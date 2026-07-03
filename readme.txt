@@ -17,14 +17,16 @@ Minn Admin serves a modern, minimal admin dashboard at `/minn-admin/` on your si
 Features:
 
 * **Overview** — real stats (posts, pages, comments, media storage), an activity chart and a recent-activity feed.
-* **Content** — combined posts & pages list with status, author and quick filtering.
-* **Media** — grid and list library views with real thumbnails.
+* **Content** — posts, pages and custom post types with search, status pills and Load-more pagination.
+* **Media** — grid and list library views with real thumbnails, uploads and drag-and-drop.
+* **Comments** — moderation with Pending/Approved/Spam/Trash tabs and one-click actions.
 * **Extensions** — activate/deactivate plugins with a switch, see and run available updates ("Update all").
-* **Settings** — site title, tagline, address, comments, search-engine visibility and a built-in maintenance mode.
-* **Editor** — distraction-free writing surface with autosave and one-click publish.
+* **Settings** — General, Writing, Reading and Discussion sections, plus a built-in maintenance mode.
+* **Editor** — distraction-free, block-aware writing surface with autosave and one-click publish.
 * **Command palette** — press ⌘K / Ctrl-K anywhere.
 * **Notifications** — pending comments, plugin/core updates and new users, with unread tracking.
-* **Dark & light themes** — toggle persists per browser.
+* **Dark & light themes** — toggle persists per browser. Fonts are bundled locally.
+* **Self-updater** — updates arrive from GitHub Releases through the normal WordPress updates UI.
 
 == Installation ==
 
