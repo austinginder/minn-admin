@@ -458,7 +458,9 @@
 	function contentQuery( page ) {
 		// _fields keeps WP from running the_content on every row — much faster on
 		// large sites, and immune to render-time fatals from other plugins.
-		let q = 'context=edit&status=publish,future,draft,pending,private&per_page=25&orderby=modified'
+		// "private" requires read_private_posts — requesting it without the cap 403s.
+		const statuses = 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' );
+		let q = `context=edit&status=${ statuses }&per_page=25&orderby=modified`
 			+ `&_embed=author&_fields=id,title,slug,status,modified,author,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
 		return q;
@@ -497,7 +499,8 @@
 
 	async function loadContent( more ) {
 		const c = more && state.cache.content ? state.cache.content : {
-			items: [], postPage: 0, pagePage: 0, morePosts: true, morePages: true, total: 0,
+			// Authors can't edit pages — requesting draft/pending page statuses 400s.
+			items: [], postPage: 0, pagePage: 0, morePosts: true, morePages: !! B.caps.editPages, total: 0,
 		};
 		const jobs = [];
 		if ( c.morePosts ) {
@@ -548,7 +551,8 @@
 			state.filter === 'all' || p.type === state.filter
 		);
 		const hasMore = cpt ? c.page < c.totalPages : ( c.morePosts || c.morePages );
-		const tabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ], [ 'pages', 'Pages' ],
+		const tabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ],
+			...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
 			...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
 		const rowIcon = ( p ) => p.type === 'pages' ? '▭' : ( p.type === 'posts' ? '¶' : '◆' );
 		view.innerHTML = `
@@ -2088,7 +2092,28 @@
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>
 		</div>
-		${ ( ed.panels || [] ).map( ( p ) => panelCard( ed, p ) ).join( '' ) }`;
+		${ ( ed.panels || [] ).map( ( p ) => panelCard( ed, p ) ).join( '' ) }
+		${ ed.id ? '<button class="minn-trash-link" id="minn-trash-post">Move to trash</button>' : '' }`;
+
+		const trashBtn = $( '#minn-trash-post', el );
+		if ( trashBtn ) {
+			trashBtn.addEventListener( 'click', async () => {
+				const noun = ed.type === 'pages' ? 'page' : 'post';
+				if ( ! confirm( `Move this ${ noun } to trash?` ) ) return;
+				trashBtn.disabled = true;
+				clearTimeout( autosaveTimer );
+				try {
+					await api( `wp/v2/${ ed.type }/${ ed.id }`, { method: 'DELETE' } );
+					toast( `Moved to trash` );
+					state.cache.content = null;
+					state.editor = null;
+					go( 'content' );
+				} catch ( e ) {
+					toast( e.message, true );
+					trashBtn.disabled = false;
+				}
+			} );
+		}
 
 		$$( '[data-pf]', el ).forEach( ( input ) => {
 			input.addEventListener( 'input', () => {

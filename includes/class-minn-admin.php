@@ -160,6 +160,8 @@ class Minn_Admin {
 				'moderate'     => current_user_can( 'moderate_comments' ),
 				'upload'       => current_user_can( 'upload_files' ),
 				'users'        => current_user_can( 'list_users' ),
+				'readPrivate'  => current_user_can( 'read_private_posts' ),
+				'editPages'    => current_user_can( 'edit_pages' ),
 				'createUsers'  => current_user_can( 'create_users' ),
 				'editUsers'    => current_user_can( 'edit_users' ),
 				'promoteUsers' => current_user_can( 'promote_users' ),

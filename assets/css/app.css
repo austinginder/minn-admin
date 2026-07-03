@@ -271,6 +271,12 @@ a { color: var(--accent2); text-decoration: none; }
 
 /* ===== Editor: view link + history ===== */
 .minn-side-viewlink { display: block; text-align: center; margin-top: 9px; font-size: 13.5px; font-weight: 600; }
+.minn-trash-link {
+  background: none; border: none; color: var(--text3); font-size: 13px; font-weight: 600;
+  cursor: pointer; padding: 4px; text-align: center;
+}
+.minn-trash-link:hover { color: var(--red); }
+.minn-trash-link:disabled { opacity: 0.5; }
 .minn-history-row {
   display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: none;
   border: none; padding: 6px 0; cursor: pointer; color: var(--text2); font-size: 13px; border-bottom: 1px solid var(--border);
