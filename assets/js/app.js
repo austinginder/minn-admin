@@ -118,9 +118,12 @@
 		paletteSel: 0,
 		saving: false,
 		editor: null,
+		settingsSection: 'General',
 		cache: {
 			overview: null,
 			content: null,
+			cptContent: {},
+			types: null,
 			media: null,
 			comments: null,
 			plugins: null,
@@ -166,8 +169,14 @@
 		const parts = h.split( '/' ).filter( Boolean );
 		const route = parts[ 0 ] || 'overview';
 		if ( route === 'editor' ) {
-			state.editorType = parts[ 1 ] === 'pages' ? 'pages' : 'posts';
-			state.editorId = parts[ 2 ] ? parseInt( parts[ 2 ], 10 ) : ( parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ? parseInt( parts[ 1 ], 10 ) : null );
+			// #/editor · #/editor/123 · #/editor/<rest_base>/123
+			if ( parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+				state.editorType = 'posts';
+				state.editorId = parseInt( parts[ 1 ], 10 );
+			} else {
+				state.editorType = parts[ 1 ] || 'posts';
+				state.editorId = parts[ 2 ] ? parseInt( parts[ 2 ], 10 ) : null;
+			}
 			state.route = 'editor';
 		} else if ( TITLES[ route ] ) {
 			state.route = route;
@@ -281,7 +290,9 @@
 	function renderTopbar() {
 		const [ title, sub ] = TITLES[ state.route ] || [ 'minn', '' ];
 		$( '#minn-title' ).textContent = title;
-		$( '#minn-sub' ).textContent = state.route === 'editor' && state.editor ? ( state.editor.status === 'publish' ? 'Published' : 'Draft' ) : sub;
+		$( '#minn-sub' ).textContent = state.route === 'editor' && state.editor
+			? ( state.editor.status === 'publish' ? 'Published' : 'Draft' )
+			: ( state.route === 'settings' ? state.settingsSection : sub );
 		$$( '.minn-nav-btn' ).forEach( ( btn ) =>
 			btn.classList.toggle( 'active', btn.dataset.nav === state.route )
 		);
@@ -386,6 +397,37 @@
 		return q;
 	}
 
+	// Custom post types with REST support, beyond post/page/attachment.
+	let typesPromise = null;
+	function loadTypes() {
+		if ( ! typesPromise ) {
+			// No _fields here: the types response is an associative object, and the
+			// server-level _fields filter would strip it to {} over HTTP.
+			typesPromise = api( 'wp/v2/types?context=edit' ).then( ( types ) => {
+				state.cache.types = Object.values( types )
+					.filter( ( t ) => t.viewable && t.rest_base && ! [ 'post', 'page', 'attachment' ].includes( t.slug ) )
+					.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: t.name } ) );
+				return state.cache.types;
+			} );
+		}
+		return typesPromise;
+	}
+
+	const currentCpt = () => ( state.cache.types || [] ).find( ( t ) => t.restBase === state.filter ) || null;
+
+	async function loadCpt( more ) {
+		const t = currentCpt();
+		if ( ! t ) return;
+		const cache = state.cache.cptContent;
+		const c = more && cache[ t.restBase ] ? cache[ t.restBase ] : { items: [], page: 0, totalPages: 1, total: 0 };
+		const r = await apiPaged( `wp/v2/${ t.restBase }?` + contentQuery( c.page + 1 ) );
+		c.page++;
+		c.totalPages = r.totalPages;
+		c.total = r.total;
+		c.items.push( ...r.items.map( mapContentItem( t.restBase ) ) );
+		cache[ t.restBase ] = c;
+	}
+
 	async function loadContent( more ) {
 		const c = more && state.cache.content ? state.cache.content : {
 			items: [], postPage: 0, pagePage: 0, morePosts: true, morePages: true, total: 0,
@@ -396,7 +438,7 @@
 				c.postPage++;
 				c.morePosts = c.postPage < r.totalPages;
 				c.postTotal = r.total;
-				c.items.push( ...r.items.map( mapContentItem( 'post' ) ) );
+				c.items.push( ...r.items.map( mapContentItem( 'posts' ) ) );
 			} ) );
 		}
 		if ( c.morePages ) {
@@ -404,7 +446,7 @@
 				c.pagePage++;
 				c.morePages = c.pagePage < r.totalPages;
 				c.pageTotal = r.total;
-				c.items.push( ...r.items.map( mapContentItem( 'page' ) ) );
+				c.items.push( ...r.items.map( mapContentItem( 'pages' ) ) );
 			} ) );
 		}
 		await Promise.all( jobs );
@@ -425,21 +467,28 @@
 
 	function renderContent() {
 		const view = $( '#minn-view' );
-		const c = state.cache.content;
+		if ( ! state.cache.types ) {
+			loadTypes().then( () => { if ( state.route === 'content' ) renderContent(); } ).catch( () => {} );
+		}
+		const cpt = currentCpt();
+		const c = cpt ? state.cache.cptContent[ cpt.restBase ] : state.cache.content;
 		if ( ! c ) {
 			view.innerHTML = '<div class="minn-loading">Loading content…</div>';
-			loadContent().then( renderIfCurrent( 'content' ) ).catch( showErr );
+			( cpt ? loadCpt() : loadContent() ).then( renderIfCurrent( 'content' ) ).catch( showErr );
 			return;
 		}
-		const filtered = c.items.filter( ( p ) =>
-			state.filter === 'all' || ( state.filter === 'posts' && p.type === 'post' ) || ( state.filter === 'pages' && p.type === 'page' )
+		const filtered = cpt ? c.items : c.items.filter( ( p ) =>
+			state.filter === 'all' || p.type === state.filter
 		);
-		const hasMore = c.morePosts || c.morePages;
+		const hasMore = cpt ? c.page < c.totalPages : ( c.morePosts || c.morePages );
+		const tabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ], [ 'pages', 'Pages' ],
+			...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
+		const rowIcon = ( p ) => p.type === 'pages' ? '▭' : ( p.type === 'posts' ? '¶' : '◆' );
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			<div class="minn-tabs">
-				${ [ [ 'all', 'All' ], [ 'posts', 'Posts' ], [ 'pages', 'Pages' ] ].map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ state.filter === id ? ' active' : '' }" data-filter="${ id }">${ label }</button>` ).join( '' ) }
+				${ tabs.map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ state.filter === id ? ' active' : '' }" data-filter="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>
 			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Filter by title…" value="${ esc( state.contentSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ filtered.length }${ hasMore ? ' of ' + c.total : '' } item${ c.total === 1 ? '' : 's' }</div>
@@ -449,8 +498,8 @@
 				<div></div><div>Title</div><div>Status</div><div>Author</div><div>Modified</div><div></div>
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
-				<div class="minn-table-row" data-id="${ p.id }" data-type="${ p.type }">
-					<div class="minn-row-icon">${ p.type === 'page' ? '▭' : '¶' }</div>
+				<div class="minn-table-row" data-id="${ p.id }" data-type="${ esc( p.type ) }">
+					<div class="minn-row-icon">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
 						<div class="minn-row-title">${ esc( p.title ) }</div>
 						<div class="minn-row-slug">${ esc( p.slug ) }</div>
@@ -472,7 +521,8 @@
 			contentSearchTimer = setTimeout( async () => {
 				state.contentSearch = search.value.trim();
 				state.cache.content = null;
-				await loadContent().catch( showErr );
+				state.cache.cptContent = {};
+				await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
 				if ( state.route === 'content' ) {
 					renderContent();
 					const s = $( '#minn-content-search' );
@@ -484,7 +534,7 @@
 		$$( '.minn-table-row', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				state.editorId = parseInt( row.dataset.id, 10 );
-				state.editorType = row.dataset.type === 'page' ? 'pages' : 'posts';
+				state.editorType = row.dataset.type;
 				location.hash = `#/editor/${ state.editorType }/${ state.editorId }`;
 			} )
 		);
@@ -493,7 +543,7 @@
 			more.addEventListener( 'click', async () => {
 				more.disabled = true;
 				more.textContent = 'Loading…';
-				await loadContent( true ).catch( showErr );
+				await ( cpt ? loadCpt( true ) : loadContent( true ) ).catch( showErr );
 				if ( state.route === 'content' ) renderContent();
 			} );
 		}
@@ -858,97 +908,161 @@
 
 	/* ===== Settings ===== */
 
+	const SETTINGS_SECTIONS = [ 'General', 'Writing', 'Reading', 'Discussion', 'Permalinks' ];
+	const POST_FORMATS = [ 'standard', 'aside', 'chat', 'gallery', 'link', 'image', 'quote', 'status', 'video', 'audio' ];
+
 	async function loadSettings() {
-		state.cache.settings = await api( 'wp/v2/settings' );
+		const [ values, categories, pages ] = await Promise.all( [
+			api( 'wp/v2/settings' ),
+			api( 'wp/v2/categories?per_page=100&_fields=id,name' ).catch( () => [] ),
+			api( 'wp/v2/pages?per_page=100&status=publish&orderby=title&order=asc&_fields=id,title' ).catch( () => [] ),
+		] );
+		state.cache.settings = { values, categories, pages };
+	}
+
+	function settingsFields( section, s, cache ) {
+		const text = ( key, label, value, mono ) => `
+			<div>
+				<div class="minn-field-label">${ label }</div>
+				<input class="minn-input${ mono ? ' mono' : '' }" data-key="${ key }" value="${ esc( value == null ? '' : value ) }">
+			</div>`;
+		const select = ( key, label, options, current ) => `
+			<div>
+				<div class="minn-field-label">${ label }</div>
+				<select class="minn-input" data-key="${ key }">
+					${ options.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( current ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+				</select>
+			</div>`;
+		const toggle = ( t ) => `
+			<div class="minn-toggle-row">
+				<div class="minn-toggle-info">
+					<div class="minn-toggle-label">${ t.label }</div>
+					<div class="minn-toggle-desc">${ t.desc }</div>
+				</div>
+				<button class="minn-switch${ t.on ? ' on' : '' }" data-setting="${ t.id }" role="switch" aria-checked="${ t.on }"><span class="minn-switch-knob"></span></button>
+			</div>`;
+		const pageOptions = [ [ 0, '— Select —' ], ...cache.pages.map( ( p ) => [ p.id, decodeEntities( p.title.rendered ) ] ) ];
+
+		switch ( section ) {
+			case 'General': return {
+				sub: 'Basic information about your site.',
+				fields: text( 'title', 'Site title', s.title )
+					+ text( 'description', 'Tagline', s.description )
+					+ text( 'url', 'Site address', s.url, true )
+					+ text( 'email', 'Administration email', s.email, true ),
+				toggles: [ { id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors.', on: !! s.minn_admin_maintenance } ].map( toggle ).join( '' ),
+			};
+			case 'Writing': return {
+				sub: 'Defaults for new posts.',
+				fields: select( 'default_category', 'Default post category', cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
+					+ select( 'default_post_format', 'Default post format', POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
+				toggles: '',
+			};
+			case 'Reading': return {
+				sub: 'What visitors see, and who else can see it.',
+				fields: select( 'show_on_front', 'Your homepage displays', [ [ 'posts', 'Latest posts' ], [ 'page', 'A static page' ] ], s.show_on_front )
+					+ ( s.show_on_front === 'page' ? select( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + select( 'page_for_posts', 'Posts page', pageOptions, s.page_for_posts ) : '' )
+					+ text( 'posts_per_page', 'Blog pages show at most', s.posts_per_page ),
+				toggles: [ { id: 'blog_public', label: 'Search engine visibility', desc: 'Allow search engines to index this site.', on: !! s.blog_public } ].map( toggle ).join( '' ),
+			};
+			case 'Discussion': return {
+				sub: 'How comments and pingbacks behave on new posts.',
+				fields: '',
+				toggles: [
+					{ id: 'default_comment_status', label: 'Allow comments', desc: 'Let readers respond to new posts.', on: s.default_comment_status === 'open' },
+					{ id: 'default_ping_status', label: 'Allow pingbacks & trackbacks', desc: 'Accept link notifications from other blogs on new posts.', on: s.default_ping_status === 'open' },
+				].map( toggle ).join( '' ),
+			};
+			default: return {
+				sub: 'Permalink structure isn’t exposed over the REST API yet.',
+				fields: `<div class="minn-editor-locked-note">Changing the permalink structure requires a rewrite-rule flush, so for now it lives in the classic admin. <a href="${ esc( B.site.adminUrl ) }options-permalink.php">Open permalink settings ↗</a></div>`,
+				toggles: '',
+				noSave: true,
+			};
+		}
 	}
 
 	function renderSettings() {
 		const view = $( '#minn-view' );
-		const s = state.cache.settings;
-		if ( ! s ) {
+		const cache = state.cache.settings;
+		if ( ! cache ) {
 			view.innerHTML = '<div class="minn-loading">Loading settings…</div>';
 			loadSettings().then( renderIfCurrent( 'settings' ) ).catch( showErr );
 			return;
 		}
-		const toggles = [
-			{ id: 'default_comment_status', label: 'Allow comments', desc: 'Let readers respond to new posts.', on: s.default_comment_status === 'open' },
-			{ id: 'blog_public', label: 'Search engine visibility', desc: 'Allow search engines to index this site.', on: !! s.blog_public },
-			{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors.', on: !! s.minn_admin_maintenance },
-		];
+		const s = cache.values;
+		const section = settingsFields( state.settingsSection, s, cache );
 
 		view.innerHTML = `
 		<div class="minn-settings">
 			<div class="minn-settings-nav">
-				${ [ 'General', 'Writing', 'Reading', 'Discussion', 'Permalinks' ].map( ( label, i ) =>
-					`<button class="minn-settings-nav-item${ i === 0 ? ' active' : '' }" data-section="${ label }">${ label }</button>` ).join( '' ) }
+				${ SETTINGS_SECTIONS.map( ( label ) =>
+					`<button class="minn-settings-nav-item${ label === state.settingsSection ? ' active' : '' }" data-section="${ label }">${ label }</button>` ).join( '' ) }
 			</div>
 			<div class="minn-settings-body">
 				<div>
-					<div class="minn-settings-title">General</div>
-					<div class="minn-settings-sub">Basic information about your site.</div>
+					<div class="minn-settings-title">${ state.settingsSection }</div>
+					<div class="minn-settings-sub">${ section.sub }</div>
 				</div>
-				<div class="minn-fields">
-					<div>
-						<div class="minn-field-label">Site title</div>
-						<input class="minn-input" id="minn-set-title" value="${ esc( s.title ) }">
-					</div>
-					<div>
-						<div class="minn-field-label">Tagline</div>
-						<input class="minn-input" id="minn-set-tagline" value="${ esc( s.description ) }">
-					</div>
-					<div>
-						<div class="minn-field-label">Site address</div>
-						<input class="minn-input mono" id="minn-set-url" value="${ esc( s.url ) }">
-					</div>
-				</div>
-				<div class="minn-divider"></div>
-				<div class="minn-toggle-rows">
-					${ toggles.map( ( t ) => `
-						<div class="minn-toggle-row">
-							<div class="minn-toggle-info">
-								<div class="minn-toggle-label">${ t.label }</div>
-								<div class="minn-toggle-desc">${ t.desc }</div>
-							</div>
-							<button class="minn-switch${ t.on ? ' on' : '' }" data-setting="${ t.id }" role="switch" aria-checked="${ t.on }"><span class="minn-switch-knob"></span></button>
-						</div>` ).join( '' ) }
-				</div>
-				<div>
-					<button class="minn-btn-primary" id="minn-save-settings">Save changes</button>
-				</div>
+				${ section.fields ? `<div class="minn-fields">${ section.fields }</div>` : '' }
+				${ section.fields && section.toggles ? '<div class="minn-divider"></div>' : '' }
+				${ section.toggles ? `<div class="minn-toggle-rows">${ section.toggles }</div>` : '' }
+				${ section.noSave ? '' : '<div><button class="minn-btn-primary" id="minn-save-settings">Save changes</button></div>' }
 			</div>
 		</div>`;
 
+		$$( '.minn-settings-nav-item', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.settingsSection = btn.dataset.section;
+				renderTopbar();
+				renderSettings();
+			} )
+		);
+
 		const pending = {};
+		const OPEN_CLOSED = [ 'default_comment_status', 'default_ping_status' ];
 		$$( '[data-setting]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				btn.classList.toggle( 'on' );
 				const on = btn.classList.contains( 'on' );
 				btn.setAttribute( 'aria-checked', on );
 				const id = btn.dataset.setting;
-				pending[ id ] = id === 'default_comment_status' ? ( on ? 'open' : 'closed' ) : ( id === 'blog_public' ? ( on ? 1 : 0 ) : on );
+				pending[ id ] = OPEN_CLOSED.includes( id ) ? ( on ? 'open' : 'closed' )
+					: ( id === 'blog_public' ? ( on ? 1 : 0 ) : on );
 			} )
 		);
-		$$( '.minn-settings-nav-item', view ).forEach( ( btn, i ) => {
-			if ( i > 0 ) btn.addEventListener( 'click', () => toast( btn.dataset.section + ' settings are coming in a future release' ) );
-		} );
-		$( '#minn-save-settings', view ).addEventListener( 'click', async ( e ) => {
-			const btn = e.currentTarget;
-			btn.disabled = true;
-			const payload = {
-				title: $( '#minn-set-title' ).value,
-				description: $( '#minn-set-tagline' ).value,
-				...pending,
-			};
-			const url = $( '#minn-set-url' ).value.trim();
-			if ( url && url !== s.url ) payload.url = url;
-			try {
-				state.cache.settings = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( payload ) } );
-				toast( 'Settings saved' );
-			} catch ( err ) {
-				toast( err.message, true );
-			}
-			btn.disabled = false;
-		} );
+
+		// Re-render Reading when the homepage mode flips so page pickers appear.
+		const showOnFront = $( '[data-key="show_on_front"]', view );
+		if ( showOnFront ) {
+			showOnFront.addEventListener( 'change', () => {
+				cache.values.show_on_front = showOnFront.value;
+				renderSettings();
+			} );
+		}
+
+		const saveBtn = $( '#minn-save-settings', view );
+		if ( saveBtn ) {
+			saveBtn.addEventListener( 'click', async () => {
+				saveBtn.disabled = true;
+				const NUMERIC = [ 'default_category', 'posts_per_page', 'page_on_front', 'page_for_posts' ];
+				const payload = { ...pending };
+				$$( '[data-key]', view ).forEach( ( input ) => {
+					const key = input.dataset.key;
+					let value = input.value;
+					if ( key === 'url' && value.trim() === s.url ) return;
+					if ( NUMERIC.includes( key ) ) value = parseInt( value, 10 ) || 0;
+					payload[ key ] = value;
+				} );
+				try {
+					cache.values = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( payload ) } );
+					toast( 'Settings saved' );
+				} catch ( err ) {
+					toast( err.message, true );
+				}
+				saveBtn.disabled = false;
+			} );
+		}
 	}
 
 	/* ===== Editor ===== */
@@ -1152,7 +1266,7 @@
 		</div>
 		<div class="minn-side-card">
 			<div class="minn-side-title">Settings</div>
-			<div style="display:flex; flex-direction:column; gap:11px; font-size:12.5px; color:var(--text2);">
+			<div style="display:flex; flex-direction:column; gap:11px; font-size: 13.5px; color:var(--text2);">
 				<div>Permalink<div class="minn-permalink">${ esc( ed.slug || '—' ) }</div></div>
 				${ ed.type === 'posts' ? `<div>Categories<div class="minn-chips" id="minn-editor-cats">${ ed.categories.length ? ed.categories.map( ( c ) => `<span class="minn-chip">${ esc( c ) }</span>` ).join( '' ) : '<span class="minn-chip">Uncategorized</span>' }</div></div>` : '' }
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
@@ -1483,6 +1597,7 @@
 			loadPlugins().catch( () => {} );
 		}
 		refreshCommentBadge();
+		loadTypes().catch( () => {} );
 		// Warm the content cache so the sidebar count appears.
 		if ( state.route !== 'content' ) loadContent().catch( () => {} );
 
