@@ -245,6 +245,38 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-plugin-delete:hover { background: rgba(228,107,107,0.12); color: var(--red); }
 .minn-plugin-delete:disabled { opacity: 0.5; cursor: default; }
 
+/* Busy state for cards while a background operation runs */
+.minn-busy { opacity: 0.45; pointer-events: none; animation: minnPulse 1.4s ease infinite; }
+
+/* ===== Media upload dropzone ===== */
+.minn-dropzone {
+  border: 2px dashed var(--border2); border-radius: 13px; padding: 34px 20px; margin-bottom: 18px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;
+  color: var(--text2); text-align: center; transition: border-color 0.15s, background 0.15s;
+  animation: minnFadeUp 0.2s ease;
+}
+.minn-dropzone:hover, .minn-dropzone.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.minn-dropzone-title { font-weight: 700; font-size: 15px; }
+.minn-dropzone-sub { font-size: 13px; color: var(--text3); }
+.minn-dropzone-sub b { color: var(--accent2); }
+
+/* ===== Editor: view link + history ===== */
+.minn-side-viewlink { display: block; text-align: center; margin-top: 9px; font-size: 13.5px; font-weight: 600; }
+.minn-history-row {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: none;
+  border: none; padding: 6px 0; cursor: pointer; color: var(--text2); font-size: 13px; border-bottom: 1px solid var(--border);
+}
+.minn-history-row:last-of-type { border-bottom: none; }
+.minn-history-row:hover { color: var(--text); }
+.minn-history-when { font-weight: 600; color: var(--text); }
+.minn-history-who { margin-left: auto; color: var(--text3); font-size: 12px; }
+.minn-revision-preview {
+  margin: 0 18px 14px; padding: 14px 16px; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; font-size: 14px; line-height: 1.65; max-height: 42vh; overflow-y: auto;
+}
+.minn-revision-preview img { max-width: 100%; height: auto; border-radius: 6px; }
+.minn-revision-preview h1, .minn-revision-preview h2, .minn-revision-preview h3 { font-size: 1.1em; }
+
 /* ===== Switch ===== */
 .minn-switch {
   position: relative; width: 34px; height: 20px; border-radius: 20px; border: none; cursor: pointer;
@@ -390,9 +422,10 @@ body.minn-dragging::after {
   position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 44px;
   display: flex; align-items: center; justify-content: center; font-size: 24px; line-height: 1;
   background: rgba(0,0,0,0.45); color: #fff; border: none; border-radius: 9px; cursor: pointer;
-  opacity: 0.7; backdrop-filter: blur(4px);
+  opacity: 0; transition: opacity 0.15s ease; backdrop-filter: blur(4px);
 }
-.minn-modal-nav:hover { opacity: 1; }
+.minn-modal-preview:hover .minn-modal-nav, .minn-modal-nav:focus-visible { opacity: 0.75; }
+.minn-modal-preview .minn-modal-nav:hover { opacity: 1; }
 .minn-modal-nav.prev { left: 10px; }
 .minn-modal-nav.next { right: 10px; }
 .minn-modal-meta { padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; border-bottom: 1px solid var(--border); }

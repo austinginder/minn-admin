@@ -110,6 +110,7 @@
 		filter: 'all',
 		contentSearch: '',
 		mediaView: 'grid',
+		uploadOpen: false,
 		commentTab: 'hold',
 		orderTab: 'any',
 		userSearch: '',
@@ -651,6 +652,7 @@
 		}
 		if ( done ) toast( `Uploaded ${ done } file${ done === 1 ? '' : 's' }` );
 		state.cache.media = null;
+		state.uploadOpen = false;
 		if ( state.route === 'media' ) renderMedia();
 	}
 
@@ -678,6 +680,12 @@
 				<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
 			</div>
 		</div>
+		${ state.uploadOpen && B.caps.upload ? `
+		<div class="minn-dropzone" id="minn-dropzone">
+			${ icon( 'upload' ) }
+			<div class="minn-dropzone-title">Drag &amp; drop files here</div>
+			<div class="minn-dropzone-sub">or <b>browse your computer</b></div>
+		</div>` : '' }
 		${ ! mapped.length ? '<div class="minn-card minn-empty">The media library is empty. Drop files anywhere to upload.</div>' : state.mediaView === 'grid' ? `
 		<div class="minn-media-grid">
 			${ mapped.map( ( m ) => `
@@ -724,8 +732,23 @@
 		const uploadBtn = $( '#minn-upload-btn', view );
 		if ( uploadBtn ) {
 			const input = $( '#minn-upload-input', view );
-			uploadBtn.addEventListener( 'click', () => input.click() );
+			uploadBtn.addEventListener( 'click', () => {
+				state.uploadOpen = ! state.uploadOpen;
+				renderMedia();
+			} );
 			input.addEventListener( 'change', () => uploadFiles( Array.from( input.files ) ) );
+			const zone = $( '#minn-dropzone', view );
+			if ( zone ) {
+				zone.addEventListener( 'click', () => $( '#minn-upload-input' ).click() );
+				zone.addEventListener( 'dragover', ( e ) => { e.preventDefault(); zone.classList.add( 'over' ); } );
+				zone.addEventListener( 'dragleave', () => zone.classList.remove( 'over' ) );
+				zone.addEventListener( 'drop', ( e ) => {
+					e.preventDefault();
+					e.stopPropagation();
+					zone.classList.remove( 'over' );
+					uploadFiles( Array.from( ( e.dataTransfer && e.dataTransfer.files ) || [] ) );
+				} );
+			}
 		}
 	}
 
@@ -1309,6 +1332,9 @@
 					return;
 				}
 				btn.disabled = true;
+				const card = btn.closest( '.minn-plugin' );
+				if ( card ) card.classList.add( 'minn-busy' );
+				toast( `${ activating ? 'Activating' : 'Deactivating' } ${ decodeEntities( plugin.name ) }…` );
 				try {
 					await api( 'wp/v2/plugins/' + file, {
 						method: 'PUT',
@@ -1334,6 +1360,9 @@
 				const name = decodeEntities( plugin.name );
 				if ( ! confirm( `Delete “${ name }”? This removes its files from the server.` ) ) return;
 				btn.disabled = true;
+				const card = btn.closest( '.minn-plugin' );
+				if ( card ) card.classList.add( 'minn-busy' );
+				toast( `Deleting ${ name }…` );
 				try {
 					await api( 'wp/v2/plugins/' + file, { method: 'DELETE' } );
 					toast( name + ' deleted' );
@@ -1341,6 +1370,7 @@
 					await loadPlugins().catch( () => {} );
 				} catch ( e ) {
 					toast( e.message, true );
+					if ( card ) card.classList.remove( 'minn-busy' );
 				}
 				if ( state.route === 'extensions' ) renderExtensions();
 			} )
@@ -1357,6 +1387,7 @@
 			btn.disabled = true;
 			btn.textContent = 'Updating…';
 		}
+		toast( 'Updating plugins — this can take a minute…' );
 		try {
 			const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
 			const n = ( r.updated || [] ).length;
@@ -1638,7 +1669,21 @@
 				link: p.link,
 				savedAt: null,
 				categoryIds: new Set( p.categories || [] ),
+				revisions: null,
 			};
+			// Revision history (types without revision support 404 — that's fine).
+			api( `wp/v2/${ state.editorType }/${ p.id }/revisions?per_page=6&_fields=id,modified,_links,_embedded&_embed=author` )
+				.then( ( revs ) => {
+					if ( state.editor && state.editor.id === p.id ) {
+						state.editor.revisions = revs.map( ( r ) => ( {
+							id: r.id,
+							modified: r.modified,
+							author: ( r._embedded && r._embedded.author && r._embedded.author[ 0 ] && r._embedded.author[ 0 ].name ) || '',
+						} ) );
+						if ( state.route === 'editor' ) renderEditorSide();
+					}
+				} )
+				.catch( () => {} );
 			if ( mode === 'locked' ) {
 				// Try to upgrade the read-only preview to fully rendered markup;
 				// fall back to the stripped raw markup if rendering fails.
@@ -1753,7 +1798,17 @@
 				<input type="datetime-local" class="minn-input" id="minn-schedule-input" value="${ esc( dateValue ) }">
 			</div>
 			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
+			${ ed.id && ed.link ? `<a class="minn-side-viewlink" href="${ esc( ed.status === 'publish' ? ed.link : ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) }" target="_blank" rel="noopener">${ ed.status === 'publish' ? 'View on site ↗' : 'Preview draft ↗' }</a>` : '' }
 		</div>
+		${ ed.revisions && ed.revisions.length ? `
+		<div class="minn-side-card">
+			<div class="minn-side-title">History</div>
+			${ ed.revisions.map( ( r ) => `
+				<button class="minn-history-row" data-rev="${ r.id }">
+					<span class="minn-history-when">${ timeAgo( r.modified ) }</span>
+					<span class="minn-history-who">${ esc( r.author ) }</span>
+				</button>` ).join( '' ) }
+		</div>` : '' }
 		<div class="minn-side-card">
 			<div class="minn-side-title">Settings</div>
 			<div style="display:flex; flex-direction:column; gap:11px; font-size: 13.5px; color:var(--text2);">
@@ -1765,6 +1820,10 @@
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>
 		</div>`;
+
+		$$( '[data-rev]', el ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => openRevision( ed, parseInt( btn.dataset.rev, 10 ) ) )
+		);
 
 		$( '#minn-schedule-input', el ).addEventListener( 'change', ( e ) => {
 			state.editor.newDate = e.target.value || null;
@@ -2332,6 +2391,10 @@
 			</div>`;
 		}
 
+		if ( m.type === 'revision' ) {
+			return renderRevisionModal( m );
+		}
+
 		if ( m.type === 'picker' ) {
 			const items = m.items;
 			return `
@@ -2426,6 +2489,83 @@
 
 		if ( m.type === 'user' ) {
 			bindUserModal( m );
+		}
+
+		if ( m.type === 'revision' ) {
+			bindRevisionModal( m );
+		}
+	}
+
+	/* ===== Revision modal ===== */
+
+	function openRevision( ed, revId ) {
+		state.modal = { type: 'revision', ed: { id: ed.id, type: ed.type }, revId, rev: null };
+		renderOverlays();
+		api( `wp/v2/${ ed.type }/${ ed.id }/revisions/${ revId }?context=edit&_fields=id,modified,title,content` )
+			.then( ( rev ) => {
+				if ( state.modal && state.modal.type === 'revision' && state.modal.revId === revId ) {
+					state.modal.rev = rev;
+					renderOverlays();
+				}
+			} )
+			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
+	}
+
+	function renderRevisionModal( m ) {
+		const rev = m.rev;
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal wide">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title">${ rev ? 'Revision · ' + timeAgo( rev.modified ) : 'Revision' }</div>
+					<button class="minn-x-btn" id="minn-modal-close">×</button>
+				</div>
+				${ ! rev ? '<div class="minn-loading">Loading revision…</div>' : `
+				<div class="minn-modal-meta">
+					<div class="minn-side-row"><span class="minn-side-key">Title</span><span class="minn-surface-val">${ esc( decodeEntities( ( rev.title && ( rev.title.raw != null ? rev.title.raw : rev.title.rendered ) ) || '(no title)' ) ) }</span></div>
+					<div class="minn-side-row"><span class="minn-side-key">Saved</span><span>${ timeAgo( rev.modified ) }</span></div>
+				</div>
+				<div class="minn-revision-preview" id="minn-revision-preview"></div>
+				<div class="minn-modal-actions">
+					<button class="minn-btn-primary" id="minn-restore-rev">Restore this revision</button>
+				</div>` }
+			</div>
+		</div>`;
+	}
+
+	function bindRevisionModal( m ) {
+		const rev = m.rev;
+		if ( ! rev ) return;
+		const preview = $( '#minn-revision-preview' );
+		if ( preview ) {
+			const raw = ( rev.content && ( rev.content.raw != null ? rev.content.raw : rev.content.rendered ) ) || '';
+			preview.innerHTML = stripBlockComments( raw ) || '<span style="color:var(--text3);">(empty)</span>';
+		}
+		const restore = $( '#minn-restore-rev' );
+		if ( restore ) {
+			restore.addEventListener( 'click', async () => {
+				if ( ! confirm( 'Replace the current content with this revision? The current state is saved as its own revision first.' ) ) return;
+				restore.disabled = true;
+				restore.textContent = 'Restoring…';
+				try {
+					await api( `wp/v2/${ m.ed.type }/${ m.ed.id }`, {
+						method: 'POST',
+						body: JSON.stringify( {
+							title: ( rev.title && ( rev.title.raw != null ? rev.title.raw : rev.title.rendered ) ) || '',
+							content: ( rev.content && rev.content.raw ) || '',
+						} ),
+					} );
+					toast( 'Revision restored' );
+					closeModal();
+					state.cache.content = null;
+					state.editor = null; // reload the editor with the restored content
+					if ( state.route === 'editor' ) renderEditor();
+				} catch ( e ) {
+					toast( e.message, true );
+					restore.disabled = false;
+					restore.textContent = 'Restore this revision';
+				}
+			} );
 		}
 	}
 
