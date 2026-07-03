@@ -157,7 +157,10 @@ class Minn_Admin {
 				'settings' => current_user_can( 'manage_options' ),
 				'moderate' => current_user_can( 'moderate_comments' ),
 				'upload'   => current_user_can( 'upload_files' ),
+				'users'    => current_user_can( 'list_users' ),
+				'orders'   => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ),
 			),
+			'wc'       => class_exists( 'WooCommerce' ),
 		);
 
 		include MINN_ADMIN_DIR . 'includes/template.php';

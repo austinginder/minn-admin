@@ -111,7 +111,10 @@
 		contentSearch: '',
 		mediaView: 'grid',
 		commentTab: 'hold',
+		orderTab: 'any',
+		userSearch: '',
 		range: 30,
+		modal: null,
 		notifOpen: false,
 		notifTab: 'all',
 		paletteOpen: false,
@@ -126,6 +129,10 @@
 			types: null,
 			media: null,
 			comments: null,
+			orders: null,
+			orderSummary: null,
+			users: null,
+			categories: null,
 			plugins: null,
 			pluginUpdates: {},
 			settings: null,
@@ -138,6 +145,8 @@
 		content: [ 'Content', 'Posts & Pages' ],
 		media: [ 'Media', 'Library' ],
 		comments: [ 'Comments', 'Moderation' ],
+		orders: [ 'Orders', 'WooCommerce' ],
+		users: [ 'Users', 'People' ],
 		extensions: [ 'Extensions', 'Installed' ],
 		settings: [ 'Settings', 'General' ],
 		editor: [ 'Editor', 'Draft' ],
@@ -206,6 +215,10 @@
 			refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
 			list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
 			chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+			cart: '<circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+			users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+			copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+			trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
 			upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
 			logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
 		};
@@ -221,10 +234,16 @@
 		if ( B.caps.moderate ) {
 			navItems.push( { id: 'comments', label: 'Comments', icon: 'chat', commentCount: true } );
 		}
+		if ( B.wc && B.caps.orders ) {
+			navItems.push( { id: 'orders', label: 'Orders', icon: 'cart', orderCount: true } );
+		}
 		if ( B.caps.plugins ) {
 			navItems.push( { id: 'extensions', label: 'Extensions', icon: 'plug', dot: true } );
 		}
 		const manageItems = [];
+		if ( B.caps.users ) {
+			manageItems.push( { id: 'users', label: 'Users', icon: 'users' } );
+		}
 		if ( B.caps.settings ) {
 			manageItems.push( { id: 'settings', label: 'Settings', icon: 'gear' } );
 		}
@@ -234,6 +253,7 @@
 				${ icon( n.icon ) }<span>${ esc( n.label ) }</span>
 				${ n.count ? '<span class="minn-nav-count" id="minn-content-count" hidden></span>' : '' }
 				${ n.commentCount ? '<span class="minn-nav-count" id="minn-comments-count" hidden></span>' : '' }
+				${ n.orderCount ? '<span class="minn-nav-count" id="minn-orders-count" hidden></span>' : '' }
 				${ n.dot ? '<span class="minn-nav-dot" id="minn-plugin-dot" hidden></span>' : '' }
 			</button>`;
 
@@ -291,7 +311,7 @@
 		const [ title, sub ] = TITLES[ state.route ] || [ 'minn', '' ];
 		$( '#minn-title' ).textContent = title;
 		$( '#minn-sub' ).textContent = state.route === 'editor' && state.editor
-			? ( state.editor.status === 'publish' ? 'Published' : 'Draft' )
+			? ( STATUS_LABELS[ state.editor.status ] || 'Draft' )
 			: ( state.route === 'settings' ? state.settingsSection : sub );
 		$$( '.minn-nav-btn' ).forEach( ( btn ) =>
 			btn.classList.toggle( 'active', btn.dataset.nav === state.route )
@@ -553,7 +573,7 @@
 
 	async function loadMedia( more ) {
 		const c = more && state.cache.media ? state.cache.media : { items: [], page: 0, totalPages: 1, total: 0 };
-		const r = await apiPaged( `wp/v2/media?per_page=48&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details&page=${ c.page + 1 }` );
+		const r = await apiPaged( `wp/v2/media?per_page=48&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text&page=${ c.page + 1 }` );
 		c.page++;
 		c.totalPages = r.totalPages;
 		c.total = r.total;
@@ -597,11 +617,14 @@
 				id: m.id,
 				name: decodeEntities( m.title.rendered ) || ( m.source_url || '' ).split( '/' ).pop(),
 				kind,
+				mime: m.mime_type,
 				url: m.source_url,
 				thumb,
 				grad: GRADS[ kind ] || GRADS.FILE,
 				dims: md.width ? `${ md.width }×${ md.height }` : '—',
 				size: fmtBytes( md.filesize ),
+				date: m.date,
+				alt: m.alt_text || '',
 			};
 		} );
 		const countLabel = `${ mapped.length }${ c.page < c.totalPages ? ' of ' + c.total : '' } file${ c.total === 1 ? '' : 's' }`;
@@ -621,7 +644,7 @@
 		${ ! mapped.length ? '<div class="minn-card minn-empty">The media library is empty. Drop files anywhere to upload.</div>' : state.mediaView === 'grid' ? `
 		<div class="minn-media-grid">
 			${ mapped.map( ( m ) => `
-				<div class="minn-media-card" data-url="${ esc( m.url ) }">
+				<div class="minn-media-card" data-media="${ m.id }">
 					<div class="minn-media-thumb" style="${ thumbStyle( m ) }"><span class="minn-media-badge">${ m.kind }</span></div>
 					<div class="minn-media-info">
 						<div class="minn-media-name">${ esc( m.name ) }</div>
@@ -631,7 +654,7 @@
 		</div>` : `
 		<div class="minn-card minn-media-list">
 			${ mapped.map( ( m ) => `
-				<div class="minn-media-row" data-url="${ esc( m.url ) }">
+				<div class="minn-media-row" data-media="${ m.id }">
 					<div class="minn-media-thumb-sm" style="${ thumbStyle( m ) }"></div>
 					<div class="minn-media-col">
 						<div class="minn-row-title">${ esc( m.name ) }</div>
@@ -646,8 +669,11 @@
 		$$( '.minn-view-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => { state.mediaView = btn.dataset.view; renderMedia(); } )
 		);
-		$$( '[data-url]', view ).forEach( ( el ) =>
-			el.addEventListener( 'click', () => window.open( el.dataset.url, '_blank' ) )
+		$$( '[data-media]', view ).forEach( ( el ) =>
+			el.addEventListener( 'click', () => {
+				const m = mapped.find( ( x ) => x.id === parseInt( el.dataset.media, 10 ) );
+				if ( m ) { state.modal = { type: 'media', item: m }; renderOverlays(); }
+			} )
 		);
 		const more = $( '#minn-media-more', view );
 		if ( more ) {
@@ -790,6 +816,198 @@
 				more.textContent = 'Loading…';
 				await loadComments( true ).catch( showErr );
 				if ( state.route === 'comments' ) renderComments();
+			} );
+		}
+	}
+
+	/* ===== Orders (WooCommerce) ===== */
+
+	const ORDER_TABS = [ [ 'any', 'All' ], [ 'processing', 'Processing' ], [ 'completed', 'Completed' ], [ 'on-hold', 'On hold' ], [ 'refunded', 'Refunded' ] ];
+	const ORDER_STATUS_STYLE = {
+		processing: 'future', completed: 'publish', 'on-hold': 'private', pending: 'private',
+		cancelled: 'trash-status', refunded: 'draft', failed: 'trash-status',
+	};
+
+	async function loadOrders( more ) {
+		const c = more && state.cache.orders ? state.cache.orders : { items: [], page: 0, totalPages: 1, total: 0 };
+		const r = await apiPaged( `wc/v3/orders?per_page=25&page=${ c.page + 1 }&status=${ state.orderTab }&_fields=id,number,status,total,currency_symbol,date_created,billing,line_items` );
+		c.page++;
+		c.totalPages = r.totalPages;
+		c.total = r.total;
+		c.items.push( ...r.items );
+		state.cache.orders = c;
+	}
+
+	async function loadOrderSummary() {
+		const summary = { month: null, processing: null };
+		await Promise.all( [
+			api( 'wc/v3/reports/sales?period=month' )
+				.then( ( r ) => { summary.month = r && r[ 0 ] ? r[ 0 ] : null; } )
+				.catch( () => {} ),
+			apiPaged( 'wc/v3/orders?status=processing&per_page=1&_fields=id' )
+				.then( ( r ) => { summary.processing = r.total; } )
+				.catch( () => {} ),
+		] );
+		state.cache.orderSummary = summary;
+		const badge = $( '#minn-orders-count' );
+		if ( badge && summary.processing != null ) {
+			badge.textContent = summary.processing;
+			badge.hidden = ! summary.processing;
+		}
+	}
+
+	function customerName( o ) {
+		const b = o.billing || {};
+		return ( ( b.first_name || '' ) + ' ' + ( b.last_name || '' ) ).trim() || b.email || 'Guest';
+	}
+
+	function renderOrders() {
+		const view = $( '#minn-view' );
+		const c = state.cache.orders;
+		if ( ! c ) {
+			view.innerHTML = '<div class="minn-loading">Loading orders…</div>';
+			Promise.all( [ loadOrders(), state.cache.orderSummary ? null : loadOrderSummary() ] )
+				.then( renderIfCurrent( 'orders' ) ).catch( showErr );
+			return;
+		}
+		const s = state.cache.orderSummary || {};
+		const sym = ( c.items[ 0 ] && c.items[ 0 ].currency_symbol ) || '$';
+		const summaryCards = [];
+		if ( s.month ) {
+			summaryCards.push( [ 'Orders this month', s.month.total_orders ?? '—', '' ] );
+			summaryCards.push( [ 'Revenue this month', sym + Number( s.month.total_sales || 0 ).toLocaleString(), 'net ' + sym + Number( s.month.net_sales || 0 ).toLocaleString() ] );
+		}
+		if ( s.processing != null ) summaryCards.push( [ 'Awaiting fulfillment', s.processing, 'processing' ] );
+
+		view.innerHTML = `
+		${ summaryCards.length ? `<div class="minn-stats" style="grid-template-columns:repeat(${ summaryCards.length },1fr);">
+			${ summaryCards.map( ( [ label, value, delta ] ) => `
+				<div class="minn-card minn-stat">
+					<div class="minn-stat-label">${ esc( label ) }</div>
+					<div class="minn-stat-value">${ esc( String( value ) ) }</div>
+					${ delta ? `<div class="minn-stat-delta">${ esc( delta ) }</div>` : '' }
+				</div>` ).join( '' ) }
+		</div>` : '' }
+		<div class="minn-toolbar">
+			<div class="minn-tabs">
+				${ ORDER_TABS.map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ state.orderTab === id ? ' active' : '' }" data-otab="${ id }">${ label }</button>` ).join( '' ) }
+			</div>
+			<div class="minn-toolbar-meta">${ c.total } order${ c.total === 1 ? '' : 's' }</div>
+		</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-order-cols">
+				<div>Order</div><div>Customer</div><div>Status</div><div>Items</div><div>Total</div><div></div>
+			</div>
+			${ c.items.length ? c.items.map( ( o ) => `
+				<div class="minn-table-row minn-order-cols" data-order="${ o.id }">
+					<div class="minn-cell-clip">
+						<div class="minn-row-title">#${ esc( o.number ) }</div>
+						<div class="minn-row-slug">${ timeAgo( o.date_created ) }</div>
+					</div>
+					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( o ) ) }</div>
+					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( o.status.replace( '-', ' ' ) ) }</span></div>
+					<div class="minn-row-meta">${ ( o.line_items || [] ).reduce( ( n, li ) => n + ( li.quantity || 0 ), 0 ) }</div>
+					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
+					<div class="minn-row-arrow">›</div>
+				</div>` ).join( '' ) : '<div class="minn-empty">No orders here.</div>' }
+		</div>
+		${ c.page < c.totalPages ? '<button class="minn-load-more" id="minn-orders-more">Load more</button>' : '' }`;
+
+		$$( '[data-otab]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.orderTab = btn.dataset.otab;
+				state.cache.orders = null;
+				renderOrders();
+			} )
+		);
+		$$( '[data-order]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => {
+				const o = c.items.find( ( x ) => x.id === parseInt( row.dataset.order, 10 ) );
+				if ( o ) { state.modal = { type: 'order', order: o }; renderOverlays(); }
+			} )
+		);
+		const more = $( '#minn-orders-more', view );
+		if ( more ) {
+			more.addEventListener( 'click', async () => {
+				more.disabled = true;
+				more.textContent = 'Loading…';
+				await loadOrders( true ).catch( showErr );
+				if ( state.route === 'orders' ) renderOrders();
+			} );
+		}
+	}
+
+	/* ===== Users ===== */
+
+	async function loadUsers( more ) {
+		const c = more && state.cache.users ? state.cache.users : { items: [], page: 0, totalPages: 1, total: 0 };
+		let q = `wp/v2/users?context=edit&per_page=50&orderby=registered_date&order=desc&_fields=id,name,email,roles,registered_date,avatar_urls&page=${ c.page + 1 }`;
+		if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
+		const r = await apiPaged( q );
+		c.page++;
+		c.totalPages = r.totalPages;
+		c.total = r.total;
+		c.items.push( ...r.items );
+		state.cache.users = c;
+	}
+
+	let userSearchTimer = null;
+
+	function renderUsers() {
+		const view = $( '#minn-view' );
+		const c = state.cache.users;
+		if ( ! c ) {
+			view.innerHTML = '<div class="minn-loading">Loading users…</div>';
+			loadUsers().then( renderIfCurrent( 'users' ) ).catch( showErr );
+			return;
+		}
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			<div class="minn-toolbar-meta" style="margin-left:0;">${ c.total } user${ c.total === 1 ? '' : 's' }</div>
+			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }">
+		</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-user-cols">
+				<div></div><div>Name</div><div>Email</div><div>Role</div><div>Registered</div><div></div>
+			</div>
+			${ c.items.length ? c.items.map( ( u ) => `
+				<div class="minn-table-row minn-user-cols" data-user="${ u.id }">
+					<img class="minn-user-row-avatar" src="${ esc( ( u.avatar_urls && ( u.avatar_urls[ '48' ] || Object.values( u.avatar_urls )[ 0 ] ) ) || '' ) }" alt="">
+					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
+					<div class="minn-row-meta minn-cell-clip">${ esc( u.email || '—' ) }</div>
+					<div class="minn-row-meta">${ esc( ( u.roles || [] ).map( ( r ) => r.charAt( 0 ).toUpperCase() + r.slice( 1 ) ).join( ', ' ) || '—' ) }</div>
+					<div class="minn-row-meta">${ u.registered_date ? timeAgo( u.registered_date ) : '—' }</div>
+					<div class="minn-row-arrow">›</div>
+				</div>` ).join( '' ) : '<div class="minn-empty">No users found.</div>' }
+		</div>
+		${ c.page < c.totalPages ? '<button class="minn-load-more" id="minn-users-more">Load more</button>' : '' }`;
+
+		const search = $( '#minn-user-search', view );
+		search.addEventListener( 'input', () => {
+			clearTimeout( userSearchTimer );
+			userSearchTimer = setTimeout( async () => {
+				state.userSearch = search.value.trim();
+				state.cache.users = null;
+				await loadUsers().catch( showErr );
+				if ( state.route === 'users' ) {
+					renderUsers();
+					const el = $( '#minn-user-search' );
+					el.focus();
+					el.setSelectionRange( el.value.length, el.value.length );
+				}
+			}, 350 );
+		} );
+		$$( '[data-user]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => window.open( B.site.adminUrl + 'user-edit.php?user_id=' + row.dataset.user, '_blank' ) )
+		);
+		const more = $( '#minn-users-more', view );
+		if ( more ) {
+			more.addEventListener( 'click', async () => {
+				more.disabled = true;
+				more.textContent = 'Loading…';
+				await loadUsers( true ).catch( showErr );
+				if ( state.route === 'users' ) renderUsers();
 			} );
 		}
 	}
@@ -1153,7 +1371,7 @@
 		if ( state.editorId ) {
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories` );
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,date` );
 			const raw = ( p.content && p.content.raw ) || '';
 			const mode = editorModeFor( raw );
 			state.editor = {
@@ -1166,10 +1384,12 @@
 				mode,
 				editUrl: B.site.adminUrl + 'post.php?post=' + p.id + '&action=edit',
 				status: p.status,
+				date: p.date || null,
+				newDate: null,
 				slug: '/' + ( p.slug || '' ),
 				link: p.link,
 				savedAt: null,
-				categories: [],
+				categoryIds: new Set( p.categories || [] ),
 			};
 			if ( mode === 'locked' ) {
 				// Try to upgrade the read-only preview to fully rendered markup;
@@ -1184,20 +1404,20 @@
 					} )
 					.catch( () => {} );
 			}
-			if ( state.editorType === 'posts' && p.categories && p.categories.length ) {
-				api( 'wp/v2/categories?post=' + p.id )
-					.then( ( cats ) => {
-						state.editor.categories = cats.map( ( c ) => decodeEntities( c.name ) );
-						const el = $( '#minn-editor-cats' );
-						if ( el ) el.innerHTML = state.editor.categories.map( ( c ) => `<span class="minn-chip">${ esc( c ) }</span>` ).join( '' );
-					} )
-					.catch( () => {} );
-			}
 		} else {
 			state.editor = {
 				id: null, type: 'posts', title: '', content: '', status: 'draft', mode: 'blocks',
-				slug: '', link: '', savedAt: null, categories: [],
+				date: null, newDate: null, slug: '', link: '', savedAt: null, categoryIds: new Set(),
 			};
+		}
+		// All categories for the sidebar picker (posts only), cached per session.
+		if ( state.editor.type === 'posts' && ! state.cache.categories ) {
+			api( 'wp/v2/categories?per_page=100&orderby=count&order=desc&_fields=id,name' )
+				.then( ( cats ) => {
+					state.cache.categories = cats.map( ( c ) => ( { id: c.id, name: decodeEntities( c.name ) } ) );
+					if ( state.route === 'editor' ) renderEditorSide();
+				} )
+				.catch( () => {} );
 		}
 	}
 
@@ -1218,6 +1438,9 @@
 				payload.content = ed.mode === 'blocks' ? serializeToBlocks( body ) : body.innerHTML;
 			}
 		}
+		if ( ed.type === 'posts' && ed.catsDirty ) {
+			payload.categories = Array.from( ed.categoryIds );
+		}
 		try {
 			let p;
 			if ( ed.id ) {
@@ -1231,6 +1454,8 @@
 			ed.status = p.status;
 			ed.slug = '/' + ( p.slug || '' );
 			ed.link = p.link;
+			if ( p.date ) ed.date = p.date;
+			if ( payload.date ) ed.newDate = null;
 			ed.savedAt = Date.now();
 			state.cache.content = null;
 			renderEditorSide();
@@ -1249,11 +1474,23 @@
 		}, 2500 );
 	}
 
+	function scheduledInFuture( ed ) {
+		return ed.newDate && new Date( ed.newDate ) > new Date();
+	}
+
+	function publishLabel( ed ) {
+		if ( ed.status === 'publish' && ! scheduledInFuture( ed ) ) return 'Update';
+		if ( ed.status === 'future' || scheduledInFuture( ed ) ) return 'Schedule';
+		return 'Publish';
+	}
+
 	function renderEditorSide() {
 		const ed = state.editor;
 		const el = $( '#minn-editor-side' );
 		if ( ! el || ! ed ) return;
 		const statusLabel = STATUS_LABELS[ ed.status ] || ed.status;
+		const dateValue = ( ed.newDate || ( ed.date ? ed.date.slice( 0, 16 ) : '' ) );
+		const cats = state.cache.categories;
 		el.innerHTML = `
 		<div class="minn-side-card">
 			<div class="minn-side-title">Publish</div>
@@ -1262,25 +1499,59 @@
 				<div class="minn-side-row"><span class="minn-side-key">Visibility</span><span>Public</span></div>
 				<div class="minn-side-row"><span class="minn-side-key">${ ed.savedAt ? 'Autosaved' : 'Saved' }</span><span class="minn-side-val green">${ ed.savedAt ? timeAgo( new Date( ed.savedAt ).toISOString() ) : ( ed.id ? '—' : 'Not yet' ) }</span></div>
 			</div>
-			<button class="minn-btn-primary" id="minn-publish-btn">${ ed.status === 'publish' ? 'Update' : 'Publish' }</button>
+			<div class="minn-schedule">
+				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? 'Scheduled for' : 'Publish time' }</div>
+				<input type="datetime-local" class="minn-input" id="minn-schedule-input" value="${ esc( dateValue ) }">
+			</div>
+			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
 		</div>
 		<div class="minn-side-card">
 			<div class="minn-side-title">Settings</div>
 			<div style="display:flex; flex-direction:column; gap:11px; font-size: 13.5px; color:var(--text2);">
 				<div>Permalink<div class="minn-permalink">${ esc( ed.slug || '—' ) }</div></div>
-				${ ed.type === 'posts' ? `<div>Categories<div class="minn-chips" id="minn-editor-cats">${ ed.categories.length ? ed.categories.map( ( c ) => `<span class="minn-chip">${ esc( c ) }</span>` ).join( '' ) : '<span class="minn-chip">Uncategorized</span>' }</div></div>` : '' }
+				${ ed.type === 'posts' ? `<div>Categories<div class="minn-chips" id="minn-editor-cats">${
+					cats == null ? '<span class="minn-chip">Loading…</span>'
+					: cats.map( ( c ) => `<button class="minn-chip pick${ ed.categoryIds.has( c.id ) ? ' sel' : '' }" data-cat="${ c.id }">${ esc( c.name ) }</button>` ).join( '' )
+				}</div></div>` : '' }
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>
 		</div>`;
+
+		$( '#minn-schedule-input', el ).addEventListener( 'change', ( e ) => {
+			state.editor.newDate = e.target.value || null;
+			const btn = $( '#minn-publish-btn' );
+			if ( btn ) btn.textContent = publishLabel( state.editor );
+		} );
+
+		$$( '[data-cat]', el ).forEach( ( chip ) =>
+			chip.addEventListener( 'click', () => {
+				const id = parseInt( chip.dataset.cat, 10 );
+				if ( ed.categoryIds.has( id ) ) ed.categoryIds.delete( id );
+				else ed.categoryIds.add( id );
+				ed.catsDirty = true;
+				chip.classList.toggle( 'sel' );
+				if ( ed.id ) scheduleAutosave();
+			} )
+		);
 
 		$( '#minn-publish-btn', el ).addEventListener( 'click', async ( e ) => {
 			const btn = e.currentTarget;
 			btn.disabled = true;
 			clearTimeout( autosaveTimer );
-			await saveEditor( { status: 'publish' } );
+			const extra = {};
+			if ( ed.newDate ) {
+				extra.date = ed.newDate.length === 16 ? ed.newDate + ':00' : ed.newDate;
+				extra.status = scheduledInFuture( ed ) ? 'future' : 'publish';
+			} else {
+				extra.status = ed.status === 'future' ? 'future' : 'publish';
+			}
+			await saveEditor( extra );
 			btn.disabled = false;
-			if ( state.editor && state.editor.status === 'publish' ) {
-				toast( state.editor.type === 'pages' ? 'Page published' : 'Post published' );
+			const noun = state.editor && state.editor.type === 'pages' ? 'Page' : 'Post';
+			if ( state.editor && state.editor.status === 'future' ) {
+				toast( `${ noun } scheduled` );
+			} else if ( state.editor && state.editor.status === 'publish' ) {
+				toast( `${ noun } published` );
 			}
 		} );
 	}
@@ -1313,7 +1584,9 @@
 					<button class="minn-tool" data-block="blockquote" title="Quote">“ ”</button>
 					<button class="minn-tool" data-block="pre" title="Code">{ }</button>
 					<button class="minn-tool" data-cmd="link" title="Link">🔗</button>
+					<button class="minn-tool" data-cmd="image" title="Insert image">🖼</button>
 					<button class="minn-tool" data-block="p" title="Paragraph">¶</button>
+					<span class="minn-tool-hint">type / for blocks</span>
 				</div>` }
 				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }"></div>
 			</div>
@@ -1327,12 +1600,23 @@
 		if ( ! locked ) {
 			body.addEventListener( 'input', scheduleAutosave );
 
+			const insertImage = () => openMediaPicker( ( it ) => {
+				const b = $( '#minn-editor-body' );
+				if ( ! b ) return;
+				b.focus();
+				document.execCommand( 'insertHTML', false,
+					`<figure class="wp-block-image"><img src="${ esc( it.url ) }" alt="${ esc( it.alt ) }"></figure><p><br></p>` );
+				scheduleAutosave();
+			} );
+
 			$$( '.minn-tool', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'mousedown', ( e ) => {
 					e.preventDefault(); // keep the selection in the editable region
 					if ( btn.dataset.cmd === 'link' ) {
 						const url = prompt( 'Link URL:' );
 						if ( url ) document.execCommand( 'createLink', false, url );
+					} else if ( btn.dataset.cmd === 'image' ) {
+						insertImage();
 					} else if ( btn.dataset.cmd ) {
 						document.execCommand( btn.dataset.cmd, false, null );
 					} else if ( btn.dataset.block ) {
@@ -1341,10 +1625,106 @@
 					scheduleAutosave();
 				} )
 			);
+
+			bindSlashMenu( body, insertImage );
 		}
 
 		renderEditorSide();
 		if ( ! ed.id ) $( '#minn-editor-title', view ).focus();
+	}
+
+	/* ===== Slash command menu ===== */
+
+	function bindSlashMenu( body, insertImage ) {
+		let menu = null;
+		let block = null;
+		let selIdx = 0;
+		const items = [
+			[ 'H2', 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
+			[ 'H3', 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
+			[ '“ ”', 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
+			[ '{ }', 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
+			[ '•', 'Bulleted list', () => document.execCommand( 'insertUnorderedList', false, null ) ],
+			[ '1.', 'Numbered list', () => document.execCommand( 'insertOrderedList', false, null ) ],
+			[ '🖼', 'Image', 'image' ],
+			[ '—', 'Divider', () => document.execCommand( 'insertHTML', false, '<hr><p><br></p>' ) ],
+		];
+
+		const close = () => {
+			if ( menu ) { menu.remove(); menu = null; }
+			block = null;
+		};
+
+		const highlight = () => {
+			if ( ! menu ) return;
+			$$( '.minn-slash-item', menu ).forEach( ( el, i ) =>
+				el.classList.toggle( 'selected', i === selIdx ) );
+		};
+
+		const run = ( idx ) => {
+			const item = items[ idx ];
+			if ( ! item || ! block ) return close();
+			const target = block;
+			close();
+			// Clear the "/" and put the caret back in the emptied block.
+			target.textContent = '';
+			if ( target.tagName !== 'BR' && ! target.childNodes.length ) target.appendChild( document.createElement( 'br' ) );
+			body.focus();
+			const range = document.createRange();
+			range.selectNodeContents( target );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			if ( item[ 2 ] === 'image' ) insertImage();
+			else item[ 2 ]();
+			scheduleAutosave();
+		};
+
+		const open = ( rect, blockEl ) => {
+			close();
+			block = blockEl;
+			selIdx = 0;
+			menu = document.createElement( 'div' );
+			menu.className = 'minn-slash-menu';
+			menu.innerHTML = items.map( ( [ ic, label ], i ) => `
+				<div class="minn-slash-item${ i === 0 ? ' selected' : '' }" data-slash="${ i }">
+					<span class="minn-slash-icon">${ ic }</span>${ label }
+				</div>` ).join( '' );
+			document.body.appendChild( menu );
+			const top = Math.min( rect.bottom + 6, window.innerHeight - menu.offsetHeight - 12 );
+			menu.style.top = top + 'px';
+			menu.style.left = Math.min( rect.left, window.innerWidth - menu.offsetWidth - 12 ) + 'px';
+			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
+				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
+			);
+		};
+
+		body.addEventListener( 'keyup', ( e ) => {
+			if ( [ 'ArrowDown', 'ArrowUp', 'Enter', 'Escape' ].includes( e.key ) ) return;
+			const sel = window.getSelection();
+			if ( ! sel.rangeCount ) return close();
+			let node = sel.anchorNode;
+			if ( ! node || ! body.contains( node ) ) return close();
+			while ( node.parentNode && node.parentNode !== body ) node = node.parentNode;
+			const blockEl = node.nodeType === Node.ELEMENT_NODE ? node : null;
+			const text = ( blockEl ? blockEl.textContent : node.textContent ) || '';
+			if ( text.trim() === '/' && blockEl ) {
+				open( sel.getRangeAt( 0 ).getBoundingClientRect(), blockEl );
+			} else {
+				close();
+			}
+		} );
+
+		body.addEventListener( 'keydown', ( e ) => {
+			if ( ! menu ) return;
+			if ( e.key === 'ArrowDown' ) { e.preventDefault(); selIdx = ( selIdx + 1 ) % items.length; highlight(); }
+			else if ( e.key === 'ArrowUp' ) { e.preventDefault(); selIdx = ( selIdx - 1 + items.length ) % items.length; highlight(); }
+			else if ( e.key === 'Enter' ) { e.preventDefault(); run( selIdx ); }
+			else if ( e.key === 'Escape' ) { e.stopPropagation(); close(); }
+		} );
+
+		body.addEventListener( 'blur', () => setTimeout( close, 150 ) );
 	}
 
 	/* ===== Notifications ===== */
@@ -1429,6 +1809,8 @@
 			{ label: 'Open Media Library', kind: 'nav', icon: '▣', run: () => go( 'media' ) },
 		];
 		if ( B.caps.moderate ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
+		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
+		if ( B.caps.users ) cmds.push( { label: 'Browse Users', kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
 		if ( B.caps.plugins ) cmds.push( { label: 'Manage Extensions', kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		cmds.push(
@@ -1494,11 +1876,176 @@
 		if ( cmd ) cmd.run();
 	}
 
+	/* ===== Modals (media preview · order detail · media picker) ===== */
+
+	function closeModal() {
+		state.modal = null;
+		renderOverlays();
+	}
+
+	function renderModal() {
+		const m = state.modal;
+		if ( ! m ) return '';
+
+		if ( m.type === 'media' ) {
+			const it = m.item;
+			const preview = it.kind === 'IMG' || it.kind === 'SVG'
+				? `<img src="${ esc( it.url ) }" alt="${ esc( it.alt ) }">`
+				: it.kind === 'VID' ? `<video src="${ esc( it.url ) }" controls></video>`
+				: it.kind === 'AUD' ? `<audio src="${ esc( it.url ) }" controls></audio>`
+				: `<div class="minn-modal-filecard" style="background:${ it.grad }">${ it.kind }</div>`;
+			const rows = [
+				[ 'Type', it.mime || it.kind ],
+				[ 'Dimensions', it.dims ],
+				[ 'Size', it.size ],
+				[ 'Uploaded', it.date ? timeAgo( it.date ) : '—' ],
+			];
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ esc( it.name ) }</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-preview">${ preview }</div>
+					<div class="minn-modal-meta">
+						${ rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ k }</span><span>${ esc( v ) }</span></div>` ).join( '' ) }
+						<div class="minn-modal-url"><span class="minn-permalink">${ esc( it.url ) }</span></div>
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
+						<button class="minn-btn-soft" id="minn-media-open">↗ Open</button>
+						<button class="minn-btn-soft danger" id="minn-media-delete">${ icon( 'trash' ) } Delete</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'order' ) {
+			const o = m.order;
+			const b = o.billing || {};
+			const sym = o.currency_symbol || '$';
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">Order #${ esc( o.number ) }</div>
+						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( o.status.replace( '-', ' ' ) ) }</span>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-meta">
+						<div class="minn-side-row"><span class="minn-side-key">Customer</span><span>${ esc( customerName( o ) ) }</span></div>
+						${ b.email ? `<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email ) }</span></div>` : '' }
+						<div class="minn-side-row"><span class="minn-side-key">Placed</span><span>${ timeAgo( o.date_created ) }</span></div>
+					</div>
+					<div class="minn-order-items">
+						${ ( o.line_items || [] ).map( ( li ) => `
+							<div class="minn-order-item">
+								<span class="minn-order-qty">${ li.quantity }×</span>
+								<span class="minn-cell-clip">${ esc( li.name ) }</span>
+								<span class="minn-order-line-total">${ esc( sym + li.total ) }</span>
+							</div>` ).join( '' ) }
+						<div class="minn-order-item total">
+							<span></span><span>Total</span>
+							<span class="minn-order-line-total">${ esc( sym + o.total ) }</span>
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }edit.php?post_type=shop_order" target="_blank" rel="noopener">↗ Manage in WooCommerce</a>
+					</div>
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'picker' ) {
+			const items = m.items;
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">Insert image</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ items == null ? '<div class="minn-loading">Loading images…</div>' : ! items.length ? '<div class="minn-empty">No images in the library yet.</div>' : `
+					<div class="minn-picker-grid">
+						${ items.map( ( it, i ) => `
+							<div class="minn-picker-item" data-pick="${ i }" style="background-image:url('${ esc( it.thumb ) }')" title="${ esc( it.name ) }"></div>` ).join( '' ) }
+					</div>` }
+				</div>
+			</div>`;
+		}
+		return '';
+	}
+
+	function bindModal() {
+		const m = state.modal;
+		if ( ! m ) return;
+		$( '#minn-modal-overlay' ).addEventListener( 'click', ( e ) => {
+			if ( e.target.id === 'minn-modal-overlay' ) closeModal();
+		} );
+		$( '#minn-modal-close' ).addEventListener( 'click', closeModal );
+
+		if ( m.type === 'media' ) {
+			const it = m.item;
+			$( '#minn-media-copy' ).addEventListener( 'click', async () => {
+				try {
+					await navigator.clipboard.writeText( it.url );
+					toast( 'URL copied' );
+				} catch ( e ) {
+					toast( 'Could not copy', true );
+				}
+			} );
+			$( '#minn-media-open' ).addEventListener( 'click', () => window.open( it.url, '_blank' ) );
+			$( '#minn-media-delete' ).addEventListener( 'click', async () => {
+				if ( ! confirm( `Delete “${ it.name }” permanently?` ) ) return;
+				try {
+					await api( `wp/v2/media/${ it.id }?force=true`, { method: 'DELETE' } );
+					toast( 'File deleted' );
+					closeModal();
+					state.cache.media = null;
+					if ( state.route === 'media' ) renderMedia();
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} );
+		}
+
+		if ( m.type === 'picker' ) {
+			$$( '[data-pick]' ).forEach( ( el ) =>
+				el.addEventListener( 'click', () => {
+					const it = m.items[ parseInt( el.dataset.pick, 10 ) ];
+					const cb = m.callback;
+					closeModal();
+					if ( it && cb ) cb( it );
+				} )
+			);
+		}
+	}
+
+	function openMediaPicker( callback ) {
+		state.modal = { type: 'picker', items: null, callback };
+		renderOverlays();
+		api( 'wp/v2/media?media_type=image&per_page=48&orderby=date&order=desc&_fields=id,title,source_url,media_details,alt_text' )
+			.then( ( items ) => {
+				if ( ! state.modal || state.modal.type !== 'picker' ) return;
+				state.modal.items = items.map( ( it ) => ( {
+					id: it.id,
+					name: decodeEntities( it.title.rendered ),
+					url: it.source_url,
+					alt: it.alt_text || '',
+					thumb: ( it.media_details && it.media_details.sizes && it.media_details.sizes.medium && it.media_details.sizes.medium.source_url ) || it.source_url,
+				} ) );
+				renderOverlays();
+			} )
+			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
+	}
+
 	/* ===== Overlays ===== */
 
 	function renderOverlays() {
 		const root = $( '#minn-overlays' );
-		root.innerHTML = ( state.notifOpen ? renderNotifPanel() : '' ) + ( state.paletteOpen ? renderPalette() : '' );
+		root.innerHTML = ( state.notifOpen ? renderNotifPanel() : '' ) + ( state.paletteOpen ? renderPalette() : '' ) + renderModal();
+		bindModal();
 
 		if ( state.notifOpen ) {
 			$( '#minn-notif-overlay' ).addEventListener( 'click', ( e ) => {
@@ -1554,6 +2101,8 @@
 			case 'content': return renderContent();
 			case 'media': return renderMedia();
 			case 'comments': return renderComments();
+			case 'orders': return renderOrders();
+			case 'users': return renderUsers();
 			case 'extensions': return renderExtensions();
 			case 'settings': return renderSettings();
 			case 'editor': return renderEditor();
@@ -1584,9 +2133,10 @@
 				state.paletteOpen = ! state.paletteOpen;
 				renderOverlays();
 			}
-			if ( e.key === 'Escape' && ( state.paletteOpen || state.notifOpen ) ) {
+			if ( e.key === 'Escape' && ( state.paletteOpen || state.notifOpen || state.modal ) ) {
 				state.paletteOpen = false;
 				state.notifOpen = false;
+				state.modal = null;
 				renderOverlays();
 			}
 		} );
@@ -1598,6 +2148,7 @@
 		}
 		refreshCommentBadge();
 		loadTypes().catch( () => {} );
+		if ( B.wc && B.caps.orders ) loadOrderSummary().catch( () => {} );
 		// Warm the content cache so the sidebar count appears.
 		if ( state.route !== 'content' ) loadContent().catch( () => {} );
 
