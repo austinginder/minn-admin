@@ -8,7 +8,10 @@ list / tabs / detail-modal / action primitives that power its built-in views.
 
 Minn's whole extension surface is four public filters — **`minn_admin_surfaces`** (views),
 **`minn_admin_editor_panels`** (editor sidebar fields), **`minn_admin_traffic`** (the Overview
-chart) and **`minn_admin_block_forms`** (block-inspector forms). The standardized way to
+chart) and **`minn_admin_block_forms`** (block-inspector forms) — plus one action,
+**`minn_admin_template_footer`**, fired at the end of Minn's app document. Minn deliberately
+never fires `wp_head`/`wp_footer` (its document stays clean), so developer tooling that wants
+to render into the page attaches there; the bundled Query Monitor adapter is the reference. The standardized way to
 integrate is to put your `add_filter()` calls in one file inside **your** plugin and require it
 unconditionally:
 
