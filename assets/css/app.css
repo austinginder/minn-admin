@@ -548,6 +548,17 @@ select.minn-input {
 }
 .minn-load-more:hover { background: var(--hover); color: var(--text); border-color: var(--border2); }
 .minn-load-more:disabled { opacity: 0.6; cursor: default; }
+.minn-pager { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 16px auto 0; flex-wrap: wrap; }
+.minn-pager-btn {
+  min-width: 34px; height: 34px; padding: 0 8px; display: flex; align-items: center; justify-content: center;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 9px;
+  color: var(--text2); font-size: 13.5px; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.minn-pager-btn:hover { background: var(--hover); color: var(--text); border-color: var(--border2); }
+.minn-pager-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); cursor: default; }
+.minn-pager-btn:disabled { opacity: 0.35; cursor: default; }
+.minn-pager-btn.nav { font-size: 16px; }
+.minn-pager-gap { color: var(--text3); padding: 0 3px; font-size: 13px; }
 .minn-toolbar-search { width: 220px; margin-left: auto; }
 .minn-toolbar-search + .minn-toolbar-meta { margin-left: 0; }
 
