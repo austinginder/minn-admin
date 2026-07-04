@@ -113,7 +113,15 @@ them declaratively is high effort, low frequency, high breakage risk. Default an
 Extensions-card "Settings ↗" link into wp-admin. If a specific toggle turns out to be touched
 weekly, promote just that toggle into a small settings surface.
 
-## Suggested build order
+## Status
+
+Everything below has shipped: collection surfaces, editor panels and traffic providers are all
+live with ten bundled adapters (Gravity Forms, Gravity SMTP, ACF, Simple History, Redirection,
+Koko Analytics, WP Statistics, Burst Statistics, Independent Analytics, plus the bespoke
+WooCommerce Orders view). The public reference lives in `for-plugin-authors.md`. Remaining from
+the original plan: SEO editor panels (Rank Math / Yoast meta shims).
+
+## Suggested build order (historical)
 
 1. Extract the generic collection renderer from Orders/Users into a descriptor interpreter.
 2. Boot-payload plumbing: `minn_admin_surfaces` filter → capability filter → `window.MINN.surfaces`.

@@ -5,7 +5,6 @@
 ### Added
 * **Code block languages:** A language picker (PHP, JS, HTML, CSS, bash, JSON, Python, SQL) appears in the editor toolbar whenever the caret is inside a code block. The choice is stored as a Prism-style `language-*` class on the `<code>` element — portable and theme-highlighter compatible — and drives language-aware syntax highlighting, including PHP `$variables` and `<?php` tags.
 * **Dark code surfaces:** Code blocks in the editor and previews always render on a dark surface with a fixed highlight palette, so syntax colors are equally readable in light and dark themes.
-
 * **Theme installs:** An "Add theme" flow on the Themes tab with a WordPress.org search picker (screenshot cards, install and activate in place) and zip upload via drag-and-drop or file picker.
 * **Redirects:** A bundled **Redirection** adapter lists redirects (source, target, status code, hits, last access) straight from its redirection/v1 API, with enable, disable and delete actions via its bulk endpoints.
 * **Activity Log:** A bundled **Simple History** adapter surfaces the audit log as a native Minn view — events with who/level/when columns, Warnings and Errors tabs, and detail modals — visibility following Simple History's own view capability.
