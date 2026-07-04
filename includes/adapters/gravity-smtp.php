@@ -146,7 +146,7 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
 			}
 			// Recipients are the addresses extracted from `extra` (never unserialized).
-			$to = array_filter( array_map( 'trim', explode( ',', preg_replace( '/\s\+\d+$/', '', minn_admin_gravity_smtp_recipients( $row->extra ) ) ) ) );
+			$to = array_filter( minn_admin_gravity_smtp_to_addresses( $row->extra ), 'is_email' );
 			if ( ! $to ) {
 				return new WP_Error( 'no_recipients', 'No recipient address on record for this email.', array( 'status' => 422 ) );
 			}
@@ -166,13 +166,30 @@ add_action( 'rest_api_init', function () {
  * unserializing it (PHP object injection would be a vulnerability here).
  */
 function minn_admin_gravity_smtp_recipients( $extra ) {
-	if ( ! $extra || ! preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', $extra, $m ) ) {
+	$emails = minn_admin_gravity_smtp_to_addresses( $extra );
+	if ( ! $emails ) {
 		return '';
 	}
-	$emails = array_values( array_unique( $m[1] ) );
-	$out    = implode( ', ', array_slice( $emails, 0, 2 ) );
+	$out = implode( ', ', array_slice( $emails, 0, 2 ) );
 	if ( count( $emails ) > 2 ) {
 		$out .= ' +' . ( count( $emails ) - 2 );
 	}
 	return $out;
+}
+
+/**
+ * The full To list from `extra`, scoped to the `to` Recipient_Collection so
+ * cc/bcc/reply-to addresses are never treated as To recipients (Resend would
+ * otherwise expose them in the To header).
+ */
+function minn_admin_gravity_smtp_to_addresses( $extra ) {
+	if ( ! $extra ) {
+		return array();
+	}
+	// The `to` collection ends at the first `}}}` (recipient → array → collection).
+	$scope = preg_match( '/s:2:"to";O:\d+:"[^"]*Recipient_Collection":\d+:\{.*?\}\}\}/s', $extra, $m ) ? $m[0] : $extra;
+	if ( ! preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', $scope, $m ) ) {
+		return array();
+	}
+	return array_values( array_unique( $m[1] ) );
 }
