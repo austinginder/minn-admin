@@ -596,7 +596,8 @@ class Minn_Admin_REST {
 		usort( $activity, function ( $a, $b ) {
 			return $b['time'] - $a['time'];
 		} );
-		$activity = array_slice( $activity, 0, 6 );
+		// 4 rows keeps the Recent activity card the same height as the chart card.
+		$activity = array_slice( $activity, 0, 4 );
 		foreach ( $activity as &$item ) {
 			$item['time'] = sprintf( '%s ago', human_time_diff( $item['time'] ) );
 		}

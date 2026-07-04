@@ -210,6 +210,7 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-panel-pad { padding: 18px 20px; }
 .minn-panel-title { font-weight: 700; font-size: 16px; }
 .minn-chart-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.minn-chart-head-actions { display: flex; align-items: center; gap: 8px; }
 .minn-range-tabs { display: flex; gap: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 3px; }
 .minn-range-tab { font-size: 13px; color: var(--text3); padding: 3px 9px; background: none; border: none; border-radius: 6px; cursor: pointer; }
 .minn-range-tab.active { color: var(--text); background: var(--panel2); font-weight: 600; }

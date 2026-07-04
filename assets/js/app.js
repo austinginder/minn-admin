@@ -417,10 +417,16 @@
 			loadOverview().then( renderIfCurrent( 'overview' ) ).catch( showErr );
 			return;
 		}
-		const chartData = o.traffic ? o.traffic.chart : o.chart;
+		// Chart source: traffic (when an analytics adapter answered) or activity.
+		// Traffic leads by default; the swap button cycles and the pick sticks.
+		const sources = o.traffic ? [ 'traffic', 'activity' ] : [ 'activity' ];
+		if ( ! state.chartSource ) state.chartSource = localStorage.getItem( 'minn-chart-source' ) || sources[ 0 ];
+		if ( ! sources.includes( state.chartSource ) ) state.chartSource = sources[ 0 ];
+		const isTraffic = state.chartSource === 'traffic';
+		const chartData = isTraffic ? o.traffic.chart : o.chart;
 		// Traffic bars stack pageviews (soft) behind visitors (solid), so the
 		// scale runs to the pageview max like Koko's own widget.
-		const max = Math.max( 1, ...chartData.map( ( c ) => o.traffic ? ( c.views || c.value ) : c.value ) );
+		const max = Math.max( 1, ...chartData.map( ( c ) => isTraffic ? ( c.views || c.value ) : c.value ) );
 		const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
 		const deltaCls = ( up ) => up === true ? ' up' : ( up === 'warn' ? ' warn' : ( up === 'down' ? ' down' : '' ) );
 		view.innerHTML = `
@@ -441,13 +447,16 @@
 		<div class="minn-dash-grid">
 			<div class="minn-card minn-panel-pad">
 				<div class="minn-chart-head">
-					<div class="minn-panel-title">${ o.traffic ? 'Traffic' : 'Activity' }${ o.traffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }</div>
-					<div class="minn-range-tabs">
-						${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ d }d</button>` ).join( '' ) }
+					<div class="minn-panel-title">${ isTraffic ? 'Traffic' : 'Activity' }${ isTraffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }</div>
+					<div class="minn-chart-head-actions">
+						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="Show ${ isTraffic ? 'Activity' : 'Traffic' }">⇄</button>` : '' }
+						<div class="minn-range-tabs">
+							${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ d }d</button>` ).join( '' ) }
+						</div>
 					</div>
 				</div>
-				<div class="minn-chart${ o.traffic ? '' : ' clickable' }" id="minn-chart">
-					${ chartData.map( ( c, i ) => o.traffic ? `
+				<div class="minn-chart${ isTraffic ? '' : ' clickable' }" id="minn-chart">
+					${ chartData.map( ( c, i ) => isTraffic ? `
 						<div class="minn-chart-col" data-ci="${ i }">
 							<div class="minn-chart-views" style="height:${ pct( c.views || 0 ) }%"></div>
 							<div class="minn-chart-visitors" style="height:${ pct( c.value ) }%"></div>
@@ -479,9 +488,15 @@
 				renderOverview();
 			} )
 		);
-		bindChartTooltip( $( '#minn-chart', view ), chartData, !! o.traffic );
+		const swap = $( '#minn-chart-swap', view );
+		if ( swap ) swap.addEventListener( 'click', () => {
+			state.chartSource = isTraffic ? 'activity' : 'traffic';
+			localStorage.setItem( 'minn-chart-source', state.chartSource );
+			renderOverview();
+		} );
+		bindChartTooltip( $( '#minn-chart', view ), chartData, isTraffic );
 		// Activity bars open the events behind them; traffic bars stay hover-only.
-		if ( ! o.traffic ) {
+		if ( ! isTraffic ) {
 			$$( '.minn-chart-col', view ).forEach( ( col ) =>
 				col.addEventListener( 'click', () => {
 					const c = chartData[ parseInt( col.dataset.ci, 10 ) ];
