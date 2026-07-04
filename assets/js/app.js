@@ -1842,48 +1842,113 @@
 		state.cache.postTypes = await api( 'minn-admin/v1/post-types' );
 	}
 
+	async function loadTaxonomies() {
+		state.cache.taxonomies = await api( 'minn-admin/v1/taxonomies' );
+	}
+
 	function renderPostTypes() {
 		const view = $( '#minn-view' );
 		const c = state.cache.postTypes;
-		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading post types…</div>';
-			loadPostTypes().then( renderIfCurrent( 'posttypes' ) ).catch( showErr );
+		const taxTab = state.ptTab === 'taxonomies';
+		const tx = state.cache.taxonomies;
+		if ( ! c || ( taxTab && ! tx ) ) {
+			view.innerHTML = '<div class="minn-loading">Loading…</div>';
+			Promise.all( [ c ? null : loadPostTypes(), taxTab && ! tx ? loadTaxonomies() : null ] )
+				.then( renderIfCurrent( 'posttypes' ) ).catch( showErr );
 			return;
 		}
-		view.innerHTML = `
-		<div class="minn-toolbar">
-			<div class="minn-toolbar-meta" style="margin-left:0;">${ c.types.length } post type${ c.types.length === 1 ? '' : 's' }</div>
-			<button class="minn-btn-soft" id="minn-add-cpt" style="margin-left:auto;">${ icon( 'plus' ) } Add post type</button>
-		</div>
-		<div class="minn-card minn-table">
-			<div class="minn-table-head minn-cpt-cols">
-				<div>Name</div><div>Slug</div><div>Managed by</div><div>Items</div><div>REST</div><div></div>
-			</div>
-			${ c.types.map( ( t ) => `
-			<div class="minn-table-row minn-cpt-cols" data-cpt="${ esc( t.slug ) }">
-				<div class="minn-cell-clip">
-					<div class="minn-row-title">${ esc( t.plural ) }</div>
-					<div class="minn-row-slug">${ esc( t.singular ) }</div>
-				</div>
-				<div class="minn-row-meta"><span class="minn-permalink">${ esc( t.slug ) }</span></div>
-				<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
-				<div class="minn-row-meta">${ t.count }</div>
-				<div class="minn-row-meta" title="${ t.show_in_rest ? 'Available over the REST API (editable in Minn)' : 'Not exposed over REST — Minn can’t list or edit its content' }">${ t.show_in_rest ? '✓' : '—' }</div>
-				<div class="minn-row-arrow">›</div>
-			</div>` ).join( '' ) }
+		const tabs = `<div class="minn-tabs">
+			<button class="minn-tab${ taxTab ? '' : ' active' }" data-pttab="types">Post Types</button>
+			<button class="minn-tab${ taxTab ? ' active' : '' }" data-pttab="taxonomies">Taxonomies</button>
 		</div>`;
 
-		$( '#minn-add-cpt', view ).addEventListener( 'click', () => {
-			state.modal = { type: 'cpt', item: null, backends: c.backends };
-			renderOverlays();
-		} );
-		$$( '.minn-table-row', view ).forEach( ( row ) =>
-			row.addEventListener( 'click', () => {
-				const t = c.types.find( ( x ) => x.slug === row.dataset.cpt );
-				if ( t ) {
-					state.modal = { type: 'cpt', item: t, backends: c.backends };
-					renderOverlays();
-				}
+		if ( taxTab ) {
+			// Attached-to labels resolve through the types list.
+			const typeLabel = ( slug ) => {
+				const t = c.types.find( ( x ) => x.slug === slug );
+				return t ? t.plural : slug;
+			};
+			view.innerHTML = `
+			<div class="minn-toolbar">
+				${ tabs }
+				<div class="minn-toolbar-meta">${ tx.taxonomies.length } taxonom${ tx.taxonomies.length === 1 ? 'y' : 'ies' }</div>
+				<button class="minn-btn-soft" id="minn-add-tax">${ icon( 'plus' ) } Add taxonomy</button>
+			</div>
+			<div class="minn-card minn-table">
+				<div class="minn-table-head minn-cpt-cols">
+					<div>Name</div><div>Attached to</div><div>Managed by</div><div>Terms</div><div>Type</div><div></div>
+				</div>
+				${ tx.taxonomies.map( ( t ) => `
+				<div class="minn-table-row minn-cpt-cols" data-tax="${ esc( t.slug ) }">
+					<div class="minn-cell-clip">
+						<div class="minn-row-title">${ esc( t.plural ) }</div>
+						<div class="minn-row-slug">${ esc( t.slug ) }</div>
+					</div>
+					<div class="minn-row-meta minn-cell-clip">${ esc( t.object_types.map( typeLabel ).join( ', ' ) || '—' ) }</div>
+					<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
+					<div class="minn-row-meta">${ t.count }</div>
+					<div class="minn-row-meta">${ t.hierarchical ? 'Categories' : 'Tags' }</div>
+					<div class="minn-row-arrow">›</div>
+				</div>` ).join( '' ) }
+			</div>`;
+
+			$( '#minn-add-tax', view ).addEventListener( 'click', () => {
+				state.modal = { type: 'tax', item: null, backends: tx.backends, types: c.types };
+				renderOverlays();
+			} );
+			$$( '.minn-table-row', view ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const t = tx.taxonomies.find( ( x ) => x.slug === row.dataset.tax );
+					if ( t ) {
+						state.modal = { type: 'tax', item: t, backends: tx.backends, types: c.types };
+						renderOverlays();
+					}
+				} )
+			);
+		} else {
+			view.innerHTML = `
+			<div class="minn-toolbar">
+				${ tabs }
+				<div class="minn-toolbar-meta">${ c.types.length } post type${ c.types.length === 1 ? '' : 's' }</div>
+				<button class="minn-btn-soft" id="minn-add-cpt">${ icon( 'plus' ) } Add post type</button>
+			</div>
+			<div class="minn-card minn-table">
+				<div class="minn-table-head minn-cpt-cols">
+					<div>Name</div><div>Slug</div><div>Managed by</div><div>Items</div><div>REST</div><div></div>
+				</div>
+				${ c.types.map( ( t ) => `
+				<div class="minn-table-row minn-cpt-cols" data-cpt="${ esc( t.slug ) }">
+					<div class="minn-cell-clip">
+						<div class="minn-row-title">${ esc( t.plural ) }</div>
+						<div class="minn-row-slug">${ esc( t.singular ) }</div>
+					</div>
+					<div class="minn-row-meta"><span class="minn-permalink">${ esc( t.slug ) }</span></div>
+					<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
+					<div class="minn-row-meta">${ t.count }</div>
+					<div class="minn-row-meta" title="${ t.show_in_rest ? 'Available over the REST API (editable in Minn)' : 'Not exposed over REST — Minn can’t list or edit its content' }">${ t.show_in_rest ? '✓' : '—' }</div>
+					<div class="minn-row-arrow">›</div>
+				</div>` ).join( '' ) }
+			</div>`;
+
+			$( '#minn-add-cpt', view ).addEventListener( 'click', () => {
+				state.modal = { type: 'cpt', item: null, backends: c.backends, catalog: c.taxCatalog || [] };
+				renderOverlays();
+			} );
+			$$( '.minn-table-row', view ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const t = c.types.find( ( x ) => x.slug === row.dataset.cpt );
+					if ( t ) {
+						state.modal = { type: 'cpt', item: t, backends: c.backends, catalog: c.taxCatalog || [] };
+						renderOverlays();
+					}
+				} )
+			);
+		}
+
+		$$( '[data-pttab]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.ptTab = btn.dataset.pttab;
+				renderPostTypes();
 			} )
 		);
 	}
@@ -1891,6 +1956,7 @@
 	// A definition changed — the Content view's type tabs must refetch.
 	function bustTypeCaches() {
 		state.cache.postTypes = null;
+		state.cache.taxonomies = null;
 		typesPromise = null;
 		state.cache.types = null;
 		state.cache.cptContent = {};
@@ -2413,6 +2479,14 @@
 	// simple block turns it into an island so nothing is silently dropped.
 	const EDITABLE_ATTRS = { heading: [ 'level' ], list: [ 'ordered' ], table: [ 'hasFixedLayout' ], code: [ 'language' ] };
 
+	// Blocks whose attributes ride through editing verbatim: the comment JSON is
+	// parked on the element as data-minn-attrs and re-emitted byte-faithfully on
+	// serialize. Only non-text-flow blocks — typing can't split them, so the
+	// attribute marker can't be duplicated by contenteditable. This is what lets
+	// real Gutenberg images ({"id":…,"sizeSlug":…}) stay editable instead of
+	// becoming islands.
+	const PASSTHROUGH_BLOCKS = [ 'image', 'table', 'quote', 'separator', 'verse', 'preformatted' ];
+
 	// Attributes JSON from a segment's opening block comment ({} when absent/invalid;
 	// null distinguishes "invalid JSON" for segmentEditable's bail-out).
 	function segmentAttrs( seg ) {
@@ -2430,6 +2504,7 @@
 		if ( ! SIMPLE_BLOCKS.includes( name ) ) return false;
 		const attrs = segmentAttrs( seg );
 		if ( attrs === null ) return false;
+		if ( PASSTHROUGH_BLOCKS.includes( name ) ) return true; // attrs re-emitted verbatim
 		const allowed = EDITABLE_ATTRS[ name ] || [];
 		return Object.keys( attrs ).every( ( k ) => allowed.includes( k ) );
 	}
@@ -2443,15 +2518,22 @@
 			if ( seg.type === 'html' ) return seg.raw;
 			if ( segmentEditable( seg ) ) {
 				let html = stripBlockComments( seg.raw );
+				const name = seg.name.replace( /^core\//, '' );
 				// Code blocks that keep their language in the comment attr (the
 				// {"language":"sql"} dialect): surface it as a language-* class so the
 				// picker and highlighter see it, and mark the pre so serialization
 				// restores the attr dialect instead of persisting the class.
-				if ( seg.name.replace( /^core\//, '' ) === 'code' ) {
+				if ( name === 'code' ) {
 					const lang = String( ( segmentAttrs( seg ) || {} ).language || '' ).toLowerCase();
 					if ( /^[a-z0-9-]+$/.test( lang ) ) {
 						html = html.replace( '<pre class="wp-block-code"', '<pre data-lang-attr="1" class="wp-block-code"' );
 						if ( ! /language-/.test( html ) ) html = html.replace( /<code(\s|>)/, `<code class="language-${ lang }"$1` );
+					}
+				} else if ( PASSTHROUGH_BLOCKS.includes( name ) ) {
+					// Park the comment attrs on the element; serialization re-emits them.
+					const attrs = segmentAttrs( seg );
+					if ( attrs && Object.keys( attrs ).length ) {
+						html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
 					}
 				}
 				return html;
@@ -2488,8 +2570,21 @@
 	// Serialize the edited DOM back to Gutenberg block markup.
 	function serializeToBlocks( root, islands ) {
 		const out = [];
+		// serializeBlockAttrs applies Gutenberg's comment-safe escaping ("--", <, >, &).
 		const pushBlock = ( name, attrs, html ) =>
-			out.push( `<!-- wp:${ name }${ attrs ? ' ' + JSON.stringify( attrs ) : '' } -->\n${ html }\n<!-- /wp:${ name } -->` );
+			out.push( `<!-- wp:${ name }${ serializeBlockAttrs( attrs && Object.keys( attrs ).length ? attrs : null ) } -->\n${ html }\n<!-- /wp:${ name } -->` );
+		// Passthrough attrs parked by buildEditableContent; consumed off the clone
+		// so the live DOM keeps its marker for later autosaves.
+		const takeMinnAttrs = ( el ) => {
+			const raw = el.dataset ? el.dataset.minnAttrs : null;
+			if ( ! raw ) return null;
+			el.removeAttribute( 'data-minn-attrs' );
+			try {
+				return JSON.parse( raw );
+			} catch ( e ) {
+				return null;
+			}
+		};
 
 		Array.from( root.childNodes ).forEach( ( n ) => {
 			if ( n.nodeType === Node.TEXT_NODE ) {
@@ -2515,17 +2610,20 @@
 				el.classList.add( 'wp-block-heading' );
 				pushBlock( 'heading', { level: parseInt( tag[ 1 ], 10 ) }, el.outerHTML );
 			} else if ( tag === 'blockquote' ) {
+				const pa = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-quote' );
 				const cite = el.querySelector( ':scope > cite' );
 				const paras = Array.from( el.children ).filter( ( ch ) => ch.tagName === 'P' );
 				const inner = paras.length
 					? paras.map( ( p ) => `<!-- wp:paragraph -->\n${ p.outerHTML }\n<!-- /wp:paragraph -->` ).join( '' )
 					: `<!-- wp:paragraph -->\n<p>${ cite ? '' : el.innerHTML }</p>\n<!-- /wp:paragraph -->`;
-				pushBlock( 'quote', null, `<blockquote class="wp-block-quote">${ inner }${ cite ? cite.outerHTML : '' }</blockquote>` );
+				pushBlock( 'quote', pa, `<blockquote class="${ el.className }">${ inner }${ cite ? cite.outerHTML : '' }</blockquote>` );
 			} else if ( tag === 'pre' && el.classList.contains( 'wp-block-verse' ) ) {
-				pushBlock( 'verse', null, `<pre class="wp-block-verse">${ el.innerHTML }</pre>` );
+				const pa = takeMinnAttrs( el );
+				pushBlock( 'verse', pa, `<pre class="${ el.className }">${ el.innerHTML }</pre>` );
 			} else if ( tag === 'pre' && el.classList.contains( 'wp-block-preformatted' ) ) {
-				pushBlock( 'preformatted', null, `<pre class="wp-block-preformatted">${ el.innerHTML }</pre>` );
+				const pa = takeMinnAttrs( el );
+				pushBlock( 'preformatted', pa, `<pre class="${ el.className }">${ el.innerHTML }</pre>` );
 			} else if ( tag === 'pre' ) {
 				// Plain text so syntax-highlight spans never reach the database;
 				// the language class is preserved (Prism-style, theme-compatible).
@@ -2540,14 +2638,21 @@
 					pushBlock( 'code', null, `<pre class="wp-block-code"><code${ lang !== 'auto' ? ` class="language-${ lang }"` : '' }>${ esc( text ) }</code></pre>` );
 				}
 			} else if ( ( tag === 'figure' && el.querySelector( 'table' ) ) || tag === 'table' ) {
+				const pa = takeMinnAttrs( el ) || {};
 				const table = tag === 'table' ? el : el.querySelector( 'table' );
 				table.removeAttribute( 'data-hl' );
 				const fixed = table.classList.contains( 'has-fixed-layout' );
+				// The class on the element is the live truth for hasFixedLayout —
+				// but an explicitly-written false stays explicit (newer Gutenberg
+				// defaults tables to fixed, so absent ≠ false).
+				if ( fixed ) pa.hasFixedLayout = true;
+				else if ( 'hasFixedLayout' in pa ) pa.hasFixedLayout = false;
+				const figClass = tag === 'figure' && el.className ? el.className : 'wp-block-table';
 				const caption = tag === 'figure' ? el.querySelector( ':scope > figcaption' ) : null;
 				pushBlock(
 					'table',
-					fixed ? { hasFixedLayout: true } : null,
-					`<figure class="wp-block-table"><table${ fixed ? ' class="has-fixed-layout"' : '' }>${ table.innerHTML }</table>${ caption ? caption.outerHTML : '' }</figure>`
+					pa,
+					`<figure class="${ figClass }"><table${ table.className ? ` class="${ table.className }"` : '' }>${ table.innerHTML }</table>${ caption ? caption.outerHTML : '' }</figure>`
 				);
 			} else if ( tag === 'ul' || tag === 'ol' ) {
 				el.classList.add( 'wp-block-list' );
@@ -2555,12 +2660,15 @@
 					.map( ( li ) => `<!-- wp:list-item -->\n${ li.outerHTML }\n<!-- /wp:list-item -->` ).join( '' );
 				pushBlock( 'list', tag === 'ol' ? { ordered: true } : null, `<${ tag } class="${ el.className }">${ items }</${ tag }>` );
 			} else if ( tag === 'figure' && el.querySelector( 'img' ) ) {
+				const pa = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-image' );
-				pushBlock( 'image', null, el.outerHTML );
+				pushBlock( 'image', pa, el.outerHTML );
 			} else if ( tag === 'img' ) {
-				pushBlock( 'image', null, `<figure class="wp-block-image">${ el.outerHTML }</figure>` );
+				const pa = takeMinnAttrs( el );
+				pushBlock( 'image', pa, `<figure class="wp-block-image">${ el.outerHTML }</figure>` );
 			} else if ( tag === 'hr' ) {
-				pushBlock( 'separator', null, '<hr class="wp-block-separator has-alpha-channel-opacity"/>' );
+				const pa = takeMinnAttrs( el );
+				pushBlock( 'separator', pa, pa ? el.outerHTML : '<hr class="wp-block-separator has-alpha-channel-opacity"/>' );
 			} else if ( tag === 'div' || tag === 'section' ) {
 				// contenteditable wraps things in divs — serialize their children
 				// as if they were top-level instead of dumping raw HTML.
@@ -4495,7 +4603,7 @@
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-modal-form">
-						${ editable ? '' : '<div class="minn-editor-locked-note">Registered in code by a theme or plugin — shown for reference, editable only where it’s defined.</div>' }
+						${ editable ? '' : `<div class="minn-editor-locked-note">${ t && t.source === 'core' ? 'Built into WordPress — shown for reference.' : 'Registered in code by a theme or plugin — shown for reference, editable only where it’s defined.' }</div>` }
 						<div><div class="minn-field-label">Plural label</div>
 						<input class="minn-input" data-cptfield="plural" value="${ esc( t ? t.plural : '' ) }" placeholder="Books"${ dis }></div>
 						<div><div class="minn-field-label">Singular label</div>
@@ -4518,13 +4626,61 @@
 							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cptsupport="${ id }"${ supports.has( id ) ? ' checked' : '' }${ dis }> ${ label }</label>` ).join( '' ) }</div></div>
 						<div><div class="minn-field-label">Taxonomies</div>
 						<div class="minn-cpt-checks">
-							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cpttax="category"${ taxes.has( 'category' ) ? ' checked' : '' }${ dis }> Categories</label>
-							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cpttax="post_tag"${ taxes.has( 'post_tag' ) ? ' checked' : '' }${ dis }> Tags</label>
+							${ ( m.catalog && m.catalog.length ? m.catalog : [ { slug: 'category', label: 'Categories' }, { slug: 'post_tag', label: 'Tags' } ] ).map( ( tax ) => `
+							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cpttax="${ esc( tax.slug ) }"${ taxes.has( tax.slug ) ? ' checked' : '' }${ dis }> ${ esc( tax.label ) }</label>` ).join( '' ) }
 						</div></div>
 					</div>
 					<div class="minn-modal-actions">
 						${ editable ? `<button class="minn-btn-primary" id="minn-cpt-save">${ isNew ? 'Create post type' : 'Save' }</button>` : '' }
 						${ ! isNew && editable ? `<button class="minn-btn-soft danger" id="minn-cpt-delete">${ icon( 'trash' ) } Remove</button>` : '' }
+					</div>
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'tax' ) {
+			const t = m.item;
+			const isNew = ! t;
+			const editable = isNew || t.editable;
+			const attached = new Set( t ? t.object_types : [ 'post' ] );
+			const dis = editable ? '' : ' disabled';
+			const flag = ( key, label, desc, on ) => `
+				<label class="minn-insp-check" title="${ esc( desc ) }">
+					<input type="checkbox" class="minn-cb" data-taxflag="${ key }"${ on ? ' checked' : '' }${ dis }> ${ label }
+				</label>`;
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ isNew ? 'Add taxonomy' : esc( t.plural ) }</div>
+						${ isNew ? '' : `<span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span>` }
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						${ editable ? '' : `<div class="minn-editor-locked-note">${ t && t.source === 'core' ? 'Built into WordPress — shown for reference.' : 'Registered in code by a theme or plugin — shown for reference, editable only where it’s defined.' }</div>` }
+						<div><div class="minn-field-label">Plural label</div>
+						<input class="minn-input" data-taxfield="plural" value="${ esc( t ? t.plural : '' ) }" placeholder="Genres"${ dis }></div>
+						<div><div class="minn-field-label">Singular label</div>
+						<input class="minn-input" data-taxfield="singular" value="${ esc( t ? t.singular : '' ) }" placeholder="Genre"${ dis }></div>
+						<div><div class="minn-field-label">Slug</div>
+						<input class="minn-input mono" data-taxfield="slug" value="${ esc( t ? t.slug : '' ) }" placeholder="genre" maxlength="32"${ isNew ? '' : ' disabled' }></div>
+						${ isNew && m.backends.length > 1 ? `<div><div class="minn-field-label">Store definition in</div>
+						<select class="minn-input" id="minn-tax-backend">
+							${ m.backends.map( ( b ) => `<option value="${ esc( b ) }">${ esc( CPT_SOURCE_LABEL[ b ] || b ) }</option>` ).join( '' ) }
+						</select></div>` : '' }
+						<div><div class="minn-field-label">Behavior</div>
+						${ flag( 'hierarchical', 'Hierarchical (like categories)', 'Terms can nest under parents; unchecked behaves like tags', t ? t.hierarchical : false ) }
+						${ flag( 'public', 'Public', 'Visible on the front end with term archive URLs', t ? t.public : true ) }
+						${ flag( 'show_in_rest', 'Show in REST API', 'Required for Minn and the block editor to assign terms', t ? t.show_in_rest : true ) }</div>
+						<div><div class="minn-field-label">Attach to</div>
+						<div class="minn-cpt-checks">
+							${ ( m.types || [] ).map( ( pt ) => `
+							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-taxtype="${ esc( pt.slug ) }"${ attached.has( pt.slug ) ? ' checked' : '' }${ dis }> ${ esc( pt.plural ) }</label>` ).join( '' ) }
+						</div></div>
+					</div>
+					<div class="minn-modal-actions">
+						${ editable ? `<button class="minn-btn-primary" id="minn-tax-save">${ isNew ? 'Create taxonomy' : 'Save' }</button>` : '' }
+						${ ! isNew && editable ? `<button class="minn-btn-soft danger" id="minn-tax-delete">${ icon( 'trash' ) } Remove</button>` : '' }
 					</div>
 				</div>
 			</div>`;
@@ -4790,6 +4946,45 @@
 				try {
 					await api( 'minn-admin/v1/post-types/' + m.item.slug, { method: 'DELETE' } );
 					toast( 'Post type removed — content preserved' );
+					bustTypeCaches();
+					closeModal();
+					if ( state.route === 'posttypes' ) renderPostTypes();
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} );
+		}
+
+		if ( m.type === 'tax' ) {
+			const saveBtn = $( '#minn-tax-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const modal = $( '.minn-modal' );
+				const payload = { object_types: [] };
+				$$( '[data-taxfield]', modal ).forEach( ( i ) => { payload[ i.dataset.taxfield ] = i.value.trim(); } );
+				$$( '[data-taxflag]', modal ).forEach( ( i ) => { payload[ i.dataset.taxflag ] = i.checked ? 1 : 0; } );
+				$$( '[data-taxtype]', modal ).forEach( ( i ) => { if ( i.checked ) payload.object_types.push( i.dataset.taxtype ); } );
+				const backendSel = $( '#minn-tax-backend' );
+				if ( backendSel ) payload.backend = backendSel.value;
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+				try {
+					await api( 'minn-admin/v1/taxonomies' + ( m.item ? '/' + m.item.slug : '' ), { method: 'POST', body: JSON.stringify( payload ) } );
+					toast( m.item ? 'Taxonomy updated' : 'Taxonomy created' );
+					bustTypeCaches();
+					closeModal();
+					if ( state.route === 'posttypes' ) renderPostTypes();
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = m.item ? 'Save' : 'Create taxonomy';
+				}
+			} );
+			const delBtn = $( '#minn-tax-delete' );
+			if ( delBtn ) delBtn.addEventListener( 'click', async () => {
+				if ( ! confirm( `Remove the “${ m.item.plural }” taxonomy? Existing terms stay in the database.` ) ) return;
+				try {
+					await api( 'minn-admin/v1/taxonomies/' + m.item.slug, { method: 'DELETE' } );
+					toast( 'Taxonomy removed — terms preserved' );
 					bustTypeCaches();
 					closeModal();
 					if ( state.route === 'posttypes' ) renderPostTypes();
