@@ -632,6 +632,10 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 
 /* ===== Users ===== */
 .minn-user-cols { grid-template-columns: 40px 1.2fr 1.4fr 130px 110px 40px; }
+
+/* ===== Post types ===== */
+.minn-cpt-cols { grid-template-columns: 1.4fr 1fr 120px 70px 60px 40px; }
+.minn-cpt-checks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 12px; }
 .minn-user-row-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel2); object-fit: cover; }
 
 /* ===== Editor extras ===== */
@@ -861,6 +865,9 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   .minn-user-cols { grid-template-columns: 40px 1fr 100px; }
   .minn-user-cols > :nth-child(3), .minn-user-cols > :nth-child(5),
   .minn-user-cols > :nth-child(6) { display: none; }
+  .minn-cpt-cols { grid-template-columns: 1fr 100px; }
+  .minn-cpt-cols > :nth-child(2), .minn-cpt-cols > :nth-child(4),
+  .minn-cpt-cols > :nth-child(5), .minn-cpt-cols > :nth-child(6) { display: none; }
   /* Surface tables set their columns inline (unknown shape) — scroll those instead. */
   .minn-table { overflow-x: auto; }
   .minn-table-head[style], .minn-table-row[style] { min-width: 520px; }

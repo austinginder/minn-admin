@@ -158,6 +158,7 @@
 		orders: [ 'Orders', 'WooCommerce' ],
 		users: [ 'Users', 'People' ],
 		extensions: [ 'Extensions', 'Installed' ],
+		posttypes: [ 'Post Types', 'Structure' ],
 		settings: [ 'Settings', 'General' ],
 		editor: [ 'Editor', 'Draft' ],
 	};
@@ -294,6 +295,7 @@
 			manageItems.push( { id: 'users', label: 'Users', icon: 'users' } );
 		}
 		if ( B.caps.settings ) {
+			manageItems.push( { id: 'posttypes', label: 'Post Types', icon: 'grid' } );
 			manageItems.push( { id: 'settings', label: 'Settings', icon: 'gear' } );
 		}
 
@@ -1651,6 +1653,10 @@
 						window.location.href = B.site.adminUrl;
 						return;
 					}
+					// A plugin flip can change what the app shows elsewhere —
+					// traffic provider on Overview, registered post types, CPT tabs.
+					state.cache.overview = null;
+					bustTypeCaches();
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -1696,6 +1702,8 @@
 					await api( 'wp/v2/plugins/' + file, { method: 'DELETE' } );
 					toast( name + ' deleted' );
 					state.cache.plugins = null;
+					state.cache.overview = null;
+					bustTypeCaches();
 					await loadPlugins().catch( () => {} );
 				} catch ( e ) {
 					toast( e.message, true );
@@ -1818,6 +1826,76 @@
 		if ( state.route === 'extensions' ) renderExtensions();
 	}
 
+	/* ===== Post types =====
+	 * Directory of registered post types with definition editing through
+	 * whichever manager owns each one (ACF / CPT UI / Minn's own store —
+	 * see class-minn-admin-cpt.php). Code-registered types are read-only. */
+
+	const CPT_SOURCE_LABEL = { core: 'WordPress', code: 'Code', acf: 'ACF', cptui: 'CPT UI', minn: 'Minn' };
+	const CPT_SUPPORTS = [
+		[ 'title', 'Title' ], [ 'editor', 'Editor' ], [ 'thumbnail', 'Featured image' ],
+		[ 'excerpt', 'Excerpt' ], [ 'custom-fields', 'Custom fields' ], [ 'comments', 'Comments' ],
+		[ 'revisions', 'Revisions' ], [ 'page-attributes', 'Page attributes' ], [ 'author', 'Author' ],
+	];
+
+	async function loadPostTypes() {
+		state.cache.postTypes = await api( 'minn-admin/v1/post-types' );
+	}
+
+	function renderPostTypes() {
+		const view = $( '#minn-view' );
+		const c = state.cache.postTypes;
+		if ( ! c ) {
+			view.innerHTML = '<div class="minn-loading">Loading post types…</div>';
+			loadPostTypes().then( renderIfCurrent( 'posttypes' ) ).catch( showErr );
+			return;
+		}
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			<div class="minn-toolbar-meta" style="margin-left:0;">${ c.types.length } post type${ c.types.length === 1 ? '' : 's' }</div>
+			<button class="minn-btn-soft" id="minn-add-cpt" style="margin-left:auto;">${ icon( 'plus' ) } Add post type</button>
+		</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-cpt-cols">
+				<div>Name</div><div>Slug</div><div>Managed by</div><div>Items</div><div>REST</div><div></div>
+			</div>
+			${ c.types.map( ( t ) => `
+			<div class="minn-table-row minn-cpt-cols" data-cpt="${ esc( t.slug ) }">
+				<div class="minn-cell-clip">
+					<div class="minn-row-title">${ esc( t.plural ) }</div>
+					<div class="minn-row-slug">${ esc( t.singular ) }</div>
+				</div>
+				<div class="minn-row-meta"><span class="minn-permalink">${ esc( t.slug ) }</span></div>
+				<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
+				<div class="minn-row-meta">${ t.count }</div>
+				<div class="minn-row-meta" title="${ t.show_in_rest ? 'Available over the REST API (editable in Minn)' : 'Not exposed over REST — Minn can’t list or edit its content' }">${ t.show_in_rest ? '✓' : '—' }</div>
+				<div class="minn-row-arrow">›</div>
+			</div>` ).join( '' ) }
+		</div>`;
+
+		$( '#minn-add-cpt', view ).addEventListener( 'click', () => {
+			state.modal = { type: 'cpt', item: null, backends: c.backends };
+			renderOverlays();
+		} );
+		$$( '.minn-table-row', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => {
+				const t = c.types.find( ( x ) => x.slug === row.dataset.cpt );
+				if ( t ) {
+					state.modal = { type: 'cpt', item: t, backends: c.backends };
+					renderOverlays();
+				}
+			} )
+		);
+	}
+
+	// A definition changed — the Content view's type tabs must refetch.
+	function bustTypeCaches() {
+		state.cache.postTypes = null;
+		typesPromise = null;
+		state.cache.types = null;
+		state.cache.cptContent = {};
+	}
+
 	/* ===== Settings ===== */
 
 	const SETTINGS_SECTIONS = [ 'General', 'Writing', 'Reading', 'Discussion', 'Permalinks' ];
@@ -1905,7 +1983,14 @@
 					+ siteIconField
 					+ text( 'url', 'Site address', s.url, true )
 					+ text( 'email', 'Administration email', s.email, true )
-					+ select( 'timezone', 'Timezone', timezones, s.timezone || 'UTC' )
+					// Autocomplete, not a select — 400+ zones need type-to-filter.
+					// Option values stay canonical (America/New_York); the label's
+					// spaces let "new york" match too. Validated on save.
+					+ `<div>
+						<div class="minn-field-label">Timezone</div>
+						<input class="minn-input" data-key="timezone" list="minn-tz-list" value="${ esc( s.timezone || 'UTC' ) }" placeholder="Start typing — e.g. Chicago, Berlin, UTC" autocomplete="off" spellcheck="false">
+						<datalist id="minn-tz-list">${ timezones.map( ( [ v ] ) => `<option value="${ esc( v ) }">${ esc( v.replace( /_/g, ' ' ) ) }</option>` ).join( '' ) }</datalist>
+					</div>`
 					+ text( 'date_format', 'Date format', s.date_format, true )
 					+ text( 'time_format', 'Time format', s.time_format, true )
 					+ select( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week )
@@ -2113,6 +2198,20 @@
 					if ( NUMERIC.includes( key ) ) value = parseInt( value, 10 ) || 0;
 					payload[ key ] = value;
 				} );
+				// The timezone field is free-typed with datalist suggestions —
+				// only let a real zone id (or a case-corrected match) through.
+				if ( 'timezone' in payload ) {
+					payload.timezone = payload.timezone.trim();
+					let zones = [ 'UTC', s.timezone ];
+					try { zones = zones.concat( Intl.supportedValuesOf( 'timeZone' ) ); } catch ( e2 ) {}
+					const match = zones.find( ( z ) => z && ( z === payload.timezone || z.toLowerCase() === payload.timezone.toLowerCase().replace( / /g, '_' ) ) );
+					if ( ! match ) {
+						toast( `“${ payload.timezone }” isn’t a timezone — pick one from the suggestions.`, true );
+						saveBtn.disabled = false;
+						return;
+					}
+					payload.timezone = match;
+				}
 				try {
 					cache.values = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( payload ) } );
 					toast( 'Settings saved' );
@@ -3905,6 +4004,7 @@
 			cmds.push( { label: 'Open ' + s.label + ( s.sub ? ' (' + s.sub + ')' : '' ), kind: 'nav', icon: '❖', run: () => go( s.id ) } )
 		);
 		if ( B.caps.plugins ) cmds.push( { label: 'Manage Extensions', kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
+		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		cmds.push(
 			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => { state.editorId = null; state.editorType = 'posts'; state.editor = null; go( 'editor' ); } },
@@ -4244,6 +4344,61 @@
 			return renderRevisionModal( m );
 		}
 
+		if ( m.type === 'cpt' ) {
+			const t = m.item;
+			const isNew = ! t;
+			const editable = isNew || t.editable;
+			const supports = new Set( t ? t.supports : [ 'title', 'editor', 'thumbnail' ] );
+			const taxes = new Set( t ? t.taxonomies : [] );
+			const flag = ( key, label, desc, on ) => `
+				<label class="minn-insp-check" title="${ esc( desc ) }">
+					<input type="checkbox" class="minn-cb" data-cptflag="${ key }"${ on ? ' checked' : '' }${ editable ? '' : ' disabled' }> ${ label }
+				</label>`;
+			const dis = editable ? '' : ' disabled';
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ isNew ? 'Add post type' : esc( t.plural ) }</div>
+						${ isNew ? '' : `<span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span>` }
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						${ editable ? '' : '<div class="minn-editor-locked-note">Registered in code by a theme or plugin — shown for reference, editable only where it’s defined.</div>' }
+						<div><div class="minn-field-label">Plural label</div>
+						<input class="minn-input" data-cptfield="plural" value="${ esc( t ? t.plural : '' ) }" placeholder="Books"${ dis }></div>
+						<div><div class="minn-field-label">Singular label</div>
+						<input class="minn-input" data-cptfield="singular" value="${ esc( t ? t.singular : '' ) }" placeholder="Book"${ dis }></div>
+						<div><div class="minn-field-label">Slug</div>
+						<input class="minn-input mono" data-cptfield="slug" value="${ esc( t ? t.slug : '' ) }" placeholder="book" maxlength="20"${ isNew ? '' : ' disabled' }></div>
+						<div><div class="minn-field-label">Description (optional)</div>
+						<input class="minn-input" data-cptfield="description" value="${ esc( t ? t.description : '' ) }"${ dis }></div>
+						${ isNew && m.backends.length > 1 ? `<div><div class="minn-field-label">Store definition in</div>
+						<select class="minn-input" id="minn-cpt-backend">
+							${ m.backends.map( ( b ) => `<option value="${ esc( b ) }">${ esc( CPT_SOURCE_LABEL[ b ] || b ) }</option>` ).join( '' ) }
+						</select></div>` : '' }
+						<div><div class="minn-field-label">Visibility</div>
+						${ flag( 'public', 'Public', 'Visible on the front end with its own URLs', t ? t.public : true ) }
+						${ flag( 'has_archive', 'Archive page', 'A listing page at /slug/', t ? t.has_archive : false ) }
+						${ flag( 'hierarchical', 'Hierarchical', 'Like pages — items can have parents', t ? t.hierarchical : false ) }
+						${ flag( 'show_in_rest', 'Show in REST API', 'Required for Minn (and the block editor) to list and edit content', t ? t.show_in_rest : true ) }</div>
+						<div><div class="minn-field-label">Supports</div>
+						<div class="minn-cpt-checks">${ CPT_SUPPORTS.map( ( [ id, label ] ) => `
+							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cptsupport="${ id }"${ supports.has( id ) ? ' checked' : '' }${ dis }> ${ label }</label>` ).join( '' ) }</div></div>
+						<div><div class="minn-field-label">Taxonomies</div>
+						<div class="minn-cpt-checks">
+							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cpttax="category"${ taxes.has( 'category' ) ? ' checked' : '' }${ dis }> Categories</label>
+							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cpttax="post_tag"${ taxes.has( 'post_tag' ) ? ' checked' : '' }${ dis }> Tags</label>
+						</div></div>
+					</div>
+					<div class="minn-modal-actions">
+						${ editable ? `<button class="minn-btn-primary" id="minn-cpt-save">${ isNew ? 'Create post type' : 'Save' }</button>` : '' }
+						${ ! isNew && editable ? `<button class="minn-btn-soft danger" id="minn-cpt-delete">${ icon( 'trash' ) } Remove</button>` : '' }
+					</div>
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'help' ) {
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
@@ -4462,6 +4617,47 @@
 					toast( e.message, true );
 					saveBtn.disabled = false;
 					saveBtn.textContent = 'Save';
+				}
+			} );
+		}
+
+		if ( m.type === 'cpt' ) {
+			const saveBtn = $( '#minn-cpt-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				// Scope to the modal — the list rows behind it carry data-cpt slugs.
+				const modal = $( '.minn-modal' );
+				const payload = { supports: [], taxonomies: [] };
+				$$( '[data-cptfield]', modal ).forEach( ( i ) => { payload[ i.dataset.cptfield ] = i.value.trim(); } );
+				$$( '[data-cptflag]', modal ).forEach( ( i ) => { payload[ i.dataset.cptflag ] = i.checked ? 1 : 0; } );
+				$$( '[data-cptsupport]', modal ).forEach( ( i ) => { if ( i.checked ) payload.supports.push( i.dataset.cptsupport ); } );
+				$$( '[data-cpttax]', modal ).forEach( ( i ) => { if ( i.checked ) payload.taxonomies.push( i.dataset.cpttax ); } );
+				const backendSel = $( '#minn-cpt-backend' );
+				if ( backendSel ) payload.backend = backendSel.value;
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+				try {
+					await api( 'minn-admin/v1/post-types' + ( m.item ? '/' + m.item.slug : '' ), { method: 'POST', body: JSON.stringify( payload ) } );
+					toast( m.item ? 'Post type updated' : 'Post type created' );
+					bustTypeCaches();
+					closeModal();
+					if ( state.route === 'posttypes' ) renderPostTypes();
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = m.item ? 'Save' : 'Create post type';
+				}
+			} );
+			const delBtn = $( '#minn-cpt-delete' );
+			if ( delBtn ) delBtn.addEventListener( 'click', async () => {
+				if ( ! confirm( `Remove the “${ m.item.plural }” post type? Existing content stays in the database.` ) ) return;
+				try {
+					await api( 'minn-admin/v1/post-types/' + m.item.slug, { method: 'DELETE' } );
+					toast( 'Post type removed — content preserved' );
+					bustTypeCaches();
+					closeModal();
+					if ( state.route === 'posttypes' ) renderPostTypes();
+				} catch ( e ) {
+					toast( e.message, true );
 				}
 			} );
 		}
@@ -4691,6 +4887,8 @@
 						toast( p.name + ' installed' );
 					}
 					state.cache.plugins = null;
+					state.cache.overview = null;
+					bustTypeCaches();
 					await loadPlugins().catch( () => {} );
 					if ( state.route === 'extensions' ) renderExtensions();
 					renderOverlays(); // refresh button states in the modal
@@ -5227,6 +5425,7 @@
 			case 'orders': return renderOrders();
 			case 'users': return renderUsers();
 			case 'extensions': return renderExtensions();
+			case 'posttypes': return renderPostTypes();
 			case 'settings': return renderSettings();
 			case 'editor': return renderEditor();
 			default:
