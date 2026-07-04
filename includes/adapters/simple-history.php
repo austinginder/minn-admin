@@ -25,6 +25,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'route'     => 'simple-history/v1/events',
 			'pageQuery' => 'per_page=25&page={page}',
+			'search'    => 'search={q}',
 			'tabs'      => array(
 				'param'    => 'loglevels',
 				'static'   => array(
