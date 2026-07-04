@@ -1,6 +1,11 @@
 # Block inspector — editing complex blocks without Gutenberg
 
-**Status: design (targeted at v0.4.0). Nothing here is built yet.**
+**Status: steps 1–3 shipped (v0.4.0 cycle) — code language attribute, the inspector for
+attribute/dynamic islands with server-rendered previews (`minn-admin/v1/render-blocks`
+replaced the per-block `block-renderer` idea — it renders whole islands including static
+parents with dynamic children), and one-level child editing. Still open: add/remove/reorder
+children, the `minn_admin_block_forms` filter, parent-attribute editing for InnerBlocks
+wrappers.**
 
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —
 this is the plan for making them *workable*. The goal: click an island, get a small inspector
