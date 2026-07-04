@@ -3592,7 +3592,7 @@
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,featured_media${ extraKeys }` );
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,featured_media,parent,menu_order,template${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			const mode = editorModeFor( raw );
 			state.editor = {
@@ -3617,6 +3617,15 @@
 				supportsThumb: 'featured_media' in p,
 				featuredMedia: p.featured_media || 0,
 				featuredThumb: null,
+				// Page attributes — presence in the (allowlisted) response tells
+				// which of them this post type actually supports.
+				parent: p.parent || 0,
+				menuOrder: p.menu_order || 0,
+				template: p.template || '',
+				supportsParent: 'parent' in p,
+				supportsOrder: 'menu_order' in p,
+				templates: null,
+				parentPick: null,
 			};
 			if ( state.editorType === 'posts' && ( p.tags || [] ).length ) {
 				api( `wp/v2/tags?include=${ p.tags.join( ',' ) }&per_page=100&_fields=id,name` )
@@ -3642,6 +3651,7 @@
 				: mode === 'classic' ? miniAutop( raw )
 				: stripBlockComments( raw );
 			loadEditorPanels( state.editor, p );
+			loadPageAttrs( state.editor );
 			// Revision history (types without revision support 404 — that's fine).
 			// Revisions expose an `author` ID but no author link, so _embed can't
 			// resolve names — look them up via the users endpoint instead.
@@ -3688,6 +3698,7 @@
 				tagIds: new Set(), tags: [],
 				revisions: null, panels: null,
 				supportsThumb: true, featuredMedia: 0, featuredThumb: null,
+				parent: 0, menuOrder: 0, template: '', supportsParent: false, supportsOrder: false, templates: null, parentPick: null,
 			};
 			loadEditorPanels( state.editor, null );
 		}
@@ -3737,6 +3748,9 @@
 		if ( ed.featuredDirty ) {
 			payload.featured_media = ed.featuredMedia || 0;
 		}
+		if ( ed.parentDirty ) payload.parent = ed.parent || 0;
+		if ( ed.templateDirty ) payload.template = ed.template || '';
+		if ( ed.orderDirty ) payload.menu_order = ed.menuOrder || 0;
 		try {
 			let p;
 			if ( ed.id ) {
@@ -3756,6 +3770,9 @@
 			ed.savedAt = Date.now();
 			ed.panelDirty = {};
 			ed.featuredDirty = false;
+			ed.parentDirty = false;
+			ed.templateDirty = false;
+			ed.orderDirty = false;
 			state.cache.content = null;
 			renderEditorSide();
 			renderTopbar();
@@ -3893,6 +3910,75 @@
 		}
 	}
 
+	// Data behind the Page attributes card: theme templates for the post type
+	// (cached per session) and, for hierarchical types, the parent candidates.
+	async function loadPageAttrs( ed ) {
+		const typeSlug = ed.type === 'pages' ? 'page'
+			: ed.type === 'posts' ? 'post'
+			: ( ( ( state.cache.types || [] ).find( ( t ) => t.restBase === ed.type ) || {} ).slug || ed.type );
+		const jobs = [];
+		state.cache.templates = state.cache.templates || {};
+		if ( state.cache.templates[ typeSlug ] == null ) {
+			jobs.push( api( `minn-admin/v1/templates?type=${ encodeURIComponent( typeSlug ) }` )
+				.then( ( r ) => { state.cache.templates[ typeSlug ] = r.templates || []; } )
+				.catch( () => { state.cache.templates[ typeSlug ] = []; } ) );
+		}
+		if ( ed.supportsParent ) {
+			const statuses = 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' );
+			jobs.push( api( `wp/v2/${ ed.type }?context=edit&status=${ statuses }&per_page=100&orderby=title&order=asc&_fields=id,title,parent` )
+				.then( ( items ) => {
+					ed.parentPick = ( Array.isArray( items ) ? items : [] ).map( ( x ) => ( {
+						id: x.id,
+						title: decodeEntities( ( x.title && ( x.title.raw != null ? x.title.raw : x.title.rendered ) ) || '' ) || '(no title)',
+						parent: x.parent || 0,
+					} ) );
+				} )
+				.catch( () => { ed.parentPick = []; } ) );
+		}
+		await Promise.all( jobs );
+		ed.templates = state.cache.templates[ typeSlug ] || [];
+		if ( state.route === 'editor' && state.editor === ed ) renderEditorSide();
+	}
+
+	// Parent choices as a depth-indented tree, excluding the post itself and
+	// its descendants (assigning those would create a cycle).
+	function parentOptions( ed ) {
+		const items = ed.parentPick || [];
+		const excluded = new Set( ed.id ? [ ed.id ] : [] );
+		let grew = true;
+		while ( grew ) {
+			grew = false;
+			items.forEach( ( it ) => {
+				if ( ! excluded.has( it.id ) && excluded.has( it.parent ) ) {
+					excluded.add( it.id );
+					grew = true;
+				}
+			} );
+		}
+		const byParent = new Map();
+		items.forEach( ( it ) => {
+			if ( excluded.has( it.id ) ) return;
+			if ( ! byParent.has( it.parent ) ) byParent.set( it.parent, [] );
+			byParent.get( it.parent ).push( it );
+		} );
+		const opts = [ { value: '0', label: '— none —' } ];
+		const walk = ( pid, depth ) => {
+			( byParent.get( pid ) || [] ).forEach( ( it ) => {
+				// Depth marker is an em space — ASCII spaces would collapse in the panel HTML.
+				opts.push( { value: String( it.id ), label: ' '.repeat( depth ) + it.title } );
+				walk( it.id, depth + 1 );
+			} );
+		};
+		walk( 0, 0 );
+		// Anything whose parent wasn't loaded (deep sites, >100 items) still shows, flat.
+		items.forEach( ( it ) => {
+			if ( ! excluded.has( it.id ) && ! opts.some( ( o ) => o.value === String( it.id ) ) ) {
+				opts.push( { value: String( it.id ), label: it.title } );
+			}
+		} );
+		return opts;
+	}
+
 	function renderEditorSide() {
 		const ed = state.editor;
 		const el = $( '#minn-editor-side' );
@@ -3962,8 +4048,54 @@
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>
 		</div>
+		${ ed.supportsParent || ( ed.templates && ed.templates.length ) ? `
+		<div class="minn-side-card">
+			<div class="minn-side-title">Page attributes</div>
+			<div style="display:flex; flex-direction:column; gap:11px; font-size:13.5px; color:var(--text2);">
+				${ ed.supportsParent ? `<div>Parent
+					<div class="minn-ac" id="minn-parent-ac" style="margin-top:5px;">
+						<input class="minn-input minn-ac-input" placeholder="${ ed.parentPick ? '— none —' : 'Loading…' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
+				</div>` : '' }
+				${ ed.templates && ed.templates.length ? `<div>Template
+					<select class="minn-input" id="minn-template-select" style="margin-top:5px;">
+						<option value="">Default template</option>
+						${ ed.templates.map( ( t ) => `<option value="${ esc( t.file ) }"${ ed.template === t.file ? ' selected' : '' }>${ esc( t.name ) }</option>` ).join( '' ) }
+					</select>
+				</div>` : '' }
+				${ ed.supportsOrder ? `<div>Order
+					<input type="number" class="minn-input" id="minn-order-input" value="${ ed.menuOrder }" style="margin-top:5px;">
+				</div>` : '' }
+			</div>
+		</div>` : '' }
 		${ ( ed.panels || [] ).map( ( p ) => panelCard( ed, p ) ).join( '' ) }
 		${ ed.id ? '<button class="minn-trash-link" id="minn-trash-post">Move to trash</button>' : '' }`;
+
+		const parentWrap = $( '#minn-parent-ac', el );
+		if ( parentWrap && ed.parentPick ) {
+			bindAutocomplete( parentWrap, parentOptions( ed ), {
+				strict: true,
+				value: String( ed.parent || 0 ),
+				onPick: ( v ) => {
+					ed.parent = parseInt( v, 10 ) || 0;
+					ed.parentDirty = true;
+					if ( ed.id ) scheduleAutosave();
+				},
+			} );
+		}
+		const tplSel = $( '#minn-template-select', el );
+		if ( tplSel ) tplSel.addEventListener( 'change', () => {
+			ed.template = tplSel.value;
+			ed.templateDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const orderInput = $( '#minn-order-input', el );
+		if ( orderInput ) orderInput.addEventListener( 'input', () => {
+			ed.menuOrder = parseInt( orderInput.value, 10 ) || 0;
+			ed.orderDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
 
 		const trashBtn = $( '#minn-trash-post', el );
 		if ( trashBtn ) {
