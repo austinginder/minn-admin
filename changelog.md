@@ -9,6 +9,11 @@
 * **Query Monitor support:** With QM active, Minn's pages get the full Query Monitor experience — a floating summary chip (time · memory · query time · query count) that opens the real QM panel, covering the Minn document request. The integration is a bundled adapter plus `minn_admin_template_footer`, the one hook Minn's standalone document now fires (deliberately not wp_footer — no third-party injection). Capability checks stay QM's own: users without `view_query_monitor` get zero QM bytes.
 * **Attribute passthrough for simple blocks:** Images, tables, quotes, separators, verse and preformatted blocks that carry attributes (`{"id":…,"sizeSlug":…}` images, styled tables/quotes/separators) are now **fully editable** instead of islanded — the comment attributes are parked on the element and re-emitted byte-faithfully on save, with Gutenberg's comment-safe escaping. The class-derived `hasFixedLayout` respects explicitly-written `false` (newer Gutenberg defaults tables to fixed). Only non-text-flow blocks participate, so contenteditable splits can never duplicate attributes. Cosmetic note: void elements serialize as `<img …>` rather than `<img …/>` (HTML-equivalent).
 
+### Improved
+* **Revision authors:** The editor's History card now shows who made each revision. (Revisions expose an author ID but no embeddable link, so names resolve through the users endpoint — the previous `_embed` approach could never work.)
+* **Tag autocomplete:** The editor's tag input uses the combobox — click to browse existing tags with usage counts, arrow/click to pick; plain Enter still creates exactly what you typed as a new tag.
+* **Site icon as favicon:** Minn's pages now use the site icon (settable from Minn's own Settings) as their favicon when one exists.
+
 ## **v0.4.1** - July 4, 2026
 
 ### Fixed
