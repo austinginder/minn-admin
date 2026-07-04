@@ -29,5 +29,14 @@ window.MINN = <?php echo wp_json_encode( $boot ); ?>;
 <body>
 <div id="minn-app"><div class="minn-boot-spinner"></div></div>
 <script src="<?php echo esc_url( MINN_ADMIN_URL . 'assets/js/app.js?ver=' . MINN_ADMIN_VERSION ); ?>"></script>
+<?php
+/**
+ * Fires at the end of Minn's app document — the ONLY hook inside it. Minn
+ * deliberately never fires wp_head/wp_footer (a random plugin injecting into
+ * the SPA is exactly what this document avoids); developer tooling that knows
+ * about Minn can attach here. The bundled Query Monitor adapter uses it.
+ */
+do_action( 'minn_admin_template_footer' );
+?>
 </body>
 </html>
