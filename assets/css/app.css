@@ -689,7 +689,19 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-insp-child-title {
   font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
   color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
+.minn-insp-ctl { display: flex; gap: 2px; }
+.minn-insp-ctl button {
+  width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text3); cursor: pointer; font-size: 12px; line-height: 1; padding: 0;
+}
+.minn-insp-ctl button:hover:not(:disabled) { color: var(--text); border-color: var(--border2); background: var(--hover); }
+.minn-insp-ctl button[data-cdel]:hover { color: var(--red); border-color: var(--red); }
+.minn-insp-ctl button:disabled { opacity: 0.35; cursor: default; }
+.minn-insp-add-row { display: flex; gap: 8px; margin-top: 10px; }
+.minn-insp-add-row select.minn-input { flex: 1; min-width: 0; }
 .minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
 .minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); }
 .minn-insp-actions .minn-btn-primary { width: 100%; justify-content: center; }

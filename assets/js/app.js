@@ -3213,6 +3213,133 @@
 		inspectorEl.style.top = Math.max( 10, Math.min( fitsRight ? rect.top : rect.bottom + 8, window.innerHeight - inspectorEl.offsetHeight - 10 ) ) + 'px';
 	}
 
+	/**
+	 * Build the inspector's working model from an island's raw markup.
+	 *
+	 * mode 'structural': the interior is head-html + block children separated
+	 * by whitespace + tail-html (the InnerBlocks shape) — safe to add/remove/
+	 * reorder children, reassembling as head + children.join('\n\n') + tail.
+	 * mode 'inplace': anything else with parseable children — child attrs are
+	 * still editable via in-place comment rewrites, but structure is locked.
+	 */
+	function inspectorModel( raw ) {
+		const parts = blockParts( raw );
+		if ( ! parts ) return null;
+		const model = { parts, ownAttrs: { ...parts.attrs }, head: '', tail: '', children: [], mode: 'none', segments: null };
+		if ( ! parts.inner ) return model;
+		const segments = tokenizeBlocks( parts.inner );
+		if ( ! segments ) return model;
+		model.segments = segments;
+		let structural = true;
+		segments.forEach( ( seg, i ) => {
+			if ( seg.type === 'block' ) {
+				const p = blockParts( seg.raw );
+				if ( ! p ) { structural = false; return; }
+				model.children.push( {
+					name: p.name,
+					attrs: { ...p.attrs },
+					selfClosing: p.selfClosing,
+					tail: seg.raw.slice( p.open.length ), // inner + close comment for wrapped children
+					segIdx: i,
+				} );
+			} else if ( i === 0 ) {
+				model.head = seg.raw;
+			} else if ( i === segments.length - 1 ) {
+				model.tail = seg.raw;
+			} else if ( seg.raw.trim() !== '' ) {
+				structural = false; // real HTML between children — don't reflow it
+			}
+		} );
+		if ( ! model.children.length ) return model;
+		model.mode = structural ? 'structural' : 'inplace';
+		// Types a "+ Add" can create — captured now so removing the last child
+		// doesn't strand the button.
+		model.addTypes = [ ...new Set( model.children.map( ( c ) => c.name ) ) ];
+		return model;
+	}
+
+	// Fold form values back into attribute objects. Values equal to the schema
+	// default are omitted ONLY if the attribute wasn't explicitly in the block
+	// already — an untouched "color":"blue" survives an Apply byte-for-byte
+	// even when blue is the default (nothing silently drops).
+	function collectInspectorForms() {
+		const insp = inspectorState;
+		if ( ! insp || ! inspectorEl ) return;
+		const fold = ( attrs, defs, target ) => {
+			$$( '[data-insp]', inspectorEl ).forEach( ( input ) => {
+				const [ t, key ] = input.dataset.insp.split( ':' );
+				if ( t !== target ) return;
+				let v;
+				if ( input.dataset.type === 'boolean' ) v = input.checked;
+				else if ( input.dataset.type === 'number' ) v = input.value === '' ? undefined : Number( input.value );
+				else v = input.value;
+				const def = ( defs || {} )[ key ] || {};
+				const wasExplicit = key in attrs;
+				if ( v === undefined ) {
+					delete attrs[ key ]; // cleared field = remove the attribute
+				} else if ( ! wasExplicit && def.default !== undefined && v === def.default ) {
+					// never present and still at the default — don't add noise
+				} else {
+					attrs[ key ] = v;
+				}
+			} );
+		};
+		const ownType = insp.types[ insp.model.parts.name ];
+		fold( insp.model.ownAttrs, ownType && ownType.attributes, 'own' );
+		insp.model.children.forEach( ( c, i ) => {
+			const t = insp.types[ c.name ];
+			fold( c.attrs, t && t.attributes, String( i ) );
+		} );
+	}
+
+	function renderInspectorBody() {
+		const insp = inspectorState;
+		if ( ! insp || ! inspectorEl ) return;
+		const { model, types } = insp;
+		const ownType = types[ model.parts.name ];
+		const ownFields = ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own' ) : '';
+		const structural = model.mode === 'structural';
+		const childSections = model.children.map( ( c, i ) => {
+			const t = types[ c.name ];
+			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ) ) : '';
+			if ( ! fields && ! structural ) return '';
+			return `<div class="minn-insp-child">
+				<div class="minn-insp-child-title">
+					<span>${ i + 1 }. ${ esc( c.name.replace( /^core\//, '' ) ) }</span>
+					${ structural ? `<span class="minn-insp-ctl">
+						<button type="button" data-cmove="${ i }:-1" title="Move up"${ i === 0 ? ' disabled' : '' }>↑</button>
+						<button type="button" data-cmove="${ i }:1" title="Move down"${ i === model.children.length - 1 ? ' disabled' : '' }>↓</button>
+						<button type="button" data-cdel="${ i }" title="Remove">×</button>
+					</span>` : '' }
+				</div>
+				${ fields || '<div class="minn-insp-note">No editable settings.</div>' }
+			</div>`;
+		} ).join( '' );
+		// "+ Add" only for types whose schema we can form-edit.
+		const addable = structural ? ( model.addTypes || [] ).filter( ( n ) => types[ n ] && types[ n ].attributes ) : [];
+		const addRow = addable.length ? `<div class="minn-insp-add-row">
+			${ addable.length > 1 ? `<select class="minn-input" id="minn-insp-add-type">${ addable.map( ( n ) => `<option value="${ esc( n ) }">${ esc( n.replace( /^core\//, '' ) ) }</option>` ).join( '' ) }</select>` : '' }
+			<button class="minn-btn-soft" type="button" id="minn-insp-add"${ addable.length === 1 ? ` data-add-type="${ esc( addable[ 0 ] ) }"` : '' }>+ Add ${ addable.length === 1 ? esc( addable[ 0 ].split( '/' ).pop() ) : 'block' }</button>
+		</div>` : '';
+
+		const editable = !! ( ownFields || childSections );
+		inspectorEl.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">${ esc( ( ownType && ownType.title ) || model.parts.name.replace( /^core\//, '' ) ) }</span>
+				<button class="minn-x-btn" id="minn-insp-close" type="button">×</button>
+			</div>
+			<div class="minn-insp-body">
+				${ ownFields }
+				${ childSections }
+				${ addRow }
+				${ editable ? '' : `<div class="minn-insp-note">${ ownType
+					? 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.'
+					: 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' }</div>` }
+			</div>
+			${ editable ? `<div class="minn-insp-actions"><button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button></div>` : '' }`;
+		positionInspector( insp.islandEl );
+	}
+
 	async function openInspector( islandEl ) {
 		const ed = state.editor;
 		if ( ! ed ) return;
@@ -3220,16 +3347,8 @@
 		const idx = parseInt( islandEl.dataset.island, 10 );
 		const raw = ed.islands && ed.islands[ idx ];
 		if ( raw == null ) return;
-		const parts = blockParts( raw );
-		if ( ! parts ) { toast( 'This block’s markup can’t be parsed safely.', true ); return; }
-
-		// Children: self-closing / nested blocks inside the island (one level).
-		const segments = parts.inner ? tokenizeBlocks( parts.inner ) : [];
-		const children = ( segments || [] )
-			.map( ( seg, segIdx ) => ( { seg, segIdx } ) )
-			.filter( ( c ) => c.seg.type === 'block' )
-			.map( ( c ) => ( { ...c, parts: blockParts( c.seg.raw ) } ) )
-			.filter( ( c ) => c.parts );
+		const model = inspectorModel( raw );
+		if ( ! model ) { toast( 'This block’s markup can’t be parsed safely.', true ); return; }
 
 		// Placeholder while schemas load.
 		inspectorEl = document.createElement( 'div' );
@@ -3243,89 +3362,72 @@
 		const scroller = document.querySelector( '.minn-scroll' );
 		if ( scroller ) scroller.addEventListener( 'scroll', inspectorScrollFn, { passive: true } );
 
-		const names = [ parts.name, ...children.map( ( c ) => c.parts.name ) ];
+		const names = [ model.parts.name, ...model.children.map( ( c ) => c.name ) ];
 		const types = {};
 		await Promise.all( [ ...new Set( names ) ].map( async ( n ) => { types[ n ] = await blockTypeFor( n ); } ) );
 		if ( ! inspectorEl ) return; // closed while loading
 
-		const ownType = types[ parts.name ];
-		const ownDefs = ownType && ownType.attributes;
-		const ownFields = ownDefs ? inspectorFields( ownDefs, parts.attrs, 'own' ) : '';
-		const childSections = children.map( ( c, i ) => {
-			const t = types[ c.parts.name ];
-			const fields = t && t.attributes ? inspectorFields( t.attributes, c.parts.attrs, String( i ) ) : '';
-			return fields ? `<div class="minn-insp-child"><div class="minn-insp-child-title">${ i + 1 }. ${ esc( c.parts.name.replace( /^core\//, '' ) ) }</div>${ fields }</div>` : '';
-		} ).join( '' );
+		inspectorState = { idx, model, types, islandEl };
+		renderInspectorBody();
 
-		const editable = !! ( ownFields || childSections );
-		inspectorState = { idx, parts, segments, children, types, islandEl };
-		inspectorEl.innerHTML = `
-			<div class="minn-insp-head">
-				<span class="minn-insp-title">${ esc( ( ownType && ownType.title ) || parts.name.replace( /^core\//, '' ) ) }</span>
-				<button class="minn-x-btn" id="minn-insp-close" type="button">×</button>
-			</div>
-			<div class="minn-insp-body">
-				${ ownFields }
-				${ childSections }
-				${ editable ? '' : `<div class="minn-insp-note">${ ownType
-					? 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.'
-					: 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' }</div>` }
-			</div>
-			${ editable ? `<div class="minn-insp-actions"><button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button></div>` : '' }`;
-		positionInspector( islandEl );
-
-		$( '#minn-insp-close', inspectorEl ).addEventListener( 'click', closeInspector );
-		const applyBtn = $( '#minn-insp-apply', inspectorEl );
-		if ( applyBtn ) applyBtn.addEventListener( 'click', () => applyInspector( applyBtn ) );
+		// One delegated listener survives every structure-op re-render.
+		inspectorEl.addEventListener( 'click', ( e ) => {
+			const insp = inspectorState;
+			if ( ! insp ) return;
+			if ( e.target.closest( '#minn-insp-close' ) ) { closeInspector(); return; }
+			const applyBtn = e.target.closest( '#minn-insp-apply' );
+			if ( applyBtn ) { applyInspector( applyBtn ); return; }
+			const move = e.target.closest( '[data-cmove]' );
+			const del = e.target.closest( '[data-cdel]' );
+			const add = e.target.closest( '#minn-insp-add' );
+			if ( ! move && ! del && ! add ) return;
+			collectInspectorForms(); // typed values survive the re-render
+			if ( move ) {
+				const [ i, dir ] = move.dataset.cmove.split( ':' ).map( Number );
+				const j = i + dir;
+				const kids = insp.model.children;
+				if ( j >= 0 && j < kids.length ) [ kids[ i ], kids[ j ] ] = [ kids[ j ], kids[ i ] ];
+			} else if ( del ) {
+				insp.model.children.splice( parseInt( del.dataset.cdel, 10 ), 1 );
+			} else if ( add ) {
+				const typeSel = $( '#minn-insp-add-type', inspectorEl );
+				const name = add.dataset.addType || ( typeSel && typeSel.value );
+				if ( name ) insp.model.children.push( { name, attrs: {}, selfClosing: true, tail: '' } );
+			}
+			renderInspectorBody();
+			if ( add ) {
+				const body = $( '.minn-insp-body', inspectorEl );
+				if ( body ) body.scrollTop = body.scrollHeight;
+			}
+		} );
 	}
 
 	async function applyInspector( btn ) {
 		const insp = inspectorState;
 		const ed = state.editor;
 		if ( ! insp || ! ed || ! inspectorEl ) return;
+		collectInspectorForms();
+		const { model } = insp;
 
-		// Fold form values back into attribute objects. Values equal to the
-		// schema default are omitted ONLY if the attribute wasn't explicitly in
-		// the block already — an untouched "color":"blue" survives an Apply
-		// byte-for-byte even when blue is the default (nothing silently drops).
-		const collect = ( model, defs ) => {
-			const attrs = { ...model.attrs };
-			$$( '[data-insp]', inspectorEl ).forEach( ( input ) => {
-				const [ target, key ] = input.dataset.insp.split( ':' );
-				if ( ( model.prefix ) !== target ) return;
-				let v;
-				if ( input.dataset.type === 'boolean' ) v = input.checked;
-				else if ( input.dataset.type === 'number' ) v = input.value === '' ? undefined : Number( input.value );
-				else v = input.value;
-				const def = ( defs || {} )[ key ] || {};
-				const wasExplicit = key in model.attrs;
-				if ( v === undefined ) {
-					delete attrs[ key ]; // cleared field = remove the attribute
-				} else if ( ! wasExplicit && def.default !== undefined && v === def.default ) {
-					// never present and still at the default — don't add noise
-				} else {
-					attrs[ key ] = v;
-				}
-			} );
-			return attrs;
+		const childRaw = ( c ) => {
+			const open = buildOpenComment( c.name, c.attrs, c.selfClosing );
+			return c.selfClosing ? open : open + c.tail;
 		};
 
-		const ownType = insp.types[ insp.parts.name ];
-		const ownAttrs = collect( { attrs: insp.parts.attrs, prefix: 'own' }, ownType && ownType.attributes );
-
-		// Rebuild child segment raws, then the island raw.
-		let inner = insp.parts.inner;
-		if ( insp.children.length && insp.segments ) {
-			insp.children.forEach( ( c, i ) => {
-				const t = insp.types[ c.parts.name ];
-				const attrs = collect( { attrs: c.parts.attrs, prefix: String( i ) }, t && t.attributes );
-				const open = buildOpenComment( c.parts.name, attrs, c.parts.selfClosing );
-				insp.segments[ c.segIdx ] = { ...insp.segments[ c.segIdx ], raw: c.parts.selfClosing ? open : open + c.seg.raw.slice( c.parts.open.length ) };
+		let inner = model.parts.inner;
+		if ( model.mode === 'structural' ) {
+			// Reassemble: wrapper head + children (Gutenberg's blank-line
+			// separator) + wrapper tail. Interior whitespace was verified
+			// insignificant when the model was built.
+			inner = model.head + model.children.map( childRaw ).join( '\n\n' ) + model.tail;
+		} else if ( model.mode === 'inplace' && model.segments ) {
+			model.children.forEach( ( c ) => {
+				model.segments[ c.segIdx ] = { ...model.segments[ c.segIdx ], raw: childRaw( c ) };
 			} );
-			inner = insp.segments.map( ( s ) => s.raw ).join( '' );
+			inner = model.segments.map( ( s ) => s.raw ).join( '' );
 		}
-		const open = buildOpenComment( insp.parts.name, ownAttrs, insp.parts.selfClosing );
-		const newRaw = insp.parts.selfClosing ? open : open + inner + insp.parts.close;
+		const open = buildOpenComment( model.parts.name, model.ownAttrs, model.parts.selfClosing );
+		const newRaw = model.parts.selfClosing ? open : open + inner + model.parts.close;
 
 		btn.disabled = true;
 		btn.textContent = 'Applying…';
