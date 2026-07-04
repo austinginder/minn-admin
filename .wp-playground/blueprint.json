@@ -34,7 +34,7 @@
       "step": "installPlugin",
       "pluginData": {
         "resource": "git:directory",
-        "url": "https://github.com/dknauss/minn-admin",
+        "url": "https://github.com/austinginder/minn-admin",
         "ref": "main",
         "refType": "branch",
         "path": "/"
