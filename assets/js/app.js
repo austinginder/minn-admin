@@ -540,6 +540,11 @@
 		let q = `context=edit&status=${ statuses }&per_page=25&orderby=modified`
 			+ `&_embed=author&_fields=id,title,slug,status,modified,author,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
+		// categories/tags are post taxonomies — never send them for a custom post type.
+		if ( ! currentCpt() ) {
+			if ( state.contentCat ) q += '&categories=' + encodeURIComponent( state.contentCat );
+			if ( state.contentTag ) q += '&tags=' + encodeURIComponent( state.contentTag );
+		}
 		return q;
 	}
 
@@ -576,10 +581,24 @@
 		cache[ t.restBase ] = c;
 	}
 
+	async function loadPostTerms() {
+		if ( state.cache.postTerms ) return;
+		const [ cats, tags ] = await Promise.all( [
+			api( 'wp/v2/categories?per_page=100&orderby=count&order=desc&_fields=id,name,count' ).catch( () => [] ),
+			api( 'wp/v2/tags?per_page=100&orderby=count&order=desc&_fields=id,name,count' ).catch( () => [] ),
+		] );
+		const clean = ( list ) => ( Array.isArray( list ) ? list : [] )
+			.filter( ( t ) => t.count > 0 )
+			.map( ( t ) => ( { id: t.id, name: decodeEntities( t.name ), count: t.count } ) );
+		state.cache.postTerms = { categories: clean( cats ), tags: clean( tags ) };
+	}
+
 	async function loadContent( more ) {
+		// Category/tag filters are post-only taxonomies, so suppress pages while one is active.
+		const taxFilter = !! ( state.contentCat || state.contentTag );
 		const c = more && state.cache.content ? state.cache.content : {
 			// Authors can't edit pages — requesting draft/pending page statuses 400s.
-			items: [], postPage: 0, pagePage: 0, morePosts: true, morePages: !! B.caps.editPages, total: 0,
+			items: [], postPage: 0, pagePage: 0, morePosts: true, morePages: ! taxFilter && !! B.caps.editPages, total: 0,
 		};
 		const jobs = [];
 		if ( c.morePosts ) {
@@ -614,6 +633,24 @@
 
 	let contentSearchTimer = null;
 
+	async function runBulk( sel, btn, op, doneMsg ) {
+		const entries = Array.from( sel.entries() );
+		if ( ! entries.length ) return;
+		btn.disabled = true;
+		btn.textContent = 'Working…';
+		let ok = 0, fail = 0;
+		for ( const [ id, type ] of entries ) {
+			try { await op( type, id ); ok++; }
+			catch ( e ) { fail++; }
+		}
+		sel.clear();
+		state.cache.content = null;
+		state.cache.cptContent = {};
+		toast( fail ? `${ doneMsg }: ${ ok } done, ${ fail } failed` : `${ doneMsg } (${ ok })`, fail > 0 && ok === 0 );
+		await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
+		if ( state.route === 'content' ) renderContent();
+	}
+
 	function renderContent() {
 		const view = $( '#minn-view' );
 		if ( ! state.cache.types ) {
@@ -634,21 +671,37 @@
 			...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
 			...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
 		const rowIcon = ( p ) => p.type === 'pages' ? '▭' : ( p.type === 'posts' ? '¶' : '◆' );
+		// Category/tag filters are post taxonomies — show them for the core posts context only.
+		const showTax = ! cpt && state.filter !== 'pages';
+		if ( showTax && ! state.cache.postTerms ) {
+			loadPostTerms().then( () => { if ( state.route === 'content' ) renderContent(); } ).catch( () => {} );
+		}
+		const terms = state.cache.postTerms || { categories: [], tags: [] };
+		const sel = state.contentSel || ( state.contentSel = new Map() );
+		const taxSelect = ( id, cur, label, list ) => `<select class="minn-input minn-tax-select" id="${ id }">
+			<option value="">${ label }</option>
+			${ list.map( ( t ) => `<option value="${ t.id }"${ String( cur ) === String( t.id ) ? ' selected' : '' }>${ esc( t.name ) }${ t.count != null ? ' (' + t.count + ')' : '' }</option>` ).join( '' ) }
+		</select>`;
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			<div class="minn-tabs">
 				${ tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.filter === id ? ' active' : '' }" data-filter="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>
+			${ showTax ? taxSelect( 'minn-cat-filter', state.contentCat || '', 'All categories', terms.categories ) : '' }
+			${ showTax ? taxSelect( 'minn-tag-filter', state.contentTag || '', 'All tags', terms.tags ) : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Filter by title…" value="${ esc( state.contentSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ filtered.length }${ hasMore ? ' of ' + c.total : '' } item${ c.total === 1 ? '' : 's' }</div>
 		</div>
+		<div id="minn-bulk-slot"></div>
 		<div class="minn-card minn-table">
-			<div class="minn-table-head">
+			<div class="minn-table-head minn-content-cols">
+				<div><input type="checkbox" class="minn-cb" id="minn-sel-all"${ filtered.length && filtered.every( ( p ) => sel.has( p.id ) ) ? ' checked' : '' }></div>
 				<div></div><div>Title</div><div>Status</div><div>Author</div><div>Modified</div><div></div>
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
-				<div class="minn-table-row" data-id="${ p.id }" data-type="${ esc( p.type ) }">
+				<div class="minn-table-row minn-content-cols${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }">
+					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }"${ sel.has( p.id ) ? ' checked' : '' }></div>
 					<div class="minn-row-icon">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
 						<div class="minn-row-title">${ esc( p.title ) }</div>
@@ -663,13 +716,37 @@
 		${ hasMore ? '<button class="minn-load-more" id="minn-content-more">Load more</button>' : '' }`;
 
 		$$( '.minn-tab', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => { state.filter = btn.dataset.filter; renderContent(); } )
+			btn.addEventListener( 'click', () => {
+				const nf = btn.dataset.filter;
+				// Leaving the posts context clears post-only taxonomy filters (and their cache).
+				if ( ( nf === 'pages' || ( state.cache.types || [] ).some( ( t ) => t.restBase === nf ) ) && ( state.contentCat || state.contentTag ) ) {
+					state.contentCat = null;
+					state.contentTag = null;
+					state.cache.content = null;
+				}
+				state.filter = nf;
+				sel.clear();
+				renderContent();
+			} )
 		);
+		const reloadContent = async () => {
+			sel.clear();
+			state.cache.content = null;
+			state.cache.cptContent = {};
+			view.innerHTML = '<div class="minn-loading">Loading content…</div>';
+			await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
+			if ( state.route === 'content' ) renderContent();
+		};
+		const catSel = $( '#minn-cat-filter', view );
+		if ( catSel ) catSel.addEventListener( 'change', () => { state.contentCat = catSel.value || null; reloadContent(); } );
+		const tagSel = $( '#minn-tag-filter', view );
+		if ( tagSel ) tagSel.addEventListener( 'change', () => { state.contentTag = tagSel.value || null; reloadContent(); } );
 		const search = $( '#minn-content-search', view );
 		search.addEventListener( 'input', () => {
 			clearTimeout( contentSearchTimer );
 			contentSearchTimer = setTimeout( async () => {
 				state.contentSearch = search.value.trim();
+				sel.clear();
 				state.cache.content = null;
 				state.cache.cptContent = {};
 				await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
@@ -682,10 +759,75 @@
 			}, 350 );
 		} );
 		$$( '.minn-table-row', view ).forEach( ( row ) =>
-			row.addEventListener( 'click', () => {
+			row.addEventListener( 'click', ( e ) => {
+				if ( e.target.closest( '.minn-cbcell' ) ) return; // checkbox handles its own clicks
 				go( `editor/${ row.dataset.type }/${ row.dataset.id }` );
 			} )
 		);
+		// Bulk-selection UI updates the bar in place — no full list re-render, so
+		// checkbox state stays put while you tick multiple rows.
+		const syncBulkBar = () => {
+			const slot = $( '#minn-bulk-slot', view );
+			if ( ! slot ) return;
+			if ( ! sel.size ) { slot.innerHTML = ''; }
+			else if ( ! $( '.minn-bulkbar', slot ) ) {
+				slot.innerHTML = `
+				<div class="minn-bulkbar">
+					<span class="minn-bulk-count">${ sel.size } selected</span>
+					<select class="minn-input" id="minn-bulk-status">
+						<option value="">Set status…</option>
+						<option value="publish">Published</option>
+						<option value="draft">Draft</option>
+						<option value="pending">Pending</option>
+						${ B.caps.readPrivate ? '<option value="private">Private</option>' : '' }
+					</select>
+					<button class="minn-btn-soft" id="minn-bulk-apply">Apply</button>
+					<button class="minn-btn-soft danger" id="minn-bulk-trash">${ icon( 'trash' ) } Trash</button>
+					<button class="minn-btn-soft" id="minn-bulk-clear" style="margin-left:auto;">Clear</button>
+				</div>`;
+				$( '#minn-bulk-apply', slot ).addEventListener( 'click', ( e ) => {
+					const status = $( '#minn-bulk-status', slot ).value;
+					if ( ! status ) { toast( 'Pick a status first', true ); return; }
+					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'POST', body: JSON.stringify( { status } ) } ), 'Status updated' );
+				} );
+				$( '#minn-bulk-trash', slot ).addEventListener( 'click', ( e ) => {
+					if ( ! confirm( `Move ${ sel.size } item${ sel.size === 1 ? '' : 's' } to trash?` ) ) return;
+					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'DELETE' } ), 'Moved to trash' );
+				} );
+				$( '#minn-bulk-clear', slot ).addEventListener( 'click', () => {
+					sel.clear();
+					$$( '.minn-row-cb', view ).forEach( ( c ) => { c.checked = false; c.closest( '.minn-table-row' ).classList.remove( 'sel' ); } );
+					const sa = $( '#minn-sel-all', view );
+					if ( sa ) sa.checked = false;
+					syncBulkBar();
+				} );
+			} else {
+				$( '.minn-bulk-count', slot ).textContent = sel.size + ' selected';
+			}
+			const sa = $( '#minn-sel-all', view );
+			if ( sa ) sa.checked = filtered.length > 0 && filtered.every( ( p ) => sel.has( p.id ) );
+		};
+		syncBulkBar();
+
+		$$( '.minn-row-cb', view ).forEach( ( cb ) =>
+			cb.addEventListener( 'change', () => {
+				const row = cb.closest( '.minn-table-row' );
+				const id = parseInt( cb.dataset.cbid, 10 );
+				if ( cb.checked ) sel.set( id, row.dataset.type );
+				else sel.delete( id );
+				row.classList.toggle( 'sel', cb.checked );
+				syncBulkBar();
+			} )
+		);
+		const selAll = $( '#minn-sel-all', view );
+		if ( selAll ) selAll.addEventListener( 'change', () => {
+			filtered.forEach( ( p ) => { if ( selAll.checked ) sel.set( p.id, p.type ); else sel.delete( p.id ); } );
+			$$( '.minn-row-cb', view ).forEach( ( c ) => {
+				c.checked = selAll.checked;
+				c.closest( '.minn-table-row' ).classList.toggle( 'sel', selAll.checked );
+			} );
+			syncBulkBar();
+		} );
 		const more = $( '#minn-content-more', view );
 		if ( more ) {
 			more.addEventListener( 'click', async () => {
@@ -1096,6 +1238,7 @@
 		const c = more && state.cache.users ? state.cache.users : { items: [], page: 0, totalPages: 1, total: 0 };
 		let q = `wp/v2/users?context=edit&per_page=50&orderby=registered_date&order=desc&_fields=id,name,email,roles,registered_date,avatar_urls&page=${ c.page + 1 }`;
 		if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
+		if ( state.userRole && state.userRole !== '_all' ) q += '&roles=' + encodeURIComponent( state.userRole );
 		const r = await apiPaged( q );
 		c.page++;
 		c.totalPages = r.totalPages;
@@ -1114,10 +1257,15 @@
 			loadUsers().then( renderIfCurrent( 'users' ) ).catch( showErr );
 			return;
 		}
+		const roleTabs = [ [ '_all', 'All' ], ...Object.entries( B.roles || {} ) ];
 		view.innerHTML = `
 		<div class="minn-toolbar">
-			<div class="minn-toolbar-meta" style="margin-left:0;">${ c.total } user${ c.total === 1 ? '' : 's' }</div>
+			${ roleTabs.length > 2 ? `<div class="minn-tabs">
+				${ roleTabs.map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ ( state.userRole || '_all' ) === id ? ' active' : '' }" data-role="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
+			</div>` : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }">
+			<div class="minn-toolbar-meta">${ c.total } user${ c.total === 1 ? '' : 's' }</div>
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } Add user</button>` : '' }
 		</div>
 		<div class="minn-card minn-table">
@@ -1136,6 +1284,16 @@
 		</div>
 		${ c.page < c.totalPages ? '<button class="minn-load-more" id="minn-users-more">Load more</button>' : '' }`;
 
+		$$( '.minn-tab', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				if ( ( state.userRole || '_all' ) === btn.dataset.role ) return;
+				state.userRole = btn.dataset.role;
+				state.cache.users = null;
+				view.innerHTML = '<div class="minn-loading">Loading users…</div>';
+				await loadUsers().catch( showErr );
+				if ( state.route === 'users' ) renderUsers();
+			} )
+		);
 		const search = $( '#minn-user-search', view );
 		search.addEventListener( 'input', () => {
 			clearTimeout( userSearchTimer );
@@ -2112,7 +2270,7 @@
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,date,featured_media${ extraKeys }` );
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,featured_media${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			const mode = editorModeFor( raw );
 			state.editor = {
@@ -2130,12 +2288,24 @@
 				link: p.link,
 				savedAt: null,
 				categoryIds: new Set( p.categories || [] ),
+				tagIds: new Set( p.tags || [] ),
+				tags: [],
 				revisions: null,
 				panels: null,
 				supportsThumb: 'featured_media' in p,
 				featuredMedia: p.featured_media || 0,
 				featuredThumb: null,
 			};
+			if ( state.editorType === 'posts' && ( p.tags || [] ).length ) {
+				api( `wp/v2/tags?include=${ p.tags.join( ',' ) }&per_page=100&_fields=id,name` )
+					.then( ( t ) => {
+						if ( state.editor && state.editor.id === p.id ) {
+							state.editor.tags = ( Array.isArray( t ) ? t : [] ).map( ( x ) => ( { id: x.id, name: decodeEntities( x.name ) } ) );
+							if ( state.route === 'editor' ) renderEditorSide();
+						}
+					} )
+					.catch( () => {} );
+			}
 			if ( p.featured_media ) {
 				api( `wp/v2/media/${ p.featured_media }?_fields=id,source_url,media_details` )
 					.then( ( mItem ) => {
@@ -2183,6 +2353,7 @@
 			state.editor = {
 				id: null, type: 'posts', title: '', content: '', status: 'draft', mode: 'blocks',
 				date: null, newDate: null, slug: '', link: '', savedAt: null, categoryIds: new Set(),
+				tagIds: new Set(), tags: [],
 				revisions: null, panels: null,
 				supportsThumb: true, featuredMedia: 0, featuredThumb: null,
 			};
@@ -2196,6 +2367,10 @@
 					if ( state.route === 'editor' ) renderEditorSide();
 				} )
 				.catch( () => {} );
+		}
+		// Tag suggestions (shared with the Content filters), cached per session.
+		if ( state.editor.type === 'posts' && ! state.cache.postTerms ) {
+			loadPostTerms().then( () => { if ( state.route === 'editor' ) renderEditorSide(); } ).catch( () => {} );
 		}
 	}
 
@@ -2218,6 +2393,9 @@
 		}
 		if ( ed.type === 'posts' && ed.catsDirty ) {
 			payload.categories = Array.from( ed.categoryIds );
+		}
+		if ( ed.type === 'posts' && ed.tagsDirty ) {
+			payload.tags = Array.from( ed.tagIds );
 		}
 		( ed.panels || [] ).forEach( ( p ) => {
 			if ( ed.panelDirty && ed.panelDirty[ p.desc.id ] && p.desc.writeKey ) {
@@ -2330,6 +2508,64 @@
 		</div>`;
 	}
 
+	function tagChipsHtml( ed ) {
+		return ( ed.tags || [] ).map( ( t ) => `<button class="minn-chip sel" data-tagchip="${ t.id }" title="Remove tag">${ esc( t.name ) } ×</button>` ).join( '' )
+			|| '<span class="minn-tag-empty">No tags yet</span>';
+	}
+
+	function tagSuggestHtml() {
+		const tags = state.cache.postTerms ? state.cache.postTerms.tags : [];
+		return tags.map( ( t ) => `<option value="${ esc( t.name ) }"></option>` ).join( '' );
+	}
+
+	function refreshTagChips() {
+		const box = $( '#minn-editor-tags' );
+		if ( ! box ) return;
+		box.innerHTML = tagChipsHtml( state.editor );
+		$$( '[data-tagchip]', box ).forEach( ( ch ) =>
+			ch.addEventListener( 'click', () => removeEditorTag( parseInt( ch.dataset.tagchip, 10 ) ) )
+		);
+	}
+
+	function removeEditorTag( id ) {
+		const ed = state.editor;
+		if ( ! ed ) return;
+		ed.tagIds.delete( id );
+		ed.tags = ( ed.tags || [] ).filter( ( t ) => t.id !== id );
+		ed.tagsDirty = true;
+		refreshTagChips();
+		if ( ed.id ) scheduleAutosave();
+	}
+
+	async function addEditorTag( name ) {
+		name = ( name || '' ).replace( /,/g, '' ).trim();
+		const ed = state.editor;
+		if ( ! name || ! ed ) return;
+		if ( ( ed.tags || [] ).some( ( t ) => t.name.toLowerCase() === name.toLowerCase() ) ) return;
+		let match = ( state.cache.postTerms ? state.cache.postTerms.tags : [] ).find( ( t ) => t.name.toLowerCase() === name.toLowerCase() );
+		try {
+			if ( ! match ) {
+				const found = await api( 'wp/v2/tags?search=' + encodeURIComponent( name ) + '&per_page=20&_fields=id,name' ).catch( () => [] );
+				match = ( Array.isArray( found ) ? found : [] )
+					.map( ( x ) => ( { id: x.id, name: decodeEntities( x.name ) } ) )
+					.find( ( t ) => t.name.toLowerCase() === name.toLowerCase() );
+				if ( ! match ) {
+					const created = await api( 'wp/v2/tags', { method: 'POST', body: JSON.stringify( { name } ) } );
+					match = { id: created.id, name: decodeEntities( created.name ) };
+					if ( state.cache.postTerms ) state.cache.postTerms.tags.unshift( { id: match.id, name: match.name, count: 1 } );
+				}
+			}
+			if ( ! state.editor || state.route !== 'editor' ) return;
+			state.editor.tagIds.add( match.id );
+			if ( ! state.editor.tags.some( ( t ) => t.id === match.id ) ) state.editor.tags.push( match );
+			state.editor.tagsDirty = true;
+			refreshTagChips();
+			if ( state.editor.id ) scheduleAutosave();
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
 	function renderEditorSide() {
 		const ed = state.editor;
 		const el = $( '#minn-editor-side' );
@@ -2389,6 +2625,11 @@
 					cats == null ? '<span class="minn-chip">Loading…</span>'
 					: cats.map( ( c ) => `<button class="minn-chip pick${ ed.categoryIds.has( c.id ) ? ' sel' : '' }" data-cat="${ c.id }">${ esc( c.name ) }</button>` ).join( '' )
 				}</div></div>` : '' }
+				${ ed.type === 'posts' ? `<div>Tags
+					<div class="minn-chips" id="minn-editor-tags">${ tagChipsHtml( ed ) }</div>
+					<input class="minn-input minn-tag-input" id="minn-editor-tag-input" placeholder="Add a tag, press Enter" list="minn-tag-suggest" autocomplete="off">
+					<datalist id="minn-tag-suggest">${ tagSuggestHtml() }</datalist>
+				</div>` : '' }
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>
 		</div>
@@ -2477,6 +2718,23 @@
 				if ( ed.id ) scheduleAutosave();
 			} )
 		);
+
+		$$( '[data-tagchip]', el ).forEach( ( ch ) =>
+			ch.addEventListener( 'click', () => removeEditorTag( parseInt( ch.dataset.tagchip, 10 ) ) )
+		);
+		const tagInput = $( '#minn-editor-tag-input', el );
+		if ( tagInput ) {
+			tagInput.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Enter' || e.key === ',' ) {
+					e.preventDefault();
+					const val = tagInput.value;
+					tagInput.value = '';
+					addEditorTag( val );
+				} else if ( e.key === 'Backspace' && ! tagInput.value && ed.tags && ed.tags.length ) {
+					removeEditorTag( ed.tags[ ed.tags.length - 1 ].id );
+				}
+			} );
+		}
 
 		$( '#minn-publish-btn', el ).addEventListener( 'click', async ( e ) => {
 			const btn = e.currentTarget;
@@ -2948,15 +3206,16 @@
 				[ 'Size', it.size ],
 				[ 'Uploaded', it.date ? timeAgo( it.date ) : '—' ],
 			];
+			const canEdit = it.kind === 'IMG' || it.kind === 'SVG';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal">
+				<div class="minn-modal media${ canEdit ? ' wide' : '' }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( it.name ) }</div>
 						${ ctx ? `<span class="minn-modal-count">${ ctx.idx + 1 } / ${ ctx.items.length }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					<div class="minn-modal-preview">
+					<div class="minn-modal-preview media-lg">
 						${ preview }
 						${ ctx && ctx.idx > 0 ? '<button class="minn-modal-nav prev" id="minn-media-prev" title="Previous (←)">‹</button>' : '' }
 						${ ctx && ctx.idx < ctx.items.length - 1 ? '<button class="minn-modal-nav next" id="minn-media-next" title="Next (→)">›</button>' : '' }
@@ -2964,8 +3223,16 @@
 					<div class="minn-modal-meta">
 						${ rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ k }</span><span>${ esc( v ) }</span></div>` ).join( '' ) }
 						<div class="minn-modal-url"><span class="minn-permalink">${ esc( it.url ) }</span></div>
+						${ canEdit ? `
+						<div class="minn-media-edit">
+							<div class="minn-field-label">Title</div>
+							<input class="minn-input" id="minn-media-title" value="${ esc( it.name ) }">
+							<div class="minn-field-label" style="margin-top:10px;">Alt text</div>
+							<input class="minn-input" id="minn-media-alt" placeholder="Describe this image…" value="${ esc( it.alt || '' ) }">
+						</div>` : '' }
 					</div>
 					<div class="minn-modal-actions">
+						${ canEdit ? `<button class="minn-btn-primary" id="minn-media-save">Save</button>` : '' }
 						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
 						<button class="minn-btn-soft" id="minn-media-open">↗ Open</button>
 						<button class="minn-btn-soft danger" id="minn-media-delete">${ icon( 'trash' ) } Delete</button>
@@ -3003,6 +3270,16 @@
 							<span class="minn-order-line-total">${ esc( sym + o.total ) }</span>
 						</div>
 					</div>
+					${ B.caps.orders ? `
+					<div class="minn-media-edit">
+						<div class="minn-field-label">Status</div>
+						<div style="display:flex; gap:8px;">
+							<select class="minn-input" id="minn-order-status">
+								${ Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => `<option value="${ st }"${ st === o.status ? ' selected' : '' }>${ esc( st.replace( '-', ' ' ) ) }</option>` ).join( '' ) }
+							</select>
+							<button class="minn-btn-primary" id="minn-order-save" style="flex-shrink:0;">Save</button>
+						</div>
+					</div>` : '' }
 					<div class="minn-modal-actions">
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }edit.php?post_type=shop_order" target="_blank" rel="noopener">↗ Manage in WooCommerce</a>
 					</div>
@@ -3022,9 +3299,10 @@
 				.filter( ( [ , v ] ) => v != null && v !== '' && typeof v !== 'object' )
 				.slice( 0, 24 );
 			const message = ! m.loading && detail.messageKey ? it[ detail.messageKey ] : null;
+			const isHtml = message != null && /<\/?[a-z][\s\S]*>/i.test( String( message ) );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal">
+				<div class="minn-modal${ message ? ' wide' : '' }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( s.label ) } #${ esc( String( it.id ) ) }</div>
 						${ it.status ? surfacePill( it.status ) : '' }
@@ -3034,10 +3312,13 @@
 					<div class="minn-modal-meta">
 						${ rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( stripTags( String( v ) ) ) }</span></div>` ).join( '' ) }
 					</div>
-					${ message ? `<div class="minn-surface-message">${ esc( stripTags( message ) ) }</div>` : '' }
-					${ ( s.collection.actions || [] ).length ? `
+					${ message ? ( isHtml
+						? `<iframe class="minn-email-frame" id="minn-email-frame" sandbox="" title="Email preview" srcdoc="${ esc( String( message ) ) }"></iframe>`
+						: `<pre class="minn-surface-message">${ esc( stripTags( String( message ) ) ) }</pre>` ) : '' }
+					${ ( message || ( s.collection.actions || [] ).length ) ? `
 					<div class="minn-modal-actions">
-						${ s.collection.actions.map( ( a, i ) => `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
+						${ message ? `<button class="minn-btn-soft" id="minn-surface-raw">↗ Open raw</button>` : '' }
+						${ ( s.collection.actions || [] ).map( ( a, i ) => `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 					</div>` : '' }` }
 				</div>
 			</div>`;
@@ -3309,6 +3590,28 @@
 				}
 			} );
 			$( '#minn-media-open' ).addEventListener( 'click', () => window.open( it.url, '_blank' ) );
+			const saveBtn = $( '#minn-media-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const title = $( '#minn-media-title' ).value.trim();
+				const alt = $( '#minn-media-alt' ).value;
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+				try {
+					await api( `wp/v2/media/${ it.id }`, { method: 'POST', body: JSON.stringify( { title, alt_text: alt } ) } );
+					it.name = title || it.name;
+					it.alt = alt;
+					// Reflect the change in the cached list without a full refetch.
+					const cached = state.cache.media && state.cache.media.items.find( ( x ) => x.id === it.id );
+					if ( cached ) { cached.title = { rendered: title }; cached.alt_text = alt; }
+					toast( 'Saved' );
+					if ( state.route === 'media' ) renderMedia();
+					renderOverlays();
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = 'Save';
+				}
+			} );
 			$( '#minn-media-delete' ).addEventListener( 'click', async () => {
 				if ( ! confirm( `Delete “${ it.name }” permanently?` ) ) return;
 				try {
@@ -3319,6 +3622,28 @@
 					if ( state.route === 'media' ) renderMedia();
 				} catch ( e ) {
 					toast( e.message, true );
+				}
+			} );
+		}
+
+		if ( m.type === 'order' ) {
+			const saveBtn = $( '#minn-order-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const status = $( '#minn-order-status' ).value;
+				if ( status === m.order.status ) { closeModal(); return; }
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+				try {
+					const updated = await api( `wc/v3/orders/${ m.order.id }`, { method: 'PUT', body: JSON.stringify( { status } ) } );
+					m.order.status = updated.status || status;
+					toast( 'Order updated' );
+					state.cache.orders = null;
+					if ( state.route === 'orders' ) renderOrders();
+					renderOverlays();
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = 'Save';
 				}
 			} );
 		}
@@ -3335,6 +3660,14 @@
 		}
 
 		if ( m.type === 'surface' ) {
+			const rawBtn = $( '#minn-surface-raw' );
+			if ( rawBtn ) rawBtn.addEventListener( 'click', () => {
+				const detail = m.surface.collection.detail || {};
+				const msg = detail.messageKey ? m.item[ detail.messageKey ] : null;
+				if ( msg == null ) return;
+				const blob = new Blob( [ String( msg ) ], { type: 'text/html' } );
+				window.open( URL.createObjectURL( blob ), '_blank' );
+			} );
 			$$( '[data-saction]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
 					const action = m.surface.collection.actions[ parseInt( btn.dataset.saction, 10 ) ];

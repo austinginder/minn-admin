@@ -1,5 +1,17 @@
 # Changelog
 
+## **v0.3.0** - Unreleased
+
+### Added
+* **User role filter:** The Users view gains role tabs (All plus every registered role), filtering server-side via `wp/v2/users?roles=`.
+* **HTML email preview:** The Email Log (Gravity SMTP) detail now renders the real HTML message in a sandboxed iframe — the email as it actually looks — in a wider modal, with **Open raw** (opens the message in a new tab) and **Resend** (re-dispatches to the original recipients) actions.
+* **Category & tag filters:** The Content list gains category and tag dropdowns (post taxonomies), and the editor sidebar gains a **Tags** box — add existing or brand-new tags inline (with suggestions), remove with a click — alongside the existing categories picker.
+* **Order status changes:** The order detail modal can set an order's status (processing, completed, on-hold, …) straight from Minn via `wc/v3`, no longer read-only.
+* **Media editing:** The media overlay is larger and lets you edit an image's **title and alt text** in place instead of bouncing to wp-admin.
+* **Content bulk actions:** Select rows in Content to bulk-change status or move to trash.
+
+### Fixed
+
 ## **v0.2.0** - July 3, 2026
 
 ### Added

@@ -52,6 +52,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'messageKey'  => 'message',
 				'skip'        => array( 'message' ),
 			),
+			'actions'   => array(
+				array(
+					'label'   => 'Resend',
+					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}/resend',
+					'method'  => 'POST',
+					'confirm' => 'Resend this email to the original recipients?',
+				),
+			),
 		),
 	);
 	return $surfaces;
@@ -121,6 +129,34 @@ add_action( 'rest_api_init', function () {
 				'date_created' => $row->date_created,
 				'message'      => $row->message,
 			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events/(?P<id>\d+)/resend', array(
+		'methods'             => 'POST',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) {
+			global $wpdb;
+			$table = $wpdb->prefix . 'gravitysmtp_events';
+			$row   = $wpdb->get_row( $wpdb->prepare(
+				"SELECT id, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
+				(int) $request['id']
+			) );
+			if ( ! $row ) {
+				return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+			}
+			// Recipients are the addresses extracted from `extra` (never unserialized).
+			$to = array_filter( array_map( 'trim', explode( ',', preg_replace( '/\s\+\d+$/', '', minn_admin_gravity_smtp_recipients( $row->extra ) ) ) ) );
+			if ( ! $to ) {
+				return new WP_Error( 'no_recipients', 'No recipient address on record for this email.', array( 'status' => 422 ) );
+			}
+			$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $row->message );
+			$headers = $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array();
+			$sent    = wp_mail( $to, (string) $row->subject, (string) $row->message, $headers );
+			if ( ! $sent ) {
+				return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'resent' => true, 'to' => implode( ', ', $to ) ) );
 		},
 	) );
 } );

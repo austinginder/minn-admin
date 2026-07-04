@@ -509,6 +509,34 @@ a.minn-btn-soft { text-decoration: none; }
   border-radius: 10px; font-size: 13px; line-height: 1.6; color: var(--text2);
   max-height: 260px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere;
 }
+/* HTML email preview: render the real message in a sandboxed frame, white paper. */
+.minn-email-frame {
+  display: block; width: calc(100% - 36px); margin: 0 18px 14px; height: 62vh;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+}
+/* Larger media overlay + inline edit. */
+.minn-modal.media.wide { width: 900px; }
+.minn-modal-preview.media-lg { min-height: 300px; max-height: 66vh; }
+.minn-modal-preview.media-lg img, .minn-modal-preview.media-lg video { max-height: 66vh; }
+.minn-media-edit { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.minn-tax-select { width: auto; max-width: 180px; }
+select.minn-tax-select { flex-shrink: 0; }
+/* Editor tag box. */
+.minn-tag-input { margin-top: 7px; font-size: 13px; padding: 7px 10px; }
+.minn-tag-empty { color: var(--text3); font-size: 12.5px; }
+button.minn-chip.sel[data-tagchip] { cursor: pointer; background: var(--accent-soft); border-color: var(--accent); color: var(--accent2); font-family: inherit; }
+button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(--red); }
+/* Content bulk selection. */
+.minn-content-cols { grid-template-columns: 34px 40px 1fr 110px 130px 110px 40px; }
+.minn-cbcell { display: flex; align-items: center; justify-content: center; }
+.minn-cb { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+.minn-table-row.sel { background: var(--accent-soft); }
+.minn-bulkbar {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 14px;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 12px;
+}
+.minn-bulk-count { font-weight: 600; font-size: 13.5px; }
+.minn-bulkbar select.minn-input { width: auto; }
 .minn-sessions { padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .minn-session-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .minn-session-row:last-of-type { border-bottom: none; }
