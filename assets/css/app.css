@@ -189,8 +189,13 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-chart-tip-stats > div { display: flex; flex-direction: column; align-items: flex-start; }
 .minn-chart-tip-stats b { font-size: 16px; letter-spacing: -0.3px; }
 .minn-chart-tip-stats span { font-size: 11.5px; color: var(--text3); }
+.minn-chart-tip-hint { padding: 0 13px 8px; font-size: 11px; color: var(--text3); text-align: center; }
+.minn-chart.clickable .minn-chart-col { cursor: pointer; }
 .minn-activity { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+.minn-modal .minn-activity { margin: 0; padding: 8px 18px 14px; }
 .minn-activity-row { display: flex; gap: 11px; padding: 9px 0; align-items: flex-start; }
+.minn-activity-row.linked { cursor: pointer; border-radius: 8px; margin: 0 -8px; padding: 9px 8px; }
+.minn-activity-row.linked:hover { background: var(--panel2); }
 .minn-activity-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
 .minn-activity-text { font-size: 14px; line-height: 1.4; }
 .minn-activity-time { font-size: 12.5px; color: var(--text3); margin-top: 1px; }
@@ -581,6 +586,10 @@ button.minn-chip.sel[data-tagchip] { cursor: pointer; background: var(--accent-s
 button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(--red); }
 /* Content bulk selection. */
 .minn-content-cols { grid-template-columns: 34px 40px 1fr 110px 130px 110px 40px; }
+.minn-content-cols.trash { grid-template-columns: 34px 40px 1fr 110px 130px 110px 158px; }
+.minn-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.minn-row-actions .minn-btn-soft { padding: 4px 10px; font-size: 12.5px; }
+.minn-trash-toggle.active { color: var(--accent2); background: var(--accent-soft); border-color: var(--accent); }
 .minn-cbcell { display: flex; align-items: center; justify-content: center; }
 .minn-cb { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
 .minn-table-row.sel { background: var(--accent-soft); }
@@ -890,6 +899,10 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   .minn-content-cols { grid-template-columns: 30px 1fr 84px; }
   .minn-content-cols > :nth-child(2), .minn-content-cols > :nth-child(5),
   .minn-content-cols > :nth-child(6), .minn-content-cols > :nth-child(7) { display: none; }
+  /* Trash mode keeps the Restore/Delete cell and drops the status pill instead. */
+  .minn-content-cols.trash { grid-template-columns: 30px 1fr 150px; }
+  .minn-content-cols.trash > :nth-child(4) { display: none; }
+  .minn-content-cols.trash > :nth-child(7) { display: flex; }
   .minn-order-cols { grid-template-columns: 86px 1fr 84px; }
   .minn-order-cols > :nth-child(3), .minn-order-cols > :nth-child(4),
   .minn-order-cols > :nth-child(6) { display: none; }

@@ -41,6 +41,42 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/overview/activity',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'overview_activity' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'from' => array(
+						'type'     => 'string',
+						'required' => true,
+						'pattern'  => '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$',
+					),
+					'to'   => array(
+						'type'     => 'string',
+						'required' => true,
+						'pattern'  => '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/posts/(?P<id>\d+)/restore',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'restore_post' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/notifications',
 			array(
 				'methods'             => 'GET',
@@ -459,6 +495,10 @@ class Minn_Admin_REST {
 			$chart[] = array(
 				'label' => $label,
 				'value' => $count,
+				// GMT bounds of the bucket ((from, to] — the same math the counting
+				// loop uses), so the client can fetch the events behind a bar.
+				'from'  => gmdate( 'Y-m-d H:i:s', time() - ( $buckets - $i ) * $bucket_days * DAY_IN_SECONDS ),
+				'to'    => gmdate( 'Y-m-d H:i:s', time() - ( $buckets - 1 - $i ) * $bucket_days * DAY_IN_SECONDS ),
 			);
 		}
 
@@ -568,6 +608,104 @@ class Minn_Admin_REST {
 				'traffic'  => $traffic_out,
 				'activity' => $activity,
 				'greeting' => self::greeting(),
+			)
+		);
+	}
+
+	/**
+	 * The events behind one activity-chart bar: posts/pages published and
+	 * comments received in the (from, to] GMT window the overview handed out.
+	 */
+	public static function overview_activity( WP_REST_Request $request ) {
+		global $wpdb;
+
+		$from  = $request['from'];
+		$to    = $request['to'];
+		$items = array();
+
+		$posts = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT ID, post_title, post_type, post_author, post_date_gmt FROM {$wpdb->posts}
+				 WHERE post_status = 'publish' AND post_type IN ('post','page')
+				 AND post_date_gmt > %s AND post_date_gmt <= %s
+				 ORDER BY post_date_gmt DESC LIMIT 100",
+				$from,
+				$to
+			)
+		);
+		foreach ( $posts as $p ) {
+			$author  = get_the_author_meta( 'display_name', (int) $p->post_author );
+			// Titles carry HTML entities; the client escapes, so decode here.
+			$title   = html_entity_decode( $p->post_title ?: '(no title)', ENT_QUOTES );
+			$items[] = array(
+				'kind'  => 'post',
+				'id'    => (int) $p->ID,
+				'type'  => 'page' === $p->post_type ? 'pages' : 'posts',
+				'text'  => sprintf( '%s published “%s”', $author ?: 'Someone', $title ),
+				'time'  => strtotime( $p->post_date_gmt . ' UTC' ),
+				'color' => 'green',
+			);
+		}
+
+		$comments = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT comment_ID, comment_author, comment_post_ID, comment_date_gmt, comment_approved FROM {$wpdb->comments}
+				 WHERE comment_date_gmt > %s AND comment_date_gmt <= %s
+				 ORDER BY comment_date_gmt DESC LIMIT 100",
+				$from,
+				$to
+			)
+		);
+		foreach ( $comments as $c ) {
+			$pending = '0' === $c->comment_approved;
+			$items[] = array(
+				'kind'  => 'comment',
+				'id'    => (int) $c->comment_ID,
+				'text'  => sprintf(
+					$pending ? 'Comment from %s awaiting moderation on “%s”' : '%s commented on “%s”',
+					$c->comment_author ? $c->comment_author : 'Anonymous',
+					html_entity_decode( get_the_title( (int) $c->comment_post_ID ) ?: '(no title)', ENT_QUOTES )
+				),
+				'time'  => strtotime( $c->comment_date_gmt . ' UTC' ),
+				'color' => $pending ? 'amber' : 'blue',
+			);
+		}
+
+		usort( $items, function ( $a, $b ) {
+			return $b['time'] - $a['time'];
+		} );
+		$items = array_slice( $items, 0, 100 );
+		foreach ( $items as &$item ) {
+			$item['ago'] = sprintf( '%s ago', human_time_diff( $item['time'] ) );
+		}
+
+		return rest_ensure_response( array( 'items' => $items ) );
+	}
+
+	/**
+	 * Restore a trashed post — core wp/v2 has no untrash, so Minn provides one.
+	 * wp_untrash_post lands on draft by default (core behavior since 5.6).
+	 */
+	public static function restore_post( WP_REST_Request $request ) {
+		$id   = (int) $request['id'];
+		$post = get_post( $id );
+		if ( ! $post ) {
+			return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+		}
+		if ( 'trash' !== $post->post_status ) {
+			return new WP_Error( 'not_trashed', 'That post is not in the trash.', array( 'status' => 400 ) );
+		}
+		// Same capability wp-admin's own untrash link requires.
+		if ( ! current_user_can( 'delete_post', $id ) ) {
+			return new WP_Error( 'forbidden', 'You are not allowed to restore this item.', array( 'status' => 403 ) );
+		}
+		if ( ! wp_untrash_post( $id ) ) {
+			return new WP_Error( 'restore_failed', 'Could not restore the item.', array( 'status' => 500 ) );
+		}
+		return rest_ensure_response(
+			array(
+				'restored' => true,
+				'status'   => get_post_status( $id ),
 			)
 		);
 	}

@@ -435,7 +435,7 @@
 						${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ d }d</button>` ).join( '' ) }
 					</div>
 				</div>
-				<div class="minn-chart" id="minn-chart">
+				<div class="minn-chart${ o.traffic ? '' : ' clickable' }" id="minn-chart">
 					${ chartData.map( ( c, i ) => o.traffic ? `
 						<div class="minn-chart-col" data-ci="${ i }">
 							<div class="minn-chart-views" style="height:${ pct( c.views || 0 ) }%"></div>
@@ -469,6 +469,30 @@
 			} )
 		);
 		bindChartTooltip( $( '#minn-chart', view ), chartData, !! o.traffic );
+		// Activity bars open the events behind them; traffic bars stay hover-only.
+		if ( ! o.traffic ) {
+			$$( '.minn-chart-col', view ).forEach( ( col ) =>
+				col.addEventListener( 'click', () => {
+					const c = chartData[ parseInt( col.dataset.ci, 10 ) ];
+					if ( c && c.from && c.value > 0 ) openChartActivity( c );
+				} )
+			);
+		}
+	}
+
+	async function openChartActivity( bucket ) {
+		state.modal = { type: 'chart-activity', bucket, items: null };
+		renderOverlays();
+		try {
+			const r = await api( `minn-admin/v1/overview/activity?from=${ encodeURIComponent( bucket.from ) }&to=${ encodeURIComponent( bucket.to ) }` );
+			if ( state.modal && state.modal.type === 'chart-activity' && state.modal.bucket === bucket ) {
+				state.modal.items = r.items || [];
+				renderOverlays();
+			}
+		} catch ( e ) {
+			toast( e.message, true );
+			closeModal();
+		}
 	}
 
 	// Koko-style hover card: date on top, visitors/pageviews (or events) below.
@@ -509,7 +533,8 @@
 						<div><b>${ Number( c.value ).toLocaleString() }</b><span>Visitors</span></div>
 						<div><b>${ Number( c.views || 0 ).toLocaleString() }</b><span>Pageviews</span></div>` : `
 						<div><b>${ Number( c.value ).toLocaleString() }</b><span>Event${ c.value === 1 ? '' : 's' }</span></div>` }
-					</div>`;
+					</div>
+					${ ! isTraffic && c.value > 0 ? '<div class="minn-chart-tip-hint">Click for details</div>' : '' }`;
 				$$( '.minn-chart-col.hover', chart ).forEach( ( el ) => el.classList.remove( 'hover' ) );
 				col.classList.add( 'hover' );
 				tip.hidden = false;
@@ -538,7 +563,11 @@
 		// _fields keeps WP from running the_content on every row — much faster on
 		// large sites, and immune to render-time fatals from other plugins.
 		// "private" requires read_private_posts — requesting it without the cap 403s.
-		const statuses = 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' );
+		// Trash mode swaps the whole list to status=trash (REST scopes it to what
+		// the user can read, so authors see only their own trashed items).
+		const statuses = state.contentTrash
+			? 'trash'
+			: 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' );
 		let q = `context=edit&status=${ statuses }&per_page=25&orderby=modified`
 			+ `&_embed=author&_fields=id,title,slug,status,modified,author,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
@@ -570,12 +599,21 @@
 
 	const currentCpt = () => ( state.cache.types || [] ).find( ( t ) => t.restBase === state.filter ) || null;
 
+	// The query context a content load belongs to. A load started before a
+	// context change (trash toggle, search, tax filter) must not land its rows
+	// into the new context — in trash mode that would put Restore/Delete
+	// buttons on live posts. Same-context loads may land freely (they fetch
+	// identical data), so parallel startup loads can't starve each other.
+	const contentCtx = () => [ state.contentTrash ? 't' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '' ].join( '|' );
+
 	async function loadCpt( more ) {
 		const t = currentCpt();
 		if ( ! t ) return;
+		const ctx = contentCtx();
 		const cache = state.cache.cptContent;
 		const c = more && cache[ t.restBase ] ? cache[ t.restBase ] : { items: [], page: 0, totalPages: 1, total: 0 };
 		const r = await apiPaged( `wp/v2/${ t.restBase }?` + contentQuery( c.page + 1 ) );
+		if ( ctx !== contentCtx() ) return; // context changed mid-flight — discard
 		c.page++;
 		c.totalPages = r.totalPages;
 		c.total = r.total;
@@ -596,6 +634,7 @@
 	}
 
 	async function loadContent( more ) {
+		const ctx = contentCtx();
 		// Category/tag filters are post-only taxonomies, so suppress pages while one is active.
 		const taxFilter = !! ( state.contentCat || state.contentTag );
 		const c = more && state.cache.content ? state.cache.content : {
@@ -620,18 +659,19 @@
 			} ) );
 		}
 		await Promise.all( jobs );
+		if ( ctx !== contentCtx() ) return; // context changed mid-flight — discard
 		c.items.sort( ( a, b ) => ( a.modified < b.modified ? 1 : -1 ) );
 		c.total = ( c.postTotal || 0 ) + ( c.pageTotal || 0 );
 		state.cache.content = c;
 
 		const badge = $( '#minn-content-count' );
-		if ( badge && ! state.contentSearch ) {
+		if ( badge && ! state.contentSearch && ! state.contentTrash ) {
 			badge.textContent = c.total > 999 ? ( Math.round( c.total / 100 ) / 10 ) + 'k' : c.total;
 			badge.hidden = ! c.total;
 		}
 	}
 
-	const STATUS_LABELS = { publish: 'Published', draft: 'Draft', future: 'Scheduled', pending: 'Pending', private: 'Private' };
+	const STATUS_LABELS = { publish: 'Published', draft: 'Draft', future: 'Scheduled', pending: 'Pending', private: 'Private', trash: 'Trashed' };
 
 	let contentSearchTimer = null;
 
@@ -699,16 +739,17 @@
 			${ showTax ? taxCombo( 'cat', 'All categories' ) : '' }
 			${ showTax ? taxCombo( 'tag', 'All tags' ) : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Filter by title…" value="${ esc( state.contentSearch || '' ) }">
+			<button class="minn-btn-soft minn-trash-toggle${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">${ icon( 'trash' ) } Trash</button>
 			<div class="minn-toolbar-meta">${ filtered.length }${ hasMore ? ' of ' + c.total : '' } item${ c.total === 1 ? '' : 's' }</div>
 		</div>
 		<div id="minn-bulk-slot"></div>
 		<div class="minn-card minn-table">
-			<div class="minn-table-head minn-content-cols">
+			<div class="minn-table-head minn-content-cols${ state.contentTrash ? ' trash' : '' }">
 				<div><input type="checkbox" class="minn-cb" id="minn-sel-all"${ filtered.length && filtered.every( ( p ) => sel.has( p.id ) ) ? ' checked' : '' }></div>
 				<div></div><div>Title</div><div>Status</div><div>Author</div><div>Modified</div><div></div>
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
-				<div class="minn-table-row minn-content-cols${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }">
+				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }">
 					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }"${ sel.has( p.id ) ? ' checked' : '' }></div>
 					<div class="minn-row-icon">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
@@ -718,8 +759,12 @@
 					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span></div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
 					<div class="minn-row-meta">${ timeAgo( p.modified ) }</div>
-					<div class="minn-row-arrow">›</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? 'No matches for “' + esc( state.contentSearch ) + '”.' : 'Nothing here yet. Hit <b>New</b> to write something.' }</div>` }
+					${ state.contentTrash ? `
+					<div class="minn-row-actions">
+						<button class="minn-btn-soft" data-restore="${ p.id }">Restore</button>
+						<button class="minn-btn-soft danger" data-fdelete="${ p.id }">Delete</button>
+					</div>` : '<div class="minn-row-arrow">›</div>' }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? 'No matches for “' + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? 'Trash is empty.' : 'Nothing here yet. Hit <b>New</b> to write something.' ) }</div>` }
 		</div>
 		${ hasMore ? '<button class="minn-load-more" id="minn-content-more">Load more</button>' : '' }`;
 
@@ -773,10 +818,64 @@
 				}
 			}, 350 );
 		} );
+		const trashBtn = $( '#minn-content-trash', view );
+		if ( trashBtn ) trashBtn.addEventListener( 'click', () => {
+			state.contentTrash = ! state.contentTrash;
+			sel.clear();
+			state.cache.content = null;
+			state.cache.cptContent = {};
+			renderContent();
+		} );
 		$$( '.minn-table-row', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', ( e ) => {
 				if ( e.target.closest( '.minn-cbcell' ) ) return; // checkbox handles its own clicks
+				if ( state.contentTrash ) return; // trashed posts can't be edited — restore first
 				go( `editor/${ row.dataset.type }/${ row.dataset.id }` );
+			} )
+		);
+		const restoreOne = ( type, id ) => api( `minn-admin/v1/posts/${ id }/restore`, { method: 'POST', body: '{}' } );
+		const deleteOne = ( type, id ) => api( `wp/v2/${ type }/${ id }?force=true`, { method: 'DELETE' } );
+		$$( '[data-restore]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async ( e ) => {
+				e.stopPropagation();
+				const row = btn.closest( '.minn-table-row' );
+				btn.disabled = true;
+				btn.textContent = '…';
+				try {
+					const r = await restoreOne( row.dataset.type, row.dataset.id );
+					toast( `Restored as ${ STATUS_LABELS[ r.status ] ? STATUS_LABELS[ r.status ].toLowerCase() : r.status }` );
+					sel.delete( parseInt( row.dataset.id, 10 ) );
+					state.cache.content = null;
+					state.cache.cptContent = {};
+					await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
+					if ( state.route === 'content' ) renderContent();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+					btn.textContent = 'Restore';
+				}
+			} )
+		);
+		$$( '[data-fdelete]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async ( e ) => {
+				e.stopPropagation();
+				const row = btn.closest( '.minn-table-row' );
+				if ( ! confirm( 'Delete this item permanently? This cannot be undone.' ) ) return;
+				btn.disabled = true;
+				btn.textContent = '…';
+				try {
+					await deleteOne( row.dataset.type, row.dataset.id );
+					toast( 'Deleted permanently' );
+					sel.delete( parseInt( row.dataset.id, 10 ) );
+					state.cache.content = null;
+					state.cache.cptContent = {};
+					await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
+					if ( state.route === 'content' ) renderContent();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+					btn.textContent = 'Delete';
+				}
 			} )
 		);
 		// Bulk-selection UI updates the bar in place — no full list re-render, so
@@ -786,7 +885,13 @@
 			if ( ! slot ) return;
 			if ( ! sel.size ) { slot.innerHTML = ''; }
 			else if ( ! $( '.minn-bulkbar', slot ) ) {
-				slot.innerHTML = `
+				slot.innerHTML = state.contentTrash ? `
+				<div class="minn-bulkbar">
+					<span class="minn-bulk-count">${ sel.size } selected</span>
+					<button class="minn-btn-soft" id="minn-bulk-restore">Restore</button>
+					<button class="minn-btn-soft danger" id="minn-bulk-delete">${ icon( 'trash' ) } Delete permanently</button>
+					<button class="minn-btn-soft" id="minn-bulk-clear" style="margin-left:auto;">Clear</button>
+				</div>` : `
 				<div class="minn-bulkbar">
 					<span class="minn-bulk-count">${ sel.size } selected</span>
 					<select class="minn-input" id="minn-bulk-status">
@@ -800,12 +905,23 @@
 					<button class="minn-btn-soft danger" id="minn-bulk-trash">${ icon( 'trash' ) } Trash</button>
 					<button class="minn-btn-soft" id="minn-bulk-clear" style="margin-left:auto;">Clear</button>
 				</div>`;
-				$( '#minn-bulk-apply', slot ).addEventListener( 'click', ( e ) => {
+				const bulkRestore = $( '#minn-bulk-restore', slot );
+				if ( bulkRestore ) bulkRestore.addEventListener( 'click', ( e ) => {
+					runBulk( sel, e.currentTarget, restoreOne, 'Restored' );
+				} );
+				const bulkDelete = $( '#minn-bulk-delete', slot );
+				if ( bulkDelete ) bulkDelete.addEventListener( 'click', ( e ) => {
+					if ( ! confirm( `Permanently delete ${ sel.size } item${ sel.size === 1 ? '' : 's' }? This cannot be undone.` ) ) return;
+					runBulk( sel, e.currentTarget, deleteOne, 'Deleted permanently' );
+				} );
+				const bulkApply = $( '#minn-bulk-apply', slot );
+				if ( bulkApply ) bulkApply.addEventListener( 'click', ( e ) => {
 					const status = $( '#minn-bulk-status', slot ).value;
 					if ( ! status ) { toast( 'Pick a status first', true ); return; }
 					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'POST', body: JSON.stringify( { status } ) } ), 'Status updated' );
 				} );
-				$( '#minn-bulk-trash', slot ).addEventListener( 'click', ( e ) => {
+				const bulkTrash = $( '#minn-bulk-trash', slot );
+				if ( bulkTrash ) bulkTrash.addEventListener( 'click', ( e ) => {
 					if ( ! confirm( `Move ${ sel.size } item${ sel.size === 1 ? '' : 's' } to trash?` ) ) return;
 					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'DELETE' } ), 'Moved to trash' );
 				} );
@@ -4555,6 +4671,36 @@
 		const m = state.modal;
 		if ( ! m ) return '';
 
+		if ( m.type === 'chart-activity' ) {
+			const items = m.items;
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ esc( m.bucket.label ) }</div>
+						<span class="minn-modal-count">${ Number( m.bucket.value ).toLocaleString() } event${ m.bucket.value === 1 ? '' : 's' }</span>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ items == null ? '<div class="minn-loading">Loading events…</div>'
+					: ! items.length ? '<div class="minn-empty">Nothing recorded in this period.</div>' : `
+					<div class="minn-activity minn-modal-scroll">
+						${ items.map( ( a, i ) => {
+							const linked = a.kind === 'post' || ( a.kind === 'comment' && B.caps.moderate );
+							return `
+							<div class="minn-activity-row${ linked ? ' linked' : '' }"${ linked ? ` data-ca="${ i }"` : '' }>
+								<div class="minn-activity-dot dot-${ esc( a.color ) }"></div>
+								<div style="min-width:0;">
+									<div class="minn-activity-text">${ esc( a.text ) }</div>
+									<div class="minn-activity-time">${ esc( a.ago ) }</div>
+								</div>
+							</div>`;
+						} ).join( '' ) }
+						${ items.length < m.bucket.value ? `<div class="minn-empty" style="padding:10px 0 2px;">Showing the first ${ items.length } of ${ m.bucket.value }.</div>` : '' }
+					</div>` }
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'media' ) {
 			const it = m.item;
 			const ctx = mediaModalContext();
@@ -5079,6 +5225,18 @@
 			if ( e.target.id === 'minn-modal-overlay' ) closeModal();
 		} );
 		$( '#minn-modal-close' ).addEventListener( 'click', closeModal );
+
+		if ( m.type === 'chart-activity' ) {
+			$$( '[data-ca]' ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const it = ( m.items || [] )[ parseInt( row.dataset.ca, 10 ) ];
+					if ( ! it ) return;
+					closeModal();
+					if ( it.kind === 'post' ) go( `editor/${ it.type }/${ it.id }` );
+					else go( 'comments' );
+				} )
+			);
+		}
 
 		if ( m.type === 'media' ) {
 			const it = m.item;
