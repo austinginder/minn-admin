@@ -3545,6 +3545,99 @@
 
 	const stripBlockComments = ( raw ) => raw.replace( /<!--\s*\/?wp:[\s\S]*?-->\n?/g, '' );
 
+	/* ===== Embeds & galleries (inserted as islands) ===== */
+
+	// Hosts WordPress core oEmbeds that we auto-convert a pasted lone URL for.
+	// The slash-menu Embed accepts ANY url — explicit intent needs no allowlist.
+	const EMBED_PROVIDERS = [
+		[ /(^|\.)youtube\.com$|(^|\.)youtu\.be$/, 'youtube', 'video' ],
+		[ /(^|\.)vimeo\.com$/, 'vimeo', 'video' ],
+		[ /(^|\.)dailymotion\.com$/, 'dailymotion', 'video' ],
+		[ /(^|\.)wordpress\.tv$/, 'wordpress-tv', 'video' ],
+		[ /(^|\.)videopress\.com$/, 'videopress', 'video' ],
+		[ /(^|\.)tiktok\.com$/, 'tiktok', 'video' ],
+		[ /(^|\.)ted\.com$/, 'ted', 'video' ],
+		[ /(^|\.)twitter\.com$|^x\.com$/, 'twitter', 'rich' ],
+		[ /(^|\.)instagram\.com$/, 'instagram', 'rich' ],
+		[ /(^|\.)spotify\.com$/, 'spotify', 'rich' ],
+		[ /(^|\.)soundcloud\.com$/, 'soundcloud', 'rich' ],
+		[ /(^|\.)mixcloud\.com$/, 'mixcloud', 'rich' ],
+		[ /(^|\.)reddit\.com$/, 'reddit', 'rich' ],
+		[ /(^|\.)flickr\.com$/, 'flickr', 'rich' ],
+		[ /(^|\.)tumblr\.com$/, 'tumblr', 'rich' ],
+	];
+
+	function embedProviderFor( url ) {
+		try {
+			const host = new URL( url ).hostname.replace( /^www\./, '' );
+			const hit = EMBED_PROVIDERS.find( ( [ re ] ) => re.test( host ) );
+			return hit ? { slug: hit[ 1 ], type: hit[ 2 ] } : null;
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	// Gutenberg-faithful core/embed markup: attrs in the comment, the raw URL
+	// on its own line in the wrapper. Videos get the aspect classes so the
+	// front end renders them responsive, like Gutenberg does.
+	function embedTemplate( url ) {
+		const p = embedProviderFor( url );
+		const attrs = { url };
+		const classes = [ 'wp-block-embed' ];
+		if ( p ) {
+			attrs.type = p.type;
+			attrs.providerNameSlug = p.slug;
+			classes.push( 'is-type-' + p.type, 'is-provider-' + p.slug, 'wp-block-embed-' + p.slug );
+		}
+		if ( p && p.type === 'video' ) {
+			attrs.responsive = true;
+			attrs.className = 'wp-embed-aspect-16-9 wp-has-aspect-ratio';
+			classes.push( 'wp-embed-aspect-16-9', 'wp-has-aspect-ratio' );
+		}
+		return `<!-- wp:embed${ serializeBlockAttrs( attrs ) } -->\n<figure class="${ classes.join( ' ' ) }"><div class="wp-block-embed__wrapper">\n${ url }\n</div></figure>\n<!-- /wp:embed -->`;
+	}
+
+	// Modern (5.9+) gallery: nested core/image blocks inside core/gallery.
+	function galleryTemplate( items ) {
+		const inner = items.map( ( it ) => {
+			const src = it.large || it.url;
+			const slug = it.large && it.large !== it.url ? 'large' : 'full';
+			return `<!-- wp:image${ serializeBlockAttrs( { id: it.id, sizeSlug: slug, linkDestination: 'none' } ) } -->\n`
+				+ `<figure class="wp-block-image size-${ slug }"><img src="${ esc( src ) }" alt="${ esc( it.alt || '' ) }" class="wp-image-${ it.id }"/></figure>\n`
+				+ `<!-- /wp:image -->`;
+		} ).join( '\n\n' );
+		return `<!-- wp:gallery${ serializeBlockAttrs( { linkTo: 'none' } ) } -->\n<figure class="wp-block-gallery has-nested-images columns-default is-cropped">${ inner }</figure>\n<!-- /wp:gallery -->`;
+	}
+
+	// Insert a new island before `anchor` (or at the caret's top-level block,
+	// or appended to the body) and fetch its rendered preview.
+	function insertIsland( anchor, blockName, template ) {
+		const body = $( '#minn-editor-body' );
+		const ed = state.editor;
+		if ( ! body || ! ed ) return null;
+		if ( ! anchor || ! anchor.isConnected ) {
+			const sel = window.getSelection();
+			let node = sel && sel.anchorNode;
+			while ( node && node.parentNode !== body ) node = node.parentNode;
+			anchor = node && node.parentNode === body ? node : null;
+		}
+		if ( ! ed.islands ) ed.islands = [];
+		const idx = ed.islands.push( template ) - 1;
+		const html = islandHtml( idx, blockName, template );
+		if ( anchor ) anchor.insertAdjacentHTML( 'beforebegin', html );
+		else body.insertAdjacentHTML( 'beforeend', html );
+		const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
+		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ] } ) } )
+			.then( ( r ) => {
+				const rendered = r && r.rendered && r.rendered[ 0 ];
+				const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
+				if ( prev && rendered && rendered.trim() ) prev.innerHTML = rendered;
+			} )
+			.catch( () => {} );
+		scheduleAutosave();
+		return islandEl;
+	}
+
 	// Minimal wpautop for editing classic content.
 	function miniAutop( raw ) {
 		if ( ! raw.trim() ) return '';
@@ -4573,6 +4666,23 @@
 
 			bindSlashMenu( body, insertImage );
 			bindCodeLangPicker( body );
+
+			// Pasting a lone URL from a known oEmbed provider into an empty
+			// block becomes an embed, like Gutenberg. URLs inside sentences,
+			// unknown hosts, and classic mode paste as plain text as before.
+			body.addEventListener( 'paste', ( e ) => {
+				if ( ! state.editor || state.editor.mode !== 'blocks' ) return;
+				const text = ( ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) ) || '' ).trim();
+				if ( ! /^https?:\/\/\S+$/.test( text ) || ! embedProviderFor( text ) ) return;
+				const sel = window.getSelection();
+				let node = sel && sel.anchorNode;
+				while ( node && node.parentNode !== body ) node = node.parentNode;
+				if ( ! node || node.parentNode !== body ) return;
+				const existing = node.nodeType === 1 ? node.innerHTML : node.textContent;
+				if ( stripTags( existing || '' ).trim() !== '' ) return;
+				e.preventDefault();
+				insertIsland( node, 'core/embed', embedTemplate( text ) );
+			} );
 		}
 
 		renderEditorSide();
@@ -5318,6 +5428,14 @@
 			[ '▦', 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
 			[ '—', 'Divider', { html: '<hr>' } ],
 		];
+		// Embeds and galleries insert as islands — blocks mode only (classic
+		// content already auto-embeds lone URLs server-side via WP's autoembed).
+		if ( state.editor && state.editor.mode === 'blocks' ) {
+			items.push(
+				[ '▶', 'Embed — YouTube, tweet, audio…', 'embed' ],
+				[ '🖼🖼', 'Gallery', 'gallery' ],
+			);
+		}
 		// Custom blocks that declared an `insert` template via
 		// minn_admin_block_forms land as configurable islands — blocks mode
 		// only (classic serialization would flatten them to plain HTML).
@@ -5405,7 +5523,16 @@
 			sel.removeAllRanges();
 			sel.addRange( range );
 			if ( action === 'image' ) insertImage();
-			else action();
+			else if ( action === 'embed' ) {
+				const url = ( prompt( 'Paste the URL to embed (YouTube, tweet, audio…):' ) || '' ).trim();
+				if ( /^https?:\/\/\S+$/.test( url ) ) insertIsland( target.isConnected ? target : null, 'core/embed', embedTemplate( url ) );
+				else if ( url ) toast( 'That doesn’t look like a URL', true );
+			} else if ( action === 'gallery' ) {
+				const anchor = target;
+				openMediaPicker( ( picks ) => {
+					if ( picks && picks.length ) insertIsland( anchor, 'core/gallery', galleryTemplate( picks ) );
+				}, { multi: true } );
+			} else action();
 			scheduleAutosave();
 		};
 
@@ -6203,20 +6330,25 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">Insert image</div>
+						<div class="minn-modal-title">${ m.multi ? 'Build a gallery' : 'Insert image' }</div>
+						${ m.multi ? '<span class="minn-modal-count" id="minn-picker-count">Pick images in order</span>' : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ B.caps.upload ? `
 					<div class="minn-picker-drop" id="minn-picker-drop">
 						${ icon( 'img' ) }
-						<span>Drag &amp; drop an image here, or <b>browse</b> — it's used right away</span>
+						<span>Drag &amp; drop an image here, or <b>browse</b>${ m.multi ? '' : ' — it\'s used right away' }</span>
 						<input type="file" id="minn-picker-file" accept="image/*" hidden>
 					</div>` : '' }
 					${ items == null ? '<div class="minn-loading">Loading images…</div>' : ! items.length ? '<div class="minn-empty">No images in the library yet.</div>' : `
 					<div class="minn-picker-grid">
 						${ items.map( ( it, i ) => `
-							<div class="minn-picker-item" data-pick="${ i }" style="background-image:url('${ esc( it.thumb ) }')" title="${ esc( it.name ) }"></div>` ).join( '' ) }
+							<div class="minn-picker-item${ m.picked && m.picked.includes( it.id ) ? ' sel' : '' }" data-pick="${ i }" style="background-image:url('${ esc( it.thumb ) }')" title="${ esc( it.name ) }"></div>` ).join( '' ) }
 					</div>` }
+					${ m.multi ? `
+					<div class="minn-modal-actions">
+						<button class="minn-btn-primary" id="minn-picker-done" disabled>Insert gallery</button>
+					</div>` : '' }
 				</div>
 			</div>`;
 		}
@@ -6445,14 +6577,43 @@
 		}
 
 		if ( m.type === 'picker' ) {
+			const syncPickerBar = () => {
+				const done = $( '#minn-picker-done' );
+				const count = $( '#minn-picker-count' );
+				if ( done ) {
+					done.disabled = ! m.picked.length;
+					done.textContent = m.picked.length ? `Insert gallery (${ m.picked.length })` : 'Insert gallery';
+				}
+				if ( count ) count.textContent = m.picked.length ? `${ m.picked.length } selected — in click order` : 'Pick images in order';
+			};
 			$$( '[data-pick]' ).forEach( ( el ) =>
 				el.addEventListener( 'click', () => {
 					const it = m.items[ parseInt( el.dataset.pick, 10 ) ];
+					if ( ! it ) return;
+					if ( m.multi ) {
+						// Toggle in place — no re-render, so the grid keeps its scroll.
+						const at = m.picked.indexOf( it.id );
+						if ( at === -1 ) m.picked.push( it.id );
+						else m.picked.splice( at, 1 );
+						el.classList.toggle( 'sel', at === -1 );
+						syncPickerBar();
+						return;
+					}
 					const cb = m.callback;
 					closeModal();
-					if ( it && cb ) cb( it );
+					if ( cb ) cb( it );
 				} )
 			);
+			const done = $( '#minn-picker-done' );
+			if ( done ) done.addEventListener( 'click', () => {
+				const picks = m.picked
+					.map( ( id ) => m.items.find( ( x ) => x.id === id ) )
+					.filter( Boolean );
+				const cb = m.callback;
+				closeModal();
+				if ( picks.length && cb ) cb( picks );
+			} );
+			if ( m.multi ) syncPickerBar();
 			// Upload straight from the picker — the new image is handed to the
 			// callback immediately (featured image / insertion), no second pick.
 			const drop = $( '#minn-picker-drop' );
@@ -6474,7 +6635,16 @@
 							url: up.source_url,
 							alt: up.alt_text || '',
 							thumb: ( sizes && sizes.medium && sizes.medium.source_url ) || up.source_url,
+							large: ( sizes && sizes.large && sizes.large.source_url ) || up.source_url,
 						};
+						if ( m.multi ) {
+							// Add to the gallery selection and keep picking.
+							m.items.unshift( it );
+							m.picked.push( it.id );
+							renderOverlays();
+							toast( 'Image uploaded and selected' );
+							return;
+						}
 						const cb = m.callback;
 						closeModal();
 						if ( cb ) cb( it );
@@ -7156,19 +7326,23 @@
 		}
 	}
 
-	function openMediaPicker( callback ) {
-		state.modal = { type: 'picker', items: null, callback };
+	function openMediaPicker( callback, opts = {} ) {
+		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [] };
 		renderOverlays();
 		api( 'wp/v2/media?media_type=image&per_page=48&orderby=date&order=desc&_fields=id,title,source_url,media_details,alt_text' )
 			.then( ( items ) => {
 				if ( ! state.modal || state.modal.type !== 'picker' ) return;
-				state.modal.items = items.map( ( it ) => ( {
-					id: it.id,
-					name: decodeEntities( it.title.rendered ),
-					url: it.source_url,
-					alt: it.alt_text || '',
-					thumb: ( it.media_details && it.media_details.sizes && it.media_details.sizes.medium && it.media_details.sizes.medium.source_url ) || it.source_url,
-				} ) );
+				state.modal.items = items.map( ( it ) => {
+					const sizes = it.media_details && it.media_details.sizes;
+					return {
+						id: it.id,
+						name: decodeEntities( it.title.rendered ),
+						url: it.source_url,
+						alt: it.alt_text || '',
+						thumb: ( sizes && sizes.medium && sizes.medium.source_url ) || it.source_url,
+						large: ( sizes && sizes.large && sizes.large.source_url ) || it.source_url,
+					};
+				} );
 				renderOverlays();
 			} )
 			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );

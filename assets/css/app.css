@@ -736,6 +736,12 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   cursor: pointer; border: 2px solid transparent;
 }
 .minn-picker-item:hover { border-color: var(--accent); }
+.minn-picker-item.sel { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -2px; position: relative; }
+.minn-picker-item.sel::after {
+  content: '✓'; position: absolute; top: 6px; right: 6px; width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  background: var(--accent); color: var(--accent-fg); font-size: 13px; font-weight: 700;
+}
 
 /* ===== Orders ===== */
 .minn-order-cols { grid-template-columns: 120px 1fr 130px 60px 100px 40px; }
