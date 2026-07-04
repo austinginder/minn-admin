@@ -76,8 +76,19 @@
 
 	// wp.org plugin titles are keyword-stuffed ("Rank Math SEO – AI SEO Tools
 	// to Dominate…"). Keep everything before the first separator.
+	// wp.org titles are stuffed with taglines ("UpdraftPlus: WP Backup &
+	// Migration Plugin") — keep the product name. Cut at the first separator:
+	// dashes/pipes/middots need surrounding space (WP-Optimize survives),
+	// colon/semicolon/period/comma just a following space, parens always.
+	// "X by Vendor" comes off only when a multi-word name remains, so
+	// "Login by Auth0" survives while "GEO Plugin by Squirrly SEO" trims.
+	// The full name stays available where it matters (title tooltip).
 	function cleanPluginName( name ) {
-		return decodeEntities( name || '' ).split( /\s+[–—|:]\s*|\s+-\s+|\s*[({]/ )[ 0 ].trim() || name;
+		const full = decodeEntities( name || '' ).trim();
+		let out = full.split( /\s+[–—|·]\s+|\s+-\s+|[:;.,]\s+|\s*[({]/ )[ 0 ].trim();
+		const by = out.match( /^(.+?)\s+by\s+\S/i );
+		if ( by && by[ 1 ].trim().includes( ' ' ) ) out = by[ 1 ].trim();
+		return out.length >= 2 ? out : full;
 	}
 
 	const PALETTE_COLORS = [ '#46b881', '#5b9be0', '#e0a458', '#d073c0', '#8a80f8', '#e46b6b' ];
@@ -2494,7 +2505,7 @@
 		const addBtn = $( '#minn-add-plugin', view );
 		if ( addBtn ) {
 			addBtn.addEventListener( 'click', () => {
-				state.modal = { type: 'plugin-install', q: '', results: null, searching: false };
+				state.modal = { type: 'plugin-install', q: '', results: null, searching: false, page: 1, pages: 1, total: 0 };
 				renderOverlays();
 			} );
 		}
@@ -5914,6 +5925,7 @@
 									<button class="minn-btn-soft" data-pi="${ i }" ${ stateLabel === 'Active' ? 'disabled' : '' }>${ stateLabel }</button>
 								</div>`;
 							} ).join( '' ) }
+							${ m.results && m.results.length && m.page < m.pages ? `<button class="minn-load-more" id="minn-pi-more" style="margin:10px 0 4px;">Load more · showing ${ m.results.length } of ${ Number( m.total ).toLocaleString() }</button>` : '' }
 						</div>
 					</div>
 				</div>
@@ -6430,6 +6442,18 @@
 
 	let piSearchTimer = null;
 
+	// One page of wp.org search results into the modal state; a null return
+	// means the modal closed or the query changed mid-flight (discard).
+	async function fetchPluginPage( m, page ) {
+		const q = m.q;
+		const r = await api( `minn-admin/v1/plugins/search?q=${ encodeURIComponent( q ) }&page=${ page }` );
+		if ( state.modal !== m || m.q !== q ) return null;
+		m.page = page;
+		m.pages = r.pages || 1;
+		m.total = r.total || ( r.plugins || [] ).length;
+		return r.plugins || [];
+	}
+
 	function bindPluginInstallModal( m ) {
 		const input = $( '#minn-pi-search' );
 		input.focus();
@@ -6442,9 +6466,9 @@
 				m.searching = true;
 				renderOverlays();
 				try {
-					const r = await api( 'minn-admin/v1/plugins/search?q=' + encodeURIComponent( m.q ) );
-					if ( state.modal !== m ) return;
-					m.results = r.plugins;
+					const items = await fetchPluginPage( m, 1 );
+					if ( items === null ) return;
+					m.results = items;
 				} catch ( e ) {
 					toast( e.message, true );
 					m.results = [];
@@ -6452,6 +6476,23 @@
 				m.searching = false;
 				renderOverlays();
 			}, 400 );
+		} );
+
+		const more = $( '#minn-pi-more' );
+		if ( more ) more.addEventListener( 'click', async () => {
+			more.disabled = true;
+			more.textContent = 'Loading…';
+			try {
+				const next = await fetchPluginPage( m, m.page + 1 );
+				if ( next === null ) return;
+				// wp.org pagination occasionally repeats an item across pages.
+				const seen = new Set( m.results.map( ( p ) => p.slug ) );
+				m.results = m.results.concat( next.filter( ( p ) => ! seen.has( p.slug ) ) );
+				renderOverlays();
+			} catch ( e ) {
+				toast( e.message, true );
+				renderOverlays();
+			}
 		} );
 
 		$$( '[data-pi]' ).forEach( ( btn ) =>

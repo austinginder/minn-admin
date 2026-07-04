@@ -256,9 +256,14 @@ class Minn_Admin_REST {
 					return current_user_can( 'install_plugins' );
 				},
 				'args'                => array(
-					'q' => array(
+					'q'    => array(
 						'type'     => 'string',
 						'required' => true,
+					),
+					'page' => array(
+						'type'    => 'integer',
+						'default' => 1,
+						'minimum' => 1,
 					),
 				),
 			)
@@ -1163,11 +1168,13 @@ class Minn_Admin_REST {
 		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 
-		$res = plugins_api(
+		$page = max( 1, (int) $request['page'] );
+		$res  = plugins_api(
 			'query_plugins',
 			array(
 				'search'   => sanitize_text_field( $request['q'] ),
 				'per_page' => 12,
+				'page'     => $page,
 				'fields'   => array(
 					'icons'             => true,
 					'short_description' => true,
@@ -1201,7 +1208,15 @@ class Minn_Admin_REST {
 				'installed'   => isset( $installed[ $p['slug'] ] ) ? $installed[ $p['slug'] ] : null,
 			);
 		}
-		return rest_ensure_response( array( 'plugins' => $items ) );
+		$info = isset( $res->info ) ? (array) $res->info : array();
+		return rest_ensure_response(
+			array(
+				'plugins' => $items,
+				'page'    => $page,
+				'pages'   => isset( $info['pages'] ) ? (int) $info['pages'] : 1,
+				'total'   => isset( $info['results'] ) ? (int) $info['results'] : count( $items ),
+			)
+		);
 	}
 
 	/**
