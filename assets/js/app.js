@@ -342,7 +342,7 @@
 						<button class="minn-icon-btn" id="minn-notif-btn" title="Notifications">
 							${ icon( 'bell' ) }<span class="minn-unread-dot" id="minn-unread-dot" hidden></span>
 						</button>
-						<button class="minn-btn-primary" id="minn-new-btn">${ icon( 'plus' ) } New</button>
+						<button class="minn-btn-primary" id="minn-new-btn" aria-label="New post">${ icon( 'plus' ) } New</button>
 					</div>
 				</header>
 				<div class="minn-scroll"><div class="minn-page" id="minn-view"></div></div>
@@ -1822,14 +1822,22 @@
 
 	const SETTINGS_SECTIONS = [ 'General', 'Writing', 'Reading', 'Discussion', 'Permalinks' ];
 	const POST_FORMATS = [ 'standard', 'aside', 'chat', 'gallery', 'link', 'image', 'quote', 'status', 'video', 'audio' ];
+	const PERMALINK_PRESETS = [
+		[ '', 'Plain' ],
+		[ '/%year%/%monthnum%/%day%/%postname%/', 'Day and name' ],
+		[ '/%year%/%monthnum%/%postname%/', 'Month and name' ],
+		[ '/archives/%post_id%', 'Numeric' ],
+		[ '/%postname%/', 'Post name' ],
+	];
 
 	async function loadSettings() {
-		const [ values, categories, pages ] = await Promise.all( [
+		const [ values, categories, pages, permalinks ] = await Promise.all( [
 			api( 'wp/v2/settings' ),
 			api( 'wp/v2/categories?per_page=100&_fields=id,name' ).catch( () => [] ),
 			api( 'wp/v2/pages?per_page=100&status=publish&orderby=title&order=asc&_fields=id,title' ).catch( () => [] ),
+			api( 'minn-admin/v1/permalinks' ).catch( () => null ),
 		] );
-		state.cache.settings = { values, categories, pages };
+		state.cache.settings = { values, categories, pages, permalinks };
 	}
 
 	function settingsFields( section, s, cache ) {
@@ -1900,12 +1908,25 @@
 					{ id: 'default_ping_status', label: 'Allow pingbacks & trackbacks', desc: 'Accept link notifications from other blogs on new posts.', on: s.default_ping_status === 'open' },
 				].map( toggle ).join( '' ),
 			};
-			default: return {
-				sub: 'Permalink structure isn’t exposed over the REST API yet.',
-				fields: `<div class="minn-editor-locked-note">Changing the permalink structure requires a rewrite-rule flush, so for now it lives in the classic admin. <a href="${ esc( B.site.adminUrl ) }options-permalink.php">Open permalink settings ↗</a></div>`,
-				toggles: '',
-				noSave: true,
-			};
+			default: {
+				const pl = cache.permalinks;
+				if ( ! pl ) return {
+					sub: 'Permalink settings couldn’t be loaded.',
+					fields: `<div class="minn-editor-locked-note">Manage the permalink structure in the classic admin instead. <a href="${ esc( B.site.adminUrl ) }options-permalink.php">Open permalink settings ↗</a></div>`,
+					toggles: '',
+					noSave: true,
+				};
+				const isPreset = PERMALINK_PRESETS.some( ( [ v ] ) => v === pl.structure );
+				return {
+					sub: 'URL structure for posts, categories and tags. Saving rebuilds the rewrite rules.',
+					fields: select( '_preset', 'Structure', [ ...PERMALINK_PRESETS, [ '_custom', 'Custom structure' ] ], isPreset ? pl.structure : '_custom' )
+						+ text( 'structure', 'Custom structure', pl.structure, true )
+						+ `<div class="minn-toggle-desc">Tags: %year% %monthnum% %day% %postname% %post_id% %category% %author%. Note: with Plain permalinks, Minn itself moves from /minn-admin/ to ?minn_admin=1 — the app reloads there after saving.</div>`
+						+ text( 'category_base', 'Category base (optional)', pl.category_base, true )
+						+ text( 'tag_base', 'Tag base (optional)', pl.tag_base, true ),
+					toggles: '',
+				};
+			}
 		}
 	}
 
@@ -1968,10 +1989,44 @@
 			} );
 		}
 
+		// Permalinks: keep the preset select and the custom-structure input in sync.
+		const presetSel = $( '[data-key="_preset"]', view );
+		if ( presetSel ) {
+			const structInput = $( '[data-key="structure"]', view );
+			presetSel.addEventListener( 'change', () => {
+				if ( presetSel.value !== '_custom' ) structInput.value = presetSel.value;
+			} );
+			structInput.addEventListener( 'input', () => {
+				presetSel.value = PERMALINK_PRESETS.some( ( [ v ] ) => v === structInput.value ) ? structInput.value : '_custom';
+			} );
+		}
+
 		const saveBtn = $( '#minn-save-settings', view );
 		if ( saveBtn ) {
 			saveBtn.addEventListener( 'click', async () => {
 				saveBtn.disabled = true;
+				if ( state.settingsSection === 'Permalinks' ) {
+					const payload = {};
+					$$( '[data-key]', view ).forEach( ( input ) => {
+						if ( input.dataset.key !== '_preset' ) payload[ input.dataset.key ] = input.value;
+					} );
+					try {
+						const r = await api( 'minn-admin/v1/permalinks', { method: 'POST', body: JSON.stringify( payload ) } );
+						cache.permalinks = r;
+						if ( r.pretty !== !! B.pretty ) {
+							// Routing mode flipped (path ↔ ?minn_admin=1) — reload at the app's new home.
+							toast( 'Permalinks saved — reloading…' );
+							setTimeout( () => { window.location.href = r.app_url + ( r.pretty ? 'settings' : '#/settings' ); }, 700 );
+							return;
+						}
+						toast( 'Permalinks saved' );
+						renderSettings();
+					} catch ( err ) {
+						toast( err.message, true );
+					}
+					saveBtn.disabled = false;
+					return;
+				}
 				const NUMERIC = [ 'default_category', 'posts_per_page', 'page_on_front', 'page_for_posts', 'start_of_week' ];
 				const payload = { ...pending };
 				$$( '[data-key]', view ).forEach( ( input ) => {
@@ -3702,7 +3757,9 @@
 				const detail = m.surface.collection.detail || {};
 				const msg = detail.messageKey ? m.item[ detail.messageKey ] : null;
 				if ( msg == null ) return;
-				const blob = new Blob( [ String( msg ) ], { type: 'text/html' } );
+				// text/plain, never text/html — blob: URLs are same-origin, so scripts in
+				// a logged email (which can carry user-submitted content) would run as the app.
+				const blob = new Blob( [ String( msg ) ], { type: 'text/plain' } );
 				window.open( URL.createObjectURL( blob ), '_blank' );
 			} );
 			const saveBtn = $( '#minn-surface-save' );
