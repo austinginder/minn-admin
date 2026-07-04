@@ -16,6 +16,12 @@ defined( 'ABSPATH' ) || exit;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Minn Admin — <?php echo esc_html( get_bloginfo( 'name' ) ); ?></title>
+<?php
+// The site icon (settable from Minn's own Settings → General), when one exists.
+if ( has_site_icon() ) {
+	wp_site_icon();
+}
+?>
 <link rel="stylesheet" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/css/app.css?ver=' . MINN_ADMIN_VERSION ); ?>">
 <script>
 // Apply saved theme before first paint to avoid a flash.

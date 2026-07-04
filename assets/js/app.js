@@ -2068,8 +2068,12 @@
 				items.forEach( ( el, i ) => el.classList.toggle( 'active', i === idx ) );
 				items[ idx ].scrollIntoView( { block: 'nearest' } );
 			} else if ( e.key === 'Enter' ) {
+				// enterPicksFirst:false (tags) — plain Enter submits the typed text
+				// (a possibly-new term); only an arrowed-to item is picked here.
+				const target = items[ idx ] || ( opts.enterPicksFirst === false ? null : items[ 0 ] );
+				if ( ! target ) return;
 				e.preventDefault();
-				pick( ( items[ idx ] || items[ 0 ] ).dataset.acv );
+				pick( target.dataset.acv );
 			}
 		} );
 		// mousedown (not click) + preventDefault: select before blur can close the panel.
@@ -2425,7 +2429,7 @@
 	// Blocks whose markup survives a contenteditable round-trip. Anything else
 	// (embeds, columns, custom blocks…) becomes an atomic non-editable island:
 	// preserved byte-for-byte on save, editable text around it.
-	const SIMPLE_BLOCKS = [ 'paragraph', 'heading', 'quote', 'code', 'preformatted', 'verse', 'list', 'list-item', 'image', 'table', 'html', 'separator', 'more' ];
+	const SIMPLE_BLOCKS = [ 'paragraph', 'heading', 'quote', 'code', 'preformatted', 'verse', 'list', 'list-item', 'image', 'table', 'html', 'separator', 'more', 'video', 'audio' ];
 
 	// Split raw post content into top-level segments: {type:'block',name,raw}
 	// and {type:'html',raw} (freeform chunks). Returns null when the comment
@@ -2485,7 +2489,7 @@
 	// attribute marker can't be duplicated by contenteditable. This is what lets
 	// real Gutenberg images ({"id":…,"sizeSlug":…}) stay editable instead of
 	// becoming islands.
-	const PASSTHROUGH_BLOCKS = [ 'image', 'table', 'quote', 'separator', 'verse', 'preformatted' ];
+	const PASSTHROUGH_BLOCKS = [ 'image', 'table', 'quote', 'separator', 'verse', 'preformatted', 'video', 'audio' ];
 
 	// Attributes JSON from a segment's opening block comment ({} when absent/invalid;
 	// null distinguishes "invalid JSON" for segmentEditable's bail-out).
@@ -2659,6 +2663,20 @@
 				const items = Array.from( el.querySelectorAll( ':scope > li' ) )
 					.map( ( li ) => `<!-- wp:list-item -->\n${ li.outerHTML }\n<!-- /wp:list-item -->` ).join( '' );
 				pushBlock( 'list', tag === 'ol' ? { ordered: true } : null, `<${ tag } class="${ el.className }">${ items }</${ tag }>` );
+			} else if ( tag === 'figure' && el.querySelector( 'video' ) ) {
+				const pa = takeMinnAttrs( el );
+				el.classList.add( 'wp-block-video' );
+				pushBlock( 'video', pa, el.outerHTML );
+			} else if ( tag === 'figure' && el.querySelector( 'audio' ) ) {
+				const pa = takeMinnAttrs( el );
+				el.classList.add( 'wp-block-audio' );
+				pushBlock( 'audio', pa, el.outerHTML );
+			} else if ( tag === 'video' ) {
+				const pa = takeMinnAttrs( el );
+				pushBlock( 'video', pa, `<figure class="wp-block-video">${ el.outerHTML }</figure>` );
+			} else if ( tag === 'audio' ) {
+				const pa = takeMinnAttrs( el );
+				pushBlock( 'audio', pa, `<figure class="wp-block-audio">${ el.outerHTML }</figure>` );
 			} else if ( tag === 'figure' && el.querySelector( 'img' ) ) {
 				const pa = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-image' );
@@ -2851,13 +2869,23 @@
 				: stripBlockComments( raw );
 			loadEditorPanels( state.editor, p );
 			// Revision history (types without revision support 404 — that's fine).
-			api( `wp/v2/${ state.editorType }/${ p.id }/revisions?per_page=6&_fields=id,modified,_links,_embedded&_embed=author` )
-				.then( ( revs ) => {
+			// Revisions expose an `author` ID but no author link, so _embed can't
+			// resolve names — look them up via the users endpoint instead.
+			api( `wp/v2/${ state.editorType }/${ p.id }/revisions?per_page=6&_fields=id,modified,author` )
+				.then( async ( revs ) => {
+					const names = {};
+					if ( B.user && B.user.id ) names[ B.user.id ] = B.user.name;
+					const unknown = [ ...new Set( revs.map( ( r ) => r.author ).filter( ( a ) => a > 0 && ! names[ a ] ) ) ];
+					if ( unknown.length ) {
+						await api( `wp/v2/users?include=${ unknown.join( ',' ) }&_fields=id,name` )
+							.then( ( users ) => ( Array.isArray( users ) ? users : [] ).forEach( ( u ) => { names[ u.id ] = u.name; } ) )
+							.catch( () => {} );
+					}
 					if ( state.editor && state.editor.id === p.id ) {
 						state.editor.revisions = revs.map( ( r ) => ( {
 							id: r.id,
 							modified: r.modified,
-							author: ( r._embedded && r._embedded.author && r._embedded.author[ 0 ] && r._embedded.author[ 0 ].name ) || '',
+							author: names[ r.author ] || '',
 						} ) );
 						if ( state.route === 'editor' ) renderEditorSide();
 					}
@@ -3043,11 +3071,6 @@
 			|| '<span class="minn-tag-empty">No tags yet</span>';
 	}
 
-	function tagSuggestHtml() {
-		const tags = state.cache.postTerms ? state.cache.postTerms.tags : [];
-		return tags.map( ( t ) => `<option value="${ esc( t.name ) }"></option>` ).join( '' );
-	}
-
 	function refreshTagChips() {
 		const box = $( '#minn-editor-tags' );
 		if ( ! box ) return;
@@ -3157,8 +3180,10 @@
 				}</div></div>` : '' }
 				${ ed.type === 'posts' ? `<div>Tags
 					<div class="minn-chips" id="minn-editor-tags">${ tagChipsHtml( ed ) }</div>
-					<input class="minn-input minn-tag-input" id="minn-editor-tag-input" placeholder="Add a tag, press Enter" list="minn-tag-suggest" autocomplete="off">
-					<datalist id="minn-tag-suggest">${ tagSuggestHtml() }</datalist>
+					<div class="minn-ac" id="minn-tag-ac">
+						<input class="minn-input minn-ac-input minn-tag-input" id="minn-editor-tag-input" placeholder="Add a tag, press Enter" autocomplete="off" spellcheck="false">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
 				</div>` : '' }
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>
@@ -3254,7 +3279,15 @@
 		);
 		const tagInput = $( '#minn-editor-tag-input', el );
 		if ( tagInput ) {
+			const tagWrap = $( '#minn-tag-ac', el );
+			const tagOptions = ( state.cache.postTerms ? state.cache.postTerms.tags : [] )
+				.map( ( t ) => ( { value: t.name, label: t.count != null ? `${ t.name } (${ t.count })` : t.name } ) );
+			bindAutocomplete( tagWrap, tagOptions, {
+				enterPicksFirst: false,
+				onPick: ( v ) => { tagInput.value = ''; addEditorTag( v ); },
+			} );
 			tagInput.addEventListener( 'keydown', ( e ) => {
+				if ( e.defaultPrevented ) return; // the autocomplete picked an item
 				if ( e.key === 'Enter' || e.key === ',' ) {
 					e.preventDefault();
 					const val = tagInput.value;
@@ -3340,6 +3373,13 @@
 			e.preventDefault();
 			const island = chip.closest( '.minn-block-island' );
 			if ( island ) openInspector( island );
+		} );
+		// Clicking an editable image opens its controls popover.
+		body.addEventListener( 'click', ( e ) => {
+			const img = e.target.closest( 'img' );
+			if ( img && body.contains( img ) && ! img.closest( '.minn-block-island' ) ) {
+				openImgPop( img );
+			}
 		} );
 		// Hovering an editable code block surfaces its config chip.
 		body.addEventListener( 'mouseover', ( e ) => {
@@ -3999,6 +4039,121 @@
 		const toolbarSel = $( '#minn-code-lang' );
 		if ( toolbarSel ) toolbarSel.value = lang;
 		scheduleAutosave();
+	}
+
+	/* ===== Image controls (click an image in the editor) =====
+	 * Images are editable content now (attribute passthrough), but an <img>
+	 * offers nothing to type into — clicking one opens a popover with alt
+	 * text, caption, replace and remove. Replace keeps the parked block
+	 * attributes honest: the {"id":…} attr and wp-image-N class follow the
+	 * new attachment, and stale srcset/sizes/width/height are dropped. */
+
+	let imgPop = null;
+	let imgPopTarget = null;
+
+	function imgPopAway( e ) {
+		if ( imgPop && ! imgPop.contains( e.target ) && e.target !== imgPopTarget ) hideImgPop();
+	}
+
+	function hideImgPop() {
+		if ( imgPop ) imgPop.remove();
+		imgPop = null;
+		imgPopTarget = null;
+		document.removeEventListener( 'mousedown', imgPopAway, true );
+	}
+
+	function openImgPop( img ) {
+		hideImgPop();
+		hideCodeChip();
+		closeInspector();
+		imgPopTarget = img;
+		const figure = img.closest( 'figure' );
+		const figcap = figure ? figure.querySelector( ':scope > figcaption' ) : null;
+
+		imgPop = document.createElement( 'div' );
+		imgPop.className = 'minn-inspector minn-img-pop';
+		imgPop.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">Image</span>
+				<button class="minn-x-btn" data-close type="button">×</button>
+			</div>
+			<div class="minn-insp-body">
+				<div class="minn-field-label">Alt text</div>
+				<input class="minn-input" data-img-alt placeholder="Describe this image…" value="${ esc( img.alt || '' ) }">
+				<div class="minn-field-label">Caption</div>
+				<input class="minn-input" data-img-caption placeholder="Optional caption" value="${ esc( figcap ? figcap.textContent : '' ) }">
+			</div>
+			<div class="minn-insp-actions">
+				<button class="minn-btn-primary" data-img-apply type="button">Apply</button>
+				<button class="minn-btn-soft" data-img-replace type="button">${ icon( 'img' ) } Replace</button>
+				<button class="minn-btn-soft danger" data-img-remove type="button" title="Remove image">${ icon( 'trash' ) }</button>
+			</div>`;
+		document.body.appendChild( imgPop );
+		const rect = img.getBoundingClientRect();
+		const w = imgPop.offsetWidth || 300;
+		const fitsRight = rect.right + 10 + w < window.innerWidth;
+		imgPop.style.left = ( fitsRight ? rect.right + 10 : Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) ) + 'px';
+		imgPop.style.top = Math.max( 10, Math.min( fitsRight ? rect.top : rect.bottom + 8, window.innerHeight - imgPop.offsetHeight - 10 ) ) + 'px';
+		document.addEventListener( 'mousedown', imgPopAway, true );
+
+		imgPop.querySelector( '[data-close]' ).addEventListener( 'click', hideImgPop );
+
+		imgPop.querySelector( '[data-img-apply]' ).addEventListener( 'click', () => {
+			img.alt = imgPop.querySelector( '[data-img-alt]' ).value.trim();
+			const cap = imgPop.querySelector( '[data-img-caption]' ).value.trim();
+			let fig = img.closest( 'figure' );
+			let fc = fig ? fig.querySelector( ':scope > figcaption' ) : null;
+			if ( cap ) {
+				if ( ! fig ) {
+					// Bare img — give it the standard figure wrapper so the caption has a home.
+					fig = document.createElement( 'figure' );
+					fig.className = 'wp-block-image';
+					img.replaceWith( fig );
+					fig.appendChild( img );
+				}
+				if ( ! fc ) {
+					fc = document.createElement( 'figcaption' );
+					fc.className = 'wp-element-caption';
+					fig.appendChild( fc );
+				}
+				fc.textContent = cap;
+			} else if ( fc ) {
+				fc.remove();
+			}
+			scheduleAutosave();
+			toast( 'Image updated' );
+			hideImgPop();
+		} );
+
+		imgPop.querySelector( '[data-img-replace]' ).addEventListener( 'click', () => {
+			hideImgPop();
+			openMediaPicker( ( it ) => {
+				img.src = it.url;
+				if ( it.alt ) img.alt = it.alt;
+				// Stale responsive/current-size hints don't survive a swap.
+				[ 'srcset', 'sizes', 'width', 'height' ].forEach( ( a ) => img.removeAttribute( a ) );
+				img.className = ( img.className.replace( /\bwp-image-\d+\b/, '' ).trim() + ' wp-image-' + it.id ).trim();
+				// The parked block attrs follow the new attachment.
+				const host = img.closest( 'figure' ) || img;
+				if ( host.dataset.minnAttrs ) {
+					try {
+						const a = JSON.parse( host.dataset.minnAttrs );
+						a.id = it.id;
+						host.dataset.minnAttrs = JSON.stringify( a );
+					} catch ( e ) {}
+				}
+				scheduleAutosave();
+				toast( 'Image replaced' );
+			} );
+		} );
+
+		imgPop.querySelector( '[data-img-remove]' ).addEventListener( 'click', () => {
+			if ( ! confirm( 'Remove this image from the post?' ) ) return;
+			( img.closest( 'figure' ) || img ).remove();
+			scheduleAutosave();
+			toast( 'Image removed' );
+			hideImgPop();
+		} );
 	}
 
 	/* ===== Slash command menu ===== */
@@ -5792,6 +5947,7 @@
 		renderTopbar();
 		closeInspector();
 		hideCodeChip();
+		hideImgPop();
 		const tip = $( '#minn-chart-tip' );
 		if ( tip ) tip.hidden = true;
 		switch ( state.route ) {
