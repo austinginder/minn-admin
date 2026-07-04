@@ -24,29 +24,33 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
   is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics), and a
   recent-activity feed
-- **Content** — posts, pages and custom post types with search, status pills and pagination
-- **Media** — grid/list library, uploads, drag-and-drop, and a preview overlay with arrow-key navigation
+- **Content** — posts, pages and custom post types with search, category/tag filters, status
+  pills, and **bulk actions** (set status or trash, with shift-click range select)
+- **Media** — grid/list library, uploads, drag-and-drop, and a preview overlay with arrow-key
+  navigation and in-place **title & alt text editing**
 - **Comments** — full moderation (pending / approved / spam / trash)
-- **Orders** — WooCommerce orders with summary cards and line-item detail (when WooCommerce is active)
-- **Users** — directory with search, create/edit users, roles, passwords, and **per-user login
-  sessions with one-click sign-out**
+- **Orders** — WooCommerce orders with summary cards, line-item detail and **status changes**
+  (when WooCommerce is active)
+- **Users** — directory with search, a role filter, create/edit users, roles, passwords, and
+  **per-user login sessions with one-click sign-out**
 - **AI Access** — generate revocable **application passwords** for AI agents plus a site-tailored
   **agent guide** (markdown REST reference) to hand to a coding agent; configuration work stays
   out of Minn by design
 - **Extensions** — install plugins and themes from WordPress.org or zip upload, activate,
   deactivate, delete, per-item and bulk updates, and a Themes tab with screenshots
-- **Settings** — General (with timezone picker), Writing, Reading and Discussion, plus built-in
-  maintenance mode
+- **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks
+  (structure presets + custom, with automatic rewrite flushing), plus built-in maintenance mode
 - **Editor** — distraction-free, block-aware writing surface: native Gutenberg markup with
   complex blocks preserved byte-for-byte as **read-only islands**, slash commands, tables,
   syntax-highlighted code blocks with a language picker, featured images, image insertion,
-  categories, revisions with restore, autosave, scheduling and one-click publish
+  categories & tags, revisions with restore, autosave, scheduling and one-click publish
 - **Command palette** — ⌘K / Ctrl-K everywhere
 - **Plugin surfaces** — bundled adapters for **Gravity Forms** (entries), **Gravity SMTP**
-  (email log), **Simple History** (activity log), **Redirection** (redirects) and **ACF**
-  (editor panels), plus one-filter APIs for any plugin to register views, editor panels or
-  traffic data
-- **Dark & light themes**, bundled fonts, zero external requests from the app
+  (email log with a real HTML preview and resend), **Simple History** (activity log),
+  **Redirection** (redirects, editable in place) and **ACF** (editor panels), plus one-filter
+  APIs for any plugin to register views, editor panels or traffic data
+- **Dark & light themes**, bundled fonts, zero external requests from the app, responsive down
+  to phones
 
 ## Install
 
@@ -68,6 +72,7 @@ required. See [docs/for-plugin-authors.md](docs/for-plugin-authors.md), and
 
 - [Project goals](docs/goals.md)
 - [Editor direction](docs/editor-direction.md)
+- [Block inspector (design, v0.4.0)](docs/block-inspector.md)
 - [For plugin authors](docs/for-plugin-authors.md)
 - [Changelog](changelog.md)
 

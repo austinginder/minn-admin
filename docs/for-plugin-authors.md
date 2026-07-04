@@ -55,8 +55,33 @@ That's a working, paginated, capability-gated view in the Minn sidebar.
 | `itemsKey` / `totalKey` | Where items/total live in the response body. Omit both for standard WP collections (plain array + `X-WP-Total` header) |
 | `tabs` | Either `{ "route": "...", "valueKey": "id", "labelKey": "title" }` to build tabs from a REST call, or `{ "param": "status", "static": [["sent","Sent"],["failed","Failed"]] }` for fixed tabs sent as a query param. `allLabel` names the first tab |
 | `columns` | Array of `{ key, label, format }`. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `entry-summary` (first scalar values of numeric keys — useful for form entries) |
-| `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `labels` (resolve field keys to human labels from another route), `messageKey` (render one field as a large text block), `skip` (keys to hide) |
+| `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `labels` (resolve field keys to human labels from another route), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
 | `actions` | Buttons in the detail modal: `{ label, method, route, body, confirm, danger }`. `{id}` in the route is replaced with the item id |
+
+### `detail.edit` — inline editing in the detail modal
+
+Let users edit an item's fields in place and save through your plugin's own update endpoint:
+
+```php
+'detail' => array(
+    'edit' => array(
+        'route'    => 'redirection/v1/redirect/{id}',   // update endpoint; {id} replaced
+        'method'   => 'POST',                            // default POST
+        'preserve' => array( 'match_type', 'group_id' ), // untouched fields sent along so
+                                                         // your sanitizer doesn't reset them
+        'fields'   => array(
+            array( 'key' => 'url', 'label' => 'Source URL', 'mono' => true ),
+            array( 'key' => 'action_data.url', 'label' => 'Target URL', 'mono' => true ),
+            array( 'key' => 'action_code', 'label' => 'HTTP status', 'type' => 'number' ),
+        ),
+    ),
+),
+```
+
+Each field is `{ key, label, mono, type }` — `key` supports dot paths (`action_data.url`
+reads and writes `{ "action_data": { "url": … } }`), `mono` renders a monospace input, and
+`type: "number"` sends a numeric value. Fields shown as inputs are hidden from the static
+detail rows automatically. The bundled Redirection adapter is the reference.
 
 ## Editor panels — per-post fields in the editor sidebar
 
