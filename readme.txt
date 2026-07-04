@@ -4,7 +4,7 @@ Tags: admin, dashboard, ui, admin theme
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -44,6 +44,9 @@ Try it instantly in WordPress Playground — launch link and blueprint: https://
 Pretty permalinks are recommended. Without them the app is served at `/?minn_admin=1`.
 
 == Changelog ==
+
+= 0.4.1 =
+* Fixed: updating an active plugin from the Extensions per-plugin update button no longer deactivates it (including Minn updating itself).
 
 = 0.4.0 =
 * Block inspector: configure complex blocks (islands) in place — schema-driven forms, add/remove/reorder children, wrapper-text edits, live server-rendered previews, and removal.
