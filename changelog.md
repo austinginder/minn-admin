@@ -1,6 +1,6 @@
 # Changelog
 
-## **v0.2.0** - Unreleased
+## **v0.2.0** - July 3, 2026
 
 ### Added
 * **Code block languages:** A language picker (PHP, JS, HTML, CSS, bash, JSON, Python, SQL) appears in the editor toolbar whenever the caret is inside a code block. The choice is stored as a Prism-style `language-*` class on the `<code>` element — portable and theme-highlighter compatible — and drives language-aware syntax highlighting, including PHP `$variables` and `<?php` tags.
