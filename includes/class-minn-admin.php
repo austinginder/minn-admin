@@ -142,6 +142,7 @@ class Minn_Admin {
 			'version'  => MINN_ADMIN_VERSION,
 			'user'     => array(
 				'id'     => $user->ID,
+				'login'  => $user->user_login,
 				'name'   => $user->display_name,
 				'role'   => translate_user_role( $role ),
 				'avatar' => get_avatar_url( $user->ID, array( 'size' => 64 ) ),
@@ -156,6 +157,7 @@ class Minn_Admin {
 				'plugins'      => current_user_can( 'activate_plugins' ),
 				'update'       => current_user_can( 'update_plugins' ),
 				'delete'       => current_user_can( 'delete_plugins' ),
+				'install'      => current_user_can( 'install_plugins' ),
 				'settings'     => current_user_can( 'manage_options' ),
 				'moderate'     => current_user_can( 'moderate_comments' ),
 				'upload'       => current_user_can( 'upload_files' ),

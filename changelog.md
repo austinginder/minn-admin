@@ -6,6 +6,10 @@
 * **Code block languages:** A language picker (PHP, JS, HTML, CSS, bash, JSON, Python, SQL) appears in the editor toolbar whenever the caret is inside a code block. The choice is stored as a Prism-style `language-*` class on the `<code>` element — portable and theme-highlighter compatible — and drives language-aware syntax highlighting, including PHP `$variables` and `<?php` tags.
 * **Dark code surfaces:** Code blocks in the editor and previews always render on a dark surface with a fixed highlight palette, so syntax colors are equally readable in light and dark themes.
 
+* **Plugin installs:** An "Add plugin" modal on Extensions with a WordPress.org search picker (server-side proxy — the app never talks to external hosts), install/activate in place, and zip upload via drag-and-drop or file picker.
+* **AI Access:** Your account now manages **application passwords** — create a revocable credential for an AI agent (shown once, with copy-password and copy-curl buttons) and revoke any credential — plus a generated **agent guide**: a markdown REST reference tailored to what's installed on the site (core routes, WooCommerce, Gravity Forms, ACF, Minn extras), ready to hand to a coding agent.
+* **Notifications:** Individual notifications mark read on click and navigate to the thing they're about (comments → moderation, updates → Extensions, new users → Users).
+
 ### Fixed
 * Line breaks inside code blocks (entered as `<br>` by the browser) are preserved when saving.
 * Classic-content saves now strip syntax-highlight decoration from code blocks before writing to the database.

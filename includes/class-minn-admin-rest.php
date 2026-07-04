@@ -109,6 +109,36 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/plugins/search',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'search_plugins' ),
+				'permission_callback' => function () {
+					return current_user_can( 'install_plugins' );
+				},
+				'args'                => array(
+					'q' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/plugins/upload',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'upload_plugin' ),
+				'permission_callback' => function () {
+					return current_user_can( 'install_plugins' ) && current_user_can( 'upload_files' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/plugins/update',
 			array(
 				'methods'             => 'POST',
@@ -312,6 +342,7 @@ class Minn_Admin_REST {
 		if ( current_user_can( 'moderate_comments' ) ) {
 			foreach ( get_comments( array( 'status' => 'hold', 'number' => 5 ) ) as $c ) {
 				$items[] = array(
+					'id'    => 'comment-' . $c->comment_ID,
 					'kind'  => 'comments',
 					'icon'  => '💬',
 					'title' => sprintf( 'New comment from %s awaiting moderation on “%s”', $c->comment_author ?: 'Anonymous', get_the_title( $c->comment_post_ID ) ),
@@ -321,6 +352,7 @@ class Minn_Admin_REST {
 		}
 		foreach ( get_comments( array( 'status' => 'approve', 'number' => 3 ) ) as $c ) {
 			$items[] = array(
+				'id'    => 'comment-' . $c->comment_ID,
 				'kind'  => 'comments',
 				'icon'  => '💬',
 				'title' => sprintf( '%s commented on “%s”', $c->comment_author ?: 'Anonymous', get_the_title( $c->comment_post_ID ) ),
@@ -336,6 +368,7 @@ class Minn_Admin_REST {
 				foreach ( $updates->response as $file => $data ) {
 					$name    = isset( $all_plugins[ $file ]['Name'] ) ? $all_plugins[ $file ]['Name'] : $file;
 					$items[] = array(
+						'id'    => 'plugin-' . $file . '-' . $data->new_version,
 						'kind'  => 'updates',
 						'icon'  => '⬆',
 						'title' => sprintf( '%s %s is available to install', $name, $data->new_version ),
@@ -349,6 +382,7 @@ class Minn_Admin_REST {
 			$core = get_site_transient( 'update_core' );
 			if ( $core && ! empty( $core->updates ) && 'upgrade' === $core->updates[0]->response ) {
 				$items[] = array(
+					'id'    => 'core-' . $core->updates[0]->version,
 					'kind'  => 'system',
 					'icon'  => '🛡',
 					'title' => sprintf( 'WordPress %s is available', $core->updates[0]->version ),
@@ -368,6 +402,7 @@ class Minn_Admin_REST {
 			);
 			foreach ( $users as $u ) {
 				$items[] = array(
+					'id'    => 'user-' . $u->ID,
 					'kind'  => 'system',
 					'icon'  => '👤',
 					'title' => sprintf( 'New user registered: %s', $u->display_name ),
@@ -380,9 +415,12 @@ class Minn_Admin_REST {
 			return $b['time'] - $a['time'];
 		} );
 
+		$read_ids = get_user_meta( get_current_user_id(), 'minn_admin_notif_read_ids', true );
+		$read_ids = is_array( $read_ids ) ? $read_ids : array();
+
 		$today = strtotime( 'today', current_time( 'timestamp' ) ) - (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
 		foreach ( $items as &$item ) {
-			$item['unread'] = $item['time'] > $read_at;
+			$item['unread'] = $item['time'] > $read_at && ! in_array( $item['id'], $read_ids, true );
 			$item['group']  = $item['time'] >= $today ? 'Today' : 'Earlier';
 			$item['ago']    = sprintf( '%s ago', human_time_diff( $item['time'] ) );
 		}
@@ -390,8 +428,21 @@ class Minn_Admin_REST {
 		return rest_ensure_response( array( 'items' => $items ) );
 	}
 
-	public static function notifications_read() {
-		update_user_meta( get_current_user_id(), 'minn_admin_notif_read_at', time() );
+	/**
+	 * Mark one notification read (body: {id}) or everything read (no id).
+	 */
+	public static function notifications_read( WP_REST_Request $request ) {
+		$uid = get_current_user_id();
+		$id  = sanitize_text_field( (string) $request->get_param( 'id' ) );
+		if ( $id ) {
+			$ids   = get_user_meta( $uid, 'minn_admin_notif_read_ids', true );
+			$ids   = is_array( $ids ) ? $ids : array();
+			$ids[] = $id;
+			update_user_meta( $uid, 'minn_admin_notif_read_ids', array_slice( array_unique( $ids ), -200 ) );
+		} else {
+			update_user_meta( $uid, 'minn_admin_notif_read_at', time() );
+			delete_user_meta( $uid, 'minn_admin_notif_read_ids' );
+		}
 		return rest_ensure_response( array( 'ok' => true ) );
 	}
 
@@ -470,6 +521,95 @@ class Minn_Admin_REST {
 		unset( $tokens[ $verifier ] );
 		update_user_meta( $uid, 'session_tokens', $tokens );
 		return rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	/**
+	 * Search the wordpress.org plugin directory (proxied server-side so the
+	 * app never talks to external hosts).
+	 */
+	public static function search_plugins( WP_REST_Request $request ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+		$res = plugins_api(
+			'query_plugins',
+			array(
+				'search'   => sanitize_text_field( $request['q'] ),
+				'per_page' => 12,
+				'fields'   => array(
+					'icons'             => true,
+					'short_description' => true,
+					'active_installs'   => true,
+					'rating'            => true,
+				),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+
+		// Directory names of installed plugins, for "Installed" labels.
+		$installed = array();
+		foreach ( array_keys( get_plugins() ) as $file ) {
+			$installed[ dirname( $file ) ] = $file;
+		}
+
+		$items = array();
+		foreach ( (array) $res->plugins as $p ) {
+			$p       = (array) $p;
+			$icons   = isset( $p['icons'] ) ? (array) $p['icons'] : array();
+			$items[] = array(
+				'slug'        => $p['slug'],
+				'name'        => wp_strip_all_tags( $p['name'] ),
+				'description' => wp_strip_all_tags( isset( $p['short_description'] ) ? $p['short_description'] : '' ),
+				'installs'    => isset( $p['active_installs'] ) ? (int) $p['active_installs'] : 0,
+				'rating'      => isset( $p['rating'] ) ? (int) $p['rating'] : 0,
+				'version'     => isset( $p['version'] ) ? $p['version'] : '',
+				'icon'        => isset( $icons['1x'] ) ? $icons['1x'] : ( isset( $icons['default'] ) ? $icons['default'] : '' ),
+				'installed'   => isset( $installed[ $p['slug'] ] ) ? $installed[ $p['slug'] ] : null,
+			);
+		}
+		return rest_ensure_response( array( 'plugins' => $items ) );
+	}
+
+	/**
+	 * Install a plugin from an uploaded zip.
+	 */
+	public static function upload_plugin( WP_REST_Request $request ) {
+		$files = $request->get_file_params();
+		if ( empty( $files['file'] ) || empty( $files['file']['tmp_name'] ) ) {
+			return new WP_Error( 'no_file', 'No file uploaded.', array( 'status' => 400 ) );
+		}
+		if ( ! preg_match( '/\.zip$/i', $files['file']['name'] ) ) {
+			return new WP_Error( 'not_zip', 'Plugin uploads must be .zip files.', array( 'status' => 400 ) );
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+
+		$package = wp_tempnam( $files['file']['name'] );
+		if ( ! $package || ! move_uploaded_file( $files['file']['tmp_name'], $package ) ) {
+			return new WP_Error( 'move_failed', 'Could not store the upload.', array( 'status' => 500 ) );
+		}
+
+		$skin     = new WP_Ajax_Upgrader_Skin();
+		$upgrader = new Plugin_Upgrader( $skin );
+		$result   = $upgrader->install( $package );
+		@unlink( $package ); // phpcs:ignore
+
+		if ( ! $result || is_wp_error( $result ) ) {
+			$errors = $skin->get_error_messages();
+			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : 'Install failed.', array( 'status' => 500 ) );
+		}
+
+		return rest_ensure_response(
+			array(
+				'installed' => true,
+				'plugin'    => $upgrader->plugin_info(),
+			)
+		);
 	}
 
 	/**

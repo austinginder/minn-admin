@@ -1307,8 +1307,10 @@
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			<div class="minn-toolbar-meta" style="margin-left:0;">${ active } active · ${ plugins.length } installed</div>
+			${ B.caps.install ? `
+				<button class="minn-btn-soft" id="minn-add-plugin" style="margin-left:auto;">${ icon( 'plus' ) } Add plugin</button>` : '' }
 			${ updateCount && B.caps.update ? `
-				<button class="minn-btn-soft" id="minn-update-all" style="margin-left:auto;">
+				<button class="minn-btn-soft" id="minn-update-all"${ B.caps.install ? '' : ' style="margin-left:auto;"' }>
 					${ icon( 'refresh' ) } Update all (${ updateCount })
 				</button>` : '' }
 		</div>
@@ -1420,6 +1422,13 @@
 		const updateAllBtn = $( '#minn-update-all', view );
 		if ( updateAllBtn ) {
 			updateAllBtn.addEventListener( 'click', () => updateAllPlugins( updateAllBtn ) );
+		}
+		const addBtn = $( '#minn-add-plugin', view );
+		if ( addBtn ) {
+			addBtn.addEventListener( 'click', () => {
+				state.modal = { type: 'plugin-install', q: '', results: null, searching: false };
+				renderOverlays();
+			} );
 		}
 	}
 
@@ -2535,7 +2544,7 @@
 						<div>
 							<div class="minn-notif-group-label">${ esc( g.label ) }</div>
 							${ g.items.map( ( n ) => `
-								<div class="minn-notif-row${ n.unread ? ' unread' : '' }">
+								<div class="minn-notif-row${ n.unread ? ' unread' : '' }" data-nid="${ esc( n.id ) }">
 									<div class="minn-notif-icon">${ esc( n.icon ) }</div>
 									<div class="minn-notif-text">
 										${ esc( n.title ) }
@@ -2809,6 +2818,38 @@
 							</div>
 						</div>
 					</div>
+					${ ! isNew && m.userId === B.user.id ? `
+					<div class="minn-sessions">
+						<div class="minn-side-title" style="margin:0 0 4px;">AI Access <span class="minn-panel-sub">application passwords</span></div>
+						<div class="minn-toggle-desc" style="margin-bottom:8px;">Give an AI agent its own revocable credential instead of your login. It authenticates against the REST API with HTTP Basic auth.</div>
+						${ m.newAppPassword ? `
+						<div class="minn-app-reveal">
+							<div class="minn-field-label">“${ esc( m.newAppPassword.name ) }” created — copy it now, it won't be shown again</div>
+							<code id="minn-app-secret">${ esc( m.newAppPassword.password ) }</code>
+							<div style="display:flex; gap:8px; margin-top:9px; flex-wrap:wrap;">
+								<button class="minn-btn-soft" id="minn-app-copy">${ icon( 'copy' ) } Copy password</button>
+								<button class="minn-btn-soft" id="minn-app-copy-curl">${ icon( 'copy' ) } Copy curl example</button>
+							</div>
+						</div>` : '' }
+						${ m.appPasswords == null ? '<div class="minn-session-empty">Loading…</div>'
+							: ! m.appPasswords.length ? '<div class="minn-session-empty">No application passwords yet.</div>'
+							: m.appPasswords.map( ( ap ) => `
+							<div class="minn-session-row">
+								<div class="minn-session-info">
+									<div class="minn-session-ua">${ esc( ap.name ) }</div>
+									<div class="minn-session-meta">created ${ ap.created ? timeAgo( ap.created ) : '—' } · ${ ap.last_used ? 'last used ' + timeAgo( ap.last_used ) : 'never used' }</div>
+								</div>
+								<button class="minn-comment-action danger" data-appdel="${ esc( ap.uuid ) }">Revoke</button>
+							</div>` ).join( '' ) }
+						<div style="display:flex; gap:8px; margin-top:10px;">
+							<input class="minn-input" id="minn-app-name" placeholder="AI Agent" style="font-size:13px;">
+							<button class="minn-btn-soft" id="minn-app-create" style="flex-shrink:0;">${ icon( 'plus' ) } New password</button>
+						</div>
+						<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+							<button class="minn-btn-soft" id="minn-guide-copy">${ icon( 'copy' ) } Copy agent guide</button>
+							<button class="minn-btn-soft" id="minn-guide-download">↓ Download agent-guide.md</button>
+						</div>
+					</div>` : '' }
 					${ ! isNew ? `
 					<div class="minn-sessions" id="minn-uf-sessions">
 						<div class="minn-side-title" style="margin:0 0 4px;">Sessions</div>
@@ -2834,6 +2875,47 @@
 
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
+		}
+
+		if ( m.type === 'plugin-install' ) {
+			const installedNow = ( slug ) => ( state.cache.plugins || [] ).find( ( p ) => p.plugin.split( '/' )[ 0 ] === slug );
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">Add plugin</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-pi-body">
+						<div class="minn-dropzone compact" id="minn-pi-dropzone">
+							${ icon( 'upload' ) }
+							<div class="minn-dropzone-sub">Drop a plugin <b>.zip</b> here or <b>browse</b></div>
+							<input type="file" id="minn-pi-file" accept=".zip" hidden>
+						</div>
+						<input class="minn-input" id="minn-pi-search" placeholder="Search the WordPress.org directory…" value="${ esc( m.q ) }" autocomplete="off">
+						<div class="minn-pi-results">
+							${ m.searching ? '<div class="minn-loading">Searching…</div>'
+							: m.results == null ? '<div class="minn-empty" style="padding:20px;">Search for a plugin, or drop a zip above.</div>'
+							: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">No results for “${ esc( m.q ) }”.</div>`
+							: m.results.map( ( p, i ) => {
+								const local = installedNow( p.slug );
+								const stateLabel = local && local.status === 'active' ? 'Active'
+									: ( local || p.installed ) ? 'Activate' : 'Install';
+								return `
+								<div class="minn-pi-row">
+									${ p.icon ? `<img class="minn-pi-icon" src="${ esc( p.icon ) }" alt="">` : '<div class="minn-pi-icon"></div>' }
+									<div class="minn-pi-info">
+										<div class="minn-row-title">${ esc( p.name ) }</div>
+										<div class="minn-pi-meta">${ p.installs ? Number( p.installs ).toLocaleString() + '+ installs · ' : '' }v${ esc( p.version ) }</div>
+										<div class="minn-pi-desc">${ esc( p.description ) }</div>
+									</div>
+									<button class="minn-btn-soft" data-pi="${ i }" ${ stateLabel === 'Active' ? 'disabled' : '' }>${ stateLabel }</button>
+								</div>`;
+							} ).join( '' ) }
+						</div>
+					</div>
+				</div>
+			</div>`;
 		}
 
 		if ( m.type === 'picker' ) {
@@ -2935,6 +3017,102 @@
 		if ( m.type === 'revision' ) {
 			bindRevisionModal( m );
 		}
+
+		if ( m.type === 'plugin-install' ) {
+			bindPluginInstallModal( m );
+		}
+	}
+
+	/* ===== Plugin install modal (wp.org search + zip upload) ===== */
+
+	let piSearchTimer = null;
+
+	function bindPluginInstallModal( m ) {
+		const input = $( '#minn-pi-search' );
+		input.focus();
+		input.setSelectionRange( input.value.length, input.value.length );
+		input.addEventListener( 'input', () => {
+			m.q = input.value.trim();
+			clearTimeout( piSearchTimer );
+			if ( ! m.q ) return;
+			piSearchTimer = setTimeout( async () => {
+				m.searching = true;
+				renderOverlays();
+				try {
+					const r = await api( 'minn-admin/v1/plugins/search?q=' + encodeURIComponent( m.q ) );
+					if ( state.modal !== m ) return;
+					m.results = r.plugins;
+				} catch ( e ) {
+					toast( e.message, true );
+					m.results = [];
+				}
+				m.searching = false;
+				renderOverlays();
+			}, 400 );
+		} );
+
+		$$( '[data-pi]' ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const p = m.results[ parseInt( btn.dataset.pi, 10 ) ];
+				if ( ! p ) return;
+				btn.disabled = true;
+				const activating = btn.textContent.trim() === 'Activate';
+				btn.textContent = activating ? 'Activating…' : 'Installing…';
+				try {
+					if ( activating ) {
+						const local = ( state.cache.plugins || [] ).find( ( x ) => x.plugin.split( '/' )[ 0 ] === p.slug );
+						const file = local ? local.plugin : ( p.installed ? p.installed.replace( /\.php$/, '' ) : null );
+						await api( 'wp/v2/plugins/' + file, { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+						toast( p.name + ' activated' );
+					} else {
+						await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: p.slug } ) } );
+						toast( p.name + ' installed' );
+					}
+					state.cache.plugins = null;
+					await loadPlugins().catch( () => {} );
+					if ( state.route === 'extensions' ) renderExtensions();
+					renderOverlays(); // refresh button states in the modal
+				} catch ( e ) {
+					toast( e.message, true );
+					renderOverlays();
+				}
+			} )
+		);
+
+		const zone = $( '#minn-pi-dropzone' );
+		const file = $( '#minn-pi-file' );
+		const uploadZip = async ( f ) => {
+			if ( ! f ) return;
+			if ( ! /\.zip$/i.test( f.name ) ) {
+				toast( 'Plugin uploads must be .zip files', true );
+				return;
+			}
+			zone.classList.add( 'minn-busy' );
+			toast( `Installing ${ f.name }…` );
+			const fd = new FormData();
+			fd.append( 'file', f );
+			try {
+				await api( 'minn-admin/v1/plugins/upload', { method: 'POST', body: fd } );
+				toast( 'Plugin installed — activate it from the list' );
+				state.cache.plugins = null;
+				await loadPlugins().catch( () => {} );
+				closeModal();
+				if ( state.route === 'extensions' ) renderExtensions();
+			} catch ( e ) {
+				toast( e.message, true );
+				zone.classList.remove( 'minn-busy' );
+			}
+		};
+		zone.addEventListener( 'click', () => file.click() );
+		file.addEventListener( 'change', () => uploadZip( file.files[ 0 ] ) );
+		zone.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); zone.classList.add( 'over' ); } );
+		zone.addEventListener( 'dragleave', () => zone.classList.remove( 'over' ) );
+		zone.addEventListener( 'drop', ( e ) => {
+			e.preventDefault();
+			e.stopPropagation();
+			zone.classList.remove( 'over' );
+			uploadZip( e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[ 0 ] );
+		} );
 	}
 
 	/* ===== Revision modal ===== */
@@ -3023,9 +3201,24 @@
 	}
 
 	function openUserModal( userId ) {
-		state.modal = { type: 'user', userId: userId || null, user: null, sessions: null };
+		state.modal = { type: 'user', userId: userId || null, user: null, sessions: null, appPasswords: null, newAppPassword: null };
 		renderOverlays();
 		if ( ! userId ) return;
+		if ( userId === B.user.id ) {
+			api( 'wp/v2/users/me/application-passwords' )
+				.then( ( list ) => {
+					if ( state.modal && state.modal.type === 'user' && state.modal.userId === userId ) {
+						state.modal.appPasswords = list;
+						renderOverlays();
+					}
+				} )
+				.catch( () => {
+					if ( state.modal && state.modal.type === 'user' ) {
+						state.modal.appPasswords = [];
+						renderOverlays();
+					}
+				} );
+		}
 		api( `wp/v2/users/${ userId }?context=edit&_fields=id,name,email,roles,username` )
 			.then( ( u ) => {
 				if ( state.modal && state.modal.type === 'user' && state.modal.userId === userId ) {
@@ -3056,8 +3249,121 @@
 		return Array.from( buf, ( n ) => chars[ n % chars.length ] ).join( '' );
 	}
 
+	// Markdown reference an AI agent needs to work this site over REST,
+	// tailored to what's actually installed.
+	function buildAgentGuide() {
+		const L = [];
+		L.push(
+			`# ${ B.site.name } — AI agent access`,
+			'',
+			`Base URL: \`${ B.restUrl }\``,
+			'',
+			'## Authentication',
+			'',
+			`HTTP Basic auth with the WordPress username \`${ B.user.login }\` and an application`,
+			'password (create/revoke them in Minn Admin → your account → AI Access).',
+			'',
+			'```bash',
+			`curl -u '${ B.user.login }:APPLICATION-PASSWORD' '${ B.restUrl }wp/v2/posts?per_page=5'`,
+			'```',
+			'',
+			'## Core resources (`wp/v2/`)',
+			'',
+			'- `posts`, `pages`, `media`, `users`, `comments`, `categories`, `tags`, `settings`, `plugins`, `types`',
+			'- Lists take `?per_page=&page=`; totals come back in the `X-WP-Total` header',
+			'- Use `context=edit` for raw (unrendered) content; prefer `_fields=` to keep responses small',
+			'- Posts are stored as Gutenberg block markup (`<!-- wp:paragraph -->…`)',
+			'',
+			'## Detected on this site',
+			''
+		);
+		const detected = [];
+		if ( B.wc ) detected.push( '- WooCommerce: `wc/v3/` (orders, products, customers, reports)' );
+		( B.surfaces || [] ).forEach( ( s ) => {
+			if ( s.id === 'gravity-forms' ) detected.push( '- Gravity Forms: `gf/v2/` (forms, entries; pagination via `paging[page_size]`/`paging[current_page]`)' );
+			else if ( s.id === 'gravity-smtp' ) detected.push( '- Gravity SMTP email log (read-only): `minn-admin/v1/gravity-smtp/events`' );
+			else if ( s.collection && s.collection.route ) detected.push( `- ${ s.label }${ s.sub ? ' (' + s.sub + ')' : '' }: \`${ s.collection.route }\`` );
+		} );
+		( B.editorPanels || [] ).forEach( ( p ) => {
+			if ( p.id === 'acf' ) detected.push( '- ACF: field groups with “Show in REST API” read/write through the `acf` key on post responses' );
+		} );
+		L.push( ...( detected.length ? detected : [ '- (nothing beyond core detected)' ] ) );
+		L.push(
+			'',
+			'## Minn Admin extras (`minn-admin/v1/`)',
+			'',
+			'- `overview` — stats, activity chart and recent activity',
+			'- `users/{id}/sessions` — active login sessions (DELETE to sign out)',
+			'- `plugins/update` / `plugins/update-all` — run plugin updates',
+			'',
+			`_Generated by Minn Admin v${ B.version }. Site: ${ B.site.url }_`
+		);
+		return L.join( '\n' );
+	}
+
 	function bindUserModal( m ) {
 		if ( ! $( '#minn-uf-save' ) ) return; // still in the loading state
+
+		if ( m.userId === B.user.id ) {
+			const copyText = async ( text, label ) => {
+				try {
+					await navigator.clipboard.writeText( text );
+					toast( label );
+				} catch ( e ) {
+					toast( 'Could not copy', true );
+				}
+			};
+			const createBtn = $( '#minn-app-create' );
+			if ( createBtn ) {
+				createBtn.addEventListener( 'click', async () => {
+					createBtn.disabled = true;
+					const name = $( '#minn-app-name' ).value.trim() || 'AI Agent';
+					try {
+						const ap = await api( 'wp/v2/users/me/application-passwords', { method: 'POST', body: JSON.stringify( { name } ) } );
+						m.newAppPassword = { name: ap.name, password: ap.password };
+						m.appPasswords = null;
+						renderOverlays();
+						api( 'wp/v2/users/me/application-passwords' ).then( ( list ) => {
+							if ( state.modal === m ) { m.appPasswords = list; renderOverlays(); }
+						} ).catch( () => {} );
+					} catch ( e ) {
+						toast( e.message, true );
+						createBtn.disabled = false;
+					}
+				} );
+			}
+			const copyBtn = $( '#minn-app-copy' );
+			if ( copyBtn ) copyBtn.addEventListener( 'click', () => copyText( m.newAppPassword.password, 'Password copied' ) );
+			const curlBtn = $( '#minn-app-copy-curl' );
+			if ( curlBtn ) curlBtn.addEventListener( 'click', () => copyText(
+				`curl -u '${ B.user.login }:${ m.newAppPassword.password }' '${ B.restUrl }wp/v2/posts?per_page=5'`, 'curl example copied' ) );
+			$$( '[data-appdel]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', async () => {
+					if ( ! confirm( 'Revoke this application password? Anything using it loses access immediately.' ) ) return;
+					btn.disabled = true;
+					try {
+						await api( 'wp/v2/users/me/application-passwords/' + btn.dataset.appdel, { method: 'DELETE' } );
+						toast( 'Application password revoked' );
+						m.appPasswords = m.appPasswords.filter( ( ap ) => ap.uuid !== btn.dataset.appdel );
+						renderOverlays();
+					} catch ( e ) {
+						toast( e.message, true );
+						btn.disabled = false;
+					}
+				} )
+			);
+			const guideCopy = $( '#minn-guide-copy' );
+			if ( guideCopy ) guideCopy.addEventListener( 'click', () => copyText( buildAgentGuide(), 'Agent guide copied' ) );
+			const guideDl = $( '#minn-guide-download' );
+			if ( guideDl ) guideDl.addEventListener( 'click', () => {
+				const blob = new Blob( [ buildAgentGuide() ], { type: 'text/markdown' } );
+				const a = document.createElement( 'a' );
+				a.href = URL.createObjectURL( blob );
+				a.download = 'agent-guide.md';
+				a.click();
+				URL.revokeObjectURL( a.href );
+			} );
+		}
 		const isNew = ! m.userId;
 		const gen = $( '#minn-uf-genpass' );
 		if ( gen ) {
@@ -3194,6 +3500,24 @@
 			} );
 			$$( '.minn-notif-tab' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => { state.notifTab = btn.dataset.tab; renderOverlays(); } )
+			);
+			$$( '.minn-notif-row' ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === row.dataset.nid );
+					if ( ! item ) return;
+					if ( item.unread ) {
+						item.unread = false;
+						api( 'minn-admin/v1/notifications/read', { method: 'POST', body: JSON.stringify( { id: item.id } ) } ).catch( () => {} );
+						updateUnreadDot();
+					}
+					state.notifOpen = false;
+					renderOverlays();
+					// Take the user to the thing the notification is about.
+					if ( item.kind === 'comments' && B.caps.moderate ) go( 'comments' );
+					else if ( item.kind === 'updates' && B.caps.plugins ) go( 'extensions' );
+					else if ( item.id.startsWith( 'user-' ) && B.caps.users ) go( 'users' );
+					else if ( item.id.startsWith( 'core-' ) ) window.open( B.site.adminUrl + 'update-core.php', '_blank' );
+				} )
 			);
 		}
 
