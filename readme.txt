@@ -16,7 +16,7 @@ Minn Admin serves a modern, minimal admin dashboard at `/minn-admin/` on your si
 
 Features:
 
-* **Overview** — real stats, a Traffic chart with hover details when an analytics plugin is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics), and a recent-activity feed.
+* **Overview** — real stats, a Traffic chart with hover details when an analytics plugin is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP), and a recent-activity feed.
 * **Content** — posts, pages and custom post types with search, category/tag filters, status pills, and bulk actions (set status or trash, shift-click range select).
 * **Media** — grid and list library views with real thumbnails, uploads, drag-and-drop, and a preview overlay with in-place title and alt text editing.
 * **Comments** — moderation with Pending/Approved/Spam/Trash tabs and one-click actions.
@@ -27,7 +27,7 @@ Features:
 * **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks sections, plus a built-in maintenance mode.
 * **Editor** — distraction-free, block-aware writing surface: complex blocks preserved byte-for-byte as read-only islands, slash commands, tables, syntax-highlighted code blocks with a language picker, featured images, categories and tags, revisions with restore, autosave, scheduling and one-click publish.
 * **Command palette** — press ⌘K / Ctrl-K anywhere.
-* **Plugin adapters** — Gravity Forms, Gravity SMTP (HTML email preview and resend), Simple History, Redirection (editable in place) and ACF views built in, plus one-filter APIs for other plugins.
+* **Plugin adapters** — Gravity Forms, Gravity SMTP (HTML email preview and resend), Simple History, Redirection (editable in place) and ACF views built in, plus one-filter APIs for other plugins (views, editor panels, traffic data, block-inspector forms).
 * **Notifications** — pending comments, plugin/core updates and new users; click an item to jump to it.
 * **Dark & light themes** — toggle persists per browser. Fonts are bundled locally.
 * **Self-updater** — updates arrive from GitHub Releases through the normal WordPress updates UI.

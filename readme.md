@@ -22,7 +22,7 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
 ## Features
 
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
-  is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics), and a
+  is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP), and a
   recent-activity feed
 - **Content** — posts, pages and custom post types with search, category/tag filters, status
   pills, and **bulk actions** (set status or trash, with shift-click range select)
@@ -48,7 +48,7 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
 - **Plugin surfaces** — bundled adapters for **Gravity Forms** (entries), **Gravity SMTP**
   (email log with a real HTML preview and resend), **Simple History** (activity log),
   **Redirection** (redirects, editable in place) and **ACF** (editor panels), plus one-filter
-  APIs for any plugin to register views, editor panels or traffic data
+  APIs for any plugin to register views, editor panels, traffic data or block-inspector forms
 - **Dark & light themes**, bundled fonts, zero external requests from the app, responsive down
   to phones
 

@@ -1,14 +1,18 @@
 # Block inspector — editing complex blocks without Gutenberg
 
-**Status: steps 1–4 shipped (v0.4.0 cycle) — code language attribute, the inspector for
-attribute/dynamic islands with server-rendered previews (`minn-admin/v1/render-blocks`
-replaced the per-block `block-renderer` idea — it renders whole islands including static
-parents with dynamic children), one-level child editing, and add/remove/reorder children.
-Structure ops are gated on the "structural" InnerBlocks shape: leading/trailing wrapper HTML
-preserved verbatim, whitespace-only between children (reassembled with Gutenberg's blank-line
-separator); anything else falls back to in-place attribute editing with structure locked.
-Still open: the `minn_admin_block_forms` filter, parent-attribute editing for InnerBlocks
-wrappers.**
+**Status: all five steps shipped (v0.4.0 cycle) — code language attribute (plus a hover/caret
+⚙ chip popout on editable code blocks), the inspector for attribute/dynamic islands with
+server-rendered previews (`minn-admin/v1/render-blocks` replaced the per-block
+`block-renderer` idea — it renders whole islands including static parents with dynamic
+children), one-level child editing, add/remove/reorder children (gated on the "structural"
+InnerBlocks shape: wrapper HTML preserved verbatim, whitespace-only between children), and
+the `minn_admin_block_forms` filter with `wrapperText` — which delivered the useful subset of
+"parent editing": declared text inside a wrapper (e.g. the conversation header) is editable
+via a three-capture-group pattern, replaced only when changed. Adapters ship inside the
+integrated plugin (Anchor Blocks `app/MinnAdmin.php` is the reference), not bundled in Minn.
+Full parent-attribute regeneration for static InnerBlocks wrappers remains deliberately
+unbuilt — it requires the block's JS `save()` and stays on the wrong side of the parity
+treadmill.**
 
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —
 this is the plan for making them *workable*. The goal: click an island, get a small inspector

@@ -4,6 +4,28 @@ Minn Admin renders third-party plugin data through **surfaces** — declarative 
 registered from PHP. One filter, no JavaScript, no build step. Minn draws your data with the same
 list / tabs / detail-modal / action primitives that power its built-in views.
 
+## Ship the adapter inside your own plugin
+
+Minn's whole extension surface is four public filters — **`minn_admin_surfaces`** (views),
+**`minn_admin_editor_panels`** (editor sidebar fields), **`minn_admin_traffic`** (the Overview
+chart) and **`minn_admin_block_forms`** (block-inspector forms). The standardized way to
+integrate is to put your `add_filter()` calls in one file inside **your** plugin and require it
+unconditionally:
+
+```
+my-plugin/
+└── includes/minn-admin.php   ← all your minn_admin_* filters live here
+```
+
+No `class_exists( 'Minn_Admin' )` guard is needed: when Minn isn't installed the filters are
+simply never applied, so the integration is a free no-op. Users who install both plugins get
+the integration automatically — nothing to configure, no companion plugin to ship.
+
+Minn bundles adapters (in `includes/adapters/`) only for popular plugins that don't know about
+Minn — Gravity Forms, ACF, Redirection, the analytics providers. If you're the author of the
+plugin being integrated, ship the adapter with it instead; [Anchor Blocks](https://github.com/austinginder/anchor-blocks)
+does exactly this in `app/MinnAdmin.php`.
+
 ## Quick start
 
 ```php
@@ -82,6 +104,57 @@ Each field is `{ key, label, mono, type }` — `key` supports dot paths (`action
 reads and writes `{ "action_data": { "url": … } }`), `mono` renders a monospace input, and
 `type: "number"` sends a numeric value. Fields shown as inputs are hidden from the static
 detail rows automatically. The bundled Redirection adapter is the reference.
+
+## Block inspector forms — `minn_admin_block_forms`
+
+Minn's editor renders complex blocks as read-only islands, and the **block inspector** (the ⚙
+chip on every island) generates a config form from each block's registered attribute schema.
+A schema can't express intent, though — that `role` is a two-value enum, that `content` wants
+a textarea, or what a human label is. This filter layers that on:
+
+```php
+add_filter( 'minn_admin_block_forms', function ( $forms ) {
+    $forms['my-plugin/testimonial'] = array(
+        'order'      => array( 'author', 'quote', 'tone' ),   // field order
+        'attributes' => array(
+            'author' => array( 'label' => 'Author' ),
+            'quote'  => array( 'label' => 'Quote', 'control' => 'textarea' ),
+            'tone'   => array(
+                'label'   => 'Tone',
+                'control' => 'select',
+                'options' => array( array( 'light', 'Light' ), array( 'dark', 'Dark' ) ),
+            ),
+            'legacy' => array( 'hide' => true ),              // keep out of the form
+        ),
+    );
+    return $forms;
+} );
+```
+
+Per attribute: `label`, `control` (`text` · `textarea` · `select` · `number` · `checkbox`),
+`options` (`[value, label]` pairs, implies `select`), `hide`. Without a descriptor the
+inspector falls back to schema-derived controls, so this is refinement, not requirement.
+Attributes with a `source` (stored in saved HTML) are never form-edited.
+
+### `wrapperText` — editable text in an InnerBlocks wrapper
+
+Static InnerBlocks parents often bake a heading into their saved wrapper HTML (e.g. a
+conversation block's header). Declare it editable with a regex of **exactly three capture
+groups** — `(prefix)(text)(suffix)`:
+
+```php
+$forms['my-plugin/panel'] = array(
+    'wrapperText' => array(
+        array( 'label' => 'Heading', 'pattern' => '(<div class="panel-head">)([^<]*)(</div>)' ),
+    ),
+);
+```
+
+The text is replaced in place only when it actually changed — an untouched wrapper stays
+byte-identical. Patterns that don't match simply don't render a field. For a real-world
+reference, [Anchor Blocks](https://github.com/austinginder/anchor-blocks) registers
+descriptors for all of its blocks from its own plugin (`app/MinnAdmin.php`) — the filter is
+a no-op when Minn isn't installed, so block plugins can ship it unconditionally.
 
 ## Editor panels — per-post fields in the editor sidebar
 
