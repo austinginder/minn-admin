@@ -190,6 +190,9 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-widget-info { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
 .minn-widget-moveto { width: auto; font-size: 12.5px; padding: 4px 8px; }
 .minn-widget-textarea { resize: vertical; min-height: 120px; }
+.minn-excerpt-input { resize: vertical; margin-top: 5px; font-size: 13px; line-height: 1.5; }
+.minn-comment-replybox { margin-top: 10px; }
+.minn-comment-replybox textarea { resize: vertical; font-size: 13.5px; }
 .minn-unread-dot { position: absolute; top: 6px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--bg); }
 .minn-btn-primary {
   display: flex; align-items: center; gap: 7px; background: var(--accent); color: var(--accent-fg); border: none;

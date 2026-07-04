@@ -19,6 +19,24 @@ class Minn_Admin {
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar_link' ), 100 );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
+		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
+	}
+
+	/**
+	 * "Make Minn the default admin": after signing in, land in Minn instead of
+	 * the wp-admin dashboard. Only takes over the DEFAULT landing — an explicit
+	 * redirect_to deep link (a plugin page, a specific post) still wins, and
+	 * users who can't use Minn (no edit_posts) keep core behavior.
+	 */
+	public static function login_redirect( $redirect_to, $requested, $user ) {
+		if ( ! get_option( 'minn_admin_default' ) || ! ( $user instanceof WP_User ) || ! $user->has_cap( 'edit_posts' ) ) {
+			return $redirect_to;
+		}
+		$default_targets = array( '', admin_url(), admin_url( 'index.php' ) );
+		if ( in_array( (string) $requested, $default_targets, true ) ) {
+			return self::app_url();
+		}
+		return $redirect_to;
 	}
 
 	public static function register_route() {
@@ -48,6 +66,15 @@ class Minn_Admin {
 		register_setting(
 			'minn_admin',
 			'minn_admin_maintenance',
+			array(
+				'show_in_rest' => true,
+				'type'         => 'boolean',
+				'default'      => false,
+			)
+		);
+		register_setting(
+			'minn_admin',
+			'minn_admin_default',
 			array(
 				'show_in_rest' => true,
 				'type'         => 'boolean',

@@ -1063,9 +1063,20 @@
 
 	/* ===== Media ===== */
 
+	const MEDIA_TYPES = [ [ '', 'All' ], [ 'image', 'Images' ], [ 'video', 'Video' ], [ 'audio', 'Audio' ], [ 'application', 'Docs' ] ];
+
+	// Like contentCtx: a load started before the search/type filter changed
+	// must not land its rows into the new context.
+	const mediaCtx = () => ( state.mediaSearch || '' ) + '|' + ( state.mediaType || '' );
+
 	async function loadMedia( more ) {
+		const ctx = mediaCtx();
 		const c = more && state.cache.media ? state.cache.media : { items: [], page: 0, totalPages: 1, total: 0 };
-		const r = await apiPaged( `wp/v2/media?per_page=48&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text&page=${ c.page + 1 }` );
+		let q = `wp/v2/media?per_page=48&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text&page=${ c.page + 1 }`;
+		if ( state.mediaSearch ) q += '&search=' + encodeURIComponent( state.mediaSearch );
+		if ( state.mediaType ) q += '&media_type=' + encodeURIComponent( state.mediaType );
+		const r = await apiPaged( q );
+		if ( ctx !== mediaCtx() ) return; // filter changed mid-flight — discard
 		c.page++;
 		c.totalPages = r.totalPages;
 		c.total = r.total;
@@ -1129,9 +1140,14 @@
 
 		view.innerHTML = `
 		<div class="minn-toolbar">
-			<div class="minn-toolbar-meta" style="margin-left:0;">${ countLabel }</div>
-			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn" style="margin-left:auto;">${ icon( 'upload' ) } Upload</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
-			<div class="minn-view-tabs"${ B.caps.upload ? ' style="margin-left:0;"' : '' }>
+			<div class="minn-tabs">
+				${ MEDIA_TYPES.map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ ( state.mediaType || '' ) === id ? ' active' : '' }" data-mtype="${ id }">${ label }</button>` ).join( '' ) }
+			</div>
+			<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
+			<div class="minn-toolbar-meta">${ countLabel }</div>
+			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn">${ icon( 'upload' ) } Upload</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
+			<div class="minn-view-tabs" style="margin-left:0;">
 				<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
 				<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
 			</div>
@@ -1142,7 +1158,7 @@
 			<div class="minn-dropzone-title">Drag &amp; drop files here</div>
 			<div class="minn-dropzone-sub">or <b>browse your computer</b></div>
 		</div>` : '' }
-		${ ! mapped.length ? '<div class="minn-card minn-empty">The media library is empty. Drop files anywhere to upload.</div>' : state.mediaView === 'grid' ? `
+		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType ? 'No files match.' : 'The media library is empty. Drop files anywhere to upload.' }</div>` : state.mediaView === 'grid' ? `
 		<div class="minn-media-grid">
 			${ mapped.map( ( m ) => `
 				<div class="minn-media-card" data-media="${ m.id }">
@@ -1170,6 +1186,32 @@
 		$$( '.minn-view-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => { state.mediaView = btn.dataset.view; renderMedia(); } )
 		);
+		$$( '[data-mtype]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.mediaType = btn.dataset.mtype || null;
+				state.cache.media = null;
+				renderMedia();
+			} )
+		);
+		const mediaSearch = $( '#minn-media-search', view );
+		if ( mediaSearch ) {
+			let t = null;
+			mediaSearch.addEventListener( 'input', () => {
+				clearTimeout( t );
+				t = setTimeout( async () => {
+					state.mediaSearch = mediaSearch.value.trim();
+					state.cache.media = null;
+					const grid = $( '.minn-media-grid, .minn-media-list', view );
+					if ( grid ) grid.classList.add( 'minn-busy' );
+					await loadMedia().catch( showErr );
+					if ( state.route === 'media' ) {
+						renderMedia();
+						const again = $( '#minn-media-search' );
+						if ( again ) { again.focus(); again.setSelectionRange( again.value.length, again.value.length ); }
+					}
+				}, 350 );
+			} );
+		}
 		$$( '[data-media]', view ).forEach( ( el ) =>
 			el.addEventListener( 'click', () => {
 				const m = mapped.find( ( x ) => x.id === parseInt( el.dataset.media, 10 ) );
@@ -1272,6 +1314,7 @@
 			avatar: cm.author_avatar_urls && ( cm.author_avatar_urls[ '48' ] || Object.values( cm.author_avatar_urls )[ 0 ] ),
 			excerpt: stripTags( cm.content && cm.content.rendered ).slice( 0, 160 ),
 			post: c.postTitles[ cm.post ] || '#' + cm.post,
+			postId: cm.post,
 			date: cm.date,
 		} ) );
 		const actionsFor = () => {
@@ -1302,9 +1345,18 @@
 						</div>
 						<div class="minn-comment-text">${ esc( r.excerpt ) }</div>
 						<div class="minn-comment-actions">
+							${ [ 'hold', 'approve' ].includes( state.commentTab ) ? `<button class="minn-comment-action" data-creply="${ r.id }">${ state.commentReply === r.id ? 'Close' : 'Reply' }</button>` : '' }
 							${ actionsFor().map( ( [ st, label ] ) =>
 								`<button class="minn-comment-action${ st === 'trash' || st === 'delete' ? ' danger' : '' }" data-cid="${ r.id }" data-cstatus="${ st }">${ label }</button>` ).join( '' ) }
 						</div>
+						${ state.commentReply === r.id ? `
+						<div class="minn-comment-replybox">
+							<textarea class="minn-input" id="minn-reply-text" rows="3" placeholder="Reply as ${ esc( B.user.name ) }…"></textarea>
+							<div style="display:flex; gap:8px; margin-top:8px;">
+								<button class="minn-btn-primary" id="minn-reply-send" data-post="${ r.postId }" data-parent="${ r.id }">${ state.commentTab === 'hold' ? 'Reply & approve' : 'Reply' }</button>
+								<button class="minn-btn-soft" id="minn-reply-cancel">Cancel</button>
+							</div>
+						</div>` : '' }
 					</div>
 				</div>` ).join( '' ) : `<div class="minn-empty">No ${ ( COMMENT_TABS.find( ( t ) => t[ 0 ] === state.commentTab ) || [ '', '' ] )[ 1 ].toLowerCase() } comments.</div>` }
 		</div>
@@ -1325,6 +1377,50 @@
 				setCommentStatus( parseInt( btn.dataset.cid, 10 ), st, labels[ st ] );
 			} )
 		);
+		$$( '[data-creply]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const id = parseInt( btn.dataset.creply, 10 );
+				state.commentReply = state.commentReply === id ? null : id;
+				renderComments();
+				const box = $( '#minn-reply-text' );
+				if ( box ) box.focus();
+			} )
+		);
+		const replySend = $( '#minn-reply-send', view );
+		if ( replySend ) replySend.addEventListener( 'click', async () => {
+			const text = ( $( '#minn-reply-text' ) || {} ).value || '';
+			if ( ! text.trim() ) {
+				toast( 'Write a reply first', true );
+				return;
+			}
+			replySend.disabled = true;
+			const parent = parseInt( replySend.dataset.parent, 10 );
+			const wasPending = state.commentTab === 'hold';
+			try {
+				await api( 'wp/v2/comments', { method: 'POST', body: JSON.stringify( {
+					post: parseInt( replySend.dataset.post, 10 ),
+					parent,
+					content: text.trim(),
+				} ) } );
+				// Same behavior as wp-admin: replying to a pending comment approves it.
+				if ( wasPending ) {
+					await api( `wp/v2/comments/${ parent }`, { method: 'POST', body: JSON.stringify( { status: 'approved' } ) } ).catch( () => {} );
+				}
+				toast( wasPending ? 'Reply posted, comment approved' : 'Reply posted' );
+				state.commentReply = null;
+				state.cache.comments = null;
+				refreshCommentBadge();
+				if ( state.route === 'comments' ) renderComments();
+			} catch ( e ) {
+				toast( e.message, true );
+				replySend.disabled = false;
+			}
+		} );
+		const replyCancel = $( '#minn-reply-cancel', view );
+		if ( replyCancel ) replyCancel.addEventListener( 'click', () => {
+			state.commentReply = null;
+			renderComments();
+		} );
 		const more = $( '#minn-comments-more', view );
 		if ( more ) {
 			more.addEventListener( 'click', async () => {
@@ -3012,6 +3108,7 @@
 				toggles: [
 					{ id: 'users_can_register', label: 'Membership', desc: 'Anyone can register an account.', on: !! s.users_can_register },
 					{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors.', on: !! s.minn_admin_maintenance },
+					{ id: 'minn_admin_default', label: 'Minn is the default admin', desc: 'After signing in, land here instead of wp-admin (deep links still work; classic stays available).', on: !! s.minn_admin_default },
 				].map( toggle ).join( '' ),
 			};
 			case 'Writing': return {
@@ -3647,7 +3744,7 @@
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,featured_media,parent,menu_order,template${ extraKeys }` );
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,featured_media,parent,menu_order,template,excerpt${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			const mode = editorModeFor( raw );
 			state.editor = {
@@ -3681,6 +3778,8 @@
 				supportsOrder: 'menu_order' in p,
 				templates: null,
 				parentPick: null,
+				excerpt: ( p.excerpt && ( p.excerpt.raw != null ? p.excerpt.raw : '' ) ) || '',
+				supportsExcerpt: 'excerpt' in p,
 			};
 			if ( state.editorType === 'posts' && ( p.tags || [] ).length ) {
 				api( `wp/v2/tags?include=${ p.tags.join( ',' ) }&per_page=100&_fields=id,name` )
@@ -3757,6 +3856,7 @@
 				revisions: null, panels: null,
 				supportsThumb: true, featuredMedia: 0, featuredThumb: null,
 				parent: 0, menuOrder: 0, template: '', supportsParent: newType === 'pages', supportsOrder: newType === 'pages', templates: null, parentPick: null,
+				excerpt: '', supportsExcerpt: newType === 'posts',
 			};
 			loadEditorPanels( state.editor, null );
 			loadPageAttrs( state.editor );
@@ -3810,6 +3910,7 @@
 		if ( ed.parentDirty ) payload.parent = ed.parent || 0;
 		if ( ed.templateDirty ) payload.template = ed.template || '';
 		if ( ed.orderDirty ) payload.menu_order = ed.menuOrder || 0;
+		if ( ed.excerptDirty ) payload.excerpt = ed.excerpt;
 		try {
 			let p;
 			if ( ed.id ) {
@@ -3832,6 +3933,7 @@
 			ed.parentDirty = false;
 			ed.templateDirty = false;
 			ed.orderDirty = false;
+			ed.excerptDirty = false;
 			state.cache.content = null;
 			renderEditorSide();
 			renderTopbar();
@@ -4104,6 +4206,9 @@
 						<div class="minn-ac-panel" hidden></div>
 					</div>
 				</div>` : '' }
+				${ ed.supportsExcerpt ? `<div>Excerpt
+					<textarea class="minn-input minn-excerpt-input" id="minn-editor-excerpt" rows="3" placeholder="Optional summary for archives, feeds and shares…">${ esc( ed.excerpt ) }</textarea>
+				</div>` : '' }
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>
 		</div>
@@ -4131,6 +4236,12 @@
 		${ ( ed.panels || [] ).map( ( p ) => panelCard( ed, p ) ).join( '' ) }
 		${ ed.id ? '<button class="minn-trash-link" id="minn-trash-post">Move to trash</button>' : '' }`;
 
+		const excerptInput = $( '#minn-editor-excerpt', el );
+		if ( excerptInput ) excerptInput.addEventListener( 'input', () => {
+			ed.excerpt = excerptInput.value;
+			ed.excerptDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
 		const parentWrap = $( '#minn-parent-ac', el );
 		if ( parentWrap && ed.parentPick ) {
 			bindAutocomplete( parentWrap, parentOptions( ed ), {
