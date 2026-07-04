@@ -1,0 +1,53 @@
+{
+  "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+  "landingPage": "/minn-admin/",
+  "meta": {
+    "title": "Minn Admin",
+    "author": "Austin Ginder",
+    "description": "Launch Minn Admin from GitHub in WordPress Playground."
+  },
+  "preferredVersions": {
+    "php": "8.3",
+    "wp": "latest"
+  },
+  "features": {
+    "networking": true
+  },
+  "extraLibraries": [
+    "wp-cli"
+  ],
+  "steps": [
+    {
+      "step": "login",
+      "username": "admin",
+      "password": "password"
+    },
+    {
+      "step": "setSiteOptions",
+      "options": {
+        "blogname": "Minn Admin Playground",
+        "blogdescription": "A disposable WordPress demo for Minn Admin.",
+        "permalink_structure": "/%postname%/"
+      }
+    },
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "git:directory",
+        "url": "https://github.com/austinginder/minn-admin",
+        "ref": "main",
+        "refType": "branch",
+        "path": "/"
+      },
+      "options": {
+        "activate": true,
+        "targetFolderName": "minn-admin"
+      },
+      "ifAlreadyInstalled": "overwrite"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp rewrite flush --hard"
+    }
+  ]
+}
