@@ -740,6 +740,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 }
 .minn-code-chip:hover { color: var(--accent2); border-color: var(--accent); }
 .minn-code-pop { width: 250px; }
+.minn-img-pop { width: 300px; }
+.minn-img-pop .minn-insp-actions .minn-btn-primary { flex: 0 1 auto; }
 .minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
 .minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
 .minn-insp-actions .minn-btn-primary { flex: 1; justify-content: center; }
