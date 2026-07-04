@@ -157,6 +157,8 @@
 		comments: [ 'Comments', 'Moderation' ],
 		orders: [ 'Orders', 'WooCommerce' ],
 		users: [ 'Users', 'People' ],
+		menus: [ 'Menus', 'Navigation' ],
+		widgets: [ 'Widgets', 'Sidebars & footers' ],
 		extensions: [ 'Extensions', 'Installed' ],
 		posttypes: [ 'Post Types', 'Structure' ],
 		settings: [ 'Settings', 'General' ],
@@ -255,6 +257,7 @@
 			plus: '<path d="M12 5v14M5 12h14"/>',
 			refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
 			list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+			columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
 			chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 			cart: '<circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
 			users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -293,6 +296,14 @@
 		const manageItems = [];
 		if ( B.caps.users ) {
 			manageItems.push( { id: 'users', label: 'Users', icon: 'users' } );
+		}
+		// Classic themes only — block themes manage navigation and widget areas
+		// in the site editor, and wp-admin hides these screens the same way.
+		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
+			manageItems.push( { id: 'menus', label: 'Menus', icon: 'list' } );
+			if ( B.site.hasSidebars ) {
+				manageItems.push( { id: 'widgets', label: 'Widgets', icon: 'columns' } );
+			}
 		}
 		if ( B.caps.settings ) {
 			manageItems.push( { id: 'posttypes', label: 'Post Types', icon: 'grid' } );
@@ -1725,6 +1736,576 @@
 			state.modal.loading = false;
 			renderOverlays();
 		}
+	}
+
+	/* ===== Menus (classic navigation) ===== */
+
+	function menusState() {
+		if ( ! state.menusData ) {
+			state.menusData = { menus: null, sel: null, items: null, locations: null, pick: null, editing: null };
+		}
+		return state.menusData;
+	}
+
+	async function loadMenus() {
+		const ms = menusState();
+		const [ menus, locations ] = await Promise.all( [
+			api( 'wp/v2/menus?context=edit&per_page=100&_fields=id,name,locations' ),
+			api( 'wp/v2/menu-locations' ).catch( () => ( {} ) ),
+		] );
+		ms.menus = menus;
+		ms.locations = locations;
+		if ( ! ms.sel || ! menus.some( ( m ) => m.id === ms.sel ) ) {
+			ms.sel = menus.length ? menus[ 0 ].id : null;
+		}
+	}
+
+	async function loadMenuItems() {
+		const ms = menusState();
+		if ( ! ms.sel ) {
+			ms.items = [];
+			return;
+		}
+		const r = await apiPaged( `wp/v2/menu-items?menus=${ ms.sel }&per_page=100&context=edit&_fields=id,title,url,parent,menu_order,type,object,object_id` );
+		ms.itemsTotal = r.total;
+		ms.items = r.items.map( ( it ) => ( {
+			id: it.id,
+			// raw is the stored label (may be empty for post items — WP then
+			// falls back to the post's own title, which is what rendered shows).
+			label: decodeEntities( stripTags( ( it.title && ( it.title.rendered || it.title.raw ) ) || '' ) ) || '(no label)',
+			rawLabel: decodeEntities( ( it.title && it.title.raw ) || '' ),
+			url: it.url || '',
+			parent: it.parent || 0,
+			order: it.menu_order || 0,
+			type: it.type,
+			object: it.object,
+		} ) );
+	}
+
+	// Pages + recent posts for the "add to menu" picker (loaded once per visit).
+	async function loadMenuPick() {
+		const ms = menusState();
+		if ( ms.pick ) return;
+		const [ pages, posts ] = await Promise.all( [
+			api( 'wp/v2/pages?per_page=100&orderby=title&order=asc&_fields=id,title,link' ).catch( () => [] ),
+			api( 'wp/v2/posts?per_page=100&_fields=id,title,link' ).catch( () => [] ),
+		] );
+		ms.pick = [
+			...pages.map( ( p ) => ( { key: `page:${ p.id }`, object: 'page', id: p.id, title: decodeEntities( p.title.rendered ) || '(no title)', kind: 'Page' } ) ),
+			...posts.map( ( p ) => ( { key: `post:${ p.id }`, object: 'post', id: p.id, title: decodeEntities( p.title.rendered ) || '(no title)', kind: 'Post' } ) ),
+		];
+	}
+
+	// Ordered depth-first flattening of the item tree; orphans land at root.
+	function menuTree( items ) {
+		const byParent = new Map();
+		items.forEach( ( it ) => {
+			const k = it.parent || 0;
+			if ( ! byParent.has( k ) ) byParent.set( k, [] );
+			byParent.get( k ).push( it );
+		} );
+		const ids = new Set( items.map( ( it ) => it.id ) );
+		byParent.forEach( ( list ) => list.sort( ( a, b ) => a.order - b.order ) );
+		const flat = [];
+		const walk = ( pid, depth ) => {
+			( byParent.get( pid ) || [] ).forEach( ( it ) => {
+				flat.push( { it, depth } );
+				walk( it.id, depth + 1 );
+			} );
+		};
+		walk( 0, 0 );
+		items.forEach( ( it ) => {
+			if ( it.parent && ! ids.has( it.parent ) && ! flat.some( ( f ) => f.it.id === it.id ) ) {
+				flat.push( { it, depth: 0 } );
+			}
+		} );
+		return flat;
+	}
+
+	// Persist the current tree shape: renumber depth-first and PATCH every item
+	// whose order or parent differs from what the SERVER last knew (`before`) —
+	// comparing against the mutated client value would skip items whose new
+	// value happens to equal their final position. Sequential writes; WP
+	// re-sorts on each one.
+	async function saveMenuShape( ms, before ) {
+		const flat = menuTree( ms.items );
+		flat.forEach( ( f, i ) => { f.it.order = i + 1; } );
+		const dirty = ms.items.filter( ( it ) => {
+			const b = before.get( it.id );
+			return ! b || b.order !== it.order || b.parent !== it.parent;
+		} );
+		for ( const it of dirty ) {
+			await api( `wp/v2/menu-items/${ it.id }`, { method: 'POST', body: JSON.stringify( { menu_order: it.order, parent: it.parent } ) } );
+		}
+	}
+
+	async function menuShapeAction( ms, mutate ) {
+		const view = $( '#minn-view' );
+		const tbl = $( '.minn-menu-items', view );
+		if ( tbl ) tbl.classList.add( 'minn-busy' );
+		const before = new Map( ms.items.map( ( it ) => [ it.id, { order: it.order, parent: it.parent } ] ) );
+		try {
+			mutate();
+			await saveMenuShape( ms, before );
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+		await loadMenuItems().catch( showErr );
+		if ( state.route === 'menus' ) renderMenus();
+	}
+
+	function renderMenus() {
+		const view = $( '#minn-view' );
+		const ms = menusState();
+		if ( ! ms.menus || ( ms.sel && ! ms.items ) ) {
+			view.innerHTML = '<div class="minn-loading">Loading menus…</div>';
+			// Single-flight: a re-render while loading must not start another
+			// chain (a resolved-promise .then( render ) here would loop forever).
+			if ( ! ms.loading ) {
+				ms.loading = true;
+				Promise.all( [ loadMenus().then( loadMenuItems ), loadMenuPick().catch( () => {} ) ] )
+					.then( () => { ms.loading = false; } )
+					.then( renderIfCurrent( 'menus' ) )
+					.catch( ( e ) => { ms.loading = false; showErr( e ); } );
+			}
+			return;
+		}
+		const flat = menuTree( ms.items || [] );
+		const locations = Object.entries( ms.locations || {} );
+		const cur = ( ms.menus || [] ).find( ( m ) => m.id === ms.sel );
+		const typeLabel = ( it ) => it.type === 'custom' ? 'Link' : ( it.type === 'taxonomy' ? ( it.object === 'category' ? 'Category' : it.object ) : ( it.object === 'page' ? 'Page' : it.object === 'post' ? 'Post' : it.object || it.type ) );
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			<div class="minn-tabs">
+				${ ( ms.menus || [] ).map( ( m ) =>
+					`<button class="minn-tab${ ms.sel === m.id ? ' active' : '' }" data-menu="${ m.id }">${ esc( m.name ) }</button>` ).join( '' ) }
+			</div>
+			<button class="minn-btn-soft" id="minn-menu-new">${ icon( 'plus' ) } New menu</button>
+			<div class="minn-toolbar-meta">${ flat.length } item${ flat.length === 1 ? '' : 's' }</div>
+		</div>
+		${ ! ms.menus.length ? '<div class="minn-card minn-empty">No menus yet. Create one to build your site navigation.</div>' : `
+		${ locations.length ? `
+		<div class="minn-card minn-panel-pad minn-menu-locations">
+			<div class="minn-panel-title" style="margin-bottom:10px;">Theme locations</div>
+			${ locations.map( ( [ slug, loc ] ) => `
+				<div class="minn-side-row">
+					<span class="minn-side-key">${ esc( loc.name || slug ) }</span>
+					<div class="minn-ac minn-loc-ac" data-loc="${ esc( slug ) }">
+						<input class="minn-input minn-ac-input" placeholder="— none —" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
+				</div>` ).join( '' ) }
+		</div>` : '' }
+		<div class="minn-card minn-menu-items">
+			${ flat.length ? flat.map( ( { it, depth } ) => ms.editing === it.id ? `
+			<div class="minn-menu-row editing" style="padding-left:${ 16 + depth * 26 }px;">
+				<div class="minn-menu-edit">
+					<input class="minn-input" id="minn-mi-label" value="${ esc( it.rawLabel || it.label ) }" placeholder="Label">
+					${ it.type === 'custom' ? `<input class="minn-input mono" id="minn-mi-url" value="${ esc( it.url ) }" placeholder="https://…">` : '' }
+					<button class="minn-btn-primary" data-misave="${ it.id }">Save</button>
+					<button class="minn-btn-soft" id="minn-mi-cancel">Cancel</button>
+				</div>
+			</div>` : `
+			<div class="minn-menu-row" data-mi="${ it.id }" style="padding-left:${ 16 + depth * 26 }px;">
+				<div class="minn-menu-info">
+					<span class="minn-row-title">${ esc( it.label ) }</span>
+					<span class="minn-menu-kind">${ esc( typeLabel( it ) ) }</span>
+					<span class="minn-row-slug minn-cell-clip">${ esc( it.url.replace( B.site.url, '/' ) ) }</span>
+				</div>
+				<div class="minn-menu-ctrls">
+					<button class="minn-icon-btn sm" data-mimove="up" title="Move up">↑</button>
+					<button class="minn-icon-btn sm" data-mimove="down" title="Move down">↓</button>
+					<button class="minn-icon-btn sm" data-mimove="out" title="Outdent"${ depth ? '' : ' disabled' }>⇤</button>
+					<button class="minn-icon-btn sm" data-mimove="in" title="Make child of the item above">⇥</button>
+					<button class="minn-icon-btn sm danger" data-midel="${ it.id }" title="Remove from menu">✕</button>
+				</div>
+			</div>` ).join( '' ) : '<div class="minn-empty">This menu is empty — add pages or links below.</div>' }
+			${ ms.itemsTotal > 100 ? `<div class="minn-empty" style="padding:10px 0 2px;">Showing the first 100 of ${ ms.itemsTotal } items.</div>` : '' }
+		</div>
+		<div class="minn-card minn-panel-pad minn-menu-add">
+			<div class="minn-panel-title" style="margin-bottom:10px;">Add to menu</div>
+			<div class="minn-menu-add-row">
+				<div class="minn-ac" id="minn-menu-pick">
+					<input class="minn-input minn-ac-input" placeholder="${ ms.pick ? 'Find a page or post…' : 'Loading pages…' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<div class="minn-ac-panel" hidden></div>
+				</div>
+				<button class="minn-btn-soft" id="minn-menu-add-content">${ icon( 'plus' ) } Add</button>
+			</div>
+			<div class="minn-menu-add-row">
+				<input class="minn-input" id="minn-menu-link-label" placeholder="Link label">
+				<input class="minn-input mono" id="minn-menu-link-url" placeholder="https://…">
+				<button class="minn-btn-soft" id="minn-menu-add-link">${ icon( 'plus' ) } Add link</button>
+			</div>
+		</div>
+		<div class="minn-menu-manage">
+			<button class="minn-btn-soft" id="minn-menu-rename">Rename “${ esc( cur ? cur.name : '' ) }”</button>
+			<button class="minn-btn-soft danger" id="minn-menu-delete">${ icon( 'trash' ) } Delete menu</button>
+		</div>` }`;
+
+		$$( '[data-menu]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				ms.sel = parseInt( btn.dataset.menu, 10 );
+				ms.items = null;
+				ms.editing = null;
+				renderMenus();
+			} )
+		);
+		$( '#minn-menu-new' ).addEventListener( 'click', async () => {
+			const name = prompt( 'Name for the new menu:' );
+			if ( ! name || ! name.trim() ) return;
+			try {
+				const m = await api( 'wp/v2/menus', { method: 'POST', body: JSON.stringify( { name: name.trim() } ) } );
+				toast( 'Menu created' );
+				ms.menus = null;
+				ms.sel = m.id;
+				ms.items = null;
+				renderMenus();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
+		if ( ! ms.menus.length ) return;
+
+		$$( '.minn-loc-ac', view ).forEach( ( wrap ) => {
+			const slug = wrap.dataset.loc;
+			const loc = ( ms.locations || {} )[ slug ] || {};
+			bindAutocomplete( wrap,
+				[ { value: '', label: '— none —' }, ...ms.menus.map( ( m ) => ( { value: String( m.id ), label: m.name } ) ) ],
+				{
+					strict: true,
+					value: String( loc.menu || '' ),
+					onPick: async ( v ) => {
+						const target = parseInt( v, 10 ) || 0;
+						const holder = ms.menus.find( ( m ) => ( m.locations || [] ).includes( slug ) );
+						try {
+							if ( target ) {
+								const menu = ms.menus.find( ( m ) => m.id === target );
+								await api( `wp/v2/menus/${ target }`, { method: 'POST', body: JSON.stringify( { locations: [ ...( menu.locations || [] ), slug ] } ) } );
+							} else if ( holder ) {
+								await api( `wp/v2/menus/${ holder.id }`, { method: 'POST', body: JSON.stringify( { locations: ( holder.locations || [] ).filter( ( l ) => l !== slug ) } ) } );
+							}
+							toast( 'Location updated' );
+							ms.menus = null;
+							renderMenus();
+						} catch ( e ) {
+							toast( e.message, true );
+						}
+					},
+				}
+			);
+		} );
+
+		const findItem = ( id ) => ms.items.find( ( x ) => x.id === id );
+		$$( '[data-mimove]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const id = parseInt( btn.closest( '[data-mi]' ).dataset.mi, 10 );
+				const dirKey = btn.dataset.mimove;
+				menuShapeAction( ms, () => {
+					const it = findItem( id );
+					const flatNow = menuTree( ms.items );
+					const idx = flatNow.findIndex( ( f ) => f.it.id === id );
+					if ( dirKey === 'up' || dirKey === 'down' ) {
+						const sibs = flatNow.filter( ( f ) => f.it.parent === it.parent ).map( ( f ) => f.it );
+						const i = sibs.indexOf( it );
+						const j = i + ( dirKey === 'up' ? -1 : 1 );
+						if ( j < 0 || j >= sibs.length ) throw new Error( 'Already at the edge.' );
+						const tmp = sibs[ i ].order;
+						sibs[ i ].order = sibs[ j ].order;
+						sibs[ j ].order = tmp;
+					} else if ( dirKey === 'in' ) {
+						// New parent = the item visually above, one level shallower or equal.
+						const above = flatNow.slice( 0, idx ).reverse().find( ( f ) => f.it.parent === it.parent && f.it.id !== it.id );
+						if ( ! above ) throw new Error( 'Nothing above to nest under.' );
+						it.parent = above.it.id;
+						it.order = 9999;
+					} else if ( dirKey === 'out' ) {
+						const p = findItem( it.parent );
+						if ( ! p ) throw new Error( 'Already top-level.' );
+						it.parent = p.parent;
+						it.order = p.order + 0.5;
+					}
+				} );
+			} )
+		);
+		$$( '[data-midel]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const id = parseInt( btn.dataset.midel, 10 );
+				const it = findItem( id );
+				const kids = ms.items.filter( ( x ) => x.parent === id );
+				if ( ! confirm( `Remove “${ it.label }” from the menu?${ kids.length ? ' Its sub-items move up a level.' : '' }` ) ) return;
+				btn.disabled = true;
+				try {
+					// Reparent children first so they don't orphan to the root randomly.
+					for ( const kid of kids ) {
+						await api( `wp/v2/menu-items/${ kid.id }`, { method: 'POST', body: JSON.stringify( { parent: it.parent } ) } );
+					}
+					await api( `wp/v2/menu-items/${ id }?force=true`, { method: 'DELETE' } );
+					toast( 'Removed from menu' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				await loadMenuItems().catch( showErr );
+				if ( state.route === 'menus' ) renderMenus();
+			} )
+		);
+		// Row click (not on a control) opens the inline label/URL editor.
+		$$( '.minn-menu-row[data-mi]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', ( e ) => {
+				if ( e.target.closest( 'button' ) ) return;
+				ms.editing = parseInt( row.dataset.mi, 10 );
+				renderMenus();
+			} )
+		);
+		const miCancel = $( '#minn-mi-cancel', view );
+		if ( miCancel ) miCancel.addEventListener( 'click', () => { ms.editing = null; renderMenus(); } );
+		const miSave = $( '[data-misave]', view );
+		if ( miSave ) miSave.addEventListener( 'click', async () => {
+			const id = parseInt( miSave.dataset.misave, 10 );
+			const payload = { title: $( '#minn-mi-label' ).value.trim() };
+			const urlInput = $( '#minn-mi-url' );
+			if ( urlInput ) payload.url = urlInput.value.trim();
+			miSave.disabled = true;
+			try {
+				await api( `wp/v2/menu-items/${ id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				toast( 'Item updated' );
+				ms.editing = null;
+				await loadMenuItems();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			if ( state.route === 'menus' ) renderMenus();
+		} );
+
+		const addItem = async ( payload, btn ) => {
+			btn.disabled = true;
+			try {
+				await api( 'wp/v2/menu-items', { method: 'POST', body: JSON.stringify( {
+					menus: ms.sel,
+					status: 'publish',
+					menu_order: ( ms.items.length ? Math.max( ...ms.items.map( ( x ) => x.order ) ) : 0 ) + 1,
+					...payload,
+				} ) } );
+				toast( 'Added to menu' );
+				await loadMenuItems();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			if ( state.route === 'menus' ) renderMenus();
+		};
+		const pickWrap = $( '#minn-menu-pick', view );
+		if ( pickWrap && ms.pick ) {
+			bindAutocomplete( pickWrap, ms.pick.map( ( p ) => ( { value: p.key, label: `${ p.title } — ${ p.kind }` } ) ), { strict: true, value: '' } );
+		}
+		$( '#minn-menu-add-content' ).addEventListener( 'click', ( e ) => {
+			const key = pickWrap && $( '.minn-ac-input', pickWrap ).dataset.acValue;
+			const p = ( ms.pick || [] ).find( ( x ) => x.key === key );
+			if ( ! p ) { toast( 'Pick a page or post first', true ); return; }
+			// No title: WP then tracks the post's own title automatically.
+			addItem( { type: 'post_type', object: p.object, object_id: p.id }, e.currentTarget );
+		} );
+		$( '#minn-menu-add-link' ).addEventListener( 'click', ( e ) => {
+			const label = $( '#minn-menu-link-label' ).value.trim();
+			const url = $( '#minn-menu-link-url' ).value.trim();
+			if ( ! label || ! url ) { toast( 'A label and URL are both needed', true ); return; }
+			addItem( { type: 'custom', title: label, url }, e.currentTarget );
+		} );
+
+		$( '#minn-menu-rename' ).addEventListener( 'click', async () => {
+			const name = prompt( 'New name for this menu:', cur ? cur.name : '' );
+			if ( ! name || ! name.trim() || ( cur && name.trim() === cur.name ) ) return;
+			try {
+				await api( `wp/v2/menus/${ ms.sel }`, { method: 'POST', body: JSON.stringify( { name: name.trim() } ) } );
+				toast( 'Menu renamed' );
+				ms.menus = null;
+				renderMenus();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
+		$( '#minn-menu-delete' ).addEventListener( 'click', async () => {
+			if ( ! confirm( `Delete the menu “${ cur ? cur.name : '' }” and all its items? This cannot be undone.` ) ) return;
+			try {
+				await api( `wp/v2/menus/${ ms.sel }?force=true`, { method: 'DELETE' } );
+				toast( 'Menu deleted' );
+				ms.menus = null;
+				ms.sel = null;
+				ms.items = null;
+				renderMenus();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
+	}
+
+	/* ===== Widgets (classic sidebars) ===== */
+
+	// Widget types Minn can edit in place: instance.raw fields per id_base.
+	const WIDGET_EDITABLE = {
+		block: [ { key: 'content', label: 'Content (block markup or HTML)', tall: true } ],
+		text: [ { key: 'title', label: 'Title' }, { key: 'text', label: 'Text', tall: true } ],
+		custom_html: [ { key: 'title', label: 'Title' }, { key: 'content', label: 'HTML', tall: true } ],
+	};
+
+	function widgetsState() {
+		if ( ! state.widgetsData ) {
+			state.widgetsData = { sidebars: null, widgets: null, types: null };
+		}
+		return state.widgetsData;
+	}
+
+	async function loadWidgets() {
+		const ws = widgetsState();
+		const [ sidebars, widgets, types ] = await Promise.all( [
+			api( 'wp/v2/sidebars?context=edit' ),
+			api( 'wp/v2/widgets?context=edit&per_page=100' ),
+			api( 'wp/v2/widget-types?_fields=id,name' ).catch( () => [] ),
+		] );
+		ws.sidebars = sidebars;
+		ws.widgets = widgets;
+		ws.types = {};
+		( Array.isArray( types ) ? types : Object.values( types ) ).forEach( ( t ) => { ws.types[ t.id ] = t.name; } );
+	}
+
+	function widgetPreview( w ) {
+		const raw = w.instance && w.instance.raw;
+		if ( raw ) {
+			const text = [ raw.title, raw.text || raw.content ].filter( Boolean ).join( ' — ' );
+			if ( text ) return stripTags( text ).replace( /\s+/g, ' ' ).trim().slice( 0, 80 );
+		}
+		return stripTags( w.rendered || '' ).replace( /\s+/g, ' ' ).trim().slice( 0, 80 );
+	}
+
+	async function reloadWidgets() {
+		const ws = widgetsState();
+		ws.sidebars = null;
+		await loadWidgets().catch( showErr );
+		if ( state.route === 'widgets' ) renderWidgets();
+	}
+
+	function renderWidgets() {
+		const view = $( '#minn-view' );
+		const ws = widgetsState();
+		if ( ! ws.sidebars ) {
+			view.innerHTML = '<div class="minn-loading">Loading widgets…</div>';
+			loadWidgets().then( renderIfCurrent( 'widgets' ) ).catch( showErr );
+			return;
+		}
+		const active = ws.sidebars.filter( ( s ) => s.id !== 'wp_inactive_widgets' );
+		const inactive = ws.sidebars.find( ( s ) => s.id === 'wp_inactive_widgets' );
+		const widgetsOf = ( s ) => ( s.widgets || [] ).map( ( id ) => ws.widgets.find( ( w ) => w.id === id ) ).filter( Boolean );
+		const moveTargets = ( fromId ) => ws.sidebars.filter( ( s ) => s.id !== fromId );
+		const sidebarCard = ( s, isInactive ) => {
+			const items = widgetsOf( s );
+			return `
+			<div class="minn-card minn-panel-pad minn-widget-area${ isInactive ? ' inactive' : '' }" data-sidebar="${ esc( s.id ) }">
+				<div class="minn-widget-area-head">
+					<div class="minn-panel-title">${ esc( s.name || s.id ) }</div>
+					${ isInactive ? '' : `<button class="minn-btn-soft" data-wadd="${ esc( s.id ) }">${ icon( 'plus' ) } Add</button>` }
+				</div>
+				${ s.description && ! isInactive ? `<div class="minn-toggle-desc" style="margin:-4px 0 10px;">${ esc( stripTags( s.description ) ) }</div>` : '' }
+				${ items.length ? items.map( ( w, i ) => `
+				<div class="minn-widget-row" data-widget="${ esc( w.id ) }">
+					<div class="minn-widget-info">
+						<span class="minn-row-title">${ esc( ws.types[ w.id_base ] || w.id_base ) }</span>
+						<span class="minn-row-slug minn-cell-clip">${ esc( widgetPreview( w ) || '—' ) }</span>
+					</div>
+					<div class="minn-menu-ctrls">
+						<button class="minn-icon-btn sm" data-wmove="up" title="Move up"${ i === 0 ? ' disabled' : '' }>↑</button>
+						<button class="minn-icon-btn sm" data-wmove="down" title="Move down"${ i === items.length - 1 ? ' disabled' : '' }>↓</button>
+						<select class="minn-input minn-widget-moveto" title="Move to…">
+							<option value="">Move to…</option>
+							${ moveTargets( s.id ).map( ( t ) => `<option value="${ esc( t.id ) }">${ esc( t.name || t.id ) }</option>` ).join( '' ) }
+						</select>
+						${ WIDGET_EDITABLE[ w.id_base ] && w.instance && w.instance.raw ? `<button class="minn-btn-soft" data-wedit="${ esc( w.id ) }">Edit</button>` : '' }
+						<button class="minn-icon-btn sm danger" data-wdel="${ esc( w.id ) }" title="Delete widget">✕</button>
+					</div>
+				</div>` ).join( '' ) : `<div class="minn-empty" style="padding:14px 0;">${ isInactive ? 'Nothing parked here.' : 'No widgets in this area.' }</div>` }
+			</div>`;
+		};
+		view.innerHTML = `
+		${ active.map( ( s ) => sidebarCard( s, false ) ).join( '' ) }
+		${ inactive && ( inactive.widgets || [] ).length ? sidebarCard( inactive, true ) : '' }
+		${ ! active.length ? '<div class="minn-card minn-empty">The active theme registers no widget areas.</div>' : '' }`;
+
+		$$( '[data-wadd]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				btn.disabled = true;
+				try {
+					// A block widget is the closest to "just write something" —
+					// it takes any block markup or plain HTML. Created in TWO
+					// requests: creating straight into a sidebar gets undone by
+					// the same request's Allow-header permissions check, whose
+					// retrieve_widgets() sweeps the not-yet-registered instance
+					// to wp_inactive_widgets (core #53657 territory). A second
+					// request sees the instance registered and the move sticks.
+					const w = await api( 'wp/v2/widgets', { method: 'POST', body: JSON.stringify( {
+						id_base: 'block',
+						instance: { raw: { content: '' } },
+					} ) } );
+					const moved = await api( `wp/v2/widgets/${ w.id }`, { method: 'POST', body: JSON.stringify( { sidebar: btn.dataset.wadd } ) } );
+					await reloadWidgets();
+					state.modal = { type: 'widget', widget: moved };
+					renderOverlays();
+				} catch ( e ) {
+					toast( e.message, true );
+					btn.disabled = false;
+				}
+			} )
+		);
+		$$( '[data-wedit]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const w = ws.widgets.find( ( x ) => x.id === btn.dataset.wedit );
+				if ( w ) {
+					state.modal = { type: 'widget', widget: w };
+					renderOverlays();
+				}
+			} )
+		);
+		$$( '[data-wdel]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				if ( ! confirm( 'Delete this widget? Its settings are lost.' ) ) return;
+				btn.disabled = true;
+				try {
+					await api( `wp/v2/widgets/${ btn.dataset.wdel }?force=true`, { method: 'DELETE' } );
+					toast( 'Widget deleted' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				reloadWidgets();
+			} )
+		);
+		$$( '[data-wmove]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const sid = btn.closest( '[data-sidebar]' ).dataset.sidebar;
+				const wid = btn.closest( '[data-widget]' ).dataset.widget;
+				const s = ws.sidebars.find( ( x ) => x.id === sid );
+				const arr = [ ...( s.widgets || [] ) ];
+				const i = arr.indexOf( wid );
+				const j = i + ( btn.dataset.wmove === 'up' ? -1 : 1 );
+				if ( i === -1 || j < 0 || j >= arr.length ) return;
+				[ arr[ i ], arr[ j ] ] = [ arr[ j ], arr[ i ] ];
+				btn.disabled = true;
+				try {
+					await api( `wp/v2/sidebars/${ sid }`, { method: 'POST', body: JSON.stringify( { widgets: arr } ) } );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				reloadWidgets();
+			} )
+		);
+		$$( '.minn-widget-moveto', view ).forEach( ( sel ) =>
+			sel.addEventListener( 'change', async () => {
+				if ( ! sel.value ) return;
+				const wid = sel.closest( '[data-widget]' ).dataset.widget;
+				try {
+					await api( `wp/v2/widgets/${ wid }`, { method: 'POST', body: JSON.stringify( { sidebar: sel.value } ) } );
+					toast( 'Widget moved' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				reloadWidgets();
+			} )
+		);
 	}
 
 	/* ===== Extensions ===== */
@@ -4575,6 +5156,10 @@
 		( B.surfaces || [] ).forEach( ( s ) =>
 			cmds.push( { label: 'Open ' + s.label + ( s.sub ? ' (' + s.sub + ')' : '' ), kind: 'nav', icon: '❖', run: () => go( s.id ) } )
 		);
+		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
+			cmds.push( { label: 'Edit Menus', kind: 'nav', icon: '☰', run: () => go( 'menus' ) } );
+			if ( B.site.hasSidebars ) cmds.push( { label: 'Manage Widgets', kind: 'nav', icon: '▥', run: () => go( 'widgets' ) } );
+		}
 		if ( B.caps.plugins ) cmds.push( { label: 'Manage Extensions', kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
@@ -4587,6 +5172,7 @@
 			cmds.push( { label: 'Update all plugins', kind: 'action', icon: '⟳', run: () => updateAllPlugins( null ) } );
 		}
 		cmds.push(
+			{ label: 'Your profile — name, email, password', kind: 'link', icon: '@', run: () => openUserModal( B.user.id ) },
 			{ label: 'About Minn — philosophy & help', kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
 			{ label: 'Visit site', kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank' ) },
 			{ label: 'Classic wp-admin', kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank' ) },
@@ -4697,6 +5283,33 @@
 						} ).join( '' ) }
 						${ items.length < m.bucket.value ? `<div class="minn-empty" style="padding:10px 0 2px;">Showing the first ${ items.length } of ${ m.bucket.value }.</div>` : '' }
 					</div>` }
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'widget' ) {
+			const w = m.widget;
+			const ws = widgetsState();
+			const fields = WIDGET_EDITABLE[ w.id_base ] || [];
+			const raw = ( w.instance && w.instance.raw ) || {};
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ esc( ( ws.types && ws.types[ w.id_base ] ) || w.id_base ) }</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						${ fields.map( ( f ) => `<div>
+							<div class="minn-field-label">${ esc( f.label ) }</div>
+							${ f.tall
+								? `<textarea class="minn-input mono minn-widget-textarea" data-wfield="${ esc( f.key ) }" rows="8">${ esc( raw[ f.key ] == null ? '' : String( raw[ f.key ] ) ) }</textarea>`
+								: `<input class="minn-input" data-wfield="${ esc( f.key ) }" value="${ esc( raw[ f.key ] == null ? '' : String( raw[ f.key ] ) ) }">` }
+						</div>` ).join( '' ) }
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-primary" id="minn-widget-save">Save widget</button>
+					</div>
 				</div>
 			</div>`;
 		}
@@ -4847,16 +5460,18 @@
 		if ( m.type === 'user' ) {
 			const u = m.user;
 			const isNew = ! m.userId;
+			const isSelf = ! isNew && m.userId === B.user.id;
 			const roles = Object.entries( B.roles || {} );
 			if ( ! isNew && ! u ) {
-				return `<div class="minn-modal-overlay" id="minn-modal-overlay"><div class="minn-modal"><div class="minn-modal-head"><div class="minn-modal-title">Edit user</div><button class="minn-x-btn" id="minn-modal-close">×</button></div><div class="minn-loading">Loading…</div></div></div>`;
+				return `<div class="minn-modal-overlay" id="minn-modal-overlay"><div class="minn-modal"><div class="minn-modal-head"><div class="minn-modal-title">${ isSelf ? 'Your profile' : 'Edit user' }</div><button class="minn-x-btn" id="minn-modal-close">×</button></div><div class="minn-loading">Loading…</div></div></div>`;
 			}
 			const role = u && u.roles && u.roles[ 0 ] ? u.roles[ 0 ] : 'subscriber';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? 'Add user' : 'Edit ' + esc( u.name ) }</div>
+						<div class="minn-modal-title">${ isNew ? 'Add user' : ( isSelf ? 'Your profile' : 'Edit ' + esc( u.name ) ) }</div>
+						${ isSelf ? `<span class="minn-modal-count">@${ esc( B.user.login ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-modal-form">
@@ -4875,9 +5490,11 @@
 						</div>
 						<div>
 							<div class="minn-field-label">Role</div>
-							<select class="minn-input" id="minn-uf-role" ${ B.caps.promoteUsers ? '' : 'disabled' }>
+							${ roles.length && B.caps.promoteUsers ? `
+							<select class="minn-input" id="minn-uf-role">
 								${ roles.map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }"${ slug === role ? ' selected' : '' }>${ esc( label ) }</option>` ).join( '' ) }
-							</select>
+							</select>` : `
+							<input class="minn-input" value="${ esc( isSelf ? B.user.role : role ) }" disabled>` }
 						</div>
 						<div>
 							<div class="minn-field-label">${ isNew ? 'Password' : 'New password (leave blank to keep)' }</div>
@@ -5225,6 +5842,24 @@
 			if ( e.target.id === 'minn-modal-overlay' ) closeModal();
 		} );
 		$( '#minn-modal-close' ).addEventListener( 'click', closeModal );
+
+		if ( m.type === 'widget' ) {
+			$( '#minn-widget-save' ).addEventListener( 'click', async ( e ) => {
+				const btn = e.currentTarget;
+				btn.disabled = true;
+				const raw = { ...( ( m.widget.instance && m.widget.instance.raw ) || {} ) };
+				$$( '[data-wfield]' ).forEach( ( input ) => { raw[ input.dataset.wfield ] = input.value; } );
+				try {
+					await api( `wp/v2/widgets/${ m.widget.id }`, { method: 'POST', body: JSON.stringify( { instance: { raw } } ) } );
+					toast( 'Widget saved' );
+					closeModal();
+					reloadWidgets();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+				}
+			} );
+		}
 
 		if ( m.type === 'chart-activity' ) {
 			$$( '[data-ca]' ).forEach( ( row ) =>
@@ -6004,7 +6639,8 @@
 				name: $( '#minn-uf-name' ).value.trim(),
 				email: $( '#minn-uf-email' ).value.trim(),
 			};
-			if ( B.caps.promoteUsers ) payload.roles = [ $( '#minn-uf-role' ).value ];
+			const roleSel = $( '#minn-uf-role' );
+			if ( B.caps.promoteUsers && roleSel ) payload.roles = [ roleSel.value ];
 			const password = $( '#minn-uf-password' ).value;
 			if ( password ) payload.password = password;
 			try {
@@ -6017,7 +6653,21 @@
 					toast( 'User created' );
 				} else {
 					await api( `wp/v2/users/${ m.userId }`, { method: 'POST', body: JSON.stringify( payload ) } );
-					toast( 'User updated' );
+					// Changing your own password rotates the session token, which
+					// invalidates the REST nonce baked into this page — reload to
+					// pick up fresh credentials before the next request 403s.
+					if ( password && m.userId === B.user.id ) {
+						toast( 'Password changed — refreshing…' );
+						setTimeout( () => location.reload(), 600 );
+						return;
+					}
+					toast( m.userId === B.user.id ? 'Profile updated' : 'User updated' );
+					// Keep the sidebar's name in sync with a self display-name edit.
+					if ( m.userId === B.user.id && payload.name ) {
+						B.user.name = payload.name;
+						const nameEl = $( '.minn-user-name' );
+						if ( nameEl ) nameEl.textContent = payload.name;
+					}
 				}
 				closeModal();
 				state.cache.users = null;
@@ -6228,6 +6878,8 @@
 			case 'comments': return renderComments();
 			case 'orders': return renderOrders();
 			case 'users': return renderUsers();
+			case 'menus': return renderMenus();
+			case 'widgets': return renderWidgets();
 			case 'extensions': return renderExtensions();
 			case 'posttypes': return renderPostTypes();
 			case 'settings': return renderSettings();

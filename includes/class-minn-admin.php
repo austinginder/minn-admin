@@ -193,10 +193,14 @@ class Minn_Admin {
 				'avatar' => get_avatar_url( $user->ID, array( 'size' => 64 ) ),
 			),
 			'site'     => array(
-				'name'     => get_bloginfo( 'name' ),
-				'url'      => home_url( '/' ),
-				'adminUrl' => admin_url(),
-				'logout'   => str_replace( '&amp;', '&', wp_logout_url( home_url( '/' ) ) ),
+				'name'       => get_bloginfo( 'name' ),
+				'url'        => home_url( '/' ),
+				'adminUrl'   => admin_url(),
+				'logout'     => str_replace( '&amp;', '&', wp_logout_url( home_url( '/' ) ) ),
+				// Block themes manage navigation/widgets in the site editor, so
+				// Minn (like wp-admin) only offers Menus/Widgets on classic themes.
+				'blockTheme'  => wp_is_block_theme(),
+				'hasSidebars' => ! empty( $GLOBALS['wp_registered_sidebars'] ),
 			),
 			'caps'     => array(
 				'plugins'      => current_user_can( 'activate_plugins' ),
@@ -218,6 +222,7 @@ class Minn_Admin {
 				'promoteUsers' => current_user_can( 'promote_users' ),
 				'deleteUsers'  => current_user_can( 'delete_users' ),
 				'orders'       => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ),
+				'themeOptions' => current_user_can( 'edit_theme_options' ),
 			),
 			'wc'       => class_exists( 'WooCommerce' ),
 			'pretty'   => (bool) get_option( 'permalink_structure' ),

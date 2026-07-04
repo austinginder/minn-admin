@@ -130,6 +130,47 @@ a { color: var(--accent2); text-decoration: none; }
   background: transparent; border: 1px solid var(--border); border-radius: 9px; color: var(--text2); cursor: pointer;
 }
 .minn-icon-btn:hover { background: var(--hover); color: var(--text); }
+.minn-icon-btn.sm { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; flex-shrink: 0; }
+.minn-icon-btn.sm:disabled { opacity: 0.35; cursor: default; }
+.minn-icon-btn.sm.danger { color: var(--red); }
+
+/* ===== Menus & Widgets ===== */
+.minn-menu-locations .minn-side-row { align-items: center; }
+.minn-loc-ac { flex: 0 1 240px; min-width: 180px; }
+.minn-menu-items { padding: 6px 0; margin-bottom: 16px; }
+.minn-menu-row {
+  display: flex; align-items: center; gap: 12px; padding: 9px 16px 9px;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.minn-menu-row:last-child { border-bottom: none; }
+.minn-menu-row:hover { background: var(--hover); }
+.minn-menu-row.editing { cursor: default; }
+.minn-menu-row.editing:hover { background: none; }
+.minn-menu-info { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
+.minn-menu-kind {
+  font-size: 11px; font-weight: 600; color: var(--text3); background: var(--panel2);
+  border: 1px solid var(--border); padding: 1px 7px; border-radius: 5px; flex-shrink: 0;
+}
+.minn-menu-ctrls { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.minn-menu-edit { display: flex; gap: 8px; flex: 1; align-items: center; flex-wrap: wrap; }
+.minn-menu-edit .minn-input { flex: 1 1 180px; }
+.minn-menu-add-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.minn-menu-add-row:last-child { margin-bottom: 0; }
+.minn-menu-add-row .minn-ac, .minn-menu-add-row .minn-input { flex: 1 1 200px; }
+.minn-menu-add-row .minn-btn-soft { flex-shrink: 0; }
+.minn-menu-add { margin-bottom: 16px; }
+.minn-menu-manage { display: flex; gap: 8px; }
+.minn-widget-area { margin-bottom: 16px; }
+.minn-widget-area.inactive { opacity: 0.7; }
+.minn-widget-area-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.minn-widget-row {
+  display: flex; align-items: center; gap: 12px; padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.minn-widget-row:last-child { border-bottom: none; }
+.minn-widget-info { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
+.minn-widget-moveto { width: auto; font-size: 12.5px; padding: 4px 8px; }
+.minn-widget-textarea { resize: vertical; min-height: 120px; }
 .minn-unread-dot { position: absolute; top: 6px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--bg); }
 .minn-btn-primary {
   display: flex; align-items: center; gap: 7px; background: var(--accent); color: var(--accent-fg); border: none;
