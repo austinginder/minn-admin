@@ -23,7 +23,7 @@ the integration automatically — nothing to configure, no companion plugin to s
 
 Minn bundles adapters (in `includes/adapters/`) only for popular plugins that don't know about
 Minn — Gravity Forms, ACF, Redirection, the analytics providers. If you're the author of the
-plugin being integrated, ship the adapter with it instead; [Anchor Blocks](https://github.com/austinginder/anchor-blocks)
+plugin being integrated, ship the adapter with it instead; [Anchor Blocks](https://github.com/anchorhost/anchor-blocks)
 does exactly this in `app/MinnAdmin.php`.
 
 ## Quick start
@@ -172,7 +172,7 @@ $forms['my-plugin/panel'] = array(
 
 The text is replaced in place only when it actually changed — an untouched wrapper stays
 byte-identical. Patterns that don't match simply don't render a field. For a real-world
-reference, [Anchor Blocks](https://github.com/austinginder/anchor-blocks) registers
+reference, [Anchor Blocks](https://github.com/anchorhost/anchor-blocks) registers
 descriptors for all of its blocks from its own plugin (`app/MinnAdmin.php`) — the filter is
 a no-op when Minn isn't installed, so block plugins can ship it unconditionally.
 
