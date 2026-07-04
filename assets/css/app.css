@@ -191,6 +191,12 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-widget-moveto { width: auto; font-size: 12.5px; padding: 4px 8px; }
 .minn-widget-textarea { resize: vertical; min-height: 120px; }
 .minn-excerpt-input { resize: vertical; margin-top: 5px; font-size: 13px; line-height: 1.5; }
+.minn-core-banner {
+  display: flex; align-items: center; gap: 16px; justify-content: space-between;
+  padding: 16px 20px; margin-bottom: 16px; border-color: var(--accent);
+}
+.minn-core-info { min-width: 0; }
+.minn-core-banner .minn-btn-primary { flex-shrink: 0; }
 .minn-comment-replybox { margin-top: 10px; }
 .minn-comment-replybox textarea { resize: vertical; font-size: 13.5px; }
 .minn-unread-dot { position: absolute; top: 6px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--bg); }

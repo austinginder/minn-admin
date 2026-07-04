@@ -2516,6 +2516,48 @@
 		);
 	}
 
+	// Core version + update offer, for the banner on Extensions.
+	async function loadCoreStatus() {
+		if ( ! B.caps.core || state.cache.core ) return;
+		state.cache.core = await api( 'minn-admin/v1/core' ).catch( () => null );
+	}
+
+	function coreBannerHtml() {
+		const core = state.cache.core;
+		if ( ! core || ! core.update ) return '';
+		return `
+		<div class="minn-card minn-core-banner">
+			<div class="minn-core-info">
+				<div class="minn-panel-title">WordPress ${ esc( core.update.version ) } is available</div>
+				<div class="minn-toggle-desc">You're on ${ esc( core.version ) }. The site enters maintenance mode for a few seconds while core updates.</div>
+			</div>
+			<button class="minn-btn-primary" id="minn-core-update">${ icon( 'refresh' ) } Update WordPress</button>
+		</div>`;
+	}
+
+	function bindCoreBanner( view ) {
+		const btn = $( '#minn-core-update', view );
+		if ( ! btn ) return;
+		btn.addEventListener( 'click', async () => {
+			const core = state.cache.core;
+			if ( ! confirm( `Update WordPress to ${ core.update.version }? Visitors see a maintenance notice for a few seconds while files are replaced.` ) ) return;
+			btn.disabled = true;
+			btn.textContent = 'Updating WordPress…';
+			try {
+				const r = await api( 'minn-admin/v1/core/update', { method: 'POST', body: '{}' } );
+				toast( `WordPress updated to ${ r.version }` );
+				state.cache.core = null;
+				state.cache.notifications = null;
+				await loadCoreStatus();
+				if ( state.route === 'extensions' ) renderExtensions();
+			} catch ( e ) {
+				toast( e.message, true );
+				btn.disabled = false;
+				btn.textContent = 'Update WordPress';
+			}
+		} );
+	}
+
 	function renderExtensions() {
 		if ( state.extTab === 'themes' && B.caps.themes ) return renderThemes();
 		const view = $( '#minn-view' );
@@ -2525,11 +2567,15 @@
 			loadPlugins().then( renderIfCurrent( 'extensions' ) ).catch( showErr );
 			return;
 		}
+		if ( B.caps.core && ! state.cache.core ) {
+			loadCoreStatus().then( () => { if ( state.route === 'extensions' && state.cache.core && state.cache.core.update ) renderExtensions(); } );
+		}
 		const updates = state.cache.pluginUpdates;
 		const updateCount = Object.keys( updates ).length;
 		const active = plugins.filter( ( p ) => p.status === 'active' ).length;
 
 		view.innerHTML = `
+		${ coreBannerHtml() }
 		<div class="minn-toolbar">
 			${ extTabsHtml() }
 			<div class="minn-toolbar-meta" style="margin-left:0;">${ active } active · ${ plugins.length } installed</div>
@@ -2567,6 +2613,7 @@
 			} ).join( '' ) }
 		</div>`;
 
+		bindCoreBanner( view );
 		$$( '[data-toggle]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const file = btn.dataset.toggle;
@@ -7180,6 +7227,7 @@
 					if ( item.kind === 'comments' && B.caps.moderate ) go( 'comments' );
 					else if ( item.kind === 'updates' && B.caps.plugins ) go( 'extensions' );
 					else if ( item.id.startsWith( 'user-' ) && B.caps.users ) go( 'users' );
+					else if ( item.id.startsWith( 'core-' ) && B.caps.core ) go( 'extensions' );
 					else if ( item.id.startsWith( 'core-' ) ) window.open( B.site.adminUrl + 'update-core.php', '_blank' );
 				} )
 			);

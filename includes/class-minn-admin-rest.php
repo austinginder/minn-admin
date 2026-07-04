@@ -301,6 +301,30 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/core',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'core_status' ),
+				'permission_callback' => function () {
+					return current_user_can( 'update_core' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/core/update',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'core_update' ),
+				'permission_callback' => function () {
+					return current_user_can( 'update_core' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/plugins/update-all',
 			array(
 				'methods'             => 'POST',
@@ -1302,6 +1326,72 @@ class Minn_Admin_REST {
 			array(
 				'updated' => true,
 				'version' => isset( $plugins[ $file ]['Version'] ) ? $plugins[ $file ]['Version'] : '',
+			)
+		);
+	}
+
+	/**
+	 * Core version + whether an update is on offer. wp_version_check() is
+	 * self-throttling, so calling it here just keeps the offer fresh.
+	 */
+	public static function core_status() {
+		require_once ABSPATH . 'wp-admin/includes/update.php';
+		wp_version_check();
+		$offers = get_core_updates();
+		$offer  = is_array( $offers ) && $offers && 'upgrade' === $offers[0]->response ? $offers[0] : null;
+		// The loaded $GLOBALS['wp_version'] can be stale right after an update —
+		// read the file that ships with the current core instead.
+		include ABSPATH . WPINC . '/version.php';
+		return rest_ensure_response(
+			array(
+				'version' => $wp_version,
+				'update'  => $offer ? array(
+					'version' => $offer->current,
+					'locale'  => $offer->locale,
+				) : null,
+			)
+		);
+	}
+
+	/**
+	 * Run the offered core update — the same Core_Upgrader path as
+	 * wp-admin/update-core.php, including its automatic rollback protections.
+	 */
+	public static function core_update() {
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		require_once ABSPATH . 'wp-admin/includes/update.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( 300 ); // the package download + copy can be slow
+		}
+
+		wp_version_check();
+		$offers = get_core_updates();
+		$offer  = is_array( $offers ) && $offers && 'upgrade' === $offers[0]->response ? $offers[0] : null;
+		if ( ! $offer ) {
+			return new WP_Error( 'no_update', 'WordPress is already up to date.', array( 'status' => 400 ) );
+		}
+
+		$skin     = new WP_Ajax_Upgrader_Skin();
+		$upgrader = new Core_Upgrader( $skin );
+		$result   = $upgrader->upgrade( $offer );
+
+		if ( is_wp_error( $result ) ) {
+			return new WP_Error( 'update_failed', $result->get_error_message() ?: 'Core update failed.', array( 'status' => 500 ) );
+		}
+
+		// Run any database migration with the NEW code — the standard
+		// upgrade.php step, hit over loopback (what wp-admin does after its
+		// post-update redirect).
+		wp_remote_get( admin_url( 'upgrade.php?step=1' ), array( 'timeout' => 60, 'sslverify' => false ) );
+
+		include ABSPATH . WPINC . '/version.php';
+		return rest_ensure_response(
+			array(
+				'updated' => true,
+				'version' => $wp_version,
 			)
 		);
 	}

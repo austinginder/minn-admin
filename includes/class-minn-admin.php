@@ -250,6 +250,7 @@ class Minn_Admin {
 				'deleteUsers'  => current_user_can( 'delete_users' ),
 				'orders'       => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ),
 				'themeOptions' => current_user_can( 'edit_theme_options' ),
+				'core'         => current_user_can( 'update_core' ),
 			),
 			'wc'       => class_exists( 'WooCommerce' ),
 			'pretty'   => (bool) get_option( 'permalink_structure' ),
