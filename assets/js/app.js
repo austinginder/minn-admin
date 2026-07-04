@@ -91,6 +91,43 @@
 		return out.length >= 2 ? out : full;
 	}
 
+	/* ===== Pager (shared numbered pagination) ===== */
+
+	// ‹ 1 … 4 [5] 6 … 20 › — first, last and a window around the current page.
+	function pagerHtml( page, totalPages ) {
+		if ( ! totalPages || totalPages <= 1 ) return '';
+		const wanted = [ 1, totalPages, page - 2, page - 1, page, page + 1, page + 2 ];
+		const list = [ ...new Set( wanted.filter( ( p ) => p >= 1 && p <= totalPages ) ) ].sort( ( a, b ) => a - b );
+		let last = 0;
+		const parts = list.map( ( p ) => {
+			const gap = p - last > 1 ? '<span class="minn-pager-gap">…</span>' : '';
+			last = p;
+			return gap + `<button class="minn-pager-btn${ p === page ? ' active' : '' }" data-pg="${ p }">${ p }</button>`;
+		} ).join( '' );
+		return `<div class="minn-pager" role="navigation" aria-label="Pagination">
+			<button class="minn-pager-btn nav" data-pg="${ page - 1 }"${ page <= 1 ? ' disabled' : '' } aria-label="Previous page">‹</button>
+			${ parts }
+			<button class="minn-pager-btn nav" data-pg="${ page + 1 }"${ page >= totalPages ? ' disabled' : '' } aria-label="Next page">›</button>
+		</div>`;
+	}
+
+	// Wire the pager: `load(p)` fetches page p, then the caller's render runs.
+	// The list dims while loading and the view scrolls back to the top after.
+	function bindPager( view, current, load, render ) {
+		$$( '.minn-pager [data-pg]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const p = parseInt( btn.dataset.pg, 10 );
+				if ( ! p || p === current || btn.disabled ) return;
+				const tbl = $( '.minn-card, .minn-media-grid', view );
+				if ( tbl ) tbl.classList.add( 'minn-busy' );
+				await load( p ).catch( showErr );
+				render();
+				const scroll = $( '.minn-scroll' );
+				if ( scroll ) scroll.scrollTop = 0;
+			} )
+		);
+	}
+
 	const PALETTE_COLORS = [ '#46b881', '#5b9be0', '#e0a458', '#d073c0', '#8a80f8', '#e46b6b' ];
 	const colorFor = ( s ) => {
 		let h = 0;
@@ -434,12 +471,25 @@
 		renderThemeBtn();
 	}
 
+	// "Page"/"Post"/CPT singular-ish noun for the thing the editor holds.
+	function editorNoun( ed ) {
+		if ( ! ed ) return 'Post';
+		if ( ed.type === 'pages' ) return 'Page';
+		if ( ed.type === 'posts' ) return 'Post';
+		const t = ( state.cache.types || [] ).find( ( x ) => x.restBase === ed.type );
+		return t ? t.name.replace( /s$/, '' ) : 'Post';
+	}
+
 	function renderTopbar() {
 		const surface = surfaceById( state.route );
 		const [ title, sub ] = surface ? [ surface.label, surface.sub || '' ] : ( TITLES[ state.route ] || [ 'minn', '' ] );
 		$( '#minn-title' ).textContent = title;
+		// The editor pill says WHAT you're editing, not just its status — a
+		// blank new page and a blank new post are otherwise indistinguishable.
 		$( '#minn-sub' ).textContent = state.route === 'editor' && state.editor
-			? ( STATUS_LABELS[ state.editor.status ] || 'Draft' )
+			? ( state.editor.id
+				? `${ editorNoun( state.editor ) } · ${ STATUS_LABELS[ state.editor.status ] || 'Draft' }`
+				: `New ${ editorNoun( state.editor ).toLowerCase() }` )
 			: ( state.route === 'settings' ? state.settingsSection : sub );
 		$$( '.minn-nav-btn' ).forEach( ( btn ) =>
 			btn.classList.toggle( 'active', btn.dataset.nav === state.route )
@@ -685,21 +735,20 @@
 	// into the new context — in trash mode that would put Restore/Delete
 	// buttons on live posts. Same-context loads may land freely (they fetch
 	// identical data), so parallel startup loads can't starve each other.
-	const contentCtx = () => [ state.contentTrash ? 't' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '' ].join( '|' );
+	const contentCtx = () => [ state.filter || 'all', state.contentTrash ? 't' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '' ].join( '|' );
 
-	async function loadCpt( more ) {
+	async function loadCpt( page = 1 ) {
 		const t = currentCpt();
 		if ( ! t ) return;
 		const ctx = contentCtx();
-		const cache = state.cache.cptContent;
-		const c = more && cache[ t.restBase ] ? cache[ t.restBase ] : { items: [], page: 0, totalPages: 1, total: 0 };
-		const r = await apiPaged( `wp/v2/${ t.restBase }?` + contentQuery( c.page + 1 ) );
+		const r = await apiPaged( `wp/v2/${ t.restBase }?` + contentQuery( page ) );
 		if ( ctx !== contentCtx() ) return; // context changed mid-flight — discard
-		c.page++;
-		c.totalPages = r.totalPages;
-		c.total = r.total;
-		c.items.push( ...r.items.map( mapContentItem( t.restBase ) ) );
-		cache[ t.restBase ] = c;
+		state.cache.cptContent[ t.restBase ] = {
+			items: r.items.map( mapContentItem( t.restBase ) ),
+			page,
+			totalPages: r.totalPages,
+			total: r.total,
+		};
 	}
 
 	async function loadPostTerms() {
@@ -714,39 +763,50 @@
 		state.cache.postTerms = { categories: clean( cats ), tags: clean( tags ) };
 	}
 
-	async function loadContent( more ) {
+	// Posts and pages are separate REST collections, so the merged "All" tab
+	// fetches page N of EACH source and shows them merge-sorted — page count is
+	// the larger of the two. The type tabs narrow to a single source server-side.
+	async function loadContent( page = 1 ) {
 		const ctx = contentCtx();
 		// Category/tag filters are post-only taxonomies, so suppress pages while one is active.
 		const taxFilter = !! ( state.contentCat || state.contentTag );
-		const c = more && state.cache.content ? state.cache.content : {
-			// Authors can't edit pages — requesting draft/pending page statuses 400s.
-			items: [], postPage: 0, pagePage: 0, morePosts: true, morePages: ! taxFilter && !! B.caps.editPages, total: 0,
-		};
+		const prev = state.cache.content;
+		const wantPosts = state.filter === 'all' || state.filter === 'posts';
+		const wantPages = ( state.filter === 'all' || state.filter === 'pages' ) && !! B.caps.editPages && ! taxFilter;
+		const c = { items: [], page, postPages: 0, pagePages: 0, postTotal: 0, pageTotal: 0 };
 		const jobs = [];
-		if ( c.morePosts ) {
-			jobs.push( apiPaged( 'wp/v2/posts?' + contentQuery( c.postPage + 1 ) ).then( ( r ) => {
-				c.postPage++;
-				c.morePosts = c.postPage < r.totalPages;
+		// Requesting a page beyond a source's last one is a REST error, so skip
+		// the shorter source once its page count is known from a previous load.
+		if ( wantPosts && ! ( prev && page > 1 && page > prev.postPages ) ) {
+			jobs.push( apiPaged( 'wp/v2/posts?' + contentQuery( page ) ).then( ( r ) => {
+				c.postPages = r.totalPages;
 				c.postTotal = r.total;
 				c.items.push( ...r.items.map( mapContentItem( 'posts' ) ) );
-			} ) );
+			} ).catch( ( e ) => { if ( page === 1 ) throw e; } ) );
+		} else if ( prev ) {
+			c.postPages = prev.postPages;
+			c.postTotal = prev.postTotal;
 		}
-		if ( c.morePages ) {
-			jobs.push( apiPaged( 'wp/v2/pages?' + contentQuery( c.pagePage + 1 ) ).then( ( r ) => {
-				c.pagePage++;
-				c.morePages = c.pagePage < r.totalPages;
+		if ( wantPages && ! ( prev && page > 1 && page > prev.pagePages ) ) {
+			jobs.push( apiPaged( 'wp/v2/pages?' + contentQuery( page ) ).then( ( r ) => {
+				c.pagePages = r.totalPages;
 				c.pageTotal = r.total;
 				c.items.push( ...r.items.map( mapContentItem( 'pages' ) ) );
-			} ) );
+			} ).catch( ( e ) => { if ( page === 1 ) throw e; } ) );
+		} else if ( prev && wantPages ) {
+			c.pagePages = prev.pagePages;
+			c.pageTotal = prev.pageTotal;
 		}
 		await Promise.all( jobs );
 		if ( ctx !== contentCtx() ) return; // context changed mid-flight — discard
 		c.items.sort( ( a, b ) => ( a.modified < b.modified ? 1 : -1 ) );
 		c.total = ( c.postTotal || 0 ) + ( c.pageTotal || 0 );
+		c.totalPages = Math.max( c.postPages || 0, c.pagePages || 0, 1 );
 		state.cache.content = c;
 
+		// The sidebar badge is the ALL-content count — only a filterless load knows it.
 		const badge = $( '#minn-content-count' );
-		if ( badge && ! state.contentSearch && ! state.contentTrash ) {
+		if ( badge && state.filter === 'all' && ! state.contentSearch && ! state.contentTrash && ! taxFilter ) {
 			badge.textContent = c.total > 999 ? ( Math.round( c.total / 100 ) / 10 ) + 'k' : c.total;
 			badge.hidden = ! c.total;
 		}
@@ -786,10 +846,8 @@
 			( cpt ? loadCpt() : loadContent() ).then( renderIfCurrent( 'content' ) ).catch( showErr );
 			return;
 		}
-		const filtered = cpt ? c.items : c.items.filter( ( p ) =>
-			state.filter === 'all' || p.type === state.filter
-		);
-		const hasMore = cpt ? c.page < c.totalPages : ( c.morePosts || c.morePages );
+		// Type tabs narrow the query server-side now — items arrive pre-filtered.
+		const filtered = c.items;
 		const tabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ],
 			...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
 			...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
@@ -821,7 +879,7 @@
 			${ showTax ? taxCombo( 'tag', 'All tags' ) : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Filter by title…" value="${ esc( state.contentSearch || '' ) }">
 			<button class="minn-btn-soft minn-trash-toggle${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">${ icon( 'trash' ) } Trash</button>
-			<div class="minn-toolbar-meta">${ filtered.length }${ hasMore ? ' of ' + c.total : '' } item${ c.total === 1 ? '' : 's' }</div>
+			<div class="minn-toolbar-meta">${ c.total } item${ c.total === 1 ? '' : 's' }${ c.totalPages > 1 ? ` · page ${ c.page } of ${ c.totalPages }` : '' }</div>
 		</div>
 		<div id="minn-bulk-slot"></div>
 		<div class="minn-card minn-table">
@@ -847,18 +905,20 @@
 					</div>` : '<div class="minn-row-arrow">›</div>' }
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? 'No matches for “' + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? 'Trash is empty.' : 'Nothing here yet. Hit <b>New</b> to write something.' ) }</div>` }
 		</div>
-		${ hasMore ? '<button class="minn-load-more" id="minn-content-more">Load more</button>' : '' }`;
+		${ pagerHtml( c.page, c.totalPages ) }`;
 
 		$$( '.minn-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				const nf = btn.dataset.filter;
-				// Leaving the posts context clears post-only taxonomy filters (and their cache).
+				// Leaving the posts context clears post-only taxonomy filters.
 				if ( ( nf === 'pages' || ( state.cache.types || [] ).some( ( t ) => t.restBase === nf ) ) && ( state.contentCat || state.contentTag ) ) {
 					state.contentCat = null;
 					state.contentTag = null;
-					state.cache.content = null;
 				}
 				state.filter = nf;
+				// Tabs are a server-side query now — refetch from page 1.
+				state.cache.content = null;
+				state.cache.cptContent = {};
 				sel.clear();
 				renderContent();
 			} )
@@ -1050,15 +1110,7 @@
 			} );
 			syncBulkBar();
 		} );
-		const more = $( '#minn-content-more', view );
-		if ( more ) {
-			more.addEventListener( 'click', async () => {
-				more.disabled = true;
-				more.textContent = 'Loading…';
-				await ( cpt ? loadCpt( true ) : loadContent( true ) ).catch( showErr );
-				if ( state.route === 'content' ) renderContent();
-			} );
-		}
+		bindPager( view, c.page, ( p ) => ( cpt ? loadCpt( p ) : loadContent( p ) ), () => { if ( state.route === 'content' ) renderContent(); } );
 	}
 
 	/* ===== Media ===== */
@@ -1069,19 +1121,14 @@
 	// must not land its rows into the new context.
 	const mediaCtx = () => ( state.mediaSearch || '' ) + '|' + ( state.mediaType || '' );
 
-	async function loadMedia( more ) {
+	async function loadMedia( page = 1 ) {
 		const ctx = mediaCtx();
-		const c = more && state.cache.media ? state.cache.media : { items: [], page: 0, totalPages: 1, total: 0 };
-		let q = `wp/v2/media?per_page=48&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text&page=${ c.page + 1 }`;
+		let q = `wp/v2/media?per_page=48&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text&page=${ page }`;
 		if ( state.mediaSearch ) q += '&search=' + encodeURIComponent( state.mediaSearch );
 		if ( state.mediaType ) q += '&media_type=' + encodeURIComponent( state.mediaType );
 		const r = await apiPaged( q );
 		if ( ctx !== mediaCtx() ) return; // filter changed mid-flight — discard
-		c.page++;
-		c.totalPages = r.totalPages;
-		c.total = r.total;
-		c.items.push( ...r.items );
-		state.cache.media = c;
+		state.cache.media = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
 	function mapMediaItem( m ) {
@@ -1133,7 +1180,7 @@
 		}
 		const items = c.items;
 		const mapped = items.map( mapMediaItem );
-		const countLabel = `${ mapped.length }${ c.page < c.totalPages ? ' of ' + c.total : '' } file${ c.total === 1 ? '' : 's' }`;
+		const countLabel = `${ c.total } file${ c.total === 1 ? '' : 's' }${ c.totalPages > 1 ? ` · page ${ c.page } of ${ c.totalPages }` : '' }`;
 		const thumbStyle = ( m ) => m.thumb
 			? `background-image:url('${ esc( m.thumb ) }')`
 			: `background:${ m.grad }`;
@@ -1181,7 +1228,7 @@
 					<div class="minn-media-size">${ esc( m.size ) }</div>
 				</div>` ).join( '' ) }
 		</div>` }
-		${ c.page < c.totalPages ? '<button class="minn-load-more" id="minn-media-more">Load more</button>' : '' }`;
+		${ pagerHtml( c.page, c.totalPages ) }`;
 
 		$$( '.minn-view-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => { state.mediaView = btn.dataset.view; renderMedia(); } )
@@ -1218,15 +1265,7 @@
 				if ( m ) { state.modal = { type: 'media', item: m }; renderOverlays(); }
 			} )
 		);
-		const more = $( '#minn-media-more', view );
-		if ( more ) {
-			more.addEventListener( 'click', async () => {
-				more.disabled = true;
-				more.textContent = 'Loading…';
-				await loadMedia( true ).catch( showErr );
-				if ( state.route === 'media' ) renderMedia();
-			} );
-		}
+		bindPager( view, c.page, loadMedia, () => { if ( state.route === 'media' ) renderMedia(); } );
 		const uploadBtn = $( '#minn-upload-btn', view );
 		if ( uploadBtn ) {
 			const input = $( '#minn-upload-input', view );
@@ -1254,19 +1293,21 @@
 
 	const COMMENT_TABS = [ [ 'hold', 'Pending' ], [ 'approve', 'Approved' ], [ 'spam', 'Spam' ], [ 'trash', 'Trash' ] ];
 
-	async function loadComments( more ) {
-		const c = more && state.cache.comments ? state.cache.comments : { items: [], page: 0, totalPages: 1, total: 0, postTitles: {} };
-		const r = await apiPaged( `wp/v2/comments?context=edit&status=${ state.commentTab }&per_page=25&page=${ c.page + 1 }&_fields=id,author_name,author_avatar_urls,content,date,post` );
-		c.page++;
-		c.totalPages = r.totalPages;
-		c.total = r.total;
-		c.items.push( ...r.items );
+	// Post-title lookups survive page changes — comments on the same posts
+	// recur across pages, so keep the map for the session.
+	const commentPostTitles = {};
+
+	async function loadComments( page = 1 ) {
+		const tab = state.commentTab;
+		const r = await apiPaged( `wp/v2/comments?context=edit&status=${ tab }&per_page=25&page=${ page }&_fields=id,author_name,author_avatar_urls,content,date,post` );
+		if ( tab !== state.commentTab ) return; // tab changed mid-flight — discard
+		const c = { items: r.items, page, totalPages: r.totalPages, total: r.total, postTitles: commentPostTitles };
 		// Resolve post titles in one cheap request (no content rendering).
-		const ids = [ ...new Set( r.items.map( ( cm ) => cm.post ).filter( ( id ) => id && ! c.postTitles[ id ] ) ) ];
+		const ids = [ ...new Set( r.items.map( ( cm ) => cm.post ).filter( ( id ) => id && ! commentPostTitles[ id ] ) ) ];
 		if ( ids.length ) {
 			try {
 				const posts = await api( `wp/v2/posts?include=${ ids.join( ',' ) }&per_page=${ ids.length }&_fields=id,title&status=publish,future,draft,pending,private&context=edit` );
-				posts.forEach( ( p ) => { c.postTitles[ p.id ] = decodeEntities( p.title.rendered ); } );
+				posts.forEach( ( p ) => { commentPostTitles[ p.id ] = decodeEntities( p.title.rendered ); } );
 			} catch ( e ) {}
 		}
 		state.cache.comments = c;
@@ -1360,7 +1401,7 @@
 					</div>
 				</div>` ).join( '' ) : `<div class="minn-empty">No ${ ( COMMENT_TABS.find( ( t ) => t[ 0 ] === state.commentTab ) || [ '', '' ] )[ 1 ].toLowerCase() } comments.</div>` }
 		</div>
-		${ c.page < c.totalPages ? '<button class="minn-load-more" id="minn-comments-more">Load more</button>' : '' }`;
+		${ pagerHtml( c.page, c.totalPages ) }`;
 
 		$$( '[data-ctab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
@@ -1421,15 +1462,7 @@
 			state.commentReply = null;
 			renderComments();
 		} );
-		const more = $( '#minn-comments-more', view );
-		if ( more ) {
-			more.addEventListener( 'click', async () => {
-				more.disabled = true;
-				more.textContent = 'Loading…';
-				await loadComments( true ).catch( showErr );
-				if ( state.route === 'comments' ) renderComments();
-			} );
-		}
+		bindPager( view, c.page, loadComments, () => { if ( state.route === 'comments' ) renderComments(); } );
 	}
 
 	/* ===== Orders (WooCommerce) ===== */
@@ -1440,14 +1473,11 @@
 		cancelled: 'trash-status', refunded: 'draft', failed: 'trash-status',
 	};
 
-	async function loadOrders( more ) {
-		const c = more && state.cache.orders ? state.cache.orders : { items: [], page: 0, totalPages: 1, total: 0 };
-		const r = await apiPaged( `wc/v3/orders?per_page=25&page=${ c.page + 1 }&status=${ state.orderTab }&_fields=id,number,status,total,currency_symbol,date_created,billing,line_items` );
-		c.page++;
-		c.totalPages = r.totalPages;
-		c.total = r.total;
-		c.items.push( ...r.items );
-		state.cache.orders = c;
+	async function loadOrders( page = 1 ) {
+		const tab = state.orderTab;
+		const r = await apiPaged( `wc/v3/orders?per_page=25&page=${ page }&status=${ tab }&_fields=id,number,status,total,currency_symbol,date_created,billing,line_items` );
+		if ( tab !== state.orderTab ) return; // tab changed mid-flight — discard
+		state.cache.orders = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
 	async function loadOrderSummary() {
@@ -1524,7 +1554,7 @@
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : '<div class="minn-empty">No orders here.</div>' }
 		</div>
-		${ c.page < c.totalPages ? '<button class="minn-load-more" id="minn-orders-more">Load more</button>' : '' }`;
+		${ pagerHtml( c.page, c.totalPages ) }`;
 
 		$$( '[data-otab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
@@ -1539,30 +1569,21 @@
 				if ( o ) { state.modal = { type: 'order', order: o }; renderOverlays(); }
 			} )
 		);
-		const more = $( '#minn-orders-more', view );
-		if ( more ) {
-			more.addEventListener( 'click', async () => {
-				more.disabled = true;
-				more.textContent = 'Loading…';
-				await loadOrders( true ).catch( showErr );
-				if ( state.route === 'orders' ) renderOrders();
-			} );
-		}
+		bindPager( view, c.page, loadOrders, () => { if ( state.route === 'orders' ) renderOrders(); } );
 	}
 
 	/* ===== Users ===== */
 
-	async function loadUsers( more ) {
-		const c = more && state.cache.users ? state.cache.users : { items: [], page: 0, totalPages: 1, total: 0 };
-		let q = `wp/v2/users?context=edit&per_page=50&orderby=registered_date&order=desc&_fields=id,name,email,roles,registered_date,avatar_urls&page=${ c.page + 1 }`;
+	const usersCtx = () => ( state.userSearch || '' ) + '|' + ( state.userRole || '_all' );
+
+	async function loadUsers( page = 1 ) {
+		const ctx = usersCtx();
+		let q = `wp/v2/users?context=edit&per_page=50&orderby=registered_date&order=desc&_fields=id,name,email,roles,registered_date,avatar_urls&page=${ page }`;
 		if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
 		if ( state.userRole && state.userRole !== '_all' ) q += '&roles=' + encodeURIComponent( state.userRole );
 		const r = await apiPaged( q );
-		c.page++;
-		c.totalPages = r.totalPages;
-		c.total = r.total;
-		c.items.push( ...r.items );
-		state.cache.users = c;
+		if ( ctx !== usersCtx() ) return; // filter changed mid-flight — discard
+		state.cache.users = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
 	let userSearchTimer = null;
@@ -1600,7 +1621,7 @@
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : '<div class="minn-empty">No users found.</div>' }
 		</div>
-		${ c.page < c.totalPages ? '<button class="minn-load-more" id="minn-users-more">Load more</button>' : '' }`;
+		${ pagerHtml( c.page, c.totalPages ) }`;
 
 		$$( '.minn-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
@@ -1638,15 +1659,7 @@
 				else window.open( B.site.adminUrl + 'user-edit.php?user_id=' + row.dataset.user, '_blank' );
 			} )
 		);
-		const more = $( '#minn-users-more', view );
-		if ( more ) {
-			more.addEventListener( 'click', async () => {
-				more.disabled = true;
-				more.textContent = 'Loading…';
-				await loadUsers( true ).catch( showErr );
-				if ( state.route === 'users' ) renderUsers();
-			} );
-		}
+		bindPager( view, c.page, loadUsers, () => { if ( state.route === 'users' ) renderUsers(); } );
 	}
 
 	/* ===== Surfaces (declarative third-party plugin views) ===== */
@@ -1701,21 +1714,29 @@
 		}
 	}
 
-	async function loadSurfaceItems( s, more ) {
+	async function loadSurfaceItems( s, page = 1 ) {
 		const ss = surfaceState( s.id );
 		const col = s.collection;
-		const c = more && ss.cache ? ss.cache : { items: [], page: 0, total: 0 };
-		const res = await apiRes( surfaceRoute( s, ss, c.page + 1 ) );
+		const ctx = ss.tab + '|' + ( ss.q || '' );
+		const res = await apiRes( surfaceRoute( s, ss, page ) );
 		const body = await res.json();
+		if ( ctx !== ss.tab + '|' + ( ss.q || '' ) ) return; // filter changed mid-flight
 		const items = col.itemsKey
 			? ( body[ col.itemsKey ] || [] )
 			: ( Array.isArray( body ) ? body : Object.values( body ) );
-		c.total = col.totalKey
+		const total = col.totalKey
 			? parseInt( body[ col.totalKey ] || 0, 10 )
 			: parseInt( res.headers.get( 'X-WP-Total' ) || String( items.length ), 10 );
-		c.page++;
-		c.items.push( ...items );
-		ss.cache = c;
+		// Adapters declare page size inside their own pageQuery template, so
+		// derive it from the first full page instead of parsing the template.
+		const perPage = page === 1 ? items.length : ( ss.cache && ss.cache.perPage ) || items.length;
+		ss.cache = {
+			items,
+			page,
+			total,
+			perPage,
+			totalPages: perPage > 0 ? Math.max( page, Math.ceil( total / perPage ) ) : 1,
+		};
 	}
 
 	const PILL_STYLES = {
@@ -1822,7 +1843,7 @@
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : '<div class="minn-empty">Nothing here.</div>' }
 		</div>
-		${ c.items.length < c.total ? '<button class="minn-load-more" id="minn-surface-more">Load more</button>' : '' }`;
+		${ pagerHtml( c.page, c.totalPages ) }`;
 
 		$$( '[data-stab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
@@ -1861,15 +1882,7 @@
 			state.modal = { type: 'surface-form', surface: s };
 			renderOverlays();
 		} );
-		const more = $( '#minn-surface-more', view );
-		if ( more ) {
-			more.addEventListener( 'click', async () => {
-				more.disabled = true;
-				more.textContent = 'Loading…';
-				await loadSurfaceItems( s, true ).catch( showErr );
-				if ( state.route === s.id ) renderSurface( s );
-			} );
-		}
+		bindPager( view, c.page, ( p ) => loadSurfaceItems( s, p ), () => { if ( state.route === s.id ) renderSurface( s ); } );
 	}
 
 	async function openSurfaceDetail( s, item ) {
@@ -4419,7 +4432,7 @@
 		view.innerHTML = `
 		<div class="minn-editor">
 			<div>
-				<input class="minn-editor-title" id="minn-editor-title" placeholder="Untitled" value="${ esc( ed.title ) }">
+				<input class="minn-editor-title" id="minn-editor-title" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" value="${ esc( ed.title ) }">
 				${ locked ? `
 				<div class="minn-editor-locked-note">
 					Minn couldn't safely parse this ${ ed.type === 'pages' ? 'page' : 'post' }'s block structure,
