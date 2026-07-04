@@ -4,7 +4,7 @@ Tags: admin, dashboard, ui, admin theme
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.3.0
+Stable tag: 0.4.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -44,6 +44,14 @@ Try it instantly in WordPress Playground — launch link and blueprint: https://
 Pretty permalinks are recommended. Without them the app is served at `/?minn_admin=1`.
 
 == Changelog ==
+
+= 0.4.0 =
+* Block inspector: configure complex blocks (islands) in place — schema-driven forms, add/remove/reorder children, wrapper-text edits, live server-rendered previews, and removal.
+* Insert custom blocks from the slash menu (plugins declare templates via minn_admin_block_forms; Anchor Blocks ships five).
+* Post Types manager: create/edit/remove CPT definitions through ACF, Custom Post Type UI, or Minn's own store; code-registered types shown read-only.
+* Settings: site icon with drag & drop, membership + default role, comment moderation toggles, searchable comboboxes for timezone/role/category/pages.
+* Image picker: drag & drop upload used immediately. Code blocks: language config chip. AnalyticsWP traffic adapter.
+* Fixed stale Overview after switching plugins. Full details in changelog.md.
 
 = 0.3.0 =
 * Content: bulk actions (set status, trash) with shift-click range select, plus category and tag filters.

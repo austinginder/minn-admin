@@ -1,6 +1,6 @@
 # Changelog
 
-## **v0.4.0** - Unreleased
+## **v0.4.0** - July 4, 2026
 
 ### Added
 * **Block inspector:** Complex blocks (islands) are no longer opaque. Every island's chip is now a ⚙ button that opens an inspector popover: the block's attribute schema is fetched from `wp/v2/block-types`, a form is generated from it (strings, numbers, booleans, enums), and edits rewrite the attributes JSON in the block comment — Gutenberg-escaped, spliced back verbatim, byte-safety model unchanged. Works one level deep too: nested self-closing children (e.g. Anchor Blocks conversation messages) each get their own form section. Attributes stored in saved HTML (`source`-backed) are correctly left alone.
