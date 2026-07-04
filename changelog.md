@@ -17,7 +17,7 @@
 * **More settings:** Membership (anyone can register) and New user default role (General); Convert emoticons (Writing); Moderate all comments, Registered-users-only commenting and Show avatars (Discussion) — exposed over `wp/v2/settings` via `register_setting`, with role writes validated server-side.
 
 ### Improved
-* **Timezone autocomplete:** The Settings timezone field is now type-to-filter instead of a 400-option select — searching "chicago" or "new york" finds the zone (spaces match underscores), and free-typed input is validated against real zone ids before saving.
+* **Timezone autocomplete:** The Settings timezone field is now a proper combobox instead of a 400-option select — click to browse the full list (current zone highlighted), type to filter ("new york" finds America/New_York — spaces match underscores), arrow keys + Enter to pick. The option panel is anchored in-flow below the input, so it never drifts around the page the way the native datalist popup does, and free-typed input is validated against real zone ids before saving.
 
 ### Fixed
 * **Stale Overview after plugin changes:** Activating, deactivating, installing or deleting a plugin now clears the Overview cache (and the post-type caches) — switching analytics plugins immediately switches the Traffic chart's provider instead of showing the old one until a hard reload.

@@ -1923,6 +1923,70 @@
 		state.cache.settings = { values, categories, pages, permalinks, siteIcon };
 	}
 
+	/**
+	 * Minimal combobox: a filtered option panel anchored in-flow directly
+	 * below the input — it can never drift like the native datalist popup —
+	 * that opens on focus/click even when the value is already complete.
+	 * Arrow keys + Enter select; Escape/Tab/blur close. `options` are
+	 * { value, label } pairs; matching normalizes _ and / to spaces so
+	 * "new york" finds America/New_York.
+	 */
+	function bindAutocomplete( wrap, options ) {
+		const input = $( '.minn-ac-input', wrap );
+		const panel = $( '.minn-ac-panel', wrap );
+		if ( ! input || ! panel ) return;
+		let idx = -1;
+		const norm = ( v ) => String( v ).toLowerCase().replace( /[_/]/g, ' ' );
+		// Opening (focus/click) browses the FULL list with the current value
+		// highlighted; filtering starts only once the user actually types.
+		const render = ( browseAll ) => {
+			const q = browseAll ? '' : norm( input.value.trim() );
+			const matches = options.filter( ( o ) => ! q || norm( o.value ).includes( q ) || norm( o.label ).includes( q ) );
+			idx = -1;
+			panel.innerHTML = ( matches.slice( 0, 500 ).map( ( o ) =>
+				`<div class="minn-ac-item${ o.value === input.value ? ' current' : '' }" data-acv="${ esc( o.value ) }">${ esc( o.label ) }</div>` ).join( '' )
+				|| '<div class="minn-ac-empty">No matches</div>' )
+				+ ( matches.length > 500 ? `<div class="minn-ac-empty">${ matches.length - 500 } more — keep typing…</div>` : '' );
+			panel.hidden = false;
+			input.setAttribute( 'aria-expanded', 'true' );
+			const cur = $( '.minn-ac-item.current', panel );
+			if ( cur ) cur.scrollIntoView( { block: 'nearest' } );
+		};
+		const close = () => {
+			panel.hidden = true;
+			idx = -1;
+			input.setAttribute( 'aria-expanded', 'false' );
+		};
+		const pick = ( v ) => {
+			input.value = v;
+			close();
+		};
+		input.addEventListener( 'focus', () => render( true ) );
+		input.addEventListener( 'click', () => { if ( panel.hidden ) render( true ); } );
+		input.addEventListener( 'input', () => render( false ) );
+		input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Escape' ) { close(); return; }
+			if ( e.key === 'Tab' ) { close(); return; }
+			const items = $$( '.minn-ac-item', panel );
+			if ( panel.hidden || ! items.length ) return;
+			if ( e.key === 'ArrowDown' || e.key === 'ArrowUp' ) {
+				e.preventDefault();
+				idx = e.key === 'ArrowDown' ? Math.min( idx + 1, items.length - 1 ) : Math.max( idx - 1, 0 );
+				items.forEach( ( el, i ) => el.classList.toggle( 'active', i === idx ) );
+				items[ idx ].scrollIntoView( { block: 'nearest' } );
+			} else if ( e.key === 'Enter' ) {
+				e.preventDefault();
+				pick( ( items[ idx ] || items[ 0 ] ).dataset.acv );
+			}
+		} );
+		// mousedown (not click) + preventDefault: select before blur can close the panel.
+		panel.addEventListener( 'mousedown', ( e ) => {
+			const item = e.target.closest( '.minn-ac-item' );
+			if ( item ) { e.preventDefault(); pick( item.dataset.acv ); }
+		} );
+		input.addEventListener( 'blur', () => setTimeout( close, 120 ) );
+	}
+
 	function settingsFields( section, s, cache ) {
 		const text = ( key, label, value, mono ) => `
 			<div>
@@ -1983,13 +2047,17 @@
 					+ siteIconField
 					+ text( 'url', 'Site address', s.url, true )
 					+ text( 'email', 'Administration email', s.email, true )
-					// Autocomplete, not a select — 400+ zones need type-to-filter.
-					// Option values stay canonical (America/New_York); the label's
-					// spaces let "new york" match too. Validated on save.
+					// Custom autocomplete, not a select or datalist — 400+ zones need
+					// type-to-filter, and the native datalist popup positions itself
+					// erratically and vanishes once the value is complete. The panel
+					// is anchored in-flow below the input (never shifts) and opens on
+					// click even with a full value. Validated on save.
 					+ `<div>
 						<div class="minn-field-label">Timezone</div>
-						<input class="minn-input" data-key="timezone" list="minn-tz-list" value="${ esc( s.timezone || 'UTC' ) }" placeholder="Start typing — e.g. Chicago, Berlin, UTC" autocomplete="off" spellcheck="false">
-						<datalist id="minn-tz-list">${ timezones.map( ( [ v ] ) => `<option value="${ esc( v ) }">${ esc( v.replace( /_/g, ' ' ) ) }</option>` ).join( '' ) }</datalist>
+						<div class="minn-ac" id="minn-tz-ac">
+							<input class="minn-input minn-ac-input" data-key="timezone" value="${ esc( s.timezone || 'UTC' ) }" placeholder="Start typing — e.g. Chicago, Berlin, UTC" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+							<div class="minn-ac-panel" hidden></div>
+						</div>
 					</div>`
 					+ text( 'date_format', 'Date format', s.date_format, true )
 					+ text( 'time_format', 'Time format', s.time_format, true )
@@ -2149,6 +2217,16 @@
 				cache.values.show_on_front = showOnFront.value;
 				renderSettings();
 			} );
+		}
+
+		// Timezone combobox (General section).
+		const tzWrap = $( '#minn-tz-ac', view );
+		if ( tzWrap ) {
+			let zones = [ 'UTC' ];
+			try { zones = [ 'UTC', ...Intl.supportedValuesOf( 'timeZone' ) ]; } catch ( e ) {}
+			const cur = cache.values.timezone;
+			if ( cur && ! zones.includes( cur ) ) zones.unshift( cur );
+			bindAutocomplete( tzWrap, zones.map( ( z ) => ( { value: z, label: z.replace( /_/g, ' ' ) } ) ) );
 		}
 
 		// Permalinks: keep the preset select and the custom-structure input in sync.
