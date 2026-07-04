@@ -50,7 +50,7 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
 - **Command palette** — ⌘K / Ctrl-K everywhere
 - **Plugin surfaces** — bundled adapters for **Gravity Forms** (entries), **Gravity SMTP**
   (email log with a real HTML preview and resend), **Simple History** (activity log),
-  **Redirection** (redirects, editable in place) and **ACF** (editor panels), plus one-filter
+  **Redirection**, **Safe Redirect Manager** and **Simple 301 Redirects** (redirects — list, search, create, edit and delete) and **ACF** (editor panels), plus one-filter
   APIs for any plugin to register views, editor panels, traffic data or block-inspector forms
 - **Dark & light themes**, bundled fonts, zero external requests from the app, responsive down
   to phones

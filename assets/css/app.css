@@ -234,6 +234,11 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-row-title { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-row-slug { font-size: 12.5px; color: var(--text3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-row-meta { font-size: 14px; color: var(--text2); }
+/* Surface table cells: single line, ellipsis — long URLs shouldn't wrap to three rows. */
+.minn-row-meta.minn-cell-clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-row-meta.mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+.minn-row-meta.minn-num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 8px; }
+.minn-table-head .minn-num { text-align: right; padding-right: 8px; }
 .minn-row-arrow { color: var(--text3); text-align: center; }
 .minn-cell-clip { min-width: 0; }
 

@@ -27,12 +27,31 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'pageQuery' => 'per_page=25&page={page0}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
+			'search'    => 'filterBy[url]={q}',
+			'create'    => array(
+				'label'    => 'Add redirect',
+				'route'    => 'redirection/v1/redirect',
+				'method'   => 'POST',
+				// Plain URL-match redirect in the default group; power users
+				// still have Redirection's own UI for regex/conditional rules.
+				'defaults' => array(
+					'action_type' => 'url',
+					'match_type'  => 'url',
+					'group_id'    => 1,
+					'regex'       => false,
+				),
+				'fields'   => array(
+					array( 'key' => 'url', 'label' => 'Source URL', 'mono' => true, 'placeholder' => '/old-page' ),
+					array( 'key' => 'action_data.url', 'label' => 'Target URL', 'mono' => true, 'placeholder' => '/new-page or https://…' ),
+					array( 'key' => 'action_code', 'label' => 'HTTP status', 'type' => 'number', 'value' => 301 ),
+				),
+			),
 			'columns'   => array(
-				array( 'key' => 'url', 'label' => 'Source', 'format' => 'title' ),
-				array( 'key' => 'action_data.url', 'label' => 'Target' ),
-				array( 'key' => 'action_code', 'label' => 'Code', 'format' => 'mono' ),
-				array( 'key' => 'hits', 'label' => 'Hits' ),
-				array( 'key' => 'last_access', 'label' => 'Last hit' ),
+				array( 'key' => 'url', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'action_data.url', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'action_code', 'label' => 'Code', 'format' => 'mono', 'width' => '64px' ),
+				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '72px' ),
+				array( 'key' => 'last_access', 'label' => 'Last hit', 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'skip' => array( 'match_data', 'match_type', 'match_url', 'position', 'group_id' ),

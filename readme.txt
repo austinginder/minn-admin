@@ -28,7 +28,7 @@ Features:
 * **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks sections, plus a built-in maintenance mode.
 * **Editor** — distraction-free, block-aware writing surface: complex blocks preserved byte-for-byte as read-only islands, slash commands, tables, syntax-highlighted code blocks with a language picker, featured images, categories and tags, revisions with restore, autosave, scheduling and one-click publish.
 * **Command palette** — press ⌘K / Ctrl-K anywhere.
-* **Plugin adapters** — Gravity Forms, Gravity SMTP (HTML email preview and resend), Simple History, Redirection (editable in place) and ACF views built in, plus one-filter APIs for other plugins (views, editor panels, traffic data, block-inspector forms).
+* **Plugin adapters** — Gravity Forms, Gravity SMTP (HTML email preview and resend), Simple History, Redirection / Safe Redirect Manager / Simple 301 Redirects (create, search, edit redirects) and ACF views built in, plus one-filter APIs for other plugins (views, editor panels, traffic data, block-inspector forms).
 * **Notifications** — pending comments, plugin/core updates and new users; click an item to jump to it.
 * **Dark & light themes** — toggle persists per browser. Fonts are bundled locally.
 * **Self-updater** — updates arrive from GitHub Releases through the normal WordPress updates UI.

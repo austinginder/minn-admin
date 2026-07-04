@@ -82,6 +82,8 @@ That's a working, paginated, capability-gated view in the Minn sidebar.
 | `columns` | Array of `{ key, label, format }`. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `entry-summary` (first scalar values of numeric keys — useful for form entries) |
 | `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `labels` (resolve field keys to human labels from another route), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
 | `actions` | Buttons in the detail modal: `{ label, method, route, body, confirm, danger }`. `{id}` in the route is replaced with the item id |
+| `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request |
+| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along |
 
 ### `detail.edit` — inline editing in the detail modal
 

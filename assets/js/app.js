@@ -1349,7 +1349,7 @@
 
 	function surfaceState( id ) {
 		if ( ! state.surface[ id ] ) {
-			state.surface[ id ] = { tab: '_all', cache: null, tabs: null, labels: {} };
+			state.surface[ id ] = { tab: '_all', cache: null, tabs: null, labels: {}, q: '' };
 		}
 		return state.surface[ id ];
 	}
@@ -1363,6 +1363,10 @@
 		if ( col.query ) parts.push( col.query );
 		if ( col.tabs && col.tabs.param && ss.tab !== '_all' ) {
 			parts.push( col.tabs.param + '=' + encodeURIComponent( ss.tab ) );
+		}
+		// Adapter-declared search: a query template with {q}.
+		if ( col.search && ss.q ) {
+			parts.push( col.search.replace( '{q}', encodeURIComponent( ss.q ) ) );
 		}
 		// {page} is 1-based; {page0} serves APIs that count pages from zero.
 		parts.push( ( col.pageQuery || 'per_page=25&page={page}' ).replace( '{page}', page ).replace( '{page0}', page - 1 ) );
@@ -1449,11 +1453,18 @@
 		let v = surfaceValue( item, colDef.key );
 		if ( ( v == null || v === '' ) && colDef.altKey ) v = surfaceValue( item, colDef.altKey );
 		switch ( colDef.format ) {
-			case 'ago': return `<div class="minn-row-meta">${ v ? timeAgo( String( v ).replace( ' ', 'T' ) ) : '—' }</div>`;
+			case 'ago': {
+				// Guard empty and zero timestamps (Redirection stores 0000-00-00
+				// for a never-hit redirect) so they read "—" not "Invalid Date".
+				const raw = String( v || '' );
+				const t = raw && ! /^0{4}/.test( raw ) ? Date.parse( raw.replace( ' ', 'T' ) ) : NaN;
+				return `<div class="minn-row-meta minn-cell-clip">${ isNaN( t ) ? '—' : timeAgo( raw.replace( ' ', 'T' ) ) }</div>`;
+			}
 			case 'pill': return `<div>${ surfacePill( v ) }</div>`;
 			case 'title': return `<div class="minn-row-title minn-cell-clip">${ esc( stripTags( String( v || '—' ) ) ) }</div>`;
 			case 'entry-summary': return `<div class="minn-row-title minn-cell-clip">${ esc( entrySummary( item ) ) }</div>`;
-			case 'mono': return `<div class="minn-row-meta" style="font-family:'JetBrains Mono',monospace;">${ esc( String( v || '—' ) ) }</div>`;
+			case 'num': return `<div class="minn-row-meta minn-num">${ esc( String( v == null || v === '' ? '—' : v ) ) }</div>`;
+			case 'mono': return `<div class="minn-row-meta mono minn-cell-clip">${ esc( String( v || '—' ) ) }</div>`;
 			default: return `<div class="minn-row-meta minn-cell-clip">${ esc( stripTags( String( v == null || v === '' ? '—' : v ) ) ) }</div>`;
 		}
 	}
@@ -1470,7 +1481,13 @@
 		}
 		const c = ss.cache;
 		const cols = s.collection.columns || [];
-		const gridCols = cols.map( ( col, i ) => i === 0 ? 'minmax(0,2fr)' : ( col.format === 'ago' || col.format === 'pill' ? '120px' : 'minmax(0,1fr)' ) ).join( ' ' ) + ' 30px';
+		// Column widths: an adapter's explicit `width` wins; otherwise size by
+		// role — flexible for the title/text columns, fixed and narrow for the
+		// short ones (codes, counts, dates, pills) so long values get the room.
+		const FIXED = { ago: '128px', pill: '110px', mono: '84px', num: '84px' };
+		const gridCols = cols.map( ( col, i ) =>
+			col.width || FIXED[ col.format ] || ( i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)' )
+		).join( ' ' ) + ' 30px';
 
 		view.innerHTML = `
 		<div class="minn-toolbar">
@@ -1479,11 +1496,13 @@
 				${ ss.tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>` : '' }
+			${ s.collection.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Filter…" value="${ esc( ss.q || '' ) }">` : '' }
 			<div class="minn-toolbar-meta">${ c.total } item${ c.total === 1 ? '' : 's' }</div>
+			${ s.collection.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( s.collection.create.label || 'Add' ) }</button>` : '' }
 		</div>
 		<div class="minn-card minn-table">
 			<div class="minn-table-head" style="grid-template-columns:${ gridCols };">
-				${ cols.map( ( col ) => `<div>${ esc( col.label ) }</div>` ).join( '' ) }<div></div>
+				${ cols.map( ( col ) => `<div${ col.format === 'num' ? ' class="minn-num"' : '' }>${ esc( col.label ) }</div>` ).join( '' ) }<div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( item, i ) => `
 				<div class="minn-table-row" style="grid-template-columns:${ gridCols };" data-sitem="${ i }">
@@ -1506,6 +1525,30 @@
 				if ( item ) openSurfaceDetail( s, item );
 			} )
 		);
+		const search = $( '#minn-surface-search', view );
+		if ( search ) {
+			let t = null;
+			search.addEventListener( 'input', () => {
+				clearTimeout( t );
+				t = setTimeout( async () => {
+					ss.q = search.value.trim();
+					ss.cache = null;
+					const tbl = $( '.minn-table', view );
+					if ( tbl ) tbl.classList.add( 'minn-busy' );
+					await loadSurfaceItems( s ).catch( showErr );
+					if ( state.route === s.id ) {
+						renderSurface( s );
+						const again = $( '#minn-surface-search' );
+						if ( again ) { again.focus(); again.setSelectionRange( again.value.length, again.value.length ); }
+					}
+				}, 350 );
+			} );
+		}
+		const addBtn = $( '#minn-surface-add', view );
+		if ( addBtn ) addBtn.addEventListener( 'click', () => {
+			state.modal = { type: 'surface-form', surface: s };
+			renderOverlays();
+		} );
 		const more = $( '#minn-surface-more', view );
 		if ( more ) {
 			more.addEventListener( 'click', async () => {
@@ -4793,6 +4836,28 @@
 			</div>`;
 		}
 
+		if ( m.type === 'surface-form' ) {
+			const cr = m.surface.collection.create;
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ esc( cr.label || 'Add' ) } — ${ esc( m.surface.label ) }</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						${ cr.fields.map( ( f ) => `<div>
+							<div class="minn-field-label">${ esc( f.label ) }</div>
+							<input class="minn-input${ f.mono ? ' mono' : '' }" data-createfield="${ esc( f.key ) }"${ f.type === 'number' ? ' type="number"' : '' } value="${ esc( f.value == null ? '' : f.value ) }" placeholder="${ esc( f.placeholder || '' ) }">
+						</div>` ).join( '' ) }
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-primary" id="minn-surface-create">${ esc( cr.label || 'Add' ) }</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'tax' ) {
 			const t = m.item;
 			const isNew = ! t;
@@ -5106,6 +5171,36 @@
 					if ( state.route === 'posttypes' ) renderPostTypes();
 				} catch ( e ) {
 					toast( e.message, true );
+				}
+			} );
+		}
+
+		if ( m.type === 'surface-form' ) {
+			const createBtn = $( '#minn-surface-create' );
+			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
+				const cr = m.surface.collection.create;
+				// Defaults first, then the typed fields (dot paths supported).
+				const body = JSON.parse( JSON.stringify( cr.defaults || {} ) );
+				let missing = false;
+				$$( '[data-createfield]', $( '.minn-modal' ) ).forEach( ( input ) => {
+					let v = input.value.trim();
+					if ( ! v && input.type !== 'number' ) missing = true;
+					if ( input.type === 'number' ) v = v === '' ? null : Number( v );
+					setDeepPath( body, input.dataset.createfield, v );
+				} );
+				if ( missing ) { toast( 'Fill in all fields first', true ); return; }
+				createBtn.disabled = true;
+				createBtn.textContent = 'Saving…';
+				try {
+					await api( cr.route, { method: cr.method || 'POST', body: JSON.stringify( body ) } );
+					toast( ( m.surface.label || 'Item' ) + ' added' );
+					surfaceState( m.surface.id ).cache = null;
+					closeModal();
+					if ( state.route === m.surface.id ) renderSurface( m.surface );
+				} catch ( e ) {
+					toast( e.message, true );
+					createBtn.disabled = false;
+					createBtn.textContent = cr.label || 'Add';
 				}
 			} );
 		}

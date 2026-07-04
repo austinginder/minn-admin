@@ -37,6 +37,8 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/independent-analytics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/analyticswp.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/simple-history.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/redirection.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/safe-redirect-manager.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/simple-301-redirects.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/query-monitor.php';
 
 Minn_Admin::init();
