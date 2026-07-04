@@ -678,6 +678,7 @@
 		}
 		const terms = state.cache.postTerms || { categories: [], tags: [] };
 		const sel = state.contentSel || ( state.contentSel = new Map() );
+		if ( ! sel.size ) state.contentLastIdx = null;
 		const taxSelect = ( id, cur, label, list ) => `<select class="minn-input minn-tax-select" id="${ id }">
 			<option value="">${ label }</option>
 			${ list.map( ( t ) => `<option value="${ t.id }"${ String( cur ) === String( t.id ) ? ' selected' : '' }>${ esc( t.name ) }${ t.count != null ? ' (' + t.count + ')' : '' }</option>` ).join( '' ) }
@@ -733,7 +734,8 @@
 			sel.clear();
 			state.cache.content = null;
 			state.cache.cptContent = {};
-			view.innerHTML = '<div class="minn-loading">Loading content…</div>';
+			const tbl = $( '.minn-table', view );
+			if ( tbl ) tbl.classList.add( 'minn-busy' );
 			await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
 			if ( state.route === 'content' ) renderContent();
 		};
@@ -809,13 +811,23 @@
 		};
 		syncBulkBar();
 
+		const setRowSel = ( p, on ) => {
+			if ( on ) sel.set( p.id, p.type ); else sel.delete( p.id );
+			const box = view.querySelector( `.minn-row-cb[data-cbid="${ p.id }"]` );
+			if ( box ) { box.checked = on; box.closest( '.minn-table-row' ).classList.toggle( 'sel', on ); }
+		};
 		$$( '.minn-row-cb', view ).forEach( ( cb ) =>
-			cb.addEventListener( 'change', () => {
-				const row = cb.closest( '.minn-table-row' );
+			// Use click (not change) so we can read shiftKey and select a whole range.
+			cb.addEventListener( 'click', ( e ) => {
 				const id = parseInt( cb.dataset.cbid, 10 );
-				if ( cb.checked ) sel.set( id, row.dataset.type );
-				else sel.delete( id );
-				row.classList.toggle( 'sel', cb.checked );
+				const idx = filtered.findIndex( ( p ) => p.id === id );
+				if ( e.shiftKey && state.contentLastIdx != null && state.contentLastIdx !== idx && filtered[ state.contentLastIdx ] ) {
+					const lo = Math.min( state.contentLastIdx, idx ), hi = Math.max( state.contentLastIdx, idx );
+					for ( let i = lo; i <= hi; i++ ) setRowSel( filtered[ i ], cb.checked );
+				} else {
+					setRowSel( filtered[ idx ], cb.checked );
+				}
+				state.contentLastIdx = idx;
 				syncBulkBar();
 			} )
 		);
@@ -1289,7 +1301,10 @@
 				if ( ( state.userRole || '_all' ) === btn.dataset.role ) return;
 				state.userRole = btn.dataset.role;
 				state.cache.users = null;
-				view.innerHTML = '<div class="minn-loading">Loading users…</div>';
+				// Keep the toolbar in place — reflect the active tab now, dim only the table while loading.
+				$$( '.minn-tab', view ).forEach( ( t ) => t.classList.toggle( 'active', t === btn ) );
+				const tbl = $( '.minn-table', view );
+				if ( tbl ) tbl.classList.add( 'minn-busy' );
 				await loadUsers().catch( showErr );
 				if ( state.route === 'users' ) renderUsers();
 			} )
@@ -1415,6 +1430,17 @@
 	function surfaceValue( item, key ) {
 		if ( ! key ) return undefined;
 		return key.split( '.' ).reduce( ( o, k ) => ( o && typeof o === 'object' ? o[ k ] : undefined ), item );
+	}
+
+	// Dot-path assignment ("action_data.url" → { action_data: { url } }).
+	function setDeepPath( obj, key, val ) {
+		const parts = key.split( '.' );
+		let o = obj;
+		for ( let i = 0; i < parts.length - 1; i++ ) {
+			if ( ! o[ parts[ i ] ] || typeof o[ parts[ i ] ] !== 'object' ) o[ parts[ i ] ] = {};
+			o = o[ parts[ i ] ];
+		}
+		o[ parts[ parts.length - 1 ] ] = val;
 	}
 
 	function surfaceCell( item, colDef ) {
@@ -3291,7 +3317,10 @@
 			const s = m.surface;
 			const detail = s.collection.detail || {};
 			const it = m.item;
-			const skip = new Set( [ 'id', ...( detail.skip || [] ) ] );
+			const edit = detail.edit;
+			const editFields = ! m.loading && edit ? edit.fields : [];
+			// Fields shown as editable inputs shouldn't also appear as static rows.
+			const skip = new Set( [ 'id', ...( detail.skip || [] ), ...editFields.map( ( f ) => f.key.split( '.' )[ 0 ] ) ] );
 			const labels = m.labels || {};
 			const rows = m.loading ? [] : Object.keys( it )
 				.filter( ( k ) => ! skip.has( k ) && k !== detail.messageKey && ! k.startsWith( '_' ) )
@@ -3311,12 +3340,20 @@
 					${ m.loading ? '<div class="minn-loading">Loading…</div>' : `
 					<div class="minn-modal-meta">
 						${ rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( stripTags( String( v ) ) ) }</span></div>` ).join( '' ) }
+						${ editFields.length ? `<div class="minn-media-edit">
+							${ editFields.map( ( f, i ) => {
+								const val = surfaceValue( it, f.key );
+								return `<div class="minn-field-label"${ i ? ' style="margin-top:10px;"' : '' }>${ esc( f.label ) }</div>
+								<input class="minn-input${ f.mono ? ' mono' : '' }" data-editfield="${ esc( f.key ) }"${ f.type === 'number' ? ' type="number"' : '' } value="${ esc( val == null ? '' : val ) }">`;
+							} ).join( '' ) }
+						</div>` : '' }
 					</div>
 					${ message ? ( isHtml
 						? `<iframe class="minn-email-frame" id="minn-email-frame" sandbox="" title="Email preview" srcdoc="${ esc( String( message ) ) }"></iframe>`
 						: `<pre class="minn-surface-message">${ esc( stripTags( String( message ) ) ) }</pre>` ) : '' }
-					${ ( message || ( s.collection.actions || [] ).length ) ? `
+					${ ( message || edit || ( s.collection.actions || [] ).length ) ? `
 					<div class="minn-modal-actions">
+						${ edit ? `<button class="minn-btn-primary" id="minn-surface-save">Save</button>` : '' }
 						${ message ? `<button class="minn-btn-soft" id="minn-surface-raw">↗ Open raw</button>` : '' }
 						${ ( s.collection.actions || [] ).map( ( a, i ) => `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 					</div>` : '' }` }
@@ -3667,6 +3704,32 @@
 				if ( msg == null ) return;
 				const blob = new Blob( [ String( msg ) ], { type: 'text/html' } );
 				window.open( URL.createObjectURL( blob ), '_blank' );
+			} );
+			const saveBtn = $( '#minn-surface-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const edit = ( m.surface.collection.detail || {} ).edit;
+				if ( ! edit ) return;
+				const body = {};
+				// Carry the untouched fields so the plugin's sanitizer doesn't reset them.
+				( edit.preserve || [] ).forEach( ( k ) => { const v = surfaceValue( m.item, k ); if ( v !== undefined ) body[ k ] = v; } );
+				$$( '[data-editfield]' ).forEach( ( input ) => {
+					let v = input.value;
+					if ( input.type === 'number' ) v = v === '' ? null : Number( v );
+					setDeepPath( body, input.dataset.editfield, v );
+				} );
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+				try {
+					await api( edit.route.replace( '{id}', m.item.id ), { method: edit.method || 'POST', body: JSON.stringify( body ) } );
+					toast( 'Saved' );
+					surfaceState( m.surface.id ).cache = null;
+					closeModal();
+					if ( state.route === m.surface.id ) renderSurface( m.surface );
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = 'Save';
+				}
 			} );
 			$$( '[data-saction]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
@@ -4336,6 +4399,38 @@
 		$( '#minn-view' ).innerHTML = `<div class="minn-card minn-empty">Something went wrong: ${ esc( e.message ) }</div>`;
 	}
 
+	// Wrap any not-yet-enhanced tab strip in a scroller with ‹ › buttons that
+	// appear only when the strip actually overflows (and only on the side you can scroll).
+	function enhanceTabStrips() {
+		$$( '.minn-tabs:not([data-scroll])' ).forEach( ( tabs ) => {
+			tabs.setAttribute( 'data-scroll', '1' );
+			const wrap = document.createElement( 'div' );
+			wrap.className = 'minn-tabscroll';
+			const prev = document.createElement( 'button' );
+			prev.type = 'button'; prev.className = 'minn-tabscroll-btn prev'; prev.textContent = '‹'; prev.setAttribute( 'aria-label', 'Scroll tabs left' );
+			const next = document.createElement( 'button' );
+			next.type = 'button'; next.className = 'minn-tabscroll-btn next'; next.textContent = '›'; next.setAttribute( 'aria-label', 'Scroll tabs right' );
+			tabs.parentNode.insertBefore( wrap, tabs );
+			wrap.appendChild( prev );
+			wrap.appendChild( tabs );
+			wrap.appendChild( next );
+			const update = () => {
+				const max = tabs.scrollWidth - tabs.clientWidth;
+				prev.classList.toggle( 'show', max > 2 && tabs.scrollLeft > 2 );
+				next.classList.toggle( 'show', max > 2 && tabs.scrollLeft < max - 2 );
+			};
+			const step = () => Math.max( 120, Math.round( tabs.clientWidth * 0.7 ) );
+			prev.addEventListener( 'click', () => tabs.scrollBy( { left: -step(), behavior: 'smooth' } ) );
+			next.addEventListener( 'click', () => tabs.scrollBy( { left: step(), behavior: 'smooth' } ) );
+			tabs.addEventListener( 'scroll', update, { passive: true } );
+			if ( 'ResizeObserver' in window ) new ResizeObserver( update ).observe( tabs );
+			// active tab may be off-screen on first paint — bring it into view, then sync arrows.
+			const active = tabs.querySelector( '.minn-tab.active' );
+			if ( active && active.scrollIntoView ) active.scrollIntoView( { inline: 'nearest', block: 'nearest' } );
+			update();
+		} );
+	}
+
 	function renderView() {
 		renderTopbar();
 		const tip = $( '#minn-chart-tip' );
@@ -4371,6 +4466,19 @@
 		parseHash();
 		renderView();
 
+		// Overflowing tab strips (e.g. every user role) get ‹ › scroll buttons that
+		// show only when there's more to scroll. Runs for any view that renders tabs.
+		const view = $( '#minn-view' );
+		if ( view && 'MutationObserver' in window ) {
+			let raf = 0;
+			const obs = new MutationObserver( () => {
+				cancelAnimationFrame( raf );
+				raf = requestAnimationFrame( enhanceTabStrips );
+			} );
+			obs.observe( view, { childList: true, subtree: true } );
+			enhanceTabStrips();
+		}
+
 		window.addEventListener( 'popstate', onRouteChange );
 		if ( ! PATH_MODE ) window.addEventListener( 'hashchange', onRouteChange );
 
@@ -4389,6 +4497,9 @@
 				state.notifOpen = false;
 				state.modal = null;
 				renderOverlays();
+			} else if ( e.key === 'Escape' && state.route === 'content' && state.contentSel && state.contentSel.size ) {
+				state.contentSel.clear();
+				renderContent();
 			}
 		} );
 

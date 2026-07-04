@@ -36,6 +36,18 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'detail'    => array(
 				'skip' => array( 'match_data', 'match_type', 'match_url', 'position', 'group_id' ),
+				// Basic in-place edit — Redirection's own update endpoint (POST /redirect/{id}).
+				// `preserve` keeps the untouched fields so the sanitizer doesn't reset them.
+				'edit' => array(
+					'route'    => 'redirection/v1/redirect/{id}',
+					'method'   => 'POST',
+					'preserve' => array( 'match_type', 'action_type', 'group_id', 'title', 'regex' ),
+					'fields'   => array(
+						array( 'key' => 'url', 'label' => 'Source URL', 'mono' => true ),
+						array( 'key' => 'action_data.url', 'label' => 'Target URL', 'mono' => true ),
+						array( 'key' => 'action_code', 'label' => 'HTTP status', 'type' => 'number' ),
+					),
+				),
 			),
 			'actions'   => array(
 				array(

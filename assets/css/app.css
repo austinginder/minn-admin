@@ -132,7 +132,7 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-unread-dot { position: absolute; top: 6px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--bg); }
 .minn-btn-primary {
   display: flex; align-items: center; gap: 7px; background: var(--accent); color: var(--accent-fg); border: none;
-  padding: 8px 14px; border-radius: 9px; font-weight: 600; font-size: 14px; cursor: pointer;
+  padding: 8px 14px; border-radius: 9px; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap;
 }
 .minn-btn-primary:hover { background: var(--accent2); }
 .minn-btn-primary:disabled { opacity: 0.6; cursor: default; }
@@ -198,10 +198,27 @@ a { color: var(--accent2); text-decoration: none; }
 
 /* ===== Content ===== */
 .minn-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-.minn-toolbar-meta { margin-left: auto; color: var(--text3); font-size: 14px; }
-.minn-tabs { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
-.minn-tab { background: transparent; color: var(--text3); border: none; padding: 5px 13px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 500; }
+.minn-toolbar-meta { margin-left: auto; color: var(--text3); font-size: 14px; white-space: nowrap; flex-shrink: 0; }
+/* Scroll-arrow wrapper injected around overflowing tab strips (see enhanceTabStrips). */
+.minn-tabscroll { position: relative; display: flex; align-items: center; min-width: 0; }
+.minn-tabscroll-btn {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 26px; height: 26px;
+  border-radius: 7px; border: 1px solid var(--border); background: var(--panel2); color: var(--text2);
+  cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 17px; line-height: 1;
+  padding: 0; box-shadow: 0 0 10px 6px var(--bg);
+}
+.minn-tabscroll-btn.show { display: flex; }
+.minn-tabscroll-btn.prev { left: 1px; }
+.minn-tabscroll-btn.next { right: 1px; }
+.minn-tabscroll-btn:hover { color: var(--text); border-color: var(--border2); }
+/* Tabs scroll horizontally instead of wrapping when there are many (e.g. every user role). */
+.minn-tabs { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 3px; flex-wrap: nowrap; min-width: 0; overflow-x: auto; scrollbar-width: thin; scroll-behavior: smooth; }
+.minn-tabs::-webkit-scrollbar { height: 6px; }
+.minn-tabs::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+.minn-tab { background: transparent; color: var(--text3); border: none; padding: 5px 13px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
 .minn-tab.active { background: var(--panel2); color: var(--text); font-weight: 600; }
+/* Quiet in-place loading: keep the toolbar, dim only the table while data refreshes. */
+.minn-busy { opacity: 0.45; pointer-events: none; transition: opacity 0.12s ease; }
 
 .minn-table { overflow: hidden; }
 .minn-table-head, .minn-table-row {
@@ -252,7 +269,7 @@ a { color: var(--accent2); text-decoration: none; }
 /* ===== Extensions ===== */
 .minn-btn-soft {
   display: flex; align-items: center; gap: 7px; background: var(--accent-soft); color: var(--accent2);
-  border: 1px solid var(--accent-soft); padding: 7px 12px; border-radius: 9px; font-weight: 600; font-size: 13.5px; cursor: pointer;
+  border: 1px solid var(--accent-soft); padding: 7px 12px; border-radius: 9px; font-weight: 600; font-size: 13.5px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
 }
 .minn-btn-soft:disabled { opacity: 0.6; cursor: default; }
 .minn-plugin-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }

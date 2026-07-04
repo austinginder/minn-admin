@@ -8,7 +8,12 @@
 * **Category & tag filters:** The Content list gains category and tag dropdowns (post taxonomies), and the editor sidebar gains a **Tags** box — add existing or brand-new tags inline (with suggestions), remove with a click — alongside the existing categories picker.
 * **Order status changes:** The order detail modal can set an order's status (processing, completed, on-hold, …) straight from Minn via `wc/v3`, no longer read-only.
 * **Media editing:** The media overlay is larger and lets you edit an image's **title and alt text** in place instead of bouncing to wp-admin.
-* **Content bulk actions:** Select rows in Content to bulk-change status or move to trash.
+* **Content bulk actions:** Select rows in Content to bulk-change status or move to trash. **Shift-click** a checkbox to select a whole range; **Esc** clears the selection.
+* **Redirect editing:** The Redirects (Redirection) detail modal can now edit a redirect's source URL, target URL and HTTP status in place — via a small generic "editable fields" capability on the surface API that other adapters can opt into.
+
+### Improved
+* **Toolbars stay put:** Switching a user role (or a content category/tag filter) no longer blanks the whole view — the toolbar stays in place and only the table dims while the new data loads.
+* **Scrolling tabs:** Tab strips with many entries (all the user roles on a big site) now scroll horizontally on one line instead of wrapping and clipping.
 
 ### Fixed
 
