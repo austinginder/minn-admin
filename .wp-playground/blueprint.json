@@ -13,14 +13,9 @@
   "features": {
     "networking": true
   },
-  "extraLibraries": [
-    "wp-cli"
-  ],
   "steps": [
     {
-      "step": "login",
-      "username": "admin",
-      "password": "password"
+      "step": "login"
     },
     {
       "step": "setSiteOptions",
@@ -33,21 +28,14 @@
     {
       "step": "installPlugin",
       "pluginData": {
-        "resource": "git:directory",
-        "url": "https://github.com/austinginder/minn-admin",
-        "ref": "main",
-        "refType": "branch",
-        "path": "/"
+        "resource": "url",
+        "url": "https://github.com/austinginder/minn-admin/releases/latest/download/minn-admin.zip"
       },
       "options": {
         "activate": true,
         "targetFolderName": "minn-admin"
       },
       "ifAlreadyInstalled": "overwrite"
-    },
-    {
-      "step": "wp-cli",
-      "command": "wp rewrite flush --hard"
     }
   ]
 }
