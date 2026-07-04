@@ -681,18 +681,23 @@
 		const terms = state.cache.postTerms || { categories: [], tags: [] };
 		const sel = state.contentSel || ( state.contentSel = new Map() );
 		if ( ! sel.size ) state.contentLastIdx = null;
-		const taxSelect = ( id, cur, label, list ) => `<select class="minn-input minn-tax-select" id="${ id }">
-			<option value="">${ label }</option>
-			${ list.map( ( t ) => `<option value="${ t.id }"${ String( cur ) === String( t.id ) ? ' selected' : '' }>${ esc( t.name ) }${ t.count != null ? ' (' + t.count + ')' : '' }</option>` ).join( '' ) }
-		</select>`;
+		// Searchable comboboxes (many terms outgrow a native select). The empty
+		// value is the "All …" reset; options carry the term counts.
+		const taxCombo = ( id, label ) => `<div class="minn-ac minn-tax-select" data-taxcombo="${ id }">
+			<input class="minn-input minn-ac-input" placeholder="${ esc( label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+			<div class="minn-ac-panel" hidden></div>
+		</div>`;
+		const taxComboOptions = ( allLabel, list ) => [ { value: '', label: allLabel } ].concat(
+			list.map( ( t ) => ( { value: String( t.id ), label: t.count != null ? `${ t.name } (${ t.count })` : t.name } ) )
+		);
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			<div class="minn-tabs">
 				${ tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.filter === id ? ' active' : '' }" data-filter="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>
-			${ showTax ? taxSelect( 'minn-cat-filter', state.contentCat || '', 'All categories', terms.categories ) : '' }
-			${ showTax ? taxSelect( 'minn-tag-filter', state.contentTag || '', 'All tags', terms.tags ) : '' }
+			${ showTax ? taxCombo( 'cat', 'All categories' ) : '' }
+			${ showTax ? taxCombo( 'tag', 'All tags' ) : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Filter by title…" value="${ esc( state.contentSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ filtered.length }${ hasMore ? ' of ' + c.total : '' } item${ c.total === 1 ? '' : 's' }</div>
 		</div>
@@ -741,10 +746,16 @@
 			await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
 			if ( state.route === 'content' ) renderContent();
 		};
-		const catSel = $( '#minn-cat-filter', view );
-		if ( catSel ) catSel.addEventListener( 'change', () => { state.contentCat = catSel.value || null; reloadContent(); } );
-		const tagSel = $( '#minn-tag-filter', view );
-		if ( tagSel ) tagSel.addEventListener( 'change', () => { state.contentTag = tagSel.value || null; reloadContent(); } );
+		const catWrap = view.querySelector( '[data-taxcombo="cat"]' );
+		if ( catWrap ) bindAutocomplete( catWrap, taxComboOptions( 'All categories', terms.categories ), {
+			strict: true, value: state.contentCat || '',
+			onPick: ( v ) => { state.contentCat = v || null; reloadContent(); },
+		} );
+		const tagWrap = view.querySelector( '[data-taxcombo="tag"]' );
+		if ( tagWrap ) bindAutocomplete( tagWrap, taxComboOptions( 'All tags', terms.tags ), {
+			strict: true, value: state.contentTag || '',
+			onPick: ( v ) => { state.contentTag = v || null; reloadContent(); },
+		} );
 		const search = $( '#minn-content-search', view );
 		search.addEventListener( 'input', () => {
 			clearTimeout( contentSearchTimer );
