@@ -1084,13 +1084,25 @@ class Minn_Admin_REST {
 			return new WP_Error( 'no_update', 'No update available for that plugin.', array( 'status' => 400 ) );
 		}
 
+		$was_active  = is_plugin_active( $file );
+		$was_network = is_plugin_active_for_network( $file );
+
 		$skin     = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Plugin_Upgrader( $skin );
-		$result   = $upgrader->upgrade( $file );
+		// bulk_upgrade (like core's own AJAX single-plugin update) — upgrade()
+		// deactivates an active plugin and leaves reactivation to the caller,
+		// which is how updating an active plugin here used to strand it inactive.
+		$results = $upgrader->bulk_upgrade( array( $file ) );
+		$result  = is_array( $results ) && isset( $results[ $file ] ) ? $results[ $file ] : false;
 
 		if ( ! $result || is_wp_error( $result ) ) {
 			$errors = $skin->get_error_messages();
 			return new WP_Error( 'update_failed', $errors ? implode( ' ', (array) $errors ) : 'Update failed.', array( 'status' => 500 ) );
+		}
+
+		// Safety net: whatever the upgrade path did, an active plugin stays active.
+		if ( $was_active && ! is_plugin_active( $file ) ) {
+			activate_plugin( $file, '', $was_network, true );
 		}
 
 		$plugins = get_plugins();
