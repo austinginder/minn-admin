@@ -573,8 +573,7 @@ a.minn-btn-soft { text-decoration: none; }
 .minn-modal-preview.media-lg { min-height: 300px; max-height: 66vh; }
 .minn-modal-preview.media-lg img, .minn-modal-preview.media-lg video { max-height: 66vh; }
 .minn-media-edit { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-.minn-tax-select { width: auto; max-width: 180px; }
-select.minn-tax-select { flex-shrink: 0; }
+.minn-tax-select { width: 180px; flex-shrink: 0; }
 /* Editor tag box. */
 .minn-tag-input { margin-top: 7px; font-size: 13px; padding: 7px 10px; }
 .minn-tag-empty { color: var(--text3); font-size: 12.5px; }
