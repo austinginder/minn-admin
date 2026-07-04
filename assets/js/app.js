@@ -1930,13 +1930,32 @@
 	 * Arrow keys + Enter select; Escape/Tab/blur close. `options` are
 	 * { value, label } pairs; matching normalizes _ and / to spaces so
 	 * "new york" finds America/New_York.
+	 *
+	 * Two modes:
+	 *   free   (default) the input IS the value — for open vocabularies like
+	 *          timezone ids, where typing the exact value is legitimate.
+	 *   strict a themed replacement for <select>: the input displays the
+	 *          option LABEL while the picked VALUE rides on
+	 *          input.dataset.acValue; typing only filters, and blurring
+	 *          without a pick snaps the display back to the selection.
 	 */
-	function bindAutocomplete( wrap, options ) {
+	function bindAutocomplete( wrap, options, opts = {} ) {
 		const input = $( '.minn-ac-input', wrap );
 		const panel = $( '.minn-ac-panel', wrap );
 		if ( ! input || ! panel ) return;
 		let idx = -1;
 		const norm = ( v ) => String( v ).toLowerCase().replace( /[_/]/g, ' ' );
+		const labelOf = ( v ) => {
+			const o = options.find( ( x ) => String( x.value ) === String( v ) );
+			return o ? o.label : String( v );
+		};
+		let selected = null;
+		if ( opts.strict ) {
+			selected = opts.value != null ? String( opts.value ) : ( options.length ? String( options[ 0 ].value ) : '' );
+			input.value = labelOf( selected );
+			input.dataset.acValue = selected;
+		}
+		const isCurrent = ( o ) => ( opts.strict ? String( o.value ) === selected : o.value === input.value );
 		// Opening (focus/click) browses the FULL list with the current value
 		// highlighted; filtering starts only once the user actually types.
 		const render = ( browseAll ) => {
@@ -1944,7 +1963,7 @@
 			const matches = options.filter( ( o ) => ! q || norm( o.value ).includes( q ) || norm( o.label ).includes( q ) );
 			idx = -1;
 			panel.innerHTML = ( matches.slice( 0, 500 ).map( ( o ) =>
-				`<div class="minn-ac-item${ o.value === input.value ? ' current' : '' }" data-acv="${ esc( o.value ) }">${ esc( o.label ) }</div>` ).join( '' )
+				`<div class="minn-ac-item${ isCurrent( o ) ? ' current' : '' }" data-acv="${ esc( o.value ) }">${ esc( o.label ) }</div>` ).join( '' )
 				|| '<div class="minn-ac-empty">No matches</div>' )
 				+ ( matches.length > 500 ? `<div class="minn-ac-empty">${ matches.length - 500 } more — keep typing…</div>` : '' );
 			panel.hidden = false;
@@ -1956,10 +1975,18 @@
 			panel.hidden = true;
 			idx = -1;
 			input.setAttribute( 'aria-expanded', 'false' );
+			// Strict mode never leaves free text behind.
+			if ( opts.strict ) input.value = labelOf( selected );
 		};
 		const pick = ( v ) => {
-			input.value = v;
+			if ( opts.strict ) {
+				selected = String( v );
+				input.dataset.acValue = selected;
+			} else {
+				input.value = v;
+			}
 			close();
+			if ( opts.onPick ) opts.onPick( v );
 		};
 		input.addEventListener( 'focus', () => render( true ) );
 		input.addEventListener( 'click', () => { if ( panel.hidden ) render( true ); } );
@@ -1987,7 +2014,27 @@
 		input.addEventListener( 'blur', () => setTimeout( close, 120 ) );
 	}
 
+	// Options for the settings comboboxes, registered by settingsFields on
+	// each render and consumed by renderSettings when binding.
+	let settingsCombos = {};
+
 	function settingsFields( section, s, cache ) {
+		settingsCombos = {};
+		// Strict combobox — a themed, searchable <select> replacement for
+		// option lists that can grow unbounded (roles, categories, pages).
+		const combo = ( key, label, options, current ) => {
+			settingsCombos[ key ] = {
+				options: options.map( ( [ v, l ] ) => ( { value: v, label: l } ) ),
+				value: current,
+			};
+			return `<div>
+				<div class="minn-field-label">${ label }</div>
+				<div class="minn-ac" data-combo="${ esc( key ) }">
+					<input class="minn-input minn-ac-input" data-key="${ esc( key ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<div class="minn-ac-panel" hidden></div>
+				</div>
+			</div>`;
+		};
 		const text = ( key, label, value, mono ) => `
 			<div>
 				<div class="minn-field-label">${ label }</div>
@@ -2062,7 +2109,7 @@
 					+ text( 'date_format', 'Date format', s.date_format, true )
 					+ text( 'time_format', 'Time format', s.time_format, true )
 					+ select( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week )
-					+ ( roleOptions.length ? select( 'default_role', 'New user default role', roleOptions, s.default_role || 'subscriber' ) : '' ),
+					+ ( roleOptions.length ? combo( 'default_role', 'New user default role', roleOptions, s.default_role || 'subscriber' ) : '' ),
 				toggles: [
 					{ id: 'users_can_register', label: 'Membership', desc: 'Anyone can register an account.', on: !! s.users_can_register },
 					{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors.', on: !! s.minn_admin_maintenance },
@@ -2070,14 +2117,14 @@
 			};
 			case 'Writing': return {
 				sub: 'Defaults for new posts.',
-				fields: select( 'default_category', 'Default post category', cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
+				fields: combo( 'default_category', 'Default post category', cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
 					+ select( 'default_post_format', 'Default post format', POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
 				toggles: [ { id: 'use_smilies', label: 'Convert emoticons', desc: 'Turn :-) and :-P into graphics when displayed.', on: !! s.use_smilies } ].map( toggle ).join( '' ),
 			};
 			case 'Reading': return {
 				sub: 'What visitors see, and who else can see it.',
 				fields: select( 'show_on_front', 'Your homepage displays', [ [ 'posts', 'Latest posts' ], [ 'page', 'A static page' ] ], s.show_on_front )
-					+ ( s.show_on_front === 'page' ? select( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + select( 'page_for_posts', 'Posts page', pageOptions, s.page_for_posts ) : '' )
+					+ ( s.show_on_front === 'page' ? combo( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + combo( 'page_for_posts', 'Posts page', pageOptions, s.page_for_posts ) : '' )
 					+ text( 'posts_per_page', 'Blog pages show at most', s.posts_per_page ),
 				toggles: [ { id: 'blog_public', label: 'Search engine visibility', desc: 'Allow search engines to index this site.', on: !! s.blog_public } ].map( toggle ).join( '' ),
 			};
@@ -2219,7 +2266,7 @@
 			} );
 		}
 
-		// Timezone combobox (General section).
+		// Timezone combobox (General section) — free mode, the id is the value.
 		const tzWrap = $( '#minn-tz-ac', view );
 		if ( tzWrap ) {
 			let zones = [ 'UTC' ];
@@ -2228,6 +2275,11 @@
 			if ( cur && ! zones.includes( cur ) ) zones.unshift( cur );
 			bindAutocomplete( tzWrap, zones.map( ( z ) => ( { value: z, label: z.replace( /_/g, ' ' ) } ) ) );
 		}
+		// Strict comboboxes (role, category, homepage pages) registered by settingsFields.
+		$$( '[data-combo]', view ).forEach( ( wrap ) => {
+			const def = settingsCombos[ wrap.dataset.combo ];
+			if ( def ) bindAutocomplete( wrap, def.options, { strict: true, value: def.value } );
+		} );
 
 		// Permalinks: keep the preset select and the custom-structure input in sync.
 		const presetSel = $( '[data-key="_preset"]', view );
@@ -2271,7 +2323,8 @@
 				const payload = { ...pending };
 				$$( '[data-key]', view ).forEach( ( input ) => {
 					const key = input.dataset.key;
-					let value = input.value;
+					// Strict comboboxes display the label; the value rides on data-ac-value.
+					let value = input.dataset.acValue !== undefined ? input.dataset.acValue : input.value;
 					if ( key === 'url' && value.trim() === s.url ) return;
 					if ( NUMERIC.includes( key ) ) value = parseInt( value, 10 ) || 0;
 					payload[ key ] = value;
