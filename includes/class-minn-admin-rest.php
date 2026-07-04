@@ -65,6 +65,24 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/templates',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'page_templates' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'type' => array(
+						'type'    => 'string',
+						'default' => 'page',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/posts/(?P<id>\d+)/restore',
 			array(
 				'methods'             => 'POST',
@@ -681,6 +699,26 @@ class Minn_Admin_REST {
 		}
 
 		return rest_ensure_response( array( 'items' => $items ) );
+	}
+
+	/**
+	 * Theme page templates for a post type — the classic `Template Name:`
+	 * headers (plus anything added via the theme_page_templates filter). Core
+	 * REST validates the `template` field against this list but never exposes
+	 * it, so the editor's picker needs its own endpoint.
+	 */
+	public static function page_templates( WP_REST_Request $request ) {
+		$type      = sanitize_key( $request['type'] );
+		$templates = wp_get_theme()->get_page_templates( null, $type );
+		asort( $templates );
+		$out = array();
+		foreach ( $templates as $file => $name ) {
+			$out[] = array(
+				'file' => $file,
+				'name' => $name,
+			);
+		}
+		return rest_ensure_response( array( 'templates' => $out ) );
 	}
 
 	/**
