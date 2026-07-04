@@ -1885,11 +1885,11 @@
 		</div>
 		${ ! ms.menus.length ? '<div class="minn-card minn-empty">No menus yet. Create one to build your site navigation.</div>' : `
 		${ locations.length ? `
-		<div class="minn-card minn-panel-pad minn-menu-locations">
-			<div class="minn-panel-title" style="margin-bottom:10px;">Theme locations</div>
+		<div class="minn-card minn-menu-locations">
+			<div class="minn-panel-title">Theme locations</div>
 			${ locations.map( ( [ slug, loc ] ) => `
-				<div class="minn-side-row">
-					<span class="minn-side-key">${ esc( loc.name || slug ) }</span>
+				<div class="minn-loc-group">
+					<span class="minn-side-key">${ esc( loc.description || loc.name || slug ) }</span>
 					<div class="minn-ac minn-loc-ac" data-loc="${ esc( slug ) }">
 						<input class="minn-input minn-ac-input" placeholder="— none —" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 						<div class="minn-ac-panel" hidden></div>

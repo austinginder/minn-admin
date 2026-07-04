@@ -135,8 +135,16 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-icon-btn.sm.danger { color: var(--red); }
 
 /* ===== Menus & Widgets ===== */
-.minn-menu-locations .minn-side-row { align-items: center; }
-.minn-loc-ac { flex: 0 1 240px; min-width: 180px; }
+/* One compact row: title + each "Location [menu ▾]" pair, wrapping as needed. */
+.minn-menu-locations {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 28px;
+  padding: 13px 20px; margin-bottom: 16px;
+}
+.minn-menu-locations .minn-panel-title { font-size: 14.5px; margin-right: 4px; }
+.minn-loc-group { display: flex; align-items: center; gap: 9px; }
+.minn-loc-group .minn-side-key { white-space: nowrap; }
+.minn-loc-ac { width: 200px; }
+.minn-loc-ac .minn-ac-input { padding-top: 6px; padding-bottom: 6px; font-size: 13.5px; }
 .minn-menu-items { padding: 6px 0; margin-bottom: 16px; }
 .minn-menu-row {
   display: flex; align-items: center; gap: 12px; padding: 9px 16px 9px;
