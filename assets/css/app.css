@@ -629,6 +629,13 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   user-select: all; overflow-wrap: anywhere;
 }
 
+.minn-picker-drop {
+  display: flex; align-items: center; justify-content: center; gap: 9px; margin: 14px 18px 0;
+  padding: 14px 16px; border: 1px dashed var(--border2); border-radius: 11px; cursor: pointer;
+  color: var(--text3); font-size: 13.5px; transition: border-color 0.15s, background 0.15s;
+}
+.minn-picker-drop b { color: var(--accent2); font-weight: 600; }
+.minn-picker-drop:hover, .minn-picker-drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text2); }
 .minn-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; padding: 16px 18px; }
 .minn-picker-item {
   aspect-ratio: 1; border-radius: 10px; background-size: cover; background-position: center;

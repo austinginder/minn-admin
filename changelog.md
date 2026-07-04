@@ -17,6 +17,7 @@
 * **More settings:** Membership (anyone can register) and New user default role (General); Convert emoticons (Writing); Moderate all comments, Registered-users-only commenting and Show avatars (Discussion) — exposed over `wp/v2/settings` via `register_setting`, with role writes validated server-side.
 
 ### Improved
+* **Upload from the image picker:** The Insert-image / featured-image picker gains a drag & drop zone (with click-to-browse) — drop an image and it uploads and is used immediately, instead of dead-ending when the library is empty.
 * **Searchable selects:** New user default role, Default post category, and the Homepage/Posts-page pickers are now themed, searchable comboboxes — click to browse with the current choice highlighted, type to filter, and the display shows friendly labels while the real value is what saves. Unlike native selects, the option panel matches Minn's theme on every OS.
 * **Timezone autocomplete:** The Settings timezone field is now a proper combobox instead of a 400-option select — click to browse the full list (current zone highlighted), type to filter ("new york" finds America/New_York — spaces match underscores), arrow keys + Enter to pick. The option panel is anchored in-flow below the input, so it never drifts around the page the way the native datalist popup does, and free-typed input is validated against real zone ids before saving.
 

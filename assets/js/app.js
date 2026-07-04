@@ -4660,6 +4660,12 @@
 						<div class="minn-modal-title">Insert image</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
+					${ B.caps.upload ? `
+					<div class="minn-picker-drop" id="minn-picker-drop">
+						${ icon( 'img' ) }
+						<span>Drag &amp; drop an image here, or <b>browse</b> — it's used right away</span>
+						<input type="file" id="minn-picker-file" accept="image/*" hidden>
+					</div>` : '' }
 					${ items == null ? '<div class="minn-loading">Loading images…</div>' : ! items.length ? '<div class="minn-empty">No images in the library yet.</div>' : `
 					<div class="minn-picker-grid">
 						${ items.map( ( it, i ) => `
@@ -4802,6 +4808,50 @@
 					if ( it && cb ) cb( it );
 				} )
 			);
+			// Upload straight from the picker — the new image is handed to the
+			// callback immediately (featured image / insertion), no second pick.
+			const drop = $( '#minn-picker-drop' );
+			if ( drop ) {
+				const fileInput = $( '#minn-picker-file' );
+				const uploadAndUse = async ( file ) => {
+					if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( 'Drop an image file', true ); return; }
+					drop.classList.add( 'minn-busy' );
+					toast( 'Uploading…' );
+					try {
+						const fd = new FormData();
+						fd.append( 'file', file );
+						const up = await api( 'wp/v2/media', { method: 'POST', body: fd } );
+						state.cache.media = null; // library changed
+						const sizes = up.media_details && up.media_details.sizes;
+						const it = {
+							id: up.id,
+							name: decodeEntities( ( up.title && up.title.rendered ) || file.name ),
+							url: up.source_url,
+							alt: up.alt_text || '',
+							thumb: ( sizes && sizes.medium && sizes.medium.source_url ) || up.source_url,
+						};
+						const cb = m.callback;
+						closeModal();
+						if ( cb ) cb( it );
+						toast( 'Image uploaded' );
+					} catch ( e ) {
+						toast( e.message, true );
+						drop.classList.remove( 'minn-busy' );
+					}
+				};
+				drop.addEventListener( 'click', () => fileInput.click() );
+				fileInput.addEventListener( 'change', () => uploadAndUse( fileInput.files && fileInput.files[ 0 ] ) );
+				// stopPropagation keeps the app-wide drop-to-media-library handler out of it.
+				drop.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); drop.classList.add( 'over' ); } );
+				drop.addEventListener( 'dragleave', () => drop.classList.remove( 'over' ) );
+				drop.addEventListener( 'drop', ( e ) => {
+					e.preventDefault();
+					e.stopPropagation();
+					drop.classList.remove( 'over' );
+					document.body.classList.remove( 'minn-dragging' );
+					uploadAndUse( e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[ 0 ] );
+				} );
+			}
 		}
 
 		if ( m.type === 'surface' ) {
