@@ -1,6 +1,6 @@
 # Changelog
 
-## **v0.5.0** - Unreleased
+## **v0.5.0** - July 4, 2026
 
 ### Added
 * **Taxonomies manager:** The Post Types view gains a Taxonomies tab — every registered taxonomy with its attachments, term counts and owner, editable through the same storage adapters as post types (**ACF** `acf-taxonomy` definitions via ACF's own API, **Custom Post Type UI**'s option, or **Minn's own store**). Create (hierarchical or flat, choose the backend), re-attach to any post types, or remove — terms always stay in the database, and ACF deletions trash recoverably. Core and code-registered taxonomies are read-only. The Post Types modal's taxonomy checkboxes are now dynamic — every assignable taxonomy, not just Categories/Tags.
