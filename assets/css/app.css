@@ -131,6 +131,17 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-icon-btn:hover { background: var(--hover); color: var(--text); }
 .minn-icon-btn.sm { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; flex-shrink: 0; }
+.minn-new-menu {
+  position: fixed; z-index: 60; min-width: 150px; padding: 5px;
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 11px;
+  box-shadow: var(--shadow); animation: minnScaleIn 0.12s ease;
+}
+.minn-new-menu button {
+  display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px;
+  background: none; border: none; border-radius: 8px; color: var(--text);
+  font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
+}
+.minn-new-menu button:hover { background: var(--hover); }
 .minn-icon-btn.sm:disabled { opacity: 0.35; cursor: default; }
 .minn-icon-btn.sm.danger { color: var(--red); }
 

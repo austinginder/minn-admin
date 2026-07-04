@@ -216,6 +216,46 @@
 
 	const surfaceById = ( id ) => ( B.surfaces || [] ).find( ( s ) => s.id === id ) || null;
 
+	function newContent( type ) {
+		state.editor = null;
+		state.editorId = null;
+		state.editorType = type;
+		go( 'editor/' + type );
+	}
+
+	// Small "Post / Page" menu under the + New button. Users who can't edit
+	// pages skip the menu entirely and go straight to a new post.
+	function toggleNewMenu( btn ) {
+		const open = $( '#minn-new-menu' );
+		if ( open ) {
+			open.remove();
+			return;
+		}
+		const menu = document.createElement( 'div' );
+		menu.id = 'minn-new-menu';
+		menu.className = 'minn-new-menu';
+		menu.innerHTML = `
+			<button data-newtype="posts"><span class="minn-row-icon">¶</span> Post</button>
+			<button data-newtype="pages"><span class="minn-row-icon">▭</span> Page</button>`;
+		const r = btn.getBoundingClientRect();
+		menu.style.top = ( r.bottom + 6 ) + 'px';
+		menu.style.right = Math.max( 8, window.innerWidth - r.right ) + 'px';
+		document.body.appendChild( menu );
+		$$( 'button', menu ).forEach( ( b ) =>
+			b.addEventListener( 'click', () => {
+				menu.remove();
+				newContent( b.dataset.newtype );
+			} )
+		);
+		setTimeout( () => {
+			const close = ( ev ) => {
+				if ( ! menu.contains( ev.target ) ) menu.remove();
+				document.removeEventListener( 'click', close );
+			};
+			document.addEventListener( 'click', close );
+		}, 0 );
+	}
+
 	function parseHash() {
 		const h = currentPath();
 		const parts = h.split( '/' ).filter( Boolean );
@@ -386,7 +426,11 @@
 		$( '#minn-theme-btn' ).addEventListener( 'click', toggleTheme );
 		$( '#minn-help-btn' ).addEventListener( 'click', () => { state.modal = { type: 'help' }; renderOverlays(); } );
 		$( '#minn-notif-btn' ).addEventListener( 'click', toggleNotif );
-		$( '#minn-new-btn' ).addEventListener( 'click', () => { state.editorId = null; state.editorType = 'posts'; go( 'editor' ); } );
+		$( '#minn-new-btn' ).addEventListener( 'click', ( e ) => {
+			e.stopPropagation();
+			if ( B.caps.editPages ) toggleNewMenu( e.currentTarget );
+			else newContent( 'posts' );
+		} );
 		renderThemeBtn();
 	}
 
@@ -3703,15 +3747,19 @@
 					.catch( () => {} );
 			}
 		} else {
+			// New content — pages when the New menu (or /editor/pages) asked for
+			// them and the user can edit pages; everything else starts as a post.
+			const newType = state.editorType === 'pages' && B.caps.editPages ? 'pages' : 'posts';
 			state.editor = {
-				id: null, type: 'posts', title: '', content: '', status: 'draft', mode: 'blocks',
+				id: null, type: newType, title: '', content: '', status: 'draft', mode: 'blocks',
 				date: null, newDate: null, slug: '', link: '', savedAt: null, categoryIds: new Set(),
 				tagIds: new Set(), tags: [],
 				revisions: null, panels: null,
 				supportsThumb: true, featuredMedia: 0, featuredThumb: null,
-				parent: 0, menuOrder: 0, template: '', supportsParent: false, supportsOrder: false, templates: null, parentPick: null,
+				parent: 0, menuOrder: 0, template: '', supportsParent: newType === 'pages', supportsOrder: newType === 'pages', templates: null, parentPick: null,
 			};
 			loadEditorPanels( state.editor, null );
+			loadPageAttrs( state.editor );
 		}
 		// All categories for the sidebar picker (posts only), cached per session.
 		if ( state.editor.type === 'posts' && ! state.cache.categories ) {
@@ -4070,10 +4118,10 @@
 					</div>
 				</div>` : '' }
 				${ ed.templates && ed.templates.length ? `<div>Template
-					<select class="minn-input" id="minn-template-select" style="margin-top:5px;">
-						<option value="">Default template</option>
-						${ ed.templates.map( ( t ) => `<option value="${ esc( t.file ) }"${ ed.template === t.file ? ' selected' : '' }>${ esc( t.name ) }</option>` ).join( '' ) }
-					</select>
+					<div class="minn-ac" id="minn-template-ac" style="margin-top:5px;">
+						<input class="minn-input minn-ac-input" placeholder="Default template" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
 				</div>` : '' }
 				${ ed.supportsOrder ? `<div>Order
 					<input type="number" class="minn-input" id="minn-order-input" value="${ ed.menuOrder }" style="margin-top:5px;">
@@ -4095,12 +4143,21 @@
 				},
 			} );
 		}
-		const tplSel = $( '#minn-template-select', el );
-		if ( tplSel ) tplSel.addEventListener( 'change', () => {
-			ed.template = tplSel.value;
-			ed.templateDirty = true;
-			if ( ed.id ) scheduleAutosave();
-		} );
+		const tplWrap = $( '#minn-template-ac', el );
+		if ( tplWrap ) {
+			bindAutocomplete( tplWrap,
+				[ { value: '', label: 'Default template' }, ...( ed.templates || [] ).map( ( t ) => ( { value: t.file, label: t.name } ) ) ],
+				{
+					strict: true,
+					value: ed.template || '',
+					onPick: ( v ) => {
+						ed.template = v;
+						ed.templateDirty = true;
+						if ( ed.id ) scheduleAutosave();
+					},
+				}
+			);
+		}
 		const orderInput = $( '#minn-order-input', el );
 		if ( orderInput ) orderInput.addEventListener( 'input', () => {
 			ed.menuOrder = parseInt( orderInput.value, 10 ) || 0;
@@ -5322,7 +5379,8 @@
 		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		cmds.push(
-			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => { state.editorId = null; state.editorType = 'posts'; state.editor = null; go( 'editor' ); } },
+			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
+			...( B.caps.editPages ? [ { label: 'Create new page', kind: 'action', icon: '▭', run: () => newContent( 'pages' ) } ] : [] ),
 			{ label: 'Toggle dark / light theme', kind: 'action', icon: '◐', run: toggleTheme },
 			{ label: 'View notifications', kind: 'action', icon: '◔', run: () => { state.notifOpen = true; renderOverlays(); loadNotifications().then( () => state.notifOpen && renderOverlays() ); } },
 		);
@@ -6478,6 +6536,15 @@
 			}, 400 );
 		} );
 
+		// renderOverlays rebuilds the modal, which resets the results scroll —
+		// put the reader back where they were.
+		const renderKeepingScroll = () => {
+			const list = $( '.minn-pi-results' );
+			const top = list ? list.scrollTop : 0;
+			renderOverlays();
+			const again = $( '.minn-pi-results' );
+			if ( again ) again.scrollTop = top;
+		};
 		const more = $( '#minn-pi-more' );
 		if ( more ) more.addEventListener( 'click', async () => {
 			more.disabled = true;
@@ -6488,10 +6555,10 @@
 				// wp.org pagination occasionally repeats an item across pages.
 				const seen = new Set( m.results.map( ( p ) => p.slug ) );
 				m.results = m.results.concat( next.filter( ( p ) => ! seen.has( p.slug ) ) );
-				renderOverlays();
+				renderKeepingScroll();
 			} catch ( e ) {
 				toast( e.message, true );
-				renderOverlays();
+				renderKeepingScroll();
 			}
 		} );
 
@@ -6517,10 +6584,10 @@
 					bustTypeCaches();
 					await loadPlugins().catch( () => {} );
 					if ( state.route === 'extensions' ) renderExtensions();
-					renderOverlays(); // refresh button states in the modal
+					renderKeepingScroll(); // refresh button states in the modal
 				} catch ( e ) {
 					toast( e.message, true );
-					renderOverlays();
+					renderKeepingScroll();
 				}
 			} )
 		);
