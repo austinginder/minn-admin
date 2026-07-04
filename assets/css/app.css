@@ -702,6 +702,14 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-insp-ctl button:disabled { opacity: 0.35; cursor: default; }
 .minn-insp-add-row { display: flex; gap: 8px; margin-top: 10px; }
 .minn-insp-add-row select.minn-input { flex: 1; min-width: 0; }
+/* Floating config chip for editable code blocks (island-chip twin, lives on body). */
+.minn-code-chip {
+  position: fixed; z-index: 69; font-size: 10.5px; font-weight: 600;
+  font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
+  border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
+}
+.minn-code-chip:hover { color: var(--accent2); border-color: var(--accent); }
+.minn-code-pop { width: 250px; }
 .minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
 .minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); }
 .minn-insp-actions .minn-btn-primary { width: 100%; justify-content: center; }
