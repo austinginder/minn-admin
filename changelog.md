@@ -1,6 +1,6 @@
 # Changelog
 
-## **v0.3.0** - Unreleased
+## **v0.3.0** - July 4, 2026
 
 ### Added
 * **User role filter:** The Users view gains role tabs (All plus every registered role), filtering server-side via `wp/v2/users?roles=`.
@@ -10,12 +10,16 @@
 * **Media editing:** The media overlay is larger and lets you edit an image's **title and alt text** in place instead of bouncing to wp-admin.
 * **Content bulk actions:** Select rows in Content to bulk-change status or move to trash. **Shift-click** a checkbox to select a whole range; **Esc** clears the selection.
 * **Redirect editing:** The Redirects (Redirection) detail modal can now edit a redirect's source URL, target URL and HTTP status in place — via a small generic "editable fields" capability on the surface API that other adapters can opt into.
+* **Permalink settings:** The Settings → Permalinks stub is now real. Core leaves `permalink_structure` out of `wp/v2/settings`, so Minn exposes its own `minn-admin/v1/permalinks` endpoint (GET/POST, `manage_options`): structure presets or a custom structure with tag validation, category/tag bases, the same normalization as options-permalink.php (including the `/index.php` prefix when URL rewriting is unavailable), and an automatic rewrite flush. If a save flips the site between pretty and plain permalinks, the app reloads itself at its new home (`/minn-admin/` ↔ `?minn_admin=1`).
 
 ### Improved
 * **Toolbars stay put:** Switching a user role (or a content category/tag filter) no longer blanks the whole view — the toolbar stays in place and only the table dims while the new data loads.
 * **Scrolling tabs:** Tab strips with many entries (all the user roles on a big site) now scroll horizontally on one line instead of wrapping and clipping.
+* **Phone layout:** A real mobile breakpoint. The topbar compacts to the essentials, toolbars wrap (tab strip on its own scrollable row, full-width search), the Content/Orders/Users tables drop secondary columns instead of clipping, plugin surface tables scroll sideways, the settings nav becomes a scrollable row, and the app height tracks mobile Safari's collapsing URL bar. Touch niceties: visible media prev/next arrows, larger checkboxes, and inputs sized so iOS doesn't zoom on focus.
 
 ### Fixed
+* **Resend sends to every recipient:** Resend in the Email Log now extracts the full To list from the event record (scoped to the `to` collection, so cc/bcc addresses are never promoted into the To header). Previously it reused the truncated display string and silently dropped recipients beyond the first two.
+* **Open raw shows source, not a live page:** The Email Log's raw view opens the message as plain text. Opening it as HTML would have run any scripts in the logged email with the app's own origin.
 
 ## **v0.2.0** - July 3, 2026
 
