@@ -47,7 +47,13 @@ standard blank line.
 ## Where the line moves over time
 
 Grow `SIMPLE_BLOCKS` and `EDITABLE_ATTRS` deliberately, one block/attribute at a time, only when
-the round-trip is proven safe. Islands make the cost of *not* supporting a block small — it still
+the round-trip is proven safe. Two later mechanisms moved the line substantially: the **block
+inspector** (docs/block-inspector.md) makes islands configurable without making them editable,
+and **attribute passthrough** (`PASSTHROUGH_BLOCKS`) lets attribute-carrying instances of
+non-text-flow simple blocks — images with `{"id":…}`, styled tables/quotes/separators — stay
+editable by parking the comment JSON on the element (`data-minn-attrs`) and re-emitting it
+byte-faithfully on save. Text-flow blocks (paragraphs, headings, lists) are deliberately
+excluded: contenteditable splits clone element attributes, which would duplicate the marker. Islands make the cost of *not* supporting a block small — it still
 displays and survives — so there is no pressure to chase parity. If a site's content is mostly
 complex layouts, Gutenberg is simply the right tool and Minn should be great at everything
 *around* the editor.
