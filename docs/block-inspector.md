@@ -1,10 +1,13 @@
 # Block inspector — editing complex blocks without Gutenberg
 
-**Status: steps 1–3 shipped (v0.4.0 cycle) — code language attribute, the inspector for
+**Status: steps 1–4 shipped (v0.4.0 cycle) — code language attribute, the inspector for
 attribute/dynamic islands with server-rendered previews (`minn-admin/v1/render-blocks`
 replaced the per-block `block-renderer` idea — it renders whole islands including static
-parents with dynamic children), and one-level child editing. Still open: add/remove/reorder
-children, the `minn_admin_block_forms` filter, parent-attribute editing for InnerBlocks
+parents with dynamic children), one-level child editing, and add/remove/reorder children.
+Structure ops are gated on the "structural" InnerBlocks shape: leading/trailing wrapper HTML
+preserved verbatim, whitespace-only between children (reassembled with Gutenberg's blank-line
+separator); anything else falls back to in-place attribute editing with structure locked.
+Still open: the `minn_admin_block_forms` filter, parent-attribute editing for InnerBlocks
 wrappers.**
 
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —
