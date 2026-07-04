@@ -224,6 +224,13 @@ class Minn_Admin {
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),
 			'editorPanels' => Minn_Admin_Surfaces::editor_panels_for_current_user(),
+			/**
+			 * Block-inspector form refinements, keyed by block name. A descriptor
+			 * can set per-attribute label/control/options/hide, an attribute
+			 * `order`, and `wrapperText` patterns for editable text in an
+			 * InnerBlocks wrapper. See docs/for-plugin-authors.md.
+			 */
+			'blockForms' => apply_filters( 'minn_admin_block_forms', array() ),
 		);
 
 		include MINN_ADMIN_DIR . 'includes/template.php';

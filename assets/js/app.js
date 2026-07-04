@@ -2997,6 +2997,14 @@
 			const island = chip.closest( '.minn-block-island' );
 			if ( island ) openInspector( island );
 		} );
+		// Hovering an editable code block surfaces its config chip.
+		body.addEventListener( 'mouseover', ( e ) => {
+			const pre = e.target.closest( 'pre' );
+			if ( pre && body.contains( pre ) && ! pre.closest( '.minn-block-island' )
+				&& ! pre.classList.contains( 'wp-block-verse' ) && ! pre.classList.contains( 'wp-block-preformatted' ) ) {
+				showCodeChip( pre );
+			}
+		} );
 
 		$( '#minn-editor-title', view ).addEventListener( 'input', scheduleAutosave );
 		if ( ! locked ) {
@@ -3062,7 +3070,10 @@
 			const pre = el && body.contains( el ) ? el.closest( 'pre' ) : null;
 			currentPre = pre && ! pre.closest( '.minn-block-island' ) ? pre : null;
 			select.hidden = ! currentPre;
-			if ( currentPre ) select.value = codeLangOf( currentPre );
+			if ( currentPre ) {
+				select.value = codeLangOf( currentPre );
+				showCodeChip( currentPre ); // keyboard/touch path to the config popout
+			}
 		};
 
 		if ( window._minnLangSync ) document.removeEventListener( 'selectionchange', window._minnLangSync );
@@ -3072,17 +3083,7 @@
 		select.addEventListener( 'change', () => {
 			if ( ! currentPre ) return;
 			const pre = currentPre;
-			let code = pre.querySelector( 'code' );
-			if ( ! code ) {
-				const text = codeTextOf( pre );
-				pre.textContent = '';
-				code = document.createElement( 'code' );
-				code.textContent = text;
-				pre.appendChild( code );
-			}
-			code.className = select.value === 'auto' ? '' : 'language-' + select.value;
-			delete pre.dataset.hl;
-			highlightCodeBlocks( body, true );
+			setCodeLang( pre, select.value );
 			// Re-highlighting rebuilds the block — put the caret back at its end.
 			const range = document.createRange();
 			range.selectNodeContents( pre.querySelector( 'code' ) || pre );
@@ -3090,7 +3091,6 @@
 			const s = window.getSelection();
 			s.removeAllRanges();
 			s.addRange( range );
-			scheduleAutosave();
 		} );
 	}
 
@@ -3104,8 +3104,12 @@
 	// Gutenberg plumbing attrs a config form shouldn't expose.
 	const BLOCK_ATTR_SKIP = [ 'lock', 'metadata', 'className', 'style', 'anchor' ];
 
+	const fullBlockName = ( name ) => ( name.includes( '/' ) ? name : 'core/' + name );
+	// Form refinements plugins registered via the minn_admin_block_forms filter.
+	const blockFormFor = ( name ) => ( B.blockForms || {} )[ fullBlockName( name ) ] || {};
+
 	async function blockTypeFor( name ) {
-		const full = name.includes( '/' ) ? name : 'core/' + name;
+		const full = fullBlockName( name );
 		const cache = state.cache.blockTypes || ( state.cache.blockTypes = {} );
 		if ( ! ( full in cache ) ) {
 			cache[ full ] = await api( 'wp/v2/block-types/' + full ).catch( () => null );
@@ -3151,35 +3155,55 @@
 		`<!-- wp:${ name }${ serializeBlockAttrs( attrs ) } ${ selfClosing ? '/' : '' }-->`;
 
 	// Form rows for one block's editable attributes. `prefix` namespaces the
-	// inputs ("own" or a child index).
-	function inspectorFields( defs, attrs, prefix ) {
+	// inputs ("own" or a child index). A minn_admin_block_forms descriptor for
+	// the block refines labels, controls, options, ordering and hiding.
+	function inspectorFields( defs, attrs, prefix, blockName ) {
+		const form = blockName ? blockFormFor( blockName ) : {};
+		const fdefs = form.attributes || {};
 		const rows = [];
-		Object.keys( defs || {} ).forEach( ( key ) => {
+		const keys = Object.keys( defs || {} );
+		const ordered = [
+			...( Array.isArray( form.order ) ? form.order.filter( ( k ) => keys.includes( k ) ) : [] ),
+			...keys.filter( ( k ) => ! ( Array.isArray( form.order ) && form.order.includes( k ) ) ),
+		];
+		ordered.forEach( ( key ) => {
 			const def = defs[ key ] || {};
+			const fd = fdefs[ key ] || {};
 			// Sourced attrs live in the block's saved HTML, not the comment —
 			// rewriting them there would do nothing.
-			if ( BLOCK_ATTR_SKIP.includes( key ) || def.source ) return;
+			if ( BLOCK_ATTR_SKIP.includes( key ) || def.source || fd.hide ) return;
 			const type = Array.isArray( def.type ) ? def.type[ 0 ] : def.type;
 			const cur = attrs && key in attrs ? attrs[ key ] : def.default;
 			const id = `${ prefix }:${ key }`;
-			if ( Array.isArray( def.enum ) && def.enum.length ) {
-				rows.push( `<div class="minn-field-label">${ esc( key ) }</div>
+			const label = esc( fd.label || key );
+			// Descriptor options are [value, label] pairs; schema enums are bare values.
+			const options = Array.isArray( fd.options ) && fd.options.length
+				? fd.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) )
+				: ( Array.isArray( def.enum ) && def.enum.length ? def.enum.map( ( v ) => [ v, v ] ) : null );
+			const control = fd.control || ( options ? 'select'
+				: ( type === 'boolean' ? 'checkbox'
+				: ( type === 'number' || type === 'integer' ? 'number'
+				: ( type === 'string' || type == null
+					? ( key === 'content' || String( cur == null ? '' : cur ).length > 60 ? 'textarea' : 'text' )
+					: null ) ) ) );
+			if ( ! control ) return; // object / array attrs — too structural for a generic form
+			if ( control === 'select' && options ) {
+				rows.push( `<div class="minn-field-label">${ label }</div>
 				<select class="minn-input" data-insp="${ esc( id ) }">
-					${ def.enum.map( ( v ) => `<option value="${ esc( v ) }"${ String( v ) === String( cur == null ? '' : cur ) ? ' selected' : '' }>${ esc( v ) }</option>` ).join( '' ) }
+					${ options.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( cur == null ? '' : cur ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
 				</select>` );
-			} else if ( type === 'boolean' ) {
-				rows.push( `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-insp="${ esc( id ) }" data-type="boolean"${ cur ? ' checked' : '' }> ${ esc( key ) }</label>` );
-			} else if ( type === 'number' || type === 'integer' ) {
-				rows.push( `<div class="minn-field-label">${ esc( key ) }</div>
+			} else if ( control === 'checkbox' ) {
+				rows.push( `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-insp="${ esc( id ) }" data-type="boolean"${ cur ? ' checked' : '' }> ${ label }</label>` );
+			} else if ( control === 'number' ) {
+				rows.push( `<div class="minn-field-label">${ label }</div>
 				<input type="number" class="minn-input" data-insp="${ esc( id ) }" data-type="number" value="${ cur == null ? '' : esc( cur ) }">` );
-			} else if ( type === 'string' || type == null ) {
-				const val = cur == null ? '' : String( cur );
-				const long = key === 'content' || val.length > 60;
-				rows.push( `<div class="minn-field-label">${ esc( key ) }</div>` + ( long
-					? `<textarea class="minn-input minn-insp-textarea" data-insp="${ esc( id ) }">${ esc( val ) }</textarea>`
-					: `<input class="minn-input" data-insp="${ esc( id ) }" value="${ esc( val ) }">` ) );
+			} else if ( control === 'textarea' ) {
+				rows.push( `<div class="minn-field-label">${ label }</div>
+				<textarea class="minn-input minn-insp-textarea" data-insp="${ esc( id ) }">${ esc( cur == null ? '' : String( cur ) ) }</textarea>` );
+			} else {
+				rows.push( `<div class="minn-field-label">${ label }</div>
+				<input class="minn-input" data-insp="${ esc( id ) }" value="${ esc( cur == null ? '' : String( cur ) ) }">` );
 			}
-			// object / array attributes are too structural for a generic form — skipped.
 		} );
 		return rows.join( '' );
 	}
@@ -3250,11 +3274,34 @@
 				structural = false; // real HTML between children — don't reflow it
 			}
 		} );
-		if ( ! model.children.length ) return model;
-		model.mode = structural ? 'structural' : 'inplace';
-		// Types a "+ Add" can create — captured now so removing the last child
-		// doesn't strand the button.
-		model.addTypes = [ ...new Set( model.children.map( ( c ) => c.name ) ) ];
+		if ( model.children.length ) {
+			model.mode = structural ? 'structural' : 'inplace';
+			// Types a "+ Add" can create — captured now so removing the last child
+			// doesn't strand the button.
+			model.addTypes = [ ...new Set( model.children.map( ( c ) => c.name ) ) ];
+		}
+
+		// Declared wrapper-text edits (minn_admin_block_forms `wrapperText`):
+		// each pattern is a regex with exactly three capture groups
+		// (prefix)(text)(suffix); the text is replaced in place only when it
+		// actually changed, so an untouched wrapper stays byte-identical.
+		model.wt = [];
+		( blockFormFor( parts.name ).wrapperText || [] ).forEach( ( w ) => {
+			if ( ! w || ! w.pattern ) return;
+			let re;
+			try { re = new RegExp( w.pattern ); } catch ( e ) { return; }
+			// inplace mode reassembles from segments, where a head/tail replace
+			// wouldn't land — wrapper text is only offered where it can apply.
+			const locs = model.mode === 'structural' ? [ [ 'head', model.head ], [ 'tail', model.tail ] ]
+				: ( model.mode === 'none' ? [ [ 'inner', parts.inner ] ] : [] );
+			for ( const [ loc, str ] of locs ) {
+				const m = str && str.match( re );
+				if ( m && m.length >= 4 ) {
+					model.wt.push( { label: w.label || 'Text', pattern: w.pattern, loc, orig: m[ 2 ], value: m[ 2 ] } );
+					break;
+				}
+			}
+		} );
 		return model;
 	}
 
@@ -3290,6 +3337,10 @@
 			const t = insp.types[ c.name ];
 			fold( c.attrs, t && t.attributes, String( i ) );
 		} );
+		( insp.model.wt || [] ).forEach( ( w, i ) => {
+			const input = inspectorEl.querySelector( `[data-insp="wt:${ i }"]` );
+			if ( input ) w.value = input.value;
+		} );
 	}
 
 	function renderInspectorBody() {
@@ -3297,11 +3348,13 @@
 		if ( ! insp || ! inspectorEl ) return;
 		const { model, types } = insp;
 		const ownType = types[ model.parts.name ];
-		const ownFields = ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own' ) : '';
+		const ownFields = ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
+			+ ( model.wt || [] ).map( ( w, i ) => `<div class="minn-field-label">${ esc( w.label ) }</div>
+			<input class="minn-input" data-insp="wt:${ i }" value="${ esc( w.value ) }">` ).join( '' );
 		const structural = model.mode === 'structural';
 		const childSections = model.children.map( ( c, i ) => {
 			const t = types[ c.name ];
-			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ) ) : '';
+			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '';
 			if ( ! fields && ! structural ) return '';
 			return `<div class="minn-insp-child">
 				<div class="minn-insp-child-title">
@@ -3415,6 +3468,18 @@
 		};
 
 		let inner = model.parts.inner;
+		// Declared wrapper-text edits: replace only when actually changed, so an
+		// untouched wrapper stays byte-identical. Text-node escaping only (& < >).
+		const escText = ( s ) => String( s ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' );
+		( model.wt || [] ).forEach( ( w ) => {
+			if ( w.value === w.orig ) return;
+			let re;
+			try { re = new RegExp( w.pattern ); } catch ( e ) { return; }
+			const rep = ( str ) => str.replace( re, ( m, p1, p2, p3 ) => p1 + escText( w.value ) + p3 );
+			if ( w.loc === 'head' ) model.head = rep( model.head );
+			else if ( w.loc === 'tail' ) model.tail = rep( model.tail );
+			else inner = rep( inner );
+		} );
 		if ( model.mode === 'structural' ) {
 			// Reassemble: wrapper head + children (Gutenberg's blank-line
 			// separator) + wrapper tail. Interior whitespace was verified
@@ -3464,6 +3529,113 @@
 				} );
 			} )
 			.catch( () => {} );
+	}
+
+	/* ===== Code block chip (config popout for editable code blocks) =====
+	 * Islands get their ⚙ chip from the inspector; editable code blocks get an
+	 * equivalent floating chip on hover (or caret-in, for keyboard/touch) that
+	 * opens a small popover with the language picker. Both the chip and the
+	 * popover live on document.body — never inside the contenteditable — so
+	 * they can't leak into serialized content. */
+
+	let codeChip = null;
+	let codeChipPre = null;
+	let codePop = null;
+
+	function codePopAway( e ) {
+		if ( codePop && ! codePop.contains( e.target ) && e.target !== codeChip ) hideCodePop();
+	}
+
+	function hideCodePop() {
+		if ( codePop ) codePop.remove();
+		codePop = null;
+		document.removeEventListener( 'mousedown', codePopAway, true );
+	}
+
+	function hideCodeChip() {
+		if ( codeChip ) codeChip.hidden = true;
+		codeChipPre = null;
+		hideCodePop();
+	}
+
+	function ensureCodeChip() {
+		if ( codeChip ) return;
+		codeChip = document.createElement( 'button' );
+		codeChip.type = 'button';
+		codeChip.className = 'minn-code-chip';
+		codeChip.hidden = true;
+		codeChip.title = 'Code block settings';
+		document.body.appendChild( codeChip );
+		codeChip.addEventListener( 'mousedown', ( e ) => e.preventDefault() ); // keep the editor selection
+		codeChip.addEventListener( 'click', () => codeChipPre && openCodePop( codeChipPre ) );
+		// Leave the pre (and not onto the chip) → chip goes away.
+		document.addEventListener( 'mouseover', ( e ) => {
+			if ( ! codeChip || codeChip.hidden || codePop ) return;
+			if ( e.target === codeChip || ( e.target.closest && e.target.closest( 'pre' ) === codeChipPre ) ) return;
+			if ( ! ( e.target.closest && e.target.closest( 'pre' ) ) ) hideCodeChip();
+		} );
+		// Scrolling moves the pre out from under the fixed chip — just drop it.
+		document.addEventListener( 'scroll', () => hideCodeChip(), true );
+	}
+
+	function showCodeChip( pre ) {
+		ensureCodeChip();
+		if ( codePop && codeChipPre !== pre ) hideCodePop();
+		codeChipPre = pre;
+		const lang = codeLangOf( pre );
+		codeChip.textContent = '⚙ ' + ( lang === 'auto' ? 'code' : lang );
+		codeChip.hidden = false;
+		const rect = pre.getBoundingClientRect();
+		codeChip.style.top = ( rect.top - 10 ) + 'px';
+		codeChip.style.left = Math.max( 10, Math.min( rect.right - codeChip.offsetWidth - 12, window.innerWidth - codeChip.offsetWidth - 12 ) ) + 'px';
+	}
+
+	function openCodePop( pre ) {
+		hideCodePop();
+		codePop = document.createElement( 'div' );
+		codePop.className = 'minn-inspector minn-code-pop';
+		codePop.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">Code block</span>
+				<button class="minn-x-btn" data-close type="button">×</button>
+			</div>
+			<div class="minn-insp-body">
+				<div class="minn-field-label">Syntax highlighting</div>
+				<select class="minn-input" data-lang>
+					${ CODE_LANGS.map( ( l ) => `<option value="${ l }"${ l === codeLangOf( pre ) ? ' selected' : '' }>${ l === 'auto' ? 'Auto detect' : l }</option>` ).join( '' ) }
+				</select>
+			</div>`;
+		document.body.appendChild( codePop );
+		const anchor = codeChip && ! codeChip.hidden ? codeChip : pre;
+		const rect = anchor.getBoundingClientRect();
+		const w = codePop.offsetWidth || 250;
+		codePop.style.top = Math.min( rect.bottom + 8, window.innerHeight - codePop.offsetHeight - 10 ) + 'px';
+		codePop.style.left = Math.max( 10, Math.min( rect.right - w, window.innerWidth - w - 12 ) ) + 'px';
+		codePop.querySelector( '[data-close]' ).addEventListener( 'click', hideCodePop );
+		codePop.querySelector( '[data-lang]' ).addEventListener( 'change', ( e ) => {
+			setCodeLang( pre, e.target.value );
+			if ( codeChipPre === pre ) showCodeChip( pre ); // refresh the chip label
+		} );
+		document.addEventListener( 'mousedown', codePopAway, true );
+	}
+
+	// Shared by the toolbar picker and the chip popover.
+	function setCodeLang( pre, lang ) {
+		let code = pre.querySelector( 'code' );
+		if ( ! code ) {
+			const text = codeTextOf( pre );
+			pre.textContent = '';
+			code = document.createElement( 'code' );
+			code.textContent = text;
+			pre.appendChild( code );
+		}
+		code.className = lang === 'auto' ? '' : 'language-' + lang;
+		delete pre.dataset.hl;
+		const body = $( '#minn-editor-body' );
+		if ( body ) highlightCodeBlocks( body, true );
+		const toolbarSel = $( '#minn-code-lang' );
+		if ( toolbarSel ) toolbarSel.value = lang;
+		scheduleAutosave();
 	}
 
 	/* ===== Slash command menu ===== */
@@ -4978,6 +5150,7 @@
 	function renderView() {
 		renderTopbar();
 		closeInspector();
+		hideCodeChip();
 		const tip = $( '#minn-chart-tip' );
 		if ( tip ) tip.hidden = true;
 		switch ( state.route ) {
