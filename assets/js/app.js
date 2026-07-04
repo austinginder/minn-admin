@@ -1375,9 +1375,17 @@
 		if ( col.tabs && col.tabs.param && ss.tab !== '_all' ) {
 			parts.push( col.tabs.param + '=' + encodeURIComponent( ss.tab ) );
 		}
-		// Adapter-declared search: a query template with {q}.
+		// Adapter-declared search: a query template with {q}, or { param, json }
+		// for APIs that take search criteria as a JSON string (Gravity Forms).
+		// split/join instead of replace so "$&"-style queries aren't mangled.
 		if ( col.search && ss.q ) {
-			parts.push( col.search.replace( '{q}', encodeURIComponent( ss.q ) ) );
+			if ( typeof col.search === 'string' ) {
+				parts.push( col.search.split( '{q}' ).join( encodeURIComponent( ss.q ) ) );
+			} else {
+				const json = JSON.stringify( col.search.json ).split( '{q}' ).join( JSON.stringify( ss.q ).slice( 1, -1 ) );
+				// Encoded twice: GF urldecodes the already-decoded param again.
+				parts.push( col.search.param + '=' + encodeURIComponent( encodeURIComponent( json ) ) );
+			}
 		}
 		// {page} is 1-based; {page0} serves APIs that count pages from zero.
 		parts.push( ( col.pageQuery || 'per_page=25&page={page}' ).replace( '{page}', page ).replace( '{page0}', page - 1 ) );

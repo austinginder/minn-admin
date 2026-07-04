@@ -34,6 +34,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'allRoute'  => 'gf/v2/entries',
 			'query'     => 'sorting[key]=date_created&sorting[direction]=DESC',
 			'pageQuery' => 'paging[page_size]=25&paging[current_page]={page}',
+			// gf/v2 takes search criteria as a JSON string; key 0 = any field.
+			'search'    => array(
+				'param' => 'search',
+				'json'  => array( 'field_filters' => array( array( 'key' => 0, 'value' => '{q}', 'operator' => 'contains' ) ) ),
+			),
 			'itemsKey'  => 'entries',
 			'totalKey'  => 'total_count',
 			'tabs'      => array(
