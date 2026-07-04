@@ -644,8 +644,9 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-chip.pick.sel { background: var(--accent-soft); border-color: var(--accent); color: var(--accent2); font-weight: 600; }
 
 .minn-slash-menu {
-  position: fixed; z-index: 70; width: 200px; background: var(--panel); border: 1px solid var(--border2);
+  position: fixed; z-index: 70; width: 210px; background: var(--panel); border: 1px solid var(--border2);
   border-radius: 11px; box-shadow: var(--shadow); padding: 5px; animation: minnScaleIn 0.12s ease;
+  max-height: min(430px, 60vh); overflow-y: auto; scrollbar-width: thin;
 }
 .minn-slash-item {
   display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 7px;
@@ -711,8 +712,9 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-code-chip:hover { color: var(--accent2); border-color: var(--accent); }
 .minn-code-pop { width: 250px; }
 .minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
-.minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); }
-.minn-insp-actions .minn-btn-primary { width: 100%; justify-content: center; }
+.minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.minn-insp-actions .minn-btn-primary { flex: 1; justify-content: center; }
+.minn-insp-actions .minn-btn-soft.danger:only-child { flex: 1; justify-content: center; }
 @media (max-width: 640px) {
   .minn-inspector { width: calc(100vw - 20px); left: 10px !important; }
 }

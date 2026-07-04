@@ -136,6 +136,26 @@ Per attribute: `label`, `control` (`text` · `textarea` · `select` · `number` 
 inspector falls back to schema-derived controls, so this is refinement, not requirement.
 Attributes with a `source` (stored in saved HTML) are never form-edited.
 
+### `insert` — offer the block in the editor's `/` menu
+
+Declare starting markup and your block appears in Minn's slash menu. It's inserted as a
+configurable island — real server-rendered preview, inspector opened immediately:
+
+```php
+$forms['my-plugin/testimonial'] = array(
+    'insert' => array(
+        'label'    => 'Testimonial',                    // slash-menu entry
+        'icon'     => '❖',                              // optional, one glyph
+        'template' => '<!-- wp:my-plugin/testimonial {"author":"…"} /-->',
+    ),
+    // …attribute refinements as above
+);
+```
+
+`template` is full raw block markup — you know your block's canonical shape (wrapper HTML,
+starter children, default attrs); Minn inserts it verbatim. Only declare `insert` on blocks
+that make sense at the top level (parents and standalone blocks, not children).
+
 ### `wrapperText` — editable text in an InnerBlocks wrapper
 
 Static InnerBlocks parents often bake a heading into their saved wrapper HTML (e.g. a

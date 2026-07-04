@@ -2227,12 +2227,18 @@
 				return html;
 			}
 			const idx = ed.islands.push( seg.raw ) - 1;
-			const inner = stripBlockComments( seg.raw ).trim();
-			return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( seg.name ) }">
-				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ ${ esc( seg.name.replace( /^core\//, '' ) ) }</button>
-				<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
-			</div>`;
+			return islandHtml( idx, seg.name, seg.raw );
 		} ).join( '\n' );
+	}
+
+	// The contenteditable=false card an island renders as. Shared by content
+	// loading and slash-menu insertion of custom blocks.
+	function islandHtml( idx, name, raw ) {
+		const inner = stripBlockComments( raw ).trim();
+		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
+			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ ${ esc( name.replace( /^core\//, '' ) ) }</button>
+			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
+		</div>`;
 	}
 
 	const stripBlockComments = ( raw ) => raw.replace( /<!--\s*\/?wp:[\s\S]*?-->\n?/g, '' );
@@ -3170,8 +3176,10 @@
 			const def = defs[ key ] || {};
 			const fd = fdefs[ key ] || {};
 			// Sourced attrs live in the block's saved HTML, not the comment —
-			// rewriting them there would do nothing.
-			if ( BLOCK_ATTR_SKIP.includes( key ) || def.source || fd.hide ) return;
+			// rewriting them there would do nothing. A descriptor that explicitly
+			// declares a field overrides the plumbing skip-list (anchor/callout's
+			// "style" is its own string attribute, not Gutenberg's style object).
+			if ( ( BLOCK_ATTR_SKIP.includes( key ) && ! fdefs[ key ] ) || def.source || fd.hide ) return;
 			const type = Array.isArray( def.type ) ? def.type[ 0 ] : def.type;
 			const cur = attrs && key in attrs ? attrs[ key ] : def.default;
 			const id = `${ prefix }:${ key }`;
@@ -3389,7 +3397,10 @@
 					? 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.'
 					: 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' }</div>` }
 			</div>
-			${ editable ? `<div class="minn-insp-actions"><button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button></div>` : '' }`;
+			<div class="minn-insp-actions">
+				${ editable ? '<button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button>' : '' }
+				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="Remove this block">${ icon( 'trash' ) }${ editable ? '' : ' Remove block' }</button>
+			</div>`;
 		positionInspector( insp.islandEl );
 	}
 
@@ -3428,6 +3439,17 @@
 			const insp = inspectorState;
 			if ( ! insp ) return;
 			if ( e.target.closest( '#minn-insp-close' ) ) { closeInspector(); return; }
+			if ( e.target.closest( '#minn-insp-remove' ) ) {
+				if ( ! confirm( 'Remove this block?' ) ) return;
+				const ed2 = state.editor;
+				// Null (don't splice) so other islands' data-island indices stay valid.
+				if ( ed2 && ed2.islands ) ed2.islands[ insp.idx ] = null;
+				insp.islandEl.remove();
+				closeInspector();
+				toast( 'Block removed' );
+				if ( ed2 && ed2.id ) scheduleAutosave();
+				return;
+			}
 			const applyBtn = e.target.closest( '#minn-insp-apply' );
 			if ( applyBtn ) { applyInspector( applyBtn ); return; }
 			const move = e.target.closest( '[data-cmove]' );
@@ -3520,7 +3542,10 @@
 	// children) show real content instead of an empty card. Best-effort.
 	function renderIslandPreviews( body, ed ) {
 		if ( ! ed.islands || ! ed.islands.length ) return;
-		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: ed.islands } ) } )
+		// Removed islands are nulled (indices stay stable) — send '' to keep the
+		// response aligned by index and satisfy the endpoint's string schema.
+		const blocks = ed.islands.map( ( r ) => ( r == null ? '' : r ) );
+		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks } ) } )
 			.then( ( r ) => {
 				if ( ! r || ! Array.isArray( r.rendered ) || ! document.contains( body ) ) return;
 				r.rendered.forEach( ( html, i ) => {
@@ -3655,6 +3680,16 @@
 			[ '▦', 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
 			[ '—', 'Divider', { html: '<hr>' } ],
 		];
+		// Custom blocks that declared an `insert` template via
+		// minn_admin_block_forms land as configurable islands — blocks mode
+		// only (classic serialization would flatten them to plain HTML).
+		if ( state.editor && state.editor.mode === 'blocks' ) {
+			Object.keys( B.blockForms || {} ).forEach( ( name ) => {
+				const ins = ( B.blockForms[ name ] || {} ).insert;
+				if ( ! ins || ! ins.template ) return;
+				items.push( [ ins.icon || '❖', ins.label || name.split( '/' ).pop(), { block: name, template: String( ins.template ) } ] );
+			} );
+		}
 
 		const close = () => {
 			if ( menu ) { menu.remove(); menu = null; }
@@ -3663,8 +3698,10 @@
 
 		const highlight = () => {
 			if ( ! menu ) return;
-			$$( '.minn-slash-item', menu ).forEach( ( el, i ) =>
-				el.classList.toggle( 'selected', i === selIdx ) );
+			$$( '.minn-slash-item', menu ).forEach( ( el, i ) => {
+				el.classList.toggle( 'selected', i === selIdx );
+				if ( i === selIdx ) el.scrollIntoView( { block: 'nearest' } );
+			} );
 		};
 
 		const run = ( idx ) => {
@@ -3674,6 +3711,36 @@
 			close();
 			body.focus();
 			const action = item[ 2 ];
+			if ( action && action.block ) {
+				// Insert a custom block as a new island: register the raw markup,
+				// drop the card in place of the "/" block, render the real
+				// preview, and open the inspector to configure it.
+				const ed = state.editor;
+				if ( ! ed ) return;
+				if ( ! ed.islands ) ed.islands = [];
+				const idx = ed.islands.push( action.template ) - 1;
+				target.insertAdjacentHTML( 'beforebegin', islandHtml( idx, action.block, action.template ) );
+				const p = document.createElement( 'p' );
+				p.appendChild( document.createElement( 'br' ) );
+				target.replaceWith( p );
+				const range = document.createRange();
+				range.selectNodeContents( p );
+				range.collapse( true );
+				const sel = window.getSelection();
+				sel.removeAllRanges();
+				sel.addRange( range );
+				const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
+				api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ action.template ] } ) } )
+					.then( ( r ) => {
+						const html = r && r.rendered && r.rendered[ 0 ];
+						const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
+						if ( prev && html && html.trim() ) prev.innerHTML = html;
+					} )
+					.catch( () => {} );
+				if ( islandEl ) openInspector( islandEl );
+				scheduleAutosave();
+				return;
+			}
 			if ( action && action.html ) {
 				// Replace the "/" block outright so the inserted markup lands at
 				// the top level (never wrapped inside the block's div).
