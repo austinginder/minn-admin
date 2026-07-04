@@ -38,9 +38,9 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
   out of Minn by design
 - **Extensions** — install plugins and themes from WordPress.org or zip upload, activate,
   deactivate, delete, per-item and bulk updates, and a Themes tab with screenshots
-- **Post Types** — see every registered post type and manage definitions through whoever owns
-  them: ACF post types, Custom Post Type UI, or Minn's own store when neither is active;
-  code-registered types shown read-only
+- **Post Types & Taxonomies** — see every registered post type and taxonomy and manage
+  definitions through whoever owns them: ACF, Custom Post Type UI, or Minn's own store when
+  neither is active; code-registered ones shown read-only
 - **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks
   (structure presets + custom, with automatic rewrite flushing), plus built-in maintenance mode
 - **Editor** — distraction-free, block-aware writing surface: native Gutenberg markup with

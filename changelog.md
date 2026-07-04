@@ -1,5 +1,11 @@
 # Changelog
 
+## **v0.5.0** - Unreleased
+
+### Added
+* **Taxonomies manager:** The Post Types view gains a Taxonomies tab — every registered taxonomy with its attachments, term counts and owner, editable through the same storage adapters as post types (**ACF** `acf-taxonomy` definitions via ACF's own API, **Custom Post Type UI**'s option, or **Minn's own store**). Create (hierarchical or flat, choose the backend), re-attach to any post types, or remove — terms always stay in the database, and ACF deletions trash recoverably. Core and code-registered taxonomies are read-only. The Post Types modal's taxonomy checkboxes are now dynamic — every assignable taxonomy, not just Categories/Tags.
+* **Attribute passthrough for simple blocks:** Images, tables, quotes, separators, verse and preformatted blocks that carry attributes (`{"id":…,"sizeSlug":…}` images, styled tables/quotes/separators) are now **fully editable** instead of islanded — the comment attributes are parked on the element and re-emitted byte-faithfully on save, with Gutenberg's comment-safe escaping. The class-derived `hasFixedLayout` respects explicitly-written `false` (newer Gutenberg defaults tables to fixed). Only non-text-flow blocks participate, so contenteditable splits can never duplicate attributes. Cosmetic note: void elements serialize as `<img …>` rather than `<img …/>` (HTML-equivalent).
+
 ## **v0.4.1** - July 4, 2026
 
 ### Fixed

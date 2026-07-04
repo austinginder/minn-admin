@@ -24,7 +24,7 @@ Features:
 * **Users** — a role filter, create/edit users, roles, passwords, and per-user login sessions with one-click sign-out.
 * **AI Access** — application passwords for AI agents plus a generated, site-tailored agent guide.
 * **Extensions** — install plugins and themes from WordPress.org or zip upload; activate, deactivate, delete, per-item and bulk updates; Themes tab with screenshots.
-* **Post Types** — manage custom post type definitions through whichever manager owns them (ACF, Custom Post Type UI, or Minn's own store); code-registered types shown read-only.
+* **Post Types & Taxonomies** — manage custom post type and taxonomy definitions through whichever manager owns them (ACF, Custom Post Type UI, or Minn's own store); code-registered ones shown read-only.
 * **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks sections, plus a built-in maintenance mode.
 * **Editor** — distraction-free, block-aware writing surface: complex blocks preserved byte-for-byte as read-only islands, slash commands, tables, syntax-highlighted code blocks with a language picker, featured images, categories and tags, revisions with restore, autosave, scheduling and one-click publish.
 * **Command palette** — press ⌘K / Ctrl-K anywhere.
