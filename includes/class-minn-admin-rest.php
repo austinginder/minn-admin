@@ -251,6 +251,91 @@ class Minn_Admin_REST {
 				},
 			)
 		);
+
+		$permalinks_perm = function () {
+			return current_user_can( 'manage_options' );
+		};
+		register_rest_route(
+			self::NS,
+			'/permalinks',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'get_permalinks' ),
+					'permission_callback' => $permalinks_perm,
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'save_permalinks' ),
+					'permission_callback' => $permalinks_perm,
+					'args'                => array(
+						'structure'     => array(
+							'type'     => 'string',
+							'required' => true,
+						),
+						'category_base' => array( 'type' => 'string' ),
+						'tag_base'      => array( 'type' => 'string' ),
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Permalink settings — core leaves these out of wp/v2/settings because
+	 * changing them needs a rewrite flush, so Minn exposes its own endpoint.
+	 */
+	private static function permalink_state() {
+		return array(
+			'structure'     => (string) get_option( 'permalink_structure' ),
+			'category_base' => (string) get_option( 'category_base' ),
+			'tag_base'      => (string) get_option( 'tag_base' ),
+			'pretty'        => (bool) get_option( 'permalink_structure' ),
+			// Where the app lives under the new structure — the client hard-redirects
+			// here when saving flips between path routing and ?minn_admin=1.
+			'app_url'       => Minn_Admin::app_url(),
+		);
+	}
+
+	public static function get_permalinks() {
+		return rest_ensure_response( self::permalink_state() );
+	}
+
+	public static function save_permalinks( WP_REST_Request $request ) {
+		global $wp_rewrite;
+		// misc.php supplies got_url_rewrite() + the .htaccess writer that a hard
+		// flush uses when it can (file.php for get_home_path underneath it).
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+
+		$structure = trim( (string) $request['structure'] );
+		if ( '' !== $structure && ! preg_match( '/%[^\/%]+%/', $structure ) ) {
+			return new WP_Error(
+				'invalid_structure',
+				'A custom structure needs at least one tag, e.g. %postname%.',
+				array( 'status' => 400 )
+			);
+		}
+		if ( '' !== $structure ) {
+			// Same normalization as options-permalink.php: no hash, single slashes,
+			// leading slash, and an /index.php prefix where URL rewriting is unavailable.
+			$structure = preg_replace( '#/+#', '/', '/' . str_replace( '#', '', $structure ) );
+			if ( ! got_url_rewrite() && 0 !== strpos( $structure, '/index.php' ) ) {
+				$structure = '/index.php' . $structure;
+			}
+		}
+		$wp_rewrite->set_permalink_structure( $structure );
+
+		if ( $request->has_param( 'category_base' ) ) {
+			$wp_rewrite->set_category_base( sanitize_option( 'category_base', (string) $request['category_base'] ) );
+		}
+		if ( $request->has_param( 'tag_base' ) ) {
+			$wp_rewrite->set_tag_base( sanitize_option( 'tag_base', (string) $request['tag_base'] ) );
+		}
+
+		flush_rewrite_rules();
+
+		return rest_ensure_response( self::permalink_state() );
 	}
 
 	/**

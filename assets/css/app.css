@@ -64,7 +64,8 @@ input, textarea { font-family: inherit; }
 a { color: var(--accent2); text-decoration: none; }
 
 /* ===== Layout ===== */
-.minn-shell { display: flex; height: 100vh; width: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
+/* dvh over vh where supported — vh overflows behind mobile Safari's collapsing URL bar. */
+.minn-shell { display: flex; height: 100vh; height: 100dvh; width: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
 .minn-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .minn-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
 .minn-page { animation: minnFadeUp 0.3s ease; padding: 26px 28px 60px; max-width: 1180px; margin: 0 auto; }
@@ -758,8 +759,70 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   .minn-sidebar { width: 64px; padding: 14px 8px; }
   .minn-sidebar .minn-logo-name, .minn-sidebar .minn-logo-ver, .minn-sidebar .minn-nav-label,
   .minn-sidebar .minn-nav-btn span, .minn-sidebar .minn-nav-count, .minn-sidebar .minn-search-btn span,
-  .minn-sidebar .minn-kbd, .minn-user > div:not(:first-child) { display: none; }
+  .minn-sidebar .minn-kbd, .minn-user > div:not(:first-child),
+  .minn-user-logout { display: none; }
+  .minn-user { justify-content: center; }
   .minn-nav-btn, .minn-search-btn { justify-content: center; }
   .minn-stats { grid-template-columns: repeat(2, 1fr); }
   .minn-dash-grid, .minn-plugin-grid, .minn-editor, .minn-settings { grid-template-columns: 1fr; }
+}
+
+/* No hover on touch: media prev/next arrows must be visible without it. */
+@media (hover: none) {
+  .minn-modal-nav { opacity: 0.75; }
+}
+
+/* ===== Phones ===== */
+@media (max-width: 640px) {
+  .minn-sidebar { width: 56px; padding: 12px 6px; }
+  .minn-page { padding: 16px 14px 60px; }
+
+  /* Topbar: title + theme + notifications + New (icon only). */
+  .minn-topbar { padding: 0 12px; gap: 8px; }
+  .minn-topbar-sub, #minn-view-site, #minn-help-btn { display: none; }
+  .minn-topbar-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .minn-topbar .minn-btn-primary { font-size: 0; gap: 0; padding: 8px 10px; }
+
+  /* Toolbars wrap: tabs get their own full-width (scrolling) row, search stretches. */
+  .minn-toolbar { flex-wrap: wrap; gap: 8px; }
+  .minn-tabscroll, .minn-toolbar > .minn-tabs { flex: 1 1 100%; }
+  .minn-toolbar-search { flex: 1 1 140px; width: auto; margin-left: 0; }
+  .minn-toolbar-meta { display: none; }
+  .minn-tax-select { flex: 1 1 40%; max-width: none; }
+  .minn-bulkbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+
+  /* Tables: drop secondary columns, keep the identity + status ones.
+     Cells are grid items, so display:none reflows the rest into the new tracks. */
+  .minn-content-cols { grid-template-columns: 30px 1fr 84px; }
+  .minn-content-cols > :nth-child(2), .minn-content-cols > :nth-child(5),
+  .minn-content-cols > :nth-child(6), .minn-content-cols > :nth-child(7) { display: none; }
+  .minn-order-cols { grid-template-columns: 86px 1fr 84px; }
+  .minn-order-cols > :nth-child(3), .minn-order-cols > :nth-child(4),
+  .minn-order-cols > :nth-child(6) { display: none; }
+  .minn-user-cols { grid-template-columns: 40px 1fr 100px; }
+  .minn-user-cols > :nth-child(3), .minn-user-cols > :nth-child(5),
+  .minn-user-cols > :nth-child(6) { display: none; }
+  /* Surface tables set their columns inline (unknown shape) — scroll those instead. */
+  .minn-table { overflow-x: auto; }
+  .minn-table-head[style], .minn-table-row[style] { min-width: 520px; }
+
+  /* Dashboard, editor, modals. */
+  .minn-dash-head { flex-wrap: wrap; gap: 10px; }
+  .minn-stat-value { font-size: 24px; }
+  /* Summary card rows that set their column count inline (orders) go 2-up. */
+  .minn-stats[style] { grid-template-columns: repeat(2, 1fr) !important; }
+  .minn-editor-title { font-size: 26px; }
+  .minn-editor-toolbar { flex-wrap: wrap; }
+  .minn-tool-hint { display: none; }
+  .minn-modal-overlay { padding: 3vh 10px; }
+  .minn-email-frame { width: calc(100% - 24px); margin: 0 12px 12px; height: 56vh; }
+  .minn-surface-message { margin: 0 12px 12px; }
+  .minn-settings-nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; scrollbar-width: thin; }
+  .minn-settings-nav::-webkit-scrollbar { height: 5px; }
+  .minn-settings-nav::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  .minn-settings-nav-item { white-space: nowrap; flex-shrink: 0; }
+
+  /* Touch ergonomics: bigger checkboxes; 16px inputs so iOS doesn't zoom on focus. */
+  .minn-cb { width: 18px; height: 18px; }
+  .minn-input, select.minn-input, .minn-schedule input { font-size: 16px; }
 }
