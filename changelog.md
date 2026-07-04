@@ -1,5 +1,14 @@
 # Changelog
 
+## **v0.4.0** - Unreleased
+
+### Added
+* **Block inspector:** Complex blocks (islands) are no longer opaque. Every island's chip is now a ⚙ button that opens an inspector popover: the block's attribute schema is fetched from `wp/v2/block-types`, a form is generated from it (strings, numbers, booleans, enums), and edits rewrite the attributes JSON in the block comment — Gutenberg-escaped, spliced back verbatim, byte-safety model unchanged. Works one level deep too: nested self-closing children (e.g. Anchor Blocks conversation messages) each get their own form section. Attributes stored in saved HTML (`source`-backed) are correctly left alone.
+* **Real island previews:** Islands render their actual content in the editor via a new `minn-admin/v1/render-blocks` endpoint (server-side `do_blocks`, `edit_posts`) — dynamic blocks and nested dynamic children show what the site will show instead of an empty "Dynamic block" card. Previews refresh live after inspector edits. Best-effort: a misbehaving render callback never breaks the editor.
+* **Code block language attribute:** `core/code` blocks carrying `{"language":…}` in the block comment (the attr dialect) are now fully editable instead of islanded — the existing toolbar language picker reads and writes the attribute, and serialization preserves the incoming dialect (attr stays attr, class stays class). `markup` added to the language list.
+* **Site icon:** Settings → General can now set the site icon — drag & drop an image, choose from the media library, or remove it, with a live preview.
+* **More settings:** Membership (anyone can register) and New user default role (General); Convert emoticons (Writing); Moderate all comments, Registered-users-only commenting and Show avatars (Discussion) — exposed over `wp/v2/settings` via `register_setting`, with role writes validated server-side.
+
 ## **v0.3.0** - July 4, 2026
 
 ### Added

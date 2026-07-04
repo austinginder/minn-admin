@@ -1837,7 +1837,12 @@
 			api( 'wp/v2/pages?per_page=100&status=publish&orderby=title&order=asc&_fields=id,title' ).catch( () => [] ),
 			api( 'minn-admin/v1/permalinks' ).catch( () => null ),
 		] );
-		state.cache.settings = { values, categories, pages, permalinks };
+		const siteIcon = values.site_icon
+			? await api( `wp/v2/media/${ values.site_icon }?_fields=id,source_url,media_details` )
+				.then( ( m ) => ( { url: ( m.media_details && m.media_details.sizes && m.media_details.sizes.thumbnail && m.media_details.sizes.thumbnail.source_url ) || m.source_url } ) )
+				.catch( () => null )
+			: null;
+		state.cache.settings = { values, categories, pages, permalinks, siteIcon };
 	}
 
 	function settingsFields( section, s, cache ) {
@@ -1874,24 +1879,47 @@
 			}
 		} )();
 
+		const iconUrl = cache.siteIcon && cache.siteIcon.url;
+		const siteIconField = `
+			<div>
+				<div class="minn-field-label">Site icon</div>
+				<div class="minn-icon-drop" id="minn-icon-drop">
+					<img class="minn-icon-preview" id="minn-icon-img" alt="Site icon" src="${ esc( iconUrl || '' ) }"${ iconUrl ? '' : ' hidden' }>
+					<div class="minn-icon-empty" id="minn-icon-empty"${ iconUrl ? ' hidden' : '' }>✦</div>
+					<div class="minn-icon-info">
+						<div class="minn-toggle-desc">Shown in browser tabs, bookmarks and app icons. Square image, 512×512 or larger. Drag &amp; drop an image here, or</div>
+						<div class="minn-icon-btns">
+							<button class="minn-btn-soft" id="minn-icon-pick" type="button">Choose image</button>
+							<button class="minn-btn-soft danger" id="minn-icon-remove" type="button"${ iconUrl ? '' : ' hidden' }>Remove</button>
+						</div>
+					</div>
+				</div>
+			</div>`;
+		const roleOptions = Object.entries( B.roles || {} );
+
 		switch ( section ) {
 			case 'General': return {
 				sub: 'Basic information about your site.',
 				fields: text( 'title', 'Site title', s.title )
 					+ text( 'description', 'Tagline', s.description )
+					+ siteIconField
 					+ text( 'url', 'Site address', s.url, true )
 					+ text( 'email', 'Administration email', s.email, true )
 					+ select( 'timezone', 'Timezone', timezones, s.timezone || 'UTC' )
 					+ text( 'date_format', 'Date format', s.date_format, true )
 					+ text( 'time_format', 'Time format', s.time_format, true )
-					+ select( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week ),
-				toggles: [ { id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors.', on: !! s.minn_admin_maintenance } ].map( toggle ).join( '' ),
+					+ select( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week )
+					+ ( roleOptions.length ? select( 'default_role', 'New user default role', roleOptions, s.default_role || 'subscriber' ) : '' ),
+				toggles: [
+					{ id: 'users_can_register', label: 'Membership', desc: 'Anyone can register an account.', on: !! s.users_can_register },
+					{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors.', on: !! s.minn_admin_maintenance },
+				].map( toggle ).join( '' ),
 			};
 			case 'Writing': return {
 				sub: 'Defaults for new posts.',
 				fields: select( 'default_category', 'Default post category', cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
 					+ select( 'default_post_format', 'Default post format', POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
-				toggles: '',
+				toggles: [ { id: 'use_smilies', label: 'Convert emoticons', desc: 'Turn :-) and :-P into graphics when displayed.', on: !! s.use_smilies } ].map( toggle ).join( '' ),
 			};
 			case 'Reading': return {
 				sub: 'What visitors see, and who else can see it.',
@@ -1906,6 +1934,9 @@
 				toggles: [
 					{ id: 'default_comment_status', label: 'Allow comments', desc: 'Let readers respond to new posts.', on: s.default_comment_status === 'open' },
 					{ id: 'default_ping_status', label: 'Allow pingbacks & trackbacks', desc: 'Accept link notifications from other blogs on new posts.', on: s.default_ping_status === 'open' },
+					{ id: 'comment_moderation', label: 'Moderate all comments', desc: 'Every comment must be manually approved before it appears.', on: !! s.comment_moderation },
+					{ id: 'comment_registration', label: 'Registered users only', desc: 'Users must be registered and logged in to comment.', on: !! s.comment_registration },
+					{ id: 'show_avatars', label: 'Show avatars', desc: 'Display profile pictures next to comments.', on: !! s.show_avatars },
 				].map( toggle ).join( '' ),
 			};
 			default: {
@@ -1969,6 +2000,8 @@
 
 		const pending = {};
 		const OPEN_CLOSED = [ 'default_comment_status', 'default_ping_status' ];
+		// Options stored as "0"/"1" strings in wp_options — registered as integer.
+		const INT_TOGGLES = [ 'blog_public', 'users_can_register', 'comment_moderation', 'comment_registration', 'show_avatars' ];
 		$$( '[data-setting]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				btn.classList.toggle( 'on' );
@@ -1976,9 +2009,53 @@
 				btn.setAttribute( 'aria-checked', on );
 				const id = btn.dataset.setting;
 				pending[ id ] = OPEN_CLOSED.includes( id ) ? ( on ? 'open' : 'closed' )
-					: ( id === 'blog_public' ? ( on ? 1 : 0 ) : on );
+					: ( INT_TOGGLES.includes( id ) ? ( on ? 1 : 0 ) : on );
 			} )
 		);
+
+		// Site icon: pick from the library, drag & drop an upload, or remove.
+		// The chosen attachment ID rides the normal save as pending.site_icon.
+		const iconDrop = $( '#minn-icon-drop', view );
+		if ( iconDrop ) {
+			const setIcon = ( id, url ) => {
+				pending.site_icon = id;
+				cache.siteIcon = url ? { url } : null;
+				const img = $( '#minn-icon-img', view );
+				const empty = $( '#minn-icon-empty', view );
+				const rm = $( '#minn-icon-remove', view );
+				if ( url ) { img.src = url; }
+				img.hidden = ! url;
+				empty.hidden = !! url;
+				rm.hidden = ! url;
+			};
+			$( '#minn-icon-pick', view ).addEventListener( 'click', () => openMediaPicker( ( it ) => setIcon( it.id, it.thumb || it.url ) ) );
+			$( '#minn-icon-remove', view ).addEventListener( 'click', () => setIcon( 0, null ) );
+			const uploadIcon = async ( file ) => {
+				if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( 'Drop an image file', true ); return; }
+				iconDrop.classList.add( 'minn-busy' );
+				try {
+					const fd = new FormData();
+					fd.append( 'file', file );
+					const m = await api( 'wp/v2/media', { method: 'POST', body: fd } );
+					const sizes = m.media_details && m.media_details.sizes;
+					setIcon( m.id, ( sizes && sizes.thumbnail && sizes.thumbnail.source_url ) || m.source_url );
+					toast( 'Icon uploaded — save to apply' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				iconDrop.classList.remove( 'minn-busy' );
+			};
+			// stopPropagation keeps the app-wide drop-to-media-library handler out of it.
+			iconDrop.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); iconDrop.classList.add( 'over' ); } );
+			iconDrop.addEventListener( 'dragleave', () => iconDrop.classList.remove( 'over' ) );
+			iconDrop.addEventListener( 'drop', ( e ) => {
+				e.preventDefault();
+				e.stopPropagation();
+				iconDrop.classList.remove( 'over' );
+				document.body.classList.remove( 'minn-dragging' );
+				uploadIcon( e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[ 0 ] );
+			} );
+		}
 
 		// Re-render Reading when the homepage mode flips so page pickers appear.
 		const showOnFront = $( '[data-key="show_on_front"]', view );
@@ -2104,20 +2181,27 @@
 
 	// Attributes the serializer reproduces faithfully; any other attribute on a
 	// simple block turns it into an island so nothing is silently dropped.
-	const EDITABLE_ATTRS = { heading: [ 'level' ], list: [ 'ordered' ], table: [ 'hasFixedLayout' ] };
+	const EDITABLE_ATTRS = { heading: [ 'level' ], list: [ 'ordered' ], table: [ 'hasFixedLayout' ], code: [ 'language' ] };
+
+	// Attributes JSON from a segment's opening block comment ({} when absent/invalid;
+	// null distinguishes "invalid JSON" for segmentEditable's bail-out).
+	function segmentAttrs( seg ) {
+		const m = seg.raw.match( /^<!--\s*wp:[a-z0-9\/_-]+\s+(\{[\s\S]*?\})\s*\/?-->/ );
+		if ( ! m ) return {};
+		try {
+			return JSON.parse( m[ 1 ] );
+		} catch ( e ) {
+			return null;
+		}
+	}
 
 	function segmentEditable( seg ) {
 		const name = seg.name.replace( /^core\//, '' );
 		if ( ! SIMPLE_BLOCKS.includes( name ) ) return false;
-		const m = seg.raw.match( /^<!--\s*wp:[a-z0-9\/_-]+\s+(\{[\s\S]*?\})\s*\/?-->/ );
-		if ( ! m ) return true;
-		try {
-			const attrs = JSON.parse( m[ 1 ] );
-			const allowed = EDITABLE_ATTRS[ name ] || [];
-			return Object.keys( attrs ).every( ( k ) => allowed.includes( k ) );
-		} catch ( e ) {
-			return false;
-		}
+		const attrs = segmentAttrs( seg );
+		if ( attrs === null ) return false;
+		const allowed = EDITABLE_ATTRS[ name ] || [];
+		return Object.keys( attrs ).every( ( k ) => allowed.includes( k ) );
 	}
 
 	// Build the contenteditable HTML: simple blocks stripped of comments,
@@ -2127,12 +2211,26 @@
 		ed.islands = [];
 		return segments.map( ( seg ) => {
 			if ( seg.type === 'html' ) return seg.raw;
-			if ( segmentEditable( seg ) ) return stripBlockComments( seg.raw );
+			if ( segmentEditable( seg ) ) {
+				let html = stripBlockComments( seg.raw );
+				// Code blocks that keep their language in the comment attr (the
+				// {"language":"sql"} dialect): surface it as a language-* class so the
+				// picker and highlighter see it, and mark the pre so serialization
+				// restores the attr dialect instead of persisting the class.
+				if ( seg.name.replace( /^core\//, '' ) === 'code' ) {
+					const lang = String( ( segmentAttrs( seg ) || {} ).language || '' ).toLowerCase();
+					if ( /^[a-z0-9-]+$/.test( lang ) ) {
+						html = html.replace( '<pre class="wp-block-code"', '<pre data-lang-attr="1" class="wp-block-code"' );
+						if ( ! /language-/.test( html ) ) html = html.replace( /<code(\s|>)/, `<code class="language-${ lang }"$1` );
+					}
+				}
+				return html;
+			}
 			const idx = ed.islands.push( seg.raw ) - 1;
 			const inner = stripBlockComments( seg.raw ).trim();
-			return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }">
-				<span class="minn-island-chip">${ esc( seg.name.replace( /^core\//, '' ) ) }</span>
-				${ inner ? `<div class="minn-island-preview">${ inner }</div>` : '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }
+			return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( seg.name ) }">
+				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ ${ esc( seg.name.replace( /^core\//, '' ) ) }</button>
+				<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 			</div>`;
 		} ).join( '\n' );
 	}
@@ -2198,7 +2296,13 @@
 				const code = el.querySelector( 'code' );
 				const text = codeTextOf( code || el );
 				const lang = codeLangOf( el );
-				pushBlock( 'code', null, `<pre class="wp-block-code"><code${ lang !== 'auto' ? ` class="language-${ lang }"` : '' }>${ esc( text ) }</code></pre>` );
+				if ( el.dataset.langAttr === '1' ) {
+					// Came in as {"language":…} in the comment — keep that dialect so the
+					// block stays valid for whatever registered the attribute.
+					pushBlock( 'code', lang !== 'auto' ? { language: lang } : null, `<pre class="wp-block-code"><code>${ esc( text ) }</code></pre>` );
+				} else {
+					pushBlock( 'code', null, `<pre class="wp-block-code"><code${ lang !== 'auto' ? ` class="language-${ lang }"` : '' }>${ esc( text ) }</code></pre>` );
+				}
 			} else if ( ( tag === 'figure' && el.querySelector( 'table' ) ) || tag === 'table' ) {
 				const table = tag === 'table' ? el : el.querySelector( 'table' );
 				table.removeAttribute( 'data-hl' );
@@ -2259,7 +2363,7 @@
 	// The language rides on the <code> element as a Prism-style class
 	// (language-php), which survives serialization and is what most theme
 	// highlighters key on.
-	const CODE_LANGS = [ 'auto', 'php', 'js', 'html', 'css', 'bash', 'json', 'python', 'sql' ];
+	const CODE_LANGS = [ 'auto', 'php', 'js', 'html', 'markup', 'css', 'bash', 'json', 'python', 'sql' ];
 
 	const HL_KEYWORD_SETS = {
 		php: 'function|return|if|else|elseif|endif|for|foreach|endforeach|while|do|switch|case|default|break|continue|class|interface|trait|extends|implements|new|public|private|protected|static|final|abstract|echo|print|use|namespace|require|require_once|include|include_once|try|catch|finally|throw|true|false|null|array|isset|empty|unset|global|const|fn|match|as|self|parent|add_action|add_filter',
@@ -2281,7 +2385,8 @@
 
 	function highlightCode( text, lang ) {
 		lang = CODE_LANGS.includes( lang ) ? lang : 'auto';
-		if ( lang === 'html' ) return highlightHtml( text );
+		// 'markup' is Prism's name for HTML/XML.
+		if ( lang === 'html' || lang === 'markup' ) return highlightHtml( text );
 		const kw = new RegExp( '\\b(' + ( HL_KEYWORD_SETS[ lang ] || HL_KEYWORD_SETS.auto ) + ')\\b', lang === 'sql' ? 'gi' : 'g' );
 		const phpish = lang === 'php' || lang === 'auto';
 		const out = [];
@@ -2882,6 +2987,16 @@
 		const body = $( '#minn-editor-body', view );
 		body.innerHTML = ed.content;
 		highlightCodeBlocks( body );
+		renderIslandPreviews( body, ed );
+		// Island chips open the block inspector (works in locked mode too — read-only there is fine
+		// because locked posts never send content, but islands only exist in blocks mode anyway).
+		body.addEventListener( 'click', ( e ) => {
+			const chip = e.target.closest( '.minn-island-chip' );
+			if ( ! chip ) return;
+			e.preventDefault();
+			const island = chip.closest( '.minn-block-island' );
+			if ( island ) openInspector( island );
+		} );
 
 		$( '#minn-editor-title', view ).addEventListener( 'input', scheduleAutosave );
 		if ( ! locked ) {
@@ -2977,6 +3092,276 @@
 			s.addRange( range );
 			scheduleAutosave();
 		} );
+	}
+
+	/* ===== Block inspector (islands) =====
+	 * Islands stay atomic, but server-registered blocks can be configured in
+	 * place: schema from wp/v2/block-types drives a generated form, edits
+	 * rewrite the attributes JSON in the island's stored raw markup, and the
+	 * preview refreshes via minn-admin/v1/render-blocks (do_blocks server-side).
+	 * See docs/block-inspector.md. */
+
+	// Gutenberg plumbing attrs a config form shouldn't expose.
+	const BLOCK_ATTR_SKIP = [ 'lock', 'metadata', 'className', 'style', 'anchor' ];
+
+	async function blockTypeFor( name ) {
+		const full = name.includes( '/' ) ? name : 'core/' + name;
+		const cache = state.cache.blockTypes || ( state.cache.blockTypes = {} );
+		if ( ! ( full in cache ) ) {
+			cache[ full ] = await api( 'wp/v2/block-types/' + full ).catch( () => null );
+		}
+		return cache[ full ];
+	}
+
+	// Split a block's raw markup into open comment / inner / close comment.
+	// The open-comment regex mirrors tokenizeBlocks (attrs can't contain "-->",
+	// Gutenberg escapes it to --).
+	function blockParts( raw ) {
+		const m = raw.match( /^<!--\s*wp:([a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?)\s*((?:(?!-->)[\s\S])*?)(\/)?\s*-->/ );
+		if ( ! m ) return null;
+		let attrs = {};
+		const json = m[ 2 ].trim();
+		if ( json ) {
+			try { attrs = JSON.parse( json ); } catch ( e ) { return null; }
+		}
+		if ( m[ 3 ] ) return { name: m[ 1 ], attrs, selfClosing: true, open: m[ 0 ], inner: '', close: '' };
+		const close = raw.match( /<!--\s*\/wp:[a-z][a-z0-9_/-]*\s*-->\s*$/ );
+		if ( ! close ) return null;
+		return {
+			name: m[ 1 ], attrs, selfClosing: false,
+			open: m[ 0 ],
+			inner: raw.slice( m[ 0 ].length, close.index ),
+			close: raw.slice( close.index ),
+		};
+	}
+
+	// Gutenberg's serializeAttributes escaping — keeps "-->" (and HTML-ish
+	// chars) out of the comment so the block can't break the document.
+	function serializeBlockAttrs( attrs ) {
+		if ( ! attrs || ! Object.keys( attrs ).length ) return '';
+		return ' ' + JSON.stringify( attrs )
+			.replace( /--/g, '\\u002d\\u002d' )
+			.replace( /</g, '\\u003c' )
+			.replace( />/g, '\\u003e' )
+			.replace( /&/g, '\\u0026' )
+			.replace( /\\"/g, '\\u0022' );
+	}
+
+	const buildOpenComment = ( name, attrs, selfClosing ) =>
+		`<!-- wp:${ name }${ serializeBlockAttrs( attrs ) } ${ selfClosing ? '/' : '' }-->`;
+
+	// Form rows for one block's editable attributes. `prefix` namespaces the
+	// inputs ("own" or a child index).
+	function inspectorFields( defs, attrs, prefix ) {
+		const rows = [];
+		Object.keys( defs || {} ).forEach( ( key ) => {
+			const def = defs[ key ] || {};
+			// Sourced attrs live in the block's saved HTML, not the comment —
+			// rewriting them there would do nothing.
+			if ( BLOCK_ATTR_SKIP.includes( key ) || def.source ) return;
+			const type = Array.isArray( def.type ) ? def.type[ 0 ] : def.type;
+			const cur = attrs && key in attrs ? attrs[ key ] : def.default;
+			const id = `${ prefix }:${ key }`;
+			if ( Array.isArray( def.enum ) && def.enum.length ) {
+				rows.push( `<div class="minn-field-label">${ esc( key ) }</div>
+				<select class="minn-input" data-insp="${ esc( id ) }">
+					${ def.enum.map( ( v ) => `<option value="${ esc( v ) }"${ String( v ) === String( cur == null ? '' : cur ) ? ' selected' : '' }>${ esc( v ) }</option>` ).join( '' ) }
+				</select>` );
+			} else if ( type === 'boolean' ) {
+				rows.push( `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-insp="${ esc( id ) }" data-type="boolean"${ cur ? ' checked' : '' }> ${ esc( key ) }</label>` );
+			} else if ( type === 'number' || type === 'integer' ) {
+				rows.push( `<div class="minn-field-label">${ esc( key ) }</div>
+				<input type="number" class="minn-input" data-insp="${ esc( id ) }" data-type="number" value="${ cur == null ? '' : esc( cur ) }">` );
+			} else if ( type === 'string' || type == null ) {
+				const val = cur == null ? '' : String( cur );
+				const long = key === 'content' || val.length > 60;
+				rows.push( `<div class="minn-field-label">${ esc( key ) }</div>` + ( long
+					? `<textarea class="minn-input minn-insp-textarea" data-insp="${ esc( id ) }">${ esc( val ) }</textarea>`
+					: `<input class="minn-input" data-insp="${ esc( id ) }" value="${ esc( val ) }">` ) );
+			}
+			// object / array attributes are too structural for a generic form — skipped.
+		} );
+		return rows.join( '' );
+	}
+
+	let inspectorEl = null;
+	let inspectorState = null;
+	let inspectorScrollFn = null;
+
+	function closeInspector() {
+		if ( inspectorEl ) inspectorEl.remove();
+		inspectorEl = null;
+		inspectorState = null;
+		document.removeEventListener( 'mousedown', inspectorAway, true );
+		if ( inspectorScrollFn ) {
+			const scroller = document.querySelector( '.minn-scroll' );
+			if ( scroller ) scroller.removeEventListener( 'scroll', inspectorScrollFn );
+			inspectorScrollFn = null;
+		}
+	}
+
+	function inspectorAway( e ) {
+		if ( inspectorEl && ! inspectorEl.contains( e.target ) && ! e.target.closest( '.minn-island-chip' ) ) closeInspector();
+	}
+
+	function positionInspector( islandEl ) {
+		if ( ! inspectorEl ) return;
+		const rect = islandEl.getBoundingClientRect();
+		const w = inspectorEl.offsetWidth || 320;
+		const fitsRight = rect.right + 10 + w < window.innerWidth;
+		inspectorEl.style.left = ( fitsRight ? rect.right + 10 : Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) ) + 'px';
+		inspectorEl.style.top = Math.max( 10, Math.min( fitsRight ? rect.top : rect.bottom + 8, window.innerHeight - inspectorEl.offsetHeight - 10 ) ) + 'px';
+	}
+
+	async function openInspector( islandEl ) {
+		const ed = state.editor;
+		if ( ! ed ) return;
+		closeInspector();
+		const idx = parseInt( islandEl.dataset.island, 10 );
+		const raw = ed.islands && ed.islands[ idx ];
+		if ( raw == null ) return;
+		const parts = blockParts( raw );
+		if ( ! parts ) { toast( 'This block’s markup can’t be parsed safely.', true ); return; }
+
+		// Children: self-closing / nested blocks inside the island (one level).
+		const segments = parts.inner ? tokenizeBlocks( parts.inner ) : [];
+		const children = ( segments || [] )
+			.map( ( seg, segIdx ) => ( { seg, segIdx } ) )
+			.filter( ( c ) => c.seg.type === 'block' )
+			.map( ( c ) => ( { ...c, parts: blockParts( c.seg.raw ) } ) )
+			.filter( ( c ) => c.parts );
+
+		// Placeholder while schemas load.
+		inspectorEl = document.createElement( 'div' );
+		inspectorEl.className = 'minn-inspector';
+		inspectorEl.innerHTML = '<div class="minn-loading" style="padding:24px;">Loading block schema…</div>';
+		document.body.appendChild( inspectorEl );
+		positionInspector( islandEl );
+		document.addEventListener( 'mousedown', inspectorAway, true );
+		// Track the island while the editor scrolls under the fixed popover.
+		inspectorScrollFn = () => positionInspector( islandEl );
+		const scroller = document.querySelector( '.minn-scroll' );
+		if ( scroller ) scroller.addEventListener( 'scroll', inspectorScrollFn, { passive: true } );
+
+		const names = [ parts.name, ...children.map( ( c ) => c.parts.name ) ];
+		const types = {};
+		await Promise.all( [ ...new Set( names ) ].map( async ( n ) => { types[ n ] = await blockTypeFor( n ); } ) );
+		if ( ! inspectorEl ) return; // closed while loading
+
+		const ownType = types[ parts.name ];
+		const ownDefs = ownType && ownType.attributes;
+		const ownFields = ownDefs ? inspectorFields( ownDefs, parts.attrs, 'own' ) : '';
+		const childSections = children.map( ( c, i ) => {
+			const t = types[ c.parts.name ];
+			const fields = t && t.attributes ? inspectorFields( t.attributes, c.parts.attrs, String( i ) ) : '';
+			return fields ? `<div class="minn-insp-child"><div class="minn-insp-child-title">${ i + 1 }. ${ esc( c.parts.name.replace( /^core\//, '' ) ) }</div>${ fields }</div>` : '';
+		} ).join( '' );
+
+		const editable = !! ( ownFields || childSections );
+		inspectorState = { idx, parts, segments, children, types, islandEl };
+		inspectorEl.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">${ esc( ( ownType && ownType.title ) || parts.name.replace( /^core\//, '' ) ) }</span>
+				<button class="minn-x-btn" id="minn-insp-close" type="button">×</button>
+			</div>
+			<div class="minn-insp-body">
+				${ ownFields }
+				${ childSections }
+				${ editable ? '' : `<div class="minn-insp-note">${ ownType
+					? 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.'
+					: 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' }</div>` }
+			</div>
+			${ editable ? `<div class="minn-insp-actions"><button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button></div>` : '' }`;
+		positionInspector( islandEl );
+
+		$( '#minn-insp-close', inspectorEl ).addEventListener( 'click', closeInspector );
+		const applyBtn = $( '#minn-insp-apply', inspectorEl );
+		if ( applyBtn ) applyBtn.addEventListener( 'click', () => applyInspector( applyBtn ) );
+	}
+
+	async function applyInspector( btn ) {
+		const insp = inspectorState;
+		const ed = state.editor;
+		if ( ! insp || ! ed || ! inspectorEl ) return;
+
+		// Fold form values back into attribute objects. Values equal to the
+		// schema default are omitted ONLY if the attribute wasn't explicitly in
+		// the block already — an untouched "color":"blue" survives an Apply
+		// byte-for-byte even when blue is the default (nothing silently drops).
+		const collect = ( model, defs ) => {
+			const attrs = { ...model.attrs };
+			$$( '[data-insp]', inspectorEl ).forEach( ( input ) => {
+				const [ target, key ] = input.dataset.insp.split( ':' );
+				if ( ( model.prefix ) !== target ) return;
+				let v;
+				if ( input.dataset.type === 'boolean' ) v = input.checked;
+				else if ( input.dataset.type === 'number' ) v = input.value === '' ? undefined : Number( input.value );
+				else v = input.value;
+				const def = ( defs || {} )[ key ] || {};
+				const wasExplicit = key in model.attrs;
+				if ( v === undefined ) {
+					delete attrs[ key ]; // cleared field = remove the attribute
+				} else if ( ! wasExplicit && def.default !== undefined && v === def.default ) {
+					// never present and still at the default — don't add noise
+				} else {
+					attrs[ key ] = v;
+				}
+			} );
+			return attrs;
+		};
+
+		const ownType = insp.types[ insp.parts.name ];
+		const ownAttrs = collect( { attrs: insp.parts.attrs, prefix: 'own' }, ownType && ownType.attributes );
+
+		// Rebuild child segment raws, then the island raw.
+		let inner = insp.parts.inner;
+		if ( insp.children.length && insp.segments ) {
+			insp.children.forEach( ( c, i ) => {
+				const t = insp.types[ c.parts.name ];
+				const attrs = collect( { attrs: c.parts.attrs, prefix: String( i ) }, t && t.attributes );
+				const open = buildOpenComment( c.parts.name, attrs, c.parts.selfClosing );
+				insp.segments[ c.segIdx ] = { ...insp.segments[ c.segIdx ], raw: c.parts.selfClosing ? open : open + c.seg.raw.slice( c.parts.open.length ) };
+			} );
+			inner = insp.segments.map( ( s ) => s.raw ).join( '' );
+		}
+		const open = buildOpenComment( insp.parts.name, ownAttrs, insp.parts.selfClosing );
+		const newRaw = insp.parts.selfClosing ? open : open + inner + insp.parts.close;
+
+		btn.disabled = true;
+		btn.textContent = 'Applying…';
+		ed.islands[ insp.idx ] = newRaw;
+
+		// Refresh the preview with a real server render; tolerate failure
+		// (a misbehaving render callback must never break the editor).
+		const previewEl = document.querySelector( `.minn-island-preview[data-preview="${ insp.idx }"]` );
+		try {
+			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ] } ) } );
+			const html = r && r.rendered && r.rendered[ 0 ];
+			if ( previewEl && html && html.trim() ) previewEl.innerHTML = html;
+		} catch ( e ) {
+			if ( previewEl ) {
+				const inner2 = stripBlockComments( newRaw ).trim();
+				if ( inner2 ) previewEl.innerHTML = inner2;
+			}
+		}
+		toast( 'Block updated' );
+		closeInspector();
+		if ( ed.id ) scheduleAutosave();
+	}
+
+	// Server-render island previews so dynamic blocks (and nested dynamic
+	// children) show real content instead of an empty card. Best-effort.
+	function renderIslandPreviews( body, ed ) {
+		if ( ! ed.islands || ! ed.islands.length ) return;
+		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: ed.islands } ) } )
+			.then( ( r ) => {
+				if ( ! r || ! Array.isArray( r.rendered ) || ! document.contains( body ) ) return;
+				r.rendered.forEach( ( html, i ) => {
+					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
+					if ( el && html && html.trim() ) el.innerHTML = html;
+				} );
+			} )
+			.catch( () => {} );
 	}
 
 	/* ===== Slash command menu ===== */
@@ -4490,6 +4875,7 @@
 
 	function renderView() {
 		renderTopbar();
+		closeInspector();
 		const tip = $( '#minn-chart-tip' );
 		if ( tip ) tip.hidden = true;
 		switch ( state.route ) {

@@ -54,6 +54,51 @@ class Minn_Admin {
 				'default'      => false,
 			)
 		);
+
+		// wp-admin options core never put behind wp/v2/settings — same pattern
+		// as blog_public above. Writes are gated by manage_options at the endpoint.
+		register_setting(
+			'general',
+			'users_can_register',
+			array(
+				'show_in_rest' => true,
+				'type'         => 'integer',
+				'default'      => 0,
+			)
+		);
+		register_setting(
+			'general',
+			'default_role',
+			array(
+				'show_in_rest'      => true,
+				'type'              => 'string',
+				'default'           => 'subscriber',
+				'sanitize_callback' => function ( $value ) {
+					// Only real roles; a bogus write keeps the current value.
+					return wp_roles()->is_role( $value ) ? $value : get_option( 'default_role', 'subscriber' );
+				},
+			)
+		);
+		foreach ( array( 'comment_moderation', 'comment_registration' ) as $discussion_opt ) {
+			register_setting(
+				'discussion',
+				$discussion_opt,
+				array(
+					'show_in_rest' => true,
+					'type'         => 'integer',
+					'default'      => 0,
+				)
+			);
+		}
+		register_setting(
+			'discussion',
+			'show_avatars',
+			array(
+				'show_in_rest' => true,
+				'type'         => 'integer',
+				'default'      => 1,
+			)
+		);
 	}
 
 	/**

@@ -252,6 +252,25 @@ class Minn_Admin_REST {
 			)
 		);
 
+		register_rest_route(
+			self::NS,
+			'/render-blocks',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'render_blocks' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'blocks' => array(
+						'type'     => 'array',
+						'required' => true,
+						'items'    => array( 'type' => 'string' ),
+					),
+				),
+			)
+		);
+
 		$permalinks_perm = function () {
 			return current_user_can( 'manage_options' );
 		};
@@ -279,6 +298,24 @@ class Minn_Admin_REST {
 				),
 			)
 		);
+	}
+
+	/**
+	 * Render raw block markup server-side (do_blocks) — powers island previews
+	 * in the editor and the block inspector's post-edit refresh. This runs the
+	 * same render callbacks the front end runs on every page view; the cap gate
+	 * (edit_posts) matches the editor itself.
+	 */
+	public static function render_blocks( WP_REST_Request $request ) {
+		$blocks = $request['blocks'];
+		if ( ! is_array( $blocks ) ) {
+			return new WP_Error( 'invalid_blocks', 'Expected an array of block markup strings.', array( 'status' => 400 ) );
+		}
+		$rendered = array();
+		foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
+			$rendered[] = do_blocks( (string) $raw );
+		}
+		return rest_ensure_response( array( 'rendered' => $rendered ) );
 	}
 
 	/**

@@ -395,6 +395,19 @@ select.minn-input {
   background-repeat: no-repeat; background-position: right 11px center;
 }
 .minn-divider { height: 1px; background: var(--border); }
+/* Site icon field: preview + dropzone. */
+.minn-icon-drop {
+  display: flex; align-items: center; gap: 14px; padding: 12px;
+  border: 1px dashed var(--border2); border-radius: 11px; transition: border-color 0.15s, background 0.15s;
+}
+.minn-icon-drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.minn-icon-preview { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+.minn-icon-empty {
+  width: 56px; height: 56px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel2);
+  display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 20px; flex-shrink: 0;
+}
+.minn-icon-info { flex: 1; min-width: 0; }
+.minn-icon-btns { display: flex; gap: 8px; margin-top: 8px; }
 .minn-toggle-rows { display: flex; flex-direction: column; gap: 14px; }
 .minn-toggle-row { display: flex; align-items: center; gap: 14px; }
 .minn-toggle-info { flex: 1; }
@@ -651,14 +664,38 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 }
 .minn-block-island:hover { border-color: var(--accent); }
 .minn-island-chip {
-  position: absolute; top: -9px; right: 12px; font-size: 10.5px; font-weight: 600;
+  position: absolute; top: -10px; right: 12px; font-size: 10.5px; font-weight: 600;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
-  border: 1px solid var(--border); padding: 1px 8px; border-radius: 5px;
+  border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
 }
-.minn-block-island:hover .minn-island-chip { color: var(--accent2); border-color: var(--accent); }
+.minn-island-chip:hover, .minn-block-island:hover .minn-island-chip { color: var(--accent2); border-color: var(--accent); }
 .minn-island-preview { pointer-events: none; opacity: 0.85; overflow: hidden; max-height: 420px; }
 .minn-island-preview > :last-child { margin-bottom: 0; }
 .minn-island-empty { color: var(--text3); font-size: 13.5px; font-style: italic; }
+
+/* ===== Block inspector popover ===== */
+.minn-inspector {
+  position: fixed; z-index: 70; width: 320px; max-height: 72vh; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 13px;
+  box-shadow: var(--shadow); animation: minnScaleIn 0.14s ease;
+}
+.minn-insp-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.minn-insp-title { font-weight: 700; font-size: 14.5px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-insp-body { padding: 12px 14px; overflow-y: auto; font-size: 13.5px; display: flex; flex-direction: column; gap: 6px; }
+.minn-insp-body .minn-field-label { margin: 4px 0 0; }
+.minn-insp-textarea { min-height: 74px; resize: vertical; font-size: 13.5px; line-height: 1.5; }
+.minn-insp-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 500; padding: 4px 0; cursor: pointer; }
+.minn-insp-child { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; }
+.minn-insp-child-title {
+  font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
+.minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); }
+.minn-insp-actions .minn-btn-primary { width: 100%; justify-content: center; }
+@media (max-width: 640px) {
+  .minn-inspector { width: calc(100vw - 20px); left: 10px !important; }
+}
 
 /* ===== Code syntax highlighting =====
    Code surfaces are always dark — fixed colors, not theme vars — so the
