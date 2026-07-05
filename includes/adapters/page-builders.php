@@ -240,6 +240,22 @@ function minn_admin_page_builders_boot() {
 add_action(
 	'rest_api_init',
 	function () {
+		// Always registered (even with no builder active) so the client can
+		// re-poll after a plugin/theme toggle and see a builder appear — the
+		// boot payload is a one-time snapshot.
+		register_rest_route(
+			'minn-admin/v1',
+			'/builders',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'callback'            => function () {
+					return rest_ensure_response( minn_admin_page_builders_boot() );
+				},
+			)
+		);
 		if ( ! minn_admin_page_builders() ) {
 			return; // No builder active — the field (and its per-row cost) vanishes.
 		}
