@@ -1,0 +1,62 @@
+# Working on Minn Admin
+
+Minn Admin is a standalone WordPress admin SPA served at `/minn-admin/`. One vanilla-JS
+file, one stylesheet, PHP that reads top to bottom. **No build step — that's a core
+architectural bet, not an omission.** Read `docs/goals.md` before proposing structure.
+
+## The development loop
+
+1. Edit files directly (`assets/js/app.js`, `assets/css/app.css`, `includes/*.php`).
+   Assets are cache-busted by `?ver=MINN_ADMIN_VERSION`, so hard-refresh while iterating.
+2. Cheap validation on every change:
+   ```bash
+   node --check assets/js/app.js && php -l includes/*.php minn-admin.php
+   ```
+3. **Browser-verify before calling anything done.** Syntax checks prove nothing about an
+   editor; this codebase fights contenteditable, and contenteditable fights back. Drive a
+   real Chrome via the harness in `tests/` (see `tests/README.md`) — real keystrokes,
+   real clicks, zero-console-errors as a standing gate, and check what actually got
+   *saved*, not just what the DOM shows.
+4. A bug fix in the editor ships with a test. Reproduce first (a failing script), fix,
+   rerun to green, keep the suite in `tests/`.
+
+## Map
+
+| Where | What |
+|---|---|
+| `assets/js/app.js` | The entire SPA. Section banners (`/* ===== … ===== */`) are the navigation — grep them. |
+| `includes/class-minn-admin.php` | Routing, auth gate, boot payload (`window.MINN`), oEmbed shims |
+| `includes/class-minn-admin-rest.php` | `minn-admin/v1` endpoints (overview, render-blocks, editor-styles, …) |
+| `includes/adapters/` | Bundled third-party integrations — each guards on its plugin; `acf.php` is the panel reference, `seo.php` the REST-field reference |
+| `docs/` | Decisions live here. `editor-direction.md` (safety model — read before touching editor scope), `editor-roadmap.md` (where it's going), `block-inspector.md`, `for-plugin-authors.md` |
+| `tests/` | Self-contained Playwright suites + `helpers.js` harness |
+
+## Editor invariants (violations are data loss)
+
+- **The safety model is frozen.** `editorModeFor()` → classic / blocks / locked. Islands
+  (`contenteditable=false`) pass through byte-identical from `ed.islands[]`; locked posts
+  never send `content`. Grow `SIMPLE_BLOCKS` / `EDITABLE_ATTRS` one proven attribute at a
+  time — every allowed attribute must be reproducible from the live DOM at serialize time.
+- **Never trust contenteditable defaults.** The recurring traps, all documented at their
+  fix sites in `app.js`: Chrome rebalances boundary whitespace destructively; `insertHTML`
+  rewrites `<code>` into styled spans; new lists nest inside the source paragraph
+  (`liftNestedLists`); whole-block deletion merges neighbors into husks (delete *contents*
+  instead); an adjacent Backspace atomically deletes a non-editable island
+  (`bindIslandGuards`); modal clicks destroy the selection (capture the Range first).
+- **Nothing decorative reaches the database.** Syntax-highlight spans, hover inline
+  styles, `data-minn-attrs` markers, nbsp litter, `<strike>`, empty figure husks — all
+  scrubbed in `serializeToBlocks()` / `classicHtml()`. New editor chrome must live on
+  `document.body` (chips, popovers) or be scrubbed at serialize; prove it by saving and
+  inspecting `post_content`.
+- **Lists over REST:** never request rendered content in list views (`_fields`
+  allowlists); no `_fields` on `wp/v2/types`. Capability checks are server-side.
+
+## Conventions
+
+- Commits: Emoji-Log — `📦 NEW:` `👌 IMPROVE:` `🐛 FIX:` `📖 DOC:` `🚀 RELEASE:`,
+  imperative and present tense.
+- Version lives in four places at release time: `minn-admin.php` (×2), `readme.txt`
+  Stable tag, `manifest.json` (version + download_url). Don't touch them mid-cycle.
+- Match the file's comment voice: comments state constraints the code can't show —
+  especially the hard-won browser facts. Delete nothing labeled "hard-won" without
+  re-proving it in a browser.
