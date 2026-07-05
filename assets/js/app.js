@@ -4927,6 +4927,16 @@
 				showCodeChip( pre );
 			}
 		} );
+		// Hovering an editable table surfaces its row/column controls chip
+		// (locked bodies never save, so no manipulation UI there).
+		if ( ! locked ) {
+			body.addEventListener( 'mouseover', ( e ) => {
+				const table = e.target.closest( 'table' );
+				if ( table && body.contains( table ) && ! table.closest( '.minn-block-island' ) ) {
+					showTableChip( table );
+				}
+			} );
+		}
 
 		$( '#minn-editor-title', view ).addEventListener( 'input', scheduleAutosave );
 		if ( ! locked ) {
@@ -5564,6 +5574,200 @@
 				updateEditorStats();
 			} )
 			.catch( () => {} );
+	}
+
+	/* ===== Table chip (row & column controls for editable tables) =====
+	 * Same pattern as the code chip below: hover an editable table and a fixed
+	 * chip appears; clicking it opens a popover with row/column/header ops that
+	 * act on the CELL THE CARET SITS IN. Chip and popover live on
+	 * document.body so they can never leak into serialized content. */
+
+	let tableChip = null;
+	let tableChipTable = null;
+	let tablePop = null;
+
+	function tablePopAway( e ) {
+		if ( tablePop && ! tablePop.contains( e.target ) && e.target !== tableChip ) hideTablePop();
+	}
+
+	function hideTablePop() {
+		if ( tablePop ) tablePop.remove();
+		tablePop = null;
+		document.removeEventListener( 'mousedown', tablePopAway, true );
+	}
+
+	function hideTableChip() {
+		if ( tableChip ) tableChip.hidden = true;
+		tableChipTable = null;
+		hideTablePop();
+	}
+
+	function ensureTableChip() {
+		if ( tableChip ) return;
+		tableChip = document.createElement( 'button' );
+		tableChip.type = 'button';
+		tableChip.className = 'minn-code-chip';
+		tableChip.hidden = true;
+		tableChip.title = 'Table \u2014 rows, columns, header';
+		tableChip.textContent = '\u2699 table';
+		document.body.appendChild( tableChip );
+		tableChip.addEventListener( 'mousedown', ( e ) => e.preventDefault() ); // keep the caret in its cell
+		tableChip.addEventListener( 'click', () => tableChipTable && openTablePop( tableChipTable ) );
+		document.addEventListener( 'mouseover', ( e ) => {
+			if ( ! tableChip || tableChip.hidden || tablePop ) return;
+			if ( e.target === tableChip || ( e.target.closest && e.target.closest( 'table' ) === tableChipTable ) ) return;
+			if ( ! ( e.target.closest && e.target.closest( 'table' ) ) ) hideTableChip();
+		} );
+		document.addEventListener( 'scroll', () => hideTableChip(), true );
+	}
+
+	function showTableChip( table ) {
+		ensureTableChip();
+		if ( tablePop && tableChipTable !== table ) hideTablePop();
+		tableChipTable = table;
+		tableChip.hidden = false;
+		const rect = table.getBoundingClientRect();
+		tableChip.style.top = ( rect.top - 10 ) + 'px';
+		tableChip.style.left = Math.max( 10, Math.min( rect.right - tableChip.offsetWidth - 12, window.innerWidth - tableChip.offsetWidth - 12 ) ) + 'px';
+	}
+
+	// The cell the caret sits in; falls back to the table's first cell.
+	function tableRefCell( table ) {
+		const sel = window.getSelection();
+		let n = sel.rangeCount ? sel.anchorNode : null;
+		while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+		const cell = n && n.closest ? n.closest( 'td, th' ) : null;
+		return cell && table.contains( cell ) ? cell : table.querySelector( 'td, th' );
+	}
+
+	function tableNewCell( tag ) {
+		const c = document.createElement( tag );
+		c.innerHTML = '&nbsp;';
+		return c;
+	}
+
+	function openTablePop( table ) {
+		hideTablePop();
+		tablePop = document.createElement( 'div' );
+		tablePop.className = 'minn-inspector minn-table-pop';
+		tablePop.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">Table</span>
+				<button class="minn-x-btn" data-close type="button">\u00d7</button>
+			</div>
+			<div class="minn-insp-body">
+				<div class="minn-field-label">Row \u2014 at the caret</div>
+				<div class="minn-table-ops">
+					<button class="minn-btn-soft" data-op="row-above" type="button">+ Above</button>
+					<button class="minn-btn-soft" data-op="row-below" type="button">+ Below</button>
+					<button class="minn-btn-soft danger" data-op="row-del" type="button">Delete</button>
+				</div>
+				<div class="minn-field-label">Column \u2014 at the caret</div>
+				<div class="minn-table-ops">
+					<button class="minn-btn-soft" data-op="col-left" type="button">+ Left</button>
+					<button class="minn-btn-soft" data-op="col-right" type="button">+ Right</button>
+					<button class="minn-btn-soft danger" data-op="col-del" type="button">Delete</button>
+				</div>
+				<div class="minn-table-ops">
+					<button class="minn-btn-soft" data-op="header" type="button">${ table.tHead ? 'Remove header row' : 'Make first row a header' }</button>
+					<button class="minn-btn-soft danger" data-op="table-del" type="button">Delete table</button>
+				</div>
+			</div>`;
+		document.body.appendChild( tablePop );
+		const anchor = tableChip && ! tableChip.hidden ? tableChip : table;
+		const rect = anchor.getBoundingClientRect();
+		const w = tablePop.offsetWidth || 280;
+		tablePop.style.top = Math.min( rect.bottom + 8, window.innerHeight - tablePop.offsetHeight - 10 ) + 'px';
+		tablePop.style.left = Math.max( 10, Math.min( rect.right - w, window.innerWidth - w - 12 ) ) + 'px';
+		tablePop.querySelector( '[data-close]' ).addEventListener( 'click', hideTablePop );
+		$$( '[data-op]', tablePop ).forEach( ( b ) => {
+			b.addEventListener( 'mousedown', ( e ) => e.preventDefault() ); // the caret cell must survive the click
+			b.addEventListener( 'click', () => tableOp( table, b.dataset.op ) );
+		} );
+		document.addEventListener( 'mousedown', tablePopAway, true );
+	}
+
+	function tableOp( table, op ) {
+		const cell = tableRefCell( table );
+		if ( ! cell && op !== 'table-del' ) return;
+		const row = cell ? cell.closest( 'tr' ) : null;
+		const allRows = Array.from( table.querySelectorAll( 'tr' ) );
+
+		// Deleting the last row/column means deleting the table.
+		if ( op === 'table-del' || ( op === 'row-del' && allRows.length <= 1 ) || ( op === 'col-del' && row && row.cells.length <= 1 ) ) {
+			const target = table.closest( 'figure' ) || table;
+			const p = document.createElement( 'p' );
+			p.appendChild( document.createElement( 'br' ) );
+			target.replaceWith( p );
+			setCaret( p, 0 );
+			hideTableChip();
+			scheduleAutosave();
+			return;
+		}
+
+		if ( op === 'row-above' || op === 'row-below' ) {
+			const tr = document.createElement( 'tr' );
+			Array.from( row.cells ).forEach( () => tr.appendChild( tableNewCell( 'td' ) ) );
+			if ( row.parentNode.tagName === 'THEAD' ) {
+				// New rows are body rows — relative to a header they land at
+				// the top of the body, never inside the thead.
+				const tbody = table.tBodies[ 0 ];
+				if ( tbody ) tbody.insertBefore( tr, tbody.firstChild );
+				else table.appendChild( tr );
+			} else {
+				row.parentNode.insertBefore( tr, op === 'row-above' ? row : row.nextSibling );
+			}
+		} else if ( op === 'row-del' ) {
+			const section = row.parentNode;
+			row.remove();
+			if ( section.tagName !== 'TABLE' && ! section.querySelector( 'tr' ) ) section.remove();
+		} else if ( op === 'col-left' || op === 'col-right' ) {
+			const idx = cell.cellIndex + ( op === 'col-right' ? 1 : 0 );
+			allRows.forEach( ( r ) => {
+				const tag = r.parentNode.tagName === 'THEAD' ? 'th' : 'td';
+				r.insertBefore( tableNewCell( tag ), r.cells[ idx ] || null );
+			} );
+		} else if ( op === 'col-del' ) {
+			const idx = cell.cellIndex;
+			allRows.forEach( ( r ) => {
+				if ( r.cells[ idx ] ) r.cells[ idx ].remove();
+			} );
+		} else if ( op === 'header' ) {
+			if ( table.tHead ) {
+				// The header row becomes the first body row — content kept.
+				const hr = table.tHead.rows[ 0 ];
+				const tr = document.createElement( 'tr' );
+				Array.from( hr.cells ).forEach( ( c ) => {
+					const td = document.createElement( 'td' );
+					td.innerHTML = c.innerHTML;
+					tr.appendChild( td );
+				} );
+				const tbody = table.tBodies[ 0 ];
+				if ( tbody ) tbody.insertBefore( tr, tbody.firstChild );
+				else table.appendChild( tr );
+				table.tHead.remove();
+			} else {
+				const first = table.querySelector( 'tr' );
+				if ( first ) {
+					const thead = document.createElement( 'thead' );
+					const tr = document.createElement( 'tr' );
+					Array.from( first.cells ).forEach( ( c ) => {
+						const th = document.createElement( 'th' );
+						th.innerHTML = c.innerHTML;
+						tr.appendChild( th );
+					} );
+					thead.appendChild( tr );
+					first.remove();
+					table.insertBefore( thead, table.firstChild );
+				}
+			}
+		}
+		scheduleAutosave();
+		// Geometry (and the header button label) changed — refresh both.
+		if ( table.isConnected ) {
+			showTableChip( table );
+			openTablePop( table );
+		}
 	}
 
 	/* ===== Code block chip (config popout for editable code blocks) =====
