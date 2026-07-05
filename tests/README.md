@@ -14,6 +14,7 @@ MINN_TEST_PASS=<admin password> node paste.test.js      # Word/Docs/web fixtures
 MINN_TEST_PASS=<admin password> node localnet.test.js   # crash net: snapshot → hard-leave → recover
 MINN_TEST_PASS=<admin password> node lock.test.js       # slow (~60s): two sessions ride the 30s lock refresh
 MINN_TEST_PASS=<admin password> node media-flow.test.js # paste/drop image files → library; inline captions
+MINN_TEST_PASS=<admin password> node editor-sidebar.test.js # slug, discussion, visibility, sticky (~20s)
 
 # all suites
 for f in *.test.js; do MINN_TEST_PASS=… node "$f" || break; done
