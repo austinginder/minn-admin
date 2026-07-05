@@ -535,6 +535,13 @@ select.minn-input {
 .minn-editor-body pre { padding: 12px 14px; overflow-x: auto; }
 .minn-editor-body code { padding: 1px 6px; }
 .minn-editor-body:empty::before { content: 'Keep writing…'; color: var(--text3); }
+/* Word count / reading time — sticky so it rides along while scrolling long posts. */
+.minn-editor-stats {
+  position: sticky; bottom: 14px; display: inline-flex; margin-top: 14px; padding: 4px 11px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12px; color: var(--text3); pointer-events: none; user-select: none; white-space: nowrap;
+}
+.minn-editor-stats:empty { display: none; }
 .minn-editor-side { display: flex; flex-direction: column; gap: 18px; }
 .minn-side-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 15px; }
 .minn-side-title { font-weight: 700; font-size: 14px; margin-bottom: 12px; }

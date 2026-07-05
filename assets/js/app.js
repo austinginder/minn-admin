@@ -4021,6 +4021,7 @@
 							if ( body ) {
 								body.innerHTML = r.content.rendered;
 								highlightCodeBlocks( body );
+								updateEditorStats();
 							}
 						}
 					} )
@@ -4184,6 +4185,7 @@
 		ed.dirty = true;
 		ed.editedAt = Date.now();
 		updateSavedRow();
+		updateEditorStats();
 		clearTimeout( autosaveTimer );
 		autosaveTimer = setTimeout( autosaveFire, AUTOSAVE_IDLE );
 		if ( ! autosaveMaxTimer ) autosaveMaxTimer = setTimeout( autosaveFire, AUTOSAVE_MAX );
@@ -4244,6 +4246,26 @@
 		const s = savedState( ed );
 		el.textContent = s.text;
 		el.className = 'minn-side-val ' + s.cls;
+	}
+
+	// Word count + reading time for the sticky pill under the editor body.
+	// Island PREVIEWS count (they're real content); island chrome (the ⚙ chip,
+	// the "dynamic block" placeholder) doesn't.
+	function updateEditorStats() {
+		const el = $( '#minn-editor-stats' );
+		const body = $( '#minn-editor-body' );
+		if ( ! el || ! body ) return;
+		const walker = document.createTreeWalker( body, NodeFilter.SHOW_TEXT, {
+			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-empty' )
+				? NodeFilter.FILTER_REJECT
+				: NodeFilter.FILTER_ACCEPT,
+		} );
+		let text = '';
+		while ( walker.nextNode() ) text += walker.currentNode.textContent + ' ';
+		const words = ( text.match( /\S+/g ) || [] ).length;
+		// 225 wpm — the middle of the usual 200–250 adult-reading estimates.
+		const mins = Math.max( 1, Math.round( words / 225 ) );
+		el.textContent = words ? `${ words.toLocaleString() } words · ${ mins } min read` : '0 words';
 	}
 
 	function scheduledInFuture( ed ) {
@@ -4737,6 +4759,7 @@
 					<span class="minn-tool-hint">type / for blocks</span>
 				</div>` }
 				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }"></div>
+				<div class="minn-editor-stats" id="minn-editor-stats" aria-live="off"></div>
 			</div>
 			<div class="minn-editor-side" id="minn-editor-side"></div>
 		</div>`;
@@ -4745,6 +4768,7 @@
 		body.innerHTML = ed.content;
 		highlightCodeBlocks( body );
 		renderIslandPreviews( body, ed );
+		updateEditorStats();
 		// Island chips open the block inspector (works in locked mode too — read-only there is fine
 		// because locked posts never send content, but islands only exist in blocks mode anyway).
 		body.addEventListener( 'click', ( e ) => {
@@ -5161,6 +5185,18 @@
 			<button class="minn-btn-soft" type="button" id="minn-insp-add"${ addable.length === 1 ? ` data-add-type="${ esc( addable[ 0 ] ) }"` : '' }>+ Add ${ addable.length === 1 ? esc( addable[ 0 ].split( '/' ).pop() ) : 'block' }</button>
 		</div>` : '';
 
+		// Embeds and galleries carry their content in saved HTML, so attribute
+		// edits alone can't retarget them — offer a full rebuild through the
+		// same templates that create them (URL swap / image re-pick).
+		const short = model.parts.name.replace( /^core\//, '' );
+		const special = short === 'embed' ? `
+			<button class="minn-btn-soft" type="button" id="minn-insp-embed-url" style="width:100%; justify-content:center;">Change URL…</button>
+			<div class="minn-insp-note">Rebuilds the embed for the new URL.</div>`
+		: short === 'gallery' ? `
+			<button class="minn-btn-soft" type="button" id="minn-insp-gallery" style="width:100%; justify-content:center;">Replace images…</button>
+			<div class="minn-insp-note">Re-picks the gallery images; per-image captions and layout tweaks reset.</div>`
+		: '';
+
 		const editable = !! ( ownFields || childSections );
 		inspectorEl.innerHTML = `
 			<div class="minn-insp-head">
@@ -5168,6 +5204,7 @@
 				<button class="minn-x-btn" id="minn-insp-close" type="button">×</button>
 			</div>
 			<div class="minn-insp-body">
+				${ special }
 				${ ownFields }
 				${ childSections }
 				${ addRow }
@@ -5180,6 +5217,27 @@
 				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="Remove this block">${ icon( 'trash' ) }${ editable ? '' : ' Remove block' }</button>
 			</div>`;
 		positionInspector( insp.islandEl );
+	}
+
+	// Regenerate an island's stored markup wholesale (embed URL change,
+	// gallery re-pick) and refresh its preview from a server render.
+	function replaceIsland( idx, islandEl, template ) {
+		const ed = state.editor;
+		if ( ! ed || ! ed.islands || ed.islands[ idx ] == null ) return;
+		ed.islands[ idx ] = template;
+		const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
+		if ( prev ) {
+			const inner = stripBlockComments( template ).trim();
+			if ( inner ) prev.innerHTML = inner;
+		}
+		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ] } ) } )
+			.then( ( r ) => {
+				const html = r && r.rendered && r.rendered[ 0 ];
+				if ( prev && html && html.trim() ) prev.innerHTML = html;
+			} )
+			.catch( () => {} );
+		toast( 'Block updated' );
+		scheduleAutosave();
 	}
 
 	async function openInspector( islandEl ) {
@@ -5226,6 +5284,26 @@
 				closeInspector();
 				toast( 'Block removed' );
 				if ( ed2 && ed2.id ) scheduleAutosave();
+				return;
+			}
+			if ( e.target.closest( '#minn-insp-embed-url' ) ) {
+				const current = ( insp.model.ownAttrs && insp.model.ownAttrs.url ) || '';
+				const url = ( prompt( 'Embed URL (YouTube, tweet, audio…):', current ) || '' ).trim();
+				if ( ! url || url === current ) return;
+				if ( ! /^https?:\/\/\S+$/.test( url ) ) { toast( 'That doesn’t look like a URL', true ); return; }
+				const { idx, islandEl: el } = insp;
+				closeInspector();
+				replaceIsland( idx, el, embedTemplate( url ) );
+				return;
+			}
+			if ( e.target.closest( '#minn-insp-gallery' ) ) {
+				// The media picker modal takes over the screen — close the
+				// popover first and hold on to the island by index.
+				const { idx, islandEl: el } = insp;
+				closeInspector();
+				openMediaPicker( ( picks ) => {
+					if ( picks && picks.length ) replaceIsland( idx, el, galleryTemplate( picks ) );
+				}, { multi: true } );
 				return;
 			}
 			const applyBtn = e.target.closest( '#minn-insp-apply' );
