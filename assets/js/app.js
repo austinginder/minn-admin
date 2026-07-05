@@ -366,6 +366,21 @@
 			logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
 			globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/>',
 			help: '<circle cx="12" cy="12" r="10"/><text x="12" y="16.5" text-anchor="middle" font-size="12.5" font-weight="650" font-family="inherit" fill="currentColor" stroke-width="0">?</text>',
+			// Editor toolbar + slash menu glyphs (same lucide/feather family).
+			bold: '<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>',
+			italic: '<line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/>',
+			code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+			braces: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
+			h2: '<path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M21 18h-4c0-4 4-3 4-6 0-1.5-2-2.5-4-1"/>',
+			h3: '<path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M17.5 10.5c1.7-1 3.5 0 3.5 1.5a2 2 0 0 1-2 2"/><path d="M17 17.5c2 1.5 4 .3 4-1.5a2 2 0 0 0-2-2"/>',
+			quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+			link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+			pilcrow: '<path d="M13 4v16"/><path d="M17 4v16"/><path d="M19 4H9.5a4.5 4.5 0 0 0 0 9H13"/>',
+			olist: '<line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>',
+			table: '<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>',
+			minus: '<path d="M5 12h14"/>',
+			play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+			gallery: '<path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><circle cx="12" cy="8" r="2"/><rect width="16" height="16" x="6" y="2" rx="2"/>',
 		};
 		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ icons[ name ] || '' }</svg>`;
 	}
@@ -4831,16 +4846,16 @@
 					<a href="${ esc( ed.editUrl ) }">Open in block editor ↗</a>
 				</div>` : `
 				<div class="minn-editor-toolbar">
-					<button class="minn-tool b" data-cmd="bold" title="Bold">B</button>
-					<button class="minn-tool i" data-cmd="italic" title="Italic">i</button>
-					<button class="minn-tool code" data-cmd="inline-code" title="Inline code — or wrap it in backticks">&lt;/&gt;</button>
-					<button class="minn-tool" data-block="h2" title="Heading 2">H2</button>
-					<button class="minn-tool" data-block="h3" title="Heading 3">H3</button>
-					<button class="minn-tool" data-block="blockquote" title="Quote">“ ”</button>
-					<button class="minn-tool" data-block="pre" title="Code">{ }</button>
-					<button class="minn-tool" data-cmd="link" title="Link">🔗</button>
-					<button class="minn-tool" data-cmd="image" title="Insert image">🖼</button>
-					<button class="minn-tool" data-block="p" title="Paragraph">¶</button>
+					<button class="minn-tool b" data-cmd="bold" title="Bold">${ icon( 'bold' ) }</button>
+					<button class="minn-tool i" data-cmd="italic" title="Italic">${ icon( 'italic' ) }</button>
+					<button class="minn-tool code" data-cmd="inline-code" title="Inline code — or wrap it in backticks">${ icon( 'code' ) }</button>
+					<button class="minn-tool" data-block="h2" title="Heading 2">${ icon( 'h2' ) }</button>
+					<button class="minn-tool" data-block="h3" title="Heading 3">${ icon( 'h3' ) }</button>
+					<button class="minn-tool" data-block="blockquote" title="Quote">${ icon( 'quote' ) }</button>
+					<button class="minn-tool" data-block="pre" title="Code block">${ icon( 'braces' ) }</button>
+					<button class="minn-tool" data-cmd="link" title="Link">${ icon( 'link' ) }</button>
+					<button class="minn-tool" data-cmd="image" title="Insert image">${ icon( 'img' ) }</button>
+					<button class="minn-tool" data-block="p" title="Paragraph">${ icon( 'pilcrow' ) }</button>
 					<select class="minn-input minn-code-lang" id="minn-code-lang" title="Code language" hidden>
 						${ CODE_LANGS.map( ( l ) => `<option value="${ l }">${ l === 'auto' ? 'language: auto' : l }</option>` ).join( '' ) }
 					</select>
@@ -6041,22 +6056,22 @@
 		let selIdx = 0;
 		let filtered = [];
 		const items = [
-			[ 'H2', 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
-			[ 'H3', 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
-			[ '“ ”', 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
-			[ '{ }', 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
-			[ '•', 'Bulleted list', () => document.execCommand( 'insertUnorderedList', false, null ) ],
-			[ '1.', 'Numbered list', () => document.execCommand( 'insertOrderedList', false, null ) ],
-			[ '🖼', 'Image', 'image' ],
-			[ '▦', 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
-			[ '—', 'Divider', { html: '<hr>' } ],
+			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
+			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
+			[ icon( 'quote' ), 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
+			[ icon( 'braces' ), 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
+			[ icon( 'list' ), 'Bulleted list', () => document.execCommand( 'insertUnorderedList', false, null ) ],
+			[ icon( 'olist' ), 'Numbered list', () => document.execCommand( 'insertOrderedList', false, null ) ],
+			[ icon( 'img' ), 'Image', 'image' ],
+			[ icon( 'table' ), 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
+			[ icon( 'minus' ), 'Divider', { html: '<hr>' } ],
 		];
 		// Embeds and galleries insert as islands — blocks mode only (classic
 		// content already auto-embeds lone URLs server-side via WP's autoembed).
 		if ( state.editor && state.editor.mode === 'blocks' ) {
 			items.push(
-				[ '▶', 'Embed — YouTube, tweet, audio…', 'embed' ],
-				[ '🖼🖼', 'Gallery', 'gallery' ],
+				[ icon( 'play' ), 'Embed — YouTube, tweet, audio…', 'embed' ],
+				[ icon( 'gallery' ), 'Gallery', 'gallery' ],
 			);
 		}
 		// Custom blocks that declared an `insert` template via

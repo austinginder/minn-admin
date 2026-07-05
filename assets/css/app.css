@@ -521,10 +521,12 @@ select.minn-input {
 }
 .minn-editor-title::placeholder { color: var(--text3); }
 .minn-editor-toolbar { display: flex; gap: 2px; padding: 6px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 18px; color: var(--text2); }
-.minn-tool { padding: 6px 9px; border-radius: 7px; cursor: pointer; background: none; border: none; color: var(--text2); font-size: 14px; }
+.minn-tool {
+  display: inline-flex; align-items: center; justify-content: center; padding: 6px 8px;
+  border-radius: 7px; cursor: pointer; background: none; border: none; color: var(--text2);
+}
 .minn-tool:hover { background: var(--hover); color: var(--text); }
-.minn-tool.b { font-weight: 700; } .minn-tool.i { font-style: italic; }
-.minn-tool.code { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: -0.5px; }
+.minn-tool svg { display: block; }
 .minn-editor-body { color: var(--text); line-height: 1.75; font-size: 16px; min-height: 40vh; outline: none; overflow-x: hidden; overflow-wrap: break-word; }
 .minn-editor-body table { display: block; max-width: 100%; overflow-x: auto; }
 .minn-editor-body iframe, .minn-editor-body video { max-width: 100%; }
