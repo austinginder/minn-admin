@@ -524,6 +524,7 @@ select.minn-input {
 .minn-tool { padding: 6px 9px; border-radius: 7px; cursor: pointer; background: none; border: none; color: var(--text2); font-size: 14px; }
 .minn-tool:hover { background: var(--hover); color: var(--text); }
 .minn-tool.b { font-weight: 700; } .minn-tool.i { font-style: italic; }
+.minn-tool.code { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: -0.5px; }
 .minn-editor-body { color: var(--text); line-height: 1.75; font-size: 16px; min-height: 40vh; outline: none; overflow-x: hidden; overflow-wrap: break-word; }
 .minn-editor-body table { display: block; max-width: 100%; overflow-x: auto; }
 .minn-editor-body iframe, .minn-editor-body video { max-width: 100%; }
@@ -543,6 +544,7 @@ select.minn-input {
 .minn-side-val.amber { color: var(--amber); font-weight: 600; }
 .minn-side-val.green { color: var(--green); }
 .minn-side-card .minn-btn-primary { width: 100%; margin-top: 14px; justify-content: center; }
+.minn-side-card .minn-save-draft { width: 100%; margin-top: 8px; justify-content: center; }
 .minn-permalink { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text3); margin-top: 3px; word-break: break-all; }
 .minn-chips { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
 .minn-chip { background: var(--panel2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 6px; font-size: 12.5px; }
