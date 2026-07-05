@@ -979,9 +979,12 @@
 					<div class="minn-row-icon">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
 						<div class="minn-row-title">${ esc( p.title ) }</div>
-						<div class="minn-row-slug">${ esc( p.slug ) }</div>
+						<div class="minn-row-slug">
+							<span class="minn-row-slug-text">${ esc( p.slug ) }</span>
+							${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }
+						</div>
 					</div>
-					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }</div>
+					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span></div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
 					<div class="minn-row-meta">${ timeAgo( p.modified ) }</div>
 					${ state.contentTrash ? `
