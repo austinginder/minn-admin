@@ -167,6 +167,8 @@
 		uploadOpen: false,
 		commentTab: 'hold',
 		extTab: 'plugins',
+		extFilter: 'all',
+		extSearch: '',
 		orderTab: 'any',
 		userSearch: '',
 		range: 30,
@@ -2566,10 +2568,47 @@
 	function bindExtTabs( view ) {
 		$$( '[data-xtab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
+				if ( state.extTab === btn.dataset.xtab ) return;
 				state.extTab = btn.dataset.xtab;
+				// Plugins and Themes have different filter sets — reset when switching.
+				state.extFilter = 'all';
+				state.extSearch = '';
 				renderExtensions();
 			} )
 		);
+	}
+
+	// Shared filter/search bar for both Extensions tabs. `counts` is a map of
+	// filter id → count; only ids present get a pill. Wires the pills + search
+	// (client-side; the full plugin/theme set is already cached) to re-render.
+	function extFilterBarHtml( filters, counts, placeholder ) {
+		const pills = filters
+			.filter( ( [ id ] ) => id === 'all' || counts[ id ] )
+			.map( ( [ id, label ] ) =>
+				`<button class="minn-tab${ state.extFilter === id ? ' active' : '' }" data-xfilter="${ id }">${ esc( label ) }${ counts[ id ] != null ? ` <span class="minn-tab-count">${ counts[ id ] }</span>` : '' }</button>` )
+			.join( '' );
+		return `
+			<div class="minn-tabs minn-ext-filters">${ pills }</div>
+			<input class="minn-input minn-toolbar-search" id="minn-ext-search" placeholder="${ esc( placeholder ) }" value="${ esc( state.extSearch || '' ) }">`;
+	}
+
+	function bindExtFilterBar( view ) {
+		$$( '[data-xfilter]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				if ( state.extFilter === btn.dataset.xfilter ) return;
+				state.extFilter = btn.dataset.xfilter;
+				renderExtensions();
+			} )
+		);
+		const search = $( '#minn-ext-search', view );
+		if ( search ) {
+			search.addEventListener( 'input', () => {
+				state.extSearch = search.value;
+				renderExtensions();
+				const s = $( '#minn-ext-search' );
+				if ( s ) { s.focus(); s.setSelectionRange( s.value.length, s.value.length ); }
+			} );
+		}
 	}
 
 	// Core version + update offer, for the banner on Extensions.
@@ -2629,12 +2668,29 @@
 		const updates = state.cache.pluginUpdates;
 		const updateCount = Object.keys( updates ).length;
 		const active = plugins.filter( ( p ) => p.status === 'active' ).length;
+		const hasUpd = ( p ) => !! updates[ p.plugin + '.php' ];
+
+		// Client-side filter + search over the already-cached plugin set.
+		const q = ( state.extSearch || '' ).trim().toLowerCase();
+		const matchesFilter = ( p ) =>
+			state.extFilter === 'active' ? p.status === 'active'
+			: state.extFilter === 'inactive' ? p.status !== 'active'
+			: state.extFilter === 'updates' ? hasUpd( p )
+			: true;
+		const matchesSearch = ( p ) => ! q ||
+			cleanPluginName( p.name ).toLowerCase().includes( q ) ||
+			stripTags( p.description && p.description.rendered ).toLowerCase().includes( q );
+		const visible = plugins.filter( ( p ) => matchesFilter( p ) && matchesSearch( p ) );
+
+		const filterDefs = [ [ 'all', 'All' ], [ 'active', 'Active' ], [ 'inactive', 'Inactive' ] ];
+		if ( B.caps.update ) filterDefs.push( [ 'updates', 'Updates' ] );
+		const counts = { all: plugins.length, active, inactive: plugins.length - active, updates: updateCount };
 
 		view.innerHTML = `
 		${ coreBannerHtml() }
 		<div class="minn-toolbar">
 			${ extTabsHtml() }
-			<div class="minn-toolbar-meta" style="margin-left:0;">${ active } active · ${ plugins.length } installed</div>
+			${ extFilterBarHtml( filterDefs, counts, 'Search plugins…' ) }
 			${ B.caps.install ? `
 				<button class="minn-btn-soft" id="minn-add-plugin" style="margin-left:auto;">${ icon( 'plus' ) } Add plugin</button>` : '' }
 			${ updateCount && B.caps.update ? `
@@ -2642,8 +2698,9 @@
 					${ icon( 'refresh' ) } Update all (${ updateCount })
 				</button>` : '' }
 		</div>
+		${ visible.length ? `
 		<div class="minn-plugin-grid">
-			${ plugins.map( ( p ) => {
+			${ visible.map( ( p ) => {
 				const name = cleanPluginName( p.name );
 				const hasUpdate = !! updates[ p.plugin + '.php' ];
 				const on = p.status === 'active';
@@ -2667,9 +2724,10 @@
 					</div>
 				</div>`;
 			} ).join( '' ) }
-		</div>`;
+		</div>` : `<div class="minn-card minn-empty">${ q ? 'No plugins match “' + esc( state.extSearch.trim() ) + '”.' : 'No ' + state.extFilter + ' plugins.' }</div>` }`;
 
 		bindCoreBanner( view );
+		bindExtFilterBar( view );
 		$$( '[data-toggle]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const file = btn.dataset.toggle;
@@ -2782,14 +2840,34 @@
 			loadThemes().then( renderIfCurrent( 'extensions' ) ).catch( showErr );
 			return;
 		}
+		const activeCount = themes.filter( ( t ) => t.active ).length;
+		const updateCount = themes.filter( ( t ) => t.update ).length;
+
+		// Client-side filter + search; keep the original index for data-tact refs.
+		const q = ( state.extSearch || '' ).trim().toLowerCase();
+		const visible = themes
+			.map( ( t, i ) => ( { t, i } ) )
+			.filter( ( { t } ) =>
+				state.extFilter === 'active' ? t.active
+				: state.extFilter === 'updates' ? !! t.update
+				: true )
+			.filter( ( { t } ) => ! q ||
+				( t.name || '' ).toLowerCase().includes( q ) ||
+				( t.author || '' ).toLowerCase().includes( q ) );
+
+		const filterDefs = [ [ 'all', 'All' ], [ 'active', 'Active' ] ];
+		if ( B.caps.updateThemes ) filterDefs.push( [ 'updates', 'Updates' ] );
+		const counts = { all: themes.length, active: activeCount, updates: updateCount };
+
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			${ extTabsHtml() }
-			<div class="minn-toolbar-meta">${ themes.length } installed</div>
+			${ extFilterBarHtml( filterDefs, counts, 'Search themes…' ) }
 			${ B.caps.installThemes ? `<button class="minn-btn-soft" id="minn-add-theme" style="margin-left:auto;">${ icon( 'plus' ) } Add theme</button>` : '' }
 		</div>
+		${ visible.length ? `
 		<div class="minn-theme-grid">
-			${ themes.map( ( t, i ) => `
+			${ visible.map( ( { t, i } ) => `
 				<div class="minn-card minn-theme${ t.active ? ' is-active' : '' }" data-theme="${ i }">
 					<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ esc( t.screenshot ) }')"` : '' }>
 						${ t.active ? '<span class="minn-status publish minn-theme-badge">Active</span>' : '' }
@@ -2805,9 +2883,10 @@
 						</div>
 					</div>
 				</div>` ).join( '' ) }
-		</div>`;
+		</div>` : `<div class="minn-card minn-empty">${ q ? 'No themes match “' + esc( state.extSearch.trim() ) + '”.' : 'No ' + state.extFilter + ' themes.' }</div>` }`;
 
 		bindExtTabs( view );
+		bindExtFilterBar( view );
 		const addTheme = $( '#minn-add-theme', view );
 		if ( addTheme ) {
 			addTheme.addEventListener( 'click', () => {
