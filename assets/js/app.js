@@ -383,6 +383,8 @@
 			gallery: '<path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><circle cx="12" cy="8" r="2"/><rect width="16" height="16" x="6" y="2" rx="2"/>',
 			strike: '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/>',
 			eraser: '<path d="M4 7V4h16v3"/><path d="M5 20h6"/><path d="M13 4 8 20"/><path d="m15 15 5 5"/><path d="m20 15-5 5"/>',
+			alignCenter: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="17" y1="12" x2="7" y2="12"/><line x1="19" y1="18" x2="5" y2="18"/>',
+			alignRight: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="7" y2="18"/>',
 		};
 		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ icons[ name ] || '' }</svg>`;
 	}
@@ -3491,7 +3493,16 @@
 
 	// Attributes the serializer reproduces faithfully; any other attribute on a
 	// simple block turns it into an island so nothing is silently dropped.
-	const EDITABLE_ATTRS = { heading: [ 'level' ], list: [ 'ordered' ], table: [ 'hasFixedLayout' ], code: [ 'language' ] };
+	// Every attr here MUST be reproducible from the live DOM at serialize time
+	// (alignment rides the has-text-align-* class; list numbering rides real
+	// start/reversed/type attributes on the <ol>).
+	const EDITABLE_ATTRS = {
+		paragraph: [ 'align' ],
+		heading: [ 'level', 'textAlign' ],
+		list: [ 'ordered', 'start', 'reversed', 'type' ],
+		table: [ 'hasFixedLayout' ],
+		code: [ 'language' ],
+	};
 
 	// Blocks whose attributes ride through editing verbatim: the comment JSON is
 	// parked on the element as data-minn-attrs and re-emitted byte-faithfully on
@@ -3840,12 +3851,20 @@
 			cleanBoundaryNbsp( el );
 			modernizeStrikes( el );
 
+			const alignOf = ( node ) => {
+				const m = node.className.match( /has-text-align-(left|center|right)/ );
+				return m ? m[ 1 ] : null;
+			};
 			if ( tag === 'p' ) {
 				if ( ! el.textContent.trim() && ! el.querySelector( 'img' ) ) return;
-				pushBlock( 'paragraph', null, el.outerHTML );
+				const align = alignOf( el );
+				pushBlock( 'paragraph', align ? { align } : null, el.outerHTML );
 			} else if ( /^h[1-6]$/.test( tag ) ) {
 				el.classList.add( 'wp-block-heading' );
-				pushBlock( 'heading', { level: parseInt( tag[ 1 ], 10 ) }, el.outerHTML );
+				const textAlign = alignOf( el );
+				const hAttrs = { level: parseInt( tag[ 1 ], 10 ) };
+				if ( textAlign ) hAttrs.textAlign = textAlign;
+				pushBlock( 'heading', hAttrs, el.outerHTML );
 			} else if ( tag === 'blockquote' ) {
 				const pa = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-quote' );
@@ -3893,9 +3912,18 @@
 				);
 			} else if ( tag === 'ul' || tag === 'ol' ) {
 				el.classList.add( 'wp-block-list' );
+				const la = tag === 'ol' ? { ordered: true } : null;
+				let listHtmlAttrs = '';
+				if ( tag === 'ol' ) {
+					const start = parseInt( el.getAttribute( 'start' ), 10 );
+					const type = el.getAttribute( 'type' );
+					if ( start ) { la.start = start; listHtmlAttrs += ` start="${ start }"`; }
+					if ( el.hasAttribute( 'reversed' ) ) { la.reversed = true; listHtmlAttrs += ' reversed'; }
+					if ( type ) { la.type = type; listHtmlAttrs += ` type="${ esc( type ) }"`; }
+				}
 				const items = Array.from( el.querySelectorAll( ':scope > li' ) )
 					.map( ( li ) => `<!-- wp:list-item -->\n${ li.outerHTML }\n<!-- /wp:list-item -->` ).join( '' );
-				pushBlock( 'list', tag === 'ol' ? { ordered: true } : null, `<${ tag } class="${ el.className }">${ items }</${ tag }>` );
+				pushBlock( 'list', la, `<${ tag }${ listHtmlAttrs } class="${ el.className }">${ items }</${ tag }>` );
 			} else if ( tag === 'figure' && el.querySelector( 'video' ) ) {
 				const pa = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-video' );
@@ -4051,7 +4079,7 @@
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,featured_media,parent,menu_order,template,excerpt${ extraKeys }` );
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			const mode = editorModeFor( raw );
 			state.editor = {
@@ -4133,6 +4161,18 @@
 							author: names[ r.author ] || '',
 						} ) );
 						if ( state.route === 'editor' ) renderEditorSide();
+					}
+				} )
+				.catch( () => {} );
+			// A crash or an abandoned session leaves an autosave revision newer
+			// than the post — surface it instead of silently forgetting it.
+			api( `wp/v2/${ state.editorType }/${ p.id }/autosaves?_fields=id,modified` )
+				.then( ( revs ) => {
+					const latest = Array.isArray( revs ) && revs[ 0 ];
+					if ( latest && p.modified && latest.modified > p.modified
+						&& state.editor && state.editor.id === p.id ) {
+						state.editor.backup = { id: latest.id, modified: latest.modified };
+						if ( state.route === 'editor' ) renderBackupNotice();
 					}
 				} )
 				.catch( () => {} );
@@ -4858,6 +4898,50 @@
 		} );
 	}
 
+	// "A newer backup exists" — the flip side of autosave-to-revision:
+	// offer the backup back after a crash or an abandoned editing session.
+	function renderBackupNotice() {
+		const ed = state.editor;
+		const existing = $( '#minn-backup-note' );
+		if ( existing ) existing.remove();
+		if ( ! ed || ! ed.backup ) return;
+		const title = $( '#minn-editor-title' );
+		if ( ! title ) return;
+		title.insertAdjacentHTML( 'afterend', `
+			<div class="minn-backup-note" id="minn-backup-note">
+				<span>A newer backup of this ${ esc( editorNoun( ed ).toLowerCase() ) } exists (${ esc( timeAgo( ed.backup.modified ) ) }) \u2014 likely unsaved changes from an earlier session.</span>
+				<button class="minn-btn-soft" id="minn-backup-restore" type="button">Restore backup</button>
+				<button class="minn-x-btn" id="minn-backup-dismiss" type="button" title="Dismiss">\u00d7</button>
+			</div>` );
+		$( '#minn-backup-restore' ).addEventListener( 'click', restoreBackup );
+		$( '#minn-backup-dismiss' ).addEventListener( 'click', () => {
+			if ( state.editor ) state.editor.backup = null;
+			renderBackupNotice();
+		} );
+	}
+
+	async function restoreBackup() {
+		const ed = state.editor;
+		if ( ! ed || ! ed.backup ) return;
+		try {
+			const a = await api( `wp/v2/${ ed.type }/${ ed.id }/autosaves/${ ed.backup.id }?context=edit&_fields=title,content` );
+			if ( state.editor !== ed || state.route !== 'editor' ) return;
+			const raw = ( a.content && a.content.raw ) || '';
+			ed.title = decodeEntities( ( a.title && ( a.title.raw != null ? a.title.raw : a.title.rendered ) ) || ed.title );
+			ed.mode = editorModeFor( raw );
+			ed.islands = [];
+			ed.content = ed.mode === 'blocks' ? buildEditableContent( ed, raw )
+				: ed.mode === 'classic' ? miniAutop( raw )
+				: stripBlockComments( raw );
+			ed.backup = null;
+			renderEditor();
+			scheduleAutosave();
+			toast( 'Backup restored \u2014 review, then Save or Update to apply' );
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
 	function renderEditor() {
 		const view = $( '#minn-view' );
 		if ( ! state.editor || ( state.editorId && state.editor.id !== state.editorId ) || ( ! state.editorId && state.editor.id ) ) {
@@ -4889,7 +4973,9 @@
 					<button class="minn-tool" data-block="pre" title="Code block">${ icon( 'braces' ) }</button>
 					<button class="minn-tool" data-cmd="insertUnorderedList" title="Bulleted list">${ icon( 'list' ) }</button>
 					<button class="minn-tool" data-cmd="insertOrderedList" title="Numbered list">${ icon( 'olist' ) }</button>
-					<button class="minn-tool" data-cmd="link" title="Link">${ icon( 'link' ) }</button>
+					<button class="minn-tool" data-align="center" title="Center — press again to clear">${ icon( 'alignCenter' ) }</button>
+					<button class="minn-tool" data-align="right" title="Align right — press again to clear">${ icon( 'alignRight' ) }</button>
+					<button class="minn-tool" data-cmd="link" title="Link — or ⌘K">${ icon( 'link' ) }</button>
 					<button class="minn-tool" data-cmd="image" title="Insert image">${ icon( 'img' ) }</button>
 					<button class="minn-tool" data-block="p" title="Paragraph">${ icon( 'pilcrow' ) }</button>
 					<button class="minn-tool" data-cmd="removeFormat" title="Clear formatting">${ icon( 'eraser' ) }</button>
@@ -4910,6 +4996,7 @@
 		renderIslandPreviews( body, ed );
 		updateEditorStats();
 		ensureEditorStyles();
+		renderBackupNotice();
 		// Island chips open the block inspector (works in locked mode too — read-only there is fine
 		// because locked posts never send content, but islands only exist in blocks mode anyway).
 		body.addEventListener( 'click', ( e ) => {
@@ -4924,6 +5011,15 @@
 			const img = e.target.closest( 'img' );
 			if ( img && body.contains( img ) && ! img.closest( '.minn-block-island' ) ) {
 				openImgPop( img );
+			}
+		} );
+		// Clicking a link opens its edit popover (links never navigate
+		// inside contenteditable anyway).
+		body.addEventListener( 'click', ( e ) => {
+			const a = e.target.closest( 'a' );
+			if ( a && body.contains( a ) && ! a.closest( '.minn-block-island' ) ) {
+				e.preventDefault();
+				openLinkPop( a );
 			}
 		} );
 		// Hovering an editable code block surfaces its config chip.
@@ -4988,12 +5084,29 @@
 				btn.addEventListener( 'mousedown', ( e ) => {
 					e.preventDefault(); // keep the selection in the editable region
 					if ( btn.dataset.cmd === 'link' ) {
-						const url = prompt( 'Link URL:' );
-						if ( url ) document.execCommand( 'createLink', false, url );
+						const sel2 = window.getSelection();
+						let n = sel2.rangeCount ? sel2.anchorNode : null;
+						while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+						const a = n && n.closest ? n.closest( 'a' ) : null;
+						if ( a && body.contains( a ) ) openLinkPop( a );
+						else if ( sel2.rangeCount && ! sel2.isCollapsed && body.contains( sel2.anchorNode ) ) openLinkPop( null, sel2.getRangeAt( 0 ) );
 					} else if ( btn.dataset.cmd === 'inline-code' ) {
 						toggleInlineCode( body );
 					} else if ( btn.dataset.cmd === 'image' ) {
 						insertImage();
+					} else if ( btn.dataset.align ) {
+						// Toggle alignment via the Gutenberg class (inline text-align
+						// styles would be stripped at serialize). Paragraphs and
+						// headings only. Pressing the active alignment clears it.
+						const sel3 = window.getSelection();
+						let blk = sel3.rangeCount ? sel3.anchorNode : null;
+						while ( blk && blk.parentNode && blk.parentNode !== body ) blk = blk.parentNode;
+						if ( blk && blk.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6])$/.test( blk.tagName ) ) {
+							const had = blk.classList.contains( 'has-text-align-' + btn.dataset.align );
+							blk.classList.remove( 'has-text-align-left', 'has-text-align-center', 'has-text-align-right' );
+							if ( ! had ) blk.classList.add( 'has-text-align-' + btn.dataset.align );
+							if ( ! blk.className ) blk.removeAttribute( 'class' );
+						}
 					} else if ( btn.dataset.cmd ) {
 						document.execCommand( btn.dataset.cmd, false, null );
 						liftNestedLists( body );
@@ -5563,7 +5676,21 @@
 			inner = model.segments.map( ( s ) => s.raw ).join( '' );
 		}
 		const open = buildOpenComment( model.parts.name, model.ownAttrs, model.parts.selfClosing );
-		const newRaw = model.parts.selfClosing ? open : open + inner + model.parts.close;
+		let newRaw = model.parts.selfClosing ? open : open + inner + model.parts.close;
+		// core/spacer keeps its height in BOTH the attrs and an inline style in
+		// the saved HTML — regenerate the block so a height edit actually
+		// applies (the embed/gallery lesson, in miniature).
+		if ( model.parts.name === 'spacer' ) {
+			let h = model.ownAttrs.height != null ? model.ownAttrs.height : '100px';
+			if ( typeof h === 'number' ) h += 'px';
+			h = String( h ).replace( /[^0-9a-z.%]/gi, '' ) || '100px';
+			const sa = {};
+			Object.keys( model.ownAttrs ).forEach( ( k ) => {
+				if ( model.ownAttrs[ k ] !== '' && model.ownAttrs[ k ] != null ) sa[ k ] = model.ownAttrs[ k ];
+			} );
+			sa.height = h;
+			newRaw = `<!-- wp:spacer${ serializeBlockAttrs( sa ) } -->\n<div style="height:${ h }" aria-hidden="true" class="wp-block-spacer"></div>\n<!-- /wp:spacer -->`;
+		}
 
 		btn.disabled = true;
 		btn.textContent = 'Applying…';
@@ -5961,6 +6088,91 @@
 
 	function imgPopAway( e ) {
 		if ( imgPop && ! imgPop.contains( e.target ) && e.target !== imgPopTarget ) hideImgPop();
+	}
+
+	/* ===== Link popover (edit or create links in the editor) ===== */
+
+	let linkPop = null;
+	let linkPopSaved = null; // selection Range for create mode
+
+	function linkPopAway( e ) {
+		if ( linkPop && ! linkPop.contains( e.target ) ) hideLinkPop();
+	}
+
+	function hideLinkPop() {
+		if ( linkPop ) linkPop.remove();
+		linkPop = null;
+		linkPopSaved = null;
+		document.removeEventListener( 'mousedown', linkPopAway, true );
+	}
+
+	// Open on an existing <a> (edit/unlink) or on a selection Range (create).
+	function openLinkPop( a, range ) {
+		hideLinkPop();
+		const body = $( '#minn-editor-body' );
+		if ( ! body ) return;
+		linkPopSaved = ! a && range ? range.cloneRange() : null;
+		const href = a ? a.getAttribute( 'href' ) || '' : '';
+		linkPop = document.createElement( 'div' );
+		linkPop.className = 'minn-inspector minn-link-pop';
+		linkPop.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">Link</span>
+				<button class="minn-x-btn" data-close type="button">\u00d7</button>
+			</div>
+			<div class="minn-insp-body">
+				<div class="minn-field-label">URL</div>
+				<input class="minn-input" data-link-url placeholder="https://\u2026" value="${ esc( href ) }" spellcheck="false" autocomplete="off">
+			</div>
+			<div class="minn-insp-actions">
+				<button class="minn-btn-primary" data-link-apply type="button">Apply</button>
+				${ a ? '<button class="minn-btn-soft danger" data-link-remove type="button">Unlink</button>' : '' }
+				${ a && href ? `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">Open \u2197</a>` : '' }
+			</div>`;
+		document.body.appendChild( linkPop );
+		const rect = ( a || range ).getBoundingClientRect();
+		const w = linkPop.offsetWidth || 320;
+		linkPop.style.left = Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) + 'px';
+		linkPop.style.top = Math.max( 10, Math.min( rect.bottom + 8, window.innerHeight - linkPop.offsetHeight - 10 ) ) + 'px';
+		document.addEventListener( 'mousedown', linkPopAway, true );
+
+		const urlInput = linkPop.querySelector( '[data-link-url]' );
+		const apply = () => {
+			const url = urlInput.value.trim();
+			if ( a && a.isConnected ) {
+				if ( url ) a.setAttribute( 'href', url );
+				else unlink();
+			} else if ( url && linkPopSaved && linkPopSaved.startContainer.isConnected ) {
+				body.focus();
+				const sel = window.getSelection();
+				sel.removeAllRanges();
+				sel.addRange( linkPopSaved );
+				document.execCommand( 'createLink', false, url );
+			}
+			scheduleAutosave();
+			hideLinkPop();
+		};
+		const unlink = () => {
+			if ( a && a.isConnected ) {
+				body.focus();
+				const sel = window.getSelection();
+				const r = document.createRange();
+				r.selectNodeContents( a );
+				sel.removeAllRanges();
+				sel.addRange( r );
+				document.execCommand( 'unlink', false, null );
+			}
+			scheduleAutosave();
+			hideLinkPop();
+		};
+		linkPop.querySelector( '[data-close]' ).addEventListener( 'click', hideLinkPop );
+		linkPop.querySelector( '[data-link-apply]' ).addEventListener( 'click', apply );
+		urlInput.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' ) { e.preventDefault(); apply(); }
+		} );
+		const rm = linkPop.querySelector( '[data-link-remove]' );
+		if ( rm ) rm.addEventListener( 'click', unlink );
+		if ( ! a ) urlInput.focus();
 	}
 
 	function hideImgPop() {
@@ -8446,6 +8658,7 @@
 		hideCodeChip();
 		clearTableChips();
 		hideImgPop();
+		hideLinkPop();
 		const tip = $( '#minn-chart-tip' );
 		if ( tip ) tip.hidden = true;
 		switch ( state.route ) {
@@ -8509,6 +8722,18 @@
 		window.addEventListener( 'keydown', ( e ) => {
 			if ( ( e.metaKey || e.ctrlKey ) && e.key.toLowerCase() === 'k' ) {
 				e.preventDefault();
+				// In the editor with text selected (or the caret in a link), ⌘K
+				// means link — muscle memory from every other editor. The
+				// command palette keeps ⌘K everywhere else.
+				const ebody = $( '#minn-editor-body' );
+				const esel = window.getSelection();
+				if ( state.route === 'editor' && ebody && esel.rangeCount && ebody.contains( esel.anchorNode ) ) {
+					let n = esel.anchorNode;
+					while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+					const a = n && n.closest ? n.closest( 'a' ) : null;
+					if ( a && ebody.contains( a ) && ! a.closest( '.minn-block-island' ) ) return openLinkPop( a );
+					if ( ! esel.isCollapsed ) return openLinkPop( null, esel.getRangeAt( 0 ) );
+				}
 				state.paletteOpen = ! state.paletteOpen;
 				renderOverlays();
 			}
