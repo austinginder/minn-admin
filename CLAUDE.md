@@ -57,6 +57,9 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
   imperative and present tense.
 - Version lives in four places at release time: `minn-admin.php` (×2), `readme.txt`
   Stable tag, `manifest.json` (version + download_url). Don't touch them mid-cycle.
+- A release ends at the published GitHub release + verified manifest. **Never update a
+  live site as part of releasing** — the owner updates through Minn's own Extensions UI,
+  which doubles as the release-candidate test of the self-updater.
 - Match the file's comment voice: comments state constraints the code can't show —
   especially the hard-won browser facts. Delete nothing labeled "hard-won" without
   re-proving it in a browser.
