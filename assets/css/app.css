@@ -876,7 +876,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
 }
-.minn-code-chip:hover { color: var(--accent2); border-color: var(--accent); }
+.minn-code-chip:hover, .minn-code-chip.hot { color: var(--accent2); border-color: var(--accent); }
 .minn-code-pop { width: 250px; }
 .minn-table-pop { width: 300px; }
 .minn-table-ops { display: flex; gap: 6px; margin-bottom: 12px; }

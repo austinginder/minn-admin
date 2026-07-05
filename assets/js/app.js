@@ -4286,6 +4286,12 @@
 		const clone = body.cloneNode( true );
 		cleanBoundaryNbsp( clone );
 		modernizeStrikes( clone );
+		// Table hover-highlighting parks a border-color inline style on the
+		// figure — never store it.
+		$$( ':scope > figure, :scope > table', clone ).forEach( ( el ) => {
+			el.style.borderColor = '';
+			if ( ! el.getAttribute( 'style' ) ) el.removeAttribute( 'style' );
+		} );
 		$$( 'pre', clone ).forEach( ( pre ) => {
 			const lang = codeLangOf( pre );
 			const text = codeTextOf( pre );
@@ -4926,6 +4932,22 @@
 			if ( pre && body.contains( pre ) && ! pre.closest( '.minn-block-island' )
 				&& ! pre.classList.contains( 'wp-block-verse' ) && ! pre.classList.contains( 'wp-block-preformatted' ) ) {
 				showCodeChip( pre );
+			}
+		} );
+		// Hovering a table's cutout (edge included) highlights it AND its chip.
+		let hotTable = null;
+		body.addEventListener( 'mouseover', ( e ) => {
+			const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table' ) : null;
+			const t = box ? ( box.tagName === 'TABLE' ? box : box.querySelector( 'table' ) ) : null;
+			if ( t === hotTable ) return;
+			if ( hotTable ) setTableHot( hotTable, false );
+			hotTable = t;
+			if ( hotTable ) setTableHot( hotTable, true );
+		} );
+		body.addEventListener( 'mouseleave', () => {
+			if ( hotTable ) {
+				setTableHot( hotTable, false );
+				hotTable = null;
 			}
 		} );
 
@@ -5624,6 +5646,19 @@
 		tableChipsRaf = requestAnimationFrame( syncTableChips );
 	}
 
+	// Chip and cutout highlight TOGETHER, like an island and its chip. The chip
+	// lives outside the contenteditable so CSS :hover can't link them — done in
+	// JS from both directions. The border ride is an inline style, stripped at
+	// serialize (blocks mode drops top-level style attrs; classicHtml scrubs it).
+	function setTableHot( table, on ) {
+		if ( ! table || ! table.isConnected ) return;
+		const box = table.closest( 'figure' ) || table;
+		box.style.borderColor = on ? 'var(--accent)' : '';
+		if ( ! box.getAttribute( 'style' ) ) box.removeAttribute( 'style' );
+		const chip = tableChipFor( table );
+		if ( chip ) chip.classList.toggle( 'hot', on );
+	}
+
 	// One persistent chip per top-level editable table, straddling the cutout
 	// border like island chips do. Repositioned (not hidden) on scroll and
 	// after every edit; hidden only when the table slides under the sticky
@@ -5652,6 +5687,8 @@
 				chip.title = 'Table \u2014 rows, columns, header';
 				chip.addEventListener( 'mousedown', ( ev ) => ev.preventDefault() ); // keep the caret in its cell
 				chip.addEventListener( 'click', () => chip._table && chip._table.isConnected && openTablePop( chip._table ) );
+				chip.addEventListener( 'mouseenter', () => setTableHot( chip._table, true ) );
+				chip.addEventListener( 'mouseleave', () => setTableHot( chip._table, false ) );
 				tableChipsBox.appendChild( chip );
 			}
 			chip._table = table;
