@@ -381,6 +381,8 @@
 			minus: '<path d="M5 12h14"/>',
 			play: '<polygon points="6 3 20 12 6 21 6 3"/>',
 			gallery: '<path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="m22 13-1.3-1.3a2.4 2.4 0 0 0-3.4 0L11 18"/><circle cx="12" cy="8" r="2"/><rect width="16" height="16" x="6" y="2" rx="2"/>',
+			strike: '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/>',
+			eraser: '<path d="M4 7V4h16v3"/><path d="M5 20h6"/><path d="M13 4 8 20"/><path d="m15 15 5 5"/><path d="m20 15-5 5"/>',
 		};
 		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ icons[ name ] || '' }</svg>`;
 	}
@@ -3779,6 +3781,27 @@
 		} );
 	}
 
+	// Chrome's insertUnordered/OrderedList sometimes nests the new list INSIDE
+	// the source paragraph — lift it to the top level or the serializer would
+	// emit <p><ul>… (invalid markup). Shared by the toolbar, the slash menu
+	// and the markdown "- " prefix.
+	function liftNestedLists( body ) {
+		$$( ':scope > p > ul, :scope > p > ol', body ).forEach( ( l ) => {
+			const p = l.parentNode;
+			if ( p.textContent === l.textContent ) p.replaceWith( l );
+		} );
+	}
+
+	// execCommand('strikeThrough') writes the obsolete <strike> tag — store the
+	// standard <s> instead (what Gutenberg and the ~~markdown~~ rule produce).
+	function modernizeStrikes( root ) {
+		$$( 'strike', root ).forEach( ( el ) => {
+			const s = document.createElement( 's' );
+			while ( el.firstChild ) s.appendChild( el.firstChild );
+			el.replaceWith( s );
+		} );
+	}
+
 	function serializeToBlocks( root, islands ) {
 		const out = [];
 		// serializeBlockAttrs applies Gutenberg's comment-safe escaping ("--", <, >, &).
@@ -3814,6 +3837,7 @@
 			const el = n.cloneNode( true );
 			el.removeAttribute( 'style' );
 			cleanBoundaryNbsp( el );
+			modernizeStrikes( el );
 
 			if ( tag === 'p' ) {
 				if ( ! el.textContent.trim() && ! el.querySelector( 'img' ) ) return;
@@ -4260,6 +4284,7 @@
 	function classicHtml( body ) {
 		const clone = body.cloneNode( true );
 		cleanBoundaryNbsp( clone );
+		modernizeStrikes( clone );
 		$$( 'pre', clone ).forEach( ( pre ) => {
 			const lang = codeLangOf( pre );
 			const text = codeTextOf( pre );
@@ -4848,14 +4873,18 @@
 				<div class="minn-editor-toolbar">
 					<button class="minn-tool b" data-cmd="bold" title="Bold">${ icon( 'bold' ) }</button>
 					<button class="minn-tool i" data-cmd="italic" title="Italic">${ icon( 'italic' ) }</button>
+					<button class="minn-tool" data-cmd="strikeThrough" title="Strikethrough — or wrap it in ~~tildes~~">${ icon( 'strike' ) }</button>
 					<button class="minn-tool code" data-cmd="inline-code" title="Inline code — or wrap it in backticks">${ icon( 'code' ) }</button>
 					<button class="minn-tool" data-block="h2" title="Heading 2">${ icon( 'h2' ) }</button>
 					<button class="minn-tool" data-block="h3" title="Heading 3">${ icon( 'h3' ) }</button>
 					<button class="minn-tool" data-block="blockquote" title="Quote">${ icon( 'quote' ) }</button>
 					<button class="minn-tool" data-block="pre" title="Code block">${ icon( 'braces' ) }</button>
+					<button class="minn-tool" data-cmd="insertUnorderedList" title="Bulleted list">${ icon( 'list' ) }</button>
+					<button class="minn-tool" data-cmd="insertOrderedList" title="Numbered list">${ icon( 'olist' ) }</button>
 					<button class="minn-tool" data-cmd="link" title="Link">${ icon( 'link' ) }</button>
 					<button class="minn-tool" data-cmd="image" title="Insert image">${ icon( 'img' ) }</button>
 					<button class="minn-tool" data-block="p" title="Paragraph">${ icon( 'pilcrow' ) }</button>
+					<button class="minn-tool" data-cmd="removeFormat" title="Clear formatting">${ icon( 'eraser' ) }</button>
 					<select class="minn-input minn-code-lang" id="minn-code-lang" title="Code language" hidden>
 						${ CODE_LANGS.map( ( l ) => `<option value="${ l }">${ l === 'auto' ? 'language: auto' : l }</option>` ).join( '' ) }
 					</select>
@@ -4943,6 +4972,7 @@
 						insertImage();
 					} else if ( btn.dataset.cmd ) {
 						document.execCommand( btn.dataset.cmd, false, null );
+						liftNestedLists( body );
 					} else if ( btn.dataset.block ) {
 						document.execCommand( 'formatBlock', false, btn.dataset.block );
 					}
@@ -6018,12 +6048,7 @@
 				document.execCommand( 'delete', false, null );
 				if ( list ) {
 					document.execCommand( list, false, null );
-					// Chrome nests the new list INSIDE the paragraph — lift it
-					// to the top level or the serializer would see <p><ul>…
-					if ( blockEl.parentNode === body && blockEl.tagName === 'P' ) {
-						const l = blockEl.querySelector( 'ul, ol' );
-						if ( l && blockEl.textContent === l.textContent ) blockEl.replaceWith( l );
-					}
+					liftNestedLists( body );
 				} else {
 					document.execCommand( 'formatBlock', false, block );
 				}
@@ -6170,7 +6195,10 @@
 				openMediaPicker( ( picks ) => {
 					if ( picks && picks.length ) insertIsland( anchor, 'core/gallery', galleryTemplate( picks ) );
 				}, { multi: true } );
-			} else action();
+			} else {
+				action();
+				liftNestedLists( body );
+			}
 			scheduleAutosave();
 		};
 
