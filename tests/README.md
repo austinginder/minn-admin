@@ -10,6 +10,7 @@ its own posts through the app's REST credentials and deletes them on exit.
 cd tests && npm install          # once — installs playwright-core only
 MINN_TEST_PASS=<admin password> node markdown.test.js
 MINN_TEST_PASS=<admin password> node autosave.test.js   # slow (~90s) by design
+MINN_TEST_PASS=<admin password> node paste.test.js      # Word/Docs/web fixtures → saved markup
 
 # all suites
 for f in *.test.js; do MINN_TEST_PASS=… node "$f" || break; done
@@ -39,7 +40,10 @@ Environment (all optional except the password):
 - **Assert through real input.** Drive `page.keyboard` / `page.mouse`, not DOM mutation —
   the contenteditable quirks (whitespace rebalancing, block merges, selection loss) only
   reproduce under real events. Setting the caret via `page.evaluate` is fine; the
-  keystroke that follows must be real.
+  keystroke that follows must be real. Exception: paste. A synthetic ClipboardEvent with
+  a DataTransfer exercises the full sanitize/insert pipeline (the handler preventDefaults
+  and does its own insertion), so fixtures don't need the OS clipboard — but keep one
+  real `navigator.clipboard.write` + ⌘V case per suite to prove the wiring.
 - **innerHTML shows entities.** A boundary space may serialize as `&nbsp;` in innerHTML
   reads — match with `(?:&nbsp;| )`, not a character class.
 - **Verify what got SAVED, not just the DOM.** For serializer-touching changes, ⌘S in the
@@ -49,7 +53,9 @@ Environment (all optional except the password):
 
 ## What's covered vs. not (yet)
 
-Covered here: markdown typing rules, autosave semantics. The v0.5.x cycle also verified
+Covered here: markdown typing rules, autosave semantics, paste cleanup (Google Docs /
+Word / web fixtures, caret-context routing, undo integrity, classic mode, real ⌘V).
+The v0.5.x cycle also verified
 (in session scratchpads, worth porting on next touch): inline-code boundary escape, slash
 menu filtering, table/image chips + ops, island backspace guards, image delete/undo,
 embed render pipeline, backup-restore notice, alignment, link popover. When you fix a bug

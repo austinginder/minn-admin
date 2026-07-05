@@ -49,7 +49,11 @@ The theme: a writer who moves in must never lose work or hit a behavior that mak
 distrust the surface.
 
 - **Paste cleanup.** Word / Google Docs / arbitrary HTML paste → clean safe-subset markup.
-  The single biggest remaining trust gap; also the hardest (budget accordingly).
+  ✅ *Shipped 2026-07-05* — `sanitizePastedHtml()` + caret-context insertion (see the
+  "Paste cleanup" section in app.js and `tests/paste.test.js`). Word mso-lists rebuild as
+  real nested lists; Docs style-spans map to strong/em/s/code; js: hrefs, handlers and
+  vendor styling never pass; single ⌘Z reverts a whole paste. Clipboard *images* (files,
+  not URLs) remain with the "inline media flow" item below.
 - **Undo completeness.** Island operations (insert, remove, table ops) sit outside the
   browser undo stack today. Decide: a small custom undo journal for island/array state
   interleaved with native undo, or document the boundary honestly. Investigate before 1.0.

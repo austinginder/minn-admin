@@ -3914,6 +3914,19 @@
 		} );
 	}
 
+	// A block-level paste splits the caret paragraph and Chrome hands the
+	// split-off tail a leading nbsp. At paragraph start a plain space renders
+	// as nothing while an nbsp shows as an indent — store the space. (Fixing
+	// the live DOM instead would corrupt undo: Chrome replays recorded text
+	// offsets, and an out-of-stack text edit misapplies them — probed, a
+	// character vanished mid-word.)
+	function cleanLeadingNbsp( blockEl ) {
+		const t = blockEl.firstChild;
+		if ( t && t.nodeType === Node.TEXT_NODE && /^\u00A0\S/.test( t.textContent ) ) {
+			t.textContent = ' ' + t.textContent.slice( 1 );
+		}
+	}
+
 	// Chrome's insertUnordered/OrderedList sometimes nests the new list INSIDE
 	// the source paragraph — lift it to the top level or the serializer would
 	// emit <p><ul>… (invalid markup). Shared by the toolbar, the slash menu
@@ -3969,7 +3982,11 @@
 			const tag = n.tagName.toLowerCase();
 			const el = n.cloneNode( true );
 			el.removeAttribute( 'style' );
+			// A redo can resurrect an empty paste-bracket paragraph (see
+			// pasteBlocksInsert) — typed-into, it must not leak its marker.
+			el.removeAttribute( 'data-minn-bkt' );
 			cleanBoundaryNbsp( el );
+			cleanLeadingNbsp( el );
 			modernizeStrikes( el );
 
 			const alignOf = ( node ) => {
@@ -4448,7 +4465,9 @@
 	function classicHtml( body ) {
 		const clone = body.cloneNode( true );
 		cleanBoundaryNbsp( clone );
+		Array.from( clone.children ).forEach( cleanLeadingNbsp );
 		modernizeStrikes( clone );
+		$$( '[data-minn-bkt]', clone ).forEach( ( el ) => el.removeAttribute( 'data-minn-bkt' ) );
 		// Table hover-highlighting parks a border-color inline style on the
 		// figure — never store it.
 		$$( ':scope > figure, :scope > table', clone ).forEach( ( el ) => {
@@ -5272,21 +5291,64 @@
 			bindSlashMenu( body, insertImage );
 			bindCodeLangPicker( body );
 
-			// Pasting a lone URL from a known oEmbed provider into an empty
-			// block becomes an embed, like Gutenberg. URLs inside sentences,
-			// unknown hosts, and classic mode paste as plain text as before.
+			// Paste. Priority order: lone oEmbed URL into an empty block →
+			// embed island (like Gutenberg); code contexts take the clipboard
+			// TEXT (Chrome's default would insert the rich flavor — and its
+			// insertText splits a pre into per-line <code>s); any rich HTML →
+			// sanitized to the safe subset (see Paste cleanup section), never
+			// inserted raw; multi-line plain text → real paragraphs. Single-line
+			// plain text keeps Chrome's native handling.
 			body.addEventListener( 'paste', ( e ) => {
-				if ( ! state.editor || state.editor.mode !== 'blocks' ) return;
-				const text = ( ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) ) || '' ).trim();
-				if ( ! /^https?:\/\/\S+$/.test( text ) || ! embedProviderFor( text ) ) return;
+				const ed2 = state.editor;
+				const cd = e.clipboardData;
+				if ( ! ed2 || ! cd ) return;
+				const text = cd.getData( 'text/plain' ) || '';
+				const trimmed = text.trim();
+				if ( ed2.mode === 'blocks' && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
+					const sel = window.getSelection();
+					let node = sel && sel.anchorNode;
+					while ( node && node.parentNode !== body ) node = node.parentNode;
+					if ( node && node.parentNode === body ) {
+						const existing = node.nodeType === 1 ? node.innerHTML : node.textContent;
+						if ( stripTags( existing || '' ).trim() === '' ) {
+							e.preventDefault();
+							insertIsland( node, 'core/embed', embedTemplate( trimmed ) );
+							return;
+						}
+					}
+				}
 				const sel = window.getSelection();
-				let node = sel && sel.anchorNode;
-				while ( node && node.parentNode !== body ) node = node.parentNode;
-				if ( ! node || node.parentNode !== body ) return;
-				const existing = node.nodeType === 1 ? node.innerHTML : node.textContent;
-				if ( stripTags( existing || '' ).trim() !== '' ) return;
-				e.preventDefault();
-				insertIsland( node, 'core/embed', embedTemplate( text ) );
+				const anchor = sel.rangeCount ? sel.anchorNode : null;
+				if ( ! anchor || ! body.contains( anchor ) ) return;
+				const anchorEl = anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentNode;
+				const html = cd.getData( 'text/html' );
+				if ( anchorEl.closest( 'pre' ) || closestInlineCode( anchor ) ) {
+					if ( ! text ) return;
+					e.preventDefault();
+					// insertHTML keeps newlines as literal text inside a pre
+					// (probed); code chips are single-line, newlines flatten.
+					const literal = anchorEl.closest( 'pre' )
+						? text.replace( /\r\n?/g, '\n' )
+						: text.replace( /\s*\n\s*/g, ' ' );
+					document.execCommand( 'insertHTML', false, esc( literal ) );
+					scheduleAutosave();
+					return;
+				}
+				if ( html ) {
+					// Rich flavor present: always ours from here — falling back
+					// to the default would insert the raw vendor HTML.
+					e.preventDefault();
+					const payload = sanitizePastedHtml( html ) || ( trimmed ? pasteTextPayload( text ) : null );
+					if ( payload ) pasteInsert( body, payload, anchorEl );
+					scheduleAutosave();
+					return;
+				}
+				if ( trimmed && /\n/.test( trimmed ) ) {
+					e.preventDefault();
+					const payload = pasteTextPayload( text );
+					if ( payload ) pasteInsert( body, payload, anchorEl );
+					scheduleAutosave();
+				}
 			} );
 		}
 
@@ -6795,6 +6857,423 @@
 				}
 			}
 		} );
+	}
+
+	/* ===== Paste cleanup (Word / Google Docs / arbitrary HTML → safe subset) ===== */
+
+	// Clipboard HTML is never inserted raw: it carries vendor styling by the
+	// kilobyte, javascript: hrefs and on* handlers. sanitizePastedHtml() rewrites
+	// it into exactly the vocabulary the serializers know how to store — p,
+	// h1-h6, ul/ol/li, blockquote, pre>code, figure>img, figure>table, hr, with
+	// strong/em/s/code/a/kbd/sub/sup/br inline. Everything else unwraps to its
+	// text; nothing unknown passes through.
+
+	const PASTE_DROP = new Set( [ 'SCRIPT', 'STYLE', 'LINK', 'META', 'TITLE', 'BASE', 'HEAD', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED', 'APPLET', 'svg', 'SVG', 'MATH', 'CANVAS', 'NOSCRIPT', 'TEMPLATE', 'BUTTON', 'INPUT', 'SELECT', 'OPTION', 'TEXTAREA', 'AUDIO', 'VIDEO', 'SOURCE', 'TRACK', 'DIALOG', 'XML' ] );
+	const PASTE_INLINE_MAP = { STRONG: 'strong', B: 'strong', EM: 'em', I: 'em', S: 's', STRIKE: 's', DEL: 's', CODE: 'code', SAMP: 'code', TT: 'code', KBD: 'kbd', SUB: 'sub', SUP: 'sup' };
+	const PASTE_BLOCK_SEL = 'p, h1, h2, h3, h4, h5, h6, ul, ol, pre, table, blockquote, hr, figure, li';
+
+	// Vendor styling → intent. Google Docs marks bold/italic/mono via span
+	// styles — and wraps whole payloads in <b style="font-weight:normal">,
+	// which must NOT read as bold.
+	function pasteMarksOf( el, ctx ) {
+		const st = el.style || {};
+		const w = String( st.fontWeight || '' );
+		const marks = [];
+		const mapped = PASTE_INLINE_MAP[ el.tagName ];
+		const unbolded = /^(normal|[1-4]00)$/.test( w );
+		if ( mapped && ! ( mapped === 'strong' && unbolded ) ) marks.push( mapped );
+		if ( w === 'bold' || w === 'bolder' || parseInt( w, 10 ) >= 600 ) marks.push( 'strong' );
+		if ( st.fontStyle === 'italic' ) marks.push( 'em' );
+		if ( /line-through/.test( st.textDecoration || st.textDecorationLine || '' ) ) marks.push( 's' );
+		if ( /mono|courier|consolas|menlo|jetbrains|source ?code/i.test( st.fontFamily || '' ) ) marks.push( 'code' );
+		// Headings are bold already — a strong wrap would just be noise.
+		return marks.filter( ( m, i ) => marks.indexOf( m ) === i && ! ctx.active.has( m ) && ! ( m === 'strong' && ctx.heading ) );
+	}
+
+	// Inline content of one node. Block children flow in with <br> boundaries
+	// (Docs puts <p> inside <li>; Word puts <div>s in table cells). Images are
+	// handed to ctx.onImage — a paragraph can't host a block-level image.
+	function pasteInline( node, ctx ) {
+		let out = '';
+		Array.from( node.childNodes ).forEach( ( n ) => {
+			if ( n.nodeType === Node.TEXT_NODE ) {
+				out += esc( n.textContent.replace( / /g, ' ' ) );
+				return;
+			}
+			if ( n.nodeType !== Node.ELEMENT_NODE || PASTE_DROP.has( n.tagName ) ) return;
+			const tag = n.tagName;
+			if ( tag === 'BR' ) {
+				out += '<br>';
+				return;
+			}
+			if ( tag === 'IMG' ) {
+				if ( ctx.onImage ) ctx.onImage( n );
+				return;
+			}
+			if ( tag === 'A' ) {
+				const href = ( n.getAttribute( 'href' ) || '' ).trim();
+				const inner = pasteInline( n, ctx );
+				if ( ! inner ) return;
+				out += /^(https?:|mailto:|tel:|#|\/)/i.test( href ) ? `<a href="${ esc( href ) }">${ inner }</a>` : inner;
+				return;
+			}
+			if ( /^(P|DIV|H[1-6]|BLOCKQUOTE|SECTION|ARTICLE|TABLE|TR|PRE)$/.test( tag ) ) {
+				const inner = pasteInline( n, ctx );
+				if ( inner ) out += ( out ? '<br>' : '' ) + inner;
+				return;
+			}
+			if ( tag === 'UL' || tag === 'OL' ) {
+				out += pasteList( n, ctx );
+				return;
+			}
+			if ( tag === 'LI' || tag === 'TD' || tag === 'TH' ) {
+				const inner = pasteInline( n, ctx );
+				if ( inner ) out += ( out ? '<br>' : '' ) + inner;
+				return;
+			}
+			const marks = pasteMarksOf( n, ctx );
+			marks.forEach( ( m ) => ctx.active.add( m ) );
+			const inner = pasteInline( n, ctx );
+			marks.forEach( ( m ) => ctx.active.delete( m ) );
+			if ( ! inner ) return;
+			out += marks.map( ( m ) => `<${ m }>` ).join( '' ) + inner + marks.slice().reverse().map( ( m ) => `</${ m }>` ).join( '' );
+		} );
+		return out;
+	}
+
+	const pasteHasInk = ( html ) => !! stripTags( html ).trim();
+	const pasteAlignClass = ( el ) => {
+		const m = ( el.className || '' ).match( /has-text-align-(center|right)/ )
+			|| ( el.style && /^(center|right)$/.test( el.style.textAlign ) ? [ 0, el.style.textAlign ] : null );
+		return m ? ` class="has-text-align-${ m[ 1 ] }"` : '';
+	};
+
+	function pasteList( el, ctx ) {
+		const tag = el.tagName === 'OL' ? 'ol' : 'ul';
+		let attrs = '';
+		if ( tag === 'ol' ) {
+			const start = parseInt( el.getAttribute( 'start' ), 10 );
+			const type = el.getAttribute( 'type' );
+			if ( start ) attrs += ` start="${ start }"`;
+			if ( el.hasAttribute( 'reversed' ) ) attrs += ' reversed';
+			if ( type && /^[1AaIi]$/.test( type ) ) attrs += ` type="${ type }"`;
+		}
+		const items = Array.from( el.children )
+			.filter( ( c ) => c.tagName === 'LI' )
+			.map( ( li ) => `<li>${ pasteInline( li, ctx ) }</li>` )
+			.filter( ( li ) => pasteHasInk( li ) )
+			.join( '' );
+		return items ? `<${ tag }${ attrs }>${ items }</${ tag }>` : '';
+	}
+
+	// A pre's text with line structure intact: <br> and block-element
+	// boundaries are newlines (GitHub-style line-per-div listings).
+	function pasteCodeText( el ) {
+		let out = '';
+		const walk = ( node ) => {
+			Array.from( node.childNodes ).forEach( ( n ) => {
+				if ( n.nodeType === Node.TEXT_NODE ) {
+					out += n.textContent.replace( / /g, ' ' );
+					return;
+				}
+				if ( n.nodeType !== Node.ELEMENT_NODE || PASTE_DROP.has( n.tagName ) ) return;
+				if ( n.tagName === 'BR' ) {
+					out += '\n';
+					return;
+				}
+				const block = /^(P|DIV|TR|LI)$/.test( n.tagName );
+				if ( block && out && ! out.endsWith( '\n' ) ) out += '\n';
+				walk( n );
+				if ( block && ! out.endsWith( '\n' ) ) out += '\n';
+			} );
+		};
+		walk( el );
+		return out.replace( /\n$/, '' );
+	}
+
+	function pasteCodeBlock( el ) {
+		const text = pasteCodeText( el );
+		if ( ! text.trim() ) return '';
+		const cls = ( ( el.className || '' ) + ' ' + ( ( el.querySelector( 'code' ) || {} ).className || '' ) ).match( /language-([a-z0-9+-]+)/i );
+		return `<pre class="wp-block-code"><code${ cls ? ` class="language-${ cls[ 1 ].toLowerCase() }"` : '' }>${ esc( text ) }</code></pre>`;
+	}
+
+	function pasteTable( t, ctx ) {
+		const cell = ( c ) => {
+			const tag = c.tagName === 'TH' ? 'th' : 'td';
+			const span = ( a ) => {
+				const v = parseInt( c.getAttribute( a ), 10 );
+				return v > 1 ? ` ${ a }="${ v }"` : '';
+			};
+			return `<${ tag }${ span( 'colspan' ) }${ span( 'rowspan' ) }>${ pasteInline( c, ctx ) }</${ tag }>`;
+		};
+		const row = ( tr ) => `<tr>${ Array.from( tr.cells ).map( cell ).join( '' ) }</tr>`;
+		const head = t.tHead ? Array.from( t.tHead.rows ).map( row ).join( '' ) : '';
+		const bodyRows = Array.from( t.rows ).filter( ( r ) => ! t.tHead || ! t.tHead.contains( r ) ).map( row ).join( '' );
+		if ( ! head && ! bodyRows ) return '';
+		return `<figure class="wp-block-table"><table>${ head ? `<thead>${ head }</thead>` : '' }<tbody>${ bodyRows }</tbody></table></figure>`;
+	}
+
+	function pasteImage( img, ctx, figureEl ) {
+		const src = ( img.getAttribute( 'src' ) || '' ).trim();
+		if ( ! /^https?:\/\//i.test( src ) ) return ''; // data:/file: payloads are dead weight
+		const alt = img.getAttribute( 'alt' ) || '';
+		const cap = figureEl && ctx ? ( () => {
+			const fc = figureEl.querySelector( ':scope > figcaption' );
+			const inner = fc ? pasteInline( fc, ctx ) : '';
+			return inner ? `<figcaption class="wp-element-caption">${ inner }</figcaption>` : '';
+		} )() : '';
+		return `<figure class="wp-block-image"><img src="${ esc( src ) }" alt="${ esc( alt ) }">${ cap }</figure>`;
+	}
+
+	function pasteQuote( q, ctx ) {
+		const inner = [];
+		collectPasteBlocks( q, inner, ctx );
+		const cite = q.querySelector( ':scope > cite' );
+		const ps = inner
+			.map( ( b ) => b.replace( /^<(?:h[1-6]|p)[^>]*>/, '<p>' ).replace( /<\/(?:h[1-6]|p)>$/, '</p>' ) )
+			.filter( ( b ) => /^<p>/.test( b ) && pasteHasInk( b ) )
+			.join( '' );
+		if ( ! ps && ! cite ) return '';
+		return `<blockquote class="wp-block-quote">${ ps || '<p></p>' }${ cite ? `<cite>${ pasteInline( cite, ctx ) }</cite>` : '' }</blockquote>`;
+	}
+
+	// Desktop Word emits list items as paragraphs carrying mso-list styles with
+	// the bullet/number in a "mso-list:Ignore" marker span — no <ul>/<ol> at
+	// all. Rebuild real (nested) lists in place before the generic walk.
+	function rebuildWordLists( root ) {
+		const isListPara = ( n ) => n && n.nodeType === Node.ELEMENT_NODE && n.tagName === 'P'
+			&& /mso-list:/i.test( n.getAttribute( 'style' ) || '' );
+		$$( 'p', root ).forEach( ( first ) => {
+			if ( ! isListPara( first ) || first.dataset.msoDone ) return;
+			const items = [];
+			for ( let n = first; isListPara( n ); n = n.nextElementSibling ) {
+				n.dataset.msoDone = '1';
+				const style = n.getAttribute( 'style' ) || '';
+				const lvl = parseInt( ( style.match( /level(\d+)/i ) || [] )[ 1 ], 10 ) || 1;
+				// lN identifies the logical list — adjacent paragraphs from
+				// DIFFERENT lists (a bullet run followed by a numbered run)
+				// must not collapse into one.
+				const listId = ( style.match( /mso-list:\s*l(\d+)/i ) || [] )[ 1 ] || '';
+				// The marker span holds the literal bullet/number; a digit or
+				// letter followed by . or ) means ordered.
+				let ordered = false;
+				const marker = Array.from( n.querySelectorAll( 'span' ) ).find( ( s ) =>
+					/mso-list:\s*ignore/i.test( s.getAttribute( 'style' ) || '' ) );
+				if ( marker ) {
+					ordered = /^\s*\w{1,4}[.)]/.test( marker.textContent.replace( / /g, ' ' ) );
+					marker.remove();
+				}
+				items.push( { lvl, listId, ordered, node: n } );
+			}
+			const doc = root.ownerDocument;
+			const listFor = ( it ) => doc.createElement( it.ordered ? 'ol' : 'ul' );
+			let stack = null; // [{lvl, list}] — reset per logical list
+			items.forEach( ( it, i ) => {
+				if ( ! stack || it.listId !== items[ i - 1 ].listId ) {
+					const rootList = listFor( it );
+					it.node.before( rootList );
+					stack = [ { lvl: it.lvl, list: rootList } ];
+				}
+				while ( stack.length > 1 && it.lvl < stack[ stack.length - 1 ].lvl ) stack.pop();
+				if ( it.lvl > stack[ stack.length - 1 ].lvl ) {
+					const parentLi = stack[ stack.length - 1 ].list.lastElementChild;
+					const sub = listFor( it );
+					( parentLi || stack[ stack.length - 1 ].list ).appendChild( sub );
+					stack.push( { lvl: it.lvl, list: sub } );
+				}
+				const li = doc.createElement( 'li' );
+				while ( it.node.firstChild ) li.appendChild( it.node.firstChild );
+				stack[ stack.length - 1 ].list.appendChild( li );
+				it.node.remove();
+			} );
+		} );
+	}
+
+	// Walk a container's children into vocabulary blocks. Loose inline runs
+	// between block elements collect into paragraphs; images lift to their own
+	// figure; wrappers (div, section, Docs' <b> shell) recurse transparently.
+	function collectPasteBlocks( container, out, ctx ) {
+		let run = '';
+		const figures = [];
+		const innerCtx = { ...ctx, onImage: ( img ) => {
+			const f = pasteImage( img );
+			if ( f ) figures.push( f );
+		} };
+		const flush = () => {
+			if ( pasteHasInk( run ) ) out.push( `<p>${ run.trim() }</p>` );
+			run = '';
+			figures.splice( 0 ).forEach( ( f ) => out.push( f ) );
+		};
+		Array.from( container.childNodes ).forEach( ( n ) => {
+			if ( n.nodeType === Node.TEXT_NODE ) {
+				run += esc( n.textContent.replace( / /g, ' ' ) );
+				return;
+			}
+			if ( n.nodeType !== Node.ELEMENT_NODE || PASTE_DROP.has( n.tagName ) ) return;
+			const tag = n.tagName;
+			const emit = ( html ) => {
+				flush();
+				if ( html ) out.push( html );
+			};
+			if ( tag === 'P' ) {
+				flush();
+				const inner = pasteInline( n, innerCtx );
+				if ( pasteHasInk( inner ) ) out.push( `<p${ pasteAlignClass( n ) }>${ inner.trim() }</p>` );
+				figures.splice( 0 ).forEach( ( f ) => out.push( f ) );
+			} else if ( /^H[1-6]$/.test( tag ) ) {
+				flush();
+				const inner = pasteInline( n, { ...innerCtx, heading: true } );
+				if ( pasteHasInk( inner ) ) out.push( `<${ tag.toLowerCase() }${ pasteAlignClass( n ) }>${ inner.trim() }</${ tag.toLowerCase() }>` );
+			} else if ( tag === 'UL' || tag === 'OL' ) {
+				emit( pasteList( n, innerCtx ) );
+			} else if ( tag === 'PRE' ) {
+				emit( pasteCodeBlock( n ) );
+			} else if ( tag === 'BLOCKQUOTE' ) {
+				emit( pasteQuote( n, innerCtx ) );
+			} else if ( tag === 'TABLE' ) {
+				emit( pasteTable( n, innerCtx ) );
+			} else if ( tag === 'HR' ) {
+				emit( '<hr>' );
+			} else if ( tag === 'IMG' ) {
+				emit( pasteImage( n ) );
+			} else if ( n.classList && n.classList.contains( 'minn-block-island' ) ) {
+				// Copy-paste within this post: rebuild the island from its
+				// registered raw markup (fresh chip, same index → same bytes on
+				// save). Foreign islands fall back to their visible preview.
+				const idx = parseInt( n.dataset.island, 10 );
+				const ed = state.editor;
+				if ( ed && ed.islands && ed.islands[ idx ] != null ) {
+					emit( islandHtml( idx, n.dataset.block || 'block', ed.islands[ idx ] ) );
+				} else {
+					flush();
+					const prev = n.querySelector( '.minn-island-preview' );
+					if ( prev ) collectPasteBlocks( prev, out, ctx );
+				}
+			} else if ( tag === 'FIGURE' ) {
+				const media = n.querySelector( 'table' ) ? pasteTable( n.querySelector( 'table' ), innerCtx )
+					: n.querySelector( 'img' ) ? pasteImage( n.querySelector( 'img' ), innerCtx, n ) : '';
+				if ( media ) emit( media );
+				else {
+					flush();
+					collectPasteBlocks( n, out, ctx );
+				}
+			} else if ( n.querySelector && n.querySelector( PASTE_BLOCK_SEL ) ) {
+				// Wrapper holding block content (div soup, Docs' <b> shell) —
+				// recurse; a pure-inline wrapper joins the current run instead.
+				flush();
+				collectPasteBlocks( n, out, ctx );
+			} else {
+				run += pasteInline( n.parentNode === container ? wrapSingle( n ) : n, innerCtx );
+			}
+		} );
+		flush();
+	}
+
+	// pasteInline works on a node's CHILDREN — to clean one element with its
+	// own marks, hand it over inside a disposable wrapper.
+	function wrapSingle( n ) {
+		const w = n.ownerDocument.createElement( 'span' );
+		n.before( w );
+		w.appendChild( n );
+		return w;
+	}
+
+	// Clipboard HTML → { kind: 'inline'|'blocks', html, list, allParagraphs }.
+	// Returns null when nothing usable survives (caller falls back to text).
+	function sanitizePastedHtml( html ) {
+		let doc;
+		try {
+			doc = new DOMParser().parseFromString( html, 'text/html' );
+		} catch ( e ) {
+			return null;
+		}
+		if ( ! doc || ! doc.body ) return null;
+		rebuildWordLists( doc.body );
+		const out = [];
+		collectPasteBlocks( doc.body, out, { active: new Set() } );
+		if ( ! out.length ) return null;
+		// A single plain paragraph pastes inline — it continues the sentence at
+		// the caret instead of splitting the block (matches Gutenberg).
+		if ( out.length === 1 && /^<p>/.test( out[ 0 ] ) ) {
+			return { kind: 'inline', html: out[ 0 ].replace( /^<p>/, '' ).replace( /<\/p>$/, '' ) };
+		}
+		return {
+			kind: 'blocks',
+			html: out.join( '' ),
+			list: out.length === 1 && /^<[ou]l[\s>]/.test( out[ 0 ] ) ? out[ 0 ] : null,
+			allParagraphs: out.every( ( b ) => /^<p[\s>]/.test( b ) ),
+		};
+	}
+
+	// Multi-line plain text → paragraphs (blank line = new paragraph, single
+	// newline = <br>), single line → inline.
+	function pasteTextPayload( text ) {
+		const chunks = text.replace( /\r\n?/g, '\n' ).split( /\n{2,}/ ).map( ( c ) => c.trim() ).filter( Boolean );
+		if ( ! chunks.length ) return null;
+		if ( chunks.length === 1 && ! /\n/.test( chunks[ 0 ] ) ) return { kind: 'inline', html: esc( chunks[ 0 ] ) };
+		return { kind: 'blocks', html: chunks.map( ( c ) => `<p>${ esc( c ).replace( /\n/g, '<br>' ) }</p>` ).join( '' ), allParagraphs: true };
+	}
+
+	const pasteFlatHtml = ( payload ) => esc( stripTags( payload.html.replace( /<\/(p|h[1-6]|li|tr|pre)>/g, ' ' ) ).replace( /\s+/g, ' ' ).trim() );
+
+	// Block-level insertion. Chrome merges a payload's first and last blocks
+	// into the blocks around the caret — fine when both are paragraphs, but a
+	// merged-in <pre>/<h2>/<figure> gets shredded into styled spans (probed).
+	// Empty marker paragraphs bracket the payload so nothing merges; the
+	// brackets are removed after (outside the undo stack, like the markdown
+	// nbsp fix — ⌘Z still reverts the whole paste in one step, and a redo's
+	// resurrected empty bracket serializes to nothing).
+	function pasteBlocksInsert( body, blocksHtml ) {
+		const BKT = '<p data-minn-bkt="1"><br></p>';
+		document.execCommand( 'insertHTML', false, BKT + blocksHtml + BKT );
+		const sel = window.getSelection();
+		$$( 'p[data-minn-bkt]', body ).forEach( ( p ) => {
+			p.removeAttribute( 'data-minn-bkt' );
+			if ( p.textContent.trim() ) return; // absorbed real text — it's a paragraph now
+			const holdsCaret = sel.rangeCount && p.contains( sel.anchorNode );
+			const next = p.nextElementSibling;
+			if ( holdsCaret ) {
+				if ( ! next || next.classList.contains( 'minn-block-island' ) ) return; // keep as the landing paragraph
+				setCaret( next, 0 );
+			}
+			// Node removal is safe here; editing TEXT would be data loss —
+			// Chrome's undo replays recorded offsets against the live DOM, and
+			// an out-of-stack text mutation misapplies them (probed: a
+			// character vanished mid-word). The split-off tail's leading nbsp
+			// is handled at serialize instead (cleanLeadingNbsp).
+			p.remove();
+		} );
+		liftNestedLists( body );
+	}
+
+	// Route a sanitized payload to the right insertion for the caret context.
+	// Constrained containers can't take block splices (Chrome shreds blocks
+	// pasted into headings/list items — probed): lists merge into lists
+	// natively, paragraphs merge into quotes, anything else flattens to text.
+	function pasteInsert( body, payload, anchorEl ) {
+		if ( payload.kind === 'inline' ) {
+			document.execCommand( 'insertHTML', false, payload.html );
+			return;
+		}
+		if ( anchorEl.closest( 'li' ) ) {
+			if ( payload.list ) {
+				document.execCommand( 'insertHTML', false, payload.list );
+				liftNestedLists( body );
+			} else {
+				document.execCommand( 'insertHTML', false, pasteFlatHtml( payload ) );
+			}
+			return;
+		}
+		if ( anchorEl.closest( 'h1,h2,h3,h4,h5,h6,td,th,figcaption' ) ) {
+			document.execCommand( 'insertHTML', false, pasteFlatHtml( payload ) );
+			return;
+		}
+		if ( anchorEl.closest( 'blockquote' ) ) {
+			document.execCommand( 'insertHTML', false, payload.allParagraphs ? payload.html : pasteFlatHtml( payload ) );
+			return;
+		}
+		pasteBlocksInsert( body, payload.html );
 	}
 
 	/* ===== Slash command menu ===== */

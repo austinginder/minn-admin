@@ -42,7 +42,12 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
   rewrites `<code>` into styled spans; new lists nest inside the source paragraph
   (`liftNestedLists`); whole-block deletion merges neighbors into husks (delete *contents*
   instead); an adjacent Backspace atomically deletes a non-editable island
-  (`bindIslandGuards`); modal clicks destroy the selection (capture the Range first).
+  (`bindIslandGuards`); modal clicks destroy the selection (capture the Range first);
+  `insertHTML` merges a payload's first/last blocks into the blocks around the caret and
+  SHREDS non-paragraphs doing it (`pasteBlocksInsert` brackets payloads with marker
+  paragraphs); after any execCommand, out-of-stack TEXT mutations corrupt undo — Chrome
+  replays recorded offsets against the live DOM (node *removals* are safe; fix text at
+  serialize time, see `cleanLeadingNbsp`).
 - **Nothing decorative reaches the database.** Syntax-highlight spans, hover inline
   styles, `data-minn-attrs` markers, nbsp litter, `<strike>`, empty figure husks — all
   scrubbed in `serializeToBlocks()` / `classicHtml()`. New editor chrome must live on
