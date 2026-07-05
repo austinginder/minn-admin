@@ -590,6 +590,10 @@ select.minn-input {
 .minn-side-row { display: flex; justify-content: space-between; }
 .minn-side-key { color: var(--text3); }
 .minn-side-val.amber { color: var(--amber); font-weight: 600; }
+/* Sectioned surface detail (e.g. form entries): long/multiline answers stack. */
+.minn-side-row.multi { flex-direction: column; align-items: flex-start; gap: 3px; }
+.minn-surface-val.multi { white-space: pre-wrap; text-align: left; max-height: 200px; overflow-y: auto; }
+.minn-view-switch { flex-shrink: 0; padding-right: 10px; margin-right: 4px; border-right: 1px solid var(--border); }
 .minn-side-val.green { color: var(--green); }
 .minn-side-card .minn-btn-primary { width: 100%; margin-top: 14px; justify-content: center; }
 .minn-side-card .minn-save-draft { width: 100%; margin-top: 8px; justify-content: center; }

@@ -1692,13 +1692,20 @@
 
 	function surfaceState( id ) {
 		if ( ! state.surface[ id ] ) {
-			state.surface[ id ] = { tab: '_all', cache: null, tabs: null, labels: {}, q: '' };
+			state.surface[ id ] = { tab: '_all', cache: null, tabs: null, labels: {}, q: '', view: 'main' };
 		}
 		return state.surface[ id ];
 	}
 
+	// A surface may declare a second collection under `manage` (e.g. Gravity
+	// Forms: entries by default, the forms themselves in the Manage view).
+	// Everything below renders whichever collection the current view resolves.
+	function surfaceColl( s, ss ) {
+		return ss.view === 'manage' && s.manage ? s.manage : s.collection;
+	}
+
 	function surfaceRoute( s, ss, page ) {
-		const col = s.collection;
+		const col = surfaceColl( s, ss );
 		let route = ss.tab === '_all'
 			? ( col.allRoute || col.route )
 			: col.route.replace( '{tab}', encodeURIComponent( ss.tab ) );
@@ -1726,7 +1733,7 @@
 
 	async function loadSurfaceTabs( s ) {
 		const ss = surfaceState( s.id );
-		const tabs = s.collection.tabs;
+		const tabs = surfaceColl( s, ss ).tabs;
 		if ( ! tabs || ss.tabs ) return;
 		const all = [ [ '_all', tabs.allLabel || 'All' ] ];
 		if ( tabs.static ) {
@@ -1742,7 +1749,7 @@
 
 	async function loadSurfaceItems( s, page = 1 ) {
 		const ss = surfaceState( s.id );
-		const col = s.collection;
+		const col = surfaceColl( s, ss );
 		const ctx = ss.tab + '|' + ( ss.q || '' );
 		const res = await apiRes( surfaceRoute( s, ss, page ) );
 		const body = await res.json();
@@ -1831,7 +1838,8 @@
 	function renderSurface( s ) {
 		const view = $( '#minn-view' );
 		const ss = surfaceState( s.id );
-		if ( ! ss.cache || ( s.collection.tabs && ! ss.tabs ) ) {
+		const coll = surfaceColl( s, ss );
+		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) ) {
 			view.innerHTML = '<div class="minn-loading">Loading…</div>';
 			Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ) ] )
 				.then( renderIfCurrent( s.id ) )
@@ -1839,7 +1847,7 @@
 			return;
 		}
 		const c = ss.cache;
-		const cols = s.collection.columns || [];
+		const cols = coll.columns || [];
 		// Column widths: an adapter's explicit `width` wins; otherwise size by
 		// role — flexible for the title/text columns, fixed and narrow for the
 		// short ones (codes, counts, dates, pills) so long values get the room.
@@ -1850,14 +1858,19 @@
 
 		view.innerHTML = `
 		<div class="minn-toolbar">
+			${ s.manage ? `
+			<div class="minn-tabs minn-view-switch">
+				<button class="minn-tab${ ss.view !== 'manage' ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
+				<button class="minn-tab${ ss.view === 'manage' ? ' active' : '' }" data-sview="manage">${ esc( s.manage.viewLabel || 'Manage' ) }</button>
+			</div>` : '' }
 			${ ss.tabs && ss.tabs.length > 1 ? `
 			<div class="minn-tabs">
 				${ ss.tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>` : '' }
-			${ s.collection.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Filter…" value="${ esc( ss.q || '' ) }">` : '' }
+			${ coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Filter…" value="${ esc( ss.q || '' ) }">` : '' }
 			<div class="minn-toolbar-meta">${ c.total } item${ c.total === 1 ? '' : 's' }</div>
-			${ s.collection.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( s.collection.create.label || 'Add' ) }</button>` : '' }
+			${ coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '' }
 		</div>
 		<div class="minn-card minn-table">
 			<div class="minn-table-head" style="grid-template-columns:${ gridCols };">
@@ -1875,6 +1888,18 @@
 			btn.addEventListener( 'click', () => {
 				ss.tab = btn.dataset.stab;
 				ss.cache = null;
+				renderSurface( s );
+			} )
+		);
+		$$( '[data-sview]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				if ( ss.view === btn.dataset.sview ) return;
+				ss.view = btn.dataset.sview;
+				// The views are different collections — nothing carries over.
+				ss.cache = null;
+				ss.tabs = null;
+				ss.tab = '_all';
+				ss.q = '';
 				renderSurface( s );
 			} )
 		);
@@ -1912,14 +1937,19 @@
 	}
 
 	async function openSurfaceDetail( s, item ) {
-		state.modal = { type: 'surface', surface: s, item, labels: null, loading: true };
+		const coll = surfaceColl( s, surfaceState( s.id ) );
+		state.modal = { type: 'surface', surface: s, coll, item, labels: null, sections: null, loading: true };
 		renderOverlays();
-		const detail = ( s.collection.detail || {} );
+		const detail = ( coll.detail || {} );
 		try {
 			if ( detail.detailRoute ) {
 				state.modal.item = await api( detail.detailRoute.replace( '{id}', item.id ) );
 			}
-			if ( detail.labels ) {
+			// A sections route returns the whole display model (grouped rows,
+			// labels resolved server-side) — no client label mapping needed.
+			if ( detail.sectionsRoute ) {
+				state.modal.sections = await api( detail.sectionsRoute.replace( '{id}', item.id ) );
+			} else if ( detail.labels ) {
 				const ss = surfaceState( s.id );
 				const route = detail.labels.route.replace( /\{(\w+)\}/g, ( _, k ) => item[ k ] );
 				if ( ! ss.labels[ route ] ) {
@@ -7220,7 +7250,8 @@
 
 		if ( m.type === 'surface' ) {
 			const s = m.surface;
-			const detail = s.collection.detail || {};
+			const coll = m.coll || s.collection;
+			const detail = coll.detail || {};
 			const it = m.item;
 			const edit = detail.edit;
 			const editFields = ! m.loading && edit ? edit.fields : [];
@@ -7234,17 +7265,34 @@
 				.slice( 0, 24 );
 			const message = ! m.loading && detail.messageKey ? it[ detail.messageKey ] : null;
 			const isHtml = message != null && /<\/?[a-z][\s\S]*>/i.test( String( message ) );
+			// Actions can be conditional (when.key equals when.equals on the
+			// item) or plain links (href with {id}); indexes stay stable for
+			// the bind step.
+			const visibleActions = ( coll.actions || [] )
+				.map( ( a, i ) => ( { a, i } ) )
+				.filter( ( { a } ) => ! a.when || String( surfaceValue( it, a.when.key ) ) === String( a.when.equals ) );
+			const sec = m.sections;
+			const secRows = sec ? ( sec.sections || [] ).map( ( g ) => `
+					<div class="minn-side-title" style="margin:12px 0 8px;">${ esc( g.title || '' ) }</div>
+					${ ( g.rows || [] ).map( ( r ) => {
+						const raw = String( r.value == null ? '' : r.value );
+						const multi = raw.includes( '\n' ) || raw.length > 90;
+						const val = r.type === 'url' && /^https?:\/\//.test( raw )
+							? `<a class="minn-surface-val" href="${ esc( raw ) }" target="_blank" rel="noopener">${ esc( raw ) }</a>`
+							: `<span class="minn-surface-val${ multi ? ' multi' : '' }">${ esc( raw ) }</span>`;
+						return `<div class="minn-side-row${ multi ? ' multi' : '' }"><span class="minn-side-key">${ esc( r.label || '' ) }</span>${ val }</div>`;
+					} ).join( '' ) }` ).join( '' ) : '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal${ message ? ' wide' : '' }">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ esc( s.label ) } #${ esc( String( it.id ) ) }</div>
+						<div class="minn-modal-title">${ esc( sec && sec.title ? sec.title : s.label ) } #${ esc( String( it.id ) ) }</div>
 						${ it.status ? surfacePill( it.status ) : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ m.loading ? '<div class="minn-loading">Loading…</div>' : `
 					<div class="minn-modal-meta">
-						${ rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( stripTags( String( v ) ) ) }</span></div>` ).join( '' ) }
+						${ sec ? secRows : rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( stripTags( String( v ) ) ) }</span></div>` ).join( '' ) }
 						${ editFields.length ? `<div class="minn-media-edit">
 							${ editFields.map( ( f, i ) => {
 								const val = surfaceValue( it, f.key );
@@ -7256,11 +7304,14 @@
 					${ message ? ( isHtml
 						? `<iframe class="minn-email-frame" id="minn-email-frame" sandbox="" title="Email preview" srcdoc="${ esc( String( message ) ) }"></iframe>`
 						: `<pre class="minn-surface-message">${ esc( stripTags( String( message ) ) ) }</pre>` ) : '' }
-					${ ( message || edit || ( s.collection.actions || [] ).length ) ? `
+					${ ( message || edit || visibleActions.length || ( sec && sec.adminUrl ) ) ? `
 					<div class="minn-modal-actions">
 						${ edit ? `<button class="minn-btn-primary" id="minn-surface-save">Save</button>` : '' }
 						${ message ? `<button class="minn-btn-soft" id="minn-surface-raw">↗ Open raw</button>` : '' }
-						${ ( s.collection.actions || [] ).map( ( a, i ) => `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
+						${ sec && sec.adminUrl ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'wp-admin' ) } ↗</a>` : '' }
+						${ visibleActions.map( ( { a, i } ) => a.href
+							? `<a class="minn-btn-soft" href="${ esc( String( a.href ).replace( '{id}', encodeURIComponent( it.id ) ) ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
+							: `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 					</div>` : '' }` }
 				</div>
 			</div>`;
@@ -7967,7 +8018,7 @@
 		if ( m.type === 'surface' ) {
 			const rawBtn = $( '#minn-surface-raw' );
 			if ( rawBtn ) rawBtn.addEventListener( 'click', () => {
-				const detail = m.surface.collection.detail || {};
+				const detail = ( m.coll || m.surface.collection ).detail || {};
 				const msg = detail.messageKey ? m.item[ detail.messageKey ] : null;
 				if ( msg == null ) return;
 				// text/plain, never text/html — blob: URLs are same-origin, so scripts in
@@ -7977,7 +8028,7 @@
 			} );
 			const saveBtn = $( '#minn-surface-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const edit = ( m.surface.collection.detail || {} ).edit;
+				const edit = ( ( m.coll || m.surface.collection ).detail || {} ).edit;
 				if ( ! edit ) return;
 				const body = {};
 				// Carry the untouched fields so the plugin's sanitizer doesn't reset them.
@@ -8003,7 +8054,7 @@
 			} );
 			$$( '[data-saction]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
-					const action = m.surface.collection.actions[ parseInt( btn.dataset.saction, 10 ) ];
+					const action = ( m.coll || m.surface.collection ).actions[ parseInt( btn.dataset.saction, 10 ) ];
 					if ( ! action ) return;
 					if ( action.confirm && ! confirm( action.confirm ) ) return;
 					btn.disabled = true;
