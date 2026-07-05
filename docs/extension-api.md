@@ -115,11 +115,16 @@ weekly, promote just that toggle into a small settings surface.
 
 ## Status
 
-Everything below has shipped: collection surfaces, editor panels and traffic providers are all
-live with ten bundled adapters (Gravity Forms, Gravity SMTP, ACF, Simple History, Redirection,
-Koko Analytics, WP Statistics, Burst Statistics, Independent Analytics, plus the bespoke
-WooCommerce Orders view). The public reference lives in `for-plugin-authors.md`. Remaining from
-the original plan: SEO editor panels (Rank Math / Yoast meta shims).
+Everything in the original plan has shipped: collection surfaces, editor panels and traffic
+providers are live with the bundled adapters (Gravity Forms, Gravity SMTP, ACF, Simple History,
+Redirection, Safe Redirect Manager, Simple 301 Redirects, Query Monitor, Koko Analytics,
+WP Statistics, Burst Statistics, Independent Analytics, AnalyticsWP, plus the bespoke
+WooCommerce Orders view). The public reference lives in `for-plugin-authors.md`. The **SEO
+editor panel** (the last planned piece) landed in the v0.5.x cycle — `adapters/seo.php`
+detects Yoast or Rank Math and registers a dedicated read/write `minn_seo` REST field
+(context=edit only) for SEO title, meta description and focus keyword, rather than the
+originally-sketched raw `register_post_meta` shim: the editor writes its whole panel object
+back on save, so a dedicated field keeps that write scoped to exactly these three values.
 
 ## Suggested build order (historical)
 
