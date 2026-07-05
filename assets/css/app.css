@@ -537,12 +537,21 @@ select.minn-input {
 .minn-editor-body table { display: block; max-width: 100%; overflow-x: auto; }
 /* Editable tables get the same cutout treatment as block islands — the dashed
    outline marks "this is a structured block", top-level only so tables inside
-   island previews aren't double-framed. */
+   island previews aren't double-framed. Cell gridlines are an editor-only
+   affordance (the front end styles its own tables). */
 .minn-editor-body > figure.wp-block-table, .minn-editor-body > table {
   border: 1px dashed var(--border2); border-radius: 11px; padding: 14px 16px; margin: 0 0 18px;
 }
-.minn-editor-body > figure.wp-block-table { display: block; }
-.minn-editor-body > figure.wp-block-table table { margin: 0; }
+.minn-editor-body > figure.wp-block-table:hover, .minn-editor-body > table:hover { border-color: var(--accent); }
+.minn-editor-body > figure.wp-block-table { display: block; overflow-x: auto; }
+/* The figure handles overflow, so the inner table can be a real full-width table. */
+.minn-editor-body > figure.wp-block-table table { display: table; margin: 0; border-collapse: collapse; width: 100%; }
+.minn-editor-body > table { border-collapse: separate; }
+.minn-editor-body > figure.wp-block-table td, .minn-editor-body > figure.wp-block-table th,
+.minn-editor-body > table td, .minn-editor-body > table th {
+  border: 1px solid var(--border); padding: 6px 12px; min-width: 40px;
+}
+.minn-editor-body > figure.wp-block-table th, .minn-editor-body > table th { background: var(--panel); }
 .minn-editor-body iframe, .minn-editor-body video { max-width: 100%; }
 .minn-editor-body p { margin: 0 0 16px; }
 .minn-editor-body h1, .minn-editor-body h2 { letter-spacing: -0.4px; }

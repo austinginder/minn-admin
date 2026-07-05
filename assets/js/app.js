@@ -5646,7 +5646,10 @@
 		if ( tablePop && tableChipTable !== table ) hideTablePop();
 		tableChipTable = table;
 		tableChip.hidden = false;
-		const rect = table.getBoundingClientRect();
+		// Straddle the cutout border exactly like an island chip (top -10,
+		// right 12) — measured on the figure, not the inner table.
+		const box = table.closest( 'figure' ) || table;
+		const rect = box.getBoundingClientRect();
 		tableChip.style.top = ( rect.top - 10 ) + 'px';
 		tableChip.style.left = Math.max( 10, Math.min( rect.right - tableChip.offsetWidth - 12, window.innerWidth - tableChip.offsetWidth - 12 ) ) + 'px';
 	}
