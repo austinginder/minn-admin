@@ -293,6 +293,8 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-tabs::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 .minn-tab { background: transparent; color: var(--text3); border: none; padding: 5px 13px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
 .minn-tab.active { background: var(--panel2); color: var(--text); font-weight: 600; }
+.minn-tab-count { display: inline-block; margin-left: 5px; padding: 0 6px; border-radius: 999px; background: var(--panel2); color: var(--text3); font-size: 12px; font-weight: 600; line-height: 18px; vertical-align: 1px; }
+.minn-tab.active .minn-tab-count { background: var(--bg); color: var(--text2); }
 /* Quiet in-place loading: keep the toolbar, dim only the table while data refreshes. */
 .minn-busy { opacity: 0.45; pointer-events: none; transition: opacity 0.12s ease; }
 
