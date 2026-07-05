@@ -3658,6 +3658,26 @@
 	}
 
 	// Serialize the edited DOM back to Gutenberg block markup.
+	// Chrome's editing engine litters nbsp around inline elements (it guards
+	// spaces that "might collapse" pessimistically, and our boundary-escape
+	// typing does the same at block edges). Where an nbsp touches an inline
+	// element and its other neighbour is a real character, a plain space
+	// renders identically — store that instead. Trailing/leading nbsp (still
+	// load-bearing) and everything inside <pre> are left alone.
+	function cleanBoundaryNbsp( root ) {
+		$$( 'code, strong, em, s, b, i, a', root ).forEach( ( el ) => {
+			if ( el.closest( 'pre' ) ) return;
+			const prev = el.previousSibling;
+			if ( prev && prev.nodeType === Node.TEXT_NODE && /\S\u00A0$/.test( prev.textContent ) ) {
+				prev.textContent = prev.textContent.slice( 0, -1 ) + ' ';
+			}
+			const next = el.nextSibling;
+			if ( next && next.nodeType === Node.TEXT_NODE && /^\u00A0\S/.test( next.textContent ) ) {
+				next.textContent = ' ' + next.textContent.slice( 1 );
+			}
+		} );
+	}
+
 	function serializeToBlocks( root, islands ) {
 		const out = [];
 		// serializeBlockAttrs applies Gutenberg's comment-safe escaping ("--", <, >, &).
@@ -3692,6 +3712,7 @@
 			const tag = n.tagName.toLowerCase();
 			const el = n.cloneNode( true );
 			el.removeAttribute( 'style' );
+			cleanBoundaryNbsp( el );
 
 			if ( tag === 'p' ) {
 				if ( ! el.textContent.trim() && ! el.querySelector( 'img' ) ) return;
@@ -4136,6 +4157,7 @@
 	// blocks so decoration never reaches the database.
 	function classicHtml( body ) {
 		const clone = body.cloneNode( true );
+		cleanBoundaryNbsp( clone );
 		$$( 'pre', clone ).forEach( ( pre ) => {
 			const lang = codeLangOf( pre );
 			const text = codeTextOf( pre );
@@ -4786,7 +4808,7 @@
 				} )
 			);
 
-			bindInlineCode( body );
+			bindMarkdown( body );
 			bindSlashMenu( body, insertImage );
 			bindCodeLangPicker( body );
 
@@ -5534,7 +5556,7 @@
 		} );
 	}
 
-	/* ===== Inline code ===== */
+	/* ===== Inline code & markdown typing rules ===== */
 
 	// A <code> that flows inside text — not a code block's <code> and not
 	// anything inside an island.
@@ -5601,14 +5623,47 @@
 		setCaretAfterInline( code );
 	}
 
-	// Two writing affordances for inline code, bound on the editor body:
-	// 1. Markdown backticks — typing the closing ` of `text` converts it.
-	// 2. Boundary escape — contenteditable offers no caret position that types
-	//    OUTSIDE a <code> at its edges (Chrome extends the code), so printable
-	//    keys at the first/last position are intercepted and inserted as plain
-	//    text beside the element instead. Extending the code itself still
-	//    works from any interior position.
-	function bindInlineCode( body ) {
+	// Markdown typing rules + the inline-boundary escape, bound on the editor
+	// body. Inline wraps fire on the closing delimiter's keydown, within one
+	// text node: `code` · **bold** · *italic* · __bold__ · _italic_ ·
+	// ~~strike~~ · [text](url). Block prefixes fire on space at the start of
+	// a paragraph: #…###### headings · - * + bullets · 1. numbers · > quote —
+	// plus ``` → code block and --- → divider. Wraps and prefix removals go
+	// through execCommand so ⌘Z unwinds them back to the literal text.
+	//
+	// Boundary escape: contenteditable offers no caret position that types
+	// OUTSIDE an inline element at its edges (Chrome extends the format), so
+	// printable keys at a <code> edge are intercepted and inserted beside the
+	// element — unconditionally for code chips, one-shot (mdEscape) for the
+	// element a markdown wrap just created, so toolbar bold-then-keep-typing
+	// still extends the bold run as users expect.
+	function bindMarkdown( body ) {
+		// The element the latest markdown wrap produced — typing at its end
+		// boundary escapes outside once, then normal typing rules apply.
+		let mdEscape = null;
+
+		const topBlockOf = ( n ) => {
+			while ( n && n.parentNode && n.parentNode !== body ) n = n.parentNode;
+			return n && n.nodeType === Node.ELEMENT_NODE ? n : null;
+		};
+
+		// The element insertHTML just created, located from the collapsed caret.
+		const justInserted = ( tag ) => {
+			const s = window.getSelection();
+			if ( ! s.rangeCount ) return null;
+			const n = s.anchorNode;
+			if ( n.nodeType === Node.ELEMENT_NODE && s.anchorOffset > 0 ) {
+				const c = n.childNodes[ s.anchorOffset - 1 ];
+				if ( c && c.nodeType === Node.ELEMENT_NODE && c.tagName === tag ) return c;
+			}
+			if ( n.nodeType === Node.TEXT_NODE && s.anchorOffset === 0 && n.previousSibling
+				&& n.previousSibling.nodeType === Node.ELEMENT_NODE && n.previousSibling.tagName === tag ) {
+				return n.previousSibling;
+			}
+			const el = n.nodeType === Node.ELEMENT_NODE ? n : n.parentNode;
+			return el && el.closest ? el.closest( tag.toLowerCase() ) : null;
+		};
+
 		body.addEventListener( 'keydown', ( e ) => {
 			if ( e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1 ) return;
 			const sel = window.getSelection();
@@ -5638,51 +5693,162 @@
 				setCaret( t, 1 );
 				scheduleAutosave();
 			};
+			const escapeOutside = ( el, side ) => {
+				e.preventDefault();
+				const t = keyText( el, side );
+				if ( side === 'start' ) el.before( t );
+				else el.after( t );
+				typed( t );
+			};
 
-			// Element-level caret directly after a <code> (as left by the
-			// backtick rule or the toolbar): type beside it, not into it.
+			// Element-level caret directly after a boundary element (as left
+			// by a wrap or the toolbar): type beside it, not into it.
 			if ( node.nodeType === Node.ELEMENT_NODE ) {
 				const before = node.childNodes[ sel.anchorOffset - 1 ];
-				if ( before && before.nodeType === Node.ELEMENT_NODE && before.tagName === 'CODE' && closestInlineCode( before ) === before ) {
-					e.preventDefault();
-					const t = keyText( before, 'end' );
-					before.after( t );
-					typed( t );
+				if ( before && before.nodeType === Node.ELEMENT_NODE ) {
+					if ( before.tagName === 'CODE' && closestInlineCode( before ) === before ) return escapeOutside( before, 'end' );
+					if ( before === mdEscape ) {
+						mdEscape = null;
+						return escapeOutside( before, 'end' );
+					}
 				}
 				return;
 			}
 
+			// Inside an inline code chip: escape at the edges, otherwise type
+			// freely — markdown delimiters stay literal inside code.
 			const code = closestInlineCode( node );
+			if ( code ) {
+				if ( caretAtCodeEdge( code, node, sel.anchorOffset, 'end' ) ) return escapeOutside( code, 'end' );
+				if ( caretAtCodeEdge( code, node, sel.anchorOffset, 'start' ) ) return escapeOutside( code, 'start' );
+				return;
+			}
 
-			// Markdown: a closing backtick wraps back to the previous one.
-			if ( e.key === '`' && ! code && node.nodeType === Node.TEXT_NODE && ! node.parentNode.closest( 'pre' ) ) {
-				const upto = node.textContent.slice( 0, sel.anchorOffset );
-				const idx = upto.lastIndexOf( '`' );
-				const inner = idx === -1 ? '' : upto.slice( idx + 1 );
-				if ( inner.trim() ) {
+			// One-shot escape at the end of a fresh markdown wrap.
+			if ( mdEscape && mdEscape.contains( node ) && caretAtCodeEdge( mdEscape, node, sel.anchorOffset, 'end' ) ) {
+				const el = mdEscape;
+				mdEscape = null;
+				return escapeOutside( el, 'end' );
+			}
+
+			if ( node.parentNode.closest( 'pre' ) ) return; // block code: literal
+
+			const upto = node.textContent.slice( 0, sel.anchorOffset );
+
+			// Inline wrap through the undo stack: the typed delimiter is never
+			// inserted; the matched source text becomes the element.
+			const wrapInline = ( startIdx, tag, inner, attrs = '' ) => {
+				e.preventDefault();
+				const r = document.createRange();
+				r.setStart( node, startIdx );
+				r.setEnd( node, sel.anchorOffset );
+				if ( tag === 'code' ) {
+					// Blink's insertHTML keeps strong/em/s/a but rewrites <code>
+					// into a styled <span> — build it manually (this one wrap
+					// sits outside the undo stack, the others don't).
+					r.deleteContents();
+					const codeEl = document.createElement( 'code' );
+					codeEl.textContent = inner;
+					r.insertNode( codeEl );
+					setCaretAfterInline( codeEl );
+					scheduleAutosave();
+					return;
+				}
+				sel.removeAllRanges();
+				sel.addRange( r );
+				document.execCommand( 'insertHTML', false, `<${ tag }${ attrs }>${ esc( inner ) }</${ tag }>` );
+				const el = justInserted( tag.toUpperCase() );
+				if ( el ) {
+					// insertHTML rebalances a preceding mid-sentence space into
+					// nbsp — put the plain space back.
+					const prev = el.previousSibling;
+					if ( prev && prev.nodeType === Node.TEXT_NODE && /\S $/.test( prev.textContent ) ) {
+						prev.textContent = prev.textContent.slice( 0, -1 ) + ' ';
+					}
+					mdEscape = el;
+				}
+				scheduleAutosave();
+			};
+
+			let m;
+			if ( e.key === '`' ) {
+				// ``` alone in a paragraph → code block.
+				const blockEl = topBlockOf( node );
+				if ( blockEl && blockEl.tagName === 'P' && blockEl.textContent.trim() === '``' && upto.endsWith( '``' ) ) {
 					e.preventDefault();
-					const range = document.createRange();
-					range.setStart( node, idx );
-					range.setEnd( node, sel.anchorOffset );
-					range.deleteContents();
-					const wrap = document.createElement( 'code' );
-					wrap.textContent = inner;
-					range.insertNode( wrap );
-					setCaretAfterInline( wrap );
+					const r = document.createRange();
+					r.selectNodeContents( blockEl );
+					sel.removeAllRanges();
+					sel.addRange( r );
+					document.execCommand( 'delete', false, null );
+					document.execCommand( 'formatBlock', false, 'pre' );
+					scheduleAutosave();
+					return;
+				}
+				m = /`([^`]+)$/.exec( upto );
+				if ( m && m[ 1 ].trim() ) wrapInline( m.index, 'code', m[ 1 ] );
+			} else if ( e.key === '*' ) {
+				if ( ( m = /\*\*([^\s*](?:[^*]*[^\s*])?)\*$/.exec( upto ) ) ) wrapInline( m.index, 'strong', m[ 1 ] );
+				else if ( ( m = /(^|[^*])\*([^\s*](?:[^*]*[^\s*])?)$/.exec( upto ) ) ) wrapInline( m.index + m[ 1 ].length, 'em', m[ 2 ] );
+			} else if ( e.key === '_' ) {
+				// Underscores fire on word boundaries only — snake_case stays.
+				if ( ( m = /(^|[\s"'(])__([^\s_](?:[^_]*[^\s_])?)_$/.exec( upto ) ) ) wrapInline( m.index + m[ 1 ].length, 'strong', m[ 2 ] );
+				else if ( ( m = /(^|[\s"'(])_([^\s_](?:[^_]*[^\s_])?)$/.exec( upto ) ) ) wrapInline( m.index + m[ 1 ].length, 'em', m[ 2 ] );
+			} else if ( e.key === '~' ) {
+				if ( ( m = /~~([^\s~](?:[^~]*[^\s~])?)~$/.exec( upto ) ) ) wrapInline( m.index, 's', m[ 1 ] );
+			} else if ( e.key === ')' ) {
+				// [text](url) — only for things that look like a destination,
+				// so array[0](call) style prose never converts.
+				m = /\[([^\[\]]+)\]\(((?:https?:\/\/|\/|#|mailto:)[^)\s]*)$/.exec( upto );
+				if ( m ) wrapInline( m.index, 'a', m[ 1 ], ` href="${ esc( m[ 2 ] ) }"` );
+			} else if ( e.key === ' ' ) {
+				// Block prefixes at the start of a paragraph.
+				const blockEl = topBlockOf( node );
+				if ( ! blockEl || blockEl.tagName !== 'P' ) return;
+				const r = document.createRange();
+				r.selectNodeContents( blockEl );
+				r.setEnd( node, sel.anchorOffset );
+				const prefix = r.toString();
+				let block = null;
+				let list = null;
+				if ( /^#{1,6}$/.test( prefix ) ) block = 'h' + prefix.length;
+				else if ( /^[-*+]$/.test( prefix ) ) list = 'insertUnorderedList';
+				else if ( /^1[.)]$/.test( prefix ) ) list = 'insertOrderedList';
+				else if ( prefix === '>' ) block = 'blockquote';
+				if ( ! block && ! list ) return;
+				e.preventDefault();
+				sel.removeAllRanges();
+				sel.addRange( r );
+				document.execCommand( 'delete', false, null );
+				if ( list ) {
+					document.execCommand( list, false, null );
+					// Chrome nests the new list INSIDE the paragraph — lift it
+					// to the top level or the serializer would see <p><ul>…
+					if ( blockEl.parentNode === body && blockEl.tagName === 'P' ) {
+						const l = blockEl.querySelector( 'ul, ol' );
+						if ( l && blockEl.textContent === l.textContent ) blockEl.replaceWith( l );
+					}
+				} else {
+					document.execCommand( 'formatBlock', false, block );
+				}
+				scheduleAutosave();
+			} else if ( e.key === '-' ) {
+				// --- alone in a paragraph → divider, caret stays in the
+				// (emptied) paragraph below it.
+				const blockEl = topBlockOf( node );
+				if ( blockEl && blockEl.tagName === 'P' && blockEl.textContent.trim() === '--' && upto.endsWith( '--' ) ) {
+					e.preventDefault();
+					blockEl.insertAdjacentHTML( 'beforebegin', '<hr>' );
+					blockEl.textContent = '';
+					blockEl.appendChild( document.createElement( 'br' ) );
+					const r = document.createRange();
+					r.selectNodeContents( blockEl );
+					r.collapse( true );
+					sel.removeAllRanges();
+					sel.addRange( r );
 					scheduleAutosave();
 				}
-				return;
 			}
-
-			if ( ! code ) return;
-			const atEnd = caretAtCodeEdge( code, node, sel.anchorOffset, 'end' );
-			const atStart = ! atEnd && caretAtCodeEdge( code, node, sel.anchorOffset, 'start' );
-			if ( ! atEnd && ! atStart ) return;
-			e.preventDefault();
-			const t = keyText( code, atEnd ? 'end' : 'start' );
-			if ( atEnd ) code.after( t );
-			else code.before( t );
-			typed( t );
 		} );
 	}
 
