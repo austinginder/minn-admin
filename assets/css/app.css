@@ -604,6 +604,21 @@ select.minn-input {
 .minn-side-card .minn-btn-primary { width: 100%; margin-top: 14px; justify-content: center; }
 .minn-side-card .minn-save-draft { width: 100%; margin-top: 8px; justify-content: center; }
 .minn-permalink { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text3); margin-top: 3px; word-break: break-all; }
+/* Publish-card visibility + per-post discussion/slug controls. */
+.minn-mini-select {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 7px; padding: 2px 6px; font-size: 13px; font-weight: 500; cursor: pointer;
+  max-width: 55%;
+}
+.minn-vis-extra { margin-top: 9px; }
+input.minn-vis-extra { width: 100%; }
+.minn-check-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--text2); cursor: pointer; font-size: 13px; }
+.minn-check-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+.minn-slug-field { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.minn-slug-prefix { color: var(--text3); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+.minn-slug-input { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; padding: 5px 8px; }
+.minn-slug-input:disabled { opacity: 0.5; cursor: default; }
+.minn-slug-note { color: var(--amber); font-size: 11.5px; margin-top: 4px; }
 .minn-chips { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
 .minn-chip { background: var(--panel2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 6px; font-size: 12.5px; }
 

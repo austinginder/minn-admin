@@ -303,11 +303,11 @@
 		// builder's own editing surface (docs/page-builders.md).
 		const builderRows = ( B.builders || [] ).length && B.caps.editPages
 			? `<div class="minn-new-menu-label">Page in…</div>` + B.builders.map( ( b ) =>
-				`<button data-newbuilder="${ esc( b.id ) }"><span class="minn-row-icon">▭</span> ${ esc( b.name ) }</button>` ).join( '' )
+				`<button data-newbuilder="${ esc( b.id ) }"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( b.name ) }</button>` ).join( '' )
 			: '';
 		menu.innerHTML = `
-			<button data-newtype="posts"><span class="minn-row-icon">¶</span> Post</button>
-			<button data-newtype="pages"><span class="minn-row-icon">▭</span> Page</button>
+			<button data-newtype="posts"><span class="minn-row-icon">${ icon( 'pilcrow' ) }</span> Post</button>
+			<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> Page</button>
 			${ builderRows }`;
 		const r = btn.getBoundingClientRect();
 		menu.style.top = ( r.bottom + 6 ) + 'px';
@@ -438,6 +438,9 @@
 			strike: '<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/>',
 			eraser: '<path d="M4 7V4h16v3"/><path d="M5 20h6"/><path d="M13 4 8 20"/><path d="m15 15 5 5"/><path d="m20 15-5 5"/>',
 			alignCenter: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="17" y1="12" x2="7" y2="12"/><line x1="19" y1="18" x2="5" y2="18"/>',
+			// Content-list row markers (a single page vs. a blog post).
+			file: '<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/>',
+			block: '<path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
 			alignRight: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="7" y2="18"/>',
 		};
 		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ icons[ name ] || '' }</svg>`;
@@ -932,7 +935,7 @@
 		const tabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ],
 			...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
 			...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
-		const rowIcon = ( p ) => p.type === 'pages' ? '▭' : ( p.type === 'posts' ? '¶' : '◆' );
+		const rowIcon = ( p ) => icon( p.type === 'pages' ? 'file' : ( p.type === 'posts' ? 'pilcrow' : 'block' ) );
 		// Category/tag filters are post taxonomies — show them for the core posts context only.
 		const showTax = ! cpt && state.filter !== 'pages';
 		if ( showTax && ! state.cache.postTerms ) {
@@ -4289,7 +4292,7 @@
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,minn_builder${ extraKeys }` );
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,minn_builder${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			// A builder that OWNS the canvas (Elementor/Beaver/Brizy/Divi-4:
 			// canonical content lives outside post_content) forces locked mode —
@@ -4310,8 +4313,20 @@
 				date: p.date || null,
 				newDate: null,
 				slug: '/' + ( p.slug || '' ),
+				slugValue: p.slug || '',
 				link: p.link,
 				savedAt: null,
+				// Discussion + visibility ride wp/v2's native fields (verified
+				// round-trip in context=edit). Visibility is derived: a private
+				// status wins, else a set password, else public.
+				commentStatus: p.comment_status || 'open',
+				pingStatus: p.ping_status || 'open',
+				password: p.password || '',
+				visibility: p.status === 'private' ? 'private' : ( p.password ? 'password' : 'public' ),
+				sticky: !! p.sticky,
+				serverSticky: !! p.sticky,
+				supportsSticky: 'sticky' in p,
+				supportsDiscussion: 'comment_status' in p,
 				categoryIds: new Set( p.categories || [] ),
 				tagIds: new Set( p.tags || [] ),
 				tags: [],
@@ -4430,9 +4445,11 @@
 			const newType = state.editorType === 'pages' && B.caps.editPages ? 'pages' : 'posts';
 			state.editor = {
 				id: null, type: newType, title: '', content: '', status: 'draft', mode: 'blocks',
-				date: null, newDate: null, slug: '', link: '', savedAt: null, categoryIds: new Set(),
+				date: null, newDate: null, slug: '', slugValue: '', link: '', savedAt: null, categoryIds: new Set(),
 				tagIds: new Set(), tags: [],
 				revisions: null, panels: null,
+				commentStatus: 'open', pingStatus: 'open', password: '', visibility: 'public',
+				sticky: false, serverSticky: false, supportsSticky: newType === 'posts', supportsDiscussion: true,
 				supportsThumb: true, featuredMedia: 0, featuredThumb: null,
 				parent: 0, menuOrder: 0, template: '', supportsParent: newType === 'pages', supportsOrder: newType === 'pages', templates: null, parentPick: null,
 				excerpt: '', supportsExcerpt: newType === 'posts',
@@ -4483,6 +4500,13 @@
 		// A lost (or never-held) lock means the other session's copy is
 		// canonical — no write path may fire until the lock is taken back.
 		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) return Promise.resolve();
+		// WP rejects a password on a sticky post and validates against the
+		// CURRENT sticky state, so un-sticking and setting a password in one
+		// request 400s. Commit the un-stick in its own chained request first.
+		if ( ed.id && ed.serverSticky && ed.passwordDirty && ed.visibility === 'password' && ed.password ) {
+			saveChain = saveChain.then( () => api( `wp/v2/${ ed.type }/${ ed.id }`, { method: 'POST', body: JSON.stringify( { sticky: false } ) } )
+				.then( () => { ed.serverSticky = false; } ).catch( () => {} ) );
+		}
 		const payload = buildSavePayload( ed, extra );
 		const capturedAt = Date.now();
 		saveChain = saveChain.then( () => doSaveEditor( ed, payload, capturedAt ) );
@@ -4490,9 +4514,13 @@
 	}
 
 	function buildSavePayload( ed, extra = {} ) {
+		// _explicit marks a user-initiated save (Publish / Update / ⌘S / Save
+		// draft) vs. an autosave — it gates the private-publish below and must
+		// never reach REST.
+		const { _explicit, ...rest } = extra;
 		const payload = {
 			title: $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ed.title,
-			...extra,
+			...rest,
 		};
 		// Locked mode never touches the body — complex block markup stays intact.
 		if ( ed.mode !== 'locked' ) {
@@ -4519,6 +4547,24 @@
 		if ( ed.templateDirty ) payload.template = ed.template || '';
 		if ( ed.orderDirty ) payload.menu_order = ed.menuOrder || 0;
 		if ( ed.excerptDirty ) payload.excerpt = ed.excerpt;
+		if ( ed.slugDirty ) payload.slug = ed.slugValue;
+		if ( ed.commentDirty ) payload.comment_status = ed.commentStatus;
+		if ( ed.pingDirty ) payload.ping_status = ed.pingStatus;
+		// Never send sticky with password protection — they're mutually
+		// exclusive and the un-stick is committed separately (see saveEditor).
+		if ( ed.stickyDirty && ed.visibility !== 'password' ) payload.sticky = ed.sticky;
+		// Password rides its own field; a private post must have no password
+		// (the two are mutually exclusive in WordPress).
+		if ( ed.passwordDirty ) payload.password = ed.visibility === 'password' ? ed.password : '';
+		// "Private" is a STATUS, not a field. Only an EXPLICIT save applies it —
+		// otherwise a draft's autosave would silently publish it private
+		// (private is a live status), breaking "autosave never auto-publishes".
+		if ( _explicit && ed.visibilityDirty && ed.visibility === 'private' ) {
+			payload.status = 'private';
+		} else if ( _explicit && ed.visibilityDirty && ed.status === 'private' && ed.visibility !== 'private' ) {
+			// Leaving private on an already-private post → back to published.
+			payload.status = 'publish';
+		}
 		return payload;
 	}
 
@@ -4554,6 +4600,12 @@
 			}
 			ed.status = p.status;
 			ed.slug = '/' + ( p.slug || '' );
+			if ( 'slug' in p ) ed.slugValue = p.slug || '';
+			if ( 'comment_status' in p ) ed.commentStatus = p.comment_status;
+			if ( 'ping_status' in p ) ed.pingStatus = p.ping_status;
+			if ( 'password' in p ) ed.password = p.password || '';
+			if ( 'sticky' in p ) { ed.sticky = !! p.sticky; ed.serverSticky = !! p.sticky; }
+			ed.visibility = p.status === 'private' ? 'private' : ( ed.password ? 'password' : 'public' );
 			ed.link = p.link;
 			if ( p.date ) ed.date = p.date;
 			if ( payload.date ) ed.newDate = null;
@@ -4566,6 +4618,12 @@
 			ed.templateDirty = false;
 			ed.orderDirty = false;
 			ed.excerptDirty = false;
+			ed.slugDirty = false;
+			ed.commentDirty = false;
+			ed.pingDirty = false;
+			ed.passwordDirty = false;
+			ed.stickyDirty = false;
+			ed.visibilityDirty = false;
 			state.cache.content = null;
 			renderEditorSide();
 			renderTopbar();
@@ -4720,8 +4778,10 @@
 	}
 
 	function publishLabel( ed ) {
-		if ( ed.status === 'publish' && ! scheduledInFuture( ed ) ) return 'Update';
 		if ( ed.status === 'future' || scheduledInFuture( ed ) ) return 'Schedule';
+		// Private is a live status — its button updates in place, not "Publish"
+		// (which would make it public).
+		if ( ( ed.status === 'publish' || ed.status === 'private' ) && ! scheduledInFuture( ed ) ) return 'Update';
 		return 'Publish';
 	}
 
@@ -4912,9 +4972,17 @@
 			<div class="minn-side-title">Publish</div>
 			<div class="minn-side-rows">
 				<div class="minn-side-row"><span class="minn-side-key">Status</span><span class="minn-side-val${ ed.status === 'publish' ? ' green' : ' amber' }" style="font-weight:600;" id="minn-status-state">${ esc( statusLabel ) }</span></div>
-				<div class="minn-side-row"><span class="minn-side-key">Visibility</span><span>Public</span></div>
+				<div class="minn-side-row"><span class="minn-side-key">Visibility</span>
+					<select class="minn-mini-select" id="minn-visibility">
+						<option value="public"${ ed.visibility === 'public' ? ' selected' : '' }>Public</option>
+						<option value="password"${ ed.visibility === 'password' ? ' selected' : '' }>Password protected</option>
+						<option value="private"${ ed.visibility === 'private' ? ' selected' : '' }>Private</option>
+					</select>
+				</div>
 				<div class="minn-side-row"><span class="minn-side-key">Saved</span><span class="minn-side-val ${ saved.cls }" id="minn-saved-state">${ esc( saved.text ) }</span></div>
 			</div>
+			${ ed.visibility === 'password' ? `<input type="text" class="minn-input minn-vis-extra" id="minn-password-input" placeholder="Enter a password" value="${ esc( ed.password ) }" autocomplete="off">` : '' }
+			${ ed.supportsSticky && ed.visibility !== 'password' ? `<label class="minn-check-row minn-vis-extra"><input type="checkbox" id="minn-sticky"${ ed.sticky ? ' checked' : '' }> Stick to the top of the blog</label>` : '' }
 			<div class="minn-schedule">
 				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? 'Scheduled for' : 'Publish time' }</div>
 				<input type="datetime-local" class="minn-input" id="minn-schedule-input" value="${ esc( dateValue ) }">
@@ -4946,7 +5014,13 @@
 		<div class="minn-side-card">
 			<div class="minn-side-title">Settings</div>
 			<div style="display:flex; flex-direction:column; gap:11px; font-size: 13.5px; color:var(--text2);">
-				<div>Permalink<div class="minn-permalink">${ esc( ed.slug || '—' ) }</div></div>
+				<div>Permalink
+					<div class="minn-slug-field">
+						<span class="minn-slug-prefix">/</span>
+						<input class="minn-input minn-slug-input" id="minn-slug-input" value="${ esc( ed.slugValue ) }" placeholder="${ ed.id ? 'post-slug' : 'set on first save' }" autocomplete="off" spellcheck="false"${ ed.id ? '' : ' disabled' }>
+					</div>
+					${ LIVE_STATUSES.includes( ed.status ) ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
+				</div>
 				${ ed.type === 'posts' ? `<div>Categories<div class="minn-chips" id="minn-editor-cats">${
 					cats == null ? '<span class="minn-chip">Loading…</span>'
 					: cats.map( ( c ) => `<button class="minn-chip pick${ ed.categoryIds.has( c.id ) ? ' sel' : '' }" data-cat="${ c.id }">${ esc( c.name ) }</button>` ).join( '' )
@@ -4960,6 +5034,10 @@
 				</div>` : '' }
 				${ ed.supportsExcerpt ? `<div>Excerpt
 					<textarea class="minn-input minn-excerpt-input" id="minn-editor-excerpt" rows="3" placeholder="Optional summary for archives, feeds and shares…">${ esc( ed.excerpt ) }</textarea>
+				</div>` : '' }
+				${ ed.supportsDiscussion ? `<div>Discussion
+					<label class="minn-check-row"><input type="checkbox" id="minn-comment-status"${ ed.commentStatus === 'open' ? ' checked' : '' }> Allow comments</label>
+					<label class="minn-check-row"><input type="checkbox" id="minn-ping-status"${ ed.pingStatus === 'open' ? ' checked' : '' }> Allow pingbacks &amp; trackbacks</label>
 				</div>` : '' }
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>
@@ -4992,6 +5070,61 @@
 		if ( excerptInput ) excerptInput.addEventListener( 'input', () => {
 			ed.excerpt = excerptInput.value;
 			ed.excerptDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const slugInput = $( '#minn-slug-input', el );
+		if ( slugInput ) {
+			// Sanitize toward a real slug (WP finishes the job on save). Kept in
+			// ed.slugValue while typing; the field itself is normalized on blur
+			// so the caret doesn't jump mid-edit (matches Gutenberg).
+			slugInput.addEventListener( 'input', () => {
+				ed.slugValue = slugInput.value.toLowerCase().replace( /[^a-z0-9\-_%]+/g, '-' ).replace( /-+/g, '-' );
+				ed.slugDirty = true;
+				if ( ed.id ) scheduleAutosave();
+			} );
+			slugInput.addEventListener( 'blur', () => { slugInput.value = ed.slugValue; } );
+		}
+		const visSel = $( '#minn-visibility', el );
+		if ( visSel ) visSel.addEventListener( 'change', () => {
+			ed.visibility = visSel.value;
+			ed.visibilityDirty = true;
+			ed.passwordDirty = true; // password is set or cleared by the choice
+			// A password-protected post can't be sticky (WP rejects the pair) —
+			// drop stickiness when password is chosen.
+			if ( ed.visibility === 'password' && ed.sticky ) {
+				ed.sticky = false;
+				ed.stickyDirty = true;
+			}
+			// Re-render to show/hide the password field. renderEditorSide skips
+			// a full render while ANY sidebar input is focused — blur whatever
+			// holds focus (could be a checkbox the user just toggled, not the
+			// select), or the password field would never appear.
+			if ( document.activeElement && document.activeElement.blur ) document.activeElement.blur();
+			renderEditorSide();
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const pwInput = $( '#minn-password-input', el );
+		if ( pwInput ) pwInput.addEventListener( 'input', () => {
+			ed.password = pwInput.value;
+			ed.passwordDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const stickyBox = $( '#minn-sticky', el );
+		if ( stickyBox ) stickyBox.addEventListener( 'change', () => {
+			ed.sticky = stickyBox.checked;
+			ed.stickyDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const commentBox = $( '#minn-comment-status', el );
+		if ( commentBox ) commentBox.addEventListener( 'change', () => {
+			ed.commentStatus = commentBox.checked ? 'open' : 'closed';
+			ed.commentDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const pingBox = $( '#minn-ping-status', el );
+		if ( pingBox ) pingBox.addEventListener( 'change', () => {
+			ed.pingStatus = pingBox.checked ? 'open' : 'closed';
+			ed.pingDirty = true;
 			if ( ed.id ) scheduleAutosave();
 		} );
 		const parentWrap = $( '#minn-parent-ac', el );
@@ -5141,7 +5274,7 @@
 			saveDraftBtn.addEventListener( 'click', async () => {
 				saveDraftBtn.disabled = true;
 				clearAutosaveTimers();
-				await saveEditor();
+				await saveEditor( { _explicit: true } );
 				saveDraftBtn.disabled = false;
 				if ( state.editor && ! state.editor.dirty ) toast( 'Draft saved' );
 			} );
@@ -5151,12 +5284,15 @@
 			const btn = e.currentTarget;
 			btn.disabled = true;
 			clearAutosaveTimers();
-			const extra = {};
+			const extra = { _explicit: true };
+			// Keep a private post private on Update unless the visibility
+			// control changed it (buildSavePayload applies that override).
+			const liveStatus = ed.status === 'private' && ed.visibility === 'private' ? 'private' : 'publish';
 			if ( ed.newDate ) {
 				extra.date = ed.newDate.length === 16 ? ed.newDate + ':00' : ed.newDate;
-				extra.status = scheduledInFuture( ed ) ? 'future' : 'publish';
+				extra.status = scheduledInFuture( ed ) ? 'future' : liveStatus;
 			} else {
-				extra.status = ed.status === 'future' ? 'future' : 'publish';
+				extra.status = ed.status === 'future' ? 'future' : liveStatus;
 			}
 			await saveEditor( extra );
 			btn.disabled = false;
@@ -10067,7 +10203,7 @@
 				e.preventDefault();
 				const ed = state.editor;
 				clearAutosaveTimers();
-				saveEditor().then( () => {
+				saveEditor( { _explicit: true } ).then( () => {
 					if ( state.editor === ed && ! ed.dirty ) {
 						toast( LIVE_STATUSES.includes( ed.status ) ? 'Updated' : 'Draft saved' );
 					}
