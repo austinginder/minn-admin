@@ -313,7 +313,8 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-table-row:last-child { border-bottom: none; }
 .minn-row-icon { width: 28px; height: 28px; border-radius: 7px; background: var(--panel2); display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 14px; flex-shrink: 0; }
 .minn-row-title { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.minn-row-slug { font-size: 12.5px; color: var(--text3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-row-slug { font-size: 12.5px; color: var(--text3); margin-top: 1px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.minn-row-slug-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .minn-row-meta { font-size: 14px; color: var(--text2); }
 /* Surface table cells: single line, ellipsis — long URLs shouldn't wrap to three rows. */
 .minn-row-meta.minn-cell-clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -674,9 +675,9 @@ body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert her
 
 /* ===== Page builders (list chip + editor note) ===== */
 .minn-builder-chip {
-  display: inline-block; margin-left: 7px; padding: 2px 8px; border-radius: 999px;
+  flex-shrink: 0; padding: 1px 7px; border-radius: 999px;
   background: var(--panel2); border: 1px solid var(--border); color: var(--text3);
-  font-size: 11.5px; font-weight: 600; white-space: nowrap; vertical-align: 1px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
 }
 .minn-builder-note { display: flex; align-items: center; gap: 14px; }
 .minn-builder-note > span { flex: 1; }
