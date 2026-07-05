@@ -44,6 +44,37 @@ byte-comparing nested group/columns and shortcode blocks through a full edit-and
 Known cosmetic effect: the first Minn save normalizes inter-block whitespace to the Gutenberg
 standard blank line.
 
+## The writing surface
+
+The hybrid model decides what's *safe* to edit; these are the affordances that make the
+editing itself fast (all landed in the v0.5.x cycle):
+
+- **Markdown typing rules.** Inline wraps fire on the closing delimiter — `` `code` ``,
+  `**bold**`, `*italic*`, `__bold__` / `_italic_` (word-boundary only, so `snake_case`
+  survives), `~~strike~~`, `[text](url)` (URL-shaped destinations only). Block prefixes fire
+  on space at a paragraph start — `#`–`######`, `-`/`*`/`+`, `1.`, `>` — plus ``` → code
+  block and `---` → divider. Wraps go through `execCommand` so ⌘Z restores the literal text.
+  Hard-won Blink facts live as comments in `bindMarkdown()`: `insertHTML` rewrites `<code>`
+  into a styled span (code wraps are built manually), it rebalances adjacent spaces into
+  nbsp (fixed post-insert; `cleanBoundaryNbsp()` also scrubs at serialize), and new lists
+  nest inside the paragraph until lifted.
+- **Inline-code boundary escape.** contenteditable offers no caret position that types
+  *outside* an inline element at its edge — Chrome extends the format. Printable keys at a
+  `<code>` edge are intercepted and inserted beside the element (unconditionally for code
+  chips; one-shot for the element a markdown wrap just created, so toolbar bold-then-type
+  still extends).
+- **Calm, status-aware autosave.** 15s idle / 60s max-while-typing. Drafts save in place;
+  published/scheduled/private posts are **never** written by autosave — edits back up to a
+  WP autosave revision (like Gutenberg) and apply only on Update/⌘S. Save draft button,
+  ⌘S, an Unsaved-changes indicator, flush-on-navigate and an unload warning round it out.
+- **Slash menu filters as you type** (`/co` → Code); a second `/` (a literal path) closes it.
+- **Word count · reading time** in a sticky pill under the body.
+- **Previews wear the site's real styles.** `minn-admin/v1/editor-styles` collects every
+  registered block's style handles, the theme's editor styles and the global stylesheet;
+  the client scopes every rule to `.minn-island-preview` (html/body/:root map onto the
+  container) and injects once. Islands render like the front end; the typing surface
+  deliberately keeps Minn's own typography.
+
 ## Where the line moves over time
 
 Grow `SIMPLE_BLOCKS` and `EDITABLE_ATTRS` deliberately, one block/attribute at a time, only when

@@ -14,6 +14,16 @@ Full parent-attribute regeneration for static InnerBlocks wrappers remains delib
 unbuilt — it requires the block's JS `save()` and stays on the wrong side of the parity
 treadmill.**
 
+**Two later additions (v0.5.x cycle):** the inspector on a `core/embed` / `core/gallery`
+island offers **"Change URL…" / "Replace images…"** — these regenerate the island wholesale
+through the same templates that create embeds and galleries (`embedTemplate()` /
+`galleryTemplate()`), because their content lives in saved HTML where attribute edits alone
+can't retarget it. Gutenberg-set captions/layout attributes reset by design; the popover
+note says so. And island previews now render with the site's **real front-end styles** —
+`minn-admin/v1/editor-styles` collects block style handles + theme editor styles + the
+global stylesheet, and the client scopes every rule to `.minn-island-preview` before
+injecting (see editor-direction.md, "The writing surface").
+
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —
 this is the plan for making them *workable*. The goal: click an island, get a small inspector
 popover next to it, edit the block's configuration in place, watch the preview update. No React,
