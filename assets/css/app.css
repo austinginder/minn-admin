@@ -879,6 +879,16 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-code-chip:hover, .minn-code-chip.hot { color: var(--accent2); border-color: var(--accent); }
 .minn-code-pop { width: 250px; }
 .minn-table-pop { width: 300px; }
+.minn-link-pop { width: 340px; }
+.minn-link-pop .minn-insp-actions a.minn-btn-soft { text-decoration: none; }
+/* "A newer backup exists" — amber, dismissable, above the toolbar. */
+.minn-backup-note {
+  display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; padding: 9px 12px;
+  background: rgba(224,168,79,0.08); border: 1px solid rgba(224,168,79,0.25); border-radius: 9px;
+  font-size: 13px; color: var(--text2);
+}
+.minn-backup-note span { flex: 1; }
+.minn-backup-note .minn-btn-soft { flex-shrink: 0; padding: 4px 10px; font-size: 12.5px; }
 .minn-table-ops { display: flex; gap: 6px; margin-bottom: 12px; }
 .minn-table-ops:last-child { margin-bottom: 2px; }
 .minn-table-ops .minn-btn-soft { flex: 1; justify-content: center; padding: 5px 8px; font-size: 12.5px; }
