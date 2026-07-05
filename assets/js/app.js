@@ -93,6 +93,14 @@
 
 	/* ===== Pager (shared numbered pagination) ===== */
 
+	// Standard toolbar meta: "N thing(s) · page X of Y". Right-aligned, always
+	// sits immediately left of the primary action button. Pass a page/totalPages
+	// pair and the page suffix appears whenever the list spans more than one page.
+	function metaLabel( count, noun, page, totalPages ) {
+		const plural = /[^aeiou]y$/.test( noun ) ? noun.slice( 0, -1 ) + 'ies' : noun + 's';
+		return `${ count } ${ count === 1 ? noun : plural }${ totalPages > 1 ? ` · page ${ page } of ${ totalPages }` : '' }`;
+	}
+
 	// ‹ 1 … 4 [5] 6 … 20 › — first, last and a window around the current page.
 	function pagerHtml( page, totalPages ) {
 		if ( ! totalPages || totalPages <= 1 ) return '';
@@ -905,9 +913,9 @@
 			</div>
 			${ showTax ? taxCombo( 'cat', 'All categories' ) : '' }
 			${ showTax ? taxCombo( 'tag', 'All tags' ) : '' }
-			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Filter by title…" value="${ esc( state.contentSearch || '' ) }">
+			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Search content…" value="${ esc( state.contentSearch || '' ) }">
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item', c.page, c.totalPages ) }</div>
 			<button class="minn-btn-soft minn-trash-toggle${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">${ icon( 'trash' ) } Trash</button>
-			<div class="minn-toolbar-meta">${ c.total } item${ c.total === 1 ? '' : 's' }${ c.totalPages > 1 ? ` · page ${ c.page } of ${ c.totalPages }` : '' }</div>
 		</div>
 		<div id="minn-bulk-slot"></div>
 		<div class="minn-card minn-table">
@@ -1208,7 +1216,7 @@
 		}
 		const items = c.items;
 		const mapped = items.map( mapMediaItem );
-		const countLabel = `${ c.total } file${ c.total === 1 ? '' : 's' }${ c.totalPages > 1 ? ` · page ${ c.page } of ${ c.totalPages }` : '' }`;
+		const countLabel = metaLabel( c.total, 'file', c.page, c.totalPages );
 		const thumbStyle = ( m ) => m.thumb
 			? `background-image:url('${ esc( m.thumb ) }')`
 			: `background:${ m.grad }`;
@@ -1400,7 +1408,7 @@
 				${ COMMENT_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.commentTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
-			<div class="minn-toolbar-meta">${ c.total } comment${ c.total === 1 ? '' : 's' }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'comment', c.page, c.totalPages ) }</div>
 		</div>
 		<div class="minn-card">
 			${ rows.length ? rows.map( ( r ) => `
@@ -1563,7 +1571,7 @@
 				${ ORDER_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.orderTab === id ? ' active' : '' }" data-otab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
-			<div class="minn-toolbar-meta">${ c.total } order${ c.total === 1 ? '' : 's' }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'order', c.page, c.totalPages ) }</div>
 		</div>
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-order-cols">
@@ -1632,7 +1640,7 @@
 					`<button class="minn-tab${ ( state.userRole || '_all' ) === id ? ' active' : '' }" data-role="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>` : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }">
-			<div class="minn-toolbar-meta">${ c.total } user${ c.total === 1 ? '' : 's' }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user', c.page, c.totalPages ) }</div>
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } Add user</button>` : '' }
 		</div>
 		<div class="minn-card minn-table">
@@ -1870,8 +1878,8 @@
 				${ ss.tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>` : '' }
-			${ coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Filter…" value="${ esc( ss.q || '' ) }">` : '' }
-			<div class="minn-toolbar-meta">${ c.total } item${ c.total === 1 ? '' : 's' }</div>
+			${ coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Search ${ esc( ( coll.viewLabel || 'items' ).toLowerCase() ) }…" value="${ esc( ss.q || '' ) }">` : '' }
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item', c.page, c.totalPages ) }</div>
 			${ coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '' }
 		</div>
 		<div class="minn-card minn-table">
@@ -2117,8 +2125,8 @@
 				${ ( ms.menus || [] ).map( ( m ) =>
 					`<button class="minn-tab${ ms.sel === m.id ? ' active' : '' }" data-menu="${ m.id }">${ esc( m.name ) }</button>` ).join( '' ) }
 			</div>
+			<div class="minn-toolbar-meta">${ metaLabel( flat.length, 'item', 1, 1 ) }</div>
 			<button class="minn-btn-soft" id="minn-menu-new">${ icon( 'plus' ) } New menu</button>
-			<div class="minn-toolbar-meta">${ flat.length } item${ flat.length === 1 ? '' : 's' }</div>
 		</div>
 		${ ! ms.menus.length ? '<div class="minn-card minn-empty">No menus yet. Create one to build your site navigation.</div>' : `
 		${ locations.length ? `
@@ -2991,7 +2999,7 @@
 			view.innerHTML = `
 			<div class="minn-toolbar">
 				${ tabs }
-				<div class="minn-toolbar-meta">${ tx.taxonomies.length } taxonom${ tx.taxonomies.length === 1 ? 'y' : 'ies' }</div>
+				<div class="minn-toolbar-meta">${ metaLabel( tx.taxonomies.length, 'taxonomy', 1, 1 ) }</div>
 				<button class="minn-btn-soft" id="minn-add-tax">${ icon( 'plus' ) } Add taxonomy</button>
 			</div>
 			<div class="minn-card minn-table">
@@ -3029,7 +3037,7 @@
 			view.innerHTML = `
 			<div class="minn-toolbar">
 				${ tabs }
-				<div class="minn-toolbar-meta">${ c.types.length } post type${ c.types.length === 1 ? '' : 's' }</div>
+				<div class="minn-toolbar-meta">${ metaLabel( c.types.length, 'post type', 1, 1 ) }</div>
 				<button class="minn-btn-soft" id="minn-add-cpt">${ icon( 'plus' ) } Add post type</button>
 			</div>
 			<div class="minn-card minn-table">
