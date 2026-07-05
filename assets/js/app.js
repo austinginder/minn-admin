@@ -3645,6 +3645,92 @@
 		return islandEl;
 	}
 
+	/* ===== Front-end styles for island previews ===== */
+
+	// Islands render real block HTML, but Minn's standalone document never
+	// loads the site's block/theme CSS — previews looked like bare text.
+	// Collect the same stylesheets the block editor loads into its canvas
+	// (minn-admin/v1/editor-styles), scope every rule to the preview
+	// containers, and inject once per session. Failure just means previews
+	// stay unstyled.
+	let editorStylesPromise = null;
+
+	function ensureEditorStyles() {
+		if ( editorStylesPromise ) return editorStylesPromise;
+		editorStylesPromise = ( async () => {
+			try {
+				const r = await api( 'minn-admin/v1/editor-styles' );
+				const texts = await Promise.all( ( r.urls || [] ).map( ( u ) =>
+					fetch( u, { credentials: 'omit' } )
+						.then( ( x ) => ( x.ok ? x.text() : '' ) )
+						.then( ( css ) => absolutizeCssUrls( css, u ) )
+						.catch( () => '' )
+				) );
+				texts.push( r.inline || '' );
+				const scoped = scopeCssToPreviews( texts.join( '\n' ) );
+				if ( ! scoped ) return;
+				const el = document.createElement( 'style' );
+				el.id = 'minn-frontend-css';
+				el.textContent = scoped;
+				document.head.appendChild( el );
+			} catch ( e ) { /* previews simply stay unstyled */ }
+		} )();
+		return editorStylesPromise;
+	}
+
+	// Relative url(...) references break once CSS moves into an inline <style>
+	// on the admin document — rewrite them against the stylesheet's own URL.
+	function absolutizeCssUrls( css, base ) {
+		return css.replace( /url\(\s*(['"]?)([^'")]+)\1\s*\)/g, ( m, q, path ) => {
+			if ( /^(data:|https?:|\/\/|#|\/)/i.test( path ) ) return m;
+			try {
+				return `url(${ q }${ new URL( path, base ).href }${ q })`;
+			} catch ( e ) {
+				return m;
+			}
+		} );
+	}
+
+	// Prefix every selector with the preview scope. html/body/:root map onto
+	// the preview container itself, so theme custom properties, background
+	// and `body:not(.wp-admin)`-style gates land there. @font-face and
+	// @keyframes pass through globally — they define resources, not element
+	// styles. Anything unrecognized is dropped rather than leaked unscoped.
+	function scopeCssToPreviews( cssText ) {
+		let sheet;
+		try {
+			sheet = new CSSStyleSheet();
+			sheet.replaceSync( cssText );
+		} catch ( e ) {
+			return '';
+		}
+		const SCOPE = '.minn-island-preview';
+		const scopeSelector = ( selectorText ) => selectorText.split( ',' ).map( ( sel ) => {
+			let s = sel.trim();
+			if ( ! s ) return s;
+			s = s.replace( /(^|[\s>+~])(:root|html|body)(?![\w-])/gi, ( m0, pre ) => pre + '&' );
+			s = s.replace( /^&(\s*&)*/, SCOPE ); // ":root body …" chains collapse
+			s = s.replace( /&/g, SCOPE );
+			return s.startsWith( SCOPE ) ? s : SCOPE + ' ' + s;
+		} ).join( ', ' );
+		const walk = ( rules ) => {
+			let out = '';
+			Array.from( rules ).forEach( ( rule ) => {
+				if ( rule instanceof CSSStyleRule ) {
+					out += scopeSelector( rule.selectorText ) + ' { ' + rule.style.cssText + ' }\n';
+				} else if ( rule instanceof CSSMediaRule ) {
+					out += '@media ' + rule.conditionText + ' {\n' + walk( rule.cssRules ) + '}\n';
+				} else if ( rule instanceof CSSSupportsRule ) {
+					out += '@supports ' + rule.conditionText + ' {\n' + walk( rule.cssRules ) + '}\n';
+				} else if ( rule instanceof CSSFontFaceRule || ( window.CSSKeyframesRule && rule instanceof CSSKeyframesRule ) ) {
+					out += rule.cssText + '\n';
+				}
+			} );
+			return out;
+		};
+		return walk( sheet.cssRules );
+	}
+
 	// Minimal wpautop for editing classic content.
 	function miniAutop( raw ) {
 		if ( ! raw.trim() ) return '';
@@ -4769,6 +4855,7 @@
 		highlightCodeBlocks( body );
 		renderIslandPreviews( body, ed );
 		updateEditorStats();
+		ensureEditorStyles();
 		// Island chips open the block inspector (works in locked mode too — read-only there is fine
 		// because locked posts never send content, but islands only exist in blocks mode anyway).
 		body.addEventListener( 'click', ( e ) => {
