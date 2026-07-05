@@ -437,6 +437,133 @@ class Minn_Admin_REST {
 				},
 			)
 		);
+
+		// Toggle a whitelisted debug constant in wp-config.php. Sensitive — the
+		// callback re-checks writability, DISALLOW_FILE_MODS and multisite.
+		register_rest_route(
+			self::NS,
+			'/system/config',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'set_config_constant' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+				'args'                => array(
+					'constant' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+					'value'    => array(
+						'type'     => 'boolean',
+						'required' => true,
+					),
+				),
+			)
+		);
+
+		// Read (tail) or clear the WordPress debug log.
+		register_rest_route(
+			self::NS,
+			'/system/debug-log',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'read_debug_log' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+				array(
+					'methods'             => 'DELETE',
+					'callback'            => array( __CLASS__, 'clear_debug_log' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+			)
+		);
+	}
+
+	/**
+	 * The active debug log path: a string WP_DEBUG_LOG wins, else PHP's
+	 * error_log if it points at a real file, else the WordPress default.
+	 */
+	private static function debug_log_path() {
+		if ( defined( 'WP_DEBUG_LOG' ) && is_string( WP_DEBUG_LOG ) && '' !== WP_DEBUG_LOG ) {
+			return WP_DEBUG_LOG;
+		}
+		$ini = ini_get( 'error_log' );
+		if ( $ini && 'syslog' !== $ini && ( file_exists( $ini ) || is_dir( dirname( $ini ) ) ) && '/' === substr( $ini, 0, 1 ) ) {
+			return $ini;
+		}
+		return WP_CONTENT_DIR . '/debug.log';
+	}
+
+	/**
+	 * Return the tail of the debug log (last 256 KB, partial first line
+	 * dropped) plus metadata — never the whole thing, which can be enormous.
+	 */
+	public static function read_debug_log( WP_REST_Request $request ) {
+		$path = self::debug_log_path();
+		$rel  = str_replace( ABSPATH, '', $path );
+		if ( ! file_exists( $path ) ) {
+			return rest_ensure_response(
+				array(
+					'exists'  => false,
+					'path'    => $rel,
+					'content' => '',
+					'size'    => 0,
+				)
+			);
+		}
+		$max       = 256 * 1024;
+		$size      = (int) filesize( $path );
+		$truncated = $size > $max;
+		$content   = '';
+		$fh        = @fopen( $path, 'rb' );
+		if ( $fh ) {
+			if ( $truncated ) {
+				fseek( $fh, -$max, SEEK_END );
+			}
+			$content = (string) stream_get_contents( $fh );
+			fclose( $fh );
+			if ( $truncated ) {
+				// Drop the partial line the byte-offset seek landed inside.
+				$nl = strpos( $content, "\n" );
+				if ( false !== $nl ) {
+					$content = substr( $content, $nl + 1 );
+				}
+			}
+		}
+		return rest_ensure_response(
+			array(
+				'exists'     => true,
+				'path'       => $rel,
+				'size'       => $size,
+				'size_human' => size_format( $size, 1 ),
+				'truncated'  => $truncated,
+				'writable'   => wp_is_writable( $path ),
+				'content'    => $content,
+			)
+		);
+	}
+
+	/** Empty the debug log (truncate to zero). */
+	public static function clear_debug_log() {
+		$path = self::debug_log_path();
+		if ( ! file_exists( $path ) ) {
+			return rest_ensure_response( array( 'cleared' => true ) );
+		}
+		if ( ! wp_is_writable( $path ) ) {
+			return new WP_Error( 'not_writable', 'The debug log is not writable.', array( 'status' => 400 ) );
+		}
+		$fh = @fopen( $path, 'w' );
+		if ( ! $fh ) {
+			return new WP_Error( 'clear_failed', 'Could not clear the debug log.', array( 'status' => 500 ) );
+		}
+		fclose( $fh );
+		return rest_ensure_response( array( 'cleared' => true ) );
 	}
 
 	/**
@@ -1801,12 +1928,161 @@ class Minn_Admin_REST {
 			array(
 				'generated' => current_time( 'c' ),
 				'checks'    => $checks,
+				'config'    => self::config_state(),
 				'groups'    => array(
 					array( 'title' => 'WordPress', 'icon' => 'wp', 'rows' => self::kv_rows( $wordpress ) ),
 					array( 'title' => 'PHP', 'icon' => 'php', 'rows' => self::kv_rows( $php ) ),
 					array( 'title' => 'Database', 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables ),
 					array( 'title' => 'Server', 'icon' => 'server', 'rows' => self::kv_rows( $server ) ),
 				),
+			)
+		);
+	}
+
+	/**
+	 * The whitelisted, boolean-only wp-config constants Minn will toggle. This
+	 * is the ONLY set the write endpoint accepts — never an arbitrary name.
+	 */
+	private static function debug_constants() {
+		return array(
+			'WP_DEBUG'         => array( 'label' => 'Debug mode', 'desc' => 'Master switch for WordPress debugging.' ),
+			'WP_DEBUG_LOG'     => array( 'label' => 'Log to file', 'desc' => 'Write notices and errors to wp-content/debug.log.' ),
+			'WP_DEBUG_DISPLAY' => array( 'label' => 'Show errors on screen', 'desc' => 'Render errors in the page. Leave off in production and read the log instead.' ),
+			'SCRIPT_DEBUG'     => array( 'label' => 'Unminified assets', 'desc' => 'Load the full-length core and plugin JS/CSS.' ),
+			'SAVEQUERIES'      => array( 'label' => 'Log database queries', 'desc' => 'Record every query for inspection — a real performance cost; turn off when done.' ),
+		);
+	}
+
+	/** Regex matching a `define( 'NAME', <value> );` line, any quote/spacing. */
+	private static function const_pattern( $name ) {
+		return "/define\\(\\s*(['\"])" . preg_quote( $name, '/' ) . "\\1\\s*,\\s*[^)]*\\)\\s*;/";
+	}
+
+	/**
+	 * Locate the wp-config.php this install actually loads (core's own rule:
+	 * ABSPATH first, then one level up when there's no wp-settings.php there).
+	 */
+	private static function wpconfig_path() {
+		if ( file_exists( ABSPATH . 'wp-config.php' ) ) {
+			return ABSPATH . 'wp-config.php';
+		}
+		$up = dirname( ABSPATH ) . '/wp-config.php';
+		if ( file_exists( $up ) && ! file_exists( dirname( ABSPATH ) . '/wp-settings.php' ) ) {
+			return $up;
+		}
+		return '';
+	}
+
+	/**
+	 * Whether editing wp-config is possible here, and the current state of each
+	 * debug constant. A constant defined OUTSIDE wp-config (a mu-plugin, the
+	 * host's prepend) is 'locked' — editing wp-config wouldn't change it.
+	 */
+	private static function config_state() {
+		$path       = self::wpconfig_path();
+		$writable   = $path && wp_is_writable( $path );
+		$disallowed = ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ) || ( is_multisite() && ! is_super_admin() );
+		$contents   = ( $path && is_readable( $path ) ) ? (string) file_get_contents( $path ) : '';
+
+		$constants = array();
+		foreach ( self::debug_constants() as $name => $meta ) {
+			$in_config = '' !== $contents && (bool) preg_match( self::const_pattern( $name ), $contents );
+			$defined   = defined( $name );
+			$constants[] = array(
+				'name'      => $name,
+				'label'     => $meta['label'],
+				'desc'      => $meta['desc'],
+				'value'     => $defined ? (bool) constant( $name ) : false,
+				'in_config' => $in_config,
+				'locked'    => $defined && ! $in_config,
+			);
+		}
+
+		$log_path = self::debug_log_path();
+		$log      = array(
+			'path'       => str_replace( ABSPATH, '', $log_path ),
+			'exists'     => file_exists( $log_path ),
+			'size_human' => file_exists( $log_path ) ? size_format( (int) filesize( $log_path ), 1 ) : '',
+		);
+
+		return array(
+			'editable'   => (bool) ( $writable && ! $disallowed ),
+			'writable'   => (bool) $writable,
+			'disallowed' => (bool) $disallowed,
+			'constants'  => $constants,
+			'log'        => $log,
+		);
+	}
+
+	/**
+	 * Set a whitelisted boolean debug constant in wp-config.php. Every write is
+	 * gated (writability / DISALLOW_FILE_MODS / multisite super-admin), scoped
+	 * to the whitelist, syntax-validated before it touches disk, and preceded
+	 * by a .minn-bak backup.
+	 */
+	public static function set_config_constant( WP_REST_Request $request ) {
+		$name  = (string) $request['constant'];
+		$value = (bool) $request['value'];
+
+		$consts = self::debug_constants();
+		if ( ! isset( $consts[ $name ] ) ) {
+			return new WP_Error( 'bad_constant', 'That constant is not editable.', array( 'status' => 400 ) );
+		}
+		if ( ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ) || ( is_multisite() && ! is_super_admin() ) ) {
+			return new WP_Error( 'forbidden', 'File modifications are disabled on this site.', array( 'status' => 403 ) );
+		}
+		$path = self::wpconfig_path();
+		if ( ! $path || ! wp_is_writable( $path ) ) {
+			return new WP_Error( 'not_writable', 'wp-config.php is not writable.', array( 'status' => 400 ) );
+		}
+		$contents = file_get_contents( $path );
+		if ( false === $contents ) {
+			return new WP_Error( 'read_failed', 'Could not read wp-config.php.', array( 'status' => 500 ) );
+		}
+
+		$line    = "define( '" . $name . "', " . ( $value ? 'true' : 'false' ) . " );";
+		$pattern = self::const_pattern( $name );
+
+		if ( preg_match( $pattern, $contents ) ) {
+			$new = preg_replace( $pattern, $line, $contents, 1 );
+		} elseif ( defined( $name ) ) {
+			// Defined elsewhere — a wp-config edit would be a confusing no-op.
+			return new WP_Error( 'defined_elsewhere', $name . ' is defined outside wp-config.php, so it can\'t be toggled here.', array( 'status' => 400 ) );
+		} else {
+			$marker = "/* That's all, stop editing! Happy publishing. */";
+			if ( false !== strpos( $contents, $marker ) ) {
+				$new = str_replace( $marker, $line . "\n\n" . $marker, $contents );
+			} else {
+				// Fall back to just before wp-settings.php loads.
+				$new = preg_replace( "/(require_once\\s*\\(?\\s*ABSPATH\\s*\\.\\s*['\"]wp-settings\\.php['\"])/", $line . "\n\n\$1", $contents, 1 );
+			}
+			if ( null === $new || $new === $contents ) {
+				return new WP_Error( 'place_failed', 'Could not find a safe place to add the constant.', array( 'status' => 500 ) );
+			}
+		}
+		if ( null === $new ) {
+			return new WP_Error( 'edit_failed', 'The edit could not be applied.', array( 'status' => 500 ) );
+		}
+
+		// Validate the transformed file parses BEFORE writing it. TOKEN_PARSE
+		// makes token_get_all throw ParseError on a syntax error (PHP 7+).
+		try {
+			token_get_all( $new, TOKEN_PARSE );
+		} catch ( \ParseError $e ) {
+			return new WP_Error( 'parse_error', 'The change would break wp-config.php, so it was not saved.', array( 'status' => 500 ) );
+		}
+
+		@copy( $path, $path . '.minn-bak' );
+		if ( false === file_put_contents( $path, $new ) ) {
+			return new WP_Error( 'write_failed', 'Could not write wp-config.php.', array( 'status' => 500 ) );
+		}
+
+		return rest_ensure_response(
+			array(
+				'constant' => $name,
+				// The value that will apply on the next request (this one already
+				// bootstrapped with the old constant).
+				'value'    => $value,
 			)
 		);
 	}

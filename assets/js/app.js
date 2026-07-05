@@ -453,6 +453,7 @@
 			warn: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>',
 			x: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>',
 			clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+			bug: '<path d="M8 2l1.5 1.5M16 2l-1.5 1.5"/><path d="M9 7h6a3 3 0 0 1 3 3v3a6 6 0 0 1-12 0v-3a3 3 0 0 1 3-3Z"/><path d="M3 13h3M18 13h3M4 8l2.5 1.5M20 8l-2.5 1.5M4 18l2.5-1.5M20 18l-2.5-1.5M12 19v3"/>',
 			alignRight: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="7" y2="18"/>',
 		};
 		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ icons[ name ] || '' }</svg>`;
@@ -3230,6 +3231,38 @@
 				</div>` : '' }
 			</div>`;
 
+		// Debug tools — wp-config toggles (only when wp-config is writable) and
+		// a debug-log viewer (whenever the log exists). Absent when neither.
+		const cfg = s.config;
+		const log = cfg && cfg.log;
+		const showDebug = cfg && ( cfg.editable || ( log && log.exists ) );
+		const debugCard = showDebug ? `
+			<div class="minn-card minn-sys-debug">
+				<div class="minn-sys-card-head">${ icon( 'bug' ) }<span>Debug tools</span>
+					${ cfg.editable ? '<span class="minn-sys-debug-hint">writes wp-config.php</span>' : '' }
+				</div>
+				${ cfg.editable ? `
+				<div class="minn-sys-toggles">
+					${ cfg.constants.map( ( c ) => `
+						<div class="minn-sys-toggle">
+							<div class="minn-sys-toggle-text">
+								<div class="minn-sys-toggle-label">${ esc( c.label ) } <span class="mono minn-sys-const">${ esc( c.name ) }</span></div>
+								<div class="minn-sys-toggle-desc">${ esc( c.desc ) }</div>
+							</div>
+							${ c.locked
+		? '<span class="minn-sys-locked">defined elsewhere</span>'
+		: `<button class="minn-switch${ c.value ? ' on' : '' }" data-const="${ esc( c.name ) }" role="switch" aria-checked="${ c.value }" aria-label="Toggle ${ esc( c.label ) }"><span class="minn-switch-knob"></span></button>` }
+						</div>` ).join( '' ) }
+				</div>` : '' }
+				${ log && log.exists ? `
+				<button class="minn-sys-logrow" id="minn-view-log">
+					${ icon( 'file' ) }
+					<span class="mono minn-sys-logpath">${ esc( log.path ) }</span>
+					<span class="minn-sys-logsize">${ esc( log.size_human ) }</span>
+					<span class="minn-sys-logopen">View log →</span>
+				</button>` : '' }
+			</div>` : '';
+
 		view.innerHTML = `
 			<div class="minn-sys-topbar">
 				<div class="minn-sys-summary">
@@ -3249,10 +3282,32 @@
 						</div>
 					</div>` ).join( '' ) }
 			</div>
+			${ debugCard }
 			<div class="minn-sys-grid">
 				${ s.groups.map( groupCard ).join( '' ) }
 			</div>
 			<div class="minn-sys-foot">Generated ${ esc( timeAgo( s.generated ) ) }</div>`;
+
+		$$( '[data-const]', view ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {
+			const name = btn.dataset.const;
+			const next = btn.getAttribute( 'aria-checked' ) !== 'true';
+			btn.disabled = true;
+			try {
+				await api( 'minn-admin/v1/system/config', { method: 'POST', body: JSON.stringify( { constant: name, value: next } ) } );
+				btn.classList.toggle( 'on', next );
+				btn.setAttribute( 'aria-checked', String( next ) );
+				const c = cfg.constants.find( ( x ) => x.name === name );
+				if ( c ) c.value = next;
+				state.cache.system = null; // re-read fresh next visit
+				toast( `${ name } ${ next ? 'enabled' : 'disabled' } — applies on the next page load` );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			btn.disabled = false;
+		} ) );
+
+		const viewLog = $( '#minn-view-log', view );
+		if ( viewLog ) viewLog.addEventListener( 'click', openDebugLog );
 
 		$( '#minn-sys-copy', view ).addEventListener( 'click', async () => {
 			const text = systemReportText( s );
@@ -3269,6 +3324,69 @@
 				ta.remove();
 			}
 		} );
+	}
+
+	// Full-screen debug-log viewer: the tail of the log in a scrollable
+	// monospace pane, with Refresh / Copy / Clear. Fetches on open and reload.
+	function openDebugLog() {
+		const overlay = document.createElement( 'div' );
+		overlay.className = 'minn-modal-overlay minn-log-overlay';
+		overlay.innerHTML = `
+			<div class="minn-modal minn-log-modal">
+				<div class="minn-modal-head">
+					<span class="minn-modal-title">${ icon( 'file' ) } Debug log <span class="minn-log-meta" id="minn-log-meta"></span></span>
+					<div class="minn-log-actions">
+						<button class="minn-btn-soft" id="minn-log-refresh" title="Refresh">${ icon( 'refresh' ) }</button>
+						<button class="minn-btn-soft" id="minn-log-copy" title="Copy all">${ icon( 'clipboard' ) }</button>
+						<button class="minn-btn-soft danger" id="minn-log-clear">Clear</button>
+						<button class="minn-x-btn" data-close type="button">×</button>
+					</div>
+				</div>
+				<pre class="minn-log-body" id="minn-log-body"><span class="minn-log-loading">Reading log…</span></pre>
+			</div>`;
+		document.body.appendChild( overlay );
+		let raw = '';
+
+		const close = () => { overlay.remove(); document.removeEventListener( 'keydown', onKey ); };
+		const onKey = ( e ) => { if ( e.key === 'Escape' ) close(); };
+		document.addEventListener( 'keydown', onKey );
+		overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) close(); } );
+		overlay.querySelector( '[data-close]' ).addEventListener( 'click', close );
+
+		const load = async () => {
+			const body = $( '#minn-log-body', overlay );
+			const meta = $( '#minn-log-meta', overlay );
+			try {
+				const r = await api( 'minn-admin/v1/system/debug-log' );
+				raw = r.content || '';
+				meta.textContent = r.exists ? `${ r.path } · ${ r.size_human }${ r.truncated ? ' · showing last 256 KB' : '' }` : r.path + ' · empty';
+				if ( ! raw.trim() ) {
+					body.innerHTML = '<span class="minn-log-loading">The log is empty.</span>';
+				} else {
+					body.textContent = raw;
+					body.scrollTop = body.scrollHeight; // newest at the bottom
+				}
+			} catch ( e ) {
+				body.innerHTML = `<span class="minn-log-loading">Couldn’t read the log: ${ esc( e.message ) }</span>`;
+			}
+		};
+
+		$( '#minn-log-refresh', overlay ).addEventListener( 'click', load );
+		$( '#minn-log-copy', overlay ).addEventListener( 'click', async () => {
+			try { await navigator.clipboard.writeText( raw ); toast( 'Log copied' ); } catch ( e ) { toast( 'Copy failed', true ); }
+		} );
+		$( '#minn-log-clear', overlay ).addEventListener( 'click', async () => {
+			if ( ! confirm( 'Empty the debug log? This can’t be undone.' ) ) return;
+			try {
+				await api( 'minn-admin/v1/system/debug-log', { method: 'DELETE' } );
+				state.cache.system = null; // size changed
+				toast( 'Debug log cleared' );
+				load();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
+		load();
 	}
 
 	/* ===== Settings ===== */
