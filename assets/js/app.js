@@ -93,16 +93,17 @@
 
 	/* ===== Pager (shared numbered pagination) ===== */
 
-	// Standard toolbar meta: "N thing(s) · page X of Y". Right-aligned, always
-	// sits immediately left of the primary action button. Pass a page/totalPages
-	// pair and the page suffix appears whenever the list spans more than one page.
-	function metaLabel( count, noun, page, totalPages ) {
+	// Quiet toolbar meta: "N thing(s)" — live feedback for the filters and
+	// search beside it. Page position deliberately lives at the bottom with
+	// the pager (the control that changes it), not up here.
+	function metaLabel( count, noun ) {
 		const plural = /[^aeiou]y$/.test( noun ) ? noun.slice( 0, -1 ) + 'ies' : noun + 's';
-		return `${ count } ${ count === 1 ? noun : plural }${ totalPages > 1 ? ` · page ${ page } of ${ totalPages }` : '' }`;
+		return `${ count } ${ count === 1 ? noun : plural }`;
 	}
 
 	// ‹ 1 … 4 [5] 6 … 20 › — first, last and a window around the current page.
-	function pagerHtml( page, totalPages ) {
+	// Pass count/noun and the row carries "N things · page X of Y" on the left.
+	function pagerHtml( page, totalPages, count, noun ) {
 		if ( ! totalPages || totalPages <= 1 ) return '';
 		const wanted = [ 1, totalPages, page - 2, page - 1, page, page + 1, page + 2 ];
 		const list = [ ...new Set( wanted.filter( ( p ) => p >= 1 && p <= totalPages ) ) ].sort( ( a, b ) => a - b );
@@ -113,6 +114,7 @@
 			return gap + `<button class="minn-pager-btn${ p === page ? ' active' : '' }" data-pg="${ p }">${ p }</button>`;
 		} ).join( '' );
 		return `<div class="minn-pager" role="navigation" aria-label="Pagination">
+			${ count != null ? `<div class="minn-pager-meta">${ metaLabel( count, noun ) } · page ${ page } of ${ totalPages }</div>` : '' }
 			<button class="minn-pager-btn nav" data-pg="${ page - 1 }"${ page <= 1 ? ' disabled' : '' } aria-label="Previous page">‹</button>
 			${ parts }
 			<button class="minn-pager-btn nav" data-pg="${ page + 1 }"${ page >= totalPages ? ' disabled' : '' } aria-label="Next page">›</button>
@@ -911,11 +913,13 @@
 				${ tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.filter === id ? ' active' : '' }" data-filter="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>
+			<div class="minn-tabs minn-tabs-aux">
+				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">Trash</button>
+			</div>
 			${ showTax ? taxCombo( 'cat', 'All categories' ) : '' }
 			${ showTax ? taxCombo( 'tag', 'All tags' ) : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Search content…" value="${ esc( state.contentSearch || '' ) }">
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item', c.page, c.totalPages ) }</div>
-			<button class="minn-btn-soft minn-trash-toggle${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">${ icon( 'trash' ) } Trash</button>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>
 		</div>
 		<div id="minn-bulk-slot"></div>
 		<div class="minn-card minn-table">
@@ -941,9 +945,9 @@
 					</div>` : '<div class="minn-row-arrow">›</div>' }
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? 'No matches for “' + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? 'Trash is empty.' : 'Nothing here yet. Hit <b>New</b> to write something.' ) }</div>` }
 		</div>
-		${ pagerHtml( c.page, c.totalPages ) }`;
+		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
 
-		$$( '.minn-tab', view ).forEach( ( btn ) =>
+		$$( '.minn-tab[data-filter]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				const nf = btn.dataset.filter;
 				// Leaving the posts context clears post-only taxonomy filters.
@@ -1216,7 +1220,7 @@
 		}
 		const items = c.items;
 		const mapped = items.map( mapMediaItem );
-		const countLabel = metaLabel( c.total, 'file', c.page, c.totalPages );
+		const countLabel = metaLabel( c.total, 'file' );
 		const thumbStyle = ( m ) => m.thumb
 			? `background-image:url('${ esc( m.thumb ) }')`
 			: `background:${ m.grad }`;
@@ -1229,11 +1233,11 @@
 			</div>
 			<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ countLabel }</div>
-			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn">${ icon( 'upload' ) } Upload</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
 			<div class="minn-view-tabs" style="margin-left:0;">
 				<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
 				<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
 			</div>
+			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn">${ icon( 'upload' ) } Upload</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
 		</div>
 		${ state.uploadOpen && B.caps.upload ? `
 		<div class="minn-dropzone" id="minn-dropzone">
@@ -1264,7 +1268,7 @@
 					<div class="minn-media-size">${ esc( m.size ) }</div>
 				</div>` ).join( '' ) }
 		</div>` }
-		${ pagerHtml( c.page, c.totalPages ) }`;
+		${ pagerHtml( c.page, c.totalPages, c.total, 'file' ) }`;
 
 		$$( '.minn-view-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => { state.mediaView = btn.dataset.view; renderMedia(); } )
@@ -1408,7 +1412,7 @@
 				${ COMMENT_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.commentTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'comment', c.page, c.totalPages ) }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'comment' ) }</div>
 		</div>
 		<div class="minn-card">
 			${ rows.length ? rows.map( ( r ) => `
@@ -1437,7 +1441,7 @@
 					</div>
 				</div>` ).join( '' ) : `<div class="minn-empty">No ${ ( COMMENT_TABS.find( ( t ) => t[ 0 ] === state.commentTab ) || [ '', '' ] )[ 1 ].toLowerCase() } comments.</div>` }
 		</div>
-		${ pagerHtml( c.page, c.totalPages ) }`;
+		${ pagerHtml( c.page, c.totalPages, c.total, 'comment' ) }`;
 
 		$$( '[data-ctab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
@@ -1571,7 +1575,7 @@
 				${ ORDER_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.orderTab === id ? ' active' : '' }" data-otab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'order', c.page, c.totalPages ) }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'order' ) }</div>
 		</div>
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-order-cols">
@@ -1590,7 +1594,7 @@
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : '<div class="minn-empty">No orders here.</div>' }
 		</div>
-		${ pagerHtml( c.page, c.totalPages ) }`;
+		${ pagerHtml( c.page, c.totalPages, c.total, 'order' ) }`;
 
 		$$( '[data-otab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
@@ -1640,7 +1644,7 @@
 					`<button class="minn-tab${ ( state.userRole || '_all' ) === id ? ' active' : '' }" data-role="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>` : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }">
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user', c.page, c.totalPages ) }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } Add user</button>` : '' }
 		</div>
 		<div class="minn-card minn-table">
@@ -1657,7 +1661,7 @@
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : '<div class="minn-empty">No users found.</div>' }
 		</div>
-		${ pagerHtml( c.page, c.totalPages ) }`;
+		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
 
 		$$( '.minn-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
@@ -1879,7 +1883,7 @@
 					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>` : '' }
 			${ coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Search ${ esc( ( coll.viewLabel || 'items' ).toLowerCase() ) }…" value="${ esc( ss.q || '' ) }">` : '' }
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item', c.page, c.totalPages ) }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>
 			${ coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '' }
 		</div>
 		<div class="minn-card minn-table">
@@ -1892,7 +1896,7 @@
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : '<div class="minn-empty">Nothing here.</div>' }
 		</div>
-		${ pagerHtml( c.page, c.totalPages ) }`;
+		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
 
 		$$( '[data-stab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
@@ -2125,7 +2129,7 @@
 				${ ( ms.menus || [] ).map( ( m ) =>
 					`<button class="minn-tab${ ms.sel === m.id ? ' active' : '' }" data-menu="${ m.id }">${ esc( m.name ) }</button>` ).join( '' ) }
 			</div>
-			<div class="minn-toolbar-meta">${ metaLabel( flat.length, 'item', 1, 1 ) }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( flat.length, 'item' ) }</div>
 			<button class="minn-btn-soft" id="minn-menu-new">${ icon( 'plus' ) } New menu</button>
 		</div>
 		${ ! ms.menus.length ? '<div class="minn-card minn-empty">No menus yet. Create one to build your site navigation.</div>' : `
@@ -2999,7 +3003,7 @@
 			view.innerHTML = `
 			<div class="minn-toolbar">
 				${ tabs }
-				<div class="minn-toolbar-meta">${ metaLabel( tx.taxonomies.length, 'taxonomy', 1, 1 ) }</div>
+				<div class="minn-toolbar-meta">${ metaLabel( tx.taxonomies.length, 'taxonomy' ) }</div>
 				<button class="minn-btn-soft" id="minn-add-tax">${ icon( 'plus' ) } Add taxonomy</button>
 			</div>
 			<div class="minn-card minn-table">
@@ -3037,7 +3041,7 @@
 			view.innerHTML = `
 			<div class="minn-toolbar">
 				${ tabs }
-				<div class="minn-toolbar-meta">${ metaLabel( c.types.length, 'post type', 1, 1 ) }</div>
+				<div class="minn-toolbar-meta">${ metaLabel( c.types.length, 'post type' ) }</div>
 				<button class="minn-btn-soft" id="minn-add-cpt">${ icon( 'plus' ) } Add post type</button>
 			</div>
 			<div class="minn-card minn-table">
@@ -8868,9 +8872,11 @@
 	}
 
 	// Wrap any not-yet-enhanced tab strip in a scroller with ‹ › buttons that
-	// appear only when the strip actually overflows (and only on the side you can scroll).
+	// appear only when the strip actually overflows (and only on the side you can
+	// scroll). Aux groups (a pinned slice like Content's Trash) are skipped —
+	// they must never scroll out of sight with the main strip.
 	function enhanceTabStrips() {
-		$$( '.minn-tabs:not([data-scroll])' ).forEach( ( tabs ) => {
+		$$( '.minn-tabs:not([data-scroll]):not(.minn-tabs-aux)' ).forEach( ( tabs ) => {
 			tabs.setAttribute( 'data-scroll', '1' );
 			const wrap = document.createElement( 'div' );
 			wrap.className = 'minn-tabscroll';
