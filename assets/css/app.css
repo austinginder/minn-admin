@@ -520,7 +520,13 @@ select.minn-input {
   font-size: 34px; font-weight: 800; letter-spacing: -0.8px; margin-bottom: 6px;
 }
 .minn-editor-title::placeholder { color: var(--text3); }
-.minn-editor-toolbar { display: flex; gap: 2px; padding: 6px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 18px; color: var(--text2); }
+/* Sticky so the formatting tools stay reachable in long posts; opaque so
+   content scrolls beneath, below the fixed word-count pill (40) and chips. */
+.minn-editor-toolbar {
+  display: flex; gap: 2px; padding: 6px 0 14px; border-bottom: 1px solid var(--border);
+  margin-bottom: 18px; color: var(--text2);
+  position: sticky; top: 0; z-index: 35; background: var(--bg);
+}
 .minn-tool {
   display: inline-flex; align-items: center; justify-content: center; padding: 6px 8px;
   border-radius: 7px; cursor: pointer; background: none; border: none; color: var(--text2);
@@ -529,6 +535,14 @@ select.minn-input {
 .minn-tool svg { display: block; }
 .minn-editor-body { color: var(--text); line-height: 1.75; font-size: 16px; min-height: 40vh; outline: none; overflow-x: hidden; overflow-wrap: break-word; }
 .minn-editor-body table { display: block; max-width: 100%; overflow-x: auto; }
+/* Editable tables get the same cutout treatment as block islands — the dashed
+   outline marks "this is a structured block", top-level only so tables inside
+   island previews aren't double-framed. */
+.minn-editor-body > figure.wp-block-table, .minn-editor-body > table {
+  border: 1px dashed var(--border2); border-radius: 11px; padding: 14px 16px; margin: 0 0 18px;
+}
+.minn-editor-body > figure.wp-block-table { display: block; }
+.minn-editor-body > figure.wp-block-table table { margin: 0; }
 .minn-editor-body iframe, .minn-editor-body video { max-width: 100%; }
 .minn-editor-body p { margin: 0 0 16px; }
 .minn-editor-body h1, .minn-editor-body h2 { letter-spacing: -0.4px; }

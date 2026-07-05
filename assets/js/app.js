@@ -4985,7 +4985,27 @@
 						document.execCommand( btn.dataset.cmd, false, null );
 						liftNestedLists( body );
 					} else if ( btn.dataset.block ) {
-						document.execCommand( 'formatBlock', false, btn.dataset.block );
+						// Block buttons TOGGLE: pressing Quote (or H2…) while
+						// already inside one converts back to a paragraph.
+						// Without this the second press is a no-op that still
+						// pushes a junk undo entry, making ⌘Z look broken.
+						const want = btn.dataset.block;
+						const sel2 = window.getSelection();
+						let n = sel2.rangeCount ? sel2.anchorNode : null;
+						while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+						const inBlock = want !== 'p' && n && n.closest ? n.closest( want ) : null;
+						if ( inBlock && body.contains( inBlock ) ) {
+							if ( want === 'blockquote' ) {
+								// outdent unwraps the blockquote (formatBlock can't),
+								// but leaves a bare text node — re-wrap it.
+								document.execCommand( 'outdent', false, null );
+								document.execCommand( 'formatBlock', false, 'p' );
+							} else {
+								document.execCommand( 'formatBlock', false, 'p' );
+							}
+						} else {
+							document.execCommand( 'formatBlock', false, want );
+						}
 					}
 					scheduleAutosave();
 				} )
