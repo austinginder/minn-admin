@@ -3656,6 +3656,7 @@
 				const rendered = r && r.rendered && r.rendered[ 0 ];
 				const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
 				if ( prev && rendered && rendered.trim() ) prev.innerHTML = rendered;
+				updateEditorStats();
 			} )
 			.catch( () => {} );
 		scheduleAutosave();
@@ -5382,6 +5383,7 @@
 			.then( ( r ) => {
 				const html = r && r.rendered && r.rendered[ 0 ];
 				if ( prev && html && html.trim() ) prev.innerHTML = html;
+				updateEditorStats();
 			} )
 			.catch( () => {} );
 		toast( 'Block updated' );
@@ -5531,6 +5533,7 @@
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ] } ) } );
 			const html = r && r.rendered && r.rendered[ 0 ];
 			if ( previewEl && html && html.trim() ) previewEl.innerHTML = html;
+			updateEditorStats();
 		} catch ( e ) {
 			if ( previewEl ) {
 				const inner2 = stripBlockComments( newRaw ).trim();
@@ -5556,6 +5559,9 @@
 					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
 					if ( el && html && html.trim() ) el.innerHTML = html;
 				} );
+				// Preview text counts toward the word-count pill — recount now
+				// that the real rendered content replaced the placeholders.
+				updateEditorStats();
 			} )
 			.catch( () => {} );
 	}
@@ -6154,6 +6160,7 @@
 						const html = r && r.rendered && r.rendered[ 0 ];
 						const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
 						if ( prev && html && html.trim() ) prev.innerHTML = html;
+						updateEditorStats();
 					} )
 					.catch( () => {} );
 				if ( islandEl ) openInspector( islandEl );
