@@ -424,6 +424,19 @@ class Minn_Admin_REST {
 				),
 			)
 		);
+
+		// System diagnostics — the developer's "what am I running on" page.
+		register_rest_route(
+			self::NS,
+			'/system',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'system_info' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
 	}
 
 	/**
@@ -1605,5 +1618,208 @@ class Minn_Admin_REST {
 				'errors'  => $skin->get_error_messages(),
 			)
 		);
+	}
+
+	/**
+	 * System diagnostics: WordPress, PHP, database, server and directory facts
+	 * a developer wants at a glance, plus derived health checks. Every probe is
+	 * defensive — a missing constant or a slow DB never fatals the page.
+	 */
+	public static function system_info() {
+		global $wpdb;
+
+		$bytes = function ( $val ) {
+			// Parse a php.ini shorthand size (128M, 1G, -1) into bytes.
+			$val = trim( (string) $val );
+			if ( '' === $val || '-1' === $val ) {
+				return -1;
+			}
+			$unit = strtolower( substr( $val, -1 ) );
+			$num  = (float) $val;
+			switch ( $unit ) {
+				case 'g':
+					$num *= 1024;
+					// fall through.
+				case 'm':
+					$num *= 1024;
+					// fall through.
+				case 'k':
+					$num *= 1024;
+			}
+			return (int) $num;
+		};
+
+		// --- WordPress -----------------------------------------------------
+		$upload = wp_get_upload_dir();
+		$theme  = wp_get_theme();
+		$parent = $theme->parent();
+		$cron   = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
+
+		$wordpress = array(
+			'Version'          => get_bloginfo( 'version' ),
+			'Environment'      => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
+			'Site URL'         => site_url(),
+			'Home URL'         => home_url(),
+			'Multisite'        => is_multisite() ? 'Yes (' . get_blog_count() . ' sites)' : 'No',
+			'Language'         => get_locale(),
+			'Timezone'         => wp_timezone_string() ? wp_timezone_string() : (string) get_option( 'gmt_offset' ),
+			'Permalinks'       => get_option( 'permalink_structure' ) ? get_option( 'permalink_structure' ) : 'Plain',
+			'Debug mode'       => ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? 'On' . ( ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) ? ' + log' : '' ) : 'Off',
+			'Object cache'     => wp_using_ext_object_cache() ? 'External (persistent)' : 'None (transient)',
+			'WP-Cron'          => $cron ? 'Disabled (external)' : 'Enabled',
+			'Memory limit'     => defined( 'WP_MEMORY_LIMIT' ) ? WP_MEMORY_LIMIT : '(default)',
+			'Max memory limit' => defined( 'WP_MAX_MEMORY_LIMIT' ) ? WP_MAX_MEMORY_LIMIT : '(default)',
+			'Active theme'     => $theme->get( 'Name' ) . ' ' . $theme->get( 'Version' ) . ( $parent ? ' (child of ' . $parent->get( 'Name' ) . ')' : '' ),
+			'Active plugins'   => (string) count( (array) get_option( 'active_plugins', array() ) ) . ( count( (array) ( function_exists( 'wp_get_mu_plugins' ) ? wp_get_mu_plugins() : array() ) ) ? ' + ' . count( wp_get_mu_plugins() ) . ' mu' : '' ),
+		);
+
+		// --- PHP -----------------------------------------------------------
+		$exts = array( 'curl', 'gd', 'imagick', 'mbstring', 'xml', 'zip', 'intl', 'openssl', 'opcache', 'redis', 'memcached', 'apcu', 'exif', 'fileinfo', 'sodium' );
+		$loaded = array();
+		foreach ( $exts as $e ) {
+			if ( extension_loaded( $e ) ) {
+				$loaded[] = $e;
+			}
+		}
+		$opcache = function_exists( 'opcache_get_status' ) ? @opcache_get_status( false ) : false;
+		$php     = array(
+			'Version'             => PHP_VERSION,
+			'Interface (SAPI)'    => PHP_SAPI,
+			'memory_limit'        => ini_get( 'memory_limit' ),
+			'max_execution_time'  => ini_get( 'max_execution_time' ) . 's',
+			'upload_max_filesize' => ini_get( 'upload_max_filesize' ),
+			'post_max_size'       => ini_get( 'post_max_size' ),
+			'max_input_vars'      => ini_get( 'max_input_vars' ),
+			'max_input_time'      => ini_get( 'max_input_time' ) . 's',
+			'OPcache'             => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'Enabled' : ( function_exists( 'opcache_get_status' ) ? 'Disabled' : 'Not installed' ),
+			'Extensions'          => implode( ', ', $loaded ),
+			'cURL'                => function_exists( 'curl_version' ) ? ( curl_version()['version'] ?? 'yes' ) : 'no',
+		);
+
+		// --- Database ------------------------------------------------------
+		$db_version = $wpdb->get_var( 'SELECT VERSION()' );
+		$server_info = '';
+		if ( isset( $wpdb->dbh ) && $wpdb->dbh instanceof mysqli ) {
+			$server_info = @mysqli_get_server_info( $wpdb->dbh );
+		}
+		$is_maria = false !== stripos( (string) ( $server_info ? $server_info : $db_version ), 'maria' );
+		// Table count + total data/index size, scoped to this install's prefix
+		// (fast — reads information_schema metadata, not the tables).
+		$tables = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT table_name AS name, ( data_length + index_length ) AS size, table_rows AS rows_count
+				 FROM information_schema.TABLES WHERE table_schema = %s AND table_name LIKE %s
+				 ORDER BY size DESC',
+				DB_NAME,
+				$wpdb->esc_like( $wpdb->prefix ) . '%'
+			)
+		);
+		$db_size    = 0;
+		$top_tables = array();
+		foreach ( (array) $tables as $i => $tbl ) {
+			$db_size += (int) $tbl->size;
+			if ( $i < 5 ) {
+				$top_tables[] = array(
+					'name' => $tbl->name,
+					'size' => size_format( (int) $tbl->size, 1 ),
+					'rows' => number_format_i18n( (int) $tbl->rows_count ),
+				);
+			}
+		}
+		$database = array(
+			'Engine'    => $is_maria ? 'MariaDB' : 'MySQL',
+			'Version'   => $server_info ? $server_info : $db_version,
+			'Host'      => DB_HOST,
+			'Name'      => DB_NAME,
+			'Charset'   => defined( 'DB_CHARSET' ) ? DB_CHARSET : $wpdb->charset,
+			'Collation' => $wpdb->collate ? $wpdb->collate : '(default)',
+			'Prefix'    => $wpdb->prefix,
+			'Tables'    => (string) count( (array) $tables ),
+			'Size'      => size_format( $db_size, 1 ),
+		);
+
+		// --- Server & filesystem -------------------------------------------
+		$uploads_writable = wp_is_writable( $upload['basedir'] );
+		$disk_free        = @disk_free_space( ABSPATH );
+		$disk_total       = @disk_total_space( ABSPATH );
+		$server           = array(
+			'Web server'      => isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : 'Unknown',
+			'Protocol'        => isset( $_SERVER['SERVER_PROTOCOL'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_PROTOCOL'] ) ) : '',
+			'HTTPS'           => is_ssl() ? 'Yes' : 'No',
+			'Operating system'=> php_uname( 's' ) . ' ' . php_uname( 'r' ),
+			'Architecture'    => php_uname( 'm' ),
+			'Server IP'       => isset( $_SERVER['SERVER_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_ADDR'] ) ) : '',
+			'Uploads writable'=> $uploads_writable ? 'Yes' : 'No',
+			'Disk free'       => ( $disk_free && $disk_total ) ? size_format( $disk_free ) . ' free of ' . size_format( $disk_total ) : 'Unknown',
+		);
+
+		// --- Health checks (pass / warn / fail) ----------------------------
+		$php_ok    = version_compare( PHP_VERSION, '8.1', '>=' );
+		$php_warn  = ! $php_ok && version_compare( PHP_VERSION, '7.4', '>=' );
+		$mem_bytes = $bytes( ini_get( 'memory_limit' ) );
+		$env       = $wordpress['Environment'];
+		$debug_on  = defined( 'WP_DEBUG' ) && WP_DEBUG;
+		$checks    = array(
+			array(
+				'label'  => 'PHP version',
+				'status' => $php_ok ? 'pass' : ( $php_warn ? 'warn' : 'fail' ),
+				'detail' => $php_ok ? PHP_VERSION . ' is current' : PHP_VERSION . ' is past its supported life — upgrade to 8.2+',
+			),
+			array(
+				'label'  => 'HTTPS',
+				'status' => is_ssl() ? 'pass' : 'warn',
+				'detail' => is_ssl() ? 'Served over TLS' : 'This request is not over HTTPS',
+			),
+			array(
+				'label'  => 'Persistent object cache',
+				'status' => wp_using_ext_object_cache() ? 'pass' : 'warn',
+				'detail' => wp_using_ext_object_cache() ? 'A drop-in is active' : 'Redis/Memcached would speed up repeat queries',
+			),
+			array(
+				'label'  => 'Memory limit',
+				'status' => ( $mem_bytes < 0 || $mem_bytes >= 256 * 1024 * 1024 ) ? 'pass' : ( $mem_bytes >= 128 * 1024 * 1024 ? 'warn' : 'fail' ),
+				'detail' => ini_get( 'memory_limit' ) . ' available to PHP',
+			),
+			array(
+				'label'  => 'OPcache',
+				'status' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'pass' : 'warn',
+				'detail' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'Bytecode caching is on' : 'Not enabled — pages recompile each request',
+			),
+			array(
+				'label'  => 'Debug mode',
+				'status' => ( $debug_on && 'production' === $env ) ? 'warn' : 'pass',
+				'detail' => ( $debug_on && 'production' === $env ) ? 'WP_DEBUG is on in a production environment' : ( $debug_on ? 'On (fine for ' . $env . ')' : 'Off' ),
+			),
+			array(
+				'label'  => 'Uploads writable',
+				'status' => $uploads_writable ? 'pass' : 'fail',
+				'detail' => $uploads_writable ? 'The uploads directory accepts writes' : 'Uploads directory is not writable',
+			),
+		);
+
+		return rest_ensure_response(
+			array(
+				'generated' => current_time( 'c' ),
+				'checks'    => $checks,
+				'groups'    => array(
+					array( 'title' => 'WordPress', 'icon' => 'wp', 'rows' => self::kv_rows( $wordpress ) ),
+					array( 'title' => 'PHP', 'icon' => 'php', 'rows' => self::kv_rows( $php ) ),
+					array( 'title' => 'Database', 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables ),
+					array( 'title' => 'Server', 'icon' => 'server', 'rows' => self::kv_rows( $server ) ),
+				),
+			)
+		);
+	}
+
+	/** Turn an ordered assoc array into [{key,value}] rows for the client. */
+	private static function kv_rows( array $data ) {
+		$rows = array();
+		foreach ( $data as $k => $v ) {
+			$rows[] = array(
+				'key'   => $k,
+				'value' => (string) $v,
+			);
+		}
+		return $rows;
 	}
 }

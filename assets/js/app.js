@@ -222,6 +222,7 @@
 		extensions: [ 'Extensions', 'Installed' ],
 		posttypes: [ 'Post Types', 'Structure' ],
 		settings: [ 'Settings', 'General' ],
+		system: [ 'System', 'Diagnostics' ],
 		editor: [ 'Editor', 'Draft' ],
 	};
 
@@ -441,6 +442,17 @@
 			// Content-list row markers (a single page vs. a blog post).
 			file: '<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/>',
 			block: '<path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
+			// System page — nav + section headers.
+			activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+			cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
+			database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
+			server: '<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/>',
+			wp: '<circle cx="12" cy="12" r="10"/><path d="M4 8h9M6 12l3 6 3-8 3 8 2-6"/>',
+			php: '<ellipse cx="12" cy="12" rx="10" ry="6"/><path d="M7 10h1.5a1.5 1.5 0 0 1 0 3H7zM7 10v5M12 9v6M12 12h2M17 10h1.5a1.5 1.5 0 0 1 0 3H17zM17 10v5"/>',
+			check: '<path d="M20 6 9 17l-5-5"/>',
+			warn: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>',
+			x: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>',
+			clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
 			alignRight: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="7" y2="18"/>',
 		};
 		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ icons[ name ] || '' }</svg>`;
@@ -478,6 +490,7 @@
 		}
 		if ( B.caps.settings ) {
 			manageItems.push( { id: 'posttypes', label: 'Post Types', icon: 'grid' } );
+			manageItems.push( { id: 'system', label: 'System', icon: 'activity' } );
 			manageItems.push( { id: 'settings', label: 'Settings', icon: 'gear' } );
 		}
 
@@ -3160,6 +3173,102 @@
 		typesPromise = null;
 		state.cache.types = null;
 		state.cache.cptContent = {};
+	}
+
+	/* ===== System (developer diagnostics) ===== */
+
+	function loadSystem() {
+		return api( 'minn-admin/v1/system' ).then( ( s ) => { state.cache.system = s; } );
+	}
+
+	// A flat, copy-pasteable report of everything on the page — what a
+	// developer drops into a support ticket or a gist.
+	function systemReportText( s ) {
+		const lines = [ `# System report — ${ esc( B.site.name ) }`, '' ];
+		s.checks.forEach( ( c ) => lines.push( `${ c.status === 'pass' ? '✓' : c.status === 'warn' ? '!' : '✗' } ${ c.label}: ${ c.detail }` ) );
+		s.groups.forEach( ( g ) => {
+			lines.push( '', `## ${ g.title }` );
+			g.rows.forEach( ( r ) => lines.push( `- ${ r.key }: ${ r.value || '—' }` ) );
+			if ( g.tables && g.tables.length ) {
+				lines.push( '', 'Largest tables:' );
+				g.tables.forEach( ( t ) => lines.push( `- ${ t.name } — ${ t.size } (${ t.rows } rows)` ) );
+			}
+		} );
+		return lines.join( '\n' );
+	}
+
+	function renderSystem() {
+		const view = $( '#minn-view' );
+		const s = state.cache.system;
+		if ( ! s ) {
+			view.innerHTML = '<div class="minn-loading">Reading the system…</div>';
+			loadSystem().then( renderIfCurrent( 'system' ) ).catch( showErr );
+			return;
+		}
+		const dot = ( st ) => `<span class="minn-sys-dot ${ esc( st ) }">${ icon( st === 'pass' ? 'check' : st === 'warn' ? 'warn' : 'x' ) }</span>`;
+		const counts = { pass: 0, warn: 0, fail: 0 };
+		s.checks.forEach( ( c ) => { counts[ c.status ] = ( counts[ c.status ] || 0 ) + 1; } );
+		const groupCard = ( g ) => `
+			<div class="minn-card minn-sys-card">
+				<div class="minn-sys-card-head">${ icon( g.icon ) }<span>${ esc( g.title ) }</span></div>
+				<div class="minn-sys-rows">
+					${ g.rows.map( ( r ) => `
+						<div class="minn-sys-row">
+							<span class="minn-sys-key">${ esc( r.key ) }</span>
+							<span class="minn-sys-val mono" title="${ esc( r.value ) }">${ r.value ? esc( r.value ) : '—' }</span>
+						</div>` ).join( '' ) }
+				</div>
+				${ g.tables && g.tables.length ? `
+				<div class="minn-sys-tables">
+					<div class="minn-sys-tables-head">Largest tables</div>
+					${ g.tables.map( ( t ) => `
+						<div class="minn-sys-trow">
+							<span class="minn-sys-tname mono">${ esc( t.name ) }</span>
+							<span class="minn-sys-tsize mono">${ esc( t.size ) }</span>
+							<span class="minn-sys-trows">${ esc( t.rows ) } rows</span>
+						</div>` ).join( '' ) }
+				</div>` : '' }
+			</div>`;
+
+		view.innerHTML = `
+			<div class="minn-sys-topbar">
+				<div class="minn-sys-summary">
+					${ counts.fail ? `<span class="minn-sys-pill fail">${ counts.fail } failing</span>` : '' }
+					${ counts.warn ? `<span class="minn-sys-pill warn">${ counts.warn } to review</span>` : '' }
+					<span class="minn-sys-pill pass">${ counts.pass } healthy</span>
+				</div>
+				<button class="minn-btn-soft" id="minn-sys-copy">${ icon( 'clipboard' ) } Copy report</button>
+			</div>
+			<div class="minn-sys-checks">
+				${ s.checks.map( ( c ) => `
+					<div class="minn-sys-check ${ esc( c.status ) }">
+						${ dot( c.status ) }
+						<div class="minn-sys-check-body">
+							<div class="minn-sys-check-label">${ esc( c.label ) }</div>
+							<div class="minn-sys-check-detail">${ esc( c.detail ) }</div>
+						</div>
+					</div>` ).join( '' ) }
+			</div>
+			<div class="minn-sys-grid">
+				${ s.groups.map( groupCard ).join( '' ) }
+			</div>
+			<div class="minn-sys-foot">Generated ${ esc( timeAgo( s.generated ) ) }</div>`;
+
+		$( '#minn-sys-copy', view ).addEventListener( 'click', async () => {
+			const text = systemReportText( s );
+			try {
+				await navigator.clipboard.writeText( text );
+				toast( 'System report copied' );
+			} catch ( e ) {
+				// execCommand fallback for non-secure contexts.
+				const ta = document.createElement( 'textarea' );
+				ta.value = text;
+				document.body.appendChild( ta );
+				ta.select();
+				try { document.execCommand( 'copy' ); toast( 'System report copied' ); } catch ( e2 ) { toast( 'Copy failed', true ); }
+				ta.remove();
+			}
+		} );
 	}
 
 	/* ===== Settings ===== */
@@ -8288,6 +8397,7 @@
 		}
 		if ( B.caps.plugins ) cmds.push( { label: 'Manage Extensions', kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
+		if ( B.caps.settings ) cmds.push( { label: 'View System diagnostics', kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		cmds.push(
 			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
@@ -10123,6 +10233,7 @@
 			case 'extensions': return renderExtensions();
 			case 'posttypes': return renderPostTypes();
 			case 'settings': return renderSettings();
+			case 'system': return renderSystem();
 			case 'editor': return renderEditor();
 			default:
 				if ( surfaceById( state.route ) ) return renderSurface( surfaceById( state.route ) );
