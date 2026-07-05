@@ -4891,14 +4891,28 @@
 			} );
 			body.addEventListener( 'blur', () => highlightCodeBlocks( body ) );
 
-			const insertImage = () => openMediaPicker( ( it ) => {
-				const b = $( '#minn-editor-body' );
-				if ( ! b ) return;
-				b.focus();
-				document.execCommand( 'insertHTML', false,
-					`<figure class="wp-block-image"><img src="${ esc( it.url ) }" alt="${ esc( it.alt ) }"></figure><p><br></p>` );
-				scheduleAutosave();
-			} );
+			const insertImage = () => {
+				// Clicking inside the media picker modal destroys the editor
+				// selection — capture the caret NOW and restore it before
+				// inserting, or the image lands at the top of the document.
+				const sel0 = window.getSelection();
+				const saved = sel0.rangeCount && body.contains( sel0.anchorNode )
+					? sel0.getRangeAt( 0 ).cloneRange()
+					: null;
+				openMediaPicker( ( it ) => {
+					const b = $( '#minn-editor-body' );
+					if ( ! b ) return;
+					b.focus();
+					if ( saved && saved.startContainer.isConnected && b.contains( saved.startContainer ) ) {
+						const s = window.getSelection();
+						s.removeAllRanges();
+						s.addRange( saved );
+					}
+					document.execCommand( 'insertHTML', false,
+						`<figure class="wp-block-image"><img src="${ esc( it.url ) }" alt="${ esc( it.alt ) }"></figure><p><br></p>` );
+					scheduleAutosave();
+				} );
+			};
 
 			$$( '.minn-tool', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'mousedown', ( e ) => {
