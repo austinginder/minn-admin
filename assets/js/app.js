@@ -5473,11 +5473,15 @@
 		if ( ! insp || ! inspectorEl ) return;
 		const { model, types } = insp;
 		const ownType = types[ model.parts.name ];
-		const ownFields = ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
+		// Embed/gallery content lives in saved HTML — comment-attr edits alone
+		// desync from it (a url field that "doesn't work"). Those blocks get
+		// ONLY the rebuild actions below, never the generic form.
+		const mediaRebuild = [ 'embed', 'gallery' ].includes( model.parts.name.replace( /^core\//, '' ) );
+		const ownFields = mediaRebuild ? '' : ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
 			+ ( model.wt || [] ).map( ( w, i ) => `<div class="minn-field-label">${ esc( w.label ) }</div>
 			<input class="minn-input" data-insp="wt:${ i }" value="${ esc( w.value ) }">` ).join( '' );
-		const structural = model.mode === 'structural';
-		const childSections = model.children.map( ( c, i ) => {
+		const structural = model.mode === 'structural' && ! mediaRebuild;
+		const childSections = mediaRebuild ? '' : model.children.map( ( c, i ) => {
 			const t = types[ c.name ];
 			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '';
 			if ( ! fields && ! structural ) return '';
@@ -5523,7 +5527,7 @@
 				${ ownFields }
 				${ childSections }
 				${ addRow }
-				${ editable ? '' : `<div class="minn-insp-note">${ ownType
+				${ editable || special ? '' : `<div class="minn-insp-note">${ ownType
 					? 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.'
 					: 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' }</div>` }
 			</div>

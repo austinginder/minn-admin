@@ -408,7 +408,14 @@ class Minn_Admin_REST {
 		}
 		$rendered = array();
 		foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
-			$rendered[] = do_blocks( (string) $raw );
+			$html = do_blocks( (string) $raw );
+			// Embed blocks keep a bare URL in their saved HTML; the front end
+			// converts it via WP_Embed::autoembed on the_content — run the same
+			// pass here so island previews show the real embed.
+			if ( isset( $GLOBALS['wp_embed'] ) && false !== strpos( $html, 'wp-block-embed__wrapper' ) ) {
+				$html = $GLOBALS['wp_embed']->autoembed( $html );
+			}
+			$rendered[] = $html;
 		}
 		return rest_ensure_response( array( 'rendered' => $rendered ) );
 	}
