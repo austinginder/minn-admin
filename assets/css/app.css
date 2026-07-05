@@ -610,7 +610,8 @@ select.minn-input {
 }
 .minn-load-more:hover { background: var(--hover); color: var(--text); border-color: var(--border2); }
 .minn-load-more:disabled { opacity: 0.6; cursor: default; }
-.minn-pager { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 16px auto 0; flex-wrap: wrap; }
+.minn-pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 16px auto 0; flex-wrap: wrap; }
+.minn-pager-meta { margin-right: auto; color: var(--text3); font-size: 13.5px; white-space: nowrap; padding-right: 12px; }
 .minn-pager-btn {
   min-width: 34px; height: 34px; padding: 0 8px; display: flex; align-items: center; justify-content: center;
   background: var(--panel); border: 1px solid var(--border); border-radius: 9px;
@@ -726,7 +727,6 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-content-cols.trash { grid-template-columns: 34px 40px 1fr 110px 130px 110px 158px; }
 .minn-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .minn-row-actions .minn-btn-soft { padding: 4px 10px; font-size: 12.5px; }
-.minn-trash-toggle.active { color: var(--accent2); background: var(--accent-soft); border-color: var(--accent); }
 .minn-cbcell { display: flex; align-items: center; justify-content: center; }
 .minn-cb { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
 .minn-table-row.sel { background: var(--accent-soft); }
@@ -1048,6 +1048,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   /* Toolbars wrap: tabs get their own full-width (scrolling) row, search stretches. */
   .minn-toolbar { flex-wrap: wrap; gap: 8px; }
   .minn-tabscroll, .minn-toolbar > .minn-tabs { flex: 1 1 100%; }
+  .minn-toolbar > .minn-tabs.minn-tabs-aux { flex: 0 0 auto; }
   .minn-toolbar-search { flex: 1 1 140px; width: auto; margin-left: 0; }
   .minn-toolbar-meta { display: none; }
   .minn-tax-select { flex: 1 1 40%; max-width: none; }
