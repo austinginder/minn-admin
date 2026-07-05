@@ -3924,6 +3924,8 @@
 				const items = Array.from( el.querySelectorAll( ':scope > li' ) )
 					.map( ( li ) => `<!-- wp:list-item -->\n${ li.outerHTML }\n<!-- /wp:list-item -->` ).join( '' );
 				pushBlock( 'list', la, `<${ tag }${ listHtmlAttrs } class="${ el.className }">${ items }</${ tag }>` );
+			} else if ( tag === 'figure' && ! el.querySelector( 'img, video, audio, table, iframe' ) && ! el.textContent.trim() ) {
+				return; // husk left behind by an undoable image delete
 			} else if ( tag === 'figure' && el.querySelector( 'video' ) ) {
 				const pa = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-video' );
@@ -4331,6 +4333,10 @@
 		$$( ':scope > figure, :scope > table', clone ).forEach( ( el ) => {
 			el.style.borderColor = '';
 			if ( ! el.getAttribute( 'style' ) ) el.removeAttribute( 'style' );
+		} );
+		// Media-less figure husks (undoable image deletes) serialize to nothing.
+		$$( 'figure', clone ).forEach( ( f ) => {
+			if ( ! f.querySelector( 'img, video, audio, table, iframe' ) && ! f.textContent.trim() ) f.remove();
 		} );
 		$$( 'pre', clone ).forEach( ( pre ) => {
 			const lang = codeLangOf( pre );
@@ -6268,10 +6274,26 @@
 		} );
 
 		imgPop.querySelector( '[data-img-remove]' ).addEventListener( 'click', () => {
-			if ( ! confirm( 'Remove this image from the post?' ) ) return;
-			( img.closest( 'figure' ) || img ).remove();
+			// No confirm dialog — deletion goes through the editing command
+			// stack instead of element.remove(), so ⌘Z brings the image back.
+			const target = img.closest( 'figure' ) || img;
+			const editorBody = $( '#minn-editor-body' );
+			if ( ! editorBody || ! editorBody.contains( target ) ) return hideImgPop();
+			editorBody.focus();
+			const sel = window.getSelection();
+			const r = document.createRange();
+			// Delete the figure's CONTENTS, not the figure: a selection spanning
+			// the whole block makes Chrome merge the next paragraph into the
+			// leftover husk. Contents-only deletion never crosses a block
+			// boundary, ⌘Z restores into the same husk, and the serializer
+			// drops media-less figure husks.
+			if ( target.tagName === 'FIGURE' ) r.selectNodeContents( target );
+			else r.selectNode( target );
+			sel.removeAllRanges();
+			sel.addRange( r );
+			document.execCommand( 'delete', false, null );
 			scheduleAutosave();
-			toast( 'Image removed' );
+			toast( 'Image removed — ⌘Z restores it' );
 			hideImgPop();
 		} );
 	}
