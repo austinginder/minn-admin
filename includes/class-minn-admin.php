@@ -21,6 +21,33 @@ class Minn_Admin {
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
 		add_action( 'init', array( __CLASS__, 'register_x_oembed' ) );
+		add_action( 'init', array( __CLASS__, 'register_oembed_refresh' ), 20 );
+	}
+
+	/**
+	 * Core refreshes a post's oEmbed caches only from the CLASSIC editor's
+	 * ajax hook — REST saves never do, so a cached '{{unknown}}' failure
+	 * (e.g. x.com before the provider fix) sticks forever. Refresh the
+	 * caches whenever a post is saved through REST.
+	 */
+	public static function register_oembed_refresh() {
+		foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $type ) {
+			add_action( 'rest_after_insert_' . $type->name, array( __CLASS__, 'refresh_oembed_cache' ) );
+		}
+	}
+
+	public static function refresh_oembed_cache( $post ) {
+		if ( empty( $post->ID ) || empty( $GLOBALS['wp_embed'] ) ) {
+			return;
+		}
+		// Drop stale failure caches so cache_oembed refetches them.
+		foreach ( get_post_meta( $post->ID ) as $key => $values ) {
+			if ( 0 === strpos( $key, '_oembed_' ) && in_array( '{{unknown}}', $values, true ) ) {
+				delete_post_meta( $post->ID, $key );
+				delete_post_meta( $post->ID, str_replace( '_oembed_', '_oembed_time_', $key ) );
+			}
+		}
+		$GLOBALS['wp_embed']->cache_oembed( $post->ID );
 	}
 
 	/**
