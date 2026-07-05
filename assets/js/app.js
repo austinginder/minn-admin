@@ -277,6 +277,16 @@
 		go( 'editor/' + type );
 	}
 
+	// window.MINN.builders is a boot-time snapshot; a builder toggled during
+	// the session (Extensions) makes it stale — the + New menu and the content
+	// chips would show the old set. Re-poll after any plugin/theme change.
+	async function refreshBuilders() {
+		try {
+			B.builders = await api( 'minn-admin/v1/builders' );
+		} catch ( e ) { /* leave the snapshot as-is */ }
+		state.cache.content = null; // chips ride the minn_builder field — refetch
+	}
+
 	// Small "Post / Page" menu under the + New button. Users who can't edit
 	// pages skip the menu entirely and go straight to a new post.
 	function toggleNewMenu( btn ) {
@@ -2592,16 +2602,29 @@
 
 	/* ===== Extensions ===== */
 
-	async function loadPlugins() {
-		const jobs = [ api( 'wp/v2/plugins' ) ];
-		if ( B.caps.update ) {
-			jobs.push( api( 'minn-admin/v1/plugin-updates' ).then( ( r ) => r.updates ).catch( () => ( {} ) ) );
-		}
-		const [ plugins, updates ] = await Promise.all( jobs );
-		state.cache.plugins = plugins;
-		state.cache.pluginUpdates = updates || {};
-		const dot = $( '#minn-plugin-dot' );
-		if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length;
+	// De-duplicated like loadTypes: concurrent callers (boot warm-up + a
+	// navigation + a re-render) share ONE fetch and therefore ONE plugins
+	// array. Without this, a late fetch could replace state.cache.plugins
+	// AFTER a render had already bound the toggle handlers to the older array
+	// — the click then mutated the stale array while the re-render read the
+	// new one, so the switch appeared not to move (the live plugin state was
+	// correct, only the card lagged). The promise clears on settle so an
+	// explicit reload (cache set null after activate/delete) still refetches.
+	let pluginsPromise = null;
+	function loadPlugins() {
+		if ( pluginsPromise ) return pluginsPromise;
+		pluginsPromise = ( async () => {
+			const jobs = [ api( 'wp/v2/plugins' ) ];
+			if ( B.caps.update ) {
+				jobs.push( api( 'minn-admin/v1/plugin-updates' ).then( ( r ) => r.updates ).catch( () => ( {} ) ) );
+			}
+			const [ plugins, updates ] = await Promise.all( jobs );
+			state.cache.plugins = plugins;
+			state.cache.pluginUpdates = updates || {};
+			const dot = $( '#minn-plugin-dot' );
+			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length;
+		} )().finally( () => { pluginsPromise = null; } );
+		return pluginsPromise;
 	}
 
 	const extTabsHtml = () => B.caps.themes ? `
@@ -2798,9 +2821,11 @@
 						return;
 					}
 					// A plugin flip can change what the app shows elsewhere —
-					// traffic provider on Overview, registered post types, CPT tabs.
+					// traffic provider on Overview, registered post types, CPT
+					// tabs, and which page builders are available.
 					state.cache.overview = null;
 					bustTypeCaches();
+					await refreshBuilders();
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -2848,6 +2873,7 @@
 					state.cache.plugins = null;
 					state.cache.overview = null;
 					bustTypeCaches();
+					await refreshBuilders();
 					await loadPlugins().catch( () => {} );
 				} catch ( e ) {
 					toast( e.message, true );
@@ -2961,6 +2987,9 @@
 					} );
 					const done = { activate: `${ t.name } is now the active theme`, delete: `${ t.name } deleted`, update: `${ t.name } updated${ r.version ? ' to v' + r.version : '' }` };
 					toast( done[ action ] );
+					// Bricks and Divi are THEMES — a theme switch can add or
+					// remove a builder.
+					if ( 'activate' === action ) await refreshBuilders();
 				} catch ( e ) {
 					toast( e.message, true );
 				}
