@@ -27,7 +27,9 @@ inspected `post_content`, postmeta, and how Minn's editor presented the same pos
 | **Brizy** | `brizy` postmeta storage (+ compiled HTML) | compiled copy | `post.php?action=in-front-editor&post=N` — bounces to the front-end editor | `Brizy_Editor_Entity::isBrizyEnabled()` (`brizy_post_uid` present) |
 | **Divi 4 (legacy)** | `post_content` | `[et_pb_*]` shortcode soup | `permalink?et_fb=1` — pure front end | `_et_pb_use_builder = on`, no `wp:divi/` |
 | **Divi 5** | `post_content` | `<!-- wp:divi/* -->` block markup | `permalink?et_fb=1` — pure front end | `_et_pb_use_builder = on` + `wp:divi/` |
-| **Etch** | `post_content` | `<!-- wp:etch/* -->` block markup | `permalink?etch=magic` — pure front end, admin bar stripped by Etch itself | `wp:etch/` in content |
+| **Etch** | `post_content` | `<!-- wp:etch/* -->` block markup | `home_url?etch=magic&post_id=N` — front-end app at the **site root** (Etch's `AppRenderer` gates on `is_front_page()`; a permalink URL yields a blank page), admin bar stripped by Etch | `wp:etch/` in content |
+| **Bricks** | `_bricks_page_content_2` postmeta (element tree) | untouched | `permalink?bricks=run` — pure front end | `_bricks_editor_mode = bricks` (or the content meta present) |
+| **WPBakery** | `post_content` as `[vc_row…]` shortcodes | the shortcode soup | `post.php?vc_action=vc_inline&post_id=N` — wp-admin URL rendering the front-end inline editor | `_wpb_vc_js_status = true` (or `[vc_row` in content) |
 
 Two classes fall out:
 
@@ -43,7 +45,13 @@ saves apply the identical normalization; content already in canonical form is a 
 point (proved: second save byte-identical). This is the direction the industry is
 moving — Divi 5's whole `builder-5/` server module is block-parser based.
 
-### Meta-storage builders (Elementor, Beaver Builder, Brizy) + shortcode Divi 4 — must be fenced
+Bricks joins the block-native list conceptually but stores its element tree in **postmeta**
+(`_bricks_page_content_2`), so it's fenced like the meta-storage group below — its
+`post_content` is untouched and a Minn edit would be invisible to Bricks. WPBakery is
+shortcode-storage (like legacy Divi 4): content is `[vc_row]` soup in `post_content`,
+which renders through `the_content` but is the builder's to own.
+
+### Meta-storage builders (Elementor, Beaver Builder, Brizy, Bricks) + shortcode Divi 4 / WPBakery — must be fenced
 
 Canonical content lives *outside* `post_content` (or, for Divi 4, inside it as shortcode
 soup the Visual Builder owns). What `post_content` holds is a stale or compiled copy.
@@ -107,6 +115,14 @@ Third-party builders get the flow for free by including `prepare` in their
   editor URL, so detection and routing hold. Worth a spot-check when a license is around.
 - Etch's builder booted to a blank app in the lab (SureCart license gate suspected);
   its storage format and edit URL are confirmed from source and its own test fixtures.
+
+## Etch's edit URL — the one that bit
+
+Etch is the odd one out: its front-end app renders only when `is_front_page()` is true
+(`AppRenderer::should_render`), so the post must be passed as `?post_id=N` against the
+**site root**, not `permalink?etch=magic`. The permalink form loads Etch's blank builder
+template with no app and no console error — a silent white page (reported and fixed
+2026-07-05). This is exactly the URL Etch's own admin-bar "Edit with Etch" button builds.
 
 ## Lab artifacts
 

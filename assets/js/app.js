@@ -312,7 +312,10 @@
 		$$( 'button[data-newbuilder]', menu ).forEach( ( b ) =>
 			b.addEventListener( 'click', async () => {
 				menu.remove();
-				toast( `Creating page in ${ b.textContent.trim() }…` );
+				// Name from the registry, not button textContent — that would
+				// drag the row-icon glyph into the toast.
+				const reg = ( B.builders || [] ).find( ( x ) => x.id === b.dataset.newbuilder );
+				toast( `Creating page in ${ reg ? reg.name : 'builder' }…` );
 				try {
 					const r = await api( 'minn-admin/v1/builders/new', {
 						method: 'POST',

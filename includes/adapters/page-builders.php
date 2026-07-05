@@ -139,6 +139,47 @@ function minn_admin_page_builders() {
 		);
 	}
 
+	if ( defined( 'BRICKS_VERSION' ) ) {
+		$builders['bricks'] = array(
+			'name'         => 'Bricks',
+			// Canonical content is the _bricks_page_content_2 element tree.
+			'owns_content' => true,
+			'detect'       => function ( $post ) {
+				return 'bricks' === get_post_meta( $post->ID, '_bricks_editor_mode', true )
+					|| (bool) get_post_meta( $post->ID, '_bricks_page_content_2', true );
+			},
+			// permalink?bricks=run — pure front-end (Helpers::get_builder_edit_link).
+			'edit_url'     => function ( $post ) {
+				return add_query_arg( defined( 'BRICKS_BUILDER_PARAM' ) ? BRICKS_BUILDER_PARAM : 'bricks', 'run', get_permalink( $post ) );
+			},
+			'prepare'      => function ( $post_id ) {
+				update_post_meta( $post_id, '_bricks_editor_mode', 'bricks' );
+			},
+		);
+	}
+
+	if ( defined( 'WPB_VC_VERSION' ) ) {
+		$builders['wpbakery'] = array(
+			'name'         => 'WPBakery',
+			// Content is [vc_row…] shortcode soup in post_content — same class
+			// as legacy Divi 4: renders through the_content, but hand-editing
+			// it in Minn would mangle what the builder owns.
+			'owns_content' => true,
+			'detect'       => function ( $post ) {
+				return 'true' === get_post_meta( $post->ID, '_wpb_vc_js_status', true )
+					|| false !== strpos( (string) $post->post_content, '[vc_row' );
+			},
+			// The front-end inline editor (Vc_Frontend_Editor::getInlineUrl) —
+			// a wp-admin URL rendering a full-screen editing app.
+			'edit_url'     => function ( $post ) {
+				return admin_url( 'post.php?vc_action=vc_inline&post_id=' . $post->ID . '&post_type=' . get_post_type( $post ) );
+			},
+			'prepare'      => function ( $post_id ) {
+				update_post_meta( $post_id, '_wpb_vc_js_status', 'true' );
+			},
+		);
+	}
+
 	if ( defined( 'ETCH_PLUGIN_FILE' ) ) {
 		$builders['etch'] = array(
 			'name'         => 'Etch',
@@ -148,9 +189,18 @@ function minn_admin_page_builders() {
 			'detect'       => function ( $post ) {
 				return false !== strpos( (string) $post->post_content, '<!-- wp:etch/' );
 			},
-			// Front-end app; Etch strips the admin bar itself.
+			// Front-end app at the SITE ROOT — Etch's AppRenderer only renders
+			// when is_front_page(), so the post rides in as ?post_id (exactly
+			// the URL Etch's own admin-bar button builds). A permalink-based
+			// URL yields a silent blank template.
 			'edit_url'     => function ( $post ) {
-				return add_query_arg( array( 'etch' => 'magic' ), get_permalink( $post ) );
+				return add_query_arg(
+					array(
+						'etch'    => 'magic',
+						'post_id' => $post->ID,
+					),
+					home_url( '/' )
+				);
 			},
 		);
 	}
