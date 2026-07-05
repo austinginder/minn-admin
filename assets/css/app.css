@@ -552,6 +552,13 @@ select.minn-input {
   border: 1px solid var(--border); padding: 6px 12px; min-width: 40px;
 }
 .minn-editor-body > figure.wp-block-table th, .minn-editor-body > table th { background: var(--panel); }
+/* Images get the same cutout as tables and islands. :has(img) keeps the empty
+   husk figures (undoable deletes) from showing a hollow frame. */
+.minn-editor-body > figure.wp-block-image:has(img), .minn-editor-body > img {
+  border: 1px dashed var(--border2); border-radius: 11px; padding: 14px 16px; margin: 0 0 18px; display: block;
+}
+.minn-editor-body > figure.wp-block-image img { max-width: 100%; height: auto; display: block; border-radius: 6px; }
+.minn-editor-body > figure.wp-block-image figcaption { color: var(--text3); font-size: 13px; margin-top: 8px; }
 .minn-editor-body iframe, .minn-editor-body video { max-width: 100%; }
 .minn-editor-body p { margin: 0 0 16px; }
 .minn-editor-body h1, .minn-editor-body h2 { letter-spacing: -0.4px; }
