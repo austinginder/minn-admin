@@ -3984,12 +3984,20 @@
 				if ( raw != null ) out.push( raw.trim() );
 				return;
 			}
+			// A figure whose upload hasn't landed only holds a blob: URL —
+			// meaningless outside this tab. Skip it; the post-upload swap
+			// triggers another save that includes the real attachment.
+			if ( n.nodeType === Node.ELEMENT_NODE && n.dataset && n.dataset.minnUpload ) return;
 			const tag = n.tagName.toLowerCase();
 			const el = n.cloneNode( true );
 			el.removeAttribute( 'style' );
 			// A redo can resurrect an empty paste-bracket paragraph (see
 			// pasteBlocksInsert) — typed-into, it must not leak its marker.
 			el.removeAttribute( 'data-minn-bkt' );
+			// The inline-caption affordance is editor chrome until it has text.
+			$$( 'figcaption', el ).forEach( ( fc ) => {
+				if ( ! fc.textContent.trim() ) fc.remove();
+			} );
 			cleanBoundaryNbsp( el );
 			cleanLeadingNbsp( el );
 			modernizeStrikes( el );
@@ -4512,6 +4520,11 @@
 		Array.from( clone.children ).forEach( cleanLeadingNbsp );
 		modernizeStrikes( clone );
 		$$( '[data-minn-bkt]', clone ).forEach( ( el ) => el.removeAttribute( 'data-minn-bkt' ) );
+		// In-flight uploads hold only a blob: URL; empty captions are chrome.
+		$$( '[data-minn-upload]', clone ).forEach( ( el ) => el.remove() );
+		$$( 'figcaption', clone ).forEach( ( fc ) => {
+			if ( ! fc.textContent.trim() ) fc.remove();
+		} );
 		// Table hover-highlighting parks a border-color inline style on the
 		// figure — never store it.
 		$$( ':scope > figure, :scope > table', clone ).forEach( ( el ) => {
@@ -5131,6 +5144,10 @@
 				: ed.mode === 'classic' ? miniAutop( raw )
 				: stripBlockComments( raw );
 			ed.backup = null;
+			// The restored ed.content is the truth \u2014 without this, the
+			// dirty-editor guard in renderEditor would adopt the live DOM
+			// and silently discard the restore. scheduleAutosave re-dirties.
+			ed.dirty = false;
 			renderEditor();
 			scheduleAutosave();
 			toast( 'Backup restored \u2014 review, then Save or Update to apply' );
@@ -5375,6 +5392,9 @@
 				: ed.mode === 'classic' ? miniAutop( snap.content )
 				: stripBlockComments( snap.content );
 		}
+		// The restored content is the truth \u2014 see the matching note in
+		// restoreBackup; scheduleAutosave re-dirties right after.
+		ed.dirty = false;
 		renderEditor();
 		// Marks dirty AND re-snapshots within LOCAL_NET_DELAY \u2014 the removed
 		// key is re-covered before a crash could lose the restored work.
@@ -5392,6 +5412,18 @@
 		}
 		const ed = state.editor;
 		const locked = ed.mode === 'locked';
+		// A render while unsaved edits sit in the DOM must never eat them:
+		// ed.content can be seconds stale (it's only rebuilt on load/restore),
+		// so a late or stray re-render would silently revert live typing and
+		// the next save would persist the reverted body. Adopt the live DOM
+		// first. (Bit the paste suite as a heisenbug: paste → slow-server
+		// late render wiped the body → ⌘S saved pre-paste content.)
+		if ( ed.dirty && ! locked ) {
+			const liveBody = $( '#minn-editor-body' );
+			const liveTitle = $( '#minn-editor-title' );
+			if ( liveBody ) ed.content = liveBody.innerHTML;
+			if ( liveTitle ) ed.title = liveTitle.value;
+		}
 		view.innerHTML = `
 		<div class="minn-editor">
 			<div>
@@ -5432,6 +5464,7 @@
 
 		const body = $( '#minn-editor-body', view );
 		body.innerHTML = ed.content;
+		if ( ! locked ) seedImageCaptions( body );
 		highlightCodeBlocks( body );
 		renderIslandPreviews( body, ed );
 		updateEditorStats();
@@ -5521,8 +5554,7 @@
 						s.removeAllRanges();
 						s.addRange( saved );
 					}
-					document.execCommand( 'insertHTML', false,
-						`<figure class="wp-block-image"><img src="${ esc( it.url ) }" alt="${ esc( it.alt ) }"></figure><p><br></p>` );
+					document.execCommand( 'insertHTML', false, imageFigureHtml( it ) + '<p><br></p>' );
 					scheduleAutosave();
 				} );
 			};
@@ -5589,6 +5621,80 @@
 			bindSlashMenu( body, insertImage );
 			bindCodeLangPicker( body );
 
+			// Dropped image files land where the pointer released. Dragging
+			// content WITHIN the editor carries no files and keeps Chrome's
+			// native behavior. stopPropagation matters: the app-wide
+			// drop-anywhere handler would otherwise ALSO catch this, navigate
+			// to the Media view and upload a second copy (probed).
+			body.addEventListener( 'dragover', ( e ) => {
+				if ( e.dataTransfer && Array.from( e.dataTransfer.items || [] ).some( ( i ) => i.kind === 'file' ) ) {
+					e.preventDefault();
+					// The global "Drop files to upload" veil gets an
+					// editor-specific label while the pointer is over us.
+					document.body.classList.add( 'minn-drag-editor' );
+				}
+			} );
+			body.addEventListener( 'dragleave', () => document.body.classList.remove( 'minn-drag-editor' ) );
+			body.addEventListener( 'drop', ( e ) => {
+				document.body.classList.remove( 'minn-drag-editor' );
+				const all = Array.from( ( e.dataTransfer && e.dataTransfer.files ) || [] );
+				if ( ! all.length ) return; // in-editor content drags keep native behavior
+				// Claim EVERY file drop — the unhandled default navigates the
+				// browser to the dropped file, destroying the editing session.
+				e.preventDefault();
+				e.stopPropagation();
+				document.body.classList.remove( 'minn-dragging' );
+				if ( ! B.caps.upload ) {
+					toast( 'You aren’t allowed to upload files', true );
+					return;
+				}
+				const files = all.filter( ( f ) => /^image\//.test( f.type ) );
+				if ( ! files.length ) {
+					toast( 'Only images can be dropped into the editor', true );
+					return;
+				}
+				if ( document.caretRangeFromPoint ) {
+					const r = document.caretRangeFromPoint( e.clientX, e.clientY );
+					if ( r ) {
+						const s = window.getSelection();
+						s.removeAllRanges();
+						s.addRange( r );
+					}
+				}
+				body.focus();
+				insertImageFiles( body, files );
+			} );
+
+			// Caption edges. Enter exits to the block after the figure —
+			// Chrome's default would split the FIGURE, duplicating the image.
+			// Backspace at the caption's start dissolves the figcaption into a
+			// styled <span> (probed), and Delete at its end pulls the next
+			// block's text in — both are no-ops, like Gutenberg.
+			body.addEventListener( 'keydown', ( e ) => {
+				if ( e.key !== 'Enter' && e.key !== 'Backspace' && e.key !== 'Delete' ) return;
+				const s = window.getSelection();
+				if ( ! s.rangeCount ) return;
+				let n = s.anchorNode;
+				while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+				const fc = n && n.closest ? n.closest( 'figcaption' ) : null;
+				if ( ! fc || ! body.contains( fc ) || fc.closest( '.minn-block-island' ) ) return;
+				if ( e.key === 'Enter' ) {
+					e.preventDefault();
+					const fig = fc.closest( 'figure' );
+					let next = fig && fig.nextElementSibling;
+					if ( ! next || next.classList.contains( 'minn-block-island' ) ) {
+						// Same manual-DOM pattern as the markdown --- divider.
+						fig.insertAdjacentHTML( 'afterend', '<p><br></p>' );
+						next = fig.nextElementSibling;
+					}
+					setCaret( next, 0 );
+					return;
+				}
+				if ( ! s.isCollapsed ) return; // range deletes inside the caption are fine
+				const edge = e.key === 'Backspace' ? 'start' : 'end';
+				if ( caretAtCodeEdge( fc, s.anchorNode, s.anchorOffset, edge ) ) e.preventDefault();
+			} );
+
 			// Paste. Priority order: lone oEmbed URL into an empty block →
 			// embed island (like Gutenberg); code contexts take the clipboard
 			// TEXT (Chrome's default would insert the rich flavor — and its
@@ -5614,6 +5720,18 @@
 							return;
 						}
 					}
+				}
+				// Clipboard image FILES (a screenshot ⌘V) upload straight to the
+				// library. When html rides along, prefer it unless it's just
+				// the image's own tag — a Docs/Word copy of text-with-images
+				// must keep its text, but a copied lone image should become a
+				// self-hosted upload, not a hotlink.
+				const imgFiles = B.caps.upload ? Array.from( cd.files || [] ).filter( ( f ) => /^image\//.test( f.type ) ) : [];
+				const htmlFlavor = cd.getData( 'text/html' ) || '';
+				if ( imgFiles.length && ( ! htmlFlavor.trim() || /^(?:<meta[^>]*>)?\s*<img[^>]*\/?>\s*$/i.test( htmlFlavor.trim() ) ) ) {
+					e.preventDefault();
+					insertImageFiles( body, imgFiles );
+					return;
 				}
 				const sel = window.getSelection();
 				const anchor = sel.rangeCount ? sel.anchorNode : null;
@@ -6740,7 +6858,9 @@
 				}
 				fc.textContent = cap;
 			} else if ( fc ) {
-				fc.remove();
+				// Keep the (typable) caption element — empty ones are the
+				// inline affordance and never serialize.
+				fc.textContent = '';
 			}
 			scheduleAutosave();
 			toast( 'Image updated' );
@@ -7572,6 +7692,94 @@
 			return;
 		}
 		pasteBlocksInsert( body, payload.html );
+	}
+
+	/* ===== Inline media flow (paste/drop image files → library at caret) ===== */
+
+	// Upload one file to the media library; resolves {id, url, alt}.
+	async function uploadImageFile( file ) {
+		const fd = new FormData();
+		fd.append( 'file', file, file.name || 'pasted-image.png' );
+		const m = await api( 'wp/v2/media', { method: 'POST', body: fd } );
+		return { id: m.id, url: m.source_url, alt: m.alt_text || '' };
+	}
+
+	// The standard editable image figure. Attachment attrs ride the parked
+	// data-minn-attrs marker (PASSTHROUGH_BLOCKS) so the serializer emits a
+	// true Gutenberg image block: {"id":N} + wp-image-N.
+	const imageFigureHtml = ( it ) =>
+		`<figure class="wp-block-image" data-minn-attrs="${ esc( JSON.stringify( { id: it.id } ) ) }"><img src="${ esc( it.url ) }" alt="${ esc( it.alt || '' ) }" class="wp-image-${ it.id }"><figcaption class="wp-element-caption"></figcaption></figure>`;
+
+	// Insert pasted/dropped image files at the caret. The instant preview is a
+	// local blob: URL inserted through the undo stack; the upload runs behind
+	// it and the real URL + attachment id swap in when it lands. A figure
+	// still marked data-minn-upload is skipped by both serializers, so a
+	// mid-upload autosave (or crash-net snapshot) can never store a blob URL.
+	let uploadSeq = 0;
+	function insertImageFiles( body, files ) {
+		// Figures can't live inside lists, headings, cells or code — hop the
+		// caret into a fresh paragraph after the enclosing top-level block.
+		// A bare element-level caret in the body doesn't work: Chrome
+		// normalizes it back into the nearest text position (probed — the
+		// figure landed inside the <li>). A real landing paragraph does; the
+		// serializer drops it if it stays empty.
+		const sel = window.getSelection();
+		let node = sel.rangeCount ? sel.anchorNode : null;
+		if ( ! node || ! body.contains( node ) ) return;
+		const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode;
+		if ( el.closest( 'li, td, th, h1, h2, h3, h4, h5, h6, pre, figcaption' ) ) {
+			let top = node;
+			while ( top.parentNode && top.parentNode !== body ) top = top.parentNode;
+			const landing = document.createElement( 'p' );
+			landing.appendChild( document.createElement( 'br' ) );
+			top.after( landing );
+			const r = document.createRange();
+			r.selectNodeContents( landing );
+			r.collapse( true );
+			sel.removeAllRanges();
+			sel.addRange( r );
+		}
+		files.forEach( ( file ) => {
+			if ( ! /^image\//.test( file.type ) ) return;
+			const key = 'u' + ( ++uploadSeq );
+			const blobUrl = URL.createObjectURL( file );
+			document.execCommand( 'insertHTML', false,
+				`<figure class="wp-block-image" data-minn-upload="${ key }"><img src="${ blobUrl }" alt=""><figcaption class="wp-element-caption"></figcaption></figure><p><br></p>` );
+			scheduleAutosave();
+			uploadImageFile( file ).then( ( it ) => {
+				URL.revokeObjectURL( blobUrl );
+				const fig = document.querySelector( `figure[data-minn-upload="${ key }"]` );
+				if ( ! fig ) return; // undone or navigated away — the upload stays in the library
+				const img = fig.querySelector( 'img' );
+				img.src = it.url;
+				if ( it.alt ) img.alt = it.alt;
+				img.className = 'wp-image-' + it.id;
+				fig.dataset.minnAttrs = JSON.stringify( { id: it.id } );
+				fig.removeAttribute( 'data-minn-upload' );
+				state.cache.media = null;
+				scheduleAutosave();
+			} ).catch( ( err ) => {
+				URL.revokeObjectURL( blobUrl );
+				const fig = document.querySelector( `figure[data-minn-upload="${ key }"]` );
+				if ( fig ) fig.remove();
+				toast( `Upload failed: ${ err.message }`, true );
+				scheduleAutosave();
+			} );
+		} );
+	}
+
+	// Seed a typable caption on every editable top-level image figure that
+	// lacks one — the inline affordance ("Write a caption…" via CSS :empty).
+	// Empty captions are scrubbed at serialize, so they never reach the
+	// database; islands are divs, so their preview images stay untouched.
+	function seedImageCaptions( body ) {
+		$$( ':scope > figure', body ).forEach( ( fig ) => {
+			if ( fig.querySelector( 'img' ) && ! fig.querySelector( ':scope > figcaption' ) && ! fig.querySelector( 'table' ) ) {
+				const fc = document.createElement( 'figcaption' );
+				fc.className = 'wp-element-caption';
+				fig.appendChild( fc );
+			}
+		} );
 	}
 
 	/* ===== Slash command menu ===== */

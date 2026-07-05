@@ -650,6 +650,8 @@ body.minn-dragging::after {
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; font-weight: 700; color: var(--accent2); pointer-events: none;
 }
+/* Over the editor body a drop inserts at the pointer, not just the library. */
+body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert here'; }
 
 /* ===== Editor locked mode ===== */
 .minn-editor-locked-note {
@@ -916,6 +918,12 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-lock-card p { margin: 0 0 18px; color: var(--text2); font-size: 13.5px; line-height: 1.5; }
 .minn-lock-avatar { width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 12px; display: block; border: 1px solid var(--border2); }
 .minn-lock-actions { display: flex; gap: 10px; justify-content: center; }
+/* Inline caption affordance: every editable image carries a typable
+   figcaption; empty ones show a quiet placeholder and never serialize. */
+.minn-editor-body > figure.wp-block-image > figcaption { min-height: 1.4em; }
+.minn-editor-body > figure.wp-block-image > figcaption:empty::before { content: 'Write a caption…'; color: var(--text3); pointer-events: none; }
+/* In-flight upload: dim the preview until the real URL swaps in. */
+.minn-editor-body > figure[data-minn-upload] img { opacity: 0.55; }
 .minn-table-ops { display: flex; gap: 6px; margin-bottom: 12px; }
 .minn-table-ops:last-child { margin-bottom: 2px; }
 .minn-table-ops .minn-btn-soft { flex: 1; justify-content: center; padding: 5px 8px; font-size: 12.5px; }

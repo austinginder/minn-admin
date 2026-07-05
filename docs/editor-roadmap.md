@@ -71,6 +71,14 @@ distrust the surface.
   accessibility pass (keyboard access to chips/popovers/islands, ARIA on the toolbar).
 - **Inline media flow.** Paste/drag an image from the clipboard straight to the media
   library at the caret; inline figcaption editing.
+  ✅ *Shipped 2026-07-05* — screenshot ⌘V and dropped image files upload to the library
+  with an instant blob preview and an undo-safe swap to the real attachment (id + class,
+  a true Gutenberg image block); serializers skip in-flight uploads so an autosave can
+  never store a blob URL. Every editable image carries a typable caption ("Write a
+  caption…" placeholder; empty ones never serialize; Enter/Backspace edge guards).
+  Suite: `tests/media-flow.test.js`. Fixing the suite also flushed out and fixed a
+  pre-existing race: a late editor re-render could revert unsaved DOM edits before a
+  save (renderEditor now adopts the live DOM when dirty).
 
 ## Horizon 2 — delight (0.7–0.9): things Gutenberg will never feel like
 
