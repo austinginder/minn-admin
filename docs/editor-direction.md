@@ -1,5 +1,8 @@
 # Editor direction
 
+> Where this is all heading: [editor-roadmap.md](editor-roadmap.md) — the editor as the
+> selling feature, the horizons, and the never-build list.
+
 **Decision: keep and deepen Minn's own editor. Use Gutenberg as the escape hatch, not the foundation.**
 
 ## The options considered
