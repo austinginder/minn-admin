@@ -653,6 +653,16 @@ body.minn-dragging::after {
 /* Over the editor body a drop inserts at the pointer, not just the library. */
 body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert here'; }
 
+/* ===== Page builders (list chip + editor note) ===== */
+.minn-builder-chip {
+  display: inline-block; margin-left: 7px; padding: 2px 8px; border-radius: 999px;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text3);
+  font-size: 11.5px; font-weight: 600; white-space: nowrap; vertical-align: 1px;
+}
+.minn-builder-note { display: flex; align-items: center; gap: 14px; }
+.minn-builder-note > span { flex: 1; }
+.minn-builder-note .minn-builder-open { flex-shrink: 0; text-decoration: none; }
+
 /* ===== Editor locked mode ===== */
 .minn-editor-locked-note {
   background: rgba(224,164,88,0.1); border: 1px solid rgba(224,164,88,0.3); color: var(--text2);

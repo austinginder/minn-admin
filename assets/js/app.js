@@ -731,6 +731,7 @@
 		status: p.status,
 		author: ( p._embedded && p._embedded.author && p._embedded.author[ 0 ] && p._embedded.author[ 0 ].name ) || '—',
 		modified: p.modified,
+		builder: p.minn_builder || null,
 	} );
 
 	function contentQuery( page ) {
@@ -743,7 +744,7 @@
 			? 'trash'
 			: 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' );
 		let q = `context=edit&status=${ statuses }&per_page=25&orderby=modified`
-			+ `&_embed=author&_fields=id,title,slug,status,modified,author,_links,_embedded&page=${ page }`;
+			+ `&_embed=author&_fields=id,title,slug,status,modified,author,minn_builder,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
 		// categories/tags are post taxonomies — never send them for a custom post type.
 		if ( ! currentCpt() ) {
@@ -940,7 +941,7 @@
 						<div class="minn-row-title">${ esc( p.title ) }</div>
 						<div class="minn-row-slug">${ esc( p.slug ) }</div>
 					</div>
-					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span></div>
+					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }</div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
 					<div class="minn-row-meta">${ timeAgo( p.modified ) }</div>
 					${ state.contentTrash ? `
@@ -4232,9 +4233,14 @@
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt${ extraKeys }` );
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,minn_builder${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
-			const mode = editorModeFor( raw );
+			// A builder that OWNS the canvas (Elementor/Beaver/Brizy/Divi-4:
+			// canonical content lives outside post_content) forces locked mode —
+			// a Minn edit to the stale copy would silently never render. Block-
+			// native builders (Etch, Divi 5) stay editable; islands protect them.
+			const builder = p.minn_builder || null;
+			const mode = builder && builder.owns_content ? 'locked' : editorModeFor( raw );
 			state.editor = {
 				id: p.id,
 				type: state.editorType,
@@ -4242,6 +4248,7 @@
 				content: '',
 				islands: [],
 				mode,
+				builder,
 				editUrl: B.site.adminUrl + 'post.php?post=' + p.id + '&action=edit',
 				status: p.status,
 				date: p.date || null,
@@ -5428,12 +5435,22 @@
 		<div class="minn-editor">
 			<div>
 				<input class="minn-editor-title" id="minn-editor-title" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" value="${ esc( ed.title ) }">
-				${ locked ? `
+				${ ed.builder && ed.builder.edit_url ? `
+				<div class="minn-editor-locked-note minn-builder-note">
+					<span>${ ed.builder.owns_content
+		? `This ${ ed.type === 'pages' ? 'page' : 'post' }'s canvas is managed by <b>${ esc( ed.builder.name ) }</b> —
+						its content lives in the builder, so the body below is a read-only preview.
+						Title, status, URL and the side panel still save from here.`
+		: `Built with <b>${ esc( ed.builder.name ) }</b> — its blocks are preserved exactly; the text around them is editable here.` }</span>
+					<a class="minn-btn-primary minn-builder-open" href="${ esc( ed.builder.edit_url ) }">Edit in ${ esc( ed.builder.name ) }</a>
+				</div>` : '' }
+				${ locked && ! ( ed.builder && ed.builder.owns_content ) ? `
 				<div class="minn-editor-locked-note">
 					Minn couldn't safely parse this ${ ed.type === 'pages' ? 'page' : 'post' }'s block structure,
 					so the body is read-only — the title can still be edited here.
 					<a href="${ esc( ed.editUrl ) }">Open in block editor ↗</a>
-				</div>` : `
+				</div>` : '' }
+				${ locked ? `` : `
 				<div class="minn-editor-toolbar">
 					<button class="minn-tool b" data-cmd="bold" title="Bold">${ icon( 'bold' ) }</button>
 					<button class="minn-tool i" data-cmd="italic" title="Italic">${ icon( 'italic' ) }</button>
