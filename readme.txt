@@ -4,7 +4,7 @@ Tags: admin, dashboard, ui, admin theme
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.5.0
+Stable tag: 0.6.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -26,9 +26,10 @@ Features:
 * **Extensions** — install plugins and themes from WordPress.org or zip upload; activate, deactivate, delete, per-item and bulk updates; Themes tab with screenshots.
 * **Post Types & Taxonomies** — manage custom post type and taxonomy definitions through whichever manager owns them (ACF, Custom Post Type UI, or Minn's own store); code-registered ones shown read-only.
 * **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks sections, plus a built-in maintenance mode.
-* **Editor** — distraction-free, block-aware writing surface: complex blocks preserved byte-for-byte as read-only islands, slash commands, tables, syntax-highlighted code blocks with a language picker, featured images, categories and tags, revisions with restore, autosave, scheduling and one-click publish.
+* **Editor** — a distraction-free, block-aware writing surface that stores native Gutenberg markup. Markdown typing conventions (bold, italic, strike, inline code, links, headings, lists, quotes, code fences, dividers), a link popover on ⌘K, text alignment, table and image controls with island-style cutouts, complex blocks preserved byte-for-byte as configurable islands with real front-end styling in previews, slash commands with type-to-filter, syntax-highlighted code blocks, word count and reading time, featured images, categories and tags, revisions with restore and backup recovery, status-aware autosave (published posts back up to revisions — only Update goes live), scheduling and one-click publish.
+* **SEO panel** — Yoast SEO or Rank Math title, meta description and focus keyword in the editor sidebar.
 * **Command palette** — press ⌘K / Ctrl-K anywhere.
-* **Plugin adapters** — Gravity Forms, Gravity SMTP (HTML email preview and resend), Simple History, Redirection / Safe Redirect Manager / Simple 301 Redirects (create, search, edit redirects) and ACF views built in, plus one-filter APIs for other plugins (views, editor panels, traffic data, block-inspector forms).
+* **Plugin adapters** — Gravity Forms (readable entries with real field labels, plus a Forms view with activate/deactivate), Gravity SMTP (HTML email preview and resend), Simple History, Redirection / Safe Redirect Manager / Simple 301 Redirects (create, search, edit redirects), ACF and SEO views built in, plus one-filter APIs for other plugins (views, editor panels, traffic data, block-inspector forms).
 * **Notifications** — pending comments, plugin/core updates and new users; click an item to jump to it.
 * **Dark & light themes** — toggle persists per browser. Fonts are bundled locally.
 * **Self-updater** — updates arrive from GitHub Releases through the normal WordPress updates UI.
@@ -44,6 +45,16 @@ Try it instantly in WordPress Playground — launch link and blueprint: https://
 Pretty permalinks are recommended. Without them the app is served at `/?minn_admin=1`.
 
 == Changelog ==
+
+= 0.6.0 =
+* The editor release: full markdown typing conventions, inline code with boundary-safe typing, link popover on ⌘K, text alignment, table and image controls with island-style cutouts, word count and reading time, SVG toolbar, sticky toolbar with toggleable block buttons.
+* Status-aware autosave: drafts save in place, published posts back up to autosave revisions — only Update goes live. Save draft button, ⌘S, backup-restore banner.
+* Island previews render with the site's real front-end styles; embeds render for real, with in-place Change URL / Replace images.
+* SEO editor panel (Yoast / Rank Math) and a much better Gravity Forms surface: readable entry detail plus a Forms view with activate/deactivate.
+* Fixes: Backspace can no longer destroy an adjacent embed, images insert at the caret, x.com tweets embed again on WordPress 7.0, serialized markup stays clean. Full details in changelog.md.
+
+= 0.5.0 =
+* Taxonomies manager, redirect creation and search, image controls, video/audio blocks editable, Query Monitor integration, attribute passthrough for simple blocks, activity chart drill-down. Full details in changelog.md.
 
 = 0.4.1 =
 * Fixed: updating an active plugin from the Extensions per-plugin update button no longer deactivates it (including Minn updating itself).

@@ -1,5 +1,40 @@
 # Changelog
 
+## **v0.6.0** - July 5, 2026
+
+The editor release. Everything here is aimed at one goal: writing in Minn beats writing in the block editor — see the new [editor roadmap](docs/editor-roadmap.md).
+
+### Added
+* **Markdown typing conventions:** the full set — `` `code` ``, `**bold**`, `*italic*`, `__bold__`/`_italic_` (word-boundary, so snake_case survives), `~~strike~~`, `[text](url)`; block prefixes on space — `#`–`######`, `-`/`*`/`+`, `1.`, `>` — plus ``` → code block and `---` → divider. Wraps go through the undo stack so ⌘Z restores the literal text, with guards so spaced math stars and `array[0](call)` prose never convert.
+* **Inline code:** a `</>` toolbar toggle and the backtick markdown rule, plus a boundary escape — typing at a code chip's edge lands *outside* the chip (contenteditable offers no such caret position; Chrome would extend the code forever).
+* **Link popover + ⌘K:** click any link to edit its URL, open it, or unlink. The toolbar button and ⌘K-with-a-selection create links; ⌘K still opens the command palette everywhere else.
+* **Table controls:** every editable table carries a persistent ⚙ chip opening a popover — add row above/below, add column left/right, delete either (all relative to the caret cell), make the first row a header (content-preserving both directions), delete table. Tables wear the same dashed cutout as block islands, with editor-side gridlines and a shaded header row.
+* **Image controls:** images get the island-style cutout and their own persistent ⚙ chip into the existing alt/caption/replace popover. Removing an image is dialog-free and **⌘Z restores it**.
+* **Status-aware autosave:** 15s-idle / 60s-max instead of every keystroke. Drafts save in place; published, scheduled and private posts are **never written by autosave** — edits back up to a WordPress autosave revision (like Gutenberg) and apply only on Update. Save draft button, **⌘S**, an unsaved-changes indicator, flush-on-navigate and a browser unload warning.
+* **Backup restore:** opening a post with a newer autosave revision (a crash, an abandoned session) shows a banner offering Restore / Dismiss. REST saves now refresh the post's oEmbed caches — core only does that from the classic editor, so stale embed failures used to stick forever.
+* **Text alignment:** center/right toolbar toggles, and aligned paragraphs/headings now round-trip as editable content instead of becoming read-only islands. Ordered-list `start`/`reversed`/`type` round-trip too, and `core/spacer` height edits regenerate the block properly.
+* **Front-end styles in previews:** island previews load the site's real block and theme CSS — collected server-side, scoped client-side so the admin chrome and the typing surface keep Minn's own look. An `anchor/stats-dashboard` island now looks like the published page.
+* **In-place embed & gallery editing:** the inspector offers **Change URL…** / **Replace images…**, rebuilding the block through the same templates that create them. The misleading generic attribute fields are gone (editing `url` in the comment never touched the URL living in the saved HTML). Embed islands now render the real embed in the editor.
+* **Word count · reading time:** a fixed bottom-right pill, always visible while scrolling, recounted live (including when island previews finish rendering).
+* **SEO editor panel:** Yoast SEO or Rank Math — SEO title, meta description and focus keyword in the editor sidebar, via a dedicated `minn_seo` REST field (edit-context only, per-post capability checks). Completes the extension-api plan.
+* **Gravity Forms, readable:** the entry detail is now a document — answers under the form's real field labels in form order (choice labels resolved, composite names assembled, multiline preserved), then a Submission section (formatted date, clickable source, IP, user), and an open-in-GF link. A new **Forms view** lists forms with entry counts and status, offers activate/deactivate and edit-in-GF. Deliberately not a form builder.
+* **x.com embeds:** WordPress 7.0's trusted oEmbed providers cover twitter.com but not x.com, so tweets were stripped as untrusted — Minn registers the x.com provider until core catches up.
+* **Browser test harness:** self-contained Playwright suites in `tests/` (markdown rules, autosave semantics) plus a `CLAUDE.md` agent guide. Suites create and delete their own fixtures over REST and gate on zero console errors.
+
+### Improved
+* SVG icons across the editor toolbar and slash menu (the app's lucide-style set), plus new strikethrough, bulleted/numbered list and clear-formatting buttons.
+* The editor toolbar is sticky, and block-type buttons **toggle** — pressing Quote or H2 again returns to a paragraph. (Repeat presses used to be silent no-ops that still pushed junk undo entries, which made ⌘Z look broken.)
+* The slash menu filters as you type — `/co` narrows to Code; a second `/` (a literal path) dismisses it.
+* Table and image chips highlight together with their cutouts on hover, track scrolling, and are always visible — no hover hunting.
+* Surface framework: collections can declare a second **manage view**, sectioned detail routes, conditional (`when`) and link (`href`) actions — all generic, first used by Gravity Forms.
+
+### Fixed
+* Backspace in the paragraph after an embed no longer destroys the embed (Chrome treats an adjacent island as one deletable atom — and merged the neighbors too). Empty blocks delete alone; deleting *into* an island arms it red and a deliberate second press removes it.
+* Images insert at the caret instead of the top of the document — clicking in the media picker destroyed the editor selection.
+* Alignment now previews inside the editor; the word count is no longer stale until the first keystroke.
+* Serialized content stays clean: no nbsp litter around inline elements, `<strike>` stored as `<s>`, lists never nest inside paragraphs, hover styles and image-delete husks never reach the database.
+* Gravity Forms surface now appears for administrators whose role has `gform_full_access` but not the granular caps (gated through GF's own capability resolver).
+
 ## **v0.5.0** - July 4, 2026
 
 ### Added
