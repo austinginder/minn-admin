@@ -5003,6 +5003,8 @@
 		updateEditorStats();
 		ensureEditorStyles();
 		renderBackupNotice();
+		// Image loads change layout under the fixed chips — reposition then.
+		body.addEventListener( 'load', queueTableChips, true );
 		// Island chips open the block inspector (works in locked mode too — read-only there is fine
 		// because locked posts never send content, but islands only exist in blocks mode anyway).
 		body.addEventListener( 'click', ( e ) => {
@@ -5039,8 +5041,9 @@
 		// Hovering a table's cutout (edge included) highlights it AND its chip.
 		let hotTable = null;
 		body.addEventListener( 'mouseover', ( e ) => {
-			const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table' ) : null;
-			const t = box ? ( box.tagName === 'TABLE' ? box : box.querySelector( 'table' ) ) : null;
+			const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table, #minn-editor-body > figure.wp-block-image, #minn-editor-body > img' ) : null;
+			let t = null;
+			if ( box ) t = box.tagName === 'TABLE' || box.tagName === 'IMG' ? box : box.querySelector( 'table, img' );
 			if ( t === hotTable ) return;
 			if ( hotTable ) setTableHot( hotTable, false );
 			hotTable = t;
@@ -5768,9 +5771,9 @@
 		hideTablePop();
 	}
 
-	function tableChipFor( table ) {
+	function tableChipFor( el ) {
 		return tableChipsBox
-			? Array.from( tableChipsBox.children ).find( ( c ) => c._table === table )
+			? Array.from( tableChipsBox.children ).find( ( c ) => c._target === el )
 			: null;
 	}
 
@@ -5783,12 +5786,12 @@
 	// lives outside the contenteditable so CSS :hover can't link them — done in
 	// JS from both directions. The border ride is an inline style, stripped at
 	// serialize (blocks mode drops top-level style attrs; classicHtml scrubs it).
-	function setTableHot( table, on ) {
-		if ( ! table || ! table.isConnected ) return;
-		const box = table.closest( 'figure' ) || table;
+	function setTableHot( el, on ) {
+		if ( ! el || ! el.isConnected ) return;
+		const box = el.closest( 'figure' ) || el;
 		box.style.borderColor = on ? 'var(--accent)' : '';
 		if ( ! box.getAttribute( 'style' ) ) box.removeAttribute( 'style' );
-		const chip = tableChipFor( table );
+		const chip = tableChipFor( el );
 		if ( chip ) chip.classList.toggle( 'hot', on );
 	}
 
@@ -5800,32 +5803,39 @@
 		const body = $( '#minn-editor-body' );
 		const ed = state.editor;
 		if ( ! body || ! ed || ed.mode === 'locked' || state.route !== 'editor' ) return clearTableChips();
-		const tables = $$( ':scope > table, :scope > figure.wp-block-table table', body );
-		if ( ! tables.length ) return clearTableChips();
+		const targets = [];
+		$$( ':scope > table, :scope > figure.wp-block-table table', body ).forEach( ( t ) => targets.push( { el: t, kind: 'table' } ) );
+		$$( ':scope > figure.wp-block-image img, :scope > img', body ).forEach( ( i ) => targets.push( { el: i, kind: 'image' } ) );
+		if ( ! targets.length ) return clearTableChips();
 		if ( ! tableChipsBox ) {
 			tableChipsBox = document.createElement( 'div' );
 			tableChipsBox.id = 'minn-table-chips';
 			document.body.appendChild( tableChipsBox );
 		}
-		while ( tableChipsBox.children.length > tables.length ) tableChipsBox.lastChild.remove();
+		while ( tableChipsBox.children.length > targets.length ) tableChipsBox.lastChild.remove();
 		const toolbar = $( '.minn-editor-toolbar' );
 		const minTop = toolbar ? toolbar.getBoundingClientRect().bottom - 4 : 0;
-		tables.forEach( ( table, i ) => {
+		targets.forEach( ( t, i ) => {
 			let chip = tableChipsBox.children[ i ];
 			if ( ! chip ) {
 				chip = document.createElement( 'button' );
 				chip.type = 'button';
 				chip.className = 'minn-code-chip';
-				chip.textContent = '\u2699 table';
-				chip.title = 'Table \u2014 rows, columns, header';
-				chip.addEventListener( 'mousedown', ( ev ) => ev.preventDefault() ); // keep the caret in its cell
-				chip.addEventListener( 'click', () => chip._table && chip._table.isConnected && openTablePop( chip._table ) );
-				chip.addEventListener( 'mouseenter', () => setTableHot( chip._table, true ) );
-				chip.addEventListener( 'mouseleave', () => setTableHot( chip._table, false ) );
+				chip.addEventListener( 'mousedown', ( ev ) => ev.preventDefault() ); // keep the editor caret
+				chip.addEventListener( 'click', () => {
+					if ( ! chip._target || ! chip._target.isConnected ) return;
+					if ( chip._kind === 'table' ) openTablePop( chip._target );
+					else openImgPop( chip._target );
+				} );
+				chip.addEventListener( 'mouseenter', () => setTableHot( chip._target, true ) );
+				chip.addEventListener( 'mouseleave', () => setTableHot( chip._target, false ) );
 				tableChipsBox.appendChild( chip );
 			}
-			chip._table = table;
-			const box = table.closest( 'figure' ) || table;
+			chip._target = t.el;
+			chip._kind = t.kind;
+			chip.textContent = '\u2699 ' + t.kind;
+			chip.title = t.kind === 'table' ? 'Table \u2014 rows, columns, header' : 'Image \u2014 alt, caption, replace';
+			const box = t.el.closest( 'figure' ) || t.el;
 			const rect = box.getBoundingClientRect();
 			const top = rect.top - 10;
 			chip.style.top = top + 'px';
