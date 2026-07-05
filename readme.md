@@ -43,15 +43,25 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
   neither is active; code-registered ones shown read-only
 - **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks
   (structure presets + custom, with automatic rewrite flushing), plus built-in maintenance mode
-- **Editor** — distraction-free, block-aware writing surface: native Gutenberg markup with
-  complex blocks preserved byte-for-byte as **read-only islands**, slash commands, tables,
-  syntax-highlighted code blocks with a language picker, featured images, image insertion,
-  categories & tags, revisions with restore, autosave, scheduling and one-click publish
+- **Editor** — a calm, block-aware writing surface that stores **native Gutenberg markup**
+  (zero lock-in — open any post in the block editor, any time). Markdown typing conventions
+  (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), a link popover
+  on ⌘K, text alignment, table & image controls in island-style cutouts, complex blocks
+  preserved byte-for-byte as **configurable islands** rendered with the site's real front-end
+  styles, slash commands with type-to-filter, syntax-highlighted code blocks, word count ·
+  reading time, status-aware autosave (published posts back up to revisions — only Update
+  goes live) with crash recovery, revisions, scheduling and one-click publish. Where this is
+  heading: [the editor roadmap](docs/editor-roadmap.md)
+- **SEO panel** — Yoast SEO / Rank Math title, meta description and focus keyword in the
+  editor sidebar
 - **Command palette** — ⌘K / Ctrl-K everywhere
-- **Plugin surfaces** — bundled adapters for **Gravity Forms** (entries), **Gravity SMTP**
-  (email log with a real HTML preview and resend), **Simple History** (activity log),
-  **Redirection**, **Safe Redirect Manager** and **Simple 301 Redirects** (redirects — list, search, create, edit and delete) and **ACF** (editor panels), plus one-filter
-  APIs for any plugin to register views, editor panels, traffic data or block-inspector forms
+- **Plugin surfaces** — bundled adapters for **Gravity Forms** (readable entries with real
+  field labels + a Forms view with activate/deactivate), **Gravity SMTP** (email log with a
+  real HTML preview and resend), **Simple History** (activity log), **Redirection**,
+  **Safe Redirect Manager** and **Simple 301 Redirects** (redirects — list, search, create,
+  edit and delete), **ACF** (editor panels) and **Yoast / Rank Math** (SEO panel), plus
+  one-filter APIs for any plugin to register views, editor panels, traffic data or
+  block-inspector forms
 - **Dark & light themes**, bundled fonts, zero external requests from the app, responsive down
   to phones
 
@@ -75,6 +85,7 @@ required. See [docs/for-plugin-authors.md](docs/for-plugin-authors.md), and
 
 - [Project goals](docs/goals.md)
 - [Editor direction](docs/editor-direction.md)
+- [Editor roadmap](docs/editor-roadmap.md)
 - [Block inspector (design, v0.4.0)](docs/block-inspector.md)
 - [For plugin authors](docs/for-plugin-authors.md)
 - [Changelog](changelog.md)
