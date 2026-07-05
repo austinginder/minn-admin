@@ -60,6 +60,13 @@ distrust the surface.
 - **Conflict safety.** Post locking / "someone else is editing" (core's heartbeat locks),
   and a localStorage safety net for drafts so a crashed browser loses nothing even before
   the first autosave.
+  ✅ *Shipped 2026-07-05* — locking rides core's own `_edit_lock`
+  (`minn-admin/v1/posts/{id}/lock`; Minn, classic and Gutenberg all honor each other;
+  takeover dialog, 30s refresh doubling as takeover detection, read-only + banner when
+  taken, release on leave incl. `sendBeacon` from pagehide). The crash net snapshots
+  every edit to localStorage within ~1.2s, offers recovery on the next open (including
+  never-saved new posts) and clears itself on successful saves. Suites: `tests/lock.test.js`,
+  `tests/localnet.test.js`. This also delivers Horizon 3's presence groundwork.
 - **Input long tail.** IME/composition input audit (CJK), mobile Safari pass,
   accessibility pass (keyboard access to chips/popovers/islands, ARIA on the toolbar).
 - **Inline media flow.** Paste/drag an image from the clipboard straight to the media

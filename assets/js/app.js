@@ -267,7 +267,10 @@
 
 	function newContent( type ) {
 		// The current editor's pending autosave must fire before its state goes.
-		if ( state.route === 'editor' ) flushAutosave();
+		if ( state.route === 'editor' ) {
+			flushAutosave();
+			if ( state.editor ) releaseLock( state.editor );
+		}
 		state.editor = null;
 		state.editorId = null;
 		state.editorType = type;
@@ -333,9 +336,11 @@
 		const prevId = state.editorId;
 		parseHash();
 		// Leaving the editor (or switching posts) fires any pending autosave
-		// now, while the editor DOM is still on screen to serialize.
+		// now, while the editor DOM is still on screen to serialize — and
+		// hands the edit lock back.
 		if ( prevRoute === 'editor' && ( state.route !== 'editor' || prevId !== state.editorId ) ) {
 			flushAutosave();
+			if ( state.editor ) releaseLock( state.editor );
 		}
 		if ( state.route !== 'editor' || prevRoute !== 'editor' || prevId !== state.editorId ) {
 			if ( state.route === 'editor' && prevRoute !== 'editor' ) state.editor = null;
@@ -4279,6 +4284,21 @@
 			state.editor.content = mode === 'blocks' ? buildEditableContent( state.editor, raw )
 				: mode === 'classic' ? miniAutop( raw )
 				: stripBlockComments( raw );
+			acquireLock( state.editor, false );
+			// Local crash net: a snapshot differing from what the server just
+			// returned means a session ended before its work was saved (crash,
+			// killed tab, dismissed unload warning). Identical means stale.
+			try {
+				const stored = localStorage.getItem( localNetKey( state.editor ) );
+				if ( stored ) {
+					const snap = JSON.parse( stored );
+					if ( ( snap.content != null && snap.content !== raw ) || snap.title !== state.editor.title ) {
+						state.editor.localNet = snap;
+					} else {
+						localStorage.removeItem( localNetKey( state.editor ) );
+					}
+				}
+			} catch ( e ) {}
 			loadEditorPanels( state.editor, p );
 			loadPageAttrs( state.editor );
 			// Revision history (types without revision support 404 — that's fine).
@@ -4346,6 +4366,12 @@
 				parent: 0, menuOrder: 0, template: '', supportsParent: newType === 'pages', supportsOrder: newType === 'pages', templates: null, parentPick: null,
 				excerpt: '', supportsExcerpt: newType === 'posts',
 			};
+			// Crash net for never-saved drafts — anything under the new-post
+			// key is by definition work that never reached the server.
+			try {
+				const stored = localStorage.getItem( localNetKey( state.editor ) );
+				if ( stored ) state.editor.localNet = JSON.parse( stored );
+			} catch ( e ) {}
 			loadEditorPanels( state.editor, null );
 			loadPageAttrs( state.editor );
 		}
@@ -4383,8 +4409,12 @@
 	function saveEditor( extra = {} ) {
 		const ed = state.editor;
 		if ( ! ed ) return Promise.resolve();
+		// A lost (or never-held) lock means the other session's copy is
+		// canonical — no write path may fire until the lock is taken back.
+		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) return Promise.resolve();
 		const payload = buildSavePayload( ed, extra );
-		saveChain = saveChain.then( () => doSaveEditor( ed, payload ) );
+		const capturedAt = Date.now();
+		saveChain = saveChain.then( () => doSaveEditor( ed, payload, capturedAt ) );
 		return saveChain;
 	}
 
@@ -4421,7 +4451,7 @@
 		return payload;
 	}
 
-	async function doSaveEditor( ed, payload ) {
+	async function doSaveEditor( ed, payload, capturedAt ) {
 		state.saving = true;
 		try {
 			let p;
@@ -4430,7 +4460,20 @@
 			} else {
 				payload.status = payload.status || 'draft';
 				p = await api( `wp/v2/${ ed.type }`, { method: 'POST', body: JSON.stringify( payload ) } );
-				ed.id = p.id;
+				// The crash-net snapshot written under the new-post key follows
+				// the post to its permanent key before ed.id changes the key.
+				try {
+					const newKey = localNetKey( ed );
+					const snap = localStorage.getItem( newKey );
+					ed.id = p.id;
+					if ( snap ) {
+						localStorage.setItem( localNetKey( ed ), snap );
+						localStorage.removeItem( newKey );
+					}
+				} catch ( e ) {
+					ed.id = p.id;
+				}
+				acquireLock( ed, false );
 				// Only rewrite the URL if this editor is still on screen — a
 				// flushed autosave may resolve after the user navigated away.
 				if ( state.route === 'editor' && state.editor === ed ) {
@@ -4445,6 +4488,7 @@
 			if ( payload.date ) ed.newDate = null;
 			ed.savedAt = Date.now();
 			ed.dirty = false;
+			localNetClear( ed, capturedAt );
 			ed.panelDirty = {};
 			ed.featuredDirty = false;
 			ed.parentDirty = false;
@@ -4508,6 +4552,7 @@
 		clearTimeout( autosaveTimer );
 		autosaveTimer = setTimeout( autosaveFire, AUTOSAVE_IDLE );
 		if ( ! autosaveMaxTimer ) autosaveMaxTimer = setTimeout( autosaveFire, AUTOSAVE_MAX );
+		localNetSchedule();
 	}
 
 	// A pending autosave leaves with the user — fired immediately on SPA
@@ -4521,6 +4566,8 @@
 	function autosaveNow() {
 		const ed = state.editor;
 		if ( ! ed ) return;
+		// A lost lock stops every write path — see saveEditor.
+		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
 		// Never auto-publish, never touch live content: published/scheduled/
 		// private posts back up to an autosave revision; drafts save in place.
 		if ( ed.id && LIVE_STATUSES.includes( ed.status ) ) return autosaveBackup( ed );
@@ -4532,12 +4579,14 @@
 		// would read as empty content if ever restored — skip; Update covers it.
 		if ( ed.noAutosave || ed.mode === 'locked' ) return;
 		const payload = { title: $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ed.title };
+		const capturedAt = Date.now();
 		const body = $( '#minn-editor-body' );
 		if ( body ) payload.content = ed.mode === 'blocks' ? serializeToBlocks( body, ed.islands ) : classicHtml( body );
 		if ( ed.excerptDirty ) payload.excerpt = ed.excerpt;
 		try {
 			await api( `wp/v2/${ ed.type }/${ ed.id }/autosaves`, { method: 'POST', body: JSON.stringify( payload ) } );
 			ed.autosavedAt = Date.now();
+			localNetClear( ed, capturedAt );
 			updateSavedRow();
 		} catch ( e ) {
 			// Types without revision support have no autosaves route — from here
@@ -5050,7 +5099,9 @@
 		const ed = state.editor;
 		const existing = $( '#minn-backup-note' );
 		if ( existing ) existing.remove();
-		if ( ! ed || ! ed.backup ) return;
+		// A pending local crash-net notice owns the banner slot first — it's
+		// this browser's own last state, at least as fresh as any revision.
+		if ( ! ed || ! ed.backup || ed.localNet ) return;
 		const title = $( '#minn-editor-title' );
 		if ( ! title ) return;
 		title.insertAdjacentHTML( 'afterend', `
@@ -5086,6 +5137,249 @@
 		} catch ( e ) {
 			toast( e.message, true );
 		}
+	}
+
+	/* ===== Conflict safety: post locking (core's _edit_lock) ===== */
+
+	// Locks live in core's own _edit_lock meta via wp_set_post_lock, so Minn,
+	// the classic editor and Gutenberg all honor each other. Core's window is
+	// 150s; wp-admin heartbeats every 15s, Minn refreshes at a calmer 30s \u2014
+	// the refresh doubles as takeover detection.
+	const LOCK_REFRESH = 30000;
+	let lockTimer = null;
+
+	function clearLockTimer() {
+		clearTimeout( lockTimer );
+		lockTimer = null;
+	}
+
+	// Acquire (or steal) the edit lock. Lock failures never block writing \u2014
+	// a broken lock endpoint degrades to pre-locking behavior, not read-only.
+	async function acquireLock( ed, takeOver ) {
+		if ( ! ed.id ) return;
+		let r;
+		try {
+			r = await api( `minn-admin/v1/posts/${ ed.id }/lock`, { method: 'POST', body: JSON.stringify( takeOver ? { take_over: true } : {} ) } );
+		} catch ( e ) {
+			return;
+		}
+		if ( state.editor !== ed ) {
+			// Navigated away while the request was in flight \u2014 hand it back.
+			if ( r.acquired ) api( `minn-admin/v1/posts/${ ed.id }/unlock`, { method: 'POST', body: '{}' } ).catch( () => {} );
+			return;
+		}
+		if ( r.acquired ) {
+			const wasReadonly = ed.lockState === 'taken' || ed.lockState === 'blocked';
+			ed.lockState = 'held';
+			ed.lockHolder = null;
+			scheduleLockRefresh( ed );
+			if ( wasReadonly && state.route === 'editor' ) {
+				removeLockOverlay();
+				setEditorWritable( true );
+				renderLockNotice();
+			}
+		} else if ( ed.lockState === 'held' || ed.lockState === 'taken' ) {
+			lockLost( ed, r.holder );
+		} else {
+			ed.lockState = 'blocked';
+			ed.lockHolder = r.holder || null;
+			if ( state.route === 'editor' ) renderLockOverlay();
+		}
+	}
+
+	function scheduleLockRefresh( ed ) {
+		clearLockTimer();
+		lockTimer = setTimeout( () => {
+			if ( state.editor === ed && state.route === 'editor' && ed.lockState === 'held' ) acquireLock( ed, false );
+		}, LOCK_REFRESH );
+	}
+
+	// Someone took the lock while we were editing: their copy is canonical
+	// now. Freeze the surface and stop every write path (autosave included) \u2014
+	// saving would silently clobber their work.
+	function lockLost( ed, holder ) {
+		ed.lockState = 'taken';
+		ed.lockHolder = holder || null;
+		clearLockTimer();
+		clearAutosaveTimers();
+		if ( state.route === 'editor' ) {
+			setEditorWritable( false );
+			renderLockNotice();
+		}
+	}
+
+	function setEditorWritable( on ) {
+		const body = $( '#minn-editor-body' );
+		const title = $( '#minn-editor-title' );
+		if ( body && state.editor && state.editor.mode !== 'locked' ) body.contentEditable = on ? 'true' : 'false';
+		if ( title ) title.disabled = ! on;
+	}
+
+	function releaseLock( ed ) {
+		clearLockTimer();
+		if ( ! ed || ! ed.id || ed.lockState !== 'held' ) return;
+		ed.lockState = null;
+		api( `minn-admin/v1/posts/${ ed.id }/unlock`, { method: 'POST', body: '{}' } ).catch( () => {} );
+	}
+
+	// Full-screen takeover dialog when the post is already open elsewhere \u2014
+	// the wp-admin pattern: identify who, offer Take over or a way back.
+	function renderLockOverlay() {
+		const ed = state.editor;
+		removeLockOverlay();
+		if ( ! ed || ed.lockState !== 'blocked' || ! ed.lockHolder ) return;
+		const el = document.createElement( 'div' );
+		el.className = 'minn-modal-overlay minn-lock-overlay';
+		el.id = 'minn-lock-overlay';
+		el.innerHTML = `
+			<div class="minn-modal minn-lock-card">
+				${ ed.lockHolder.avatar ? `<img class="minn-lock-avatar" src="${ esc( ed.lockHolder.avatar ) }" alt="">` : '' }
+				<h3>${ esc( ed.lockHolder.name ) } is currently editing</h3>
+				<p>This ${ esc( editorNoun( ed ).toLowerCase() ) } is open in another editor session. Taking over will lock them out of saving until they take it back.</p>
+				<div class="minn-lock-actions">
+					<button class="minn-btn-soft" id="minn-lock-back" type="button">\u2039 Back to content</button>
+					<button class="minn-btn-primary" id="minn-lock-take" type="button">Take over</button>
+				</div>
+			</div>`;
+		document.body.appendChild( el );
+		$( '#minn-lock-back' ).addEventListener( 'click', () => go( 'content' ) );
+		$( '#minn-lock-take' ).addEventListener( 'click', () => acquireLock( ed, true ) );
+	}
+
+	function removeLockOverlay() {
+		const el = $( '#minn-lock-overlay' );
+		if ( el ) el.remove();
+	}
+
+	// Mid-session takeover banner \u2014 red sibling of the backup notice.
+	function renderLockNotice() {
+		const ed = state.editor;
+		const existing = $( '#minn-lock-note' );
+		if ( existing ) existing.remove();
+		if ( ! ed || ed.lockState !== 'taken' ) return;
+		const title = $( '#minn-editor-title' );
+		if ( ! title ) return;
+		const who = ed.lockHolder ? ed.lockHolder.name : 'Someone else';
+		title.insertAdjacentHTML( 'afterend', `
+			<div class="minn-backup-note minn-lock-note" id="minn-lock-note">
+				<span><b>${ esc( who ) }</b> took over editing \u2014 this copy is read-only and won\u2019t save.</span>
+				<button class="minn-btn-soft" id="minn-lock-retake" type="button">Take back</button>
+			</div>` );
+		$( '#minn-lock-retake' ).addEventListener( 'click', () => acquireLock( ed, true ) );
+	}
+
+	/* ===== Conflict safety: local crash net (localStorage) ===== */
+
+	// Every edit also lands in localStorage within ~1.2s, so a crashed browser
+	// loses at most that much \u2014 even before the first autosave. Snapshots are
+	// the serializers' own output; recovery reuses the exact load path.
+	const LOCAL_NET_DELAY = 1200;
+	const LOCAL_NET_MAX = 12;
+	let localNetTimer = null;
+
+	const localNetKey = ( ed ) => 'minn-net-' + ( ed.id ? `${ ed.type }-${ ed.id }` : 'new-' + ed.type );
+
+	function localNetSchedule() {
+		clearTimeout( localNetTimer );
+		localNetTimer = setTimeout( localNetWrite, LOCAL_NET_DELAY );
+	}
+
+	function localNetWrite() {
+		clearTimeout( localNetTimer );
+		localNetTimer = null;
+		const ed = state.editor;
+		// Locked bodies never serialize; read-only lock states must not
+		// snapshot either \u2014 recovery would resurrect a clobbering copy.
+		if ( ! ed || ed.mode === 'locked' || ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
+		if ( state.route !== 'editor' ) return;
+		const body = $( '#minn-editor-body' );
+		const title = $( '#minn-editor-title' );
+		if ( ! body || ! title ) return;
+		const content = ed.mode === 'blocks' ? serializeToBlocks( body, ed.islands ) : classicHtml( body );
+		try {
+			localStorage.setItem( localNetKey( ed ), JSON.stringify( { t: Date.now(), title: title.value, content } ) );
+			localNetPrune();
+		} catch ( e ) { /* quota / private mode \u2014 the net is best-effort */ }
+	}
+
+	function localNetPrune() {
+		const keys = [];
+		for ( let i = 0; i < localStorage.length; i++ ) {
+			const k = localStorage.key( i );
+			if ( k && k.indexOf( 'minn-net-' ) === 0 ) keys.push( k );
+		}
+		if ( keys.length <= LOCAL_NET_MAX ) return;
+		keys.map( ( k ) => {
+			try {
+				return [ k, JSON.parse( localStorage.getItem( k ) ).t || 0 ];
+			} catch ( e ) {
+				return [ k, 0 ];
+			}
+		} ).sort( ( a, b ) => a[ 1 ] - b[ 1 ] )
+			.slice( 0, keys.length - LOCAL_NET_MAX )
+			.forEach( ( pair ) => localStorage.removeItem( pair[ 0 ] ) );
+	}
+
+	// After a successful server write the snapshot is redundant \u2014 unless the
+	// user kept typing after the payload was captured; the newer snapshot
+	// still covers the unsaved tail and must survive.
+	function localNetClear( ed, capturedAt ) {
+		try {
+			const key = localNetKey( ed );
+			const stored = localStorage.getItem( key );
+			if ( stored && capturedAt && JSON.parse( stored ).t > capturedAt ) return;
+			localStorage.removeItem( key );
+		} catch ( e ) {}
+	}
+
+	// Recovery banner \u2014 the crash-net twin of renderBackupNotice. When both a
+	// local snapshot and a newer autosave revision exist, the local one takes
+	// the slot (written on every edit in THIS browser, it's at least as
+	// fresh); dismissing it lets the revision notice have its turn.
+	function renderLocalNetNotice() {
+		const ed = state.editor;
+		const existing = $( '#minn-localnet-note' );
+		if ( existing ) existing.remove();
+		if ( ! ed || ! ed.localNet ) return;
+		const title = $( '#minn-editor-title' );
+		if ( ! title ) return;
+		title.insertAdjacentHTML( 'afterend', `
+			<div class="minn-backup-note" id="minn-localnet-note">
+				<span>This browser has unsaved work on this ${ esc( editorNoun( ed ).toLowerCase() ) } from ${ esc( timeAgo( new Date( ed.localNet.t ).toISOString() ) ) } \u2014 a session ended before it reached the server.</span>
+				<button class="minn-btn-soft" id="minn-localnet-restore" type="button">Restore</button>
+				<button class="minn-x-btn" id="minn-localnet-dismiss" type="button" title="Dismiss">\u00d7</button>
+			</div>` );
+		$( '#minn-localnet-restore' ).addEventListener( 'click', restoreLocalNet );
+		$( '#minn-localnet-dismiss' ).addEventListener( 'click', () => {
+			if ( state.editor ) {
+				try {
+					localStorage.removeItem( localNetKey( state.editor ) );
+				} catch ( e ) {}
+				state.editor.localNet = null;
+			}
+			renderLocalNetNotice();
+			renderBackupNotice();
+		} );
+	}
+
+	function restoreLocalNet() {
+		const ed = state.editor;
+		if ( ! ed || ! ed.localNet ) return;
+		const snap = ed.localNet;
+		ed.localNet = null;
+		ed.title = snap.title || '';
+		if ( snap.content != null && ed.mode !== 'locked' ) {
+			ed.mode = editorModeFor( snap.content );
+			ed.islands = [];
+			ed.content = ed.mode === 'blocks' ? buildEditableContent( ed, snap.content )
+				: ed.mode === 'classic' ? miniAutop( snap.content )
+				: stripBlockComments( snap.content );
+		}
+		renderEditor();
+		// Marks dirty AND re-snapshots within LOCAL_NET_DELAY \u2014 the removed
+		// key is re-covered before a crash could lose the restored work.
+		scheduleAutosave();
+		toast( 'Recovered work restored \u2014 review, then save' );
 	}
 
 	function renderEditor() {
@@ -5143,6 +5437,10 @@
 		updateEditorStats();
 		ensureEditorStyles();
 		renderBackupNotice();
+		renderLocalNetNotice();
+		renderLockNotice();
+		renderLockOverlay();
+		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) setEditorWritable( false );
 		// Image loads change layout under the fixed chips — reposition then.
 		body.addEventListener( 'load', queueTableChips, true );
 		// Island chips open the block inspector (works in locked mode too — read-only there is fine
@@ -9391,6 +9689,7 @@
 		clearTableChips();
 		hideImgPop();
 		hideLinkPop();
+		removeLockOverlay();
 		const tip = $( '#minn-chart-tip' );
 		if ( tip ) tip.hidden = true;
 		switch ( state.route ) {
@@ -9448,6 +9747,18 @@
 			if ( state.route === 'editor' && state.editor && state.editor.dirty ) {
 				e.preventDefault();
 				e.returnValue = '';
+			}
+		} );
+
+		// Leaving for real: land any pending crash-net snapshot synchronously
+		// (the last defense the net offers on a clean-ish close), and hand the
+		// edit lock back — sendBeacon is the only reliable transport here; it
+		// can't set headers, so the REST nonce rides as a query param.
+		window.addEventListener( 'pagehide', () => {
+			if ( localNetTimer ) localNetWrite();
+			const ed = state.editor;
+			if ( ed && ed.id && ed.lockState === 'held' && navigator.sendBeacon ) {
+				navigator.sendBeacon( `${ B.restUrl }minn-admin/v1/posts/${ ed.id }/unlock?_wpnonce=${ encodeURIComponent( B.nonce ) }`, '' );
 			}
 		} );
 

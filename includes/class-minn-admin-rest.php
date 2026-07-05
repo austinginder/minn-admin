@@ -93,6 +93,37 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Post locking on core's own _edit_lock meta (wp_set_post_lock /
+		// wp_check_post_lock), so Minn, the classic editor and Gutenberg all
+		// see each other's locks. POST acquires or refreshes; {"take_over":true}
+		// steals, exactly like wp-admin's takeover button.
+		register_rest_route(
+			self::NS,
+			'/posts/(?P<id>\d+)/lock',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'lock_post' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
+		// Release is its own POST route (not DELETE on /lock): the client frees
+		// the lock from pagehide via navigator.sendBeacon, which can only POST
+		// and can't set headers — the nonce rides in as a ?_wpnonce query param.
+		register_rest_route(
+			self::NS,
+			'/posts/(?P<id>\d+)/unlock',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'unlock_post' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/notifications',
@@ -860,6 +891,63 @@ class Minn_Admin_REST {
 				'status'   => get_post_status( $id ),
 			)
 		);
+	}
+
+	/**
+	 * Acquire or refresh the edit lock. Uses core's lock primitives (150s
+	 * window by default, refreshed by wp-admin's heartbeat every 15s and by
+	 * Minn every 30s) so both admins honor the same lock. When someone else
+	 * holds a fresh lock and take_over wasn't asked for, returns who — taking
+	 * over is just setting the lock to us, same as wp-admin's takeover.
+	 */
+	public static function lock_post( WP_REST_Request $request ) {
+		$id   = (int) $request['id'];
+		$post = get_post( $id );
+		if ( ! $post ) {
+			return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+		}
+		if ( ! current_user_can( 'edit_post', $id ) ) {
+			return new WP_Error( 'forbidden', 'You are not allowed to edit this item.', array( 'status' => 403 ) );
+		}
+		require_once ABSPATH . 'wp-admin/includes/post.php';
+		$other = wp_check_post_lock( $id );
+		if ( $other && empty( $request['take_over'] ) ) {
+			$user = get_userdata( $other );
+			return rest_ensure_response(
+				array(
+					'acquired' => false,
+					'holder'   => array(
+						'id'     => $other,
+						'name'   => $user ? $user->display_name : 'Someone',
+						'avatar' => get_avatar_url( $other, array( 'size' => 96 ) ),
+					),
+				)
+			);
+		}
+		wp_set_post_lock( $id );
+		return rest_ensure_response( array( 'acquired' => true ) );
+	}
+
+	/**
+	 * Release the edit lock — but only our own. A stale release arriving after
+	 * someone else took over (a beacon from a closing tab) must not free THEIR
+	 * lock.
+	 */
+	public static function unlock_post( WP_REST_Request $request ) {
+		$id   = (int) $request['id'];
+		$post = get_post( $id );
+		if ( ! $post ) {
+			return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+		}
+		if ( ! current_user_can( 'edit_post', $id ) ) {
+			return new WP_Error( 'forbidden', 'You are not allowed to edit this item.', array( 'status' => 403 ) );
+		}
+		$lock  = (string) get_post_meta( $id, '_edit_lock', true );
+		$parts = explode( ':', $lock );
+		if ( ! empty( $parts[1] ) && (int) $parts[1] === get_current_user_id() ) {
+			delete_post_meta( $id, '_edit_lock' );
+		}
+		return rest_ensure_response( array( 'unlocked' => true ) );
 	}
 
 	private static function greeting() {

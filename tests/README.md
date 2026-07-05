@@ -11,6 +11,8 @@ cd tests && npm install          # once — installs playwright-core only
 MINN_TEST_PASS=<admin password> node markdown.test.js
 MINN_TEST_PASS=<admin password> node autosave.test.js   # slow (~90s) by design
 MINN_TEST_PASS=<admin password> node paste.test.js      # Word/Docs/web fixtures → saved markup
+MINN_TEST_PASS=<admin password> node localnet.test.js   # crash net: snapshot → hard-leave → recover
+MINN_TEST_PASS=<admin password> node lock.test.js       # slow (~60s): two sessions ride the 30s lock refresh
 
 # all suites
 for f in *.test.js; do MINN_TEST_PASS=… node "$f" || break; done
@@ -24,6 +26,8 @@ Environment (all optional except the password):
 | `MINN_TEST_USER` | `admin` |
 | `MINN_TEST_PASS` | — required |
 | `MINN_TEST_CHROME` | macOS system Chrome path |
+| `MINN_TEST_USER2` | `minn-editor` (lock.test.js's second session; needs Editor role) |
+| `MINN_TEST_PASS2` | `minn-editor-pass-1` |
 
 ## Conventions (read before writing a suite)
 
@@ -54,7 +58,10 @@ Environment (all optional except the password):
 ## What's covered vs. not (yet)
 
 Covered here: markdown typing rules, autosave semantics, paste cleanup (Google Docs /
-Word / web fixtures, caret-context routing, undo integrity, classic mode, real ⌘V).
+Word / web fixtures, caret-context routing, undo integrity, classic mode, real ⌘V),
+post locking (blocked open → takeover → detection → take-back → release-on-leave, two
+real sessions), and the localStorage crash net (snapshot → hard-leave → recovery →
+clear-on-save, including never-saved new posts).
 The v0.5.x cycle also verified
 (in session scratchpads, worth porting on next touch): inline-code boundary escape, slash
 menu filtering, table/image chips + ops, island backspace guards, image delete/undo,
