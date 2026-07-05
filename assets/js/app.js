@@ -254,6 +254,8 @@
 	const surfaceById = ( id ) => ( B.surfaces || [] ).find( ( s ) => s.id === id ) || null;
 
 	function newContent( type ) {
+		// The current editor's pending autosave must fire before its state goes.
+		if ( state.route === 'editor' ) flushAutosave();
 		state.editor = null;
 		state.editorId = null;
 		state.editorType = type;
@@ -318,6 +320,11 @@
 		const prevRoute = state.route;
 		const prevId = state.editorId;
 		parseHash();
+		// Leaving the editor (or switching posts) fires any pending autosave
+		// now, while the editor DOM is still on screen to serialize.
+		if ( prevRoute === 'editor' && ( state.route !== 'editor' || prevId !== state.editorId ) ) {
+			flushAutosave();
+		}
 		if ( state.route !== 'editor' || prevRoute !== 'editor' || prevId !== state.editorId ) {
 			if ( state.route === 'editor' && prevRoute !== 'editor' ) state.editor = null;
 			renderView();
@@ -4030,11 +4037,30 @@
 	}
 
 	let autosaveTimer = null;
+	let autosaveMaxTimer = null;
+	let saveChain = Promise.resolve();
+	// Idle: save this long after the last edit stops. Max: while editing never
+	// pauses, still save this often. Calm, not keystroke-chasing.
+	const AUTOSAVE_IDLE = 15000;
+	const AUTOSAVE_MAX = 60000;
+	// Statuses whose content is (or is about to be) live. Autosave never writes
+	// to the post itself here — it backs up to a WP autosave revision instead,
+	// exactly like Gutenberg; only Update/⌘S applies changes to the live post.
+	const LIVE_STATUSES = [ 'publish', 'future', 'private' ];
 
-	async function saveEditor( extra = {} ) {
+	// Saves are serialized on a chain: a Publish click during an in-flight
+	// autosave waits for it instead of being silently dropped. The payload is
+	// captured synchronously so a flush-on-navigate reads the editor DOM
+	// before the next view replaces it.
+	function saveEditor( extra = {} ) {
 		const ed = state.editor;
-		if ( ! ed || state.saving ) return;
-		state.saving = true;
+		if ( ! ed ) return Promise.resolve();
+		const payload = buildSavePayload( ed, extra );
+		saveChain = saveChain.then( () => doSaveEditor( ed, payload ) );
+		return saveChain;
+	}
+
+	function buildSavePayload( ed, extra = {} ) {
 		const payload = {
 			title: $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ed.title,
 			...extra,
@@ -4064,6 +4090,11 @@
 		if ( ed.templateDirty ) payload.template = ed.template || '';
 		if ( ed.orderDirty ) payload.menu_order = ed.menuOrder || 0;
 		if ( ed.excerptDirty ) payload.excerpt = ed.excerpt;
+		return payload;
+	}
+
+	async function doSaveEditor( ed, payload ) {
+		state.saving = true;
 		try {
 			let p;
 			if ( ed.id ) {
@@ -4072,8 +4103,12 @@
 				payload.status = payload.status || 'draft';
 				p = await api( `wp/v2/${ ed.type }`, { method: 'POST', body: JSON.stringify( payload ) } );
 				ed.id = p.id;
-				state.editorId = p.id;
-				setPath( `editor/${ ed.type }/${ p.id }`, true );
+				// Only rewrite the URL if this editor is still on screen — a
+				// flushed autosave may resolve after the user navigated away.
+				if ( state.route === 'editor' && state.editor === ed ) {
+					state.editorId = p.id;
+					setPath( `editor/${ ed.type }/${ p.id }`, true );
+				}
 			}
 			ed.status = p.status;
 			ed.slug = '/' + ( p.slug || '' );
@@ -4081,6 +4116,7 @@
 			if ( p.date ) ed.date = p.date;
 			if ( payload.date ) ed.newDate = null;
 			ed.savedAt = Date.now();
+			ed.dirty = false;
 			ed.panelDirty = {};
 			ed.featuredDirty = false;
 			ed.parentDirty = false;
@@ -4109,12 +4145,83 @@
 		return clone.innerHTML;
 	}
 
-	function scheduleAutosave() {
+	function clearAutosaveTimers() {
 		clearTimeout( autosaveTimer );
-		autosaveTimer = setTimeout( () => {
-			// Never auto-publish: autosave keeps the current status.
-			saveEditor();
-		}, 2500 );
+		clearTimeout( autosaveMaxTimer );
+		autosaveTimer = autosaveMaxTimer = null;
+	}
+
+	function autosaveFire() {
+		clearAutosaveTimers();
+		autosaveNow();
+	}
+
+	function scheduleAutosave() {
+		const ed = state.editor;
+		if ( ! ed ) return;
+		ed.dirty = true;
+		ed.editedAt = Date.now();
+		updateSavedRow();
+		clearTimeout( autosaveTimer );
+		autosaveTimer = setTimeout( autosaveFire, AUTOSAVE_IDLE );
+		if ( ! autosaveMaxTimer ) autosaveMaxTimer = setTimeout( autosaveFire, AUTOSAVE_MAX );
+	}
+
+	// A pending autosave leaves with the user — fired immediately on SPA
+	// navigation away from the editor (browser unload warns instead).
+	function flushAutosave() {
+		if ( ! autosaveTimer && ! autosaveMaxTimer ) return;
+		clearAutosaveTimers();
+		autosaveNow();
+	}
+
+	function autosaveNow() {
+		const ed = state.editor;
+		if ( ! ed ) return;
+		// Never auto-publish, never touch live content: published/scheduled/
+		// private posts back up to an autosave revision; drafts save in place.
+		if ( ed.id && LIVE_STATUSES.includes( ed.status ) ) return autosaveBackup( ed );
+		return saveEditor();
+	}
+
+	async function autosaveBackup( ed ) {
+		// Locked bodies are never serialized, and a title-only autosave revision
+		// would read as empty content if ever restored — skip; Update covers it.
+		if ( ed.noAutosave || ed.mode === 'locked' ) return;
+		const payload = { title: $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ed.title };
+		const body = $( '#minn-editor-body' );
+		if ( body ) payload.content = ed.mode === 'blocks' ? serializeToBlocks( body, ed.islands ) : classicHtml( body );
+		if ( ed.excerptDirty ) payload.excerpt = ed.excerpt;
+		try {
+			await api( `wp/v2/${ ed.type }/${ ed.id }/autosaves`, { method: 'POST', body: JSON.stringify( payload ) } );
+			ed.autosavedAt = Date.now();
+			updateSavedRow();
+		} catch ( e ) {
+			// Types without revision support have no autosaves route — from here
+			// on this post only saves manually (Save/Update/⌘S).
+			ed.noAutosave = true;
+		}
+	}
+
+	function savedState( ed ) {
+		if ( ed.dirty ) {
+			// Live posts whose latest edits made it into an autosave revision
+			// are crash-safe even though the live copy hasn't changed — say so.
+			return ed.autosavedAt && ed.autosavedAt >= ( ed.editedAt || 0 )
+				? { text: 'Unsaved · backed up', cls: 'amber' }
+				: { text: 'Unsaved changes', cls: 'amber' };
+		}
+		if ( ed.savedAt ) return { text: timeAgo( new Date( ed.savedAt ).toISOString() ), cls: 'green' };
+		return { text: ed.id ? '—' : 'Not yet', cls: 'green' };
+	}
+
+	function updateSavedRow() {
+		const ed = state.editor;
+		const el = $( '#minn-saved-state' );
+		if ( ! el || ! ed ) return;
+		const s = savedState( ed );
+		el.textContent = s.text;
+		el.className = 'minn-side-val ' + s.cls;
 	}
 
 	function scheduledInFuture( ed ) {
@@ -4303,10 +4410,10 @@
 		if ( el.contains( document.activeElement ) && document.activeElement.matches( 'input, textarea, select' ) ) {
 			const statusEl = $( '#minn-status-state', el );
 			if ( statusEl ) statusEl.textContent = statusLabel;
-			const savedEl = $( '#minn-saved-state', el );
-			if ( savedEl && ed.savedAt ) savedEl.textContent = timeAgo( new Date( ed.savedAt ).toISOString() );
+			updateSavedRow();
 			return;
 		}
+		const saved = savedState( ed );
 		const dateValue = ( ed.newDate || ( ed.date ? ed.date.slice( 0, 16 ) : '' ) );
 		const cats = state.cache.categories;
 		el.innerHTML = `
@@ -4315,13 +4422,14 @@
 			<div class="minn-side-rows">
 				<div class="minn-side-row"><span class="minn-side-key">Status</span><span class="minn-side-val${ ed.status === 'publish' ? ' green' : ' amber' }" style="font-weight:600;" id="minn-status-state">${ esc( statusLabel ) }</span></div>
 				<div class="minn-side-row"><span class="minn-side-key">Visibility</span><span>Public</span></div>
-				<div class="minn-side-row"><span class="minn-side-key">${ ed.savedAt ? 'Autosaved' : 'Saved' }</span><span class="minn-side-val green" id="minn-saved-state">${ ed.savedAt ? timeAgo( new Date( ed.savedAt ).toISOString() ) : ( ed.id ? '—' : 'Not yet' ) }</span></div>
+				<div class="minn-side-row"><span class="minn-side-key">Saved</span><span class="minn-side-val ${ saved.cls }" id="minn-saved-state">${ esc( saved.text ) }</span></div>
 			</div>
 			<div class="minn-schedule">
 				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? 'Scheduled for' : 'Publish time' }</div>
 				<input type="datetime-local" class="minn-input" id="minn-schedule-input" value="${ esc( dateValue ) }">
 			</div>
 			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
+			${ LIVE_STATUSES.includes( ed.status ) ? '' : '<button class="minn-btn-soft minn-save-draft" id="minn-save-draft-btn">Save draft</button>' }
 			${ ed.id && ed.link ? `<a class="minn-side-viewlink" href="${ esc( ed.status === 'publish' ? ed.link : ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) }" target="_blank" rel="noopener">${ ed.status === 'publish' ? 'View on site ↗' : 'Preview draft ↗' }</a>` : '' }
 		</div>
 		${ ed.supportsThumb ? `
@@ -4435,7 +4543,7 @@
 				const noun = ed.type === 'pages' ? 'page' : 'post';
 				if ( ! confirm( `Move this ${ noun } to trash?` ) ) return;
 				trashBtn.disabled = true;
-				clearTimeout( autosaveTimer );
+				clearAutosaveTimers();
 				try {
 					await api( `wp/v2/${ ed.type }/${ ed.id }`, { method: 'DELETE' } );
 					toast( `Moved to trash` );
@@ -4537,10 +4645,21 @@
 			} );
 		}
 
+		const saveDraftBtn = $( '#minn-save-draft-btn', el );
+		if ( saveDraftBtn ) {
+			saveDraftBtn.addEventListener( 'click', async () => {
+				saveDraftBtn.disabled = true;
+				clearAutosaveTimers();
+				await saveEditor();
+				saveDraftBtn.disabled = false;
+				if ( state.editor && ! state.editor.dirty ) toast( 'Draft saved' );
+			} );
+		}
+
 		$( '#minn-publish-btn', el ).addEventListener( 'click', async ( e ) => {
 			const btn = e.currentTarget;
 			btn.disabled = true;
-			clearTimeout( autosaveTimer );
+			clearAutosaveTimers();
 			const extra = {};
 			if ( ed.newDate ) {
 				extra.date = ed.newDate.length === 16 ? ed.newDate + ':00' : ed.newDate;
@@ -4582,6 +4701,7 @@
 				<div class="minn-editor-toolbar">
 					<button class="minn-tool b" data-cmd="bold" title="Bold">B</button>
 					<button class="minn-tool i" data-cmd="italic" title="Italic">i</button>
+					<button class="minn-tool code" data-cmd="inline-code" title="Inline code — or wrap it in backticks">&lt;/&gt;</button>
 					<button class="minn-tool" data-block="h2" title="Heading 2">H2</button>
 					<button class="minn-tool" data-block="h3" title="Heading 3">H3</button>
 					<button class="minn-tool" data-block="blockquote" title="Quote">“ ”</button>
@@ -4653,6 +4773,8 @@
 					if ( btn.dataset.cmd === 'link' ) {
 						const url = prompt( 'Link URL:' );
 						if ( url ) document.execCommand( 'createLink', false, url );
+					} else if ( btn.dataset.cmd === 'inline-code' ) {
+						toggleInlineCode( body );
 					} else if ( btn.dataset.cmd === 'image' ) {
 						insertImage();
 					} else if ( btn.dataset.cmd ) {
@@ -4664,6 +4786,7 @@
 				} )
 			);
 
+			bindInlineCode( body );
 			bindSlashMenu( body, insertImage );
 			bindCodeLangPicker( body );
 
@@ -5411,12 +5534,165 @@
 		} );
 	}
 
+	/* ===== Inline code ===== */
+
+	// A <code> that flows inside text — not a code block's <code> and not
+	// anything inside an island.
+	function closestInlineCode( node ) {
+		while ( node && node.nodeType !== Node.ELEMENT_NODE ) node = node.parentNode;
+		const code = node && node.closest ? node.closest( 'code' ) : null;
+		if ( ! code || code.closest( 'pre' ) || code.closest( '.minn-block-island' ) ) return null;
+		return code;
+	}
+
+	function setCaret( node, offset ) {
+		const range = document.createRange();
+		range.setStart( node, offset );
+		range.collapse( true );
+		const sel = window.getSelection();
+		sel.removeAllRanges();
+		sel.addRange( range );
+	}
+
+	function setCaretAfterInline( el ) {
+		const parent = el.parentNode;
+		setCaret( parent, Array.prototype.indexOf.call( parent.childNodes, el ) + 1 );
+	}
+
+	// True when a collapsed caret inside `code` has no text between itself and
+	// the element's start/end — i.e. it sits on the boundary.
+	function caretAtCodeEdge( code, container, offset, side ) {
+		const r = document.createRange();
+		r.selectNodeContents( code );
+		if ( side === 'end' ) r.setStart( container, offset );
+		else r.setEnd( container, offset );
+		return r.toString() === '';
+	}
+
+	function toggleInlineCode( body ) {
+		const sel = window.getSelection();
+		if ( ! sel.rangeCount ) return;
+		const range = sel.getRangeAt( 0 );
+		if ( ! body.contains( range.commonAncestorContainer ) ) return;
+		const existing = closestInlineCode( range.commonAncestorContainer );
+		if ( existing ) {
+			// Toggle off — the whole <code> becomes plain text again.
+			const parent = existing.parentNode;
+			while ( existing.firstChild ) parent.insertBefore( existing.firstChild, existing );
+			parent.removeChild( existing );
+			parent.normalize();
+			return;
+		}
+		if ( range.collapsed ) return;
+		// Only wrap within one top-level block — cross-block inline code isn't a thing.
+		const blockOf = ( n ) => {
+			while ( n && n.parentNode && n.parentNode !== body ) n = n.parentNode;
+			return n;
+		};
+		if ( blockOf( range.startContainer ) !== blockOf( range.endContainer ) ) return;
+		const code = document.createElement( 'code' );
+		code.appendChild( range.extractContents() );
+		// Any <code> swallowed by the selection collapses into the new one.
+		$$( 'code', code ).forEach( ( c ) => {
+			while ( c.firstChild ) c.parentNode.insertBefore( c.firstChild, c );
+			c.remove();
+		} );
+		range.insertNode( code );
+		setCaretAfterInline( code );
+	}
+
+	// Two writing affordances for inline code, bound on the editor body:
+	// 1. Markdown backticks — typing the closing ` of `text` converts it.
+	// 2. Boundary escape — contenteditable offers no caret position that types
+	//    OUTSIDE a <code> at its edges (Chrome extends the code), so printable
+	//    keys at the first/last position are intercepted and inserted as plain
+	//    text beside the element instead. Extending the code itself still
+	//    works from any interior position.
+	function bindInlineCode( body ) {
+		body.addEventListener( 'keydown', ( e ) => {
+			if ( e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1 ) return;
+			const sel = window.getSelection();
+			if ( ! sel.rangeCount || ! sel.isCollapsed ) return;
+			const node = sel.anchorNode;
+			if ( ! node || ! body.contains( node ) ) return;
+
+			// A plain space inserted at a block edge or beside existing
+			// whitespace is collapsed — Chrome strips it on the next keystroke
+			// and tucks the caret back inside the <code>, or rebalances it
+			// destructively. Use nbsp there (as Chrome's own typing does);
+			// against a non-space character a clean regular space is fine.
+			const spaceFor = ( codeEl, side ) => {
+				let blockEl = codeEl;
+				while ( blockEl.parentNode && blockEl.parentNode !== body ) blockEl = blockEl.parentNode;
+				const r = document.createRange();
+				r.selectNodeContents( blockEl );
+				if ( side === 'start' ) r.setEndBefore( codeEl );
+				else r.setStartAfter( codeEl );
+				const rest = r.toString();
+				const adjacent = side === 'start' ? rest.slice( -1 ) : rest.charAt( 0 );
+				return adjacent && ! /\s/.test( adjacent ) ? ' ' : ' ';
+			};
+			const keyText = ( codeEl, side ) =>
+				document.createTextNode( e.key === ' ' ? spaceFor( codeEl, side ) : e.key );
+			const typed = ( t ) => {
+				setCaret( t, 1 );
+				scheduleAutosave();
+			};
+
+			// Element-level caret directly after a <code> (as left by the
+			// backtick rule or the toolbar): type beside it, not into it.
+			if ( node.nodeType === Node.ELEMENT_NODE ) {
+				const before = node.childNodes[ sel.anchorOffset - 1 ];
+				if ( before && before.nodeType === Node.ELEMENT_NODE && before.tagName === 'CODE' && closestInlineCode( before ) === before ) {
+					e.preventDefault();
+					const t = keyText( before, 'end' );
+					before.after( t );
+					typed( t );
+				}
+				return;
+			}
+
+			const code = closestInlineCode( node );
+
+			// Markdown: a closing backtick wraps back to the previous one.
+			if ( e.key === '`' && ! code && node.nodeType === Node.TEXT_NODE && ! node.parentNode.closest( 'pre' ) ) {
+				const upto = node.textContent.slice( 0, sel.anchorOffset );
+				const idx = upto.lastIndexOf( '`' );
+				const inner = idx === -1 ? '' : upto.slice( idx + 1 );
+				if ( inner.trim() ) {
+					e.preventDefault();
+					const range = document.createRange();
+					range.setStart( node, idx );
+					range.setEnd( node, sel.anchorOffset );
+					range.deleteContents();
+					const wrap = document.createElement( 'code' );
+					wrap.textContent = inner;
+					range.insertNode( wrap );
+					setCaretAfterInline( wrap );
+					scheduleAutosave();
+				}
+				return;
+			}
+
+			if ( ! code ) return;
+			const atEnd = caretAtCodeEdge( code, node, sel.anchorOffset, 'end' );
+			const atStart = ! atEnd && caretAtCodeEdge( code, node, sel.anchorOffset, 'start' );
+			if ( ! atEnd && ! atStart ) return;
+			e.preventDefault();
+			const t = keyText( code, atEnd ? 'end' : 'start' );
+			if ( atEnd ) code.after( t );
+			else code.before( t );
+			typed( t );
+		} );
+	}
+
 	/* ===== Slash command menu ===== */
 
 	function bindSlashMenu( body, insertImage ) {
 		let menu = null;
 		let block = null;
 		let selIdx = 0;
+		let filtered = [];
 		const items = [
 			[ 'H2', 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
 			[ 'H3', 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
@@ -5536,23 +5812,43 @@
 			scheduleAutosave();
 		};
 
-		const open = ( rect, blockEl ) => {
+		const renderItems = () => {
+			menu.innerHTML = filtered.map( ( idx, i ) => `
+				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" data-slash="${ idx }">
+					<span class="minn-slash-icon">${ items[ idx ][ 0 ] }</span>${ items[ idx ][ 1 ] }
+				</div>` ).join( '' );
+			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
+				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
+			);
+		};
+
+		// Keep typing after the "/" to narrow the list — "/co" finds Code.
+		// No matches left closes the menu (the "/" was probably literal text).
+		const applyQuery = ( q ) => {
+			q = q.toLowerCase();
+			filtered = items
+				.map( ( it, i ) => i )
+				.filter( ( i ) => items[ i ][ 1 ].toLowerCase().includes( q ) );
+			filtered.sort( ( a, b ) =>
+				Number( items[ b ][ 1 ].toLowerCase().startsWith( q ) ) - Number( items[ a ][ 1 ].toLowerCase().startsWith( q ) ) );
+			selIdx = 0;
+			if ( ! filtered.length ) return close();
+			renderItems();
+		};
+
+		const position = ( rect ) => {
+			const top = Math.min( rect.bottom + 6, window.innerHeight - menu.offsetHeight - 12 );
+			menu.style.top = top + 'px';
+			menu.style.left = Math.min( rect.left, window.innerWidth - menu.offsetWidth - 12 ) + 'px';
+		};
+
+		const open = ( blockEl ) => {
 			close();
 			block = blockEl;
 			selIdx = 0;
 			menu = document.createElement( 'div' );
 			menu.className = 'minn-slash-menu';
-			menu.innerHTML = items.map( ( [ ic, label ], i ) => `
-				<div class="minn-slash-item${ i === 0 ? ' selected' : '' }" data-slash="${ i }">
-					<span class="minn-slash-icon">${ ic }</span>${ label }
-				</div>` ).join( '' );
 			document.body.appendChild( menu );
-			const top = Math.min( rect.bottom + 6, window.innerHeight - menu.offsetHeight - 12 );
-			menu.style.top = top + 'px';
-			menu.style.left = Math.min( rect.left, window.innerWidth - menu.offsetWidth - 12 ) + 'px';
-			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
-				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
-			);
 		};
 
 		body.addEventListener( 'keyup', ( e ) => {
@@ -5563,9 +5859,14 @@
 			if ( ! node || ! body.contains( node ) ) return close();
 			while ( node.parentNode && node.parentNode !== body ) node = node.parentNode;
 			const blockEl = node.nodeType === Node.ELEMENT_NODE ? node : null;
-			const text = ( blockEl ? blockEl.textContent : node.textContent ) || '';
-			if ( text.trim() === '/' && blockEl ) {
-				open( sel.getRangeAt( 0 ).getBoundingClientRect(), blockEl );
+			const text = ( ( blockEl ? blockEl.textContent : node.textContent ) || '' ).trim();
+			// A second "/" (e.g. typing a path like /wp-admin/) ends the menu.
+			const m = blockEl && /^\/([^\/]{0,24})$/.exec( text );
+			if ( m ) {
+				const rect = sel.getRangeAt( 0 ).getBoundingClientRect();
+				if ( ! menu || block !== blockEl ) open( blockEl );
+				applyQuery( m[ 1 ] );
+				if ( menu ) position( rect );
 			} else {
 				close();
 			}
@@ -5573,9 +5874,9 @@
 
 		body.addEventListener( 'keydown', ( e ) => {
 			if ( ! menu ) return;
-			if ( e.key === 'ArrowDown' ) { e.preventDefault(); selIdx = ( selIdx + 1 ) % items.length; highlight(); }
-			else if ( e.key === 'ArrowUp' ) { e.preventDefault(); selIdx = ( selIdx - 1 + items.length ) % items.length; highlight(); }
-			else if ( e.key === 'Enter' ) { e.preventDefault(); run( selIdx ); }
+			if ( e.key === 'ArrowDown' ) { e.preventDefault(); selIdx = ( selIdx + 1 ) % filtered.length; highlight(); }
+			else if ( e.key === 'ArrowUp' ) { e.preventDefault(); selIdx = ( selIdx - 1 + filtered.length ) % filtered.length; highlight(); }
+			else if ( e.key === 'Enter' ) { e.preventDefault(); run( filtered[ selIdx ] ); }
 			else if ( e.key === 'Escape' ) { e.stopPropagation(); close(); }
 		} );
 
@@ -7523,11 +7824,31 @@
 		window.addEventListener( 'popstate', onRouteChange );
 		if ( ! PATH_MODE ) window.addEventListener( 'hashchange', onRouteChange );
 
+		// Closing the tab with unsaved editor changes gets the standard warning.
+		window.addEventListener( 'beforeunload', ( e ) => {
+			if ( state.route === 'editor' && state.editor && state.editor.dirty ) {
+				e.preventDefault();
+				e.returnValue = '';
+			}
+		} );
+
 		window.addEventListener( 'keydown', ( e ) => {
 			if ( ( e.metaKey || e.ctrlKey ) && e.key.toLowerCase() === 'k' ) {
 				e.preventDefault();
 				state.paletteOpen = ! state.paletteOpen;
 				renderOverlays();
+			}
+			// ⌘S saves keeping the current status — drafts stay drafts,
+			// published posts get a real Update.
+			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 's' && state.route === 'editor' && state.editor ) {
+				e.preventDefault();
+				const ed = state.editor;
+				clearAutosaveTimers();
+				saveEditor().then( () => {
+					if ( state.editor === ed && ! ed.dirty ) {
+						toast( LIVE_STATUSES.includes( ed.status ) ? 'Updated' : 'Draft saved' );
+					}
+				} );
 			}
 			if ( state.modal && state.modal.type === 'media' ) {
 				if ( e.key === 'ArrowLeft' ) { e.preventDefault(); mediaModalNav( -1 ); }
