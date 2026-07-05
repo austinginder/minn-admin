@@ -86,11 +86,18 @@ Client behavior:
 - Everything around editing — lists, statuses, search, comments, media, users, SEO
   fields — is Minn.
 
-## Not built (deliberate, candidates for a later round)
+## New page in a builder (shipped 2026-07-05, same day)
 
-- **"New page in ⟨builder⟩"** from the + New menu / ⌘K: create a draft over REST, then
-  redirect to the builder's edit URL (every builder boots fine on an empty post — this
-  is exactly what their own admin buttons do). Cheap once wanted.
+The + New menu lists every active builder under a "Page in…" divider.
+`POST minn-admin/v1/builders/new {builder, type}` creates a draft (titled "Untitled" —
+`wp_insert_post` refuses an all-empty post), runs the builder's `prepare` callback (the
+same meta its own new-post flow seeds), and returns the edit URL; the client then hands
+the tab to the builder. Verified live: Elementor boots its editor on the prepared
+draft, and Beaver Builder boots on a draft's ugly `?page_id=N&fl_builder` permalink.
+Third-party builders get the flow for free by including `prepare` in their
+`minn_admin_page_builders` descriptor.
+
+## Not built (deliberate, candidates for a later round)
 - **Builder templates/libraries** (Elementor library, Divi library, BB saved rows):
   their CPTs stay hidden from Content (`elementor_library` already is); managing those
   belongs to the builders.

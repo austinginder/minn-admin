@@ -142,6 +142,10 @@ a { color: var(--accent2); text-decoration: none; }
   font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
 }
 .minn-new-menu button:hover { background: var(--hover); }
+.minn-new-menu-label {
+  margin: 5px 4px 1px; padding: 4px 7px 2px; border-top: 1px solid var(--border);
+  color: var(--text3); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+}
 .minn-icon-btn.sm:disabled { opacity: 0.35; cursor: default; }
 .minn-icon-btn.sm.danger { color: var(--red); }
 

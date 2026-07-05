@@ -60,6 +60,11 @@ function minn_admin_page_builders() {
 			'edit_url'     => function ( $post ) {
 				return admin_url( 'post.php?post=' . $post->ID . '&action=elementor' );
 			},
+			// Same seeding Elementor's own new-post flow performs.
+			'prepare'      => function ( $post_id, $type ) {
+				update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
+				update_post_meta( $post_id, '_elementor_template_type', 'wp-' . ( 'page' === $type ? 'page' : 'post' ) );
+			},
 		);
 	}
 
@@ -75,6 +80,9 @@ function minn_admin_page_builders() {
 			// Pure front-end editing surface.
 			'edit_url'     => function ( $post ) {
 				return add_query_arg( 'fl_builder', '', get_permalink( $post ) );
+			},
+			'prepare'      => function ( $post_id ) {
+				update_post_meta( $post_id, '_fl_builder_enabled', true );
 			},
 		);
 	}
@@ -98,6 +106,11 @@ function minn_admin_page_builders() {
 					return '';
 				}
 			},
+			'prepare'      => function ( $post_id ) {
+				try {
+					Brizy_Editor_Entity::setBrizyEnabled( $post_id, 1 );
+				} catch ( Exception $e ) { /* builder will enable on first open */ }
+			},
 		);
 	}
 
@@ -118,6 +131,10 @@ function minn_admin_page_builders() {
 			// The Visual Builder — pure front-end URL.
 			'edit_url'     => function ( $post ) {
 				return add_query_arg( 'et_fb', '1', get_permalink( $post ) );
+			},
+			'prepare'      => function ( $post_id, $type ) {
+				update_post_meta( $post_id, '_et_pb_use_builder', 'on' );
+				update_post_meta( $post_id, '_et_pb_built_for_post_type', $type );
 			},
 		);
 	}
@@ -148,8 +165,27 @@ function minn_admin_page_builders() {
 }
 
 /**
+ * Active builders for the boot payload — just what the + New menu needs.
+ *
+ * @return array[] [ { id, name } ]
+ */
+function minn_admin_page_builders_boot() {
+	$out = array();
+	foreach ( minn_admin_page_builders() as $id => $b ) {
+		$out[] = array(
+			'id'   => $id,
+			'name' => $b['name'],
+		);
+	}
+	return $out;
+}
+
+/**
  * The `minn_builder` REST field: null, or
  * { id, name, edit_url, owns_content } for the builder that owns the post.
+ * Plus POST /builders/new — create a draft already prepared for a builder
+ * and hand back its editing surface, so "+ New → Page in Elementor" is one
+ * request and a redirect.
  */
 add_action(
 	'rest_api_init',
@@ -157,6 +193,56 @@ add_action(
 		if ( ! minn_admin_page_builders() ) {
 			return; // No builder active — the field (and its per-row cost) vanishes.
 		}
+		register_rest_route(
+			'minn-admin/v1',
+			'/builders/new',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'callback'            => function ( WP_REST_Request $request ) {
+					$builders = minn_admin_page_builders();
+					$bid      = sanitize_key( $request['builder'] );
+					if ( ! isset( $builders[ $bid ] ) ) {
+						return new WP_Error( 'unknown_builder', 'That builder is not active.', array( 'status' => 404 ) );
+					}
+					$type     = 'posts' === $request['type'] ? 'post' : 'page';
+					$type_obj = get_post_type_object( $type );
+					if ( ! current_user_can( $type_obj->cap->edit_posts ) ) {
+						return new WP_Error( 'forbidden', 'You are not allowed to create this.', array( 'status' => 403 ) );
+					}
+					$title = sanitize_text_field( (string) $request['title'] );
+					if ( '' === $title ) {
+						// wp_insert_post refuses an entirely empty post
+						// ("Content, title, and excerpt are empty.").
+						$title = __( 'Untitled' );
+					}
+					$post_id = wp_insert_post(
+						array(
+							'post_type'    => $type,
+							'post_status'  => 'draft',
+							'post_title'   => $title,
+							'post_content' => '',
+						),
+						true
+					);
+					if ( is_wp_error( $post_id ) ) {
+						return new WP_Error( 'create_failed', $post_id->get_error_message(), array( 'status' => 500 ) );
+					}
+					$b = $builders[ $bid ];
+					if ( isset( $b['prepare'] ) ) {
+						call_user_func( $b['prepare'], $post_id, $type );
+					}
+					return rest_ensure_response(
+						array(
+							'id'       => $post_id,
+							'edit_url' => (string) call_user_func( $b['edit_url'], get_post( $post_id ) ),
+						)
+					);
+				},
+			)
+		);
 		$types = get_post_types( array( 'show_in_rest' => true ) );
 		unset( $types['attachment'] );
 		register_rest_field(

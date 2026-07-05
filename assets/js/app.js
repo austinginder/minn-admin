@@ -288,17 +288,41 @@
 		const menu = document.createElement( 'div' );
 		menu.id = 'minn-new-menu';
 		menu.className = 'minn-new-menu';
+		// Active page builders each get a "Page in ⟨builder⟩" entry: one POST
+		// creates a prepared draft, then the browser hands over to the
+		// builder's own editing surface (docs/page-builders.md).
+		const builderRows = ( B.builders || [] ).length && B.caps.editPages
+			? `<div class="minn-new-menu-label">Page in…</div>` + B.builders.map( ( b ) =>
+				`<button data-newbuilder="${ esc( b.id ) }"><span class="minn-row-icon">▭</span> ${ esc( b.name ) }</button>` ).join( '' )
+			: '';
 		menu.innerHTML = `
 			<button data-newtype="posts"><span class="minn-row-icon">¶</span> Post</button>
-			<button data-newtype="pages"><span class="minn-row-icon">▭</span> Page</button>`;
+			<button data-newtype="pages"><span class="minn-row-icon">▭</span> Page</button>
+			${ builderRows }`;
 		const r = btn.getBoundingClientRect();
 		menu.style.top = ( r.bottom + 6 ) + 'px';
 		menu.style.right = Math.max( 8, window.innerWidth - r.right ) + 'px';
 		document.body.appendChild( menu );
-		$$( 'button', menu ).forEach( ( b ) =>
+		$$( 'button[data-newtype]', menu ).forEach( ( b ) =>
 			b.addEventListener( 'click', () => {
 				menu.remove();
 				newContent( b.dataset.newtype );
+			} )
+		);
+		$$( 'button[data-newbuilder]', menu ).forEach( ( b ) =>
+			b.addEventListener( 'click', async () => {
+				menu.remove();
+				toast( `Creating page in ${ b.textContent.trim() }…` );
+				try {
+					const r = await api( 'minn-admin/v1/builders/new', {
+						method: 'POST',
+						body: JSON.stringify( { builder: b.dataset.newbuilder, type: 'pages' } ),
+					} );
+					// Hand the tab to the builder — its surface is another app.
+					location.href = r.edit_url;
+				} catch ( e ) {
+					toast( e.message, true );
+				}
 			} )
 		);
 		setTimeout( () => {
