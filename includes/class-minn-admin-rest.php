@@ -354,6 +354,18 @@ class Minn_Admin_REST {
 			)
 		);
 
+		register_rest_route(
+			self::NS,
+			'/editor-styles',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'editor_styles' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
 		$permalinks_perm = function () {
 			return current_user_can( 'manage_options' );
 		};
@@ -399,6 +411,71 @@ class Minn_Admin_REST {
 			$rendered[] = do_blocks( (string) $raw );
 		}
 		return rest_ensure_response( array( 'rendered' => $rendered ) );
+	}
+
+	/**
+	 * The stylesheets that make blocks look like the front end — what the block
+	 * editor loads into its canvas, collected for Minn's island previews: every
+	 * registered block's style handles (resolved with their dependencies and
+	 * wp_add_inline_style extras), the theme's declared editor styles, and the
+	 * theme.json global stylesheet. The client fetches, scopes and injects them.
+	 */
+	public static function editor_styles() {
+		$styles  = wp_styles();
+		$handles = array( 'wp-block-library', 'wp-block-library-theme' );
+		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $block_type ) {
+			foreach ( (array) $block_type->style_handles as $handle ) {
+				$handles[] = $handle;
+			}
+			if ( isset( $block_type->view_style_handles ) ) {
+				foreach ( (array) $block_type->view_style_handles as $handle ) {
+					$handles[] = $handle;
+				}
+			}
+		}
+
+		$urls   = array();
+		$inline = '';
+		$done   = array();
+		$add    = function ( $handle ) use ( &$add, &$urls, &$inline, &$done, $styles ) {
+			if ( isset( $done[ $handle ] ) || empty( $styles->registered[ $handle ] ) ) {
+				return;
+			}
+			$done[ $handle ] = true;
+			$dep             = $styles->registered[ $handle ];
+			foreach ( (array) $dep->deps as $d ) {
+				$add( $d );
+			}
+			if ( $dep->src ) {
+				$src = $dep->src;
+				if ( 0 === strpos( $src, '/' ) && 0 !== strpos( $src, '//' ) ) {
+					$src = site_url( $src );
+				}
+				$urls[] = add_query_arg( 'ver', $dep->ver ? $dep->ver : get_bloginfo( 'version' ), $src );
+			}
+			$after = $styles->get_data( $handle, 'after' );
+			if ( $after ) {
+				$inline .= implode( "\n", (array) $after ) . "\n";
+			}
+		};
+		foreach ( array_unique( $handles ) as $handle ) {
+			$add( $handle );
+		}
+
+		// The same theme styles the block editor honors (add_editor_style API).
+		foreach ( get_editor_stylesheets() as $url ) {
+			$urls[] = $url;
+		}
+		if ( function_exists( 'wp_get_global_stylesheet' ) ) {
+			$inline .= wp_get_global_stylesheet();
+		}
+
+		return rest_ensure_response(
+			array(
+				'urls'   => array_values( array_unique( $urls ) ),
+				'inline' => $inline,
+			)
+		);
 	}
 
 	/**
