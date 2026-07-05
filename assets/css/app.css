@@ -567,6 +567,11 @@ select.minn-input {
 .minn-editor-body pre { padding: 12px 14px; overflow-x: auto; }
 .minn-editor-body code { padding: 1px 6px; }
 .minn-editor-body:empty::before { content: 'Keep writing…'; color: var(--text3); }
+/* Gutenberg alignment classes — the serializer emits them, the front end
+   styles them; the editor must preview them too. */
+.minn-editor-body .has-text-align-left { text-align: left; }
+.minn-editor-body .has-text-align-center { text-align: center; }
+.minn-editor-body .has-text-align-right { text-align: right; }
 /* Word count / reading time — fixed bottom-right so it's always in view while
    scrolling long posts. Below every overlay (modals 55+, popovers 60–80). */
 .minn-editor-stats {
