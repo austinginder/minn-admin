@@ -4961,7 +4961,7 @@
 		view.innerHTML = `
 		<div class="minn-editor">
 			<div>
-				<input class="minn-editor-title" id="minn-editor-title" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" value="${ esc( ed.title ) }">
+				<input class="minn-editor-title" id="minn-editor-title" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" value="${ esc( ed.title ) }" spellcheck="false">
 				${ locked ? `
 				<div class="minn-editor-locked-note">
 					Minn couldn't safely parse this ${ ed.type === 'pages' ? 'page' : 'post' }'s block structure,
@@ -4990,7 +4990,7 @@
 					</select>
 					<span class="minn-tool-hint">type / for blocks</span>
 				</div>` }
-				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }"></div>
+				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }" spellcheck="false"></div>
 				<div class="minn-editor-stats" id="minn-editor-stats" aria-live="off"></div>
 			</div>
 			<div class="minn-editor-side" id="minn-editor-side"></div>
