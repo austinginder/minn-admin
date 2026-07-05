@@ -4395,6 +4395,7 @@
 		el.innerHTML = words
 			? `<b>${ words.toLocaleString() }</b> words&nbsp;· <b>${ mins }</b> min read`
 			: '<b>0</b> words';
+		syncTableChips();
 	}
 
 	function scheduledInFuture( ed ) {
@@ -4927,16 +4928,6 @@
 				showCodeChip( pre );
 			}
 		} );
-		// Hovering an editable table surfaces its row/column controls chip
-		// (locked bodies never save, so no manipulation UI there).
-		if ( ! locked ) {
-			body.addEventListener( 'mouseover', ( e ) => {
-				const table = e.target.closest( 'table' );
-				if ( table && body.contains( table ) && ! table.closest( '.minn-block-island' ) ) {
-					showTableChip( table );
-				}
-			} );
-		}
 
 		$( '#minn-editor-title', view ).addEventListener( 'input', scheduleAutosave );
 		if ( ! locked ) {
@@ -5602,12 +5593,12 @@
 	 * act on the CELL THE CARET SITS IN. Chip and popover live on
 	 * document.body so they can never leak into serialized content. */
 
-	let tableChip = null;
-	let tableChipTable = null;
+	let tableChipsBox = null;
 	let tablePop = null;
+	let tableChipsRaf = 0;
 
 	function tablePopAway( e ) {
-		if ( tablePop && ! tablePop.contains( e.target ) && e.target !== tableChip ) hideTablePop();
+		if ( tablePop && ! tablePop.contains( e.target ) && ! ( e.target.closest && e.target.closest( '#minn-table-chips' ) ) ) hideTablePop();
 	}
 
 	function hideTablePop() {
@@ -5616,43 +5607,65 @@
 		document.removeEventListener( 'mousedown', tablePopAway, true );
 	}
 
-	function hideTableChip() {
-		if ( tableChip ) tableChip.hidden = true;
-		tableChipTable = null;
+	function clearTableChips() {
+		if ( tableChipsBox ) tableChipsBox.remove();
+		tableChipsBox = null;
 		hideTablePop();
 	}
 
-	function ensureTableChip() {
-		if ( tableChip ) return;
-		tableChip = document.createElement( 'button' );
-		tableChip.type = 'button';
-		tableChip.className = 'minn-code-chip';
-		tableChip.hidden = true;
-		tableChip.title = 'Table \u2014 rows, columns, header';
-		tableChip.textContent = '\u2699 table';
-		document.body.appendChild( tableChip );
-		tableChip.addEventListener( 'mousedown', ( e ) => e.preventDefault() ); // keep the caret in its cell
-		tableChip.addEventListener( 'click', () => tableChipTable && openTablePop( tableChipTable ) );
-		document.addEventListener( 'mouseover', ( e ) => {
-			if ( ! tableChip || tableChip.hidden || tablePop ) return;
-			if ( e.target === tableChip || ( e.target.closest && e.target.closest( 'table' ) === tableChipTable ) ) return;
-			if ( ! ( e.target.closest && e.target.closest( 'table' ) ) ) hideTableChip();
-		} );
-		document.addEventListener( 'scroll', () => hideTableChip(), true );
+	function tableChipFor( table ) {
+		return tableChipsBox
+			? Array.from( tableChipsBox.children ).find( ( c ) => c._table === table )
+			: null;
 	}
 
-	function showTableChip( table ) {
-		ensureTableChip();
-		if ( tablePop && tableChipTable !== table ) hideTablePop();
-		tableChipTable = table;
-		tableChip.hidden = false;
-		// Straddle the cutout border exactly like an island chip (top -10,
-		// right 12) — measured on the figure, not the inner table.
-		const box = table.closest( 'figure' ) || table;
-		const rect = box.getBoundingClientRect();
-		tableChip.style.top = ( rect.top - 10 ) + 'px';
-		tableChip.style.left = Math.max( 10, Math.min( rect.right - tableChip.offsetWidth - 12, window.innerWidth - tableChip.offsetWidth - 12 ) ) + 'px';
+	function queueTableChips() {
+		cancelAnimationFrame( tableChipsRaf );
+		tableChipsRaf = requestAnimationFrame( syncTableChips );
 	}
+
+	// One persistent chip per top-level editable table, straddling the cutout
+	// border like island chips do. Repositioned (not hidden) on scroll and
+	// after every edit; hidden only when the table slides under the sticky
+	// toolbar or out of the viewport.
+	function syncTableChips() {
+		const body = $( '#minn-editor-body' );
+		const ed = state.editor;
+		if ( ! body || ! ed || ed.mode === 'locked' || state.route !== 'editor' ) return clearTableChips();
+		const tables = $$( ':scope > table, :scope > figure.wp-block-table table', body );
+		if ( ! tables.length ) return clearTableChips();
+		if ( ! tableChipsBox ) {
+			tableChipsBox = document.createElement( 'div' );
+			tableChipsBox.id = 'minn-table-chips';
+			document.body.appendChild( tableChipsBox );
+		}
+		while ( tableChipsBox.children.length > tables.length ) tableChipsBox.lastChild.remove();
+		const toolbar = $( '.minn-editor-toolbar' );
+		const minTop = toolbar ? toolbar.getBoundingClientRect().bottom - 4 : 0;
+		tables.forEach( ( table, i ) => {
+			let chip = tableChipsBox.children[ i ];
+			if ( ! chip ) {
+				chip = document.createElement( 'button' );
+				chip.type = 'button';
+				chip.className = 'minn-code-chip';
+				chip.textContent = '\u2699 table';
+				chip.title = 'Table \u2014 rows, columns, header';
+				chip.addEventListener( 'mousedown', ( ev ) => ev.preventDefault() ); // keep the caret in its cell
+				chip.addEventListener( 'click', () => chip._table && chip._table.isConnected && openTablePop( chip._table ) );
+				tableChipsBox.appendChild( chip );
+			}
+			chip._table = table;
+			const box = table.closest( 'figure' ) || table;
+			const rect = box.getBoundingClientRect();
+			const top = rect.top - 10;
+			chip.style.top = top + 'px';
+			chip.style.left = Math.max( 10, Math.min( rect.right - chip.offsetWidth - 12, window.innerWidth - chip.offsetWidth - 12 ) ) + 'px';
+			chip.style.visibility = top < minTop || top > window.innerHeight ? 'hidden' : 'visible';
+		} );
+	}
+
+	document.addEventListener( 'scroll', queueTableChips, true );
+	window.addEventListener( 'resize', queueTableChips );
 
 	// The cell the caret sits in; falls back to the table's first cell.
 	function tableRefCell( table ) {
@@ -5697,7 +5710,8 @@
 				</div>
 			</div>`;
 		document.body.appendChild( tablePop );
-		const anchor = tableChip && ! tableChip.hidden ? tableChip : table;
+		const chip = tableChipFor( table );
+		const anchor = chip && chip.style.visibility !== 'hidden' ? chip : ( table.closest( 'figure' ) || table );
 		const rect = anchor.getBoundingClientRect();
 		const w = tablePop.offsetWidth || 280;
 		tablePop.style.top = Math.min( rect.bottom + 8, window.innerHeight - tablePop.offsetHeight - 10 ) + 'px';
@@ -5723,7 +5737,7 @@
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
 			setCaret( p, 0 );
-			hideTableChip();
+			hideTablePop();
 			scheduleAutosave();
 			return;
 		}
@@ -5787,10 +5801,8 @@
 		}
 		scheduleAutosave();
 		// Geometry (and the header button label) changed — refresh both.
-		if ( table.isConnected ) {
-			showTableChip( table );
-			openTablePop( table );
-		}
+		syncTableChips();
+		if ( table.isConnected ) openTablePop( table );
 	}
 
 	/* ===== Code block chip (config popout for editable code blocks) =====
@@ -8395,6 +8407,7 @@
 		renderTopbar();
 		closeInspector();
 		hideCodeChip();
+		clearTableChips();
 		hideImgPop();
 		const tip = $( '#minn-chart-tip' );
 		if ( tip ) tip.hidden = true;
