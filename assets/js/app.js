@@ -4351,7 +4351,9 @@
 		const words = ( text.match( /\S+/g ) || [] ).length;
 		// 225 wpm — the middle of the usual 200–250 adult-reading estimates.
 		const mins = Math.max( 1, Math.round( words / 225 ) );
-		el.textContent = words ? `${ words.toLocaleString() } words · ${ mins } min read` : '0 words';
+		el.innerHTML = words
+			? `<b>${ words.toLocaleString() }</b> words&nbsp;· <b>${ mins }</b> min read`
+			: '<b>0</b> words';
 	}
 
 	function scheduledInFuture( ed ) {
