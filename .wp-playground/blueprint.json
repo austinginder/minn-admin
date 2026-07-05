@@ -36,6 +36,66 @@
         "targetFolderName": "minn-admin"
       },
       "ifAlreadyInstalled": "overwrite"
+    },
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "wordpress.org/plugins",
+        "slug": "simple-history"
+      },
+      "options": {
+        "activate": true
+      }
+    },
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "wordpress.org/plugins",
+        "slug": "redirection"
+      },
+      "options": {
+        "activate": true
+      }
+    },
+    {
+      "step": "rm",
+      "path": "/wordpress/wp-content/plugins/hello.php"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp post create --post_type=page --post_title='About Minn Admin' --post_status=publish --post_content='A reimagined WordPress admin experience.' --user=admin"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp post create --post_title='Meet the new dashboard' --post_status=publish --post_content='Fast, focused and beautiful.' --user=admin"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp post create --post_title='One vanilla-JS file' --post_status=publish --post_content='No React, no build step.' --user=admin"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp post create --post_title='Draft release notes' --post_status=draft --post_content='Coming soon.' --user=admin"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp user create dana dana@example.com --role=editor --display_name='Dana Lee' --user_pass=demo-pass-1 --user=admin"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp user create sam sam@example.com --role=author --display_name='Sam Rivera' --user_pass=demo-pass-2 --user=admin"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp comment create --comment_post_ID=1 --comment_author='Dana Lee' --comment_content='Love the new dashboard!' --comment_approved=0 --user=admin"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp option update timezone_string 'America/Chicago' --user=admin"
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp option update blogdescription 'Fast, focused and beautiful WordPress admin.' --user=admin"
     }
   ]
 }
