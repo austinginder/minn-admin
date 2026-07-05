@@ -843,6 +843,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   padding: 14px 16px 12px; margin: 0 0 18px; cursor: default; user-select: none;
 }
 .minn-block-island:hover { border-color: var(--accent); }
+.minn-block-island.minn-island-armed { border-color: var(--red); }
+.minn-block-island.minn-island-armed .minn-island-chip { color: var(--red); border-color: var(--red); }
 .minn-island-chip {
   position: absolute; top: -10px; right: 12px; font-size: 10.5px; font-weight: 600;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);

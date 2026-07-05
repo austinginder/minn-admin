@@ -5146,6 +5146,7 @@
 				} )
 			);
 
+			bindIslandGuards( body );
 			bindMarkdown( body );
 			bindSlashMenu( body, insertImage );
 			bindCodeLangPicker( body );
@@ -6306,6 +6307,78 @@
 			toast( 'Image removed — ⌘Z restores it' );
 			hideImgPop();
 		} );
+	}
+
+	// Backspace/Delete guard around islands. Chrome treats an adjacent
+	// contenteditable=false island as one deletable atom — a single Backspace
+	// in the empty paragraph after an embed nuked the embed AND merged the
+	// neighbors. Instead: an empty block beside an island is removed alone,
+	// and deleting INTO an island arms it (red outline) so a deliberate
+	// second press removes just the island.
+	function bindIslandGuards( body ) {
+		let armed = null;
+		const disarm = () => {
+			if ( armed ) armed.classList.remove( 'minn-island-armed' );
+			armed = null;
+		};
+		body.addEventListener( 'keydown', ( e ) => {
+			if ( e.key !== 'Backspace' && e.key !== 'Delete' ) {
+				disarm();
+				return;
+			}
+			const sel = window.getSelection();
+			if ( ! sel.rangeCount || ! sel.isCollapsed ) return;
+			let block = sel.anchorNode;
+			while ( block && block.parentNode !== body ) block = block.parentNode;
+			if ( ! block || block.nodeType !== Node.ELEMENT_NODE ) return;
+			const back = e.key === 'Backspace';
+			const caret = sel.getRangeAt( 0 );
+			const edge = document.createRange();
+			edge.selectNodeContents( block );
+			if ( back ) edge.setEnd( caret.startContainer, caret.startOffset );
+			else edge.setStart( caret.startContainer, caret.startOffset );
+			if ( edge.toString() !== '' ) {
+				disarm();
+				return; // deletion stays inside the block — normal editing
+			}
+			const island = back ? block.previousElementSibling : block.nextElementSibling;
+			if ( ! island || ! island.classList || ! island.classList.contains( 'minn-block-island' ) ) {
+				disarm();
+				return;
+			}
+			e.preventDefault();
+			const blockEmpty = ! block.textContent.trim() && ! block.querySelector( 'img, table, ul, ol, pre, figure' );
+			const landing = back ? island.previousElementSibling : island.nextElementSibling;
+			const landingOk = landing && landing !== block && ! landing.classList.contains( 'minn-block-island' );
+			if ( blockEmpty && landingOk ) {
+				// Remove just the empty block; the island survives.
+				block.remove();
+				const lr = document.createRange();
+				lr.selectNodeContents( landing );
+				lr.collapse( ! back ); // backspace lands at the END of the block before the island
+				sel.removeAllRanges();
+				sel.addRange( lr );
+				disarm();
+				scheduleAutosave();
+				return;
+			}
+			// Deleting INTO the island: arm first, delete on the second press.
+			if ( armed === island ) {
+				const ed = state.editor;
+				const idx = parseInt( island.dataset.island, 10 );
+				if ( ed && ed.islands && ed.islands[ idx ] != null ) ed.islands[ idx ] = null;
+				island.remove();
+				disarm();
+				toast( 'Block removed' );
+				scheduleAutosave();
+			} else {
+				disarm();
+				armed = island;
+				island.classList.add( 'minn-island-armed' );
+			}
+		} );
+		body.addEventListener( 'mousedown', disarm );
+		body.addEventListener( 'blur', disarm );
 	}
 
 	/* ===== Inline code & markdown typing rules ===== */

@@ -20,6 +20,29 @@ class Minn_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
+		add_action( 'init', array( __CLASS__, 'register_x_oembed' ) );
+	}
+
+	/**
+	 * WordPress 7.0 ships oEmbed providers for twitter.com but not x.com, so
+	 * x.com links resolve only through discovery — which the security filter
+	 * (wp_filter_oembed_result) treats as untrusted and strips, because tweet
+	 * embeds carry no iframe. Register x.com against its own publish endpoint
+	 * so tweets embed like they used to, until core catches up.
+	 */
+	public static function register_x_oembed() {
+		if ( ! function_exists( 'wp_oembed_get' ) ) {
+			return;
+		}
+		$oembed = _wp_oembed_get_object();
+		// Probe with a representative URL — core (or another plugin) may
+		// already cover x.com. (Never substring-match the provider list:
+		// mixcloud\.com contains "x\.com".)
+		if ( false !== $oembed->get_provider( 'https://x.com/wordpress/status/1', array( 'discover' => false ) ) ) {
+			return;
+		}
+		wp_oembed_add_provider( '#https?://(www\\.)?x\\.com/\\w{1,15}/status(es)?/.*#i', 'https://publish.x.com/oembed', true );
+		wp_oembed_add_provider( '#https?://(www\\.)?x\\.com/\\w{1,15}$#i', 'https://publish.x.com/oembed', true );
 	}
 
 	/**
