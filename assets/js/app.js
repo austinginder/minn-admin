@@ -477,6 +477,7 @@
 			// wp + php are the real brand marks (Simple Icons, CC0) — filled paths,
 			// not strokes, hence the per-element overrides on the stroke-based frame.
 			focus: '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>',
+			grip: '<g fill="currentColor" stroke-width="0"><circle cx="9" cy="5.5" r="1.6"/><circle cx="15" cy="5.5" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18.5" r="1.6"/><circle cx="15" cy="18.5" r="1.6"/></g>',
 			wp: '<path fill="currentColor" stroke-width="0" d="M21.469 6.825c.84 1.537 1.318 3.3 1.318 5.175 0 3.979-2.156 7.456-5.363 9.325l3.295-9.527c.615-1.54.82-2.771.82-3.864 0-.405-.026-.78-.07-1.11m-7.981.105c.647-.03 1.232-.105 1.232-.105.582-.075.514-.93-.067-.899 0 0-1.755.135-2.88.135-1.064 0-2.85-.15-2.85-.15-.585-.03-.661.855-.075.885 0 0 .54.061 1.125.09l1.68 4.605-2.37 7.08L5.354 6.9c.649-.03 1.234-.1 1.234-.1.585-.075.516-.93-.065-.896 0 0-1.746.138-2.874.138-.2 0-.438-.008-.69-.015C4.911 3.15 8.235 1.215 12 1.215c2.809 0 5.365 1.072 7.286 2.833-.046-.003-.091-.009-.141-.009-1.06 0-1.812.923-1.812 1.914 0 .89.513 1.643 1.06 2.531.411.72.89 1.643.89 2.977 0 .915-.354 1.994-.821 3.479l-1.075 3.585-3.9-11.61.001.014zM12 22.784c-1.059 0-2.081-.153-3.048-.437l3.237-9.406 3.315 9.087c.024.053.05.101.078.149-1.12.393-2.325.607-3.582.607M1.211 12c0-1.564.336-3.05.935-4.39L7.29 21.709C3.694 19.96 1.212 16.271 1.211 12M12 0C5.385 0 0 5.385 0 12s5.385 12 12 12 12-5.385 12-12S18.615 0 12 0"/>',
 			php: '<path fill="currentColor" stroke-width="0" d="M7.01 10.207h-.944l-.515 2.648h.838c.556 0 .97-.105 1.242-.314.272-.21.455-.559.55-1.049.092-.47.05-.802-.124-.995-.175-.193-.523-.29-1.047-.29zM12 5.688C5.373 5.688 0 8.514 0 12s5.373 6.313 12 6.313S24 15.486 24 12c0-3.486-5.373-6.312-12-6.312zm-3.26 7.451c-.261.25-.575.438-.917.551-.336.108-.765.164-1.285.164H5.357l-.327 1.681H3.652l1.23-6.326h2.65c.797 0 1.378.209 1.744.628.366.418.476 1.002.33 1.752a2.836 2.836 0 0 1-.305.847c-.143.255-.33.49-.561.703zm4.024.715l.543-2.799c.063-.318.039-.536-.068-.651-.107-.116-.336-.174-.687-.174H11.46l-.704 3.625H9.388l1.23-6.327h1.367l-.327 1.682h1.218c.767 0 1.295.134 1.586.401s.378.7.263 1.299l-.572 2.944h-1.389zm7.597-2.265a2.782 2.782 0 0 1-.305.847c-.143.255-.33.49-.561.703a2.44 2.44 0 0 1-.917.551c-.336.108-.765.164-1.286.164h-1.18l-.327 1.682h-1.378l1.23-6.326h2.649c.797 0 1.378.209 1.744.628.366.417.477 1.001.331 1.751zm-2.605-1.901h-.943l-.516 2.648h.838c.557 0 .971-.105 1.242-.314.272-.21.455-.559.551-1.049.092-.47.049-.802-.125-.995s-.524-.29-1.047-.29z"/>',
 			check: '<path d="M20 6 9 17l-5-5"/>',
@@ -2287,6 +2288,7 @@
 				</div>
 			</div>` : `
 			<div class="minn-menu-row" data-mi="${ it.id }" style="padding-left:${ 16 + depth * 26 }px;">
+				<span class="minn-menu-grip" draggable="true" title="Drag to reorder">${ icon( 'grip' ) }</span>
 				<div class="minn-menu-info">
 					<span class="minn-row-title">${ esc( it.label ) }</span>
 					<span class="minn-menu-kind">${ esc( typeLabel( it ) ) }</span>
@@ -2407,6 +2409,56 @@
 				} );
 			} )
 		);
+		// Drag to reorder: the grip drags its row; dropping on another row
+		// makes the dragged item that row's SIBLING, above or below its
+		// midpoint. Children travel with their parent (the tree is
+		// parent-keyed); indent stays on the ⇤⇥ buttons.
+		let dragId = null;
+		$$( '.minn-menu-grip', view ).forEach( ( grip ) => {
+			const row = grip.closest( '[data-mi]' );
+			grip.addEventListener( 'click', ( e ) => e.stopPropagation() ); // never open the editor
+			grip.addEventListener( 'dragstart', ( e ) => {
+				dragId = parseInt( row.dataset.mi, 10 );
+				row.classList.add( 'dragging' );
+				e.dataTransfer.effectAllowed = 'move';
+				e.dataTransfer.setData( 'text/plain', String( dragId ) );
+			} );
+			grip.addEventListener( 'dragend', () => {
+				dragId = null;
+				$$( '.minn-menu-row', view ).forEach( ( r ) => r.classList.remove( 'dragging', 'drop-above', 'drop-below' ) );
+			} );
+		} );
+		$$( '.minn-menu-row[data-mi]', view ).forEach( ( row ) => {
+			row.addEventListener( 'dragover', ( e ) => {
+				if ( dragId === null || parseInt( row.dataset.mi, 10 ) === dragId ) return;
+				e.preventDefault();
+				e.dataTransfer.dropEffect = 'move';
+				const r = row.getBoundingClientRect();
+				const below = e.clientY > r.top + r.height / 2;
+				row.classList.toggle( 'drop-below', below );
+				row.classList.toggle( 'drop-above', ! below );
+			} );
+			row.addEventListener( 'dragleave', () => row.classList.remove( 'drop-above', 'drop-below' ) );
+			row.addEventListener( 'drop', ( e ) => {
+				e.preventDefault();
+				const targetId = parseInt( row.dataset.mi, 10 );
+				const below = row.classList.contains( 'drop-below' );
+				row.classList.remove( 'drop-above', 'drop-below' );
+				if ( dragId === null || targetId === dragId ) return;
+				const movedId = dragId;
+				menuShapeAction( ms, () => {
+					const it = findItem( movedId );
+					const target = findItem( targetId );
+					// A parent can't become its own descendant's sibling.
+					for ( let p = target; p; p = findItem( p.parent ) ) {
+						if ( p.id === it.id ) throw new Error( 'Can’t drop an item inside itself.' );
+					}
+					it.parent = target.parent;
+					it.order = target.order + ( below ? 0.5 : -0.5 );
+				} );
+			} );
+		} );
+
 		$$( '[data-midel]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const id = parseInt( btn.dataset.midel, 10 );
@@ -5327,6 +5379,162 @@
 	document.addEventListener( 'scroll', () => queueFocusDim( true ), true );
 	window.addEventListener( 'resize', () => queueFocusDim( true ) );
 
+	/* ===== Date-time picker (themed replacement for datetime-local) ===== */
+	// Chrome's native calendar is unstyleable and clashes with both themes.
+	// A readonly display input carries the machine value ("YYYY-MM-DDTHH:mm",
+	// same shape datetime-local produced — the save path is untouched) on
+	// input.dataset.dp; the popover writes both and fires onChange.
+	let dpPop = null;
+
+	function dpPad( n ) { return String( n ).padStart( 2, '0' ); }
+
+	function dpMachine( d ) {
+		return `${ d.getFullYear() }-${ dpPad( d.getMonth() + 1 ) }-${ dpPad( d.getDate() ) }T${ dpPad( d.getHours() ) }:${ dpPad( d.getMinutes() ) }`;
+	}
+
+	function dpPretty( machine ) {
+		if ( ! machine ) return '';
+		const d = new Date( machine );
+		if ( isNaN( d ) ) return '';
+		return d.toLocaleDateString( undefined, { month: 'short', day: 'numeric', year: 'numeric' } )
+			+ ' · ' + d.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } );
+	}
+
+	// Lenient time parse: "7", "7:30", "7:30 pm", "19:30" → {h, m} (24h).
+	function dpParseTime( s ) {
+		const m = String( s ).trim().match( /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i );
+		if ( ! m ) return null;
+		let h = +m[ 1 ];
+		const min = +( m[ 2 ] || 0 );
+		const ap = m[ 3 ] && m[ 3 ].toLowerCase();
+		if ( min > 59 ) return null;
+		if ( ap ) {
+			if ( h < 1 || h > 12 ) return null;
+			h = ( h % 12 ) + ( 'pm' === ap ? 12 : 0 );
+		} else if ( h > 23 ) return null;
+		return { h, m: min };
+	}
+
+	function hideDatePicker() {
+		if ( dpPop ) dpPop.remove();
+		dpPop = null;
+		document.removeEventListener( 'mousedown', dpAway, true );
+	}
+
+	function dpAway( e ) {
+		if ( dpPop && ! dpPop.contains( e.target ) && ! e.target.classList.contains( 'minn-dp-input' ) ) hideDatePicker();
+	}
+
+	function bindDatePicker( input, onChange ) {
+		const commit = ( machine ) => {
+			input.dataset.dp = machine || '';
+			input.value = dpPretty( machine );
+			onChange( machine || null );
+		};
+
+		const open = () => {
+			hideDatePicker();
+			// The selection (or now) seeds both the grid month and the time.
+			const sel = input.dataset.dp ? new Date( input.dataset.dp ) : null;
+			const seed = sel && ! isNaN( sel ) ? new Date( sel ) : new Date();
+			let view = new Date( seed.getFullYear(), seed.getMonth(), 1 );
+
+			dpPop = document.createElement( 'div' );
+			dpPop.className = 'minn-dp-pop';
+			document.body.appendChild( dpPop );
+
+			const render = () => {
+				const selKey = input.dataset.dp ? input.dataset.dp.slice( 0, 10 ) : '';
+				const todayKey = dpMachine( new Date() ).slice( 0, 10 );
+				const first = new Date( view );
+				first.setDate( 1 - first.getDay() ); // back to Sunday
+				let days = '';
+				const d = new Date( first );
+				for ( let i = 0; i < 42; i++ ) {
+					const key = dpMachine( d ).slice( 0, 10 );
+					days += `<button type="button" class="minn-dp-day${ d.getMonth() !== view.getMonth() ? ' out' : '' }${ key === selKey ? ' sel' : '' }${ key === todayKey ? ' today' : '' }" data-day="${ key }">${ d.getDate() }</button>`;
+					d.setDate( d.getDate() + 1 );
+				}
+				dpPop.innerHTML = `
+					<div class="minn-dp-head">
+						<span class="minn-dp-month">${ view.toLocaleDateString( undefined, { month: 'long', year: 'numeric' } ) }</span>
+						<button type="button" class="minn-dp-nav" data-nav="-1" title="Previous month">‹</button>
+						<button type="button" class="minn-dp-nav" data-nav="1" title="Next month">›</button>
+					</div>
+					<div class="minn-dp-grid">
+						${ [ 'S', 'M', 'T', 'W', 'T', 'F', 'S' ].map( ( w ) => `<span class="minn-dp-wd">${ w }</span>` ).join( '' ) }
+						${ days }
+					</div>
+					<div class="minn-dp-time">
+						<span class="minn-side-key">Time</span>
+						<input type="text" class="minn-input minn-dp-time-input" value="${ esc( seed.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } ) ) }" spellcheck="false" autocomplete="off">
+					</div>
+					<div class="minn-dp-foot">
+						<button type="button" class="minn-btn-soft" data-dp-now>Now</button>
+						<button type="button" class="minn-btn-soft" data-dp-clear>Clear</button>
+						<button type="button" class="minn-btn-primary" data-dp-done>Done</button>
+					</div>`;
+				const rect = input.getBoundingClientRect();
+				const w = dpPop.offsetWidth || 260;
+				dpPop.style.left = Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) + 'px';
+				dpPop.style.top = Math.min( rect.bottom + 6, window.innerHeight - dpPop.offsetHeight - 10 ) + 'px';
+
+				const timeOf = () => dpParseTime( $( '.minn-dp-time-input', dpPop ).value )
+					|| { h: seed.getHours(), m: seed.getMinutes() };
+				$$( '.minn-dp-nav', dpPop ).forEach( ( b ) => b.addEventListener( 'click', () => {
+					view.setMonth( view.getMonth() + parseInt( b.dataset.nav, 10 ) );
+					render();
+				} ) );
+				$$( '.minn-dp-day', dpPop ).forEach( ( b ) => b.addEventListener( 'click', () => {
+					const t = timeOf();
+					const picked = new Date( b.dataset.day + 'T00:00' );
+					picked.setHours( t.h, t.m );
+					seed.setTime( picked.getTime() );
+					commit( dpMachine( picked ) );
+					render(); // reflect the new selection; stays open for time tweaks
+				} ) );
+				const timeInput = $( '.minn-dp-time-input', dpPop );
+				timeInput.addEventListener( 'change', () => {
+					const t = dpParseTime( timeInput.value );
+					if ( ! t ) { timeInput.value = seed.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } ); return; }
+					seed.setHours( t.h, t.m );
+					if ( input.dataset.dp ) commit( dpMachine( seed ) );
+					timeInput.value = seed.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } );
+				} );
+				timeInput.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) { e.preventDefault(); timeInput.blur(); } } );
+				$( '[data-dp-now]', dpPop ).addEventListener( 'click', () => {
+					const now = new Date();
+					seed.setTime( now.getTime() );
+					commit( dpMachine( now ) );
+					hideDatePicker();
+				} );
+				$( '[data-dp-clear]', dpPop ).addEventListener( 'click', () => {
+					commit( '' );
+					hideDatePicker();
+				} );
+				// Explicit accept: commits whatever the popover shows —
+				// including time-field text that hasn't blurred yet — and
+				// closes. On an empty field with nothing chosen, just closes.
+				$( '[data-dp-done]', dpPop ).addEventListener( 'click', () => {
+					if ( input.dataset.dp ) {
+						const t = timeOf();
+						seed.setHours( t.h, t.m );
+						commit( dpMachine( seed ) );
+					}
+					hideDatePicker();
+				} );
+			};
+			render();
+			document.addEventListener( 'mousedown', dpAway, true );
+		};
+
+		input.addEventListener( 'click', () => { if ( ! dpPop ) open(); else hideDatePicker(); } );
+		input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' || e.key === ' ' ) { e.preventDefault(); if ( ! dpPop ) open(); }
+			if ( e.key === 'Escape' ) hideDatePicker();
+		} );
+	}
+
 	/* ===== Collapsible sidebar cards ===== */
 	// Every editor sidebar card collapses from its title, remembered per-card
 	// (localStorage map) — collapse everything but Outline once and that stays
@@ -5593,7 +5801,7 @@
 			${ ed.supportsSticky && ed.visibility !== 'password' ? `<label class="minn-check-row minn-vis-extra"><input type="checkbox" id="minn-sticky"${ ed.sticky ? ' checked' : '' }> Stick to the top of the blog</label>` : '' }
 			<div class="minn-schedule">
 				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? 'Scheduled for' : 'Publish time' }</div>
-				<input type="datetime-local" class="minn-input" id="minn-schedule-input" value="${ esc( dateValue ) }">
+				<input type="text" readonly class="minn-input minn-dp-input" id="minn-schedule-input" data-dp="${ esc( dateValue ) }" value="${ esc( dpPretty( dateValue ) ) }" placeholder="Immediately">
 			</div>
 			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
 			${ LIVE_STATUSES.includes( ed.status ) ? '' : '<button class="minn-btn-soft minn-save-draft" id="minn-save-draft-btn">Save draft</button>' }
@@ -5842,8 +6050,8 @@
 			} );
 		}
 
-		$( '#minn-schedule-input', el ).addEventListener( 'change', ( e ) => {
-			state.editor.newDate = e.target.value || null;
+		bindDatePicker( $( '#minn-schedule-input', el ), ( v ) => {
+			state.editor.newDate = v || null;
 			const btn = $( '#minn-publish-btn' );
 			if ( btn ) btn.textContent = publishLabel( state.editor );
 		} );
@@ -11005,6 +11213,7 @@
 		closeInspector();
 		hideCodePop();
 		hideTableMenu();
+		hideDatePicker();
 		clearTableChips();
 		removeFocusDim();
 		hideImgPop();

@@ -181,6 +181,12 @@ a { color: var(--accent2); text-decoration: none; }
   border-bottom: 1px solid var(--border); cursor: pointer;
 }
 .minn-menu-row:last-child { border-bottom: none; }
+.minn-menu-grip { display: flex; align-items: center; flex-shrink: 0; color: var(--text3); cursor: grab; padding: 4px 0; margin: 0 -4px 0 -6px; opacity: 0.55; }
+.minn-menu-row:hover .minn-menu-grip { opacity: 1; }
+.minn-menu-grip:active { cursor: grabbing; }
+.minn-menu-row.dragging { opacity: 0.35; }
+.minn-menu-row.drop-above { box-shadow: inset 0 2px 0 var(--accent); }
+.minn-menu-row.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
 .minn-menu-row:hover { background: var(--hover); }
 .minn-menu-row.editing { cursor: default; }
 .minn-menu-row.editing:hover { background: none; }
@@ -493,6 +499,35 @@ body.minn-nav-hidden #minn-nav-tab::after { transform: rotate(-135deg) translate
 body.minn-focus-zen .minn-editor { grid-template-columns: minmax(0, 1fr) 0px; gap: 0; }
 .minn-editor-side { transition: opacity 0.2s ease; }
 body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-events: none; }
+
+/* Date-time picker — themed replacement for Chrome's native calendar. */
+.minn-dp-input { cursor: pointer; }
+.minn-dp-pop {
+  position: fixed; z-index: 60; width: 264px; padding: 12px;
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 12px;
+  box-shadow: var(--shadow); animation: minnScaleIn 0.12s ease;
+}
+.minn-dp-head { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+.minn-dp-month { font-weight: 700; font-size: 13.5px; margin-right: auto; padding-left: 4px; }
+.minn-dp-nav {
+  width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 7px;
+  background: none; color: var(--text2); cursor: pointer; font-size: 15px; line-height: 1;
+}
+.minn-dp-nav:hover { background: var(--hover); color: var(--text); }
+.minn-dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.minn-dp-wd { text-align: center; font-size: 10.5px; font-weight: 700; color: var(--text3); padding: 3px 0 5px; }
+.minn-dp-day {
+  height: 30px; border: none; border-radius: 8px; background: none; color: var(--text2);
+  font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.minn-dp-day:hover { background: var(--hover); color: var(--text); }
+.minn-dp-day.out { color: var(--text3); opacity: 0.45; }
+.minn-dp-day.today { box-shadow: inset 0 0 0 1px var(--border2); }
+.minn-dp-day.sel { background: var(--accent); color: var(--accent-fg); font-weight: 700; opacity: 1; }
+.minn-dp-time { display: flex; align-items: center; gap: 10px; margin: 10px 0 0; }
+.minn-dp-time .minn-input { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
+.minn-dp-foot { display: flex; gap: 8px; margin-top: 10px; }
+.minn-dp-foot .minn-btn-soft { flex: 1; }
 
 /* Collapsible sidebar cards — the title is the toggle, chevron shows state.
    Collapsed hides everything but the title; per-card state persists. */
