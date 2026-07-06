@@ -141,10 +141,37 @@ Per attribute: `label`, `control` (`text` · `textarea` · `select` · `number` 
 inspector falls back to schema-derived controls, so this is refinement, not requirement.
 Attributes with a `source` (stored in saved HTML) are never form-edited.
 
+### Dynamic blocks insert automatically — no descriptor needed
+
+If your block is **dynamic** (server-rendered via a `render_callback` or a `render` file), it
+is already insertable in Minn with zero adapter code. A self-closing block comment is always
+valid saved markup for a server-rendered block, so Minn auto-registers every dynamic,
+top-level, inserter-visible non-core block as a search-only slash-menu entry: it doesn't
+clutter the default menu, but typing part of its title (or its namespace, so `/my-plugin`
+lists everything you ship) surfaces it. Insertion drops `<!-- wp:your/block /-->` as an
+island, renders the real preview, and opens the schema-driven inspector.
+
+To make the most of this, register your blocks well server-side:
+
+- **`title` in PHP registration** (or `block.json`) — without it Minn falls back to a
+  humanized slug ("report-card" → "Report Card").
+- **`parent` / `ancestor` for child blocks** — declared children are excluded from top-level
+  insertion, exactly like Gutenberg's inserter.
+- **`supports.inserter = false`** hides a block entirely.
+- **Attribute schemas in PHP** — they are what the inspector's generated form is built from.
+
+Static-save blocks (HTML produced by your editor JS `save()`) never auto-insert; only your
+JS can produce their markup. Give those an explicit `insert.template` below.
+
+To suppress an auto entry without providing a template, set `'insert' => false` in the
+block's descriptor. Sites can also prune or extend the whole list via the
+`minn_admin_insert_blocks` filter.
+
 ### `insert` — offer the block in the editor's `/` menu
 
-Declare starting markup and your block appears in Minn's slash menu. It's inserted as a
-configurable island — real server-rendered preview, inspector opened immediately:
+Declare starting markup and your block appears in Minn's slash menu (an explicit template
+always supersedes the auto entry). It's inserted as a configurable island — real
+server-rendered preview, inspector opened immediately:
 
 ```php
 $forms['my-plugin/testimonial'] = array(

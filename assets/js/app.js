@@ -9309,6 +9309,15 @@
 				if ( ! ins || ! ins.template ) return;
 				items.push( [ ins.icon || '❖', ins.label || name.split( '/' ).pop(), { block: name, template: String( ins.template ) } ] );
 			} );
+			// Every other dynamic third-party block is insertable with no
+			// adapter — a self-closing comment is always valid saved markup
+			// for a server-rendered block (B.insertBlocks; static-save blocks
+			// never make that list). SEARCH-ONLY (item[3]): they surface when
+			// typing matches title or namespace ("/stackable" lists a whole
+			// plugin), so the default menu stays curated.
+			( B.insertBlocks || [] ).forEach( ( b ) => {
+				items.push( [ icon( 'block' ), b.title, { block: b.name, template: `<!-- wp:${ b.name } /-->` }, true, b.ns ] );
+			} );
 		}
 
 		const close = () => {
@@ -9407,7 +9416,7 @@
 		const renderItems = () => {
 			menu.innerHTML = filtered.map( ( idx, i ) => `
 				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" data-slash="${ idx }">
-					<span class="minn-slash-icon">${ items[ idx ][ 0 ] }</span>${ items[ idx ][ 1 ] }
+					<span class="minn-slash-icon">${ items[ idx ][ 0 ] }</span>${ esc( items[ idx ][ 1 ] ) }${ items[ idx ][ 4 ] ? `<span class="minn-slash-ns">${ esc( items[ idx ][ 4 ] ) }</span>` : '' }
 				</div>` ).join( '' );
 			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
 				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
@@ -9416,11 +9425,17 @@
 
 		// Keep typing after the "/" to narrow the list — "/co" finds Code.
 		// No matches left closes the menu (the "/" was probably literal text).
+		// Search-only entries (auto-registered dynamic blocks, item[3]) need a
+		// query; they match on title or namespace (item[4]).
 		const applyQuery = ( q ) => {
 			q = q.toLowerCase();
 			filtered = items
 				.map( ( it, i ) => i )
-				.filter( ( i ) => items[ i ][ 1 ].toLowerCase().includes( q ) );
+				.filter( ( i ) => {
+					const it = items[ i ];
+					if ( it[ 3 ] && ! q ) return false;
+					return it[ 1 ].toLowerCase().includes( q ) || ( it[ 4 ] && it[ 4 ].toLowerCase().includes( q ) );
+				} );
 			filtered.sort( ( a, b ) =>
 				Number( items[ b ][ 1 ].toLowerCase().startsWith( q ) ) - Number( items[ a ][ 1 ].toLowerCase().startsWith( q ) ) );
 			selIdx = 0;

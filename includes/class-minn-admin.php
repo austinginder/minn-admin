@@ -257,6 +257,8 @@ class Minn_Admin {
 		$roles = array_values( $user->roles );
 		$role  = $roles ? wp_roles()->role_names[ $roles[0] ] ?? $roles[0] : '';
 
+		$block_forms = apply_filters( 'minn_admin_block_forms', array() );
+
 		$boot = array(
 			'restUrl'  => esc_url_raw( rest_url() ),
 			'nonce'    => wp_create_nonce( 'wp_rest' ),
@@ -316,10 +318,69 @@ class Minn_Admin {
 			 * `order`, and `wrapperText` patterns for editable text in an
 			 * InnerBlocks wrapper. See docs/for-plugin-authors.md.
 			 */
-			'blockForms' => apply_filters( 'minn_admin_block_forms', array() ),
+			'blockForms' => $block_forms,
+			/**
+			 * Dynamic third-party blocks the editor can insert with no adapter
+			 * (search-only slash-menu entries). See insertable_blocks().
+			 */
+			'insertBlocks' => self::insertable_blocks( $block_forms ),
 		);
 
 		include MINN_ADMIN_DIR . 'includes/template.php';
 		exit;
+	}
+
+	/**
+	 * Third-party blocks insertable with zero adapter code.
+	 *
+	 * A self-closing block comment is always valid saved markup for a DYNAMIC
+	 * (server-rendered) block, so any dynamic, top-level, inserter-visible
+	 * block qualifies automatically — the existing island + schema-driven
+	 * inspector machinery handles it from there. Static-save blocks are
+	 * excluded on purpose: only the block's own JS `save()` can produce their
+	 * HTML (docs/block-inspector.md, "The honest limit"). Core blocks are
+	 * excluded because Minn has native flows for them.
+	 *
+	 * An adapter descriptor with an `insert` key supersedes the auto entry
+	 * (its hand-written template wins); `insert => false` suppresses a block
+	 * from the menu entirely.
+	 *
+	 * @param array $block_forms The applied `minn_admin_block_forms` value.
+	 * @return array[] Sorted list of { name, title, ns }.
+	 */
+	public static function insertable_blocks( $block_forms ) {
+		$out = array();
+		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $type ) {
+			if ( 0 === strpos( $name, 'core/' ) ) {
+				continue;
+			}
+			if ( ! $type->is_dynamic() ) {
+				continue;
+			}
+			// Child blocks are only valid inside their parent/ancestor.
+			if ( ! empty( $type->parent ) || ! empty( $type->ancestor ) ) {
+				continue;
+			}
+			$supports = (array) $type->supports;
+			if ( isset( $supports['inserter'] ) && false === $supports['inserter'] ) {
+				continue;
+			}
+			if ( isset( $block_forms[ $name ]['insert'] ) ) {
+				continue;
+			}
+			// Many plugins register titles only in their editor JS — fall back
+			// to a humanized slug so those blocks stay reachable.
+			$slug  = substr( $name, strpos( $name, '/' ) + 1 );
+			$title = $type->title ? $type->title : ucwords( str_replace( array( '-', '_' ), ' ', $slug ) );
+			$out[] = array(
+				'name'  => $name,
+				'title' => $title,
+				'ns'    => substr( $name, 0, strpos( $name, '/' ) ),
+			);
+		}
+		usort( $out, function ( $a, $b ) {
+			return strcasecmp( $a['title'], $b['title'] );
+		} );
+		return apply_filters( 'minn_admin_insert_blocks', $out );
 	}
 }
