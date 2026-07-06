@@ -3135,6 +3135,10 @@
 		if ( B.caps.core && ! state.cache.core ) {
 			loadCoreStatus().then( () => { if ( state.route === 'extensions' && state.cache.core && state.cache.core.update ) renderExtensions(); } );
 		}
+		// Toggling/updating/deleting a plugin re-renders this whole view — the
+		// innerHTML swap can clamp the scroller to the top mid-list. Restore.
+		const scroller = $( '.minn-scroll' );
+		const keepScrollTop = scroller ? scroller.scrollTop : 0;
 		const updates = state.cache.pluginUpdates;
 		const updateCount = Object.keys( updates ).length;
 		const active = plugins.filter( ( p ) => p.status === 'active' ).length;
@@ -3188,7 +3192,10 @@
 								? `<button class="minn-badge-update as-btn" data-update="${ esc( p.plugin ) }" title="Update to ${ esc( updates[ p.plugin + '.php' ] ) }">Update → ${ esc( updates[ p.plugin + '.php' ] ) }</button>`
 								: `<span class="minn-badge-update">Update</span>` ) : '' }
 						</div>
-						<div class="minn-plugin-desc">${ esc( stripTags( p.description && p.description.rendered ) ) }</div>
+						<div class="minn-plugin-desc">${ esc( stripTags( ( ( p.description && p.description.rendered ) || '' ).replace( /<cite>[\s\S]*?<\/cite>/, '' ) ) ) }</div>
+						${ p.author ? `<div class="minn-plugin-author">by ${ p.author_uri
+							? `<a href="${ esc( p.author_uri ) }" target="_blank" rel="noopener">${ esc( decodeEntities( stripTags( p.author ) ) ) }</a>`
+							: esc( decodeEntities( stripTags( p.author ) ) ) }</div>` : '' }
 						<div class="minn-plugin-foot">
 							<div class="minn-plugin-ver">v${ esc( p.version || '?' ) }</div>
 							<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="Toggle ${ esc( name ) }"><span class="minn-switch-knob"></span></button>
@@ -3200,6 +3207,7 @@
 			} ).join( '' ) }
 		</div>` : `<div class="minn-card minn-empty">${ q ? 'No plugins match “' + esc( state.extSearch.trim() ) + '”.' : 'No ' + state.extFilter + ' plugins.' }</div>` }`;
 
+		if ( scroller ) scroller.scrollTop = keepScrollTop;
 		bindCoreBanner( view );
 		bindExtFilterBar( view );
 		// Broken icon URLs fall back to the letter tile underneath.
@@ -11684,9 +11692,15 @@
 			next.addEventListener( 'click', () => tabs.scrollBy( { left: step(), behavior: 'smooth' } ) );
 			tabs.addEventListener( 'scroll', update, { passive: true } );
 			if ( 'ResizeObserver' in window ) new ResizeObserver( update ).observe( tabs );
-			// active tab may be off-screen on first paint — bring it into view, then sync arrows.
+			// Active tab may be off-screen on first paint — reveal it by moving
+			// ONLY the strip's own scrollLeft. scrollIntoView propagates to
+			// every scroll ancestor and yanked the page vertically to the tab
+			// bar on each re-render (the plugin-toggle scroll bug).
 			const active = tabs.querySelector( '.minn-tab.active' );
-			if ( active && active.scrollIntoView ) active.scrollIntoView( { inline: 'nearest', block: 'nearest' } );
+			if ( active ) {
+				const target = active.offsetLeft - tabs.clientWidth / 2 + active.clientWidth / 2;
+				tabs.scrollLeft = Math.max( 0, Math.min( target, tabs.scrollWidth - tabs.clientWidth ) );
+			}
 			update();
 		} );
 	}
