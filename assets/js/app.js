@@ -3014,7 +3014,13 @@
 			if ( B.caps.update ) {
 				jobs.push( api( 'minn-admin/v1/plugin-updates' ).then( ( r ) => r.updates ).catch( () => ( {} ) ) );
 			}
+			// wp.org icons + directory links; tolerant — cards fall back to
+			// letter avatars without it.
+			const metaJob = state.cache.pluginMeta
+				? Promise.resolve( state.cache.pluginMeta )
+				: api( 'minn-admin/v1/plugin-meta' ).catch( () => ( {} ) );
 			const [ plugins, updates ] = await Promise.all( jobs );
+			state.cache.pluginMeta = await metaJob;
 			state.cache.plugins = plugins;
 			state.cache.pluginUpdates = updates || {};
 			const dot = $( '#minn-plugin-dot' );
@@ -3168,9 +3174,13 @@
 				const name = cleanPluginName( p.name );
 				const hasUpdate = !! updates[ p.plugin + '.php' ];
 				const on = p.status === 'active';
+				// wp.org plugins wear their real icon, and the icon links to
+				// their directory page; everything else keeps the letter tile.
+				const meta = ( state.cache.pluginMeta || {} )[ p.plugin + '.php' ];
+				const tile = `<div class="minn-plugin-icon" style="background:${ colorFor( name ) }">${ esc( name.charAt( 0 ) ) }${ meta && meta.icon ? `<img src="${ esc( meta.icon ) }" alt="" loading="lazy">` : '' }</div>`;
 				return `
 				<div class="minn-card minn-plugin" data-plugin="${ esc( p.plugin ) }">
-					<div class="minn-plugin-icon" style="background:${ colorFor( name ) }">${ esc( name.charAt( 0 ) ) }</div>
+					${ meta && meta.url ? `<a class="minn-plugin-icon-link" href="${ esc( meta.url ) }" target="_blank" rel="noopener" title="${ /wordpress\.org/.test( meta.url ) ? `View ${ esc( name ) } on WordPress.org` : `${ esc( name ) } plugin page` }">${ tile }</a>` : tile }
 					<div class="minn-plugin-body">
 						<div class="minn-plugin-head">
 							<div class="minn-plugin-name">${ esc( name ) }</div>
@@ -3192,6 +3202,10 @@
 
 		bindCoreBanner( view );
 		bindExtFilterBar( view );
+		// Broken icon URLs fall back to the letter tile underneath.
+		$$( '.minn-plugin-icon img', view ).forEach( ( img ) =>
+			img.addEventListener( 'error', () => img.remove() )
+		);
 		$$( '[data-toggle]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const file = btn.dataset.toggle;

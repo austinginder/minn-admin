@@ -21,6 +21,44 @@ class Minn_Admin_REST {
 	public static function register_routes() {
 		register_rest_route(
 			self::NS,
+			'/plugin-meta',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'activate_plugins' );
+				},
+				'callback'            => function () {
+					// wp.org icons + directory URLs already ride the
+					// update_plugins transient (core fetched them for the
+					// updates screen) — zero extra HTTP, and presence here IS
+					// the "this plugin is on wp.org" signal. Keyed by plugin
+					// file ("dir/plugin.php").
+					$tr  = get_site_transient( 'update_plugins' );
+					$out = array();
+					foreach ( array( 'response', 'no_update' ) as $bucket ) {
+						if ( empty( $tr->$bucket ) || ! is_array( $tr->$bucket ) ) {
+							continue;
+						}
+						foreach ( $tr->$bucket as $file => $data ) {
+							$data  = (object) $data;
+							$icons = isset( $data->icons ) ? (array) $data->icons : array();
+							$slug  = isset( $data->slug ) && $data->slug ? $data->slug : dirname( $file );
+							$out[ $file ] = array(
+								'slug' => $slug,
+								'icon' => isset( $icons['svg'] ) ? $icons['svg']
+									: ( isset( $icons['2x'] ) ? $icons['2x']
+									: ( isset( $icons['1x'] ) ? $icons['1x'] : '' ) ),
+								'url'  => isset( $data->url ) && $data->url ? $data->url : 'https://wordpress.org/plugins/' . $slug . '/',
+							);
+						}
+					}
+					return rest_ensure_response( $out );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/changelog',
 			array(
 				'methods'             => 'GET',
