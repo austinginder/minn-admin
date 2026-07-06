@@ -4,7 +4,7 @@ Tags: admin, dashboard, ui, admin theme
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.6.0
+Stable tag: 0.7.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -26,7 +26,10 @@ Features:
 * **Extensions** — install plugins and themes from WordPress.org or zip upload; activate, deactivate, delete, per-item and bulk updates; Themes tab with screenshots.
 * **Post Types & Taxonomies** — manage custom post type and taxonomy definitions through whichever manager owns them (ACF, Custom Post Type UI, or Minn's own store); code-registered ones shown read-only.
 * **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks sections, plus a built-in maintenance mode.
-* **Editor** — a distraction-free, block-aware writing surface that stores native Gutenberg markup. Markdown typing conventions (bold, italic, strike, inline code, links, headings, lists, quotes, code fences, dividers), a link popover on ⌘K, text alignment, table and image controls with island-style cutouts, complex blocks preserved byte-for-byte as configurable islands with real front-end styling in previews, slash commands with type-to-filter, syntax-highlighted code blocks, word count and reading time, featured images, categories and tags, revisions with restore and backup recovery, status-aware autosave (published posts back up to revisions — only Update goes live), scheduling and one-click publish.
+* **Editor** — a distraction-free, block-aware writing surface that stores native Gutenberg markup. Markdown typing conventions (bold, italic, strike, inline code, links, headings, lists, quotes, code fences, dividers), a link popover on ⌘K, text alignment, table and image controls with island-style cutouts, complex blocks preserved byte-for-byte as configurable islands with real front-end styling in previews, slash commands with type-to-filter, syntax-highlighted code blocks, word count and reading time, featured images, categories and tags, revisions with restore and backup recovery, status-aware autosave (published posts back up to revisions — only Update goes live), scheduling and one-click publish. Paste cleanup turns Word / Google Docs / web HTML into the safe subset; paste or drag an image to upload it at the caret with an inline caption; the publish sidebar edits slug, visibility (public / password / private), per-post discussion and sticky; deleting an embed or table row offers a Removed — Undo toast.
+* **Never lose work** — post locking on WordPress's own `_edit_lock` (Minn, the classic editor and Gutenberg honor each other, with takeover), plus a localStorage crash net that snapshots every edit within ~1.2s — before the first autosave — and offers recovery on the next open.
+* **Page builders** — build a page with Divi, Elementor, Brizy, Beaver Builder, Etch, Bricks or WPBakery and keep managing it from Minn: builder-owned pages are marked, edited through the builder's own chrome-free surface (no wp-admin screen), and fenced so a stray Minn edit can't break the builder's canvas. + New can start a page in any active builder. Third parties register via the `minn_admin_page_builders` filter.
+* **System** — a developer diagnostics page: a health strip over WordPress / PHP / database (with a largest-tables breakdown) / server facts, an installed extensions manifest (plugins, must-use, themes with versions), live debug toggles that safely rewrite wp-config.php, a clickable debug-log viewer, and one-click Copy report as markdown.
 * **SEO panel** — Yoast SEO or Rank Math title, meta description and focus keyword in the editor sidebar.
 * **Command palette** — press ⌘K / Ctrl-K anywhere.
 * **Plugin adapters** — Gravity Forms (readable entries with real field labels, plus a Forms view with activate/deactivate), Gravity SMTP (HTML email preview and resend), Simple History, Redirection / Safe Redirect Manager / Simple 301 Redirects (create, search, edit redirects), ACF and SEO views built in, plus one-filter APIs for other plugins (views, editor panels, traffic data, block-inspector forms).
@@ -45,6 +48,13 @@ Try it instantly in WordPress Playground — launch link and blueprint: https://
 Pretty permalinks are recommended. Without them the app is served at `/?minn_admin=1`.
 
 == Changelog ==
+
+= 0.7.0 =
+* Page-builder coexistence: Divi, Elementor, Brizy, Beaver Builder, Etch, Bricks and WPBakery — builder-owned pages are marked, edited through the builder's own chrome-free surface, and fenced so Minn can't break them. + New can start a page in any builder.
+* Paste cleanup (Word / Google Docs / web HTML → safe subset), inline media (paste or drag an image to upload at the caret) with captions, and Undo toasts for structural deletions.
+* Conflict safety: post locking on WordPress's own edit-lock (with takeover) plus a localStorage crash net that recovers work even before the first autosave.
+* Editor publish essentials in the sidebar: slug, visibility (public / password / private), per-post discussion and sticky.
+* System page: developer diagnostics, health checks, an installed extensions manifest, live wp-config debug toggles, and a debug-log viewer. Extensions view gains status filters and search. Full details in changelog.md.
 
 = 0.6.0 =
 * The editor release: full markdown typing conventions, inline code with boundary-safe typing, link popover on ⌘K, text alignment, table and image controls with island-style cutouts, word count and reading time, SVG toolbar, sticky toolbar with toggleable block buttons.

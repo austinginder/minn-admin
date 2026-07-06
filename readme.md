@@ -49,9 +49,26 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
   on ⌘K, text alignment, table & image controls in island-style cutouts, complex blocks
   preserved byte-for-byte as **configurable islands** rendered with the site's real front-end
   styles, slash commands with type-to-filter, syntax-highlighted code blocks, word count ·
-  reading time, status-aware autosave (published posts back up to revisions — only Update
-  goes live) with crash recovery, revisions, scheduling and one-click publish. Where this is
-  heading: [the editor roadmap](docs/editor-roadmap.md)
+  reading time, scheduling and one-click publish. **Paste cleanup** turns Word / Google Docs /
+  web HTML into the safe subset; **paste or drag an image** and it uploads to the library at
+  the caret with an inline caption. The publish sidebar edits the **slug**, **visibility**
+  (public / password / private), per-post **discussion** and **sticky**. Deleting an embed or
+  a table row offers a **Removed — Undo** toast. Where this is heading:
+  [the editor roadmap](docs/editor-roadmap.md)
+- **Never lose work** — post locking on WordPress's own `_edit_lock` (Minn, the classic editor
+  and Gutenberg all honor each other, with takeover), plus a localStorage **crash net** that
+  snapshots every edit within ~1.2s — before the first autosave — and offers recovery on the
+  next open. Status-aware autosave: drafts save in place, published posts back up to revisions
+  (only Update goes live), with a backup-restore banner.
+- **Page builders** — build a page with **Divi, Elementor, Brizy, Beaver Builder, Etch, Bricks
+  or WPBakery** and keep managing it from Minn: builder-owned pages are marked, edited through
+  the builder's own chrome-free surface via **Edit in ⟨builder⟩** (no wp-admin screen), and
+  fenced so a stray Minn edit can't break the builder's canvas. + New can start a page in any
+  active builder. Third parties register via the `minn_admin_page_builders` filter
+- **System** — a developer diagnostics page: a health strip over WordPress / PHP / database
+  (with a largest-tables breakdown) / server facts, an **installed extensions manifest**
+  (plugins, must-use, themes with versions), live **debug toggles** that safely rewrite
+  `wp-config.php`, a clickable **debug-log viewer**, and one-click **Copy report** as markdown
 - **SEO panel** — Yoast SEO / Rank Math title, meta description and focus keyword in the
   editor sidebar
 - **Command palette** — ⌘K / Ctrl-K everywhere
