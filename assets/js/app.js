@@ -9281,6 +9281,21 @@
 
 	/* ===== Slash command menu ===== */
 
+	// Stackable design library (adapters/stackable.php): free-tier section
+	// templates scraped from Stackable's own CDN library — full serialized
+	// save() markup, so each design inserts as one valid island. Fetched
+	// lazily, deduped via a shared in-flight promise (the loadPlugins rule).
+	let stackableDesignsPromise = null;
+	function loadStackableDesigns() {
+		if ( ! B.stackable ) return Promise.resolve( [] );
+		if ( ! stackableDesignsPromise ) {
+			stackableDesignsPromise = api( 'minn-admin/v1/stackable/designs' )
+				.then( ( r ) => ( r && Array.isArray( r.designs ) ? r.designs : [] ) )
+				.catch( () => [] );
+		}
+		return stackableDesignsPromise;
+	}
+
 	function bindSlashMenu( body, insertImage ) {
 		let menu = null;
 		let block = null;
@@ -9324,6 +9339,14 @@
 			( B.insertBlocks || [] ).forEach( ( b ) => {
 				items.push( [ icon( 'block' ), b.title, { block: b.name, template: `<!-- wp:${ b.name } /-->` }, true, b.ns ] );
 			} );
+			// Stackable design library sections — search-only like the auto
+			// blocks ("/pricing", "/hero"…). The list arrives async into the
+			// live items array; applyQuery reads it fresh on every keyup.
+			loadStackableDesigns().then( ( designs ) => {
+				designs.forEach( ( d ) => {
+					items.push( [ icon( 'block' ), d.label, { design: d.id }, true, 'stackable' ] );
+				} );
+			} );
 		}
 
 		const close = () => {
@@ -9346,6 +9369,29 @@
 			close();
 			body.focus( { preventScroll: true } );
 			const action = item[ 2 ];
+			if ( action && action.design ) {
+				// Stackable design: the template arrives async (the server may
+				// be sideloading its CDN images), so swap the "/" block for a
+				// clean paragraph now and island the markup when it lands.
+				const p = document.createElement( 'p' );
+				p.appendChild( document.createElement( 'br' ) );
+				target.replaceWith( p );
+				const range = document.createRange();
+				range.selectNodeContents( p );
+				range.collapse( true );
+				const sel = window.getSelection();
+				sel.removeAllRanges();
+				sel.addRange( range );
+				toast( 'Inserting design…' );
+				api( 'minn-admin/v1/stackable/designs/' + encodeURIComponent( action.design ), { method: 'POST' } )
+					.then( ( r ) => {
+						if ( ! r || ! r.template ) throw new Error( 'Design unavailable' );
+						if ( ! p.isConnected || ! state.editor ) return;
+						insertIsland( p, r.block || 'stackable/columns', r.template );
+					} )
+					.catch( ( e ) => toast( 'Design insert failed: ' + e.message, true ) );
+				return;
+			}
 			if ( action && action.block ) {
 				// Insert a custom block as a new island: register the raw markup,
 				// drop the card in place of the "/" block, render the real
