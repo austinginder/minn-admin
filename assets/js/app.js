@@ -5588,19 +5588,22 @@
 			const h = heads[ Math.min( +row.dataset.oi, heads.length - 1 ) ];
 			if ( ! h ) return;
 			h.scrollIntoView( { behavior: 'smooth', block: 'center' } );
-			// Flash via a document.body overlay — NEVER a class or style on the
-			// heading itself: the typing surface serializes, chrome must not.
+			// Flash via an overlay — NEVER a class or style on the heading
+			// itself: the typing surface serializes, chrome must not. The ping
+			// lives INSIDE the scroller at absolute content coordinates, so it
+			// rides the smooth scroll natively — a fixed overlay chasing the
+			// heading from a timer visibly stutters (Austin's wiggle report).
+			const sc = $( '.minn-scroll' );
+			if ( ! sc ) return;
 			const ping = document.createElement( 'div' );
 			ping.className = 'minn-outline-ping';
-			const place = () => {
-				const r = h.getBoundingClientRect();
-				ping.style.cssText = `top:${ r.top - 4 }px;left:${ r.left - 8 }px;width:${ r.width + 16 }px;height:${ r.height + 8 }px;`;
-			};
-			place();
-			document.body.appendChild( ping );
-			// Track the smooth scroll, then fade out and remove.
-			const track = setInterval( place, 50 );
-			setTimeout( () => { clearInterval( track ); ping.classList.add( 'out' ); }, 900 );
+			const r = h.getBoundingClientRect();
+			const scRect = sc.getBoundingClientRect();
+			ping.style.cssText = `top:${ r.top - scRect.top + sc.scrollTop - 4 }px;`
+				+ `left:${ r.left - scRect.left + sc.scrollLeft - 8 }px;`
+				+ `width:${ r.width + 16 }px;height:${ r.height + 8 }px;`;
+			sc.appendChild( ping );
+			setTimeout( () => ping.classList.add( 'out' ), 900 );
 			setTimeout( () => ping.remove(), 1500 );
 		} );
 		updateOutline();

@@ -41,6 +41,24 @@ const CONTENT = '<!-- wp:heading --><h2 class="wp-block-heading">First section</
 	const beforeTop = await page.evaluate( () => document.querySelector( '#minn-editor-body h2' ).getBoundingClientRect().top );
 	await page.click( '.minn-outline-row' ); // first section — we're at the bottom now
 	await page.waitForSelector( '.minn-outline-ping', { timeout: 4000 } );
+	// Mid-smooth-scroll, the ping must stay GLUED to the heading (constant
+	// offset) — it lives in the scroller's coordinate space, it never chases.
+	const glue = await page.evaluate( () => new Promise( ( resolve ) => {
+		const offset = () => {
+			const ping = document.querySelector( '.minn-outline-ping' );
+			const h = document.querySelector( '#minn-editor-body h2' );
+			return ping && h ? Math.round( ping.getBoundingClientRect().top - h.getBoundingClientRect().top ) : null;
+		};
+		const samples = [ offset() ];
+		let n = 0;
+		const tick = () => {
+			samples.push( offset() );
+			if ( ++n < 20 ) requestAnimationFrame( tick );
+			else resolve( { inScroller: document.querySelector( '.minn-outline-ping' ).parentElement.classList.contains( 'minn-scroll' ), samples: [ ...new Set( samples.filter( ( s ) => s !== null ) ) ] } );
+		};
+		requestAnimationFrame( tick );
+	} ) );
+	t.check( 'ping rides the scroll glued to the heading (no chase lag)', glue.inScroller && glue.samples.length === 1, JSON.stringify( glue ) );
 	await page.waitForTimeout( 1200 );
 	const afterTop = await page.evaluate( () => document.querySelector( '#minn-editor-body h2' ).getBoundingClientRect().top );
 	t.check( 'click scrolls the heading into view', Math.abs( afterTop ) < Math.abs( beforeTop ) && afterTop > 0, `before=${ Math.round( beforeTop ) } after=${ Math.round( afterTop ) }` );

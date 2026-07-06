@@ -69,7 +69,8 @@ a { color: var(--accent2); text-decoration: none; }
 /* dvh over vh where supported — vh overflows behind mobile Safari's collapsing URL bar. */
 .minn-shell { display: flex; height: 100vh; height: 100dvh; width: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
 .minn-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.minn-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+/* position:relative anchors the outline ping's absolute content coords. */
+.minn-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; }
 .minn-page { animation: minnFadeUp 0.3s ease; padding: 26px 28px 60px; max-width: 1180px; margin: 0 auto; }
 
 /* ===== Sidebar ===== */
@@ -563,8 +564,9 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .minn-outline-row:hover { background: var(--bg2); color: var(--text); }
+/* Absolute inside .minn-scroll — rides the scroll natively, never chases it. */
 .minn-outline-ping {
-  position: fixed; z-index: 70; pointer-events: none; border-radius: 8px;
+  position: absolute; z-index: 70; pointer-events: none; border-radius: 8px;
   background: color-mix(in srgb, var(--accent, #7c7ff2) 14%, transparent);
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent, #7c7ff2) 45%, transparent);
   opacity: 1; transition: opacity 0.55s ease;
