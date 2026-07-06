@@ -9952,8 +9952,138 @@
 
 	/* ===== Revision modal ===== */
 
+	/* ===== Revision diff ===== */
+	// Writers think in "what changed", not revision IDs — the History card
+	// opens a side-by-side diff of the revision against the CURRENT editor
+	// content (live serializer output, so unsaved edits count). Block-level
+	// LCS aligns paragraphs; changed pairs refine to word-level <del>/<ins>
+	// marks on escaped TEXT (never marked-up HTML — honest and injection-safe;
+	// unchanged rows render their real markup, dimmed).
+
+	// Classic LCS keep-table over arrays of comparable strings.
+	function lcsOps( a, b, key ) {
+		const n = a.length, m = b.length;
+		// Guard the O(n·m) table — beyond this, callers degrade gracefully.
+		if ( n * m > 1200 * 1200 ) return null;
+		const w = m + 1;
+		const dp = new Uint16Array( ( n + 1 ) * w );
+		for ( let i = n - 1; i >= 0; i-- ) {
+			for ( let j = m - 1; j >= 0; j-- ) {
+				dp[ i * w + j ] = key( a[ i ] ) === key( b[ j ] )
+					? dp[ ( i + 1 ) * w + j + 1 ] + 1
+					: Math.max( dp[ ( i + 1 ) * w + j ], dp[ i * w + j + 1 ] );
+			}
+		}
+		const ops = [];
+		let i = 0, j = 0;
+		while ( i < n && j < m ) {
+			if ( key( a[ i ] ) === key( b[ j ] ) ) { ops.push( [ 'same', i++, j++ ] ); }
+			else if ( dp[ ( i + 1 ) * w + j ] >= dp[ i * w + j + 1 ] ) { ops.push( [ 'del', i++, -1 ] ); }
+			else { ops.push( [ 'add', -1, j++ ] ); }
+		}
+		while ( i < n ) ops.push( [ 'del', i++, -1 ] );
+		while ( j < m ) ops.push( [ 'add', -1, j++ ] );
+		return ops;
+	}
+
+	// Word-level marks for one changed block pair; splits keep whitespace so
+	// the rejoin is lossless. Falls back to whole-side marks past the cap.
+	// sameRatio (shared words / larger side) lets callers refuse to pair
+	// blocks that merely happen to sit in the same del/add run.
+	function diffWords( oldText, newText ) {
+		const a = oldText.split( /(\s+)/ ).filter( ( t ) => t !== '' );
+		const b = newText.split( /(\s+)/ ).filter( ( t ) => t !== '' );
+		const ops = lcsOps( a, b, ( t ) => t );
+		if ( ! ops ) {
+			return { left: `<del>${ esc( oldText ) }</del>`, right: `<ins>${ esc( newText ) }</ins>`, sameRatio: 0 };
+		}
+		let left = '', right = '', delBuf = '', addBuf = '', sameWords = 0;
+		const flush = () => {
+			if ( delBuf ) { left += `<del>${ esc( delBuf ) }</del>`; delBuf = ''; }
+			if ( addBuf ) { right += `<ins>${ esc( addBuf ) }</ins>`; addBuf = ''; }
+		};
+		ops.forEach( ( [ op, i, j ] ) => {
+			if ( op === 'same' ) { flush(); left += esc( a[ i ] ); right += esc( b[ j ] ); if ( a[ i ].trim() ) sameWords++; }
+			else if ( op === 'del' ) { delBuf += a[ i ]; }
+			else { addBuf += b[ j ]; }
+		} );
+		flush();
+		const words = Math.max( a.filter( ( t ) => t.trim() ).length, b.filter( ( t ) => t.trim() ).length, 1 );
+		return { left, right, sameRatio: sameWords / words };
+	}
+
+	// Top-level blocks of a rendered-ish HTML string (block comments already
+	// meaningless to a writer — stripped like the old preview did).
+	function diffBlocksOf( html ) {
+		const div = document.createElement( 'div' );
+		div.innerHTML = stripBlockComments( html || '' );
+		const out = [];
+		div.childNodes.forEach( ( n ) => {
+			if ( n.nodeType === 1 ) {
+				const text = ( n.textContent || '' ).replace( /\s+/g, ' ' ).trim();
+				// Media/embed blocks have no prose — compare their markup so an
+				// image swap still registers as a change.
+				out.push( { text: text || n.outerHTML, html: n.outerHTML } );
+			} else if ( n.nodeType === 3 && n.textContent.trim() ) {
+				out.push( { text: n.textContent.replace( /\s+/g, ' ' ).trim(), html: esc( n.textContent ) } );
+			}
+		} );
+		return out;
+	}
+
+	// rows: { kind: same|change|del|add, left, right } — left/right are HTML.
+	function diffRevision( oldHtml, newHtml ) {
+		const a = diffBlocksOf( oldHtml );
+		const b = diffBlocksOf( newHtml );
+		const ops = lcsOps( a, b, ( x ) => x.text );
+		if ( ! ops ) return null; // beyond the cap — caller shows the raw preview
+		const rows = [];
+		let dels = [], adds = [];
+		const flush = () => {
+			// Pair up del/add runs index-wise as word-level changes — but only
+			// when the pair genuinely shares words. Two unrelated paragraphs
+			// that merely sit in the same run read better as a removal + an
+			// addition than as one fully-marked "change".
+			const pairs = Math.min( dels.length, adds.length );
+			for ( let k = 0; k < pairs; k++ ) {
+				const wd = diffWords( dels[ k ].text, adds[ k ].text );
+				if ( wd.sameRatio >= 0.4 ) {
+					rows.push( { kind: 'change', left: wd.left, right: wd.right } );
+				} else {
+					rows.push( { kind: 'del', left: `<del>${ esc( dels[ k ].text ) }</del>`, right: '' } );
+					rows.push( { kind: 'add', left: '', right: `<ins>${ esc( adds[ k ].text ) }</ins>` } );
+				}
+			}
+			dels.slice( pairs ).forEach( ( x ) => rows.push( { kind: 'del', left: `<del>${ esc( x.text ) }</del>`, right: '' } ) );
+			adds.slice( pairs ).forEach( ( x ) => rows.push( { kind: 'add', left: '', right: `<ins>${ esc( x.text ) }</ins>` } ) );
+			dels = []; adds = [];
+		};
+		ops.forEach( ( [ op, i, j ] ) => {
+			if ( op === 'same' ) { flush(); rows.push( { kind: 'same', left: a[ i ].html, right: b[ j ].html } ); }
+			else if ( op === 'del' ) { dels.push( a[ i ] ); }
+			else { adds.push( b[ j ] ); }
+		} );
+		flush();
+		return rows;
+	}
+
+	// The live "current" side — the same serializer the save path uses, so
+	// unsaved edits diff truthfully; locked mode falls back to loaded content.
+	function currentEditorContent( ed ) {
+		const body = $( '#minn-editor-body' );
+		if ( body && ed.mode === 'blocks' ) return serializeToBlocks( body, ed.islands );
+		if ( body && ed.mode === 'classic' ) return classicHtml( body );
+		return ed.content || '';
+	}
+
 	function openRevision( ed, revId ) {
-		state.modal = { type: 'revision', ed: { id: ed.id, type: ed.type }, revId, rev: null };
+		// Capture the current side NOW — the serializer needs the editor DOM,
+		// and the diff must reflect what the writer sees, unsaved edits included.
+		state.modal = {
+			type: 'revision', ed: { id: ed.id, type: ed.type }, revId, rev: null,
+			current: currentEditorContent( ed ),
+			currentTitle: $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ( ed.title || '' ),
+		};
 		renderOverlays();
 		api( `wp/v2/${ ed.type }/${ ed.id }/revisions/${ revId }?context=edit&_fields=id,modified,title,content` )
 			.then( ( rev ) => {
@@ -9967,22 +10097,46 @@
 
 	function renderRevisionModal( m ) {
 		const rev = m.rev;
+		let bodyHtml = '';
+		if ( rev ) {
+			const revTitle = decodeEntities( ( rev.title && ( rev.title.raw != null ? rev.title.raw : rev.title.rendered ) ) || '' );
+			const revContent = ( rev.content && ( rev.content.raw != null ? rev.content.raw : rev.content.rendered ) ) || '';
+			const rows = diffRevision( revContent, m.current || '' );
+			const changed = rows ? rows.filter( ( r ) => r.kind !== 'same' ).length : 0;
+			const titleDiff = revTitle !== ( m.currentTitle || '' )
+				? diffWords( revTitle || '(no title)', m.currentTitle || '(no title)' )
+				: null;
+			const summary = rows
+				? ( changed || titleDiff ? `${ changed } block${ changed === 1 ? '' : 's' } differ${ changed === 1 ? 's' : '' } from the current content${ titleDiff ? ' · title changed' : '' }` : 'Identical to the current content' )
+				: 'Post too large to diff — showing the revision as saved';
+			bodyHtml = `
+				<div class="minn-modal-meta">
+					${ titleDiff ? `<div class="minn-side-row"><span class="minn-side-key">Title</span><span class="minn-diff-inline">${ titleDiff.left } → ${ titleDiff.right }</span></div>`
+						: `<div class="minn-side-row"><span class="minn-side-key">Title</span><span class="minn-surface-val">${ esc( revTitle || '(no title)' ) }</span></div>` }
+					<div class="minn-side-row"><span class="minn-side-key">Saved</span><span>${ timeAgo( rev.modified ) }</span></div>
+					<div class="minn-side-row"><span class="minn-side-key">Changes</span><span>${ esc( summary ) }</span></div>
+				</div>
+				${ rows ? `
+				<div class="minn-diff" id="minn-diff">
+					<div class="minn-diff-headrow"><div>This revision</div><div>Current</div></div>
+					${ rows.map( ( r ) => `
+					<div class="minn-diff-row ${ r.kind }">
+						<div class="minn-diff-cell${ r.left ? '' : ' empty' }">${ r.left }</div>
+						<div class="minn-diff-cell${ r.right ? '' : ' empty' }">${ r.right }</div>
+					</div>` ).join( '' ) }
+				</div>` : '<div class="minn-revision-preview" id="minn-revision-preview"></div>' }
+				<div class="minn-modal-actions">
+					<button class="minn-btn-primary" id="minn-restore-rev">Restore this revision</button>
+				</div>`;
+		}
 		return `
 		<div class="minn-modal-overlay" id="minn-modal-overlay">
-			<div class="minn-modal wide">
+			<div class="minn-modal xl">
 				<div class="minn-modal-head">
 					<div class="minn-modal-title">${ rev ? 'Revision · ' + timeAgo( rev.modified ) : 'Revision' }</div>
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
-				${ ! rev ? '<div class="minn-loading">Loading revision…</div>' : `
-				<div class="minn-modal-meta">
-					<div class="minn-side-row"><span class="minn-side-key">Title</span><span class="minn-surface-val">${ esc( decodeEntities( ( rev.title && ( rev.title.raw != null ? rev.title.raw : rev.title.rendered ) ) || '(no title)' ) ) }</span></div>
-					<div class="minn-side-row"><span class="minn-side-key">Saved</span><span>${ timeAgo( rev.modified ) }</span></div>
-				</div>
-				<div class="minn-revision-preview" id="minn-revision-preview"></div>
-				<div class="minn-modal-actions">
-					<button class="minn-btn-primary" id="minn-restore-rev">Restore this revision</button>
-				</div>` }
+				${ ! rev ? '<div class="minn-loading">Loading revision…</div>' : bodyHtml }
 			</div>
 		</div>`;
 	}
@@ -9990,6 +10144,7 @@
 	function bindRevisionModal( m ) {
 		const rev = m.rev;
 		if ( ! rev ) return;
+		// Raw-preview fallback only exists when the post was too large to diff.
 		const preview = $( '#minn-revision-preview' );
 		if ( preview ) {
 			const raw = ( rev.content && ( rev.content.raw != null ? rev.content.raw : rev.content.rendered ) ) || '';
