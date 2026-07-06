@@ -542,7 +542,7 @@
 						<span class="minn-logo-mark">m</span>
 						<span class="minn-logo-name">minn</span>
 					</button>
-					<div class="minn-logo-ver">v${ esc( B.version.split( '.' ).slice( 0, 2 ).join( '.' ) ) }</div>
+					<button class="minn-logo-ver" id="minn-ver-btn" title="What's new — full changelog">v${ esc( B.version.split( '.' ).slice( 0, 2 ).join( '.' ) ) }</button>
 				</div>
 				<button class="minn-search-btn" id="minn-open-palette">
 					${ icon( 'search' ) }<span>Search…</span><span class="minn-kbd">⌘K</span>
@@ -583,6 +583,23 @@
 		);
 		$( '#minn-open-palette' ).addEventListener( 'click', openPalette );
 		$( '#minn-logo-home' ).addEventListener( 'click', () => go( 'overview' ) );
+		$( '#minn-ver-btn' ).addEventListener( 'click', openChangelog );
+
+		// Global nav show/hide — a slim tab pinned to the left edge (it must
+		// live OUTSIDE the sidebar it hides). Persists; sits under the focus
+		// dim so zen keeps its calm.
+		const navTab = document.createElement( 'button' );
+		navTab.id = 'minn-nav-tab';
+		navTab.type = 'button';
+		navTab.title = 'Show / hide navigation';
+		document.body.appendChild( navTab );
+		try {
+			if ( localStorage.getItem( 'minn-nav-hidden' ) ) document.body.classList.add( 'minn-nav-hidden' );
+		} catch ( e ) { /* private mode */ }
+		navTab.addEventListener( 'click', () => {
+			const hidden = document.body.classList.toggle( 'minn-nav-hidden' );
+			try { localStorage.setItem( 'minn-nav-hidden', hidden ? '1' : '' ); } catch ( e ) { /* private mode */ }
+		} );
 		$( '#minn-user-area' ).addEventListener( 'click', ( e ) => {
 			if ( e.target.closest( 'a' ) ) return; // logout link
 			openUserModal( B.user.id );
@@ -669,12 +686,16 @@
 			</div>
 		</div>
 		<div class="minn-stats">
-			${ o.stats.map( ( s ) => `
-				<div class="minn-card minn-stat">
+			${ o.stats.map( ( s ) => {
+				// Each stat is a door to its view, not just a number.
+				const goto = { 'Published posts': 'content:posts', 'Pages': 'content:pages', 'Comments': 'comments', 'Media files': 'media', 'Users': 'users' }[ s.label ] || '';
+				return `
+				<div class="minn-card minn-stat${ goto ? ' clickable' : '' }"${ goto ? ` data-goto="${ esc( goto ) }" role="link" tabindex="0"` : '' }>
 					<div class="minn-stat-label">${ esc( s.label ) }</div>
 					<div class="minn-stat-value">${ esc( s.value ) }</div>
 					<div class="minn-stat-delta${ deltaCls( s.up ) }">${ esc( s.delta ) }</div>
-				</div>` ).join( '' ) }
+				</div>`;
+			} ).join( '' ) }
 		</div>
 		<div class="minn-dash-grid">
 			<div class="minn-card minn-panel-pad">
@@ -720,6 +741,16 @@
 				renderOverview();
 			} )
 		);
+		$$( '.minn-stat[data-goto]', view ).forEach( ( card ) => {
+			const open = () => {
+				const [ route, filter ] = card.dataset.goto.split( ':' );
+				if ( filter ) { state.filter = filter; state.cache.content = null; }
+				go( route );
+			};
+			card.addEventListener( 'click', open );
+			card.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) open(); } );
+		} );
+
 		const swap = $( '#minn-chart-swap', view );
 		if ( swap ) swap.addEventListener( 'click', () => {
 			state.chartSource = isTraffic ? 'activity' : 'traffic';
@@ -6300,6 +6331,15 @@
 				openLinkPop( a );
 			}
 		} );
+		// Right-click in a table cell → targeted row/column ops on THAT cell.
+		body.addEventListener( 'contextmenu', ( e ) => {
+			const cell = e.target.closest ? e.target.closest( 'td, th' ) : null;
+			const table = cell ? cell.closest( 'table' ) : null;
+			if ( ! cell || ! table || ! body.contains( table ) || table.closest( '.minn-block-island' ) ) return;
+			e.preventDefault();
+			openTableMenu( e.clientX, e.clientY, table, cell );
+		} );
+
 		// Hovering a chip-carrying block's box (edge included) highlights it
 		// AND its chip — tables, images and code blocks all behave alike.
 		let hotTable = null;
@@ -7220,6 +7260,50 @@
 		return c;
 	}
 
+	/* ===== Table context menu (right-click a cell) ===== */
+	// The popover's ops act on the CARET cell — fine from the chip, awkward
+	// mid-table. Right-click gives targeted ops on the cell under the pointer.
+	let tableMenu = null;
+
+	function tableMenuAway( e ) {
+		if ( tableMenu && ! tableMenu.contains( e.target ) ) hideTableMenu();
+	}
+
+	function hideTableMenu() {
+		if ( tableMenu ) tableMenu.remove();
+		tableMenu = null;
+		document.removeEventListener( 'mousedown', tableMenuAway, true );
+	}
+
+	function openTableMenu( x, y, table, cell ) {
+		hideTableMenu();
+		hideTablePop();
+		tableMenu = document.createElement( 'div' );
+		tableMenu.className = 'minn-new-menu minn-table-menu';
+		tableMenu.innerHTML = `
+			<button data-op="row-above" type="button">Add row above</button>
+			<button data-op="row-below" type="button">Add row below</button>
+			<button data-op="row-del" type="button" class="danger">Delete row</button>
+			<div class="minn-new-menu-label">Column</div>
+			<button data-op="col-left" type="button">Add column left</button>
+			<button data-op="col-right" type="button">Add column right</button>
+			<button data-op="col-del" type="button" class="danger">Delete column</button>`;
+		document.body.appendChild( tableMenu );
+		tableMenu.style.left = Math.max( 10, Math.min( x, window.innerWidth - tableMenu.offsetWidth - 10 ) ) + 'px';
+		tableMenu.style.top = Math.max( 10, Math.min( y, window.innerHeight - tableMenu.offsetHeight - 10 ) ) + 'px';
+		$$( 'button', tableMenu ).forEach( ( b ) => {
+			b.addEventListener( 'mousedown', ( ev ) => ev.preventDefault() );
+			b.addEventListener( 'click', () => {
+				const op = b.dataset.op;
+				hideTableMenu();
+				// Seat the caret in the clicked cell so typing continues there.
+				setCaret( cell, 0 );
+				tableOp( table, op, cell );
+			} );
+		} );
+		document.addEventListener( 'mousedown', tableMenuAway, true );
+	}
+
 	function openTablePop( table ) {
 		hideTablePop();
 		tablePop = document.createElement( 'div' );
@@ -7262,8 +7346,10 @@
 		document.addEventListener( 'mousedown', tablePopAway, true );
 	}
 
-	function tableOp( table, op ) {
-		const cell = tableRefCell( table );
+	function tableOp( table, op, refCell ) {
+		// refCell: the right-clicked cell from the context menu — beats the
+		// caret cell, so ops land exactly where the pointer asked.
+		const cell = ( refCell && refCell.isConnected ? refCell : null ) || tableRefCell( table );
 		if ( ! cell && op !== 'table-del' ) return;
 		const row = cell ? cell.closest( 'tr' ) : null;
 		const allRows = Array.from( table.querySelectorAll( 'tr' ) );
@@ -7369,9 +7455,11 @@
 		}
 		scheduleAutosave();
 		if ( restore ) toastAction( destructive, 'Undo', restore );
-		// Geometry (and the header button label) changed — refresh both.
+		// Geometry (and the header button label) changed — refresh the chips,
+		// and refresh the popover only if one was open (the chip flow keeps it
+		// up across ops; the context-menu flow never opens one).
 		syncTableChips();
-		if ( table.isConnected ) openTablePop( table );
+		if ( tablePop && table.isConnected ) openTablePop( table );
 	}
 
 	/* ===== Code block chip (config popout for editable code blocks) =====
@@ -9223,9 +9311,10 @@
 						<div>
 							<div class="minn-field-label">Role</div>
 							${ roles.length && B.caps.promoteUsers ? `
-							<select class="minn-input" id="minn-uf-role">
-								${ roles.map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }"${ slug === role ? ' selected' : '' }>${ esc( label ) }</option>` ).join( '' ) }
-							</select>` : `
+							<div class="minn-ac" id="minn-uf-role-ac">
+								<input class="minn-input minn-ac-input" id="minn-uf-role" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+								<div class="minn-ac-panel" hidden></div>
+							</div>` : `
 							<input class="minn-input" value="${ esc( isSelf ? B.user.role : role ) }" disabled>` }
 						</div>
 						<div>
@@ -9293,6 +9382,20 @@
 
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
+		}
+
+		if ( m.type === 'changelog' ) {
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">What's new · v${ esc( B.version ) }</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ m.md === null ? '<div class="minn-loading">Loading changelog…</div>'
+						: `<div class="minn-changelog">${ changelogHtml( m.md ) }</div>` }
+				</div>
+			</div>`;
 		}
 
 		if ( m.type === 'cpt' ) {
@@ -10332,6 +10435,49 @@
 			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
 	}
 
+	/* ===== Changelog modal (the version badge) ===== */
+	// A tiny renderer for OUR changelog's markdown vocabulary — headings,
+	// bullets, bold, code, links. Everything is escaped first; inline marks
+	// are rebuilt on the escaped text, so nothing in the file can inject.
+	function changelogInline( s ) {
+		return esc( s )
+			.replace( /\*\*([^*]+)\*\*/g, '<b>$1</b>' )
+			.replace( /`([^`]+)`/g, '<code>$1</code>' )
+			.replace( /\[([^\]]+)\]\((https?:\/\/[^)\s]+|[\w./-]+)\)/g, ( m0, t, u ) =>
+				/^https?:/.test( u ) ? `<a href="${ u }" target="_blank" rel="noopener">${ t }</a>` : t );
+	}
+
+	function changelogHtml( md ) {
+		const out = [];
+		let list = null;
+		const flushList = () => { if ( list ) { out.push( `<ul>${ list.join( '' ) }</ul>` ); list = null; } };
+		String( md ).split( /\r?\n/ ).forEach( ( line ) => {
+			const l = line.trim();
+			if ( /^# /.test( l ) ) { flushList(); return; } // the file's own "# Changelog" title — the modal has one
+			if ( /^## /.test( l ) ) { flushList(); out.push( `<h3>${ changelogInline( l.slice( 3 ) ) }</h3>` ); return; }
+			if ( /^### /.test( l ) ) { flushList(); out.push( `<h4>${ changelogInline( l.slice( 4 ) ) }</h4>` ); return; }
+			if ( /^[*-] /.test( l ) ) { ( list = list || [] ).push( `<li>${ changelogInline( l.slice( 2 ) ) }</li>` ); return; }
+			if ( ! l ) { flushList(); return; }
+			flushList();
+			out.push( `<p>${ changelogInline( l ) }</p>` );
+		} );
+		flushList();
+		return out.join( '' ) || '<div class="minn-empty">No changelog found.</div>';
+	}
+
+	function openChangelog() {
+		state.modal = { type: 'changelog', md: null };
+		renderOverlays();
+		api( 'minn-admin/v1/changelog' )
+			.then( ( r ) => {
+				if ( state.modal && state.modal.type === 'changelog' ) {
+					state.modal.md = r.markdown || '';
+					renderOverlays();
+				}
+			} )
+			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
+	}
+
 	function renderRevisionModal( m ) {
 		const rev = m.rev;
 		let bodyHtml = '';
@@ -10531,6 +10677,17 @@
 	function bindUserModal( m ) {
 		if ( ! $( '#minn-uf-save' ) ) return; // still in the loading state
 
+		// Role rides the strict combobox (same as the Users filter) — real
+		// sites stack 10+ roles and a bare select doesn't type-to-filter.
+		const roleAc = $( '#minn-uf-role-ac' );
+		if ( roleAc ) {
+			const current = m.user && m.user.roles && m.user.roles[ 0 ] ? m.user.roles[ 0 ] : 'subscriber';
+			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: l } ) ), {
+				strict: true,
+				value: current,
+			} );
+		}
+
 		if ( m.userId === B.user.id ) {
 			const copyText = async ( text, label ) => {
 				try {
@@ -10608,8 +10765,10 @@
 				name: $( '#minn-uf-name' ).value.trim(),
 				email: $( '#minn-uf-email' ).value.trim(),
 			};
+			// Strict combobox: the picked slug rides dataset.acValue, the
+			// input's visible value is the display label.
 			const roleSel = $( '#minn-uf-role' );
-			if ( B.caps.promoteUsers && roleSel ) payload.roles = [ roleSel.value ];
+			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue ) payload.roles = [ roleSel.dataset.acValue ];
 			const password = $( '#minn-uf-password' ).value;
 			if ( password ) payload.password = password;
 			try {
@@ -10845,6 +11004,7 @@
 		renderTopbar();
 		closeInspector();
 		hideCodePop();
+		hideTableMenu();
 		clearTableChips();
 		removeFocusDim();
 		hideImgPop();

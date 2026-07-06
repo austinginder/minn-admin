@@ -21,6 +21,25 @@ class Minn_Admin_REST {
 	public static function register_routes() {
 		register_rest_route(
 			self::NS,
+			'/changelog',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'callback'            => function () {
+					// The bundled changelog.md, rendered client-side.
+					$file = MINN_ADMIN_DIR . 'changelog.md';
+					return rest_ensure_response( array(
+						'version'  => MINN_ADMIN_VERSION,
+						'markdown' => is_readable( $file ) ? (string) file_get_contents( $file ) : '',
+					) );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/overview',
 			array(
 				'methods'             => 'GET',
@@ -486,6 +505,26 @@ class Minn_Admin_REST {
 	}
 
 	/**
+	 * Total users without count_users()' per-role breakdown — a single
+	 * COUNT(*) instead of the meta JOIN, cheap even on huge user tables.
+	 */
+	private static function user_count() {
+		global $wpdb;
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->users}" );
+	}
+
+	/**
+	 * A title as plain text: get_the_title() returns stored entities
+	 * (&#8217; etc.) which read as raw code in the activity feed — decode
+	 * them, and give untitled drafts a label instead of empty quotes.
+	 * The client re-escapes on render.
+	 */
+	private static function plain_title( $post ) {
+		$t = html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' );
+		return '' === trim( $t ) ? '(no title)' : $t;
+	}
+
+	/**
 	 * The active debug log path: a string WP_DEBUG_LOG wins, else PHP's
 	 * error_log if it points at a real file, else the WordPress default.
 	 */
@@ -748,7 +787,15 @@ class Minn_Admin_REST {
 				'delta' => 'published',
 				'up'    => null,
 			),
-			array(
+			// Many sites never use comments — an eternal zero is dead weight,
+			// so a comment-less site gets a Users count instead. Pending
+			// comments still force the card (they need moderating).
+			( 0 === (int) $comments->approved && 0 === (int) $comments->moderated ) ? array(
+				'label' => 'Users',
+				'value' => number_format_i18n( self::user_count() ),
+				'delta' => 'registered',
+				'up'    => null,
+			) : array(
 				'label' => 'Comments',
 				'value' => number_format_i18n( (int) $comments->approved ),
 				'delta' => (int) $comments->moderated . ' pending',
@@ -859,23 +906,37 @@ class Minn_Admin_REST {
 		// Recent activity feed.
 		$activity = array();
 
-		$recent_posts = get_posts(
-			array(
-				'post_type'   => array( 'post', 'page' ),
-				'post_status' => array( 'publish', 'draft', 'future', 'pending' ),
-				'numberposts' => 5,
-				'orderby'     => 'modified',
-			)
+		// Two queries, merged: never-edited drafts carry a zeroed modified
+		// date and sort out of an orderby=modified window, but a fresh draft
+		// IS activity — the by-date query catches them. The usort below
+		// settles the merged order.
+		$base_query   = array(
+			'post_type'   => array( 'post', 'page' ),
+			'post_status' => array( 'publish', 'draft', 'future', 'pending' ),
+			'numberposts' => 5,
 		);
+		$recent_posts = get_posts( array_merge( $base_query, array( 'orderby' => 'modified' ) ) );
+		$seen_ids     = wp_list_pluck( $recent_posts, 'ID' );
+		foreach ( get_posts( array_merge( $base_query, array( 'orderby' => 'date' ) ) ) as $by_date ) {
+			if ( ! in_array( $by_date->ID, $seen_ids, true ) ) {
+				$recent_posts[] = $by_date;
+			}
+		}
 		foreach ( $recent_posts as $p ) {
 			$time = strtotime( $p->post_modified_gmt . ' UTC' );
 			if ( ! $time || $time < 0 ) {
-				continue; // drafts can carry a zeroed modified date
+				// Never-updated drafts zero BOTH gmt columns — post_date
+				// (site-local) is the only truthful stamp; convert it here
+				// instead of hiding the draft from the feed.
+				$time = strtotime( get_gmt_from_date( $p->post_date ) . ' UTC' );
+			}
+			if ( ! $time || $time < 0 ) {
+				continue;
 			}
 			$author = get_the_author_meta( 'display_name', $p->post_author );
 			$verb   = 'publish' === $p->post_status ? 'published' : ( 'future' === $p->post_status ? 'scheduled' : 'drafted' );
 			$activity[] = array(
-				'text'  => sprintf( '%s %s “%s”', $author, $verb, get_the_title( $p ) ),
+				'text'  => sprintf( '%s %s “%s”', $author, $verb, self::plain_title( $p ) ),
 				'time'  => $time,
 				'color' => 'publish' === $p->post_status ? 'green' : ( 'future' === $p->post_status ? 'blue' : 'accent' ),
 			);
@@ -888,7 +949,7 @@ class Minn_Admin_REST {
 				'text'  => sprintf(
 					$pending ? 'Comment from %s awaiting moderation on “%s”' : '%s commented on “%s”',
 					$c->comment_author ? $c->comment_author : 'Anonymous',
-					get_the_title( $c->comment_post_ID )
+					self::plain_title( $c->comment_post_ID )
 				),
 				'time'  => strtotime( $c->comment_date_gmt . ' UTC' ),
 				'color' => $pending ? 'amber' : 'blue',

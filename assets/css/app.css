@@ -88,7 +88,18 @@ a { color: var(--accent2); text-decoration: none; }
   display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 16px; letter-spacing: -0.5px;
 }
 .minn-logo-name { font-weight: 700; font-size: 17px; letter-spacing: -0.3px; }
-.minn-logo-ver { margin-left: auto; font-size: 12px; color: var(--text3); background: var(--panel); border: 1px solid var(--border); padding: 2px 7px; border-radius: 6px; }
+.minn-logo-ver { margin-left: auto; font-size: 12px; color: var(--text3); background: var(--panel); border: 1px solid var(--border); padding: 2px 7px; border-radius: 6px; font-family: inherit; cursor: pointer; }
+.minn-logo-ver:hover { color: var(--text); border-color: var(--accent); }
+
+/* Changelog modal — the mini markdown renderer's vocabulary. */
+.minn-changelog { padding: 4px 18px 18px; max-height: 64vh; overflow-y: auto; font-size: 13.5px; line-height: 1.65; color: var(--text2); }
+.minn-changelog h3 { font-size: 15px; color: var(--text); margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
+.minn-changelog h3:first-child { margin-top: 6px; padding-top: 0; border-top: 0; }
+.minn-changelog h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin: 14px 0 4px; }
+.minn-changelog ul { margin: 4px 0 10px; padding-left: 20px; }
+.minn-changelog li { margin: 4px 0; }
+.minn-changelog code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+.minn-changelog a { color: var(--accent2); }
 
 .minn-search-btn {
   display: flex; align-items: center; gap: 9px; width: 100%; background: var(--panel); border: 1px solid var(--border);
@@ -144,6 +155,8 @@ a { color: var(--accent2); text-decoration: none; }
   font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
 }
 .minn-new-menu button:hover { background: var(--hover); }
+.minn-new-menu button.danger { color: var(--red); }
+.minn-table-menu { min-width: 180px; }
 .minn-new-menu-label {
   margin: 5px 4px 1px; padding: 4px 7px 2px; border-top: 1px solid var(--border);
   color: var(--text3); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
@@ -225,6 +238,8 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-dash-sub { color: var(--text2); margin-top: 3px; }
 .minn-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 14px; margin-bottom: 20px; }
 .minn-stat { padding: 16px 17px; }
+.minn-stat.clickable { cursor: pointer; transition: border-color 0.15s ease; }
+.minn-stat.clickable:hover, .minn-stat.clickable:focus-visible { border-color: var(--accent); }
 .minn-stat-label { color: var(--text2); font-size: 13.5px; font-weight: 500; }
 .minn-stat-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; margin-top: 8px; }
 .minn-stat-delta { font-size: 13px; font-weight: 600; margin-top: 6px; color: var(--text3); }
@@ -456,7 +471,24 @@ a { color: var(--accent2); text-decoration: none; }
    writing column, centered. body-class specificity outranks the responsive
    narrow-nav rules, so this wins at every breakpoint. */
 .minn-sidebar { transition: width 0.25s ease, padding 0.25s ease, opacity 0.2s ease; }
-body.minn-focus-zen .minn-sidebar { width: 0; min-width: 0; padding-left: 0; padding-right: 0; opacity: 0; overflow: hidden; border-right: 0; }
+body.minn-focus-zen .minn-sidebar,
+body.minn-nav-hidden .minn-sidebar { width: 0; min-width: 0; padding-left: 0; padding-right: 0; opacity: 0; overflow: hidden; border-right: 0; }
+
+/* Nav show/hide edge tab — lives outside the sidebar it hides; z-25 keeps it
+   under the focus dim (30) so zen stays calm. */
+#minn-nav-tab {
+  position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 25;
+  width: 14px; height: 52px; border: 1px solid var(--border); border-left: 0;
+  border-radius: 0 8px 8px 0; background: var(--bg2); cursor: pointer; padding: 0;
+  opacity: 0.45; transition: opacity 0.15s ease;
+}
+#minn-nav-tab:hover { opacity: 1; }
+#minn-nav-tab::after {
+  content: ''; position: absolute; inset: 0; margin: auto; width: 6px; height: 6px;
+  border-left: 1.6px solid var(--text3); border-bottom: 1.6px solid var(--text3);
+  transform: rotate(45deg) translate(1px, -1px);
+}
+body.minn-nav-hidden #minn-nav-tab::after { transform: rotate(-135deg) translate(1px, -1px); }
 .minn-editor { transition: grid-template-columns 0.25s ease, gap 0.25s ease; }
 body.minn-focus-zen .minn-editor { grid-template-columns: minmax(0, 1fr) 0px; gap: 0; }
 .minn-editor-side { transition: opacity 0.2s ease; }
