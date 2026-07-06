@@ -3315,6 +3315,10 @@
 				lines.push( '', 'Largest tables:' );
 				g.tables.forEach( ( t ) => lines.push( `- ${ t.name } — ${ t.size } (${ t.rows } rows)` ) );
 			}
+			if ( g.autoload ) {
+				lines.push( '', `Autoloaded options (${ g.autoload.count } · ${ g.autoload.size_human } on every request):` );
+				g.autoload.top.forEach( ( t ) => lines.push( `- ${ t.name } — ${ t.size }` ) );
+			}
 		} );
 		const ext = s.extensions;
 		if ( ext ) {
@@ -3359,6 +3363,15 @@
 							<span class="minn-sys-tname mono">${ esc( t.name ) }</span>
 							<span class="minn-sys-tsize mono">${ esc( t.size ) }</span>
 							<span class="minn-sys-trows">${ esc( t.rows ) } rows</span>
+						</div>` ).join( '' ) }
+				</div>` : '' }
+				${ g.autoload ? `
+				<div class="minn-sys-tables">
+					<div class="minn-sys-tables-head">Autoloaded options — ${ esc( String( g.autoload.count ) ) } options · ${ esc( g.autoload.size_human ) } on every request</div>
+					${ g.autoload.top.map( ( t ) => `
+						<div class="minn-sys-trow">
+							<span class="minn-sys-tname mono">${ esc( t.name ) }</span>
+							<span class="minn-sys-tsize mono">${ esc( t.size ) }</span>
 						</div>` ).join( '' ) }
 				</div>` : '' }
 			</div>`;

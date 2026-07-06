@@ -22,6 +22,13 @@ const fs = require( 'fs' );
 	t.check( 'checks carry a status of pass/warn/fail', ( api.body.checks || [] ).length > 0 && api.body.checks.every( ( c ) => [ 'pass', 'warn', 'fail' ].includes( c.status ) ), JSON.stringify( ( api.body.checks || [] ).map( ( c ) => c.status ) ) );
 	const db = ( api.body.groups || [] ).find( ( g ) => g.title === 'Database' );
 	t.check( 'database group carries largest-tables', !! db && Array.isArray( db.tables ) && db.tables.length > 0, JSON.stringify( db && db.tables && db.tables.length ) );
+	const al = db && db.autoload;
+	t.check( 'database group carries the autoload breakdown', !! al && al.count > 0 && al.size > 0 && /\S/.test( al.size_human ) && Array.isArray( al.top ) && al.top.length > 0 && al.top.every( ( x ) => x.name && x.size ), JSON.stringify( al && { count: al.count, size_human: al.size_human, top: al.top.length } ) );
+	t.check( 'expired-transients row present', !! db.rows.find( ( r ) => r.key === 'Expired transients' ), '' );
+	const labels = api.body.checks.map( ( c ) => c.label );
+	t.check( 'autoload + cron health checks exist', labels.includes( 'Autoload size' ) && labels.includes( 'Cron' ), JSON.stringify( labels ) );
+	const wpg = ( api.body.groups || [] ).find( ( g ) => g.title === 'WordPress' );
+	t.check( 'WordPress group carries a Cron row', !! wpg.rows.find( ( r ) => r.key === 'Cron' && /event/.test( r.value ) ), JSON.stringify( ( wpg.rows.find( ( r ) => r.key === 'Cron' ) || {} ).value ) );
 
 	const ex = api.body.extensions;
 	t.check( 'extensions manifest has plugins + themes with versions', !! ex && Array.isArray( ex.plugins ) && ex.plugins.length > 0 && typeof ex.active_plugins === 'number' && Array.isArray( ex.themes ) && ex.plugins.every( ( p ) => typeof p.name === 'string' && typeof p.version === 'string' && typeof p.active === 'boolean' ), JSON.stringify( { plugins: ex && ex.plugins.length, active: ex && ex.active_plugins, themes: ex && ex.themes.length } ) );
@@ -44,6 +51,11 @@ const fs = require( 'fs' );
 	t.check( 'health strip renders every check', ui.checks === ( api.body.checks || [] ).length && ui.checks > 0, JSON.stringify( ui ) );
 	t.check( 'four group cards render', ui.cards === 4, String( ui.cards ) );
 	t.check( 'summary pills + largest-tables render', ui.pills > 0 && ui.hasHealthy && ui.tableRows > 0, JSON.stringify( ui ) );
+	const alUi = await page.evaluate( () => {
+		const head = [ ...document.querySelectorAll( '.minn-sys-tables-head' ) ].find( ( h ) => /Autoloaded options/.test( h.textContent ) );
+		return head ? head.textContent : '';
+	} );
+	t.check( 'autoload section renders in the Database card', /Autoloaded options — \d+ options · \S+.*on every request/.test( alUi ), alUi );
 	const extUi = await page.evaluate( () => ( {
 		sections: Array.from( document.querySelectorAll( '.minn-sys-ext-label' ) ).map( ( l ) => l.textContent ),
 		items: document.querySelectorAll( '.minn-sys-ext-item' ).length,

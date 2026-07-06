@@ -1914,16 +1914,83 @@ class Minn_Admin_REST {
 				);
 			}
 		}
+		// --- Autoload / transients / cron: the silent-rot trio --------------
+		// Autoloaded options load on EVERY request — the classic hidden
+		// performance tax. WP 6.6 split autoload into yes/on/auto* variants;
+		// core's resolver is the source of truth where it exists.
+		$autoload_in  = function_exists( 'wp_autoload_values_to_autoload' )
+			? array_values( (array) wp_autoload_values_to_autoload() )
+			: array( 'yes', 'on', 'auto-on', 'auto' );
+		$placeholders = implode( ',', array_fill( 0, count( $autoload_in ), '%s' ) );
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above; core tables.
+		$autoload_totals = $wpdb->get_row( $wpdb->prepare(
+			"SELECT COUNT(*) AS c, COALESCE(SUM(LENGTH(option_value)),0) AS s FROM {$wpdb->options} WHERE autoload IN ($placeholders)",
+			$autoload_in
+		) );
+		$autoload_top = $wpdb->get_results( $wpdb->prepare(
+			"SELECT option_name AS name, LENGTH(option_value) AS len FROM {$wpdb->options} WHERE autoload IN ($placeholders) ORDER BY len DESC LIMIT 8",
+			$autoload_in
+		) );
+		// Expired transients never clean themselves up without object caching
+		// — dead weight in the options table. '_transient_timeout_' is 19
+		// chars, so the paired value key starts at position 20.
+		$expired_transients = $wpdb->get_row(
+			"SELECT COUNT(*) AS c, COALESCE(SUM(LENGTH(b.option_value)),0) AS s
+			 FROM {$wpdb->options} a
+			 LEFT JOIN {$wpdb->options} b ON b.option_name = CONCAT('_transient_', SUBSTRING(a.option_name, 20))
+			 WHERE a.option_name LIKE '\\_transient\\_timeout\\_%' AND a.option_value < UNIX_TIMESTAMP()"
+		);
+		// phpcs:enable
+		$autoload_size  = (int) $autoload_totals->s;
+		$autoload       = array(
+			'count'      => (int) $autoload_totals->c,
+			'size'       => $autoload_size,
+			'size_human' => size_format( $autoload_size, 1 ),
+			'top'        => array_map(
+				function ( $r ) {
+					return array( 'name' => $r->name, 'size' => size_format( (int) $r->len, 1 ) );
+				},
+				(array) $autoload_top
+			),
+		);
+
+		// Cron: overdue events mean scheduled posts and emails silently stall.
+		$cron_events  = 0;
+		$cron_overdue = 0;
+		$cron_next    = null;
+		foreach ( (array) _get_cron_array() as $ts => $hooks ) {
+			if ( ! is_numeric( $ts ) ) {
+				continue; // the 'version' key
+			}
+			$n = 0;
+			foreach ( (array) $hooks as $entries ) {
+				$n += count( (array) $entries );
+			}
+			$cron_events += $n;
+			if ( $ts < time() - 5 * MINUTE_IN_SECONDS ) {
+				$cron_overdue += $n;
+			}
+			if ( null === $cron_next ) {
+				$cron_next = (int) $ts; // the array is time-ordered
+			}
+		}
+		$cron_disabled     = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
+		$wordpress['Cron'] = $cron_events . ' event' . ( 1 === $cron_events ? '' : 's' )
+			. ( $cron_next ? ( $cron_next <= time() ? ', next due now' : ', next in ' . human_time_diff( time(), $cron_next ) ) : '' )
+			. ( $cron_disabled ? ' · WP-Cron disabled (system cron expected)' : '' );
+
 		$database = array(
-			'Engine'    => $is_maria ? 'MariaDB' : 'MySQL',
-			'Version'   => $server_info ? $server_info : $db_version,
-			'Host'      => DB_HOST,
-			'Name'      => DB_NAME,
-			'Charset'   => defined( 'DB_CHARSET' ) ? DB_CHARSET : $wpdb->charset,
-			'Collation' => $wpdb->collate ? $wpdb->collate : '(default)',
-			'Prefix'    => $wpdb->prefix,
-			'Tables'    => (string) count( (array) $tables ),
-			'Size'      => size_format( $db_size, 1 ),
+			'Engine'             => $is_maria ? 'MariaDB' : 'MySQL',
+			'Version'            => $server_info ? $server_info : $db_version,
+			'Host'               => DB_HOST,
+			'Name'               => DB_NAME,
+			'Charset'            => defined( 'DB_CHARSET' ) ? DB_CHARSET : $wpdb->charset,
+			'Collation'          => $wpdb->collate ? $wpdb->collate : '(default)',
+			'Prefix'             => $wpdb->prefix,
+			'Tables'             => (string) count( (array) $tables ),
+			'Size'               => size_format( $db_size, 1 ),
+			'Expired transients' => number_format_i18n( (int) $expired_transients->c )
+				. ( (int) $expired_transients->s > 0 ? ' (' . size_format( (int) $expired_transients->s, 1 ) . ')' : '' ),
 		);
 
 		// --- Server & filesystem -------------------------------------------
@@ -1987,6 +2054,21 @@ class Minn_Admin_REST {
 				'status' => $uploads_writable ? 'pass' : 'fail',
 				'detail' => $uploads_writable ? 'The uploads directory accepts writes' : 'Uploads directory is not writable',
 			),
+			array(
+				'label'  => 'Autoload size',
+				// The usual guidance: under ~800 KB is healthy, past a few MB
+				// every request pays a real tax.
+				'status' => $autoload_size < 800 * 1024 ? 'pass' : ( $autoload_size < 3 * 1024 * 1024 ? 'warn' : 'fail' ),
+				'detail' => $autoload['size_human'] . ' across ' . number_format_i18n( $autoload['count'] ) . ' options'
+					. ( $autoload_size < 800 * 1024 ? ' — healthy' : ' loads on every request — see the top offenders in the Database card' ),
+			),
+			array(
+				'label'  => 'Cron',
+				'status' => $cron_overdue > 0 ? 'warn' : 'pass',
+				'detail' => $cron_overdue > 0
+					? $cron_overdue . ' overdue event' . ( 1 === $cron_overdue ? '' : 's' ) . ' — cron may be stalled' . ( $cron_disabled ? ' (WP-Cron is disabled; is the system cron running?)' : '' )
+					: $cron_events . ' scheduled event' . ( 1 === $cron_events ? '' : 's' ) . ', none overdue',
+			),
 		);
 
 		return rest_ensure_response(
@@ -1998,7 +2080,7 @@ class Minn_Admin_REST {
 				'groups'     => array(
 					array( 'title' => 'WordPress', 'icon' => 'wp', 'rows' => self::kv_rows( $wordpress ) ),
 					array( 'title' => 'PHP', 'icon' => 'php', 'rows' => self::kv_rows( $php ) ),
-					array( 'title' => 'Database', 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables ),
+					array( 'title' => 'Database', 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables, 'autoload' => $autoload ),
 					array( 'title' => 'Server', 'icon' => 'server', 'rows' => self::kv_rows( $server ) ),
 				),
 			)
