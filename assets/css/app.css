@@ -1125,6 +1125,9 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-toast-icon { width: 22px; height: 22px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .minn-toast-icon.err { background: var(--red); }
 .minn-toast-msg { font-size: 14.5px; font-weight: 500; }
+.minn-toast-action { padding-right: 8px; }
+.minn-toast-btn { margin-left: 6px; background: var(--accent-soft); color: var(--accent2); border: 1px solid var(--accent-soft); border-radius: 8px; padding: 5px 12px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.minn-toast-btn:hover { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
 /* ===== Responsive ===== */
 @media (max-width: 900px) {
