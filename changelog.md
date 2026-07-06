@@ -1,5 +1,35 @@
 # Changelog
 
+## **v0.7.0** - July 5, 2026
+
+Beyond writing. Two big moves this cycle: **coexist with page builders** instead of pretending they don't exist, and give developers a real **System** page. Plus the trust work that closes Horizon 1 of the [editor roadmap](docs/editor-roadmap.md) — a writer never loses work.
+
+### Added
+* **Page-builder coexistence:** Minn detects pages built with **Divi, Elementor, Brizy, Beaver Builder, Etch, Bricks or WPBakery** and gets out of their way. A builder chip marks them in the content list; opening one shows a read-only preview with an **Edit in ⟨builder⟩** button to the builder's own chrome-free surface (no wp-admin screen), while title, status, URL, SEO and the sidebar still save from Minn. Builders that keep their content in postmeta (Elementor, Beaver, Brizy, Bricks) or shortcodes (WPBakery, legacy Divi) fence the editor so a stray Minn edit can't silently break their canvas; block-native builders (Etch, Divi 5) stay editable through islands. Third parties register via the `minn_admin_page_builders` filter.
+* **New page in a builder:** The + New menu lists every active builder — pick one and Minn creates a prepared draft and hands the tab straight to the builder's editor.
+* **Paste cleanup:** Pasting from Word, Google Docs or any web page is sanitized to Minn's safe block subset — Word's `mso-list` paragraphs rebuild into real nested lists, Docs style-spans map to bold/italic/strike/code, `javascript:` hrefs and vendor styling never pass, and a single ⌘Z reverts a whole paste. Multi-line plain text becomes real paragraphs; a lone URL still becomes an embed. Classic mode is sanitized too.
+* **Inline media flow:** Paste a screenshot or drag an image file into the editor and it uploads to the media library at the caret — an instant preview, then an undo-safe swap to a real attachment (a true Gutenberg image block). The serializers skip in-flight uploads so an autosave can never store a `blob:` URL. Every editable image now carries a typable caption ("Write a caption…").
+* **Conflict safety:** Post locking rides WordPress's own `_edit_lock`, so Minn, the classic editor and Gutenberg all honor each other. Opening a post someone else is editing shows a takeover dialog; being taken over drops you to read-only with a "take back" banner. A localStorage **crash net** snapshots every edit within ~1.2s — even before the first autosave — and offers recovery on the next open, so a crashed browser loses nothing.
+* **Undo for structural deletions:** Deleting an embed, gallery, table row/column or whole table shows a "Removed — Undo" toast. (These are direct-DOM operations outside the browser's undo stack, so ⌘Z can't reach them — see the [undo-completeness investigation](docs/editor-roadmap.md).) Restoring re-inserts the block and its saved markup intact.
+* **Editor sidebar — the publish essentials:** Editable **permalink/slug**, per-post **Discussion** (allow comments / pingbacks), full **Visibility** (Public / Password protected / Private) and **Sticky** for posts — everything writers used to open wp-admin for. All through WordPress's native REST fields, with the sticky/password mutual exclusion and "private is a status, not a field" edge cases handled so an autosave never accidentally publishes a draft.
+* **System page:** A developer diagnostics surface under Manage — a health strip (PHP version, HTTPS, persistent object cache, memory, OPcache, debug-in-production, uploads writable) over cards for WordPress, PHP, the database (with a largest-tables breakdown) and the server, plus one-click **Copy report** as markdown. Deliberately not WordPress-y — dense with the facts a developer actually wants.
+* **Debug tools:** On the System page, live toggle switches for `WP_DEBUG`, `WP_DEBUG_LOG`, `WP_DEBUG_DISPLAY`, `SCRIPT_DEBUG` and `SAVEQUERIES` that safely rewrite `wp-config.php` — whitelist-only, syntax-validated before writing, backed up, and shown only when wp-config is writable and file mods aren't disabled (constants defined elsewhere are read-only). The `debug.log` path is clickable and opens a large overlay showing the tail with Refresh / Copy / Clear.
+* **Installed extensions manifest:** The System page lists every plugin (active first, inactive dimmed), must-use plugin and theme with versions — folded into the Copy report too.
+* **Extensions filters & search:** The Extensions view gains All / Active / Inactive / Updates status filters and a search box.
+* **Test coverage:** New repo-citizen Playwright suites for paste cleanup, conflict safety, the crash net, inline media, the editor sidebar, the System page and structural-deletion undo — each verifying *saved* content, not just the DOM.
+
+### Improved
+* One consistent grammar for list-view toolbars: filters and search on the left, a single primary action on the right, and the item/page count moved down to the pager where it belongs. Trash became a slice tab rather than an action button.
+* The page-builder chip moved to the slug line so its placement is consistent regardless of the builder's name length, leaving the Status column a clean column of pills.
+* Content-list and + New row markers are proper SVG icons now (the page glyph read as broken).
+
+### Fixed
+* The Extensions on/off switch reflects the real plugin state immediately. Concurrent `loadPlugins()` fetches could replace the cache *after* a render had bound the toggle handlers to the older array, so the switch appeared frozen even though the plugin had toggled server-side.
+* A late editor re-render could revert unsaved edits before a save (surfaced under server load) — the editor now adopts the live DOM whenever there are unsaved changes.
+* Etch's edit URL renders its app at the site root (`?etch=magic&post_id=N`); a permalink-based URL yielded a silent blank page.
+* Toasts animate straight up from the bottom instead of flashing in sideways — the keyframe was dropping the horizontal-centering transform mid-animation.
+* A first-block island's ⚙ chip is no longer clipped at the top of the editor (`overflow-x: hidden` was forcing vertical clipping to `auto`).
+
 ## **v0.6.0** - July 5, 2026
 
 The editor release. Everything here is aimed at one goal: writing in Minn beats writing in the block editor — see the new [editor roadmap](docs/editor-roadmap.md).
