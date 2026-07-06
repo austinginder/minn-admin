@@ -30,7 +30,11 @@ registry at boot (dynamic + top-level + inserter-visible + non-core; adapter `in
 descriptors supersede, `insert => false` suppresses, `minn_admin_insert_blocks` filters the
 result) and the slash menu carries them as **search-only** entries: the default list stays
 curated, and typing matches title or namespace. A self-closing comment is valid saved
-markup for any server-rendered block, so insertion needs no template. Static-save blocks
+markup only when the block's JS `save()` is null — `is_dynamic` is NOT that guarantee
+(stackable/posts pairs a render_callback with a JS save that emits wrapper HTML; a bare
+comment renders empty AND fails Gutenberg validation). The server can't see JS `save()`, so
+the shipped discriminator is a **render probe**: candidates whose bare comment renders
+nothing are excluded (cached in a transient keyed on the candidate set). Static-save blocks
 remain excluded per "The honest limit" below.
 
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —

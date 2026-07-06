@@ -143,15 +143,22 @@ Attributes with a `source` (stored in saved HTML) are never form-edited.
 
 ### Dynamic blocks insert automatically — no descriptor needed
 
-If your block is **dynamic** (server-rendered via a `render_callback` or a `render` file), it
-is already insertable in Minn with zero adapter code. A self-closing block comment is always
-valid saved markup for a server-rendered block, so Minn auto-registers every dynamic,
-top-level, inserter-visible non-core block as a search-only slash-menu entry: it doesn't
-clutter the default menu, but typing part of its title (or its namespace, so `/my-plugin`
-lists everything you ship) surfaces it. Insertion drops `<!-- wp:your/block /-->` as an
-island, renders the real preview, and opens the schema-driven inspector.
+If your block is **fully server-rendered** (a `render_callback` or `render` file does the
+work and your JS `save()` is null), it is already insertable in Minn with zero adapter code.
+For those blocks a self-closing comment is valid saved markup, so Minn auto-registers every
+dynamic, top-level, inserter-visible non-core block that **renders output from a bare
+comment** as a search-only slash-menu entry: it doesn't clutter the default menu, but typing
+part of its title (or its namespace, so `/my-plugin` lists everything you ship) surfaces it.
+Insertion drops `<!-- wp:your/block /-->` as an island, renders the real preview, and opens
+the schema-driven inspector.
 
-To make the most of this, register your blocks well server-side:
+The render probe is the honesty gate. `is_dynamic` alone doesn't mean a bare comment is
+valid — hybrid blocks (a render_callback **plus** a JS `save()` that emits wrapper HTML, or
+a render that only processes saved inner blocks) render nothing standalone and would fail
+Gutenberg's block validation if Minn inserted them, so they are excluded. If your block
+renders empty without attributes, give it sensible defaults or ship an `insert.template`.
+
+To make the most of the auto-insert, register your blocks well server-side:
 
 - **`title` in PHP registration** (or `block.json`) — without it Minn falls back to a
   humanized slug ("report-card" → "Report Card").

@@ -12,7 +12,8 @@
  * blocks registered without PHP titles — exercises the humanized-slug
  * fallback, e.g. anchor/report-card → "Report Card"; anchor/callout has an
  * adapter insert template so it must NOT be duplicated) and Stackable active
- * (namespace search).
+ * (stackable/posts is a hybrid — render_callback plus a JS save() — so it
+ * renders empty from a bare comment and pins the render-probe exclusion).
  */
 const { launch, login, createPost, deletePost, openEditor, freshParagraph, reporter } = require( './helpers' );
 
@@ -48,6 +49,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 			( boot.find( ( b ) => b.name === 'anchor/report-card' ) || {} ).title === 'Report Card' );
 		t.check( 'adapter insert template supersedes auto entry', ! names.includes( 'anchor/callout' ) );
 		t.check( 'static-save blocks excluded', ! names.some( ( n ) => n === 'stackable/icon-box' || n === 'stackable/heading' ) );
+		t.check( 'hybrid dynamic blocks excluded (render probe)',
+			! names.includes( 'stackable/posts' ) && ! names.includes( 'yoast/faq-block' ), names.join( ', ' ) );
 
 		// --- Search-only: default menu stays curated ---
 		await freshParagraph( page );
@@ -79,10 +82,10 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 
 		// --- Namespace search lists a whole plugin's blocks ---
 		await freshParagraph( page );
-		await page.keyboard.type( '/stackable', { delay: 30 } );
+		await page.keyboard.type( '/anchor', { delay: 30 } );
 		await page.waitForTimeout( 250 );
 		labels = await page.$$( '.minn-slash-menu' ) .then( ( m ) => m.length ? menuLabels() : [] );
-		t.check( 'namespace query lists plugin blocks', labels.some( ( l ) => l.includes( 'Posts' ) ), labels.join( ', ' ) );
+		t.check( 'namespace query lists plugin blocks', labels.some( ( l ) => l.includes( 'Term List' ) ), labels.join( ', ' ) );
 		await page.keyboard.press( 'Escape' );
 
 		// --- No duplicate entry for adapter-templated blocks ---
@@ -97,7 +100,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		// Drop the leftover "/query" paragraphs so saves stay clean.
 		await page.evaluate( () => {
 			document.querySelectorAll( '#minn-editor-body > p' ).forEach( ( p ) => {
-				if ( /^\/(stackable|callout)/.test( p.textContent.trim() ) ) p.remove();
+				if ( /^\/(anchor|callout)/.test( p.textContent.trim() ) ) p.remove();
 			} );
 		} );
 

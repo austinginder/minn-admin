@@ -333,13 +333,17 @@ class Minn_Admin {
 	/**
 	 * Third-party blocks insertable with zero adapter code.
 	 *
-	 * A self-closing block comment is always valid saved markup for a DYNAMIC
-	 * (server-rendered) block, so any dynamic, top-level, inserter-visible
-	 * block qualifies automatically — the existing island + schema-driven
-	 * inspector machinery handles it from there. Static-save blocks are
-	 * excluded on purpose: only the block's own JS `save()` can produce their
-	 * HTML (docs/block-inspector.md, "The honest limit"). Core blocks are
-	 * excluded because Minn has native flows for them.
+	 * A self-closing block comment is valid saved markup only for blocks whose
+	 * JS `save()` is null — `is_dynamic()` alone is NOT that guarantee (hybrid
+	 * blocks like stackable/posts have a render_callback AND a JS save that
+	 * emits wrapper HTML; a bare comment renders empty and Gutenberg flags it
+	 * invalid). The server can't see JS save(), so the discriminator is a
+	 * RENDER PROBE: a block that outputs nothing from a bare self-closing
+	 * comment depends on saved HTML, inner blocks or editor-supplied
+	 * attributes, and is excluded. Static-save blocks are excluded outright:
+	 * only the block's own JS `save()` can produce their HTML
+	 * (docs/block-inspector.md, "The honest limit"). Core blocks are excluded
+	 * because Minn has native flows for them.
 	 *
 	 * An adapter descriptor with an `insert` key supersedes the auto entry
 	 * (its hand-written template wins); `insert => false` suppresses a block
@@ -349,7 +353,7 @@ class Minn_Admin {
 	 * @return array[] Sorted list of { name, title, ns }.
 	 */
 	public static function insertable_blocks( $block_forms ) {
-		$out = array();
+		$candidates = array();
 		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $type ) {
 			if ( 0 === strpos( $name, 'core/' ) ) {
 				continue;
@@ -372,12 +376,33 @@ class Minn_Admin {
 			// to a humanized slug so those blocks stay reachable.
 			$slug  = substr( $name, strpos( $name, '/' ) + 1 );
 			$title = $type->title ? $type->title : ucwords( str_replace( array( '-', '_' ), ' ', $slug ) );
-			$out[] = array(
+			$candidates[ $name ] = array(
 				'name'  => $name,
 				'title' => $title,
 				'ns'    => substr( $name, 0, strpos( $name, '/' ) ),
 			);
 		}
+
+		// Render probe, cached: ~60 candidate renders can run real queries, so
+		// the surviving list is kept in a transient. The key hashes the
+		// candidate set, so activating/deactivating a plugin busts it.
+		$key = 'minn_admin_insert_blocks_' . md5( MINN_ADMIN_VERSION . wp_json_encode( array_keys( $candidates ) ) );
+		$out = get_transient( $key );
+		if ( ! is_array( $out ) ) {
+			$out = array();
+			foreach ( $candidates as $name => $entry ) {
+				try {
+					$rendered = trim( do_blocks( '<!-- wp:' . $name . ' /-->' ) );
+				} catch ( \Throwable $e ) {
+					$rendered = '';
+				}
+				if ( '' !== $rendered ) {
+					$out[] = $entry;
+				}
+			}
+			set_transient( $key, $out, 12 * HOUR_IN_SECONDS );
+		}
+
 		usort( $out, function ( $a, $b ) {
 			return strcasecmp( $a['title'], $b['title'] );
 		} );
