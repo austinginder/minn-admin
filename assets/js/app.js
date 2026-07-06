@@ -5345,6 +5345,14 @@
 		if ( ! ed || ed.mode === 'locked' ) return;
 		ed.focus = ! ed.focus;
 		try { localStorage.setItem( 'minn-focus', ed.focus ? '1' : '' ); } catch ( e ) { /* private mode */ }
+		// View modes are mutually exclusive — entering one exits the other
+		// silently (zen hides the whole sidebar; outline mode under it is
+		// meaningless). Only the entering mode toasts.
+		if ( ed.focus && ed.outlineMode ) {
+			ed.outlineMode = false;
+			try { localStorage.setItem( 'minn-outline-mode', '' ); } catch ( e ) { /* private mode */ }
+			removeOutlineMode();
+		}
 		toast( ed.focus ? 'Focus mode on — ⌘⇧D to leave' : 'Focus mode off' );
 		if ( ed.focus ) {
 			// Zen: collapse the nav and the editor sidebar — nothing but the
@@ -5388,6 +5396,12 @@
 		if ( ! ed ) return;
 		ed.outlineMode = ! ed.outlineMode;
 		try { localStorage.setItem( 'minn-outline-mode', ed.outlineMode ? '1' : '' ); } catch ( e ) { /* private mode */ }
+		// Mutually exclusive with focus mode — see toggleFocusMode.
+		if ( ed.outlineMode && ed.focus ) {
+			ed.focus = false;
+			try { localStorage.setItem( 'minn-focus', '' ); } catch ( e ) { /* private mode */ }
+			removeFocusDim();
+		}
 		toast( ed.outlineMode ? 'Outline mode on — ⌘⇧O to leave' : 'Outline mode off' );
 		document.body.classList.toggle( 'minn-outline-mode', ed.outlineMode );
 	}
@@ -6523,8 +6537,10 @@
 			document.body.classList.toggle( 'minn-focus-zen', !! ed.focus );
 		}
 		// Outline mode persists the same way (and works in locked mode — it's
-		// pure chrome around a read-only body).
+		// pure chrome around a read-only body). Focus wins if both somehow
+		// persisted — the toggles keep them mutually exclusive.
 		try { ed.outlineMode = ed.outlineMode || !! localStorage.getItem( 'minn-outline-mode' ); } catch ( e ) { /* private mode */ }
+		if ( ed.focus && ed.outlineMode ) ed.outlineMode = false;
 		document.body.classList.toggle( 'minn-outline-mode', !! ed.outlineMode );
 		updateEditorStats();
 		ensureEditorStyles();
