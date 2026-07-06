@@ -1,10 +1,10 @@
 # Minn Admin
 
-**A reimagined WordPress admin experience — fast, focused and beautiful.**
+**A reimagined WordPress admin experience. Fast, focused and beautiful.**
 
 Minn Admin serves a modern, minimal dashboard at `/minn-admin/` on your WordPress site. It's a
-single-page app built on the WordPress REST API — no React, no build step, one vanilla-JS file —
-and it lives *alongside* the classic wp-admin, which stays fully available.
+single-page app built on the WordPress REST API with no React, no build step, and one
+vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully available.
 
 ![Minn Admin — Overview](.github/screenshot-dark.png)
 
@@ -44,7 +44,7 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
 - **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks
   (structure presets + custom, with automatic rewrite flushing), plus built-in maintenance mode
 - **Editor** — a calm, block-aware writing surface that stores **native Gutenberg markup**
-  (zero lock-in — open any post in the block editor, any time). Markdown typing conventions
+  (zero lock-in: open any post in the block editor, any time). Markdown typing conventions
   (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), a link popover
   on ⌘K, text alignment, table & image controls in island-style cutouts, complex blocks
   preserved byte-for-byte as **configurable islands** rendered with the site's real front-end
@@ -53,11 +53,11 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
   web HTML into the safe subset; **paste or drag an image** and it uploads to the library at
   the caret with an inline caption. The publish sidebar edits the **slug**, **visibility**
   (public / password / private), per-post **discussion** and **sticky**. Deleting an embed or
-  a table row offers a **Removed — Undo** toast. Where this is heading:
+  a table row offers an **Undo** toast. Where this is heading:
   [the editor roadmap](docs/editor-roadmap.md)
 - **Never lose work** — post locking on WordPress's own `_edit_lock` (Minn, the classic editor
   and Gutenberg all honor each other, with takeover), plus a localStorage **crash net** that
-  snapshots every edit within ~1.2s — before the first autosave — and offers recovery on the
+  snapshots every edit within ~1.2s (before the first autosave) and offers recovery on the
   next open. Status-aware autosave: drafts save in place, published posts back up to revisions
   (only Update goes live), with a backup-restore banner.
 - **Page builders** — build a page with **Divi, Elementor, Brizy, Beaver Builder, Etch, Bricks
@@ -75,7 +75,7 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
 - **Plugin surfaces** — bundled adapters for **Gravity Forms** (readable entries with real
   field labels + a Forms view with activate/deactivate), **Gravity SMTP** (email log with a
   real HTML preview and resend), **Simple History** (activity log), **Redirection**,
-  **Safe Redirect Manager** and **Simple 301 Redirects** (redirects — list, search, create,
+  **Safe Redirect Manager** and **Simple 301 Redirects** (redirects: list, search, create,
   edit and delete), **ACF** (editor panels) and **Yoast / Rank Math** (SEO panel), plus
   one-filter APIs for any plugin to register views, editor panels, traffic data or
   block-inspector forms
@@ -86,7 +86,7 @@ and it lives *alongside* the classic wp-admin, which stays fully available.
 
 1. Download or clone into `wp-content/plugins/minn-admin`.
 2. Activate through the Plugins screen.
-3. Visit `/minn-admin/` — also linked from the admin bar and the wp-admin menu.
+3. Visit `/minn-admin/`. It's also linked from the admin bar and the wp-admin menu.
 
 Pretty permalinks recommended (clean routes like `/minn-admin/content`); without them the app
 falls back to `/?minn_admin=1` with hash routing. Updates are delivered through the normal
@@ -94,7 +94,7 @@ WordPress updates UI via GitHub Releases.
 
 ## Extending
 
-Any plugin can add a view to Minn with one filter — a declarative descriptor, no JavaScript
+Any plugin can add a view to Minn with one filter: a declarative descriptor, no JavaScript
 required. See [docs/for-plugin-authors.md](docs/for-plugin-authors.md), and
 [docs/extension-api.md](docs/extension-api.md) for the design rationale.
 
@@ -109,7 +109,7 @@ required. See [docs/for-plugin-authors.md](docs/for-plugin-authors.md), and
 
 ## Development
 
-Edit and go — there's no build step. Lint with `node --check assets/js/app.js` and
+Edit and go. There's no build step. Lint with `node --check assets/js/app.js` and
 `php -l minn-admin.php`. Commit messages follow [Emoji-Log](https://github.com/ahmadawais/Emoji-Log).
 
 ## License
