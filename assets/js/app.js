@@ -1381,6 +1381,135 @@
 		state.cache.media = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
+	/* ===== Image editor (rotate + crop over core's media/{id}/edit) ===== */
+	// Core's REST image editor does all the pixel work server-side and saves
+	// a NEW copy — Minn only draws the preview (canvas, rotation-aware) and a
+	// drag crop box. Crop percentages are relative to the POST-rotation image,
+	// exactly what the modifiers contract expects (applied in order).
+	function bindImageEditor( m ) {
+		const it = m.item;
+		const stage = $( '#minn-imged-stage' );
+		const canvas = $( '#minn-imged-canvas' );
+		const box = $( '#minn-imged-crop' );
+		if ( ! stage || ! canvas ) return;
+		m.rot = m.rot || 0;
+		m.crop = m.crop || null; // { x, y, w, h } percentages of the canvas
+
+		const draw = () => {
+			const img = m._img;
+			if ( ! img ) return;
+			const rotated = m.rot % 180 !== 0;
+			const iw = rotated ? img.naturalHeight : img.naturalWidth;
+			const ih = rotated ? img.naturalWidth : img.naturalHeight;
+			const scale = Math.min( 640 / iw, 420 / ih, 1 );
+			canvas.width = Math.round( iw * scale );
+			canvas.height = Math.round( ih * scale );
+			const cx = canvas.getContext( '2d' );
+			cx.save();
+			cx.translate( canvas.width / 2, canvas.height / 2 );
+			cx.rotate( ( m.rot * Math.PI ) / 180 );
+			cx.drawImage( img, -img.naturalWidth * scale / 2, -img.naturalHeight * scale / 2, img.naturalWidth * scale, img.naturalHeight * scale );
+			cx.restore();
+			positionBox();
+		};
+
+		const positionBox = () => {
+			if ( ! m.crop ) { box.hidden = true; return; }
+			box.hidden = false;
+			const r = canvas.getBoundingClientRect();
+			const s = stage.getBoundingClientRect();
+			box.style.left = ( r.left - s.left + ( m.crop.x / 100 ) * r.width ) + 'px';
+			box.style.top = ( r.top - s.top + ( m.crop.y / 100 ) * r.height ) + 'px';
+			box.style.width = ( ( m.crop.w / 100 ) * r.width ) + 'px';
+			box.style.height = ( ( m.crop.h / 100 ) * r.height ) + 'px';
+		};
+
+		if ( m._img ) draw();
+		else {
+			const img = new Image();
+			img.onload = () => { m._img = img; draw(); };
+			img.src = it.url;
+		}
+
+		// Crop interactions: drag on the canvas starts a new box; drag the box
+		// moves it; corner handles resize. All math in canvas percentages.
+		const pctOf = ( e ) => {
+			const r = canvas.getBoundingClientRect();
+			return {
+				x: Math.max( 0, Math.min( 100, ( ( e.clientX - r.left ) / r.width ) * 100 ) ),
+				y: Math.max( 0, Math.min( 100, ( ( e.clientY - r.top ) / r.height ) * 100 ) ),
+			};
+		};
+		let drag = null;
+		stage.addEventListener( 'pointerdown', ( e ) => {
+			const h = e.target.dataset && e.target.dataset.h;
+			const p = pctOf( e );
+			if ( h ) drag = { mode: h, orig: { ...m.crop } };
+			else if ( e.target === box ) drag = { mode: 'move', start: p, orig: { ...m.crop } };
+			else if ( e.target === canvas ) { drag = { mode: 'new', start: p }; m.crop = { x: p.x, y: p.y, w: 0, h: 0 }; }
+			else return;
+			e.preventDefault();
+			stage.setPointerCapture && stage.setPointerCapture( e.pointerId );
+		} );
+		stage.addEventListener( 'pointermove', ( e ) => {
+			if ( ! drag || ! m.crop ) return;
+			const p = pctOf( e );
+			const c = m.crop;
+			if ( drag.mode === 'new' ) {
+				c.x = Math.min( drag.start.x, p.x );
+				c.y = Math.min( drag.start.y, p.y );
+				c.w = Math.abs( p.x - drag.start.x );
+				c.h = Math.abs( p.y - drag.start.y );
+			} else if ( drag.mode === 'move' ) {
+				c.x = Math.max( 0, Math.min( 100 - c.w, drag.orig.x + ( p.x - drag.start.x ) ) );
+				c.y = Math.max( 0, Math.min( 100 - c.h, drag.orig.y + ( p.y - drag.start.y ) ) );
+			} else {
+				const o = drag.orig;
+				const right = o.x + o.w;
+				const bottom = o.y + o.h;
+				if ( drag.mode.includes( 'w' ) ) { c.x = Math.min( p.x, right - 2 ); c.w = right - c.x; }
+				if ( drag.mode.includes( 'e' ) ) { c.w = Math.max( 2, p.x - o.x ); }
+				if ( drag.mode.includes( 'n' ) ) { c.y = Math.min( p.y, bottom - 2 ); c.h = bottom - c.y; }
+				if ( drag.mode.includes( 's' ) ) { c.h = Math.max( 2, p.y - o.y ); }
+			}
+			positionBox();
+		} );
+		stage.addEventListener( 'pointerup', () => {
+			if ( drag && m.crop && ( m.crop.w < 2 || m.crop.h < 2 ) ) { m.crop = null; positionBox(); }
+			drag = null;
+		} );
+
+		$( '#minn-imged-rl' ).addEventListener( 'click', () => { m.rot = ( m.rot + 270 ) % 360; m.crop = null; draw(); } );
+		$( '#minn-imged-rr' ).addEventListener( 'click', () => { m.rot = ( m.rot + 90 ) % 360; m.crop = null; draw(); } );
+		$( '#minn-imged-reset' ).addEventListener( 'click', () => { m.rot = 0; m.crop = null; draw(); } );
+		$( '#minn-imged-cancel' ).addEventListener( 'click', () => { m.editing = false; renderOverlays(); } );
+		$( '#minn-imged-save' ).addEventListener( 'click', async ( e ) => {
+			const modifiers = [];
+			if ( m.rot ) modifiers.push( { type: 'rotate', args: { angle: m.rot } } );
+			if ( m.crop ) modifiers.push( { type: 'crop', args: { left: m.crop.x, top: m.crop.y, width: m.crop.w, height: m.crop.h } } );
+			if ( ! modifiers.length ) { toast( 'Nothing to save — rotate or crop first', true ); return; }
+			const btn = e.currentTarget;
+			btn.disabled = true;
+			btn.textContent = 'Saving…';
+			try {
+				const fresh = await api( `wp/v2/media/${ it.id }/edit`, {
+					method: 'POST',
+					body: JSON.stringify( { src: it.url, modifiers } ),
+				} );
+				toast( 'Edited copy saved' );
+				state.cache.media = null;
+				if ( state.route === 'media' ) renderMedia();
+				// Land on the new copy's preview.
+				state.modal = { type: 'media', item: mapMediaItem( fresh ) };
+				renderOverlays();
+			} catch ( err ) {
+				toast( err.message, true );
+				btn.disabled = false;
+				btn.textContent = 'Save as copy';
+			}
+		} );
+	}
+
 	// Shared by the preview modal's Delete and the grid context menu.
 	async function deleteMediaItem( it ) {
 		if ( ! confirm( `Delete “${ it.name }” permanently?` ) ) return;
@@ -1541,7 +1670,7 @@
 						catch ( err ) { toast( 'Could not copy', true ); }
 					} },
 					{ label: 'Open ↗', href: m.url },
-					...( m.kind === 'IMG' ? [ { label: 'Edit image ↗', href: `${ B.site.adminUrl }post.php?post=${ m.id }&action=edit` } ] : [] ),
+					...( m.kind === 'IMG' ? [ { label: 'Edit image', run: () => { state.modal = { type: 'media', item: m, editing: true }; renderOverlays(); } } ] : [] ),
 					{ label: 'Delete', danger: true, run: () => deleteMediaItem( m ) },
 				] );
 			} );
@@ -9578,6 +9707,35 @@
 			</div>`;
 		}
 
+		if ( m.type === 'media' && m.editing ) {
+			const it = m.item;
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal media wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">Edit image · ${ esc( it.name ) }</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-imged-bar">
+						<button class="minn-btn-soft" id="minn-imged-rl" title="Rotate left">⟲ Rotate</button>
+						<button class="minn-btn-soft" id="minn-imged-rr" title="Rotate right">⟳ Rotate</button>
+						<button class="minn-btn-soft" id="minn-imged-reset">Reset</button>
+						<span class="minn-imged-hint">Drag on the image to crop</span>
+					</div>
+					<div class="minn-imged-stage" id="minn-imged-stage">
+						<canvas id="minn-imged-canvas"></canvas>
+						<div class="minn-imged-crop" id="minn-imged-crop" hidden>
+							<span data-h="nw"></span><span data-h="ne"></span><span data-h="sw"></span><span data-h="se"></span>
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-primary" id="minn-imged-save">Save as copy</button>
+						<button class="minn-btn-soft" id="minn-imged-cancel">Cancel</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'media' ) {
 			const it = m.item;
 			const ctx = mediaModalContext();
@@ -9621,7 +9779,7 @@
 						${ canEdit ? `<button class="minn-btn-primary" id="minn-media-save">Save</button>` : '' }
 						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
 						<button class="minn-btn-soft" id="minn-media-open">↗ Open</button>
-						${ it.kind === 'IMG' ? `<a class="minn-btn-soft" id="minn-media-edit-image" href="${ esc( B.site.adminUrl ) }post.php?post=${ it.id }&action=edit" target="_blank" rel="noopener" title="Crop, rotate and scale in the classic attachment editor">✎ Edit image ↗</a>` : '' }
+						${ it.kind === 'IMG' ? `<button class="minn-btn-soft" id="minn-media-edit-image" type="button" title="Rotate and crop — saved as a new copy">✎ Edit image</button>` : '' }
 						<button class="minn-btn-soft danger" id="minn-media-delete">${ icon( 'trash' ) } Delete</button>
 					</div>
 				</div>
@@ -10215,8 +10373,17 @@
 			);
 		}
 
-		if ( m.type === 'media' ) {
+		if ( m.type === 'media' && m.editing ) {
+			bindImageEditor( m );
+		} else if ( m.type === 'media' ) {
 			const it = m.item;
+			const editBtn = $( '#minn-media-edit-image' );
+			if ( editBtn ) editBtn.addEventListener( 'click', () => {
+				m.editing = true;
+				m.rot = 0;
+				m.crop = null;
+				renderOverlays();
+			} );
 			const prev = $( '#minn-media-prev' );
 			const next = $( '#minn-media-next' );
 			if ( prev ) prev.addEventListener( 'click', () => mediaModalNav( -1 ) );

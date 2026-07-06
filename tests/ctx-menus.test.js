@@ -17,11 +17,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
 	const media = await page.evaluate( () => ( {
 		labels: [ ...document.querySelectorAll( '.minn-ctx-menu button, .minn-ctx-menu a' ) ].map( ( e ) => e.textContent.trim() ),
-		editHref: ( document.querySelector( '.minn-ctx-menu a[href*="action=edit"]' ) || {} ).href || '',
 		openHref: ( document.querySelector( '.minn-ctx-menu a[href*="uploads"]' ) || {} ).href || '',
 	} ) );
 	t.check( 'media menu offers the item verbs', media.labels.includes( 'Preview' ) && media.labels.includes( 'Copy URL' ) && media.labels.includes( 'Delete' ), JSON.stringify( media.labels ) );
-	t.check( 'image items add the Edit image deep link', /post\.php\?post=\d+&action=edit/.test( media.editHref ) || ! media.labels.includes( 'Edit image ↗' ), media.editHref );
+	t.check( 'image items offer the in-app editor', media.labels.includes( 'Edit image' ), JSON.stringify( media.labels ) );
 	await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( b ) => b.textContent.trim() === 'Preview' ).click() );
 	await page.waitForSelector( '#minn-modal-overlay .minn-modal.media', { timeout: 5000 } );
 	t.check( 'Preview opens the media modal', true, '' );

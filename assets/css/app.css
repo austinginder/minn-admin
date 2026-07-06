@@ -521,6 +521,30 @@ body.minn-focus-zen .minn-editor { grid-template-columns: minmax(0, 1fr) 0px; ga
 .minn-editor-side { transition: opacity 0.2s ease; }
 body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-events: none; }
 
+/* Image editor — canvas preview + drag crop box; pixels stay server-side. */
+.minn-imged-bar { display: flex; align-items: center; gap: 8px; padding: 12px 18px 0; }
+.minn-imged-hint { margin-left: auto; font-size: 12.5px; color: var(--text3); }
+.minn-imged-stage {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  margin: 14px 18px; min-height: 300px; background: var(--bg2);
+  border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+  touch-action: none; user-select: none; overflow: hidden; /* contain the crop dim shadow */
+}
+#minn-imged-canvas { max-width: 100%; border-radius: 4px; cursor: crosshair; }
+.minn-imged-crop {
+  position: absolute; border: 1.5px solid var(--accent); cursor: move;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 55%, transparent);
+}
+.minn-imged-crop span {
+  position: absolute; width: 11px; height: 11px; background: var(--accent);
+  border: 2px solid var(--bg); border-radius: 50%;
+}
+.minn-imged-crop [data-h="nw"] { top: -6px; left: -6px; cursor: nwse-resize; }
+.minn-imged-crop [data-h="ne"] { top: -6px; right: -6px; cursor: nesw-resize; }
+.minn-imged-crop [data-h="sw"] { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.minn-imged-crop [data-h="se"] { bottom: -6px; right: -6px; cursor: nwse-resize; }
+
 /* Date-time picker — themed replacement for Chrome's native calendar. */
 .minn-dp-input { cursor: pointer; }
 .minn-dp-pop {

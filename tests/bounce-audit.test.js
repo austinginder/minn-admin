@@ -69,8 +69,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	await page.waitForSelector( '.minn-media-item, .minn-media-grid [data-media]', { timeout: 15000 } );
 	await page.click( '.minn-media-item, .minn-media-grid [data-media]' );
 	await page.waitForSelector( '#minn-modal-overlay', { timeout: 10000 } );
-	const editHref = await page.evaluate( () => ( document.querySelector( '#minn-media-edit-image' ) || {} ).href || '' );
-	t.check( 'media preview offers the Edit image deep link', /post\.php\?post=\d+&action=edit/.test( editHref ), editHref );
+	await page.click( '#minn-media-edit-image' );
+	await page.waitForSelector( '#minn-imged-stage', { timeout: 5000 } );
+	t.check( 'media preview opens Minn\'s own image editor', true, '' );
+	await page.click( '#minn-imged-cancel' );
+	await page.waitForSelector( '.minn-modal.media', { timeout: 5000 } );
 	await page.keyboard.press( 'Escape' );
 	await page.waitForTimeout( 300 );
 
