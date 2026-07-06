@@ -1,0 +1,64 @@
+/**
+ * Outline panel: headings as a clickable ToC in the editor sidebar — rows
+ * appear/update live on the stats cadence, indent rides heading depth, click
+ * scrolls to the heading with an overlay ping that must NEVER touch the
+ * typing surface (no classes/styles that could serialize), and the card
+ * hides when a post has no headings.
+ */
+const { launch, login, createPost, deletePost, openEditor, freshParagraph, reporter } = require( './helpers' );
+
+const CONTENT = '<!-- wp:heading --><h2 class="wp-block-heading">First section</h2><!-- /wp:heading -->'
+	+ '<!-- wp:paragraph --><p>Some prose under the first section heading.</p><!-- /wp:paragraph -->'
+	+ '<!-- wp:heading {"level":3} --><h3 class="wp-block-heading">Nested subsection</h3><!-- /wp:heading -->'
+	+ '<!-- wp:paragraph --><p>' + 'Long filler text to make the editor scroll. '.repeat( 60 ) + '</p><!-- /wp:paragraph -->'
+	+ '<!-- wp:heading --><h2 class="wp-block-heading">Second section</h2><!-- /wp:heading -->'
+	+ '<!-- wp:paragraph --><p>Closing prose.</p><!-- /wp:paragraph -->';
+
+( async () => {
+	const { browser, page, errors } = await launch();
+	const t = reporter( 'outline' );
+	await login( page );
+
+	const id = await createPost( page, { title: 'Outline probe', content: CONTENT, status: 'draft' } );
+	await openEditor( page, id );
+	await page.waitForSelector( '#minn-outline-card:not([hidden])', { timeout: 10000 } );
+
+	/* ===== Initial rows ===== */
+	const rows = await page.$$eval( '.minn-outline-row', ( els ) => els.map( ( e ) => ( {
+		text: e.textContent.trim(), lvl: e.style.getPropertyValue( '--olvl' ), tag: e.title,
+	} ) ) );
+	t.check( 'three headings listed in order', rows.map( ( r ) => r.text ).join( '|' ) === 'First section|Nested subsection|Second section', JSON.stringify( rows.map( ( r ) => r.text ) ) );
+	t.check( 'h3 indents one level deeper than h2', rows[ 0 ].lvl === '0' && rows[ 1 ].lvl === '1' && rows[ 2 ].lvl === '0', JSON.stringify( rows.map( ( r ) => r.lvl ) ) );
+
+	/* ===== Live update: type a new markdown heading ===== */
+	await freshParagraph( page );
+	await page.keyboard.type( '## Brand new heading', { delay: 20 } );
+	await page.waitForFunction( () => document.querySelectorAll( '.minn-outline-row' ).length === 4, { timeout: 8000 } );
+	const last = await page.$$eval( '.minn-outline-row', ( els ) => els[ els.length - 1 ].textContent.trim() );
+	t.check( 'typed heading appears in the outline live', last === 'Brand new heading', last );
+
+	/* ===== Click scrolls + pings without touching the surface ===== */
+	const beforeTop = await page.evaluate( () => document.querySelector( '#minn-editor-body h2' ).getBoundingClientRect().top );
+	await page.click( '.minn-outline-row' ); // first section — we're at the bottom now
+	await page.waitForSelector( '.minn-outline-ping', { timeout: 4000 } );
+	await page.waitForTimeout( 1200 );
+	const afterTop = await page.evaluate( () => document.querySelector( '#minn-editor-body h2' ).getBoundingClientRect().top );
+	t.check( 'click scrolls the heading into view', Math.abs( afterTop ) < Math.abs( beforeTop ) && afterTop > 0, `before=${ Math.round( beforeTop ) } after=${ Math.round( afterTop ) }` );
+	const clean = await page.evaluate( () => {
+		const h = document.querySelector( '#minn-editor-body h2' );
+		return { cls: h.className, style: h.getAttribute( 'style' ) || '' };
+	} );
+	t.check( 'heading untouched by the ping (no class/style leak)', clean.cls === 'wp-block-heading' && clean.style === '', JSON.stringify( clean ) );
+	await page.waitForFunction( () => ! document.querySelector( '.minn-outline-ping' ), { timeout: 4000 } );
+	t.check( 'ping overlay removes itself', true, '' );
+
+	/* ===== No headings → card hidden ===== */
+	const bare = await createPost( page, { title: 'No headings', content: '<!-- wp:paragraph --><p>Just prose.</p><!-- /wp:paragraph -->', status: 'draft' } );
+	await openEditor( page, bare );
+	await page.waitForTimeout( 800 );
+	t.check( 'card hidden when no headings', await page.$eval( '#minn-outline-card', ( el ) => el.hidden ), '' );
+
+	await deletePost( page, id );
+	await deletePost( page, bare );
+	await t.done( browser, errors );
+} )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

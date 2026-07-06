@@ -5099,6 +5099,63 @@
 			? `<b>${ words.toLocaleString() }</b> words&nbsp;· <b>${ mins }</b> min read`
 			: '<b>0</b> words';
 		syncTableChips();
+		updateOutline();
+	}
+
+	/* ===== Outline panel ===== */
+	// Headings as a clickable ToC in the sidebar — structure feedback while
+	// drafting. Rides the updateEditorStats cadence (typing, island swaps),
+	// signature-gated so the list only rebuilds when headings actually change.
+	function outlineHeads( body ) {
+		return $$( 'h1,h2,h3,h4,h5,h6', body )
+			.filter( ( h ) => ! h.closest( '.minn-island-chip, .minn-island-empty' ) && h.textContent.trim() );
+	}
+
+	function updateOutline() {
+		const card = $( '#minn-outline-card' );
+		const list = $( '#minn-outline' );
+		const body = $( '#minn-editor-body' );
+		if ( ! card || ! list || ! body ) return;
+		const heads = outlineHeads( body );
+		card.hidden = ! heads.length;
+		if ( ! heads.length ) { list.dataset.sig = ''; list.innerHTML = ''; return; }
+		const sig = heads.map( ( h ) => h.tagName + '|' + h.textContent.trim() ).join( '\n' );
+		if ( list.dataset.sig === sig ) return;
+		list.dataset.sig = sig;
+		// Indent relative to the shallowest level present, so an h2-only post
+		// isn't needlessly inset.
+		const min = Math.min( ...heads.map( ( h ) => +h.tagName[ 1 ] ) );
+		list.innerHTML = heads.map( ( h, i ) =>
+			`<button class="minn-outline-row" style="--olvl:${ Math.min( +h.tagName[ 1 ] - min, 3 ) }" data-oi="${ i }" title="${ esc( h.tagName.toLowerCase() ) }">${ esc( h.textContent.trim() ) }</button>` ).join( '' );
+	}
+
+	function bindOutline() {
+		const list = $( '#minn-outline' );
+		if ( ! list ) return;
+		list.addEventListener( 'click', ( e ) => {
+			const row = e.target.closest( '.minn-outline-row' );
+			const body = $( '#minn-editor-body' );
+			if ( ! row || ! body ) return;
+			const heads = outlineHeads( body );
+			const h = heads[ Math.min( +row.dataset.oi, heads.length - 1 ) ];
+			if ( ! h ) return;
+			h.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+			// Flash via a document.body overlay — NEVER a class or style on the
+			// heading itself: the typing surface serializes, chrome must not.
+			const ping = document.createElement( 'div' );
+			ping.className = 'minn-outline-ping';
+			const place = () => {
+				const r = h.getBoundingClientRect();
+				ping.style.cssText = `top:${ r.top - 4 }px;left:${ r.left - 8 }px;width:${ r.width + 16 }px;height:${ r.height + 8 }px;`;
+			};
+			place();
+			document.body.appendChild( ping );
+			// Track the smooth scroll, then fade out and remove.
+			const track = setInterval( place, 50 );
+			setTimeout( () => { clearInterval( track ); ping.classList.add( 'out' ); }, 900 );
+			setTimeout( () => ping.remove(), 1500 );
+		} );
+		updateOutline();
 	}
 
 	function scheduledInFuture( ed ) {
@@ -5330,6 +5387,10 @@
 			</div>` : ed.featuredMedia ? '<div class="minn-session-empty">Loading…</div>' : `
 			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } Set featured image</button>` }
 		</div>` : '' }
+		<div class="minn-side-card" id="minn-outline-card" hidden>
+			<div class="minn-side-title">Outline</div>
+			<div id="minn-outline"></div>
+		</div>
 		${ ed.revisions && ed.revisions.length ? `
 		<div class="minn-side-card">
 			<div class="minn-side-title">History</div>
@@ -5533,6 +5594,8 @@
 		$$( '[data-rev]', el ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => openRevision( ed, parseInt( btn.dataset.rev, 10 ) ) )
 		);
+
+		bindOutline();
 
 		const featSet = $( '#minn-featured-set', el );
 		if ( featSet ) {
