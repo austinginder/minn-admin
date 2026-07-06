@@ -46,7 +46,9 @@ body {
 @keyframes minnFadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
 @keyframes minnScaleIn { from { opacity:0; transform: translateY(-6px) scale(0.98); } to { opacity:1; transform: none; } }
 @keyframes minnSlideIn { from { transform: translateX(100%); } to { transform: none; } }
-@keyframes minnToastIn { from { opacity:0; transform: translateY(16px) scale(0.96); } to { opacity:1; transform: none; } }
+/* Keep the translateX(-50%) centering in every frame — without it the toast
+   animates in un-centered and snaps left at the end (reads as a sideways flash). */
+@keyframes minnToastIn { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
 @keyframes minnPulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 @keyframes minnSpin { to { transform: rotate(360deg); } }
 
