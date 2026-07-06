@@ -476,6 +476,7 @@
 			server: '<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/>',
 			// wp + php are the real brand marks (Simple Icons, CC0) — filled paths,
 			// not strokes, hence the per-element overrides on the stroke-based frame.
+			focus: '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>',
 			wp: '<path fill="currentColor" stroke-width="0" d="M21.469 6.825c.84 1.537 1.318 3.3 1.318 5.175 0 3.979-2.156 7.456-5.363 9.325l3.295-9.527c.615-1.54.82-2.771.82-3.864 0-.405-.026-.78-.07-1.11m-7.981.105c.647-.03 1.232-.105 1.232-.105.582-.075.514-.93-.067-.899 0 0-1.755.135-2.88.135-1.064 0-2.85-.15-2.85-.15-.585-.03-.661.855-.075.885 0 0 .54.061 1.125.09l1.68 4.605-2.37 7.08L5.354 6.9c.649-.03 1.234-.1 1.234-.1.585-.075.516-.93-.065-.896 0 0-1.746.138-2.874.138-.2 0-.438-.008-.69-.015C4.911 3.15 8.235 1.215 12 1.215c2.809 0 5.365 1.072 7.286 2.833-.046-.003-.091-.009-.141-.009-1.06 0-1.812.923-1.812 1.914 0 .89.513 1.643 1.06 2.531.411.72.89 1.643.89 2.977 0 .915-.354 1.994-.821 3.479l-1.075 3.585-3.9-11.61.001.014zM12 22.784c-1.059 0-2.081-.153-3.048-.437l3.237-9.406 3.315 9.087c.024.053.05.101.078.149-1.12.393-2.325.607-3.582.607M1.211 12c0-1.564.336-3.05.935-4.39L7.29 21.709C3.694 19.96 1.212 16.271 1.211 12M12 0C5.385 0 0 5.385 0 12s5.385 12 12 12 12-5.385 12-12S18.615 0 12 0"/>',
 			php: '<path fill="currentColor" stroke-width="0" d="M7.01 10.207h-.944l-.515 2.648h.838c.556 0 .97-.105 1.242-.314.272-.21.455-.559.55-1.049.092-.47.05-.802-.124-.995-.175-.193-.523-.29-1.047-.29zM12 5.688C5.373 5.688 0 8.514 0 12s5.373 6.313 12 6.313S24 15.486 24 12c0-3.486-5.373-6.312-12-6.312zm-3.26 7.451c-.261.25-.575.438-.917.551-.336.108-.765.164-1.285.164H5.357l-.327 1.681H3.652l1.23-6.326h2.65c.797 0 1.378.209 1.744.628.366.418.476 1.002.33 1.752a2.836 2.836 0 0 1-.305.847c-.143.255-.33.49-.561.703zm4.024.715l.543-2.799c.063-.318.039-.536-.068-.651-.107-.116-.336-.174-.687-.174H11.46l-.704 3.625H9.388l1.23-6.327h1.367l-.327 1.682h1.218c.767 0 1.295.134 1.586.401s.378.7.263 1.299l-.572 2.944h-1.389zm7.597-2.265a2.782 2.782 0 0 1-.305.847c-.143.255-.33.49-.561.703a2.44 2.44 0 0 1-.917.551c-.336.108-.765.164-1.286.164h-1.18l-.327 1.682h-1.378l1.23-6.326h2.649c.797 0 1.378.209 1.744.628.366.417.477 1.001.331 1.751zm-2.605-1.901h-.943l-.516 2.648h.838c.557 0 .971-.105 1.242-.314.272-.21.455-.559.551-1.049.092-.47.049-.802-.125-.995s-.524-.29-1.047-.29z"/>',
 			check: '<path d="M20 6 9 17l-5-5"/>',
@@ -5100,6 +5101,9 @@
 			: '<b>0</b> words';
 		syncTableChips();
 		updateOutline();
+		// Focus mode rides the same typing cadence.
+		syncFocusDim();
+		focusTypewriter();
 	}
 
 	/* ===== Outline panel ===== */
@@ -5128,6 +5132,88 @@
 		list.innerHTML = heads.map( ( h, i ) =>
 			`<button class="minn-outline-row" style="--olvl:${ Math.min( +h.tagName[ 1 ] - min, 3 ) }" data-oi="${ i }" title="${ esc( h.tagName.toLowerCase() ) }">${ esc( h.textContent.trim() ) }</button>` ).join( '' );
 	}
+
+	/* ===== Focus mode ===== */
+	// Fade everything but the current paragraph + typewriter scroll. The fade
+	// is TWO fixed overlays on document.body above/below the caret block —
+	// never a class or style on content (the typing surface serializes).
+	// z-30: under the toolbar (35), stats pill (40) and chips (69+), so the
+	// controls stay crisp while prose, sidebar and chrome-less areas dim.
+	let focusDims = null, focusRaf = 0;
+
+	function focusModeOn() {
+		return !! ( state.editor && state.editor.focus && state.route === 'editor' );
+	}
+
+	function focusBlockOf() {
+		const body = $( '#minn-editor-body' );
+		const sel = window.getSelection();
+		let n = sel && sel.rangeCount ? sel.anchorNode : null;
+		while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+		if ( ! n || ! body || ! body.contains( n ) || n === body ) return null;
+		// Caret-line granularity: the nearest prose block, not the whole list
+		// or quote; falls back to the top-level block for anything exotic.
+		const c = n.closest( 'p, h1, h2, h3, h4, h5, h6, li, pre, figcaption, td, th, figure' );
+		if ( c && body.contains( c ) && c !== body ) return c;
+		let t = n;
+		while ( t.parentNode && t.parentNode !== body ) t = t.parentNode;
+		return t.parentNode === body ? t : null;
+	}
+
+	function removeFocusDim() {
+		if ( focusDims ) { focusDims.forEach( ( d ) => d.remove() ); focusDims = null; }
+	}
+
+	function syncFocusDim() {
+		if ( ! focusModeOn() ) { removeFocusDim(); return; }
+		const blk = focusBlockOf();
+		if ( ! blk ) return; // caret elsewhere (sidebar input, palette) — hold the band
+		if ( ! focusDims ) {
+			focusDims = [ document.createElement( 'div' ), document.createElement( 'div' ) ];
+			focusDims.forEach( ( d ) => { d.className = 'minn-focus-dim'; document.body.appendChild( d ); } );
+		}
+		const r = blk.getBoundingClientRect();
+		const pad = 8;
+		focusDims[ 0 ].style.cssText = `top:0;height:${ Math.max( 0, r.top - pad ) }px;`;
+		focusDims[ 1 ].style.cssText = `top:${ r.bottom + pad }px;height:${ Math.max( 0, innerHeight - r.bottom - pad ) }px;`;
+	}
+
+	function queueFocusDim() {
+		if ( focusRaf || ! focusDims ) return;
+		focusRaf = requestAnimationFrame( () => { focusRaf = 0; syncFocusDim(); } );
+	}
+
+	// Typewriter scroll: while typing, keep the caret block inside the middle
+	// band of the scrollport. Runs on the input cadence only — reacting to
+	// scroll events here would fight the reader's own scrolling.
+	function focusTypewriter() {
+		if ( ! focusModeOn() ) return;
+		const sc = $( '.minn-scroll' );
+		const blk = focusBlockOf();
+		if ( ! sc || ! blk ) return;
+		const port = sc.getBoundingClientRect();
+		const r = blk.getBoundingClientRect();
+		const center = port.top + port.height / 2;
+		const blkCenter = ( r.top + r.bottom ) / 2;
+		if ( Math.abs( blkCenter - center ) > port.height * 0.18 ) {
+			sc.scrollTop += blkCenter - center;
+		}
+	}
+
+	function toggleFocusMode() {
+		const ed = state.editor;
+		if ( ! ed || ed.mode === 'locked' ) return;
+		ed.focus = ! ed.focus;
+		try { localStorage.setItem( 'minn-focus', ed.focus ? '1' : '' ); } catch ( e ) { /* private mode */ }
+		const btn = $( '#minn-focus-btn' );
+		if ( btn ) btn.classList.toggle( 'active', ed.focus );
+		if ( ed.focus ) syncFocusDim();
+		else removeFocusDim();
+	}
+
+	document.addEventListener( 'selectionchange', queueFocusDim );
+	document.addEventListener( 'scroll', queueFocusDim, true );
+	window.addEventListener( 'resize', queueFocusDim );
 
 	function bindOutline() {
 		const list = $( '#minn-outline' );
@@ -6051,6 +6137,7 @@
 					<button class="minn-tool" data-cmd="image" title="Insert image">${ icon( 'img' ) }</button>
 					<button class="minn-tool" data-block="p" title="Paragraph">${ icon( 'pilcrow' ) }</button>
 					<button class="minn-tool" data-cmd="removeFormat" title="Clear formatting">${ icon( 'eraser' ) }</button>
+					<button class="minn-tool" data-cmd="focus" id="minn-focus-btn" title="Focus mode — fade all but the current paragraph">${ icon( 'focus' ) }</button>
 					<select class="minn-input minn-code-lang" id="minn-code-lang" title="Code language" hidden>
 						${ CODE_LANGS.map( ( l ) => `<option value="${ l }">${ l === 'auto' ? 'language: auto' : l }</option>` ).join( '' ) }
 					</select>
@@ -6067,6 +6154,12 @@
 		if ( ! locked ) seedImageCaptions( body );
 		highlightCodeBlocks( body );
 		renderIslandPreviews( body, ed );
+		// Focus mode persists across posts/sessions (localStorage), never in locked mode.
+		if ( ! locked ) {
+			try { ed.focus = ed.focus || !! localStorage.getItem( 'minn-focus' ); } catch ( e ) { /* private mode */ }
+			const fbtn = $( '#minn-focus-btn', view );
+			if ( fbtn && ed.focus ) fbtn.classList.add( 'active' );
+		}
 		updateEditorStats();
 		ensureEditorStyles();
 		renderBackupNotice();
@@ -6173,6 +6266,8 @@
 						toggleInlineCode( body );
 					} else if ( btn.dataset.cmd === 'image' ) {
 						insertImage();
+					} else if ( btn.dataset.cmd === 'focus' ) {
+						toggleFocusMode();
 					} else if ( btn.dataset.align ) {
 						// Toggle alignment via the Gutenberg class (inline text-align
 						// styles would be stripped at serialize). Paragraphs and
@@ -10672,6 +10767,7 @@
 		closeInspector();
 		hideCodeChip();
 		clearTableChips();
+		removeFocusDim();
 		hideImgPop();
 		hideLinkPop();
 		removeLockOverlay();
