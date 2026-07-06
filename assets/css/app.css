@@ -69,8 +69,11 @@ a { color: var(--accent2); text-decoration: none; }
 /* dvh over vh where supported — vh overflows behind mobile Safari's collapsing URL bar. */
 .minn-shell { display: flex; height: 100vh; height: 100dvh; width: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
 .minn-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-/* position:relative anchors the outline ping's absolute content coords. */
-.minn-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; }
+/* position:relative anchors the outline ping's absolute content coords.
+   overflow-anchor:none — Chrome's scroll anchoring loses its anchor node on
+   every full innerHTML re-render and "helpfully" jumps the scroller (the
+   plugin-toggle scroll bug); SPA views restore position themselves. */
+.minn-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; overflow-anchor: none; }
 .minn-page { animation: minnFadeUp 0.3s ease; padding: 26px 28px 60px; max-width: 1180px; margin: 0 auto; }
 
 /* ===== Sidebar ===== */
@@ -411,6 +414,9 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-plugin-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .minn-plugin-icon-link { flex-shrink: 0; border-radius: 10px; display: block; }
 .minn-plugin-icon-link:hover .minn-plugin-icon { opacity: 1; box-shadow: 0 0 0 2px var(--accent); }
+.minn-plugin-author { margin-top: 5px; font-size: 12px; color: var(--text3); }
+.minn-plugin-author a { color: var(--text2); text-decoration: none; border-bottom: 1px solid var(--border2); }
+.minn-plugin-author a:hover { color: var(--accent2); border-bottom-color: var(--accent2); }
 .minn-plugin-body { flex: 1; min-width: 0; }
 .minn-plugin-head { display: flex; align-items: center; gap: 8px; }
 .minn-plugin-name { font-weight: 700; font-size: 15px; }
