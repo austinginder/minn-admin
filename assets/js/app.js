@@ -5296,6 +5296,31 @@
 	document.addEventListener( 'scroll', () => queueFocusDim( true ), true );
 	window.addEventListener( 'resize', () => queueFocusDim( true ) );
 
+	/* ===== Collapsible sidebar cards ===== */
+	// Every editor sidebar card collapses from its title, remembered per-card
+	// (localStorage map) — collapse everything but Outline once and that stays
+	// your layout. All cards default to expanded.
+	function bindSideCollapse( el ) {
+		let saved = {};
+		try { saved = JSON.parse( localStorage.getItem( 'minn-side-collapsed' ) || '{}' ); } catch ( e ) { /* private mode */ }
+		$$( '.minn-side-card', el ).forEach( ( card ) => {
+			const title = card.querySelector( ':scope > .minn-side-title' );
+			if ( ! title ) return;
+			const slug = title.textContent.trim().toLowerCase().replace( /[^a-z0-9]+/g, '-' );
+			card.classList.add( 'collapsible' );
+			card.classList.toggle( 'collapsed', !! saved[ slug ] );
+			title.addEventListener( 'click', () => {
+				const on = card.classList.toggle( 'collapsed' );
+				try {
+					const cur = JSON.parse( localStorage.getItem( 'minn-side-collapsed' ) || '{}' );
+					if ( on ) cur[ slug ] = 1;
+					else delete cur[ slug ];
+					localStorage.setItem( 'minn-side-collapsed', JSON.stringify( cur ) );
+				} catch ( e ) { /* private mode */ }
+			} );
+		} );
+	}
+
 	function bindOutline() {
 		const list = $( '#minn-outline' );
 		if ( ! list ) return;
@@ -5762,6 +5787,7 @@
 			btn.addEventListener( 'click', () => openRevision( ed, parseInt( btn.dataset.rev, 10 ) ) )
 		);
 
+		bindSideCollapse( el );
 		bindOutline();
 
 		const featSet = $( '#minn-featured-set', el );

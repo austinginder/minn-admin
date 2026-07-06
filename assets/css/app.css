@@ -462,6 +462,19 @@ body.minn-focus-zen .minn-editor { grid-template-columns: minmax(0, 1fr) 0px; ga
 .minn-editor-side { transition: opacity 0.2s ease; }
 body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-events: none; }
 
+/* Collapsible sidebar cards — the title is the toggle, chevron shows state.
+   Collapsed hides everything but the title; per-card state persists. */
+.minn-side-card.collapsible > .minn-side-title { cursor: pointer; user-select: none; display: flex; align-items: center; }
+.minn-side-card.collapsible > .minn-side-title::after {
+  content: '';  margin-left: auto; width: 8px; height: 8px; flex-shrink: 0;
+  border-right: 1.8px solid var(--text3); border-bottom: 1.8px solid var(--text3);
+  transform: rotate(45deg) translate(-2px, -2px); transition: transform 0.15s ease;
+}
+.minn-side-card.collapsed > .minn-side-title { margin-bottom: 0; }
+.minn-side-card.collapsed > .minn-side-title::after { transform: rotate(-45deg) translate(-1px, 1px); }
+/* !important: several card bodies carry inline display:flex styles. */
+.minn-side-card.collapsed > :not(.minn-side-title) { display: none !important; }
+
 /* Outline panel — heading ToC in the editor sidebar. Indent rides --olvl.
    LAST card in the side column + sticky: the grid stretches the column to
    the editor's full height, so the outline stays pinned while a long post
