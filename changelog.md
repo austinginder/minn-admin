@@ -5,6 +5,9 @@
 ### Added
 * **Third-party blocks insert with no adapter:** every dynamic (server-rendered) block a plugin registers now appears in the editor's slash menu automatically. Entries are search-only, so the default menu stays curated; type part of a block's title, or its namespace (like `/woocommerce`) to list everything a plugin ships. Insertion lands as a configurable island with a real preview and the schema-driven inspector, exactly like adapter-declared blocks. Adapter `insert` templates still win when present, `insert => false` hides a block, and the new `minn_admin_insert_blocks` filter prunes or extends the list.
 
+### Fixed
+* **New posts no longer degrade to classic mode.** Reloading a brand-new post before its first content save (the title-only autosave draft) reopened it as a classic-mode post permanently, silently hiding embeds, galleries, and custom blocks from the slash menu. Empty posts now open in blocks mode; there is nothing classic mode would need to preserve.
+
 ## **v0.8.0** - July 6, 2026
 
 The delight release. Horizon 2 of the [editor roadmap](docs/editor-roadmap.md) lands: **revision diffs**, an **outline panel**, **focus mode**, and an **internal link picker**, plus two new view modes and a real keyboard-shortcut story. Around the editor, the whole app picked up a shared **context-menu language** (content rows, media, comments, tables), Minn grew its **own image editor**, and the System page now surfaces the silent-rot trio every developer checks first.
