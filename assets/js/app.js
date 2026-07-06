@@ -7462,8 +7462,9 @@
 				<button class="minn-x-btn" data-close type="button">\u00d7</button>
 			</div>
 			<div class="minn-insp-body">
-				<div class="minn-field-label">URL</div>
-				<input class="minn-input" data-link-url placeholder="https://\u2026" value="${ esc( href ) }" spellcheck="false" autocomplete="off">
+				<div class="minn-field-label">URL or search</div>
+				<input class="minn-input" data-link-url placeholder="https://\u2026 or search your content" value="${ esc( href ) }" spellcheck="false" autocomplete="off">
+				<div class="minn-link-results" data-link-results hidden></div>
 			</div>
 			<div class="minn-insp-actions">
 				<button class="minn-btn-primary" data-link-apply type="button">Apply</button>
@@ -7508,8 +7509,60 @@
 		};
 		linkPop.querySelector( '[data-close]' ).addEventListener( 'click', hideLinkPop );
 		linkPop.querySelector( '[data-link-apply]' ).addEventListener( 'click', apply );
+
+		// Internal link picker: anything that doesn't read as a URL searches
+		// your own content (core wp/v2/search — posts, pages, CPTs with their
+		// permalinks). Linking to your own writing beats pasting a URL.
+		const results = linkPop.querySelector( '[data-link-results]' );
+		let searchTimer = 0, resIdx = -1;
+		const urlish = ( v ) => /^(https?:|mailto:|tel:|#|\/)/i.test( v ) || /^[\w-]+(\.[a-z]{2,})+(\/|$)/i.test( v );
+		const renderResults = ( items ) => {
+			resIdx = -1;
+			results.hidden = ! items.length;
+			results.innerHTML = items.map( ( r, i ) =>
+				`<button type="button" class="minn-link-result" data-ri="${ i }" data-url="${ esc( r.url ) }">
+					<span class="minn-link-result-title">${ esc( decodeEntities( r.title || '(no title)' ) ) }</span>
+					<span class="minn-link-result-type">${ esc( r.subtype || r.type || '' ) }</span>
+				</button>` ).join( '' );
+		};
+		urlInput.addEventListener( 'input', () => {
+			clearTimeout( searchTimer );
+			const q = urlInput.value.trim();
+			if ( q.length < 2 || urlish( q ) ) { renderResults( [] ); return; }
+			searchTimer = setTimeout( () => {
+				api( 'wp/v2/search?per_page=6&_fields=id,title,url,type,subtype&search=' + encodeURIComponent( q ) )
+					.then( ( items ) => {
+						// The query may have changed while the request flew.
+						if ( linkPop && urlInput.value.trim() === q ) renderResults( items );
+					} )
+					.catch( () => renderResults( [] ) );
+			}, 250 );
+		} );
+		// mousedown (not click) + preventDefault — the editor selection must
+		// survive into apply(), same rule as every popover in this file.
+		results.addEventListener( 'mousedown', ( e ) => {
+			const row = e.target.closest( '.minn-link-result' );
+			if ( ! row ) return;
+			e.preventDefault();
+			urlInput.value = row.dataset.url;
+			apply();
+		} );
 		urlInput.addEventListener( 'keydown', ( e ) => {
-			if ( e.key === 'Enter' ) { e.preventDefault(); apply(); }
+			const rows = $$( '.minn-link-result', results );
+			if ( e.key === 'ArrowDown' || e.key === 'ArrowUp' ) {
+				if ( results.hidden || ! rows.length ) return;
+				e.preventDefault();
+				resIdx = e.key === 'ArrowDown' ? Math.min( resIdx + 1, rows.length - 1 ) : Math.max( resIdx - 1, 0 );
+				rows.forEach( ( el, i ) => el.classList.toggle( 'active', i === resIdx ) );
+			} else if ( e.key === 'Enter' ) {
+				e.preventDefault();
+				if ( ! results.hidden && rows[ resIdx ] ) { urlInput.value = rows[ resIdx ].dataset.url; }
+				apply();
+			} else if ( e.key === 'Escape' ) {
+				e.preventDefault();
+				if ( ! results.hidden ) renderResults( [] );
+				else hideLinkPop();
+			}
 		} );
 		const rm = linkPop.querySelector( '[data-link-remove]' );
 		if ( rm ) rm.addEventListener( 'click', unlink );
