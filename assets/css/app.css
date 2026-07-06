@@ -430,6 +430,16 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-history-when { font-weight: 600; color: var(--text); }
 .minn-history-who { margin-left: auto; color: var(--text3); font-size: 12px; }
 
+/* Internal link picker — results under the link popover's URL field. */
+.minn-link-results { margin-top: 7px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden auto; max-height: 190px; }
+.minn-link-result {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  background: none; border: 0; cursor: pointer; padding: 7px 10px; color: var(--text2); font: inherit; font-size: 13px;
+}
+.minn-link-result:hover, .minn-link-result.active { background: var(--bg2); color: var(--text); }
+.minn-link-result-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.minn-link-result-type { margin-left: auto; flex-shrink: 0; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); }
+
 /* Focus mode — two fixed overlays fade everything above/below the caret
    block. z-30 keeps the toolbar (35), stats pill (40) and chips (69+) crisp.
    Chrome-only: content never gets a class or style from this. */
