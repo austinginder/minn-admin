@@ -5387,10 +5387,6 @@
 			</div>` : ed.featuredMedia ? '<div class="minn-session-empty">Loading…</div>' : `
 			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } Set featured image</button>` }
 		</div>` : '' }
-		<div class="minn-side-card" id="minn-outline-card" hidden>
-			<div class="minn-side-title">Outline</div>
-			<div id="minn-outline"></div>
-		</div>
 		${ ed.revisions && ed.revisions.length ? `
 		<div class="minn-side-card">
 			<div class="minn-side-title">History</div>
@@ -5453,7 +5449,11 @@
 			</div>
 		</div>` : '' }
 		${ ( ed.panels || [] ).map( ( p ) => panelCard( ed, p ) ).join( '' ) }
-		${ ed.id ? '<button class="minn-trash-link" id="minn-trash-post">Move to trash</button>' : '' }`;
+		${ ed.id ? '<button class="minn-trash-link" id="minn-trash-post">Move to trash</button>' : '' }
+		<div class="minn-side-card" id="minn-outline-card" hidden>
+			<div class="minn-side-title">Outline</div>
+			<div id="minn-outline"></div>
+		</div>`;
 
 		const excerptInput = $( '#minn-editor-excerpt', el );
 		if ( excerptInput ) excerptInput.addEventListener( 'input', () => {

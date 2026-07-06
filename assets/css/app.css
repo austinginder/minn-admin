@@ -430,7 +430,11 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-history-when { font-weight: 600; color: var(--text); }
 .minn-history-who { margin-left: auto; color: var(--text3); font-size: 12px; }
 
-/* Outline panel — heading ToC in the editor sidebar. Indent rides --olvl. */
+/* Outline panel — heading ToC in the editor sidebar. Indent rides --olvl.
+   LAST card in the side column + sticky: the grid stretches the column to
+   the editor's full height, so the outline stays pinned while a long post
+   scrolls (and being last, it never slides over the cards below it). */
+#minn-outline-card { position: sticky; top: 14px; max-height: calc(100vh - 28px); overflow-y: auto; }
 .minn-outline-row {
   display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
   padding: 5px 8px 5px calc(8px + var(--olvl, 0) * 14px); border-radius: 7px;

@@ -10,7 +10,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 const CONTENT = '<!-- wp:heading --><h2 class="wp-block-heading">First section</h2><!-- /wp:heading -->'
 	+ '<!-- wp:paragraph --><p>Some prose under the first section heading.</p><!-- /wp:paragraph -->'
 	+ '<!-- wp:heading {"level":3} --><h3 class="wp-block-heading">Nested subsection</h3><!-- /wp:heading -->'
-	+ '<!-- wp:paragraph --><p>' + 'Long filler text to make the editor scroll. '.repeat( 60 ) + '</p><!-- /wp:paragraph -->'
+	+ '<!-- wp:paragraph --><p>' + 'Long filler text to make the editor scroll well past the sidebar cards. '.repeat( 400 ) + '</p><!-- /wp:paragraph -->'
 	+ '<!-- wp:heading --><h2 class="wp-block-heading">Second section</h2><!-- /wp:heading -->'
 	+ '<!-- wp:paragraph --><p>Closing prose.</p><!-- /wp:paragraph -->';
 
@@ -51,6 +51,27 @@ const CONTENT = '<!-- wp:heading --><h2 class="wp-block-heading">First section</
 	t.check( 'heading untouched by the ping (no class/style leak)', clean.cls === 'wp-block-heading' && clean.style === '', JSON.stringify( clean ) );
 	await page.waitForFunction( () => ! document.querySelector( '.minn-outline-ping' ), { timeout: 4000 } );
 	t.check( 'ping overlay removes itself', true, '' );
+
+	/* ===== Sticky: deep scroll keeps the outline pinned in view ===== */
+	// The app scrolls in .minn-scroll — scrollIntoView on sticky chrome is a
+	// no-op. Mid-scroll the card pins near the scrollport top; at the very
+	// bottom it correctly parks at its container's end (still visible).
+	const pin = await page.evaluate( () => {
+		const sc = document.querySelector( '.minn-scroll' );
+		sc.scrollTop = Math.round( ( sc.scrollHeight - sc.clientHeight ) * 0.8 );
+		const r = document.querySelector( '#minn-outline-card' ).getBoundingClientRect();
+		const side = document.querySelector( '.minn-editor-side' );
+		sc.scrollTop = 999999;
+		const r2 = document.querySelector( '#minn-outline-card' ).getBoundingClientRect();
+		return {
+			midTop: Math.round( r.top ), midVisible: r.bottom > 0 && r.top < innerHeight,
+			endVisible: r2.bottom > 0 && r2.top < innerHeight,
+			last: side.lastElementChild.id === 'minn-outline-card',
+		};
+	} );
+	t.check( 'outline is the last sidebar card (sticky-safe)', pin.last, '' );
+	t.check( 'outline pins near the top mid-scroll', pin.midVisible && pin.midTop >= 0 && pin.midTop < 200, JSON.stringify( pin ) );
+	t.check( 'outline still visible at the very bottom', pin.endVisible, JSON.stringify( pin ) );
 
 	/* ===== No headings → card hidden ===== */
 	const bare = await createPost( page, { title: 'No headings', content: '<!-- wp:paragraph --><p>Just prose.</p><!-- /wp:paragraph -->', status: 'draft' } );
