@@ -111,6 +111,30 @@ const CONTENT = '<!-- wp:heading --><h2 class="wp-block-heading">First section</
 		&& document.querySelector( '.minn-sidebar' ).offsetWidth > 100
 		&& [ ...document.querySelectorAll( '#minn-editor-side > .minn-side-card' ) ].filter( ( el ) => el.checkVisibility() ).length > 1 ), '' );
 
+	/* ===== View modes are mutually exclusive ===== */
+	await page.click( '#minn-editor-body p' );
+	await page.keyboard.press( 'Meta+Shift+D' ); // focus on
+	await page.waitForSelector( '.minn-focus-dim', { timeout: 5000 } );
+	await page.keyboard.press( 'Meta+Shift+O' ); // outline on → focus must drop
+	await page.waitForTimeout( 400 );
+	const excl = await page.evaluate( () => ( {
+		outline: document.body.classList.contains( 'minn-outline-mode' ),
+		zen: document.body.classList.contains( 'minn-focus-zen' ),
+		dims: document.querySelectorAll( '.minn-focus-dim' ).length,
+		focusStored: !! localStorage.getItem( 'minn-focus' ),
+	} ) );
+	t.check( 'outline mode ejects focus mode', excl.outline && ! excl.zen && excl.dims === 0 && ! excl.focusStored, JSON.stringify( excl ) );
+	await page.keyboard.press( 'Meta+Shift+D' ); // focus on → outline must drop
+	await page.waitForTimeout( 400 );
+	const excl2 = await page.evaluate( () => ( {
+		outline: document.body.classList.contains( 'minn-outline-mode' ),
+		zen: document.body.classList.contains( 'minn-focus-zen' ),
+		outlineStored: !! localStorage.getItem( 'minn-outline-mode' ),
+	} ) );
+	t.check( 'focus mode ejects outline mode', ! excl2.outline && excl2.zen && ! excl2.outlineStored, JSON.stringify( excl2 ) );
+	await page.keyboard.press( 'Meta+Shift+D' ); // clean up: all modes off
+	await page.waitForTimeout( 300 );
+
 	/* ===== No headings → card hidden ===== */
 	const bare = await createPost( page, { title: 'No headings', content: '<!-- wp:paragraph --><p>Just prose.</p><!-- /wp:paragraph -->', status: 'draft' } );
 	await openEditor( page, bare );
