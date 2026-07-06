@@ -478,6 +478,7 @@
 			// not strokes, hence the per-element overrides on the stroke-based frame.
 			focus: '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>',
 			grip: '<g fill="currentColor" stroke-width="0"><circle cx="9" cy="5.5" r="1.6"/><circle cx="15" cy="5.5" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18.5" r="1.6"/><circle cx="15" cy="18.5" r="1.6"/></g>',
+			toc: '<path d="M4 5h16M9 10h11M9 14h11M4 19h16"/>',
 			wp: '<path fill="currentColor" stroke-width="0" d="M21.469 6.825c.84 1.537 1.318 3.3 1.318 5.175 0 3.979-2.156 7.456-5.363 9.325l3.295-9.527c.615-1.54.82-2.771.82-3.864 0-.405-.026-.78-.07-1.11m-7.981.105c.647-.03 1.232-.105 1.232-.105.582-.075.514-.93-.067-.899 0 0-1.755.135-2.88.135-1.064 0-2.85-.15-2.85-.15-.585-.03-.661.855-.075.885 0 0 .54.061 1.125.09l1.68 4.605-2.37 7.08L5.354 6.9c.649-.03 1.234-.1 1.234-.1.585-.075.516-.93-.065-.896 0 0-1.746.138-2.874.138-.2 0-.438-.008-.69-.015C4.911 3.15 8.235 1.215 12 1.215c2.809 0 5.365 1.072 7.286 2.833-.046-.003-.091-.009-.141-.009-1.06 0-1.812.923-1.812 1.914 0 .89.513 1.643 1.06 2.531.411.72.89 1.643.89 2.977 0 .915-.354 1.994-.821 3.479l-1.075 3.585-3.9-11.61.001.014zM12 22.784c-1.059 0-2.081-.153-3.048-.437l3.237-9.406 3.315 9.087c.024.053.05.101.078.149-1.12.393-2.325.607-3.582.607M1.211 12c0-1.564.336-3.05.935-4.39L7.29 21.709C3.694 19.96 1.212 16.271 1.211 12M12 0C5.385 0 0 5.385 0 12s5.385 12 12 12 12-5.385 12-12S18.615 0 12 0"/>',
 			php: '<path fill="currentColor" stroke-width="0" d="M7.01 10.207h-.944l-.515 2.648h.838c.556 0 .97-.105 1.242-.314.272-.21.455-.559.55-1.049.092-.47.05-.802-.124-.995-.175-.193-.523-.29-1.047-.29zM12 5.688C5.373 5.688 0 8.514 0 12s5.373 6.313 12 6.313S24 15.486 24 12c0-3.486-5.373-6.312-12-6.312zm-3.26 7.451c-.261.25-.575.438-.917.551-.336.108-.765.164-1.285.164H5.357l-.327 1.681H3.652l1.23-6.326h2.65c.797 0 1.378.209 1.744.628.366.418.476 1.002.33 1.752a2.836 2.836 0 0 1-.305.847c-.143.255-.33.49-.561.703zm4.024.715l.543-2.799c.063-.318.039-.536-.068-.651-.107-.116-.336-.174-.687-.174H11.46l-.704 3.625H9.388l1.23-6.327h1.367l-.327 1.682h1.218c.767 0 1.295.134 1.586.401s.378.7.263 1.299l-.572 2.944h-1.389zm7.597-2.265a2.782 2.782 0 0 1-.305.847c-.143.255-.33.49-.561.703a2.44 2.44 0 0 1-.917.551c-.336.108-.765.164-1.286.164h-1.18l-.327 1.682h-1.378l1.23-6.326h2.649c.797 0 1.378.209 1.744.628.366.417.477 1.001.331 1.751zm-2.605-1.901h-.943l-.516 2.648h.838c.557 0 .971-.105 1.242-.314.272-.21.455-.559.551-1.049.092-.47.049-.802-.125-.995s-.524-.29-1.047-.29z"/>',
 			check: '<path d="M20 6 9 17l-5-5"/>',
@@ -5344,8 +5345,7 @@
 		if ( ! ed || ed.mode === 'locked' ) return;
 		ed.focus = ! ed.focus;
 		try { localStorage.setItem( 'minn-focus', ed.focus ? '1' : '' ); } catch ( e ) { /* private mode */ }
-		const btn = $( '#minn-focus-btn' );
-		if ( btn ) btn.classList.toggle( 'active', ed.focus );
+		toast( ed.focus ? 'Focus mode on — ⌘⇧D to leave' : 'Focus mode off' );
 		if ( ed.focus ) {
 			// Zen: collapse the nav and the editor sidebar — nothing but the
 			// writing. The toolbar (with this toggle) and ⌘S stay.
@@ -5378,6 +5378,23 @@
 	document.addEventListener( 'selectionchange', () => queueFocusDim( false ) );
 	document.addEventListener( 'scroll', () => queueFocusDim( true ), true );
 	window.addEventListener( 'resize', () => queueFocusDim( true ) );
+
+	/* ===== Outline mode ===== */
+	// Focus mode's structural sibling: hide the nav and every sidebar card
+	// except the Outline — just the writing and the document's shape. Pure
+	// chrome (a body class), persisted like focus mode.
+	function toggleOutlineMode() {
+		const ed = state.editor;
+		if ( ! ed ) return;
+		ed.outlineMode = ! ed.outlineMode;
+		try { localStorage.setItem( 'minn-outline-mode', ed.outlineMode ? '1' : '' ); } catch ( e ) { /* private mode */ }
+		toast( ed.outlineMode ? 'Outline mode on — ⌘⇧O to leave' : 'Outline mode off' );
+		document.body.classList.toggle( 'minn-outline-mode', ed.outlineMode );
+	}
+
+	function removeOutlineMode() {
+		document.body.classList.remove( 'minn-outline-mode' );
+	}
 
 	/* ===== Date-time picker (themed replacement for datetime-local) ===== */
 	// Chrome's native calendar is unstyleable and clashes with both themes.
@@ -6483,7 +6500,6 @@
 					<button class="minn-tool" data-cmd="image" title="Insert image">${ icon( 'img' ) }</button>
 					<button class="minn-tool" data-block="p" title="Paragraph">${ icon( 'pilcrow' ) }</button>
 					<button class="minn-tool" data-cmd="removeFormat" title="Clear formatting">${ icon( 'eraser' ) }</button>
-					<button class="minn-tool" data-cmd="focus" id="minn-focus-btn" title="Focus mode — fade all but the current paragraph">${ icon( 'focus' ) }</button>
 					<span class="minn-tool-hint">type / for blocks</span>
 				</div>` }
 				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }"></div>
@@ -6501,10 +6517,12 @@
 		// Focus mode persists across posts/sessions (localStorage), never in locked mode.
 		if ( ! locked ) {
 			try { ed.focus = ed.focus || !! localStorage.getItem( 'minn-focus' ); } catch ( e ) { /* private mode */ }
-			const fbtn = $( '#minn-focus-btn', view );
-			if ( fbtn && ed.focus ) fbtn.classList.add( 'active' );
 			document.body.classList.toggle( 'minn-focus-zen', !! ed.focus );
 		}
+		// Outline mode persists the same way (and works in locked mode — it's
+		// pure chrome around a read-only body).
+		try { ed.outlineMode = ed.outlineMode || !! localStorage.getItem( 'minn-outline-mode' ); } catch ( e ) { /* private mode */ }
+		document.body.classList.toggle( 'minn-outline-mode', !! ed.outlineMode );
 		updateEditorStats();
 		ensureEditorStyles();
 		renderBackupNotice();
@@ -6613,8 +6631,6 @@
 						toggleInlineCode( body );
 					} else if ( btn.dataset.cmd === 'image' ) {
 						insertImage();
-					} else if ( btn.dataset.cmd === 'focus' ) {
-						toggleFocusMode();
 					} else if ( btn.dataset.align ) {
 						// Toggle alignment via the Gutenberg class (inline text-align
 						// styles would be stripped at serialize). Paragraphs and
@@ -9183,11 +9199,18 @@
 	/* ===== Command palette ===== */
 
 	function paletteCommands() {
-		const cmds = [
+		const cmds = [];
+		// View modes are palette commands, not toolbar buttons — the toolbar
+		// is for formatting; focus/outline are how you LOOK at the document.
+		if ( state.route === 'editor' && state.editor ) {
+			cmds.push( { label: 'Toggle focus mode (⌘⇧D)', kind: 'view', icon: '◎', run: () => toggleFocusMode() } );
+			cmds.push( { label: 'Toggle outline mode (⌘⇧O)', kind: 'view', icon: '☰', run: () => toggleOutlineMode() } );
+		}
+		cmds.push(
 			{ label: 'Go to Overview', kind: 'nav', icon: '▦', run: () => go( 'overview' ) },
 			{ label: 'Manage Content', kind: 'nav', icon: '¶', run: () => go( 'content' ) },
-			{ label: 'Open Media Library', kind: 'nav', icon: '▣', run: () => go( 'media' ) },
-		];
+			{ label: 'Open Media Library', kind: 'nav', icon: '▣', run: () => go( 'media' ) }
+		);
 		if ( B.caps.moderate ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
 		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
 		if ( B.caps.users ) cmds.push( { label: 'Browse Users', kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
@@ -9784,6 +9807,7 @@
 							<span class="minn-kbd">⌘S</span><span>Save, keeping the current status</span>
 							<span class="minn-kbd">⌘⏎</span><span>Publish, Update or Schedule</span>
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
+							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
 							<span class="minn-kbd">Esc</span><span>Close menus and dialogs</span>
 						</div>
@@ -11260,6 +11284,7 @@
 		hideDatePicker();
 		clearTableChips();
 		removeFocusDim();
+		removeOutlineMode();
 		hideImgPop();
 		hideLinkPop();
 		removeLockOverlay();
@@ -11379,6 +11404,11 @@
 			if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'd' && state.route === 'editor' && state.editor ) {
 				e.preventDefault();
 				toggleFocusMode();
+			}
+			// ⌘⇧O toggles outline mode — the writing plus the document's shape.
+			if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'o' && state.route === 'editor' && state.editor ) {
+				e.preventDefault();
+				toggleOutlineMode();
 			}
 			// ⌘⏎ publishes/updates/schedules — the writing-tool standard.
 			if ( ( e.metaKey || e.ctrlKey ) && e.key === 'Enter' && state.route === 'editor' && state.editor ) {

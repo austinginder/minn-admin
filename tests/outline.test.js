@@ -73,6 +73,26 @@ const CONTENT = '<!-- wp:heading --><h2 class="wp-block-heading">First section</
 	t.check( 'outline pins near the top mid-scroll', pin.midVisible && pin.midTop >= 0 && pin.midTop < 200, JSON.stringify( pin ) );
 	t.check( 'outline still visible at the very bottom', pin.endVisible, JSON.stringify( pin ) );
 
+	/* ===== Outline mode: nav gone, only the Outline card survives ===== */
+	await page.keyboard.press( 'Meta+Shift+O' );
+	await page.waitForTimeout( 400 );
+	const om = await page.evaluate( () => ( {
+		cls: document.body.classList.contains( 'minn-outline-mode' ),
+		nav: document.querySelector( '.minn-sidebar' ).offsetWidth,
+		visibleCards: [ ...document.querySelectorAll( '#minn-editor-side > *' ) ]
+			.filter( ( el ) => el.checkVisibility && el.checkVisibility() )
+			.map( ( el ) => el.id || el.className.split( ' ' )[ 0 ] ),
+	} ) );
+	t.check( 'outline mode hides nav and every card but the Outline', om.cls && om.nav < 10 && om.visibleCards.length === 1 && om.visibleCards[ 0 ] === 'minn-outline-card', JSON.stringify( om ) );
+	await openEditor( page, id );
+	t.check( 'outline mode persists across loads', await page.evaluate( () => document.body.classList.contains( 'minn-outline-mode' ) ), '' );
+	await page.keyboard.press( 'Meta+Shift+O' );
+	await page.waitForTimeout( 400 );
+	t.check( 'toggle off restores the full sidebar', await page.evaluate( () =>
+		! document.body.classList.contains( 'minn-outline-mode' )
+		&& document.querySelector( '.minn-sidebar' ).offsetWidth > 100
+		&& [ ...document.querySelectorAll( '#minn-editor-side > .minn-side-card' ) ].filter( ( el ) => el.checkVisibility() ).length > 1 ), '' );
+
 	/* ===== No headings → card hidden ===== */
 	const bare = await createPost( page, { title: 'No headings', content: '<!-- wp:paragraph --><p>Just prose.</p><!-- /wp:paragraph -->', status: 'draft' } );
 	await openEditor( page, bare );
