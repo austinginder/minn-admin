@@ -245,6 +245,24 @@
 		toastTimer = setTimeout( () => el.remove(), 2600 );
 	}
 
+	// A toast with an action button (e.g. "Removed — Undo"). Used to make
+	// structural block deletions recoverable without touching the browser undo
+	// stack (see the undo-completeness decision in docs/editor-roadmap.md).
+	function toastAction( msg, actionLabel, onAction, duration = 7000 ) {
+		$$( '.minn-toast' ).forEach( ( el ) => el.remove() );
+		clearTimeout( toastTimer );
+		const el = document.createElement( 'div' );
+		el.className = 'minn-toast minn-toast-action';
+		el.innerHTML = `
+			<div class="minn-toast-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>
+			<div class="minn-toast-msg">${ esc( msg ) }</div>
+			<button class="minn-toast-btn" type="button">${ esc( actionLabel ) }</button>`;
+		document.body.appendChild( el );
+		const dismiss = () => { clearTimeout( toastTimer ); el.remove(); };
+		el.querySelector( '.minn-toast-btn' ).addEventListener( 'click', () => { dismiss(); onAction(); } );
+		toastTimer = setTimeout( dismiss, duration );
+	}
+
 	/* ===== Routing =====
 	 * Path-based ( /minn-admin/content ) when pretty permalinks are on,
 	 * falling back to hash routing ( #/content ) on plain permalinks. */
@@ -4090,6 +4108,31 @@
 		return islandEl;
 	}
 
+	// Remove an island (embed/gallery/custom block) with an Undo toast. Island
+	// deletion is direct-DOM, so it's outside the browser undo stack (see the
+	// undo-completeness decision in docs/editor-roadmap.md) — this makes it
+	// recoverable. Restoring re-inserts the node AND its islands[] entry, which
+	// is nulled (not spliced) on remove so sibling data-island indices hold.
+	function removeIslandWithUndo( island ) {
+		if ( ! island || ! island.parentNode ) return;
+		const ed = state.editor;
+		const idx = parseInt( island.dataset.island, 10 );
+		const template = ed && ed.islands ? ed.islands[ idx ] : null;
+		const parent = island.parentNode;
+		const next = island.nextSibling;
+		if ( ed && ed.islands && ed.islands[ idx ] != null ) ed.islands[ idx ] = null;
+		island.remove();
+		updateEditorStats();
+		if ( ed && ed.id ) scheduleAutosave();
+		toastAction( 'Block removed', 'Undo', () => {
+			if ( ! parent.isConnected ) return;
+			if ( ed && ed.islands && template != null ) ed.islands[ idx ] = template;
+			parent.insertBefore( island, next && next.isConnected && next.parentNode === parent ? next : null );
+			updateEditorStats();
+			scheduleAutosave();
+		} );
+	}
+
 	/* ===== Front-end styles for island previews ===== */
 
 	// Islands render real block HTML, but Minn's standalone document never
@@ -6634,14 +6677,9 @@
 			if ( ! insp ) return;
 			if ( e.target.closest( '#minn-insp-close' ) ) { closeInspector(); return; }
 			if ( e.target.closest( '#minn-insp-remove' ) ) {
-				if ( ! confirm( 'Remove this block?' ) ) return;
-				const ed2 = state.editor;
-				// Null (don't splice) so other islands' data-island indices stay valid.
-				if ( ed2 && ed2.islands ) ed2.islands[ insp.idx ] = null;
-				insp.islandEl.remove();
+				const el = insp.islandEl;
 				closeInspector();
-				toast( 'Block removed' );
-				if ( ed2 && ed2.id ) scheduleAutosave();
+				removeIslandWithUndo( el );
 				return;
 			}
 			if ( e.target.closest( '#minn-insp-embed-url' ) ) {
@@ -6953,6 +6991,12 @@
 		const row = cell ? cell.closest( 'tr' ) : null;
 		const allRows = Array.from( table.querySelectorAll( 'tr' ) );
 
+		// Destructive table ops aren't on the browser undo stack (direct DOM),
+		// so make them recoverable with an Undo toast (see the undo-completeness
+		// decision in docs/editor-roadmap.md). Snapshot the figure before the op.
+		const fig = table.closest( 'figure' ) || table;
+		const destructive = { 'table-del': 'Table deleted', 'row-del': 'Row deleted', 'col-del': 'Column deleted' }[ op ];
+
 		// Deleting the last row/column means deleting the table.
 		if ( op === 'table-del' || ( op === 'row-del' && allRows.length <= 1 ) || ( op === 'col-del' && row && row.cells.length <= 1 ) ) {
 			const target = table.closest( 'figure' ) || table;
@@ -6961,8 +7005,32 @@
 			target.replaceWith( p );
 			setCaret( p, 0 );
 			hideTablePop();
+			// The original figure node is intact and detached — undo restores it.
+			toastAction( 'Table deleted', 'Undo', () => {
+				if ( p.isConnected ) p.replaceWith( target );
+				queueTableChips();
+				updateEditorStats();
+				scheduleAutosave();
+			} );
 			scheduleAutosave();
 			return;
+		}
+
+		// For in-place destructive ops (row/col delete), snapshot the figure's
+		// markup and restore it on undo.
+		let restore = null;
+		if ( destructive ) {
+			const snapHTML = fig.outerHTML;
+			restore = () => {
+				if ( ! fig.isConnected ) return;
+				const tmp = document.createElement( 'div' );
+				tmp.innerHTML = snapHTML;
+				const node = tmp.firstElementChild;
+				if ( node ) fig.replaceWith( node );
+				queueTableChips();
+				updateEditorStats();
+				scheduleAutosave();
+			};
 		}
 
 		if ( op === 'row-above' || op === 'row-below' ) {
@@ -7023,6 +7091,7 @@
 			}
 		}
 		scheduleAutosave();
+		if ( restore ) toastAction( destructive, 'Undo', restore );
 		// Geometry (and the header button label) changed — refresh both.
 		syncTableChips();
 		if ( table.isConnected ) openTablePop( table );
@@ -7408,13 +7477,8 @@
 			}
 			// Deleting INTO the island: arm first, delete on the second press.
 			if ( armed === island ) {
-				const ed = state.editor;
-				const idx = parseInt( island.dataset.island, 10 );
-				if ( ed && ed.islands && ed.islands[ idx ] != null ) ed.islands[ idx ] = null;
-				island.remove();
 				disarm();
-				toast( 'Block removed' );
-				scheduleAutosave();
+				removeIslandWithUndo( island );
 			} else {
 				disarm();
 				armed = island;
