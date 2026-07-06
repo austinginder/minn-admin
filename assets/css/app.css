@@ -542,7 +542,10 @@ select.minn-input {
 }
 .minn-tool:hover { background: var(--hover); color: var(--text); }
 .minn-tool svg { display: block; }
-.minn-editor-body { color: var(--text); line-height: 1.75; font-size: 16px; min-height: 40vh; outline: none; overflow-x: hidden; overflow-wrap: break-word; }
+/* overflow-x: clip (not hidden) contains wide content horizontally WITHOUT
+   forcing overflow-y to auto — hidden would clip a first-block island's ⚙ chip,
+   which pokes 10px above the island's top edge. */
+.minn-editor-body { color: var(--text); line-height: 1.75; font-size: 16px; min-height: 40vh; outline: none; overflow-x: clip; overflow-wrap: break-word; }
 .minn-editor-body table { display: block; max-width: 100%; overflow-x: auto; }
 /* Editable tables get the same cutout treatment as block islands — the dashed
    outline marks "this is a structured block", top-level only so tables inside
