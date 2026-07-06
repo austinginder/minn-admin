@@ -35,7 +35,9 @@ markup only when the block's JS `save()` is null — `is_dynamic` is NOT that gu
 comment renders empty AND fails Gutenberg validation). The server can't see JS `save()`, so
 the shipped discriminator is a **render probe**: candidates whose bare comment renders
 nothing are excluded (cached in a transient keyed on the candidate set). Static-save blocks
-remain excluded per "The honest limit" below.
+remain excluded per "The honest limit" below — but see `adapters/stackable.php` for the
+scrape-the-data counter-move: when a plugin publishes its designs as serialized markup
+(Stackable's CDN design library), those templates insert as valid islands with no runtime.
 
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —
 this is the plan for making them *workable*. The goal: click an island, get a small inspector
