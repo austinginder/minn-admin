@@ -24,6 +24,15 @@ note says so. And island previews now render with the site's **real front-end st
 global stylesheet, and the client scopes every rule to `.minn-island-preview` before
 injecting (see editor-direction.md, "The writing surface").
 
+**Post-v0.8.0 addition (auto-registered inserts):** dynamic third-party blocks no longer
+need an adapter to be insertable. `Minn_Admin::insertable_blocks()` walks the block-type
+registry at boot (dynamic + top-level + inserter-visible + non-core; adapter `insert`
+descriptors supersede, `insert => false` suppresses, `minn_admin_insert_blocks` filters the
+result) and the slash menu carries them as **search-only** entries: the default list stays
+curated, and typing matches title or namespace. A self-closing comment is valid saved
+markup for any server-rendered block, so insertion needs no template. Static-save blocks
+remain excluded per "The honest limit" below.
+
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —
 this is the plan for making them *workable*. The goal: click an island, get a small inspector
 popover next to it, edit the block's configuration in place, watch the preview update. No React,
