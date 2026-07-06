@@ -4355,6 +4355,11 @@
 	}
 
 	function editorModeFor( raw ) {
+		// An empty post has nothing classic mode would preserve — open it in
+		// the native blocks mode. Without this, a new post reloaded before its
+		// first content save (the title-only autosave draft) degraded to
+		// classic permanently, hiding embeds/galleries/custom blocks.
+		if ( ! String( raw || '' ).trim() ) return 'blocks';
 		if ( ! /<!--\s*wp:/.test( raw ) ) return 'classic';
 		return tokenizeBlocks( raw ) ? 'blocks' : 'locked';
 	}

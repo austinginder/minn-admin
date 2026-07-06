@@ -25,6 +25,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		title: 'Auto-block insert test',
 		content: '<!-- wp:paragraph -->\n<p>Auto blocks.</p>\n<!-- /wp:paragraph -->',
 	} );
+	let emptyId = null;
 
 	const save = async () => { await page.keyboard.press( 'Meta+s' ); await page.waitForTimeout( 2000 ); };
 	const rawContent = () => page.evaluate( async ( pid ) => {
@@ -116,8 +117,24 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		const raw2 = await rawContent();
 		t.check( 'island round-trips through a second save',
 			raw2.includes( '<!-- wp:anchor/report-card /-->' ) && raw2.includes( 'Round two.' ), raw2 );
+
+		// --- Empty posts open in blocks mode ---
+		// The classic-degradation trap: a title-only autosave draft reloaded
+		// before its first content save used to reopen as classic, hiding
+		// embeds/galleries/custom blocks forever (editorModeFor empty → blocks).
+		emptyId = await createPost( page, { title: 'Auto-block empty fixture', content: '' } );
+		await openEditor( page, emptyId );
+		await freshParagraph( page );
+		await page.keyboard.type( '/', { delay: 30 } );
+		await page.waitForSelector( '.minn-slash-menu' );
+		labels = await menuLabels();
+		t.check( 'empty post opens in blocks mode (Embed offered, hint shown)',
+			labels.some( ( l ) => l.startsWith( 'Embed' ) ) && !! ( await page.$( '.minn-slash-hint' ) ),
+			labels.join( ', ' ) );
+		await page.keyboard.press( 'Escape' );
 	} finally {
 		await deletePost( page, id );
+		await deletePost( page, emptyId );
 	}
 
 	await t.done( browser, errors );
