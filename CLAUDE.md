@@ -60,6 +60,10 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 
 - Commits: Emoji-Log — `📦 NEW:` `👌 IMPROVE:` `🐛 FIX:` `📖 DOC:` `🚀 RELEASE:`,
   imperative and present tense.
+- Prose style: no em dashes inside sentences in user-facing text (readmes, docs,
+  changelog entries, UI strings). Rewrite with a period, colon, semicolon or
+  parentheses. The one sanctioned use is the list-item label separator
+  (`**Feature** — description`).
 - Version lives in four places at release time: `minn-admin.php` (×2), `readme.txt`
   Stable tag, `manifest.json` (version + download_url). Don't touch them mid-cycle.
 - A release ends at the published GitHub release + verified manifest. **Never update a
