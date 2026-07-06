@@ -449,6 +449,15 @@ a { color: var(--accent2); text-decoration: none; }
   transition: top 0.15s ease, height 0.15s ease;
 }
 .minn-tool.active { background: var(--accent-soft); color: var(--accent2); }
+/* Zen: focus mode collapses the nav and the editor sidebar — nothing but the
+   writing column, centered. body-class specificity outranks the responsive
+   narrow-nav rules, so this wins at every breakpoint. */
+.minn-sidebar { transition: width 0.25s ease, padding 0.25s ease, opacity 0.2s ease; }
+body.minn-focus-zen .minn-sidebar { width: 0; min-width: 0; padding-left: 0; padding-right: 0; opacity: 0; overflow: hidden; border-right: 0; }
+.minn-editor { transition: grid-template-columns 0.25s ease, gap 0.25s ease; }
+body.minn-focus-zen .minn-editor { grid-template-columns: minmax(0, 1fr) 0px; gap: 0; }
+.minn-editor-side { transition: opacity 0.2s ease; }
+body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-events: none; }
 
 /* Outline panel — heading ToC in the editor sidebar. Indent rides --olvl.
    LAST card in the side column + sticky: the grid stretches the column to

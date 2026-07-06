@@ -5162,6 +5162,7 @@
 
 	function removeFocusDim() {
 		if ( focusDims ) { focusDims.forEach( ( d ) => d.remove() ); focusDims = null; }
+		document.body.classList.remove( 'minn-focus-zen' );
 	}
 
 	function syncFocusDim() {
@@ -5207,8 +5208,17 @@
 		try { localStorage.setItem( 'minn-focus', ed.focus ? '1' : '' ); } catch ( e ) { /* private mode */ }
 		const btn = $( '#minn-focus-btn' );
 		if ( btn ) btn.classList.toggle( 'active', ed.focus );
-		if ( ed.focus ) syncFocusDim();
-		else removeFocusDim();
+		if ( ed.focus ) {
+			// Zen: collapse the nav and the editor sidebar — nothing but the
+			// writing. The toolbar (with this toggle) and ⌘S stay.
+			document.body.classList.add( 'minn-focus-zen' );
+			syncFocusDim();
+		} else {
+			removeFocusDim();
+		}
+		// The collapse/restore transition (250ms) reflows everything the
+		// fixed-position chrome is anchored to — re-sync after it settles.
+		setTimeout( updateEditorStats, 300 );
 	}
 
 	document.addEventListener( 'selectionchange', queueFocusDim );
@@ -6159,6 +6169,7 @@
 			try { ed.focus = ed.focus || !! localStorage.getItem( 'minn-focus' ); } catch ( e ) { /* private mode */ }
 			const fbtn = $( '#minn-focus-btn', view );
 			if ( fbtn && ed.focus ) fbtn.classList.add( 'active' );
+			document.body.classList.toggle( 'minn-focus-zen', !! ed.focus );
 		}
 		updateEditorStats();
 		ensureEditorStyles();
