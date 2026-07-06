@@ -4,7 +4,7 @@ Tags: admin, dashboard, ui, admin theme
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.7.0
+Stable tag: 0.7.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -48,6 +48,9 @@ Try it instantly in WordPress Playground — launch link and blueprint: https://
 Pretty permalinks are recommended. Without them the app is served at `/?minn_admin=1`.
 
 == Changelog ==
+
+= 0.7.1 =
+* Fix: System page returned a 500 on managed hosts (Kinsta) that disable disk_free_space/disk_total_space in web PHP — now guarded, disk usage shows "Unknown" where hidden. php_uname guarded the same way.
 
 = 0.7.0 =
 * Page-builder coexistence: Divi, Elementor, Brizy, Beaver Builder, Etch, Bricks and WPBakery — builder-owned pages are marked, edited through the builder's own chrome-free surface, and fenced so Minn can't break them. + New can start a page in any builder.

@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.7.1** - July 5, 2026
+
+### Fixed
+* **System page 500 on managed hosts:** the System endpoint called `disk_free_space()` / `disk_total_space()` unguarded — hosts like Kinsta remove them from the web PHP via `disable_functions`, which turns the call into a fatal error (`@` doesn't save you, and the CLI on the same box reports nothing disabled). Both are now `function_exists()`-guarded, as is `php_uname()` a few lines below — the next fatal waiting on hardened hosts. Disk usage degrades to "Unknown" where the host hides it.
+
 ## **v0.7.0** - July 5, 2026
 
 Beyond writing. Two big moves this cycle: **coexist with page builders** instead of pretending they don't exist, and give developers a real **System** page. Plus the trust work that closes Horizon 1 of the [editor roadmap](docs/editor-roadmap.md) — a writer never loses work.
