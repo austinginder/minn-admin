@@ -478,7 +478,11 @@ a { color: var(--accent2); text-decoration: none; }
    narrow-nav rules, so this wins at every breakpoint. */
 .minn-sidebar { transition: width 0.25s ease, padding 0.25s ease, opacity 0.2s ease; }
 body.minn-focus-zen .minn-sidebar,
-body.minn-nav-hidden .minn-sidebar { width: 0; min-width: 0; padding-left: 0; padding-right: 0; opacity: 0; overflow: hidden; border-right: 0; }
+body.minn-nav-hidden .minn-sidebar,
+body.minn-outline-mode .minn-sidebar { width: 0; min-width: 0; padding-left: 0; padding-right: 0; opacity: 0; overflow: hidden; border-right: 0; }
+
+/* Outline mode — nav gone, every sidebar card gone except the Outline. */
+body.minn-outline-mode .minn-editor-side > :not(#minn-outline-card) { display: none !important; }
 
 /* Nav show/hide edge tab — lives outside the sidebar it hides; z-25 keeps it
    under the focus dim (30) so zen stays calm. */
@@ -546,7 +550,12 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
    LAST card in the side column + sticky: the grid stretches the column to
    the editor's full height, so the outline stays pinned while a long post
    scrolls (and being last, it never slides over the cards below it). */
-#minn-outline-card { position: sticky; top: 14px; max-height: calc(100vh - 28px); overflow-y: auto; }
+/* The CARD must not be scrollable — a sticky element with overflow:auto
+   falls off Chrome's compositor fast path and lags the scroll by a frame
+   (reads as wiggle/shake). The inner LIST scrolls instead, and translateZ
+   pins the card to its own layer. */
+#minn-outline-card { position: sticky; top: 14px; transform: translateZ(0); }
+#minn-outline { max-height: calc(100vh - 92px); overflow-y: auto; }
 .minn-outline-row {
   display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
   padding: 5px 8px 5px calc(8px + var(--olvl, 0) * 14px); border-radius: 7px;

@@ -32,7 +32,7 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	await page.click( '#minn-editor-body p' );
 	await page.keyboard.press( 'Meta+Shift+D' );
 	await page.waitForSelector( '.minn-focus-dim', { timeout: 5000 } );
-	t.check( '⌘⇧D enters focus mode', await page.$eval( '#minn-focus-btn', ( b ) => b.classList.contains( 'active' ) ), '' );
+	t.check( '⌘⇧D enters focus mode', await page.evaluate( () => document.body.classList.contains( 'minn-focus-zen' ) ), '' );
 	await page.keyboard.press( 'Meta+Shift+D' );
 	await page.waitForTimeout( 400 );
 	t.check( '⌘⇧D leaves focus mode', await page.evaluate( () => ! document.querySelector( '.minn-focus-dim' ) && ! document.body.classList.contains( 'minn-focus-zen' ) ), '' );

@@ -1,5 +1,5 @@
 /**
- * Focus mode: toolbar toggle fades everything but the caret block via two
+ * Focus mode: the ⌘⇧D toggle fades everything but the caret block via two
  * document.body overlays (never a class/style on content), the band follows
  * the caret, typewriter scroll recenters while typing, state persists via
  * localStorage, and toggling off removes every trace.
@@ -19,7 +19,7 @@ const PARAS = Array.from( { length: 14 }, ( _, i ) =>
 
 	/* ===== Toggle with NO caret anywhere: must band the first visible block
 	   and seat the caret there — a bare zen collapse looks broken. ===== */
-	await page.click( '#minn-focus-btn' );
+	await page.keyboard.press( 'Meta+Shift+D' );
 	await page.waitForSelector( '.minn-focus-dim', { timeout: 5000 } );
 	const cold = await page.evaluate( () => {
 		const [ top, bot ] = document.querySelectorAll( '.minn-focus-dim' );
@@ -35,14 +35,14 @@ const PARAS = Array.from( { length: 14 }, ( _, i ) =>
 	} );
 	t.check( 'cold toggle bands the first visible block', cold.topEnds <= cold.pTop && cold.botStarts >= cold.pBottom, JSON.stringify( cold ) );
 	t.check( 'cold toggle seats the caret in that block', cold.caretInFirst, JSON.stringify( cold ) );
-	await page.click( '#minn-focus-btn' ); // back off for the caret-driven flow
+	await page.keyboard.press( 'Meta+Shift+D' ); // back off for the caret-driven flow
 	await page.waitForTimeout( 350 );
 
 	/* ===== Toggle on with the caret in a paragraph ===== */
 	await page.click( '#minn-editor-body p:nth-of-type(3)' );
-	await page.click( '#minn-focus-btn' );
+	await page.keyboard.press( 'Meta+Shift+D' );
 	await page.waitForSelector( '.minn-focus-dim', { timeout: 5000 } );
-	t.check( 'toggle activates the button', await page.$eval( '#minn-focus-btn', ( b ) => b.classList.contains( 'active' ) ), '' );
+	t.check( 'toggle engages focus mode', await page.evaluate( () => document.body.classList.contains( 'minn-focus-zen' ) ), '' );
 	const band = await page.evaluate( () => {
 		const [ top, bot ] = document.querySelectorAll( '.minn-focus-dim' );
 		const p = document.querySelector( '#minn-editor-body p:nth-of-type(3)' ).getBoundingClientRect();
@@ -98,14 +98,14 @@ const PARAS = Array.from( { length: 14 }, ( _, i ) =>
 
 	/* ===== Persists across editor loads ===== */
 	await openEditor( page, id );
-	t.check( 'focus mode persists across loads', await page.$eval( '#minn-focus-btn', ( b ) => b.classList.contains( 'active' ) ), '' );
+	t.check( 'focus mode persists across loads', await page.evaluate( () => document.body.classList.contains( 'minn-focus-zen' ) ), '' );
 
 	/* ===== Toggle off removes every trace ===== */
-	await page.click( '#minn-focus-btn' );
+	await page.keyboard.press( 'Meta+Shift+D' );
 	await page.waitForTimeout( 250 );
 	const off = await page.evaluate( () => ( {
 		dims: document.querySelectorAll( '.minn-focus-dim' ).length,
-		active: document.querySelector( '#minn-focus-btn' ).classList.contains( 'active' ),
+		active: document.body.classList.contains( 'minn-focus-zen' ),
 		stored: !! localStorage.getItem( 'minn-focus' ),
 		zen: document.body.classList.contains( 'minn-focus-zen' ),
 		nav: document.querySelector( '.minn-sidebar' ).offsetWidth,
@@ -117,7 +117,7 @@ const PARAS = Array.from( { length: 14 }, ( _, i ) =>
 	/* ===== Leaving the editor with zen on restores the app chrome. The nav
 	   is collapsed, so the honest exit is the ⌘K palette — which doubles as
 	   proof the palette stays reachable in zen (SPA nav, not a reload). ===== */
-	await page.click( '#minn-focus-btn' ); // zen back on
+	await page.keyboard.press( 'Meta+Shift+D' ); // zen back on
 	await page.waitForTimeout( 400 );
 	await page.click( '#minn-editor-body p:nth-of-type(2)' ); // collapsed caret → ⌘K = palette
 	await page.keyboard.press( 'Meta+k' );
@@ -135,8 +135,8 @@ const PARAS = Array.from( { length: 14 }, ( _, i ) =>
 	t.check( 'leaving the editor restores nav and drops overlays', ! away.zen && away.nav > 100 && away.dims === 0, JSON.stringify( away ) );
 	// Leave focus mode OFF for whoever runs next in this profile.
 	await openEditor( page, id );
-	if ( await page.$eval( '#minn-focus-btn', ( b ) => b.classList.contains( 'active' ) ) ) {
-		await page.click( '#minn-focus-btn' );
+	if ( await page.evaluate( () => document.body.classList.contains( 'minn-focus-zen' ) ) ) {
+		await page.keyboard.press( 'Meta+Shift+D' );
 		await page.waitForTimeout( 300 );
 	}
 
