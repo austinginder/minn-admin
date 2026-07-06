@@ -6873,6 +6873,18 @@
 	const buildOpenComment = ( name, attrs, selfClosing ) =>
 		`<!-- wp:${ name }${ serializeBlockAttrs( attrs ) } ${ selfClosing ? '/' : '' }-->`;
 
+	// A child's TEXT lives in its saved HTML (c.tail), not its comment attrs —
+	// core paragraph/heading "content" is a sourced attribute the schema form
+	// rightly skips (rewriting it in the comment would do nothing). For
+	// single-element text children, expose the inner HTML directly; the value
+	// writes back verbatim so inline marks (<code>, <a>, <strong>) survive.
+	const CHILD_TEXT_RE = /^(\s*<(p|h[1-6])(\s[^>]*)?>)([\s\S]*)(<\/\2>\s*<!--[\s\S]*)$/;
+	function childTextOf( c ) {
+		if ( c.selfClosing || ! c.tail ) return null;
+		const m = c.tail.match( CHILD_TEXT_RE );
+		return m ? { pre: m[ 1 ], inner: m[ 4 ], post: m[ 5 ] } : null;
+	}
+
 	// Form rows for one block's editable attributes. `prefix` namespaces the
 	// inputs ("own" or a child index). A minn_admin_block_forms descriptor for
 	// the block refines labels, controls, options, ordering and hiding.
@@ -6909,9 +6921,14 @@
 					: null ) ) ) );
 			if ( ! control ) return; // object / array attrs — too structural for a generic form
 			if ( control === 'select' && options ) {
+				// An enum with no current value and no default must offer an
+				// empty choice — otherwise the select forces its first option
+				// and Apply injects an attr the block never had.
+				const opts = ( cur == null && def.default === undefined && ! options.some( ( [ v ] ) => v === '' ) )
+					? [ [ '', '—' ], ...options ] : options;
 				rows.push( `<div class="minn-field-label">${ label }</div>
 				<select class="minn-input" data-insp="${ esc( id ) }">
-					${ options.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( cur == null ? '' : cur ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+					${ opts.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( cur == null ? '' : cur ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
 				</select>` );
 			} else if ( control === 'checkbox' ) {
 				rows.push( `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-insp="${ esc( id ) }" data-type="boolean"${ cur ? ' checked' : '' }> ${ label }</label>` );
@@ -7045,8 +7062,14 @@
 				const wasExplicit = key in attrs;
 				if ( v === undefined ) {
 					delete attrs[ key ]; // cleared field = remove the attribute
-				} else if ( ! wasExplicit && def.default !== undefined && v === def.default ) {
-					// never present and still at the default — don't add noise
+				} else if ( ! wasExplicit && (
+					( def.default !== undefined && v === def.default )
+					// No default and still empty/unchecked: an untouched form
+					// row must not inject placeholder:"" / dropCap:false noise
+					// into children it merely displayed.
+					|| ( def.default === undefined && ( v === '' || v === false ) )
+				) ) {
+					// never present and still empty or at the default — skip
 				} else {
 					attrs[ key ] = v;
 				}
@@ -7057,6 +7080,8 @@
 		insp.model.children.forEach( ( c, i ) => {
 			const t = insp.types[ c.name ];
 			fold( c.attrs, t && t.attributes, String( i ) );
+			const ta = inspectorEl.querySelector( `[data-insptext="${ i }"]` );
+			if ( ta ) c.__text = ta.value;
 		} );
 		( insp.model.wt || [] ).forEach( ( w, i ) => {
 			const input = inspectorEl.querySelector( `[data-insp="wt:${ i }"]` );
@@ -7080,7 +7105,12 @@
 		const childSections = mediaRebuild ? '' : model.children.map( ( c, i ) => {
 			const t = types[ c.name ];
 			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '';
-			if ( ! fields && ! structural ) return '';
+			// The child's text (from its saved HTML) leads the section — it's
+			// what a writer came to change; schema attrs follow.
+			const ct = childTextOf( c );
+			const textRow = ct ? `<div class="minn-field-label">text</div>
+				<textarea class="minn-input minn-insp-textarea" data-insptext="${ i }">${ esc( ct.inner ) }</textarea>` : '';
+			if ( ! fields && ! textRow && ! structural ) return '';
 			return `<div class="minn-insp-child">
 				<div class="minn-insp-child-title">
 					<span>${ i + 1 }. ${ esc( c.name.replace( /^core\//, '' ) ) }</span>
@@ -7090,7 +7120,7 @@
 						<button type="button" data-cdel="${ i }" title="Remove">×</button>
 					</span>` : '' }
 				</div>
-				${ fields || '<div class="minn-insp-note">No editable settings.</div>' }
+				${ textRow + fields || '<div class="minn-insp-note">No editable settings.</div>' }
 			</div>`;
 		} ).join( '' );
 		// "+ Add" only for types whose schema we can form-edit.
@@ -7253,7 +7283,14 @@
 
 		const childRaw = ( c ) => {
 			const open = buildOpenComment( c.name, c.attrs, c.selfClosing );
-			return c.selfClosing ? open : open + c.tail;
+			let tail = c.tail;
+			// Edited child text splices into the saved HTML — only when it
+			// actually changed, so untouched children stay byte-identical.
+			if ( ! c.selfClosing && c.__text != null ) {
+				const ct = childTextOf( c );
+				if ( ct && ct.inner !== c.__text ) tail = ct.pre + c.__text + ct.post;
+			}
+			return c.selfClosing ? open : open + tail;
 		};
 
 		let inner = model.parts.inner;
