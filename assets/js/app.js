@@ -5357,7 +5357,7 @@
 			if ( body && ! focusBlockOf() ) {
 				const blk = firstVisibleBlock();
 				if ( blk && ! blk.closest( '.minn-block-island' ) && blk.getAttribute( 'contenteditable' ) !== 'false' ) {
-					body.focus();
+					body.focus( { preventScroll: true } );
 					const r = document.createRange();
 					r.setStart( blk, 0 );
 					r.collapse( true );
@@ -6702,7 +6702,7 @@
 						s.addRange( r );
 					}
 				}
-				body.focus();
+				body.focus( { preventScroll: true } );
 				insertImageFiles( body, files );
 			} );
 
@@ -7807,7 +7807,11 @@
 				if ( url ) a.setAttribute( 'href', url );
 				else unlink();
 			} else if ( url && linkPopSaved && linkPopSaved.startContainer.isConnected ) {
-				body.focus();
+				// preventScroll matters on every editor-body focus: focusing the
+				// contenteditable scrolls its TOP into view BEFORE the saved
+				// range is restored — Apply on a link deep in a long post
+				// yanked the viewport to the start of the document.
+				body.focus( { preventScroll: true } );
 				const sel = window.getSelection();
 				sel.removeAllRanges();
 				sel.addRange( linkPopSaved );
@@ -7818,7 +7822,7 @@
 		};
 		const unlink = () => {
 			if ( a && a.isConnected ) {
-				body.focus();
+				body.focus( { preventScroll: true } );
 				const sel = window.getSelection();
 				const r = document.createRange();
 				r.selectNodeContents( a );
@@ -7991,7 +7995,7 @@
 			const target = img.closest( 'figure' ) || img;
 			const editorBody = $( '#minn-editor-body' );
 			if ( ! editorBody || ! editorBody.contains( target ) ) return hideImgPop();
-			editorBody.focus();
+			editorBody.focus( { preventScroll: true } );
 			const sel = window.getSelection();
 			const r = document.createRange();
 			// Delete the figure's CONTENTS, not the figure: a selection spanning
@@ -8928,7 +8932,7 @@
 			if ( ! item || ! block ) return close();
 			const target = block;
 			close();
-			body.focus();
+			body.focus( { preventScroll: true } );
 			const action = item[ 2 ];
 			if ( action && action.block ) {
 				// Insert a custom block as a new island: register the raw markup,

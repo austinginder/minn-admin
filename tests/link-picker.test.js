@@ -71,7 +71,37 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	}, id );
 	t.check( 'typed URL still applies classically', saved2.includes( '<a href="https://example.com/page">announcement</a>' ), saved2.slice( 0, 160 ) );
 
+	/* ===== Apply deep in a long post must not scroll to the top =====
+	   (body.focus() without preventScroll scrolls the contenteditable's TOP
+	   into view before the saved range restores.) ===== */
+	const longId = await createPost( page, { title: 'Deep link probe', content:
+		'<!-- wp:paragraph --><p>' + 'Filler to push the target far down the document. '.repeat( 250 ) + '</p><!-- /wp:paragraph -->'
+		+ '<!-- wp:paragraph --><p>Read the announcement for details.</p><!-- /wp:paragraph -->', status: 'draft' } );
+	await openEditor( page, longId );
+	await page.evaluate( () => {
+		const p = document.querySelectorAll( '#minn-editor-body > p' )[ 1 ];
+		p.scrollIntoView( { block: 'center' } );
+		const tn = p.firstChild;
+		const i = tn.textContent.indexOf( 'announcement' );
+		const r = document.createRange();
+		r.setStart( tn, i );
+		r.setEnd( tn, i + 'announcement'.length );
+		const s = getSelection();
+		s.removeAllRanges();
+		s.addRange( r );
+		document.querySelector( '#minn-editor-body' ).focus( { preventScroll: true } );
+	} );
+	const scrollBefore = await page.$eval( '.minn-scroll', ( s ) => s.scrollTop );
+	await page.keyboard.press( 'Meta+k' );
+	await page.waitForSelector( '.minn-link-pop', { timeout: 5000 } );
+	await page.type( '.minn-link-pop [data-link-url]', 'https://example.com/deep', { delay: 10 } );
+	await page.keyboard.press( 'Enter' );
+	await page.waitForTimeout( 400 );
+	const scrollAfter = await page.$eval( '.minn-scroll', ( s ) => s.scrollTop );
+	t.check( 'Apply keeps the scroll position', Math.abs( scrollAfter - scrollBefore ) < 60 && scrollBefore > 500, `before=${ scrollBefore } after=${ scrollAfter }` );
+
 	await deletePost( page, id );
 	await deletePost( page, target );
+	await deletePost( page, longId );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
