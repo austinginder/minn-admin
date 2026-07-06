@@ -963,6 +963,9 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* ===== Help / philosophy ===== */
 .minn-help-body { padding: 6px 18px 14px; font-size: 14px; line-height: 1.65; color: var(--text2); border-bottom: 1px solid var(--border); }
 .minn-help-body b { color: var(--text); }
+.minn-help-keys { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; align-items: center; margin: 8px 0 4px; }
+.minn-help-keys .minn-kbd { justify-self: start; }
+.minn-help-keys-note { font-size: 12.5px; color: var(--text3); margin-top: 8px; }
 .minn-help-body h4 { color: var(--text); font-size: 14px; margin: 18px 0 4px; }
 .minn-help-body p { margin: 6px 0; }
 

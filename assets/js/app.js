@@ -9778,6 +9778,17 @@
 						work you actually do every day: writing, moderating, uploading, and keeping an eye
 						on the site. The classic wp-admin stays fully available. Minn is additive, never a cage.</p>
 
+						<h4>Keyboard shortcuts</h4>
+						<div class="minn-help-keys">
+							<span class="minn-kbd">⌘K</span><span>Command palette · with text selected in the editor: link</span>
+							<span class="minn-kbd">⌘S</span><span>Save, keeping the current status</span>
+							<span class="minn-kbd">⌘⏎</span><span>Publish, Update or Schedule</span>
+							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
+							<span class="minn-kbd">⌘\\</span><span>Show or hide the navigation</span>
+							<span class="minn-kbd">Esc</span><span>Close menus and dialogs</span>
+						</div>
+						<p class="minn-help-keys-note">On Windows and Linux, use <span class="minn-kbd">Ctrl</span> in place of <span class="minn-kbd">⌘</span>.</p>
+
 						<h4>Get out of the way</h4>
 						<p>No boxes within boxes, no meta panels fighting for attention. The daily loop is one
 						click away and visually quiet. Press <span class="minn-kbd">⌘K</span> anywhere.</p>
@@ -11354,6 +11365,27 @@
 						toast( LIVE_STATUSES.includes( ed.status ) ? 'Updated' : 'Draft saved' );
 					}
 				} );
+			}
+			// ⌘\ toggles the navigation — the Notion/Linear convention (⌘B is
+			// bold in an editor). Routed through the edge tab: one source of
+			// truth for the class + localStorage persistence.
+			if ( ( e.metaKey || e.ctrlKey ) && e.key === '\\' ) {
+				e.preventDefault();
+				const tab = $( '#minn-nav-tab' );
+				if ( tab ) tab.click();
+			}
+			// ⌘⇧D toggles focus mode — classic WP's distraction-free lineage.
+			if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'd' && state.route === 'editor' && state.editor ) {
+				e.preventDefault();
+				toggleFocusMode();
+			}
+			// ⌘⏎ publishes/updates/schedules — the writing-tool standard.
+			if ( ( e.metaKey || e.ctrlKey ) && e.key === 'Enter' && state.route === 'editor' && state.editor ) {
+				const pubBtn = $( '#minn-publish-btn' );
+				if ( pubBtn && ! pubBtn.disabled ) {
+					e.preventDefault();
+					pubBtn.click();
+				}
 			}
 			if ( state.modal && state.modal.type === 'media' ) {
 				if ( e.key === 'ArrowLeft' ) { e.preventDefault(); mediaModalNav( -1 ); }
