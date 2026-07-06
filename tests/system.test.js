@@ -22,6 +22,11 @@ const fs = require( 'fs' );
 	t.check( 'checks carry a status of pass/warn/fail', ( api.body.checks || [] ).length > 0 && api.body.checks.every( ( c ) => [ 'pass', 'warn', 'fail' ].includes( c.status ) ), JSON.stringify( ( api.body.checks || [] ).map( ( c ) => c.status ) ) );
 	const db = ( api.body.groups || [] ).find( ( g ) => g.title === 'Database' );
 	t.check( 'database group carries largest-tables', !! db && Array.isArray( db.tables ) && db.tables.length > 0, JSON.stringify( db && db.tables && db.tables.length ) );
+
+	const ex = api.body.extensions;
+	t.check( 'extensions manifest has plugins + themes with versions', !! ex && Array.isArray( ex.plugins ) && ex.plugins.length > 0 && typeof ex.active_plugins === 'number' && Array.isArray( ex.themes ) && ex.plugins.every( ( p ) => typeof p.name === 'string' && typeof p.version === 'string' && typeof p.active === 'boolean' ), JSON.stringify( { plugins: ex && ex.plugins.length, active: ex && ex.active_plugins, themes: ex && ex.themes.length } ) );
+	t.check( 'plugins sorted active-first', ! ex.plugins.some( ( p, i ) => i > 0 && p.active && ! ex.plugins[ i - 1 ].active ), '' );
+	t.check( 'exactly one active theme', ex.themes.filter( ( th ) => th.active ).length === 1, String( ex.themes.filter( ( th ) => th.active ).length ) );
 	const phpRow = ( api.body.groups || [] ).find( ( g ) => g.title === 'PHP' ).rows.find( ( r ) => r.key === 'Version' );
 	t.check( 'PHP version is present', !! phpRow && /^\d+\.\d+/.test( phpRow.value ), phpRow && phpRow.value );
 
@@ -39,13 +44,20 @@ const fs = require( 'fs' );
 	t.check( 'health strip renders every check', ui.checks === ( api.body.checks || [] ).length && ui.checks > 0, JSON.stringify( ui ) );
 	t.check( 'four group cards render', ui.cards === 4, String( ui.cards ) );
 	t.check( 'summary pills + largest-tables render', ui.pills > 0 && ui.hasHealthy && ui.tableRows > 0, JSON.stringify( ui ) );
+	const extUi = await page.evaluate( () => ( {
+		sections: Array.from( document.querySelectorAll( '.minn-sys-ext-label' ) ).map( ( l ) => l.textContent ),
+		items: document.querySelectorAll( '.minn-sys-ext-item' ).length,
+		dimmed: document.querySelectorAll( '.minn-sys-ext-item.off' ).length,
+		activeBadge: document.querySelectorAll( '.minn-sys-ext-active' ).length,
+	} ) );
+	t.check( 'extensions card renders Plugins + Themes with a version manifest', extUi.sections.includes( 'Plugins' ) && extUi.sections.includes( 'Themes' ) && extUi.items > 0 && extUi.activeBadge === 1, JSON.stringify( extUi ) );
 
 	/* ===== Nav item + copy report ===== */
 	t.check( 'System nav item present', !! ( await page.$( '.minn-nav-btn[data-nav="system"]' ) ) );
 	await page.click( '#minn-sys-copy' );
 	await page.waitForTimeout( 400 );
 	const clip = await page.evaluate( () => navigator.clipboard.readText() );
-	t.check( 'copy report writes a markdown system report', /^# System report/.test( clip ) && /## PHP/.test( clip ) && /## Database/.test( clip ), clip.slice( 0, 50 ) );
+	t.check( 'copy report writes a markdown system report', /^# System report/.test( clip ) && /## PHP/.test( clip ) && /## Database/.test( clip ) && /## Plugins \(\d+ active of \d+\)/.test( clip ) && /## Themes/.test( clip ), clip.slice( 0, 50 ) );
 
 	/* ===== Debug tools (wp-config toggles) ===== */
 	const cfg = api.body.config;

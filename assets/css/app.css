@@ -1033,6 +1033,20 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-log-body { flex: 1; margin: 0; overflow: auto; padding: 14px 18px; background: var(--bg); font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: var(--text2); white-space: pre-wrap; word-break: break-word; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
 .minn-log-loading { color: var(--text3); font-family: 'Inter', sans-serif; }
 
+/* Extensions manifest — installed plugins / mu-plugins / themes with versions. */
+.minn-sys-ext { padding: 0; margin-top: 14px; overflow: hidden; }
+.minn-sys-ext .minn-sys-card-head svg { color: var(--accent2); }
+.minn-sys-ext-section { padding: 12px 17px 14px; border-top: 1px solid var(--border); }
+.minn-sys-ext-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 9px; }
+.minn-sys-ext-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 3px 22px; }
+.minn-sys-ext-item { display: flex; align-items: baseline; gap: 12px; padding: 4px 0; min-width: 0; }
+.minn-sys-ext-item.off { opacity: 0.5; }
+.minn-sys-ext-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text); }
+.minn-sys-ext-item.off .minn-sys-ext-name { color: var(--text2); }
+.minn-sys-ext-ver { font-size: 11.5px; color: var(--text3); flex-shrink: 0; }
+.minn-sys-ext-active { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--green); background: rgba(70,184,129,0.12); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+.minn-sys-ext-parent { font-size: 11px; color: var(--text3); font-style: italic; }
+
 @media (max-width: 640px) {
   .minn-inspector { width: calc(100vw - 20px); left: 10px !important; }
 }

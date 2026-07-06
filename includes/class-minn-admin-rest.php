@@ -1926,16 +1926,84 @@ class Minn_Admin_REST {
 
 		return rest_ensure_response(
 			array(
-				'generated' => current_time( 'c' ),
-				'checks'    => $checks,
-				'config'    => self::config_state(),
-				'groups'    => array(
+				'generated'  => current_time( 'c' ),
+				'checks'     => $checks,
+				'config'     => self::config_state(),
+				'extensions' => self::extensions_manifest(),
+				'groups'     => array(
 					array( 'title' => 'WordPress', 'icon' => 'wp', 'rows' => self::kv_rows( $wordpress ) ),
 					array( 'title' => 'PHP', 'icon' => 'php', 'rows' => self::kv_rows( $php ) ),
 					array( 'title' => 'Database', 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables ),
 					array( 'title' => 'Server', 'icon' => 'server', 'rows' => self::kv_rows( $server ) ),
 				),
 			)
+		);
+	}
+
+	/**
+	 * Installed plugins (active first), must-use plugins, and themes with
+	 * versions — the diagnostic manifest a developer pastes into a ticket.
+	 */
+	private static function extensions_manifest() {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+		$active = (array) get_option( 'active_plugins', array() );
+		if ( is_multisite() ) {
+			$active = array_merge( $active, array_keys( (array) get_site_option( 'active_sitewide_plugins', array() ) ) );
+		}
+		$plugins = array();
+		foreach ( get_plugins() as $file => $data ) {
+			$plugins[] = array(
+				'name'    => $data['Name'],
+				'version' => $data['Version'] ? $data['Version'] : '—',
+				'active'  => in_array( $file, $active, true ),
+			);
+		}
+		usort(
+			$plugins,
+			function ( $a, $b ) {
+				if ( $a['active'] !== $b['active'] ) {
+					return $a['active'] ? -1 : 1;
+				}
+				return strcasecmp( $a['name'], $b['name'] );
+			}
+		);
+
+		$mu = array();
+		foreach ( (array) get_mu_plugins() as $file => $data ) {
+			$mu[] = array(
+				'name'    => ! empty( $data['Name'] ) ? $data['Name'] : $file,
+				'version' => ! empty( $data['Version'] ) ? $data['Version'] : '',
+				'active'  => true,
+			);
+		}
+
+		$current = get_stylesheet();
+		$themes  = array();
+		foreach ( wp_get_themes() as $slug => $theme ) {
+			$parent   = $theme->parent();
+			$themes[] = array(
+				'name'    => $theme->get( 'Name' ),
+				'version' => $theme->get( 'Version' ) ? $theme->get( 'Version' ) : '—',
+				'active'  => $slug === $current,
+				'parent'  => $parent ? $parent->get( 'Name' ) : '',
+			);
+		}
+		usort(
+			$themes,
+			function ( $a, $b ) {
+				if ( $a['active'] !== $b['active'] ) {
+					return $a['active'] ? -1 : 1;
+				}
+				return strcasecmp( $a['name'], $b['name'] );
+			}
+		);
+
+		return array(
+			'plugins'        => $plugins,
+			'active_plugins' => count( array_filter( $plugins, function ( $p ) { return $p['active']; } ) ),
+			'mu_plugins'     => $mu,
+			'themes'         => $themes,
 		);
 	}
 

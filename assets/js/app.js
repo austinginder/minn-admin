@@ -3213,6 +3213,17 @@
 				g.tables.forEach( ( t ) => lines.push( `- ${ t.name } — ${ t.size } (${ t.rows } rows)` ) );
 			}
 		} );
+		const ext = s.extensions;
+		if ( ext ) {
+			lines.push( '', `## Plugins (${ ext.active_plugins } active of ${ ext.plugins.length })` );
+			ext.plugins.forEach( ( p ) => lines.push( `- ${ p.name } — ${ p.version }${ p.active ? '' : ' (inactive)' }` ) );
+			if ( ext.mu_plugins.length ) {
+				lines.push( '', '## Must-use plugins' );
+				ext.mu_plugins.forEach( ( p ) => lines.push( `- ${ p.name }${ p.version ? ' — ' + p.version : '' }` ) );
+			}
+			lines.push( '', '## Themes' );
+			ext.themes.forEach( ( th ) => lines.push( `- ${ th.name } — ${ th.version }${ th.active ? ' (active)' : '' }${ th.parent ? ' [child of ' + th.parent + ']' : '' }` ) );
+		}
 		return lines.join( '\n' );
 	}
 
@@ -3281,6 +3292,28 @@
 				</button>` : '' }
 			</div>` : '';
 
+		// Installed extensions manifest — plugins (active first), must-use, themes.
+		const ext = s.extensions;
+		const extItem = ( it, activeBadge ) => `
+			<div class="minn-sys-ext-item${ it.active ? '' : ' off' }">
+				<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.parent ? ` <span class="minn-sys-ext-parent">child of ${ esc( it.parent ) }</span>` : '' }${ activeBadge && it.active ? ' <span class="minn-sys-ext-active">active</span>' : '' }</span>
+				<span class="minn-sys-ext-ver mono">${ esc( it.version || '—' ) }</span>
+			</div>`;
+		const extSection = ( label, items, activeBadge ) => items.length ? `
+			<div class="minn-sys-ext-section">
+				<div class="minn-sys-ext-label">${ esc( label ) }</div>
+				<div class="minn-sys-ext-grid">${ items.map( ( it ) => extItem( it, activeBadge ) ).join( '' ) }</div>
+			</div>` : '';
+		const extCard = ext ? `
+			<div class="minn-card minn-sys-ext">
+				<div class="minn-sys-card-head">${ icon( 'plug' ) }<span>Extensions</span>
+					<span class="minn-sys-debug-hint">${ ext.active_plugins } active · ${ ext.plugins.length } plugins · ${ ext.themes.length } themes</span>
+				</div>
+				${ extSection( 'Plugins', ext.plugins, false ) }
+				${ extSection( 'Must-use', ext.mu_plugins, false ) }
+				${ extSection( 'Themes', ext.themes, true ) }
+			</div>` : '';
+
 		view.innerHTML = `
 			<div class="minn-sys-topbar">
 				<div class="minn-sys-summary">
@@ -3304,6 +3337,7 @@
 			<div class="minn-sys-grid">
 				${ s.groups.map( groupCard ).join( '' ) }
 			</div>
+			${ extCard }
 			<div class="minn-sys-foot">Generated ${ esc( timeAgo( s.generated ) ) }</div>`;
 
 		$$( '[data-const]', view ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {
