@@ -14,17 +14,17 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	await page.click( '#minn-help-btn' );
 	await page.waitForSelector( '.minn-help-keys', { timeout: 10000 } );
 	const keys = await page.$$eval( '.minn-help-keys .minn-kbd', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
-	t.check( 'help dialog lists the shortcut set', [ '⌘K', '⌘S', '⌘⏎', '⌘⇧D', '⌘\\', 'Esc' ].every( ( k ) => keys.includes( k ) ), JSON.stringify( keys ) );
+	t.check( 'help dialog lists the shortcut set', [ '⌘K', '⌘S', '⌘⏎', '⌘⇧D', '⌘.', 'Esc' ].every( ( k ) => keys.includes( k ) ), JSON.stringify( keys ) );
 	await page.keyboard.press( 'Escape' );
 	await page.waitForTimeout( 300 );
 
-	/* ===== ⌘\ toggles the navigation ===== */
+	/* ===== ⌘. toggles the navigation (⌘\ is the silent alternate) ===== */
+	await page.keyboard.press( 'Meta+.' );
+	await page.waitForTimeout( 400 );
+	t.check( '⌘. hides the nav', await page.evaluate( () => document.body.classList.contains( 'minn-nav-hidden' ) && document.querySelector( '.minn-sidebar' ).offsetWidth < 10 ), '' );
 	await page.keyboard.press( 'Meta+\\' );
 	await page.waitForTimeout( 400 );
-	t.check( '⌘\\ hides the nav', await page.evaluate( () => document.body.classList.contains( 'minn-nav-hidden' ) && document.querySelector( '.minn-sidebar' ).offsetWidth < 10 ), '' );
-	await page.keyboard.press( 'Meta+\\' );
-	await page.waitForTimeout( 400 );
-	t.check( '⌘\\ shows it again', await page.evaluate( () => ! document.body.classList.contains( 'minn-nav-hidden' ) && document.querySelector( '.minn-sidebar' ).offsetWidth > 100 ), '' );
+	t.check( '⌘\\ (alternate) shows it again', await page.evaluate( () => ! document.body.classList.contains( 'minn-nav-hidden' ) && document.querySelector( '.minn-sidebar' ).offsetWidth > 100 ), '' );
 
 	/* ===== Editor: ⌘⇧D focus mode, ⌘⏎ publish ===== */
 	const id = await createPost( page, { title: 'Shortcut probe', content: '<!-- wp:paragraph --><p>Body text for the probe.</p><!-- /wp:paragraph -->', status: 'draft' } );

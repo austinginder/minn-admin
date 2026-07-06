@@ -543,7 +543,7 @@
 						<span class="minn-logo-mark">m</span>
 						<span class="minn-logo-name">minn</span>
 					</button>
-					<button class="minn-logo-ver" id="minn-ver-btn" title="What's new — full changelog">v${ esc( B.version.split( '.' ).slice( 0, 2 ).join( '.' ) ) }</button>
+					<button class="minn-logo-ver" id="minn-ver-btn" title="What's new — full changelog">v${ esc( B.version ) }</button>
 				</div>
 				<button class="minn-search-btn" id="minn-open-palette">
 					${ icon( 'search' ) }<span>Search…</span><span class="minn-kbd">⌘K</span>
@@ -9784,7 +9784,7 @@
 							<span class="minn-kbd">⌘S</span><span>Save, keeping the current status</span>
 							<span class="minn-kbd">⌘⏎</span><span>Publish, Update or Schedule</span>
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
-							<span class="minn-kbd">⌘\\</span><span>Show or hide the navigation</span>
+							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
 							<span class="minn-kbd">Esc</span><span>Close menus and dialogs</span>
 						</div>
 						<p class="minn-help-keys-note">On Windows and Linux, use <span class="minn-kbd">Ctrl</span> in place of <span class="minn-kbd">⌘</span>.</p>
@@ -11366,10 +11366,11 @@
 					}
 				} );
 			}
-			// ⌘\ toggles the navigation — the Notion/Linear convention (⌘B is
-			// bold in an editor). Routed through the edge tab: one source of
-			// truth for the class + localStorage persistence.
-			if ( ( e.metaKey || e.ctrlKey ) && e.key === '\\' ) {
+			// ⌘. toggles the navigation (⌘\ works too, but 1Password's Quick
+			// Access owns ⌘\ at the OS level for many users, and ⌘B is bold in
+			// an editor). Routed through the edge tab: one source of truth for
+			// the class + localStorage persistence.
+			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ( e.key === '.' || e.key === '\\' ) ) {
 				e.preventDefault();
 				const tab = $( '#minn-nav-tab' );
 				if ( tab ) tab.click();
