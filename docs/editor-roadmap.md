@@ -55,8 +55,37 @@ distrust the surface.
   vendor styling never pass; single ⌘Z reverts a whole paste. Clipboard *images* (files,
   not URLs) remain with the "inline media flow" item below.
 - **Undo completeness.** Island operations (insert, remove, table ops) sit outside the
-  browser undo stack today. Decide: a small custom undo journal for island/array state
-  interleaved with native undo, or document the boundary honestly. Investigate before 1.0.
+  browser undo stack today.
+  🔍 *Investigated 2026-07-05* (empirical, `scratchpad/undo-probe*.js`). The map:
+  - **execCommand ops are fully tracked** — typing, markdown, toolbar formatting, rich
+    paste (a whole paste reverts in one ⌘Z), image insert/remove, link create/edit.
+  - **Direct-DOM ops are outside the stack** — island insert (embed/gallery/slash custom),
+    island remove (backspace guard / inspector), table row/col/header ops, inspector
+    attribute regen. For all of these ⌘Z is a **safe no-op**, never a corruption.
+  - **The headline: no sequence corrupts.** The dangerous case — native undo of typing
+    restoring a stale full-DOM snapshot that wipes or duplicates an untracked island —
+    does **not** happen. Blink's undo is transaction-based, not snapshot-based: it replays
+    the specific ranges its execCommands recorded and leaves direct-DOM nodes alone. Even
+    the worst adversarial case (type into a table cell, delete that row out from under the
+    pending transaction, then ⌘Z) is a clean no-op with zero console errors.
+  - **The one genuine gap: structural DELETION is unrecoverable.** Remove an embed island
+    or a table row and ⌘Z can't bring it back (only autosave / revisions / the crash net
+    can, coarsely). Everything else that's a no-op is merely *incomplete*, not lossy.
+
+  **Decision: do NOT build the interleaved custom undo journal.** Because there's no
+  corruption, this is a completeness/polish gap, not a data-integrity one — and a journal
+  that correctly interleaves with Blink's native stack means intercepting ⌘Z globally and
+  essentially reimplementing the whole undo stack (capturing typing too, to keep ordering
+  right). That's a large, fragile core rewrite for a polish feature — against the "no build
+  step / greppable / islands keep the editor good" ethos. Instead:
+  1. **Toast-Undo for destructive structural ops** (island / table / row / column delete):
+     a Gmail-style "Deleted — Undo" toast (~6s) that re-inserts the removed node + its
+     islands[] entry. Closes the one real gap at low risk, no undo-stack surgery. *(Not
+     built yet — the recommended follow-up.)*
+  2. **Document the boundary:** ⌘Z covers writing; structural block changes use the block's
+     own controls, and deletions offer the Undo toast. The safe-no-op behavior already
+     satisfies Horizon 1's "nothing surprising, ever" — a no-op ⌘Z disappoints mildly but
+     never breaks trust.
 - **Conflict safety.** Post locking / "someone else is editing" (core's heartbeat locks),
   and a localStorage safety net for drafts so a crashed browser loses nothing even before
   the first autosave.
