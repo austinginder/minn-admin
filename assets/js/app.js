@@ -9281,6 +9281,7 @@
 		let block = null;
 		let selIdx = 0;
 		let filtered = [];
+		let query = '';
 		const items = [
 			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
 			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
@@ -9414,10 +9415,14 @@
 		};
 
 		const renderItems = () => {
+			// Search-only entries (auto-registered dynamic blocks) are invisible
+			// until typed for — say so, or nobody discovers them.
+			const hidden = query ? 0 : items.filter( ( it ) => it[ 3 ] ).length;
 			menu.innerHTML = filtered.map( ( idx, i ) => `
 				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" data-slash="${ idx }">
 					<span class="minn-slash-icon">${ items[ idx ][ 0 ] }</span>${ esc( items[ idx ][ 1 ] ) }${ items[ idx ][ 4 ] ? `<span class="minn-slash-ns">${ esc( items[ idx ][ 4 ] ) }</span>` : '' }
-				</div>` ).join( '' );
+				</div>` ).join( '' )
+				+ ( hidden ? `<div class="minn-slash-hint">Keep typing to search ${ hidden } more blocks…</div>` : '' );
 			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
 				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
 			);
@@ -9429,6 +9434,7 @@
 		// query; they match on title or namespace (item[4]).
 		const applyQuery = ( q ) => {
 			q = q.toLowerCase();
+			query = q;
 			filtered = items
 				.map( ( it, i ) => i )
 				.filter( ( i ) => {

@@ -1116,6 +1116,11 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   margin-left: auto; padding-left: 8px; font-size: 10.5px; font-weight: 500; color: var(--text2);
   opacity: 0.7; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Footer hint on the unfiltered menu — search-only blocks exist beyond this list. */
+.minn-slash-hint {
+  margin-top: 4px; padding: 6px 9px 3px; border-top: 1px solid var(--border2);
+  font-size: 11px; color: var(--text2); opacity: 0.75; cursor: default;
+}
 
 /* ===== Block islands (complex blocks preserved verbatim) ===== */
 .minn-block-island {

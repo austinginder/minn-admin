@@ -56,6 +56,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		t.check( 'default menu hides auto blocks',
 			! labels.some( ( l ) => l.includes( 'Report Card' ) || l.includes( 'Featured Product' ) ),
 			labels.join( ', ' ) );
+		const hint = await page.$eval( '.minn-slash-hint', ( e ) => e.textContent ).catch( () => '' );
+		t.check( 'default menu shows keep-typing hint', /more blocks/.test( hint ), hint );
 
 		// --- Query surfaces an auto block, with its namespace badge ---
 		await page.keyboard.type( 'report card', { delay: 30 } );
@@ -64,6 +66,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		t.check( 'query surfaces auto block', labels.some( ( l ) => l.includes( 'Report Card' ) ), labels.join( ', ' ) );
 		const ns = await page.$$eval( '.minn-slash-item .minn-slash-ns', ( els ) => els.map( ( e ) => e.textContent ) );
 		t.check( 'namespace badge rendered', ns.includes( 'anchor' ), ns.join( ', ' ) );
+		t.check( 'hint gone once typing', ( await page.$( '.minn-slash-hint' ) ) === null );
 
 		// --- Insert: lands as an island, self-closing comment registered ---
 		await page.keyboard.press( 'Enter' );
