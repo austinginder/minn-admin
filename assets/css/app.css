@@ -436,6 +436,39 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-revision-preview img { max-width: 100%; height: auto; border-radius: 6px; }
 .minn-revision-preview h1, .minn-revision-preview h2, .minn-revision-preview h3 { font-size: 1.1em; }
 
+/* Revision diff — side-by-side, block rows aligned; unchanged rows dim so
+   the changes carry the eye. ins/del ride color-mix tints off the status
+   tokens, which hold in both themes. */
+.minn-diff {
+  margin: 0 18px 14px; border: 1px solid var(--border); border-radius: 10px;
+  max-height: 64vh; overflow-y: auto; font-size: 13.5px; line-height: 1.6;
+}
+.minn-diff-headrow {
+  display: grid; grid-template-columns: 1fr 1fr; position: sticky; top: 0; z-index: 1;
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3);
+}
+.minn-diff-headrow > div { padding: 8px 14px; }
+.minn-diff-headrow > div + div { border-left: 1px solid var(--border); }
+.minn-diff-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); }
+.minn-diff-row:last-child { border-bottom: 0; }
+.minn-diff-cell { padding: 8px 14px; min-width: 0; overflow-wrap: break-word; }
+.minn-diff-cell + .minn-diff-cell { border-left: 1px solid var(--border); }
+.minn-diff-cell.empty { background: repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--border) 45%, transparent) 6px, color-mix(in srgb, var(--border) 45%, transparent) 7px); }
+.minn-diff-row.same .minn-diff-cell { color: var(--text3); }
+.minn-diff-row.same img { max-width: 100%; height: auto; opacity: 0.6; border-radius: 6px; }
+.minn-diff-row.same h1, .minn-diff-row.same h2, .minn-diff-row.same h3 { font-size: 1.05em; margin: 0; }
+.minn-diff del, .minn-diff-inline del {
+  text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--red) 70%, transparent);
+  background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--text); border-radius: 3px; padding: 0 1px;
+}
+.minn-diff ins, .minn-diff-inline ins {
+  text-decoration: none;
+  background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--text); border-radius: 3px; padding: 0 1px;
+}
+.minn-diff-row.del .minn-diff-cell:first-child,
+.minn-diff-row.add .minn-diff-cell:last-child { background: color-mix(in srgb, var(--bg2) 60%, transparent); }
+
 /* ===== Themes ===== */
 .minn-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .minn-theme { overflow: hidden; }
@@ -709,6 +742,8 @@ body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert her
   box-shadow: var(--shadow); animation: minnScaleIn 0.18s ease;
 }
 .minn-modal.wide { width: 720px; }
+/* Side-by-side prose needs real width — the 94vw cap still governs laptops. */
+.minn-modal.xl { width: 1280px; }
 .minn-modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .minn-modal-title { font-weight: 700; font-size: 16px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-modal-preview { background: var(--bg); display: flex; align-items: center; justify-content: center; min-height: 180px; max-height: 46vh; overflow: hidden; }
