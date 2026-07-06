@@ -5165,23 +5165,50 @@
 		document.body.classList.remove( 'minn-focus-zen' );
 	}
 
-	function syncFocusDim() {
+	// First block actually in view (under the sticky toolbar) — the band's
+	// anchor when focus mode starts before the caret has landed anywhere.
+	function firstVisibleBlock() {
+		const body = $( '#minn-editor-body' );
+		if ( ! body ) return null;
+		const kids = Array.from( body.children );
+		return kids.find( ( el ) => {
+			const r = el.getBoundingClientRect();
+			return r.height > 0 && r.bottom > 120;
+		} ) || kids[ 0 ] || null;
+	}
+
+	// instant=true glues the band to the content with no transition — required
+	// while SCROLLING (an animated band would chase the page and rubber-band);
+	// caret moves keep the glide.
+	function syncFocusDim( instant ) {
 		if ( ! focusModeOn() ) { removeFocusDim(); return; }
-		const blk = focusBlockOf();
-		if ( ! blk ) return; // caret elsewhere (sidebar input, palette) — hold the band
+		// No caret in the body yet (fresh toggle, or focus persisted across a
+		// load) → band the first visible block so the mode never LOOKS broken.
+		// Once a band exists, a caret elsewhere (palette, sidebar) holds it.
+		const blk = focusBlockOf() || ( ! focusDims ? firstVisibleBlock() : null );
+		if ( ! blk ) return;
 		if ( ! focusDims ) {
 			focusDims = [ document.createElement( 'div' ), document.createElement( 'div' ) ];
 			focusDims.forEach( ( d ) => { d.className = 'minn-focus-dim'; document.body.appendChild( d ); } );
 		}
 		const r = blk.getBoundingClientRect();
 		const pad = 8;
+		focusDims.forEach( ( d ) => d.classList.toggle( 'instant', !! instant ) );
 		focusDims[ 0 ].style.cssText = `top:0;height:${ Math.max( 0, r.top - pad ) }px;`;
 		focusDims[ 1 ].style.cssText = `top:${ r.bottom + pad }px;height:${ Math.max( 0, innerHeight - r.bottom - pad ) }px;`;
 	}
 
-	function queueFocusDim() {
-		if ( focusRaf || ! focusDims ) return;
-		focusRaf = requestAnimationFrame( () => { focusRaf = 0; syncFocusDim(); } );
+	let focusQueuedInstant = false;
+	function queueFocusDim( instant ) {
+		if ( ! focusDims ) return;
+		focusQueuedInstant = focusQueuedInstant || instant === true;
+		if ( focusRaf ) return;
+		focusRaf = requestAnimationFrame( () => {
+			focusRaf = 0;
+			const i = focusQueuedInstant;
+			focusQueuedInstant = false;
+			syncFocusDim( i );
+		} );
 	}
 
 	// Typewriter scroll: while typing, keep the caret block inside the middle
@@ -5197,7 +5224,13 @@
 		const center = port.top + port.height / 2;
 		const blkCenter = ( r.top + r.bottom ) / 2;
 		if ( Math.abs( blkCenter - center ) > port.height * 0.18 ) {
-			sc.scrollTop += blkCenter - center;
+			// A capped instant step per keystroke, not scrollTo(smooth) —
+			// Chrome's caret-reveal cancels smooth programmatic scrolls on
+			// every insertion, freezing them at ~0 progress (probed). Small
+			// steps converge exponentially across keystrokes and read as a
+			// gentle drift; a hard full-delta jump was the "jumpy" complaint.
+			const delta = blkCenter - center;
+			sc.scrollTop += Math.max( -56, Math.min( 56, delta * 0.35 ) );
 		}
 	}
 
@@ -5212,6 +5245,22 @@
 			// Zen: collapse the nav and the editor sidebar — nothing but the
 			// writing. The toolbar (with this toggle) and ⌘S stay.
 			document.body.classList.add( 'minn-focus-zen' );
+			// Toggled with no caret in the body: seat it at the first visible
+			// block so the band appears AND typing starts there. Islands are
+			// contenteditable=false — band-only for those, no caret.
+			const body = $( '#minn-editor-body' );
+			if ( body && ! focusBlockOf() ) {
+				const blk = firstVisibleBlock();
+				if ( blk && ! blk.closest( '.minn-block-island' ) && blk.getAttribute( 'contenteditable' ) !== 'false' ) {
+					body.focus();
+					const r = document.createRange();
+					r.setStart( blk, 0 );
+					r.collapse( true );
+					const s = window.getSelection();
+					s.removeAllRanges();
+					s.addRange( r );
+				}
+			}
 			syncFocusDim();
 		} else {
 			removeFocusDim();
@@ -5221,9 +5270,9 @@
 		setTimeout( updateEditorStats, 300 );
 	}
 
-	document.addEventListener( 'selectionchange', queueFocusDim );
-	document.addEventListener( 'scroll', queueFocusDim, true );
-	window.addEventListener( 'resize', queueFocusDim );
+	document.addEventListener( 'selectionchange', () => queueFocusDim( false ) );
+	document.addEventListener( 'scroll', () => queueFocusDim( true ), true );
+	window.addEventListener( 'resize', () => queueFocusDim( true ) );
 
 	function bindOutline() {
 		const list = $( '#minn-outline' );

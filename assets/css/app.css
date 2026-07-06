@@ -446,8 +446,11 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-focus-dim {
   position: fixed; left: 0; right: 0; z-index: 30; pointer-events: none;
   background: color-mix(in srgb, var(--bg) 80%, transparent);
-  transition: top 0.15s ease, height 0.15s ease;
+  /* Caret moves glide; .instant (set while scrolling) glues the band to the
+     content — animating during scroll reads as rubber-banding. */
+  transition: top 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), height 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
+.minn-focus-dim.instant { transition: none; }
 .minn-tool.active { background: var(--accent-soft); color: var(--accent2); }
 /* Zen: focus mode collapses the nav and the editor sidebar — nothing but the
    writing column, centered. body-class specificity outranks the responsive

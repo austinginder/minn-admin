@@ -17,6 +17,27 @@ const PARAS = Array.from( { length: 14 }, ( _, i ) =>
 	const id = await createPost( page, { title: 'Focus probe', content: PARAS, status: 'draft' } );
 	await openEditor( page, id );
 
+	/* ===== Toggle with NO caret anywhere: must band the first visible block
+	   and seat the caret there — a bare zen collapse looks broken. ===== */
+	await page.click( '#minn-focus-btn' );
+	await page.waitForSelector( '.minn-focus-dim', { timeout: 5000 } );
+	const cold = await page.evaluate( () => {
+		const [ top, bot ] = document.querySelectorAll( '.minn-focus-dim' );
+		const first = document.querySelector( '#minn-editor-body > p' );
+		const p = first.getBoundingClientRect();
+		const s = getSelection();
+		return {
+			topEnds: Math.round( top.getBoundingClientRect().bottom ),
+			botStarts: Math.round( bot.getBoundingClientRect().top ),
+			pTop: Math.round( p.top ), pBottom: Math.round( p.bottom ),
+			caretInFirst: !! ( s.rangeCount && first.contains( s.anchorNode ) ),
+		};
+	} );
+	t.check( 'cold toggle bands the first visible block', cold.topEnds <= cold.pTop && cold.botStarts >= cold.pBottom, JSON.stringify( cold ) );
+	t.check( 'cold toggle seats the caret in that block', cold.caretInFirst, JSON.stringify( cold ) );
+	await page.click( '#minn-focus-btn' ); // back off for the caret-driven flow
+	await page.waitForTimeout( 350 );
+
 	/* ===== Toggle on with the caret in a paragraph ===== */
 	await page.click( '#minn-editor-body p:nth-of-type(3)' );
 	await page.click( '#minn-focus-btn' );
