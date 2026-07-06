@@ -24,11 +24,15 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
   is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP), and a
   recent-activity feed
-- **Content** — posts, pages and custom post types with search, category/tag filters, status
-  pills, and **bulk actions** (set status or trash, with shift-click range select)
-- **Media** — grid/list library, uploads, drag-and-drop, and a preview overlay with arrow-key
-  navigation and in-place **title & alt text editing**
-- **Comments** — full moderation (pending / approved / spam / trash)
+- **Content** — posts, pages and custom post types sorted by publish date (scheduled posts
+  lead with their go-out dates), with search, category/tag filters, status pills, **bulk
+  actions** (set status or trash, with shift-click range select), and **row actions**:
+  right-click or hover for quick publish/draft/trash, view, and a block-editor escape
+- **Media** — grid/list library, uploads, drag-and-drop, a preview overlay with arrow-key
+  navigation and in-place **title & alt text editing**, a right-click menu, and a built-in
+  **image editor**: rotate and crop, saved as a new copy with originals untouched
+- **Comments** — full moderation (pending / approved / spam / trash) with inline replies and
+  a right-click menu for the same verbs
 - **Orders** — WooCommerce orders with summary cards, line-item detail and **status changes**
   (when WooCommerce is active)
 - **Users** — directory with search, a role filter, create/edit users, roles, passwords, and
@@ -37,7 +41,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   **agent guide** (markdown REST reference) to hand to a coding agent; configuration work stays
   out of Minn by design
 - **Extensions** — install plugins and themes from WordPress.org or zip upload, activate,
-  deactivate, delete, per-item and bulk updates, and a Themes tab with screenshots
+  deactivate, delete, per-item and bulk updates, a Themes tab with screenshots, and cards
+  wearing real wp.org icons (linked to the directory) with linked author lines
 - **Post Types & Taxonomies** — see every registered post type and taxonomy and manage
   definitions through whoever owns them: ACF, Custom Post Type UI, or Minn's own store when
   neither is active; code-registered ones shown read-only
@@ -53,8 +58,13 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   web HTML into the safe subset; **paste or drag an image** and it uploads to the library at
   the caret with an inline caption. The publish sidebar edits the **slug**, **visibility**
   (public / password / private), per-post **discussion** and **sticky**. Deleting an embed or
-  a table row offers an **Undo** toast. Where this is heading:
-  [the editor roadmap](docs/editor-roadmap.md)
+  a table row offers an **Undo** toast. **Revision diffs** open a side-by-side, word-marked
+  diff of any revision against the current content. An **outline panel** lists headings as a
+  clickable, live-updating table of contents; **focus mode** (⌘⇧D) fades all but the current
+  paragraph with typewriter scroll; **outline mode** (⌘⇧O) leaves just the writing and the
+  outline. The **internal link picker** searches your own posts from the link popover, and a
+  themed **date-time picker** handles scheduling. ⌘⏎ publishes; the help dialog documents
+  every shortcut. Where this is heading: [the editor roadmap](docs/editor-roadmap.md)
 - **Never lose work** — post locking on WordPress's own `_edit_lock` (Minn, the classic editor
   and Gutenberg all honor each other, with takeover), plus a localStorage **crash net** that
   snapshots every edit within ~1.2s (before the first autosave) and offers recovery on the
@@ -66,15 +76,17 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   fenced so a stray Minn edit can't break the builder's canvas. + New can start a page in any
   active builder. Third parties register via the `minn_admin_page_builders` filter
 - **System** — a developer diagnostics page: a health strip over WordPress / PHP / database
-  (with a largest-tables breakdown) / server facts, an **installed extensions manifest**
-  (plugins, must-use, themes with versions), live **debug toggles** that safely rewrite
+  (largest tables, an **autoloaded-options breakdown** with top offenders, expired-transient
+  bloat, cron health) / server facts, an **installed extensions manifest** (plugins,
+  must-use, themes with versions), live **debug toggles** that safely rewrite
   `wp-config.php`, a clickable **debug-log viewer**, and one-click **Copy report** as markdown
 - **SEO panel** — Yoast SEO / Rank Math title, meta description and focus keyword in the
   editor sidebar
 - **Command palette** — ⌘K / Ctrl-K everywhere
 - **Plugin surfaces** — bundled adapters for **Gravity Forms** (readable entries with real
   field labels + a Forms view with activate/deactivate), **Gravity SMTP** (email log with a
-  real HTML preview and resend), **Simple History** (activity log), **Redirection**,
+  real HTML preview and resend), **Simple History**, **WP Activity Log**, **Activity Log
+  (Aryo)** and **Stream** (audit logs), **Redirection**,
   **Safe Redirect Manager** and **Simple 301 Redirects** (redirects: list, search, create,
   edit and delete), **ACF** (editor panels) and **Yoast / Rank Math** (SEO panel), plus
   one-filter APIs for any plugin to register views, editor panels, traffic data or

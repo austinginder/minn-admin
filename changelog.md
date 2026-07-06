@@ -1,5 +1,37 @@
 # Changelog
 
+## **v0.8.0** - July 6, 2026
+
+The delight release. Horizon 2 of the [editor roadmap](docs/editor-roadmap.md) lands: **revision diffs**, an **outline panel**, **focus mode**, and an **internal link picker**, plus two new view modes and a real keyboard-shortcut story. Around the editor, the whole app picked up a shared **context-menu language** (content rows, media, comments, tables), Minn grew its **own image editor**, and the System page now surfaces the silent-rot trio every developer checks first.
+
+### Added
+* **Revision diffs:** the History card opens a side-by-side diff of a revision against your current content (unsaved edits included) with word-level change marks, instead of a raw preview. Unrelated paragraphs render as a removal plus an addition, not one fully-marked change; identical revisions say so; Restore is unchanged.
+* **Outline panel:** headings as a clickable table of contents in the editor sidebar. It updates live while you type, indents by depth, sticks in view on long posts, and clicking a heading scrolls to it with a highlight that rides the scroll.
+* **Focus mode (⌘⇧D):** fades everything but the paragraph you are writing, with typewriter scroll and the nav and sidebar tucked away. Persists per browser; never touches saved markup.
+* **Outline mode (⌘⇧O):** just the writing and the outline. Hides the nav and every sidebar card except the Outline. The two view modes are mutually exclusive and live in the ⌘K palette.
+* **Internal link picker:** type a post title into the link popover (⌘K with text selected) and pick from your own content; URLs still paste straight through.
+* **Image editor:** rotate and crop right in the media preview, saved as a new copy through core's own image-editing endpoint. All pixel work happens server-side; originals are never touched.
+* **Context menus everywhere:** right-click a content row for quick status changes, view/preview, a block-editor escape, and trash; a media item for preview, copy URL, edit image, and delete; a comment for its moderation verbs; a table cell for targeted row and column operations.
+* **Keyboard shortcuts:** ⌘. shows or hides the navigation, ⌘⏎ publishes or updates, ⌘S saves, and the help dialog now documents the whole set.
+* **Audit-log adapters:** WP Activity Log, Activity Log (Aryo), and Stream join Simple History, so all four major audit plugins read natively in Minn.
+* **System page additions:** an autoloaded-options breakdown with the top offenders and a health check, cron health (overdue events flagged), expired-transient bloat, and a clickable version badge that opens the full changelog.
+* **Themed date-time picker:** scheduling gets a Minn-styled calendar with a lenient time field and an explicit Done, replacing the unstyleable native control.
+* **Menu drag handles:** drag to reorder menu items; children travel with their parent. The indent buttons stay for nesting.
+* **Extensions cards:** real wp.org plugin icons (linked to the plugin's directory page) and author lines linked to the author's site.
+
+### Improved
+* Content lists sort by publish date, so scheduled posts lead with the dates they go out. Rows grow a hover actions button; the big Overview stat cards navigate to their views; sites without comments show a Users count instead of an eternal zero.
+* Sidebar cards collapse from their titles and remember your layout; the role pickers in Users and the profile are searchable comboboxes; the WordPress and PHP marks on the System page are the real brand icons.
+* Deactivating Minn from Extensions asks properly and lands you on a readable notice before the classic dashboard, instead of a native confirm and an instant redirect.
+* Every block-config popover (island, table, image, code) now opens beside the block instead of on top of the content it configures, and the code block's settings chip is persistent like table and image chips.
+
+### Fixed
+* The block inspector can now edit the text of core paragraph and heading children inside wrapper blocks (the report-card case), and no longer injects empty attributes into children it merely displayed.
+* Applying a link deep in a long post no longer scrolls to the top; the same fix covers image drops, slash commands, and focus-mode toggles.
+* Toggling a plugin no longer scrolls the Extensions list to the top (the tab bar's reveal was yanking every scroll ancestor).
+* A code block as the last block no longer traps the caret; a click-to-continue paragraph always follows terminal blocks, tables, and embeds.
+* The activity feed decodes entities, labels untitled drafts, and no longer hides never-edited drafts; the version badge shows the full version.
+
 ## **v0.7.1** - July 5, 2026
 
 ### Fixed
