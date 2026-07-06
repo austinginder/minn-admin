@@ -4975,9 +4975,9 @@
 		$$( 'figcaption', clone ).forEach( ( fc ) => {
 			if ( ! fc.textContent.trim() ) fc.remove();
 		} );
-		// Table hover-highlighting parks a border-color inline style on the
-		// figure — never store it.
-		$$( ':scope > figure, :scope > table', clone ).forEach( ( el ) => {
+		// Chip hover-highlighting parks a border-color inline style on the
+		// figure/table/pre — never store it.
+		$$( ':scope > figure, :scope > table, :scope > pre', clone ).forEach( ( el ) => {
 			el.style.borderColor = '';
 			if ( ! el.getAttribute( 'style' ) ) el.removeAttribute( 'style' );
 		} );
@@ -4991,6 +4991,10 @@
 			pre.removeAttribute( 'data-hl' );
 			pre.innerHTML = `<code${ lang !== 'auto' ? ` class="language-${ lang }"` : '' }>${ esc( text ) }</code>`;
 		} );
+		// The trailing click-affordance paragraph (ensureTrailingParagraph) is
+		// chrome — a terminal empty paragraph never persists.
+		const lastEl = clone.lastElementChild;
+		if ( lastEl && lastEl.tagName === 'P' && ! lastEl.textContent.trim() && ! lastEl.querySelector( 'img' ) ) lastEl.remove();
 		return clone.innerHTML;
 	}
 
@@ -5082,10 +5086,28 @@
 	// Word count + reading time for the sticky pill under the editor body.
 	// Island PREVIEWS count (they're real content); island chrome (the ⚙ chip,
 	// the "dynamic block" placeholder) doesn't.
+	// A pre/table/figure/island/quote as the LAST block traps the caret —
+	// nothing below it to click to keep writing (typing ``` as the last act
+	// converts the last paragraph INTO a pre and springs the trap). Keep one
+	// empty paragraph after any terminal non-paragraph block; empty
+	// paragraphs never serialize, so it's pure affordance. Node INSERTION is
+	// undo-safe (unlike text mutation — rule at cleanLeadingNbsp).
+	function ensureTrailingParagraph( body ) {
+		if ( ! body || body.getAttribute( 'contenteditable' ) === 'false' ) return;
+		const last = body.lastElementChild;
+		if ( ! last ) return;
+		if ( /^(PRE|TABLE|FIGURE|HR|BLOCKQUOTE)$/.test( last.tagName ) || last.classList.contains( 'minn-block-island' ) ) {
+			const p = document.createElement( 'p' );
+			p.innerHTML = '<br>';
+			body.appendChild( p );
+		}
+	}
+
 	function updateEditorStats() {
 		const el = $( '#minn-editor-stats' );
 		const body = $( '#minn-editor-body' );
 		if ( ! el || ! body ) return;
+		ensureTrailingParagraph( body );
 		const walker = document.createTreeWalker( body, NodeFilter.SHOW_TEXT, {
 			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-empty' )
 				? NodeFilter.FILTER_REJECT
@@ -6197,9 +6219,6 @@
 					<button class="minn-tool" data-block="p" title="Paragraph">${ icon( 'pilcrow' ) }</button>
 					<button class="minn-tool" data-cmd="removeFormat" title="Clear formatting">${ icon( 'eraser' ) }</button>
 					<button class="minn-tool" data-cmd="focus" id="minn-focus-btn" title="Focus mode — fade all but the current paragraph">${ icon( 'focus' ) }</button>
-					<select class="minn-input minn-code-lang" id="minn-code-lang" title="Code language" hidden>
-						${ CODE_LANGS.map( ( l ) => `<option value="${ l }">${ l === 'auto' ? 'language: auto' : l }</option>` ).join( '' ) }
-					</select>
 					<span class="minn-tool-hint">type / for blocks</span>
 				</div>` }
 				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }"></div>
@@ -6211,6 +6230,7 @@
 		const body = $( '#minn-editor-body', view );
 		body.innerHTML = ed.content;
 		if ( ! locked ) seedImageCaptions( body );
+		if ( ! locked ) ensureTrailingParagraph( body );
 		highlightCodeBlocks( body );
 		renderIslandPreviews( body, ed );
 		// Focus mode persists across posts/sessions (localStorage), never in locked mode.
@@ -6254,20 +6274,13 @@
 				openLinkPop( a );
 			}
 		} );
-		// Hovering an editable code block surfaces its config chip.
-		body.addEventListener( 'mouseover', ( e ) => {
-			const pre = e.target.closest( 'pre' );
-			if ( pre && body.contains( pre ) && ! pre.closest( '.minn-block-island' )
-				&& ! pre.classList.contains( 'wp-block-verse' ) && ! pre.classList.contains( 'wp-block-preformatted' ) ) {
-				showCodeChip( pre );
-			}
-		} );
-		// Hovering a table's cutout (edge included) highlights it AND its chip.
+		// Hovering a chip-carrying block's box (edge included) highlights it
+		// AND its chip — tables, images and code blocks all behave alike.
 		let hotTable = null;
 		body.addEventListener( 'mouseover', ( e ) => {
-			const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table, #minn-editor-body > figure.wp-block-image, #minn-editor-body > img' ) : null;
+			const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table, #minn-editor-body > figure.wp-block-image, #minn-editor-body > img, #minn-editor-body > pre:not(.wp-block-verse):not(.wp-block-preformatted)' ) : null;
 			let t = null;
-			if ( box ) t = box.tagName === 'TABLE' || box.tagName === 'IMG' ? box : box.querySelector( 'table, img' );
+			if ( box ) t = box.tagName === 'TABLE' || box.tagName === 'IMG' || box.tagName === 'PRE' ? box : box.querySelector( 'table, img' );
 			if ( t === hotTable ) return;
 			if ( hotTable ) setTableHot( hotTable, false );
 			hotTable = t;
@@ -6374,7 +6387,6 @@
 			bindIslandGuards( body );
 			bindMarkdown( body );
 			bindSlashMenu( body, insertImage );
-			bindCodeLangPicker( body );
 
 			// Dropped image files land where the pointer released. Dragging
 			// content WITHIN the editor carries no files and keeps Chrome's
@@ -6525,50 +6537,6 @@
 
 		renderEditorSide();
 		if ( ! ed.id ) $( '#minn-editor-title', view ).focus();
-	}
-
-	/* ===== Code language picker (shows when the caret is in a code block) ===== */
-
-	function bindCodeLangPicker( body ) {
-		const select = $( '#minn-code-lang' );
-		if ( ! select ) return;
-		let currentPre = null;
-
-		const sync = () => {
-			if ( ! document.contains( body ) ) {
-				document.removeEventListener( 'selectionchange', sync );
-				return;
-			}
-			if ( document.activeElement === select ) return; // interacting with the picker itself
-			const sel = window.getSelection();
-			let el = sel && sel.anchorNode
-				? ( sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement )
-				: null;
-			const pre = el && body.contains( el ) ? el.closest( 'pre' ) : null;
-			currentPre = pre && ! pre.closest( '.minn-block-island' ) ? pre : null;
-			select.hidden = ! currentPre;
-			if ( currentPre ) {
-				select.value = codeLangOf( currentPre );
-				showCodeChip( currentPre ); // keyboard/touch path to the config popout
-			}
-		};
-
-		if ( window._minnLangSync ) document.removeEventListener( 'selectionchange', window._minnLangSync );
-		window._minnLangSync = sync;
-		document.addEventListener( 'selectionchange', sync );
-
-		select.addEventListener( 'change', () => {
-			if ( ! currentPre ) return;
-			const pre = currentPre;
-			setCodeLang( pre, select.value );
-			// Re-highlighting rebuilds the block — put the caret back at its end.
-			const range = document.createRange();
-			range.selectNodeContents( pre.querySelector( 'code' ) || pre );
-			range.collapse( false );
-			const s = window.getSelection();
-			s.removeAllRanges();
-			s.addRange( range );
-		} );
 	}
 
 	/* ===== Block inspector (islands) =====
@@ -7160,6 +7128,10 @@
 		const targets = [];
 		$$( ':scope > table, :scope > figure.wp-block-table table', body ).forEach( ( t ) => targets.push( { el: t, kind: 'table' } ) );
 		$$( ':scope > figure.wp-block-image img, :scope > img', body ).forEach( ( i ) => targets.push( { el: i, kind: 'image' } ) );
+		// Code blocks ride the same persistent chips as tables/images — the
+		// old hover-shown chip flickered and only the chip itself was a hover
+		// target. Verse/preformatted pres have no language to configure.
+		$$( ':scope > pre:not(.wp-block-verse):not(.wp-block-preformatted)', body ).forEach( ( p ) => targets.push( { el: p, kind: 'code' } ) );
 		if ( ! targets.length ) return clearTableChips();
 		if ( ! tableChipsBox ) {
 			tableChipsBox = document.createElement( 'div' );
@@ -7179,6 +7151,7 @@
 				chip.addEventListener( 'click', () => {
 					if ( ! chip._target || ! chip._target.isConnected ) return;
 					if ( chip._kind === 'table' ) openTablePop( chip._target );
+					else if ( chip._kind === 'code' ) openCodePop( chip._target );
 					else openImgPop( chip._target );
 				} );
 				chip.addEventListener( 'mouseenter', () => setTableHot( chip._target, true ) );
@@ -7187,8 +7160,13 @@
 			}
 			chip._target = t.el;
 			chip._kind = t.kind;
-			chip.textContent = '\u2699 ' + t.kind;
-			chip.title = t.kind === 'table' ? 'Table \u2014 rows, columns, header' : 'Image \u2014 alt, caption, replace';
+			// Code chips wear the language so a glance tells you what's set.
+			chip.textContent = '\u2699 ' + ( t.kind === 'code'
+				? ( codeLangOf( t.el ) === 'auto' ? 'code' : codeLangOf( t.el ) )
+				: t.kind );
+			chip.title = t.kind === 'table' ? 'Table \u2014 rows, columns, header'
+				: t.kind === 'code' ? 'Code block \u2014 syntax highlighting'
+				: 'Image \u2014 alt, caption, replace';
 			const box = t.el.closest( 'figure' ) || t.el;
 			const rect = box.getBoundingClientRect();
 			const top = rect.top - 10;
@@ -7377,56 +7355,18 @@
 	 * popover live on document.body — never inside the contenteditable — so
 	 * they can't leak into serialized content. */
 
-	let codeChip = null;
-	let codeChipPre = null;
+	// Code blocks share the persistent chip system (syncTableChips) with
+	// tables and images — only the config popover is code-specific.
 	let codePop = null;
 
 	function codePopAway( e ) {
-		if ( codePop && ! codePop.contains( e.target ) && e.target !== codeChip ) hideCodePop();
+		if ( codePop && ! codePop.contains( e.target ) && ! ( e.target.closest && e.target.closest( '#minn-table-chips' ) ) ) hideCodePop();
 	}
 
 	function hideCodePop() {
 		if ( codePop ) codePop.remove();
 		codePop = null;
 		document.removeEventListener( 'mousedown', codePopAway, true );
-	}
-
-	function hideCodeChip() {
-		if ( codeChip ) codeChip.hidden = true;
-		codeChipPre = null;
-		hideCodePop();
-	}
-
-	function ensureCodeChip() {
-		if ( codeChip ) return;
-		codeChip = document.createElement( 'button' );
-		codeChip.type = 'button';
-		codeChip.className = 'minn-code-chip';
-		codeChip.hidden = true;
-		codeChip.title = 'Code block settings';
-		document.body.appendChild( codeChip );
-		codeChip.addEventListener( 'mousedown', ( e ) => e.preventDefault() ); // keep the editor selection
-		codeChip.addEventListener( 'click', () => codeChipPre && openCodePop( codeChipPre ) );
-		// Leave the pre (and not onto the chip) → chip goes away.
-		document.addEventListener( 'mouseover', ( e ) => {
-			if ( ! codeChip || codeChip.hidden || codePop ) return;
-			if ( e.target === codeChip || ( e.target.closest && e.target.closest( 'pre' ) === codeChipPre ) ) return;
-			if ( ! ( e.target.closest && e.target.closest( 'pre' ) ) ) hideCodeChip();
-		} );
-		// Scrolling moves the pre out from under the fixed chip — just drop it.
-		document.addEventListener( 'scroll', () => hideCodeChip(), true );
-	}
-
-	function showCodeChip( pre ) {
-		ensureCodeChip();
-		if ( codePop && codeChipPre !== pre ) hideCodePop();
-		codeChipPre = pre;
-		const lang = codeLangOf( pre );
-		codeChip.textContent = '⚙ ' + ( lang === 'auto' ? 'code' : lang );
-		codeChip.hidden = false;
-		const rect = pre.getBoundingClientRect();
-		codeChip.style.top = ( rect.top - 10 ) + 'px';
-		codeChip.style.left = Math.max( 10, Math.min( rect.right - codeChip.offsetWidth - 12, window.innerWidth - codeChip.offsetWidth - 12 ) ) + 'px';
 	}
 
 	function openCodePop( pre ) {
@@ -7445,7 +7385,9 @@
 				</select>
 			</div>`;
 		document.body.appendChild( codePop );
-		const anchor = codeChip && ! codeChip.hidden ? codeChip : pre;
+		// Anchor to the block's persistent chip when it's on screen.
+		const chipEl = tableChipFor( pre );
+		const anchor = chipEl && chipEl.style.visibility !== 'hidden' ? chipEl : pre;
 		const rect = anchor.getBoundingClientRect();
 		const w = codePop.offsetWidth || 250;
 		codePop.style.top = Math.min( rect.bottom + 8, window.innerHeight - codePop.offsetHeight - 10 ) + 'px';
@@ -7453,7 +7395,7 @@
 		codePop.querySelector( '[data-close]' ).addEventListener( 'click', hideCodePop );
 		codePop.querySelector( '[data-lang]' ).addEventListener( 'change', ( e ) => {
 			setCodeLang( pre, e.target.value );
-			if ( codeChipPre === pre ) showCodeChip( pre ); // refresh the chip label
+			syncTableChips(); // refresh the chip's language label
 		} );
 		document.addEventListener( 'mousedown', codePopAway, true );
 	}
@@ -7472,8 +7414,6 @@
 		delete pre.dataset.hl;
 		const body = $( '#minn-editor-body' );
 		if ( body ) highlightCodeBlocks( body, true );
-		const toolbarSel = $( '#minn-code-lang' );
-		if ( toolbarSel ) toolbarSel.value = lang;
 		scheduleAutosave();
 	}
 
@@ -7638,7 +7578,7 @@
 
 	function openImgPop( img ) {
 		hideImgPop();
-		hideCodeChip();
+		hideCodePop();
 		closeInspector();
 		imgPopTarget = img;
 		const figure = img.closest( 'figure' );
@@ -10878,7 +10818,7 @@
 	function renderView() {
 		renderTopbar();
 		closeInspector();
-		hideCodeChip();
+		hideCodePop();
 		clearTableChips();
 		removeFocusDim();
 		hideImgPop();

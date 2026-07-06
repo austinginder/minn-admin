@@ -16,7 +16,11 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 
 	const lastHtml = () => page.evaluate( () => window.__minnTestPara.innerHTML );
 	const lastBlock = () => page.evaluate( () => {
-		const el = document.querySelector( '#minn-editor-body' ).lastElementChild;
+		// A terminal pre/quote grows a trailing affordance paragraph
+		// (ensureTrailingParagraph) — skip it; the block under test is the
+		// last CONTENT block.
+		let el = document.querySelector( '#minn-editor-body' ).lastElementChild;
+		if ( el.tagName === 'P' && ! el.textContent.trim() && el.previousElementSibling ) el = el.previousElementSibling;
 		return { tag: el.tagName, html: el.innerHTML, prevTag: el.previousElementSibling ? el.previousElementSibling.tagName : null };
 	} );
 	const SP = '(?:&nbsp;| )'; // Chrome renders boundary spaces as nbsp entities in innerHTML
