@@ -16,6 +16,7 @@ MINN_TEST_PASS=<admin password> node lock.test.js       # slow (~60s): two sessi
 MINN_TEST_PASS=<admin password> node media-flow.test.js # paste/drop image files → library; inline captions
 MINN_TEST_PASS=<admin password> node editor-sidebar.test.js # slug, discussion, visibility, sticky (~20s)
 MINN_TEST_PASS=<admin password> node system.test.js     # diagnostics endpoint + page + copy-report
+MINN_TEST_PASS=<admin password> node undo-toast.test.js # structural-deletion Undo (islands, tables)
 
 # all suites
 for f in *.test.js; do MINN_TEST_PASS=… node "$f" || break; done

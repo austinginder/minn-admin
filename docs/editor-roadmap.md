@@ -80,8 +80,8 @@ distrust the surface.
   step / greppable / islands keep the editor good" ethos. Instead:
   1. **Toast-Undo for destructive structural ops** (island / table / row / column delete):
      a Gmail-style "Deleted — Undo" toast (~6s) that re-inserts the removed node + its
-     islands[] entry. Closes the one real gap at low risk, no undo-stack surgery. *(Not
-     built yet — the recommended follow-up.)*
+     islands[] entry. Closes the one real gap at low risk, no undo-stack surgery. ✅ *Shipped 2026-07-05* — `toastAction()` + `removeIslandWithUndo()` and the
+     table-op snapshot restore; suite `tests/undo-toast.test.js`.
   2. **Document the boundary:** ⌘Z covers writing; structural block changes use the block's
      own controls, and deletions offer the Undo toast. The safe-no-op behavior already
      satisfies Horizon 1's "nothing surprising, ever" — a no-op ⌘Z disappoints mildly but
