@@ -77,6 +77,12 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 	} );
 	await page.waitForSelector( '.minn-code-pop [data-lang]', { timeout: 5000 } );
 	t.check( 'chip click opens the code popover', true, '' );
+	const pos = await page.evaluate( () => {
+		const pop = document.querySelector( '.minn-code-pop' ).getBoundingClientRect();
+		const pre = document.querySelector( '#minn-editor-body pre' ).getBoundingClientRect();
+		return { beside: pop.left >= pre.right + 4, below: pop.top >= pre.bottom + 4 };
+	} );
+	t.check( 'popover sits beside or below the block, never on it', pos.beside || pos.below, JSON.stringify( pos ) );
 	await page.selectOption( '.minn-code-pop [data-lang]', 'php' );
 	await page.waitForTimeout( 400 );
 	const relabeled = await chipState();

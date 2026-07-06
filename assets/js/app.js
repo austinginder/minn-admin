@@ -6966,13 +6966,20 @@
 		if ( inspectorEl && ! inspectorEl.contains( e.target ) && ! e.target.closest( '.minn-island-chip' ) ) closeInspector();
 	}
 
+	// ONE placement rule for every block-config popover (island inspector,
+	// table, image, code): BESIDE the block when it fits, else below its
+	// bottom edge — never parked on top of the content being configured.
+	function positionBlockPop( pop, anchorEl ) {
+		const rect = anchorEl.getBoundingClientRect();
+		const w = pop.offsetWidth || 320;
+		const fitsRight = rect.right + 10 + w < window.innerWidth;
+		pop.style.left = ( fitsRight ? rect.right + 10 : Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) ) + 'px';
+		pop.style.top = Math.max( 10, Math.min( fitsRight ? rect.top : rect.bottom + 8, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
+	}
+
 	function positionInspector( islandEl ) {
 		if ( ! inspectorEl ) return;
-		const rect = islandEl.getBoundingClientRect();
-		const w = inspectorEl.offsetWidth || 320;
-		const fitsRight = rect.right + 10 + w < window.innerWidth;
-		inspectorEl.style.left = ( fitsRight ? rect.right + 10 : Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) ) + 'px';
-		inspectorEl.style.top = Math.max( 10, Math.min( fitsRight ? rect.top : rect.bottom + 8, window.innerHeight - inspectorEl.offsetHeight - 10 ) ) + 'px';
+		positionBlockPop( inspectorEl, islandEl );
 	}
 
 	/**
@@ -7577,12 +7584,7 @@
 				</div>
 			</div>`;
 		document.body.appendChild( tablePop );
-		const chip = tableChipFor( table );
-		const anchor = chip && chip.style.visibility !== 'hidden' ? chip : ( table.closest( 'figure' ) || table );
-		const rect = anchor.getBoundingClientRect();
-		const w = tablePop.offsetWidth || 280;
-		tablePop.style.top = Math.min( rect.bottom + 8, window.innerHeight - tablePop.offsetHeight - 10 ) + 'px';
-		tablePop.style.left = Math.max( 10, Math.min( rect.right - w, window.innerWidth - w - 12 ) ) + 'px';
+		positionBlockPop( tablePop, table.closest( 'figure' ) || table );
 		tablePop.querySelector( '[data-close]' ).addEventListener( 'click', hideTablePop );
 		$$( '[data-op]', tablePop ).forEach( ( b ) => {
 			b.addEventListener( 'mousedown', ( e ) => e.preventDefault() ); // the caret cell must survive the click
@@ -7744,13 +7746,7 @@
 				</select>
 			</div>`;
 		document.body.appendChild( codePop );
-		// Anchor to the block's persistent chip when it's on screen.
-		const chipEl = tableChipFor( pre );
-		const anchor = chipEl && chipEl.style.visibility !== 'hidden' ? chipEl : pre;
-		const rect = anchor.getBoundingClientRect();
-		const w = codePop.offsetWidth || 250;
-		codePop.style.top = Math.min( rect.bottom + 8, window.innerHeight - codePop.offsetHeight - 10 ) + 'px';
-		codePop.style.left = Math.max( 10, Math.min( rect.right - w, window.innerWidth - w - 12 ) ) + 'px';
+		positionBlockPop( codePop, pre );
 		codePop.querySelector( '[data-close]' ).addEventListener( 'click', hideCodePop );
 		codePop.querySelector( '[data-lang]' ).addEventListener( 'change', ( e ) => {
 			setCodeLang( pre, e.target.value );
@@ -7966,11 +7962,7 @@
 				<button class="minn-btn-soft danger" data-img-remove type="button" title="Remove image">${ icon( 'trash' ) }</button>
 			</div>`;
 		document.body.appendChild( imgPop );
-		const rect = img.getBoundingClientRect();
-		const w = imgPop.offsetWidth || 300;
-		const fitsRight = rect.right + 10 + w < window.innerWidth;
-		imgPop.style.left = ( fitsRight ? rect.right + 10 : Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) ) + 'px';
-		imgPop.style.top = Math.max( 10, Math.min( fitsRight ? rect.top : rect.bottom + 8, window.innerHeight - imgPop.offsetHeight - 10 ) ) + 'px';
+		positionBlockPop( imgPop, img.closest( 'figure' ) || img );
 		document.addEventListener( 'mousedown', imgPopAway, true );
 
 		imgPop.querySelector( '[data-close]' ).addEventListener( 'click', hideImgPop );
