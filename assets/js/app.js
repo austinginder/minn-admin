@@ -849,6 +849,7 @@
 		author: ( p._embedded && p._embedded.author && p._embedded.author[ 0 ] && p._embedded.author[ 0 ].name ) || '—',
 		date: p.date || p.modified,
 		modified: p.modified,
+		link: p.link || '',
 		builder: p.minn_builder || null,
 	} );
 
@@ -864,7 +865,7 @@
 		// orderby=date puts scheduled posts (future dates) first, then everything
 		// else newest-published first — the list reads as a publishing timeline.
 		let q = `context=edit&status=${ statuses }&per_page=25&orderby=date`
-			+ `&_embed=author&_fields=id,title,slug,status,date,modified,author,minn_builder,_links,_embedded&page=${ page }`;
+			+ `&_embed=author&_fields=id,title,slug,status,date,modified,link,author,minn_builder,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
 		// categories/tags are post taxonomies — never send them for a custom post type.
 		if ( ! currentCpt() ) {
@@ -1054,7 +1055,7 @@
 				<div></div><div>Title</div><div>Status</div><div>Author</div><div>Date</div><div></div>
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
-				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }">
+				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }">
 					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }"${ sel.has( p.id ) ? ' checked' : '' }></div>
 					<div class="minn-row-icon">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
@@ -1071,7 +1072,7 @@
 					<div class="minn-row-actions">
 						<button class="minn-btn-soft" data-restore="${ p.id }">Restore</button>
 						<button class="minn-btn-soft danger" data-fdelete="${ p.id }">Delete</button>
-					</div>` : '<div class="minn-row-arrow">›</div>' }
+					</div>` : `<div class="minn-row-end"><button class="minn-row-more" data-more="${ p.id }" type="button" title="Actions">⋯</button><span class="minn-row-arrow">›</span></div>` }
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? 'No matches for “' + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? 'Trash is empty.' : 'Nothing here yet. Hit <b>New</b> to write something.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
@@ -1128,6 +1129,86 @@
 				}
 			}, 350 );
 		} );
+		// Row actions — right-click a row (or its hover ⋯) for quick moves
+		// without opening the editor: the bounce-audit's top friction item,
+		// re-imagined as Minn's context-menu pattern instead of wp-admin's
+		// hover-link litter.
+		let rowMenu = null;
+		const hideRowMenu = () => {
+			if ( rowMenu ) rowMenu.remove();
+			rowMenu = null;
+			document.removeEventListener( 'mousedown', rowMenuAway, true );
+		};
+		const rowMenuAway = ( e ) => { if ( rowMenu && ! rowMenu.contains( e.target ) ) hideRowMenu(); };
+		const rowQuick = async ( p, body, msg, method ) => {
+			hideRowMenu();
+			try {
+				await api( `wp/v2/${ p.type }/${ p.id }`, {
+					method: method || 'POST',
+					body: body ? JSON.stringify( body ) : undefined,
+				} );
+				toast( msg );
+				sel.clear();
+				state.cache.content = null;
+				state.cache.cptContent = {};
+				await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
+				if ( state.route === 'content' ) renderContent();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		};
+		const openRowMenu = ( x, y, p ) => {
+			hideRowMenu();
+			const viewUrl = p.link ? ( p.status === 'publish' ? p.link : p.link + ( p.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) : '';
+			rowMenu = document.createElement( 'div' );
+			rowMenu.className = 'minn-new-menu minn-row-menu';
+			rowMenu.innerHTML = `
+				<button type="button" data-ract="open">Open in Minn</button>
+				${ viewUrl ? `<a href="${ esc( viewUrl ) }" target="_blank" rel="noopener">${ p.status === 'publish' ? 'View on site' : 'Preview draft' } ↗</a>` : '' }
+				<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">Edit in block editor ↗</a>
+				<div class="minn-new-menu-label">Status</div>
+				${ p.status !== 'publish' ? '<button type="button" data-ract="publish">Publish now</button>' : '' }
+				${ p.status !== 'draft' ? '<button type="button" data-ract="draft">Move to draft</button>' : '' }
+				<button type="button" data-ract="trash" class="danger">Move to trash</button>`;
+			document.body.appendChild( rowMenu );
+			rowMenu.style.left = Math.max( 10, Math.min( x, window.innerWidth - rowMenu.offsetWidth - 10 ) ) + 'px';
+			rowMenu.style.top = Math.max( 10, Math.min( y, window.innerHeight - rowMenu.offsetHeight - 10 ) ) + 'px';
+			$$( '[data-ract]', rowMenu ).forEach( ( b ) => b.addEventListener( 'click', () => {
+				const act = b.dataset.ract;
+				if ( act === 'open' ) { hideRowMenu(); go( `editor/${ p.type }/${ p.id }` ); }
+				else if ( act === 'publish' ) rowQuick( p, { status: 'publish' }, 'Published' );
+				else if ( act === 'draft' ) rowQuick( p, { status: 'draft' }, 'Moved to draft' );
+				else if ( act === 'trash' ) rowQuick( p, null, 'Moved to trash', 'DELETE' );
+			} ) );
+			$$( 'a', rowMenu ).forEach( ( a ) => a.addEventListener( 'click', hideRowMenu ) );
+			document.addEventListener( 'mousedown', rowMenuAway, true );
+		};
+		// The menu's inputs ride the row's own data attrs — no cache coupling.
+		const rowItem = ( el ) => ( {
+			id: parseInt( el.dataset.id, 10 ),
+			type: el.dataset.type,
+			status: el.dataset.status,
+			link: el.dataset.link,
+		} );
+		if ( ! state.contentTrash ) {
+			$$( '.minn-table-row[data-id]', view ).forEach( ( row ) => {
+				row.addEventListener( 'contextmenu', ( e ) => {
+					const p = rowItem( row );
+					if ( ! p ) return;
+					e.preventDefault();
+					openRowMenu( e.clientX, e.clientY, p );
+				} );
+				const more = row.querySelector( '.minn-row-more' );
+				if ( more ) more.addEventListener( 'click', ( e ) => {
+					e.stopPropagation(); // never open the editor
+					const p = rowItem( row );
+					if ( ! p ) return;
+					const r = more.getBoundingClientRect();
+					openRowMenu( r.left - 150, r.bottom + 6, p );
+				} );
+			} );
+		}
+
 		const trashBtn = $( '#minn-content-trash', view );
 		if ( trashBtn ) trashBtn.addEventListener( 'click', () => {
 			state.contentTrash = ! state.contentTrash;
@@ -2942,8 +3023,12 @@
 				const file = btn.dataset.toggle;
 				const plugin = plugins.find( ( p ) => p.plugin === file );
 				const activating = plugin.status !== 'active';
-				if ( ! activating && file === 'minn-admin/minn-admin' &&
-					! confirm( 'Deactivating Minn Admin will close this dashboard. Continue?' ) ) {
+				if ( ! activating && file === 'minn-admin/minn-admin' ) {
+					// Turning Minn off ejects the user — that deserves a real
+					// modal and a readable landing, not a native confirm() and
+					// an instant yank to wp-admin (the bounce-audit P1).
+					state.modal = { type: 'minn-off', file, done: false };
+					renderOverlays();
 					return;
 				}
 				btn.disabled = true;
@@ -9452,6 +9537,7 @@
 						${ canEdit ? `<button class="minn-btn-primary" id="minn-media-save">Save</button>` : '' }
 						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
 						<button class="minn-btn-soft" id="minn-media-open">↗ Open</button>
+						${ it.kind === 'IMG' ? `<a class="minn-btn-soft" id="minn-media-edit-image" href="${ esc( B.site.adminUrl ) }post.php?post=${ it.id }&action=edit" target="_blank" rel="noopener" title="Crop, rotate and scale in the classic attachment editor">✎ Edit image ↗</a>` : '' }
 						<button class="minn-btn-soft danger" id="minn-media-delete">${ icon( 'trash' ) } Delete</button>
 					</div>
 				</div>
@@ -9678,6 +9764,29 @@
 
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
+		}
+
+		if ( m.type === 'minn-off' ) {
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ m.done ? 'Minn Admin is off' : 'Deactivate Minn Admin?' }</div>
+						${ m.done ? '' : '<button class="minn-x-btn" id="minn-modal-close">×</button>' }
+					</div>
+					<div class="minn-help-body" style="border-bottom:0;">
+						${ m.done
+							? `<p><b>Done.</b> Heading to the classic dashboard… Reactivate Minn any time from <b>Plugins</b>, and everything here — content, settings, markup — is exactly as you left it.</p>`
+							: `<p>This turns off the <b>/minn-admin/</b> dashboard and returns you to the classic wp-admin.</p>
+							<p>Nothing is lost: Minn writes native WordPress content and options, and reactivating from the Plugins screen brings this dashboard straight back.</p>` }
+					</div>
+					${ m.done ? '' : `
+					<div class="minn-modal-actions">
+						<button class="minn-btn-soft danger" id="minn-off-confirm">Deactivate and go to wp-admin</button>
+						<button class="minn-btn-primary" id="minn-off-cancel">Keep Minn</button>
+					</div>` }
+				</div>
+			</div>`;
 		}
 
 		if ( m.type === 'changelog' ) {
@@ -10364,6 +10473,26 @@
 
 		if ( m.type === 'revision' ) {
 			bindRevisionModal( m );
+		}
+
+		if ( m.type === 'minn-off' && ! m.done ) {
+			$( '#minn-off-cancel' ).addEventListener( 'click', closeModal );
+			$( '#minn-off-confirm' ).addEventListener( 'click', async ( e ) => {
+				e.currentTarget.disabled = true;
+				try {
+					await api( 'wp/v2/plugins/' + m.file, {
+						method: 'PUT',
+						body: JSON.stringify( { status: 'inactive' } ),
+					} );
+					m.done = true;
+					renderOverlays();
+					// A beat to read the landing before the classic dashboard.
+					setTimeout( () => { window.location.href = B.site.adminUrl; }, 1600 );
+				} catch ( err ) {
+					toast( err.message, true );
+					closeModal();
+				}
+			} );
 		}
 
 		if ( m.type === 'plugin-install' ) {
@@ -11317,6 +11446,7 @@
 		clearTableChips();
 		removeFocusDim();
 		removeOutlineMode();
+		$$( '.minn-row-menu' ).forEach( ( el ) => el.remove() );
 		hideImgPop();
 		hideLinkPop();
 		removeLockOverlay();
