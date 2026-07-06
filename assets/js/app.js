@@ -1731,12 +1731,14 @@
 			loadUsers().then( renderIfCurrent( 'users' ) ).catch( showErr );
 			return;
 		}
-		const roleTabs = [ [ '_all', 'All' ], ...Object.entries( B.roles || {} ) ];
+		// One searchable combobox, not a tab per role — real sites (Woo,
+		// memberships, LMS) carry 10+ roles and the tab row overflowed.
+		const roles = Object.entries( B.roles || {} );
 		view.innerHTML = `
 		<div class="minn-toolbar">
-			${ roleTabs.length > 2 ? `<div class="minn-tabs">
-				${ roleTabs.map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ ( state.userRole || '_all' ) === id ? ' active' : '' }" data-role="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
+			${ roles.length > 1 ? `<div class="minn-ac minn-tax-select" data-rolecombo>
+				<input class="minn-input minn-ac-input" placeholder="All roles" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<div class="minn-ac-panel" hidden></div>
 			</div>` : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
@@ -1758,19 +1760,21 @@
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
 
-		$$( '.minn-tab', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', async () => {
-				if ( ( state.userRole || '_all' ) === btn.dataset.role ) return;
-				state.userRole = btn.dataset.role;
-				state.cache.users = null;
-				// Keep the toolbar in place — reflect the active tab now, dim only the table while loading.
-				$$( '.minn-tab', view ).forEach( ( t ) => t.classList.toggle( 'active', t === btn ) );
-				const tbl = $( '.minn-table', view );
-				if ( tbl ) tbl.classList.add( 'minn-busy' );
-				await loadUsers().catch( showErr );
-				if ( state.route === 'users' ) renderUsers();
-			} )
-		);
+		const roleWrap = view.querySelector( '[data-rolecombo]' );
+		if ( roleWrap ) bindAutocomplete( roleWrap,
+			[ { value: '', label: 'All roles' } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label } ) ) ), {
+				strict: true,
+				value: state.userRole && state.userRole !== '_all' ? state.userRole : '',
+				onPick: async ( v ) => {
+					state.userRole = v || null;
+					state.cache.users = null;
+					// Keep the toolbar in place — dim only the table while loading.
+					const tbl = $( '.minn-table', view );
+					if ( tbl ) tbl.classList.add( 'minn-busy' );
+					await loadUsers().catch( showErr );
+					if ( state.route === 'users' ) renderUsers();
+				},
+			} );
 		const search = $( '#minn-user-search', view );
 		search.addEventListener( 'input', () => {
 			clearTimeout( userSearchTimer );
@@ -3547,7 +3551,10 @@
 			close();
 			if ( opts.onPick ) opts.onPick( v );
 		};
-		input.addEventListener( 'focus', () => render( true ) );
+		// Strict displays are labels, not free text — select on focus so the
+		// first keystroke REPLACES the label (typing into "All roles" must
+		// filter on "e", not on "All rolese").
+		input.addEventListener( 'focus', () => { render( true ); if ( opts.strict ) input.select(); } );
 		input.addEventListener( 'click', () => { if ( panel.hidden ) render( true ); } );
 		input.addEventListener( 'input', () => render( false ) );
 		input.addEventListener( 'keydown', ( e ) => {
