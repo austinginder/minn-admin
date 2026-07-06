@@ -1866,15 +1866,19 @@ class Minn_Admin_REST {
 		);
 
 		// --- Server & filesystem -------------------------------------------
+		// Managed hosts (Kinsta) strip disk_*_space + php_uname from the web SAPI
+		// via disable_functions — calling one is a FATAL, and @ does not save you.
+		// CLI shows them enabled, so only a real web request catches this.
 		$uploads_writable = wp_is_writable( $upload['basedir'] );
-		$disk_free        = @disk_free_space( ABSPATH );
-		$disk_total       = @disk_total_space( ABSPATH );
+		$disk_free        = function_exists( 'disk_free_space' ) ? @disk_free_space( ABSPATH ) : false;
+		$disk_total       = function_exists( 'disk_total_space' ) ? @disk_total_space( ABSPATH ) : false;
+		$has_uname        = function_exists( 'php_uname' );
 		$server           = array(
 			'Web server'      => isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : 'Unknown',
 			'Protocol'        => isset( $_SERVER['SERVER_PROTOCOL'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_PROTOCOL'] ) ) : '',
 			'HTTPS'           => is_ssl() ? 'Yes' : 'No',
-			'Operating system'=> php_uname( 's' ) . ' ' . php_uname( 'r' ),
-			'Architecture'    => php_uname( 'm' ),
+			'Operating system'=> $has_uname ? php_uname( 's' ) . ' ' . php_uname( 'r' ) : PHP_OS,
+			'Architecture'    => $has_uname ? php_uname( 'm' ) : ( PHP_INT_SIZE === 8 ? '64-bit' : '32-bit' ),
 			'Server IP'       => isset( $_SERVER['SERVER_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_ADDR'] ) ) : '',
 			'Uploads writable'=> $uploads_writable ? 'Yes' : 'No',
 			'Disk free'       => ( $disk_free && $disk_total ) ? size_format( $disk_free ) . ' free of ' . size_format( $disk_total ) : 'Unknown',
