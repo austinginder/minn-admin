@@ -164,6 +164,8 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-new-menu a:hover { background: var(--hover); }
 .minn-table-menu { min-width: 180px; }
 .minn-row-menu { min-width: 200px; }
+.minn-ctx-menu { min-width: 180px; }
+.minn-new-menu a.danger, .minn-new-menu button.danger { color: var(--red); }
 .minn-row-end { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .minn-row-more {
   width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 7px;

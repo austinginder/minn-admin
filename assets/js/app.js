@@ -1381,6 +1381,20 @@
 		state.cache.media = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
+	// Shared by the preview modal's Delete and the grid context menu.
+	async function deleteMediaItem( it ) {
+		if ( ! confirm( `Delete “${ it.name }” permanently?` ) ) return;
+		try {
+			await api( `wp/v2/media/${ it.id }?force=true`, { method: 'DELETE' } );
+			toast( 'File deleted' );
+			if ( state.modal && state.modal.type === 'media' ) closeModal();
+			state.cache.media = null;
+			if ( state.route === 'media' ) renderMedia();
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
 	function mapMediaItem( m ) {
 		const kind = mediaKind( m.mime_type );
 		const md = m.media_details || {};
@@ -1509,12 +1523,29 @@
 				}, 350 );
 			} );
 		}
-		$$( '[data-media]', view ).forEach( ( el ) =>
+		$$( '[data-media]', view ).forEach( ( el ) => {
+			const itemOf = () => mapped.find( ( x ) => x.id === parseInt( el.dataset.media, 10 ) );
 			el.addEventListener( 'click', () => {
-				const m = mapped.find( ( x ) => x.id === parseInt( el.dataset.media, 10 ) );
+				const m = itemOf();
 				if ( m ) { state.modal = { type: 'media', item: m }; renderOverlays(); }
-			} )
-		);
+			} );
+			// Right-click: the item's verbs without opening the preview.
+			el.addEventListener( 'contextmenu', ( e ) => {
+				const m = itemOf();
+				if ( ! m ) return;
+				e.preventDefault();
+				openMinnMenu( e.clientX, e.clientY, [
+					{ label: 'Preview', run: () => { state.modal = { type: 'media', item: m }; renderOverlays(); } },
+					{ label: 'Copy URL', run: async () => {
+						try { await navigator.clipboard.writeText( m.url ); toast( 'URL copied' ); }
+						catch ( err ) { toast( 'Could not copy', true ); }
+					} },
+					{ label: 'Open ↗', href: m.url },
+					...( m.kind === 'IMG' ? [ { label: 'Edit image ↗', href: `${ B.site.adminUrl }post.php?post=${ m.id }&action=edit` } ] : [] ),
+					{ label: 'Delete', danger: true, run: () => deleteMediaItem( m ) },
+				] );
+			} );
+		} );
 		bindPager( view, c.page, loadMedia, () => { if ( state.route === 'media' ) renderMedia(); } );
 		const uploadBtn = $( '#minn-upload-btn', view );
 		if ( uploadBtn ) {
@@ -1626,7 +1657,7 @@
 		</div>
 		<div class="minn-card">
 			${ rows.length ? rows.map( ( r ) => `
-				<div class="minn-comment-row">
+				<div class="minn-comment-row" data-crow="${ r.id }">
 					${ r.avatar ? `<img class="minn-comment-avatar" src="${ esc( r.avatar ) }" alt="">` : '<div class="minn-comment-avatar"></div>' }
 					<div class="minn-comment-body">
 						<div class="minn-comment-head">
@@ -1658,6 +1689,20 @@
 				state.commentTab = btn.dataset.ctab;
 				state.cache.comments = null;
 				renderComments();
+			} )
+		);
+		// Right-click a comment: the row's own action buttons as a menu —
+		// built FROM the buttons, so it can never drift from the tab's verbs.
+		$$( '.minn-comment-row[data-crow]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				const btns = $$( '.minn-comment-action', row );
+				if ( ! btns.length ) return;
+				e.preventDefault();
+				openMinnMenu( e.clientX, e.clientY, btns.map( ( b ) => ( {
+					label: b.textContent.trim(),
+					danger: b.classList.contains( 'danger' ),
+					run: () => b.click(),
+				} ) ) );
 			} )
 		);
 		$$( '[data-cstatus]', view ).forEach( ( btn ) =>
@@ -7645,6 +7690,45 @@
 		return c;
 	}
 
+	/* ===== Shared context menu ===== */
+	// One builder for right-click menus — entries are { label, run },
+	// { label, href } (opens a new tab), or { heading }; danger: true tints
+	// destructive items. Away-click closes; renderView sweeps strays.
+	let minnMenuEl = null;
+
+	function minnMenuAway( e ) {
+		if ( minnMenuEl && ! minnMenuEl.contains( e.target ) ) hideMinnMenu();
+	}
+
+	function hideMinnMenu() {
+		if ( minnMenuEl ) minnMenuEl.remove();
+		minnMenuEl = null;
+		document.removeEventListener( 'mousedown', minnMenuAway, true );
+	}
+
+	function openMinnMenu( x, y, entries ) {
+		hideMinnMenu();
+		minnMenuEl = document.createElement( 'div' );
+		minnMenuEl.className = 'minn-new-menu minn-ctx-menu';
+		minnMenuEl.innerHTML = entries.map( ( en, i ) =>
+			en.heading != null
+				? `<div class="minn-new-menu-label">${ esc( en.heading ) }</div>`
+				: en.href
+					? `<a href="${ esc( en.href ) }" target="_blank" rel="noopener"${ en.danger ? ' class="danger"' : '' }>${ esc( en.label ) }</a>`
+					: `<button type="button" data-mi="${ i }"${ en.danger ? ' class="danger"' : '' }>${ esc( en.label ) }</button>`
+		).join( '' );
+		document.body.appendChild( minnMenuEl );
+		minnMenuEl.style.left = Math.max( 10, Math.min( x, window.innerWidth - minnMenuEl.offsetWidth - 10 ) ) + 'px';
+		minnMenuEl.style.top = Math.max( 10, Math.min( y, window.innerHeight - minnMenuEl.offsetHeight - 10 ) ) + 'px';
+		$$( 'button[data-mi]', minnMenuEl ).forEach( ( b ) => b.addEventListener( 'click', () => {
+			const en = entries[ parseInt( b.dataset.mi, 10 ) ];
+			hideMinnMenu();
+			if ( en && en.run ) en.run();
+		} ) );
+		$$( 'a', minnMenuEl ).forEach( ( a ) => a.addEventListener( 'click', hideMinnMenu ) );
+		document.addEventListener( 'mousedown', minnMenuAway, true );
+	}
+
 	/* ===== Table context menu (right-click a cell) ===== */
 	// The popover's ops act on the CARET cell — fine from the chip, awkward
 	// mid-table. Right-click gives targeted ops on the cell under the pointer.
@@ -10168,18 +10252,7 @@
 					saveBtn.textContent = 'Save';
 				}
 			} );
-			$( '#minn-media-delete' ).addEventListener( 'click', async () => {
-				if ( ! confirm( `Delete “${ it.name }” permanently?` ) ) return;
-				try {
-					await api( `wp/v2/media/${ it.id }?force=true`, { method: 'DELETE' } );
-					toast( 'File deleted' );
-					closeModal();
-					state.cache.media = null;
-					if ( state.route === 'media' ) renderMedia();
-				} catch ( e ) {
-					toast( e.message, true );
-				}
-			} );
+			$( '#minn-media-delete' ).addEventListener( 'click', () => deleteMediaItem( it ) );
 		}
 
 		if ( m.type === 'order' ) {
@@ -11446,6 +11519,7 @@
 		clearTableChips();
 		removeFocusDim();
 		removeOutlineMode();
+		hideMinnMenu();
 		$$( '.minn-row-menu' ).forEach( ( el ) => el.remove() );
 		hideImgPop();
 		hideLinkPop();
