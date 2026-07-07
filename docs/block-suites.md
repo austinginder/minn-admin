@@ -102,11 +102,19 @@ shims — candidates ranked in the roadmap.
    one island per top-level block via `insertPatternIslands()`; on reload the load
    pipeline upgrades simple blocks to editable prose. Lab site surfaces 101 patterns
    (Otter 61 + theme 40); suite: tests/patterns.test.js.
-2. **Preview CSS shims**: (a) flip `generateblocks_do_inline_styles` during
-   render-blocks — one line; (b) Essential Blocks: extract `blockMeta` CSS from the
-   markup being rendered; (c) Otter/Spectra per-post CSS: hardest — needs post context
-   or running their generators over the submitted markup; investigate their generator
-   classes before committing.
+2. ~~**Preview CSS shims**~~ — **SHIPPED** (same day) for three of four: render-blocks
+   flips `generateblocks_do_inline_styles` (GB blocks inline their own `<style>`),
+   `adapters/essential-blocks.php` extracts `blockMeta` desktop CSS from the submitted
+   markup, and `adapters/otter.php` recovers the per-post CSS caches
+   (`_themeisle_gutenberg_block_styles` + `_atomic_wind_css` — atomic-wind is Tailwind
+   compiled in the browser on first front-end view, so a never-viewed section has no
+   cache until someone views the page once). Plumbing: render-blocks accepts a `post`
+   param and applies the `minn_admin_render_styles` filter; editor-styles also carries
+   handles the fired hooks enqueued directly (atomic-wind's base CSS). The client
+   scoper now unwraps `@layer` (compiled Tailwind) and preserves CSS nesting.
+   REMAINING: Spectra generates per-post CSS at request time with no persistent store —
+   needs its `UAGB_Post_Assets` generator run over the edited post; investigate before
+   committing.
 3. **Library adapters** on the Stackable shape: Kadence sections (free tier, empty
    api_key), Spectra templates, GenerateBlocks patterns (its own `generateblocks/v1`
    proxy is already `edit_posts`-gated and transient-cached — Minn's client might call

@@ -46,6 +46,8 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/query-monitor.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/page-builders.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/seo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/stackable.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/otter.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/essential-blocks.php';
 
 Minn_Admin::init();
 Minn_Admin_REST::init();

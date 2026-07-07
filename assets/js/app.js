@@ -4535,7 +4535,7 @@
 		if ( anchor ) anchor.insertAdjacentHTML( 'beforebegin', html );
 		else body.insertAdjacentHTML( 'beforeend', html );
 		const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
-		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ] } ) } )
+		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
 				const rendered = r && r.rendered && r.rendered[ 0 ];
@@ -4675,12 +4675,28 @@
 			let out = '';
 			Array.from( rules ).forEach( ( rule ) => {
 				if ( rule instanceof CSSStyleRule ) {
-					out += scopeSelector( rule.selectorText ) + ' { ' + rule.style.cssText + ' }\n';
+					// Emit the FULL rule body (not just declarations) so CSS
+					// nesting survives — nested selectors are &-relative, so
+					// scoping the parent selector scopes them too.
+					const body = rule.cssText.slice( rule.cssText.indexOf( '{' ) );
+					out += scopeSelector( rule.selectorText ) + ' ' + body + '\n';
 				} else if ( rule instanceof CSSMediaRule ) {
 					out += '@media ' + rule.conditionText + ' {\n' + walk( rule.cssRules ) + '}\n';
 				} else if ( rule instanceof CSSSupportsRule ) {
 					out += '@supports ' + rule.conditionText + ' {\n' + walk( rule.cssRules ) + '}\n';
-				} else if ( rule instanceof CSSFontFaceRule || ( window.CSSKeyframesRule && rule instanceof CSSKeyframesRule ) ) {
+				} else if ( window.CSSLayerBlockRule && rule instanceof CSSLayerBlockRule ) {
+					// Compiled Tailwind (atomic-wind et al) wraps everything in
+					// @layer — unwrap and scope the contents. Losing the layer
+					// raises specificity, which is what a preview wants anyway.
+					out += walk( rule.cssRules );
+				} else if ( window.CSSLayerStatementRule && rule instanceof CSSLayerStatementRule ) {
+					// @layer ordering statement — nothing to scope.
+				} else if (
+					rule instanceof CSSFontFaceRule
+					|| ( window.CSSKeyframesRule && rule instanceof CSSKeyframesRule )
+					|| ( window.CSSPropertyRule && rule instanceof CSSPropertyRule )
+				) {
+					// Resource definitions, not element styles — pass through.
 					out += rule.cssText + '\n';
 				}
 			} );
@@ -7189,6 +7205,16 @@
 	const BLOCK_ATTR_SKIP = [ 'lock', 'metadata', 'className', 'style', 'anchor' ];
 
 	const fullBlockName = ( name ) => ( name.includes( '/' ) ? name : 'core/' + name );
+	// Raw camelCase attribute keys make poor field labels — "hasCustomCSS"
+	// reads better as "Has custom CSS". Adapter labels always win.
+	const humanizeAttrKey = ( key ) => {
+		const words = String( key )
+			.replace( /([a-z0-9])([A-Z])/g, '$1 $2' )
+			.replace( /([A-Z]+)([A-Z][a-z])/g, '$1 $2' )
+			.replace( /[_-]+/g, ' ' )
+			.toLowerCase();
+		return words.charAt( 0 ).toUpperCase() + words.slice( 1 );
+	};
 	// Form refinements plugins registered via the minn_admin_block_forms filter.
 	const blockFormFor = ( name ) => ( B.blockForms || {} )[ fullBlockName( name ) ] || {};
 
@@ -7380,7 +7406,7 @@
 			const type = Array.isArray( def.type ) ? def.type[ 0 ] : def.type;
 			const cur = attrs && key in attrs ? attrs[ key ] : def.default;
 			const id = `${ prefix }:${ key }`;
-			const label = esc( fd.label || key );
+			const label = esc( fd.label || humanizeAttrKey( key ) );
 			// Descriptor options are [value, label] pairs; schema enums are bare values.
 			const options = Array.isArray( fd.options ) && fd.options.length
 				? fd.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) )
@@ -7711,7 +7737,7 @@
 			const inner = stripBlockComments( template ).trim();
 			if ( inner ) prev.innerHTML = inner;
 		}
-		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ] } ) } )
+		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
 				const html = r && r.rendered && r.rendered[ 0 ];
@@ -7925,7 +7951,7 @@
 		// (a misbehaving render callback must never break the editor).
 		const previewEl = document.querySelector( `.minn-island-preview[data-preview="${ insp.idx }"]` );
 		try {
-			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ] } ) } );
+			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ], post: ( state.editor && state.editor.id ) || 0 } ) } );
 			injectPreviewStyles( r && r.styles );
 			const html = r && r.rendered && r.rendered[ 0 ];
 			if ( previewEl && html && html.trim() ) previewEl.innerHTML = html;
@@ -7948,7 +7974,7 @@
 		// Removed islands are nulled (indices stay stable) — send '' to keep the
 		// response aligned by index and satisfy the endpoint's string schema.
 		const blocks = ed.islands.map( ( r ) => ( r == null ? '' : r ) );
-		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks } ) } )
+		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks, post: ( state.editor && state.editor.id ) || 0 } ) } )
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
 				if ( ! r || ! Array.isArray( r.rendered ) || ! document.contains( body ) ) return;
@@ -9724,7 +9750,7 @@
 				sel.removeAllRanges();
 				sel.addRange( range );
 				const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
-				api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ action.template ] } ) } )
+				api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ action.template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
 					.then( ( r ) => {
 						injectPreviewStyles( r && r.styles );
 						const html = r && r.rendered && r.rendered[ 0 ];

@@ -686,6 +686,15 @@ class Minn_Admin_REST {
 		if ( ! is_array( $blocks ) ) {
 			return new WP_Error( 'invalid_blocks', 'Expected an array of block markup strings.', array( 'status' => 400 ) );
 		}
+		// The post these islands belong to, when the client knows it — some
+		// plugins cache per-post generated CSS the styles filter below can
+		// recover (adapters/otter.php).
+		$post_id = absint( $request['post'] ?? 0 );
+		// GenerateBlocks keeps each block's CSS in a `css` attribute and only
+		// inlines it after wp_head; this documented filter makes every GB
+		// block prepend its own <style> during our render
+		// (docs/block-suites.md, CSS models).
+		add_filter( 'generateblocks_do_inline_styles', '__return_true' );
 		// Plugins with lazy CSS loading (Stackable's optimizer, Kadence,
 		// GenerateBlocks) only enqueue their stylesheets from inside a
 		// render_block filter when one of their blocks actually renders — an
@@ -706,11 +715,22 @@ class Minn_Admin_REST {
 		}
 		$out         = array( 'rendered' => $rendered );
 		$new_handles = array_values( array_diff( wp_styles()->queue, $queue_before ) );
-		if ( $new_handles ) {
-			$extra = self::collect_style_urls( $new_handles );
-			if ( $extra['urls'] || $extra['inline'] ) {
-				$out['styles'] = $extra;
-			}
+		$styles      = $new_handles ? self::collect_style_urls( $new_handles ) : array(
+			'urls'   => array(),
+			'inline' => '',
+		);
+		/**
+		 * Preview styles adapters can extend — e.g. per-post generated CSS a
+		 * plugin cached in postmeta (Otter/atomic-wind) or CSS carried inside
+		 * the submitted markup itself (Essential Blocks' blockMeta).
+		 *
+		 * @param array $styles  { urls: string[], inline: string }
+		 * @param array $blocks  The submitted block markup strings.
+		 * @param int   $post_id The post being edited (0 when unknown).
+		 */
+		$styles = apply_filters( 'minn_admin_render_styles', $styles, $blocks, $post_id );
+		if ( ! empty( $styles['urls'] ) || ! empty( $styles['inline'] ) ) {
+			$out['styles'] = $styles;
 		}
 		return rest_ensure_response( $out );
 	}
@@ -769,6 +789,7 @@ class Minn_Admin_REST {
 		// previews render unstyled. Fire the registration hooks defensively:
 		// output-buffered (some callbacks echo) and exception-swallowed (a
 		// misbehaving enqueue must never break the editor).
+		$queue_before = wp_styles()->queue;
 		ob_start();
 		try {
 			do_action( 'wp_enqueue_scripts' );
@@ -779,6 +800,11 @@ class Minn_Admin_REST {
 		ob_end_clean();
 
 		$handles = array( 'wp-block-library', 'wp-block-library-theme' );
+		// Styles those hooks ENQUEUED directly (atomic-wind's base CSS et al)
+		// never appear as block style_handles — carry them too.
+		foreach ( array_diff( wp_styles()->queue, $queue_before ) as $handle ) {
+			$handles[] = $handle;
+		}
 		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $block_type ) {
 			foreach ( (array) $block_type->style_handles as $handle ) {
 				$handles[] = $handle;
