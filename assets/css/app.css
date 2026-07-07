@@ -1207,6 +1207,13 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-img-pop { width: 300px; }
 .minn-img-pop .minn-insp-actions .minn-btn-primary { flex: 0 1 auto; }
 .minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
+/* Inspector "Images" rows — thumbnail + Replace, one per image in the island. */
+.minn-insp-img-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.minn-insp-img-row img {
+  width: 64px; height: 44px; object-fit: cover; border-radius: 7px;
+  border: 1px solid var(--border2); background: var(--panel2); flex-shrink: 0;
+}
+.minn-insp-img-row button { margin-left: auto; }
 .minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
 .minn-insp-actions .minn-btn-primary { flex: 1; justify-content: center; }
 .minn-insp-actions .minn-btn-soft.danger:only-child { flex: 1; justify-content: center; }

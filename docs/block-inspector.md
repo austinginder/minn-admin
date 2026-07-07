@@ -50,6 +50,17 @@ these blocks SOURCE their text attributes from that same HTML. Children already 
 the single-element text editor (`childTextOf`) keep it — the two paths are mutually
 exclusive per child.
 
+**Image swaps (same cycle):** the sibling move for pictures. Static blocks mirror an
+image's URL between comment JSON (`imageUrl`, `blockBackgroundMediaUrl`) and saved HTML
+(`img src`, `background-image` style), so `swapIslandImage()` replaces the URL string
+everywhere (plus its serializeAttributes-escaped form), retargets paired `XxxUrl`/`XxxId`
+media ids scoped to the comment carrying the URL, and updates `wp-image-N` classes on
+swapped `img` tags. The inspector's Images section lists every image in the island with a
+Replace button into the media picker; pending field edits are folded into the raw first
+(`buildInspectorRaw`, shared with Apply) so nothing typed is lost. Embed/gallery keep
+their dedicated rebuild flows — the generic swap is suppressed there, since core image
+comments carry a bare `id` the URL-key heuristic can't safely retarget.
+
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —
 this is the plan for making them *workable*. The goal: click an island, get a small inspector
 popover next to it, edit the block's configuration in place, watch the preview update. No React,

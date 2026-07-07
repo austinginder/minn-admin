@@ -103,6 +103,22 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		const previewText = await page.$eval( '.minn-block-island .minn-island-preview', ( e ) => e.textContent ).catch( () => '' );
 		t.check( 'preview reflects the text edit', previewText.includes( 'Launch week' ) );
 
+		// --- Inspector image swap: replace the design's background image ---
+		await page.click( '.minn-block-island .minn-island-chip' );
+		await page.waitForSelector( '[data-inspimg]', { timeout: 10000 } );
+		t.check( 'inspector lists the island image', ( await page.$$( '[data-inspimg]' ) ).length === 1 );
+		await page.click( '[data-inspimg]' );
+		await page.waitForSelector( '.minn-picker-item', { timeout: 15000 } );
+		// Pick the gal-red fixture (find it by thumbnail title).
+		const picked = await page.evaluate( () => {
+			const el = [ ...document.querySelectorAll( '.minn-picker-item' ) ].find( ( e ) => /gal-red/i.test( e.title ) );
+			if ( ! el ) return false;
+			el.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+			return true;
+		} );
+		t.check( 'gal-red fixture picked from media library', picked );
+		await page.waitForTimeout( 1500 );
+
 		// Saved markup: real template, images localized.
 		await save();
 		const raw1 = await rawContent();
@@ -111,6 +127,9 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		t.check( 'text edit persisted, splice byte-exact',
 			raw1.includes( 'Launch week' ) && ! raw1.includes( 'heading_placeholder' )
 			&& raw1.includes( 'description_placeholder' ) && raw1.includes( 'btn-1_placeholder' ) );
+		t.check( 'image swap persisted in attr + style',
+			raw1.includes( 'gal-red' ) && ! raw1.includes( 'stk-design-library-image' )
+			&& /"blockBackgroundMediaUrl":"[^"]*gal-red/.test( raw1 ) );
 
 		// Round-trip: reload, unrelated edit, save again — island byte-stable.
 		await openEditor( page, id );

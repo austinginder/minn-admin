@@ -7281,6 +7281,41 @@
 		return str;
 	}
 
+	/* Island image swaps — the sibling of text runs for pictures. Static
+	 * blocks mirror an image's URL between comment JSON (imageUrl /
+	 * blockBackgroundMediaUrl) and saved HTML (img src, background-image
+	 * style), so replacing the URL string everywhere keeps both in sync —
+	 * the same surgery that localizes design-library images server-side.
+	 * Best-effort extras: paired `XxxUrl`/`XxxId` media ids are retargeted
+	 * inside the comment that carries the URL, and wp-image-N classes on
+	 * swapped <img> tags follow the new attachment. */
+	const ISLAND_IMG_RE = /https?:\/\/[^\s"'()\\<>]+\.(?:jpe?g|png|gif|webp|avif)/gi;
+	const islandImageUrls = ( raw ) => [ ...new Set( raw.match( ISLAND_IMG_RE ) || [] ) ];
+	const escRegex = ( s ) => s.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+	function swapIslandImage( raw, oldUrl, item ) {
+		const newUrl = item && item.url;
+		if ( ! newUrl || newUrl === oldUrl ) return raw;
+		// serializeAttributes-escaped form (URLs containing "--" etc.).
+		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
+		raw = raw.split( oldUrl ).join( newUrl );
+		if ( encAttr( oldUrl ) !== oldUrl ) raw = raw.split( encAttr( oldUrl ) ).join( encAttr( newUrl ) );
+		if ( item.id ) {
+			raw = raw.replace( /<!--(?:(?!-->)[\s\S])*-->/g, ( comment ) => {
+				let out = comment;
+				const keyRe = new RegExp( '"(\\w*?)Url":"(?:' + escRegex( newUrl ) + '|' + escRegex( encAttr( newUrl ) ) + ')"', 'g' );
+				let m;
+				while ( ( m = keyRe.exec( comment ) ) ) {
+					out = out.replace( new RegExp( '"' + m[ 1 ] + 'Id":\\d+', 'g' ), '"' + m[ 1 ] + 'Id":' + item.id );
+				}
+				return out;
+			} );
+			const srcPat = 'src="' + escRegex( newUrl ) + '"';
+			raw = raw.replace( new RegExp( '(<img[^>]*wp-image-)\\d+([^>]*' + srcPat + ')', 'g' ), '$1' + item.id + '$2' );
+			raw = raw.replace( new RegExp( '(<img[^>]*' + srcPat + '[^>]*wp-image-)\\d+', 'g' ), '$1' + item.id );
+		}
+		return raw;
+	}
+
 	// Form rows for one block's editable attributes. `prefix` namespaces the
 	// inputs ("own" or a child index). A minn_admin_block_forms descriptor for
 	// the block refines labels, controls, options, ordering and hiding.
@@ -7532,6 +7567,14 @@
 		).join( '' );
 		const ownRunRows = mediaRebuild ? ''
 			: runRows( 'head', model.headRuns ) + runRows( 'inner', model.innerRuns ) + runRows( 'tail', model.tailRuns );
+		// Images anywhere in the island's markup — replaced via the media
+		// picker (embed/gallery keep their dedicated rebuild flows instead).
+		const imgSection = mediaRebuild || ! ( insp.images || [] ).length ? ''
+			: `<div class="minn-field-label">Images</div>` + insp.images.map( ( u, i ) => `
+				<div class="minn-insp-img-row">
+					<img src="${ esc( u ) }" alt="" loading="lazy">
+					<button class="minn-btn-soft" type="button" data-inspimg="${ i }">Replace…</button>
+				</div>` ).join( '' );
 		const ownFields = mediaRebuild ? '' : ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
 			+ ( model.wt || [] ).map( ( w, i ) => `<div class="minn-field-label">${ esc( w.label ) }</div>
 			<input class="minn-input" data-insp="wt:${ i }" value="${ esc( w.value ) }">` ).join( '' )
@@ -7589,10 +7632,11 @@
 			</div>
 			<div class="minn-insp-body">
 				${ special }
+				${ imgSection }
 				${ ownFields }
 				${ childSections }
 				${ addRow }
-				${ editable || special ? '' : `<div class="minn-insp-note">${ ownType
+				${ editable || special || imgSection ? '' : `<div class="minn-insp-note">${ ownType
 					? 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.'
 					: 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' }</div>` }
 			</div>
@@ -7652,7 +7696,7 @@
 		await Promise.all( [ ...new Set( names ) ].map( async ( n ) => { types[ n ] = await blockTypeFor( n ); } ) );
 		if ( ! inspectorEl ) return; // closed while loading
 
-		inspectorState = { idx, model, types, islandEl };
+		inspectorState = { idx, model, types, islandEl, images: islandImageUrls( raw ) };
 		renderInspectorBody();
 
 		// One delegated listener survives every structure-op re-render.
@@ -7686,6 +7730,24 @@
 				}, { multi: true } );
 				return;
 			}
+			const rep = e.target.closest( '[data-inspimg]' );
+			if ( rep ) {
+				// Fold any pending field edits into the raw BEFORE the swap —
+				// the picker modal closes the popover, and typed values must
+				// not be lost with it.
+				collectInspectorForms();
+				const base = buildInspectorRaw( insp );
+				const oldUrl = ( insp.images || [] )[ parseInt( rep.dataset.inspimg, 10 ) ];
+				const { idx, islandEl: el } = insp;
+				closeInspector();
+				if ( ! oldUrl ) return;
+				openMediaPicker( ( it ) => {
+					if ( ! it || ! it.url ) return;
+					replaceIsland( idx, el, swapIslandImage( base, oldUrl, it ) );
+					toast( 'Image replaced' );
+				} );
+				return;
+			}
 			const applyBtn = e.target.closest( '#minn-insp-apply' );
 			if ( applyBtn ) { applyInspector( applyBtn ); return; }
 			const move = e.target.closest( '[data-cmove]' );
@@ -7713,11 +7775,10 @@
 		} );
 	}
 
-	async function applyInspector( btn ) {
-		const insp = inspectorState;
-		const ed = state.editor;
-		if ( ! insp || ! ed || ! inspectorEl ) return;
-		collectInspectorForms();
+	// Rebuild an island's raw markup from the (already collected) inspector
+	// model — shared by Apply and the image-replace flow, so pending field
+	// edits are folded in either way and never lost.
+	function buildInspectorRaw( insp ) {
 		const { model } = insp;
 
 		const childRaw = ( c ) => {
@@ -7781,6 +7842,15 @@
 			sa.height = h;
 			newRaw = `<!-- wp:spacer${ serializeBlockAttrs( sa ) } -->\n<div style="height:${ h }" aria-hidden="true" class="wp-block-spacer"></div>\n<!-- /wp:spacer -->`;
 		}
+		return newRaw;
+	}
+
+	async function applyInspector( btn ) {
+		const insp = inspectorState;
+		const ed = state.editor;
+		if ( ! insp || ! ed || ! inspectorEl ) return;
+		collectInspectorForms();
+		const newRaw = buildInspectorRaw( insp );
 
 		btn.disabled = true;
 		btn.textContent = 'Applying…';
