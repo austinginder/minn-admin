@@ -119,12 +119,15 @@ shims — candidates ranked in the roadmap.
    api_key), Spectra templates, GenerateBlocks patterns (its own `generateblocks/v1`
    proxy is already `edit_posts`-gated and transient-cached — Minn's client might call
    it directly).
-4. **Inspector form scaling** for huge schemas (Spectra's 300+ attrs): collapse to a
-   curated first page (attrs explicitly set on the block first, then a "More settings"
-   expander or filter box).
-5. **Image-swap heuristic widening**: key+`ID` pairing (Kadence), same-object
-   `{url, id}` retarget (Spectra/Otter/EB), `data-media-id`/`data-id` img attributes
-   (GenerateBlocks/Otter).
+4. ~~**Inspector form scaling**~~ — **SHIPPED**: fields explicitly set on the block
+   (or adapter-ordered) stay in view; the rest collapse behind "More settings (N)"
+   with a filter box (threshold 16). Setting a value promotes the field. Suite:
+   tests/inspector-scaling.test.js against the minn-test/big-schema fixture block.
+5. ~~**Image-swap heuristic widening**~~ — **SHIPPED**: Img/Image keys pair with
+   Id/ID suffixes (Kadence bgImg→bgImgID), media objects retarget `id` only inside
+   the object carrying the swapped URL, GB `mediaId` comment-scoped, and img-tag
+   markers data-media-id / data-id / wp-image-N in either attribute order. Suite:
+   tests/image-swap.test.js (synthetic block carrying every convention).
 
 ## Lab housekeeping
 

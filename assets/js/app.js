@@ -7444,30 +7444,51 @@
 					? ( key === 'content' || String( cur == null ? '' : cur ).length > 60 ? 'textarea' : 'text' )
 					: null ) ) ) );
 			if ( ! control ) return; // object / array attrs — too structural for a generic form
+			const priority = ( attrs && key in attrs ) || ( Array.isArray( form.order ) && form.order.includes( key ) );
+			const push = ( html ) => rows.push( { key, label, priority, html } );
 			if ( control === 'select' && options ) {
 				// An enum with no current value and no default must offer an
 				// empty choice — otherwise the select forces its first option
 				// and Apply injects an attr the block never had.
 				const opts = ( cur == null && def.default === undefined && ! options.some( ( [ v ] ) => v === '' ) )
 					? [ [ '', '—' ], ...options ] : options;
-				rows.push( `<div class="minn-field-label">${ label }</div>
+				push( `<div class="minn-field-label">${ label }</div>
 				<select class="minn-input" data-insp="${ esc( id ) }">
 					${ opts.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( cur == null ? '' : cur ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
 				</select>` );
 			} else if ( control === 'checkbox' ) {
-				rows.push( `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-insp="${ esc( id ) }" data-type="boolean"${ cur ? ' checked' : '' }> ${ label }</label>` );
+				push( `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-insp="${ esc( id ) }" data-type="boolean"${ cur ? ' checked' : '' }> ${ label }</label>` );
 			} else if ( control === 'number' ) {
-				rows.push( `<div class="minn-field-label">${ label }</div>
+				push( `<div class="minn-field-label">${ label }</div>
 				<input type="number" class="minn-input" data-insp="${ esc( id ) }" data-type="number" value="${ cur == null ? '' : esc( cur ) }">` );
 			} else if ( control === 'textarea' ) {
-				rows.push( `<div class="minn-field-label">${ label }</div>
+				push( `<div class="minn-field-label">${ label }</div>
 				<textarea class="minn-input minn-insp-textarea" data-insp="${ esc( id ) }">${ esc( cur == null ? '' : String( cur ) ) }</textarea>` );
 			} else {
-				rows.push( `<div class="minn-field-label">${ label }</div>
+				push( `<div class="minn-field-label">${ label }</div>
 				<input class="minn-input" data-insp="${ esc( id ) }" value="${ esc( cur == null ? '' : String( cur ) ) }">` );
 			}
 		} );
-		return rows.join( '' );
+		// SCALING: design suites register huge schemas (Spectra's post-grid:
+		// 315 attributes) — a flat wall of fields is unusable. Fields the
+		// block explicitly SETS (or an adapter ordered) stay in view; the
+		// rest collapse behind "More settings" with a filter box. Small
+		// schemas render flat, exactly as before.
+		const MAX_FLAT = 16;
+		if ( rows.length <= MAX_FLAT ) return rows.map( ( r ) => r.html ).join( '' );
+		let head = rows.filter( ( r ) => r.priority );
+		let rest = rows.filter( ( r ) => ! r.priority );
+		if ( ! head.length ) {
+			head = rest.slice( 0, 8 );
+			rest = rest.slice( 8 );
+		}
+		if ( ! rest.length ) return head.map( ( r ) => r.html ).join( '' );
+		return head.map( ( r ) => r.html ).join( '' )
+			+ `<button type="button" class="minn-btn-soft minn-insp-more-btn" data-inspmore="${ esc( prefix ) }">More settings (${ rest.length })</button>`
+			+ `<div class="minn-insp-more" data-inspmore-panel="${ esc( prefix ) }" hidden>
+				<input class="minn-input minn-insp-filter" data-inspmore-filter placeholder="Filter settings…">
+				${ rest.map( ( r ) => `<div class="minn-insp-row" data-fkey="${ esc( ( r.label + ' ' + r.key ).toLowerCase() ) }">${ r.html }</div>` ).join( '' ) }
+			</div>`;
 	}
 
 	let inspectorEl = null;
@@ -7805,10 +7826,31 @@
 		inspectorState = { idx, model, types, islandEl, images: islandImageUrls( raw ) };
 		renderInspectorBody();
 
+		// Filter box inside a "More settings" panel — narrow by label/key.
+		inspectorEl.addEventListener( 'input', ( e ) => {
+			const f = e.target.closest( '[data-inspmore-filter]' );
+			if ( ! f ) return;
+			const q = f.value.trim().toLowerCase();
+			$$( '.minn-insp-row', f.closest( '.minn-insp-more' ) ).forEach( ( row ) => {
+				row.style.display = ! q || row.dataset.fkey.includes( q ) ? '' : 'none';
+			} );
+		} );
+
 		// One delegated listener survives every structure-op re-render.
 		inspectorEl.addEventListener( 'click', ( e ) => {
 			const insp = inspectorState;
 			if ( ! insp ) return;
+			const moreBtn = e.target.closest( '[data-inspmore]' );
+			if ( moreBtn ) {
+				const panel = inspectorEl.querySelector( `[data-inspmore-panel="${ moreBtn.dataset.inspmore }"]` );
+				if ( panel ) {
+					panel.hidden = ! panel.hidden;
+					moreBtn.textContent = panel.hidden
+						? `More settings (${ panel.querySelectorAll( '.minn-insp-row' ).length })`
+						: 'Fewer settings';
+				}
+				return;
+			}
 			if ( e.target.closest( '#minn-insp-close' ) ) { closeInspector(); return; }
 			if ( e.target.closest( '#minn-insp-remove' ) ) {
 				const el = insp.islandEl;
