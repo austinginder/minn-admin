@@ -39,6 +39,17 @@ remain excluded per "The honest limit" below — but see `adapters/stackable.php
 scrape-the-data counter-move: when a plugin publishes its designs as serialized markup
 (Stackable's CDN design library), those templates insert as valid islands with no runtime.
 
+**Generic text runs (same cycle):** the honest limit got narrower. A static block's
+STRUCTURE and STYLING still can't be regenerated outside Gutenberg, but its TEXT is just
+text nodes in the saved HTML — so the inspector scans an island's raw markup by offset
+(`textRunsOf`: block comments, tags and style/script/svg subtrees skipped) and renders one
+field per text node, however deep the nesting and even for blocks with no registered
+attributes. Changed runs are spliced back last-to-first with text-node escaping only;
+untouched runs are never rewritten, preserving byte-identity. Gutenberg stays happy because
+these blocks SOURCE their text attributes from that same HTML. Children already served by
+the single-element text editor (`childTextOf`) keep it — the two paths are mutually
+exclusive per child.
+
 Block islands made complex content *safe* (see [editor-direction.md](editor-direction.md)) —
 this is the plan for making them *workable*. The goal: click an island, get a small inspector
 popover next to it, edit the block's configuration in place, watch the preview update. No React,
