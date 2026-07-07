@@ -9660,6 +9660,7 @@
 	const DESIGN_SOURCES = [
 		{ flag: 'stackable', ns: 'stackable', base: 'minn-admin/v1/stackable/designs' },
 		{ flag: 'kadence', ns: 'kadence', base: 'minn-admin/v1/kadence/designs' },
+		{ flag: 'generateblocks', ns: 'generateblocks', base: 'minn-admin/v1/generateblocks/designs' },
 	];
 	const designSourcePromises = {};
 	function loadDesigns( src ) {

@@ -316,6 +316,7 @@ class Minn_Admin {
 			// — gate the lazy designs fetches in the editor's slash menu.
 			'stackable' => minn_admin_stackable_active(),
 			'kadence'   => minn_admin_kadence_active(),
+			'generateblocks' => minn_admin_generateblocks_active(),
 			/**
 			 * Block-inspector form refinements, keyed by block name. A descriptor
 			 * can set per-attribute label/control/options/hide, an attribute

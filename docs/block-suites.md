@@ -120,9 +120,17 @@ shims — candidates ranked in the roadmap.
    `rest_do_request` so its file cache applies; 352 free sections, pro/locked
    filtered; images localized via the shared `adapters/media-localize.php` helper;
    client generalizes to a `DESIGN_SOURCES` table — adding a source is one PHP
-   adapter + one table row). Remaining: Spectra templates, GenerateBlocks patterns
-   (its own `generateblocks/v1` proxy is already `edit_posts`-gated and
-   transient-cached — Minn's client might call it directly).
+   adapter + one table row). **GenerateBlocks SHIPPED** (`adapters/generateblocks.php`:
+   drives its `generateblocks/v1` proxy via rest_do_request — NOTE its responses
+   carry objects with protected props that only flatten via JsonSerializable, so
+   normalize through a wp_json_encode/json_decode round-trip; the listing carries
+   full markup inline, 37 free patterns, ids are `{libraryId}--{patternId}` across
+   all enabled libraries). **Spectra is a documented DEAD END**: the websitedemos
+   cloud has fully migrated to a `spectra/*` block system (v2/v3 entries, markup in
+   the item response's `original_content` field) that the shipping wp.org plugin
+   (2.19.x, `uagb/*`) does NOT register — inserting it would create
+   Gutenberg-unavailable blocks, the exact broken-insert class the render probe
+   exists to prevent. Revisit when the plugin ships the new block system.
 4. ~~**Inspector form scaling**~~ — **SHIPPED**: fields explicitly set on the block
    (or adapter-ordered) stay in view; the rest collapse behind "More settings (N)"
    with a filter box (threshold 16). Setting a value promotes the field. Suite:
