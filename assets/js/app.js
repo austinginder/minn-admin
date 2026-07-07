@@ -7367,18 +7367,44 @@
 		if ( encAttr( oldUrl ) !== oldUrl ) raw = raw.split( encAttr( oldUrl ) ).join( encAttr( newUrl ) );
 		raw = raw.split( slashEsc( oldUrl ) ).join( slashEsc( newUrl ) );
 		if ( item.id ) {
+			const urlPat = '(?:' + escRegex( newUrl ) + '|' + escRegex( encAttr( newUrl ) ) + '|' + escRegex( slashEsc( newUrl ) ) + ')';
 			raw = raw.replace( /<!--(?:(?!-->)[\s\S])*-->/g, ( comment ) => {
 				let out = comment;
-				const keyRe = new RegExp( '"(\\w*?)Url":"(?:' + escRegex( newUrl ) + '|' + escRegex( encAttr( newUrl ) ) + ')"', 'g' );
+				// Named-key pairs, per-suite conventions (docs/block-suites.md):
+				// imageUrl→imageId (EB), bgImg→bgImgID (Kadence),
+				// backgroundImageURL→…ID — try both Id/ID casings.
+				const keyRe = new RegExp( '"(\\w*?)(Url|URL|Src|Img|Image)":"' + urlPat + '"', 'g' );
 				let m;
 				while ( ( m = keyRe.exec( comment ) ) ) {
-					out = out.replace( new RegExp( '"' + m[ 1 ] + 'Id":\\d+', 'g' ), '"' + m[ 1 ] + 'Id":' + item.id );
+					const stems = /^(Img|Image)$/.test( m[ 2 ] )
+						? [ m[ 1 ] + m[ 2 ] ]      // bgImg → bgImgID / bgImgId
+						: [ m[ 1 ] ];               // imageUrl → imageId / imageID
+					stems.forEach( ( stem ) => {
+						out = out.replace( new RegExp( '"' + stem + '(Id|ID)":\\d+', 'g' ), '"' + stem + '$1":' + item.id );
+					} );
+				}
+				// Media objects ({ "url": …, "id": N } in either order): bare
+				// keys are only safe to retarget INSIDE the object that carries
+				// the swapped URL.
+				out = out.replace( new RegExp( '\\{[^{}]*"url":"' + urlPat + '"[^{}]*\\}', 'g' ), ( obj ) =>
+					obj.replace( /"id":\d+/g, '"id":' + item.id ) );
+				// GenerateBlocks: no URL attribute at all — mediaId pairs with
+				// the src living in htmlAttributes/saved HTML. Comment-scoped:
+				// a GB media comment carries exactly one mediaId.
+				if ( new RegExp( urlPat ).test( comment ) ) {
+					out = out.replace( /"mediaId":\d+/g, '"mediaId":' + item.id );
 				}
 				return out;
 			} );
+			// Attachment ids riding the swapped <img> tags themselves:
+			// wp-image-N class (core convention), data-media-id (GB),
+			// data-id (Otter slider) — either attribute order.
 			const srcPat = 'src="' + escRegex( newUrl ) + '"';
-			raw = raw.replace( new RegExp( '(<img[^>]*wp-image-)\\d+([^>]*' + srcPat + ')', 'g' ), '$1' + item.id + '$2' );
-			raw = raw.replace( new RegExp( '(<img[^>]*' + srcPat + '[^>]*wp-image-)\\d+', 'g' ), '$1' + item.id );
+			[ 'wp-image-', 'data-media-id="', 'data-id="' ].forEach( ( marker ) => {
+				const mk = escRegex( marker );
+				raw = raw.replace( new RegExp( '(<img[^>]*' + mk + ')\\d+([^>]*' + srcPat + ')', 'g' ), '$1' + item.id + '$2' );
+				raw = raw.replace( new RegExp( '(<img[^>]*' + srcPat + '[^>]*' + mk + ')\\d+', 'g' ), '$1' + item.id );
+			} );
 		}
 		return raw;
 	}
