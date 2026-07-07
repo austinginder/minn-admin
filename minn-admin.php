@@ -48,6 +48,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/seo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/media-localize.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/stackable.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/kadence.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/generateblocks.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/otter.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/essential-blocks.php';
 
