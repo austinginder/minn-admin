@@ -72,72 +72,8 @@ function minn_admin_stackable_library() {
  * @return array { template: string, attachments: int[] }
  */
 function minn_admin_stackable_localize_images( $template ) {
-	$attachments = array();
-	preg_match_all( '#https://stackable-files\.pages\.dev/[^\s"\'\\\\)]+\.(?:jpe?g|png|gif|webp|mp4)#i', $template, $m );
-	$urls = array_slice( array_unique( $m[0] ), 0, 12 );
-	if ( ! $urls || ! current_user_can( 'upload_files' ) ) {
-		return array( 'template' => $template, 'attachments' => $attachments );
-	}
-
-	if ( ! function_exists( 'media_handle_sideload' ) ) {
-		require_once ABSPATH . 'wp-admin/includes/media.php';
-	}
-	if ( ! function_exists( 'download_url' ) ) {
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-	}
-	if ( ! function_exists( 'wp_read_image_metadata' ) ) {
-		require_once ABSPATH . 'wp-admin/includes/image.php';
-	}
-
-	foreach ( $urls as $url ) {
-		try {
-			$basename = sanitize_file_name( wp_basename( wp_parse_url( $url, PHP_URL_PATH ) ) );
-			$existing = get_posts( array(
-				'post_type'      => 'attachment',
-				'post_status'    => 'inherit',
-				'posts_per_page' => 1,
-				'fields'         => 'ids',
-				'meta_query'     => array(
-					array(
-						'key'     => '_wp_attached_file',
-						'value'   => $basename,
-						'compare' => 'LIKE',
-					),
-				),
-			) );
-
-			if ( $existing ) {
-				$media_id = $existing[0];
-			} else {
-				$tmp = download_url( $url );
-				if ( is_wp_error( $tmp ) ) {
-					continue;
-				}
-				$media_id = media_handle_sideload( array(
-					'name'     => $basename,
-					'type'     => mime_content_type( $tmp ),
-					'tmp_name' => $tmp,
-					'size'     => wp_filesize( $tmp ),
-				), 0 );
-				if ( file_exists( $tmp ) ) {
-					wp_delete_file( $tmp );
-				}
-				if ( is_wp_error( $media_id ) ) {
-					continue;
-				}
-			}
-
-			$local = wp_get_attachment_url( $media_id );
-			if ( $local ) {
-				$template      = str_replace( $url, $local, $template );
-				$attachments[] = (int) $media_id;
-			}
-		} catch ( \Throwable $e ) {
-			continue; // A failed image keeps its CDN URL — still renders.
-		}
-	}
-
-	return array( 'template' => $template, 'attachments' => $attachments );
+	// Shared sideloader (adapters/media-localize.php), scoped to Stackable's CDN.
+	return minn_admin_localize_images( $template, '#https://stackable-files\.pages\.dev/[^\s"\'\\\\)]+\.(?:jpe?g|png|gif|webp|mp4)#i' );
 }
 
 add_action( 'rest_api_init', function () {

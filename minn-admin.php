@@ -45,7 +45,9 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/simple-301-redirects.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/query-monitor.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/page-builders.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/seo.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/media-localize.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/stackable.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/kadence.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/otter.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/essential-blocks.php';
 

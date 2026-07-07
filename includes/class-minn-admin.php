@@ -312,9 +312,10 @@ class Minn_Admin {
 			// Active page builders — drives "+ New → Page in ⟨builder⟩"
 			// (docs/page-builders.md; adapters/page-builders.php).
 			'builders' => minn_admin_page_builders_boot(),
-			// Stackable design library available (adapters/stackable.php) —
-			// gates the lazy designs fetch in the editor's slash menu.
+			// Design libraries available (adapters/stackable.php, kadence.php)
+			// — gate the lazy designs fetches in the editor's slash menu.
 			'stackable' => minn_admin_stackable_active(),
+			'kadence'   => minn_admin_kadence_active(),
 			/**
 			 * Block-inspector form refinements, keyed by block name. A descriptor
 			 * can set per-attribute label/control/options/hide, an attribute

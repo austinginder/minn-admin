@@ -115,10 +115,14 @@ shims — candidates ranked in the roadmap.
    REMAINING: Spectra generates per-post CSS at request time with no persistent store —
    needs its `UAGB_Post_Assets` generator run over the edited post; investigate before
    committing.
-3. **Library adapters** on the Stackable shape: Kadence sections (free tier, empty
-   api_key), Spectra templates, GenerateBlocks patterns (its own `generateblocks/v1`
-   proxy is already `edit_posts`-gated and transient-cached — Minn's client might call
-   it directly).
+3. **Library adapters** on the Stackable shape — **Kadence SHIPPED**
+   (`adapters/kadence.php`: drives the plugin's own `kb-design-library/v1` proxy via
+   `rest_do_request` so its file cache applies; 352 free sections, pro/locked
+   filtered; images localized via the shared `adapters/media-localize.php` helper;
+   client generalizes to a `DESIGN_SOURCES` table — adding a source is one PHP
+   adapter + one table row). Remaining: Spectra templates, GenerateBlocks patterns
+   (its own `generateblocks/v1` proxy is already `edit_posts`-gated and
+   transient-cached — Minn's client might call it directly).
 4. ~~**Inspector form scaling**~~ — **SHIPPED**: fields explicitly set on the block
    (or adapter-ordered) stay in view; the rest collapse behind "More settings (N)"
    with a filter box (threshold 16). Setting a value promotes the field. Suite:
