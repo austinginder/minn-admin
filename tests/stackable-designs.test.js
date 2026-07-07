@@ -82,11 +82,35 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		}, null, { timeout: 20000 } ).then( ( h ) => h.jsonValue() ).catch( () => 0 );
 		t.check( 'island preview renders real Stackable markup', preview > 200, preview + ' bytes' );
 
+		// --- Inspector text runs: edit the design's placeholder copy ---
+		// The design insert auto-opens the inspector; its generic text-run
+		// fields expose every text node in the saved HTML, however deep.
+		await page.waitForSelector( '.minn-block-inspector [data-insprun], .minn-insp-body [data-insprun]', { timeout: 10000 } ).catch( () => null );
+		const runInputs = await page.$$( '[data-insprun]' );
+		t.check( 'inspector exposes text-run fields', runInputs.length >= 3, runInputs.length + ' fields' );
+		let edited = false;
+		for ( const input of runInputs ) {
+			const v = await input.inputValue();
+			if ( v === 'heading_placeholder' ) {
+				await input.fill( 'Launch week' );
+				edited = true;
+				break;
+			}
+		}
+		t.check( 'placeholder heading field found', edited );
+		await page.click( '#minn-insp-apply' );
+		await page.waitForTimeout( 1500 );
+		const previewText = await page.$eval( '.minn-block-island .minn-island-preview', ( e ) => e.textContent ).catch( () => '' );
+		t.check( 'preview reflects the text edit', previewText.includes( 'Launch week' ) );
+
 		// Saved markup: real template, images localized.
 		await save();
 		const raw1 = await rawContent();
 		t.check( 'saved markup contains the design template', /<!-- wp:stackable\/[a-z-]+ {"uniqueId"/.test( raw1 ) );
 		t.check( 'CDN image URLs localized', ! raw1.includes( 'stackable-files.pages.dev' ), raw1.slice( 0, 300 ) );
+		t.check( 'text edit persisted, splice byte-exact',
+			raw1.includes( 'Launch week' ) && ! raw1.includes( 'heading_placeholder' )
+			&& raw1.includes( 'description_placeholder' ) && raw1.includes( 'btn-1_placeholder' ) );
 
 		// Round-trip: reload, unrelated edit, save again — island byte-stable.
 		await openEditor( page, id );

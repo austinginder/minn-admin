@@ -7219,6 +7219,68 @@
 		return m ? { pre: m[ 1 ], inner: m[ 4 ], post: m[ 5 ] } : null;
 	}
 
+	/* Generic island text runs — the "I can't edit the content" answer for
+	 * static-save blocks (Stackable et al). Their text lives as plain text
+	 * nodes in saved HTML the schema form can't reach, however deeply the
+	 * blocks nest. Scan a raw markup string for text nodes BY OFFSET (block
+	 * comments, tags and style/script/svg subtrees skipped), edit each as a
+	 * plain-text field, and splice changed runs back from last to first so
+	 * offsets stay valid. Untouched runs are never rewritten — the island
+	 * stays byte-identical except for the exact text the user changed. */
+	const TEXTRUN_SKIP = [ 'style', 'script', 'svg', 'textarea' ];
+	function decodeTextEntities( s ) {
+		const el = document.createElement( 'textarea' );
+		el.innerHTML = s;
+		return el.value;
+	}
+	const escTextNode = ( s ) => String( s ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' );
+	function textRunsOf( str ) {
+		const runs = [];
+		if ( ! str ) return runs;
+		const lower = str.toLowerCase();
+		let i = 0;
+		while ( i < str.length ) {
+			if ( str.startsWith( '<!--', i ) ) {
+				const end = str.indexOf( '-->', i );
+				i = end === -1 ? str.length : end + 3;
+			} else if ( str[ i ] === '<' ) {
+				const end = str.indexOf( '>', i );
+				if ( end === -1 ) break;
+				const m = str.slice( i, end + 1 ).match( /^<\s*(\/?)\s*([a-zA-Z0-9-]+)/ );
+				const tag = m ? m[ 2 ].toLowerCase() : '';
+				if ( m && ! m[ 1 ] && TEXTRUN_SKIP.includes( tag ) && str[ end - 1 ] !== '/' ) {
+					// Skip the whole subtree (icons, inline CSS) — nothing a
+					// writer should edit lives in there.
+					const close = lower.indexOf( '</' + tag, end );
+					i = close === -1 ? str.length : Math.max( lower.indexOf( '>', close ) + 1, close + tag.length + 3 );
+				} else {
+					i = end + 1;
+				}
+			} else {
+				let next = str.indexOf( '<', i );
+				if ( next === -1 ) next = str.length;
+				const raw = str.slice( i, next );
+				if ( raw.trim() ) {
+					const pre = raw.match( /^\s*/ )[ 0 ];
+					const post = raw.match( /\s*$/ )[ 0 ];
+					const core = raw.slice( pre.length, raw.length - post.length );
+					runs.push( { start: i, end: next, pre, post, text: decodeTextEntities( core ), value: decodeTextEntities( core ) } );
+				}
+				i = next;
+			}
+		}
+		return runs;
+	}
+	function spliceTextRuns( str, runs ) {
+		if ( ! runs || ! runs.length ) return str;
+		for ( let i = runs.length - 1; i >= 0; i-- ) {
+			const r = runs[ i ];
+			if ( r.value === r.text ) continue;
+			str = str.slice( 0, r.start ) + r.pre + escTextNode( r.value ) + r.post + str.slice( r.end );
+		}
+		return str;
+	}
+
 	// Form rows for one block's editable attributes. `prefix` namespaces the
 	// inputs ("own" or a child index). A minn_admin_block_forms descriptor for
 	// the block refines labels, controls, options, ordering and hiding.
@@ -7381,6 +7443,21 @@
 				}
 			}
 		} );
+
+		// Generic text runs: every text node in saved HTML becomes editable,
+		// however deep the nesting (the Stackable case — schema-less children
+		// whose content the attr form can't reach). Children that already get
+		// the single-element text editor (childTextOf) are skipped so the two
+		// paths never fight over the same string.
+		model.children.forEach( ( c ) => {
+			if ( ! c.selfClosing && ! childTextOf( c ) ) c.runs = textRunsOf( c.tail );
+		} );
+		if ( model.mode === 'structural' ) {
+			model.headRuns = textRunsOf( model.head );
+			model.tailRuns = textRunsOf( model.tail );
+		} else if ( model.mode === 'none' && ! parts.selfClosing ) {
+			model.innerRuns = textRunsOf( parts.inner );
+		}
 		return model;
 	}
 
@@ -7428,6 +7505,15 @@
 			const input = inspectorEl.querySelector( `[data-insp="wt:${ i }"]` );
 			if ( input ) w.value = input.value;
 		} );
+		// Generic text-run fields (head/inner/tail groups + per-child cN groups).
+		$$( '[data-insprun]', inspectorEl ).forEach( ( input ) => {
+			const [ group, j ] = input.dataset.insprun.split( ':' );
+			const runs = group === 'head' ? insp.model.headRuns
+				: group === 'inner' ? insp.model.innerRuns
+				: group === 'tail' ? insp.model.tailRuns
+				: ( insp.model.children[ Number( group.slice( 1 ) ) ] || {} ).runs;
+			if ( runs && runs[ Number( j ) ] ) runs[ Number( j ) ].value = input.value;
+		} );
 	}
 
 	function renderInspectorBody() {
@@ -7439,9 +7525,17 @@
 		// desync from it (a url field that "doesn't work"). Those blocks get
 		// ONLY the rebuild actions below, never the generic form.
 		const mediaRebuild = [ 'embed', 'gallery' ].includes( model.parts.name.replace( /^core\//, '' ) );
+		// Generic text-run fields (saved-HTML text nodes, offset-addressed).
+		const runRows = ( group, runs ) => ( runs || [] ).map( ( r, j ) => r.text.length > 40
+			? `<textarea class="minn-input minn-insp-textarea" data-insprun="${ group }:${ j }">${ esc( r.value ) }</textarea>`
+			: `<input class="minn-input" data-insprun="${ group }:${ j }" value="${ esc( r.value ) }">`
+		).join( '' );
+		const ownRunRows = mediaRebuild ? ''
+			: runRows( 'head', model.headRuns ) + runRows( 'inner', model.innerRuns ) + runRows( 'tail', model.tailRuns );
 		const ownFields = mediaRebuild ? '' : ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
 			+ ( model.wt || [] ).map( ( w, i ) => `<div class="minn-field-label">${ esc( w.label ) }</div>
-			<input class="minn-input" data-insp="wt:${ i }" value="${ esc( w.value ) }">` ).join( '' );
+			<input class="minn-input" data-insp="wt:${ i }" value="${ esc( w.value ) }">` ).join( '' )
+			+ ( ownRunRows ? `<div class="minn-field-label">Text</div>${ ownRunRows }` : '' );
 		const structural = model.mode === 'structural' && ! mediaRebuild;
 		const childSections = mediaRebuild ? '' : model.children.map( ( c, i ) => {
 			const t = types[ c.name ];
@@ -7451,7 +7545,11 @@
 			const ct = childTextOf( c );
 			const textRow = ct ? `<div class="minn-field-label">text</div>
 				<textarea class="minn-input minn-insp-textarea" data-insptext="${ i }">${ esc( ct.inner ) }</textarea>` : '';
-			if ( ! fields && ! textRow && ! structural ) return '';
+			// Deep text runs for schema-less children (the Stackable case) —
+			// mutually exclusive with the single-element text editor above.
+			const runRowsC = ! textRow && c.runs && c.runs.length
+				? `<div class="minn-field-label">text</div>${ runRows( 'c' + i, c.runs ) }` : '';
+			if ( ! fields && ! textRow && ! runRowsC && ! structural ) return '';
 			return `<div class="minn-insp-child">
 				<div class="minn-insp-child-title">
 					<span>${ i + 1 }. ${ esc( c.name.replace( /^core\//, '' ) ) }</span>
@@ -7461,7 +7559,7 @@
 						<button type="button" data-cdel="${ i }" title="Remove">×</button>
 					</span>` : '' }
 				</div>
-				${ textRow + fields || '<div class="minn-insp-note">No editable settings.</div>' }
+				${ textRow + runRowsC + fields || '<div class="minn-insp-note">No editable settings.</div>' }
 			</div>`;
 		} ).join( '' );
 		// "+ Add" only for types whose schema we can form-edit.
@@ -7631,10 +7729,19 @@
 				const ct = childTextOf( c );
 				if ( ct && ct.inner !== c.__text ) tail = ct.pre + c.__text + ct.post;
 			}
+			// Deep text runs (schema-less children): offsets were computed on
+			// the pristine tail — mutually exclusive with the splice above.
+			if ( c.runs ) tail = spliceTextRuns( tail, c.runs );
 			return c.selfClosing ? open : open + tail;
 		};
 
 		let inner = model.parts.inner;
+		// Offset-based text-run splices go FIRST — they address the pristine
+		// strings; the regex wrapperText replacements below are
+		// position-independent and follow safely.
+		if ( model.innerRuns ) inner = spliceTextRuns( inner, model.innerRuns );
+		if ( model.headRuns ) model.head = spliceTextRuns( model.head, model.headRuns );
+		if ( model.tailRuns ) model.tail = spliceTextRuns( model.tail, model.tailRuns );
 		// Declared wrapper-text edits: replace only when actually changed, so an
 		// untouched wrapper stays byte-identical. Text-node escaping only (& < >).
 		const escText = ( s ) => String( s ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' );
@@ -9387,7 +9494,10 @@
 					.then( ( r ) => {
 						if ( ! r || ! r.template ) throw new Error( 'Design unavailable' );
 						if ( ! p.isConnected || ! state.editor ) return;
-						insertIsland( p, r.block || 'stackable/columns', r.template );
+						const islandEl = insertIsland( p, r.block || 'stackable/columns', r.template );
+						// The inspector's text-run fields are how the design's
+						// placeholder copy gets replaced — open it right away.
+						if ( islandEl ) openInspector( islandEl );
 					} )
 					.catch( ( e ) => toast( 'Design insert failed: ' + e.message, true ) );
 				return;
