@@ -4611,8 +4611,40 @@
 	// editor-styles sweep can't see those, so render-blocks reports what the
 	// render enqueued and this injects it, scoped, exactly once per source.
 	const injectedPreviewCss = new Set();
+	// Some preview CSS only exists after the PAGE runs in a browser (Otter's
+	// atomic-wind compiles Tailwind client-side, and clears its cache on
+	// every save). When the server says so (styles.warm), load the page in a
+	// hidden iframe — the plugin's own compiler runs and persists — then
+	// re-fetch the styles. One attempt per URL per session.
+	const warmedPreviewUrls = new Set();
+	function warmPreviewStyles( url ) {
+		if ( warmedPreviewUrls.has( url ) ) return;
+		warmedPreviewUrls.add( url );
+		const frame = document.createElement( 'iframe' );
+		frame.style.cssText = 'position:fixed;width:10px;height:10px;left:-9999px;top:-9999px;visibility:hidden;';
+		frame.src = url;
+		document.body.appendChild( frame );
+		let tries = 0;
+		const poll = () => {
+			tries++;
+			api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [], post: ( state.editor && state.editor.id ) || 0 } ) } )
+				.then( ( r ) => {
+					if ( r && r.styles && r.styles.inline ) {
+						frame.remove();
+						injectPreviewStyles( { urls: r.styles.urls, inline: r.styles.inline } );
+					} else if ( tries < 8 ) {
+						setTimeout( poll, 1500 );
+					} else {
+						frame.remove();
+					}
+				} )
+				.catch( () => frame.remove() );
+		};
+		setTimeout( poll, 3500 );
+	}
 	async function injectPreviewStyles( styles ) {
 		if ( ! styles ) return;
+		if ( styles.warm ) warmPreviewStyles( styles.warm );
 		const urls = ( styles.urls || [] ).filter( ( u ) => ! injectedPreviewCss.has( u ) );
 		urls.forEach( ( u ) => injectedPreviewCss.add( u ) );
 		const inlineKey = styles.inline ? 'inline:' + styles.inline.length + ':' + styles.inline.slice( 0, 80 ) : '';

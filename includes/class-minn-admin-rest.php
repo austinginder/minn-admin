@@ -729,7 +729,7 @@ class Minn_Admin_REST {
 		 * @param int   $post_id The post being edited (0 when unknown).
 		 */
 		$styles = apply_filters( 'minn_admin_render_styles', $styles, $blocks, $post_id );
-		if ( ! empty( $styles['urls'] ) || ! empty( $styles['inline'] ) ) {
+		if ( ! empty( $styles['urls'] ) || ! empty( $styles['inline'] ) || ! empty( $styles['warm'] ) ) {
 			$out['styles'] = $styles;
 		}
 		return rest_ensure_response( $out );

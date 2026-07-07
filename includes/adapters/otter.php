@@ -33,5 +33,19 @@ add_filter( 'minn_admin_render_styles', function ( $styles, $blocks, $post_id ) 
 			$styles['inline'] .= "\n" . $css;
 		}
 	}
+
+	// Atomic-wind CSS is compiled in the BROWSER on a front-end view, and
+	// Otter clears the cache on every save — a post being actively edited is
+	// usually cold. Hand the client a warm URL: it loads the page in a
+	// hidden iframe so Otter's own compiler runs (and, for editors, its
+	// style-builder persists the cache), then re-fetches these styles.
+	$post = get_post( $post_id );
+	if ( $post && false !== strpos( $post->post_content, '<!-- wp:atomic-wind/' )
+		&& '' === trim( (string) get_post_meta( $post_id, '_atomic_wind_css', true ) ) ) {
+		$url = 'publish' === $post->post_status ? get_permalink( $post ) : get_preview_post_link( $post );
+		if ( $url ) {
+			$styles['warm'] = add_query_arg( 'minn_warm', '1', $url );
+		}
+	}
 	return $styles;
 }, 10, 3 );

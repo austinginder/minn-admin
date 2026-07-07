@@ -22,7 +22,16 @@ if ( has_site_icon() ) {
 	wp_site_icon();
 }
 ?>
-<link rel="stylesheet" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/css/app.css?ver=' . MINN_ADMIN_VERSION ); ?>">
+<?php
+// Self-busting asset versions: version + file mtime, so every edit or update
+// invalidates the browser cache without a constant bump (stale app.js after
+// an update repeatedly masked real fixes during development).
+$minn_asset_ver = function ( $rel ) {
+	$mtime = @filemtime( MINN_ADMIN_DIR . $rel );
+	return MINN_ADMIN_VERSION . ( $mtime ? '.' . $mtime : '' );
+};
+?>
+<link rel="stylesheet" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/css/app.css?ver=' . $minn_asset_ver( 'assets/css/app.css' ) ); ?>">
 <script>
 // Apply saved theme before first paint to avoid a flash.
 try {
@@ -34,7 +43,7 @@ window.MINN = <?php echo wp_json_encode( $boot ); ?>;
 </head>
 <body>
 <div id="minn-app"><div class="minn-boot-spinner"></div></div>
-<script src="<?php echo esc_url( MINN_ADMIN_URL . 'assets/js/app.js?ver=' . MINN_ADMIN_VERSION ); ?>"></script>
+<script src="<?php echo esc_url( MINN_ADMIN_URL . 'assets/js/app.js?ver=' . $minn_asset_ver( 'assets/js/app.js' ) ); ?>"></script>
 <?php
 /**
  * Fires at the end of Minn's app document — the ONLY hook inside it. Minn
