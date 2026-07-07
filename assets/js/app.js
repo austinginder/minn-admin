@@ -7486,6 +7486,17 @@
 			// Types a "+ Add" can create — captured now so removing the last child
 			// doesn't strand the button.
 			model.addTypes = [ ...new Set( model.children.map( ( c ) => c.name ) ) ];
+			// Prototype per type: static children (saved HTML only their editor
+			// JS can author) are added by CLONING a sibling — an empty
+			// self-closing comment would render nothing and fail Gutenberg
+			// validation (the hybrid-block trap). Attr-only children keep the
+			// empty start; their schema form fills them in.
+			model.addProto = {};
+			model.children.forEach( ( c ) => {
+				if ( ! model.addProto[ c.name ] ) {
+					model.addProto[ c.name ] = { name: c.name, attrs: JSON.parse( JSON.stringify( c.attrs ) ), selfClosing: c.selfClosing, tail: c.tail };
+				}
+			} );
 		}
 
 		// Declared wrapper-text edits (minn_admin_block_forms `wrapperText`):
@@ -7673,6 +7684,7 @@
 			</div>
 			<div class="minn-insp-actions">
 				${ editable ? '<button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button>' : '' }
+				${ state.editor && state.editor.id ? `<a class="minn-btn-soft" id="minn-insp-gutenberg" href="${ esc( B.site.adminUrl ) }post.php?post=${ state.editor.id }&action=edit" target="_blank" rel="noopener" title="Design controls — layout, spacing, colors — live in the block editor">Block editor&nbsp;↗</a>` : '' }
 				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="Remove this block">${ icon( 'trash' ) }${ editable ? '' : ' Remove block' }</button>
 			</div>`;
 		positionInspector( insp.islandEl );
@@ -7797,7 +7809,18 @@
 			} else if ( add ) {
 				const typeSel = $( '#minn-insp-add-type', inspectorEl );
 				const name = add.dataset.addType || ( typeSel && typeSel.value );
-				if ( name ) insp.model.children.push( { name, attrs: {}, selfClosing: true, tail: '' } );
+				const proto = name && insp.model.addProto && insp.model.addProto[ name ];
+				if ( proto && ! proto.selfClosing ) {
+					// Static child: clone the sibling prototype verbatim.
+					// Duplicate uniqueIds are the plugin's own problem to heal
+					// (Stackable regenerates them at render), and a clone
+					// SHOULD look identical until edited.
+					const clone = { name, attrs: JSON.parse( JSON.stringify( proto.attrs ) ), selfClosing: false, tail: proto.tail };
+					if ( ! childTextOf( clone ) ) clone.runs = textRunsOf( clone.tail );
+					insp.model.children.push( clone );
+				} else if ( name ) {
+					insp.model.children.push( { name, attrs: {}, selfClosing: true, tail: '' } );
+				}
 			}
 			renderInspectorBody();
 			if ( add ) {

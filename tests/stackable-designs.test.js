@@ -150,6 +150,20 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		const islandAfter = raw2.match( /<!-- wp:stackable\/[\s\S]*\/wp:stackable\/[a-z-]+ -->/ );
 		t.check( 'design round-trips byte-identical through a second save',
 			!! islandBefore && !! islandAfter && islandBefore[ 0 ] === islandAfter[ 0 ] && raw2.includes( 'After the section.' ) );
+
+		// --- Structural add clones a static sibling (never an empty comment) ---
+		await page.click( '.minn-block-island .minn-island-chip' );
+		await page.waitForSelector( '#minn-insp-add', { timeout: 10000 } );
+		t.check( 'block editor escape hatch shown',
+			( await page.$( '#minn-insp-gutenberg[target="_blank"]' ) ) !== null );
+		await page.click( '#minn-insp-add' );
+		await page.click( '#minn-insp-apply' );
+		await page.waitForTimeout( 1500 );
+		await save();
+		const raw3 = await rawContent();
+		const colOpens = ( raw3.match( /<!-- wp:stackable\/column [\{]/g ) || [] ).length;
+		t.check( 'add clones the static column, no empty self-closing',
+			colOpens === 2 && ! raw3.includes( '<!-- wp:stackable/column /-->' ), colOpens + ' columns' );
 	} finally {
 		await deletePost( page, id );
 	}
