@@ -9711,12 +9711,10 @@
 		scheduleAutosave();
 	}
 
-	function bindSlashMenu( body, insertImage ) {
-		let menu = null;
-		let block = null;
-		let selIdx = 0;
-		let filtered = [];
-		let query = '';
+	// The curated quick-insert set — shared by the inline slash menu and the
+	// full block picker. Embeds and galleries insert as islands, blocks mode
+	// only (classic content already auto-embeds lone URLs server-side).
+	function basicSlashItems( blocksMode ) {
 		const items = [
 			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
 			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
@@ -9728,14 +9726,312 @@
 			[ icon( 'table' ), 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
 			[ icon( 'minus' ), 'Divider', { html: '<hr>' } ],
 		];
-		// Embeds and galleries insert as islands — blocks mode only (classic
-		// content already auto-embeds lone URLs server-side via WP's autoembed).
-		if ( state.editor && state.editor.mode === 'blocks' ) {
+		if ( blocksMode ) {
 			items.push(
 				[ icon( 'play' ), 'Embed — YouTube, tweet, audio…', 'embed' ],
 				[ icon( 'gallery' ), 'Gallery', 'gallery' ],
 			);
 		}
+		return items;
+	}
+
+	/* ===== Block picker — the full library, browsable ===== */
+	// The inline slash menu stays curated (search-only entries hide until
+	// typed for); this large modal shows EVERYTHING — basics, every plugin's
+	// insertable blocks, design libraries and patterns — grouped by source
+	// with a search box. Opened from the slash menu's "Browse all" row or ⌘/.
+	let pickerInsertImage = null; // captured by bindSlashMenu (caret-preserving image flow)
+	let pickerEl = null;
+
+	function closeBlockPicker() {
+		if ( pickerEl ) { pickerEl.remove(); pickerEl = null; }
+	}
+
+	const prettyNs = ( ns ) => ( {
+		woocommerce: 'WooCommerce', uagb: 'Spectra', 'themeisle-blocks': 'Otter',
+		'essential-blocks': 'Essential Blocks', generateblocks: 'GenerateBlocks',
+		kadence: 'Kadence', stackable: 'Stackable', 'otter-blocks': 'Otter',
+		core: 'WordPress', anchor: 'Anchor Blocks',
+	}[ ns ] || ns.charAt( 0 ).toUpperCase() + ns.slice( 1 ) );
+
+	async function openBlockPicker( targetBlock ) {
+		const ed = state.editor;
+		const body = $( '#minn-editor-body' );
+		if ( ! ed || ! body || ed.mode === 'locked' ) return;
+		closeBlockPicker();
+		// Where the insert lands: the "/" block when opened from the slash
+		// menu (replaceable by design), else after the caret's top-level
+		// block — captured NOW, before the modal steals focus.
+		let caretBlock = null;
+		{
+			const sel = window.getSelection();
+			let n = sel.rangeCount ? sel.anchorNode : null;
+			while ( n && n.parentNode && n.parentNode !== body ) n = n.parentNode;
+			caretBlock = n && n.parentNode === body ? n : null;
+		}
+
+		pickerEl = document.createElement( 'div' );
+		pickerEl.className = 'minn-block-picker';
+		pickerEl.innerHTML = `
+			<div class="minn-bp-backdrop"></div>
+			<div class="minn-bp-panel" role="dialog" aria-label="Insert from the block library">
+				<div class="minn-bp-head">
+					<input class="minn-input" id="minn-bp-search" placeholder="Search blocks, designs and patterns…" autocomplete="off">
+					<button class="minn-x-btn" id="minn-bp-close" type="button">×</button>
+				</div>
+				<div class="minn-bp-body"><div class="minn-loading" style="padding:24px;">Loading the library…</div></div>
+			</div>`;
+		document.body.appendChild( pickerEl );
+		const searchInput = $( '#minn-bp-search', pickerEl );
+		const bpBody = $( '.minn-bp-body', pickerEl );
+		searchInput.focus();
+		pickerEl.addEventListener( 'mousedown', ( e ) => {
+			if ( e.target.classList.contains( 'minn-bp-backdrop' ) || e.target.closest( '#minn-bp-close' ) ) closeBlockPicker();
+		} );
+		pickerEl.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Escape' ) { e.stopPropagation(); closeBlockPicker(); }
+			else if ( e.key === 'Enter' && e.target === searchInput ) {
+				const first = bpBody.querySelector( '[data-bp]' );
+				if ( first ) first.click();
+			}
+		} );
+
+		// Assemble the catalog: basics, per-namespace blocks (adapter
+		// templates + auto-registered), design libraries, patterns.
+		const blocksMode = ed.mode === 'blocks';
+		const groups = [ {
+			title: 'Basics',
+			items: basicSlashItems( blocksMode ).map( ( [ ic, label, action ] ) => ( { ic, label, meta: '', action } ) ),
+		} ];
+		const byKey = {};
+		const groupFor = ( key, title ) => {
+			if ( ! byKey[ key ] ) { byKey[ key ] = { title, items: [] }; groups.push( byKey[ key ] ); }
+			return byKey[ key ];
+		};
+		if ( blocksMode ) {
+			Object.keys( B.blockForms || {} ).forEach( ( name ) => {
+				const ins = ( B.blockForms[ name ] || {} ).insert;
+				if ( ! ins || ! ins.template ) return;
+				const ns = name.split( '/' )[ 0 ];
+				groupFor( 'b:' + ns, prettyNs( ns ) + ' · blocks' ).items.push( {
+					ic: icon( 'block' ), label: ins.label || name.split( '/' ).pop(), meta: '',
+					action: { block: name, template: String( ins.template ) },
+				} );
+			} );
+			( B.insertBlocks || [] ).forEach( ( b ) => {
+				groupFor( 'b:' + b.ns, prettyNs( b.ns ) + ' · blocks' ).items.push( {
+					ic: icon( 'block' ), label: b.title, meta: '',
+					action: { block: b.name, template: `<!-- wp:${ b.name } /-->` },
+				} );
+			} );
+			const [ designSets, pats ] = await Promise.all( [
+				Promise.all( DESIGN_SOURCES.map( ( src ) => loadDesigns( src ) ) ),
+				loadBlockPatterns(),
+			] );
+			if ( ! pickerEl ) return; // closed while loading
+			designSets.forEach( ( designs, si ) => {
+				const src = DESIGN_SOURCES[ si ];
+				designs.forEach( ( d ) => {
+					groupFor( 'd:' + src.ns, prettyNs( src.ns ) + ' · designs' ).items.push( {
+						ic: icon( 'block' ), label: d.label, meta: d.category || '',
+						action: { design: d.id, src: si },
+					} );
+				} );
+			} );
+			pats.forEach( ( pt ) => {
+				if ( pt.postTypes && ed.type && ! pt.postTypes.includes( ed.type ) ) return;
+				groupFor( 'p:' + pt.ns, prettyNs( pt.ns ) + ' · patterns' ).items.push( {
+					ic: icon( 'block' ), label: pt.title, meta: '',
+					action: { pattern: pt.name },
+				} );
+			} );
+		}
+
+		const renderGroups = ( q ) => {
+			q = ( q || '' ).trim().toLowerCase();
+			bpBody.innerHTML = groups.map( ( g, gi ) => {
+				const vis = g.items
+					.map( ( it, j ) => ( { it, j } ) )
+					.filter( ( { it } ) => ! q || it.label.toLowerCase().includes( q )
+						|| ( it.meta || '' ).toLowerCase().includes( q )
+						|| g.title.toLowerCase().includes( q ) );
+				if ( ! vis.length ) return '';
+				return `<section class="minn-bp-group"><h3>${ esc( g.title ) } <span>${ vis.length }</span></h3>
+					<div class="minn-bp-grid">${ vis.map( ( { it, j } ) => `
+						<button type="button" class="minn-bp-item" data-bp="${ gi }:${ j }">
+							<span class="minn-bp-ic">${ it.ic }</span>
+							<span class="minn-bp-label">${ esc( it.label ) }</span>
+							${ it.meta ? `<span class="minn-bp-meta">${ esc( it.meta ) }</span>` : '' }
+						</button>` ).join( '' ) }</div></section>`;
+			} ).join( '' ) || '<div class="minn-insp-note" style="padding:24px;">Nothing matches.</div>';
+		};
+		renderGroups( '' );
+		searchInput.addEventListener( 'input', () => renderGroups( searchInput.value ) );
+
+		bpBody.addEventListener( 'click', ( e ) => {
+			const btn = e.target.closest( '[data-bp]' );
+			if ( ! btn ) return;
+			const [ gi, j ] = btn.dataset.bp.split( ':' ).map( Number );
+			const found = groups[ gi ] && groups[ gi ].items[ j ];
+			if ( ! found ) return;
+			closeBlockPicker();
+			const b = $( '#minn-editor-body' );
+			if ( ! b || ! state.editor ) return;
+			b.focus( { preventScroll: true } );
+			let target;
+			if ( targetBlock && targetBlock.isConnected && targetBlock.parentNode === b ) {
+				// The slash menu's "/" block — replaceable by design.
+				target = targetBlock;
+			} else {
+				// Fresh landing paragraph after the caret block (never
+				// replace real content the caret happened to sit in).
+				target = document.createElement( 'p' );
+				target.appendChild( document.createElement( 'br' ) );
+				if ( caretBlock && caretBlock.isConnected && caretBlock.parentNode === b ) caretBlock.after( target );
+				else b.appendChild( target );
+			}
+			const range = document.createRange();
+			range.selectNodeContents( target );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			runSlashAction( found.action, target, b, pickerInsertImage || ( () => {} ) );
+		} );
+	}
+
+	// Dispatch one insert action — shared by the inline slash menu and the
+	// full block picker. `target` is the block to insert before/replace
+	// (the emptied "/" block, or a fresh paragraph the picker created).
+	function runSlashAction( action, target, body, insertImage ) {
+		if ( action && action.design ) {
+			// Stackable design: the template arrives async (the server may
+			// be sideloading its CDN images), so swap the "/" block for a
+			// clean paragraph now and island the markup when it lands.
+			const p = document.createElement( 'p' );
+			p.appendChild( document.createElement( 'br' ) );
+			target.replaceWith( p );
+			const range = document.createRange();
+			range.selectNodeContents( p );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			toast( 'Inserting design…' );
+			const source = DESIGN_SOURCES[ action.src ] || DESIGN_SOURCES[ 0 ];
+			api( source.base + '/' + encodeURIComponent( action.design ), { method: 'POST' } )
+				.then( ( r ) => {
+					if ( ! r || ! r.template ) throw new Error( 'Design unavailable' );
+					if ( ! p.isConnected || ! state.editor ) return;
+					const islandEl = insertIsland( p, r.block || 'core/group', r.template );
+					// The inspector's text-run fields are how the design's
+					// placeholder copy gets replaced — open it right away.
+					if ( islandEl ) openInspector( islandEl );
+				} )
+				.catch( ( e ) => toast( 'Design insert failed: ' + e.message, true ) );
+			return;
+		}
+		if ( action && action.pattern ) {
+			// Registered block pattern: same async placeholder dance.
+			const p = document.createElement( 'p' );
+			p.appendChild( document.createElement( 'br' ) );
+			target.replaceWith( p );
+			const range = document.createRange();
+			range.selectNodeContents( p );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			api( 'minn-admin/v1/pattern?name=' + encodeURIComponent( action.pattern ) )
+				.then( ( r ) => {
+					if ( ! r || ! r.content ) throw new Error( 'Pattern unavailable' );
+					insertPatternIslands( p, r.content );
+				} )
+				.catch( ( e ) => toast( 'Pattern insert failed: ' + e.message, true ) );
+			return;
+		}
+		if ( action && action.block ) {
+			// Insert a custom block as a new island: register the raw markup,
+			// drop the card in place of the "/" block, render the real
+			// preview, and open the inspector to configure it.
+			const ed = state.editor;
+			if ( ! ed ) return;
+			if ( ! ed.islands ) ed.islands = [];
+			const idx = ed.islands.push( action.template ) - 1;
+			target.insertAdjacentHTML( 'beforebegin', islandHtml( idx, action.block, action.template ) );
+			const p = document.createElement( 'p' );
+			p.appendChild( document.createElement( 'br' ) );
+			target.replaceWith( p );
+			const range = document.createRange();
+			range.selectNodeContents( p );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
+			api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ action.template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
+				.then( ( r ) => {
+					injectPreviewStyles( r && r.styles );
+					const html = r && r.rendered && r.rendered[ 0 ];
+					const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
+					if ( prev && html && html.trim() ) prev.innerHTML = html;
+					updateEditorStats();
+				} )
+				.catch( () => {} );
+			if ( islandEl ) openInspector( islandEl );
+			scheduleAutosave();
+			return;
+		}
+		if ( action && action.html ) {
+			// Replace the "/" block outright so the inserted markup lands at
+			// the top level (never wrapped inside the block's div).
+			target.insertAdjacentHTML( 'beforebegin', action.html );
+			const p = document.createElement( 'p' );
+			p.appendChild( document.createElement( 'br' ) );
+			target.replaceWith( p );
+			const range = document.createRange();
+			range.selectNodeContents( p );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			scheduleAutosave();
+			return;
+		}
+		// Clear the "/" and put the caret back in the emptied block.
+		target.textContent = '';
+		if ( ! target.childNodes.length ) target.appendChild( document.createElement( 'br' ) );
+		const range = document.createRange();
+		range.selectNodeContents( target );
+		range.collapse( true );
+		const sel = window.getSelection();
+		sel.removeAllRanges();
+		sel.addRange( range );
+		if ( action === 'image' ) insertImage();
+		else if ( action === 'embed' ) {
+			const url = ( prompt( 'Paste the URL to embed (YouTube, tweet, audio…):' ) || '' ).trim();
+			if ( /^https?:\/\/\S+$/.test( url ) ) insertIsland( target.isConnected ? target : null, 'core/embed', embedTemplate( url ) );
+			else if ( url ) toast( 'That doesn’t look like a URL', true );
+		} else if ( action === 'gallery' ) {
+			const anchor = target;
+			openMediaPicker( ( picks ) => {
+				if ( picks && picks.length ) insertIsland( anchor, 'core/gallery', galleryTemplate( picks ) );
+			}, { multi: true } );
+		} else {
+			action();
+			liftNestedLists( body );
+		}
+		scheduleAutosave();
+	}
+
+	function bindSlashMenu( body, insertImage ) {
+		pickerInsertImage = insertImage;
+		let menu = null;
+		let block = null;
+		let selIdx = 0;
+		let filtered = [];
+		let query = '';
+		const items = basicSlashItems( state.editor && state.editor.mode === 'blocks' );
 		// Custom blocks that declared an `insert` template via
 		// minn_admin_block_forms land as configurable islands — blocks mode
 		// only (classic serialization would flatten them to plain HTML).
@@ -9794,139 +10090,29 @@
 			const target = block;
 			close();
 			body.focus( { preventScroll: true } );
-			const action = item[ 2 ];
-			if ( action && action.design ) {
-				// Stackable design: the template arrives async (the server may
-				// be sideloading its CDN images), so swap the "/" block for a
-				// clean paragraph now and island the markup when it lands.
-				const p = document.createElement( 'p' );
-				p.appendChild( document.createElement( 'br' ) );
-				target.replaceWith( p );
-				const range = document.createRange();
-				range.selectNodeContents( p );
-				range.collapse( true );
-				const sel = window.getSelection();
-				sel.removeAllRanges();
-				sel.addRange( range );
-				toast( 'Inserting design…' );
-				const source = DESIGN_SOURCES[ action.src ] || DESIGN_SOURCES[ 0 ];
-				api( source.base + '/' + encodeURIComponent( action.design ), { method: 'POST' } )
-					.then( ( r ) => {
-						if ( ! r || ! r.template ) throw new Error( 'Design unavailable' );
-						if ( ! p.isConnected || ! state.editor ) return;
-						const islandEl = insertIsland( p, r.block || 'core/group', r.template );
-						// The inspector's text-run fields are how the design's
-						// placeholder copy gets replaced — open it right away.
-						if ( islandEl ) openInspector( islandEl );
-					} )
-					.catch( ( e ) => toast( 'Design insert failed: ' + e.message, true ) );
-				return;
-			}
-			if ( action && action.pattern ) {
-				// Registered block pattern: same async placeholder dance.
-				const p = document.createElement( 'p' );
-				p.appendChild( document.createElement( 'br' ) );
-				target.replaceWith( p );
-				const range = document.createRange();
-				range.selectNodeContents( p );
-				range.collapse( true );
-				const sel = window.getSelection();
-				sel.removeAllRanges();
-				sel.addRange( range );
-				api( 'minn-admin/v1/pattern?name=' + encodeURIComponent( action.pattern ) )
-					.then( ( r ) => {
-						if ( ! r || ! r.content ) throw new Error( 'Pattern unavailable' );
-						insertPatternIslands( p, r.content );
-					} )
-					.catch( ( e ) => toast( 'Pattern insert failed: ' + e.message, true ) );
-				return;
-			}
-			if ( action && action.block ) {
-				// Insert a custom block as a new island: register the raw markup,
-				// drop the card in place of the "/" block, render the real
-				// preview, and open the inspector to configure it.
-				const ed = state.editor;
-				if ( ! ed ) return;
-				if ( ! ed.islands ) ed.islands = [];
-				const idx = ed.islands.push( action.template ) - 1;
-				target.insertAdjacentHTML( 'beforebegin', islandHtml( idx, action.block, action.template ) );
-				const p = document.createElement( 'p' );
-				p.appendChild( document.createElement( 'br' ) );
-				target.replaceWith( p );
-				const range = document.createRange();
-				range.selectNodeContents( p );
-				range.collapse( true );
-				const sel = window.getSelection();
-				sel.removeAllRanges();
-				sel.addRange( range );
-				const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
-				api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ action.template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
-					.then( ( r ) => {
-						injectPreviewStyles( r && r.styles );
-						const html = r && r.rendered && r.rendered[ 0 ];
-						const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
-						if ( prev && html && html.trim() ) prev.innerHTML = html;
-						updateEditorStats();
-					} )
-					.catch( () => {} );
-				if ( islandEl ) openInspector( islandEl );
-				scheduleAutosave();
-				return;
-			}
-			if ( action && action.html ) {
-				// Replace the "/" block outright so the inserted markup lands at
-				// the top level (never wrapped inside the block's div).
-				target.insertAdjacentHTML( 'beforebegin', action.html );
-				const p = document.createElement( 'p' );
-				p.appendChild( document.createElement( 'br' ) );
-				target.replaceWith( p );
-				const range = document.createRange();
-				range.selectNodeContents( p );
-				range.collapse( true );
-				const sel = window.getSelection();
-				sel.removeAllRanges();
-				sel.addRange( range );
-				scheduleAutosave();
-				return;
-			}
-			// Clear the "/" and put the caret back in the emptied block.
-			target.textContent = '';
-			if ( ! target.childNodes.length ) target.appendChild( document.createElement( 'br' ) );
-			const range = document.createRange();
-			range.selectNodeContents( target );
-			range.collapse( true );
-			const sel = window.getSelection();
-			sel.removeAllRanges();
-			sel.addRange( range );
-			if ( action === 'image' ) insertImage();
-			else if ( action === 'embed' ) {
-				const url = ( prompt( 'Paste the URL to embed (YouTube, tweet, audio…):' ) || '' ).trim();
-				if ( /^https?:\/\/\S+$/.test( url ) ) insertIsland( target.isConnected ? target : null, 'core/embed', embedTemplate( url ) );
-				else if ( url ) toast( 'That doesn’t look like a URL', true );
-			} else if ( action === 'gallery' ) {
-				const anchor = target;
-				openMediaPicker( ( picks ) => {
-					if ( picks && picks.length ) insertIsland( anchor, 'core/gallery', galleryTemplate( picks ) );
-				}, { multi: true } );
-			} else {
-				action();
-				liftNestedLists( body );
-			}
-			scheduleAutosave();
+			runSlashAction( item[ 2 ], target, body, insertImage );
 		};
 
 		const renderItems = () => {
 			// Search-only entries (auto-registered dynamic blocks) are invisible
-			// until typed for — say so, or nobody discovers them.
+			// until typed for — the Browse row is both the hint and the door
+			// to the full picker.
 			const hidden = query ? 0 : items.filter( ( it ) => it[ 3 ] ).length;
 			menu.innerHTML = filtered.map( ( idx, i ) => `
 				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" data-slash="${ idx }">
 					<span class="minn-slash-icon">${ items[ idx ][ 0 ] }</span>${ esc( items[ idx ][ 1 ] ) }${ items[ idx ][ 4 ] ? `<span class="minn-slash-ns">${ esc( items[ idx ][ 4 ] ) }</span>` : '' }
 				</div>` ).join( '' )
-				+ ( hidden ? `<div class="minn-slash-hint">Keep typing to search ${ hidden } more blocks…</div>` : '' );
+				+ ( ! query ? `<div class="minn-slash-hint" data-browse>Browse all${ hidden ? ` — ${ hidden } more blocks…` : '…' }</div>` : '' );
 			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
 				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
 			);
+			const browse = menu.querySelector( '[data-browse]' );
+			if ( browse ) browse.addEventListener( 'mousedown', ( e ) => {
+				e.preventDefault();
+				const t = block;
+				close();
+				openBlockPicker( t );
+			} );
 		};
 
 		// Keep typing after the "/" to narrow the list — "/co" finds Code.
@@ -10733,6 +10919,7 @@
 							<span class="minn-kbd">⌘K</span><span>Command palette · with text selected in the editor: link</span>
 							<span class="minn-kbd">⌘S</span><span>Save, keeping the current status</span>
 							<span class="minn-kbd">⌘⏎</span><span>Publish, Update or Schedule</span>
+							<span class="minn-kbd">⌘/</span><span>Block library: browse every block, design and pattern</span>
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
 							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
@@ -12230,6 +12417,7 @@
 	function renderView() {
 		renderTopbar();
 		closeInspector();
+		closeBlockPicker();
 		hideCodePop();
 		hideTableMenu();
 		hideDatePicker();
@@ -12354,6 +12542,11 @@
 				if ( tab ) tab.click();
 			}
 			// ⌘⇧D toggles focus mode — classic WP's distraction-free lineage.
+			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key === '/' && state.route === 'editor' && state.editor ) {
+				e.preventDefault();
+				openBlockPicker( null );
+				return;
+			}
 			if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'd' && state.route === 'editor' && state.editor ) {
 				e.preventDefault();
 				toggleFocusMode();

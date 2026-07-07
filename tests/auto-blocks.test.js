@@ -61,7 +61,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 			! labels.some( ( l ) => l.includes( 'Report Card' ) || l.includes( 'Featured Product' ) ),
 			labels.join( ', ' ) );
 		const hint = await page.$eval( '.minn-slash-hint', ( e ) => e.textContent ).catch( () => '' );
-		t.check( 'default menu shows keep-typing hint', /more blocks/.test( hint ), hint );
+		t.check( 'default menu shows Browse-all row', /Browse all/.test( hint ), hint );
 
 		// --- Query surfaces an auto block, with its namespace badge ---
 		await page.keyboard.type( 'report card', { delay: 30 } );
