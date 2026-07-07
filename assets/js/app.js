@@ -7321,15 +7321,25 @@
 	 * inside the comment that carries the URL, and wp-image-N classes on
 	 * swapped <img> tags follow the new attachment. */
 	const ISLAND_IMG_RE = /https?:\/\/[^\s"'()\\<>]+\.(?:jpe?g|png|gif|webp|avif)/gi;
-	const islandImageUrls = ( raw ) => [ ...new Set( raw.match( ISLAND_IMG_RE ) || [] ) ];
+	// Server-authored markup (imported patterns, PHP wp_json_encode) may carry
+	// JSON-escaped "https:\/\/…" forms — scan a slash-normalized copy too, so
+	// those images still surface (Kadence's own importer handles the same
+	// variant when it rewrites URLs).
+	const islandImageUrls = ( raw ) => [ ...new Set( [
+		...( raw.match( ISLAND_IMG_RE ) || [] ),
+		...( raw.replace( /\\\//g, '/' ).match( ISLAND_IMG_RE ) || [] ),
+	] ) ];
 	const escRegex = ( s ) => s.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
 	function swapIslandImage( raw, oldUrl, item ) {
 		const newUrl = item && item.url;
 		if ( ! newUrl || newUrl === oldUrl ) return raw;
 		// serializeAttributes-escaped form (URLs containing "--" etc.).
 		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
+		// PHP-side wp_json_encode escapes forward slashes — cover that form too.
+		const slashEsc = ( s ) => s.split( '/' ).join( '\\/' );
 		raw = raw.split( oldUrl ).join( newUrl );
 		if ( encAttr( oldUrl ) !== oldUrl ) raw = raw.split( encAttr( oldUrl ) ).join( encAttr( newUrl ) );
+		raw = raw.split( slashEsc( oldUrl ) ).join( slashEsc( newUrl ) );
 		if ( item.id ) {
 			raw = raw.replace( /<!--(?:(?!-->)[\s\S])*-->/g, ( comment ) => {
 				let out = comment;
