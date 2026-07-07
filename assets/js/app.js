@@ -9651,19 +9651,25 @@
 
 	/* ===== Slash command menu ===== */
 
-	// Stackable design library (adapters/stackable.php): free-tier section
-	// templates scraped from Stackable's own CDN library — full serialized
-	// save() markup, so each design inserts as one valid island. Fetched
-	// lazily, deduped via a shared in-flight promise (the loadPlugins rule).
-	let stackableDesignsPromise = null;
-	function loadStackableDesigns() {
-		if ( ! B.stackable ) return Promise.resolve( [] );
-		if ( ! stackableDesignsPromise ) {
-			stackableDesignsPromise = api( 'minn-admin/v1/stackable/designs' )
+	// Design libraries (adapters/stackable.php, kadence.php): free-tier
+	// section templates scraped from each plugin's own data source — full
+	// serialized save() markup, so every design inserts as one valid island.
+	// One adapter contract per plugin (slim list + insert-ready template with
+	// sideloaded images), gated on a boot flag; lists load lazily, deduped
+	// via shared in-flight promises (the loadPlugins rule).
+	const DESIGN_SOURCES = [
+		{ flag: 'stackable', ns: 'stackable', base: 'minn-admin/v1/stackable/designs' },
+		{ flag: 'kadence', ns: 'kadence', base: 'minn-admin/v1/kadence/designs' },
+	];
+	const designSourcePromises = {};
+	function loadDesigns( src ) {
+		if ( ! B[ src.flag ] ) return Promise.resolve( [] );
+		if ( ! designSourcePromises[ src.ns ] ) {
+			designSourcePromises[ src.ns ] = api( src.base )
 				.then( ( r ) => ( r && Array.isArray( r.designs ) ? r.designs : [] ) )
 				.catch( () => [] );
 		}
-		return stackableDesignsPromise;
+		return designSourcePromises[ src.ns ];
 	}
 
 	// Server-registered block patterns (core, active theme, Otter, Essential
@@ -9747,12 +9753,14 @@
 			( B.insertBlocks || [] ).forEach( ( b ) => {
 				items.push( [ icon( 'block' ), b.title, { block: b.name, template: `<!-- wp:${ b.name } /-->` }, true, b.ns ] );
 			} );
-			// Stackable design library sections — search-only like the auto
-			// blocks ("/pricing", "/hero"…). The list arrives async into the
-			// live items array; applyQuery reads it fresh on every keyup.
-			loadStackableDesigns().then( ( designs ) => {
-				designs.forEach( ( d ) => {
-					items.push( [ icon( 'block' ), d.label, { design: d.id }, true, 'stackable' ] );
+			// Design-library sections (Stackable, Kadence…) — search-only like
+			// the auto blocks ("/pricing", "/hero"…). Lists arrive async into
+			// the live items array; applyQuery reads it fresh on every keyup.
+			DESIGN_SOURCES.forEach( ( src, si ) => {
+				loadDesigns( src ).then( ( designs ) => {
+					designs.forEach( ( d ) => {
+						items.push( [ icon( 'block' ), d.label, { design: d.id, src: si }, true, src.ns ] );
+					} );
 				} );
 			} );
 			// Server-registered block patterns — search-only, filtered by the
@@ -9800,11 +9808,12 @@
 				sel.removeAllRanges();
 				sel.addRange( range );
 				toast( 'Inserting design…' );
-				api( 'minn-admin/v1/stackable/designs/' + encodeURIComponent( action.design ), { method: 'POST' } )
+				const source = DESIGN_SOURCES[ action.src ] || DESIGN_SOURCES[ 0 ];
+				api( source.base + '/' + encodeURIComponent( action.design ), { method: 'POST' } )
 					.then( ( r ) => {
 						if ( ! r || ! r.template ) throw new Error( 'Design unavailable' );
 						if ( ! p.isConnected || ! state.editor ) return;
-						const islandEl = insertIsland( p, r.block || 'stackable/columns', r.template );
+						const islandEl = insertIsland( p, r.block || 'core/group', r.template );
 						// The inspector's text-run fields are how the design's
 						// placeholder copy gets replaced — open it right away.
 						if ( islandEl ) openInspector( islandEl );
