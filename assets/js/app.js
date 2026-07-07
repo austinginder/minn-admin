@@ -9540,6 +9540,44 @@
 		return stackableDesignsPromise;
 	}
 
+	// Server-registered block patterns (core, active theme, Otter, Essential
+	// Blocks…): ready-made valid saved markup with zero adapter code — the
+	// generic counterpart to plugin design libraries (docs/block-suites.md).
+	let blockPatternsPromise = null;
+	function loadBlockPatterns() {
+		if ( ! blockPatternsPromise ) {
+			blockPatternsPromise = api( 'minn-admin/v1/patterns' )
+				.then( ( r ) => ( r && Array.isArray( r.patterns ) ? r.patterns : [] ) )
+				.catch( () => [] );
+		}
+		return blockPatternsPromise;
+	}
+
+	// Insert a pattern's markup as one island per top-level block. Patterns
+	// are ready-made SAVED markup, so islands are the safe landing: sections
+	// stay verbatim (text runs and image swaps still apply), and a multi-root
+	// pattern becomes a run of sibling islands. Stray top-level HTML between
+	// blocks (rare, usually whitespace) is dropped.
+	function insertPatternIslands( anchor, content ) {
+		const body = $( '#minn-editor-body' );
+		const ed = state.editor;
+		if ( ! body || ! ed || ! anchor.isConnected ) return;
+		const segs = tokenizeBlocks( content.trim() );
+		if ( ! segs ) { toast( 'This pattern’s markup can’t be parsed safely', true ); return; }
+		if ( ! ed.islands ) ed.islands = [];
+		let count = 0;
+		segs.forEach( ( seg ) => {
+			if ( seg.type !== 'block' ) return;
+			const idx = ed.islands.push( seg.raw ) - 1;
+			anchor.insertAdjacentHTML( 'beforebegin', islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw ) );
+			count++;
+		} );
+		if ( ! count ) { toast( 'Nothing insertable in this pattern', true ); return; }
+		renderIslandPreviews( body, ed );
+		updateEditorStats();
+		scheduleAutosave();
+	}
+
 	function bindSlashMenu( body, insertImage ) {
 		let menu = null;
 		let block = null;
@@ -9591,6 +9629,15 @@
 					items.push( [ icon( 'block' ), d.label, { design: d.id }, true, 'stackable' ] );
 				} );
 			} );
+			// Server-registered block patterns — search-only, filtered by the
+			// post type being edited when the pattern declares postTypes.
+			loadBlockPatterns().then( ( pats ) => {
+				const type = state.editor && state.editor.type;
+				pats.forEach( ( pt ) => {
+					if ( pt.postTypes && type && ! pt.postTypes.includes( type ) ) return;
+					items.push( [ icon( 'block' ), pt.title, { pattern: pt.name }, true, pt.ns ] );
+				} );
+			} );
 		}
 
 		const close = () => {
@@ -9637,6 +9684,25 @@
 						if ( islandEl ) openInspector( islandEl );
 					} )
 					.catch( ( e ) => toast( 'Design insert failed: ' + e.message, true ) );
+				return;
+			}
+			if ( action && action.pattern ) {
+				// Registered block pattern: same async placeholder dance.
+				const p = document.createElement( 'p' );
+				p.appendChild( document.createElement( 'br' ) );
+				target.replaceWith( p );
+				const range = document.createRange();
+				range.selectNodeContents( p );
+				range.collapse( true );
+				const sel = window.getSelection();
+				sel.removeAllRanges();
+				sel.addRange( range );
+				api( 'minn-admin/v1/pattern?name=' + encodeURIComponent( action.pattern ) )
+					.then( ( r ) => {
+						if ( ! r || ! r.content ) throw new Error( 'Pattern unavailable' );
+						insertPatternIslands( p, r.content );
+					} )
+					.catch( ( e ) => toast( 'Pattern insert failed: ' + e.message, true ) );
 				return;
 			}
 			if ( action && action.block ) {

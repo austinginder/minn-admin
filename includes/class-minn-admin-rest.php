@@ -454,6 +454,38 @@ class Minn_Admin_REST {
 			)
 		);
 
+		register_rest_route(
+			self::NS,
+			'/patterns',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'patterns' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
+		// Single pattern content — `name` is a query arg because pattern names
+		// contain slashes (otter-blocks/aw-hero-split).
+		register_rest_route(
+			self::NS,
+			'/pattern',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'pattern' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'name' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+				),
+			)
+		);
+
 		$permalinks_perm = function () {
 			return current_user_can( 'manage_options' );
 		};
@@ -769,6 +801,51 @@ class Minn_Admin_REST {
 		$out['urls'] = array_values( array_unique( $out['urls'] ) );
 
 		return rest_ensure_response( $out );
+	}
+
+	/**
+	 * Server-registered block patterns, slim: ready-made valid saved markup
+	 * from WP_Block_Patterns_Registry (core, the active theme, Otter,
+	 * Essential Blocks, anything else that registers locally). Contextual
+	 * patterns are excluded — blockTypes-bound ones are query-variation /
+	 * template-part fills, templateTypes ones belong to the site editor.
+	 * postTypes restrictions ride along for the client to filter against the
+	 * post being edited.
+	 */
+	public static function patterns() {
+		$out = array();
+		foreach ( WP_Block_Patterns_Registry::get_instance()->get_all_registered() as $p ) {
+			if ( isset( $p['inserter'] ) && false === $p['inserter'] ) {
+				continue;
+			}
+			if ( empty( $p['content'] ) || empty( $p['name'] ) ) {
+				continue;
+			}
+			if ( ! empty( $p['blockTypes'] ) || ! empty( $p['templateTypes'] ) ) {
+				continue;
+			}
+			$item = array(
+				'name'  => (string) $p['name'],
+				'title' => wp_strip_all_tags( (string) ( $p['title'] ?? $p['name'] ) ),
+				'ns'    => strtok( (string) $p['name'], '/' ),
+			);
+			if ( ! empty( $p['postTypes'] ) ) {
+				$item['postTypes'] = array_values( (array) $p['postTypes'] );
+			}
+			$out[] = $item;
+		}
+		usort( $out, function ( $a, $b ) {
+			return strcasecmp( $a['title'], $b['title'] );
+		} );
+		return rest_ensure_response( array( 'patterns' => $out ) );
+	}
+
+	public static function pattern( WP_REST_Request $request ) {
+		$p = WP_Block_Patterns_Registry::get_instance()->get_registered( (string) $request['name'] );
+		if ( ! $p || empty( $p['content'] ) || ( isset( $p['inserter'] ) && false === $p['inserter'] ) ) {
+			return new WP_Error( 'minn_pattern_not_found', __( 'Pattern not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		return rest_ensure_response( array( 'content' => (string) $p['content'] ) );
 	}
 
 	/**

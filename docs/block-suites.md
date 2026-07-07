@@ -95,10 +95,13 @@ shims — candidates ranked in the roadmap.
 
 ## Roadmap (ranked)
 
-1. **Server-registered patterns in the slash menu** — generic, zero adapter; instantly
-   surfaces Otter's 61 + Essential Blocks' 12 + the active theme's patterns (97 on the
-   lab site) and any other plugin that registers patterns. Multi-root patterns need
-   island-per-top-level-block insertion (13 of Otter's 61 are multi-root).
+1. ~~**Server-registered patterns in the slash menu**~~ — **SHIPPED** (same day):
+   `minn-admin/v1/patterns` (slim list; blockTypes/templateTypes-contextual patterns
+   excluded, postTypes restrictions client-filtered) + `minn-admin/v1/pattern?name=`
+   (content; query arg because names contain slashes). Multi-root patterns insert as
+   one island per top-level block via `insertPatternIslands()`; on reload the load
+   pipeline upgrades simple blocks to editable prose. Lab site surfaces 101 patterns
+   (Otter 61 + theme 40); suite: tests/patterns.test.js.
 2. **Preview CSS shims**: (a) flip `generateblocks_do_inline_styles` during
    render-blocks — one line; (b) Essential Blocks: extract `blockMeta` CSS from the
    markup being rendered; (c) Otter/Spectra per-post CSS: hardest — needs post context
