@@ -4537,6 +4537,7 @@
 		const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ] } ) } )
 			.then( ( r ) => {
+				injectPreviewStyles( r && r.styles );
 				const rendered = r && r.rendered && r.rendered[ 0 ];
 				const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
 				if ( prev && rendered && rendered.trim() ) prev.innerHTML = rendered;
@@ -4603,6 +4604,36 @@
 			} catch ( e ) { /* previews simply stay unstyled */ }
 		} )();
 		return editorStylesPromise;
+	}
+
+	// Lazy-CSS plugins (Stackable's optimizer, Kadence, GenerateBlocks) only
+	// enqueue their stylesheets while one of their blocks RENDERS — the
+	// editor-styles sweep can't see those, so render-blocks reports what the
+	// render enqueued and this injects it, scoped, exactly once per source.
+	const injectedPreviewCss = new Set();
+	async function injectPreviewStyles( styles ) {
+		if ( ! styles ) return;
+		const urls = ( styles.urls || [] ).filter( ( u ) => ! injectedPreviewCss.has( u ) );
+		urls.forEach( ( u ) => injectedPreviewCss.add( u ) );
+		const inlineKey = styles.inline ? 'inline:' + styles.inline.length + ':' + styles.inline.slice( 0, 80 ) : '';
+		const inline = inlineKey && ! injectedPreviewCss.has( inlineKey ) ? styles.inline : '';
+		if ( inlineKey ) injectedPreviewCss.add( inlineKey );
+		if ( ! urls.length && ! inline ) return;
+		try {
+			const texts = await Promise.all( urls.map( ( u ) =>
+				fetch( u, { credentials: 'omit' } )
+					.then( ( x ) => ( x.ok ? x.text() : '' ) )
+					.then( ( css ) => absolutizeCssUrls( css, u ) )
+					.catch( () => '' )
+			) );
+			texts.push( inline );
+			const scoped = scopeCssToPreviews( texts.join( '\n' ) );
+			if ( ! scoped ) return;
+			const el = document.createElement( 'style' );
+			el.className = 'minn-preview-css';
+			el.textContent = scoped;
+			document.head.appendChild( el );
+		} catch ( e ) { /* previews simply stay unstyled */ }
 	}
 
 	// Relative url(...) references break once CSS moves into an inline <style>
@@ -7660,6 +7691,7 @@
 		}
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ] } ) } )
 			.then( ( r ) => {
+				injectPreviewStyles( r && r.styles );
 				const html = r && r.rendered && r.rendered[ 0 ];
 				if ( prev && html && html.trim() ) prev.innerHTML = html;
 				updateEditorStats();
@@ -7861,6 +7893,7 @@
 		const previewEl = document.querySelector( `.minn-island-preview[data-preview="${ insp.idx }"]` );
 		try {
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ] } ) } );
+			injectPreviewStyles( r && r.styles );
 			const html = r && r.rendered && r.rendered[ 0 ];
 			if ( previewEl && html && html.trim() ) previewEl.innerHTML = html;
 			updateEditorStats();
@@ -7884,6 +7917,7 @@
 		const blocks = ed.islands.map( ( r ) => ( r == null ? '' : r ) );
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks } ) } )
 			.then( ( r ) => {
+				injectPreviewStyles( r && r.styles );
 				if ( ! r || ! Array.isArray( r.rendered ) || ! document.contains( body ) ) return;
 				r.rendered.forEach( ( html, i ) => {
 					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
@@ -9593,6 +9627,7 @@
 				const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
 				api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ action.template ] } ) } )
 					.then( ( r ) => {
+						injectPreviewStyles( r && r.styles );
 						const html = r && r.rendered && r.rendered[ 0 ];
 						const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
 						if ( prev && html && html.trim() ) prev.innerHTML = html;

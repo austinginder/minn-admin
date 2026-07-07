@@ -654,7 +654,14 @@ class Minn_Admin_REST {
 		if ( ! is_array( $blocks ) ) {
 			return new WP_Error( 'invalid_blocks', 'Expected an array of block markup strings.', array( 'status' => 400 ) );
 		}
-		$rendered = array();
+		// Plugins with lazy CSS loading (Stackable's optimizer, Kadence,
+		// GenerateBlocks) only enqueue their stylesheets from inside a
+		// render_block filter when one of their blocks actually renders — an
+		// editor-styles sweep can never see those. Diff the style queue across
+		// the render and hand the newly-enqueued styles to the client, which
+		// scopes them into the previews like everything else.
+		$queue_before = wp_styles()->queue;
+		$rendered     = array();
 		foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
 			$html = do_blocks( (string) $raw );
 			// Embed blocks keep a bare URL in their saved HTML; the front end
@@ -665,30 +672,24 @@ class Minn_Admin_REST {
 			}
 			$rendered[] = $html;
 		}
-		return rest_ensure_response( array( 'rendered' => $rendered ) );
+		$out         = array( 'rendered' => $rendered );
+		$new_handles = array_values( array_diff( wp_styles()->queue, $queue_before ) );
+		if ( $new_handles ) {
+			$extra = self::collect_style_urls( $new_handles );
+			if ( $extra['urls'] || $extra['inline'] ) {
+				$out['styles'] = $extra;
+			}
+		}
+		return rest_ensure_response( $out );
 	}
 
 	/**
-	 * The stylesheets that make blocks look like the front end — what the block
-	 * editor loads into its canvas, collected for Minn's island previews: every
-	 * registered block's style handles (resolved with their dependencies and
-	 * wp_add_inline_style extras), the theme's declared editor styles, and the
-	 * theme.json global stylesheet. The client fetches, scopes and injects them.
+	 * Resolve style handles — with their dependency chains, inline
+	 * wp_add_inline_style extras, and versioned URLs — into a fetchable
+	 * { urls, inline } bundle for the client's preview-scoping pipeline.
 	 */
-	public static function editor_styles() {
-		$styles  = wp_styles();
-		$handles = array( 'wp-block-library', 'wp-block-library-theme' );
-		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $block_type ) {
-			foreach ( (array) $block_type->style_handles as $handle ) {
-				$handles[] = $handle;
-			}
-			if ( isset( $block_type->view_style_handles ) ) {
-				foreach ( (array) $block_type->view_style_handles as $handle ) {
-					$handles[] = $handle;
-				}
-			}
-		}
-
+	private static function collect_style_urls( $handles ) {
+		$styles = wp_styles();
 		$urls   = array();
 		$inline = '';
 		$done   = array();
@@ -716,21 +717,58 @@ class Minn_Admin_REST {
 		foreach ( array_unique( $handles ) as $handle ) {
 			$add( $handle );
 		}
+		return array(
+			'urls'   => array_values( array_unique( $urls ) ),
+			'inline' => $inline,
+		);
+	}
+
+	/**
+	 * The stylesheets that make blocks look like the front end — what the block
+	 * editor loads into its canvas, collected for Minn's island previews: every
+	 * registered block's style handles (resolved with their dependencies and
+	 * wp_add_inline_style extras), the theme's declared editor styles, and the
+	 * theme.json global stylesheet. The client fetches, scopes and injects them.
+	 */
+	public static function editor_styles() {
+		// Many plugins register their block styles only on front-end enqueue
+		// hooks (Stackable's ugb-style-css, for one), which never fire during
+		// a REST request — the handles below would resolve to nothing and
+		// previews render unstyled. Fire the registration hooks defensively:
+		// output-buffered (some callbacks echo) and exception-swallowed (a
+		// misbehaving enqueue must never break the editor).
+		ob_start();
+		try {
+			do_action( 'wp_enqueue_scripts' );
+			do_action( 'enqueue_block_assets' );
+		} catch ( \Throwable $e ) {
+			// Best effort — whatever registered before the throw still counts.
+		}
+		ob_end_clean();
+
+		$handles = array( 'wp-block-library', 'wp-block-library-theme' );
+		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $block_type ) {
+			foreach ( (array) $block_type->style_handles as $handle ) {
+				$handles[] = $handle;
+			}
+			if ( isset( $block_type->view_style_handles ) ) {
+				foreach ( (array) $block_type->view_style_handles as $handle ) {
+					$handles[] = $handle;
+				}
+			}
+		}
+		$out = self::collect_style_urls( $handles );
 
 		// The same theme styles the block editor honors (add_editor_style API).
 		foreach ( get_editor_stylesheets() as $url ) {
-			$urls[] = $url;
+			$out['urls'][] = $url;
 		}
 		if ( function_exists( 'wp_get_global_stylesheet' ) ) {
-			$inline .= wp_get_global_stylesheet();
+			$out['inline'] .= wp_get_global_stylesheet();
 		}
+		$out['urls'] = array_values( array_unique( $out['urls'] ) );
 
-		return rest_ensure_response(
-			array(
-				'urls'   => array_values( array_unique( $urls ) ),
-				'inline' => $inline,
-			)
-		);
+		return rest_ensure_response( $out );
 	}
 
 	/**

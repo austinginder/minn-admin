@@ -81,6 +81,13 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 			return p && p.innerHTML.includes( 'stk-block' ) ? p.innerHTML.length : false;
 		}, null, { timeout: 20000 } ).then( ( h ) => h.jsonValue() ).catch( () => 0 );
 		t.check( 'island preview renders real Stackable markup', preview > 200, preview + ' bytes' );
+		// Stackable enqueues its CSS lazily from render_block — render-blocks
+		// reports it and the client scopes it into previews.
+		const cssInjected = await page.waitForFunction( () =>
+			[ ...document.querySelectorAll( 'style.minn-preview-css' ) ]
+				.some( ( s ) => s.textContent.includes( '.minn-island-preview' ) && s.textContent.includes( 'stk-' ) ),
+		null, { timeout: 15000 } ).then( () => true ).catch( () => false );
+		t.check( 'lazy Stackable CSS scoped into previews', cssInjected );
 
 		// --- Inspector text runs: edit the design's placeholder copy ---
 		// The design insert auto-opens the inspector; its generic text-run

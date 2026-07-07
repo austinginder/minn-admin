@@ -10,6 +10,7 @@
 * **Stackable design library in the slash menu:** Stackable's blocks are built in its editor JS, so Minn can't create them one by one; instead, Minn now scrapes what Stackable itself publishes as data. All 107 free designs from the Design Library (Hero, Call to Action, Pricing Table, Testimonials, and more) surface as search-only slash entries; try `/hero` or `/pricing`. Each design inserts as one island of the library's own serialized markup, valid in Gutenberg by construction, with its stock images sideloaded into the media library first. Requires Stackable to be active; nothing loads otherwise.
 
 ### Fixed
+* **Complex-block previews now pick up lazily-loaded styles.** Many block plugins (Stackable with its CSS optimizer, Kadence, GenerateBlocks) only enqueue their stylesheets while one of their blocks renders, so island previews could show bare unstyled markup. The preview renderer now reports what the render enqueued and the editor scopes it in, and the editor-styles sweep also fires the front-end registration hooks it was missing.
 * **New posts no longer degrade to classic mode.** Reloading a brand-new post before its first content save (the title-only autosave draft) reopened it as a classic-mode post permanently, silently hiding embeds, galleries, and custom blocks from the slash menu. Empty posts now open in blocks mode; there is nothing classic mode would need to preserve.
 
 ## **v0.8.0** - July 6, 2026
