@@ -1207,6 +1207,11 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-img-pop { width: 300px; }
 .minn-img-pop .minn-insp-actions .minn-btn-primary { flex: 0 1 auto; }
 .minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
+/* "More settings" collapse for huge block schemas (300+ attr design suites). */
+.minn-insp-more-btn { width: 100%; justify-content: center; margin: 10px 0 2px; }
+/* The explicit display would defeat the hidden attribute — gate on it. */
+.minn-insp-more:not([hidden]) { display: flex; flex-direction: column; }
+.minn-insp-more .minn-insp-filter { margin: 6px 0 4px; }
 /* Inspector "Images" rows — thumbnail + Replace, one per image in the island. */
 .minn-insp-img-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
 .minn-insp-img-row img {
