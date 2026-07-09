@@ -2231,6 +2231,7 @@
 	const PILL_STYLES = {
 		green: [ 'sent', 'active', 'completed', 'publish', 'approved', 'success', 'read' ],
 		red: [ 'failed', 'spam', 'error', 'cancelled' ],
+		// inactive (Code Snippets / GF forms) is a quiet draft-like state.
 		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread' ],
 	};
 
@@ -2274,6 +2275,10 @@
 	function surfaceCell( item, colDef ) {
 		let v = surfaceValue( item, colDef.key );
 		if ( ( v == null || v === '' ) && colDef.altKey ) v = surfaceValue( item, colDef.altKey );
+		// Booleans (Code Snippets' `active`) and string arrays (tags) need a
+		// human form before they hit a pill or text cell.
+		if ( typeof v === 'boolean' ) v = v ? 'active' : 'inactive';
+		if ( Array.isArray( v ) ) v = v.join( ', ' );
 		switch ( colDef.format ) {
 			case 'ago': {
 				// Guard empty and zero timestamps (Redirection stores 0000-00-00
@@ -10863,7 +10868,8 @@
 				<div class="minn-modal${ message ? ' wide' : '' }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( sec && sec.title ? sec.title : s.label ) } #${ esc( String( it.id ) ) }</div>
-						${ it.status ? surfacePill( it.status ) : '' }
+						${ it.status ? surfacePill( it.status )
+							: ( typeof it.active === 'boolean' ? surfacePill( it.active ? 'active' : 'inactive' ) : '' ) }
 						${ canStep ? `<span class="minn-modal-count">${ sctx.idx + 1 } / ${ sctx.items.length }</span>
 						<button class="minn-modal-step" id="minn-surface-prev" type="button" title="Previous (←)"${ sctx.idx <= 0 ? ' disabled' : '' }>‹</button>
 						<button class="minn-modal-step" id="minn-surface-next" type="button" title="Next (→)"${ sctx.idx >= sctx.items.length - 1 ? ' disabled' : '' }>›</button>` : '' }

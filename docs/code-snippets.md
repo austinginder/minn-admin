@@ -115,7 +115,10 @@ One nav item **"Snippets"** when any supported plugin is active (first match win
 
 ## Recommended build order
 
-1. **Code Snippets adapter** — pure descriptor + their REST (fastest ship, cleanest API).
+1. ~~**Code Snippets adapter**~~ — **SHIPPED** (`includes/adapters/code-snippets.php`,
+   suite `tests/code-snippets.test.js`). Pure surface over `code-snippets/v1`:
+   list + status pills (boolean `active` → active/inactive) + detail with code body
+   + Activate/Deactivate (PUT `{active}`) + Delete + Edit deep link. No shim.
 2. **WPCode shim** — coverage for the install-base majority.
 3. **FluentSnippets** — free/file-based alternative; REST already there.
 4. HFCM / Woody only if demand appears after 1–2.
