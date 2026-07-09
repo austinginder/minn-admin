@@ -13,10 +13,11 @@
 2. **Rebuild block support piecemeal in the custom editor.** Chasing full parity with Gutenberg
    (nested layouts, patterns, dynamic blocks) is a treadmill we would never get off.
 3. **Hybrid (chosen).** Minn's editor owns the *writing* use case — the 90% of edits that are
-   paragraphs, headings, lists, quotes, code and images. It reads and writes native Gutenberg
-   block markup for that subset, so nothing is proprietary and every post remains fully editable
-   in Gutenberg at any time. Anything beyond the safe subset (`SIMPLE_BLOCKS` in `app.js`) locks
-   the body read-only and hands off to the real block editor with one click.
+   paragraphs, headings, lists, quotes, pullquotes, details, code and images. It reads and
+   writes native Gutenberg block markup for that subset, so nothing is proprietary and every
+   post remains fully editable in Gutenberg at any time. Anything beyond the safe subset
+   (`SIMPLE_BLOCKS` in `app.js`) becomes an atomic island (or, historically, locked mode) and
+   hands off to the real block editor with one click.
 
 ## Why hybrid wins
 

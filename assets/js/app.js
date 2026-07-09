@@ -4751,7 +4751,7 @@
 	// Blocks whose markup survives a contenteditable round-trip. Anything else
 	// (embeds, columns, custom blocks…) becomes an atomic non-editable island:
 	// preserved byte-for-byte on save, editable text around it.
-	const SIMPLE_BLOCKS = [ 'paragraph', 'heading', 'quote', 'code', 'preformatted', 'verse', 'list', 'list-item', 'image', 'table', 'html', 'separator', 'more', 'video', 'audio' ];
+	const SIMPLE_BLOCKS = [ 'paragraph', 'heading', 'quote', 'pullquote', 'details', 'code', 'preformatted', 'verse', 'list', 'list-item', 'image', 'table', 'html', 'separator', 'more', 'video', 'audio' ];
 
 	// Split raw post content into top-level segments: {type:'block',name,raw}
 	// and {type:'html',raw} (freeform chunks). Returns null when the comment
@@ -4825,7 +4825,7 @@
 	// attribute marker can't be duplicated by contenteditable. This is what lets
 	// real Gutenberg images ({"id":…,"sizeSlug":…}) stay editable instead of
 	// becoming islands.
-	const PASSTHROUGH_BLOCKS = [ 'image', 'table', 'quote', 'separator', 'verse', 'preformatted', 'video', 'audio' ];
+	const PASSTHROUGH_BLOCKS = [ 'image', 'table', 'quote', 'pullquote', 'details', 'separator', 'verse', 'preformatted', 'video', 'audio' ];
 
 	// Attributes JSON from a segment's opening block comment ({} when absent/invalid;
 	// null distinguishes "invalid JSON" for segmentEditable's bail-out).
@@ -4945,6 +4945,28 @@
 			classes.push( 'wp-embed-aspect-16-9', 'wp-has-aspect-ratio' );
 		}
 		return `<!-- wp:embed${ serializeBlockAttrs( attrs ) } -->\n<figure class="${ classes.join( ' ' ) }"><div class="wp-block-embed__wrapper">\n${ url }\n</div></figure>\n<!-- /wp:embed -->`;
+	}
+
+	// Spacer — self-closing-ish island; height lives in attrs + inline style.
+	function spacerTemplate( height ) {
+		const h = ( height && String( height ).trim() ) || '40px';
+		const px = /px$|%$|em$|rem$/.test( h ) ? h : h + 'px';
+		return `<!-- wp:spacer${ serializeBlockAttrs( { height: px } ) } -->\n<div style="height:${ px }" aria-hidden="true" class="wp-block-spacer"></div>\n<!-- /wp:spacer -->`;
+	}
+
+	// File download block. `item` is a media-picker pick { id, url/name }.
+	function fileTemplate( item ) {
+		const id = item.id;
+		const url = item.url || item.source_url || '';
+		const name = item.name || item.title || 'Download';
+		const attrs = { id, href: url };
+		return `<!-- wp:file${ serializeBlockAttrs( attrs ) } -->\n<div class="wp-block-file"><a id="wp-block-file--media-${ id }" href="${ esc( url ) }">${ esc( name ) }</a><a href="${ esc( url ) }" class="wp-block-file__button wp-element-button" download>Download</a></div>\n<!-- /wp:file -->`;
+	}
+
+	// Shortcode island — free text between the comments is the shortcode body.
+	function shortcodeTemplate( code ) {
+		const body = String( code || '' ).trim() || '[]';
+		return `<!-- wp:shortcode -->\n${ body }\n<!-- /wp:shortcode -->`;
 	}
 
 	// Modern (5.9+) gallery: nested core/image blocks inside core/gallery.
@@ -5335,6 +5357,37 @@
 					? paras.map( ( p ) => `<!-- wp:paragraph -->\n${ p.outerHTML }\n<!-- /wp:paragraph -->` ).join( '' )
 					: `<!-- wp:paragraph -->\n<p>${ cite ? '' : el.innerHTML }</p>\n<!-- /wp:paragraph -->`;
 				pushBlock( 'quote', pa, `<blockquote class="${ el.className }">${ inner }${ cite ? cite.outerHTML : '' }</blockquote>` );
+			} else if ( tag === 'figure' && ( el.classList.contains( 'wp-block-pullquote' ) || ( el.querySelector( ':scope > blockquote' ) && ! el.querySelector( 'img, video, audio, table' ) ) ) ) {
+				// Pullquote: figure > blockquote > p + optional cite. Distinct
+				// from image/table figures and from bare blockquote quotes.
+				const pa = takeMinnAttrs( el );
+				el.classList.add( 'wp-block-pullquote' );
+				const bq = el.querySelector( ':scope > blockquote' ) || el;
+				if ( bq !== el && ! bq.querySelector( 'p' ) && bq.textContent.trim() ) {
+					// Flatten bare text into a paragraph so Gutenberg stays happy.
+					const p = document.createElement( 'p' );
+					p.textContent = bq.textContent;
+					const cite = bq.querySelector( ':scope > cite' );
+					bq.textContent = '';
+					bq.appendChild( p );
+					if ( cite ) bq.appendChild( cite );
+				}
+				pushBlock( 'pullquote', pa, el.outerHTML );
+			} else if ( tag === 'details' ) {
+				// Details/summary — native HTML, free typing in summary + body.
+				const pa = takeMinnAttrs( el );
+				el.classList.add( 'wp-block-details' );
+				// Editor-only expanded state must not stick in saved markup.
+				el.removeAttribute( 'open' );
+				// Drop empty body paragraphs; keep at least one so structure is valid.
+				$$( ':scope > p', el ).forEach( ( p ) => {
+					if ( ! p.textContent.trim() && ! p.querySelector( 'img' ) ) p.remove();
+				} );
+				if ( ! el.querySelector( ':scope > p, :scope > ul, :scope > ol, :scope > blockquote' ) ) {
+					const p = document.createElement( 'p' );
+					el.appendChild( p );
+				}
+				pushBlock( 'details', pa, el.outerHTML );
 			} else if ( tag === 'pre' && el.classList.contains( 'wp-block-verse' ) ) {
 				const pa = takeMinnAttrs( el );
 				pushBlock( 'verse', pa, `<pre class="${ el.className }">${ el.innerHTML }</pre>` );
@@ -10281,6 +10334,10 @@
 			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
 			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
 			[ icon( 'quote' ), 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
+			// Pullquote + details are prose-class SIMPLE_BLOCKS — insert as live HTML
+			// so the writer can type immediately (not islands).
+			[ icon( 'quote' ), 'Pullquote', { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ],
+			[ icon( 'list' ), 'Details', { html: '<details class="wp-block-details" open><summary>Details</summary><p><br></p></details>' } ],
 			[ icon( 'braces' ), 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
 			[ icon( 'list' ), 'Bulleted list', () => document.execCommand( 'insertUnorderedList', false, null ) ],
 			[ icon( 'olist' ), 'Numbered list', () => document.execCommand( 'insertOrderedList', false, null ) ],
@@ -10292,6 +10349,9 @@
 			items.push(
 				[ icon( 'play' ), 'Embed — YouTube, tweet, audio…', 'embed' ],
 				[ icon( 'gallery' ), 'Gallery', 'gallery' ],
+				[ icon( 'minus' ), 'Spacer', 'spacer' ],
+				[ icon( 'file' ), 'File', 'file' ],
+				[ icon( 'braces' ), 'Shortcode', 'shortcode' ],
 			);
 		}
 		return items;
@@ -10579,6 +10639,17 @@
 			openMediaPicker( ( picks ) => {
 				if ( picks && picks.length ) insertIsland( anchor, 'core/gallery', galleryTemplate( picks ) );
 			}, { multi: true } );
+		} else if ( action === 'spacer' ) {
+			insertIsland( target.isConnected ? target : null, 'core/spacer', spacerTemplate( '40px' ) );
+		} else if ( action === 'file' ) {
+			const anchor = target;
+			openMediaPicker( ( picks ) => {
+				const item = Array.isArray( picks ) ? picks[ 0 ] : picks;
+				if ( item ) insertIsland( anchor, 'core/file', fileTemplate( item ) );
+			}, { multi: false, any: true } );
+		} else if ( action === 'shortcode' ) {
+			const code = ( prompt( 'Shortcode (include the brackets):', '[]' ) || '' ).trim();
+			if ( code ) insertIsland( target.isConnected ? target : null, 'core/shortcode', shortcodeTemplate( code ) );
 		} else {
 			action();
 			liftNestedLists( body );
@@ -11646,24 +11717,27 @@
 
 		if ( m.type === 'picker' ) {
 			const items = m.items;
+			const any = !! m.any;
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ m.multi ? 'Build a gallery' : 'Insert image' }</div>
+						<div class="minn-modal-title">${ m.multi ? 'Build a gallery' : ( any ? 'Insert file' : 'Insert image' ) }</div>
 						${ m.multi ? '<span class="minn-modal-count" id="minn-picker-count">Pick images in order</span>' : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ B.caps.upload ? `
+					${ B.caps.upload && ! any ? `
 					<div class="minn-picker-drop" id="minn-picker-drop">
 						${ icon( 'img' ) }
 						<span>Drag &amp; drop an image here, or <b>browse</b>${ m.multi ? '' : ' — it\'s used right away' }</span>
 						<input type="file" id="minn-picker-file" accept="image/*" hidden>
 					</div>` : '' }
-					${ items == null ? '<div class="minn-loading">Loading images…</div>' : ! items.length ? '<div class="minn-empty">No images in the library yet.</div>' : `
-					<div class="minn-picker-grid">
-						${ items.map( ( it, i ) => `
-							<div class="minn-picker-item${ m.picked && m.picked.includes( it.id ) ? ' sel' : '' }" data-pick="${ i }" style="background-image:url('${ esc( it.thumb ) }')" title="${ esc( it.name ) }"></div>` ).join( '' ) }
+					${ items == null ? `<div class="minn-loading">Loading ${ any ? 'files' : 'images' }…</div>` : ! items.length ? `<div class="minn-empty">No ${ any ? 'files' : 'images' } in the library yet.</div>` : `
+					<div class="minn-picker-grid${ any ? ' any' : '' }">
+						${ items.map( ( it, i ) => it.thumb
+							? `<div class="minn-picker-item${ m.picked && m.picked.includes( it.id ) ? ' sel' : '' }" data-pick="${ i }" style="background-image:url('${ esc( it.thumb ) }')" title="${ esc( it.name ) }"></div>`
+							: `<div class="minn-picker-item file${ m.picked && m.picked.includes( it.id ) ? ' sel' : '' }" data-pick="${ i }" title="${ esc( it.name ) }"><span class="minn-picker-file-icon">${ icon( 'file' ) }</span><span class="minn-picker-file-name">${ esc( it.name ) }</span></div>`
+						).join( '' ) }
 					</div>` }
 					${ m.multi ? `
 					<div class="minn-modal-actions">
@@ -12881,20 +12955,28 @@
 	}
 
 	function openMediaPicker( callback, opts = {} ) {
-		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [] };
+		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [], any: !! opts.any };
 		renderOverlays();
-		api( 'wp/v2/media?media_type=image&per_page=48&orderby=date&order=desc&_fields=id,title,source_url,media_details,alt_text' )
+		// File block needs any attachment type; image/gallery stay image-only.
+		const typeQ = opts.any ? '' : ( opts.mediaType ? '&media_type=' + encodeURIComponent( opts.mediaType ) : '&media_type=image' );
+		api( 'wp/v2/media?per_page=48&orderby=date&order=desc&_fields=id,title,source_url,media_details,alt_text,mime_type' + typeQ )
 			.then( ( items ) => {
 				if ( ! state.modal || state.modal.type !== 'picker' ) return;
 				state.modal.items = items.map( ( it ) => {
 					const sizes = it.media_details && it.media_details.sizes;
+					const isImg = ( it.mime_type || '' ).startsWith( 'image/' );
 					return {
 						id: it.id,
 						name: decodeEntities( it.title.rendered ),
 						url: it.source_url,
 						alt: it.alt_text || '',
-						thumb: ( sizes && sizes.medium && sizes.medium.source_url ) || it.source_url,
-						large: ( sizes && sizes.large && sizes.large.source_url ) || it.source_url,
+						thumb: isImg
+							? ( ( sizes && sizes.medium && sizes.medium.source_url ) || it.source_url )
+							: '',
+						large: isImg
+							? ( ( sizes && sizes.large && sizes.large.source_url ) || it.source_url )
+							: it.source_url,
+						mime: it.mime_type || '',
 					};
 				} );
 				renderOverlays();
