@@ -1,7 +1,8 @@
 /**
  * Pullquote as editable prose; details/spacer/file/shortcode as slash islands.
- * Details is deliberately NOT free contenteditable — a live <details> traps the
- * caret in Blink and blocks typing after it.
+ * Details is deliberately NOT free top-level contenteditable — a live <details>
+ * traps the caret in Blink. It is an island with interactive expand + in-card
+ * summary/body fields instead.
  */
 const { BASE, launch, login, createPost, deletePost, reporter } = require( './helpers' );
 
@@ -58,7 +59,12 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 			pullEditable: body.querySelector( 'figure.wp-block-pullquote' )?.isContentEditable !== false
 				&& ! body.querySelector( 'figure.wp-block-pullquote' )?.closest( '.minn-block-island' ),
 			detailsIsland: !! detailsIsland,
-			detailsInPreview: !!( detailsIsland && detailsIsland.querySelector( 'details.wp-block-details, summary' ) ),
+			detailsInteractive: !!( detailsIsland && detailsIsland.querySelector( '.minn-details-summary' )
+				&& detailsIsland.querySelector( '.minn-details-body' )
+				&& detailsIsland.querySelector( 'details.minn-details-edit' ) ),
+			detailsSummary: detailsIsland && detailsIsland.querySelector( '.minn-details-summary' )?.value,
+			detailsBody: detailsIsland && ( detailsIsland.querySelector( '.minn-details-body' )?.textContent || '' ).trim(),
+			detailsOpen: !!( detailsIsland && detailsIsland.querySelector( 'details.minn-details-edit' )?.open ),
 			freeTopLevelDetails: freeTopLevel,
 			spacerIsland: islands.some( ( el ) => /spacer/.test( el.dataset.block || '' ) ),
 			shortcodeIsland: islands.some( ( el ) => /shortcode/.test( el.dataset.block || '' ) ),
@@ -69,10 +75,23 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	} );
 	t.check( 'pullquote is live HTML (not island)', shape.pull && shape.pullEditable, JSON.stringify( shape ) );
 	t.check( 'details loads as island (not free)', shape.detailsIsland && ! shape.freeTopLevelDetails, JSON.stringify( shape ) );
-	t.check( 'details island has preview content', shape.detailsInPreview || /Orig summary/.test( shape.text || '' ), JSON.stringify( shape ) );
+	t.check( 'details island is interactive', shape.detailsInteractive, JSON.stringify( shape ) );
+	t.check( 'details summary field has original', shape.detailsSummary === 'Orig summary', JSON.stringify( shape ) );
+	t.check( 'details body field has original', /Orig body/.test( shape.detailsBody || '' ), JSON.stringify( shape ) );
 	t.check( 'spacer loads as island', shape.spacerIsland, JSON.stringify( shape ) );
 	t.check( 'shortcode loads as island', shape.shortcodeIsland, JSON.stringify( shape ) );
 	t.check( 'trailing paragraph after islands', shape.trailingP, JSON.stringify( shape ) );
+
+	// Toggle details closed then open again
+	const toggleOk = await page.evaluate( () => {
+		const det = document.querySelector( '#minn-editor-body .minn-details-island details.minn-details-edit' );
+		if ( ! det ) return { ok: false, reason: 'missing' };
+		det.open = false;
+		const closed = ! det.open;
+		det.open = true;
+		return { ok: closed && det.open, closed, open: det.open };
+	} );
+	t.check( 'details expand/collapse works', toggleOk.ok, JSON.stringify( toggleOk ) );
 
 	// Edit pullquote text (prose path)
 	await page.evaluate( () => {
@@ -81,41 +100,22 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		document.querySelector( '#minn-editor-body' ).dispatchEvent( new Event( 'input', { bubbles: true } ) );
 	} );
 
-	// Edit details via inspector text runs (same chip → popover path as other suites)
-	await page.evaluate( () => {
-		const island = [ ...document.querySelectorAll( '#minn-editor-body .minn-block-island' ) ]
-			.find( ( el ) => /details/.test( el.dataset.block || '' ) );
-		const chip = island && island.querySelector( '.minn-island-chip' );
-		if ( chip ) chip.click();
+	// Edit details in-island (summary input + body contenteditable)
+	const detailsEdited = await page.evaluate( () => {
+		const island = document.querySelector( '#minn-editor-body .minn-details-island' );
+		if ( ! island ) return false;
+		const det = island.querySelector( 'details.minn-details-edit' );
+		if ( det ) det.open = true;
+		const sum = island.querySelector( '.minn-details-summary' );
+		const bodyEl = island.querySelector( '.minn-details-body' );
+		if ( ! sum || ! bodyEl ) return false;
+		sum.value = 'Edited summary';
+		sum.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		bodyEl.innerHTML = '<p>Edited details body</p>';
+		bodyEl.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		return sum.value === 'Edited summary' && /Edited details body/.test( bodyEl.textContent || '' );
 	} );
-	await page.waitForSelector( '.minn-inspector #minn-insp-remove', { timeout: 10000 } );
-	await page.waitForSelector( '.minn-inspector [data-insprun]', { timeout: 10000 } ).catch( () => null );
-	const runCount = await page.$$eval( '.minn-inspector [data-insprun]', ( els ) => els.length ).catch( () => 0 );
-	t.check( 'inspector exposes details text runs', runCount >= 1, 'runs=' + runCount );
-	let detailsEdited = false;
-	if ( runCount >= 1 ) {
-		const runs = await page.$$( '.minn-inspector [data-insprun]' );
-		// Fill summary + body runs by matching original values
-		for ( const input of runs ) {
-			const v = await input.inputValue().catch( () => '' );
-			if ( v === 'Orig summary' ) {
-				await input.fill( 'Edited summary' );
-				detailsEdited = true;
-			} else if ( v === 'Orig body' ) {
-				await input.fill( 'Edited details body' );
-				detailsEdited = true;
-			}
-		}
-		// If values weren't matched (preview timing), just fill first two
-		if ( ! detailsEdited && runs[ 0 ] ) {
-			await runs[ 0 ].fill( 'Edited summary' );
-			if ( runs[ 1 ] ) await runs[ 1 ].fill( 'Edited details body' );
-			detailsEdited = true;
-		}
-		await page.click( '#minn-insp-apply' );
-		await page.waitForTimeout( 800 );
-	}
-	t.check( 'details text runs edited', detailsEdited || runCount === 0, 'edited=' + detailsEdited );
+	t.check( 'details edited in island fields', detailsEdited, 'dom' );
 
 	// Save via keyboard
 	await page.keyboard.down( 'Meta' );
@@ -136,13 +136,8 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'saved has pullquote block', /wp:pullquote/.test( saved || '' ), ( saved || '' ).slice( 0, 400 ) );
 	t.check( 'saved pullquote text', /Edited pullquote line/.test( saved || '' ), ( saved || '' ).slice( 0, 500 ) );
 	t.check( 'saved has details block', /wp:details/.test( saved || '' ), ( saved || '' ).slice( 0, 500 ) );
-	if ( detailsEdited ) {
-		t.check( 'saved details summary', /Edited summary/.test( saved || '' ), ( saved || '' ).slice( 0, 500 ) );
-		t.check( 'saved details body or original', /Edited details body|Orig body/.test( saved || '' ), ( saved || '' ).slice( 0, 500 ) );
-	} else {
-		// Island round-trip keeps original when inspector had no runs
-		t.check( 'saved details keeps original text', /Orig summary/.test( saved || '' ), ( saved || '' ).slice( 0, 500 ) );
-	}
+	t.check( 'saved details summary', /Edited summary/.test( saved || '' ), ( saved || '' ).slice( 0, 500 ) );
+	t.check( 'saved details body', /Edited details body/.test( saved || '' ), ( saved || '' ).slice( 0, 500 ) );
 	t.check( 'saved keeps spacer', /wp:spacer/.test( saved || '' ), ( saved || '' ).slice( 0, 300 ) );
 	t.check( 'saved keeps shortcode', /wp:shortcode/.test( saved || '' ) && /gallery ids/.test( saved || '' ), ( saved || '' ).slice( 0, 400 ) );
 
@@ -197,20 +192,24 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	await page.waitForTimeout( 500 );
 	const detailsSlash = await page.evaluate( () => {
 		const body = document.querySelector( '#minn-editor-body' );
-		const islands = [ ...body.querySelectorAll( '.minn-block-island' ) ].filter( ( el ) => /details/.test( el.dataset.block || '' ) );
+		const islands = [ ...body.querySelectorAll( '.minn-details-island, .minn-block-island' ) ]
+			.filter( ( el ) => /details/.test( el.dataset.block || '' ) );
+		const newest = islands[ islands.length - 1 ];
 		const freeTop = [ ...body.children ].filter( ( el ) => el.tagName === 'DETAILS' );
-		// After insert, a landing <p> should exist so typing continues
 		const last = body.lastElementChild;
-		const canTypeAfter = last && ( last.tagName === 'P' || last.classList.contains( 'minn-block-island' ) === false );
 		return {
 			islandCount: islands.length,
 			freeTop: freeTop.length,
 			lastTag: last && last.tagName,
 			lastIsP: last && last.tagName === 'P',
+			interactive: !!( newest && newest.querySelector( '.minn-details-summary' ) && newest.querySelector( '.minn-details-body' ) ),
+			open: !!( newest && newest.querySelector( 'details.minn-details-edit' )?.open ),
 		};
 	} );
 	t.check( 'slash inserts details island', detailsSlash.islandCount >= 1, JSON.stringify( detailsSlash ) );
 	t.check( 'slash details is not free top-level', detailsSlash.freeTop === 0, JSON.stringify( detailsSlash ) );
+	t.check( 'slash details is interactive', detailsSlash.interactive, JSON.stringify( detailsSlash ) );
+	t.check( 'slash details starts open for typing', detailsSlash.open, JSON.stringify( detailsSlash ) );
 	t.check( 'landing paragraph after details island', detailsSlash.lastIsP, JSON.stringify( detailsSlash ) );
 
 	// Type after the details island — must not trap the caret
