@@ -4762,10 +4762,12 @@
 	}
 
 	// Prefix every selector with the preview scope. html/body/:root map onto
-	// the preview container itself, so theme custom properties, background
-	// and `body:not(.wp-admin)`-style gates land there. @font-face and
-	// @keyframes pass through globally — they define resources, not element
-	// styles. Anything unrecognized is dropped rather than leaked unscoped.
+	// the preview container itself, so theme custom properties and
+	// `body:not(.wp-admin)`-style gates land there. Canvas paints on body
+	// (background) are STRIPPED from shell selectors — otherwise the site's
+	// light page background becomes a white plate behind every island in
+	// dark mode. @font-face and @keyframes pass through globally. Anything
+	// unrecognized is dropped rather than leaked unscoped.
 	function scopeCssToPreviews( cssText ) {
 		let sheet;
 		try {
@@ -4783,6 +4785,19 @@
 			s = s.replace( /&/g, SCOPE );
 			return s.startsWith( SCOPE ) ? s : SCOPE + ' ' + s;
 		} ).join( ', ' );
+		// True when every comma-branch of the scoped selector is the preview
+		// shell itself (body / html / :root alone, not "body .card").
+		const isPreviewShell = ( scoped ) => scoped.split( ',' ).every( ( s ) => {
+			const t = s.trim().replace( /\s+/g, ' ' );
+			return t === SCOPE || /^\.minn-island-preview(?::[\w-]+(?:\([^)]*\))?)*$/.test( t );
+		} );
+		const stripShellCanvas = ( declBlock ) => declBlock
+			// background / background-color / background-image … (not -clip etc. alone)
+			.replace( /(?:^|[;{\s])background(?:-color|-image|-size|-position|-repeat|-attachment|-origin|-clip|-blend-mode)?\s*:[^;}{]+;?/gi, ( m ) => {
+				// Keep the leading delimiter (space/{/;) so the next property stays valid.
+				const lead = m.match( /^[;{\s]/ );
+				return lead ? lead[ 0 ] : '';
+			} );
 		const walk = ( rules ) => {
 			let out = '';
 			Array.from( rules ).forEach( ( rule ) => {
@@ -4790,8 +4805,10 @@
 					// Emit the FULL rule body (not just declarations) so CSS
 					// nesting survives — nested selectors are &-relative, so
 					// scoping the parent selector scopes them too.
-					const body = rule.cssText.slice( rule.cssText.indexOf( '{' ) );
-					out += scopeSelector( rule.selectorText ) + ' ' + body + '\n';
+					let body = rule.cssText.slice( rule.cssText.indexOf( '{' ) );
+					const scoped = scopeSelector( rule.selectorText );
+					if ( isPreviewShell( scoped ) ) body = stripShellCanvas( body );
+					out += scoped + ' ' + body + '\n';
 				} else if ( rule instanceof CSSMediaRule ) {
 					out += '@media ' + rule.conditionText + ' {\n' + walk( rule.cssRules ) + '}\n';
 				} else if ( rule instanceof CSSSupportsRule ) {

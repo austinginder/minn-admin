@@ -1184,9 +1184,51 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
 }
 .minn-island-chip:hover, .minn-block-island:hover .minn-island-chip { color: var(--accent2); border-color: var(--accent); }
-.minn-island-preview { pointer-events: none; opacity: 0.85; overflow: hidden; max-height: 420px; }
+/* No max-height: a hard cap (was 420px) clipped multi-card grids and tall
+   design-library inserts mid-block while the front end looked fine. overflow
+   stays hidden so child border-radii don't paint outside the island.
+   background:transparent — scoped theme CSS maps body { background } onto this
+   container (see scopeCssToPreviews), which painted the site's light page
+   canvas as a white plate behind every island in dark mode. */
+.minn-island-preview { pointer-events: none; opacity: 0.85; overflow: hidden; background: transparent !important; }
 .minn-island-preview > :last-child { margin-bottom: 0; }
 .minn-island-empty { color: var(--text3); font-size: 13.5px; font-style: italic; }
+/* Embed wrappers shouldn't reintroduce a light plate either. */
+.minn-island-preview .wp-block-embed,
+.minn-island-preview .wp-block-embed__wrapper {
+  background: transparent !important;
+}
+
+/* X / Twitter oEmbed fallback. widgets.js never runs on island innerHTML
+   (scripts inserted that way don't execute), so we only ever see the bare
+   <blockquote class="twitter-tweet">. Style it with Minn tokens so dark mode
+   isn't a light card on a black editor. !important beats later-injected
+   scoped theme CSS that maps body:not(.wp-admin) onto the preview. */
+.minn-island-preview blockquote.twitter-tweet {
+  background: var(--panel2) !important;
+  color: var(--text3) !important;
+  border: 1px solid var(--border) !important;
+  border-left: 3px solid #1d9bf0 !important;
+  border-radius: 12px !important;
+  padding: 14px 16px 12px !important;
+  margin: 0 !important;
+  font-style: normal !important;
+  font-family: inherit !important;
+  font-size: 14.5px !important;
+  line-height: 1.55 !important;
+  max-width: 100% !important;
+  box-shadow: none !important;
+}
+.minn-island-preview blockquote.twitter-tweet p {
+  margin: 0 0 0.7em !important;
+  color: var(--text2) !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+.minn-island-preview blockquote.twitter-tweet a {
+  color: var(--accent2) !important;
+  text-decoration: none !important;
+}
 
 /* ===== Block inspector popover ===== */
 .minn-inspector {
