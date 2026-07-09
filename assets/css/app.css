@@ -1397,6 +1397,91 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   font-style: italic;
   pointer-events: none;
 }
+/* Buttons island — label + URL rows, add/remove, new-tab + outline. */
+.minn-buttons-island {
+  user-select: text;
+  cursor: default;
+  padding-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.minn-buttons-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.minn-btn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+.minn-btn-label,
+.minn-btn-url {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+  user-select: text;
+}
+.minn-btn-url {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12.5px;
+}
+.minn-btn-label::placeholder,
+.minn-btn-url::placeholder { color: var(--text3); opacity: 0.85; }
+.minn-btn-label:hover,
+.minn-btn-url:hover { border-color: var(--border2); }
+.minn-btn-label:focus,
+.minn-btn-url:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.minn-btn-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.minn-btn-opt input { accent-color: var(--accent); cursor: pointer; }
+.minn-btn-row-del {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel2);
+  color: var(--text3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.minn-btn-row-del:hover {
+  color: var(--red);
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, var(--panel2));
+}
+.minn-buttons-add {
+  align-self: flex-start;
+}
+@media (max-width: 720px) {
+  .minn-btn-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .minn-btn-row-del { justify-self: end; }
+}
 /* Embed wrappers shouldn't reintroduce a light plate either. */
 .minn-island-preview .wp-block-embed,
 .minn-island-preview .wp-block-embed__wrapper {

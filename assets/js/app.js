@@ -4888,9 +4888,9 @@
 
 	// The contenteditable=false card an island renders as. Shared by content
 	// loading and slash-menu insertion of custom blocks.
-	// Special interactive islands (shortcode, details) host live fields and
-	// commit into ed.islands[idx] on every edit — serialize never reads the
-	// fields themselves, and renderIslandPreviews must not overwrite them.
+	// Special interactive islands (shortcode, details, buttons) host live
+	// fields and commit into ed.islands[idx] on every edit — serialize never
+	// reads the fields themselves, and renderIslandPreviews must not overwrite them.
 	function islandHtml( idx, name, raw ) {
 		const short = String( name || '' ).replace( /^core\//, '' );
 		if ( short === 'shortcode' ) {
@@ -4917,6 +4917,19 @@
 					</summary>
 					<div class="minn-details-body" contenteditable="true" data-details-body="${ idx }" data-placeholder="Write the hidden content…">${ bodyInner }</div>
 				</details>
+			</div>`;
+		}
+		if ( short === 'buttons' ) {
+			// CTA row: label + URL per button, add/remove, optional new-tab + outline.
+			const parts = parseButtonsRaw( raw );
+			const rows = parts.buttons.map( ( b, i ) => buttonsRowHtml( i, b ) ).join( '' );
+			const wrapData = parts.wrapAttrs
+				? ` data-btn-wrap-attrs="${ esc( JSON.stringify( parts.wrapAttrs ) ) }"`
+				: '';
+			return `<div class="minn-block-island minn-buttons-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }" data-btn-stamped="1"${ wrapData }>
+				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ buttons</button>
+				<div class="minn-buttons-rows">${ rows }</div>
+				<button type="button" class="minn-btn-soft minn-buttons-add">+ Add button</button>
 			</div>`;
 		}
 		const inner = stripBlockComments( raw ).trim();
@@ -5036,12 +5049,229 @@
 		} );
 	}
 
-	// Live-field islands (shortcode/details) — never overwrite with a server
-	// render; their DOM is the source of truth until commit.
+	/* ===== Buttons island (core/buttons + nested core/button) ===== */
+
+	function buttonsRowHtml( i, b ) {
+		const btn = b || { text: 'Button', url: '', newTab: false, outline: false, attrs: {} };
+		const attrsJson = esc( JSON.stringify( btn.attrs && typeof btn.attrs === 'object' && ! Array.isArray( btn.attrs ) ? btn.attrs : {} ) );
+		return `<div class="minn-btn-row" data-btn-i="${ i }" data-btn-attrs="${ attrsJson }">
+			<input type="text" class="minn-btn-label" value="${ esc( btn.text || '' ) }" placeholder="Label" spellcheck="true" autocomplete="off">
+			<input type="url" class="minn-btn-url" value="${ esc( btn.url || '' ) }" placeholder="https://…" spellcheck="false" autocomplete="off">
+			<label class="minn-btn-opt" title="Open in a new tab"><input type="checkbox" class="minn-btn-newtab"${ btn.newTab ? ' checked' : '' }><span>New tab</span></label>
+			<label class="minn-btn-opt" title="Outline style"><input type="checkbox" class="minn-btn-outline"${ btn.outline ? ' checked' : '' }><span>Outline</span></label>
+			<button type="button" class="minn-btn-row-del" title="Remove button" aria-label="Remove button">×</button>
+		</div>`;
+	}
+
+	// Parse a core/buttons island into editable rows. Preserves each button's
+	// full attr object so colors/width/etc. survive a label/URL edit.
+	function parseButtonsRaw( raw ) {
+		const str = String( raw || '' );
+		const openM = str.match( /<!--\s*wp:buttons((?:(?!-->)[\s\S])*?)\s*-->/ );
+		let wrapAttrs = null;
+		if ( openM && openM[ 1 ] && openM[ 1 ].trim() ) {
+			try { wrapAttrs = JSON.parse( openM[ 1 ].trim() ); } catch ( e ) { wrapAttrs = null; }
+		}
+		const buttons = [];
+		// (?![a-z-]) so "wp:button" does not match the start of "wp:buttons".
+		const re = /<!--\s*wp:button(?![a-z-])((?:(?!-->)[\s\S])*?)\s*-->\s*([\s\S]*?)<!--\s*\/wp:button\s*-->/g;
+		let m;
+		while ( ( m = re.exec( str ) ) ) {
+			let attrs = {};
+			if ( m[ 1 ] && m[ 1 ].trim() ) {
+				try { attrs = JSON.parse( m[ 1 ].trim() ) || {}; } catch ( e ) { attrs = {}; }
+			}
+			// Attrs may be an empty array from some serializers — normalize.
+			if ( Array.isArray( attrs ) ) attrs = {};
+			const wrap = document.createElement( 'div' );
+			wrap.innerHTML = m[ 2 ];
+			const a = wrap.querySelector( 'a' );
+			const div = wrap.querySelector( '.wp-block-button' ) || wrap.firstElementChild;
+			const text = ( a ? a.textContent : ( attrs.text || 'Button' ) || 'Button' )
+				.replace( /\s+/g, ' ' ).trim() || 'Button';
+			const url = ( a && a.getAttribute( 'href' ) ) || attrs.url || '';
+			const newTab = ( a && a.getAttribute( 'target' ) === '_blank' )
+				|| attrs.linkTarget === '_blank';
+			const classBlob = [ attrs.className || '', div && div.className || '', a && a.className || '' ].join( ' ' );
+			const outline = /\bis-style-outline\b/.test( classBlob );
+			buttons.push( { attrs, text, url, newTab, outline } );
+		}
+		if ( ! buttons.length ) {
+			buttons.push( { attrs: {}, text: 'Button', url: '', newTab: false, outline: false } );
+		}
+		return { wrapAttrs, buttons };
+	}
+
+	function buildButtonsRaw( buttons, wrapAttrs ) {
+		const list = ( buttons && buttons.length )
+			? buttons
+			: [ { attrs: {}, text: 'Button', url: '', newTab: false, outline: false } ];
+		const inner = list.map( ( b ) => {
+			const text = ( b.text != null ? String( b.text ) : 'Button' ).replace( /\s+/g, ' ' ).trim() || 'Button';
+			const url = ( b.url != null ? String( b.url ) : '' ).trim();
+			const attrs = {};
+			// Preserve non-edited attrs (colors, width, style, …).
+			const prev = b.attrs && typeof b.attrs === 'object' && ! Array.isArray( b.attrs ) ? b.attrs : {};
+			Object.keys( prev ).forEach( ( k ) => {
+				if ( [ 'url', 'linkTarget', 'rel', 'className', 'text', 'placeholder' ].includes( k ) ) return;
+				if ( prev[ k ] === '' || prev[ k ] == null ) return;
+				attrs[ k ] = prev[ k ];
+			} );
+			if ( url ) attrs.url = url;
+			if ( b.newTab ) {
+				attrs.linkTarget = '_blank';
+				attrs.rel = ( prev.rel && prev.rel !== 'noreferrer noopener' ) ? prev.rel : 'noreferrer noopener';
+			}
+			// Outline class on the wrapper div (Gutenberg convention).
+			let cn = typeof prev.className === 'string' ? prev.className : '';
+			cn = cn.replace( /\bis-style-outline\b/g, '' ).replace( /\s+/g, ' ' ).trim();
+			if ( b.outline ) cn = ( cn + ' is-style-outline' ).trim();
+			if ( cn ) attrs.className = cn;
+
+			const divClass = cn ? `wp-block-button ${ cn }` : 'wp-block-button';
+			let aOpen = '<a class="wp-block-button__link wp-element-button"';
+			if ( url ) aOpen += ` href="${ esc( url ) }"`;
+			if ( b.newTab ) {
+				aOpen += ` target="_blank" rel="${ esc( attrs.rel || 'noreferrer noopener' ) }"`;
+			}
+			aOpen += '>';
+			return `<!-- wp:button${ serializeBlockAttrs( attrs ) } -->\n`
+				+ `<div class="${ divClass }">${ aOpen }${ esc( text ) }</a></div>\n`
+				+ `<!-- /wp:button -->`;
+		} ).join( '' );
+
+		const wa = wrapAttrs && typeof wrapAttrs === 'object' && ! Array.isArray( wrapAttrs ) ? wrapAttrs : null;
+		const open = wa && Object.keys( wa ).length
+			? `<!-- wp:buttons${ serializeBlockAttrs( wa ) } -->`
+			: '<!-- wp:buttons -->';
+		return `${ open }\n<div class="wp-block-buttons">${ inner }</div>\n<!-- /wp:buttons -->`;
+	}
+
+	function buttonsTemplate( label, url ) {
+		return buildButtonsRaw( [ {
+			attrs: {},
+			text: label != null ? String( label ) : 'Button',
+			url: url != null ? String( url ) : '',
+			newTab: false,
+			outline: false,
+		} ], null );
+	}
+
+	function collectButtonsFromIsland( islandEl ) {
+		if ( ! islandEl ) return [];
+		return $$( '.minn-btn-row', islandEl ).map( ( row ) => {
+			const label = row.querySelector( '.minn-btn-label' );
+			const url = row.querySelector( '.minn-btn-url' );
+			const nt = row.querySelector( '.minn-btn-newtab' );
+			const ol = row.querySelector( '.minn-btn-outline' );
+			// Stash prior attrs on the row so rebuild can preserve colors etc.
+			let attrs = {};
+			try {
+				if ( row.dataset.btnAttrs ) attrs = JSON.parse( row.dataset.btnAttrs ) || {};
+			} catch ( e ) { attrs = {}; }
+			return {
+				attrs,
+				text: label ? label.value : 'Button',
+				url: url ? url.value : '',
+				newTab: !!( nt && nt.checked ),
+				outline: !!( ol && ol.checked ),
+			};
+		} );
+	}
+
+	function stampButtonsRowAttrs( islandEl, parsed ) {
+		// Park each button's original attrs on its row so commits don't drop
+		// colors/width that the form doesn't expose.
+		const rows = $$( '.minn-btn-row', islandEl );
+		( parsed.buttons || [] ).forEach( ( b, i ) => {
+			if ( rows[ i ] ) rows[ i ].dataset.btnAttrs = JSON.stringify( b.attrs || {} );
+		} );
+		if ( parsed.wrapAttrs ) {
+			islandEl.dataset.btnWrapAttrs = JSON.stringify( parsed.wrapAttrs );
+		} else {
+			delete islandEl.dataset.btnWrapAttrs;
+		}
+	}
+
+	function commitButtonsIsland( islandEl, opts ) {
+		const ed = state.editor;
+		if ( ! ed || ! ed.islands || ! islandEl ) return;
+		const idx = parseInt( islandEl.dataset.island, 10 );
+		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		let wrapAttrs = null;
+		try {
+			if ( islandEl.dataset.btnWrapAttrs ) wrapAttrs = JSON.parse( islandEl.dataset.btnWrapAttrs );
+		} catch ( e ) { wrapAttrs = null; }
+		// First commit after load: stamp attrs from current raw if not yet.
+		if ( ! islandEl.dataset.btnStamped ) {
+			const parsed = parseButtonsRaw( ed.islands[ idx ] );
+			stampButtonsRowAttrs( islandEl, parsed );
+			wrapAttrs = parsed.wrapAttrs;
+			islandEl.dataset.btnStamped = '1';
+		}
+		const next = buildButtonsRaw( collectButtonsFromIsland( islandEl ), wrapAttrs );
+		if ( ed.islands[ idx ] === next ) return;
+		ed.islands[ idx ] = next;
+		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
+	}
+
+	function focusButtonsIsland( islandEl ) {
+		const input = islandEl && islandEl.querySelector( '.minn-btn-label' );
+		if ( ! input ) return;
+		requestAnimationFrame( () => {
+			if ( ! input.isConnected ) return;
+			input.focus( { preventScroll: true } );
+			if ( input.value === 'Button' || ! input.value.trim() ) input.select();
+		} );
+	}
+
+	function addButtonsRow( islandEl ) {
+		const box = islandEl && islandEl.querySelector( '.minn-buttons-rows' );
+		if ( ! box ) return;
+		const i = box.children.length;
+		box.insertAdjacentHTML( 'beforeend', buttonsRowHtml( i, {
+			attrs: {}, text: 'Button', url: '', newTab: false, outline: false,
+		} ) );
+		const row = box.lastElementChild;
+		if ( row ) row.dataset.btnAttrs = '{}';
+		commitButtonsIsland( islandEl );
+		const label = row && row.querySelector( '.minn-btn-label' );
+		if ( label ) {
+			label.focus( { preventScroll: true } );
+			label.select();
+		}
+	}
+
+	function removeButtonsRow( row ) {
+		const island = row && row.closest( '.minn-buttons-island' );
+		if ( ! island || ! row ) return;
+		const box = island.querySelector( '.minn-buttons-rows' );
+		if ( ! box ) return;
+		// Keep at least one row so the island never goes empty mid-edit.
+		if ( box.children.length <= 1 ) {
+			const label = row.querySelector( '.minn-btn-label' );
+			const url = row.querySelector( '.minn-btn-url' );
+			const nt = row.querySelector( '.minn-btn-newtab' );
+			const ol = row.querySelector( '.minn-btn-outline' );
+			if ( label ) label.value = 'Button';
+			if ( url ) url.value = '';
+			if ( nt ) nt.checked = false;
+			if ( ol ) ol.checked = false;
+			row.dataset.btnAttrs = '{}';
+			commitButtonsIsland( island );
+			if ( label ) { label.focus( { preventScroll: true } ); label.select(); }
+			return;
+		}
+		row.remove();
+		commitButtonsIsland( island );
+	}
+
+	// Live-field islands (shortcode/details/buttons) — never overwrite with a
+	// server render; their DOM is the source of truth until commit.
 	function isLiveFieldIsland( island ) {
 		if ( ! island ) return false;
 		const b = island.dataset.block || '';
-		return /(?:^|\/)(shortcode|details)$/.test( b );
+		return /(?:^|\/)(shortcode|details|buttons)$/.test( b );
 	}
 
 	/* ===== Embeds & galleries (inserted as islands) ===== */
@@ -5442,6 +5672,7 @@
 		if ( root ) {
 			$$( '.minn-shortcode-input', root ).forEach( ( el ) => commitShortcodeInput( el, { silent: true } ) );
 			$$( '.minn-details-island', root ).forEach( ( el ) => commitDetailsIsland( el, { silent: true } ) );
+			$$( '.minn-buttons-island', root ).forEach( ( el ) => commitButtonsIsland( el, { silent: true } ) );
 		}
 		const out = [];
 		// serializeBlockAttrs applies Gutenberg's comment-safe escaping ("--", <, >, &).
@@ -7654,12 +7885,21 @@
 			const island = chip.closest( '.minn-block-island' );
 			if ( island ) openInspector( island );
 		} );
-		// Live-field islands (shortcode + details): type in the card, commit
-		// into ed.islands (serialize never reads the fields). stopPropagation
-		// so island guards / outer contenteditable don't treat keystrokes as
-		// body edits. Summary input click preventDefault keeps <details>
-		// from toggling while the writer focuses the summary field.
+		// Live-field islands (shortcode + details + buttons): type in the card,
+		// commit into ed.islands (serialize never reads the fields).
+		// stopPropagation so island guards / outer contenteditable don't treat
+		// keystrokes as body edits. Summary input click preventDefault keeps
+		// <details> from toggling while the writer focuses the summary field.
 		if ( ! locked ) {
+			// Stamp buttons-row attrs once the body is live so commits preserve
+			// colors/width from the original markup.
+			$$( '.minn-buttons-island', body ).forEach( ( island ) => {
+				const idx = parseInt( island.dataset.island, 10 );
+				const raw = ed.islands && ed.islands[ idx ];
+				if ( raw == null || island.dataset.btnStamped ) return;
+				stampButtonsRowAttrs( island, parseButtonsRaw( raw ) );
+				island.dataset.btnStamped = '1';
+			} );
 			body.addEventListener( 'input', ( e ) => {
 				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
 				if ( sc ) { commitShortcodeInput( sc ); return; }
@@ -7667,6 +7907,12 @@
 				if ( detField ) {
 					const island = detField.closest( '.minn-details-island' );
 					if ( island ) commitDetailsIsland( island );
+					return;
+				}
+				const btnField = e.target.closest && e.target.closest( '.minn-btn-label, .minn-btn-url' );
+				if ( btnField ) {
+					const island = btnField.closest( '.minn-buttons-island' );
+					if ( island ) commitButtonsIsland( island );
 				}
 			} );
 			body.addEventListener( 'change', ( e ) => {
@@ -7676,6 +7922,12 @@
 				if ( detField ) {
 					const island = detField.closest( '.minn-details-island' );
 					if ( island ) commitDetailsIsland( island );
+					return;
+				}
+				const btnField = e.target.closest && e.target.closest( '.minn-btn-label, .minn-btn-url, .minn-btn-newtab, .minn-btn-outline' );
+				if ( btnField ) {
+					const island = btnField.closest( '.minn-buttons-island' );
+					if ( island ) commitButtonsIsland( island );
 				}
 			} );
 			body.addEventListener( 'keydown', ( e ) => {
@@ -7712,10 +7964,32 @@
 					return;
 				}
 				const detBody = e.target.closest && e.target.closest( '.minn-details-body' );
-				if ( detBody ) e.stopPropagation();
+				if ( detBody ) { e.stopPropagation(); return; }
+				const btnField = e.target.closest && e.target.closest( '.minn-btn-label, .minn-btn-url' );
+				if ( btnField ) {
+					if ( e.key === 'Enter' ) {
+						e.preventDefault();
+						// Label → URL; URL → next row label (or add row).
+						if ( btnField.classList.contains( 'minn-btn-label' ) ) {
+							const url = btnField.closest( '.minn-btn-row' )?.querySelector( '.minn-btn-url' );
+							if ( url ) url.focus();
+						} else {
+							const row = btnField.closest( '.minn-btn-row' );
+							const next = row && row.nextElementSibling;
+							const island = btnField.closest( '.minn-buttons-island' );
+							if ( next ) {
+								const lab = next.querySelector( '.minn-btn-label' );
+								if ( lab ) lab.focus();
+							} else if ( island ) {
+								addButtonsRow( island );
+							}
+						}
+					}
+					e.stopPropagation();
+				}
 			} );
 			body.addEventListener( 'mousedown', ( e ) => {
-				if ( e.target.closest && e.target.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body' ) ) {
+				if ( e.target.closest && e.target.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url, .minn-btn-opt, .minn-buttons-add, .minn-btn-row-del' ) ) {
 					e.stopPropagation();
 				}
 			}, true );
@@ -7723,6 +7997,18 @@
 			body.addEventListener( 'click', ( e ) => {
 				const sum = e.target.closest && e.target.closest( '.minn-details-summary' );
 				if ( sum ) e.preventDefault();
+				const addBtn = e.target.closest && e.target.closest( '.minn-buttons-add' );
+				if ( addBtn ) {
+					e.preventDefault();
+					const island = addBtn.closest( '.minn-buttons-island' );
+					if ( island ) addButtonsRow( island );
+					return;
+				}
+				const delBtn = e.target.closest && e.target.closest( '.minn-btn-row-del' );
+				if ( delBtn ) {
+					e.preventDefault();
+					removeButtonsRow( delBtn.closest( '.minn-btn-row' ) );
+				}
 			}, true );
 		}
 		// Clicking an editable image opens its controls popover.
@@ -10604,6 +10890,9 @@
 			[ icon( 'minus' ), 'Spacer', 'spacer' ],
 			[ icon( 'file' ), 'File', 'file' ],
 			[ icon( 'braces' ), 'Shortcode', 'shortcode' ],
+			// Buttons: live island with label/URL rows (not free HTML — nested
+			// core/button markup must stay in the island raw store).
+			[ icon( 'send' ), 'Buttons', { block: 'core/buttons', template: buttonsTemplate( 'Button', '' ) } ],
 		];
 	}
 
@@ -10875,11 +11164,17 @@
 					updateEditorStats();
 				} )
 				.catch( () => {} );
-			// Details is interactive in-island (expand + type) — focus the
-			// summary instead of opening the inspector. Other custom blocks
-			// still open the inspector to configure attrs.
+			// Live-field islands focus an in-card field instead of opening the
+			// inspector. Other custom blocks still open the inspector.
 			if ( islandEl ) {
-				if ( /(?:^|\/)details$/.test( action.block || '' ) ) focusDetailsIsland( islandEl );
+				const bn = action.block || '';
+				if ( /(?:^|\/)details$/.test( bn ) ) focusDetailsIsland( islandEl );
+				else if ( /(?:^|\/)buttons$/.test( bn ) ) {
+					// Stamp empty attrs for the fresh insert row.
+					stampButtonsRowAttrs( islandEl, parseButtonsRaw( action.template ) );
+					islandEl.dataset.btnStamped = '1';
+					focusButtonsIsland( islandEl );
+				}
 				else openInspector( islandEl );
 			}
 			scheduleAutosave();
