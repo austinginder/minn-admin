@@ -28,7 +28,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['aryo-activity-log'] = array(
 		'label'      => 'Activity Log',
-		'sub'        => 'Activity Log',
+		'family'     => 'activity-log',
+		// Plugin product name is just "Activity Log"; use Aryo so the
+		// family switcher can tell it apart from Simple History / Stream.
+		'sub'        => 'Aryo',
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating above + in the shim.
 		'collection' => array(

@@ -739,7 +739,7 @@
 			const members = surfacesInFamily( surface.family );
 			subEl.innerHTML = `
 				<div class="minn-ac minn-surface-switch" id="minn-surface-switch" title="Switch provider">
-					<input class="minn-input minn-ac-input minn-surface-switch-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Snippet provider">
+					<input class="minn-input minn-ac-input minn-surface-switch-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Provider">
 					<div class="minn-ac-panel" hidden></div>
 				</div>`;
 			bindAutocomplete( $( '#minn-surface-switch' ), members.map( ( m ) => ( {

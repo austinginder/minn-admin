@@ -23,6 +23,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 	$surfaces['simple-301-redirects'] = array(
 		'label'      => 'Redirects',
+		'family'     => 'redirects',
 		'sub'        => 'Simple 301 Redirects',
 		'icon'       => 'shuffle',
 		'cap'        => 'manage_options',
