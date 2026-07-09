@@ -4,9 +4,9 @@
  *
  * The plugin stores redirects as a flat `301_redirects` option — an
  * associative array of `from => to` (all 301s, no per-rule status). No REST
- * surface, so this is a shim: a small collection over that option with list,
- * search, create and delete. The option key IS the source path, so we index
- * rows by a base64 of the source for stable ids.
+ * surface, so this is a shim: list / search / create / edit / delete over that
+ * option. The option key IS the source path, so rows are indexed by a base64
+ * of the source for stable ids (recomputed when the source is renamed).
  *
  * @package minn-admin
  */
@@ -15,6 +15,16 @@ defined( 'ABSPATH' ) || exit;
 
 function minn_admin_s301_active() {
 	return class_exists( 'Simple301Redirects' );
+}
+
+/** Base64url-encode a source path for use as a REST id. */
+function minn_admin_s301_encode_id( $from ) {
+	return rtrim( strtr( base64_encode( (string) $from ), '+/', '-_' ), '=' );
+}
+
+/** Inverse of minn_admin_s301_encode_id. */
+function minn_admin_s301_decode_id( $id ) {
+	return (string) base64_decode( strtr( (string) $id, '-_', '+/' ) );
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
@@ -33,8 +43,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey' => 'total',
 			'search'   => 'search={q}',
 			'columns'  => array(
-				array( 'key' => 'from', 'label' => 'Source', 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => 'Target' ),
+				array( 'key' => 'from', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'to', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
 			),
 			'create'   => array(
 				'label'  => 'Add redirect',
@@ -43,6 +53,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'fields' => array(
 					array( 'key' => 'from', 'label' => 'Source URL', 'mono' => true, 'placeholder' => '/old-page' ),
 					array( 'key' => 'to', 'label' => 'Target URL', 'mono' => true, 'placeholder' => '/new-page or https://…' ),
+				),
+			),
+			'detail'   => array(
+				'skip' => array( 'id' ),
+				'edit' => array(
+					'route'  => 'minn-admin/v1/s301/redirects/{id}',
+					'method' => 'PUT',
+					'fields' => array(
+						array( 'key' => 'from', 'label' => 'Source URL', 'mono' => true ),
+						array( 'key' => 'to', 'label' => 'Target URL', 'mono' => true ),
+					),
 				),
 			),
 			'actions'  => array(
@@ -66,10 +87,6 @@ add_action( 'rest_api_init', function () {
 	$perm = function () {
 		return current_user_can( 'manage_options' );
 	};
-	// The id is the source path, base64url-encoded so it survives the route.
-	$decode = function ( $id ) {
-		return (string) base64_decode( strtr( $id, '-_', '+/' ) );
-	};
 
 	register_rest_route( 'minn-admin/v1', '/s301/redirects', array(
 		array(
@@ -84,7 +101,7 @@ add_action( 'rest_api_init', function () {
 						continue;
 					}
 					$items[] = array(
-						'id'   => rtrim( strtr( base64_encode( (string) $from ), '+/', '-_' ), '=' ),
+						'id'   => minn_admin_s301_encode_id( $from ),
 						'from' => (string) $from,
 						'to'   => (string) $to,
 					);
@@ -107,22 +124,55 @@ add_action( 'rest_api_init', function () {
 				$rows          = (array) get_option( '301_redirects', array() );
 				$rows[ $from ] = $to;
 				update_option( '301_redirects', $rows );
-				return rest_ensure_response( array( 'created' => $from ) );
+				return rest_ensure_response( array(
+					'id'   => minn_admin_s301_encode_id( $from ),
+					'from' => $from,
+					'to'   => $to,
+				) );
 			},
 		),
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/s301/redirects/(?P<id>[A-Za-z0-9\-_]+)', array(
-		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $decode ) {
-			$from = $decode( $request['id'] );
-			$rows = (array) get_option( '301_redirects', array() );
-			if ( isset( $rows[ $from ] ) ) {
-				unset( $rows[ $from ] );
+		array(
+			'methods'             => 'PUT',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$old  = minn_admin_s301_decode_id( $request['id'] );
+				$from = trim( (string) $request['from'] );
+				$to   = trim( (string) $request['to'] );
+				if ( '' === $from || '' === $to ) {
+					return new WP_Error( 'invalid', 'Source and target are both required.', array( 'status' => 400 ) );
+				}
+				$rows = (array) get_option( '301_redirects', array() );
+				if ( ! array_key_exists( $old, $rows ) ) {
+					return new WP_Error( 'not_found', 'Redirect not found.', array( 'status' => 404 ) );
+				}
+				// Renaming the source: drop the old key, write the new one.
+				if ( $old !== $from ) {
+					unset( $rows[ $old ] );
+				}
+				$rows[ $from ] = $to;
 				update_option( '301_redirects', $rows );
-			}
-			return rest_ensure_response( array( 'deleted' => $from ) );
-		},
+				return rest_ensure_response( array(
+					'id'   => minn_admin_s301_encode_id( $from ),
+					'from' => $from,
+					'to'   => $to,
+				) );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$from = minn_admin_s301_decode_id( $request['id'] );
+				$rows = (array) get_option( '301_redirects', array() );
+				if ( isset( $rows[ $from ] ) ) {
+					unset( $rows[ $from ] );
+					update_option( '301_redirects', $rows );
+				}
+				return rest_ensure_response( array( 'deleted' => $from ) );
+			},
+		),
 	) );
 } );
