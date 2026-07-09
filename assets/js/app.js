@@ -2338,13 +2338,15 @@
 				<div></div><div>Name</div><div>Email</div><div>Role</div><div>Registered</div><div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( u ) => `
-				<div class="minn-table-row minn-user-cols" data-user="${ u.id }">
+				<div class="minn-table-row minn-user-cols" data-user="${ u.id }" data-uname="${ esc( u.name || '' ) }" data-uemail="${ esc( u.email || '' ) }" data-uroles="${ esc( ( u.roles || [] ).join( ',' ) ) }">
 					<img class="minn-user-row-avatar" src="${ esc( ( u.avatar_urls && ( u.avatar_urls[ '48' ] || Object.values( u.avatar_urls )[ 0 ] ) ) || '' ) }" alt="">
 					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( u.email || '—' ) }</div>
 					<div class="minn-row-meta">${ esc( ( u.roles || [] ).map( ( r ) => r.charAt( 0 ).toUpperCase() + r.slice( 1 ) ).join( ', ' ) || '—' ) }</div>
 					<div class="minn-row-meta">${ u.registered_date ? timeAgo( u.registered_date ) : '—' }</div>
-					<div class="minn-row-arrow">›</div>
+					<div class="minn-row-actions">
+						<button type="button" class="minn-row-more" title="Actions" aria-label="User actions">⋯</button>
+					</div>
 				</div>` ).join( '' ) : '<div class="minn-empty">No users found.</div>' }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
@@ -2381,13 +2383,139 @@
 		} );
 		const addBtn = $( '#minn-add-user', view );
 		if ( addBtn ) addBtn.addEventListener( 'click', () => openUserModal( null ) );
-		$$( '[data-user]', view ).forEach( ( row ) =>
-			row.addEventListener( 'click', () => {
+
+		const userFromRow = ( row ) => {
+			const id = parseInt( row.dataset.user, 10 );
+			const cached = ( c.items || [] ).find( ( x ) => x.id === id );
+			return cached || {
+				id,
+				name: row.dataset.uname || '',
+				email: row.dataset.uemail || '',
+				roles: ( row.dataset.uroles || '' ).split( ',' ).filter( Boolean ),
+			};
+		};
+		const openUserMenu = ( x, y, u ) => {
+			const isSelf = u.id === B.user.id;
+			const entries = [
+				{ label: 'View user', run: () => openUserModal( u.id ) },
+				...( u.email ? [ {
+					label: 'Copy email',
+					run: async () => {
+						try { await navigator.clipboard.writeText( u.email ); toast( 'Email copied' ); }
+						catch ( err ) { toast( 'Could not copy', true ); }
+					},
+				} ] : [] ),
+				{ heading: 'Email' },
+				...( B.caps.editUsers ? [
+					{
+						label: 'Send password reset',
+						run: () => sendUserPasswordReset( u ),
+					},
+					{
+						label: 'Send email…',
+						run: () => openUserEmailModal( u ),
+					},
+				] : [] ),
+				{ heading: 'Access' },
+				...( B.caps.editUsers || isSelf ? [ {
+					label: isSelf ? 'Sign out other sessions' : 'Sign out all sessions',
+					run: () => killUserSessions( u ),
+				} ] : [] ),
+				{
+					label: 'Edit in wp-admin ↗',
+					href: B.site.adminUrl + 'user-edit.php?user_id=' + u.id,
+				},
+				...( B.caps.deleteUsers && ! isSelf ? [
+					{ heading: 'Danger' },
+					{
+						label: 'Delete user…',
+						danger: true,
+						run: () => openUserDeleteModal( u ),
+					},
+				] : [] ),
+			];
+			openMinnMenu( x, y, entries );
+		};
+
+		$$( '[data-user]', view ).forEach( ( row ) => {
+			row.addEventListener( 'click', ( e ) => {
+				if ( e.target.closest( '.minn-row-more' ) ) return;
 				if ( B.caps.editUsers ) openUserModal( parseInt( row.dataset.user, 10 ) );
 				else window.open( B.site.adminUrl + 'user-edit.php?user_id=' + row.dataset.user, '_blank' );
-			} )
-		);
+			} );
+			row.addEventListener( 'contextmenu', ( e ) => {
+				e.preventDefault();
+				openUserMenu( e.clientX, e.clientY, userFromRow( row ) );
+			} );
+			const more = row.querySelector( '.minn-row-more' );
+			if ( more ) more.addEventListener( 'click', ( e ) => {
+				e.stopPropagation();
+				const r = more.getBoundingClientRect();
+				openUserMenu( r.left - 160, r.bottom + 6, userFromRow( row ) );
+			} );
+		} );
 		bindPager( view, c.page, loadUsers, () => { if ( state.route === 'users' ) renderUsers(); } );
+	}
+
+	async function sendUserPasswordReset( u ) {
+		if ( ! u || ! u.id ) return;
+		if ( ! confirm( `Send a password-reset email to ${ u.name || 'this user' }${ u.email ? ' (' + u.email + ')' : '' }?` ) ) return;
+		try {
+			const r = await api( `minn-admin/v1/users/${ u.id }/reset-password`, { method: 'POST', body: '{}' } );
+			toast( 'Reset email sent' + ( r && r.email ? ' to ' + r.email : '' ) );
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
+	async function killUserSessions( u ) {
+		if ( ! u || ! u.id ) return;
+		const isSelf = u.id === B.user.id;
+		const msg = isSelf
+			? 'Sign out of every other browser and device? This session stays signed in.'
+			: `Sign ${ u.name || 'this user' } out of every active session?`;
+		if ( ! confirm( msg ) ) return;
+		try {
+			await api( `minn-admin/v1/users/${ u.id }/sessions`, { method: 'DELETE' } );
+			toast( isSelf ? 'Other sessions signed out' : 'All sessions signed out' );
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
+	function openUserEmailModal( u ) {
+		state.modal = {
+			type: 'user-email',
+			user: u,
+			subject: '',
+			message: '',
+		};
+		renderOverlays();
+	}
+
+	function openUserDeleteModal( u ) {
+		state.modal = {
+			type: 'user-delete',
+			user: u,
+			reassign: String( B.user.id ),
+			candidates: null,
+		};
+		renderOverlays();
+		// Load a pick list for reassignment (exclude the user being deleted).
+		api( 'wp/v2/users?context=edit&per_page=100&orderby=name&order=asc&_fields=id,name,email' )
+			.then( ( list ) => {
+				if ( state.modal && state.modal.type === 'user-delete' ) {
+					state.modal.candidates = ( Array.isArray( list ) ? list : [] )
+						.filter( ( x ) => x.id !== u.id );
+					renderOverlays();
+				}
+			} )
+			.catch( () => {
+				if ( state.modal && state.modal.type === 'user-delete' ) {
+					state.modal.candidates = [ { id: B.user.id, name: B.user.name || 'You', email: '' } ];
+					renderOverlays();
+				}
+			} );
 	}
 
 	/* ===== Surfaces (declarative third-party plugin views) ===== */
@@ -12271,6 +12399,71 @@
 			</div>`;
 		}
 
+		if ( m.type === 'user-email' ) {
+			const u = m.user || {};
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">Send email</div>
+							<div class="minn-modal-sub">To ${ esc( u.name || 'user' ) }${ u.email ? ' · ' + esc( u.email ) : '' }</div>
+						</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						<div>
+							<div class="minn-field-label">Subject</div>
+							<input class="minn-input" id="minn-ue-subject" value="${ esc( m.subject || '' ) }" placeholder="A note from ${ esc( B.site.name || 'the site' ) }" autocomplete="off">
+						</div>
+						<div>
+							<div class="minn-field-label">Message</div>
+							<textarea class="minn-input minn-insp-textarea" id="minn-ue-message" rows="8" placeholder="Write your message…">${ esc( m.message || '' ) }</textarea>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Sent as a styled Minn Admin HTML email from the site. Blank lines become paragraphs.</div>
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-primary" id="minn-ue-send">${ icon( 'send' ) } Send email</button>
+						<button class="minn-btn-soft" id="minn-modal-cancel">Cancel</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'user-delete' ) {
+			const u = m.user || {};
+			const cands = m.candidates;
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">Delete user</div>
+							<div class="minn-modal-sub">${ esc( u.name || '' ) }${ u.email ? ' · ' + esc( u.email ) : '' }</div>
+						</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-help-body" style="border-bottom:0;padding-bottom:4px;">
+						<p>This permanently removes the account. Content they authored must be reassigned to another user.</p>
+					</div>
+					<div class="minn-modal-form" style="padding-top:0;">
+						<div>
+							<div class="minn-field-label">Reassign content to</div>
+							${ cands == null ? '<div class="minn-loading" style="padding:12px;">Loading users…</div>' : `
+							<div class="minn-ac" id="minn-ud-reassign-ac">
+								<input class="minn-input minn-ac-input" id="minn-ud-reassign" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" placeholder="Search users…">
+								<div class="minn-ac-panel" hidden></div>
+							</div>` }
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-primary danger" id="minn-ud-confirm" ${ cands == null ? 'disabled' : '' }>Delete user</button>
+						<button class="minn-btn-soft" id="minn-modal-cancel">Cancel</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
 		}
@@ -12629,7 +12822,10 @@
 		$( '#minn-modal-overlay' ).addEventListener( 'click', ( e ) => {
 			if ( e.target.id === 'minn-modal-overlay' ) closeModal();
 		} );
-		$( '#minn-modal-close' ).addEventListener( 'click', closeModal );
+		const closeBtn = $( '#minn-modal-close' );
+		if ( closeBtn ) closeBtn.addEventListener( 'click', closeModal );
+		const cancelBtn = $( '#minn-modal-cancel' );
+		if ( cancelBtn ) cancelBtn.addEventListener( 'click', closeModal );
 
 		if ( m.type === 'widget' ) {
 			$( '#minn-widget-save' ).addEventListener( 'click', async ( e ) => {
@@ -13001,6 +13197,68 @@
 
 		if ( m.type === 'user' ) {
 			bindUserModal( m );
+		}
+
+		if ( m.type === 'user-email' ) {
+			const sub = $( '#minn-ue-subject' );
+			const msg = $( '#minn-ue-message' );
+			if ( sub ) setTimeout( () => sub.focus(), 30 );
+			$( '#minn-ue-send' ).addEventListener( 'click', async ( e ) => {
+				const btn = e.currentTarget;
+				const subject = ( sub && sub.value || '' ).trim();
+				const message = ( msg && msg.value || '' ).trim();
+				if ( ! subject || ! message ) {
+					toast( 'Subject and message are required', true );
+					return;
+				}
+				btn.disabled = true;
+				try {
+					const r = await api( `minn-admin/v1/users/${ m.user.id }/email`, {
+						method: 'POST',
+						body: JSON.stringify( { subject, message } ),
+					} );
+					toast( 'Email sent' + ( r && r.email ? ' to ' + r.email : '' ) );
+					closeModal();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+				}
+			} );
+		}
+
+		if ( m.type === 'user-delete' ) {
+			const cands = m.candidates || [];
+			const ac = $( '#minn-ud-reassign-ac' );
+			if ( ac && cands.length ) {
+				bindAutocomplete( ac, cands.map( ( u ) => ( {
+					value: String( u.id ),
+					label: u.name + ( u.email ? ' · ' + u.email : '' ),
+				} ) ), {
+					strict: true,
+					value: m.reassign || String( B.user.id ),
+				} );
+			}
+			const confirmBtn = $( '#minn-ud-confirm' );
+			if ( confirmBtn ) confirmBtn.addEventListener( 'click', async () => {
+				const input = $( '#minn-ud-reassign' );
+				const reassign = ( input && input.dataset.acValue ) || m.reassign || String( B.user.id );
+				if ( ! reassign ) {
+					toast( 'Pick a user to reassign content to', true );
+					return;
+				}
+				if ( ! confirm( `Permanently delete ${ m.user.name || 'this user' }? This cannot be undone.` ) ) return;
+				confirmBtn.disabled = true;
+				try {
+					await api( `wp/v2/users/${ m.user.id }?force=true&reassign=${ encodeURIComponent( reassign ) }`, { method: 'DELETE' } );
+					toast( 'User deleted' );
+					closeModal();
+					state.cache.users = null;
+					if ( state.route === 'users' ) renderUsers();
+				} catch ( err ) {
+					toast( err.message, true );
+					confirmBtn.disabled = false;
+				}
+			} );
 		}
 
 		if ( m.type === 'revision' ) {
@@ -13843,20 +14101,11 @@
 
 		const del = $( '#minn-uf-delete' );
 		if ( del ) {
-			del.addEventListener( 'click', async () => {
-				const name = m.user ? m.user.name : 'this user';
-				if ( ! confirm( `Delete ${ name }? Their content will be reassigned to you.` ) ) return;
-				del.disabled = true;
-				try {
-					await api( `wp/v2/users/${ m.userId }?force=true&reassign=${ B.user.id }`, { method: 'DELETE' } );
-					toast( 'User deleted' );
-					closeModal();
-					state.cache.users = null;
-					if ( state.route === 'users' ) renderUsers();
-				} catch ( err ) {
-					toast( err.message, true );
-					del.disabled = false;
-				}
+			// Same reassign flow as the users row menu.
+			del.addEventListener( 'click', () => {
+				if ( ! m.user ) return;
+				closeModal();
+				openUserDeleteModal( m.user );
 			} );
 		}
 
