@@ -109,13 +109,16 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	const after = await page.$$( '.minn-history-row' );
 	t.check( 'history gains a row after save without refresh', after.length > nBefore, `before=${ nBefore } after=${ after.length }` );
 
+	// Top row is labeled with when the previous version was superseded (the
+	// new save's clock), not when that previous content was written — so a
+	// fresh Update reads "just now", not the older save's age.
 	const whenAfter = await page.evaluate( () => {
 		const el = document.querySelector( '.minn-history-when' );
 		return el ? el.textContent.trim() : '';
 	} );
 	t.check(
-		'post-save revision still reads as recent',
-		/just now|min ago/.test( whenAfter ),
+		'post-save top History row reads as just now (superseded-at label)',
+		whenAfter === 'just now',
 		whenAfter
 	);
 
