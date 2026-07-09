@@ -384,14 +384,11 @@
 	}
 
 	function newContent( type ) {
-		// The current editor's pending autosave must fire before its state goes.
-		if ( state.route === 'editor' ) {
-			flushAutosave();
-			if ( state.editor ) releaseLock( state.editor );
-		}
-		state.editor = null;
-		state.editorId = null;
-		state.editorType = type;
+		// Navigate to a blank editor for `type` (posts/pages/…). Don't pre-clear
+		// editorId/editorType here — onRouteChange compares the previous target
+		// to the new one. Nulling id first made editor/posts/1451 → editor/pages
+		// look like null → null (no change), so the URL updated but the open
+		// post stayed on screen (Austin). Flush + lock release run in onRouteChange.
 		go( 'editor/' + type );
 	}
 
@@ -562,16 +559,26 @@
 	function onRouteChange() {
 		const prevRoute = state.route;
 		const prevId = state.editorId;
+		const prevType = state.editorType;
 		parseHash();
-		// Leaving the editor (or switching posts) fires any pending autosave
-		// now, while the editor DOM is still on screen to serialize — and
-		// hands the edit lock back.
-		if ( prevRoute === 'editor' && ( state.route !== 'editor' || prevId !== state.editorId ) ) {
+		// Editor "target" = type + id. New Post/Page sets id null and may only
+		// change type (posts → pages); id-only comparison missed that and also
+		// missed newContent() pre-clearing id before go (fixed above).
+		const editorTargetChanged = prevRoute === 'editor' && state.route === 'editor'
+			&& ( prevId !== state.editorId || prevType !== state.editorType );
+		// Leaving the editor (or switching posts/types) fires any pending
+		// autosave now, while the editor DOM is still on screen to serialize —
+		// and hands the edit lock back.
+		if ( prevRoute === 'editor' && ( state.route !== 'editor' || editorTargetChanged ) ) {
 			flushAutosave();
 			if ( state.editor ) releaseLock( state.editor );
 		}
-		if ( state.route !== 'editor' || prevRoute !== 'editor' || prevId !== state.editorId ) {
-			if ( state.route === 'editor' && prevRoute !== 'editor' ) state.editor = null;
+		if ( state.route !== 'editor' || prevRoute !== 'editor' || editorTargetChanged ) {
+			// Drop the loaded post when entering the editor or changing target
+			// so renderEditor/loadEditor builds the blank (or next) document.
+			if ( state.route === 'editor' && ( prevRoute !== 'editor' || editorTargetChanged ) ) {
+				state.editor = null;
+			}
 			renderView();
 		}
 	}
