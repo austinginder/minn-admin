@@ -113,15 +113,26 @@ One nav item **"Snippets"** when any supported plugin is active (first match win
 
 ---
 
-## Recommended build order
+## Shipped adapters (same “Snippets” nav label, plugin badge as `sub`)
 
-1. ~~**Code Snippets adapter**~~ — **SHIPPED** (`includes/adapters/code-snippets.php`,
-   suite `tests/code-snippets.test.js`). Pure surface over `code-snippets/v1`:
-   list + status pills (boolean `active` → active/inactive) + detail with code body
-   + Activate/Deactivate (PUT `{active}`) + Delete + Edit deep link. No shim.
-2. **WPCode shim** — coverage for the install-base majority.
-3. **FluentSnippets** — free/file-based alternative; REST already there.
-4. HFCM / Woody only if demand appears after 1–2.
+Same convention as Redirects / Activity Log: each plugin registers its own surface
+id; when several are active the sidebar shows multiple Snippets entries with
+different badges (Code Snippets / WPCode / FluentSnippets). Dogfood one at a time
+on production sites if you want a single nav item.
+
+1. ~~**Code Snippets**~~ — **SHIPPED** (`adapters/code-snippets.php`, pure
+   `code-snippets/v1`). Suite: `tests/code-snippets.test.js`.
+2. ~~**WPCode**~~ — **SHIPPED** (`adapters/wpcode.php`, shim
+   `minn-admin/v1/wpcode/snippets` over `WPCode_Snippet`). List/create/edit/toggle/delete.
+3. ~~**FluentSnippets**~~ — **SHIPPED** (`adapters/fluent-snippets.php`, shim
+   `minn-admin/v1/fluent-snippets` normalizing file_name → `id` and draft/published →
+   `active`). Suite: `tests/snippets-adapters.test.js` covers both shims.
+4. **HFCM / Woody** — not yet. HFCM is scripts-only (html/js/css); Woody activate
+   fatals on current lab.
+
+Shared UX: name, scope column, active pill, priority, modified; wide detail form
+(name/desc/code/scope or type·location/priority/tags); Activate/Deactivate; Delete;
+Edit ↗ into the plugin’s own admin.
 
 ## Lab housekeeping
 

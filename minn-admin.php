@@ -40,6 +40,8 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/wp-activity-log.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/aryo-activity-log.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/stream.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/code-snippets.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/wpcode.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-snippets.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/redirection.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/safe-redirect-manager.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/simple-301-redirects.php';
