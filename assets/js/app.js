@@ -75,6 +75,7 @@
 
 	function timeAgo( dateStr ) {
 		const d = parseWpDate( dateStr );
+		if ( isNaN( d.getTime() ) ) return '—';
 		const diff = Math.round( ( Date.now() - d.getTime() ) / 1000 );
 		// Future dates (scheduled posts) mirror the past buckets as "in …".
 		if ( diff < -30 ) {
@@ -90,6 +91,19 @@
 		if ( s < 86400 ) return Math.round( s / 3600 ) + 'h ago';
 		if ( s < 86400 * 7 ) return Math.round( s / 86400 ) + 'd ago';
 		return d.toLocaleDateString( undefined, { month: 'short', day: 'numeric' } );
+	}
+
+	// timeAgo for surface/list cells. Keys ending in _gmt (Simple History's
+	// date_gmt) are UTC without a zone suffix — parseWpDate would otherwise
+	// treat them as site-local and shift by gmt_offset ("in 4h" on EDT).
+	function timeAgoForKey( dateStr, key ) {
+		let s = String( dateStr == null ? '' : dateStr ).trim();
+		if ( ! s || /^0{4}/.test( s ) ) return '—';
+		if ( /_gmt$/i.test( key || '' ) && ! /Z|[+-]\d{2}:?\d{2}$/.test( s ) ) {
+			s = s.replace( ' ', 'T' );
+			if ( ! /Z|[+-]\d{2}:?\d{2}$/.test( s ) ) s += 'Z';
+		}
+		return timeAgo( s );
 	}
 
 	function fmtBytes( n ) {
@@ -2600,22 +2614,16 @@
 		}
 
 		// --- When ---
-		let when = it.date_gmt || it.date_local || it.date || '';
+		// Prefer site-local when both exist (SH); only fall back to *_gmt with
+		// an explicit UTC key so parseWpDate does not shift by gmt_offset.
+		let when = it.date_local || it.date || it.date_gmt || '';
+		let whenKey = it.date_local || it.date ? 'date' : ( it.date_gmt ? 'date_gmt' : '' );
 		if ( ! when && groups.length ) {
 			const wr = groups.flatMap( ( g ) => g.rows || [] )
 				.find( ( r ) => /when|date|time/i.test( r.label || '' ) );
-			if ( wr ) when = wr.value;
+			if ( wr ) { when = wr.value; whenKey = /gmt/i.test( wr.label || '' ) ? 'date_gmt' : 'date'; }
 		}
-		let whenLabel = '';
-		if ( when ) {
-			// Prefer relative + absolute when we can parse an ISO/GMT string.
-			const iso = String( when ).includes( 'T' ) || /^\d{4}-\d{2}-\d{2} /.test( String( when ) )
-				? String( when ).replace( ' ', 'T' ) + ( /Z|[+-]\d{2}:?\d{2}$/.test( String( when ) ) ? '' : ( String( when ).includes( 'T' ) || String( when ).includes( ' ' ) ? 'Z' : '' ) )
-				: String( when );
-			const ago = timeAgo( iso );
-			whenLabel = ago && ago !== '—' ? ago : String( when );
-			// timeAgo returns relative; keep a readable absolute as title.
-		}
+		const whenLabel = when ? timeAgoForKey( when, whenKey ) : '';
 
 		// --- Short context fields (not the message / who / when) ---
 		const fieldRows = [];
@@ -2812,10 +2820,11 @@
 		switch ( colDef.format ) {
 			case 'ago': {
 				// Guard empty and zero timestamps (Redirection stores 0000-00-00
-				// for a never-hit redirect) so they read "—" not "Invalid Date".
+				// for a never-hit redirect). Pass the field key so *_gmt values
+				// are parsed as UTC (otherwise site offset makes them "in Nh").
 				const raw = String( v || '' );
-				const t = raw && ! /^0{4}/.test( raw ) ? Date.parse( raw.replace( ' ', 'T' ) ) : NaN;
-				return `<div class="minn-row-meta minn-cell-clip">${ isNaN( t ) ? '—' : timeAgo( raw.replace( ' ', 'T' ) ) }</div>`;
+				const label = timeAgoForKey( raw, colDef.key || colDef.altKey || '' );
+				return `<div class="minn-row-meta minn-cell-clip" title="${ esc( raw ) }">${ esc( label ) }</div>`;
 			}
 			case 'pill': return `<div>${ surfacePill( v ) }</div>`;
 			case 'title': return `<div class="minn-row-title minn-cell-clip">${ esc( stripTags( String( v || '—' ) ) ) }</div>`;

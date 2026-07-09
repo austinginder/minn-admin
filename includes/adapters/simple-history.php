@@ -39,7 +39,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'message', 'label' => 'Event', 'format' => 'title' ),
 				array( 'key' => 'initiator_data.user_login', 'altKey' => 'initiator', 'label' => 'Who' ),
 				array( 'key' => 'loglevel', 'label' => 'Level', 'format' => 'pill' ),
-				array( 'key' => 'date_gmt', 'label' => 'When', 'format' => 'ago' ),
+				// date_local is site-local (matches parseWpDate). date_gmt
+				// without a zone suffix used to render "in 4h" on EDT.
+				array( 'key' => 'date_local', 'altKey' => 'date_gmt', 'label' => 'When', 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'skip' => array(
