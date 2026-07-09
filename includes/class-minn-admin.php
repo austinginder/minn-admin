@@ -424,39 +424,134 @@ class Minn_Admin {
 	/**
 	 * Whether comments are a usable feature on this site.
 	 *
-	 * Plugins like Disable Comments strip post_type_support( 'comments' )
-	 * from every type (or set "remove everywhere"), leaving the
-	 * moderate_comments capability intact but the Comments screen empty.
-	 * Return false when no type still accepts comments, or when Disable
-	 * Comments is in everywhere mode.
+	 * Detects the *mechanisms* plugins and snippets use to kill comments,
+	 * rather than naming a single plugin. Common kill methods converge on:
+	 *
+	 *  1. remove_post_type_support( …, 'comments' ) on every type
+	 *     (Disable Comments "everywhere", Completely Disable Comments,
+	 *     functions.php snippets, host hardening).
+	 *  2. add_filter( 'comments_open', '__return_false' ) (and equivalent
+	 *     always-false closers) so even open posts never accept replies.
+	 *  3. Stripping the REST comments routes so the admin list can't load.
+	 *  4. A DISABLE_COMMENTS constant (wp-config / mu-plugin kill-switch).
+	 *
+	 * Settings → Discussion "Allow comments on new posts" alone does NOT
+	 * count as disabled — existing posts still need moderation.
 	 *
 	 * @return bool
 	 */
 	public static function comments_enabled() {
-		// Disable Comments "everywhere" removes support + menus; check first.
-		if ( class_exists( 'Disable_Comments', false ) ) {
-			$opts = get_option( 'disable_comments_options', array() );
-			if ( is_array( $opts ) && ! empty( $opts['remove_everywhere'] ) ) {
-				return false;
+		// 0. Explicit constant kill-switch (many mu-plugins / host configs).
+		if ( defined( 'DISABLE_COMMENTS' ) && DISABLE_COMMENTS ) {
+			return self::filter_comments_enabled( false, array() );
+		}
+
+		// 1. Post-type support stripped for every UI type.
+		//    This is what "remove everywhere" plugins actually do under the hood.
+		$types = array();
+		foreach ( get_post_types_by_support( 'comments' ) as $type ) {
+			$obj = get_post_type_object( $type );
+			// Public or show_ui — skip purely internal types that happen to
+			// inherit support (and attachment, which almost never means
+			// "site comments" for moderation UI purposes).
+			if ( ! $obj || ( ! $obj->public && ! $obj->show_ui ) ) {
+				continue;
+			}
+			if ( 'attachment' === $type ) {
+				continue;
+			}
+			$types[] = $type;
+		}
+		if ( ! $types ) {
+			return self::filter_comments_enabled( false, array() );
+		}
+
+		// 2. REST route gone — Minn's list is wp/v2/comments; no route, no UI.
+		if ( function_exists( 'rest_get_server' ) ) {
+			$routes = rest_get_server()->get_routes();
+			if ( empty( $routes['/wp/v2/comments'] ) ) {
+				return self::filter_comments_enabled( false, $types );
 			}
 		}
-		// Explicit kill-switch some setups define in wp-config.
-		if ( defined( 'DISABLE_COMMENTS' ) && DISABLE_COMMENTS ) {
-			return false;
+
+		// 3. Hard-close via comments_open filter (support left in place).
+		if ( self::comments_hard_closed( $types ) ) {
+			return self::filter_comments_enabled( false, $types );
 		}
 
-		// Any post type that still declares comment support?
-		$types = get_post_types_by_support( 'comments' );
-		if ( empty( $types ) ) {
-			return false;
+		return self::filter_comments_enabled( true, $types );
+	}
+
+	/**
+	 * True when comments_open is forced closed site-wide despite support.
+	 *
+	 * @param string[] $types Post types that still support comments.
+	 * @return bool
+	 */
+	private static function comments_hard_closed( array $types ) {
+		// Sitewide always-false filters (the classic snippet pattern) answer
+		// false even with a dummy post id. Per-type closers usually leave
+		// post_id 0 alone, so this is a low-false-positive first check.
+		if ( ! apply_filters( 'comments_open', true, 0 ) ) {
+			return true;
 		}
 
+		// Post-level: among recent published posts that *should* accept
+		// comments (type supports + comment_status open), does comments_open()
+		// still return true for any of them? If every one is filtered closed,
+		// the feature is effectively off.
+		$q = new WP_Query(
+			array(
+				'post_type'              => $types,
+				'post_status'            => 'publish',
+				'posts_per_page'         => 10,
+				'orderby'                => 'date',
+				'order'                  => 'DESC',
+				'ignore_sticky_posts'    => true,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			)
+		);
+
+		$saw_candidate = false;
+		foreach ( $q->posts as $post ) {
+			if ( 'open' !== $post->comment_status ) {
+				continue;
+			}
+			if ( ! post_type_supports( $post->post_type, 'comments' ) ) {
+				continue;
+			}
+			$saw_candidate = true;
+			if ( comments_open( $post ) ) {
+				return false; // at least one post is truly open
+			}
+		}
+
+		// Candidates existed but all failed comments_open → hard-closed.
+		if ( $saw_candidate ) {
+			return true;
+		}
+
+		// No open-status posts in the sample (everything closed in Discussion
+		// bulk, or a brand-new site). Support remains and the filter didn't
+		// force-close post_id 0, so treat as enabled — moderation of any
+		// existing comments still makes sense, and new posts can re-open.
+		return false;
+	}
+
+	/**
+	 * @param bool     $enabled Detection result.
+	 * @param string[] $types   Types that still support comments.
+	 * @return bool
+	 */
+	private static function filter_comments_enabled( $enabled, array $types ) {
 		/**
 		 * Filter whether Minn treats comments as enabled (nav, palette, badge).
 		 *
 		 * @param bool     $enabled Default detection result.
 		 * @param string[] $types   Post types that still support comments.
 		 */
-		return (bool) apply_filters( 'minn_admin_comments_enabled', true, $types );
+		return (bool) apply_filters( 'minn_admin_comments_enabled', $enabled, $types );
 	}
 }
