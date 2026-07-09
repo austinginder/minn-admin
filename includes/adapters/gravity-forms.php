@@ -32,6 +32,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['gravity-forms'] = array(
 		'label'      => 'Forms',
+		// Shared with Fluent Forms / Elementor / WPForms adapters when present;
+		// topbar becomes a provider switcher when family size > 1.
+		'family'     => 'forms',
 		'sub'        => 'Gravity Forms',
 		'icon'       => 'inbox',
 		'cap'        => 'read',
