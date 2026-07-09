@@ -56,8 +56,25 @@
 		};
 	}
 
+	// WP REST site-local timestamps (date, modified, comment date, …) have no
+	// zone suffix. Appending Z treated them as UTC and skewed every "time ago"
+	// label by the site's gmt_offset (America/New_York → everything looked 4h
+	// old). Absolute ISO strings (with Z/offset) and our own toISOString()
+	// outputs pass through unchanged.
+	function parseWpDate( dateStr ) {
+		if ( dateStr == null || dateStr === '' ) return new Date( NaN );
+		const s = String( dateStr );
+		if ( /Z|[+-]\d\d:?\d\d$/.test( s ) ) return new Date( s );
+		const off = ( typeof B.gmtOffset === 'number' ) ? B.gmtOffset : 0;
+		const sign = off >= 0 ? '+' : '-';
+		const abs = Math.abs( off );
+		const hh = String( Math.floor( abs ) ).padStart( 2, '0' );
+		const mm = String( Math.round( ( abs % 1 ) * 60 ) ).padStart( 2, '0' );
+		return new Date( s + sign + hh + ':' + mm );
+	}
+
 	function timeAgo( dateStr ) {
-		const d = new Date( dateStr + ( /Z|[+-]\d\d:?\d\d$/.test( dateStr ) ? '' : 'Z' ) );
+		const d = parseWpDate( dateStr );
 		const diff = Math.round( ( Date.now() - d.getTime() ) / 1000 );
 		// Future dates (scheduled posts) mirror the past buckets as "in …".
 		if ( diff < -30 ) {
@@ -1067,7 +1084,7 @@
 					</div>
 					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span></div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
-					<div class="minn-row-meta" title="${ esc( new Date( p.date + ( /Z|[+-]\d\d:?\d\d$/.test( p.date ) ? '' : 'Z' ) ).toLocaleString() ) }">${ timeAgo( p.date ) }</div>
+					<div class="minn-row-meta" title="${ esc( parseWpDate( p.date ).toLocaleString() ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
 					<div class="minn-row-actions">
 						<button class="minn-btn-soft" data-restore="${ p.id }">Restore</button>
@@ -5275,29 +5292,7 @@
 			} catch ( e ) {}
 			loadEditorPanels( state.editor, p );
 			loadPageAttrs( state.editor );
-			// Revision history (types without revision support 404 — that's fine).
-			// Revisions expose an `author` ID but no author link, so _embed can't
-			// resolve names — look them up via the users endpoint instead.
-			api( `wp/v2/${ state.editorType }/${ p.id }/revisions?per_page=6&_fields=id,modified,author` )
-				.then( async ( revs ) => {
-					const names = {};
-					if ( B.user && B.user.id ) names[ B.user.id ] = B.user.name;
-					const unknown = [ ...new Set( revs.map( ( r ) => r.author ).filter( ( a ) => a > 0 && ! names[ a ] ) ) ];
-					if ( unknown.length ) {
-						await api( `wp/v2/users?include=${ unknown.join( ',' ) }&_fields=id,name` )
-							.then( ( users ) => ( Array.isArray( users ) ? users : [] ).forEach( ( u ) => { names[ u.id ] = u.name; } ) )
-							.catch( () => {} );
-					}
-					if ( state.editor && state.editor.id === p.id ) {
-						state.editor.revisions = revs.map( ( r ) => ( {
-							id: r.id,
-							modified: r.modified,
-							author: names[ r.author ] || '',
-						} ) );
-						if ( state.route === 'editor' ) renderEditorSide();
-					}
-				} )
-				.catch( () => {} );
+			loadEditorRevisions( state.editor );
 			// A crash or an abandoned session leaves an autosave revision newer
 			// than the post — surface it instead of silently forgetting it.
 			api( `wp/v2/${ state.editorType }/${ p.id }/autosaves?_fields=id,modified` )
@@ -5513,12 +5508,47 @@
 			ed.stickyDirty = false;
 			ed.visibilityDirty = false;
 			state.cache.content = null;
+			// Manual save/update/publish creates a WP revision — refresh the
+			// History card so it appears without a full page reload.
+			if ( ed.id ) loadEditorRevisions( ed );
 			renderEditorSide();
 			renderTopbar();
 		} catch ( e ) {
 			toast( e.message, true );
 		}
 		state.saving = false;
+	}
+
+	// Revision history for the History sidebar card. Types without revision
+	// support 404 — that's fine. Revisions expose an `author` ID but no
+	// author link, so _embed can't resolve names — look them up via users.
+	// Called on editor open AND after each successful save so new revisions
+	// land without a refresh.
+	function loadEditorRevisions( ed ) {
+		if ( ! ed || ! ed.id ) return Promise.resolve();
+		const type = ed.type;
+		const id = ed.id;
+		return api( `wp/v2/${ type }/${ id }/revisions?per_page=6&_fields=id,modified,author` )
+			.then( async ( revs ) => {
+				if ( ! Array.isArray( revs ) ) revs = [];
+				const names = {};
+				if ( B.user && B.user.id ) names[ B.user.id ] = B.user.name;
+				const unknown = [ ...new Set( revs.map( ( r ) => r.author ).filter( ( a ) => a > 0 && ! names[ a ] ) ) ];
+				if ( unknown.length ) {
+					await api( `wp/v2/users?include=${ unknown.join( ',' ) }&_fields=id,name` )
+						.then( ( users ) => ( Array.isArray( users ) ? users : [] ).forEach( ( u ) => { names[ u.id ] = u.name; } ) )
+						.catch( () => {} );
+				}
+				if ( state.editor && state.editor.id === id && state.editor.type === type ) {
+					state.editor.revisions = revs.map( ( r ) => ( {
+						id: r.id,
+						modified: r.modified,
+						author: names[ r.author ] || '',
+					} ) );
+					if ( state.route === 'editor' ) renderEditorSide();
+				}
+			} )
+			.catch( () => {} );
 	}
 
 	// Classic-mode save: innerHTML, but with highlight spans stripped from code
