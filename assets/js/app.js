@@ -5559,6 +5559,31 @@
 		state.saving = false;
 	}
 
+	// History card rows from WP's newest-first revisions list.
+	//
+	// WP stores a revision of the post AFTER each save, so revs[0] is always a
+	// mirror of the live post when the editor is clean — hide it (identical
+	// diffs). When dirty, keep it as "last save" vs unsaved edits.
+	//
+	// Labels use when the version was *superseded*, not when it was written:
+	// revs[i] was replaced by revs[i-1], so revs[i-1].modified is the moment
+	// that change landed. After a save, the top visible row therefore reads
+	// "just now" instead of the previous save's age (Austin, 2026-07-09).
+	function historyRowsFor( ed ) {
+		const revs = ed.revisions;
+		if ( ! revs || ! revs.length ) return [];
+		const rows = [];
+		for ( let i = 0; i < revs.length; i++ ) {
+			if ( i === 0 && ! ed.dirty ) continue;
+			rows.push( {
+				id: revs[ i ].id,
+				author: revs[ i ].author,
+				when: i === 0 ? revs[ i ].modified : revs[ i - 1 ].modified,
+			} );
+		}
+		return rows;
+	}
+
 	// Revision history for the History sidebar card. Types without revision
 	// support 404 — that's fine. Revisions expose an `author` ID but no
 	// author link, so _embed can't resolve names — look them up via users.
@@ -6398,22 +6423,14 @@
 			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } Set featured image</button>` }
 		</div>` : '' }
 		${ ( () => {
-			// WP's newest revision is a snapshot of the post AFTER the last
-			// save — identical to the live post whenever the editor is clean.
-			// Listing it made the top History row open as "Identical to the
-			// current content" (Austin, 2026-07-09). Hide that mirror when
-			// clean so every row is a previous version worth restoring. When
-			// dirty, keep it: last-save vs unsaved edits is a useful diff.
-			const historyRevs = ed.revisions && ed.revisions.length
-				? ( ed.dirty ? ed.revisions : ed.revisions.slice( 1 ) )
-				: [];
-			if ( ! historyRevs.length ) return '';
+			const historyRows = historyRowsFor( ed );
+			if ( ! historyRows.length ) return '';
 			return `
 		<div class="minn-side-card">
 			<div class="minn-side-title">History</div>
-			${ historyRevs.map( ( r ) => `
+			${ historyRows.map( ( r ) => `
 				<button class="minn-history-row" data-rev="${ r.id }">
-					<span class="minn-history-when">${ timeAgo( r.modified ) }</span>
+					<span class="minn-history-when">${ timeAgo( r.when ) }</span>
 					<span class="minn-history-who">${ esc( r.author ) }</span>
 				</button>` ).join( '' ) }
 		</div>`;
