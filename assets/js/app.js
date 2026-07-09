@@ -385,6 +385,8 @@
 			B.stackable = !! r.stackable;
 			B.kadence = !! r.kadence;
 			B.generateblocks = !! r.generateblocks;
+			// Disable Comments (and friends) strip post-type support mid-session.
+			if ( typeof r.comments === 'boolean' ) B.comments = r.comments;
 		} catch ( e ) { /* leave the snapshot as-is */ }
 		// Design lists + patterns are in-flight promises — drop them so the
 		// next slash-menu open refetches against the new plugin set.
@@ -433,6 +435,15 @@
 	// — one call site keeps the Extensions handlers honest.
 	async function refreshAfterPluginChange() {
 		await Promise.all( [ refreshBuilders(), refreshEditorBlocks(), refreshSurfaces() ] );
+		// Comments nav may have appeared/vanished (Disable Comments toggle).
+		renderNavWorkspace();
+		if ( state.route === 'comments' && ! commentsAvailable() ) go( 'overview' );
+	}
+
+	// Cap + site feature both required (Disable Comments strips the feature
+	// while leaving moderate_comments on the role).
+	function commentsAvailable() {
+		return !!( B.caps && B.caps.moderate && B.comments !== false );
 	}
 
 	// Small "Post / Page" menu under the + New button. Users who can't edit
@@ -630,7 +641,7 @@
 			{ id: 'content', label: 'Content', icon: 'doc', count: true },
 			{ id: 'media', label: 'Media', icon: 'img' },
 		];
-		if ( B.caps.moderate ) {
+		if ( commentsAvailable() ) {
 			navItems.push( { id: 'comments', label: 'Comments', icon: 'chat', commentCount: true } );
 		}
 		if ( B.wc && B.caps.orders ) {
@@ -1937,7 +1948,7 @@
 	}
 
 	async function refreshCommentBadge() {
-		if ( ! B.caps.moderate ) return;
+		if ( ! commentsAvailable() ) return;
 		try {
 			const r = await apiPaged( 'wp/v2/comments?status=hold&per_page=1' );
 			const badge = $( '#minn-comments-count' );
@@ -1966,6 +1977,10 @@
 
 	function renderComments() {
 		const view = $( '#minn-view' );
+		if ( ! commentsAvailable() ) {
+			view.innerHTML = '<div class="minn-empty">Comments are disabled on this site.</div>';
+			return;
+		}
 		const c = state.cache.comments;
 		if ( ! c ) {
 			view.innerHTML = '<div class="minn-loading">Loading comments…</div>';
@@ -10818,7 +10833,7 @@
 			{ label: 'Manage Content', kind: 'nav', icon: '¶', run: () => go( 'content' ) },
 			{ label: 'Open Media Library', kind: 'nav', icon: '▣', run: () => go( 'media' ) }
 		);
-		if ( B.caps.moderate ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
+		if ( commentsAvailable() ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
 		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
 		if ( B.caps.users ) cmds.push( { label: 'Browse Users', kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
 		// One palette entry per surface family (preferred member); ungrouped

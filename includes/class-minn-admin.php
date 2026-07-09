@@ -309,6 +309,9 @@ class Minn_Admin {
 				'core'         => current_user_can( 'update_core' ),
 			),
 			'wc'       => class_exists( 'WooCommerce' ),
+			// False when Disable Comments (etc.) has removed the feature —
+			// Comments nav/palette/badge hide even if the user can moderate.
+			'comments'  => self::comments_enabled(),
 			'pretty'   => (bool) get_option( 'permalink_structure' ),
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),
@@ -416,5 +419,44 @@ class Minn_Admin {
 			return strcasecmp( $a['title'], $b['title'] );
 		} );
 		return apply_filters( 'minn_admin_insert_blocks', $out );
+	}
+
+	/**
+	 * Whether comments are a usable feature on this site.
+	 *
+	 * Plugins like Disable Comments strip post_type_support( 'comments' )
+	 * from every type (or set "remove everywhere"), leaving the
+	 * moderate_comments capability intact but the Comments screen empty.
+	 * Return false when no type still accepts comments, or when Disable
+	 * Comments is in everywhere mode.
+	 *
+	 * @return bool
+	 */
+	public static function comments_enabled() {
+		// Disable Comments "everywhere" removes support + menus; check first.
+		if ( class_exists( 'Disable_Comments', false ) ) {
+			$opts = get_option( 'disable_comments_options', array() );
+			if ( is_array( $opts ) && ! empty( $opts['remove_everywhere'] ) ) {
+				return false;
+			}
+		}
+		// Explicit kill-switch some setups define in wp-config.
+		if ( defined( 'DISABLE_COMMENTS' ) && DISABLE_COMMENTS ) {
+			return false;
+		}
+
+		// Any post type that still declares comment support?
+		$types = get_post_types_by_support( 'comments' );
+		if ( empty( $types ) ) {
+			return false;
+		}
+
+		/**
+		 * Filter whether Minn treats comments as enabled (nav, palette, badge).
+		 *
+		 * @param bool     $enabled Default detection result.
+		 * @param string[] $types   Post types that still support comments.
+		 */
+		return (bool) apply_filters( 'minn_admin_comments_enabled', true, $types );
 	}
 }
