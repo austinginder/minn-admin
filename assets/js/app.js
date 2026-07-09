@@ -2718,13 +2718,11 @@
 					</div>` ).join( '' ) }
 			</div>` : '';
 
+		// Footer already has "Open in Simple History" — keep meta chips quiet
+		// (when / IP only; no redundant open link).
 		const metaBits = [];
 		if ( whenLabel ) metaBits.push( `<span class="minn-entry-meta-chip" title="${ esc( String( when ) ) }">${ esc( whenLabel ) }</span>` );
 		if ( ip ) metaBits.push( `<span class="minn-entry-meta-chip">${ esc( 'IP ' + ip ) }</span>` );
-		const adminUrl = ( sec && sec.adminUrl ) || it.permalink || it.link || '';
-		if ( adminUrl && /^https?:\/\//.test( String( adminUrl ) ) ) {
-			metaBits.push( `<a class="minn-entry-meta-chip" href="${ esc( adminUrl ) }" target="_blank" rel="noopener">Open in log ↗</a>` );
-		}
 		const metaHtml = metaBits.length
 			? `<div class="minn-entry-meta">${ metaBits.join( '<span class="minn-entry-meta-dot">·</span>' ) }</div>`
 			: '';
