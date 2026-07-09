@@ -112,9 +112,9 @@ Sidebar: one **Forms** item. Topbar autocomplete when `surfacesInFamily('forms')
 
 ## Recommended build order
 
-1. **Tag Gravity Forms** with `family: 'forms'` (no UX change while alone).
-2. **Fluent Forms** pure-REST adapter on minnadmin (free install, full REST) — proves multi-provider Forms switcher.
-3. **Elementor Pro** submissions shim once a Pro zip is available on the builders lab (or a customer fixture) — high fleet value.
+1. **Tag Gravity Forms** with `family: 'forms'` — **done** (2026-07-09).
+2. **Fluent Forms** shim (`includes/adapters/fluent-forms.php`) — **done**. Normalizes Laravel paginator + JSON `response` blobs to `{ items, total }` + labeled detail.
+3. **Elementor Pro** submissions shim (`includes/adapters/elementor-forms.php`) — **done** against Pro 4.1.2. Uses `Query` class; soft-trash via `move_to_trash_submission`.
 4. **WPForms Pro** entries shim (or abilities wrapper) when a Pro license is available for fixtures.
 5. Formidable / Flamingo as capacity allows.
 
