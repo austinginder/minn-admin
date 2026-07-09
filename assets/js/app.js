@@ -3753,7 +3753,7 @@
 		const addBtn = $( '#minn-add-plugin', view );
 		if ( addBtn ) {
 			addBtn.addEventListener( 'click', () => {
-				state.modal = { type: 'plugin-install', q: '', results: null, searching: false, page: 1, pages: 1, total: 0 };
+				state.modal = { type: 'plugin-install', q: '', category: null, results: null, searching: false, page: 1, pages: 1, total: 0 };
 				renderOverlays();
 			} );
 		}
@@ -12226,6 +12226,17 @@
 
 		if ( m.type === 'plugin-install' ) {
 			const installedNow = ( slug ) => ( state.cache.plugins || [] ).find( ( p ) => p.plugin.split( '/' )[ 0 ] === slug );
+			// Category chips always show — empty state is guided, and they stay
+			// useful as one-click re-searches after results land.
+			const catChips = PLUGIN_CATEGORIES.map( ( c ) =>
+				`<button type="button" class="minn-pi-cat${ m.category === c.id ? ' active' : '' }" data-pi-cat="${ esc( c.id ) }" title="Search WordPress.org for “${ esc( c.q ) }”">${ esc( c.label ) }</button>`
+			).join( '' );
+			const emptyHint = m.results == null && ! m.q
+				? `<div class="minn-pi-guide">
+					<div class="minn-pi-guide-title">Not sure what you need?</div>
+					<div class="minn-pi-guide-sub">Pick a category to browse popular plugins, or type a name above.</div>
+				</div>`
+				: '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
@@ -12240,9 +12251,13 @@
 							<input type="file" id="minn-pi-file" accept=".zip" hidden>
 						</div>
 						<input class="minn-input" id="minn-pi-search" placeholder="Search the WordPress.org directory…" value="${ esc( m.q ) }" autocomplete="off">
+						<div class="minn-pi-cats" role="group" aria-label="Browse by category">
+							<span class="minn-pi-cats-label">Browse</span>
+							${ catChips }
+						</div>
 						<div class="minn-pi-results">
 							${ m.searching ? '<div class="minn-loading">Searching…</div>'
-							: m.results == null ? '<div class="minn-empty" style="padding:20px;">Search for a plugin, or drop a zip above.</div>'
+							: m.results == null ? emptyHint || '<div class="minn-empty" style="padding:20px;">Search for a plugin, or drop a zip above.</div>'
 							: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">No results for “${ esc( m.q ) }”.</div>`
 							: m.results.map( ( p, i ) => {
 								const local = installedNow( p.slug );
@@ -12842,6 +12857,25 @@
 
 	/* ===== Plugin install modal (wp.org search + zip upload) ===== */
 
+	// Guided starting points for the Add plugin dialog. Each chip is just a
+	// plain wp.org search string — nothing curated or ranked, just a nudge
+	// toward the kinds of plugins people usually look for. Keep queries short
+	// and everyday so the directory's own ranking surfaces popular options.
+	const PLUGIN_CATEGORIES = [
+		{ id: 'seo', label: 'SEO', q: 'SEO' },
+		{ id: 'forms', label: 'Forms', q: 'contact form' },
+		{ id: 'ecommerce', label: 'Ecommerce', q: 'ecommerce' },
+		{ id: 'security', label: 'Security', q: 'security' },
+		{ id: 'backup', label: 'Backup', q: 'backup' },
+		{ id: 'analytics', label: 'Analytics', q: 'analytics' },
+		{ id: 'cache', label: 'Cache', q: 'cache' },
+		{ id: 'email', label: 'Email / SMTP', q: 'SMTP' },
+		{ id: 'redirects', label: 'Redirects', q: 'redirect' },
+		{ id: 'devtools', label: 'Dev tools', q: 'developer' },
+		{ id: 'spam', label: 'Spam', q: 'antispam' },
+		{ id: 'blocks', label: 'Blocks', q: 'gutenberg blocks' },
+	];
+
 	let piSearchTimer = null;
 
 	// One page of wp.org search results into the modal state; a null return
@@ -12856,29 +12890,75 @@
 		return r.plugins || [];
 	}
 
+	// Shared by free typing and category chips. Re-renders the modal around
+	// the in-flight search so the chip active state and input value stay in sync.
+	async function runPluginSearch( m, q, categoryId ) {
+		m.q = ( q || '' ).trim();
+		m.category = categoryId || null;
+		m.page = 1;
+		m.pages = 1;
+		m.total = 0;
+		if ( ! m.q ) {
+			m.results = null;
+			m.searching = false;
+			renderOverlays();
+			return;
+		}
+		m.searching = true;
+		renderOverlays();
+		try {
+			const items = await fetchPluginPage( m, 1 );
+			if ( items === null ) return;
+			m.results = items;
+		} catch ( e ) {
+			toast( e.message, true );
+			m.results = [];
+		}
+		m.searching = false;
+		renderOverlays();
+	}
+
 	function bindPluginInstallModal( m ) {
 		const input = $( '#minn-pi-search' );
-		input.focus();
-		input.setSelectionRange( input.value.length, input.value.length );
+		// Don't steal focus when a category just filled the box (chip click
+		// re-renders and would yank the caret); focus only on a blank open.
+		if ( ! m.q ) {
+			input.focus();
+			input.setSelectionRange( 0, 0 );
+		} else {
+			input.focus( { preventScroll: true } );
+			input.setSelectionRange( input.value.length, input.value.length );
+		}
 		input.addEventListener( 'input', () => {
-			m.q = input.value.trim();
+			const q = input.value.trim();
+			// Free typing clears the category highlight (query may diverge).
+			m.category = null;
 			clearTimeout( piSearchTimer );
-			if ( ! m.q ) return;
-			piSearchTimer = setTimeout( async () => {
-				m.searching = true;
-				renderOverlays();
-				try {
-					const items = await fetchPluginPage( m, 1 );
-					if ( items === null ) return;
-					m.results = items;
-				} catch ( e ) {
-					toast( e.message, true );
-					m.results = [];
-				}
+			if ( ! q ) {
+				m.q = '';
+				m.results = null;
 				m.searching = false;
 				renderOverlays();
-			}, 400 );
+				return;
+			}
+			piSearchTimer = setTimeout( () => runPluginSearch( m, q, null ), 400 );
 		} );
+
+		// Category chips → same search path, with the chip marked active.
+		$$( '[data-pi-cat]' ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const cat = PLUGIN_CATEGORIES.find( ( c ) => c.id === btn.dataset.piCat );
+				if ( ! cat ) return;
+				// Second click on the active category clears back to the guide.
+				if ( m.category === cat.id ) {
+					clearTimeout( piSearchTimer );
+					runPluginSearch( m, '', null );
+					return;
+				}
+				clearTimeout( piSearchTimer );
+				runPluginSearch( m, cat.q, cat.id );
+			} )
+		);
 
 		// renderOverlays rebuilds the modal, which resets the results scroll —
 		// put the reader back where they were.
