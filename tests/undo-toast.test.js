@@ -1,9 +1,8 @@
 /**
- * Undo-toast for structural deletions (docs/editor-roadmap.md "Undo
- * completeness" decision). Island/table deletions are direct-DOM — outside the
- * browser undo stack — so they offer a "Removed — Undo" toast. Each case
- * deletes, clicks Undo, and verifies the SAVED markup is fully restored (the
- * islands[] entry as well as the DOM).
+ * Structural undo (docs/editor-roadmap.md "Undo completeness"):
+ *  - Island deletions are direct-DOM → "Removed — Undo" toast button
+ *  - Table row/col/header/delete ops go through execCommand → real ⌘Z
+ * Each case deletes, undoes, and verifies the SAVED markup is restored.
  */
 const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
@@ -23,7 +22,12 @@ const TABLE = '<!-- wp:table -->\n<figure class="wp-block-table"><table><tbody><
 		return ( await r.json() ).content.raw;
 	}, id );
 	const save = async () => { await page.keyboard.press( 'Meta+s' ); await page.waitForTimeout( 1500 ); };
-	const undo = async () => { await page.waitForSelector( '.minn-toast-btn', { timeout: 4000 } ); await page.click( '.minn-toast-btn' ); await page.waitForTimeout( 300 ); };
+	const toastUndo = async () => { await page.waitForSelector( '.minn-toast-btn', { timeout: 4000 } ); await page.click( '.minn-toast-btn' ); await page.waitForTimeout( 300 ); };
+	const cmdZ = async () => {
+		await page.focus( '#minn-editor-body' );
+		await page.keyboard.press( 'Meta+z' );
+		await page.waitForTimeout( 300 );
+	};
 	const islands = () => page.evaluate( () => document.querySelectorAll( '#minn-editor-body .minn-block-island' ).length );
 	const rows = () => page.evaluate( () => document.querySelectorAll( '#minn-editor-body table tr' ).length );
 	const cells = () => page.evaluate( () => document.querySelectorAll( '#minn-editor-body table tr:first-child td, #minn-editor-body table tr:first-child th' ).length );
@@ -46,7 +50,7 @@ const TABLE = '<!-- wp:table -->\n<figure class="wp-block-table"><table><tbody><
 	await page.keyboard.press( 'Backspace' ); await page.waitForTimeout( 150 );
 	await page.keyboard.press( 'Backspace' ); await page.waitForTimeout( 200 );
 	t.check( 'backspace removes the embed island', ( await islands() ) === 0 );
-	await undo();
+	await toastUndo();
 	t.check( 'Undo restores the island in the DOM', ( await islands() ) === 1 );
 	await save();
 	let r = await raw( id1 );
@@ -59,45 +63,63 @@ const TABLE = '<!-- wp:table -->\n<figure class="wp-block-table"><table><tbody><
 	await page.click( '#minn-insp-remove' );
 	await page.waitForTimeout( 200 );
 	t.check( 'inspector remove deletes the island (no confirm)', ( await islands() ) === 0 );
-	await undo();
+	await toastUndo();
 	await save();
 	r = await raw( id2 );
 	t.check( 'inspector-removed island restores + saves', ( await islands() ) === 1 && /wp:embed/.test( r ), '' );
 
-	/* ===== Table row delete ===== */
+	/* ===== Table row delete — ⌘Z ===== */
 	const id3 = await fresh( TABLE );
 	await openTablePop();
 	await page.waitForTimeout( 200 );
 	await page.click( '[data-op="row-del"]' ); await page.waitForTimeout( 250 );
 	t.check( 'row-del removes a row', ( await rows() ) === 1 );
-	await undo();
-	t.check( 'Undo restores the row', ( await rows() ) === 2 );
+	await cmdZ();
+	t.check( '⌘Z restores the row', ( await rows() ) === 2 );
 	await save();
 	r = await raw( id3 );
 	t.check( 'both rows saved after restore', /<td>a<\/td><td>b<\/td>/.test( r ) && /<td>c<\/td><td>d<\/td>/.test( r ), '' );
 
-	/* ===== Table column delete ===== */
+	/* ===== Table column delete — ⌘Z ===== */
 	const id4 = await fresh( TABLE );
 	await openTablePop();
 	await page.waitForTimeout( 200 );
 	await page.click( '[data-op="col-del"]' ); await page.waitForTimeout( 250 );
 	t.check( 'col-del removes a column', ( await cells() ) === 1 );
-	await undo();
-	t.check( 'Undo restores the column', ( await cells() ) === 2 );
+	await cmdZ();
+	t.check( '⌘Z restores the column', ( await cells() ) === 2 );
 	await save();
 	r = await raw( id4 );
 	t.check( 'both columns saved after restore', /<td>a<\/td><td>b<\/td>/.test( r ), '' );
 
-	/* ===== Whole table delete ===== */
+	/* ===== Whole table delete — ⌘Z ===== */
 	const id5 = await fresh( TABLE + '\n\n' + P( 'keep' ) );
 	await openTablePop();
 	await page.waitForTimeout( 200 );
 	await page.click( '[data-op="table-del"]' ); await page.waitForTimeout( 250 );
 	t.check( 'table-del removes the figure', ( await page.evaluate( () => document.querySelectorAll( '#minn-editor-body figure' ).length ) ) === 0 );
-	await undo();
+	await cmdZ();
 	await save();
 	r = await raw( id5 );
-	t.check( 'deleted table restores + saves', ( await page.evaluate( () => document.querySelectorAll( '#minn-editor-body figure' ).length ) ) === 1 && /wp:table/.test( r ), '' );
+	t.check( 'deleted table restores + saves via ⌘Z', ( await page.evaluate( () => document.querySelectorAll( '#minn-editor-body figure' ).length ) ) === 1 && /wp:table/.test( r ), '' );
+
+	/* ===== Add row / add column also undo via ⌘Z ===== */
+	const id6 = await fresh( TABLE );
+	await openTablePop();
+	await page.waitForTimeout( 200 );
+	await page.click( '[data-op="row-below"]' ); await page.waitForTimeout( 250 );
+	t.check( 'row-below adds a row', ( await rows() ) === 3 );
+	await cmdZ();
+	t.check( '⌘Z undoes add-row', ( await rows() ) === 2 );
+	await openTablePop();
+	await page.waitForTimeout( 150 );
+	await page.click( '[data-op="col-right"]' ); await page.waitForTimeout( 250 );
+	t.check( 'col-right adds a column', ( await cells() ) === 3 );
+	await cmdZ();
+	t.check( '⌘Z undoes add-column', ( await cells() ) === 2 );
+	await save();
+	r = await raw( id6 );
+	t.check( 'table back to 2×2 after add undos', /<td>a<\/td><td>b<\/td>/.test( r ) && /<td>c<\/td><td>d<\/td>/.test( r ), r.slice( 0, 160 ) );
 
 	for ( const id of ids ) await deletePost( page, id );
 	await t.done( browser, errors );
