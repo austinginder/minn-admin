@@ -454,6 +454,21 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Live re-poll of the boot payload keys that change when plugins/
+		// themes are toggled — insertable blocks, inspector forms, design-
+		// library flags. Same shape as window.MINN's boot fields.
+		register_rest_route(
+			self::NS,
+			'/editor-blocks',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'editor_blocks' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/patterns',
@@ -827,6 +842,25 @@ class Minn_Admin_REST {
 		$out['urls'] = array_values( array_unique( $out['urls'] ) );
 
 		return rest_ensure_response( $out );
+	}
+
+	/**
+	 * Re-poll of the boot keys that go stale when a plugin/theme is toggled
+	 * mid-session. Mirrors the corresponding window.MINN fields so the
+	 * client can update them without a full page reload (slash menu, block
+	 * picker, design libraries).
+	 */
+	public static function editor_blocks() {
+		$block_forms = apply_filters( 'minn_admin_block_forms', array() );
+		return rest_ensure_response(
+			array(
+				'insertBlocks'   => Minn_Admin::insertable_blocks( $block_forms ),
+				'blockForms'     => $block_forms,
+				'stackable'      => function_exists( 'minn_admin_stackable_active' ) ? minn_admin_stackable_active() : false,
+				'kadence'        => function_exists( 'minn_admin_kadence_active' ) ? minn_admin_kadence_active() : false,
+				'generateblocks' => function_exists( 'minn_admin_generateblocks_active' ) ? minn_admin_generateblocks_active() : false,
+			)
+		);
 	}
 
 	/**

@@ -332,6 +332,43 @@
 		state.cache.content = null; // chips ride the minn_builder field — refetch
 	}
 
+	// Same idea for the editor's block surface: insertBlocks / blockForms /
+	// design-library flags / patterns / preview CSS are all boot snapshots.
+	// Activating Otter (or any block plugin) mid-session left the slash menu
+	// and block picker empty of its blocks until a full page refresh.
+	async function refreshEditorBlocks() {
+		try {
+			const r = await api( 'minn-admin/v1/editor-blocks' );
+			B.insertBlocks = Array.isArray( r.insertBlocks ) ? r.insertBlocks : [];
+			B.blockForms = r.blockForms && typeof r.blockForms === 'object' ? r.blockForms : {};
+			B.stackable = !! r.stackable;
+			B.kadence = !! r.kadence;
+			B.generateblocks = !! r.generateblocks;
+		} catch ( e ) { /* leave the snapshot as-is */ }
+		// Design lists + patterns are in-flight promises — drop them so the
+		// next slash-menu open refetches against the new plugin set.
+		Object.keys( designSourcePromises ).forEach( ( k ) => { delete designSourcePromises[ k ]; } );
+		blockPatternsPromise = null;
+		// Preview CSS was collected once at first island render; a newly
+		// activated block plugin's styles would be missing until reload.
+		editorStylesPromise = null;
+		const css = document.getElementById( 'minn-frontend-css' );
+		if ( css ) css.remove();
+		// Editor already open: re-render so bindSlashMenu rebuilds its items
+		// array from the fresh B.insertBlocks / B.blockForms (dirty-adopt
+		// keeps unsaved body/title — hard-won rule 18).
+		if ( state.route === 'editor' && state.editor ) {
+			renderEditor();
+			ensureEditorStyles();
+		}
+	}
+
+	// Builders + editor blocks both go stale on plugin/theme flips — one
+	// call site keeps the Extensions handlers honest.
+	async function refreshAfterPluginChange() {
+		await Promise.all( [ refreshBuilders(), refreshEditorBlocks() ] );
+	}
+
 	// Small "Post / Page" menu under the + New button. Users who can't edit
 	// pages skip the menu entirely and go straight to a new post.
 	function toggleNewMenu( btn ) {
@@ -3341,10 +3378,12 @@
 					}
 					// A plugin flip can change what the app shows elsewhere —
 					// traffic provider on Overview, registered post types, CPT
-					// tabs, and which page builders are available.
+					// tabs, page builders, and which blocks/patterns the
+					// editor can insert (Otter et al. only registered after
+					// activate — boot snapshot would stay empty until reload).
 					state.cache.overview = null;
 					bustTypeCaches();
-					await refreshBuilders();
+					await refreshAfterPluginChange();
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -3392,7 +3431,7 @@
 					state.cache.plugins = null;
 					state.cache.overview = null;
 					bustTypeCaches();
-					await refreshBuilders();
+					await refreshAfterPluginChange();
 					await loadPlugins().catch( () => {} );
 				} catch ( e ) {
 					toast( e.message, true );
@@ -3507,8 +3546,9 @@
 					const done = { activate: `${ t.name } is now the active theme`, delete: `${ t.name } deleted`, update: `${ t.name } updated${ r.version ? ' to v' + r.version : '' }` };
 					toast( done[ action ] );
 					// Bricks and Divi are THEMES — a theme switch can add or
-					// remove a builder.
-					if ( 'activate' === action ) await refreshBuilders();
+					// remove a builder. Theme patterns + block styles also
+					// change with the active theme.
+					if ( 'activate' === action ) await refreshAfterPluginChange();
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -11846,6 +11886,7 @@
 						const file = local ? local.plugin : ( p.installed ? p.installed.replace( /\.php$/, '' ) : null );
 						await api( 'wp/v2/plugins/' + file, { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
 						toast( p.name + ' activated' );
+						await refreshAfterPluginChange();
 					} else {
 						await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: p.slug } ) } );
 						toast( p.name + ' installed' );
