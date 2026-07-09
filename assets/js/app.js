@@ -2303,7 +2303,7 @@
 	}
 
 	const PILL_STYLES = {
-		green: [ 'sent', 'active', 'completed', 'publish', 'approved', 'success', 'read' ],
+		green: [ 'sent', 'active', 'completed', 'publish', 'approved', 'success', 'read', 'received' ],
 		red: [ 'failed', 'spam', 'error', 'cancelled' ],
 		// inactive (Code Snippets / GF forms) is a quiet draft-like state.
 		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread' ],
@@ -2319,14 +2319,105 @@
 	}
 
 	// First few scalar values stored under numeric-ish keys (GF entries store
-	// field values as { "1": "...", "2.3": "..." }).
+	// field values as { "1": "...", "2.3": "..." }). Prefer a short contact
+	// line (name · email · first short field) so the list doesn't look like a
+	// dump of every answer.
 	function entrySummary( item ) {
+		// Adapter-provided summary (Fluent / Elementor shims).
+		if ( item.summary ) return String( item.summary ).slice( 0, 90 );
 		const vals = Object.keys( item )
 			.filter( ( k ) => /^\d+(\.\d+)?$/.test( k ) )
 			.sort( ( a, b ) => parseFloat( a ) - parseFloat( b ) )
 			.map( ( k ) => String( item[ k ] || '' ).trim() )
 			.filter( Boolean );
-		return vals.slice( 0, 3 ).join( ' · ' ).slice( 0, 90 ) || '(empty entry)';
+		// Drop multi-line / long answers from the list line — they belong in the detail body.
+		const short = vals.filter( ( v ) => ! v.includes( '\n' ) && v.length <= 60 );
+		const pick = ( short.length ? short : vals ).slice( 0, 3 );
+		return pick.join( ' · ' ).slice( 0, 90 ) || '(empty entry)';
+	}
+
+	// Contact-form entry layout: identity (name/email) → message body → other
+	// answers → quiet meta. Used for the forms family instead of the generic
+	// right-aligned key/value dump that reads like raw data.
+	function renderEntryDetail( sec ) {
+		const groups = sec.sections || [];
+		const answers = ( groups.find( ( g ) => /response/i.test( g.title || '' ) ) || groups[ 0 ] || {} ).rows || [];
+		const meta = ( groups.find( ( g ) => /submission|meta|detail/i.test( g.title || '' ) ) || groups[ 1 ] || {} ).rows || [];
+
+		const isEmail = ( r ) => r.type === 'email' || /e-?mail/i.test( r.label || '' ) || isEmailish( r.value );
+		const isName = ( r ) => r.type === 'name' || /^(full\s*)?name$|your name|first name|last name/i.test( r.label || '' );
+		const isBody = ( r ) => r.type === 'textarea' || r.type === 'post_content'
+			|| /message|comment|how can|tell us|description|details|note/i.test( r.label || '' )
+			|| ( String( r.value || '' ).includes( '\n' ) )
+			|| ( String( r.value || '' ).length > 120 );
+
+		function isEmailish( v ) {
+			return typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( v.trim() );
+		}
+
+		let nameRow = answers.find( isName );
+		let emailRow = answers.find( isEmail );
+		// Heuristic fallback: first short non-email string as name if no labeled name.
+		if ( ! nameRow ) {
+			nameRow = answers.find( ( r ) => ! isEmail( r ) && ! isBody( r )
+				&& String( r.value || '' ).trim().split( /\s+/ ).length <= 5
+				&& String( r.value || '' ).length <= 60 );
+		}
+		const bodyRows = answers.filter( ( r ) => r !== nameRow && r !== emailRow && isBody( r ) );
+		const fieldRows = answers.filter( ( r ) => r !== nameRow && r !== emailRow && ! bodyRows.includes( r ) );
+
+		const hero = ( nameRow || emailRow ) ? `
+			<div class="minn-entry-hero">
+				${ nameRow ? `<div class="minn-entry-name">${ esc( String( nameRow.value ) ) }</div>` : '' }
+				${ emailRow ? `<a class="minn-entry-email" href="mailto:${ esc( String( emailRow.value ).trim() ) }">${ esc( String( emailRow.value ) ) }</a>` : '' }
+			</div>` : '';
+
+		const bodies = bodyRows.map( ( r ) => `
+			<div class="minn-entry-body">
+				${ r.label ? `<div class="minn-entry-field-label">${ esc( r.label ) }</div>` : '' }
+				<div class="minn-entry-message">${ esc( String( r.value == null ? '' : r.value ) ) }</div>
+			</div>` ).join( '' );
+
+		const fields = fieldRows.length ? `
+			<div class="minn-entry-fields">
+				${ fieldRows.map( ( r ) => {
+					const raw = String( r.value == null ? '' : r.value );
+					let val;
+					if ( r.type === 'url' && /^https?:\/\//.test( raw ) ) {
+						val = `<a href="${ esc( raw ) }" target="_blank" rel="noopener">${ esc( raw ) }</a>`;
+					} else if ( isEmailish( raw ) ) {
+						val = `<a href="mailto:${ esc( raw.trim() ) }">${ esc( raw ) }</a>`;
+					} else {
+						val = esc( raw );
+					}
+					return `<div class="minn-entry-field">
+						<div class="minn-entry-field-label">${ esc( r.label || '' ) }</div>
+						<div class="minn-entry-field-value">${ val }</div>
+					</div>`;
+				} ).join( '' ) }
+			</div>` : '';
+
+		// Meta as a single quiet line of chips (date · source · IP), not a second form.
+		const metaBits = meta.map( ( r ) => {
+			const raw = String( r.value == null ? '' : r.value );
+			if ( ! raw ) return '';
+			if ( r.type === 'url' && /^https?:\/\//.test( raw ) ) {
+				let host = raw;
+				try { host = new URL( raw ).pathname.replace( /\/$/, '' ) || '/'; } catch ( e ) { /* keep */ }
+				return `<a class="minn-entry-meta-chip" href="${ esc( raw ) }" target="_blank" rel="noopener" title="${ esc( raw ) }">${ esc( host ) }</a>`;
+			}
+			const label = /submitted|date|when/i.test( r.label || '' ) ? '' : ( r.label ? r.label + ' ' : '' );
+			return `<span class="minn-entry-meta-chip">${ esc( label + raw ) }</span>`;
+		} ).filter( Boolean ).join( '<span class="minn-entry-meta-dot">·</span>' );
+
+		const metaHtml = metaBits ? `<div class="minn-entry-meta">${ metaBits }</div>` : '';
+
+		if ( ! hero && ! bodies && ! fields ) {
+			// Empty entry — fall back to a simple note.
+			return `<div class="minn-entry"><div class="minn-entry-empty">No answers on this entry.</div>${ metaHtml }</div>`;
+		}
+
+		return `<div class="minn-entry">${ hero }${ bodies }${ fields }${ metaHtml }</div>`;
 	}
 
 	// Dot-path lookup ("initiator_data.user_login") with an optional fallback.
@@ -10964,12 +11055,22 @@
 			const isHtml = message != null && /<\/?[a-z][\s\S]*>/i.test( String( message ) );
 			// Actions can be conditional (when.key equals when.equals on the
 			// item) or plain links (href with {id}); indexes stay stable for
-			// the bind step.
+			// the bind step. Skip an href that duplicates sections.adminUrl
+			// (GF/Fluent/Elementor all used to show "Open in X" twice).
 			const visibleActions = ( coll.actions || [] )
 				.map( ( a, i ) => ( { a, i } ) )
-				.filter( ( { a } ) => ! a.when || String( surfaceValue( it, a.when.key ) ) === String( a.when.equals ) );
+				.filter( ( { a } ) => ! a.when || String( surfaceValue( it, a.when.key ) ) === String( a.when.equals ) )
+				.filter( ( { a } ) => {
+					if ( ! a.href || ! m.sections || ! m.sections.adminUrl ) return true;
+					const resolved = String( a.href ).replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( it[ k ] ?? '' ) );
+					return resolved !== m.sections.adminUrl
+						&& ! resolved.includes( String( m.sections.adminUrl ).replace( /#.*$/, '' ) );
+				} );
 			const sec = m.sections;
-			const secRows = sec ? ( sec.sections || [] ).map( ( g ) => `
+			// Form entries (GF / Fluent / Elementor) get a contact-style layout
+			// instead of the generic key/value dump used for audit logs etc.
+			const isEntry = !!( sec && ( sec.kind === 'entry' || s.family === 'forms' ) );
+			const secRows = sec && ! isEntry ? ( sec.sections || [] ).map( ( g ) => `
 					<div class="minn-side-title" style="margin:12px 0 8px;">${ esc( g.title || '' ) }</div>
 					${ ( g.rows || [] ).map( ( r ) => {
 						const raw = String( r.value == null ? '' : r.value );
@@ -10979,20 +11080,30 @@
 							: `<span class="minn-surface-val${ multi ? ' multi' : '' }">${ esc( raw ) }</span>`;
 						return `<div class="minn-side-row${ multi ? ' multi' : '' }"><span class="minn-side-key">${ esc( r.label || '' ) }</span>${ val }</div>`;
 					} ).join( '' ) }` ).join( '' ) : '';
+			const entryHtml = isEntry && ! m.loading ? renderEntryDetail( sec ) : '';
 			// Prev/next within the loaded list page (←/→). Media modal uses the
 			// same pattern over its preview; surface detail puts the controls
 			// in the head because there's no preview stage.
 			const sctx = surfaceModalContext();
 			const canStep = sctx && sctx.items.length > 1;
-			// Wide when the detail shows a message body or any textarea edit field
-			// (code snippets need room for the code editor).
-			const needsWide = !! message || editFields.some( ( f ) => f.type === 'textarea' );
+			// Wide when the detail shows a message body, entry layout, or any
+			// textarea edit field (code snippets need room for the code editor).
+			const needsWide = !! message || isEntry || editFields.some( ( f ) => f.type === 'textarea' );
+			// Entry title = form name; never the field-dump summary.
+			const headTitle = sec && sec.title
+				? sec.title
+				: ( isEntry && it.form_name ? it.form_name : ( isEntry && it.form_title ? it.form_title : s.label ) );
+			const headStatus = ( sec && sec.status ) || it.status;
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal${ needsWide ? ' wide' : '' }">
+				<div class="minn-modal${ needsWide ? ' wide' : '' }${ isEntry ? ' entry' : '' }">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ esc( sec && sec.title ? sec.title : s.label ) } #${ esc( String( it.id ) ) }</div>
-						${ it.status ? surfacePill( it.status )
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">${ esc( headTitle ) }</div>
+							${ isEntry ? `<div class="minn-modal-sub">Entry #${ esc( String( it.id ) ) }</div>` : '' }
+						</div>
+						${ ! isEntry ? `<span class="minn-modal-id-tag">#${ esc( String( it.id ) ) }</span>` : '' }
+						${ headStatus ? surfacePill( headStatus )
 							: ( typeof it.active === 'boolean' ? surfacePill( it.active ? 'active' : 'inactive' ) : '' ) }
 						${ canStep ? `<span class="minn-modal-count">${ sctx.idx + 1 } / ${ sctx.items.length }</span>
 						<button class="minn-modal-step" id="minn-surface-prev" type="button" title="Previous (←)"${ sctx.idx <= 0 ? ' disabled' : '' }>‹</button>
@@ -11000,6 +11111,7 @@
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ m.loading ? '<div class="minn-loading">Loading…</div>' : `
+					${ isEntry ? entryHtml : `
 					<div class="minn-modal-meta">
 						${ sec ? secRows : rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( stripTags( String( v ) ) ) }</span></div>` ).join( '' ) }
 						${ editFields.length ? `<div class="minn-media-edit">
@@ -11012,7 +11124,7 @@
 					</div>
 					${ message ? ( isHtml
 						? `<iframe class="minn-email-frame" id="minn-email-frame" sandbox="" title="Email preview" srcdoc="${ esc( String( message ) ) }"></iframe>`
-						: `<pre class="minn-surface-message">${ esc( stripTags( String( message ) ) ) }</pre>` ) : '' }
+						: `<pre class="minn-surface-message">${ esc( stripTags( String( message ) ) ) }</pre>` ) : '' }` }
 					${ ( message || edit || visibleActions.length || ( sec && sec.adminUrl ) ) ? `
 					<div class="minn-modal-actions">
 						${ edit ? `<button class="minn-btn-primary" id="minn-surface-save">Save</button>` : '' }

@@ -355,7 +355,8 @@ add_action( 'rest_api_init', function () {
 				}
 
 				return rest_ensure_response( array(
-					'title'    => minn_admin_fluent_forms_summary( $map ),
+					'kind'     => 'entry',
+					'title'    => $form_title ?: ( 'Form #' . (int) $row->form_id ),
 					'status'   => $row->status ? (string) $row->status : 'unread',
 					'sections' => array(
 						array( 'title' => 'Responses', 'rows' => $answers ),

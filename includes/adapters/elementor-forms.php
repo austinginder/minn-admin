@@ -291,7 +291,9 @@ add_action( 'rest_api_init', function () {
 				$item = minn_admin_elementor_forms_item( $sub );
 
 				return rest_ensure_response( array(
-					'title'    => $item['summary'],
+					'kind'     => 'entry',
+					// Form name in the title; answers render in the entry body.
+					'title'    => $item['form_name'] ?: 'Submission',
 					'status'   => $item['status'],
 					'sections' => array(
 						array( 'title' => 'Responses', 'rows' => $answers ),

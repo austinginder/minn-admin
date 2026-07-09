@@ -175,8 +175,13 @@ add_action( 'rest_api_init', function () {
 			}
 
 			return rest_ensure_response( array(
+				// Form name only — the client entry layout promotes name/email
+				// into a hero; never dump every answer into the modal title.
+				'kind'     => 'entry',
 				'title'    => $form['title'],
-				'status'   => $entry['status'],
+				// GF's "active" just means not spam/trash — surface as
+				// "received" so the pill doesn't look like a form toggle.
+				'status'   => ( 'active' === $entry['status'] ) ? 'received' : $entry['status'],
 				'sections' => array(
 					array( 'title' => 'Responses', 'rows' => $answers ),
 					array( 'title' => 'Submission', 'rows' => $meta ),

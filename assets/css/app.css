@@ -855,6 +855,51 @@ select.minn-input {
 /* Sectioned surface detail (e.g. form entries): long/multiline answers stack. */
 .minn-side-row.multi { flex-direction: column; align-items: flex-start; gap: 3px; }
 .minn-surface-val.multi { white-space: pre-wrap; text-align: left; max-height: 200px; overflow-y: auto; }
+
+/* Form-entry detail — contact card, not a raw key/value dump. */
+.minn-modal.entry { width: 560px; }
+.minn-modal-title-block { flex: 1; min-width: 0; }
+.minn-modal-title-block .minn-modal-title { flex: none; }
+.minn-modal-sub { font-size: 12.5px; color: var(--text3); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.minn-modal-id-tag { font-size: 12.5px; color: var(--text3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.minn-entry { padding: 18px 20px 8px; display: flex; flex-direction: column; gap: 18px; }
+.minn-entry-hero { display: flex; flex-direction: column; gap: 3px; }
+.minn-entry-name { font-size: 18px; font-weight: 700; letter-spacing: -0.2px; line-height: 1.25; }
+.minn-entry-email {
+  font-size: 14px; color: var(--accent); text-decoration: none; width: fit-content;
+}
+.minn-entry-email:hover { text-decoration: underline; }
+.minn-entry-body { display: flex; flex-direction: column; gap: 6px; }
+.minn-entry-field-label {
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text3);
+}
+.minn-entry-message {
+  font-size: 15px; line-height: 1.55; color: var(--text); white-space: pre-wrap;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px;
+}
+.minn-entry-fields {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px;
+}
+.minn-entry-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.minn-entry-field-value {
+  font-size: 14px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; line-height: 1.4;
+}
+.minn-entry-field-value a { color: var(--accent); text-decoration: none; }
+.minn-entry-field-value a:hover { text-decoration: underline; }
+.minn-entry-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px;
+  padding-top: 4px; border-top: 1px solid var(--border); margin-top: 2px;
+  font-size: 12.5px; color: var(--text3);
+}
+.minn-entry-meta-chip { color: var(--text3); text-decoration: none; }
+a.minn-entry-meta-chip:hover { color: var(--accent); text-decoration: underline; }
+.minn-entry-meta-dot { color: var(--text3); opacity: 0.55; margin: 0 4px; user-select: none; }
+.minn-entry-empty { font-size: 14px; color: var(--text3); }
+@media (max-width: 560px) {
+  .minn-entry-fields { grid-template-columns: 1fr; }
+}
 .minn-view-switch { flex-shrink: 0; padding-right: 10px; margin-right: 4px; border-right: 1px solid var(--border); }
 .minn-side-val.green { color: var(--green); }
 .minn-side-card .minn-btn-primary { width: 100%; margin-top: 14px; justify-content: center; }
