@@ -1315,6 +1315,88 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
+/* Details island — native expand/collapse + in-card summary/body editing. */
+.minn-details-island {
+  user-select: text;
+  cursor: default;
+  padding-top: 18px;
+}
+.minn-details-edit {
+  margin: 0;
+  border: none;
+  background: transparent;
+}
+.minn-details-edit > .minn-details-sum-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  list-style: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  /* Keep the disclosure triangle (browser default marker) on the left. */
+}
+.minn-details-edit > .minn-details-sum-row::-webkit-details-marker {
+  color: var(--text2);
+  margin-right: 8px;
+}
+.minn-details-edit > .minn-details-sum-row::marker {
+  color: var(--text2);
+}
+.minn-details-summary {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: -4px 0 -4px -4px;
+  outline: none;
+  cursor: text;
+  user-select: text;
+}
+.minn-details-summary::placeholder { color: var(--text3); font-weight: 500; }
+.minn-details-summary:hover { background: var(--hover); }
+.minn-details-summary:focus {
+  background: var(--panel2);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.minn-details-body {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  min-height: 2.4em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 14.5px;
+  line-height: 1.55;
+  outline: none;
+  cursor: text;
+  user-select: text;
+}
+.minn-details-body:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.minn-details-body > :first-child { margin-top: 0; }
+.minn-details-body > :last-child { margin-bottom: 0; }
+.minn-details-body:empty::before,
+.minn-details-body:has(> br:only-child)::before,
+.minn-details-body:has(> p:only-child:empty)::before,
+.minn-details-body:has(> p:only-child > br:only-child)::before {
+  content: attr(data-placeholder);
+  color: var(--text3);
+  font-style: italic;
+  pointer-events: none;
+}
 /* Embed wrappers shouldn't reintroduce a light plate either. */
 .minn-island-preview .wp-block-embed,
 .minn-island-preview .wp-block-embed__wrapper {

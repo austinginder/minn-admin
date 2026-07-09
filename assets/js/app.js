@@ -4888,9 +4888,9 @@
 
 	// The contenteditable=false card an island renders as. Shared by content
 	// loading and slash-menu insertion of custom blocks.
-	// Shortcode islands are special: the body is plain text between block
-	// comments, so the card hosts a live monospace field (no prompt, no
-	// server preview) and commits into ed.islands[idx] on every input.
+	// Special interactive islands (shortcode, details) host live fields and
+	// commit into ed.islands[idx] on every edit — serialize never reads the
+	// fields themselves, and renderIslandPreviews must not overwrite them.
 	function islandHtml( idx, name, raw ) {
 		const short = String( name || '' ).replace( /^core\//, '' );
 		if ( short === 'shortcode' ) {
@@ -4901,6 +4901,24 @@
 				<input id="minn-sc-${ idx }" class="minn-shortcode-input" type="text" data-shortcode="${ idx }" value="${ esc( code ) }" placeholder="[shortcode attr=&quot;value&quot;]" spellcheck="false" autocomplete="off">
 			</div>`;
 		}
+		if ( short === 'details' ) {
+			// Interactive details: native open/close + editable summary/body.
+			// Free <details> in the main contenteditable traps the caret; nesting
+			// the widget inside contenteditable=false keeps expand/type safe.
+			const parts = parseDetailsRaw( raw );
+			const bodyInner = parts.bodyHtml && parts.bodyHtml.trim()
+				? parts.bodyHtml
+				: '<p><br></p>';
+			return `<div class="minn-block-island minn-details-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
+				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ details</button>
+				<details class="minn-details-edit" open>
+					<summary class="minn-details-sum-row">
+						<input type="text" class="minn-details-summary" data-details-summary="${ idx }" value="${ esc( parts.summary ) }" placeholder="Details" spellcheck="true" autocomplete="off">
+					</summary>
+					<div class="minn-details-body" contenteditable="true" data-details-body="${ idx }" data-placeholder="Write the hidden content…">${ bodyInner }</div>
+				</details>
+			</div>`;
+		}
 		const inner = stripBlockComments( raw ).trim();
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ ${ esc( short || name ) }</button>
@@ -4909,6 +4927,59 @@
 	}
 
 	const stripBlockComments = ( raw ) => raw.replace( /<!--\s*\/?wp:[\s\S]*?-->\n?/g, '' );
+
+	// Pull summary + body HTML + attrs out of a core/details island raw string.
+	function parseDetailsRaw( raw ) {
+		const str = String( raw || '' );
+		const openM = str.match( /<!--\s*wp:details((?:(?!-->)[\s\S])*?)\s*-->/ );
+		let attrs = null;
+		if ( openM && openM[ 1 ] && openM[ 1 ].trim() ) {
+			try { attrs = JSON.parse( openM[ 1 ].trim() ); } catch ( e ) { attrs = null; }
+		}
+		const html = stripBlockComments( str ).trim();
+		const wrap = document.createElement( 'div' );
+		wrap.innerHTML = html;
+		const det = wrap.querySelector( 'details' );
+		if ( ! det ) {
+			return { attrs, summary: 'Details', bodyHtml: '<p></p>' };
+		}
+		const sum = det.querySelector( ':scope > summary' );
+		const summary = sum ? ( sum.textContent || '' ).replace( /\s+/g, ' ' ).trim() || 'Details' : 'Details';
+		let bodyHtml = '';
+		if ( sum ) {
+			const parts = [];
+			for ( let n = sum.nextSibling; n; n = n.nextSibling ) {
+				if ( n.nodeType === 1 ) parts.push( n.outerHTML );
+				else if ( n.nodeType === 3 && n.textContent.trim() ) {
+					parts.push( '<p>' + esc( n.textContent.trim() ) + '</p>' );
+				}
+			}
+			bodyHtml = parts.join( '' ) || '<p></p>';
+		} else {
+			bodyHtml = det.innerHTML || '<p></p>';
+		}
+		return { attrs, summary, bodyHtml };
+	}
+
+	// Rebuild core/details markup from the island fields. Preserves any attrs
+	// (e.g. showContent) that were on the original block comment.
+	function buildDetailsRaw( summary, bodyHtml, attrs ) {
+		const s = ( summary != null ? String( summary ) : 'Details' ).replace( /\s+/g, ' ' ).trim() || 'Details';
+		let body = ( bodyHtml != null ? String( bodyHtml ) : '' ).trim();
+		// contenteditable empty husks → a single empty paragraph (Gutenberg shape).
+		const plain = body.replace( /<br\s*\/?>/gi, '' ).replace( /<p>\s*<\/p>/gi, '' ).replace( /\s+/g, '' );
+		if ( ! plain ) body = '<p></p>';
+		else if ( ! /^</.test( body ) ) {
+			// Plain text path (textarea fallback): one <p> per blank-line split.
+			body = body.split( /\n\n+/ ).map( ( line ) => `<p>${ esc( line ) }</p>` ).join( '' ) || '<p></p>';
+		}
+		const sa = attrs && typeof attrs === 'object' && ! Array.isArray( attrs ) ? attrs : null;
+		const openComment = sa && Object.keys( sa ).length
+			? `<!-- wp:details${ serializeBlockAttrs( sa ) } -->`
+			: '<!-- wp:details -->';
+		const openAttr = sa && sa.showContent ? ' open' : '';
+		return `${ openComment }\n<details class="wp-block-details"${ openAttr }><summary>${ esc( s ) }</summary>${ body }</details>\n<!-- /wp:details -->`;
+	}
 
 	// Keep ed.islands in sync with the in-island shortcode field. Serialize
 	// reads islands[] (not DOM), so every keystroke must land here.
@@ -4925,6 +4996,21 @@
 		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
 	}
 
+	function commitDetailsIsland( islandEl, opts ) {
+		const ed = state.editor;
+		if ( ! ed || ! ed.islands || ! islandEl ) return;
+		const idx = parseInt( islandEl.dataset.island, 10 );
+		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		const sum = islandEl.querySelector( '.minn-details-summary' );
+		const body = islandEl.querySelector( '.minn-details-body' );
+		if ( ! sum || ! body ) return;
+		const prev = parseDetailsRaw( ed.islands[ idx ] );
+		const next = buildDetailsRaw( sum.value, body.innerHTML, prev.attrs );
+		if ( ed.islands[ idx ] === next ) return;
+		ed.islands[ idx ] = next;
+		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
+	}
+
 	function focusShortcodeIsland( islandEl ) {
 		const input = islandEl && islandEl.querySelector( '.minn-shortcode-input' );
 		if ( ! input ) return;
@@ -4935,6 +5021,27 @@
 			// Fresh insert is "[]" — select all so the first keystroke replaces.
 			if ( input.value === '[]' || ! input.value.trim() ) input.select();
 		} );
+	}
+
+	function focusDetailsIsland( islandEl ) {
+		if ( ! islandEl ) return;
+		const det = islandEl.querySelector( 'details.minn-details-edit' );
+		if ( det ) det.open = true;
+		const sum = islandEl.querySelector( '.minn-details-summary' );
+		requestAnimationFrame( () => {
+			if ( ! sum || ! sum.isConnected ) return;
+			sum.focus( { preventScroll: true } );
+			// Fresh insert defaults to "Details" — select so typing replaces.
+			if ( sum.value === 'Details' ) sum.select();
+		} );
+	}
+
+	// Live-field islands (shortcode/details) — never overwrite with a server
+	// render; their DOM is the source of truth until commit.
+	function isLiveFieldIsland( island ) {
+		if ( ! island ) return false;
+		const b = island.dataset.block || '';
+		return /(?:^|\/)(shortcode|details)$/.test( b );
 	}
 
 	/* ===== Embeds & galleries (inserted as islands) ===== */
@@ -5330,9 +5437,12 @@
 	}
 
 	function serializeToBlocks( root, islands ) {
-		// Flush in-island shortcode fields so a save mid-keystroke (or before
-		// the input event lands) still persists what the writer sees.
-		if ( root ) $$( '.minn-shortcode-input', root ).forEach( ( el ) => commitShortcodeInput( el, { silent: true } ) );
+		// Flush in-island live fields so a save mid-keystroke (or before the
+		// input event lands) still persists what the writer sees.
+		if ( root ) {
+			$$( '.minn-shortcode-input', root ).forEach( ( el ) => commitShortcodeInput( el, { silent: true } ) );
+			$$( '.minn-details-island', root ).forEach( ( el ) => commitDetailsIsland( el, { silent: true } ) );
+		}
 		const out = [];
 		// serializeBlockAttrs applies Gutenberg's comment-safe escaping ("--", <, >, &).
 		const pushBlock = ( name, attrs, html ) =>
@@ -7544,31 +7654,75 @@
 			const island = chip.closest( '.minn-block-island' );
 			if ( island ) openInspector( island );
 		} );
-		// Shortcode islands: type in the field, commit into ed.islands (serialize
-		// never reads the input itself). stopPropagation on the input path so
-		// island guards / contenteditable don't treat keystrokes as body edits.
+		// Live-field islands (shortcode + details): type in the card, commit
+		// into ed.islands (serialize never reads the fields). stopPropagation
+		// so island guards / outer contenteditable don't treat keystrokes as
+		// body edits. Summary input click preventDefault keeps <details>
+		// from toggling while the writer focuses the summary field.
 		if ( ! locked ) {
 			body.addEventListener( 'input', ( e ) => {
 				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
-				if ( sc ) commitShortcodeInput( sc );
+				if ( sc ) { commitShortcodeInput( sc ); return; }
+				const detField = e.target.closest && e.target.closest( '.minn-details-summary, .minn-details-body' );
+				if ( detField ) {
+					const island = detField.closest( '.minn-details-island' );
+					if ( island ) commitDetailsIsland( island );
+				}
 			} );
 			body.addEventListener( 'change', ( e ) => {
 				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
-				if ( sc ) commitShortcodeInput( sc );
+				if ( sc ) { commitShortcodeInput( sc ); return; }
+				const detField = e.target.closest && e.target.closest( '.minn-details-summary, .minn-details-body' );
+				if ( detField ) {
+					const island = detField.closest( '.minn-details-island' );
+					if ( island ) commitDetailsIsland( island );
+				}
 			} );
 			body.addEventListener( 'keydown', ( e ) => {
-				if ( ! ( e.target.closest && e.target.closest( '.minn-shortcode-input' ) ) ) return;
-				// Keep Enter from inserting a newline attempt / bubbling into
-				// body handlers; shortcodes are single-line in the field.
-				if ( e.key === 'Enter' ) {
-					e.preventDefault();
-					e.target.blur();
+				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
+				if ( sc ) {
+					// Shortcodes are single-line — Enter blurs instead of inserting.
+					if ( e.key === 'Enter' ) {
+						e.preventDefault();
+						e.target.blur();
+					}
+					e.stopPropagation();
+					return;
 				}
-				e.stopPropagation();
+				const detSum = e.target.closest && e.target.closest( '.minn-details-summary' );
+				if ( detSum ) {
+					// Enter in summary jumps into the body (and keeps details open).
+					if ( e.key === 'Enter' ) {
+						e.preventDefault();
+						const island = detSum.closest( '.minn-details-island' );
+						const det = island && island.querySelector( 'details.minn-details-edit' );
+						const bodyEl = island && island.querySelector( '.minn-details-body' );
+						if ( det ) det.open = true;
+						if ( bodyEl ) {
+							bodyEl.focus();
+							const r = document.createRange();
+							r.selectNodeContents( bodyEl );
+							r.collapse( false );
+							const sel = window.getSelection();
+							sel.removeAllRanges();
+							sel.addRange( r );
+						}
+					}
+					e.stopPropagation();
+					return;
+				}
+				const detBody = e.target.closest && e.target.closest( '.minn-details-body' );
+				if ( detBody ) e.stopPropagation();
 			} );
-			// Clicking the field must not be treated as "click island chrome".
 			body.addEventListener( 'mousedown', ( e ) => {
-				if ( e.target.closest && e.target.closest( '.minn-shortcode-input' ) ) e.stopPropagation();
+				if ( e.target.closest && e.target.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body' ) ) {
+					e.stopPropagation();
+				}
+			}, true );
+			// Clicking the summary text field must not toggle <details> closed.
+			body.addEventListener( 'click', ( e ) => {
+				const sum = e.target.closest && e.target.closest( '.minn-details-summary' );
+				if ( sum ) e.preventDefault();
 			}, true );
 		}
 		// Clicking an editable image opens its controls popover.
@@ -8682,11 +8836,18 @@
 
 		// Refresh the preview with a real server render; tolerate failure
 		// (a misbehaving render callback must never break the editor).
-		// Shortcode islands use a live input instead of a preview slot —
-		// sync that field so an inspector text-run Apply is visible.
+		// Live-field islands (shortcode/details) use in-card editors instead of
+		// a preview slot — sync those fields so an inspector Apply is visible.
 		const islandEl = insp.islandEl || document.querySelector( `.minn-block-island[data-island="${ insp.idx }"]` );
 		const scInput = islandEl && islandEl.querySelector( '.minn-shortcode-input' );
 		if ( scInput ) scInput.value = stripBlockComments( newRaw ).trim();
+		if ( islandEl && islandEl.classList.contains( 'minn-details-island' ) ) {
+			const parts = parseDetailsRaw( newRaw );
+			const sum = islandEl.querySelector( '.minn-details-summary' );
+			const bodyEl = islandEl.querySelector( '.minn-details-body' );
+			if ( sum ) sum.value = parts.summary;
+			if ( bodyEl ) bodyEl.innerHTML = parts.bodyHtml && parts.bodyHtml.trim() ? parts.bodyHtml : '<p><br></p>';
+		}
 		const previewEl = document.querySelector( `.minn-island-preview[data-preview="${ insp.idx }"]` );
 		try {
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ], post: ( state.editor && state.editor.id ) || 0 } ) } );
@@ -8720,7 +8881,8 @@
 				if ( ! r || ! Array.isArray( r.rendered ) || ! document.contains( body ) ) return;
 				r.rendered.forEach( ( html, i ) => {
 					const island = body.querySelector( `.minn-block-island[data-island="${ i }"]` );
-					if ( island && /shortcode/.test( island.dataset.block || '' ) ) return;
+					// Shortcode/details host live fields — never clobber them.
+					if ( isLiveFieldIsland( island ) ) return;
 					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
 					if ( el && html && html.trim() ) el.innerHTML = html;
 				} );
@@ -10448,7 +10610,7 @@
 	function detailsTemplate( summary, body ) {
 		const s = summary != null ? String( summary ) : 'Details';
 		const b = body != null ? String( body ) : '';
-		return `<!-- wp:details -->\n<details class="wp-block-details"><summary>${ esc( s ) }</summary><p>${ esc( b ) }</p></details>\n<!-- /wp:details -->`;
+		return buildDetailsRaw( s, b ? `<p>${ esc( b ) }</p>` : '<p></p>', null );
 	}
 
 	// Island inserts need blocks-mode serialization. Classic posts (no block
@@ -10713,7 +10875,13 @@
 					updateEditorStats();
 				} )
 				.catch( () => {} );
-			if ( islandEl ) openInspector( islandEl );
+			// Details is interactive in-island (expand + type) — focus the
+			// summary instead of opening the inspector. Other custom blocks
+			// still open the inspector to configure attrs.
+			if ( islandEl ) {
+				if ( /(?:^|\/)details$/.test( action.block || '' ) ) focusDetailsIsland( islandEl );
+				else openInspector( islandEl );
+			}
 			scheduleAutosave();
 			return;
 		}
