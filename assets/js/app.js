@@ -274,9 +274,19 @@
 	// A toast with an action button (e.g. "Removed — Undo"). Used to make
 	// structural block deletions recoverable without touching the browser undo
 	// stack (see the undo-completeness decision in docs/editor-roadmap.md).
+	// While the toast is up, ⌘Z / Ctrl+Z also runs the action — island delete
+	// is direct-DOM so the browser undo stack never saw it (Austin: toast Undo
+	// worked, keyboard didn't).
+	let pendingToastUndo = null; // { run: fn, el }
+
+	function clearPendingToastUndo( el ) {
+		if ( pendingToastUndo && ( ! el || pendingToastUndo.el === el ) ) pendingToastUndo = null;
+	}
+
 	function toastAction( msg, actionLabel, onAction, duration = 7000 ) {
-		$$( '.minn-toast' ).forEach( ( el ) => el.remove() );
+		$$( '.minn-toast' ).forEach( ( t ) => t.remove() );
 		clearTimeout( toastTimer );
+		clearPendingToastUndo();
 		const el = document.createElement( 'div' );
 		el.className = 'minn-toast minn-toast-action';
 		el.innerHTML = `
@@ -284,9 +294,31 @@
 			<div class="minn-toast-msg">${ esc( msg ) }</div>
 			<button class="minn-toast-btn" type="button">${ esc( actionLabel ) }</button>`;
 		document.body.appendChild( el );
-		const dismiss = () => { clearTimeout( toastTimer ); el.remove(); };
-		el.querySelector( '.minn-toast-btn' ).addEventListener( 'click', () => { dismiss(); onAction(); } );
+		const dismiss = () => {
+			clearTimeout( toastTimer );
+			clearPendingToastUndo( el );
+			if ( el.isConnected ) el.remove();
+		};
+		const run = () => {
+			// Clear first so a re-entrant ⌘Z can't double-fire.
+			clearPendingToastUndo( el );
+			clearTimeout( toastTimer );
+			if ( el.isConnected ) el.remove();
+			onAction();
+		};
+		el.querySelector( '.minn-toast-btn' ).addEventListener( 'click', run );
+		// Only arm keyboard undo for Undo-style actions (block remove today).
+		if ( /^undo$/i.test( String( actionLabel || '' ).trim() ) ) {
+			pendingToastUndo = { run, el };
+		}
 		toastTimer = setTimeout( dismiss, duration );
+	}
+
+	// True when a structural Undo toast is live — callers intercept ⌘Z.
+	function runPendingToastUndo() {
+		if ( ! pendingToastUndo ) return false;
+		pendingToastUndo.run();
+		return true;
 	}
 
 	/* ===== Routing =====
@@ -5409,7 +5441,7 @@
 		island.remove();
 		updateEditorStats();
 		if ( ed && ed.id ) scheduleAutosave();
-		toastAction( 'Block removed', 'Undo', () => {
+		toastAction( 'Block removed · ⌘Z', 'Undo', () => {
 			if ( ! parent.isConnected ) return;
 			if ( ed && ed.islands && template != null ) ed.islands[ idx ] = template;
 			parent.insertBefore( island, next && next.isConnected && next.parentNode === parent ? next : null );
@@ -13864,6 +13896,17 @@
 				navigator.sendBeacon( `${ B.restUrl }minn-admin/v1/posts/${ ed.id }/unlock?_wpnonce=${ encodeURIComponent( B.nonce ) }`, '' );
 			}
 		} );
+
+		// Capture phase so structural toast-Undo wins over contenteditable's
+		// native undo (island delete never entered the browser undo stack).
+		window.addEventListener( 'keydown', ( e ) => {
+			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'z' ) {
+				if ( runPendingToastUndo() ) {
+					e.preventDefault();
+					e.stopPropagation();
+				}
+			}
+		}, true );
 
 		window.addEventListener( 'keydown', ( e ) => {
 			if ( ( e.metaKey || e.ctrlKey ) && e.key.toLowerCase() === 'k' ) {

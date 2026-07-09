@@ -68,6 +68,20 @@ const TABLE = '<!-- wp:table -->\n<figure class="wp-block-table"><table><tbody><
 	r = await raw( id2 );
 	t.check( 'inspector-removed island restores + saves', ( await islands() ) === 1 && /wp:embed/.test( r ), '' );
 
+	/* ===== Island delete — ⌘Z restores (same as toast Undo) ===== */
+	const id2b = await fresh( P( 'x' ) + '\n\n' + EMBED );
+	await page.click( '#minn-editor-body .minn-island-chip' );
+	await page.waitForSelector( '#minn-insp-remove', { timeout: 4000 } );
+	await page.click( '#minn-insp-remove' );
+	await page.waitForTimeout( 200 );
+	t.check( 'inspector remove for ⌘Z test', ( await islands() ) === 0 );
+	await page.waitForSelector( '.minn-toast-action', { timeout: 4000 } );
+	await cmdZ();
+	t.check( '⌘Z restores the island (toast Undo path)', ( await islands() ) === 1 );
+	await save();
+	r = await raw( id2b );
+	t.check( '⌘Z-restored island saves', /wp:embed/.test( r ) && /watch\?v=abc/.test( r ), r.slice( 0, 160 ) );
+
 	/* ===== Table row delete — ⌘Z ===== */
 	const id3 = await fresh( TABLE );
 	await openTablePop();
