@@ -52,19 +52,28 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   (zero lock-in: open any post in the block editor, any time). Markdown typing conventions
   (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), a link popover
   on ⌘K, text alignment, table & image controls in island-style cutouts, complex blocks
-  preserved byte-for-byte as **configurable islands** rendered with the site's real front-end
-  styles, slash commands with type-to-filter, syntax-highlighted code blocks, word count ·
-  reading time, scheduling and one-click publish. **Paste cleanup** turns Word / Google Docs /
-  web HTML into the safe subset; **paste or drag an image** and it uploads to the library at
-  the caret with an inline caption. The publish sidebar edits the **slug**, **visibility**
-  (public / password / private), per-post **discussion** and **sticky**. Deleting an embed or
-  a table row offers an **Undo** toast. **Revision diffs** open a side-by-side, word-marked
-  diff of any revision against the current content. An **outline panel** lists headings as a
-  clickable, live-updating table of contents; **focus mode** (⌘⇧D) fades all but the current
-  paragraph with typewriter scroll; **outline mode** (⌘⇧O) leaves just the writing and the
-  outline. The **internal link picker** searches your own posts from the link popover, and a
-  themed **date-time picker** handles scheduling. ⌘⏎ publishes; the help dialog documents
-  every shortcut. Where this is heading: [the editor roadmap](docs/editor-roadmap.md)
+  preserved byte-for-byte as **configurable islands** with real front-end styles (and full
+  height; previews no longer clip tall grids). Slash commands stay curated and type-to-filter;
+  **Browse all** or **⌘/** opens the **block picker**, grouped by source (basics, plugin
+  blocks, design libraries, patterns). **Dynamic third-party blocks** that render standalone
+  auto-appear in search (no adapter); **Stackable**, **Kadence**, and **GenerateBlocks**
+  free design/pattern libraries insert as valid Gutenberg markup with images sideloaded;
+  **block patterns** from core, the theme, and plugins join the same search. Island content
+  is editable: **text runs** and an **Images** section rewrite only what you change; block
+  settings scale (used fields first, the rest behind **More settings**); every island links
+  out to the block editor for layout controls. Previews pick up lazy CSS and **auto-warm**
+  browser-compiled styles when needed. Syntax-highlighted code blocks, word count · reading
+  time, scheduling and one-click publish. **Paste cleanup** turns Word / Google Docs / web
+  HTML into the safe subset; **paste or drag an image** uploads at the caret with an inline
+  caption. The publish sidebar edits the **slug**, **visibility** (public / password /
+  private), per-post **discussion** and **sticky**. Deleting an embed offers an **Undo**
+  toast; **table** add/delete row and column undo with **⌘Z**. **Revision diffs** open a
+  side-by-side, word-marked diff against the current content. An **outline panel** lists
+  headings as a live table of contents; **focus mode** (⌘⇧D) fades all but the current
+  paragraph; **outline mode** (⌘⇧O) leaves just the writing and the outline. The **internal
+  link picker** searches your own posts from the link popover, and a themed **date-time
+  picker** handles scheduling. ⌘⏎ publishes; the help dialog documents every shortcut.
+  Where this is heading: [the editor roadmap](docs/editor-roadmap.md)
 - **Never lose work** — post locking on WordPress's own `_edit_lock` (Minn, the classic editor
   and Gutenberg all honor each other, with takeover), plus a localStorage **crash net** that
   snapshots every edit within ~1.2s (before the first autosave) and offers recovery on the
@@ -83,10 +92,13 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **SEO panel** — Yoast SEO / Rank Math title, meta description and focus keyword in the
   editor sidebar
 - **Command palette** — ⌘K / Ctrl-K everywhere
+- **Menus & Widgets** — classic nav menus with drag-to-reorder (children travel with their
+  parent); classic sidebars with **drag grips** to reorder widgets in an area, plus move
+  between areas and in-place edit for block/text/HTML widgets
 - **Plugin surfaces** — bundled adapters for **Gravity Forms** (readable entries with real
-  field labels + a Forms view with activate/deactivate), **Gravity SMTP** (email log with a
-  real HTML preview and resend), **Simple History**, **WP Activity Log**, **Activity Log
-  (Aryo)** and **Stream** (audit logs), **Redirection**,
+  field labels, **←/→** to step through the list, plus a Forms view with activate/deactivate),
+  **Gravity SMTP** (email log with a real HTML preview and resend), **Simple History**,
+  **WP Activity Log**, **Activity Log (Aryo)** and **Stream** (audit logs), **Redirection**,
   **Safe Redirect Manager** and **Simple 301 Redirects** (redirects: list, search, create,
   edit and delete), **ACF** (editor panels) and **Yoast / Rank Math** (SEO panel), plus
   one-filter APIs for any plugin to register views, editor panels, traffic data or
@@ -115,7 +127,8 @@ required. See [docs/for-plugin-authors.md](docs/for-plugin-authors.md), and
 - [Project goals](docs/goals.md)
 - [Editor direction](docs/editor-direction.md)
 - [Editor roadmap](docs/editor-roadmap.md)
-- [Block inspector (design, v0.4.0)](docs/block-inspector.md)
+- [Block inspector](docs/block-inspector.md)
+- [Block-suite lab notes](docs/block-suites.md)
 - [For plugin authors](docs/for-plugin-authors.md)
 - [Changelog](changelog.md)
 
