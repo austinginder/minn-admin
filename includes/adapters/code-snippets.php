@@ -4,8 +4,9 @@
  *
  * Pure descriptor over Code Snippets' own REST API (code-snippets/v1). Lists
  * snippets with name, scope, active status, priority and last modified; detail
- * shows the code body as a mono block; activate / deactivate / delete ride the
- * plugin's own endpoints. Edit is a deep link into the Code Snippets admin.
+ * edits name/description/code/scope/priority/tags in place (same pattern as
+ * Redirection); activate / deactivate / delete ride the plugin's own endpoints.
+ * "Edit in Code Snippets ↗" remains for the full admin (safe mode, cloud, etc.).
  *
  * See docs/code-snippets.md for the source audit and why this plugin is the
  * first snippet adapter (full CRUD REST, manage_options cap, clean table).
@@ -27,6 +28,34 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$cap = \Code_Snippets\code_snippets()->get_cap_name();
 	}
 
+	// Free-tier scopes from Snippet::get_all_scopes(). Pro CSS/JS scopes still
+	// round-trip via preserve if present; the select covers the common set.
+	$scope_options = array(
+		array( 'global', 'Global (everywhere)' ),
+		array( 'admin', 'Admin only' ),
+		array( 'front-end', 'Front-end only' ),
+		array( 'single-use', 'Single use' ),
+		array( 'content', 'Content (shortcode)' ),
+		array( 'head-content', 'Site head' ),
+		array( 'footer-content', 'Site footer' ),
+	);
+
+	$edit_fields = array(
+		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => 'Disable emojis' ),
+		array( 'key' => 'desc', 'label' => 'Description', 'type' => 'textarea', 'rows' => 2, 'required' => false ),
+		array(
+			'key'         => 'code',
+			'label'       => 'Code',
+			'type'        => 'textarea',
+			'mono'        => true,
+			'rows'        => 14,
+			'placeholder' => "add_filter( '…', '…' );",
+		),
+		array( 'key' => 'scope', 'label' => 'Scope', 'type' => 'select', 'options' => $scope_options ),
+		array( 'key' => 'priority', 'label' => 'Priority', 'type' => 'number' ),
+		array( 'key' => 'tags', 'label' => 'Tags', 'type' => 'tags', 'required' => false, 'placeholder' => 'media, sample' ),
+	);
+
 	$surfaces['code-snippets'] = array(
 		'label'      => 'Snippets',
 		'sub'        => 'Code Snippets',
@@ -35,8 +64,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'route'     => 'code-snippets/v1/snippets',
 			'pageQuery' => 'per_page=25&page={page}',
-			// Their list endpoint has no free-text search; name/desc still land
-			// in the detail and are scannable in the list title column.
+			// Their list endpoint has no free-text search; names are scannable
+			// in the title column and full code is editable in the detail.
+			'create'    => array(
+				'label'    => 'Add snippet',
+				'route'    => 'code-snippets/v1/snippets',
+				'method'   => 'POST',
+				'defaults' => array(
+					'active'   => false,
+					'scope'    => 'global',
+					'priority' => 10,
+					'tags'     => array(),
+				),
+				'fields'   => $edit_fields,
+			),
 			'columns'   => array(
 				array( 'key' => 'name', 'label' => 'Snippet', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'scope', 'label' => 'Scope', 'format' => 'mono', 'width' => '100px' ),
@@ -47,11 +88,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				// Re-fetch so the modal always has full code + fresh active flag.
 				'detailRoute' => 'code-snippets/v1/snippets/{id}',
-				// Code body as the main panel (plain-text <pre>, not an iframe).
-				'messageKey'  => 'code',
+				// Static rows hide editable fields; the form is the editor.
 				'skip'        => array(
 					'code', 'code_error', 'network', 'shared_network',
-					'condition_id', 'cloud_id', 'revision',
+					'condition_id', 'cloud_id', 'revision', 'name', 'desc',
+					'scope', 'priority', 'tags', 'active',
+				),
+				// In-place edit through PUT /snippets/{id} — same path as
+				// activate/deactivate, so only fields present are updated.
+				'edit'        => array(
+					'route'    => 'code-snippets/v1/snippets/{id}',
+					'method'   => 'PUT',
+					// Keep activation + network flags when saving content.
+					'preserve' => array( 'active', 'network', 'shared_network', 'condition_id' ),
+					'fields'   => $edit_fields,
 				),
 			),
 			'actions'   => array(

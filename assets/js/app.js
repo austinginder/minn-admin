@@ -2272,6 +2272,41 @@
 		o[ parts[ parts.length - 1 ] ] = val;
 	}
 
+	// Shared field markup for surface create + detail.edit. Supports text
+	// (default), number, textarea, and select (options: [[value, label], …]).
+	// data-edittype rides so the save path can coerce tags/numbers correctly.
+	function surfaceFieldHtml( f, val, dataAttr ) {
+		const attr = dataAttr || 'data-editfield';
+		const cls = `minn-input${ f.mono ? ' mono' : '' }${ f.type === 'textarea' ? ' minn-surface-textarea' : '' }`;
+		const type = f.type || 'text';
+		const v = val == null ? '' : val;
+		if ( type === 'textarea' ) {
+			const rows = f.rows || ( f.mono ? 12 : 3 );
+			return `<textarea class="${ cls }" ${ attr }="${ esc( f.key ) }" data-edittype="textarea" rows="${ rows }" placeholder="${ esc( f.placeholder || '' ) }">${ esc( String( v ) ) }</textarea>`;
+		}
+		if ( type === 'select' ) {
+			const opts = ( f.options || [] ).map( ( o ) => {
+				const value = Array.isArray( o ) ? o[ 0 ] : o;
+				const label = Array.isArray( o ) ? ( o[ 1 ] != null ? o[ 1 ] : o[ 0 ] ) : o;
+				return `<option value="${ esc( String( value ) ) }"${ String( value ) === String( v ) ? ' selected' : '' }>${ esc( String( label ) ) }</option>`;
+			} ).join( '' );
+			return `<select class="${ cls }" ${ attr }="${ esc( f.key ) }" data-edittype="select">${ opts }</select>`;
+		}
+		if ( type === 'tags' ) {
+			const shown = Array.isArray( v ) ? v.join( ', ' ) : String( v );
+			return `<input class="${ cls }" ${ attr }="${ esc( f.key ) }" data-edittype="tags" value="${ esc( shown ) }" placeholder="${ esc( f.placeholder || 'tag-one, tag-two' ) }">`;
+		}
+		return `<input class="${ cls }" ${ attr }="${ esc( f.key ) }" data-edittype="${ esc( type ) }"${ type === 'number' ? ' type="number"' : '' } value="${ esc( String( v ) ) }" placeholder="${ esc( f.placeholder || '' ) }">`;
+	}
+
+	function surfaceFieldValue( el ) {
+		let v = el.value;
+		const kind = el.dataset.edittype || el.type || 'text';
+		if ( kind === 'number' ) return v === '' ? null : Number( v );
+		if ( kind === 'tags' ) return v.split( /,\s*/ ).map( ( t ) => t.trim() ).filter( Boolean );
+		return v;
+	}
+
 	function surfaceCell( item, colDef ) {
 		let v = surfaceValue( item, colDef.key );
 		if ( ( v == null || v === '' ) && colDef.altKey ) v = surfaceValue( item, colDef.altKey );
@@ -10863,9 +10898,12 @@
 			// in the head because there's no preview stage.
 			const sctx = surfaceModalContext();
 			const canStep = sctx && sctx.items.length > 1;
+			// Wide when the detail shows a message body or any textarea edit field
+			// (code snippets need room for the code editor).
+			const needsWide = !! message || editFields.some( ( f ) => f.type === 'textarea' );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal${ message ? ' wide' : '' }">
+				<div class="minn-modal${ needsWide ? ' wide' : '' }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( sec && sec.title ? sec.title : s.label ) } #${ esc( String( it.id ) ) }</div>
 						${ it.status ? surfacePill( it.status )
@@ -10882,7 +10920,7 @@
 							${ editFields.map( ( f, i ) => {
 								const val = surfaceValue( it, f.key );
 								return `<div class="minn-field-label"${ i ? ' style="margin-top:10px;"' : '' }>${ esc( f.label ) }</div>
-								<input class="minn-input${ f.mono ? ' mono' : '' }" data-editfield="${ esc( f.key ) }"${ f.type === 'number' ? ' type="number"' : '' } value="${ esc( val == null ? '' : val ) }">`;
+								${ surfaceFieldHtml( f, val, 'data-editfield' ) }`;
 							} ).join( '' ) }
 						</div>` : '' }
 					</div>
@@ -11103,9 +11141,10 @@
 
 		if ( m.type === 'surface-form' ) {
 			const cr = m.surface.collection.create;
+			const formWide = ( cr.fields || [] ).some( ( f ) => f.type === 'textarea' );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal">
+				<div class="minn-modal${ formWide ? ' wide' : '' }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( cr.label || 'Add' ) } — ${ esc( m.surface.label ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
@@ -11113,7 +11152,7 @@
 					<div class="minn-modal-form">
 						${ cr.fields.map( ( f ) => `<div>
 							<div class="minn-field-label">${ esc( f.label ) }</div>
-							<input class="minn-input${ f.mono ? ' mono' : '' }" data-createfield="${ esc( f.key ) }"${ f.type === 'number' ? ' type="number"' : '' } value="${ esc( f.value == null ? '' : f.value ) }" placeholder="${ esc( f.placeholder || '' ) }">
+							${ surfaceFieldHtml( f, f.value, 'data-createfield' ) }
 						</div>` ).join( '' ) }
 					</div>
 					<div class="minn-modal-actions">
@@ -11496,9 +11535,11 @@
 				const body = JSON.parse( JSON.stringify( cr.defaults || {} ) );
 				let missing = false;
 				$$( '[data-createfield]', $( '.minn-modal' ) ).forEach( ( input ) => {
-					let v = input.value.trim();
-					if ( ! v && input.type !== 'number' ) missing = true;
-					if ( input.type === 'number' ) v = v === '' ? null : Number( v );
+					const v = surfaceFieldValue( input );
+					const empty = v == null || v === '' || ( Array.isArray( v ) && ! v.length );
+					// Number 0 is a real value; optional fields can set required:false.
+					const field = ( cr.fields || [] ).find( ( f ) => f.key === input.dataset.createfield );
+					if ( empty && ( ! field || field.required !== false ) && input.dataset.edittype !== 'number' ) missing = true;
 					setDeepPath( body, input.dataset.createfield, v );
 				} );
 				if ( missing ) { toast( 'Fill in all fields first', true ); return; }
@@ -11673,9 +11714,7 @@
 				// Carry the untouched fields so the plugin's sanitizer doesn't reset them.
 				( edit.preserve || [] ).forEach( ( k ) => { const v = surfaceValue( m.item, k ); if ( v !== undefined ) body[ k ] = v; } );
 				$$( '[data-editfield]' ).forEach( ( input ) => {
-					let v = input.value;
-					if ( input.type === 'number' ) v = v === '' ? null : Number( v );
-					setDeepPath( body, input.dataset.editfield, v );
+					setDeepPath( body, input.dataset.editfield, surfaceFieldValue( input ) );
 				} );
 				saveBtn.disabled = true;
 				saveBtn.textContent = 'Saving…';

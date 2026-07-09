@@ -995,6 +995,14 @@ a.minn-btn-soft { text-decoration: none; }
 .minn-modal-preview.media-lg { min-height: 300px; max-height: 66vh; }
 .minn-modal-preview.media-lg img, .minn-modal-preview.media-lg video { max-height: 66vh; }
 .minn-media-edit { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+/* Surface detail/create textareas (code snippets, long fields). Mono code
+   editors get a taller box and tab-friendly sizing; wrap stays on for long
+   lines so the modal doesn't grow horizontally. */
+.minn-surface-textarea { width: 100%; min-height: 72px; resize: vertical; line-height: 1.45; }
+.minn-surface-textarea.mono {
+  min-height: 220px; max-height: 52vh; font-size: 12.5px; tab-size: 4;
+  white-space: pre; overflow: auto; field-sizing: fixed;
+}
 .minn-tax-select { width: 180px; flex-shrink: 0; }
 /* Editor tag box. */
 .minn-tag-input { margin-top: 7px; font-size: 13px; padding: 7px 10px; }
