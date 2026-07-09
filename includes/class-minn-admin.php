@@ -281,6 +281,10 @@ class Minn_Admin {
 				'blockTheme'  => wp_is_block_theme(),
 				'hasSidebars' => ! empty( $GLOBALS['wp_registered_sidebars'] ),
 			),
+			// Hours east of UTC (may be fractional, e.g. +5.5). Used by the
+			// client to parse WP REST site-local dates (no zone suffix) so
+			// timeAgo / tooltips aren't skewed by gmt_offset.
+			'gmtOffset' => (float) get_option( 'gmt_offset' ),
 			'caps'     => array(
 				'plugins'      => current_user_can( 'activate_plugins' ),
 				'update'       => current_user_can( 'update_plugins' ),
