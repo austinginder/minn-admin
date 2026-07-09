@@ -37,6 +37,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['wp-activity-log'] = array(
 		'label'      => 'Activity Log',
+		'family'     => 'activity-log',
 		'sub'        => 'WP Activity Log',
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating happens above + in the shim.

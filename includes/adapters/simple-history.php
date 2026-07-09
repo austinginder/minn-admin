@@ -19,6 +19,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['simple-history'] = array(
 		'label'      => 'Activity Log',
+		'family'     => 'activity-log',
 		'sub'        => 'Simple History',
 		'icon'       => 'clock',
 		'cap'        => apply_filters( 'simple_history/view_history_capability', 'edit_pages' ),

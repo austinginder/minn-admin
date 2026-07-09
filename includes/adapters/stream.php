@@ -22,6 +22,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['stream'] = array(
 		'label'      => 'Activity Log',
+		'family'     => 'activity-log',
 		'sub'        => 'Stream',
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating above + in the shim.

@@ -24,6 +24,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 	$surfaces['safe-redirect-manager'] = array(
 		'label'      => 'Redirects',
+		'family'     => 'redirects',
 		'sub'        => 'Safe Redirect Manager',
 		'icon'       => 'shuffle',
 		'cap'        => 'manage_options',

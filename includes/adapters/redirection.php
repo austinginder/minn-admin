@@ -19,6 +19,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['redirection'] = array(
 		'label'      => 'Redirects',
+		'family'     => 'redirects',
 		'sub'        => 'Redirection',
 		'icon'       => 'shuffle',
 		'cap'        => apply_filters( 'redirection_role', 'manage_options' ),
