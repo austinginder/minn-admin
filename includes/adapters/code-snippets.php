@@ -86,7 +86,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'scope', 'label' => 'Scope', 'format' => 'mono', 'width' => '100px' ),
 				array( 'key' => 'active', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
 				array( 'key' => 'priority', 'label' => 'Priority', 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago' ),
+				// Code Snippets stores/returns modified via gmdate (UTC, no Z).
+				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				// Re-fetch so the modal always has full code + fresh active flag.

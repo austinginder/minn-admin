@@ -52,7 +52,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'action_data.url', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
 				array( 'key' => 'action_code', 'label' => 'Code', 'format' => 'mono', 'width' => '64px' ),
 				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '72px' ),
-				array( 'key' => 'last_access', 'label' => 'Last hit', 'format' => 'ago' ),
+				// last_access is stored via gmdate (UTC, no zone).
+				array( 'key' => 'last_access', 'label' => 'Last hit', 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'skip' => array( 'match_data', 'match_type', 'match_url', 'position', 'group_id' ),

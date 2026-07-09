@@ -45,7 +45,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'subject', 'label' => 'Subject', 'format' => 'title' ),
 				array( 'key' => 'to', 'label' => 'To', 'format' => 'text' ),
 				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'date_created', 'label' => 'Date', 'format' => 'ago' ),
+				// Event timestamps are UTC MySQL datetimes (no zone suffix).
+				array( 'key' => 'date_created', 'label' => 'Date', 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'detailRoute' => 'minn-admin/v1/gravity-smtp/events/{id}',

@@ -60,7 +60,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'columns'   => array(
 				array( 'key' => '_summary', 'label' => 'Entry', 'format' => 'entry-summary' ),
 				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'date_created', 'label' => 'Date', 'format' => 'ago' ),
+				// GF stores entry dates in UTC (MySQL, no zone).
+				array( 'key' => 'date_created', 'label' => 'Date', 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				// The shim returns the whole display model: answers with the
@@ -88,7 +89,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'title', 'label' => 'Form', 'format' => 'title' ),
 				array( 'key' => 'entries', 'label' => 'Entries', 'format' => 'num' ),
 				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'date_created', 'label' => 'Created', 'format' => 'ago' ),
+				array( 'key' => 'date_created', 'label' => 'Created', 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(),
 			'actions'   => array(

@@ -104,7 +104,8 @@ add_action( 'rest_api_init', function () {
 					'ip'      => $r->hist_ip,
 					// Aryo stores current_time('timestamp') — WP's LOCAL epoch,
 					// not UTC — so shift back before emitting an ISO-UTC shape.
-					'date'    => gmdate( 'Y-m-d\TH:i:s', (int) $r->hist_time - (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ),
+					// UTC with Z (hist_time is WP local epoch — shift back first).
+					'date'    => gmdate( 'Y-m-d\TH:i:s\Z', (int) $r->hist_time - (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ),
 				);
 			}
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
