@@ -141,6 +141,25 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-topbar-title { font-weight: 700; font-size: 16px; letter-spacing: -0.2px; }
 .minn-topbar-sub { font-size: 13px; color: var(--text3); background: var(--panel); border: 1px solid var(--border); padding: 3px 9px; border-radius: 20px; }
+/* Family provider switcher — sits where the static sub badge was; opens a
+   combobox of installed adapters (Code Snippets / WPCode / Fluent…). */
+.minn-topbar-sub:has(.minn-surface-switch) {
+  padding: 0; background: transparent; border: 0; overflow: visible;
+}
+.minn-surface-switch { min-width: 140px; max-width: 220px; }
+.minn-surface-switch-input {
+  font-size: 13px; color: var(--text3); background: var(--panel);
+  border: 1px solid var(--border); padding: 3px 28px 3px 10px; border-radius: 20px;
+  height: auto; min-height: 0; line-height: 1.4; cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.2'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 9px center;
+}
+.minn-surface-switch-input:focus {
+  border-color: var(--accent); color: var(--text); outline: none;
+}
+.minn-surface-switch .minn-ac-panel {
+  min-width: 180px; right: 0; left: auto;
+}
 .minn-topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .minn-icon-btn {
   position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;

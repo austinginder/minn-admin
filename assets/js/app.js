@@ -310,6 +310,47 @@
 
 	const surfaceById = ( id ) => ( B.surfaces || [] ).find( ( s ) => s.id === id ) || null;
 
+	// Surfaces that share a `family` (Snippets / Redirects / Activity Log…) collapse
+	// to ONE sidebar item. Preference for which member is active sticks in
+	// localStorage; the topbar badge becomes an autocomplete switcher when
+	// more than one member is installed.
+	function surfacesInFamily( family ) {
+		if ( ! family ) return [];
+		return ( B.surfaces || [] ).filter( ( s ) => s.family === family );
+	}
+
+	function preferredSurfaceId( family ) {
+		const members = surfacesInFamily( family );
+		if ( ! members.length ) return null;
+		try {
+			const pref = localStorage.getItem( 'minn-sf-' + family );
+			if ( pref && members.some( ( m ) => m.id === pref ) ) return pref;
+		} catch ( e ) { /* private mode */ }
+		return members[ 0 ].id;
+	}
+
+	function setPreferredSurface( family, id ) {
+		try { localStorage.setItem( 'minn-sf-' + family, id ); } catch ( e ) { /* private mode */ }
+	}
+
+	// Nav entries: first-seen family wins (resolved to the preferred member).
+	function surfaceNavItems() {
+		const out = [];
+		const seen = new Set();
+		( B.surfaces || [] ).forEach( ( s ) => {
+			if ( s.family ) {
+				if ( seen.has( s.family ) ) return;
+				seen.add( s.family );
+				const id = preferredSurfaceId( s.family );
+				const primary = surfaceById( id ) || s;
+				out.push( { id: primary.id, label: primary.label, icon: primary.icon || 'plug', family: s.family } );
+			} else {
+				out.push( { id: s.id, label: s.label, icon: s.icon || 'plug' } );
+			}
+		} );
+		return out;
+	}
+
 	function newContent( type ) {
 		// The current editor's pending autosave must fire before its state goes.
 		if ( state.route === 'editor' ) {
@@ -557,8 +598,8 @@
 		if ( B.wc && B.caps.orders ) {
 			navItems.push( { id: 'orders', label: 'Orders', icon: 'cart', orderCount: true } );
 		}
-		( B.surfaces || [] ).forEach( ( s ) =>
-			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug' } )
+		surfaceNavItems().forEach( ( s ) =>
+			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
 		);
 		if ( B.caps.plugins ) {
 			navItems.push( { id: 'extensions', label: 'Extensions', icon: 'plug', dot: true } );
@@ -582,7 +623,7 @@
 		}
 
 		const navBtn = ( n ) => `
-			<button class="minn-nav-btn" data-nav="${ n.id }">
+			<button class="minn-nav-btn" data-nav="${ n.id }"${ n.family ? ` data-family="${ esc( n.family ) }"` : '' }>
 				${ icon( n.icon ) }<span>${ esc( n.label ) }</span>
 				${ n.count ? '<span class="minn-nav-count" id="minn-content-count" hidden></span>' : '' }
 				${ n.commentCount ? '<span class="minn-nav-count" id="minn-comments-count" hidden></span>' : '' }
@@ -684,16 +725,49 @@
 		const surface = surfaceById( state.route );
 		const [ title, sub ] = surface ? [ surface.label, surface.sub || '' ] : ( TITLES[ state.route ] || [ 'minn', '' ] );
 		$( '#minn-title' ).textContent = title;
+		const subEl = $( '#minn-sub' );
 		// The editor pill says WHAT you're editing, not just its status — a
 		// blank new page and a blank new post are otherwise indistinguishable.
-		$( '#minn-sub' ).textContent = state.route === 'editor' && state.editor
-			? ( state.editor.id
+		if ( state.route === 'editor' && state.editor ) {
+			subEl.textContent = state.editor.id
 				? `${ editorNoun( state.editor ) } · ${ STATUS_LABELS[ state.editor.status ] || 'Draft' }`
-				: `New ${ editorNoun( state.editor ).toLowerCase() }` )
-			: ( state.route === 'settings' ? state.settingsSection : sub );
-		$$( '.minn-nav-btn' ).forEach( ( btn ) =>
-			btn.classList.toggle( 'active', btn.dataset.nav === state.route )
-		);
+				: `New ${ editorNoun( state.editor ).toLowerCase() }`;
+		} else if ( state.route === 'settings' ) {
+			subEl.textContent = state.settingsSection || '';
+		} else if ( surface && surface.family && surfacesInFamily( surface.family ).length > 1 ) {
+			// Multiple adapters of the same family → topbar badge is a switcher.
+			const members = surfacesInFamily( surface.family );
+			subEl.innerHTML = `
+				<div class="minn-ac minn-surface-switch" id="minn-surface-switch" title="Switch provider">
+					<input class="minn-input minn-ac-input minn-surface-switch-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Snippet provider">
+					<div class="minn-ac-panel" hidden></div>
+				</div>`;
+			bindAutocomplete( $( '#minn-surface-switch' ), members.map( ( m ) => ( {
+				value: m.id,
+				label: m.sub || m.id,
+			} ) ), {
+				strict: true,
+				value: surface.id,
+				onPick: ( id ) => {
+					if ( id === surface.id ) return;
+					setPreferredSurface( surface.family, id );
+					// Keep the single sidebar button pointed at the pick so
+					// the next click (and active highlight) land correctly.
+					const btn = document.querySelector( `.minn-nav-btn[data-family="${ surface.family }"]` );
+					if ( btn ) btn.dataset.nav = id;
+					go( id );
+				},
+			} );
+		} else {
+			subEl.textContent = sub;
+		}
+		// Family members all light the same sidebar item.
+		const activeFamily = surface && surface.family ? surface.family : '';
+		$$( '.minn-nav-btn' ).forEach( ( btn ) => {
+			const on = btn.dataset.nav === state.route
+				|| ( activeFamily && btn.dataset.family === activeFamily );
+			btn.classList.toggle( 'active', on );
+		} );
 	}
 
 	function renderThemeBtn() {
@@ -10571,9 +10645,21 @@
 		if ( B.caps.moderate ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
 		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
 		if ( B.caps.users ) cmds.push( { label: 'Browse Users', kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
-		( B.surfaces || [] ).forEach( ( s ) =>
-			cmds.push( { label: 'Open ' + s.label + ( s.sub ? ' (' + s.sub + ')' : '' ), kind: 'nav', icon: '❖', run: () => go( s.id ) } )
-		);
+		// One palette entry per surface family (preferred member); ungrouped
+		// surfaces keep a single entry as before.
+		surfaceNavItems().forEach( ( s ) => {
+			const full = surfaceById( s.id ) || s;
+			const n = surfacesInFamily( s.family || '' ).length;
+			const badge = n > 1
+				? ` (${ full.sub || full.id } · ${ n } providers)`
+				: ( full.sub ? ' (' + full.sub + ')' : '' );
+			cmds.push( {
+				label: 'Open ' + full.label + badge,
+				kind: 'nav',
+				icon: '❖',
+				run: () => go( preferredSurfaceId( s.family ) || s.id ),
+			} );
+		} );
 		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
 			cmds.push( { label: 'Edit Menus', kind: 'nav', icon: '☰', run: () => go( 'menus' ) } );
 			if ( B.site.hasSidebars ) cmds.push( { label: 'Manage Widgets', kind: 'nav', icon: '▥', run: () => go( 'widgets' ) } );

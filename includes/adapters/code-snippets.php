@@ -58,6 +58,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['code-snippets'] = array(
 		'label'      => 'Snippets',
+		// Surfaces that share a family collapse to one sidebar item; the topbar
+		// sub badge becomes a provider switcher when more than one is active.
+		'family'     => 'snippets',
 		'sub'        => 'Code Snippets',
 		'icon'       => 'code',
 		'cap'        => $cap,
