@@ -6,13 +6,25 @@ list / tabs / detail-modal / action primitives that power its built-in views.
 
 ## Ship the adapter inside your own plugin
 
-Minn's whole extension surface is four public filters — **`minn_admin_surfaces`** (views),
-**`minn_admin_editor_panels`** (editor sidebar fields), **`minn_admin_traffic`** (the Overview
-chart) and **`minn_admin_block_forms`** (block-inspector forms) — plus one action,
-**`minn_admin_template_footer`**, fired at the end of Minn's app document. Minn deliberately
-never fires `wp_head`/`wp_footer` (its document stays clean), so developer tooling that wants
-to render into the page attaches there; the bundled Query Monitor adapter is the reference. The standardized way to
-integrate is to put your `add_filter()` calls in one file inside **your** plugin and require it
+Minn's whole extension surface is a small set of public hooks. The main ones:
+
+| Hook | Kind | Purpose |
+|---|---|---|
+| `minn_admin_surfaces` | filter | Sidebar views (lists, tabs, detail modals) |
+| `minn_admin_editor_panels` | filter | Per-post fields in the editor sidebar |
+| `minn_admin_traffic` | filter | Overview chart traffic provider |
+| `minn_admin_block_forms` | filter | Block inspector labels/controls + slash insert templates |
+| `minn_admin_insert_blocks` | filter | Prune or extend the auto-insert slash list |
+| `minn_admin_page_builders` | filter | Register a full-canvas page builder |
+| `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
+| `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
+| `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
+| `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
+
+Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
+tooling that wants to render into the page attaches at `minn_admin_template_footer`; the
+bundled Query Monitor adapter is the reference. The standardized way to integrate is to put
+your `add_filter()` / `add_action()` calls in one file inside **your** plugin and require it
 unconditionally:
 
 ```
@@ -215,6 +227,145 @@ reference, [Anchor Blocks](https://github.com/anchorhost/anchor-blocks) register
 descriptors for all of its blocks from its own plugin (`app/MinnAdmin.php`) — the filter is
 a no-op when Minn isn't installed, so block plugins can ship it unconditionally.
 
+## Island previews — free path first, adapter only when stuck
+
+Complex blocks land in Minn as **islands**: the saved markup is preserved byte-for-byte,
+and the ⚙ chip opens the inspector. Previews are not a second editor canvas. Minn POSTs the
+raw markup to `minn-admin/v1/render-blocks`, runs `do_blocks()` server-side, diffs the style
+queue, scopes any new CSS into `.minn-island-preview`, and sets the result with
+`innerHTML`. That design is intentional: islands stay safe to serialize, never reimplement
+your React UI, and still look like the front end when assets show up.
+
+**Design for that path and most blocks need zero Minn-specific code.** When something still
+looks empty, giant, or unstyled, the checklist below is the same one Minn's own adapters
+follow.
+
+### Free path (no adapter): make `do_blocks` honest
+
+1. **Server-render meaningful HTML.** A bare `<!-- wp:your/block /-->` (or with default
+   attrs) should produce visible markup. If output is empty without attrs, set attribute
+   defaults in `block.json` / PHP registration, or ship an `insert.template` with starter
+   markup.
+2. **Register front-end styles at `init`, not only when `has_block()` finds them on a
+   singular post.** Prefer `block.json` `"style": "file:./style.css"` so core registers the
+   handle when the block is registered. If you use a named handle (`"style": "my-block-style"`),
+   call `wp_register_style()` in the same place you `register_block_type()`. Minn (and any
+   other headless `do_blocks` consumer) will then auto-enqueue on render.
+3. **Do not gate styles on `is_admin()` or editor-only hooks** for the front-end stylesheet.
+   Editor styles (`editorStyle`) stay editor-only; the **style** handle is what previews and
+   the public site share.
+4. **Size icons and SVGs in CSS** (`max-width` / `width` / `height` on the SVG or a wrapper
+   class). Unconstrained SVGs look like "broken giant icons" in any CSS-less context, not
+   only Minn.
+5. **Prefer static or server HTML for maps / charts / carousels when possible**, or accept
+   that a pure client-side shell will look empty in previews until you add a fallback
+   (below).
+6. **Put text and image URLs in saved HTML (or attrs that mirror that HTML).** Minn can
+   already edit generic text runs and swap images inside islands without per-block code
+   when the content lives in the markup.
+
+What Minn already does for free (no adapter):
+
+| Behavior | Mechanism |
+|---|---|
+| Dynamic block slash-insert | Render probe on bare comment; search-only entries |
+| Schema inspector | Attr schema from `register_block_type` / `block.json` |
+| Live preview HTML | `do_blocks` via `render-blocks` |
+| Styles enqueued during render | Style-queue diff after `do_blocks` |
+| Site + block library CSS | `editor-styles` + client scoper on `.minn-island-preview` |
+| Text / image edit in islands | Generic text runs + image URL swap |
+| Design libraries / patterns | Optional; see Stackable/Kadence/GB adapters and patterns |
+
+### When the free path fails: diagnosis → drop-in adapter
+
+| Symptom in Minn | Likely cause | Fix without Minn code | Drop-in adapter if you can't change that |
+|---|---|---|---|
+| Empty island, full in block editor | Hybrid: JS `save()` owns markup; bare comment renders nothing | Fully server-render, or ship `insert.template` with real save markup | `minn_admin_block_forms` → `insert.template` |
+| Content present but huge SVGs / broken layout | Front-end CSS never registered on REST render | Register `style` at `init` (`file:./style.css` or `wp_register_style`) | `minn_admin_before_render_blocks` + `minn_admin_render_styles` |
+| Looks right on front end after a visit, empty in Minn | CSS only exists as postmeta / browser-compiled cache | Emit CSS from `do_blocks` or enqueue a real stylesheet | `minn_admin_render_styles` (postmeta / warm URL); see Otter |
+| Empty map / slider / Lottie shell | Server outputs a div + script; `innerHTML` never runs scripts | Server-render a static fallback (image, iframe, noscript) | `minn_admin_rendered_html` swap to iframe/static |
+| Insert works, inspector empty | No attr schema server-side | Register attributes in PHP / `block.json` | `minn_admin_block_forms` labels only refine schema |
+| Static-save design library | Only editor JS can author full designs | Publish serialized templates (JSON/CDN) Minn can fetch | Design-library adapter pattern (`adapters/stackable.php`) |
+
+### Preview hooks (copy into `includes/minn-admin.php`)
+
+All of these no-op when Minn is not installed.
+
+**1. Register styles before render** (named handles that core would not see otherwise):
+
+```php
+add_action( 'minn_admin_before_render_blocks', function ( $blocks, $post_id ) {
+	// $blocks is an array of raw markup strings for the islands being previewed.
+	if ( ! minn_admin_markup_has( $blocks, 'my-plugin/' ) ) {
+		return;
+	}
+	wp_register_style(
+		'my-block-style',
+		plugins_url( 'build/style.css', MY_PLUGIN_FILE ),
+		array(),
+		MY_PLUGIN_VERSION
+	);
+}, 10, 2 );
+
+function minn_admin_markup_has( $blocks, $needle ) {
+	foreach ( (array) $blocks as $raw ) {
+		if ( is_string( $raw ) && false !== strpos( $raw, $needle ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+```
+
+Once the handle is registered, Minn's `do_blocks` + queue-diff path enqueues it the same way
+the front end would.
+
+**2. Hand CSS URLs or inline CSS directly** (postmeta caches, CSS embedded in attrs, etc.):
+
+```php
+add_filter( 'minn_admin_render_styles', function ( $styles, $blocks, $post_id ) {
+	// $styles = [ 'urls' => string[], 'inline' => string, optional 'warm' => url ]
+	$styles['urls'][] = plugins_url( 'build/style.css', MY_PLUGIN_FILE );
+	if ( $post_id ) {
+		$cached = get_post_meta( $post_id, '_my_plugin_generated_css', true );
+		if ( is_string( $cached ) && $cached !== '' ) {
+			$styles['inline'] .= "\n" . $cached;
+		}
+	}
+	return $styles;
+}, 10, 3 );
+```
+
+Optional `'warm' => $front_end_url`: Minn loads that URL in a hidden iframe once so a
+browser-only compiler can fill a cache, then re-fetches styles (Otter atomic-wind).
+
+**3. Rewrite HTML for JS-only shells** (maps, widgets that need a script runner):
+
+```php
+add_filter( 'minn_admin_rendered_html', function ( $html, $raw, $post_id ) {
+	if ( false === strpos( $raw, 'my-plugin/map' ) ) {
+		return $html;
+	}
+	// Parse attrs from $raw or scrape them from $html; return a static preview.
+	return '<iframe src="…" style="width:100%;height:400px;border:0" loading="lazy" title="Map"></iframe>';
+}, 10, 3 );
+```
+
+Prefer fixing the free path in your plugin when you can. Adapters are for constraints you
+cannot change (third-party hosting of CSS, JIT compilers, legacy registration order).
+
+### Reference adapters in Minn (read these first)
+
+| Adapter | Teaches |
+|---|---|
+| `includes/adapters/otter.php` | Lazy named styles + postmeta CSS + map HTML fallback + warm URL |
+| `includes/adapters/essential-blocks.php` | CSS carried inside submitted block attrs |
+| `includes/adapters/stackable.php` | Design-library insert when static-save blocks cannot auto-insert |
+| `includes/adapters/kadence.php` / `generateblocks.php` | Same library pattern over the plugin's own REST/cache |
+| Anchor Blocks `app/MinnAdmin.php` (external) | `minn_admin_block_forms` owned by the block plugin itself |
+
+Internal lab notes (CSS models, hybrid traps): `docs/block-suites.md`.
+
 ## Editor panels — per-post fields in the editor sidebar
 
 For plugins whose data lives *inside the post* (custom fields, SEO meta), register an **editor
@@ -288,7 +439,7 @@ plus a descriptor. Rules of the road: check capabilities in `permission_callback
   REST permission checks keep working.
 - Escape nothing yourself — Minn escapes every value it renders.
 - Bundled adapters live in `includes/adapters/` and are guarded by `class_exists`/`defined`
-  checks; PRs adding adapters for widely-used plugins are welcome. Current set: Gravity Forms,
-  Gravity SMTP, ACF, Simple History, Redirection, and four analytics providers (Koko,
-  WP Statistics, Burst, Independent Analytics).
+  checks; PRs adding adapters for widely-used plugins are welcome. Prefer shipping the
+  adapter **inside your plugin** when you own the product; Minn bundles only for plugins
+  that will never know about it.
 - Column keys support dot paths (`initiator_data.user_login`) plus an optional `altKey` fallback.
