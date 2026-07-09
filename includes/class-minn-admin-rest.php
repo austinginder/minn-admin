@@ -469,6 +469,21 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Same idea for the sidebar: B.surfaces is a boot snapshot, so
+		// activating/deactivating Safe Redirect Manager (etc.) would leave
+		// stale nav items until a full reload without this re-poll.
+		register_rest_route(
+			self::NS,
+			'/surfaces',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'surfaces' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/patterns',
@@ -861,6 +876,15 @@ class Minn_Admin_REST {
 				'generateblocks' => function_exists( 'minn_admin_generateblocks_active' ) ? minn_admin_generateblocks_active() : false,
 			)
 		);
+	}
+
+	/**
+	 * Live surface list for the current user — same shape as the boot
+	 * payload's `surfaces` key. Re-polled after plugin/theme toggles so the
+	 * sidebar tracks adapters that appear/disappear.
+	 */
+	public static function surfaces() {
+		return rest_ensure_response( Minn_Admin_Surfaces::for_current_user() );
 	}
 
 	/**
