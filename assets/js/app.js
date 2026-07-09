@@ -6397,15 +6397,27 @@
 			</div>` : ed.featuredMedia ? '<div class="minn-session-empty">Loading…</div>' : `
 			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } Set featured image</button>` }
 		</div>` : '' }
-		${ ed.revisions && ed.revisions.length ? `
+		${ ( () => {
+			// WP's newest revision is a snapshot of the post AFTER the last
+			// save — identical to the live post whenever the editor is clean.
+			// Listing it made the top History row open as "Identical to the
+			// current content" (Austin, 2026-07-09). Hide that mirror when
+			// clean so every row is a previous version worth restoring. When
+			// dirty, keep it: last-save vs unsaved edits is a useful diff.
+			const historyRevs = ed.revisions && ed.revisions.length
+				? ( ed.dirty ? ed.revisions : ed.revisions.slice( 1 ) )
+				: [];
+			if ( ! historyRevs.length ) return '';
+			return `
 		<div class="minn-side-card">
 			<div class="minn-side-title">History</div>
-			${ ed.revisions.map( ( r ) => `
+			${ historyRevs.map( ( r ) => `
 				<button class="minn-history-row" data-rev="${ r.id }">
 					<span class="minn-history-when">${ timeAgo( r.modified ) }</span>
 					<span class="minn-history-who">${ esc( r.author ) }</span>
 				</button>` ).join( '' ) }
-		</div>` : '' }
+		</div>`;
+		} )() }
 		<div class="minn-side-card">
 			<div class="minn-side-title">Settings</div>
 			<div style="display:flex; flex-direction:column; gap:11px; font-size: 13.5px; color:var(--text2);">

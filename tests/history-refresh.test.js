@@ -17,30 +17,43 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	} ) );
 	t.check( 'boot payload includes numeric gmtOffset', typeof boot.gmtOffset === 'number', String( boot.gmtOffset ) );
 
-	// Seed one revision so History exists, then open the editor and Update
-	// again — the new row must land without a full reload.
+	// Seed TWO updates. WP's newest revision mirrors the live post and is
+	// hidden while the editor is clean, so we need an older revision for the
+	// History card to show anything. Then Update again in the UI — a new
+	// previous-version row must land without a full reload.
 	const id = await createPost( page, {
 		title: 'History refresh probe',
 		content: '<!-- wp:paragraph --><p>Version one seed.</p><!-- /wp:paragraph -->',
 		status: 'publish',
 	} );
-	await page.evaluate( async ( pid ) => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid, {
+	const seedUpdate = ( content ) => page.evaluate( async ( args ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + args.id, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
-			body: JSON.stringify( { content: '<!-- wp:paragraph --><p>Version two.</p><!-- /wp:paragraph -->' } ),
+			body: JSON.stringify( { content: args.content } ),
 		} );
 		if ( ! r.ok ) throw new Error( 'seed update failed' );
-	}, id );
+	}, { id, content } );
+	await seedUpdate( '<!-- wp:paragraph --><p>Version two.</p><!-- /wp:paragraph -->' );
+	await seedUpdate( '<!-- wp:paragraph --><p>Version three.</p><!-- /wp:paragraph -->' );
 
 	await openEditor( page, id );
 	await page.waitForSelector( '.minn-history-row', { timeout: 15000 } );
 	const before = await page.$$( '.minn-history-row' );
 	const nBefore = before.length;
-	t.check( 'history lists at least one revision after seed', nBefore >= 1, String( nBefore ) );
+	t.check( 'history lists at least one previous revision after seed', nBefore >= 1, String( nBefore ) );
 
-	// Newest row should read as recent — never "4h ago" for a revision
-	// written moments ago (the old Z-suffix bug).
+	// API has one more revision than the UI (the live-post mirror is hidden).
+	const nApi = await page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '/revisions?per_page=6&_fields=id', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce },
+		} );
+		return ( await r.json() ).length;
+	}, id );
+	t.check( 'clean editor hides the current-save mirror revision', nBefore === nApi - 1, `ui=${ nBefore } api=${ nApi }` );
+
+	// Visible previous-version row should read as recent — never "4h ago"
+	// (the old Z-suffix bug on America/New_York).
 	const whenBefore = await page.evaluate( () => {
 		const el = document.querySelector( '.minn-history-when' );
 		return el ? el.textContent.trim() : '';
@@ -51,12 +64,33 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		whenBefore
 	);
 
-	// Edit in the body and click Update — a new revision must appear.
+	// Top row is a previous version — opening it must show a real diff, not
+	// "Identical to the current content" (the off-by-one Austin hit).
+	await before[ 0 ].click();
+	await page.waitForSelector( '#minn-modal-overlay .minn-side-row', { timeout: 10000 } );
+	await page.waitForTimeout( 400 );
+	const topDiff = await page.evaluate( () =>
+		[ ...document.querySelectorAll( '#minn-modal-overlay .minn-side-row' ) ].map( ( r ) => r.textContent ).join( ' ' )
+	);
+	t.check(
+		'top History row diffs against current (not identical mirror)',
+		! /Identical to the current content/.test( topDiff ) && /differ/.test( topDiff ),
+		topDiff.slice( 0, 160 )
+	);
+	await page.evaluate( () => {
+		const close = document.querySelector( '#minn-modal-overlay .minn-modal-close, #minn-modal-overlay [aria-label="Close"]' );
+		if ( close ) close.click();
+		else {
+			const overlay = document.querySelector( '#minn-modal-overlay' );
+			if ( overlay ) overlay.click();
+		}
+	} );
+	await page.waitForFunction( () => ! document.querySelector( '#minn-modal-overlay' ), { timeout: 5000 } ).catch( () => {} );
+
+	// Edit in the body and click Update — a new previous-version row appears.
 	await page.click( '#minn-editor-body' );
 	await page.keyboard.type( ' ' );
 	await page.keyboard.type( 'Edited live.' );
-	const updateBtn = await page.$( '#minn-update, #minn-publish, button.minn-btn-primary' );
-	// Prefer the explicit Update control in the topbar/side.
 	const clicked = await page.evaluate( () => {
 		const btn = [ ...document.querySelectorAll( 'button' ) ].find( ( b ) =>
 			/^(Update|Publish)$/.test( b.textContent.trim() )
