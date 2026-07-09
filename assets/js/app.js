@@ -1792,11 +1792,23 @@
 					method: 'POST',
 					body: JSON.stringify( { src: it.url, modifiers } ),
 				} );
-				toast( 'Edited copy saved' );
+				const mapped = mapMediaItem( fresh );
+				// Editing the featured image: adopt the new copy as featured so
+				// the post doesn't keep pointing at the pre-edit original.
+				if ( m.from === 'featured' && state.editor ) {
+					state.editor.featuredMedia = mapped.id;
+					state.editor.featuredThumb = mapped.thumb || mapped.url;
+					state.editor.featuredDirty = true;
+					renderEditorSide();
+					if ( state.editor.id ) scheduleAutosave();
+					toast( 'Edited copy saved · set as featured image' );
+				} else {
+					toast( 'Edited copy saved' );
+				}
 				state.cache.media = null;
 				if ( state.route === 'media' ) renderMedia();
-				// Land on the new copy's preview.
-				state.modal = { type: 'media', item: mapMediaItem( fresh ) };
+				// Land on the new copy's preview (keep featured context).
+				state.modal = { type: 'media', item: mapped, from: m.from || null };
 				renderOverlays();
 			} catch ( err ) {
 				toast( err.message, true );
@@ -1812,6 +1824,15 @@
 		try {
 			await api( `wp/v2/media/${ it.id }?force=true`, { method: 'DELETE' } );
 			toast( 'File deleted' );
+			// If this was the current featured image, clear it so the sidebar
+			// doesn't keep a broken thumb.
+			if ( state.editor && state.editor.featuredMedia === it.id ) {
+				state.editor.featuredMedia = 0;
+				state.editor.featuredThumb = null;
+				state.editor.featuredDirty = true;
+				renderEditorSide();
+				if ( state.editor.id ) scheduleAutosave();
+			}
 			if ( state.modal && state.modal.type === 'media' ) closeModal();
 			state.cache.media = null;
 			if ( state.route === 'media' ) renderMedia();
@@ -4096,6 +4117,13 @@
 						method: 'POST',
 						body: JSON.stringify( { plugin: file + '.php' } ),
 					} );
+					// Self-update replaces app.js / CSS / boot payload — a soft
+					// re-render keeps the old SPA in memory. Hard-reload so the
+					// version badge, new routes, and cache-busted assets land.
+					if ( isMinnAdminPluginFile( file ) ) {
+						reloadAfterMinnSelfUpdate( r && r.version );
+						return;
+					}
 					toast( `${ name } updated${ r.version ? ' to v' + r.version : '' }` );
 				} catch ( e ) {
 					toast( e.message, true );
@@ -4257,17 +4285,39 @@
 		toast( 'Updating plugins — this can take a minute…' );
 		try {
 			const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
-			const n = ( r.updated || [] ).length;
+			const updated = r.updated || [];
+			const n = updated.length;
 			if ( r.failed && r.failed.length ) {
 				toast( `${ n } updated, ${ r.failed.length } failed`, true );
 			} else {
 				toast( n ? `${ n } plugin${ n === 1 ? '' : 's' } updated` : 'Everything is up to date' );
+			}
+			// Bulk path can include Minn itself — same hard-reload need as a
+			// single-plugin self-update (new features + version in boot payload).
+			if ( updated.some( isMinnAdminPluginFile ) ) {
+				reloadAfterMinnSelfUpdate();
+				return;
 			}
 		} catch ( e ) {
 			toast( e.message, true );
 		}
 		state.cache.plugins = null;
 		if ( state.route === 'extensions' ) renderExtensions();
+	}
+
+	// Plugin file keys appear as "minn-admin/minn-admin" (list rows) or
+	// "minn-admin/minn-admin.php" (update API / bulk results).
+	function isMinnAdminPluginFile( file ) {
+		const f = String( file || '' ).replace( /\.php$/, '' );
+		return f === 'minn-admin/minn-admin';
+	}
+
+	function reloadAfterMinnSelfUpdate( version ) {
+		toast( version
+			? `Minn Admin updated to v${ version } — reloading…`
+			: 'Minn Admin updated — reloading…' );
+		// Brief beat so the toast paints before navigation tears the SPA down.
+		setTimeout( () => { window.location.reload(); }, 700 );
 	}
 
 	/* ===== Post types =====
@@ -5804,6 +5854,28 @@
 		} );
 	}
 
+	// Same undo toast for non-island atomic blocks (empty code <pre>, HR,
+	// image figures) that bindIslandGuards arms with the red outline.
+	function removeAtomicBlockWithUndo( el ) {
+		if ( ! el || ! el.parentNode ) return;
+		if ( el.classList && el.classList.contains( 'minn-block-island' ) ) {
+			removeIslandWithUndo( el );
+			return;
+		}
+		const parent = el.parentNode;
+		const next = el.nextSibling;
+		el.classList.remove( 'minn-island-armed' );
+		el.remove();
+		updateEditorStats();
+		scheduleAutosave();
+		toastAction( 'Block removed · ⌘Z', 'Undo', () => {
+			if ( ! parent.isConnected ) return;
+			parent.insertBefore( el, next && next.isConnected && next.parentNode === parent ? next : null );
+			updateEditorStats();
+			scheduleAutosave();
+		} );
+	}
+
 	/* ===== Front-end styles for island previews ===== */
 
 	// Islands render real block HTML, but Minn's standalone document never
@@ -6880,8 +6952,20 @@
 	// undo-safe (unlike text mutation — rule at cleanLeadingNbsp).
 	function ensureTrailingParagraph( body ) {
 		if ( ! body || body.getAttribute( 'contenteditable' ) === 'false' ) return;
+		// Empty body (new/blank posts, or after select-all + delete): Chrome
+		// will put the next keystrokes as a bare text node under the
+		// contenteditable. Slash-menu detection needs a real block element,
+		// and serialize expects Gutenberg-shaped paragraphs — seed or wrap.
 		const last = body.lastElementChild;
-		if ( ! last ) return;
+		if ( ! last ) {
+			const p = document.createElement( 'p' );
+			// Preserve any bare text the user already typed (don't wipe it on
+			// the next stats tick); only seed <br> when truly empty.
+			while ( body.firstChild ) p.appendChild( body.firstChild );
+			if ( ! p.childNodes.length ) p.innerHTML = '<br>';
+			body.appendChild( p );
+			return;
+		}
 		// DETAILS too — if a live <details> ever lands outside an island, the
 		// caret still needs a landing <p> after it (same for any non-typing
 		// block tag we don't treat as prose).
@@ -7552,7 +7636,7 @@
 		<div class="minn-side-card">
 			<div class="minn-side-title">Featured image</div>
 			${ ed.featuredMedia && ed.featuredThumb ? `
-			<div class="minn-featured-thumb" style="background-image:url('${ esc( ed.featuredThumb ) }')"></div>
+			<button type="button" class="minn-featured-thumb" id="minn-featured-preview" style="background-image:url('${ esc( ed.featuredThumb ) }')" title="Preview featured image" aria-label="Preview featured image"></button>
 			<div style="display:flex; gap:8px; margin-top:10px;">
 				<button class="minn-btn-soft" id="minn-featured-set">Replace</button>
 				<button class="minn-btn-soft danger" id="minn-featured-remove">Remove</button>
@@ -7774,24 +7858,42 @@
 		bindSideCollapse( el );
 		bindOutline();
 
+		const pickFeatured = () => openMediaPicker( ( it ) => {
+			ed.featuredMedia = it.id;
+			ed.featuredThumb = it.thumb;
+			ed.featuredDirty = true;
+			renderEditorSide();
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const clearFeatured = () => {
+			ed.featuredMedia = 0;
+			ed.featuredThumb = null;
+			ed.featuredDirty = true;
+			renderEditorSide();
+			if ( ed.id ) scheduleAutosave();
+		};
 		const featSet = $( '#minn-featured-set', el );
-		if ( featSet ) {
-			featSet.addEventListener( 'click', () => openMediaPicker( ( it ) => {
-				ed.featuredMedia = it.id;
-				ed.featuredThumb = it.thumb;
-				ed.featuredDirty = true;
-				renderEditorSide();
-				if ( ed.id ) scheduleAutosave();
-			} ) );
-		}
+		if ( featSet ) featSet.addEventListener( 'click', pickFeatured );
 		const featRemove = $( '#minn-featured-remove', el );
-		if ( featRemove ) {
-			featRemove.addEventListener( 'click', () => {
-				ed.featuredMedia = 0;
-				ed.featuredThumb = null;
-				ed.featuredDirty = true;
-				renderEditorSide();
-				if ( ed.id ) scheduleAutosave();
+		if ( featRemove ) featRemove.addEventListener( 'click', clearFeatured );
+		// Thumb opens the same media preview used in the library — full image,
+		// Edit image, Copy URL, plus Replace/Remove featured from that context.
+		const featPrev = $( '#minn-featured-preview', el );
+		if ( featPrev ) {
+			featPrev.addEventListener( 'click', async () => {
+				if ( ! ed.featuredMedia ) return;
+				featPrev.disabled = true;
+				featPrev.classList.add( 'loading' );
+				try {
+					const raw = await api( `wp/v2/media/${ ed.featuredMedia }?_fields=id,title,mime_type,source_url,media_details,date,alt_text` );
+					state.modal = { type: 'media', item: mapMediaItem( raw ), from: 'featured' };
+					renderOverlays();
+				} catch ( e ) {
+					toast( e.message || 'Could not load image', true );
+				} finally {
+					featPrev.disabled = false;
+					featPrev.classList.remove( 'loading' );
+				}
 			} );
 		}
 
@@ -8208,7 +8310,7 @@
 				<div class="minn-editor-locked-note">
 					Minn couldn't safely parse this ${ ed.type === 'pages' ? 'page' : 'post' }'s block structure,
 					so the body is read-only — the title can still be edited here.
-					<a href="${ esc( ed.editUrl ) }">Open in block editor ↗</a>
+					<button type="button" class="minn-linkish" id="minn-open-block-editor">Open in block editor ↗</button>
 				</div>` : '' }
 				${ locked ? `` : `
 				<div class="minn-editor-toolbar">
@@ -8237,7 +8339,10 @@
 		</div>`;
 
 		const body = $( '#minn-editor-body', view );
-		body.innerHTML = ed.content;
+		// Blank posts must not stay truly empty: a contenteditable with no
+		// children puts the first keystrokes in a bare text node, and the
+		// slash menu (and most block ops) need a top-level element.
+		body.innerHTML = ed.content || ( locked ? '' : '<p><br></p>' );
 		if ( ! locked ) seedImageCaptions( body );
 		if ( ! locked ) ensureTrailingParagraph( body );
 		highlightCodeBlocks( body );
@@ -8271,6 +8376,8 @@
 			const island = chip.closest( '.minn-block-island' );
 			if ( island ) openInspector( island );
 		} );
+		const openBe = $( '#minn-open-block-editor', view );
+		if ( openBe ) openBe.addEventListener( 'click', () => openInBlockEditor( openBe ) );
 		// Live-field islands (shortcode + details + buttons): type in the card,
 		// commit into ed.islands (serialize never reads the fields).
 		// stopPropagation so island guards / outer contenteditable don't treat
@@ -8317,20 +8424,26 @@
 				}
 			} );
 			body.addEventListener( 'keydown', ( e ) => {
+				// Island live fields stopPropagation so contenteditable body
+				// handlers don't treat typing as body edits — but ⌘/Ctrl
+				// shortcuts (⌘S save, ⌘K link/palette, …) must still reach
+				// the window listeners. Without this, ⌘S in a shortcode input
+				// falls through to the browser's "Save Page As…" (Austin).
+				const appShortcut = e.metaKey || e.ctrlKey;
 				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
 				if ( sc ) {
 					// Shortcodes are single-line — Enter blurs instead of inserting.
-					if ( e.key === 'Enter' ) {
+					if ( e.key === 'Enter' && ! appShortcut ) {
 						e.preventDefault();
 						e.target.blur();
 					}
-					e.stopPropagation();
+					if ( ! appShortcut ) e.stopPropagation();
 					return;
 				}
 				const detSum = e.target.closest && e.target.closest( '.minn-details-summary' );
 				if ( detSum ) {
 					// Enter in summary jumps into the body (and keeps details open).
-					if ( e.key === 'Enter' ) {
+					if ( e.key === 'Enter' && ! appShortcut ) {
 						e.preventDefault();
 						const island = detSum.closest( '.minn-details-island' );
 						const det = island && island.querySelector( 'details.minn-details-edit' );
@@ -8346,14 +8459,17 @@
 							sel.addRange( r );
 						}
 					}
-					e.stopPropagation();
+					if ( ! appShortcut ) e.stopPropagation();
 					return;
 				}
 				const detBody = e.target.closest && e.target.closest( '.minn-details-body' );
-				if ( detBody ) { e.stopPropagation(); return; }
+				if ( detBody ) {
+					if ( ! appShortcut ) e.stopPropagation();
+					return;
+				}
 				const btnField = e.target.closest && e.target.closest( '.minn-btn-label, .minn-btn-url' );
 				if ( btnField ) {
-					if ( e.key === 'Enter' ) {
+					if ( e.key === 'Enter' && ! appShortcut ) {
 						e.preventDefault();
 						// Label → URL; URL → next row label (or add row).
 						if ( btnField.classList.contains( 'minn-btn-label' ) ) {
@@ -8371,7 +8487,7 @@
 							}
 						}
 					}
-					e.stopPropagation();
+					if ( ! appShortcut ) e.stopPropagation();
 				}
 			} );
 			body.addEventListener( 'mousedown', ( e ) => {
@@ -9258,10 +9374,63 @@
 			</div>
 			<div class="minn-insp-actions">
 				${ editable ? '<button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button>' : '' }
-				${ state.editor && state.editor.id ? `<a class="minn-btn-soft" id="minn-insp-gutenberg" href="${ esc( B.site.adminUrl ) }post.php?post=${ state.editor.id }&action=edit" target="_blank" rel="noopener" title="Design controls — layout, spacing, colors — live in the block editor">Block editor&nbsp;↗</a>` : '' }
+				${ state.editor ? `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there.">Block editor&nbsp;↗</button>` : '' }
 				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="Remove this block">${ icon( 'trash' ) }${ editable ? '' : ' Remove block' }</button>
 			</div>`;
 		positionInspector( insp.islandEl );
+	}
+
+	// Escape hatch to wp-admin's block editor. Always persists the live Minn
+	// document first — islands/islands edits only exist in the browser until
+	// save, so opening without save shows a stale post (Austin, 2026-07-09).
+	async function openInBlockEditor( triggerEl ) {
+		const ed = state.editor;
+		if ( ! ed ) return;
+		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) {
+			toast( 'Another session holds this post — take over before opening the block editor', true );
+			return;
+		}
+		// Fold pending inspector field edits into the island so they ride the save
+		// (clicking Block editor without Apply used to drop them).
+		if ( inspectorState && inspectorEl && ed.islands && inspectorState.idx != null ) {
+			const hasFields = inspectorEl.querySelector( '[data-insp], [data-insprun], [data-insptext], [data-inspimg]' );
+			if ( hasFields || $( '#minn-insp-apply', inspectorEl ) ) {
+				collectInspectorForms();
+				const newRaw = buildInspectorRaw( inspectorState );
+				if ( newRaw && ed.islands[ inspectorState.idx ] !== newRaw ) {
+					ed.islands[ inspectorState.idx ] = newRaw;
+					ed.dirty = true;
+				}
+			}
+		}
+		const label = triggerEl && ( triggerEl.textContent || '' ).trim();
+		const setBusy = ( on ) => {
+			if ( ! triggerEl ) return;
+			triggerEl.disabled = !! on;
+			if ( on ) triggerEl.textContent = 'Saving…';
+			else if ( label ) triggerEl.textContent = label;
+		};
+		const go = ( id ) => {
+			closeInspector();
+			const url = B.site.adminUrl + 'post.php?post=' + id + '&action=edit';
+			window.open( url, '_blank', 'noopener' );
+		};
+		// Clean and already has an id: nothing to flush.
+		if ( ed.id && ! ed.dirty && ! state.saving ) {
+			go( ed.id );
+			return;
+		}
+		setBusy( true );
+		try {
+			await saveEditor( { _explicit: true } );
+			if ( ! ed.id || ed.dirty ) {
+				// doSaveEditor already toasted the error; leave the inspector open.
+				return;
+			}
+			go( ed.id );
+		} finally {
+			setBusy( false );
+		}
 	}
 
 	// Regenerate an island's stored markup wholesale (embed URL change,
@@ -9343,6 +9512,12 @@
 				return;
 			}
 			if ( e.target.closest( '#minn-insp-close' ) ) { closeInspector(); return; }
+			const gut = e.target.closest( '#minn-insp-gutenberg' );
+			if ( gut ) {
+				e.preventDefault();
+				openInBlockEditor( gut );
+				return;
+			}
 			if ( e.target.closest( '#minn-insp-remove' ) ) {
 				const el = insp.islandEl;
 				closeInspector();
@@ -10323,69 +10498,192 @@
 		} );
 	}
 
-	// Backspace/Delete guard around islands. Chrome treats an adjacent
-	// contenteditable=false island as one deletable atom — a single Backspace
-	// in the empty paragraph after an embed nuked the embed AND merged the
-	// neighbors. Instead: an empty block beside an island is removed alone,
-	// and deleting INTO an island arms it (red outline) so a deliberate
-	// second press removes just the island.
+	// Backspace/Delete arm-then-remove for atomic blocks (islands, empty code
+	// <pre>, HR, media figures). Chrome treats contenteditable=false islands
+	// as one deletable atom and would merge neighbors in a single keypress;
+	// without an arm step, empty paragraphs after a shortcode also "jumped
+	// over" the shortcode into the previous code block (Austin, 2026-07-09).
+	//
+	// One model everywhere:
+	//   1st press at the edge → red outline (armed)
+	//   2nd press             → remove with Undo toast
+	// Live fields (shortcode input, details, buttons) join the same path when
+	// the field is empty; otherwise typing stays normal text editing.
 	function bindIslandGuards( body ) {
 		let armed = null;
 		const disarm = () => {
 			if ( armed ) armed.classList.remove( 'minn-island-armed' );
 			armed = null;
 		};
+		const isIsland = ( el ) => !!( el && el.classList && el.classList.contains( 'minn-block-island' ) );
+		// Top-level blocks that arm/delete like islands when empty (or always
+		// for HR). Not list/heading — those stay normal prose.
+		const isAtomicEl = ( el ) => {
+			if ( ! el || el.nodeType !== Node.ELEMENT_NODE || el.parentNode !== body ) return false;
+			if ( isIsland( el ) ) return true;
+			const t = el.tagName;
+			if ( t === 'HR' ) return true;
+			if ( t === 'PRE' ) return true;
+			if ( t === 'FIGURE' && el.querySelector( 'img, video, audio, table' ) ) return true;
+			if ( t === 'TABLE' ) return true;
+			return false;
+		};
+		const isEmptyAtomic = ( el ) => {
+			if ( ! isAtomicEl( el ) || isIsland( el ) ) return false;
+			if ( el.tagName === 'HR' ) return true;
+			if ( el.tagName === 'PRE' ) return ! el.textContent.replace( /\u00a0/g, ' ' ).trim();
+			if ( el.tagName === 'FIGURE' ) {
+				// Image husks (img removed, figure kept for undo) count as empty.
+				return ! el.querySelector( 'img, video, audio' ) && ! ( el.querySelector( 'table' ) && el.textContent.trim() );
+			}
+			if ( el.tagName === 'TABLE' ) return ! el.textContent.trim();
+			return false;
+		};
+		// Live-field islands: field is "done" / empty so Backspace/Delete should
+		// arm the island instead of editing text.
+		const liveFieldReady = ( el, key ) => {
+			if ( ! el || ! el.closest ) return null;
+			const field = el.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url' );
+			if ( ! field ) return null;
+			const island = field.closest( '.minn-block-island' );
+			if ( ! island || island.parentNode !== body ) return null;
+			if ( field.matches( '.minn-details-body' ) ) {
+				if ( field.textContent.replace( /\u00a0/g, ' ' ).trim() ) return null;
+				return island;
+			}
+			const v = String( field.value != null ? field.value : '' );
+			const t = v.replace( /\u00a0/g, ' ' ).trim();
+			// Shortcode template seeds "[]" — treat bare brackets as empty so the
+			// first Backspace arms the island rather than nibbling brackets forever.
+			const empty = field.matches( '.minn-shortcode-input' )
+				? ( ! t || t === '[]' || t === '[' || t === ']' )
+				: ! t;
+			if ( ! empty ) {
+				// Non-empty: only arm when caret is at the field edge in the
+				// delete direction (start+Backspace / end+Delete).
+				if ( field.matches( '.minn-details-body' ) ) return null;
+				const start = field.selectionStart;
+				const end = field.selectionEnd;
+				if ( start !== end ) return null;
+				if ( key === 'Backspace' && start === 0 ) {
+					// Prefer arming this island only when truly empty; at start
+					// of a filled field, leave browser/default (no-op).
+					return null;
+				}
+				if ( key === 'Delete' && end === v.length ) return null;
+				return null;
+			}
+			return island;
+		};
+		const armOrRemove = ( target ) => {
+			if ( ! target ) return;
+			if ( armed === target ) {
+				disarm();
+				removeAtomicBlockWithUndo( target );
+			} else {
+				disarm();
+				armed = target;
+				target.classList.add( 'minn-island-armed' );
+			}
+		};
+
+		// Capture phase so we see keydowns from shortcode/details inputs
+		// (those fields stopPropagation on bubble for non-⌘ keys).
 		body.addEventListener( 'keydown', ( e ) => {
 			if ( e.key !== 'Backspace' && e.key !== 'Delete' ) {
 				disarm();
 				return;
 			}
+			if ( e.metaKey || e.ctrlKey || e.altKey ) return;
+
+			// 1) Focus in a live-field island (shortcode input, etc.).
+			const liveIsland = liveFieldReady( e.target, e.key );
+			if ( liveIsland ) {
+				e.preventDefault();
+				e.stopPropagation();
+				armOrRemove( liveIsland );
+				return;
+			}
+			// Typing inside a non-empty live field: don't arm, don't steal the key.
+			if ( e.target.closest && e.target.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url' ) ) {
+				disarm();
+				return;
+			}
+
 			const sel = window.getSelection();
 			if ( ! sel.rangeCount || ! sel.isCollapsed ) return;
 			let block = sel.anchorNode;
+			// Caret can land inside an island's chrome (rare) — walk out.
+			if ( block && block.nodeType === Node.ELEMENT_NODE && block.closest ) {
+				const inIsland = block.closest( '.minn-block-island' );
+				if ( inIsland && inIsland.parentNode === body ) block = inIsland;
+			}
 			while ( block && block.parentNode !== body ) block = block.parentNode;
 			if ( ! block || block.nodeType !== Node.ELEMENT_NODE ) return;
+
+			// 2) Caret inside an empty atomic block (code <pre>, empty figure…):
+			//    arm/remove THAT block — not the neighbor (was jumping from an
+			//    empty code block to the Stackable island above).
+			if ( isEmptyAtomic( block ) ) {
+				e.preventDefault();
+				armOrRemove( block );
+				return;
+			}
+			// Caret inside a non-empty island (shouldn't type there, but if
+			// focus landed on the island shell): arm/remove itself.
+			if ( isIsland( block ) ) {
+				e.preventDefault();
+				armOrRemove( block );
+				return;
+			}
+
+			// 3) Caret at the edge of a prose (or non-empty atomic) block,
+			//    adjacent sibling is atomic → arm/remove the sibling.
 			const back = e.key === 'Backspace';
-			const caret = sel.getRangeAt( 0 );
-			const edge = document.createRange();
-			edge.selectNodeContents( block );
-			if ( back ) edge.setEnd( caret.startContainer, caret.startOffset );
-			else edge.setStart( caret.startContainer, caret.startOffset );
-			if ( edge.toString() !== '' ) {
+			// Empty prose (just <br>/whitespace): both keys are "at the edge"
+			// — range math around <br> is unreliable across browsers.
+			const proseEmpty = ! block.textContent.replace( /\u00a0/g, ' ' ).trim()
+				&& ! block.querySelector( 'img, table, ul, ol, pre, figure, video, audio' );
+			let atEdge = proseEmpty;
+			if ( ! atEdge ) {
+				try {
+					const caret = sel.getRangeAt( 0 );
+					const edge = document.createRange();
+					edge.selectNodeContents( block );
+					if ( back ) edge.setEnd( caret.startContainer, caret.startOffset );
+					else edge.setStart( caret.startContainer, caret.startOffset );
+					atEdge = edge.toString() === '';
+				} catch ( err ) {
+					atEdge = false;
+				}
+			}
+			if ( ! atEdge ) {
 				disarm();
 				return; // deletion stays inside the block — normal editing
 			}
-			const island = back ? block.previousElementSibling : block.nextElementSibling;
-			if ( ! island || ! island.classList || ! island.classList.contains( 'minn-block-island' ) ) {
+			const neighbor = back ? block.previousElementSibling : block.nextElementSibling;
+			if ( ! isAtomicEl( neighbor ) ) {
 				disarm();
 				return;
+			}
+			// Non-empty code/figure: move the caret into it rather than arming
+			// (user clears content first; empty atomic then arms on the next
+			// press). Islands always arm — they aren't editable in place.
+			if ( ! isIsland( neighbor ) && ! isEmptyAtomic( neighbor ) && neighbor.tagName !== 'HR' ) {
+				if ( neighbor.tagName === 'PRE' || neighbor.tagName === 'FIGURE' || neighbor.tagName === 'TABLE' ) {
+					e.preventDefault();
+					const r = document.createRange();
+					r.selectNodeContents( neighbor );
+					r.collapse( ! back ); // backspace → end of previous; delete → start of next
+					sel.removeAllRanges();
+					sel.addRange( r );
+					disarm();
+					return;
+				}
 			}
 			e.preventDefault();
-			const blockEmpty = ! block.textContent.trim() && ! block.querySelector( 'img, table, ul, ol, pre, figure' );
-			const landing = back ? island.previousElementSibling : island.nextElementSibling;
-			const landingOk = landing && landing !== block && ! landing.classList.contains( 'minn-block-island' );
-			if ( blockEmpty && landingOk ) {
-				// Remove just the empty block; the island survives.
-				block.remove();
-				const lr = document.createRange();
-				lr.selectNodeContents( landing );
-				lr.collapse( ! back ); // backspace lands at the END of the block before the island
-				sel.removeAllRanges();
-				sel.addRange( lr );
-				disarm();
-				scheduleAutosave();
-				return;
-			}
-			// Deleting INTO the island: arm first, delete on the second press.
-			if ( armed === island ) {
-				disarm();
-				removeIslandWithUndo( island );
-			} else {
-				disarm();
-				armed = island;
-				island.classList.add( 'minn-island-armed' );
-			}
-		} );
+			armOrRemove( neighbor );
+		}, true );
 		body.addEventListener( 'mousedown', disarm );
 		body.addEventListener( 'blur', disarm );
 	}
@@ -11764,8 +12062,17 @@
 			let node = sel.anchorNode;
 			if ( ! node || ! body.contains( node ) ) return close();
 			while ( node.parentNode && node.parentNode !== body ) node = node.parentNode;
-			const blockEl = node.nodeType === Node.ELEMENT_NODE ? node : null;
-			const text = ( ( blockEl ? blockEl.textContent : node.textContent ) || '' ).trim();
+			let blockEl = node.nodeType === Node.ELEMENT_NODE ? node : null;
+			// Empty editor / after select-all+delete: Chrome parks a bare text
+			// node as a direct child of the contenteditable. Promote it to a
+			// <p> so slash detection, insert-as-replace, and serialize agree.
+			if ( ! blockEl && node.nodeType === Node.TEXT_NODE && node.parentNode === body ) {
+				const p = document.createElement( 'p' );
+				body.insertBefore( p, node );
+				p.appendChild( node );
+				blockEl = p;
+			}
+			const text = ( ( blockEl ? blockEl.textContent : '' ) || '' ).trim();
 			// A second "/" (e.g. typing a path like /wp-admin/) ends the menu.
 			const m = blockEl && /^\/([^\/]{0,24})$/.exec( text );
 			if ( m ) {
@@ -12128,6 +12435,9 @@
 						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
 						<button class="minn-btn-soft" id="minn-media-open">↗ Open</button>
 						${ it.kind === 'IMG' ? `<button class="minn-btn-soft" id="minn-media-edit-image" type="button" title="Rotate and crop — saved as a new copy">✎ Edit image</button>` : '' }
+						${ m.from === 'featured' && state.editor ? `
+						<button class="minn-btn-soft" id="minn-media-feat-replace" type="button">Replace featured</button>
+						<button class="minn-btn-soft danger" id="minn-media-feat-remove" type="button">Remove featured</button>` : '' }
 						<button class="minn-btn-soft danger" id="minn-media-delete">${ icon( 'trash' ) } Delete</button>
 					</div>
 				</div>
@@ -12866,6 +13176,7 @@
 				m.editing = true;
 				m.rot = 0;
 				m.crop = null;
+				// keep m.from (e.g. 'featured') so Save as copy can adopt it
 				renderOverlays();
 			} );
 			const prev = $( '#minn-media-prev' );
@@ -12902,6 +13213,34 @@
 					saveBtn.disabled = false;
 					saveBtn.textContent = 'Save';
 				}
+			} );
+			// Featured-image context: replace / remove without leaving the modal
+			// flow for another sidebar click.
+			const featRep = $( '#minn-media-feat-replace' );
+			if ( featRep ) featRep.addEventListener( 'click', () => {
+				const ed = state.editor;
+				if ( ! ed ) return;
+				closeModal();
+				openMediaPicker( ( pick ) => {
+					ed.featuredMedia = pick.id;
+					ed.featuredThumb = pick.thumb;
+					ed.featuredDirty = true;
+					renderEditorSide();
+					if ( ed.id ) scheduleAutosave();
+					toast( 'Featured image updated' );
+				} );
+			} );
+			const featRm = $( '#minn-media-feat-remove' );
+			if ( featRm ) featRm.addEventListener( 'click', () => {
+				const ed = state.editor;
+				if ( ! ed ) return;
+				ed.featuredMedia = 0;
+				ed.featuredThumb = null;
+				ed.featuredDirty = true;
+				closeModal();
+				renderEditorSide();
+				if ( ed.id ) scheduleAutosave();
+				toast( 'Featured image removed' );
 			} );
 			$( '#minn-media-delete' ).addEventListener( 'click', () => deleteMediaItem( it ) );
 		}
@@ -14397,6 +14736,44 @@
 			}
 		}, true );
 
+		// Capture-phase ⌘S: island live fields (shortcode/details/buttons)
+		// stopPropagation on keydown so body handlers don't see typing — that
+		// also blocked the bubble-phase save handler and let Chrome's
+		// "Save Page As…" win. Capture runs before the target, so save always
+		// reaches us and preventDefault kills the browser dialog.
+		window.addEventListener( 'keydown', ( e ) => {
+			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 's' && state.route === 'editor' && state.editor ) {
+				e.preventDefault();
+				e.stopPropagation();
+				const ed = state.editor;
+				clearAutosaveTimers();
+				// Commit the focused live-field island before serialize.
+				const t = e.target;
+				if ( t && t.closest ) {
+					const sc = t.closest( '.minn-shortcode-input' );
+					if ( sc ) commitShortcodeInput( sc );
+					else {
+						const det = t.closest( '.minn-details-summary, .minn-details-body' );
+						if ( det ) {
+							const island = det.closest( '.minn-details-island' );
+							if ( island ) commitDetailsIsland( island );
+						} else {
+							const btn = t.closest( '.minn-btn-label, .minn-btn-url, .minn-btn-newtab, .minn-btn-outline' );
+							if ( btn ) {
+								const island = btn.closest( '.minn-buttons-island' );
+								if ( island ) commitButtonsIsland( island );
+							}
+						}
+					}
+				}
+				saveEditor( { _explicit: true } ).then( () => {
+					if ( state.editor === ed && ! ed.dirty ) {
+						toast( LIVE_STATUSES.includes( ed.status ) ? 'Updated' : 'Draft saved' );
+					}
+				} );
+			}
+		}, true );
+
 		window.addEventListener( 'keydown', ( e ) => {
 			if ( ( e.metaKey || e.ctrlKey ) && e.key.toLowerCase() === 'k' ) {
 				e.preventDefault();
@@ -14414,18 +14791,6 @@
 				}
 				state.paletteOpen = ! state.paletteOpen;
 				renderOverlays();
-			}
-			// ⌘S saves keeping the current status — drafts stay drafts,
-			// published posts get a real Update.
-			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 's' && state.route === 'editor' && state.editor ) {
-				e.preventDefault();
-				const ed = state.editor;
-				clearAutosaveTimers();
-				saveEditor( { _explicit: true } ).then( () => {
-					if ( state.editor === ed && ! ed.dirty ) {
-						toast( LIVE_STATUSES.includes( ed.status ) ? 'Updated' : 'Draft saved' );
-					}
-				} );
 			}
 			// ⌘. toggles the navigation (⌘\ works too, but 1Password's Quick
 			// Access owns ⌘\ at the OS level for many users, and ⌘B is bold in

@@ -477,9 +477,14 @@ a { color: var(--accent2); text-decoration: none; }
 /* ===== Editor: view link + history ===== */
 .minn-side-viewlink { display: block; text-align: center; margin-top: 9px; font-size: 13.5px; font-weight: 600; }
 .minn-featured-thumb {
-  width: 100%; aspect-ratio: 16 / 10; border-radius: 9px; background-size: cover;
-  background-position: center; border: 1px solid var(--border);
+  display: block; width: 100%; aspect-ratio: 16 / 10; border-radius: 9px; background-size: cover;
+  background-position: center; border: 1px solid var(--border); cursor: pointer;
+  padding: 0; background-color: var(--panel2); position: relative; transition: border-color 0.12s, box-shadow 0.12s;
 }
+.minn-featured-thumb:hover, .minn-featured-thumb:focus-visible {
+  border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.18); outline: none;
+}
+.minn-featured-thumb.loading { opacity: 0.55; cursor: wait; }
 .minn-featured-empty {
   display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
   padding: 22px 10px; border: 1px dashed var(--border2); border-radius: 9px; background: none;
@@ -988,7 +993,13 @@ body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert her
   background: rgba(224,164,88,0.1); border: 1px solid rgba(224,164,88,0.3); color: var(--text2);
   border-radius: 10px; padding: 11px 14px; font-size: 13.5px; line-height: 1.5; margin: 6px 0 18px;
 }
-.minn-editor-locked-note a { font-weight: 600; white-space: nowrap; }
+.minn-editor-locked-note a,
+.minn-editor-locked-note .minn-linkish {
+	font-weight: 600; white-space: nowrap;
+	background: none; border: 0; padding: 0; color: var(--accent2); cursor: pointer;
+	font: inherit; text-decoration: underline; text-underline-offset: 2px;
+}
+.minn-editor-locked-note .minn-linkish:disabled { opacity: 0.6; cursor: default; }
 .minn-editor-body.locked { opacity: 0.75; }
 .minn-editor-body.locked img { max-width: 100%; height: auto; }
 .minn-editor-body img { max-width: 100%; height: auto; border-radius: 8px; }
@@ -1291,6 +1302,15 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-block-island:hover { border-color: var(--accent); }
 .minn-block-island.minn-island-armed { border-color: var(--red); }
 .minn-block-island.minn-island-armed .minn-island-chip { color: var(--red); border-color: var(--red); }
+/* Empty code / HR / figure use the same arm-then-delete outline as islands. */
+.minn-editor-body > pre.minn-island-armed,
+.minn-editor-body > hr.minn-island-armed,
+.minn-editor-body > figure.minn-island-armed,
+.minn-editor-body > table.minn-island-armed {
+	outline: 2px solid var(--red);
+	outline-offset: 2px;
+	border-color: var(--red);
+}
 .minn-island-chip {
   position: absolute; top: -10px; right: 12px; font-size: 10.5px; font-weight: 600;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);

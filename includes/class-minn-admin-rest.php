@@ -763,6 +763,11 @@ class Minn_Admin_REST {
 		// block prepend its own <style> during our render
 		// (docs/block-suites.md, CSS models).
 		add_filter( 'generateblocks_do_inline_styles', '__return_true' );
+		// Adapters that need to register assets *before* do_blocks (Otter
+		// front-end style handles only exist after its has_block enqueue
+		// path — adapters/otter.php registers them from the submitted
+		// markup so the queue-diff below can see them).
+		do_action( 'minn_admin_before_render_blocks', $blocks, $post_id );
 		// Plugins with lazy CSS loading (Stackable's optimizer, Kadence,
 		// GenerateBlocks) only enqueue their stylesheets from inside a
 		// render_block filter when one of their blocks actually renders — an
@@ -772,13 +777,23 @@ class Minn_Admin_REST {
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
 		foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
-			$html = do_blocks( (string) $raw );
+			$raw  = (string) $raw;
+			$html = do_blocks( $raw );
 			// Embed blocks keep a bare URL in their saved HTML; the front end
 			// converts it via WP_Embed::autoembed on the_content — run the same
 			// pass here so island previews show the real embed.
 			if ( isset( $GLOBALS['wp_embed'] ) && false !== strpos( $html, 'wp-block-embed__wrapper' ) ) {
 				$html = $GLOBALS['wp_embed']->autoembed( $html );
 			}
+			/**
+			 * Per-block HTML post-process for island previews. Used by the
+			 * Otter adapter to swap JS-only Leaflet maps for an OSM embed.
+			 *
+			 * @param string $html    Rendered HTML from do_blocks.
+			 * @param string $raw     Original block markup string.
+			 * @param int    $post_id Post being edited (0 when unknown).
+			 */
+			$html       = apply_filters( 'minn_admin_rendered_html', $html, $raw, $post_id );
 			$rendered[] = $html;
 		}
 		$out         = array( 'rendered' => $rendered );
