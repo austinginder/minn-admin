@@ -1738,15 +1738,13 @@ class Minn_Admin_REST {
 				. nl2br( esc_html( $message ) ) . '</p>';
 		}
 
-		$year = gmdate( 'Y' );
 		return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#f4f4f6;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Helvetica,Arial,sans-serif;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f4f6;padding:28px 16px;">
 <tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #e7e7ea;border-radius:14px;overflow:hidden;">
-<tr><td style="padding:18px 24px;background:linear-gradient(135deg,#7166f6,#8f86f8);">
-<div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.75);">Minn Admin</div>
-<div style="font-size:18px;font-weight:700;color:#ffffff;margin-top:4px;">' . esc_html( $site ) . '</div>
+<tr><td style="padding:20px 24px;background:linear-gradient(135deg,#7166f6,#8f86f8);">
+<div style="font-size:18px;font-weight:700;color:#ffffff;">' . esc_html( $site ) . '</div>
 </td></tr>
 <tr><td style="padding:28px 24px 8px;">
 <p style="margin:0 0 18px;font-size:15px;color:#65656f;">Hi ' . esc_html( $who ) . ',</p>
@@ -1756,7 +1754,7 @@ class Minn_Admin_REST {
 <a href="' . esc_url( $url ) . '" style="display:inline-block;background:#7166f6;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 18px;border-radius:10px;">Visit ' . esc_html( $site ) . '</a>
 </td></tr>
 <tr><td style="padding:16px 24px;border-top:1px solid #e7e7ea;font-size:12.5px;color:#9494a0;line-height:1.45;">
-Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration:none;">' . esc_html( $site ) . '</a> via Minn Admin · ' . esc_html( $year ) . '
+Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration:none;">' . esc_html( $site ) . '</a>
 </td></tr>
 </table>
 </td></tr>
