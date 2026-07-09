@@ -202,11 +202,15 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-menu-row:last-child { border-bottom: none; }
 .minn-menu-grip { display: flex; align-items: center; flex-shrink: 0; color: var(--text3); cursor: grab; padding: 4px 0; margin: 0 -4px 0 -6px; opacity: 0.55; }
-.minn-menu-row:hover .minn-menu-grip { opacity: 1; }
+.minn-menu-row:hover .minn-menu-grip,
+.minn-widget-row:hover .minn-menu-grip { opacity: 1; }
 .minn-menu-grip:active { cursor: grabbing; }
-.minn-menu-row.dragging { opacity: 0.35; }
-.minn-menu-row.drop-above { box-shadow: inset 0 2px 0 var(--accent); }
-.minn-menu-row.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
+.minn-menu-row.dragging,
+.minn-widget-row.dragging { opacity: 0.35; }
+.minn-menu-row.drop-above,
+.minn-widget-row.drop-above { box-shadow: inset 0 2px 0 var(--accent); }
+.minn-menu-row.drop-below,
+.minn-widget-row.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
 .minn-menu-row:hover { background: var(--hover); }
 .minn-menu-row.editing { cursor: default; }
 .minn-menu-row.editing:hover { background: none; }
