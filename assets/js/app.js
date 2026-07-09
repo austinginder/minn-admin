@@ -10330,7 +10330,12 @@
 	// full block picker. Embeds and galleries insert as islands, blocks mode
 	// only (classic content already auto-embeds lone URLs server-side).
 	function basicSlashItems( blocksMode ) {
-		const items = [
+		// Always list the full Basics set. Island inserts (embed/gallery/spacer/
+		// file/shortcode) used to hide in classic mode, which made them look
+		// "missing" in Browse all on classic-content posts. Insert promotes
+		// classic → blocks via ensureBlocksMode() instead.
+		void blocksMode;
+		return [
 			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
 			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
 			[ icon( 'quote' ), 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
@@ -10344,17 +10349,28 @@
 			[ icon( 'img' ), 'Image', 'image' ],
 			[ icon( 'table' ), 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
 			[ icon( 'minus' ), 'Divider', { html: '<hr>' } ],
+			[ icon( 'play' ), 'Embed — YouTube, tweet, audio…', 'embed' ],
+			[ icon( 'gallery' ), 'Gallery', 'gallery' ],
+			[ icon( 'minus' ), 'Spacer', 'spacer' ],
+			[ icon( 'file' ), 'File', 'file' ],
+			[ icon( 'braces' ), 'Shortcode', 'shortcode' ],
 		];
-		if ( blocksMode ) {
-			items.push(
-				[ icon( 'play' ), 'Embed — YouTube, tweet, audio…', 'embed' ],
-				[ icon( 'gallery' ), 'Gallery', 'gallery' ],
-				[ icon( 'minus' ), 'Spacer', 'spacer' ],
-				[ icon( 'file' ), 'File', 'file' ],
-				[ icon( 'braces' ), 'Shortcode', 'shortcode' ],
-			);
+	}
+
+	// Island inserts need blocks-mode serialization. Classic posts (no block
+	// comments yet) promote cleanly: the live HTML body serializes via
+	// serializeToBlocks. Locked layouts stay locked.
+	function ensureBlocksMode() {
+		const ed = state.editor;
+		if ( ! ed ) return false;
+		if ( ed.mode === 'blocks' ) return true;
+		if ( ed.mode === 'locked' ) {
+			toast( 'This layout is locked — open it in the block editor to add blocks', true );
+			return false;
 		}
-		return items;
+		ed.mode = 'blocks';
+		if ( ! ed.islands ) ed.islands = [];
+		return true;
 	}
 
 	/* ===== Block picker — the full library, browsable ===== */
@@ -10530,6 +10546,7 @@
 			// Stackable design: the template arrives async (the server may
 			// be sideloading its CDN images), so swap the "/" block for a
 			// clean paragraph now and island the markup when it lands.
+			if ( ! ensureBlocksMode() ) return;
 			const p = document.createElement( 'p' );
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
@@ -10555,6 +10572,7 @@
 		}
 		if ( action && action.pattern ) {
 			// Registered block pattern: same async placeholder dance.
+			if ( ! ensureBlocksMode() ) return;
 			const p = document.createElement( 'p' );
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
@@ -10576,6 +10594,7 @@
 			// Insert a custom block as a new island: register the raw markup,
 			// drop the card in place of the "/" block, render the real
 			// preview, and open the inspector to configure it.
+			if ( ! ensureBlocksMode() ) return;
 			const ed = state.editor;
 			if ( ! ed ) return;
 			if ( ! ed.islands ) ed.islands = [];
@@ -10605,6 +10624,9 @@
 			return;
 		}
 		if ( action && action.html ) {
+			// Pullquote/details/table HTML needs blocks-mode serialization so
+			// the next save re-emits <!-- wp:… --> comments (not freeform HTML).
+			if ( /wp-block-(pullquote|details|table)/.test( action.html ) ) ensureBlocksMode();
 			// Replace the "/" block outright so the inserted markup lands at
 			// the top level (never wrapped inside the block's div).
 			target.insertAdjacentHTML( 'beforebegin', action.html );
@@ -10631,23 +10653,28 @@
 		sel.addRange( range );
 		if ( action === 'image' ) insertImage();
 		else if ( action === 'embed' ) {
+			if ( ! ensureBlocksMode() ) return;
 			const url = ( prompt( 'Paste the URL to embed (YouTube, tweet, audio…):' ) || '' ).trim();
 			if ( /^https?:\/\/\S+$/.test( url ) ) insertIsland( target.isConnected ? target : null, 'core/embed', embedTemplate( url ) );
 			else if ( url ) toast( 'That doesn’t look like a URL', true );
 		} else if ( action === 'gallery' ) {
+			if ( ! ensureBlocksMode() ) return;
 			const anchor = target;
 			openMediaPicker( ( picks ) => {
 				if ( picks && picks.length ) insertIsland( anchor, 'core/gallery', galleryTemplate( picks ) );
 			}, { multi: true } );
 		} else if ( action === 'spacer' ) {
+			if ( ! ensureBlocksMode() ) return;
 			insertIsland( target.isConnected ? target : null, 'core/spacer', spacerTemplate( '40px' ) );
 		} else if ( action === 'file' ) {
+			if ( ! ensureBlocksMode() ) return;
 			const anchor = target;
 			openMediaPicker( ( picks ) => {
 				const item = Array.isArray( picks ) ? picks[ 0 ] : picks;
 				if ( item ) insertIsland( anchor, 'core/file', fileTemplate( item ) );
 			}, { multi: false, any: true } );
 		} else if ( action === 'shortcode' ) {
+			if ( ! ensureBlocksMode() ) return;
 			const code = ( prompt( 'Shortcode (include the brackets):', '[]' ) || '' ).trim();
 			if ( code ) insertIsland( target.isConnected ? target : null, 'core/shortcode', shortcodeTemplate( code ) );
 		} else {
