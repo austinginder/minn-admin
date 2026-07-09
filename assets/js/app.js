@@ -8336,56 +8336,15 @@
 		document.addEventListener( 'mousedown', tablePopAway, true );
 	}
 
-	function tableOp( table, op, refCell ) {
-		// refCell: the right-clicked cell from the context menu — beats the
-		// caret cell, so ops land exactly where the pointer asked.
-		const cell = ( refCell && refCell.isConnected ? refCell : null ) || tableRefCell( table );
-		if ( ! cell && op !== 'table-del' ) return;
+	// Apply a structural table mutation to a (detached) table. Returns
+	// { deleteTable: true } when the table itself should go away.
+	function applyTableMutation( table, op, cell ) {
 		const row = cell ? cell.closest( 'tr' ) : null;
 		const allRows = Array.from( table.querySelectorAll( 'tr' ) );
-
-		// Destructive table ops aren't on the browser undo stack (direct DOM),
-		// so make them recoverable with an Undo toast (see the undo-completeness
-		// decision in docs/editor-roadmap.md). Snapshot the figure before the op.
-		const fig = table.closest( 'figure' ) || table;
-		const destructive = { 'table-del': 'Table deleted', 'row-del': 'Row deleted', 'col-del': 'Column deleted' }[ op ];
-
-		// Deleting the last row/column means deleting the table.
 		if ( op === 'table-del' || ( op === 'row-del' && allRows.length <= 1 ) || ( op === 'col-del' && row && row.cells.length <= 1 ) ) {
-			const target = table.closest( 'figure' ) || table;
-			const p = document.createElement( 'p' );
-			p.appendChild( document.createElement( 'br' ) );
-			target.replaceWith( p );
-			setCaret( p, 0 );
-			hideTablePop();
-			// The original figure node is intact and detached — undo restores it.
-			toastAction( 'Table deleted', 'Undo', () => {
-				if ( p.isConnected ) p.replaceWith( target );
-				queueTableChips();
-				updateEditorStats();
-				scheduleAutosave();
-			} );
-			scheduleAutosave();
-			return;
+			return { deleteTable: true };
 		}
-
-		// For in-place destructive ops (row/col delete), snapshot the figure's
-		// markup and restore it on undo.
-		let restore = null;
-		if ( destructive ) {
-			const snapHTML = fig.outerHTML;
-			restore = () => {
-				if ( ! fig.isConnected ) return;
-				const tmp = document.createElement( 'div' );
-				tmp.innerHTML = snapHTML;
-				const node = tmp.firstElementChild;
-				if ( node ) fig.replaceWith( node );
-				queueTableChips();
-				updateEditorStats();
-				scheduleAutosave();
-			};
-		}
-
+		if ( ! cell && op !== 'header' ) return null;
 		if ( op === 'row-above' || op === 'row-below' ) {
 			const tr = document.createElement( 'tr' );
 			Array.from( row.cells ).forEach( () => tr.appendChild( tableNewCell( 'td' ) ) );
@@ -8442,14 +8401,116 @@
 					table.insertBefore( thead, table.firstChild );
 				}
 			}
+		} else {
+			return null;
+		}
+		return { deleteTable: false };
+	}
+
+	// Put a selection on a live block and run an execCommand so ⌘Z undoes it.
+	// HARD-WON BLINK FACT: selectNode + insertHTML on a <figure> does NOT
+	// replace the figure — it nests the payload inside (or leaves an empty
+	// husk next to a sibling). For figures we selectNodeContents and swap
+	// only the inner HTML; the shell stays. Bare tables accept selectNode.
+	function commandOnBlock( liveEl, { contentsOnly, html, del } ) {
+		const editorBody = $( '#minn-editor-body' );
+		if ( ! editorBody || ! editorBody.contains( liveEl ) ) return false;
+		editorBody.focus( { preventScroll: true } );
+		const sel = window.getSelection();
+		const r = document.createRange();
+		if ( contentsOnly ) r.selectNodeContents( liveEl );
+		else r.selectNode( liveEl );
+		sel.removeAllRanges();
+		sel.addRange( r );
+		if ( del ) return document.execCommand( 'delete', false, null );
+		return document.execCommand( 'insertHTML', false, html );
+	}
+
+	function tableOp( table, op, refCell ) {
+		// refCell: the right-clicked cell from the context menu — beats the
+		// caret cell, so ops land exactly where the pointer asked.
+		const cell = ( refCell && refCell.isConnected ? refCell : null ) || tableRefCell( table );
+		if ( ! cell && op !== 'table-del' ) return;
+		const fig = table.closest( 'figure' ) || table;
+		const editorBody = $( '#minn-editor-body' );
+		if ( ! editorBody || ! editorBody.contains( fig ) ) return;
+
+		// Mutate a detached clone, then swap via the browser command stack so
+		// every row/col/header/delete change is a real ⌘Z step (see
+		// docs/editor-roadmap.md). Direct DOM mutation is not undoable.
+		const keepPop = !! tablePop;
+		const isFigure = fig.tagName === 'FIGURE';
+		const cloneRoot = fig.cloneNode( true );
+		const cloneTable = isFigure ? cloneRoot.querySelector( 'table' ) : cloneRoot;
+		if ( ! cloneTable && op !== 'table-del' ) return;
+
+		let cloneCell = null;
+		if ( cell && cloneTable ) {
+			const liveRows = Array.from( table.querySelectorAll( 'tr' ) );
+			const ri = liveRows.indexOf( cell.closest( 'tr' ) );
+			const cloneRows = Array.from( cloneTable.querySelectorAll( 'tr' ) );
+			cloneCell = ri >= 0 && cloneRows[ ri ] ? cloneRows[ ri ].cells[ cell.cellIndex ] : null;
+		}
+
+		const result = op === 'table-del'
+			? { deleteTable: true }
+			: applyTableMutation( cloneTable, op, cloneCell );
+		if ( ! result ) return;
+
+		if ( result.deleteTable ) {
+			// Figure: delete contents (shell collapses; ⌘Z restores the table
+			// into the previous figure position). Bare table: replace the node
+			// with an empty paragraph.
+			const ok = isFigure
+				? commandOnBlock( fig, { contentsOnly: true, del: true } )
+				: commandOnBlock( fig, { contentsOnly: false, html: '<p><br></p>' } );
+			if ( ! ok ) return;
+			hideTablePop();
+			// Seat the caret in a real block if one remains (or the empty p).
+			const landing = editorBody.querySelector( 'p, h1, h2, h3, h4, h5, h6, td, th' )
+				|| editorBody.firstElementChild;
+			if ( landing ) setCaret( landing, 0 );
+			toast( 'Table deleted. ⌘Z restores it' );
+		} else {
+			// Figure shell stays; swap its inner HTML. Bare table swaps outer.
+			const marker = 'minn-tbl-' + Date.now().toString( 36 );
+			let ok;
+			if ( isFigure ) {
+				ok = commandOnBlock( fig, { contentsOnly: true, html: cloneRoot.innerHTML } );
+			} else {
+				cloneRoot.setAttribute( 'data-minn-tbl', marker );
+				ok = commandOnBlock( fig, { contentsOnly: false, html: cloneRoot.outerHTML } );
+			}
+			if ( ! ok ) return;
+			let newTable = null;
+			if ( isFigure && fig.isConnected ) {
+				// Live figure reference survives a contents-only swap.
+				newTable = fig.querySelector( 'table' );
+			} else {
+				const marked = editorBody.querySelector( `[data-minn-tbl="${ marker }"]` );
+				if ( marked ) {
+					marked.removeAttribute( 'data-minn-tbl' );
+					newTable = marked.tagName === 'TABLE' ? marked : marked.querySelector( 'table' );
+				}
+			}
+			if ( newTable ) {
+				const seat = newTable.querySelector( 'td, th' );
+				if ( seat ) setCaret( seat, 0 );
+				if ( keepPop ) openTablePop( newTable );
+			} else {
+				hideTablePop();
+			}
+			const destructiveMsg = {
+				'row-del': 'Row deleted. ⌘Z restores it',
+				'col-del': 'Column deleted. ⌘Z restores it',
+			}[ op ];
+			if ( destructiveMsg ) toast( destructiveMsg );
 		}
 		scheduleAutosave();
-		if ( restore ) toastAction( destructive, 'Undo', restore );
-		// Geometry (and the header button label) changed — refresh the chips,
-		// and refresh the popover only if one was open (the chip flow keeps it
-		// up across ops; the context-menu flow never opens one).
+		updateEditorStats();
+		// Geometry (and the header button label) changed — refresh chips.
+		// Popover reopened above when keepPop and the table still exists.
 		syncTableChips();
-		if ( tablePop && table.isConnected ) openTablePop( table );
 	}
 
 	/* ===== Code block chip (config popout for editable code blocks) =====

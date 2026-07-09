@@ -1,8 +1,8 @@
 /**
  * Table context menu: right-click a cell for targeted ops — add row
  * above/below, add column left/right, delete row/column — acting on the
- * CLICKED cell (not the caret). Deletes offer the Undo toast. All verified
- * against SAVED markup.
+ * CLICKED cell (not the caret). Structural ops ride the browser undo stack
+ * (⌘Z). All verified against SAVED markup.
  */
 const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
@@ -46,7 +46,7 @@ const TABLE = '<!-- wp:table --><figure class="wp-block-table"><table><thead><tr
 	const headCells = await page.$$eval( '#minn-editor-body thead th', ( els ) => els.map( ( c ) => c.textContent.trim() ) );
 	t.check( 'column lands right of the clicked one, thead included', headCells.length === 4 && headCells[ 0 ] === 'H1' && headCells[ 1 ] === 'H2' && headCells[ 2 ] === '' && headCells[ 3 ] === 'H3', JSON.stringify( headCells ) );
 
-	/* ===== Delete the clicked column — Undo toast offered ===== */
+	/* ===== Delete the clicked column — ⌘Z restores it ===== */
 	await page.click( 'td >> text=a3', { button: 'right' } );
 	await page.waitForSelector( '.minn-table-menu' );
 	await page.click( '.minn-table-menu button[data-op="col-del"]' );
@@ -57,7 +57,18 @@ const TABLE = '<!-- wp:table --><figure class="wp-block-table"><table><thead><tr
 		return el ? el.textContent : '';
 	} );
 	t.check( 'clicked column deleted', afterDel === 3, String( afterDel ) );
-	t.check( 'delete offers the Undo toast', /Undo/.test( toast ), toast.slice( 0, 60 ) );
+	t.check( 'delete hints ⌘Z restore', /⌘Z|Cmd\+Z|Meta/.test( toast ) || /restores it/.test( toast ), toast.slice( 0, 80 ) );
+	// One ⌘Z puts the column back (then re-delete so the rest of the suite
+	// still exercises a column-deleted save shape).
+	await page.focus( '#minn-editor-body' );
+	await page.keyboard.press( 'Meta+z' );
+	await page.waitForTimeout( 300 );
+	const afterUndo = await page.$$eval( '#minn-editor-body thead th', ( els ) => els.length );
+	t.check( '⌘Z restores the deleted column', afterUndo === 4, String( afterUndo ) );
+	await page.click( 'td >> text=a3', { button: 'right' } );
+	await page.waitForSelector( '.minn-table-menu' );
+	await page.click( '.minn-table-menu button[data-op="col-del"]' );
+	await page.waitForTimeout( 300 );
 
 	/* ===== Delete the clicked row ===== */
 	await page.click( 'td >> text=a1', { button: 'right' } );

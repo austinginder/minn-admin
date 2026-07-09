@@ -78,14 +78,20 @@ distrust the surface.
   essentially reimplementing the whole undo stack (capturing typing too, to keep ordering
   right). That's a large, fragile core rewrite for a polish feature — against the "no build
   step / greppable / islands keep the editor good" ethos. Instead:
-  1. **Toast-Undo for destructive structural ops** (island / table / row / column delete):
-     a Gmail-style "Deleted — Undo" toast (~6s) that re-inserts the removed node + its
-     islands[] entry. Closes the one real gap at low risk, no undo-stack surgery. ✅ *Shipped 2026-07-05* — `toastAction()` + `removeIslandWithUndo()` and the
-     table-op snapshot restore; suite `tests/undo-toast.test.js`.
-  2. **Document the boundary:** ⌘Z covers writing; structural block changes use the block's
-     own controls, and deletions offer the Undo toast. The safe-no-op behavior already
-     satisfies Horizon 1's "nothing surprising, ever" — a no-op ⌘Z disappoints mildly but
-     never breaks trust.
+  1. **Toast-Undo for island deletions** (embed/gallery/custom block remove): a Gmail-style
+     "Deleted — Undo" toast (~6s) that re-inserts the removed node + its islands[] entry.
+     ✅ *Shipped 2026-07-05* — `toastAction()` + `removeIslandWithUndo()`; suite
+     `tests/undo-toast.test.js`.
+  2. **Table ops on the real undo stack** (2026-07-09): row/col add/delete, header toggle,
+     and table delete mutate a detached clone then swap via `commandOnBlock` /
+     `applyTableMutation`. Figures use `selectNodeContents` + insertHTML of the inner
+     markup (Blink nests a full-figure `selectNode` insertHTML); bare tables use
+     `selectNode`. Table-delete is contents-delete on the figure (⌘Z restores). Same
+     idea as image remove. Destructive ops toast a "⌘Z restores it" hint. Suite:
+     `tests/undo-toast.test.js` + `tests/table-menu.test.js`.
+  3. **Document the boundary:** ⌘Z covers writing + table structure + image remove;
+     island deletions offer the Undo toast. Remaining direct-DOM ops (inspector attr
+     regen, island insert) are still safe no-ops under ⌘Z.
 - **Conflict safety.** Post locking / "someone else is editing" (core's heartbeat locks),
   and a localStorage safety net for drafts so a crashed browser loses nothing even before
   the first autosave.
