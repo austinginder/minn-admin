@@ -1278,6 +1278,43 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-island-preview { pointer-events: none; opacity: 0.85; overflow: hidden; background: transparent !important; }
 .minn-island-preview > :last-child { margin-bottom: 0; }
 .minn-island-empty { color: var(--text3); font-size: 13.5px; font-style: italic; }
+/* Shortcode island — type the shortcode in place (no browser prompt). */
+.minn-shortcode-island {
+  user-select: text;
+  cursor: text;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 18px;
+}
+.minn-shortcode-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text3);
+  user-select: none;
+}
+.minn-shortcode-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+  user-select: text;
+}
+.minn-shortcode-input::placeholder { color: var(--text3); opacity: 0.85; }
+.minn-shortcode-input:hover { border-color: var(--border2); }
+.minn-shortcode-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
 /* Embed wrappers shouldn't reintroduce a light plate either. */
 .minn-island-preview .wp-block-embed,
 .minn-island-preview .wp-block-embed__wrapper {

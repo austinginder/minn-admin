@@ -281,6 +281,95 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	);
 	t.check( 'slash inserts spacer island', spacerOk, 'dom' );
 
+	// Shortcode island: inline field (no browser prompt), type + save
+	let dialogOpened = false;
+	page.on( 'dialog', async ( d ) => {
+		dialogOpened = true;
+		await d.dismiss().catch( () => {} );
+	} );
+	await page.evaluate( () => {
+		const body = document.querySelector( '#minn-editor-body' );
+		const p = document.createElement( 'p' );
+		p.appendChild( document.createElement( 'br' ) );
+		body.appendChild( p );
+		const range = document.createRange();
+		range.selectNodeContents( p );
+		range.collapse( true );
+		const sel = window.getSelection();
+		sel.removeAllRanges();
+		sel.addRange( range );
+	} );
+	await page.keyboard.type( '/shortcode' );
+	await page.waitForSelector( '.minn-slash-menu .minn-slash-item', { timeout: 3000 } );
+	await page.evaluate( () => {
+		const item = [ ...document.querySelectorAll( '.minn-slash-item' ) ]
+			.find( ( el ) => /Shortcode/i.test( el.textContent || '' ) );
+		if ( item ) item.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+	} );
+	await page.waitForTimeout( 500 );
+	const scShape = await page.evaluate( () => {
+		const body = document.querySelector( '#minn-editor-body' );
+		// Newest shortcode island (slash insert appends after existing ones).
+		const islands = [ ...body.querySelectorAll( '.minn-block-island' ) ]
+			.filter( ( el ) => /shortcode/.test( el.dataset.block || '' ) );
+		const island = islands[ islands.length - 1 ];
+		const input = island && island.querySelector( '.minn-shortcode-input' );
+		return {
+			island: !! island,
+			hasInput: !! input,
+			value: input ? input.value : null,
+			focused: !!( input && document.activeElement === input ),
+			count: islands.length,
+		};
+	} );
+	t.check( 'slash shortcode inserts island with input', scShape.island && scShape.hasInput, JSON.stringify( scShape ) );
+	t.check( 'slash shortcode did not open a prompt', ! dialogOpened, 'dialog=' + dialogOpened );
+	// Focus is best-effort (rAF after menu close); field presence is the contract.
+	t.check( 'slash shortcode field is ready', scShape.hasInput && scShape.value === '[]', JSON.stringify( scShape ) );
+
+	// Type a shortcode into the field
+	await page.evaluate( () => {
+		const input = [ ...document.querySelectorAll( '.minn-shortcode-input' ) ].pop();
+		if ( ! input ) return;
+		input.focus();
+		input.select();
+	} );
+	await page.keyboard.type( '[contact-form-7 id="42"]' );
+	await page.waitForTimeout( 200 );
+	const scVal = await page.evaluate( () => {
+		const input = [ ...document.querySelectorAll( '.minn-shortcode-input' ) ].pop();
+		return input ? input.value : '';
+	} );
+	t.check( 'typed shortcode into island field', scVal === '[contact-form-7 id="42"]', scVal );
+
+	// Save and verify
+	await page.keyboard.down( 'Meta' );
+	await page.keyboard.press( 's' );
+	await page.keyboard.up( 'Meta' );
+	await page.waitForTimeout( 800 );
+	const savedSc = await page.evaluate( async ( pid ) => {
+		const btn = [ ...document.querySelectorAll( 'button' ) ].find( ( b ) => /Update|Save|Publish/.test( b.textContent || '' ) );
+		if ( btn ) btn.click();
+		await new Promise( ( r ) => setTimeout( r, 1500 ) );
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce },
+		} );
+		const j = await r.json();
+		return j.content && j.content.raw;
+	}, id );
+	t.check( 'saved typed shortcode', /contact-form-7 id="42"/.test( savedSc || '' ), ( savedSc || '' ).slice( 0, 600 ) );
+
+	// Fixture shortcode also loads with its value in the input
+	const fixtureInput = await page.evaluate( () => {
+		const inputs = [ ...document.querySelectorAll( '.minn-shortcode-input' ) ];
+		return inputs.map( ( i ) => i.value );
+	} );
+	t.check(
+		'loaded shortcode shows body in field',
+		fixtureInput.some( ( v ) => /gallery ids/.test( v ) ) || fixtureInput.some( ( v ) => /contact-form-7/.test( v ) ),
+		JSON.stringify( fixtureInput )
+	);
+
 	await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => {

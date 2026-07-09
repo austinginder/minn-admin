@@ -4888,15 +4888,54 @@
 
 	// The contenteditable=false card an island renders as. Shared by content
 	// loading and slash-menu insertion of custom blocks.
+	// Shortcode islands are special: the body is plain text between block
+	// comments, so the card hosts a live monospace field (no prompt, no
+	// server preview) and commits into ed.islands[idx] on every input.
 	function islandHtml( idx, name, raw ) {
+		const short = String( name || '' ).replace( /^core\//, '' );
+		if ( short === 'shortcode' ) {
+			const code = stripBlockComments( raw || '' ).trim();
+			return `<div class="minn-block-island minn-shortcode-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
+				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ shortcode</button>
+				<label class="minn-shortcode-label" for="minn-sc-${ idx }">Shortcode</label>
+				<input id="minn-sc-${ idx }" class="minn-shortcode-input" type="text" data-shortcode="${ idx }" value="${ esc( code ) }" placeholder="[shortcode attr=&quot;value&quot;]" spellcheck="false" autocomplete="off">
+			</div>`;
+		}
 		const inner = stripBlockComments( raw ).trim();
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
-			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ ${ esc( name.replace( /^core\//, '' ) ) }</button>
+			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ ${ esc( short || name ) }</button>
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 		</div>`;
 	}
 
 	const stripBlockComments = ( raw ) => raw.replace( /<!--\s*\/?wp:[\s\S]*?-->\n?/g, '' );
+
+	// Keep ed.islands in sync with the in-island shortcode field. Serialize
+	// reads islands[] (not DOM), so every keystroke must land here.
+	// opts.silent: skip scheduleAutosave (used by serialize flush so a save
+	// doesn't re-arm the idle timer).
+	function commitShortcodeInput( input, opts ) {
+		const ed = state.editor;
+		if ( ! ed || ! ed.islands || ! input ) return;
+		const idx = parseInt( input.dataset.shortcode, 10 );
+		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		const next = shortcodeTemplate( input.value );
+		if ( ed.islands[ idx ] === next ) return;
+		ed.islands[ idx ] = next;
+		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
+	}
+
+	function focusShortcodeIsland( islandEl ) {
+		const input = islandEl && islandEl.querySelector( '.minn-shortcode-input' );
+		if ( ! input ) return;
+		// Defer so the slash menu / picker teardown doesn't steal focus.
+		requestAnimationFrame( () => {
+			if ( ! input.isConnected ) return;
+			input.focus( { preventScroll: true } );
+			// Fresh insert is "[]" — select all so the first keystroke replaces.
+			if ( input.value === '[]' || ! input.value.trim() ) input.select();
+		} );
+	}
 
 	/* ===== Embeds & galleries (inserted as islands) ===== */
 
@@ -4967,8 +5006,10 @@
 	}
 
 	// Shortcode island — free text between the comments is the shortcode body.
+	// Empty/whitespace collapses to "[]" so the block stays a valid placeholder
+	// the writer can select-and-replace in the island field.
 	function shortcodeTemplate( code ) {
-		const body = String( code || '' ).trim() || '[]';
+		const body = String( code == null ? '' : code ).trim() || '[]';
 		return `<!-- wp:shortcode -->\n${ body }\n<!-- /wp:shortcode -->`;
 	}
 
@@ -5289,6 +5330,9 @@
 	}
 
 	function serializeToBlocks( root, islands ) {
+		// Flush in-island shortcode fields so a save mid-keystroke (or before
+		// the input event lands) still persists what the writer sees.
+		if ( root ) $$( '.minn-shortcode-input', root ).forEach( ( el ) => commitShortcodeInput( el, { silent: true } ) );
 		const out = [];
 		// serializeBlockAttrs applies Gutenberg's comment-safe escaping ("--", <, >, &).
 		const pushBlock = ( name, attrs, html ) =>
@@ -6129,7 +6173,7 @@
 		if ( ! el || ! body ) return;
 		ensureTrailingParagraph( body );
 		const walker = document.createTreeWalker( body, NodeFilter.SHOW_TEXT, {
-			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-empty' )
+			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-empty, .minn-shortcode-label, .minn-shortcode-input' )
 				? NodeFilter.FILTER_REJECT
 				: NodeFilter.FILTER_ACCEPT,
 		} );
@@ -7500,6 +7544,33 @@
 			const island = chip.closest( '.minn-block-island' );
 			if ( island ) openInspector( island );
 		} );
+		// Shortcode islands: type in the field, commit into ed.islands (serialize
+		// never reads the input itself). stopPropagation on the input path so
+		// island guards / contenteditable don't treat keystrokes as body edits.
+		if ( ! locked ) {
+			body.addEventListener( 'input', ( e ) => {
+				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
+				if ( sc ) commitShortcodeInput( sc );
+			} );
+			body.addEventListener( 'change', ( e ) => {
+				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
+				if ( sc ) commitShortcodeInput( sc );
+			} );
+			body.addEventListener( 'keydown', ( e ) => {
+				if ( ! ( e.target.closest && e.target.closest( '.minn-shortcode-input' ) ) ) return;
+				// Keep Enter from inserting a newline attempt / bubbling into
+				// body handlers; shortcodes are single-line in the field.
+				if ( e.key === 'Enter' ) {
+					e.preventDefault();
+					e.target.blur();
+				}
+				e.stopPropagation();
+			} );
+			// Clicking the field must not be treated as "click island chrome".
+			body.addEventListener( 'mousedown', ( e ) => {
+				if ( e.target.closest && e.target.closest( '.minn-shortcode-input' ) ) e.stopPropagation();
+			}, true );
+		}
 		// Clicking an editable image opens its controls popover.
 		body.addEventListener( 'click', ( e ) => {
 			const img = e.target.closest( 'img' );
@@ -8611,6 +8682,11 @@
 
 		// Refresh the preview with a real server render; tolerate failure
 		// (a misbehaving render callback must never break the editor).
+		// Shortcode islands use a live input instead of a preview slot —
+		// sync that field so an inspector text-run Apply is visible.
+		const islandEl = insp.islandEl || document.querySelector( `.minn-block-island[data-island="${ insp.idx }"]` );
+		const scInput = islandEl && islandEl.querySelector( '.minn-shortcode-input' );
+		if ( scInput ) scInput.value = stripBlockComments( newRaw ).trim();
 		const previewEl = document.querySelector( `.minn-island-preview[data-preview="${ insp.idx }"]` );
 		try {
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ], post: ( state.editor && state.editor.id ) || 0 } ) } );
@@ -8635,12 +8711,16 @@
 		if ( ! ed.islands || ! ed.islands.length ) return;
 		// Removed islands are nulled (indices stay stable) — send '' to keep the
 		// response aligned by index and satisfy the endpoint's string schema.
+		// Shortcode islands host a live input (not a preview slot) — still
+		// request a render for index alignment, but never overwrite the field.
 		const blocks = ed.islands.map( ( r ) => ( r == null ? '' : r ) );
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks, post: ( state.editor && state.editor.id ) || 0 } ) } )
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
 				if ( ! r || ! Array.isArray( r.rendered ) || ! document.contains( body ) ) return;
 				r.rendered.forEach( ( html, i ) => {
+					const island = body.querySelector( `.minn-block-island[data-island="${ i }"]` );
+					if ( island && /shortcode/.test( island.dataset.block || '' ) ) return;
 					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
 					if ( el && html && html.trim() ) el.innerHTML = html;
 				} );
@@ -10689,9 +10769,11 @@
 				if ( item ) insertIsland( anchor, 'core/file', fileTemplate( item ) );
 			}, { multi: false, any: true } );
 		} else if ( action === 'shortcode' ) {
+			// Insert a blank shortcode island and focus its field — no prompt.
+			// The writer types [shortcode …] directly in the island UI.
 			if ( ! ensureBlocksMode() ) return;
-			const code = ( prompt( 'Shortcode (include the brackets):', '[]' ) || '' ).trim();
-			if ( code ) insertIsland( target.isConnected ? target : null, 'core/shortcode', shortcodeTemplate( code ) );
+			const el = insertIsland( target.isConnected ? target : null, 'core/shortcode', shortcodeTemplate( '' ) );
+			focusShortcodeIsland( el );
 		} else {
 			action();
 			liftNestedLists( body );
