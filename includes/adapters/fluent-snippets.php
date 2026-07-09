@@ -116,6 +116,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['fluent-snippets'] = array(
 		'label'      => 'Snippets',
+		'family'     => 'snippets',
 		'sub'        => 'FluentSnippets',
 		'icon'       => 'code',
 		// install_plugins is Fluent's own gate; unfiltered_html is needed to write code.

@@ -86,6 +86,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['wpcode'] = array(
 		'label'      => 'Snippets',
+		'family'     => 'snippets',
 		'sub'        => 'WPCode',
 		'icon'       => 'code',
 		'cap'        => 'wpcode_edit_snippets',
