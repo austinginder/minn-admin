@@ -192,11 +192,37 @@ class Minn_Admin {
 		if ( ! current_user_can( 'edit_posts' ) ) {
 			return;
 		}
+
+		// Default: open the app. On a singular front-end view the current
+		// user can edit, retarget to that item's Minn editor (mirrors WP's
+		// own "Edit Page" / "Edit Post" affordance).
+		$title = 'Minn Admin';
+		$href  = self::app_url();
+
+		if ( ! is_admin() && is_singular() ) {
+			$post = get_queried_object();
+			if ( $post instanceof WP_Post && current_user_can( 'edit_post', $post->ID ) ) {
+				$pto = get_post_type_object( $post->post_type );
+				// Minn's editor is REST-backed — skip types that aren't in REST.
+				if ( $pto && ! empty( $pto->show_in_rest ) ) {
+					$rest_base = ! empty( $pto->rest_base ) ? $pto->rest_base : $post->post_type;
+					$path      = 'editor/' . rawurlencode( $rest_base ) . '/' . (int) $post->ID;
+					$title     = 'Edit in Minn Admin';
+					if ( get_option( 'permalink_structure' ) ) {
+						$href = trailingslashit( self::app_url() ) . $path;
+					} else {
+						// Plain permalinks: app boots via ?minn_admin=1, route rides the hash.
+						$href = self::app_url() . '#/' . $path;
+					}
+				}
+			}
+		}
+
 		$bar->add_node(
 			array(
 				'id'    => 'minn-admin',
-				'title' => 'Minn Admin',
-				'href'  => self::app_url(),
+				'title' => $title,
+				'href'  => $href,
 			)
 		);
 	}
