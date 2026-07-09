@@ -4751,7 +4751,10 @@
 	// Blocks whose markup survives a contenteditable round-trip. Anything else
 	// (embeds, columns, custom blocks…) becomes an atomic non-editable island:
 	// preserved byte-for-byte on save, editable text around it.
-	const SIMPLE_BLOCKS = [ 'paragraph', 'heading', 'quote', 'pullquote', 'details', 'code', 'preformatted', 'verse', 'list', 'list-item', 'image', 'table', 'html', 'separator', 'more', 'video', 'audio' ];
+	// details is intentionally NOT here — free contenteditable <details> traps
+	// the caret and blocks typing after it in Blink. It inserts as an island
+	// (summary/body editable via the inspector text runs).
+	const SIMPLE_BLOCKS = [ 'paragraph', 'heading', 'quote', 'pullquote', 'code', 'preformatted', 'verse', 'list', 'list-item', 'image', 'table', 'html', 'separator', 'more', 'video', 'audio' ];
 
 	// Split raw post content into top-level segments: {type:'block',name,raw}
 	// and {type:'html',raw} (freeform chunks). Returns null when the comment
@@ -4825,7 +4828,7 @@
 	// attribute marker can't be duplicated by contenteditable. This is what lets
 	// real Gutenberg images ({"id":…,"sizeSlug":…}) stay editable instead of
 	// becoming islands.
-	const PASSTHROUGH_BLOCKS = [ 'image', 'table', 'quote', 'pullquote', 'details', 'separator', 'verse', 'preformatted', 'video', 'audio' ];
+	const PASSTHROUGH_BLOCKS = [ 'image', 'table', 'quote', 'pullquote', 'separator', 'verse', 'preformatted', 'video', 'audio' ];
 
 	// Attributes JSON from a segment's opening block comment ({} when absent/invalid;
 	// null distinguishes "invalid JSON" for segmentEditable's bail-out).
@@ -6108,7 +6111,12 @@
 		if ( ! body || body.getAttribute( 'contenteditable' ) === 'false' ) return;
 		const last = body.lastElementChild;
 		if ( ! last ) return;
-		if ( /^(PRE|TABLE|FIGURE|HR|BLOCKQUOTE)$/.test( last.tagName ) || last.classList.contains( 'minn-block-island' ) ) {
+		// DETAILS too — if a live <details> ever lands outside an island, the
+		// caret still needs a landing <p> after it (same for any non-typing
+		// block tag we don't treat as prose).
+		if ( /^(PRE|TABLE|FIGURE|HR|BLOCKQUOTE|DETAILS)$/.test( last.tagName )
+			|| last.classList.contains( 'minn-block-island' )
+			|| last.getAttribute( 'contenteditable' ) === 'false' ) {
 			const p = document.createElement( 'p' );
 			p.innerHTML = '<br>';
 			body.appendChild( p );
@@ -10339,10 +10347,10 @@
 			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
 			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
 			[ icon( 'quote' ), 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
-			// Pullquote + details are prose-class SIMPLE_BLOCKS — insert as live HTML
-			// so the writer can type immediately (not islands).
+			// Pullquote is prose-class; details is an island (contenteditable
+			// <details> traps the caret and blocks typing after it in Blink).
 			[ icon( 'quote' ), 'Pullquote', { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ],
-			[ icon( 'list' ), 'Details', { html: '<details class="wp-block-details" open><summary>Details</summary><p><br></p></details>' } ],
+			[ icon( 'list' ), 'Details', { block: 'core/details', template: detailsTemplate( 'Details', '' ) } ],
 			[ icon( 'braces' ), 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
 			[ icon( 'list' ), 'Bulleted list', () => document.execCommand( 'insertUnorderedList', false, null ) ],
 			[ icon( 'olist' ), 'Numbered list', () => document.execCommand( 'insertOrderedList', false, null ) ],
@@ -10355,6 +10363,12 @@
 			[ icon( 'file' ), 'File', 'file' ],
 			[ icon( 'braces' ), 'Shortcode', 'shortcode' ],
 		];
+	}
+
+	function detailsTemplate( summary, body ) {
+		const s = summary != null ? String( summary ) : 'Details';
+		const b = body != null ? String( body ) : '';
+		return `<!-- wp:details -->\n<details class="wp-block-details"><summary>${ esc( s ) }</summary><p>${ esc( b ) }</p></details>\n<!-- /wp:details -->`;
 	}
 
 	// Island inserts need blocks-mode serialization. Classic posts (no block
@@ -10624,9 +10638,10 @@
 			return;
 		}
 		if ( action && action.html ) {
-			// Pullquote/details/table HTML needs blocks-mode serialization so
-			// the next save re-emits <!-- wp:… --> comments (not freeform HTML).
-			if ( /wp-block-(pullquote|details|table)/.test( action.html ) ) ensureBlocksMode();
+			// Pullquote/table HTML needs blocks-mode serialization so the next
+			// save re-emits <!-- wp:… --> comments (not freeform HTML). Details
+			// always inserts as an island via action.block (never free HTML).
+			if ( /wp-block-(pullquote|table)/.test( action.html ) ) ensureBlocksMode();
 			// Replace the "/" block outright so the inserted markup lands at
 			// the top level (never wrapped inside the block's div).
 			target.insertAdjacentHTML( 'beforebegin', action.html );
