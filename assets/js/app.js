@@ -2916,6 +2916,7 @@
 				${ s.description && ! isInactive ? `<div class="minn-toggle-desc" style="margin:-4px 0 10px;">${ esc( stripTags( s.description ) ) }</div>` : '' }
 				${ items.length ? items.map( ( w, i ) => `
 				<div class="minn-widget-row" data-widget="${ esc( w.id ) }">
+					${ items.length > 1 ? `<span class="minn-menu-grip" draggable="true" title="Drag to reorder">${ icon( 'grip' ) }</span>` : '' }
 					<div class="minn-widget-info">
 						<span class="minn-row-title">${ esc( ws.types[ w.id_base ] || w.id_base ) }</span>
 						<span class="minn-row-slug minn-cell-clip">${ esc( widgetPreview( w ) || '—' ) }</span>
@@ -3004,6 +3005,62 @@
 				reloadWidgets();
 			} )
 		);
+		// Drag to reorder within a sidebar — same grip UX as menus. Dropping
+		// on another row puts the dragged widget above/below its midpoint;
+		// cross-sidebar moves stay on the "Move to…" select.
+		$$( '[data-sidebar]', view ).forEach( ( area ) => {
+			let dragWid = null;
+			$$( '.minn-menu-grip', area ).forEach( ( grip ) => {
+				const row = grip.closest( '[data-widget]' );
+				grip.addEventListener( 'dragstart', ( e ) => {
+					dragWid = row.dataset.widget;
+					row.classList.add( 'dragging' );
+					e.dataTransfer.effectAllowed = 'move';
+					e.dataTransfer.setData( 'text/plain', dragWid );
+				} );
+				grip.addEventListener( 'dragend', () => {
+					dragWid = null;
+					$$( '.minn-widget-row', area ).forEach( ( r ) => r.classList.remove( 'dragging', 'drop-above', 'drop-below' ) );
+				} );
+			} );
+			$$( '.minn-widget-row[data-widget]', area ).forEach( ( row ) => {
+				row.addEventListener( 'dragover', ( e ) => {
+					if ( ! dragWid || row.dataset.widget === dragWid ) return;
+					e.preventDefault();
+					e.dataTransfer.dropEffect = 'move';
+					const r = row.getBoundingClientRect();
+					const below = e.clientY > r.top + r.height / 2;
+					row.classList.toggle( 'drop-below', below );
+					row.classList.toggle( 'drop-above', ! below );
+				} );
+				row.addEventListener( 'dragleave', () => row.classList.remove( 'drop-above', 'drop-below' ) );
+				row.addEventListener( 'drop', async ( e ) => {
+					e.preventDefault();
+					const targetId = row.dataset.widget;
+					const below = row.classList.contains( 'drop-below' );
+					row.classList.remove( 'drop-above', 'drop-below' );
+					if ( ! dragWid || targetId === dragWid ) return;
+					const movedId = dragWid;
+					const sid = area.dataset.sidebar;
+					const s = ws.sidebars.find( ( x ) => x.id === sid );
+					if ( ! s ) return;
+					const arr = [ ...( s.widgets || [] ) ];
+					const from = arr.indexOf( movedId );
+					if ( from === -1 ) return;
+					arr.splice( from, 1 );
+					const to = arr.indexOf( targetId );
+					if ( to === -1 ) return;
+					arr.splice( below ? to + 1 : to, 0, movedId );
+					area.classList.add( 'minn-busy' );
+					try {
+						await api( `wp/v2/sidebars/${ sid }`, { method: 'POST', body: JSON.stringify( { widgets: arr } ) } );
+					} catch ( err ) {
+						toast( err.message, true );
+					}
+					reloadWidgets();
+				} );
+			} );
+		} );
 		$$( '.minn-widget-moveto', view ).forEach( ( sel ) =>
 			sel.addEventListener( 'change', async () => {
 				if ( ! sel.value ) return;

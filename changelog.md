@@ -23,6 +23,7 @@
 
 ### Improved
 * **←/→ steps through entry details:** when viewing a Gravity Forms entry (or any surface detail opened from a list), the left and right arrow keys go to the previous and next item on the current page, with matching ‹ › buttons in the modal header. Same idea as the media preview; arrow keys leave the caret alone when you're typing in a field.
+* **Widget drag grips:** widget rows in an area get the same drag handle as menu items. Drop above or below another row to reorder; ↑↓ and Move to… stay for the other cases.
 
 ### Fixed
 * **Table row/column actions undo with ⌘Z.** Add, delete, header toggle, and delete-table used to mutate the DOM directly, so ⌘Z was a no-op (deletes only offered a short-lived Undo toast). Those ops now go through the browser command stack: mutate a clone, swap via `insertHTML` / `delete`, and ⌘Z restores the previous table. Destructive ops still toast a "⌘Z restores it" hint.
