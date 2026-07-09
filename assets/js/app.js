@@ -404,10 +404,35 @@
 		}
 	}
 
-	// Builders + editor blocks both go stale on plugin/theme flips — one
-	// call site keeps the Extensions handlers honest.
+	// Surfaces (Redirects / Snippets / Forms / Activity Log…) are also a
+	// boot snapshot. Deactivating Safe Redirect Manager used to leave its
+	// nav item until a hard refresh — re-poll and rebuild just the nav.
+	async function refreshSurfaces() {
+		const prevIds = new Set( ( B.surfaces || [] ).map( ( s ) => s.id ) );
+		try {
+			const list = await api( 'minn-admin/v1/surfaces' );
+			B.surfaces = Array.isArray( list ) ? list : [];
+		} catch ( e ) { /* leave the snapshot as-is */ }
+
+		// If the open view is a surface that just vanished, leave it.
+		const stillThere = !! surfaceById( state.route );
+		const wasSurface = prevIds.has( state.route )
+			|| ( ! TITLES[ state.route ] && state.route !== 'editor' && ! String( state.route ).startsWith( 'editor/' ) );
+		if ( wasSurface && ! stillThere && state.route !== 'extensions' ) {
+			// Prefer staying in Extensions if the user just toggled from there;
+			// otherwise drop to Overview rather than a blank/error view.
+			go( state.route === 'extensions' ? 'extensions' : 'overview' );
+		}
+
+		renderNavWorkspace();
+		// Family switcher may appear/disappear when the member count changes.
+		if ( surfaceById( state.route ) ) renderTopbar();
+	}
+
+	// Builders + editor blocks + surfaces all go stale on plugin/theme flips
+	// — one call site keeps the Extensions handlers honest.
 	async function refreshAfterPluginChange() {
-		await Promise.all( [ refreshBuilders(), refreshEditorBlocks() ] );
+		await Promise.all( [ refreshBuilders(), refreshEditorBlocks(), refreshSurfaces() ] );
 	}
 
 	// Small "Post / Page" menu under the + New button. Users who can't edit
@@ -586,7 +611,20 @@
 		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ icons[ name ] || '' }</svg>`;
 	}
 
-	function renderShell() {
+	function navBtnHtml( n ) {
+		return `
+			<button class="minn-nav-btn" data-nav="${ n.id }"${ n.family ? ` data-family="${ esc( n.family ) }"` : '' }>
+				${ icon( n.icon ) }<span>${ esc( n.label ) }</span>
+				${ n.count ? '<span class="minn-nav-count" id="minn-content-count" hidden></span>' : '' }
+				${ n.commentCount ? '<span class="minn-nav-count" id="minn-comments-count" hidden></span>' : '' }
+				${ n.orderCount ? '<span class="minn-nav-count" id="minn-orders-count" hidden></span>' : '' }
+				${ n.dot ? '<span class="minn-nav-dot" id="minn-plugin-dot" hidden></span>' : '' }
+			</button>`;
+	}
+
+	// Workspace nav items (Overview… + surfaces + Extensions). Rebuilt when
+	// surfaces re-poll so plugin toggles don't leave stale sidebar entries.
+	function workspaceNavItems() {
 		const navItems = [
 			{ id: 'overview', label: 'Overview', icon: 'grid' },
 			{ id: 'content', label: 'Content', icon: 'doc', count: true },
@@ -604,6 +642,10 @@
 		if ( B.caps.plugins ) {
 			navItems.push( { id: 'extensions', label: 'Extensions', icon: 'plug', dot: true } );
 		}
+		return navItems;
+	}
+
+	function manageNavItems() {
 		const manageItems = [];
 		if ( B.caps.users ) {
 			manageItems.push( { id: 'users', label: 'Users', icon: 'users' } );
@@ -621,15 +663,60 @@
 			manageItems.push( { id: 'system', label: 'System', icon: 'activity' } );
 			manageItems.push( { id: 'settings', label: 'Settings', icon: 'gear' } );
 		}
+		return manageItems;
+	}
 
-		const navBtn = ( n ) => `
-			<button class="minn-nav-btn" data-nav="${ n.id }"${ n.family ? ` data-family="${ esc( n.family ) }"` : '' }>
-				${ icon( n.icon ) }<span>${ esc( n.label ) }</span>
-				${ n.count ? '<span class="minn-nav-count" id="minn-content-count" hidden></span>' : '' }
-				${ n.commentCount ? '<span class="minn-nav-count" id="minn-comments-count" hidden></span>' : '' }
-				${ n.orderCount ? '<span class="minn-nav-count" id="minn-orders-count" hidden></span>' : '' }
-				${ n.dot ? '<span class="minn-nav-dot" id="minn-plugin-dot" hidden></span>' : '' }
-			</button>`;
+	function bindNavClicks( root ) {
+		$$( '.minn-nav-btn', root || document ).forEach( ( btn ) => {
+			if ( btn._minnNavBound ) return;
+			btn._minnNavBound = true;
+			btn.addEventListener( 'click', () => go( btn.dataset.nav ) );
+		} );
+	}
+
+	// Rebuild workspace (+ manage) nav from the current B.surfaces without
+	// wiping #minn-view — used after plugin activate/deactivate.
+	function renderNavWorkspace() {
+		const ws = $( '#minn-nav-workspace' );
+		if ( ! ws ) return;
+		// Preserve count/dot badges' filled state across the rebuild by
+		// reading current text/hidden flags, then re-applying after.
+		const prev = {
+			content: $( '#minn-content-count' )?.textContent || '',
+			contentHidden: $( '#minn-content-count' )?.hidden,
+			comments: $( '#minn-comments-count' )?.textContent || '',
+			commentsHidden: $( '#minn-comments-count' )?.hidden,
+			orders: $( '#minn-orders-count' )?.textContent || '',
+			ordersHidden: $( '#minn-orders-count' )?.hidden,
+			dotHidden: $( '#minn-plugin-dot' )?.hidden,
+		};
+		ws.innerHTML = workspaceNavItems().map( navBtnHtml ).join( '' );
+		bindNavClicks( ws );
+		const manage = $( '#minn-nav-manage' );
+		if ( manage ) {
+			manage.innerHTML = manageNavItems().map( navBtnHtml ).join( '' );
+			bindNavClicks( manage );
+		}
+		// Restore badges.
+		const cc = $( '#minn-content-count' );
+		if ( cc && prev.content ) { cc.textContent = prev.content; cc.hidden = !! prev.contentHidden; }
+		const cm = $( '#minn-comments-count' );
+		if ( cm && prev.comments ) { cm.textContent = prev.comments; cm.hidden = !! prev.commentsHidden; }
+		const oc = $( '#minn-orders-count' );
+		if ( oc && prev.orders ) { oc.textContent = prev.orders; oc.hidden = !! prev.ordersHidden; }
+		const dot = $( '#minn-plugin-dot' );
+		if ( dot && prev.dotHidden === false ) dot.hidden = false;
+		// Active highlight for the current route.
+		$$( '.minn-nav-btn' ).forEach( ( btn ) => {
+			const surface = surfaceById( state.route );
+			const on = btn.dataset.nav === state.route
+				|| ( surface && surface.family && btn.dataset.family === surface.family );
+			btn.classList.toggle( 'active', on );
+		} );
+	}
+
+	function renderShell() {
+		const manageItems = manageNavItems();
 
 		$( '#minn-app' ).innerHTML = `
 		<div class="minn-shell">
@@ -645,8 +732,8 @@
 					${ icon( 'search' ) }<span>Search…</span><span class="minn-kbd">⌘K</span>
 				</button>
 				<div class="minn-nav-label">Workspace</div>
-				${ navItems.map( navBtn ).join( '' ) }
-				${ manageItems.length ? '<div class="minn-nav-label later">Manage</div>' + manageItems.map( navBtn ).join( '' ) : '' }
+				<div id="minn-nav-workspace">${ workspaceNavItems().map( navBtnHtml ).join( '' ) }</div>
+				${ manageItems.length ? '<div class="minn-nav-label later">Manage</div><div id="minn-nav-manage">' + manageItems.map( navBtnHtml ).join( '' ) + '</div>' : '' }
 				<div class="minn-user" id="minn-user-area" title="Your account">
 					<img class="minn-user-avatar" src="${ esc( B.user.avatar ) }" alt="">
 					<div style="min-width:0;">
@@ -675,9 +762,7 @@
 		</div>
 		<div id="minn-overlays"></div>`;
 
-		$$( '.minn-nav-btn' ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => go( btn.dataset.nav ) )
-		);
+		bindNavClicks();
 		$( '#minn-open-palette' ).addEventListener( 'click', openPalette );
 		$( '#minn-logo-home' ).addEventListener( 'click', () => go( 'overview' ) );
 		$( '#minn-ver-btn' ).addEventListener( 'click', openChangelog );
