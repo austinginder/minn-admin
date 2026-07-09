@@ -2552,6 +2552,199 @@
 		return `<div class="minn-entry">${ hero }${ bodies }${ fields }${ metaHtml }</div>`;
 	}
 
+	// Activity-log event layout (Simple History / WSAL / Aryo / Stream): who →
+	// event message → short context fields → quiet meta chips. Same visual
+	// language as form entries so audit events don't read as a raw key dump.
+	function renderActivityDetail( item, sec ) {
+		const it = item || {};
+		const groups = ( sec && sec.sections ) || [];
+
+		// --- Message (the event) ---
+		let message = it.message || it.summary || ( sec && sec.title ) || '';
+		if ( ! message && groups.length ) {
+			// WSAL-style sections: first non-empty "Event" row.
+			const eventGroup = groups.find( ( g ) => /event/i.test( g.title || '' ) ) || groups[ 0 ];
+			const first = ( eventGroup && eventGroup.rows || [] ).find( ( r ) => r.value );
+			if ( first ) message = first.value;
+		}
+		message = stripTags( String( message || '' ) ).trim();
+
+		// --- Who ---
+		let who = surfaceValue( it, 'initiator_data.user_display_name' )
+			|| surfaceValue( it, 'initiator_data.user_login' )
+			|| it.username || it.who || '';
+		if ( ! who && groups.length ) {
+			const userRow = groups.flatMap( ( g ) => g.rows || [] )
+				.find( ( r ) => /^(user|who|actor)$/i.test( r.label || '' ) );
+			if ( userRow ) who = userRow.value;
+		}
+		if ( ! who || who === 'wp_user' ) {
+			// Fall back to initiator slug only when nothing human is available.
+			who = who || it.initiator || 'System';
+		}
+		if ( who === 'wp_user' ) who = 'User';
+
+		// --- Level / severity / action pill text ---
+		let level = it.loglevel || it.severity || it.action || '';
+		if ( ! level && groups.length ) {
+			const lvl = groups.flatMap( ( g ) => g.rows || [] )
+				.find( ( r ) => /severity|level|action/i.test( r.label || '' ) );
+			if ( lvl ) level = lvl.value;
+		}
+
+		// --- When ---
+		let when = it.date_gmt || it.date_local || it.date || '';
+		if ( ! when && groups.length ) {
+			const wr = groups.flatMap( ( g ) => g.rows || [] )
+				.find( ( r ) => /when|date|time/i.test( r.label || '' ) );
+			if ( wr ) when = wr.value;
+		}
+		let whenLabel = '';
+		if ( when ) {
+			// Prefer relative + absolute when we can parse an ISO/GMT string.
+			const iso = String( when ).includes( 'T' ) || /^\d{4}-\d{2}-\d{2} /.test( String( when ) )
+				? String( when ).replace( ' ', 'T' ) + ( /Z|[+-]\d{2}:?\d{2}$/.test( String( when ) ) ? '' : ( String( when ).includes( 'T' ) || String( when ).includes( ' ' ) ? 'Z' : '' ) )
+				: String( when );
+			const ago = timeAgo( iso );
+			whenLabel = ago && ago !== '—' ? ago : String( when );
+			// timeAgo returns relative; keep a readable absolute as title.
+		}
+
+		// --- Short context fields (not the message / who / when) ---
+		const fieldRows = [];
+		const pushField = ( label, value ) => {
+			const v = value == null ? '' : String( value ).trim();
+			if ( ! v || ! label ) return;
+			if ( fieldRows.some( ( f ) => f.label === label ) ) return;
+			// Skip multi-kB blobs (content diffs, full post bodies).
+			if ( v.length > 280 || ( v.match( /\n/g ) || [] ).length > 4 ) {
+				fieldRows.push( { label, value: 'Changed' } );
+				return;
+			}
+			fieldRows.push( { label, value: v } );
+		};
+
+		if ( it.logger ) pushField( 'Logger', humanizeLogger( it.logger ) );
+		if ( it.connector ) pushField( 'Source', it.connector );
+		if ( it.object && it.object !== message ) pushField( 'Object', it.object );
+		if ( it.type && it.type !== level ) pushField( 'Type', it.type );
+		if ( it.context && typeof it.context === 'string' ) pushField( 'Context', it.context );
+		if ( it.message_key ) pushField( 'Key', it.message_key );
+
+		// Simple History details_data: compact name / prev → new pairs.
+		( Array.isArray( it.details_data ) ? it.details_data : [] ).forEach( ( group ) => {
+			( group.items || [] ).forEach( ( d ) => {
+				const name = d.name || group.title || 'Detail';
+				const nv = d.new_value != null ? String( d.new_value ) : '';
+				const pv = d.prev_value != null ? String( d.prev_value ) : '';
+				if ( ! nv && ! pv ) return;
+				if ( nv.length > 200 || pv.length > 200 ) {
+					pushField( name, 'Changed' );
+				} else if ( pv && nv && pv !== nv ) {
+					pushField( name, pv + ' → ' + nv );
+				} else {
+					pushField( name, nv || pv );
+				}
+			} );
+		} );
+
+		// Useful short keys from SH context object (skip content blobs).
+		const ctx = it.context && typeof it.context === 'object' && ! Array.isArray( it.context ) ? it.context : null;
+		if ( ctx ) {
+			const keep = {
+				post_title: 'Post',
+				post_type: 'Post type',
+				post_id: 'Post ID',
+				plugin_slug: 'Plugin',
+				plugin_name: 'Plugin',
+				theme_name: 'Theme',
+				user_login: 'User',
+				option: 'Option',
+			};
+			Object.keys( keep ).forEach( ( k ) => {
+				if ( ctx[ k ] != null && String( ctx[ k ] ).trim() ) {
+					pushField( keep[ k ], ctx[ k ] );
+				}
+			} );
+		}
+
+		// WSAL / shim sections: Context group → fields; Event rows already used for message.
+		if ( groups.length ) {
+			groups.forEach( ( g ) => {
+				const isMeta = /event|meta|when|user/i.test( g.title || '' ) && ! /context/i.test( g.title || '' );
+				( g.rows || [] ).forEach( ( r ) => {
+					if ( ! r || r.value == null || r.value === '' ) return;
+					const lab = r.label || '';
+					if ( /^(event|when|date|user|who|severity|level)$/i.test( lab ) ) return;
+					if ( String( r.value ) === message || String( r.value ) === who ) return;
+					// Event group with only the headline was already used.
+					if ( isMeta && /event/i.test( g.title || '' ) && String( r.value ) === message ) return;
+					pushField( lab || g.title || 'Detail', r.value );
+				} );
+			} );
+		}
+
+		if ( level ) pushField( 'Level', level );
+
+		// --- IP ---
+		let ip = it.ip || it.client_ip || '';
+		if ( ! ip && it.ip_addresses && typeof it.ip_addresses === 'object' ) {
+			const ips = Object.keys( it.ip_addresses );
+			if ( ips.length ) ip = ips[ 0 ];
+		}
+		if ( ! ip && groups.length ) {
+			const ipRow = groups.flatMap( ( g ) => g.rows || [] ).find( ( r ) => /^ip/i.test( r.label || '' ) );
+			if ( ipRow ) ip = ipRow.value;
+		}
+
+		const hero = who ? `
+			<div class="minn-entry-hero">
+				<div class="minn-entry-name">${ esc( String( who ) ) }</div>
+				${ level ? `<div class="minn-entry-email" style="color:var(--text3); pointer-events:none;">${ esc( String( level ) ) }</div>` : '' }
+			</div>` : '';
+
+		const body = message ? `
+			<div class="minn-entry-body">
+				<div class="minn-entry-field-label">Event</div>
+				<div class="minn-entry-message">${ esc( message ) }</div>
+			</div>` : '';
+
+		const fields = fieldRows.length ? `
+			<div class="minn-entry-fields">
+				${ fieldRows.map( ( r ) => `
+					<div class="minn-entry-field">
+						<div class="minn-entry-field-label">${ esc( r.label ) }</div>
+						<div class="minn-entry-field-value">${ esc( r.value ) }</div>
+					</div>` ).join( '' ) }
+			</div>` : '';
+
+		const metaBits = [];
+		if ( whenLabel ) metaBits.push( `<span class="minn-entry-meta-chip" title="${ esc( String( when ) ) }">${ esc( whenLabel ) }</span>` );
+		if ( ip ) metaBits.push( `<span class="minn-entry-meta-chip">${ esc( 'IP ' + ip ) }</span>` );
+		const adminUrl = ( sec && sec.adminUrl ) || it.permalink || it.link || '';
+		if ( adminUrl && /^https?:\/\//.test( String( adminUrl ) ) ) {
+			metaBits.push( `<a class="minn-entry-meta-chip" href="${ esc( adminUrl ) }" target="_blank" rel="noopener">Open in log ↗</a>` );
+		}
+		const metaHtml = metaBits.length
+			? `<div class="minn-entry-meta">${ metaBits.join( '<span class="minn-entry-meta-dot">·</span>' ) }</div>`
+			: '';
+
+		if ( ! hero && ! body && ! fields ) {
+			return `<div class="minn-entry"><div class="minn-entry-empty">No details for this event.</div>${ metaHtml }</div>`;
+		}
+		return `<div class="minn-entry minn-activity-entry">${ hero }${ body }${ fields }${ metaHtml }</div>`;
+	}
+
+	// SimplePostLogger → "Post", PluginLogger → "Plugin", etc.
+	function humanizeLogger( logger ) {
+		const s = String( logger || '' )
+			.replace( /^Simple/, '' )
+			.replace( /Logger$/i, '' )
+			.replace( /([a-z])([A-Z])/g, '$1 $2' )
+			.trim();
+		return s || String( logger || '' );
+	}
+
 	// Dot-path lookup ("initiator_data.user_login") with an optional fallback.
 	function surfaceValue( item, key ) {
 		if ( ! key ) return undefined;
@@ -11857,10 +12050,12 @@
 						&& ! resolved.includes( String( m.sections.adminUrl ).replace( /#.*$/, '' ) );
 				} );
 			const sec = m.sections;
-			// Form entries (GF / Fluent / Elementor) get a contact-style layout
-			// instead of the generic key/value dump used for audit logs etc.
+			// Form entries (GF / Fluent / Elementor) get a contact-style layout;
+			// activity-log events get the same treatment (who → message → meta).
 			const isEntry = !!( sec && ( sec.kind === 'entry' || s.family === 'forms' ) );
-			const secRows = sec && ! isEntry ? ( sec.sections || [] ).map( ( g ) => `
+			const isActivity = ! isEntry && ( s.family === 'activity-log' || ( sec && sec.kind === 'activity' ) );
+			const isCard = isEntry || isActivity;
+			const secRows = sec && ! isCard ? ( sec.sections || [] ).map( ( g ) => `
 					<div class="minn-side-title" style="margin:12px 0 8px;">${ esc( g.title || '' ) }</div>
 					${ ( g.rows || [] ).map( ( r ) => {
 						const raw = String( r.value == null ? '' : r.value );
@@ -11871,28 +12066,38 @@
 						return `<div class="minn-side-row${ multi ? ' multi' : '' }"><span class="minn-side-key">${ esc( r.label || '' ) }</span>${ val }</div>`;
 					} ).join( '' ) }` ).join( '' ) : '';
 			const entryHtml = isEntry && ! m.loading ? renderEntryDetail( sec ) : '';
+			const activityHtml = isActivity && ! m.loading ? renderActivityDetail( it, sec ) : '';
+			// SH action_links (Edit post, Preview, …) — surface as soft buttons.
+			const activityLinks = isActivity && Array.isArray( it.action_links )
+				? it.action_links.filter( ( l ) => l && l.url && l.label ).slice( 0, 4 )
+				: [];
 			// Prev/next within the loaded list page (←/→). Media modal uses the
 			// same pattern over its preview; surface detail puts the controls
 			// in the head because there's no preview stage.
 			const sctx = surfaceModalContext();
 			const canStep = sctx && sctx.items.length > 1;
-			// Wide when the detail shows a message body, entry layout, or any
+			// Wide when the detail shows a message body, card layout, or any
 			// textarea edit field (code snippets need room for the code editor).
-			const needsWide = !! message || isEntry || editFields.some( ( f ) => f.type === 'textarea' );
-			// Entry title = form name; never the field-dump summary.
-			const headTitle = sec && sec.title
-				? sec.title
-				: ( isEntry && it.form_name ? it.form_name : ( isEntry && it.form_title ? it.form_title : s.label ) );
-			const headStatus = ( sec && sec.status ) || it.status;
+			const needsWide = !! message || isCard || editFields.some( ( f ) => f.type === 'textarea' );
+			// Entry title = form name; activity keeps the surface label (message is body).
+			const headTitle = isActivity
+				? ( s.label || 'Activity Log' )
+				: ( sec && sec.title
+					? sec.title
+					: ( isEntry && it.form_name ? it.form_name : ( isEntry && it.form_title ? it.form_title : s.label ) ) );
+			const headStatus = ( sec && sec.status ) || it.status
+				|| ( isActivity ? ( it.loglevel || it.severity || it.action ) : null );
+			const activityAdmin = ( sec && sec.adminUrl ) || it.permalink || it.link || '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal${ needsWide ? ' wide' : '' }${ isEntry ? ' entry' : '' }">
+				<div class="minn-modal${ needsWide ? ' wide' : '' }${ isCard ? ' entry' : '' }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">${ esc( headTitle ) }</div>
 							${ isEntry ? `<div class="minn-modal-sub">Entry #${ esc( String( it.id ) ) }</div>` : '' }
+							${ isActivity ? `<div class="minn-modal-sub">Event #${ esc( String( it.id ) ) }</div>` : '' }
 						</div>
-						${ ! isEntry ? `<span class="minn-modal-id-tag">#${ esc( String( it.id ) ) }</span>` : '' }
+						${ ! isCard ? `<span class="minn-modal-id-tag">#${ esc( String( it.id ) ) }</span>` : '' }
 						${ headStatus ? surfacePill( headStatus )
 							: ( typeof it.active === 'boolean' ? surfacePill( it.active ? 'active' : 'inactive' ) : '' ) }
 						${ canStep ? `<span class="minn-modal-count">${ sctx.idx + 1 } / ${ sctx.items.length }</span>
@@ -11901,7 +12106,7 @@
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ m.loading ? '<div class="minn-loading">Loading…</div>' : `
-					${ isEntry ? entryHtml : `
+					${ isEntry ? entryHtml : isActivity ? activityHtml : `
 					<div class="minn-modal-meta">
 						${ sec ? secRows : rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( stripTags( String( v ) ) ) }</span></div>` ).join( '' ) }
 						${ editFields.length ? `<div class="minn-media-edit">
@@ -11915,11 +12120,13 @@
 					${ message ? ( isHtml
 						? `<iframe class="minn-email-frame" id="minn-email-frame" sandbox="" title="Email preview" srcdoc="${ esc( String( message ) ) }"></iframe>`
 						: `<pre class="minn-surface-message">${ esc( stripTags( String( message ) ) ) }</pre>` ) : '' }` }
-					${ ( message || edit || visibleActions.length || ( sec && sec.adminUrl ) ) ? `
+					${ ( message || edit || visibleActions.length || ( sec && sec.adminUrl ) || activityAdmin || activityLinks.length ) ? `
 					<div class="minn-modal-actions">
 						${ edit ? `<button class="minn-btn-primary" id="minn-surface-save">Save</button>` : '' }
 						${ message ? `<button class="minn-btn-soft" id="minn-surface-raw">↗ Open raw</button>` : '' }
-						${ sec && sec.adminUrl ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'wp-admin' ) } ↗</a>` : '' }
+						${ sec && sec.adminUrl && ! isActivity ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'wp-admin' ) } ↗</a>` : '' }
+						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'log' ) } ↗</a>` : '' }
+						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( l.url ) }" target="_blank" rel="noopener">${ esc( l.label ) }</a>` ).join( '' ) }
 						${ visibleActions.map( ( { a, i } ) => a.href
 							? `<a class="minn-btn-soft" href="${ esc( String( a.href ).replace( '{id}', encodeURIComponent( it.id ) ) ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
 							: `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
