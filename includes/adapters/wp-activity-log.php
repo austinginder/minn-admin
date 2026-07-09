@@ -139,7 +139,8 @@ add_action( 'rest_api_init', function () {
 					'message'  => $alert_title( $r->alert_id ),
 					'username' => $who ?: 'System',
 					'severity' => $severity_label( $r->severity ),
-					'date'     => gmdate( 'Y-m-d\TH:i:s', (int) $r->created_on ),
+					// Trailing Z so the client does not treat UTC as site-local.
+					'date'     => gmdate( 'Y-m-d\TH:i:s\Z', (int) $r->created_on ),
 					'object'   => $r->object,
 					'ip'       => $r->client_ip,
 				);

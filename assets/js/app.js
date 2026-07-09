@@ -61,6 +61,11 @@
 	// label by the site's gmt_offset (America/New_York → everything looked 4h
 	// old). Absolute ISO strings (with Z/offset) and our own toISOString()
 	// outputs pass through unchanged.
+	//
+	// UTC sources without a suffix (Code Snippets `modified` via gmdate,
+	// Stream/WSAL/Aryo shims, `*_gmt` keys) MUST be flagged: pass
+	// { utc: true } or a key ending in `_gmt`, or emit a trailing Z server-side.
+	// Otherwise parseWpDate treats them as site-local → "in 4h" on EDT.
 	function parseWpDate( dateStr ) {
 		if ( dateStr == null || dateStr === '' ) return new Date( NaN );
 		const s = String( dateStr );
@@ -73,8 +78,30 @@
 		return new Date( s + sign + hh + ':' + mm );
 	}
 
-	function timeAgo( dateStr ) {
-		const d = parseWpDate( dateStr );
+	// Normalize a timestamp for parseWpDate/timeAgo.
+	// opts.utc / keys ending _gmt → force UTC (append Z when bare).
+	function normalizeTimeInput( dateStr, opts ) {
+		let s = String( dateStr == null ? '' : dateStr ).trim();
+		if ( ! s || /^0{4}-0{2}-0{2}/.test( s ) ) return '';
+		// Unix seconds / ms (session login times, some plugins).
+		if ( /^-?\d+(\.\d+)?$/.test( s ) ) {
+			const n = Number( s );
+			const ms = n < 1e12 ? n * 1000 : n;
+			const d = new Date( ms );
+			return isNaN( d.getTime() ) ? '' : d.toISOString();
+		}
+		s = s.replace( ' ', 'T' );
+		if ( /Z|[+-]\d{2}:?\d{2}$/.test( s ) ) return s;
+		const key = ( opts && opts.key ) || '';
+		const utc = !!( opts && opts.utc ) || /_gmt$/i.test( key );
+		if ( utc ) return s + 'Z';
+		return s;
+	}
+
+	function timeAgo( dateStr, opts ) {
+		const s = normalizeTimeInput( dateStr, opts && typeof opts === 'object' ? opts : null );
+		if ( ! s ) return '—';
+		const d = parseWpDate( s );
 		if ( isNaN( d.getTime() ) ) return '—';
 		const diff = Math.round( ( Date.now() - d.getTime() ) / 1000 );
 		// Future dates (scheduled posts) mirror the past buckets as "in …".
@@ -85,25 +112,17 @@
 			if ( f < 86400 * 7 ) return 'in ' + Math.round( f / 86400 ) + 'd';
 			return d.toLocaleDateString( undefined, { month: 'short', day: 'numeric' } );
 		}
-		const s = Math.max( 1, diff );
-		if ( s < 60 ) return 'just now';
-		if ( s < 3600 ) return Math.round( s / 60 ) + ' min ago';
-		if ( s < 86400 ) return Math.round( s / 3600 ) + 'h ago';
-		if ( s < 86400 * 7 ) return Math.round( s / 86400 ) + 'd ago';
+		const sec = Math.max( 1, diff );
+		if ( sec < 60 ) return 'just now';
+		if ( sec < 3600 ) return Math.round( sec / 60 ) + ' min ago';
+		if ( sec < 86400 ) return Math.round( sec / 3600 ) + 'h ago';
+		if ( sec < 86400 * 7 ) return Math.round( sec / 86400 ) + 'd ago';
 		return d.toLocaleDateString( undefined, { month: 'short', day: 'numeric' } );
 	}
 
-	// timeAgo for surface/list cells. Keys ending in _gmt (Simple History's
-	// date_gmt) are UTC without a zone suffix — parseWpDate would otherwise
-	// treat them as site-local and shift by gmt_offset ("in 4h" on EDT).
-	function timeAgoForKey( dateStr, key ) {
-		let s = String( dateStr == null ? '' : dateStr ).trim();
-		if ( ! s || /^0{4}/.test( s ) ) return '—';
-		if ( /_gmt$/i.test( key || '' ) && ! /Z|[+-]\d{2}:?\d{2}$/.test( s ) ) {
-			s = s.replace( ' ', 'T' );
-			if ( ! /Z|[+-]\d{2}:?\d{2}$/.test( s ) ) s += 'Z';
-		}
-		return timeAgo( s );
+	// Surface list cells: pass field key + optional col.utc.
+	function timeAgoForKey( dateStr, key, utc ) {
+		return timeAgo( dateStr, { key: key || '', utc: !! utc } );
 	}
 
 	function fmtBytes( n ) {
@@ -2820,10 +2839,10 @@
 		switch ( colDef.format ) {
 			case 'ago': {
 				// Guard empty and zero timestamps (Redirection stores 0000-00-00
-				// for a never-hit redirect). Pass the field key so *_gmt values
-				// are parsed as UTC (otherwise site offset makes them "in Nh").
+				// for a never-hit redirect). colDef.utc / *_gmt keys force UTC
+				// (Code Snippets gmdate, Stream/WSAL, etc. — else "in 4h" on EDT).
 				const raw = String( v || '' );
-				const label = timeAgoForKey( raw, colDef.key || colDef.altKey || '' );
+				const label = timeAgoForKey( raw, colDef.key || colDef.altKey || '', !! colDef.utc );
 				return `<div class="minn-row-meta minn-cell-clip" title="${ esc( raw ) }">${ esc( label ) }</div>`;
 			}
 			case 'pill': return `<div>${ surfacePill( v ) }</div>`;

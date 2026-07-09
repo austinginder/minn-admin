@@ -95,9 +95,9 @@ add_action( 'rest_api_init', function () {
 					'connector' => $r->connector,
 					'context'   => $r->context . ( $r->action ? ' / ' . $r->action : '' ),
 					'ip'        => $r->ip,
-					// Stream stores GMT datetimes; normalize to the ISO shape
-					// timeAgo expects (it assumes UTC when no zone is present).
-					'date'      => str_replace( ' ', 'T', (string) $r->created ),
+					// Stream stores GMT datetimes — append Z so parseWpDate
+					// does not treat them as site-local (EDT "in 4h" bug).
+					'date'      => rtrim( str_replace( ' ', 'T', (string) $r->created ), 'Z' ) . 'Z',
 				);
 			}
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
