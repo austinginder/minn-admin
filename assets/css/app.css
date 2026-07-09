@@ -948,6 +948,15 @@ body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert her
   justify-content: center; color: #fff; font-weight: 800; font-size: 20px; letter-spacing: 0.5px;
 }
 .minn-modal-count { font-size: 12.5px; color: var(--text3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* Surface-detail head steppers (GF entries, etc.) — compact siblings of the ×. */
+.minn-modal-step {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; line-height: 1; color: var(--text2); background: transparent;
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer; flex-shrink: 0;
+  padding: 0;
+}
+.minn-modal-step:hover:not(:disabled) { background: var(--bg2); color: var(--text); border-color: var(--border2, var(--border)); }
+.minn-modal-step:disabled { opacity: 0.35; cursor: default; }
 .minn-modal-preview { position: relative; }
 .minn-modal-nav {
   position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 44px;

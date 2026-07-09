@@ -2375,6 +2375,29 @@
 		}
 	}
 
+	// Position of the open surface detail within the loaded list page, for
+	// prev/next (←/→) — same idea as the media modal. Scoped to the current
+	// cache so we never invent off-page ids.
+	function surfaceModalContext() {
+		const m = state.modal;
+		if ( ! m || m.type !== 'surface' || ! m.item || ! m.surface ) return null;
+		const ss = surfaceState( m.surface.id );
+		const items = ss.cache && ss.cache.items;
+		if ( ! items || ! items.length ) return null;
+		const idx = items.findIndex( ( x ) => String( x.id ) === String( m.item.id ) );
+		return idx === -1 ? null : { items, idx, surface: m.surface };
+	}
+
+	function surfaceModalNav( dir ) {
+		const m = state.modal;
+		if ( m && m.loading ) return; // don't stack mid-flight detail loads
+		const ctx = surfaceModalContext();
+		if ( ! ctx ) return;
+		const next = ctx.idx + dir;
+		if ( next < 0 || next >= ctx.items.length ) return;
+		openSurfaceDetail( ctx.surface, ctx.items[ next ] );
+	}
+
 	/* ===== Menus (classic navigation) ===== */
 
 	function menusState() {
@@ -10657,12 +10680,20 @@
 							: `<span class="minn-surface-val${ multi ? ' multi' : '' }">${ esc( raw ) }</span>`;
 						return `<div class="minn-side-row${ multi ? ' multi' : '' }"><span class="minn-side-key">${ esc( r.label || '' ) }</span>${ val }</div>`;
 					} ).join( '' ) }` ).join( '' ) : '';
+			// Prev/next within the loaded list page (←/→). Media modal uses the
+			// same pattern over its preview; surface detail puts the controls
+			// in the head because there's no preview stage.
+			const sctx = surfaceModalContext();
+			const canStep = sctx && sctx.items.length > 1;
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal${ message ? ' wide' : '' }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( sec && sec.title ? sec.title : s.label ) } #${ esc( String( it.id ) ) }</div>
 						${ it.status ? surfacePill( it.status ) : '' }
+						${ canStep ? `<span class="minn-modal-count">${ sctx.idx + 1 } / ${ sctx.items.length }</span>
+						<button class="minn-modal-step" id="minn-surface-prev" type="button" title="Previous (←)"${ sctx.idx <= 0 ? ' disabled' : '' }>‹</button>
+						<button class="minn-modal-step" id="minn-surface-next" type="button" title="Next (→)"${ sctx.idx >= sctx.items.length - 1 ? ' disabled' : '' }>›</button>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ m.loading ? '<div class="minn-loading">Loading…</div>' : `
@@ -10984,6 +11015,7 @@
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
 							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
+							<span class="minn-kbd">← →</span><span>Previous / next item in a media or entry detail</span>
 							<span class="minn-kbd">Esc</span><span>Close menus and dialogs</span>
 						</div>
 						<p class="minn-help-keys-note">On Windows and Linux, use <span class="minn-kbd">Ctrl</span> in place of <span class="minn-kbd">⌘</span>.</p>
@@ -11440,6 +11472,10 @@
 		}
 
 		if ( m.type === 'surface' ) {
+			const prevBtn = $( '#minn-surface-prev' );
+			const nextBtn = $( '#minn-surface-next' );
+			if ( prevBtn ) prevBtn.addEventListener( 'click', () => surfaceModalNav( -1 ) );
+			if ( nextBtn ) nextBtn.addEventListener( 'click', () => surfaceModalNav( 1 ) );
 			const rawBtn = $( '#minn-surface-raw' );
 			if ( rawBtn ) rawBtn.addEventListener( 'click', () => {
 				const detail = ( m.coll || m.surface.collection ).detail || {};
@@ -12625,9 +12661,17 @@
 					pubBtn.click();
 				}
 			}
-			if ( state.modal && state.modal.type === 'media' ) {
-				if ( e.key === 'ArrowLeft' ) { e.preventDefault(); mediaModalNav( -1 ); }
-				if ( e.key === 'ArrowRight' ) { e.preventDefault(); mediaModalNav( 1 ); }
+			// ←/→ steps through media or surface-detail items (GF entries,
+			// activity events, etc.). Skip when typing in a field so arrow
+			// keys keep moving the caret.
+			if ( state.modal && ( e.key === 'ArrowLeft' || e.key === 'ArrowRight' ) ) {
+				const t = e.target;
+				const typing = t && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable );
+				if ( ! typing ) {
+					const dir = e.key === 'ArrowLeft' ? -1 : 1;
+					if ( state.modal.type === 'media' ) { e.preventDefault(); mediaModalNav( dir ); }
+					else if ( state.modal.type === 'surface' ) { e.preventDefault(); surfaceModalNav( dir ); }
+				}
 			}
 			if ( e.key === 'Escape' && ( state.paletteOpen || state.notifOpen || state.modal ) ) {
 				state.paletteOpen = false;
