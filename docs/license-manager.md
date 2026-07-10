@@ -262,8 +262,26 @@ Read classification for every one of these is proven by
 tests/license-vendors.test.js (21 checks: seeds each real option shape,
 asserts the state pill, then CLEARS the options (plain options are not
 settings-API deletable, so a crash-aborted run cannot leave a fake license
-behind). The activation plumbing is exercised per-vendor against the live
-vendor APIs as the owner's manual step, exactly like the earlier waves.
+behind).
+
+The activation plumbing was verified 2026-07-10 by firing a bogus key at
+each callable provider through the real action endpoint against the live
+vendor APIs (the same bogus-key pass the earlier waves got). Every one
+returned a clean `{ok:false, code:'invalid'}` with a readable vendor
+message and left no key behind: SearchWP, Perfmatters, Gravity Perks,
+GP Premium, LayerSlider, WP All Export and WPMU DEV all classify back to
+`missing` after a rejected key. Three fixes came out of that pass: GP
+Premium's REST route is registered without a trailing slash (a `/license/`
+request 404s); Perfmatters, WP All Export and Gravity Perks store the
+pasted key BEFORE validating (their own activation flow reads it from the
+option), so each now snapshots and restores the prior key on failure
+rather than retaining the rejected one, and GP Premium's route (which
+unconditionally writes the key at the end) gets the same restore. Slider
+Revolution was DEMOTED to an "Activate ↗" link: its
+`activate_plugin()` is welded to admin-only classes (RevSliderTracking,
+the load balancer that only registers in RevSliderGlobals during admin
+init) that do not load in a REST request, and reproducing that boot order
+is the vendor-internals guessing the guardrails forbid.
 The generic EDD/Freemius verification pass is now moot for the tail: the
 audit found the filename-only EDD fingerprint MISSES the renamed-updater
 plugins (SearchWP, Soflyy) and the option-pair sweep MISSES GP Premium's

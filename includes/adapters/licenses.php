@@ -1367,12 +1367,19 @@ function minn_admin_license_default_providers() {
 		};
 		$providers['gravityperks']['secret_label'] = 'Gravity Perks license key';
 		$providers['gravityperks']['activate']     = function ( $secret ) use ( $gwp_save_key ) {
+			// Their check flow self-activates the stored key, so it must be
+			// written first; snapshot and restore on failure so a rejected
+			// key is not retained.
+			$prev = get_site_option( 'gwp_settings' );
+			$prev = ( is_array( $prev ) && isset( $prev['license_key'] ) ) ? (string) $prev['license_key'] : '';
 			$gwp_save_key( $secret );
 			GWPerks::flush_license( true );
 			if ( GWPerks::has_valid_license() ) {
 				return array( 'ok' => true );
 			}
 			$data = GravityPerks::get_api()->get_license_data();
+			$gwp_save_key( $prev ); // restore — do not retain the rejected key
+			GWPerks::flush_license( true );
 			if ( is_array( $data ) && isset( $data['activations_left'] ) && 0 === (int) $data['activations_left'] ) {
 				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'That key has reached its site limit' );
 			}
@@ -1391,18 +1398,31 @@ function minn_admin_license_default_providers() {
 		};
 	}
 
-	// Perfmatters: their static License methods take the key directly but
-	// store only STATUS — their form saves the key first, so mirror that.
-	// activate() is boolean-only; check() supplies the why on failure.
+	// Perfmatters: their static License::activate() takes the key directly
+	// and validates it against the passed key, storing only STATUS on a
+	// 'valid' response. The plugin reads the KEY from its own option to
+	// function, so store the pasted key ONLY on success (paste-never-retain
+	// on failure); check() supplies the why but also writes status, so the
+	// prior state is snapshotted and restored on failure.
 	if ( class_exists( '\Perfmatters\License' ) ) {
+		$pm_get = is_multisite() ? 'get_site_option' : 'get_option';
+		$pm_set = is_multisite() ? 'update_site_option' : 'update_option';
+		$pm_del = is_multisite() ? 'delete_site_option' : 'delete_option';
 		$providers['perfmatters']['secret_label'] = 'Perfmatters license key';
-		$providers['perfmatters']['activate']     = function ( $secret ) {
-			update_option( 'perfmatters_edd_license_key', sanitize_text_field( $secret ), false );
+		$providers['perfmatters']['activate']     = function ( $secret ) use ( $pm_get, $pm_set, $pm_del ) {
+			$prev_status = call_user_func( $pm_get, 'perfmatters_edd_license_status' );
 			if ( \Perfmatters\License::activate( $secret ) ) {
+				call_user_func( $pm_set, 'perfmatters_edd_license_key', sanitize_text_field( $secret ) );
 				return array( 'ok' => true );
 			}
 			$info = \Perfmatters\License::check( $secret );
 			$word = ( is_object( $info ) && ! empty( $info->license ) ) ? (string) $info->license : '';
+			// check() wrote a status for a key we are NOT keeping — restore.
+			if ( false === $prev_status ) {
+				call_user_func( $pm_del, 'perfmatters_edd_license_status' );
+			} else {
+				call_user_func( $pm_set, 'perfmatters_edd_license_status', $prev_status );
+			}
 			$code = 'expired' === $word ? 'expired' : ( 'no_activations_left' === $word ? 'site_limit' : 'invalid' );
 			return array( 'ok' => false, 'code' => $code, 'message' => $word ? str_replace( '_', ' ', $word ) : 'Perfmatters did not accept that key' );
 		};
@@ -1423,8 +1443,13 @@ function minn_admin_license_default_providers() {
 	// is their deactivate branch; '***' is their masked-key flow, which
 	// re-activates the stored key — a re-verify.
 	if ( class_exists( 'GeneratePress_Pro_Rest' ) ) {
+		// Their route unconditionally writes gen_premium_license_key at the
+		// end (even on a rejected key), so snapshot the key + status and
+		// restore them on failure — a rejected key is never retained.
 		$gpp_route = function ( $key ) {
-			$req = new WP_REST_Request( 'POST', '/generatepress-pro/v1/license/' );
+			$prev_key    = get_option( 'gen_premium_license_key' );
+			$prev_status = get_option( 'gen_premium_license_key_status' );
+			$req         = new WP_REST_Request( 'POST', '/generatepress-pro/v1/license' );
 			$req->set_param( 'key', $key );
 			$res  = rest_do_request( $req );
 			$data = json_decode( wp_json_encode( $res->get_data() ), true );
@@ -1433,6 +1458,12 @@ function minn_admin_license_default_providers() {
 			$code = '';
 			if ( ! $ok ) {
 				$code = ( false !== stripos( $msg, 'activation limit' ) ) ? 'site_limit' : ( false !== stripos( $msg, 'expired' ) ? 'expired' : 'invalid' );
+				// Only restore when this was a real activation attempt (a
+				// non-empty key); the deactivate path ('') legitimately clears.
+				if ( '' !== $key && '***' !== $key ) {
+					false === $prev_key ? delete_option( 'gen_premium_license_key' ) : update_option( 'gen_premium_license_key', $prev_key );
+					false === $prev_status ? delete_option( 'gen_premium_license_key_status' ) : update_option( 'gen_premium_license_key_status', $prev_status );
+				}
 			}
 			return array( 'ok' => $ok, 'code' => $code, 'message' => $ok ? '' : $msg );
 		};
@@ -1465,10 +1496,21 @@ function minn_admin_license_default_providers() {
 		};
 		$providers['wp-all-export']['secret_label'] = 'WP All Export license key';
 		$providers['wp-all-export']['activate']     = function ( $secret ) use ( $pmxe_result ) {
+			// Their activator reads the stored key, so it must be written
+			// first; snapshot the prior key + status and restore them on
+			// failure (paste-never-retain — no leftover bogus key).
+			$prev = PMXE_Plugin::getInstance()->getOption();
 			PMXE_Plugin::getInstance()->updateOption( 'license', trim( $secret ) );
 			( new \Wpae\App\Service\License\LicenseActivator() )->activateLicense( PMXE_Plugin::getEddName(), \Wpae\App\Service\License\LicenseActivator::CONTEXT_PMXE );
-			$o = get_option( 'PMXE_Plugin_Options' );
-			return $pmxe_result( is_array( $o ) && isset( $o['license_status'] ) ? $o['license_status'] : '' );
+			$o      = get_option( 'PMXE_Plugin_Options' );
+			$result = $pmxe_result( is_array( $o ) && isset( $o['license_status'] ) ? $o['license_status'] : '' );
+			if ( empty( $result['ok'] ) ) {
+				PMXE_Plugin::getInstance()->updateOption( array(
+					'license'        => isset( $prev['license'] ) ? $prev['license'] : '',
+					'license_status' => isset( $prev['license_status'] ) ? $prev['license_status'] : '',
+				) );
+			}
+			return $result;
 		};
 		$providers['wp-all-export']['verify'] = function () use ( $pmxe_result ) {
 			$word = ( new \Wpae\App\Service\License\LicenseActivator() )->checkLicense( PMXE_Plugin::getEddName(), PMXE_Plugin::getInstance()->getOption(), \Wpae\App\Service\License\LicenseActivator::CONTEXT_PMXE );
@@ -1499,27 +1541,14 @@ function minn_admin_license_default_providers() {
 		$providers['wp-all-import']['activate_url'] = admin_url( 'admin.php?page=pmxi-admin-settings' );
 	}
 
-	// Slider Revolution: activate_plugin() answers true | 'exist' (the code
-	// is registered to another site) | 'banned' | false.
-	if ( class_exists( 'RevSliderLicense' ) ) {
-		$providers['revslider']['secret_label'] = 'Slider Revolution purchase code';
-		$providers['revslider']['activate']     = function ( $secret ) {
-			$res = ( new RevSliderLicense() )->activate_plugin( $secret );
-			if ( true === $res ) {
-				return array( 'ok' => true );
-			}
-			if ( 'exist' === $res ) {
-				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'That purchase code is already registered on another site' );
-			}
-			if ( 'banned' === $res ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'ThemePunch reports that purchase code as banned' );
-			}
-			return array( 'ok' => false, 'code' => 'invalid', 'message' => 'ThemePunch did not recognize that purchase code' );
-		};
-		$providers['revslider']['deactivate'] = function () {
-			$ok = ( new RevSliderLicense() )->deactivate_plugin();
-			return array( 'ok' => (bool) $ok, 'code' => $ok ? '' : 'error', 'message' => $ok ? '' : 'ThemePunch did not confirm the release' );
-		};
+	// Slider Revolution: its RevSliderLicense::activate_plugin() is welded to
+	// admin-only classes (RevSliderTracking, the RevSliderLoadBalancer that
+	// is only registered in RevSliderGlobals during admin init), none of
+	// which load in a REST request. Reproducing that boot order is exactly
+	// the vendor-internals guessing the guardrails forbid, so the honest
+	// control is a link to its own activation screen.
+	if ( defined( 'RS_REVISION' ) ) {
+		$providers['revslider']['activate_url'] = admin_url( 'admin.php?page=revslider' );
 	}
 
 	// LayerSlider: the global updater instance exposes handleActivation
