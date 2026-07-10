@@ -115,6 +115,8 @@ a { color: var(--accent2); text-decoration: none; }
   border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px;
 }
 
+/* The nav region scrolls on short viewports; logo, search and user pin. */
+.minn-nav-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin: 0 -4px 4px; padding: 0 4px; }
 .minn-nav-label { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; padding: 8px 10px 4px; }
 .minn-nav-label + .minn-nav-label, .minn-nav-label.later { padding-top: 14px; }
 .minn-nav-btn {
@@ -125,6 +127,17 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-nav-btn.active { background: var(--accent-soft); color: var(--accent2); font-weight: 600; }
 .minn-nav-count { margin-left: auto; font-size: 12px; color: var(--text3); background: var(--panel); padding: 1px 7px; border-radius: 20px; }
 .minn-nav-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+
+/* Topbar core-update chip — shown only while an update pends. The explicit
+   display would defeat the hidden attribute, hence :not([hidden]). */
+.minn-core-chip[hidden] { display: none; }
+.minn-core-chip:not([hidden]) {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600;
+  color: var(--amber); background: rgba(224,164,88,0.14); border: 1px solid rgba(224,164,88,0.35);
+  padding: 6px 12px; border-radius: 9px; cursor: pointer; white-space: nowrap;
+}
+.minn-core-chip:hover { border-color: var(--amber); }
+.minn-core-chip svg { width: 14px; height: 14px; }
 
 .minn-user { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid var(--border); cursor: pointer; border-radius: 9px; }
 .minn-user:hover { background: var(--hover); }
@@ -1849,6 +1862,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   /* Topbar: title + theme + notifications + New (icon only). */
   .minn-topbar { padding: 0 12px; gap: 8px; }
   .minn-topbar-sub, #minn-view-site, #minn-help-btn { display: none; }
+  .minn-core-chip span { display: none; } /* icon-only pill */
   .minn-topbar-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .minn-topbar .minn-btn-primary { font-size: 0; gap: 0; padding: 8px 10px; }
 

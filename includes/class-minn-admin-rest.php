@@ -1523,6 +1523,24 @@ class Minn_Admin_REST {
 			}
 		}
 
+		if ( current_user_can( 'update_themes' ) ) {
+			$tupdates = get_site_transient( 'update_themes' );
+			$tchecked = $tupdates && ! empty( $tupdates->last_checked ) ? (int) $tupdates->last_checked : time();
+			if ( $tupdates && ! empty( $tupdates->response ) ) {
+				foreach ( $tupdates->response as $stylesheet => $data ) {
+					$theme   = wp_get_theme( $stylesheet );
+					$ver     = is_array( $data ) ? ( $data['new_version'] ?? '' ) : '';
+					$items[] = array(
+						'id'    => 'theme-' . $stylesheet . '-' . $ver,
+						'kind'  => 'updates',
+						'icon'  => '⬆',
+						'title' => sprintf( '%s theme %s is available to install', $theme->exists() ? $theme->get( 'Name' ) : $stylesheet, $ver ),
+						'time'  => $tchecked,
+					);
+				}
+			}
+		}
+
 		if ( current_user_can( 'update_core' ) ) {
 			$core = get_site_transient( 'update_core' );
 			if ( $core && ! empty( $core->updates ) && 'upgrade' === $core->updates[0]->response ) {
@@ -1532,6 +1550,20 @@ class Minn_Admin_REST {
 					'icon'  => '🛡',
 					'title' => sprintf( 'WordPress %s is available', $core->updates[0]->version ),
 					'time'  => (int) $core->last_checked,
+				);
+			}
+			// When core auto-updated itself (minor releases do, within hours),
+			// say so — otherwise an update nag the user saw in wp-admin just
+			// vanishes with no explanation.
+			$auto = get_option( 'auto_core_update_notified' );
+			if ( is_array( $auto ) && 'success' === ( $auto['type'] ?? '' ) && ! empty( $auto['version'] )
+				&& ( time() - (int) ( $auto['timestamp'] ?? 0 ) ) < 14 * DAY_IN_SECONDS ) {
+				$items[] = array(
+					'id'    => 'core-auto-' . $auto['version'],
+					'kind'  => 'system',
+					'icon'  => '🛡',
+					'title' => sprintf( 'WordPress updated itself to %s', $auto['version'] ),
+					'time'  => (int) $auto['timestamp'],
 				);
 			}
 		}
@@ -1609,7 +1641,14 @@ class Minn_Admin_REST {
 				$map[ $file ] = $data->new_version;
 			}
 		}
-		return rest_ensure_response( array( 'updates' => $map ) );
+		$themes       = current_user_can( 'update_themes' ) ? get_site_transient( 'update_themes' ) : null;
+		$theme_count  = ( $themes && ! empty( $themes->response ) ) ? count( $themes->response ) : 0;
+		return rest_ensure_response(
+			array(
+				'updates' => $map,
+				'themes'  => $theme_count,
+			)
+		);
 	}
 
 	/**
@@ -2127,6 +2166,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		return rest_ensure_response(
 			array(
 				'version' => $wp_version,
+				// True when files updated but the DB migration hasn't run —
+				// happens when the update request's connection dropped before
+				// its upgrade.php loopback. The client poll finishes the job.
+				'dbUpgrade' => (int) get_option( 'db_version' ) < (int) $wp_db_version,
 				'update'  => $offer ? array(
 					'version' => $offer->current,
 					'locale'  => $offer->locale,
@@ -2427,7 +2470,17 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$mem_bytes = $bytes( ini_get( 'memory_limit' ) );
 		$env       = $wordpress['Environment'];
 		$debug_on  = defined( 'WP_DEBUG' ) && WP_DEBUG;
+		$core_t     = get_site_transient( 'update_core' );
+		$core_offer = ( $core_t && ! empty( $core_t->updates ) && 'upgrade' === $core_t->updates[0]->response )
+			? $core_t->updates[0]->version : '';
 		$checks    = array(
+			array(
+				'label'  => 'WordPress version',
+				'status' => $core_offer ? 'warn' : 'pass',
+				'detail' => $core_offer
+					? get_bloginfo( 'version' ) . ' installed — WordPress ' . $core_offer . ' is available'
+					: get_bloginfo( 'version' ) . ' is current',
+			),
 			array(
 				'label'  => 'PHP version',
 				'status' => $php_ok ? 'pass' : ( $php_warn ? 'warn' : 'fail' ),

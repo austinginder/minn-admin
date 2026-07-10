@@ -814,9 +814,11 @@
 				<button class="minn-search-btn" id="minn-open-palette">
 					${ icon( 'search' ) }<span>Search…</span><span class="minn-kbd">⌘K</span>
 				</button>
-				<div class="minn-nav-label">Workspace</div>
-				<div id="minn-nav-workspace">${ workspaceNavItems().map( navBtnHtml ).join( '' ) }</div>
-				${ manageItems.length ? '<div class="minn-nav-label later">Manage</div><div id="minn-nav-manage">' + manageItems.map( navBtnHtml ).join( '' ) + '</div>' : '' }
+				<div class="minn-nav-scroll">
+					<div class="minn-nav-label">Workspace</div>
+					<div id="minn-nav-workspace">${ workspaceNavItems().map( navBtnHtml ).join( '' ) }</div>
+					${ manageItems.length ? '<div class="minn-nav-label later">Manage</div><div id="minn-nav-manage">' + manageItems.map( navBtnHtml ).join( '' ) + '</div>' : '' }
+				</div>
 				<div class="minn-user" id="minn-user-area" title="Your account">
 					<img class="minn-user-avatar" src="${ esc( B.user.avatar ) }" alt="">
 					<div style="min-width:0;">
@@ -831,6 +833,7 @@
 					<div class="minn-topbar-title" id="minn-title"></div>
 					<div class="minn-topbar-sub" id="minn-sub"></div>
 					<div class="minn-topbar-actions">
+						<button class="minn-core-chip" id="minn-core-chip" hidden title="A WordPress update is available">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
 						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="View site">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="About Minn">${ icon( 'help' ) }</button>
 						<button class="minn-icon-btn" id="minn-theme-btn" title="Toggle theme"></button>
@@ -872,6 +875,9 @@
 		$( '#minn-theme-btn' ).addEventListener( 'click', toggleTheme );
 		$( '#minn-help-btn' ).addEventListener( 'click', () => { state.modal = { type: 'help' }; renderOverlays(); } );
 		$( '#minn-notif-btn' ).addEventListener( 'click', toggleNotif );
+		// Core updates outrank everything else — the chip is visible on every
+		// route while one pends and lands on the Overview banner's button.
+		$( '#minn-core-chip' ).addEventListener( 'click', () => go( 'overview' ) );
 		$( '#minn-new-btn' ).addEventListener( 'click', ( e ) => {
 			e.stopPropagation();
 			if ( B.caps.editPages ) toggleNewMenu( e.currentTarget );
@@ -964,6 +970,11 @@
 			loadOverview().then( renderIfCurrent( 'overview' ) ).catch( showErr );
 			return;
 		}
+		// Core updates are important enough for the front page — lazy-load the
+		// offer and re-render once when one is pending (same as Extensions).
+		if ( B.caps.core && ! state.cache.core ) {
+			loadCoreStatus().then( () => { if ( state.route === 'overview' && state.cache.core && state.cache.core.update ) renderOverview(); } );
+		}
 		// Chart source: traffic (when an analytics adapter answered) or activity.
 		// Traffic leads by default; the swap button cycles and the pick sticks.
 		const sources = o.traffic ? [ 'traffic', 'activity' ] : [ 'activity' ];
@@ -983,6 +994,7 @@
 				<div class="minn-dash-sub">Here's what's happening across your site today.</div>
 			</div>
 		</div>
+		${ coreBannerHtml() }
 		<div class="minn-stats">
 			${ o.stats.map( ( s ) => {
 				// Each stat is a door to its view, not just a number.
@@ -1039,6 +1051,7 @@
 				renderOverview();
 			} )
 		);
+		bindCoreBanner( view );
 		$$( '.minn-stat[data-goto]', view ).forEach( ( card ) => {
 			const open = () => {
 				const [ route, filter ] = card.dataset.goto.split( ':' );
@@ -3858,19 +3871,22 @@
 		pluginsPromise = ( async () => {
 			const jobs = [ api( 'wp/v2/plugins' ) ];
 			if ( B.caps.update ) {
-				jobs.push( api( 'minn-admin/v1/plugin-updates' ).then( ( r ) => r.updates ).catch( () => ( {} ) ) );
+				jobs.push( api( 'minn-admin/v1/plugin-updates' ).catch( () => ( {} ) ) );
 			}
 			// wp.org icons + directory links; tolerant — cards fall back to
 			// letter avatars without it.
 			const metaJob = state.cache.pluginMeta
 				? Promise.resolve( state.cache.pluginMeta )
 				: api( 'minn-admin/v1/plugin-meta' ).catch( () => ( {} ) );
-			const [ plugins, updates ] = await Promise.all( jobs );
+			const [ plugins, upd ] = await Promise.all( jobs );
 			state.cache.pluginMeta = await metaJob;
 			state.cache.plugins = plugins;
-			state.cache.pluginUpdates = updates || {};
+			state.cache.pluginUpdates = ( upd && upd.updates ) || {};
+			// Pending THEME updates count toward the Extensions dot too —
+			// per-theme badges only render inside the Themes tab.
+			state.cache.themeUpdates = ( upd && upd.themes ) || 0;
 			const dot = $( '#minn-plugin-dot' );
-			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length;
+			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! state.cache.themeUpdates;
 		} )().finally( () => { pluginsPromise = null; } );
 		return pluginsPromise;
 	}
@@ -3927,10 +3943,20 @@
 		}
 	}
 
-	// Core version + update offer, for the banner on Extensions.
+	// Core version + update offer, for the Overview/Extensions banners and
+	// the persistent topbar chip.
 	async function loadCoreStatus() {
 		if ( ! B.caps.core || state.cache.core ) return;
 		state.cache.core = await api( 'minn-admin/v1/core' ).catch( () => null );
+		updateCoreChip();
+	}
+
+	function updateCoreChip() {
+		const chip = $( '#minn-core-chip' );
+		if ( ! chip ) return;
+		const u = state.cache.core && state.cache.core.update;
+		chip.hidden = ! u;
+		if ( u ) $( '#minn-core-chip-text' ).textContent = `WordPress ${ u.version }`;
 	}
 
 	function coreBannerHtml() {
@@ -3954,18 +3980,64 @@
 			if ( ! confirm( `Update WordPress to ${ core.update.version }? Visitors see a maintenance notice for a few seconds while files are replaced.` ) ) return;
 			btn.disabled = true;
 			btn.textContent = 'Updating WordPress…';
-			try {
-				const r = await api( 'minn-admin/v1/core/update', { method: 'POST', body: '{}' } );
-				toast( `WordPress updated to ${ r.version }` );
-				state.cache.core = null;
+			// Replacing core files recycles the PHP worker serving the update
+			// request, so its response often never arrives even when the
+			// update succeeds. The POLL is the reliable completion signal;
+			// the request's own response is just a fast-path. A false
+			// "update failed" on the scariest button in the app costs more
+			// trust than the update earns.
+			const offered = core.update.version;
+			const started = Date.now();
+			let settled = false;
+			const finish = ( version ) => {
+				if ( settled ) return;
+				settled = true;
+				clearInterval( poll );
+				toast( `WordPress updated to ${ version }` );
 				state.cache.notifications = null;
-				await loadCoreStatus();
+				updateCoreChip();
 				if ( state.route === 'extensions' ) renderExtensions();
-			} catch ( e ) {
-				toast( e.message, true );
+				else if ( state.route === 'overview' ) renderOverview();
+			};
+			const fail = ( msg ) => {
+				if ( settled ) return;
+				settled = true;
+				clearInterval( poll );
+				toast( msg, true );
 				btn.disabled = false;
 				btn.textContent = 'Update WordPress';
-			}
+			};
+			api( 'minn-admin/v1/core/update', { method: 'POST', body: '{}' } )
+				.then( ( r ) => {
+					state.cache.core = null;
+					return loadCoreStatus().then( () => finish( r.version ) );
+				} )
+				.catch( ( e ) => {
+					// Our Error = the server actually answered with a failure.
+					// A TypeError is the dropped connection — the poll decides.
+					if ( ! ( e instanceof TypeError ) ) fail( e.message );
+				} );
+			const poll = setInterval( async () => {
+				if ( settled ) return;
+				if ( Date.now() - started > 5 * 60 * 1000 ) {
+					fail( 'Still updating after 5 minutes. Give it a moment, then check Extensions.' );
+					return;
+				}
+				try {
+					const s = await api( 'minn-admin/v1/core' );
+					// Maintenance mode 503s while files copy; the offered
+					// version with no remaining offer means the update landed.
+					if ( s && s.version === offered && ! s.update ) {
+						// The dropped request may also have skipped the DB
+						// migration step — run it before declaring done.
+						if ( s.dbUpgrade ) {
+							await fetch( B.site.adminUrl + 'upgrade.php?step=1', { credentials: 'same-origin' } ).catch( () => {} );
+						}
+						state.cache.core = s;
+						finish( s.version );
+					}
+				} catch ( e ) { /* mid-update requests are expected to fail */ }
+			}, 8000 );
 		} );
 	}
 
@@ -14563,6 +14635,7 @@
 					// Take the user to the thing the notification is about.
 					if ( item.kind === 'comments' && B.caps.moderate ) go( 'comments' );
 					else if ( item.kind === 'notices' && item.link ) window.open( item.link, '_blank' );
+					else if ( item.id.startsWith( 'theme-' ) && B.caps.themes ) { state.extTab = 'themes'; go( 'extensions' ); }
 					else if ( item.kind === 'updates' && B.caps.plugins ) go( 'extensions' );
 					else if ( item.id.startsWith( 'user-' ) && B.caps.users ) go( 'users' );
 					else if ( item.id.startsWith( 'core-' ) && B.caps.core ) go( 'extensions' );
@@ -14866,6 +14939,9 @@
 		if ( B.caps.plugins ) {
 			loadPlugins().catch( () => {} );
 		}
+		// Core-update chip in the topbar — visible on every route while an
+		// update pends. wp_version_check self-throttles, so this is cheap.
+		if ( B.caps.core ) loadCoreStatus().catch( () => {} );
 		refreshCommentBadge();
 		loadTypes().catch( () => {} );
 		if ( B.wc && B.caps.orders ) loadOrderSummary().catch( () => {} );
