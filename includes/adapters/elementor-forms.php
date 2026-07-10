@@ -95,6 +95,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['elementor-forms'] = array(
 		'label'      => 'Forms',
 		'family'     => 'forms',
+		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Elementor',
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gating above + in the shim.

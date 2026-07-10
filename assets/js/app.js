@@ -400,6 +400,9 @@
 	}
 
 	// Nav entries: first-seen family wins (resolved to the preferred member).
+	// `group` places the entry: 'workspace' for inbox-shaped surfaces the
+	// descriptor opts into (form entries), everything else defaults to the
+	// Tools group so the prime real estate stays curated.
 	function surfaceNavItems() {
 		const out = [];
 		const seen = new Set();
@@ -409,9 +412,9 @@
 				seen.add( s.family );
 				const id = preferredSurfaceId( s.family );
 				const primary = surfaceById( id ) || s;
-				out.push( { id: primary.id, label: primary.label, icon: primary.icon || 'plug', family: s.family } );
+				out.push( { id: primary.id, label: primary.label, icon: primary.icon || 'plug', family: s.family, group: ( primary.group || s.group ) === 'workspace' ? 'workspace' : 'tools' } );
 			} else {
-				out.push( { id: s.id, label: s.label, icon: s.icon || 'plug' } );
+				out.push( { id: s.id, label: s.label, icon: s.icon || 'plug', group: s.group === 'workspace' ? 'workspace' : 'tools' } );
 			}
 		} );
 		return out;
@@ -496,6 +499,9 @@
 	// — one call site keeps the Extensions handlers honest.
 	async function refreshAfterPluginChange() {
 		await Promise.all( [ refreshBuilders(), refreshEditorBlocks(), refreshSurfaces() ] );
+		// Settings caches provider-derived data (the Spam page most of all) —
+		// toggling a spam/SEO plugin mid-session left it stale until reload.
+		state.cache.settings = null;
 		// Comments nav may have appeared/vanished (Disable Comments toggle).
 		renderNavWorkspace();
 		if ( state.route === 'comments' && ! commentsAvailable() ) go( 'overview' );
@@ -684,6 +690,7 @@
 			wp: '<path fill="currentColor" stroke-width="0" d="M21.469 6.825c.84 1.537 1.318 3.3 1.318 5.175 0 3.979-2.156 7.456-5.363 9.325l3.295-9.527c.615-1.54.82-2.771.82-3.864 0-.405-.026-.78-.07-1.11m-7.981.105c.647-.03 1.232-.105 1.232-.105.582-.075.514-.93-.067-.899 0 0-1.755.135-2.88.135-1.064 0-2.85-.15-2.85-.15-.585-.03-.661.855-.075.885 0 0 .54.061 1.125.09l1.68 4.605-2.37 7.08L5.354 6.9c.649-.03 1.234-.1 1.234-.1.585-.075.516-.93-.065-.896 0 0-1.746.138-2.874.138-.2 0-.438-.008-.69-.015C4.911 3.15 8.235 1.215 12 1.215c2.809 0 5.365 1.072 7.286 2.833-.046-.003-.091-.009-.141-.009-1.06 0-1.812.923-1.812 1.914 0 .89.513 1.643 1.06 2.531.411.72.89 1.643.89 2.977 0 .915-.354 1.994-.821 3.479l-1.075 3.585-3.9-11.61.001.014zM12 22.784c-1.059 0-2.081-.153-3.048-.437l3.237-9.406 3.315 9.087c.024.053.05.101.078.149-1.12.393-2.325.607-3.582.607M1.211 12c0-1.564.336-3.05.935-4.39L7.29 21.709C3.694 19.96 1.212 16.271 1.211 12M12 0C5.385 0 0 5.385 0 12s5.385 12 12 12 12-5.385 12-12S18.615 0 12 0"/>',
 			php: '<path fill="currentColor" stroke-width="0" d="M7.01 10.207h-.944l-.515 2.648h.838c.556 0 .97-.105 1.242-.314.272-.21.455-.559.55-1.049.092-.47.05-.802-.124-.995-.175-.193-.523-.29-1.047-.29zM12 5.688C5.373 5.688 0 8.514 0 12s5.373 6.313 12 6.313S24 15.486 24 12c0-3.486-5.373-6.312-12-6.312zm-3.26 7.451c-.261.25-.575.438-.917.551-.336.108-.765.164-1.285.164H5.357l-.327 1.681H3.652l1.23-6.326h2.65c.797 0 1.378.209 1.744.628.366.418.476 1.002.33 1.752a2.836 2.836 0 0 1-.305.847c-.143.255-.33.49-.561.703zm4.024.715l.543-2.799c.063-.318.039-.536-.068-.651-.107-.116-.336-.174-.687-.174H11.46l-.704 3.625H9.388l1.23-6.327h1.367l-.327 1.682h1.218c.767 0 1.295.134 1.586.401s.378.7.263 1.299l-.572 2.944h-1.389zm7.597-2.265a2.782 2.782 0 0 1-.305.847c-.143.255-.33.49-.561.703a2.44 2.44 0 0 1-.917.551c-.336.108-.765.164-1.286.164h-1.18l-.327 1.682h-1.378l1.23-6.326h2.649c.797 0 1.378.209 1.744.628.366.417.477 1.001.331 1.751zm-2.605-1.901h-.943l-.516 2.648h.838c.557 0 .971-.105 1.242-.314.272-.21.455-.559.551-1.049.092-.47.049-.802-.125-.995s-.524-.29-1.047-.29z"/>',
 			check: '<path d="M20 6 9 17l-5-5"/>',
+			chev: '<path d="m6 9 6 6 6-6"/>',
 			warn: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>',
 			x: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>',
 			clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
@@ -704,8 +711,10 @@
 			</button>`;
 	}
 
-	// Workspace nav items (Overview… + surfaces + Extensions). Rebuilt when
-	// surfaces re-poll so plugin toggles don't leave stale sidebar entries.
+	// Workspace nav items: the act-on-it set (Overview, content, incoming
+	// human stuff) plus surfaces that opted into group: 'workspace'.
+	// Rebuilt when surfaces re-poll so plugin toggles don't leave stale
+	// sidebar entries.
 	function workspaceNavItems() {
 		const navItems = [
 			{ id: 'overview', label: 'Overview', icon: 'grid' },
@@ -718,17 +727,24 @@
 		if ( B.wc && B.caps.orders ) {
 			navItems.push( { id: 'orders', label: 'Orders', icon: 'cart', orderCount: true } );
 		}
-		surfaceNavItems().forEach( ( s ) =>
+		surfaceNavItems().filter( ( s ) => s.group === 'workspace' ).forEach( ( s ) =>
 			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
 		);
-		if ( B.caps.plugins ) {
-			navItems.push( { id: 'extensions', label: 'Extensions', icon: 'plug', dot: true } );
-		}
 		return navItems;
+	}
+
+	// Tools nav items: site plumbing (logs, redirects, snippets, backups) —
+	// where surface families land unless their descriptor claims workspace.
+	function toolsNavItems() {
+		return surfaceNavItems().filter( ( s ) => s.group !== 'workspace' )
+			.map( ( s ) => ( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } ) );
 	}
 
 	function manageNavItems() {
 		const manageItems = [];
+		if ( B.caps.plugins ) {
+			manageItems.push( { id: 'extensions', label: 'Extensions', icon: 'plug', dot: true } );
+		}
 		if ( B.caps.users ) {
 			manageItems.push( { id: 'users', label: 'Users', icon: 'users' } );
 		}
@@ -756,8 +772,42 @@
 		} );
 	}
 
-	// Rebuild workspace (+ manage) nav from the current B.surfaces without
-	// wiping #minn-view — used after plugin activate/deactivate.
+	// Collapsible nav groups — the label row toggles its group's items and
+	// the choice persists per group ('minn-nav-collapsed' map).
+	function navCollapsedMap() {
+		try { return JSON.parse( localStorage.getItem( 'minn-nav-collapsed' ) || '{}' ) || {}; } catch ( e ) { return {}; }
+	}
+
+	function navGroupHtml( key, label, items, later ) {
+		const collapsed = !! navCollapsedMap()[ key ];
+		return `
+			<div class="minn-nav-group" id="minn-navgrp-${ key }"${ items.length ? '' : ' hidden' }>
+				<button class="minn-nav-label${ later ? ' later' : '' }${ collapsed ? ' collapsed' : '' }" data-navgroup="${ key }" type="button" aria-expanded="${ ! collapsed }">${ esc( label ) }${ icon( 'chev' ) }</button>
+				<div id="minn-nav-${ key }"${ collapsed ? ' hidden' : '' }>${ items.map( navBtnHtml ).join( '' ) }</div>
+			</div>`;
+	}
+
+	function bindNavGroupToggles( root ) {
+		$$( '[data-navgroup]', root || document ).forEach( ( btn ) => {
+			if ( btn._minnGrpBound ) return;
+			btn._minnGrpBound = true;
+			btn.addEventListener( 'click', () => {
+				const key = btn.dataset.navgroup;
+				const body = $( '#minn-nav-' + key );
+				const map = navCollapsedMap();
+				const collapsed = ! map[ key ];
+				map[ key ] = collapsed;
+				try { localStorage.setItem( 'minn-nav-collapsed', JSON.stringify( map ) ); } catch ( e ) { /* private mode */ }
+				btn.classList.toggle( 'collapsed', collapsed );
+				btn.setAttribute( 'aria-expanded', String( ! collapsed ) );
+				if ( body ) body.hidden = collapsed;
+			} );
+		} );
+	}
+
+	// Rebuild all nav groups from the current B.surfaces without wiping
+	// #minn-view — used after plugin activate/deactivate. Empty groups keep
+	// their (hidden) wrapper so a later toggle has somewhere to land.
 	function renderNavWorkspace() {
 		const ws = $( '#minn-nav-workspace' );
 		if ( ! ws ) return;
@@ -772,13 +822,14 @@
 			ordersHidden: $( '#minn-orders-count' )?.hidden,
 			dotHidden: $( '#minn-plugin-dot' )?.hidden,
 		};
-		ws.innerHTML = workspaceNavItems().map( navBtnHtml ).join( '' );
-		bindNavClicks( ws );
-		const manage = $( '#minn-nav-manage' );
-		if ( manage ) {
-			manage.innerHTML = manageNavItems().map( navBtnHtml ).join( '' );
-			bindNavClicks( manage );
-		}
+		[ [ 'workspace', workspaceNavItems() ], [ 'tools', toolsNavItems() ], [ 'manage', manageNavItems() ] ].forEach( ( [ key, items ] ) => {
+			const body = $( '#minn-nav-' + key );
+			if ( ! body ) return;
+			body.innerHTML = items.map( navBtnHtml ).join( '' );
+			bindNavClicks( body );
+			const wrap = $( '#minn-navgrp-' + key );
+			if ( wrap ) wrap.hidden = ! items.length;
+		} );
 		// Restore badges.
 		const cc = $( '#minn-content-count' );
 		if ( cc && prev.content ) { cc.textContent = prev.content; cc.hidden = !! prev.contentHidden; }
@@ -814,9 +865,9 @@
 					${ icon( 'search' ) }<span>Search…</span><span class="minn-kbd">⌘K</span>
 				</button>
 				<div class="minn-nav-scroll">
-					<div class="minn-nav-label">Workspace</div>
-					<div id="minn-nav-workspace">${ workspaceNavItems().map( navBtnHtml ).join( '' ) }</div>
-					${ manageItems.length ? '<div class="minn-nav-label later">Manage</div><div id="minn-nav-manage">' + manageItems.map( navBtnHtml ).join( '' ) + '</div>' : '' }
+					${ navGroupHtml( 'workspace', 'Workspace', workspaceNavItems() ) }
+					${ navGroupHtml( 'tools', 'Tools', toolsNavItems(), true ) }
+					${ navGroupHtml( 'manage', 'Manage', manageItems, true ) }
 				</div>
 				<div class="minn-user" id="minn-user-area" title="Your account">
 					<img class="minn-user-avatar" src="${ esc( B.user.avatar ) }" alt="">
@@ -848,6 +899,7 @@
 		<div id="minn-overlays"></div>`;
 
 		bindNavClicks();
+		bindNavGroupToggles();
 		$( '#minn-open-palette' ).addEventListener( 'click', openPalette );
 		$( '#minn-logo-home' ).addEventListener( 'click', () => go( 'overview' ) );
 		$( '#minn-ver-btn' ).addEventListener( 'click', openChangelog );

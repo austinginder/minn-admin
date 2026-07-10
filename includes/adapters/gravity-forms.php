@@ -35,6 +35,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// Shared with Fluent Forms / Elementor / WPForms adapters when present;
 		// topbar becomes a provider switcher when family size > 1.
 		'family'     => 'forms',
+		// Entries are incoming human messages — inbox-shaped, so this family
+		// claims the Workspace nav group (everything else defaults to Tools).
+		'group'      => 'workspace',
 		'sub'        => 'Gravity Forms',
 		'icon'       => 'inbox',
 		'cap'        => 'read',
