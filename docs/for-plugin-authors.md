@@ -22,6 +22,7 @@ Minn's whole extension surface is a small set of public hooks. The main ones:
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
 | `minn_admin_cache_purgers` | filter | Join the "Clear site cache" palette command |
+| `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
@@ -550,6 +551,52 @@ The command is only exposed to users with `manage_options`, and your `purge` cal
 runs server-side on that request; no extra capability check is needed for the common
 case. A dozen providers ship bundled in `includes/adapters/cache-purge.php` (LiteSpeed,
 WP Rocket, W3 Total Cache, …); copy any of them.
+
+## Spam providers — Settings → Spam
+
+Spam filtering plugins get a card on Minn's **Settings → Spam** page: configured state,
+all-time blocked count, a few safe toggles written through your own option shape, and a
+link to your full wp-admin screen. Register via the `minn_admin_spam_providers` filter:
+
+```php
+add_filter( 'minn_admin_spam_providers', function ( $providers ) {
+    if ( ! defined( 'MY_SPAM_PLUGIN_VERSION' ) ) {
+        return $providers; // register only while your plugin is active
+    }
+    $providers[] = array(
+        'id'     => 'my-spam',
+        'name'   => 'My Spam Filter',
+        'status' => function () {
+            return array(
+                'configured' => (bool) get_option( 'my_spam_key' ),
+                'note'       => 'One-line status shown under the name',
+                'blocked'    => (int) get_option( 'my_spam_blocked_total', 0 ),
+                'toggles'    => array(
+                    array(
+                        'id'    => 'notify',
+                        'label' => 'Email me about new spam',
+                        'desc'  => 'What the switch does, in one sentence.',
+                        'on'    => (bool) get_option( 'my_spam_notify' ),
+                    ),
+                ),
+                'adminUrl'   => admin_url( 'options-general.php?page=my-spam' ),
+            );
+        },
+        'set'    => function ( $toggle_id, $on ) {
+            if ( 'notify' === $toggle_id ) {
+                update_option( 'my_spam_notify', $on ? 1 : 0 );
+            }
+        },
+    );
+    return $providers;
+} );
+```
+
+Toggles save through `minn-admin/v1/spam` (gated on `manage_options`); `set` runs
+server-side with the toggle id and the new boolean. Keep toggles to the two or three
+switches a site owner actually flips; deep configuration belongs on your own screen,
+which the card links to. Bundled providers (Akismet, Antispam Bee, CleanTalk) live in
+`includes/adapters/spam.php` and are the references.
 
 ## Comments detection — `minn_admin_comments_enabled`
 
