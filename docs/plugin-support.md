@@ -73,22 +73,71 @@ themselves through the extension filters.
 
 ## Roadmap candidates
 
-Ranked by install base among plugins not yet covered:
+Refreshed 2026-07-10 against the wp.org top-500 by active installs. The
+pattern that falls out: the highest-value next wave is almost entirely
+**providers into surfaces that already exist**, not new machinery. Waves in
+recommended order (installs × fit × effort):
 
-- **One-place license activation** — paste a Pro plugin's key once and Minn
-  hands it to the right plugin, so the "activate your license" nags clear
-  without a wp-admin scavenger hunt. Genuinely valuable but genuinely hard
-  (no shared license API across vendors); full design in
-  `docs/license-manager.md`.
-- **WPForms** entries — Pro-gated storage; needs a Pro license for fixtures.
-- **Really Simple SSL, iThemes/Solid Security** — security posture on the
-  System page.
-- **Jetpack** — module-dependent; large surface, needs scoping.
-- **Multilingual (WPML / Polylang / TranslatePress)** — needs a language
-  dimension in content lists; parked as structural.
-- **Consent/GDPR, popups, sliders, image optimization** — mostly config
-  UIs; the notice digest, Extensions cards and link-outs are the honest
-  answer there rather than a bespoke surface.
+1. **License visibility (Phase 0)** — a read-only dashboard classifying every
+   paid plugin's license as valid/expired/invalid/missing from stored state,
+   no network calls, no seat risk. Nothing like it exists anywhere in
+   WordPress. Storage research is done and the design is ready to build; see
+   `docs/license-manager.md`.
+2. **Security posture rows** — Wordfence firewall mode + last scan + issue
+   count (5M installs, reads `wfConfig`/`wfIssues`, extends the adapter Minn
+   already ships) and Really Simple SSL (3M, pure options read) as System
+   health rows. Follow with Solid Security (now listed as **Kadence
+   Security** on wp.org; settings in `itsec-storage`, lockouts in
+   `itsec_logs`/`itsec_lockouts`), All-In-One Security and Limit Login
+   Attempts Reloaded, whose lockout logs also fit the Activity Log family.
+3. **Forms providers** — Ninja Forms (`nf3_*` tables), Forminator
+   (`frmt_form_entry*`) and Formidable (`frm_items`), all storing entries in
+   their free tiers, into the existing Forms surface. SureForms and MetForm
+   likely fit too (free-tier storage believed but not source-verified).
+4. **Backups providers** — WPvivid (`wpvivid_backup_list` option, free tier
+   schedules so freshness is claimable), Duplicator (`duplicator_packages`
+   table; manual builds only in free, so no freshness claims), BackWPup, and
+   an All-in-One WP Migration local-exports listing (never claim freshness;
+   the Disembark precedent).
+5. **Cache purge pack** — SpeedyCache, Redis Object Cache (flush + drop-in
+   status row), Breeze, Nginx Helper, Cloudflare. The cheapest shape in the
+   codebase: one purge hook plus detection each.
+6. **Email log providers** — WP Mail Logging (`wpml_mails`, the cheapest one
+   left), GoSMTP (logs free), SureMails, Site Mailer; Easy WP SMTP's full log
+   is Pro-only (free has debug events, the WP Mail SMTP shape).
+7. **Snippets providers** — Simple Custom CSS & JS (a CPT) and Header Footer
+   Code Manager (`hfcm_scripts` table) into the existing Snippets surface.
+8. **Site-status rows with toggles** — SeedProd coming-soon, Maintenance,
+   Password Protected: "your site is currently hidden from the public" is
+   arguably the single most important status Minn can show. Plus a WPS Hide
+   Login compat pass (never hardcode `wp-login.php` links; show the real
+   login URL on System).
+9. **Small delights** — User Switching ("Switch to this user" from the user
+   row via its own nonce URLs), Regenerate Thumbnails on the media detail,
+   WooCommerce PDF Invoices download on the order detail, WP Armour in the
+   spam provider cards, SiteSEO in the SEO panel (SEOPress fork, near-identical
+   meta keys), eps-301-redirects in Redirects.
+10. **Bigger scoped bets** — WPForms Pro entries (source-verified: Lite
+    stores no entries at all, so this costs a license and Pro fixtures;
+    biggest uncovered name), Jetpack Stats as a traffic provider (data lives
+    on WordPress.com behind its connection auth; scope to stats only),
+    Meta Box editor panel (runtime field discovery; ACF precedent), Matomo
+    traffic provider (small base but the best-behaved local analytics data
+    source), The Events Calendar editor panel (events already list natively;
+    the panel covers date/venue meta).
+
+Parked as structural: **multilingual** (WPML / Polylang / TranslatePress)
+needs a language dimension in content lists.
+
+Explicitly skip (link-out or nothing is the honest answer): image optimizers
+(Smush, EWWW, Imagify, ShortPixel: background processors), consent/GDPR
+banners, popups/sliders/optin (canvases and SaaS dashboards; popups are CPTs
+so they list anyway), email marketing platforms (MailPoet, MC4WP), one-shot
+migration tools (importers, Better Search Replace), remote-management agents
+(ManageWP, MainWP), file managers, Elementor addon packs (already fenced via
+the Elementor adapter), duplicate-post plugins (Minn's native Duplicate
+supersedes them), and Classic Editor/Widgets (Minn's classic mode already
+handles the storage reality).
 
 See `docs/for-plugin-authors.md` to add coverage from your own plugin, and
 `docs/extension-api.md` for the surface/panel/provider contracts.
