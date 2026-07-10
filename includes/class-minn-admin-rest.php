@@ -2649,6 +2649,33 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			),
 		);
 
+		// Backups — only when a backup plugin is present to report on.
+		if ( function_exists( 'minn_admin_updraftplus_active' ) && minn_admin_updraftplus_active() ) {
+			$bk  = minn_admin_updraft_last();
+			$age = $bk ? time() - $bk['time'] : null;
+			if ( ! $bk ) {
+				$bk_status = 'warn';
+				$bk_detail = 'UpdraftPlus is active but no backup has completed yet';
+			} elseif ( ! $bk['success'] ) {
+				$bk_status = 'fail';
+				$bk_detail = 'The last backup reported errors (' . human_time_diff( $bk['time'] ) . ' ago)';
+			} elseif ( $age <= 36 * HOUR_IN_SECONDS ) {
+				$bk_status = 'pass';
+				$bk_detail = 'Last backup completed ' . human_time_diff( $bk['time'] ) . ' ago';
+			} elseif ( $age <= 8 * DAY_IN_SECONDS ) {
+				$bk_status = 'warn';
+				$bk_detail = 'Last backup was ' . human_time_diff( $bk['time'] ) . ' ago — consider a fresher schedule';
+			} else {
+				$bk_status = 'fail';
+				$bk_detail = 'Last backup was ' . human_time_diff( $bk['time'] ) . ' ago';
+			}
+			array_splice( $checks, 1, 0, array( array(
+				'label'  => 'Backups',
+				'status' => $bk_status,
+				'detail' => $bk_detail,
+			) ) );
+		}
+
 		return rest_ensure_response(
 			array(
 				'generated'  => current_time( 'c' ),
