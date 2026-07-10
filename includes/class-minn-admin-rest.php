@@ -463,6 +463,30 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/cache/purge',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'cache_purge' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/posts/(?P<id>\d+)/duplicate',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'duplicate_post' ),
+				'permission_callback' => function ( $request ) {
+					return current_user_can( 'edit_post', (int) $request['id'] );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/render-blocks',
 			array(
 				'methods'             => 'POST',
@@ -2222,6 +2246,93 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			array(
 				'updated' => true,
 				'version' => $wp_version,
+			)
+		);
+	}
+
+	/**
+	 * Purge every active cache layer (adapters/cache-purge.php). Each
+	 * provider runs in its own Throwable guard so one broken cache plugin
+	 * can't fail the action for the rest.
+	 */
+	public static function cache_purge( WP_REST_Request $request ) {
+		$only    = sanitize_text_field( (string) $request->get_param( 'provider' ) );
+		$purged  = array();
+		$failed  = array();
+		$matched = false;
+		foreach ( minn_admin_cache_purgers() as $p ) {
+			if ( $only && $p['id'] !== $only ) {
+				continue;
+			}
+			$matched = true;
+			try {
+				call_user_func( $p['purge'] );
+				$purged[] = $p['name'];
+			} catch ( \Throwable $e ) {
+				$failed[] = $p['name'];
+			}
+		}
+		if ( ! $matched ) {
+			return new WP_Error( 'no_cache', 'No cache layer detected on this site.', array( 'status' => 400 ) );
+		}
+		return rest_ensure_response(
+			array(
+				'purged' => $purged,
+				'failed' => $failed,
+			)
+		);
+	}
+
+	/**
+	 * Duplicate a post as a new draft owned by the current user — content,
+	 * excerpt, taxonomy terms and meta (builder data, featured image, SEO)
+	 * ride along, so the copy renders like the original everywhere.
+	 */
+	public static function duplicate_post( WP_REST_Request $request ) {
+		$post = get_post( (int) $request['id'] );
+		if ( ! $post || 'trash' === $post->post_status ) {
+			return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+		}
+		$new_id = wp_insert_post(
+			array(
+				'post_title'     => $post->post_title ? $post->post_title : 'Untitled',
+				'post_content'   => $post->post_content,
+				'post_excerpt'   => $post->post_excerpt,
+				'post_type'      => $post->post_type,
+				'post_status'    => 'draft',
+				'post_parent'    => $post->post_parent,
+				'menu_order'     => $post->menu_order,
+				'comment_status' => $post->comment_status,
+				'ping_status'    => $post->ping_status,
+				'post_password'  => $post->post_password,
+				'post_author'    => get_current_user_id(),
+			),
+			true
+		);
+		if ( is_wp_error( $new_id ) ) {
+			return $new_id;
+		}
+		foreach ( get_object_taxonomies( $post->post_type ) as $tax ) {
+			$terms = wp_get_object_terms( $post->ID, $tax, array( 'fields' => 'ids' ) );
+			if ( $terms && ! is_wp_error( $terms ) ) {
+				wp_set_object_terms( $new_id, $terms, $tax );
+			}
+		}
+		$skip_meta = array( '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date' );
+		foreach ( get_post_meta( $post->ID ) as $key => $values ) {
+			if ( in_array( $key, $skip_meta, true ) ) {
+				continue;
+			}
+			foreach ( $values as $value ) {
+				// get_post_meta(single=false) returns serialized-form strings;
+				// add_post_meta would double-serialize without the unserialize.
+				add_post_meta( $new_id, $key, wp_slash( maybe_unserialize( $value ) ) );
+			}
+		}
+		return rest_ensure_response(
+			array(
+				'id'    => $new_id,
+				'title' => get_the_title( $new_id ),
 			)
 		);
 	}

@@ -351,6 +351,9 @@ class Minn_Admin {
 				'nonce' => Minn_Admin_Notices::nonce(),
 				'stale' => Minn_Admin_Notices::is_stale(),
 			),
+			// Active cache layers — drives the "Clear site cache" palette
+			// command (adapters/cache-purge.php).
+			'cache'    => current_user_can( 'manage_options' ) ? minn_admin_cache_purgers_boot() : array(),
 			// Active page builders — drives "+ New → Page in ⟨builder⟩"
 			// (docs/page-builders.md; adapters/page-builders.php).
 			'builders' => minn_admin_page_builders_boot(),
