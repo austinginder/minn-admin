@@ -1,5 +1,6 @@
 /**
- * Find & replace — the ⌘F bar over the editor body.
+ * Find & replace — the ⌘⇧F bar over the editor body (plain ⌘F stays the
+ * browser's native find).
  *
  * The contract under test: matching is over the text writers see (across
  * inline formatting like a split <strong>, never across blocks), islands
@@ -43,9 +44,12 @@ const CONTENT = [
 		await openEditor( page, pid );
 
 		// --- Open + count -----------------------------------------------------
+		// Plain ⌘F must fall through to the browser (no bar); ⌘⇧F opens ours.
 		await page.keyboard.press( 'Meta+f' );
+		t.check( 'plain ⌘F leaves the editor bar closed', ( await page.$( '#minn-find-bar' ) ) === null );
+		await page.keyboard.press( 'Meta+Shift+f' );
 		await page.waitForSelector( '#minn-find-bar', { timeout: 5000 } );
-		t.check( '⌘F opens the find bar', true );
+		t.check( '⌘⇧F opens the find bar', true );
 
 		await page.type( '#minn-find-input', 'quick brown' );
 		await page.waitForFunction( () => document.querySelector( '#minn-find-count' ).textContent === '1/4', null, { timeout: 5000 } );
