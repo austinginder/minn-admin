@@ -12207,6 +12207,35 @@
 		if ( state.notifOpen ) loadNotifications().then( () => state.notifOpen && renderOverlays() );
 	}
 
+	// Run a notice's own action link (allow / dismiss / opt-in) in the
+	// background. The link points at the admin page the notice rendered on;
+	// re-adding the capture params makes ONE request run the plugin's
+	// handler (admin_init) AND return a fresh digest (in_admin_header), so
+	// the panel reflects the result immediately.
+	async function runNoticeAction( link, btn ) {
+		if ( btn ) { btn.disabled = true; btn.textContent = 'Working…'; }
+		try {
+			const u = new URL( link.url );
+			u.searchParams.set( 'minn_notices', '1' );
+			u.searchParams.set( '_wpnonce', B.notices.nonce );
+			const r = await fetch( u.toString(), { credentials: 'same-origin' } );
+			let captured = false;
+			try {
+				captured = ( await r.json() ).ok === true;
+			} catch ( e ) { /* the handler redirected before our capture ran */ }
+			if ( ! captured ) {
+				await fetch( B.notices.url, { credentials: 'same-origin' } ).catch( () => {} );
+			}
+			state.cache.notifications = null;
+			await loadNotifications();
+			if ( state.notifOpen ) renderOverlays();
+			toast( `Done: ${ link.text }` );
+		} catch ( e ) {
+			toast( e.message, true );
+			if ( btn ) { btn.disabled = false; btn.textContent = link.text; }
+		}
+	}
+
 	// What "Update everything" would touch, gated on capabilities. Order
 	// matters downstream: plugins, themes, core LAST (core swaps the files
 	// under the running app).
@@ -12325,6 +12354,8 @@
 									<div class="minn-notif-icon">${ esc( n.icon ) }</div>
 									<div class="minn-notif-text">
 										${ esc( n.title ) }
+										${ ( n.links || [] ).length ? `<div class="minn-notif-links">${ n.links.map( ( l, i ) =>
+											`<button class="minn-notif-link" data-nid="${ esc( n.id ) }" data-li="${ i }">${ esc( l.text ) }${ l.action ? '' : ' ↗' }</button>` ).join( '' ) }</div>` : '' }
 										<div class="minn-notif-time">${ esc( n.ago ) }</div>
 									</div>
 									${ n.unread ? '<div class="minn-notif-unread-dot"></div>' : '' }
@@ -14717,6 +14748,16 @@
 			);
 			const updAll = $( '#minn-update-all' );
 			if ( updAll ) updAll.addEventListener( 'click', runUpdateEverything );
+			$$( '.minn-notif-link' ).forEach( ( b ) =>
+				b.addEventListener( 'click', ( e ) => {
+					e.stopPropagation();
+					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === b.dataset.nid );
+					const link = item && ( item.links || [] )[ parseInt( b.dataset.li, 10 ) ];
+					if ( ! link ) return;
+					if ( link.action ) runNoticeAction( link, b );
+					else window.open( link.url, '_blank' );
+				} )
+			);
 			$$( '.minn-notif-row' ).forEach( ( row ) =>
 				row.addEventListener( 'click', () => {
 					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === row.dataset.nid );
@@ -14726,11 +14767,16 @@
 						api( 'minn-admin/v1/notifications/read', { method: 'POST', body: JSON.stringify( { id: item.id } ) } ).catch( () => {} );
 						updateUnreadDot();
 					}
+					// Notices act through their link buttons — the row itself
+					// only marks read and the panel stays open.
+					if ( item.kind === 'notices' ) {
+						renderOverlays();
+						return;
+					}
 					state.notifOpen = false;
 					renderOverlays();
 					// Take the user to the thing the notification is about.
 					if ( item.kind === 'comments' && B.caps.moderate ) go( 'comments' );
-					else if ( item.kind === 'notices' && item.link ) window.open( item.link, '_blank' );
 					else if ( item.id.startsWith( 'theme-' ) && B.caps.themes ) { state.extTab = 'themes'; go( 'extensions' ); }
 					else if ( item.kind === 'updates' && B.caps.plugins ) go( 'extensions' );
 					else if ( item.id.startsWith( 'user-' ) && B.caps.users ) go( 'users' );

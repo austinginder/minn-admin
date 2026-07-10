@@ -348,6 +348,7 @@ class Minn_Admin {
 			// panel (class-minn-admin-notices.php).
 			'notices'  => array(
 				'url'   => Minn_Admin_Notices::capture_url(),
+				'nonce' => Minn_Admin_Notices::nonce(),
 				'stale' => Minn_Admin_Notices::is_stale(),
 			),
 			// Active page builders — drives "+ New → Page in ⟨builder⟩"

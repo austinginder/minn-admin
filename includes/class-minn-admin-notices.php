@@ -212,10 +212,20 @@ class Minn_Admin_Notices {
 		return $text;
 	}
 
-	/** Up to 3 action links, absolutized; text and URL only. */
+	/**
+	 * Up to 3 action links, absolutized; text and URL only.
+	 *
+	 * Links carrying our capture params are notices that built their href
+	 * from the CURRENT request URI (add_query_arg with no URL) — the
+	 * allow/dismiss/opt-in class of action link that expects to reload the
+	 * page it rendered on. They get flagged `action` so the client can run
+	 * them in the background, and our params are stripped (only OUR nonce —
+	 * a plugin's own _wpnonce value is preserved).
+	 */
 	private static function links_of( $node ) {
-		$links = array();
-		$seen  = array();
+		$links     = array();
+		$seen      = array();
+		$own_nonce = sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) );
 		foreach ( $node->getElementsByTagName( 'a' ) as $a ) {
 			$href = trim( (string) $a->getAttribute( 'href' ) );
 			if ( '' === $href || '#' === $href[0] || 0 === stripos( $href, 'javascript:' ) ) {
@@ -227,6 +237,13 @@ class Minn_Admin_Notices {
 				$url = home_url( $href );
 			} else {
 				$url = admin_url( $href );
+			}
+			$is_action = false !== strpos( $url, 'minn_notices=' );
+			if ( $is_action ) {
+				$url = remove_query_arg( 'minn_notices', $url );
+				if ( $own_nonce && false !== strpos( $url, '_wpnonce=' . $own_nonce ) ) {
+					$url = remove_query_arg( '_wpnonce', $url );
+				}
 			}
 			$url = esc_url_raw( $url );
 			if ( ! $url || isset( $seen[ $url ] ) ) {
@@ -240,8 +257,9 @@ class Minn_Admin_Notices {
 				$label = substr( $label, 0, 80 );
 			}
 			$links[] = array(
-				'text' => $label ?: 'Open',
-				'url'  => $url,
+				'text'   => $label ?: 'Open',
+				'url'    => $url,
+				'action' => $is_action,
 			);
 			if ( count( $links ) >= 3 ) {
 				break;
@@ -329,7 +347,10 @@ class Minn_Admin_Notices {
 	/* ===== Storage ===== */
 
 	private static function store_key() {
-		return 'minn_admin_notices_' . get_current_user_id();
+		// v2: links carry {action} and capture-param stripping. Versioning
+		// the key invalidates old-shape captures so the client re-captures
+		// instead of rendering stale, polluted links (old keys just expire).
+		return 'minn_admin_notices_v2_' . get_current_user_id();
 	}
 
 	private static function store( $items ) {
@@ -377,11 +398,15 @@ class Minn_Admin_Notices {
 		return ( time() - (int) self::stored()['captured'] ) > self::STALE_AFTER;
 	}
 
+	public static function nonce() {
+		return wp_create_nonce( self::NONCE_ACTION );
+	}
+
 	public static function capture_url() {
 		return add_query_arg(
 			array(
 				'minn_notices' => 1,
-				'_wpnonce'     => wp_create_nonce( self::NONCE_ACTION ),
+				'_wpnonce'     => self::nonce(),
 			),
 			admin_url( 'index.php' )
 		);
@@ -410,7 +435,9 @@ class Minn_Admin_Notices {
 				'title'    => sprintf( '%s: %s', $n['owner']['name'], $text ),
 				'time'     => isset( $seen[ $n['id'] ] ) ? (int) $seen[ $n['id'] ] : (int) self::stored()['captured'],
 				'severity' => $n['severity'],
-				'link'     => ! empty( $n['links'] ) ? $n['links'][0]['url'] : '',
+				// {text, url, action} — action links run in the background
+				// from the panel; plain links open in a new tab.
+				'links'    => $n['links'],
 			);
 		}
 		return $items;
