@@ -64,6 +64,36 @@ const fs = require( 'fs' );
 	} ) );
 	t.check( 'extensions card renders Plugins + Themes with a version manifest', extUi.sections.includes( 'Plugins' ) && extUi.sections.includes( 'Themes' ) && extUi.items > 0 && extUi.activeBadge === 1, JSON.stringify( extUi ) );
 
+	/* ===== Sticky jump bar (section navigation) ===== */
+	const jump = await page.evaluate( () => {
+		const bar = document.getElementById( 'minn-sys-jump' );
+		if ( ! bar ) return null;
+		return {
+			labels: [ ...bar.querySelectorAll( '[data-jump]' ) ].map( ( b ) => b.textContent ),
+			sticky: getComputedStyle( bar ).position === 'sticky',
+			targetsExist: [ ...bar.querySelectorAll( '[data-jump]' ) ].every( ( b ) => !! document.getElementById( b.dataset.jump ) ),
+			active: bar.querySelectorAll( '.active' ).length,
+		};
+	} );
+	t.check( 'jump bar renders sticky with resolvable targets', jump && jump.sticky && jump.targetsExist && jump.active === 1, JSON.stringify( jump ) );
+	t.check( 'jump bar covers the page sections', jump && [ 'Health', 'Licenses', 'System' ].every( ( l ) => jump.labels.includes( l ) ), JSON.stringify( jump && jump.labels ) );
+	const jumped = await page.evaluate( async () => {
+		const sc = document.querySelector( '.minn-scroll' );
+		sc.scrollTop = 0;
+		const btn = [ ...document.querySelectorAll( '#minn-sys-jump [data-jump]' ) ].find( ( b ) => b.textContent === 'Integrations' );
+		btn.click();
+		await new Promise( ( r ) => setTimeout( r, 900 ) ); // smooth scroll
+		return { top: sc.scrollTop, active: document.querySelector( '#minn-sys-jump .active' )?.textContent };
+	} );
+	t.check( 'jump click scrolls and scroll-spy follows', jumped.top > 300 && jumped.active === 'Integrations', JSON.stringify( jumped ) );
+	const licAboveDebug = await page.evaluate( () => {
+		const lic = document.getElementById( 'minn-sys-licenses' );
+		const dbg = document.getElementById( 'minn-sys-debug' );
+		return lic && dbg ? lic.offsetTop < dbg.offsetTop : null;
+	} );
+	t.check( 'Licenses card sits above Debug tools', licAboveDebug !== false, String( licAboveDebug ) );
+	await page.evaluate( () => { document.querySelector( '.minn-scroll' ).scrollTop = 0; } );
+
 	/* ===== Nav item + copy report ===== */
 	t.check( 'System nav item present', !! ( await page.$( '.minn-nav-btn[data-nav="system"]' ) ) );
 	await page.click( '#minn-sys-copy' );

@@ -4693,6 +4693,14 @@
 	function systemReportText( s ) {
 		const lines = [ `# System report — ${ esc( B.site.name ) }`, '' ];
 		s.checks.forEach( ( c ) => lines.push( `${ c.status === 'pass' ? '✓' : c.status === 'warn' ? '!' : '✗' } ${ c.label}: ${ c.detail }` ) );
+		if ( s.licenses && s.licenses.items.length ) {
+			lines.push( '', '## Licenses (stored state, not live)' );
+			s.licenses.items.forEach( ( it ) => lines.push(
+				`- ${ it.name }${ it.kind === 'theme' ? ' [theme]' : '' }: ${ it.state }`
+				+ ( it.expires ? ` (${ it.expires === 'lifetime' ? 'lifetime' : 'expires ' + it.expires })` : '' )
+				+ ( it.note ? ` — ${ it.note }` : '' )
+			) );
+		}
 		s.groups.forEach( ( g ) => {
 			lines.push( '', `## ${ g.title }` );
 			g.rows.forEach( ( r ) => lines.push( `- ${ r.key }: ${ r.value || '—' }` ) );
@@ -4705,14 +4713,6 @@
 				g.autoload.top.forEach( ( t ) => lines.push( `- ${ t.name } — ${ t.size }` ) );
 			}
 		} );
-		if ( s.licenses && s.licenses.items.length ) {
-			lines.push( '', '## Licenses (stored state, not live)' );
-			s.licenses.items.forEach( ( it ) => lines.push(
-				`- ${ it.name }${ it.kind === 'theme' ? ' [theme]' : '' }: ${ it.state }`
-				+ ( it.expires ? ` (${ it.expires === 'lifetime' ? 'lifetime' : 'expires ' + it.expires })` : '' )
-				+ ( it.note ? ` — ${ it.note }` : '' )
-			) );
-		}
 		const ext = s.extensions;
 		if ( ext ) {
 			lines.push( '', `## Plugins (${ ext.active_plugins } active of ${ ext.plugins.length })` );
@@ -4789,7 +4789,7 @@
 		const log = cfg && cfg.log;
 		const showDebug = cfg && ( cfg.editable || ( log && log.exists ) );
 		const debugCard = showDebug ? `
-			<div class="minn-card minn-sys-debug">
+			<div class="minn-card minn-sys-debug" id="minn-sys-debug">
 				<div class="minn-sys-card-head">${ icon( 'bug' ) }<span>Debug tools</span>
 					${ cfg.editable ? '<span class="minn-sys-debug-hint">writes wp-config.php</span>' : '' }
 				</div>
@@ -4828,7 +4828,7 @@
 				<div class="minn-sys-ext-grid">${ items.map( ( it ) => extItem( it, activeBadge ) ).join( '' ) }</div>
 			</div>` : '';
 		const extCard = ext ? `
-			<div class="minn-card minn-sys-ext">
+			<div class="minn-card minn-sys-ext" id="minn-sys-extensions">
 				<div class="minn-sys-card-head">${ icon( 'plug' ) }<span>Extensions</span>
 					<span class="minn-sys-debug-hint">${ ext.active_plugins } active · ${ ext.plugins.length } plugins · ${ ext.themes.length } themes</span>
 				</div>
@@ -4937,7 +4937,17 @@
 				</div>
 				<button class="minn-btn-soft" id="minn-sys-copy">${ icon( 'clipboard' ) } Copy report</button>
 			</div>
-			<div class="minn-sys-checks">
+			<div class="minn-sys-jump" id="minn-sys-jump">
+				${ [
+					[ 'Health', 'minn-sys-sec-health' ],
+					licCard ? [ 'Licenses', 'minn-sys-licenses' ] : null,
+					debugCard ? [ 'Debug', 'minn-sys-debug' ] : null,
+					[ 'System', 'minn-sys-grid' ],
+					extCard ? [ 'Extensions', 'minn-sys-extensions' ] : null,
+					intCard ? [ 'Integrations', 'minn-sys-integrations' ] : null,
+				].filter( Boolean ).map( ( [ label, id ] ) => `<button data-jump="${ id }">${ label }</button>` ).join( '' ) }
+			</div>
+			<div class="minn-sys-checks" id="minn-sys-sec-health">
 				${ s.checks.map( ( c ) => `
 					<div class="minn-sys-check ${ esc( c.status ) }">
 						${ dot( c.status ) }
@@ -4947,14 +4957,46 @@
 						</div>
 					</div>` ).join( '' ) }
 			</div>
+			${ licCard }
 			${ debugCard }
-			<div class="minn-sys-grid">
+			<div class="minn-sys-grid" id="minn-sys-grid">
 				${ s.groups.map( groupCard ).join( '' ) }
 			</div>
-			${ licCard }
 			${ extCard }
 			${ intCard }
 			<div class="minn-sys-foot">Generated ${ esc( timeAgo( s.generated ) ) }</div>`;
+
+		// Sticky jump bar: smooth-scroll to a section, scroll-spy highlights
+		// the one under the bar. The handler lives on the scroller (which
+		// outlives view swaps), so replace any previous one instead of
+		// stacking listeners across re-renders.
+		const jumpBar = $( '#minn-sys-jump', view );
+		const jumpScroller = $( '.minn-scroll' );
+		if ( jumpBar && jumpScroller ) {
+			const jumpBtns = $$( '[data-jump]', jumpBar );
+			jumpBtns.forEach( ( b ) => b.addEventListener( 'click', () => {
+				const el = document.getElementById( b.dataset.jump );
+				if ( el ) jumpScroller.scrollTo( { top: Math.max( 0, el.offsetTop - jumpBar.offsetHeight - 34 ), behavior: 'smooth' } );
+			} ) );
+			let spyRaf = 0;
+			const spy = () => {
+				spyRaf = 0;
+				if ( ! document.getElementById( 'minn-sys-jump' ) ) return; // left the page
+				const line = jumpScroller.scrollTop + jumpBar.offsetHeight + 60;
+				let cur = jumpBtns[ 0 ];
+				jumpBtns.forEach( ( b ) => {
+					const el = document.getElementById( b.dataset.jump );
+					if ( el && el.offsetTop <= line ) cur = b;
+				} );
+				jumpBtns.forEach( ( b ) => b.classList.toggle( 'active', b === cur ) );
+			};
+			if ( jumpScroller._minnSysSpy ) jumpScroller.removeEventListener( 'scroll', jumpScroller._minnSysSpy );
+			jumpScroller._minnSysSpy = () => {
+				if ( ! spyRaf ) spyRaf = requestAnimationFrame( spy );
+			};
+			jumpScroller.addEventListener( 'scroll', jumpScroller._minnSysSpy, { passive: true } );
+			spy();
+		}
 
 		$$( '[data-const]', view ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {
 			const name = btn.dataset.const;
