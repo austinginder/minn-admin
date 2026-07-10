@@ -50,6 +50,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await openSystem();
 		let text = await page.$eval( '#minn-sys-licenses', ( el ) => el.textContent );
 		t.check( 'card lists a real paid component', /Elementor Pro/.test( text ) );
+		const offRow = await page.evaluate( () => {
+			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.find( ( r ) => r.textContent.includes( 'AnalyticsWP' ) );
+			return el ? { off: el.classList.contains( 'off' ), note: /not active; activate the plugin/.test( el.textContent ) } : null;
+		} );
+		t.check( 'inactive components are dimmed and explained', offRow && offRow.off && offRow.note, JSON.stringify( offRow ) );
 		t.check( 'unlicensed dev components read "No license"', /No license/.test( text ) );
 		t.check( 'card states its read-only posture', /never the network/.test( text ) );
 		const healthBase = await page.$$eval( '.minn-sys-check', ( els ) =>

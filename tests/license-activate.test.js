@@ -174,6 +174,34 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		}, null, { timeout: 15000 } );
 		t.check( 'deactivated row returns to No license', true );
 
+		/* ===== Multi-secret provider renders both fields and activates ===== */
+		await page.evaluate( () => {
+			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.find( ( r ) => r.textContent.includes( 'Fixture Two-Field Pro' ) );
+			el.querySelector( '[data-lic="activate"]' ).click();
+		} );
+		const twoFields = await page.evaluate( () => {
+			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.find( ( r ) => r.textContent.includes( 'Fixture Two-Field Pro' ) );
+			return [ ...el.querySelectorAll( '.minn-lic-key' ) ].map( ( i ) => i.placeholder );
+		} );
+		t.check( 'two-secret vendor renders both labeled fields', twoFields.length === 2 && twoFields[ 0 ] === 'Fixture username' && twoFields[ 1 ] === 'Fixture API key', JSON.stringify( twoFields ) );
+		await page.keyboard.type( 'fixture-user' );
+		await page.evaluate( () => {
+			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.find( ( r ) => r.textContent.includes( 'Fixture Two-Field Pro' ) );
+			el.querySelectorAll( '.minn-lic-key' )[ 1 ].focus();
+		} );
+		await page.keyboard.type( 'fixture-api' );
+		await page.keyboard.press( 'Enter' );
+		await waitToast( 'License activated' );
+		await page.waitForFunction( () => {
+			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.find( ( r ) => r.textContent.includes( 'Fixture Two-Field Pro' ) );
+			return el && el.querySelector( '.minn-lic-pill' ).textContent === 'Valid';
+		}, null, { timeout: 15000 } );
+		t.check( 'two-secret activation lands as Valid', true );
+
 		/* ===== manage_options gate on the action route ===== */
 		const ctx2 = await browser.newContext( { ignoreHTTPSErrors: true } );
 		const p2 = await ctx2.newPage();
@@ -197,10 +225,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	} finally {
 		await page.evaluate( async () => {
 			const h = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };
-			await fetch( window.MINN.restUrl + 'minn-admin/v1/licenses/action', {
-				method: 'POST', headers: h, credentials: 'same-origin',
-				body: JSON.stringify( { provider: 'minn-fixture-activatable', action: 'deactivate' } ),
-			} ).catch( () => {} );
+			for ( const provider of [ 'minn-fixture-activatable', 'minn-fixture-twofield' ] ) {
+				await fetch( window.MINN.restUrl + 'minn-admin/v1/licenses/action', {
+					method: 'POST', headers: h, credentials: 'same-origin',
+					body: JSON.stringify( { provider, action: 'deactivate' } ),
+				} ).catch( () => {} );
+			}
 		} ).catch( () => {} );
 		await setOpt( false ).catch( () => {} );
 	}
