@@ -7723,7 +7723,7 @@
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,minn_builder${ extraKeys }` );
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			// A builder that OWNS the canvas (Elementor/Beaver/Brizy/Divi-4:
 			// canonical content lives outside post_content) forces locked mode —
@@ -7777,6 +7777,12 @@
 				parentPick: null,
 				excerpt: ( p.excerpt && ( p.excerpt.raw != null ? p.excerpt.raw : '' ) ) || '',
 				supportsExcerpt: 'excerpt' in p,
+				// Post format: present only when the type supports post-formats
+				// AND the active theme declares formats (B.postFormats non-empty),
+				// mirroring wp-admin's Format box.
+				format: p.format || 'standard',
+				formatDirty: false,
+				supportsFormat: ( 'format' in p ) && !! ( B.postFormats && Object.keys( B.postFormats ).length ),
 			};
 			if ( state.editorType === 'posts' && ( p.tags || [] ).length ) {
 				api( `wp/v2/tags?include=${ p.tags.join( ',' ) }&per_page=100&_fields=id,name` )
@@ -7956,6 +7962,7 @@
 		if ( ed.templateDirty ) payload.template = ed.template || '';
 		if ( ed.orderDirty ) payload.menu_order = ed.menuOrder || 0;
 		if ( ed.excerptDirty ) payload.excerpt = ed.excerpt;
+		if ( ed.formatDirty ) payload.format = ed.format || 'standard';
 		if ( ed.slugDirty ) payload.slug = ed.slugValue;
 		if ( ed.commentDirty ) payload.comment_status = ed.commentStatus;
 		if ( ed.pingDirty ) payload.ping_status = ed.pingStatus;
@@ -8014,6 +8021,7 @@
 			if ( 'ping_status' in p ) ed.pingStatus = p.ping_status;
 			if ( 'password' in p ) ed.password = p.password || '';
 			if ( 'sticky' in p ) { ed.sticky = !! p.sticky; ed.serverSticky = !! p.sticky; }
+			if ( 'format' in p ) ed.format = p.format || 'standard';
 			ed.visibility = p.status === 'private' ? 'private' : ( ed.password ? 'password' : 'public' );
 			ed.link = p.link;
 			if ( p.date ) ed.date = p.date;
@@ -8027,6 +8035,7 @@
 			ed.templateDirty = false;
 			ed.orderDirty = false;
 			ed.excerptDirty = false;
+			ed.formatDirty = false;
 			ed.slugDirty = false;
 			ed.commentDirty = false;
 			ed.pingDirty = false;
@@ -9291,6 +9300,11 @@
 					</div>
 					${ LIVE_STATUSES.includes( ed.status ) ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
 				</div>
+				${ ed.supportsFormat ? `<div>Format
+					<select class="minn-input" id="minn-post-format">
+						${ Object.entries( B.postFormats ).map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }"${ ed.format === slug ? ' selected' : '' }>${ esc( label ) }</option>` ).join( '' ) }
+					</select>
+				</div>` : '' }
 				${ ed.type === 'posts' ? `<div>Categories<div class="minn-chips" id="minn-editor-cats">${
 					cats == null ? '<span class="minn-chip">Loading…</span>'
 					: cats.map( ( c ) => `<button class="minn-chip pick${ ed.categoryIds.has( c.id ) ? ' sel' : '' }" data-cat="${ c.id }">${ esc( c.name ) }</button>` ).join( '' )
@@ -9344,6 +9358,13 @@
 		if ( excerptInput ) excerptInput.addEventListener( 'input', () => {
 			ed.excerpt = excerptInput.value;
 			ed.excerptDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const fmtSel = $( '#minn-post-format', el );
+		if ( fmtSel ) fmtSel.addEventListener( 'change', () => {
+			ed.format = fmtSel.value;
+			ed.formatDirty = true;
+			ed.dirty = true;
 			if ( ed.id ) scheduleAutosave();
 		} );
 		const slugInput = $( '#minn-slug-input', el );

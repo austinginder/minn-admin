@@ -15,17 +15,25 @@ gets a status and a judgment on whether the gap blocks daily work.
    machinery, then the source is deleted). Editors get it via
    `manage_categories`; per-taxonomy capabilities are enforced by core's
    REST routes.
-2. **Media caption and description** — the media detail modal edits title and
-   alt text only. Captions are daily work for content teams.
-3. **Media bulk select/delete** — content lists have bulk operations; the
-   media library has none.
-4. **Comment bulk moderation** — every comment action is one row at a time.
-   Bites any site with real comment volume. (The Settings → Spam blocklist
-   softens the "ban this pattern" case.)
-5. **Bulk user role change** — users are row-at-a-time; matters at scale.
-6. **Per-post format picker** — `post_format` sits in `TAX_SKIP`, so
-   format-driven themes can't be worked in Minn. `default_post_format` is
-   settable, the per-post choice is not. Small, but it's a one-field gap.
+2. **Media caption and description** — ✅ shipped (v0.11.0 cycle): the media
+   detail modal now edits caption and description alongside title and alt,
+   carrying the edit-context raw value (fetched lazily so the list stays
+   light) and saving through wp/v2/media.
+3. **Media bulk select/delete** — ✅ shipped (v0.11.0 cycle): grid tiles and
+   list rows carry a checkbox (shift-range, select-all) with a delete bar
+   mirroring the content-list pattern; force=true, per item.
+4. **Comment bulk moderation** — ✅ shipped (v0.11.0 cycle): comment rows get
+   a checkbox + Select-page, and a bar whose verbs are the current tab's own
+   actions (Approve/Spam/Trash on Pending, Restore/Delete on Trash, and so
+   on), applied per item.
+5. **Bulk user role change** — ✅ shipped (v0.11.0 cycle): the users table
+   gains a checkbox column (gated on edit-users) and a bar to change every
+   selected user's role at once; the current user is skipped (self-lockout
+   guard).
+6. **Per-post format picker** — ✅ shipped (v0.11.0 cycle): the editor sidebar
+   has a Format select, gated on the active theme declaring post-format
+   support (matching wp-admin), saving through wp/v2's native `format`
+   field. Boot payload carries the supported formats.
 
 ## Area-by-area status
 

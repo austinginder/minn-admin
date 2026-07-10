@@ -384,10 +384,41 @@ class Minn_Admin {
 			 * (search-only slash-menu entries). See insertable_blocks().
 			 */
 			'insertBlocks' => self::insertable_blocks( $block_forms ),
+			/**
+			 * Post formats the active theme supports (drives the editor's
+			 * Format picker). Empty when the theme declares no post-format
+			 * support, so Minn hides the control exactly as wp-admin does.
+			 * 'standard' always leads as the default.
+			 */
+			'postFormats' => self::supported_post_formats(),
 		);
 
 		include MINN_ADMIN_DIR . 'includes/template.php';
 		exit;
+	}
+
+	/**
+	 * Post formats the active theme supports, as { slug => label } with
+	 * 'standard' first. Empty when the theme declares no post-format support
+	 * (Minn then hides the editor's Format picker, matching wp-admin). The
+	 * label strings come from core's get_post_format_strings().
+	 *
+	 * @return array<string,string>
+	 */
+	public static function supported_post_formats() {
+		$support = get_theme_support( 'post-formats' );
+		if ( ! is_array( $support ) || empty( $support[0] ) || ! is_array( $support[0] ) ) {
+			return array();
+		}
+		$strings = get_post_format_strings(); // includes 'standard'
+		$out     = array( 'standard' => isset( $strings['standard'] ) ? $strings['standard'] : 'Standard' );
+		foreach ( $support[0] as $slug ) {
+			$slug = sanitize_key( $slug );
+			if ( '' !== $slug && isset( $strings[ $slug ] ) ) {
+				$out[ $slug ] = $strings[ $slug ];
+			}
+		}
+		return $out;
 	}
 
 	/**
