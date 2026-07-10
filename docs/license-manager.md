@@ -189,6 +189,87 @@ revert-on-rejection); Gravity SMTP validates through its container's
 license connector before storing via its own data store. Both verified
 against Gravity's live API with bogus keys.
 
+**Wave 5 (shipped 2026-07-10): the fleet-ranked uncovered tail.** Eleven
+new readers, source-verified against real builds pulled from the
+CaptainCore quicksave archive and installed inactive on minnadmin:
+
+- **WPMU DEV** (`wpmudev`): one Hub API key (site option `wpmudev_apikey`
+  or the `WPMUDEV_APIKEY` constant) unlocks the family. Membership status
+  reads from the Hub-cached `wdp_un_membership_data` (`full`/`unit`/
+  `single`/`free` = valid, `paused` = invalid, `expired`, empty/numeric
+  handled). Activation mirrors their own auth endpoint minus the redirect:
+  `set_key()` then a forced `hub_sync()`; an invalid or expired key comes
+  back with an empty `membership` (their own sync logs the site out in
+  that case). Deactivate is `logout( false )`. Pinned via the wp-config
+  constant means no paste field (`set_key` would be overridden next boot).
+- **Smush Pro** (`smush-pro`): rides the Dashboard key but keeps its OWN
+  24-hour validity cache `wp_smush_api_auth` (a per-key `{validity,
+  timestamp}` map). Read-only; it has no independent key to paste.
+- **SearchWP** (`searchwp`): one option `searchwp_license`
+  `{key,status,expires,type}`. Its EDD updater is renamed
+  (`SearchWP\Updater`), so the generic filename sweep can never fingerprint
+  it. Activate/deactivate/verify through `\SearchWP\License`.
+- **Gravity Perks** (`gravityperks`): key in the `gwp_settings` SITE
+  option; validity cached in a version-suffixed 12-hour site transient
+  `gwp_license_data_{version}`. Not an EDD-updater plugin (custom `GWAPI`).
+  Activate/deactivate/verify through `GWPerks`/`GravityPerks`.
+- **Rank Math Pro** (`rank-math-pro`): reads the free plugin's
+  `rank_math_connect_data` (`username`/`api_key`/`plan`). Registration is
+  a rankmath.com portal handshake owned by the free plugin, so the control
+  is an `activate_url` to `admin.php?page=rank-math&view=registration`.
+- **Perfmatters** (`perfmatters`): plain `perfmatters_edd_license_*`
+  option pair (site options on multisite). Builds vary on whether they
+  ship the SL updater file, so a dedicated reader (which claims the
+  component and supersedes the generic sweep) is the reliable coverage.
+  Activate/deactivate/verify through `\Perfmatters\License`.
+- **GP Premium** (`gp-premium`): its option names break both generic-sweep
+  assumptions (`gen_premium_` prefix vs `gp-premium` slug, and the status
+  option is `..._license_key_status`), so it gets a dedicated reader.
+  Activation drives its own REST route (`/generatepress-pro/v1/license/`)
+  via `rest_do_request`; empty key = deactivate, `***` = re-verify.
+- **WP All Import Pro / WP All Export Pro** (`wp-all-import` /
+  `wp-all-export`): everything inside the serialized `PMXI_Plugin_Options`
+  (class-keyed `licenses`/`statuses` maps) / `PMXE_Plugin_Options` (flat
+  `license`/`license_status`); keys are salt-wrapped. Export activates
+  through their `LicenseActivator` (stores the key their way first);
+  Import's only paste path is a nonce-gated admin controller, so it gets a
+  verify (their public static `check_license`) plus an "Activate ↗" link.
+- **Slider Revolution** (`revslider`): flat `revslider-code` +
+  `revslider-valid` (the string `'true'`/`'false'`); activate/deactivate
+  through `RevSliderLicense` (`'exist'` = the site-limit result).
+- **LayerSlider** (`layerslider`): `layerslider-purchase-code` +
+  `layerslider-authorized-site` (1/0). Its updater exposes
+  `handleActivation( $code, ['skipRefererCheck'=>true,'returnData'=>true] )`
+  which is their own re-validation path; verify reuses it with the stored
+  code. Its deactivate handler `die()`s mid-request, so releasing the seat
+  stays on their screen.
+- **Avada** (`avada`, theme): `fusion_registration_data['avada']` carries
+  the purchase code and a strict `is_valid` flag; one code covers the
+  bundled Avada plugins. Store paths are nonce/WP-CLI coupled, so read-only.
+- **Envato Market** (`envato-market`): the account OAuth token is
+  presence-only (Envato records no local validity → `unknown`), plus any
+  per-item single-use tokens that DO carry an `authorized` success/failed
+  flag; purchased-item counts ride the plugin's own hourly transients when
+  warm. Token entry is a nonce-coupled Settings-API screen, so an
+  "Activate ↗" link.
+- **The Events Calendar family + StellarWP Uplink** (`stellarwp`,
+  registry-style): PUE keys in per-plugin `pue_install_key_{slug}` options
+  have NO local validity (the checker lives in tribe-common), so those
+  rows are honest presence-only; Uplink stores per-slug key options plus a
+  domain-suffixed status option that classifies valid/invalid.
+
+Read classification for every one of these is proven by
+tests/license-vendors.test.js (21 checks: seeds each real option shape,
+asserts the state pill, then CLEARS the options (plain options are not
+settings-API deletable, so a crash-aborted run cannot leave a fake license
+behind). The activation plumbing is exercised per-vendor against the live
+vendor APIs as the owner's manual step, exactly like the earlier waves.
+The generic EDD/Freemius verification pass is now moot for the tail: the
+audit found the filename-only EDD fingerprint MISSES the renamed-updater
+plugins (SearchWP, Soflyy) and the option-pair sweep MISSES GP Premium's
+naming, so dedicated readers cover them all; Perfmatters could go either
+way by build, and its dedicated reader wins to avoid double rows.
+
 ## Next candidates, ranked by real fleet impact (2026-07-10)
 
 Measured across 2,790 production sites on the CaptainCore fleet (the
@@ -196,24 +277,28 @@ Manager DB inventory, classified against wp.org; full sourcing paths in the
 2026-07-10 session record). The already-covered set tops the fleet chart:
 Gravity Forms 2,543 sites, Gravity SMTP 1,440, Elementor Pro 1,191, ACF PRO
 1,001, WP Rocket 286, Divi 259, WPBakery 129+, Beaver Builder 43+, Bricks
-32. The uncovered tail, in order:
+32. The uncovered tail; wave 5 (2026-07-10) shipped items 1-4 and most of 5-6:
 
-1. **WPMU DEV** (Dashboard membership key): 488 sites with the dashboard,
-   425 with Smush Pro. One key unlocks the family; the largest uncovered
-   footprint by far.
-2. **Envato Market** (purchase-code/token model): 459 distinct sites carry
-   at least one Envato-licensed component (Avada + Fusion, Slider
-   Revolution, LayerSlider, betheme, jupiter, The7, salient, enfold, Total,
-   bridge, flatsome). One adapter, eleven products.
-3. **StellarWP / The Events Calendar Pro** (uplink): 116 sites.
-4. **Gravity Wiz / Gravity Perks** (~103 sites): pairs with the GF adapter.
-5. **Rank Math Pro** (92), **SearchWP** (87), **Soflyy WP All
-   Import/Export Pro** (81+), **Yoast Premium** (78), **Smash Balloon**
-   (64), **Admin Columns Pro** (140, reader already covers it).
-6. **Cheap wins**: verify the generic Freemius/EDD readers light up
-   Perfmatters (142), GP Premium, Search & Filter Pro, Unlimited Elements,
-   Stackable Premium and Permalink Manager Pro with no vendor code
-   (~380 site-installs combined).
+1. ~~**WPMU DEV**~~ SHIPPED (Dashboard + Smush Pro): 488 + 425 sites.
+2. ~~**Envato Market**~~ SHIPPED (token/purchase-code): 459 sites. The
+   adapter reads the account token + per-item tokens; Avada, Slider
+   Revolution and LayerSlider also got their own dedicated readers (their
+   codes are stored independently of the Envato Market plugin).
+3. ~~**StellarWP / The Events Calendar**~~ SHIPPED (PUE + Uplink registry):
+   116 sites.
+4. ~~**Gravity Wiz / Gravity Perks**~~ SHIPPED (~103 sites): pairs with GF.
+5. ~~**Rank Math Pro**~~ SHIPPED (92), ~~**SearchWP**~~ SHIPPED (87),
+   ~~**Soflyy WP All Import/Export Pro**~~ SHIPPED (81+), **Yoast Premium**
+   (78, still open), **Smash Balloon** (64, still open), **Admin Columns
+   Pro** (140, reader already covers it).
+6. **Cheap wins**: ~~Perfmatters~~ (142) and ~~GP Premium~~ both got
+   dedicated readers this wave (the generic sweep does NOT cover them:
+   renamed and nonstandard option names). Still open with no vendor code:
+   Search & Filter Pro, Unlimited Elements, Stackable Premium, Permalink
+   Manager Pro (verify the Freemius/EDD sweeps light these up).
+
+Remaining fleet-ranked open work: Yoast Premium, Smash Balloon, and the
+long-tail Freemius/EDD verification list above.
 
 Test builds source from the CaptainCore quicksave repos
 (`captaincore quicksave archive` extracts a plugin/theme zip from a
@@ -249,9 +334,12 @@ the vendor's product.
 ## Status
 
 Phase 0 shipped 2026-07-10 (visibility: the Licenses card, health check,
-SDK-generic readers). Phase 1 wave 1 shipped the same day (paste-to-activate
-+ deactivate for Elementor Pro and ACF PRO, re-verify for WP Rocket and
-Elementor Pro, the documented provider action contract, no locker by
-design). Remaining: a real-key activation pass by the owner, then more
-vendors (Bricks, the Freemius and EDD SDK families, Envato purchase codes)
-and `verify` coverage for the transient-based vendors.
+SDK-generic readers). Phase 1 waves 1-5 shipped the same day: the documented
+provider action contract, no locker by design, and readers + actions for
+Elementor Pro, ACF PRO, WP Rocket, Gravity Forms, Gravity SMTP, Beaver
+Builder, Brizy Pro, Etch, Bricks, Divi, and the fleet-ranked tail (WPMU DEV,
+Smush Pro, SearchWP, Gravity Perks, Rank Math Pro, Perfmatters, GP Premium,
+WP All Import/Export Pro, Slider Revolution, LayerSlider, Avada, Envato
+Market, The Events Calendar family + StellarWP Uplink). Remaining: a
+real-key activation pass by the owner, then Yoast Premium, Smash Balloon,
+and the long-tail Freemius/EDD verification list.
