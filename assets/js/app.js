@@ -12126,7 +12126,7 @@
 	function renderNotifPanel() {
 		const items = state.cache.notifications;
 		const tabs = [
-			[ 'all', 'All' ], [ 'comments', 'Comments' ], [ 'updates', 'Updates' ], [ 'system', 'System' ],
+			[ 'all', 'All' ], [ 'comments', 'Comments' ], [ 'updates', 'Updates' ], [ 'notices', 'Notices' ], [ 'system', 'System' ],
 		];
 		const visible = ( items || [] ).filter( ( n ) => state.notifTab === 'all' || n.kind === state.notifTab );
 		const groups = [];
@@ -14562,6 +14562,7 @@
 					renderOverlays();
 					// Take the user to the thing the notification is about.
 					if ( item.kind === 'comments' && B.caps.moderate ) go( 'comments' );
+					else if ( item.kind === 'notices' && item.link ) window.open( item.link, '_blank' );
 					else if ( item.kind === 'updates' && B.caps.plugins ) go( 'extensions' );
 					else if ( item.id.startsWith( 'user-' ) && B.caps.users ) go( 'users' );
 					else if ( item.id.startsWith( 'core-' ) && B.caps.core ) go( 'extensions' );
@@ -14849,6 +14850,19 @@
 
 		// Background: unread indicator, plugin update dot, pending comment count.
 		loadNotifications();
+		// Admin-notice digest: when the last capture is stale, trigger a
+		// hidden wp-admin pageload that Minn short-circuits into structured
+		// notice data (never third-party HTML), then refresh notifications.
+		if ( B.notices && B.notices.stale ) {
+			fetch( B.notices.url, { credentials: 'same-origin' } )
+				.then( ( r ) => ( r.ok ? r.json() : null ) )
+				.then( ( d ) => {
+					if ( ! d || ! d.ok ) return;
+					state.cache.notifications = null;
+					loadNotifications().then( () => state.notifOpen && renderOverlays() );
+				} )
+				.catch( () => {} );
+		}
 		if ( B.caps.plugins ) {
 			loadPlugins().catch( () => {} );
 		}

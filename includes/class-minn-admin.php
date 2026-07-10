@@ -342,6 +342,14 @@ class Minn_Admin {
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),
 			'editorPanels' => Minn_Admin_Surfaces::editor_panels_for_current_user(),
+			// Admin-notice digest: the client triggers this nonced wp-admin
+			// pageload in the background when stale; Minn extracts other
+			// plugins' notices into structured data for the notification
+			// panel (class-minn-admin-notices.php).
+			'notices'  => array(
+				'url'   => Minn_Admin_Notices::capture_url(),
+				'stale' => Minn_Admin_Notices::is_stale(),
+			),
 			// Active page builders — drives "+ New → Page in ⟨builder⟩"
 			// (docs/page-builders.md; adapters/page-builders.php).
 			'builders' => minn_admin_page_builders_boot(),
