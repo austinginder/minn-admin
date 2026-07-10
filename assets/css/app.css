@@ -460,8 +460,21 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-view-tab { width: 30px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; color: var(--text3); border: none; border-radius: 6px; cursor: pointer; }
 .minn-view-tab.active { background: var(--panel2); color: var(--text); }
 .minn-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
-.minn-media-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; }
+.minn-media-card { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; }
 .minn-media-card:hover { border-color: var(--border2); }
+.minn-media-card.sel { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -2px; }
+.minn-media-row.sel { background: var(--accent-soft); }
+/* Grid checkbox: a corner overlay revealed on hover or once anything is
+   selected; list checkbox is an inline leading control. */
+.minn-media-check {
+  position: absolute; top: 7px; left: 7px; z-index: 2; display: flex;
+  padding: 3px; border-radius: 6px; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);
+  opacity: 0; transition: opacity 0.12s;
+}
+.minn-media-card:hover .minn-media-check,
+.minn-media-check:has(:checked) { opacity: 1; }
+.minn-media-check.row { position: static; opacity: 1; background: none; backdrop-filter: none; padding: 0; }
+.minn-media-check input { cursor: pointer; width: 15px; height: 15px; accent-color: var(--accent); margin: 0; }
 .minn-media-thumb { height: 110px; position: relative; display: flex; align-items: flex-start; background-size: cover; background-position: center; }
 .minn-media-badge {
   margin: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: #fff;

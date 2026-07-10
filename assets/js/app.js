@@ -1905,6 +1905,27 @@
 		} );
 	}
 
+	// Bulk delete for the media library's selection (force=true — attachments
+	// have no trash by default). One confirm, then per-item so one failure
+	// never aborts the rest.
+	async function bulkDeleteMedia( btn ) {
+		const ids = Array.from( state.mediaSel || [] );
+		if ( ! ids.length ) return;
+		if ( ! confirm( `Delete ${ ids.length } file${ ids.length === 1 ? '' : 's' } permanently? This cannot be undone.` ) ) return;
+		btn.disabled = true;
+		btn.textContent = 'Deleting…';
+		let ok = 0, fail = 0;
+		for ( const id of ids ) {
+			try { await api( `wp/v2/media/${ id }?force=true`, { method: 'DELETE' } ); ok++; }
+			catch ( e ) { fail++; }
+		}
+		state.mediaSel.clear();
+		state.mediaLastIdx = null;
+		state.cache.media = null;
+		toast( fail ? `Deleted ${ ok }, ${ fail } failed` : `Deleted ${ ok } file${ ok === 1 ? '' : 's' }`, fail > 0 && ok === 0 );
+		if ( state.route === 'media' ) renderMedia();
+	}
+
 	// Shared by the preview modal's Delete and the grid context menu.
 	async function deleteMediaItem( it ) {
 		if ( ! confirm( `Delete “${ it.name }” permanently?` ) ) return;
@@ -2000,6 +2021,7 @@
 			</div>
 			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn">${ icon( 'upload' ) } Upload</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
 		</div>
+		<div id="minn-media-bulk-slot"></div>
 		${ state.uploadOpen && B.caps.upload ? `
 		<div class="minn-dropzone" id="minn-dropzone">
 			${ icon( 'upload' ) }
@@ -2010,6 +2032,7 @@
 		<div class="minn-media-grid">
 			${ mapped.map( ( m ) => `
 				<div class="minn-media-card" data-media="${ m.id }">
+					${ B.caps.upload ? `<label class="minn-media-check" title="Select"><input type="checkbox" class="minn-media-cb" data-cbid="${ m.id }"></label>` : '' }
 					<div class="minn-media-thumb" style="${ thumbStyle( m ) }"><span class="minn-media-badge">${ m.kind }</span></div>
 					<div class="minn-media-info">
 						<div class="minn-media-name">${ esc( m.name ) }</div>
@@ -2020,6 +2043,7 @@
 		<div class="minn-card minn-media-list">
 			${ mapped.map( ( m ) => `
 				<div class="minn-media-row" data-media="${ m.id }">
+					${ B.caps.upload ? `<label class="minn-media-check row" title="Select"><input type="checkbox" class="minn-media-cb" data-cbid="${ m.id }"></label>` : '' }
 					<div class="minn-media-thumb-sm" style="${ thumbStyle( m ) }"></div>
 					<div class="minn-media-col">
 						<div class="minn-row-title">${ esc( m.name ) }</div>
@@ -2083,6 +2107,58 @@
 				] );
 			} );
 		} );
+		// Bulk select + delete — mirrors the content-list pattern (shift-range,
+		// select-count bar in a slot updated in place, no full re-render on toggle).
+		if ( B.caps.upload ) {
+			const msel = state.mediaSel || ( state.mediaSel = new Set() );
+			const syncMediaBulk = () => {
+				const slot = $( '#minn-media-bulk-slot', view );
+				if ( ! slot ) return;
+				if ( ! msel.size ) { slot.innerHTML = ''; return; }
+				if ( ! $( '.minn-bulkbar', slot ) ) {
+					slot.innerHTML = `
+						<div class="minn-bulkbar">
+							<span class="minn-bulk-count">${ msel.size } selected</span>
+							<button class="minn-btn-soft danger" id="minn-media-bulk-delete">${ icon( 'trash' ) } Delete permanently</button>
+							<button class="minn-btn-soft" id="minn-media-bulk-clear" style="margin-left:auto;">Clear</button>
+						</div>`;
+					$( '#minn-media-bulk-delete', slot ).addEventListener( 'click', ( e ) => bulkDeleteMedia( e.currentTarget ) );
+					$( '#minn-media-bulk-clear', slot ).addEventListener( 'click', () => {
+						msel.clear();
+						$$( '.minn-media-cb', view ).forEach( ( c ) => { c.checked = false; c.closest( '[data-media]' ).classList.remove( 'sel' ); } );
+						syncMediaBulk();
+					} );
+				} else {
+					$( '.minn-bulk-count', slot ).textContent = msel.size + ' selected';
+				}
+			};
+			// Reflect a selection that survived a re-render (paginate, search).
+			$$( '.minn-media-cb', view ).forEach( ( cb ) => {
+				const id = parseInt( cb.dataset.cbid, 10 );
+				if ( msel.has( id ) ) { cb.checked = true; cb.closest( '[data-media]' ).classList.add( 'sel' ); }
+			} );
+			syncMediaBulk();
+			const setMediaSel = ( m, on ) => {
+				if ( on ) msel.add( m.id ); else msel.delete( m.id );
+				const cb = view.querySelector( `.minn-media-cb[data-cbid="${ m.id }"]` );
+				if ( cb ) { cb.checked = on; cb.closest( '[data-media]' ).classList.toggle( 'sel', on ); }
+			};
+			$$( '.minn-media-cb', view ).forEach( ( cb ) =>
+				cb.addEventListener( 'click', ( e ) => {
+					e.stopPropagation(); // never open the preview modal from the checkbox
+					const id = parseInt( cb.dataset.cbid, 10 );
+					const idx = mapped.findIndex( ( m ) => m.id === id );
+					if ( e.shiftKey && state.mediaLastIdx != null && state.mediaLastIdx !== idx && mapped[ state.mediaLastIdx ] ) {
+						const lo = Math.min( state.mediaLastIdx, idx ), hi = Math.max( state.mediaLastIdx, idx );
+						for ( let i = lo; i <= hi; i++ ) setMediaSel( mapped[ i ], cb.checked );
+					} else {
+						setMediaSel( mapped[ idx ], cb.checked );
+					}
+					state.mediaLastIdx = idx;
+					syncMediaBulk();
+				} )
+			);
+		}
 		bindPager( view, c.page, loadMedia, () => { if ( state.route === 'media' ) renderMedia(); } );
 		const uploadBtn = $( '#minn-upload-btn', view );
 		if ( uploadBtn ) {
