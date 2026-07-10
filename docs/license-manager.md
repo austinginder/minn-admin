@@ -166,11 +166,25 @@ a paste field that could not work. All four callable vendors were
 plumbing-verified with bogus keys against their live APIs (clean vendor
 messages surfaced, zero leftover state).
 
-**Still deferred: Divi** (its code only loads while the theme is active, and
-it needs two secrets: username + API key, a `secret_fields` contract
-extension nothing else requires yet). Next candidates: Divi, the Freemius
-and EDD SDK families (one adapter, many products), Envato purchase-code
-direct activation where a vendor exposes one.
+**Wave 3 (shipped 2026-07-10, same day): Divi**, the first multi-secret
+provider. The contract gained `secret_fields` (id + label per credential;
+`activate` receives an id-keyed array); Divi takes the Elegant Themes
+username + API key, writes them to their site option, busts their
+`et_update_themes` cache and runs the core theme-update check so THEIR
+hooked checker validates and stamps `et_account_status`. A failed attempt
+restores the previously stored credentials (kinder than Divi's own settings
+page, which clobbers them). Verified on a disposable Divi lab with bogus
+credentials. Divi has no per-site seats, so deactivate simply clears the
+stored credentials.
+
+Rows for INACTIVE components keep their read-only license state (stored
+options need no vendor code) but render dimmed with "not active; activate
+the theme/plugin to manage its license" in place of controls, so the
+active-theme gating reads as intended behavior instead of a missing button.
+
+Next candidates: the Freemius and EDD SDK families (one adapter, many
+products), Envato purchase-code direct activation where a vendor exposes
+one.
 
 The guardrails, unchanged and load-bearing:
 
