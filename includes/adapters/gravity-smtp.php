@@ -27,6 +27,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Gravity SMTP',
 		'icon'       => 'send',
 		'cap'        => 'manage_options',
+		'family'     => 'mail',
 		'collection' => array(
 			'route'     => 'minn-admin/v1/gravity-smtp/events',
 			'pageQuery' => 'per_page=25&page={page}',
