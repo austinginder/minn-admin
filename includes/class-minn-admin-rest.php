@@ -351,6 +351,38 @@ class Minn_Admin_REST {
 			);
 		}
 
+		// Terms manager: taxonomy switcher data + merge. Term CRUD itself
+		// rides core's own wp/v2 taxonomy routes (create/update/delete with
+		// core's per-taxonomy capability checks); only merge is Minn's.
+		register_rest_route(
+			self::NS,
+			'/term-taxonomies',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'term_taxonomies' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/terms/merge',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'merge_terms' ),
+				'permission_callback' => function () {
+					return is_user_logged_in(); // real check is per-taxonomy in the callback
+				},
+				'args'                => array(
+					'taxonomy' => array( 'type' => 'string', 'required' => true ),
+					'from'     => array( 'type' => 'integer', 'required' => true ),
+					'into'     => array( 'type' => 'integer', 'required' => true ),
+				),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/themes/search',
@@ -1962,6 +1994,103 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	/**
 	 * Search the wordpress.org theme directory (proxied server-side).
 	 */
+	/**
+	 * Taxonomies the current user can manage terms in, for the Terms
+	 * manager's switcher. REST-enabled + show_ui only (a taxonomy outside
+	 * REST is invisible to Minn by construction), filtered per-user by the
+	 * taxonomy's own manage_terms capability.
+	 */
+	public static function term_taxonomies() {
+		$out = array();
+		foreach ( get_taxonomies( array( 'show_in_rest' => true, 'show_ui' => true ), 'objects' ) as $tax ) {
+			if ( ! current_user_can( $tax->cap->manage_terms ) ) {
+				continue;
+			}
+			// Only taxonomies that organize PUBLIC content — internals like
+			// wp_pattern_category (attached to wp_block) are not daily work.
+			$organizes_public = false;
+			foreach ( (array) $tax->object_type as $pt ) {
+				$obj = get_post_type_object( $pt );
+				if ( $obj && $obj->public ) {
+					$organizes_public = true;
+					break;
+				}
+			}
+			if ( ! $organizes_public ) {
+				continue;
+			}
+			$count = wp_count_terms( array( 'taxonomy' => $tax->name, 'hide_empty' => false ) );
+			$out[] = array(
+				'slug'         => $tax->name,
+				'rest'         => $tax->rest_base ? $tax->rest_base : $tax->name,
+				'label'        => $tax->labels->name,
+				'item'         => strtolower( $tax->labels->singular_name ),
+				'hierarchical' => (bool) $tax->hierarchical,
+				'canDelete'    => current_user_can( $tax->cap->delete_terms ),
+				'canEdit'      => current_user_can( $tax->cap->edit_terms ),
+				'count'        => is_wp_error( $count ) ? 0 : (int) $count,
+				'types'        => array_values( (array) $tax->object_type ),
+			);
+		}
+		// Categories and tags first (the daily pair), then alphabetical.
+		usort( $out, function ( $a, $b ) {
+			$rank = array( 'category' => 0, 'post_tag' => 1 );
+			$ra   = isset( $rank[ $a['slug'] ] ) ? $rank[ $a['slug'] ] : 2;
+			$rb   = isset( $rank[ $b['slug'] ] ) ? $rank[ $b['slug'] ] : 2;
+			return $ra !== $rb ? $ra - $rb : strcasecmp( $a['label'], $b['label'] );
+		} );
+		return rest_ensure_response( $out );
+	}
+
+	/**
+	 * Merge one term into another: every object assigned to `from` gets
+	 * `into` instead, then `from` is deleted. Core has no merge endpoint,
+	 * but wp_delete_term's force_default arg IS the reassignment machinery
+	 * its own category-delete uses, so the whole operation stays core code.
+	 * Children of `from` are reparented to from's parent (core behavior).
+	 */
+	public static function merge_terms( WP_REST_Request $request ) {
+		$taxonomy = sanitize_key( $request->get_param( 'taxonomy' ) );
+		$from_id  = (int) $request->get_param( 'from' );
+		$into_id  = (int) $request->get_param( 'into' );
+
+		$tax = get_taxonomy( $taxonomy );
+		if ( ! $tax || ! $tax->show_in_rest ) {
+			return new WP_Error( 'bad_taxonomy', 'Unknown taxonomy.', array( 'status' => 404 ) );
+		}
+		if ( ! current_user_can( $tax->cap->delete_terms ) || ! current_user_can( $tax->cap->edit_terms ) ) {
+			return new WP_Error( 'forbidden', 'You cannot manage terms in this taxonomy.', array( 'status' => 403 ) );
+		}
+		if ( $from_id === $into_id ) {
+			return new WP_Error( 'same_term', 'Pick a different term to merge into.', array( 'status' => 400 ) );
+		}
+		$from = get_term( $from_id, $taxonomy );
+		$into = get_term( $into_id, $taxonomy );
+		if ( ! $from || is_wp_error( $from ) || ! $into || is_wp_error( $into ) ) {
+			return new WP_Error( 'bad_term', 'Both terms must exist in this taxonomy.', array( 'status' => 404 ) );
+		}
+
+		// Term counts only include published posts; count real assignments.
+		$objects = get_objects_in_term( $from_id, $taxonomy );
+		$moved   = is_wp_error( $objects ) ? 0 : count( $objects );
+		$result  = wp_delete_term( $from_id, $taxonomy, array(
+			'default'       => $into_id,
+			'force_default' => true,
+		) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( true !== $result ) {
+			return new WP_Error( 'merge_failed', 'The merge did not complete.', array( 'status' => 500 ) );
+		}
+		clean_term_cache( $into_id, $taxonomy );
+		return rest_ensure_response( array(
+			'ok'    => true,
+			'moved' => $moved,
+			'into'  => $into->name,
+		) );
+	}
+
 	public static function search_themes( WP_REST_Request $request ) {
 		require_once ABSPATH . 'wp-admin/includes/theme.php';
 

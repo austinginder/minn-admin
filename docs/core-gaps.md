@@ -6,11 +6,15 @@ gets a status and a judgment on whether the gap blocks daily work.
 
 ## Priority ranking (the gaps that matter)
 
-1. **Term management** — no way to rename, delete, merge or re-parent
-   categories and tags. Assignment in the editor is rich (checkboxes, tag
-   combobox with create-on-the-fly) and taxonomy *definitions* have a manager
-   (Post Types → Taxonomies), but reorganizing the terms themselves forces a
-   wp-admin trip. This is routine editorial work: the most impactful daily gap.
+1. **Term management** — ✅ shipped 2026-07-10: the **Terms** manager
+   (Manage → Terms, `/minn-admin/terms`) covers every REST-enabled taxonomy
+   with a switcher, an indented tree for hierarchical taxonomies, inline
+   create/edit (name, slug, parent, description), delete with honest
+   confirms, count links into the filtered content list, and **merge**
+   (posts move to the surviving term through core's own reassignment
+   machinery, then the source is deleted). Editors get it via
+   `manage_categories`; per-taxonomy capabilities are enforced by core's
+   REST routes.
 2. **Media caption and description** — the media detail modal edits title and
    alt text only. Captions are daily work for content teams.
 3. **Media bulk select/delete** — content lists have bulk operations; the
@@ -39,11 +43,9 @@ Menus (with drag reorder) and classic widgets are fully built; themes
 install/activate/update/delete under Extensions. Template/FSE editing,
 background and header images: out of scope by design.
 
-### Taxonomies — definitions yes, terms no
-See priority #1. A Terms manager (list, rename, edit slug/description/parent,
-delete with reassignment, merge) is the missing piece; core REST
-(`wp/v2/categories`, `wp/v2/tags`, custom taxonomy routes) covers all of it,
-so this is a pure client build with no new server machinery.
+### Taxonomies — covered
+The Terms manager shipped 2026-07-10 (see priority #1). The only server
+addition was `minn-admin/v1/terms/merge`; everything else rides core REST.
 
 ### Tools — System page strong, one-shot tools absent
 The System page covers diagnostics well (health checks, DB tables, autoload

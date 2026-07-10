@@ -322,6 +322,7 @@ class Minn_Admin {
 				'installThemes' => current_user_can( 'install_themes' ),
 				'settings'     => current_user_can( 'manage_options' ),
 				'moderate'     => current_user_can( 'moderate_comments' ),
+				'terms'        => current_user_can( 'manage_categories' ),
 				'upload'       => current_user_can( 'upload_files' ),
 				'users'        => current_user_can( 'list_users' ),
 				'readPrivate'  => current_user_can( 'read_private_posts' ),

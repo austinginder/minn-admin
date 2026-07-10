@@ -1331,6 +1331,26 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* ===== Users ===== */
 .minn-user-cols { grid-template-columns: 40px 1.2fr 1.4fr 130px 110px 40px; }
 
+/* Terms manager */
+.minn-term-cols { grid-template-columns: 1.6fr 1fr 90px 40px; }
+.minn-term-twig { color: var(--text3); font-size: 12px; }
+.minn-term-count { font: inherit; font-size: 13px; font-weight: 600; color: var(--accent2); background: none; border: 0; padding: 0; cursor: pointer; }
+.minn-term-count:hover { text-decoration: underline; }
+.minn-term-edit { padding: 14px 16px 16px; border-bottom: 1px solid var(--border); background: var(--bg2); display: flex; flex-direction: column; gap: 10px; }
+.minn-term-edit-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; }
+.minn-term-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.minn-term-field > span { font-size: 11.5px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; }
+.minn-term-edit-actions { display: flex; gap: 8px; }
+.minn-term-merge-copy { font-size: 13px; color: var(--text2); }
+.minn-ac-hint { color: var(--text3); font-size: 12px; margin-left: 6px; }
+button.minn-ac-item { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; }
+button.minn-ac-item:hover { background: var(--hover); }
+@media (max-width: 720px) {
+  .minn-term-cols { grid-template-columns: 1fr 80px 40px; }
+  .minn-term-cols > div:nth-child(2) { display: none; }
+  .minn-term-edit-grid { grid-template-columns: 1fr; }
+}
+
 /* ===== Post types ===== */
 .minn-cpt-cols { grid-template-columns: 1.4fr 1fr 120px 70px 60px 40px; }
 .minn-cpt-checks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 12px; }

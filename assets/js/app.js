@@ -277,6 +277,7 @@
 		comments: [ 'Comments', 'Moderation' ],
 		orders: [ 'Orders', 'WooCommerce' ],
 		users: [ 'Users', 'People' ],
+		terms: [ 'Terms', 'Categories & Tags' ],
 		menus: [ 'Menus', 'Navigation' ],
 		widgets: [ 'Widgets', 'Sidebars & footers' ],
 		extensions: [ 'Extensions', 'Installed' ],
@@ -651,6 +652,7 @@
 			send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
 			clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
 			key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+			tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
 			shuffle: '<path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.6-8.6c.8-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.4 0-2.6-.7-3.4-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/>',
 			trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
 			upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
@@ -748,6 +750,9 @@
 		}
 		if ( B.caps.users ) {
 			manageItems.push( { id: 'users', label: 'Users', icon: 'users' } );
+		}
+		if ( B.caps.terms ) {
+			manageItems.push( { id: 'terms', label: 'Terms', icon: 'tag' } );
 		}
 		// Classic themes only — block themes manage navigation and widget areas
 		// in the site editor, and wp-admin hides these screens the same way.
@@ -2393,6 +2398,400 @@
 			} )
 		);
 		bindPager( view, c.page, loadOrders, () => { if ( state.route === 'orders' ) renderOrders(); } );
+	}
+
+	/* ===== Terms (categories, tags, custom taxonomies) ===== */
+
+	// The Terms manager: rename, re-slug, re-parent, describe, delete and
+	// MERGE terms in any REST-enabled taxonomy. Term CRUD rides core's own
+	// wp/v2 routes (core enforces each taxonomy's capabilities); merge is
+	// minn-admin/v1/terms/merge. Hierarchical taxonomies render as a full
+	// tree (all terms fetched, capped); flat ones stay server-paginated.
+
+	const termsCtx = () => ( state.termsTax || '' ) + '|' + ( state.termSearch || '' );
+
+	const termTaxes = () => state.cache.termTaxes || [];
+	const currentTermTax = () => termTaxes().find( ( t ) => t.slug === state.termsTax ) || termTaxes()[ 0 ] || null;
+
+	async function loadTermTaxes() {
+		if ( ! state.cache.termTaxes ) {
+			state.cache.termTaxes = await api( 'minn-admin/v1/term-taxonomies' );
+		}
+		return state.cache.termTaxes;
+	}
+
+	// Depth-first order with depth annotations — the tree reads as an
+	// indented list. Orphans (parent outside the fetched set) surface at
+	// the root rather than vanishing.
+	function termTreeOrder( items ) {
+		const byParent = new Map();
+		const ids = new Set( items.map( ( t ) => t.id ) );
+		items.forEach( ( t ) => {
+			const p = t.parent && ids.has( t.parent ) ? t.parent : 0;
+			if ( ! byParent.has( p ) ) byParent.set( p, [] );
+			byParent.get( p ).push( t );
+		} );
+		const out = [];
+		const walk = ( parent, depth ) => {
+			( byParent.get( parent ) || [] ).forEach( ( t ) => {
+				t.depth = depth;
+				out.push( t );
+				walk( t.id, depth + 1 );
+			} );
+		};
+		walk( 0, 0 );
+		return out;
+	}
+
+	async function loadTerms( page = 1 ) {
+		await loadTermTaxes();
+		const tax = currentTermTax();
+		if ( ! tax ) {
+			state.cache.terms = { items: [], page: 1, totalPages: 0, total: 0, tree: false };
+			return;
+		}
+		const ctx = termsCtx();
+		const fields = '_fields=id,name,slug,parent,count,description,link';
+		if ( tax.hierarchical && ! state.termSearch && tax.count <= 500 ) {
+			let items = [];
+			let p = 1;
+			let totalPages = 1;
+			let total = 0;
+			do {
+				const r = await apiPaged( `wp/v2/${ tax.rest }?context=edit&per_page=100&orderby=name&page=${ p }&${ fields }` );
+				items = items.concat( r.items );
+				totalPages = r.totalPages;
+				total = r.total;
+				p++;
+			} while ( p <= totalPages && p <= 5 );
+			if ( ctx !== termsCtx() ) return;
+			state.cache.terms = { items: termTreeOrder( items ), page: 1, totalPages: 1, total, tree: true };
+			return;
+		}
+		let q = `wp/v2/${ tax.rest }?context=edit&per_page=100&orderby=name&page=${ page }&${ fields }`;
+		if ( state.termSearch ) q += '&search=' + encodeURIComponent( state.termSearch );
+		const r = await apiPaged( q );
+		if ( ctx !== termsCtx() ) return;
+		state.cache.terms = { items: r.items.map( ( t ) => Object.assign( t, { depth: 0 } ) ), page, totalPages: r.totalPages, total: r.total, tree: false };
+	}
+
+	let termSearchTimer = null;
+
+	async function reloadTerms( page ) {
+		state.cache.terms = null;
+		state.cache.termTaxes = null; // counts changed
+		await loadTerms( page || 1 ).catch( showErr );
+		if ( state.route === 'terms' ) renderTerms();
+	}
+
+	function renderTerms() {
+		const view = $( '#minn-view' );
+		if ( ! B.caps.terms ) {
+			view.innerHTML = '<div class="minn-empty">You need permission to manage terms.</div>';
+			return;
+		}
+		const c = state.cache.terms;
+		if ( ! c ) {
+			view.innerHTML = '<div class="minn-loading">Loading terms…</div>';
+			loadTerms().then( renderIfCurrent( 'terms' ) ).catch( showErr );
+			return;
+		}
+		const tax = currentTermTax();
+		if ( ! tax ) {
+			view.innerHTML = '<div class="minn-empty">No manageable taxonomies on this site.</div>';
+			return;
+		}
+		const taxes = termTaxes();
+		const linkable = 'category' === tax.slug || 'post_tag' === tax.slug;
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			${ taxes.length > 1 ? `<div class="minn-ac minn-tax-select" data-taxcombo>
+				<input class="minn-input minn-ac-input" placeholder="${ esc( tax.label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<div class="minn-ac-panel" hidden></div>
+			</div>` : '' }
+			<input class="minn-input minn-toolbar-search" id="minn-term-search" placeholder="Search ${ esc( tax.label.toLowerCase() ) }…" value="${ esc( state.termSearch || '' ) }">
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, tax.item ) }</div>
+			${ tax.canEdit ? `<button class="minn-btn-soft" id="minn-add-term" style="margin-left:0;">${ icon( 'plus' ) } Add ${ esc( tax.item ) }</button>` : '' }
+		</div>
+		<div class="minn-card minn-table" id="minn-terms-table">
+			<div class="minn-table-head minn-term-cols">
+				<div>Name</div><div>Slug</div><div>Posts</div><div></div>
+			</div>
+			<div id="minn-term-create-slot"></div>
+			${ c.items.length ? c.items.map( ( t ) => `
+				<div class="minn-table-row minn-term-cols" data-term="${ t.id }">
+					<div class="minn-row-title minn-cell-clip"${ t.depth ? ` style="padding-left:${ t.depth * 22 }px"` : '' }>${ t.depth ? '<span class="minn-term-twig">└</span> ' : '' }${ esc( t.name ) }</div>
+					<div class="minn-row-meta minn-cell-clip mono">${ esc( t.slug ) }</div>
+					<div class="minn-row-meta">${ linkable && t.count ? `<button type="button" class="minn-term-count" data-count="${ t.id }" title="View these posts">${ t.count }</button>` : ( t.count || '—' ) }</div>
+					<div class="minn-row-actions">
+						<button type="button" class="minn-row-more" title="Actions" aria-label="Term actions">⋯</button>
+					</div>
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.termSearch ? 'No matches.' : 'No ' + esc( tax.label.toLowerCase() ) + ' yet.' }</div>` }
+		</div>
+		${ c.tree ? '' : pagerHtml( c.page, c.totalPages, c.total, tax.item ) }`;
+
+		const taxWrap = view.querySelector( '[data-taxcombo]' );
+		if ( taxWrap ) bindAutocomplete( taxWrap,
+			taxes.map( ( t ) => ( { value: t.slug, label: `${ t.label } (${ t.count })` } ) ), {
+				strict: true,
+				value: tax.slug,
+				onPick: async ( v ) => {
+					state.termsTax = v || tax.slug;
+					state.termSearch = '';
+					state.cache.terms = null;
+					await loadTerms().catch( showErr );
+					if ( state.route === 'terms' ) renderTerms();
+				},
+			} );
+
+		const search = $( '#minn-term-search', view );
+		search.addEventListener( 'input', () => {
+			clearTimeout( termSearchTimer );
+			termSearchTimer = setTimeout( async () => {
+				state.termSearch = search.value.trim();
+				state.cache.terms = null;
+				await loadTerms().catch( showErr );
+				if ( state.route === 'terms' ) {
+					renderTerms();
+					const el = $( '#minn-term-search' );
+					el.focus();
+					el.setSelectionRange( el.value.length, el.value.length );
+				}
+			}, 350 );
+		} );
+
+		const addBtn = $( '#minn-add-term', view );
+		if ( addBtn ) addBtn.addEventListener( 'click', () => openTermEditor( null ) );
+
+		const termFromRow = ( row ) => ( c.items || [] ).find( ( x ) => x.id === parseInt( row.dataset.term, 10 ) );
+		const viewPosts = ( t ) => {
+			if ( 'category' === tax.slug ) state.contentCat = String( t.id );
+			else state.contentTag = String( t.id );
+			state.cache.content = null;
+			go( 'content' );
+		};
+		const openTermMenu = ( x, y, t ) => {
+			openMinnMenu( x, y, [
+				...( tax.canEdit ? [ { label: 'Edit ' + tax.item, run: () => openTermEditor( t ) } ] : [] ),
+				...( linkable && t.count ? [ { label: 'View posts', run: () => viewPosts( t ) } ] : [] ),
+				...( t.link ? [ { label: 'Open archive ↗', href: t.link } ] : [] ),
+				...( tax.canDelete && tax.canEdit ? [ { label: 'Merge into…', run: () => openTermMerge( t ) } ] : [] ),
+				...( tax.canDelete ? [
+					{ heading: 'Danger' },
+					{ label: 'Delete ' + tax.item + '…', danger: true, run: () => deleteTerm( t ) },
+				] : [] ),
+			] );
+		};
+
+		$$( '[data-term]', view ).forEach( ( row ) => {
+			row.addEventListener( 'click', ( e ) => {
+				if ( e.target.closest( '.minn-row-more' ) || e.target.closest( '.minn-term-count' ) || e.target.closest( '.minn-term-edit' ) ) return;
+				const t = termFromRow( row );
+				if ( t && tax.canEdit ) openTermEditor( t );
+			} );
+			row.addEventListener( 'contextmenu', ( e ) => {
+				const t = termFromRow( row );
+				if ( ! t ) return;
+				e.preventDefault();
+				openTermMenu( e.clientX, e.clientY, t );
+			} );
+			const more = row.querySelector( '.minn-row-more' );
+			if ( more ) more.addEventListener( 'click', ( e ) => {
+				e.stopPropagation();
+				const t = termFromRow( row );
+				if ( ! t ) return;
+				const r = more.getBoundingClientRect();
+				openTermMenu( r.left - 160, r.bottom + 6, t );
+			} );
+		} );
+		$$( '[data-count]', view ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
+			const t = ( c.items || [] ).find( ( x ) => x.id === parseInt( btn.dataset.count, 10 ) );
+			if ( t ) viewPosts( t );
+		} ) );
+		if ( ! c.tree ) bindPager( view, c.page, loadTerms, () => { if ( state.route === 'terms' ) renderTerms(); } );
+	}
+
+	// Inline editor row: create (null term) mounts under the table head,
+	// edit mounts under the term's own row. One editor at a time.
+	function openTermEditor( term ) {
+		const tax = currentTermTax();
+		const c = state.cache.terms;
+		if ( ! tax || ! c ) return;
+		$$( '.minn-term-edit' ).forEach( ( el ) => el.remove() );
+		// Parent choices exclude the term itself and its descendants (a
+		// term cannot live under its own subtree).
+		const excluded = new Set();
+		if ( term && c.tree ) {
+			excluded.add( term.id );
+			let adding = false;
+			let depth = 0;
+			c.items.forEach( ( t ) => {
+				if ( t.id === term.id ) { adding = true; depth = t.depth; return; }
+				if ( adding ) {
+					if ( t.depth > depth ) excluded.add( t.id );
+					else adding = false;
+				}
+			} );
+		}
+		const parentField = tax.hierarchical && c.tree ? `
+			<label class="minn-term-field"><span>Parent</span>
+				<div class="minn-ac" data-parentcombo>
+					<input class="minn-input minn-ac-input" placeholder="None (top level)" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<div class="minn-ac-panel" hidden></div>
+				</div>
+			</label>` : '';
+		const editor = document.createElement( 'div' );
+		editor.className = 'minn-term-edit';
+		editor.innerHTML = `
+			<div class="minn-term-edit-grid">
+				<label class="minn-term-field"><span>Name</span><input class="minn-input" data-tf="name" value="${ esc( term ? term.name : '' ) }" placeholder="${ esc( tax.item.charAt( 0 ).toUpperCase() + tax.item.slice( 1 ) ) } name"></label>
+				<label class="minn-term-field"><span>Slug</span><input class="minn-input mono" data-tf="slug" value="${ esc( term ? term.slug : '' ) }" placeholder="auto from name"></label>
+				${ parentField }
+			</div>
+			<label class="minn-term-field"><span>Description</span><textarea class="minn-input" data-tf="description" rows="2">${ esc( term && term.description ? term.description : '' ) }</textarea></label>
+			<div class="minn-term-edit-actions">
+				<button type="button" class="minn-btn-primary" data-tsave>${ term ? 'Save' : 'Add ' + esc( tax.item ) }</button>
+				<button type="button" class="minn-btn-soft" data-tcancel>Cancel</button>
+			</div>`;
+		const slot = term ? $( `[data-term="${ term.id }"]` ) : $( '#minn-term-create-slot' );
+		if ( ! slot ) return;
+		if ( term ) slot.after( editor );
+		else slot.appendChild( editor );
+
+		let parentVal = term ? term.parent || 0 : 0;
+		const pWrap = editor.querySelector( '[data-parentcombo]' );
+		if ( pWrap ) bindAutocomplete( pWrap,
+			[ { value: '0', label: 'None (top level)' } ].concat(
+				c.items.filter( ( t ) => ! excluded.has( t.id ) )
+					.map( ( t ) => ( { value: String( t.id ), label: `${ ' '.repeat( t.depth * 2 ) }${ t.name }` } ) ) ), {
+				strict: true,
+				value: String( parentVal ),
+				onPick: ( v ) => { parentVal = parseInt( v || '0', 10 ); },
+			} );
+
+		const nameInput = editor.querySelector( '[data-tf="name"]' );
+		nameInput.focus();
+		const save = async () => {
+			const name = nameInput.value.trim();
+			if ( ! name ) { nameInput.focus(); return; }
+			const btn = editor.querySelector( '[data-tsave]' );
+			btn.disabled = true;
+			const body = {
+				name,
+				description: editor.querySelector( '[data-tf="description"]' ).value,
+			};
+			const slug = editor.querySelector( '[data-tf="slug"]' ).value.trim();
+			if ( slug || term ) body.slug = slug;
+			if ( pWrap ) body.parent = parentVal;
+			try {
+				await api( `wp/v2/${ tax.rest }${ term ? '/' + term.id : '' }`, { method: 'POST', body: JSON.stringify( body ) } );
+				toast( term ? 'Saved' : `Added “${ name }”` );
+				await reloadTerms( c.page );
+			} catch ( e ) {
+				toast( e.message, true );
+				btn.disabled = false;
+			}
+		};
+		editor.querySelector( '[data-tsave]' ).addEventListener( 'click', save );
+		editor.querySelector( '[data-tcancel]' ).addEventListener( 'click', () => editor.remove() );
+		editor.addEventListener( 'keydown', ( e ) => {
+			if ( 'Enter' === e.key && e.target.tagName !== 'TEXTAREA' ) { e.preventDefault(); save(); }
+			if ( 'Escape' === e.key ) editor.remove();
+		} );
+	}
+
+	async function deleteTerm( t ) {
+		const tax = currentTermTax();
+		if ( ! tax ) return;
+		const msg = tax.hierarchical
+			? `Delete “${ t.name }”? Any children move up a level, and posts keep their other ${ tax.label.toLowerCase() }.`
+			: `Delete “${ t.name }”? It will be removed from ${ t.count } post${ t.count === 1 ? '' : 's' }.`;
+		if ( ! confirm( msg ) ) return;
+		try {
+			await api( `wp/v2/${ tax.rest }/${ t.id }?force=true`, { method: 'DELETE' } );
+			toast( `Deleted “${ t.name }”` );
+			await reloadTerms( ( state.cache.terms || {} ).page );
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
+	// Merge: pick a surviving term (async search — tags run to thousands),
+	// then one server request moves every post and deletes the source.
+	function openTermMerge( t ) {
+		const tax = currentTermTax();
+		if ( ! tax ) return;
+		$$( '.minn-term-edit' ).forEach( ( el ) => el.remove() );
+		const row = $( `[data-term="${ t.id }"]` );
+		if ( ! row ) return;
+		const editor = document.createElement( 'div' );
+		editor.className = 'minn-term-edit';
+		editor.innerHTML = `
+			<div class="minn-term-merge-copy">Merge <b>${ esc( t.name ) }</b> into another ${ esc( tax.item ) }: its posts move over, then “${ esc( t.name ) }” is deleted.</div>
+			<div class="minn-term-edit-grid">
+				<label class="minn-term-field"><span>Merge into</span>
+					<div class="minn-ac" data-mergecombo>
+						<input class="minn-input minn-ac-input" placeholder="Type to search ${ esc( tax.label.toLowerCase() ) }…" autocomplete="off" spellcheck="false">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
+				</label>
+			</div>
+			<div class="minn-term-edit-actions">
+				<button type="button" class="minn-btn-primary" data-tmerge disabled>Merge</button>
+				<button type="button" class="minn-btn-soft" data-tcancel>Cancel</button>
+			</div>`;
+		row.after( editor );
+		const input = editor.querySelector( '.minn-ac-input' );
+		const panel = editor.querySelector( '.minn-ac-panel' );
+		const mergeBtn = editor.querySelector( '[data-tmerge]' );
+		let target = null;
+		let mergeTimer = null;
+		input.focus();
+		input.addEventListener( 'input', () => {
+			target = null;
+			mergeBtn.disabled = true;
+			clearTimeout( mergeTimer );
+			mergeTimer = setTimeout( async () => {
+				const q = input.value.trim();
+				if ( ! q ) { panel.hidden = true; return; }
+				try {
+					const items = await api( `wp/v2/${ tax.rest }?search=${ encodeURIComponent( q ) }&exclude=${ t.id }&per_page=20&_fields=id,name,count` );
+					panel.innerHTML = items.length
+						? items.map( ( x ) => `<button type="button" class="minn-ac-item" data-mid="${ x.id }">${ esc( x.name ) } <span class="minn-ac-hint">${ x.count } post${ x.count === 1 ? '' : 's' }</span></button>` ).join( '' )
+						: '<div class="minn-ac-empty">No matches</div>';
+					panel.hidden = false;
+					$$( '[data-mid]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+						e.preventDefault();
+						target = { id: parseInt( b.dataset.mid, 10 ), name: b.textContent.replace( /\s+\d+ posts?$/, '' ).trim() };
+						input.value = target.name;
+						panel.hidden = true;
+						mergeBtn.disabled = false;
+					} ) );
+				} catch ( e ) { /* search hiccup — keep typing */ }
+			}, 250 );
+		} );
+		mergeBtn.addEventListener( 'click', async () => {
+			if ( ! target ) return;
+			if ( ! confirm( `Move everything in “${ t.name }” into “${ target.name }”, then delete “${ t.name }”? This cannot be undone.` ) ) return;
+			mergeBtn.disabled = true;
+			mergeBtn.textContent = 'Merging…';
+			try {
+				const res = await api( 'minn-admin/v1/terms/merge', {
+					method: 'POST',
+					body: JSON.stringify( { taxonomy: tax.slug, from: t.id, into: target.id } ),
+				} );
+				toast( `Merged into “${ res.into }” — ${ res.moved } post${ res.moved === 1 ? '' : 's' } moved` );
+				await reloadTerms( ( state.cache.terms || {} ).page );
+			} catch ( e ) {
+				toast( e.message, true );
+				mergeBtn.disabled = false;
+				mergeBtn.textContent = 'Merge';
+			}
+		} );
+		editor.querySelector( '[data-tcancel]' ).addEventListener( 'click', () => editor.remove() );
+		editor.addEventListener( 'keydown', ( e ) => {
+			if ( 'Escape' === e.key ) editor.remove();
+		} );
 	}
 
 	/* ===== Users ===== */
@@ -4606,7 +5005,7 @@
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( t.object_types.map( typeLabel ).join( ', ' ) || '—' ) }</div>
 					<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
-					<div class="minn-row-meta">${ t.count }</div>
+					<div class="minn-row-meta">${ B.caps.terms && t.count ? `<button type="button" class="minn-term-count" data-managetax="${ esc( t.slug ) }" title="Manage terms">${ t.count }</button>` : t.count }</div>
 					<div class="minn-row-meta">${ t.hierarchical ? 'Categories' : 'Tags' }</div>
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) }
@@ -4625,6 +5024,12 @@
 					}
 				} )
 			);
+			$$( '[data-managetax]', view ).forEach( ( btn ) => btn.addEventListener( 'click', ( e ) => {
+				e.stopPropagation();
+				state.termsTax = btn.dataset.managetax;
+				state.cache.terms = null;
+				go( 'terms' );
+			} ) );
 		} else {
 			view.innerHTML = `
 			<div class="minn-toolbar">
@@ -13319,6 +13724,7 @@
 		}
 		if ( B.caps.plugins ) cmds.push( { label: 'Manage Extensions', kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
+		if ( B.caps.terms ) cmds.push( { label: 'Manage categories & tags', kind: 'nav', icon: '#', run: () => go( 'terms' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'View System diagnostics', kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		cmds.push(
@@ -15855,6 +16261,7 @@
 			case 'comments': return renderComments();
 			case 'orders': return renderOrders();
 			case 'users': return renderUsers();
+			case 'terms': return renderTerms();
 			case 'menus': return renderMenus();
 			case 'widgets': return renderWidgets();
 			case 'extensions': return renderExtensions();
