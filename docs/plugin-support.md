@@ -61,6 +61,11 @@ themselves through the extension filters.
 
 Ranked by install base among plugins not yet covered:
 
+- **One-place license activation** — paste a Pro plugin's key once and Minn
+  hands it to the right plugin, so the "activate your license" nags clear
+  without a wp-admin scavenger hunt. Genuinely valuable but genuinely hard
+  (no shared license API across vendors); full design in
+  `docs/license-manager.md`.
 - **Contact Form 7 + Flamingo** — an entries "inbox" surface (CF7 stores no
   entries itself; Flamingo does).
 - **WPForms** entries — Pro-gated storage; needs a Pro license for fixtures.
