@@ -14696,6 +14696,7 @@
 				zone.classList.remove( 'minn-busy' );
 			}
 		};
+		zone._accept = uploadZip; // window-level drops route here while the modal is open
 		zone.addEventListener( 'click', () => file.click() );
 		file.addEventListener( 'change', () => uploadZip( file.files[ 0 ] ) );
 		zone.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); zone.classList.add( 'over' ); } );
@@ -14894,6 +14895,7 @@
 				zone.classList.remove( 'minn-busy' );
 			}
 		};
+		zone._accept = uploadZip; // window-level drops route here while the modal is open
 		zone.addEventListener( 'click', () => file.click() );
 		file.addEventListener( 'change', () => uploadZip( file.files[ 0 ] ) );
 		zone.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); zone.classList.add( 'over' ); } );
@@ -15912,11 +15914,22 @@
 		// Warm the content cache so the sidebar count appears.
 		if ( state.route !== 'content' ) loadContent().catch( () => {} );
 
-		// Drag & drop upload from anywhere in the app.
+		// Drag & drop upload from anywhere in the app. When an install modal
+		// (Add plugin / Add theme) is open, its dropzone owns EVERY drop: a
+		// zip aimed at the modal but landing a few pixels outside it must
+		// never end up in the media library (Austin's wp-rocket_3.23 repro),
+		// and the "Drop files to upload" veil stays hidden so the modal's own
+		// zone is the only affordance. The zones expose their upload path as
+		// zone._accept (the chips' _target/_kind convention).
 		if ( B.caps.upload ) {
+			const installDropZone = () => {
+				const z = $( '#minn-pi-dropzone' ) || $( '#minn-ti-dropzone' );
+				return z && z._accept ? z : null;
+			};
 			let dragDepth = 0;
 			window.addEventListener( 'dragenter', ( e ) => {
 				if ( e.dataTransfer && Array.from( e.dataTransfer.types ).includes( 'Files' ) ) {
+					if ( installDropZone() ) return;
 					dragDepth++;
 					document.body.classList.add( 'minn-dragging' );
 				}
@@ -15931,10 +15944,14 @@
 				dragDepth = 0;
 				document.body.classList.remove( 'minn-dragging' );
 				const files = Array.from( ( e.dataTransfer && e.dataTransfer.files ) || [] );
-				if ( files.length ) {
-					if ( state.route !== 'media' ) go( 'media' );
-					uploadFiles( files );
+				if ( ! files.length ) return;
+				const zone = installDropZone();
+				if ( zone ) {
+					zone._accept( files[ 0 ] );
+					return;
 				}
+				if ( state.route !== 'media' ) go( 'media' );
+				uploadFiles( files );
 			} );
 		}
 	}
