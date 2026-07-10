@@ -1846,7 +1846,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-lic-pill.missing { color: var(--amber); background: rgba(224,164,88,0.1); border-color: rgba(224,164,88,0.25); }
 .minn-lic-pill.unknown { color: var(--text3); background: transparent; border-color: var(--line); }
 .minn-sys-lic-meta { font-size: 11.5px; color: var(--text3); margin-top: 2px; white-space: normal; }
-.minn-lic-actions { display: flex; align-items: center; gap: 7px; margin-top: 6px; }
+.minn-lic-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
 .minn-lic-actions button { font: inherit; font-size: 11.5px; font-weight: 600; color: var(--text2); background: var(--panel2); border: 1px solid var(--border); border-radius: 7px; padding: 3px 10px; cursor: pointer; }
 .minn-lic-actions button:hover { color: var(--text); border-color: var(--text3); }
 .minn-lic-actions button:disabled { opacity: 0.6; cursor: default; }

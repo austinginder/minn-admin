@@ -701,6 +701,63 @@ function minn_admin_license_default_providers() {
 		};
 	}
 
+	// Divi / Elegant Themes (active theme or an ET plugin loading et-core):
+	// TWO secrets (username + API key) into their site option, then their
+	// own checker validates during the theme-update check and stamps
+	// et_account_status (active / expired / not_found). ET has no per-site
+	// seats; deactivation is clearing the stored credentials.
+	if ( class_exists( 'ET_Core_Updates' ) ) {
+		$divi_check = function () {
+			delete_site_transient( 'et_update_themes' ); // their own 10-min cache
+			wp_update_themes(); // fires their pre_set_site_transient hook
+			$status = strtolower( (string) get_site_option( 'et_account_status', 'not_active' ) );
+			if ( 'active' === $status ) {
+				return array( 'ok' => true );
+			}
+			$code = 'expired' === $status ? 'expired' : 'invalid';
+			$msgs = array(
+				'expired'    => 'Elegant Themes reports the subscription as expired',
+				'not_found'  => 'Elegant Themes does not recognize that username',
+				'not_active' => 'Elegant Themes did not confirm the account',
+			);
+			return array( 'ok' => false, 'code' => $code, 'message' => isset( $msgs[ $status ] ) ? $msgs[ $status ] : str_replace( '_', ' ', $status ) );
+		};
+		$providers['divi']['secret_fields'] = array(
+			array( 'id' => 'username', 'label' => 'Elegant Themes username' ),
+			array( 'id' => 'api_key', 'label' => 'API key' ),
+		);
+		$providers['divi']['activate'] = function ( $secrets ) use ( $divi_check ) {
+			// Their checker reads the option, so it must be written before
+			// validating. Snapshot first: a failed attempt restores the
+			// previous credentials instead of clobbering a working pair
+			// with a typo (better than Divi's own settings page).
+			$prev_creds  = get_site_option( 'et_automatic_updates_options', array() );
+			$prev_status = get_site_option( 'et_account_status', null );
+			update_site_option( 'et_automatic_updates_options', array(
+				'username' => sanitize_text_field( $secrets['username'] ),
+				'api_key'  => sanitize_text_field( $secrets['api_key'] ),
+			) );
+			$result = $divi_check();
+			if ( empty( $result['ok'] ) ) {
+				update_site_option( 'et_automatic_updates_options', $prev_creds );
+				if ( null === $prev_status ) {
+					delete_site_option( 'et_account_status' );
+				} else {
+					update_site_option( 'et_account_status', $prev_status );
+				}
+				delete_site_transient( 'et_update_themes' );
+			}
+			return $result;
+		};
+		$providers['divi']['verify']     = $divi_check;
+		$providers['divi']['deactivate'] = function () {
+			update_site_option( 'et_automatic_updates_options', array() );
+			delete_site_option( 'et_account_status' );
+			delete_site_transient( 'et_update_themes' );
+			return array( 'ok' => true, 'message' => 'Credentials removed; Elegant Themes has no per-site seats to release' );
+		};
+	}
+
 	// WPBakery activation is a token handshake through support.wpbakery.com
 	// (no paste-a-code callable exists), so the honest control is a link to
 	// its own activation screen.
@@ -723,11 +780,12 @@ function minn_admin_licenses_freemius( $fingerprints ) {
 		$out = array();
 		foreach ( $fingerprints as $fp ) {
 			$out[] = array(
-				'name'  => $fp['name'],
-				'kind'  => $fp['kind'],
-				'state' => 'unknown',
-				'key'   => false,
-				'note'  => 'Freemius-powered; no account state recorded yet',
+				'name'      => $fp['name'],
+				'kind'      => $fp['kind'],
+				'state'     => 'unknown',
+				'key'       => false,
+				'note'      => 'Freemius-powered; no account state recorded yet',
+				'component' => $fp['component'],
 			);
 		}
 		return $out;
@@ -761,7 +819,7 @@ function minn_admin_licenses_freemius( $fingerprints ) {
 			continue; // Free product: nothing to license.
 		}
 		if ( ! $license_id ) {
-			$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => 'missing', 'key' => false, 'note' => 'Premium install with no license attached' );
+			$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => 'missing', 'key' => false, 'note' => 'Premium install with no license attached', 'component' => $fp['component'] );
 			continue;
 		}
 		$module_id = (string) minn_admin_license_prop( $site, 'plugin_id', '' );
@@ -773,13 +831,13 @@ function minn_admin_licenses_freemius( $fingerprints ) {
 			}
 		}
 		if ( ! $license ) {
-			$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => 'unknown', 'key' => true, 'note' => 'License attached but not readable locally' );
+			$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => 'unknown', 'key' => true, 'note' => 'License attached but not readable locally', 'component' => $fp['component'] );
 			continue;
 		}
 		$raw_exp = minn_admin_license_prop( $license, 'expiration', '' );
 		$expires = ( null === $raw_exp || '' === $raw_exp ) ? 'lifetime' : minn_admin_license_expiry( $raw_exp );
 		$state   = minn_admin_license_expired( $expires ) ? 'expired' : 'valid';
-		$out[]   = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => $state, 'key' => true, 'expires' => $expires );
+		$out[]   = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => $state, 'key' => true, 'expires' => $expires, 'component' => $fp['component'] );
 	}
 	return $out;
 }
@@ -848,7 +906,7 @@ function minn_admin_licenses_edd( $fingerprints ) {
 		} else {
 			$note = 'Key stored; no readable status option';
 		}
-		$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => $state, 'key' => $key_present, 'note' => $note );
+		$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => $state, 'key' => $key_present, 'note' => $note, 'component' => $fp['component'] );
 	}
 	return $out;
 }
@@ -877,11 +935,12 @@ function minn_admin_licenses_surecart( $fingerprints ) {
 			}
 		}
 		$out[] = array(
-			'name'  => $fp['name'],
-			'kind'  => $fp['kind'],
-			'state' => $key ? 'unknown' : 'missing',
-			'key'   => (bool) $key,
-			'note'  => $key ? 'Activation stored; SureCart keeps no local expiry' : '',
+			'name'      => $fp['name'],
+			'kind'      => $fp['kind'],
+			'state'     => $key ? 'unknown' : 'missing',
+			'key'       => (bool) $key,
+			'note'      => $key ? 'Activation stored; SureCart keeps no local expiry' : '',
+			'component' => $fp['component'],
 		);
 	}
 	return $out;
@@ -893,6 +952,19 @@ function minn_admin_licenses_surecart( $fingerprints ) {
  * cover the rest of the fingerprinted set.
  */
 function minn_admin_licenses() {
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	// License STATE reads from stored options even for inactive components,
+	// but actions need the vendor's code loaded — rows for inactive
+	// components carry `off` so the UI can dim them and say why there are
+	// no controls instead of silently omitting them.
+	$component_active = function ( $component ) {
+		if ( 0 === strpos( (string) $component, 'theme:' ) ) {
+			$slug = substr( $component, 6 );
+			return get_stylesheet() === $slug || get_template() === $slug;
+		}
+		return is_plugin_active( $component );
+	};
+
 	$providers = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
 	$items     = array();
 	$claimed   = array();
@@ -925,11 +997,19 @@ function minn_admin_licenses() {
 			if ( $can ) {
 				$row['can']    = $can;
 				$row['secret'] = isset( $p['secret_label'] ) ? (string) $p['secret_label'] : 'License key';
+				if ( ! empty( $p['secret_fields'] ) && is_array( $p['secret_fields'] ) ) {
+					$row['secretFields'] = array_values( array_map( function ( $f ) {
+						return array( 'id' => sanitize_key( $f['id'] ), 'label' => (string) $f['label'] );
+					}, $p['secret_fields'] ) );
+				}
 			}
 			// Vendors with no callable activation path (portal handshakes)
 			// can still hand the user a link to their own activation screen.
 			if ( ! empty( $p['activate_url'] ) ) {
 				$row['activateUrl'] = (string) ( is_callable( $p['activate_url'] ) ? call_user_func( $p['activate_url'] ) : $p['activate_url'] );
+			}
+			if ( ! empty( $p['component'] ) && 'bsf-registry' !== $p['component'] && ! $component_active( $p['component'] ) ) {
+				$row['off'] = true;
 			}
 			$items[] = $row;
 		}
@@ -949,6 +1029,10 @@ function minn_admin_licenses() {
 		foreach ( $rows as $row ) {
 			$row['id']     = sanitize_key( $sdk . '-' . $row['name'] );
 			$row['source'] = $sdk;
+			if ( ! empty( $row['component'] ) && ! $component_active( $row['component'] ) ) {
+				$row['off'] = true;
+			}
+			unset( $row['component'] );
 			$row           = wp_parse_args( $row, array( 'expires' => '', 'note' => '', 'stale' => false, 'key' => false ) );
 			$items[]       = $row;
 		}
@@ -1032,12 +1116,28 @@ add_action( 'rest_api_init', function () {
 				if ( ! $p || empty( $p[ $action ] ) || ! is_callable( $p[ $action ] ) ) {
 					return new WP_Error( 'no_provider', 'No such action for this provider.', array( 'status' => 404 ) );
 				}
-				if ( 'activate' === $action && '' === $secret ) {
+				// Multi-secret providers (Divi's username + API key) declare
+				// secret_fields and receive an id-keyed array; single-secret
+				// providers receive the plain string. Secrets are never
+				// stored, logged or echoed back either way.
+				$payload = $secret;
+				if ( 'activate' === $action && ! empty( $p['secret_fields'] ) && is_array( $p['secret_fields'] ) ) {
+					$secrets = $req->get_param( 'secrets' );
+					$payload = array();
+					foreach ( $p['secret_fields'] as $f ) {
+						$fid = sanitize_key( $f['id'] );
+						$val = is_array( $secrets ) && isset( $secrets[ $fid ] ) ? trim( (string) $secrets[ $fid ] ) : '';
+						if ( '' === $val ) {
+							return new WP_Error( 'no_secret', 'Fill in every field first.', array( 'status' => 400 ) );
+						}
+						$payload[ $fid ] = $val;
+					}
+				} elseif ( 'activate' === $action && '' === $secret ) {
 					return new WP_Error( 'no_secret', 'Paste a key first.', array( 'status' => 400 ) );
 				}
 				try {
 					$raw = ( 'activate' === $action )
-						? call_user_func( $p[ $action ], $secret )
+						? call_user_func( $p[ $action ], $payload )
 						: call_user_func( $p[ $action ] );
 					$result = minn_admin_license_result( $raw );
 				} catch ( \Throwable $e ) {

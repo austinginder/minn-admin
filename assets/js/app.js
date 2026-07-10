@@ -4844,6 +4844,7 @@
 		const licLabel = { valid: 'Valid', expired: 'Expired', invalid: 'Invalid', missing: 'No license', unknown: 'Unknown' };
 		const licRow = ( it ) => {
 			const meta = [
+				it.off ? `not active; activate the ${ it.kind === 'theme' ? 'theme' : 'plugin' } to manage its license` : '',
 				it.note,
 				it.expires === 'lifetime' ? 'lifetime license' : ( it.expires ? ( it.state === 'expired' ? 'expired ' : 'renews ' ) + it.expires : '' ),
 				it.stale ? 'may be stale' : '',
@@ -4854,7 +4855,7 @@
 			const can = it.can || [];
 			const controls = [
 				can.includes( 'activate' ) && it.state !== 'valid'
-					? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || 'License key' ) }">Activate…</button>` : '',
+					? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || 'License key' ) }"${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>Activate…</button>` : '',
 				! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid'
 					? `<button data-lic="href" data-href="${ esc( it.activateUrl ) }">Activate ↗</button>` : '',
 				can.includes( 'deactivate' ) && it.state === 'valid'
@@ -4863,7 +4864,7 @@
 					? `<button data-lic="verify" data-provider="${ esc( it.source ) }">Re-verify</button>` : '',
 			].filter( Boolean ).join( '' );
 			return `
-			<div class="minn-sys-ext-item minn-lic-item">
+			<div class="minn-sys-ext-item minn-lic-item${ it.off ? ' off' : '' }">
 				<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.kind === 'theme' ? ' <span class="minn-sys-ext-parent">theme</span>' : '' }
 					${ meta ? `<div class="minn-sys-lic-meta">${ esc( meta ) }</div>` : '' }
 					${ controls ? `<div class="minn-lic-actions">${ controls }</div>` : '' }
@@ -4980,7 +4981,7 @@
 		// the secret rides one request and is never stored or echoed back.
 		// Failures never auto-retry (a retried activation can burn a paid
 		// seat), and the whole card repaints from fresh server state after.
-		const licRun = async ( provider, action, secret, btn ) => {
+		const licRun = async ( provider, action, payload, btn ) => {
 			const label = btn.textContent;
 			btn.disabled = true;
 			btn.textContent = action === 'activate' ? 'Activating…' : action === 'deactivate' ? 'Deactivating…' : 'Checking…';
@@ -5002,7 +5003,7 @@
 			try {
 				const res = await api( 'minn-admin/v1/licenses/action', {
 					method: 'POST',
-					body: JSON.stringify( { provider, action, secret } ),
+					body: JSON.stringify( { provider, action, ...( payload || {} ) } ),
 				} );
 				if ( res.ok ) {
 					toast( action === 'activate' ? 'License activated' : action === 'deactivate' ? 'License deactivated' : 'License re-verified' );
@@ -5037,31 +5038,49 @@
 			}
 			if ( 'deactivate' === action ) {
 				if ( ! confirm( `Deactivate the ${ btn.dataset.name } license on this site? The seat frees up, and the plugin may stop receiving updates until a license is activated again.` ) ) return;
-				licRun( provider, 'deactivate', '', btn );
+				licRun( provider, 'deactivate', null, btn );
 				return;
 			}
 			if ( 'verify' === action ) {
-				licRun( provider, 'verify', '', btn );
+				licRun( provider, 'verify', null, btn );
 				return;
 			}
+			// Multi-secret vendors (Divi's username + API key) declare their
+			// fields; everyone else gets the single paste field.
+			const fields = btn.dataset.fields ? JSON.parse( btn.dataset.fields ) : null;
 			const wrap = btn.closest( '.minn-lic-actions' );
 			wrap.innerHTML = `
-				<input type="password" class="minn-lic-key" placeholder="${ esc( btn.dataset.secret ) }" autocomplete="off" spellcheck="false">
+				${ fields
+		? fields.map( ( f ) => `<input type="password" class="minn-lic-key" data-sid="${ esc( f.id ) }" placeholder="${ esc( f.label ) }" autocomplete="off" spellcheck="false">` ).join( '' )
+		: `<input type="password" class="minn-lic-key" placeholder="${ esc( btn.dataset.secret ) }" autocomplete="off" spellcheck="false">` }
 				<button data-lic-go>Activate</button>
 				<button data-lic-cancel>Cancel</button>`;
-			const input = $( '.minn-lic-key', wrap );
-			input.focus();
+			const inputs = $$( '.minn-lic-key', wrap );
+			inputs[ 0 ].focus();
 			$( '[data-lic-go]', wrap ).addEventListener( 'click', () => {
-				const secret = input.value.trim();
-				if ( ! secret ) {
-					input.focus();
-					return;
+				let payload;
+				if ( fields ) {
+					const secrets = {};
+					for ( const i of inputs ) {
+						if ( ! i.value.trim() ) {
+							i.focus();
+							return;
+						}
+						secrets[ i.dataset.sid ] = i.value.trim();
+					}
+					payload = { secrets };
+				} else {
+					if ( ! inputs[ 0 ].value.trim() ) {
+						inputs[ 0 ].focus();
+						return;
+					}
+					payload = { secret: inputs[ 0 ].value.trim() };
 				}
-				licRun( provider, 'activate', secret, $( '[data-lic-go]', wrap ) );
+				licRun( provider, 'activate', payload, $( '[data-lic-go]', wrap ) );
 			} );
-			input.addEventListener( 'keydown', ( e ) => {
+			inputs.forEach( ( i ) => i.addEventListener( 'keydown', ( e ) => {
 				if ( 'Enter' === e.key ) $( '[data-lic-go]', wrap ).click();
-			} );
+			} ) );
 			$( '[data-lic-cancel]', wrap ).addEventListener( 'click', () => renderSystem() );
 		} ) );
 
