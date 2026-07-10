@@ -1940,16 +1940,25 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	public static function search_themes( WP_REST_Request $request ) {
 		require_once ABSPATH . 'wp-admin/includes/theme.php';
 
+		// No search term → the popular directory, so the Add theme dialog
+		// opens with something to pick instead of a blank box.
+		$q    = sanitize_text_field( (string) $request['q'] );
+		$args = '' === $q
+			? array( 'browse' => 'popular' )
+			: array( 'search' => $q );
+
 		$res = themes_api(
 			'query_themes',
-			array(
-				'search'   => sanitize_text_field( $request['q'] ),
-				'per_page' => 12,
-				'fields'   => array(
-					'screenshot_url' => true,
-					'rating'         => true,
-					'active_installs'=> true,
-				),
+			array_merge(
+				$args,
+				array(
+					'per_page' => 12,
+					'fields'   => array(
+						'screenshot_url' => true,
+						'rating'         => true,
+						'active_installs'=> true,
+					),
+				)
 			)
 		);
 		if ( is_wp_error( $res ) ) {
