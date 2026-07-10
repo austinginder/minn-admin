@@ -7095,9 +7095,10 @@
 			: '<b>0</b> words';
 		syncTableChips();
 		updateOutline();
-		// Focus mode rides the same typing cadence.
+		// Focus mode and the find bar ride the same typing cadence.
 		syncFocusDim();
 		focusTypewriter();
+		syncFindBar();
 	}
 
 	/* ===== Outline panel ===== */
@@ -7297,6 +7298,348 @@
 	function removeOutlineMode() {
 		document.body.classList.remove( 'minn-outline-mode' );
 	}
+
+	/* ===== Find & replace (editor) ===== */
+	// Searches the text writers SEE — text nodes across inline formatting —
+	// never the underlying markup. Islands and any contenteditable=false
+	// subtree are excluded (byte-identity is the islands contract), and a
+	// match never crosses a block boundary. Highlights are overlay rects
+	// INSIDE the scroller at content coordinates (the outline-ping rule:
+	// nothing decorative may touch the typing surface, and overlays that
+	// track content must ride the scroll natively). Replacements select the
+	// match Range and go through execCommand insertText/delete, so every
+	// replace lives on the native undo stack and ⌘Z walks back.
+	let findState = null; // { query, replace, matchCase, matches: Range[], idx }
+	let findRefreshTimer = 0;
+
+	const FIND_BLOCKS = 'p,h1,h2,h3,h4,h5,h6,li,td,th,pre,figcaption,blockquote,summary';
+
+	// Contiguous text runs grouped by nearest block, so "quick brown" matches
+	// across qui<strong>ck bro</strong>wn but never across two paragraphs or
+	// two table cells.
+	function findSegments( body ) {
+		const segs = [];
+		let cur = null, curBlock = null;
+		const walker = document.createTreeWalker( body, NodeFilter.SHOW_TEXT, {
+			acceptNode: ( n ) => n.parentElement && ! n.parentElement.closest(
+				'[contenteditable="false"], .minn-block-island, .minn-island-chip, .minn-island-empty' )
+				? NodeFilter.FILTER_ACCEPT
+				: NodeFilter.FILTER_REJECT,
+		} );
+		while ( walker.nextNode() ) {
+			const node = walker.currentNode;
+			if ( ! node.textContent.length ) continue;
+			const block = node.parentElement.closest( FIND_BLOCKS ) || body;
+			if ( ! cur || block !== curBlock ) {
+				cur = { text: '', parts: [] };
+				segs.push( cur );
+				curBlock = block;
+			}
+			cur.parts.push( { node, start: cur.text.length } );
+			cur.text += node.textContent;
+		}
+		return segs;
+	}
+
+	// Segment offsets → a live Range. End offsets sitting on a node boundary
+	// bind to the EARLIER node so the range never leaks into a neighbor.
+	function findSegRange( seg, from, to ) {
+		const locate = ( off, isEnd ) => {
+			for ( const p of seg.parts ) {
+				const end = p.start + p.node.textContent.length;
+				if ( isEnd ? off > p.start && off <= end : off >= p.start && off < end ) {
+					return [ p.node, off - p.start ];
+				}
+			}
+			return null;
+		};
+		const s = locate( from, false );
+		const e = locate( to, true );
+		if ( ! s || ! e ) return null;
+		const r = document.createRange();
+		r.setStart( s[ 0 ], s[ 1 ] );
+		r.setEnd( e[ 0 ], e[ 1 ] );
+		return r;
+	}
+
+	function findComputeMatches() {
+		const f = findState;
+		const body = $( '#minn-editor-body' );
+		f.matches = [];
+		const q = ( f.query || '' ).replace( /\u00a0/g, ' ' );
+		if ( ! body || ! q ) return;
+		// Escaped-literal regex: under 'i' the reported index stays true to
+		// the original string, while lowercasing a haystack can CHANGE ITS
+		// LENGTH for some Unicode and skew every offset after it.
+		const rx = new RegExp( q.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ), f.matchCase ? 'g' : 'gi' );
+		for ( const seg of findSegments( body ) ) {
+			const hay = seg.text.replace( /\u00a0/g, ' ' ); // nbsp ≡ space (boundary artifacts)
+			rx.lastIndex = 0;
+			let m;
+			while ( ( m = rx.exec( hay ) ) ) {
+				const r = findSegRange( seg, m.index, m.index + m[ 0 ].length );
+				if ( r ) f.matches.push( r );
+			}
+		}
+	}
+
+	function renderFindMarks() {
+		const wrap = $( '#minn-find-marks' );
+		const sc = $( '.minn-scroll' );
+		if ( ! findState || ! findState.matches.length || ! sc ) {
+			if ( wrap ) wrap.remove();
+			return;
+		}
+		let w = wrap;
+		if ( ! w ) {
+			w = document.createElement( 'div' );
+			w.id = 'minn-find-marks';
+			sc.appendChild( w );
+		}
+		const scRect = sc.getBoundingClientRect();
+		const cap = 300; // marks are chrome; past this only the count grows
+		let html = '';
+		const draw = ( r, i ) => {
+			for ( const rect of r.getClientRects() ) {
+				if ( rect.width < 1 && rect.height < 1 ) continue;
+				html += `<div class="minn-find-mark${ i === findState.idx ? ' cur' : '' }" style="top:${ ( rect.top - scRect.top + sc.scrollTop ).toFixed( 1 ) }px;left:${ ( rect.left - scRect.left + sc.scrollLeft ).toFixed( 1 ) }px;width:${ rect.width.toFixed( 1 ) }px;height:${ rect.height.toFixed( 1 ) }px"></div>`;
+			}
+		};
+		findState.matches.slice( 0, cap ).forEach( draw );
+		if ( findState.idx >= cap ) draw( findState.matches[ findState.idx ], findState.idx );
+		w.innerHTML = html;
+	}
+
+	function findUpdateCount() {
+		const el = $( '#minn-find-count' );
+		if ( ! el || ! findState ) return;
+		const n = findState.matches.length;
+		el.textContent = n ? `${ findState.idx + 1 }/${ n }` : ( findState.query ? '0' : '' );
+	}
+
+	function findScrollCurrent() {
+		const sc = $( '.minn-scroll' );
+		const m = findState && findState.matches[ findState.idx ];
+		if ( ! sc || ! m ) return;
+		const rect = m.getBoundingClientRect();
+		const port = sc.getBoundingClientRect();
+		// Instant step — smooth programmatic scrolls die to Chrome's
+		// caret-reveal (rule at focusTypewriter), and the marks ride content
+		// coordinates so no re-render is needed.
+		if ( rect.top < port.top + 90 || rect.bottom > port.bottom - 60 ) {
+			sc.scrollTop += rect.top - ( port.top + port.height * 0.35 );
+		}
+	}
+
+	function findGoto( delta ) {
+		const f = findState;
+		if ( ! f || ! f.matches.length ) return;
+		f.idx = ( f.idx + delta + f.matches.length ) % f.matches.length;
+		renderFindMarks();
+		findUpdateCount();
+		findScrollCurrent();
+	}
+
+	// afterRange: land on the first match at/after that point — a replace
+	// whose replacement contains the query ("cat" → "cats") must advance
+	// past itself, not re-match in place forever.
+	function findRefresh( afterRange ) {
+		const f = findState;
+		if ( ! f ) return;
+		const prev = f.idx;
+		findComputeMatches();
+		if ( afterRange ) {
+			f.idx = f.matches.findIndex( ( m ) => m.compareBoundaryPoints( Range.START_TO_START, afterRange ) >= 0 );
+			if ( f.idx === -1 ) f.idx = 0;
+		} else {
+			f.idx = Math.min( prev, Math.max( 0, f.matches.length - 1 ) );
+		}
+		renderFindMarks();
+		findUpdateCount();
+	}
+
+	function queueFindRefresh() {
+		clearTimeout( findRefreshTimer );
+		findRefreshTimer = setTimeout( () => findRefresh(), 120 );
+	}
+
+	// Rides the updateEditorStats cadence: typing reflows lines under the
+	// marks and zen/nav transitions move the column the bar is anchored to.
+	function syncFindBar() {
+		if ( ! $( '#minn-find-bar' ) ) return;
+		if ( state.route !== 'editor' || ! state.editor ) { closeFindBar(); return; }
+		positionFindBar();
+		queueFindRefresh();
+	}
+
+	function positionFindBar() {
+		const bar = $( '#minn-find-bar' );
+		const body = $( '#minn-editor-body' );
+		if ( ! bar || ! body ) return;
+		const tb = $( '.minn-editor-toolbar' );
+		const bRect = body.getBoundingClientRect();
+		const top = ( tb ? tb.getBoundingClientRect().bottom : bRect.top ) + 10;
+		bar.style.top = `${ Math.max( 60, top ) }px`;
+		bar.style.left = `${ Math.max( 12, bRect.right - bar.offsetWidth ) }px`;
+	}
+
+	function findEditableBody() {
+		const body = $( '#minn-editor-body' );
+		return body && body.getAttribute( 'contenteditable' ) !== 'false' ? body : null;
+	}
+
+	function openFindBar() {
+		const ed = state.editor;
+		if ( state.route !== 'editor' || ! ed || ed.mode === 'locked' ) return;
+		let bar = $( '#minn-find-bar' );
+		if ( ! bar ) {
+			bar = document.createElement( 'div' );
+			bar.id = 'minn-find-bar';
+			bar.className = 'minn-find-bar';
+			bar.innerHTML = `
+				<div class="minn-find-row">
+					<input id="minn-find-input" type="text" placeholder="Find in post" spellcheck="false" autocomplete="off">
+					<span id="minn-find-count"></span>
+					<button type="button" class="minn-find-btn" id="minn-find-prev" title="Previous match (⇧Enter)">↑</button>
+					<button type="button" class="minn-find-btn" id="minn-find-next" title="Next match (Enter)">↓</button>
+					<button type="button" class="minn-find-btn" id="minn-find-case" title="Match case">Aa</button>
+					<button type="button" class="minn-find-btn" id="minn-find-close" title="Close (Esc)">×</button>
+				</div>
+				<div class="minn-find-row">
+					<input id="minn-find-replace" type="text" placeholder="Replace with" spellcheck="false" autocomplete="off">
+					<button type="button" class="minn-find-act" id="minn-find-rep">Replace</button>
+					<button type="button" class="minn-find-act" id="minn-find-repall" title="Replace all matches">All</button>
+				</div>`;
+			document.body.appendChild( bar );
+			$( '#minn-find-input' ).addEventListener( 'input', () => {
+				findState.query = $( '#minn-find-input' ).value;
+				findState.idx = 0;
+				findRefresh();
+				if ( findState.matches.length ) findScrollCurrent();
+			} );
+			$( '#minn-find-replace' ).addEventListener( 'input', () => {
+				findState.replace = $( '#minn-find-replace' ).value;
+			} );
+			bar.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' ) {
+					// Ours alone — the global Esc would also close modals.
+					e.preventDefault();
+					e.stopPropagation();
+					closeFindBar( true );
+					return;
+				}
+				if ( e.key !== 'Enter' ) return;
+				e.preventDefault();
+				if ( e.target.id === 'minn-find-replace' ) findReplaceCurrent();
+				else findGoto( e.shiftKey ? -1 : 1 );
+			} );
+			$( '#minn-find-prev' ).addEventListener( 'click', () => findGoto( -1 ) );
+			$( '#minn-find-next' ).addEventListener( 'click', () => findGoto( 1 ) );
+			$( '#minn-find-case' ).addEventListener( 'click', () => {
+				findState.matchCase = ! findState.matchCase;
+				$( '#minn-find-case' ).classList.toggle( 'on', findState.matchCase );
+				findState.idx = 0;
+				findRefresh();
+			} );
+			$( '#minn-find-close' ).addEventListener( 'click', () => closeFindBar( true ) );
+			$( '#minn-find-rep' ).addEventListener( 'click', findReplaceCurrent );
+			$( '#minn-find-repall' ).addEventListener( 'click', findReplaceAll );
+		}
+		if ( ! findState ) findState = { query: '', replace: '', matchCase: false, matches: [], idx: 0 };
+		// ⌘F on selected text finds that text — muscle memory everywhere.
+		const body = $( '#minn-editor-body' );
+		const sel = window.getSelection();
+		if ( body && sel.rangeCount && ! sel.isCollapsed && body.contains( sel.anchorNode ) ) {
+			const t = sel.toString().replace( /\s+/g, ' ' ).trim();
+			if ( t && t.length <= 120 ) findState.query = t;
+		}
+		const inp = $( '#minn-find-input' );
+		inp.value = findState.query;
+		$( '#minn-find-replace' ).value = findState.replace;
+		$( '#minn-find-case' ).classList.toggle( 'on', findState.matchCase );
+		positionFindBar();
+		findRefresh();
+		if ( findState.matches.length ) findScrollCurrent();
+		inp.focus();
+		inp.select();
+	}
+
+	function closeFindBar( toCaret ) {
+		clearTimeout( findRefreshTimer );
+		const bar = $( '#minn-find-bar' );
+		const marks = $( '#minn-find-marks' );
+		if ( bar ) bar.remove();
+		if ( marks ) marks.remove();
+		// Esc hands the current match to the editor selected — find a spot,
+		// close, keep writing (or type right over it).
+		const body = findEditableBody();
+		const m = findState && findState.matches[ findState.idx ];
+		if ( toCaret && m && body && m.startContainer.isConnected ) {
+			body.focus( { preventScroll: true } );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( m.cloneRange() );
+		}
+		findState = null;
+	}
+
+	function findReplaceCurrent() {
+		const f = findState;
+		const body = findEditableBody();
+		if ( ! f || ! body || ! f.matches.length ) return;
+		const m = f.matches[ f.idx ];
+		if ( ! m.startContainer.isConnected ) { findRefresh(); return; } // stale after a re-render
+		const focused = document.activeElement;
+		const sel = window.getSelection();
+		body.focus( { preventScroll: true } );
+		sel.removeAllRanges();
+		sel.addRange( m );
+		if ( f.replace ) document.execCommand( 'insertText', false, f.replace );
+		else document.execCommand( 'delete' );
+		const after = sel.rangeCount ? sel.getRangeAt( 0 ).cloneRange() : null;
+		scheduleAutosave();
+		findRefresh( after );
+		findScrollCurrent();
+		if ( focused && focused.closest && focused.closest( '#minn-find-bar' ) ) focused.focus( { preventScroll: true } );
+	}
+
+	function findReplaceAll() {
+		const f = findState;
+		const body = findEditableBody();
+		if ( ! f || ! body || ! f.matches.length ) return;
+		const list = f.matches.filter( ( m ) => m.startContainer.isConnected );
+		if ( ! list.length ) { findRefresh(); return; }
+		const focused = document.activeElement;
+		const sel = window.getSelection();
+		body.focus( { preventScroll: true } );
+		// Last-to-first keeps every earlier Range valid while later text
+		// mutates; each step is one native undo entry, so ⌘Z walks back.
+		for ( let i = list.length - 1; i >= 0; i-- ) {
+			sel.removeAllRanges();
+			sel.addRange( list[ i ] );
+			if ( f.replace ) document.execCommand( 'insertText', false, f.replace );
+			else document.execCommand( 'delete' );
+		}
+		scheduleAutosave();
+		findRefresh();
+		toast( `Replaced ${ list.length } match${ list.length === 1 ? '' : 'es' }` );
+		if ( focused && focused.closest && focused.closest( '#minn-find-bar' ) ) focused.focus( { preventScroll: true } );
+	}
+
+	// The bar is fixed and anchored to the sticky toolbar; before the first
+	// scroll the toolbar sits at its natural (lower) position, so the bar
+	// follows it while the page scrolls. Marks need nothing here — they live
+	// in content coordinates.
+	let findBarRaf = 0;
+	document.addEventListener( 'scroll', () => {
+		if ( ! $( '#minn-find-bar' ) || findBarRaf ) return;
+		findBarRaf = requestAnimationFrame( () => { findBarRaf = 0; positionFindBar(); } );
+	}, true );
+	window.addEventListener( 'resize', () => {
+		if ( ! $( '#minn-find-bar' ) ) return;
+		positionFindBar();
+		queueFindRefresh(); // line wraps changed under the marks
+	} );
 
 	/* ===== Date-time picker (themed replacement for datetime-local) ===== */
 	// Chrome's native calendar is unstyleable and clashes with both themes.
@@ -12433,6 +12776,7 @@
 		// View modes are palette commands, not toolbar buttons — the toolbar
 		// is for formatting; focus/outline are how you LOOK at the document.
 		if ( state.route === 'editor' && state.editor ) {
+			if ( state.editor.mode !== 'locked' ) cmds.push( { label: 'Find & replace (⌘F)', kind: 'view', icon: '⌕', run: () => openFindBar() } );
 			cmds.push( { label: 'Toggle focus mode (⌘⇧D)', kind: 'view', icon: '◎', run: () => toggleFocusMode() } );
 			cmds.push( { label: 'Toggle outline mode (⌘⇧O)', kind: 'view', icon: '☰', run: () => toggleOutlineMode() } );
 		}
@@ -13230,6 +13574,7 @@
 							<span class="minn-kbd">⌘S</span><span>Save, keeping the current status</span>
 							<span class="minn-kbd">⌘⏎</span><span>Publish, Update or Schedule</span>
 							<span class="minn-kbd">⌘/</span><span>Block library: browse every block, design and pattern</span>
+							<span class="minn-kbd">⌘F</span><span>Find &amp; replace in the post</span>
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
 							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
@@ -14975,6 +15320,7 @@
 		clearTableChips();
 		removeFocusDim();
 		removeOutlineMode();
+		closeFindBar();
 		hideMinnMenu();
 		$$( '.minn-row-menu' ).forEach( ( el ) => el.remove() );
 		hideImgPop();
@@ -15133,6 +15479,15 @@
 			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key === '/' && state.route === 'editor' && state.editor ) {
 				e.preventDefault();
 				openBlockPicker( null );
+				return;
+			}
+			// ⌘F finds within the post — the editor owns find here (native
+			// find can't count, step or replace, and would match sidebar
+			// chrome). Locked mode falls through to the browser's own find
+			// over the read-only preview.
+			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'f' && state.route === 'editor' && state.editor && state.editor.mode !== 'locked' ) {
+				e.preventDefault();
+				openFindBar();
 				return;
 			}
 			if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'd' && state.route === 'editor' && state.editor ) {

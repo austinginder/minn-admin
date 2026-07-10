@@ -683,6 +683,45 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   opacity: 1; transition: opacity 0.55s ease;
 }
 .minn-outline-ping.out { opacity: 0; }
+
+/* Find & replace — a fixed bar under the sticky toolbar; match highlights
+   are overlay rects INSIDE the scroller at content coordinates (the
+   outline-ping rule: chrome never touches the typing surface, and overlays
+   tracking content must ride the scroll natively). */
+.minn-find-bar {
+  position: fixed; z-index: 70; width: 340px; padding: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 11px;
+  box-shadow: var(--shadow); animation: minnScaleIn 0.12s ease;
+}
+.minn-find-row { display: flex; align-items: center; gap: 6px; }
+.minn-find-row input {
+  flex: 1; min-width: 0; font: inherit; font-size: 13px; color: var(--text);
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px;
+}
+.minn-find-row input:focus { outline: none; border-color: var(--accent); }
+#minn-find-count { font-size: 11.5px; color: var(--text3); min-width: 30px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.minn-find-btn {
+  width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--text2); background: transparent; border: 1px solid transparent;
+  border-radius: 6px; cursor: pointer;
+}
+.minn-find-btn:hover { background: var(--hover); color: var(--text); }
+.minn-find-btn.on { color: var(--accent2); background: var(--accent-soft); border-color: var(--accent); }
+.minn-find-act {
+  flex: none; font-size: 12.5px; font-weight: 600; color: var(--text2); background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; cursor: pointer;
+}
+.minn-find-act:hover { border-color: var(--accent); color: var(--text); }
+#minn-find-marks { position: absolute; top: 0; left: 0; width: 100%; height: 0; pointer-events: none; }
+.minn-find-mark {
+  position: absolute; border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.minn-find-mark.cur {
+  background: color-mix(in srgb, var(--amber) 42%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 60%, transparent);
+}
 .minn-revision-preview {
   margin: 0 18px 14px; padding: 14px 16px; background: var(--bg2); border: 1px solid var(--border);
   border-radius: 10px; font-size: 14px; line-height: 1.65; max-height: 42vh; overflow-y: auto;

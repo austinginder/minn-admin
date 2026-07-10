@@ -129,6 +129,14 @@ the point.
 - **Internal link picker.** ⌘K link flow searches your own posts first — linking to your
   own writing should be faster than pasting a URL.
 - **Find & replace** within the post, markdown-aware.
+  ✅ *Shipped 2026-07-10* — ⌘F find bar (the "Find & replace" section in app.js; also a ⌘K
+  command). Matching runs over the text writers see: text nodes concatenated per block, so a
+  match crosses inline marks (a split `<strong>`) but never a block boundary, and islands /
+  `contenteditable=false` subtrees are excluded entirely. Highlights are overlay rects inside
+  the scroller at content coordinates (nothing touches the typing surface); replaces select
+  the match Range and run `execCommand insertText`, so every replacement is a native undo
+  entry and Replace-all applies last-to-first to keep earlier ranges valid. Locked mode falls
+  through to browser find. Suite: `tests/find-replace.test.js`.
 - **Writing stats that matter.** Session word counts, per-post goals; the pill grows up.
 - **Slash-command extension point.** `minn_admin_editor_commands` filter so plugins add
   their own slash items the way they already add blocks, panels and surfaces.
