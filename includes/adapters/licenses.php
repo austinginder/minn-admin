@@ -4,10 +4,18 @@
  *
  * Enumerates every license-wanting plugin and theme on the site and
  * classifies each as valid / expired / invalid / missing / unknown from
- * LOCALLY STORED state only. Strictly read-only: no network calls, no
- * vendor code execution, no writes, so it can never burn an activation
- * seat. Stored status is last-verified truth, not live truth; rows carry
- * a stale flag when the vendor's own cache has lapsed.
+ * LOCALLY STORED state only. Classification is strictly read-only: no
+ * network calls, no vendor code execution, no writes, so it can never
+ * burn an activation seat. Stored status is last-verified truth, not
+ * live truth; rows carry a stale flag when the vendor's own cache lapsed.
+ *
+ * Phase 1 adds OPT-IN actions per provider: `activate( $secret )`,
+ * `deactivate()` and `verify()` callables that route through the VENDOR'S
+ * OWN activation code (never a reimplemented HTTP call), exposed at
+ * POST minn-admin/v1/licenses/action. Paste-to-activate only: Minn never
+ * stores, logs or echoes a pasted secret, and a failed activation is
+ * never retried automatically (retries can burn paid seats). "Site limit
+ * reached" is a first-class result code, not a generic error.
  *
  * Third parties can add providers via the `minn_admin_license_providers`
  * filter:
@@ -505,6 +513,87 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// ----- Phase 1 actions -------------------------------------------------
+	// Attached only while the vendor's own code is LOADED (active plugin/
+	// theme), so the client never draws a control that cannot work. Every
+	// action routes through the vendor's own activation path; Minn never
+	// reimplements a vendor HTTP call and never retries a failure.
+
+	// Elementor Pro: same sequence as its own ajax handler —
+	// API::activate_license, then set_license_key + set_license_data on
+	// success. 'no_activations_left' is the seat-limit code.
+	if ( class_exists( '\ElementorPro\License\API' ) && class_exists( '\ElementorPro\License\Admin' ) ) {
+		$providers['elementor-pro']['secret_label'] = 'Elementor Pro license key';
+		$providers['elementor-pro']['activate']     = function ( $secret ) {
+			$data = \ElementorPro\License\API::activate_license( $secret );
+			if ( is_wp_error( $data ) ) {
+				return $data;
+			}
+			if ( empty( $data['success'] ) ) {
+				$err  = isset( $data['error'] ) ? (string) $data['error'] : 'unknown';
+				$code = 'no_activations_left' === $err ? 'site_limit' : ( 'expired' === $err ? 'expired' : 'invalid' );
+				$msgs = array(
+					'missing'       => 'Elementor does not recognize that key',
+					'invalid'       => 'Elementor does not recognize that key',
+					'expired'       => 'That Elementor Pro license has expired',
+					'disabled'      => 'That license was disabled',
+					'cancelled'     => 'That subscription was cancelled',
+					'revoked'       => 'That license was revoked',
+					'site_inactive' => 'That key is registered to a different domain',
+				);
+				return array( 'ok' => false, 'code' => $code, 'message' => isset( $msgs[ $err ] ) ? $msgs[ $err ] : str_replace( '_', ' ', $err ) );
+			}
+			\ElementorPro\License\Admin::set_license_key( $secret );
+			\ElementorPro\License\API::set_license_data( $data );
+			return array( 'ok' => true );
+		};
+		$providers['elementor-pro']['deactivate'] = function () {
+			\ElementorPro\License\Admin::deactivate();
+			return array( 'ok' => true );
+		};
+		$providers['elementor-pro']['verify'] = function () {
+			\ElementorPro\License\API::get_license_data( true ); // force a fresh check into their own cache
+			return array( 'ok' => true );
+		};
+	}
+
+	// ACF Pro: their own activate/deactivate return {success, message}
+	// (or WP_Error); $silent = true keeps their admin notices out of it.
+	if ( function_exists( 'acf_pro_activate_license' ) ) {
+		$providers['acf-pro']['secret_label'] = 'ACF PRO license key';
+		$providers['acf-pro']['activate']     = function ( $secret ) {
+			$res = acf_pro_activate_license( $secret, true );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$ok  = is_array( $res ) && ! empty( $res['success'] );
+			$msg = is_array( $res ) && isset( $res['message'] ) ? wp_strip_all_tags( (string) $res['message'] ) : '';
+			return array( 'ok' => $ok, 'code' => $ok ? '' : ( false !== stripos( $msg, 'site' ) && false !== stripos( $msg, 'limit' ) ? 'site_limit' : 'invalid' ), 'message' => $msg );
+		};
+		$providers['acf-pro']['deactivate'] = function () {
+			$res = acf_pro_deactivate_license( true );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$ok  = is_array( $res ) && ! empty( $res['success'] );
+			$msg = is_array( $res ) && isset( $res['message'] ) ? wp_strip_all_tags( (string) $res['message'] ) : '';
+			return array( 'ok' => $ok, 'message' => $msg );
+		};
+	}
+
+	// WP Rocket ships its credentials inside the vendor's zip (no key to
+	// paste), so its one action is re-verify: rocket_check_key() validates
+	// against their server and rewrites the stored state.
+	if ( function_exists( 'rocket_check_key' ) ) {
+		$providers['wp-rocket']['verify'] = function () {
+			rocket_check_key();
+			$flagged = (bool) get_option( 'wp_rocket_no_licence' );
+			$errs    = get_transient( 'rocket_check_key_errors' );
+			$msg     = ( is_array( $errs ) && $errs ) ? wp_strip_all_tags( (string) $errs[0] ) : '';
+			return array( 'ok' => ! $flagged, 'code' => $flagged ? 'invalid' : '', 'message' => $flagged ? $msg : '' );
+		};
+	}
+
 	return $providers;
 }
 
@@ -708,13 +797,22 @@ function minn_admin_licenses() {
 		if ( ! empty( $p['component'] ) ) {
 			$claimed[ $p['component'] ] = true;
 		}
+		// Which Phase-1 actions this provider offers; the client only draws
+		// controls for rows whose provider declares the callable.
+		$can = array_values( array_filter( array( 'activate', 'deactivate', 'verify' ), function ( $a ) use ( $p ) {
+			return ! empty( $p[ $a ] ) && is_callable( $p[ $a ] );
+		} ) );
 		foreach ( $rows as $row ) {
 			if ( ! is_array( $row ) || empty( $row['name'] ) ) {
 				continue;
 			}
 			$row['id']     = sanitize_key( $id . '-' . $row['name'] );
 			$row['source'] = (string) $id;
-			$items[]       = $row;
+			if ( $can ) {
+				$row['can']    = $can;
+				$row['secret'] = isset( $p['secret_label'] ) ? (string) $p['secret_label'] : 'License key';
+			}
+			$items[] = $row;
 		}
 	}
 
@@ -757,17 +855,79 @@ function minn_admin_licenses() {
 	);
 }
 
+/**
+ * Normalize whatever a provider action returns into { ok, code, message }.
+ * Codes: '' (fine), 'invalid', 'site_limit', 'expired', 'error'. A vendor
+ * WP_Error or thrown Throwable becomes a plain 'error' result; nothing a
+ * provider does can take the endpoint down.
+ */
+function minn_admin_license_result( $raw ) {
+	if ( is_wp_error( $raw ) ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => $raw->get_error_message() );
+	}
+	if ( is_bool( $raw ) || null === $raw ) {
+		return array( 'ok' => (bool) $raw, 'code' => $raw ? '' : 'error', 'message' => '' );
+	}
+	if ( is_array( $raw ) ) {
+		return array(
+			'ok'      => ! empty( $raw['ok'] ),
+			'code'    => isset( $raw['code'] ) ? (string) $raw['code'] : ( empty( $raw['ok'] ) ? 'error' : '' ),
+			'message' => isset( $raw['message'] ) ? (string) $raw['message'] : '',
+		);
+	}
+	return array( 'ok' => false, 'code' => 'error', 'message' => '' );
+}
+
 add_action( 'rest_api_init', function () {
+	$can = function () {
+		return current_user_can( 'manage_options' );
+	};
 	register_rest_route(
 		'minn-admin/v1',
 		'/licenses',
 		array(
 			'methods'             => 'GET',
-			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => $can,
 			'callback'            => function () {
 				return rest_ensure_response( minn_admin_licenses() );
+			},
+		)
+	);
+	register_rest_route(
+		'minn-admin/v1',
+		'/licenses/action',
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => $can,
+			'callback'            => function ( WP_REST_Request $req ) {
+				$provider_id = sanitize_key( (string) $req->get_param( 'provider' ) );
+				$action      = (string) $req->get_param( 'action' );
+				// The secret is used for this one call and never stored,
+				// logged or echoed back.
+				$secret = trim( (string) $req->get_param( 'secret' ) );
+				if ( ! in_array( $action, array( 'activate', 'deactivate', 'verify' ), true ) ) {
+					return new WP_Error( 'bad_action', 'Unknown action.', array( 'status' => 400 ) );
+				}
+				$providers = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+				$p         = isset( $providers[ $provider_id ] ) ? $providers[ $provider_id ] : null;
+				if ( ! $p || empty( $p[ $action ] ) || ! is_callable( $p[ $action ] ) ) {
+					return new WP_Error( 'no_provider', 'No such action for this provider.', array( 'status' => 404 ) );
+				}
+				if ( 'activate' === $action && '' === $secret ) {
+					return new WP_Error( 'no_secret', 'Paste a key first.', array( 'status' => 400 ) );
+				}
+				try {
+					$raw = ( 'activate' === $action )
+						? call_user_func( $p[ $action ], $secret )
+						: call_user_func( $p[ $action ] );
+					$result = minn_admin_license_result( $raw );
+				} catch ( \Throwable $e ) {
+					$result = array( 'ok' => false, 'code' => 'error', 'message' => $e->getMessage() );
+				}
+				// Fresh classification rides along so the client repaints
+				// from the vendor's now-current stored state in one round trip.
+				$result['licenses'] = minn_admin_licenses();
+				return rest_ensure_response( $result );
 			},
 		)
 	);

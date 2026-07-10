@@ -23,7 +23,7 @@ Minn's whole extension surface is a small set of public hooks. The main ones:
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
 | `minn_admin_cache_purgers` | filter | Join the "Clear site cache" palette command |
 | `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
-| `minn_admin_license_providers` | filter | Report your license state on the System page's Licenses card |
+| `minn_admin_license_providers` | filter | Report your license state on the System page's Licenses card, optionally with activate / deactivate / re-verify |
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
@@ -671,6 +671,38 @@ or invalid fails it, missing or unknown warns) and the copy-as-markdown report.
 Bundled readers, including generic Freemius and EDD Software Licensing coverage,
 live in `includes/adapters/licenses.php`; the endpoint is
 `GET minn-admin/v1/licenses` (gated on `manage_options`).
+
+### Actions: activate, deactivate, re-verify (optional)
+
+A provider may also declare `secret_label` plus any of three action callables, and
+the card grows the matching controls (paste-to-activate field, Deactivate with a
+confirm, Re-verify):
+
+```php
+'secret_label' => 'My Plugin license key',
+'activate'     => function ( $secret ) {
+    $res = my_plugin_activate_license( $secret ); // YOUR activation code
+    return array(
+        'ok'      => $res->ok,
+        'code'    => $res->seats_exhausted ? 'site_limit' : ( $res->ok ? '' : 'invalid' ),
+        'message' => $res->message,
+    );
+},
+'deactivate'   => function () { /* your deactivation */ return array( 'ok' => true ); },
+'verify'       => function () { /* re-check stored credentials */ return array( 'ok' => true ); },
+```
+
+Rules that make this safe, enforced by how Minn calls you and expected of your
+callables: actions run only when your plugin's own code is loaded (attach them
+conditionally, exactly like the bundled Elementor Pro adapter), the pasted secret
+rides one request and is never stored, logged or echoed back by Minn, a failed
+activation is never retried automatically (a retry can burn a paid seat), and
+`site_limit` is a first-class result code so a seat problem is named instead of
+buried in a generic error. Actions run through
+`POST minn-admin/v1/licenses/action` (`{provider, action, secret?}`, gated on
+`manage_options`); a returned `WP_Error` or a thrown exception surfaces as a plain
+error result. After any action the fresh classification rides back in the same
+response, so the card repaints from your stored state.
 
 ## Comments detection — `minn_admin_comments_enabled`
 

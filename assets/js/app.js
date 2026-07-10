@@ -4848,10 +4848,23 @@
 				it.expires === 'lifetime' ? 'lifetime license' : ( it.expires ? ( it.state === 'expired' ? 'expired ' : 'renews ' ) + it.expires : '' ),
 				it.stale ? 'may be stale' : '',
 			].filter( Boolean ).join( ' · ' );
+			// Phase-1 controls, only for actions the provider's ACTIVE vendor
+			// code declared. Paste-to-activate: the key rides one request and
+			// is never stored or echoed back.
+			const can = it.can || [];
+			const controls = [
+				can.includes( 'activate' ) && it.state !== 'valid'
+					? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || 'License key' ) }">Activate…</button>` : '',
+				can.includes( 'deactivate' ) && it.state === 'valid'
+					? `<button data-lic="deactivate" data-provider="${ esc( it.source ) }" data-name="${ esc( it.name ) }">Deactivate</button>` : '',
+				can.includes( 'verify' ) && it.key
+					? `<button data-lic="verify" data-provider="${ esc( it.source ) }">Re-verify</button>` : '',
+			].filter( Boolean ).join( '' );
 			return `
-			<div class="minn-sys-ext-item">
+			<div class="minn-sys-ext-item minn-lic-item">
 				<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.kind === 'theme' ? ' <span class="minn-sys-ext-parent">theme</span>' : '' }
 					${ meta ? `<div class="minn-sys-lic-meta">${ esc( meta ) }</div>` : '' }
+					${ controls ? `<div class="minn-lic-actions">${ controls }</div>` : '' }
 				</span>
 				<span class="minn-lic-pill ${ esc( it.state ) }">${ licLabel[ it.state ] || esc( it.state ) }</span>
 			</div>`;
@@ -4859,12 +4872,12 @@
 		const licCard = lic && lic.items.length ? `
 			<div class="minn-card minn-sys-ext" id="minn-sys-licenses">
 				<div class="minn-sys-card-head">${ icon( 'key' ) }<span>Licenses</span>
-					<span class="minn-sys-debug-hint">${ lic.items.length } paid component${ lic.items.length === 1 ? '' : 's' } · read from stored state, never the network</span>
+					<span class="minn-sys-debug-hint">${ lic.items.length } paid component${ lic.items.length === 1 ? '' : 's' } · states read from stored state, never the network</span>
 				</div>
 				<div class="minn-sys-ext-section">
 					<div class="minn-sys-ext-grid">${ lic.items.map( licRow ).join( '' ) }</div>
 				</div>
-				<div class="minn-sys-lic-foot">Each state is the vendor's own last-recorded check, not a live lookup. Activate or renew on the vendor's screen; Minn only reports.</div>
+				<div class="minn-sys-lic-foot">Each state is the vendor's own last-recorded check, not a live lookup. Activate and deactivate run through the vendor's own code; a pasted key is used once and never stored.</div>
 			</div>` : '';
 
 		// Integrations — the live registry of everything hooked into Minn:
@@ -4960,6 +4973,67 @@
 
 		const viewLog = $( '#minn-view-log', view );
 		if ( viewLog ) viewLog.addEventListener( 'click', openDebugLog );
+
+		// License actions (Phase 1): activate swaps in an inline paste field;
+		// the secret rides one request and is never stored or echoed back.
+		// Failures never auto-retry (a retried activation can burn a paid
+		// seat), and the whole card repaints from fresh server state after.
+		const licRun = async ( provider, action, secret, btn ) => {
+			const label = btn.textContent;
+			btn.disabled = true;
+			btn.textContent = action === 'activate' ? 'Activating…' : action === 'deactivate' ? 'Deactivating…' : 'Checking…';
+			try {
+				const res = await api( 'minn-admin/v1/licenses/action', {
+					method: 'POST',
+					body: JSON.stringify( { provider, action, secret } ),
+				} );
+				if ( res.ok ) {
+					toast( action === 'activate' ? 'License activated' : action === 'deactivate' ? 'License deactivated' : 'License re-verified' );
+				} else if ( res.code === 'site_limit' ) {
+					toast( 'No activations left on this license. Free a seat with the vendor first — Minn never retries an activation.', true );
+				} else {
+					toast( res.message || ( action === 'activate' ? 'Activation failed — check the key' : 'The vendor reported a problem' ), true );
+				}
+				state.cache.system = null; // rows + health check are server-derived
+				renderSystem();
+			} catch ( e ) {
+				toast( e.message, true );
+				btn.disabled = false;
+				btn.textContent = label;
+			}
+		};
+		$$( '[data-lic]', view ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
+			const action = btn.dataset.lic;
+			const provider = btn.dataset.provider;
+			if ( 'deactivate' === action ) {
+				if ( ! confirm( `Deactivate the ${ btn.dataset.name } license on this site? The seat frees up, and the plugin may stop receiving updates until a license is activated again.` ) ) return;
+				licRun( provider, 'deactivate', '', btn );
+				return;
+			}
+			if ( 'verify' === action ) {
+				licRun( provider, 'verify', '', btn );
+				return;
+			}
+			const wrap = btn.closest( '.minn-lic-actions' );
+			wrap.innerHTML = `
+				<input type="password" class="minn-lic-key" placeholder="${ esc( btn.dataset.secret ) }" autocomplete="off" spellcheck="false">
+				<button data-lic-go>Activate</button>
+				<button data-lic-cancel>Cancel</button>`;
+			const input = $( '.minn-lic-key', wrap );
+			input.focus();
+			$( '[data-lic-go]', wrap ).addEventListener( 'click', () => {
+				const secret = input.value.trim();
+				if ( ! secret ) {
+					input.focus();
+					return;
+				}
+				licRun( provider, 'activate', secret, $( '[data-lic-go]', wrap ) );
+			} );
+			input.addEventListener( 'keydown', ( e ) => {
+				if ( 'Enter' === e.key ) $( '[data-lic-go]', wrap ).click();
+			} );
+			$( '[data-lic-cancel]', wrap ).addEventListener( 'click', () => renderSystem() );
+		} ) );
 
 		$( '#minn-sys-copy', view ).addEventListener( 'click', async () => {
 			const text = systemReportText( s );
