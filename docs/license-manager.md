@@ -1,124 +1,164 @@
-# One place to activate Pro licenses (proposal)
+# License manager — visibility first, activation second
 
 A real WordPress site runs several commercial plugins, and every one of them
-nags for its license key on its own wp-admin page: Elementor Pro, Brizy Pro,
-Bricks, WPBakery, and dozens more each show a "activate your license" banner
-that links somewhere different. In Minn's notification digest they stack up as
-a wall of near-identical asks (see the license nags captured on the builders
-lab). The idea: **one activation surface in Minn where you paste a key once and
-Minn hands it to the right plugin**, so the nags clear without a wp-admin
-scavenger hunt.
+handles its license alone: its own wp-admin page, its own nag banner, its own
+idea of what "active" means. Two distinct problems fall out of that:
 
-This is a proposal, not shipped. The research below is what makes it hard, and
-the recommendation is a phased, honest-about-its-limits adapter surface.
+1. **Zero visibility.** Nothing on a site can answer "which of my paid plugins
+   have a valid license right now?" An expired key usually means silently
+   missed updates (including security releases) until something breaks.
+2. **Activation scavenger hunt.** Setting a site up means visiting five
+   different settings pages to paste five keys.
 
-## Why there is no easy version
+No true cross-vendor license manager has ever existed in WordPress. There is
+no shared license API; each vendor invented its own storage, key format,
+activation call and status semantics. That's exactly why it's valuable, and
+why it has to be built carefully.
 
-There is **no shared license API in WordPress**. Each vendor invented its own
-storage option, key format, activation function, and remote endpoint. Verified
-against the builders lab:
+The 2026-07-10 research pass (source-verified against the local labs' real
+paid plugins) changed the plan: **visibility is buildable now, read-only,
+with zero risk**, while activation stays the careful per-vendor project the
+earlier draft of this doc described. Ship them in that order.
 
-| Plugin | Key format | Stored in | Activate via | Endpoint |
-|---|---|---|---|---|
-| **Elementor Pro** | license key | option `elementor_pro_license_key` (+ `_elementor_pro_license_v2_data`) | `\ElementorPro\License\API::activate_license($key)` | `my.elementor.com/api/v1/licenses/` |
-| **Brizy Pro** | license key | plugin option | `BrizyPro_Admin_License->activate($args)` → `request(…, ACTIVATE_LICENSE)` | Brizy's own API |
-| **WPBakery** | **Envato purchase code** (not a key) | option `js_composer_purchase_code` (+ `license_key_token`) | `Vc_License` + `wp_ajax_vc_check_license_key` | Envato / WPBakery |
-| **Bricks** | license key | option `bricks_license_key` | theme-side activation | `api.bricksbuilder.io` |
+## Phase 0 — the license status dashboard (read-only, build first)
 
-The differences are not cosmetic:
+A surface that enumerates every license-wanting component on the site and
+classifies each as **valid / expired / invalid / missing / unknown**, from
+locally stored state only. No network calls, no vendor code execution, no
+writes. It cannot burn an activation seat because it never activates anything.
 
-- **Different secrets.** WPBakery wants an Envato purchase code, not a license
-  key. EDD-based plugins (many) want a license key tied to a download ID.
-- **Different call shapes.** Some expose a clean static method
-  (`API::activate_license`), some only an AJAX handler with a nonce, some only
-  a form POST on their settings page.
-- **Different success/failure semantics.** Each returns its own JSON shape:
-  activated, invalid, expired, **site limit reached** (a real hazard — a wrong
-  activation can burn a paid seat), disabled, etc.
-- **Different per-domain rules.** Seat counts, dev/staging exemptions, and
-  deactivation-before-move behaviour vary per vendor.
+### Why this is feasible: the storage landscape (source-verified)
 
-So a single "activate everything" button is a **per-plugin adapter matrix**,
-not one integration. Getting it wrong risks burning activation slots or writing
-malformed license state that the plugin then refuses to repair.
+Two generic SDKs cover a large share of the commercial ecosystem with one
+adapter each:
 
-## The three strategies
+- **Freemius** — detection: the plugin/theme ships a `freemius/` directory.
+  All state lives in one option, `fs_accounts`: per-slug install objects carry
+  `license_id`/`plan_id`, and `all_licenses` holds license entities with an
+  absolute `expiration` datetime. Valid/expired/missing is fully computable
+  offline, and because expiry is an absolute date, the classification stays
+  correct even when Freemius's own sync is stale. The best-behaved vendor of
+  all.
+- **EDD Software Licensing clients** — detection: the plugin bundles the
+  `EDD_SL_Plugin_Updater` class (filenames vary; the class name is the
+  signal). Storage is conventional, not fixed: `{prefix}_license_key` +
+  `{prefix}_license_status` option pairs (verified: perfmatters, BNFW,
+  Breakdance). The *status vocabulary* is standardized by the EDD server:
+  `valid`, `invalid`, `expired`, `disabled`, `site_inactive`. Classification
+  works by prefix-pairing key/status options; a key with no readable status
+  is `unknown`.
 
-1. **Deep-link only (what Minn does today).** The notice digest surfaces each
-   nag with its "Activate ↗" link; clicking opens the vendor's own page. Zero
-   risk, zero magic. The status quo.
-2. **Store-and-forward vault.** Minn keeps a per-site "license locker" (keys the
-   user pastes once), and when a matching plugin is active, offers a one-click
-   "Apply to ⟨plugin⟩" that calls that plugin's own activation path. The keys
-   still live per plugin; Minn is a convenience layer, never the source of
-   truth.
-3. **Full abstraction.** Minn owns license state and silently keeps every
-   plugin activated. Rejected: it makes Minn responsible for other vendors'
-   billing edge cases, and a bug here costs the user real money or a broken
-   Pro install.
+Major single vendors, each a small dedicated reader (all verified in source):
 
-## Recommendation: a capability-gated vault (strategy 2), adapter by adapter
+| Vendor | Status + expiry storage | Read-only verdict |
+|---|---|---|
+| Elementor Pro | `elementor_pro_license_key` + `_elementor_pro_license_v2_data` (12h cache; holds `expired`/`site_inactive`/`disabled` and `expires`, or `lifetime`) | Full classification + expiry |
+| ACF Pro | `acf_pro_license` + `acf_pro_license_status` (status + expiry array) | Full classification + expiry |
+| WP Rocket | keys in `wp_rocket_settings`; invalid flag `wp_rocket_no_licence`; expiry in the 1-day `wp_rocket_customer_data` transient | Full when cache warm; key + invalid flag always |
+| Astra / Brainstorm Force | `brainstrom_products` (sic), per-product `purchase_key` + `status === 'registered'` (covers Astra Pro, UAE, Spectra Pro) | Full classification |
+| Kadence (StellarWP Uplink) | per-plugin `stellarwp_uplink_license_key_{slug}` + status options | Full classification |
+| Bricks | `bricks_license_key` + `bricks_license_status` transient (7d TTL) | Status while cache warm, else unknown-stale |
+| Beaver Builder | `fl_themes_subscription_email` + `fl_get_subscription_info` transient (`active`, `expiration`) | Status while cache warm |
+| Divi / Elegant Themes | `et_automatic_updates_options` (username + API key) + `et_account_status` | Status string, no expiry |
+| Admin Columns / Advanced Ads / WP All Import | EDD-style key+status options (per-product names) | Full classification |
+| WPBakery | `wpb_js_js_composer_purchase_code` only; no status is ever stored (lifetime model) | Presence-only |
+| Brizy Pro | postmeta `brizy-license-key` on the Brizy project post, not wp_options | Presence-only |
+| Etch / SureCart licensing SDK | `{name}_license_options` + activation-id option; SDK is shared, so this is a small generic adapter too | Activated/missing, no expiry |
+| Gravity Forms | `rg_gforms_key` stores the key md5-hashed | Presence-only |
 
-Ship a **Licenses** surface that is honestly a convenience wrapper over each
-plugin's own activation, one adapter at a time, highest-value vendors first.
+### Detector design
 
-**Shape:**
+Two layers, both strictly read-only (raw option/postmeta reads; never invoke
+vendor classes, never hit the network):
 
-- A `minn_admin_license_providers` filter. Each provider declares:
-  `{ id, name, secret_label ("License key" | "Envato purchase code"),
-  status(): {state, expires?, site_limit?}, activate($secret): result,
-  deactivate(): result }`. Bundled adapters call the plugin's OWN activation
-  code (never a reimplemented HTTP call to the vendor) so seat rules,
-  nonces and error handling stay the vendor's.
-- The surface lists every active Pro plugin Minn has an adapter for, its
-  current license state (read from the plugin's stored option — no network
-  call), and a field to paste + activate. Deactivate where the vendor
-  supports it.
-- The notice digest learns about it: a captured "activate your license" nag
-  from a plugin Minn has a license adapter for gets an inline **Activate in
-  Minn** action instead of only the deep-link.
+**Layer 1 — enumeration ("who wants a license?").** Cheap, cacheable signals
+per installed plugin/theme: embedded SDK fingerprints (`freemius/` dir,
+`EDD_SL_Plugin_Updater` string, SureCart licensing dir, `bsf-core/`, Uplink),
+a known-vendor slug registry, and the update-source heuristic (entries in the
+`update_plugins`/`update_themes` transients whose package URL is not
+wordpress.org, which the plugin-meta endpoint already reads for the reverse
+purpose). Anything matching becomes a row even if unclassifiable.
 
-**Non-negotiable guardrails (why this is careful, not clever):**
+**Layer 2 — classification.** Vendor adapters declare option/meta locations, a
+status map, an expiry field and the vendor's cache TTL; the two SDK adapters
+(Freemius, EDD) cover their whole families generically. Output per component:
 
-- **Never reimplement a vendor's activation HTTP call.** Always route through
-  the plugin's own method/class, so if the vendor changes their API Minn
-  doesn't silently corrupt state. If a plugin exposes no callable path (only a
-  form POST), that plugin is deep-link-only — no adapter.
-- **Surface "site limit reached" as a first-class result**, never retry a
-  failed activation automatically (retries can burn seats).
-- **Read status from the plugin's stored option, not the network**, so the
-  surface is fast and can't rack up API calls.
-- **Store pasted secrets encrypted at rest** (or not at all — a "paste to
-  activate, don't retain" mode should be the default; the locker is opt-in).
+- `valid` — stored status says so, within honesty limits
+- `expired` — stored status or an absolute expiry date in the past
+- `invalid` — deactivated, site_inactive, disabled, key/domain mismatch
+- `missing` — component wants a license, no key stored (the loudest row)
+- `unknown` — key present but status unreadable or stale past the vendor's TTL
+
+Every classified row carries an "as of" timestamp derived from the vendor's
+own cache/check time. **Stored status is last-verified truth, not live truth**;
+the UI must say "valid as of 3 days ago", never pretend to real-time.
+
+### Honest limits
+
+- WPBakery, Gravity Forms, Brizy and Etch cap out at activated/missing.
+- Bricks, Beaver Builder and Divi lose status when their transients expire;
+  those rows go unknown-stale with the last-known value and its age.
+- Expect a visible chunk of long-tail rows at "key present, status unknown".
+  That is still useful: it proves a key exists and names the plugin.
+- WooCommerce.com subscriptions and Envato purchase-code plugins use entirely
+  different models; unverified, deferred.
+- A renewal or a remote deactivation isn't visible until the vendor's own
+  check runs again. Phase 2 addresses this; Phase 0 does not.
+
+### Where it lives
+
+Start as a **Licenses card on the System page** (rows with status pills, the
+same health-check language the page already speaks) plus a health check
+("2 licenses expired, 1 missing") and license badges on Extensions cards.
+Graduate to a dedicated surface when Phase 1 adds actions. The notice digest
+already captures the vendors' own nag banners; rows here should link to the
+same activation deep-links the digest extracts.
+
+## Phase 1 — the activation vault (careful, per-vendor)
+
+Unchanged in substance from the original proposal: a
+`minn_admin_license_providers` filter where each provider declares
+`{ id, name, secret_label, status(), activate($secret), deactivate() }`,
+with bundled adapters calling the plugin's OWN activation code so seat
+rules, nonces and error handling stay the vendor's.
+
+The guardrails are non-negotiable:
+
+- **Never reimplement a vendor's activation HTTP call.** Route through the
+  plugin's own method. No callable path (form-POST-only vendors) means
+  deep-link only, no adapter.
+- **"Site limit reached" is a first-class result.** Never auto-retry a failed
+  activation; retries can burn paid seats.
+- **Paste-to-activate, don't retain, is the default.** A stored key locker is
+  opt-in and encrypted at rest.
 - **manage_options only.**
 
-## Phasing
+Sequencing within Phase 1: Elementor Pro + Bricks first (clean activation
+calls, huge install base, and Phase 0 already reads their status), then the
+EDD and Freemius SDK families (one adapter covers many products: the real
+leverage), then Envato purchase-code vendors (`secret_label` already models
+the different secret type). Needs real test licenses on a lab before any
+code; a wrong activation costs actual money.
 
-- **Phase 1 — Elementor Pro + Bricks.** Both expose a clean activation call and
-  a plain option for status; highest install base among Pro builders. Proves
-  the provider contract end-to-end with a real key.
-- **Phase 2 — EDD/Freemius families.** A large share of Pro plugins use one of
-  a few licensing SDKs (EDD Software Licensing, Freemius). A single adapter per
-  *SDK* can cover many plugins at once — the real leverage.
-- **Phase 3 — Envato purchase-code plugins (WPBakery et al.).** Different
-  secret type; the surface already models `secret_label`, so it slots in.
-- **Deferred:** vendors that only accept a form POST on their settings page
-  stay deep-link-only, and that's fine.
+## Phase 2 — freshness on demand
 
-## Open questions (decide before building)
+An optional "Re-verify now" per row that triggers the vendor's own
+revalidation (or clears its status transient so the vendor re-checks on its
+next admin load). This executes vendor code, so it deliberately stays out of
+Phase 0. Small, but it closes the staleness gap for the transient-based
+vendors.
 
-- **Which vendors first, and do we have test licenses?** Phase 1 needs a real
-  Elementor Pro / Bricks key on the lab to verify activation without faking it.
-- **Locker storage.** Encrypt-at-rest vs paste-and-forget default. Where does
-  the key material live, and what happens on plugin deactivation or site
-  migration (deactivate-first etiquette)?
-- **Scope creep into billing.** Minn should show state and activate; it should
-  not try to renew, upsell, or manage seats across sites. Draw that line
-  explicitly.
+## What Minn will never do here
+
+Own license state, silently keep plugins activated, renew or upsell, manage
+seats across sites, or store secrets without opt-in. Minn shows state and,
+where a vendor exposes a safe path, forwards a key. Billing edge cases stay
+the vendor's product.
 
 ## Status
 
-Parked. This is a multi-session feature that needs a scope decision (which
-vendors, locker storage model) and test licenses before any code. Until then,
-the notice digest's deep-links are the shipped answer, and they already remove
-most of the "where do I even go" friction.
+Phase 0 is scoped and ready to build: the storage research is done
+(source-verified 2026-07-10 against the labs' real paid plugins), the
+classification enum and detector layers are designed above, and no scope
+decision blocks it. Phase 1 stays parked behind test licenses and a locker
+decision.

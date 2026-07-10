@@ -43,27 +43,42 @@ whether the adapter approach scales to full coverage.
    has a proven answer: delegate, exactly like page builders ("Edit in Gravity Forms"
    is one click, with no wp-admin chrome needed for the builder-style screens).
 
-## Where the adapter system stands today
+## Where the adapter system stands today (re-verified at v0.10.0, 2026-07-10)
 
-The current vocabulary (docs/for-plugin-authors.md) expresses: paginated list tables
-with tabs and search, a second `manage` collection, a detail modal (raw dump,
-server-shaped `sectionsRoute` sections, or a sandboxed `messageKey` body), inline
-`detail.edit` and `create` forms limited to text/number fields, and declarative
-`actions` (route + method + static body, `when`-gated, `confirm`, `href`). That covers
-"read info out of third-party plugins" plus light writes (GF form activate/deactivate,
-Redirection CRUD).
+The current vocabulary (docs/for-plugin-authors.md; ground truth is the validator
+constants in `class-minn-admin-surfaces.php`) expresses: paginated list tables with
+tabs and search, a second `manage` collection with a `viewLabel` switcher, sidebar
+placement via `group`, a detail modal (raw dump, server-shaped `sectionsRoute`
+sections, or a sandboxed `messageKey` body), inline `detail.edit` and `create` forms
+(text, number, textarea, select, tags), declarative `actions` (route + method +
+static body, `when`-gated, `confirm`, `href`), column refinements (`altKey`,
+`width`, `utc`, formats incl. `entry-summary`), and the `status` card: a
+server-built display model above the list with stat rows, a click-to-copy command
+box and action buttons (shipped 2026-07-10, Disembark is the reference). Provider
+families beyond surfaces also grew their own filters: traffic, cache purgers, spam
+provider cards, design sources, page builders, insert blocks.
 
-What no descriptor can express today, confirmed against app.js:
+What no descriptor can express today, re-confirmed against app.js at v0.10.0:
 
-- **Settings pages.** No surface shape maps to "a form that reads and writes options."
-  The extension-api Class-3 answer is still a wp-admin link.
-- **Real form fields.** Surface `create`/`detail.edit` know only text and number, all
-  fields required. Editor panels know select, radio, toggle, textarea, min/max, but
-  are trapped in the editor sidebar and hard-wired to the `wp/v2` post save.
-- **Parameterized actions.** An action body is static JSON; it cannot carry user input
-  ("resend to ⟨address⟩") or item values beyond `{id}`.
-- **Bulk operations, row-level actions, stat cards, charts, wizards, nested
-  navigation.** The `stats` key sketched in extension-api.md never shipped.
+- **Settings pages.** No surface shape maps to "a form that reads and writes
+  options." The Spam settings page (2026-07-10) is the closest thing shipped, and
+  it is deliberately bespoke: a fixed Settings tab rendering provider cards with a
+  narrow `{configured, note, blocked, toggles}` vocabulary, not a schema-driven
+  form. It proves the appetite; it is not the Rung-2 engine.
+- **Real form fields with semantics.** Surface `create`/`detail.edit` grew
+  textarea/select/tags, but still no `required`/`default`/`help`/`placeholder`/
+  `dependency`. Editor panels know select, radio, toggle, textarea, min/max, but
+  stay trapped in the editor sidebar and hard-wired to the `wp/v2` post save. The
+  block inspector remains a third vocabulary. Rung 1 is still the keystone.
+- **Parameterized actions.** An action body is static JSON; it cannot carry user
+  input ("resend to ⟨address⟩") or item values beyond `{id}` in `href`.
+- **Bulk operations, row-level actions in surface lists, charts, wizards, nested
+  navigation.** The `status` card covers part of the old `stats` sketch (rows +
+  actions), but there is no chart row type and no generic stat-tile grid.
+
+Rung status at v0.10.0: **Rung 1 not started** (three field vocabularies, one
+grew), **Rung 2 not started** (spam page is bespoke), **Rung 3 partial** (the
+`status` card only), **Rung 4 policy holding** (deep links everywhere bespoke).
 
 ## The architectural framework: four rungs
 
@@ -137,8 +152,10 @@ rough priority order:
   test", "resend to different address", GF "resend notifications" with a picker.
 - **Bulk selection.** Checkbox column plus a bulk-action bar reusing the same action
   descriptors. Unlocks GF entries bulk star/read/spam/trash and log cleanups.
-- **Surface stat cards** (ship the never-built `stats` key) **and a chart row type.**
-  Unlocks the Gravity SMTP dashboard and GF `/forms/{id}/results`.
+- **Surface stat cards and a chart row type.** The `status` card (shipped
+  2026-07-10) covers stat rows + actions above a list; still missing: a chart row
+  type and per-item stat tiles. Unlocks the Gravity SMTP dashboard and GF
+  `/forms/{id}/results`.
 - **Richer `sectionsRoute` row types.** Today only `url` is special. Add `pill`,
   `code`, `html-preview` (sandboxed iframe, the `messageKey` machinery generalized),
   and `kv-table`. The email-log detail (headers, per-event audit trail, rendered
