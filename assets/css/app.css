@@ -1839,6 +1839,15 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-sys-ext-active { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--green); background: rgba(70,184,129,0.12); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
 .minn-sys-ext-parent { font-size: 11px; color: var(--text3); font-style: italic; }
 
+/* Licenses card — read-only state pills (adapters/licenses.php) */
+.minn-lic-pill { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid; flex-shrink: 0; }
+.minn-lic-pill.valid { color: var(--green); background: rgba(70,184,129,0.1); border-color: rgba(70,184,129,0.25); }
+.minn-lic-pill.expired, .minn-lic-pill.invalid { color: var(--red); background: rgba(228,107,107,0.12); border-color: rgba(228,107,107,0.3); }
+.minn-lic-pill.missing { color: var(--amber); background: rgba(224,164,88,0.1); border-color: rgba(224,164,88,0.25); }
+.minn-lic-pill.unknown { color: var(--text3); background: transparent; border-color: var(--line); }
+.minn-sys-lic-meta { font-size: 11.5px; color: var(--text3); margin-top: 2px; white-space: normal; }
+.minn-sys-lic-foot { font-size: 11.5px; color: var(--text3); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+
 /* Integrations card — descriptor-contract problems flagged per entry */
 .minn-sys-int-problem { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 11.5px; color: var(--amber); white-space: normal; }
 .minn-sys-int-problem svg { width: 12px; height: 12px; flex: none; }

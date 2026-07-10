@@ -650,6 +650,7 @@
 			inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
 			send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
 			clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+			key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
 			shuffle: '<path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.6-8.6c.8-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.4 0-2.6-.7-3.4-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/>',
 			trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
 			upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
@@ -4704,6 +4705,14 @@
 				g.autoload.top.forEach( ( t ) => lines.push( `- ${ t.name } — ${ t.size }` ) );
 			}
 		} );
+		if ( s.licenses && s.licenses.items.length ) {
+			lines.push( '', '## Licenses (stored state, not live)' );
+			s.licenses.items.forEach( ( it ) => lines.push(
+				`- ${ it.name }${ it.kind === 'theme' ? ' [theme]' : '' }: ${ it.state }`
+				+ ( it.expires ? ` (${ it.expires === 'lifetime' ? 'lifetime' : 'expires ' + it.expires })` : '' )
+				+ ( it.note ? ` — ${ it.note }` : '' )
+			) );
+		}
 		const ext = s.extensions;
 		if ( ext ) {
 			lines.push( '', `## Plugins (${ ext.active_plugins } active of ${ ext.plugins.length })` );
@@ -4724,6 +4733,7 @@
 			intg.designs.forEach( ( r ) => lines.push( `- Design source ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
 			intg.cache.forEach( ( r ) => lines.push( `- Cache purger ${ r.id } (${ r.label }) — ${ r.owner }` ) );
 			( intg.spam || [] ).forEach( ( r ) => lines.push( `- Spam filter ${ r.id } (${ r.label }) — ${ r.owner }` ) );
+			( intg.licenses || [] ).forEach( ( r ) => lines.push( `- License reader ${ r.id } (${ r.label }) — ${ r.owner }` ) );
 			intg.builders.forEach( ( r ) => lines.push( `- Page builder ${ r.id } (${ r.label }) — ${ r.owner }` ) );
 			intg.blockForms.forEach( ( r ) => lines.push( `- Block forms: ${ r.owner } — ${ r.count } block${ r.count === 1 ? '' : 's' }` ) );
 			intg.listeners.forEach( ( l ) => lines.push( `- ${ l.hook }: ${ l.owners.join( ', ' ) }` ) );
@@ -4827,6 +4837,36 @@
 				${ extSection( 'Themes', ext.themes, true ) }
 			</div>` : '';
 
+		// Licenses — read-only visibility over every paid component's stored
+		// license state. Rows come server-classified (adapters/licenses.php);
+		// nothing here can activate, retry or otherwise touch a vendor.
+		const lic = s.licenses;
+		const licLabel = { valid: 'Valid', expired: 'Expired', invalid: 'Invalid', missing: 'No license', unknown: 'Unknown' };
+		const licRow = ( it ) => {
+			const meta = [
+				it.note,
+				it.expires === 'lifetime' ? 'lifetime license' : ( it.expires ? ( it.state === 'expired' ? 'expired ' : 'renews ' ) + it.expires : '' ),
+				it.stale ? 'may be stale' : '',
+			].filter( Boolean ).join( ' · ' );
+			return `
+			<div class="minn-sys-ext-item">
+				<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.kind === 'theme' ? ' <span class="minn-sys-ext-parent">theme</span>' : '' }
+					${ meta ? `<div class="minn-sys-lic-meta">${ esc( meta ) }</div>` : '' }
+				</span>
+				<span class="minn-lic-pill ${ esc( it.state ) }">${ licLabel[ it.state ] || esc( it.state ) }</span>
+			</div>`;
+		};
+		const licCard = lic && lic.items.length ? `
+			<div class="minn-card minn-sys-ext" id="minn-sys-licenses">
+				<div class="minn-sys-card-head">${ icon( 'key' ) }<span>Licenses</span>
+					<span class="minn-sys-debug-hint">${ lic.items.length } paid component${ lic.items.length === 1 ? '' : 's' } · read from stored state, never the network</span>
+				</div>
+				<div class="minn-sys-ext-section">
+					<div class="minn-sys-ext-grid">${ lic.items.map( licRow ).join( '' ) }</div>
+				</div>
+				<div class="minn-sys-lic-foot">Each state is the vendor's own last-recorded check, not a live lookup. Activate or renew on the vendor's screen; Minn only reports.</div>
+			</div>` : '';
+
 		// Integrations — the live registry of everything hooked into Minn:
 		// each entry attributed to the plugin that registered it, with
 		// descriptor-contract problems flagged (the author feedback loop —
@@ -4866,6 +4906,7 @@
 				${ intSection( 'Design sources', intg.designs ) }
 				${ intSection( 'Cache purgers', intg.cache ) }
 				${ intSection( 'Spam filters', intg.spam || [] ) }
+				${ intSection( 'License readers', intg.licenses || [] ) }
 				${ intSection( 'Page builders', intg.builders ) }
 				${ intPlain( 'Block inspector forms', intg.blockForms.map( ( r ) => ( { a: r.owner, b: r.count + ' block' + ( r.count === 1 ? '' : 's' ) } ) ) ) }
 				${ intPlain( 'Hook listeners', intg.listeners.map( ( l ) => ( { a: l.hook, b: l.owners.join( ', ' ), mono: true } ) ) ) }
@@ -4894,6 +4935,7 @@
 			<div class="minn-sys-grid">
 				${ s.groups.map( groupCard ).join( '' ) }
 			</div>
+			${ licCard }
 			${ extCard }
 			${ intCard }
 			<div class="minn-sys-foot">Generated ${ esc( timeAgo( s.generated ) ) }</div>`;

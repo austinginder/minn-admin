@@ -20,7 +20,19 @@ paid plugins) changed the plan: **visibility is buildable now, read-only,
 with zero risk**, while activation stays the careful per-vendor project the
 earlier draft of this doc described. Ship them in that order.
 
-## Phase 0 — the license status dashboard (read-only, build first)
+## Phase 0 — the license status dashboard (read-only) — SHIPPED 2026-07-10
+
+Implemented in `includes/adapters/licenses.php`: the Licenses card on the
+System page, a Licenses health check, `GET minn-admin/v1/licenses`, the
+`minn_admin_license_providers` filter (documented in for-plugin-authors.md)
+and Integrations-card attribution. Verified against real licenses: WP Rocket
+(valid, real expiry date), ACF PRO and Blocksy Companion Pro (valid,
+lifetime), Perfmatters through the generic EDD reader, and all seven paid
+builders on the lab enumerating correctly. One implementation fact the
+research missed: Freemius keys `sites` by ITS product slug, not the plugin
+directory (`blocksy-companion-pro/` registers as `blocksy-companion`); the
+stored `file_slug_map` inside `fs_accounts` bridges plugin file → product
+slug. The design below is the record of what was built and why.
 
 A surface that enumerates every license-wanting component on the site and
 classifies each as **valid / expired / invalid / missing / unknown**, from
@@ -157,8 +169,7 @@ the vendor's product.
 
 ## Status
 
-Phase 0 is scoped and ready to build: the storage research is done
-(source-verified 2026-07-10 against the labs' real paid plugins), the
-classification enum and detector layers are designed above, and no scope
-decision blocks it. Phase 1 stays parked behind test licenses and a locker
-decision.
+Phase 0 shipped 2026-07-10 (see the Phase 0 section above for what landed
+and the verification record). Phase 1 (the activation vault) stays parked
+behind test licenses and a locker decision; Phase 2 (re-verify on demand)
+follows Phase 1.

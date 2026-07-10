@@ -280,6 +280,32 @@ class Minn_Admin_Surfaces {
 			}
 		}
 
+		// License readers: assoc registry keyed by provider id, detect-gated
+		// (only providers whose component is installed appear). Bundled
+		// entries seed before the filter; the replay attributes third parties.
+		$l_rows = array();
+		if ( function_exists( 'minn_admin_license_default_providers' ) ) {
+			$lic = self::contributions( 'minn_admin_license_providers', array() );
+			$all = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+			foreach ( (array) $all as $id => $p ) {
+				if ( ! is_array( $p ) || empty( $p['detect'] ) || ! is_callable( $p['detect'] ) ) {
+					continue;
+				}
+				try {
+					if ( ! call_user_func( $p['detect'] ) ) {
+						continue;
+					}
+				} catch ( \Throwable $e ) {
+					continue;
+				}
+				$l_rows[] = array(
+					'id'    => sanitize_key( (string) $id ),
+					'label' => isset( $p['name'] ) ? (string) $p['name'] : (string) $id,
+					'owner' => isset( $lic['owners'][ (string) $id ] ) ? $lic['owners'][ (string) $id ] : 'Minn Admin',
+				);
+			}
+		}
+
 		// Page builders: the registry is already active-only (each bundled
 		// entry gates on its plugin's constant; `detect` is per-post, not
 		// plugin-active). Bundled entries seed before the filter, so the
@@ -336,6 +362,7 @@ class Minn_Admin_Surfaces {
 			'designs'    => $d_rows,
 			'cache'      => $c_rows,
 			'spam'       => $sp_rows,
+			'licenses'   => $l_rows,
 			'builders'   => $b_rows,
 			'blockForms' => $f_rows,
 			'listeners'  => $listeners,

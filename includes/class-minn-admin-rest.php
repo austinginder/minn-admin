@@ -2710,11 +2710,34 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			) ) );
 		}
 
+		// Licenses — read-only visibility (adapters/licenses.php); the health
+		// check only renders when the site has license-wanting components.
+		$licenses = function_exists( 'minn_admin_licenses' ) ? minn_admin_licenses() : null;
+		if ( $licenses && ! empty( $licenses['items'] ) ) {
+			$sum  = $licenses['summary'];
+			$bad  = $sum['expired'] + $sum['invalid'];
+			$soft = $sum['missing'] + $sum['unknown'];
+			$bits = array();
+			foreach ( array( 'expired', 'invalid', 'missing', 'unknown' ) as $k ) {
+				if ( $sum[ $k ] ) {
+					$bits[] = $sum[ $k ] . ' ' . $k;
+				}
+			}
+			$checks[] = array(
+				'label'  => 'Licenses',
+				'status' => $bad ? 'fail' : ( $soft ? 'warn' : 'pass' ),
+				'detail' => $bits
+					? implode( ', ', $bits ) . ' of ' . count( $licenses['items'] ) . ' paid components — see the Licenses card'
+					: 'All ' . count( $licenses['items'] ) . ' paid components hold a valid license',
+			);
+		}
+
 		return rest_ensure_response(
 			array(
 				'generated'  => current_time( 'c' ),
 				'checks'     => $checks,
 				'config'     => self::config_state(),
+				'licenses'   => $licenses,
 				'extensions' => self::extensions_manifest(),
 				// Live registry of everything hooked into Minn, with owner
 				// attribution + descriptor-contract problems — the feedback
