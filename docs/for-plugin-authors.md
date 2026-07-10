@@ -284,10 +284,14 @@ $forms['my-plugin/panel'] = array(
 ```
 
 The text is replaced in place only when it actually changed — an untouched wrapper stays
-byte-identical. Patterns that don't match simply don't render a field. For a real-world
-reference, [Anchor Blocks](https://github.com/anchorhost/anchor-blocks) registers
-descriptors for all of its blocks from its own plugin (`app/MinnAdmin.php`) — the filter is
-a no-op when Minn isn't installed, so block plugins can ship it unconditionally.
+byte-identical. Patterns that don't match simply don't render a field, and a generic
+text-run field never doubles a matched pattern (the labeled field wins). Note that Minn's
+generic text runs already make wrapper text editable with no descriptor; `wrapperText` is
+worth declaring when you want a labeled, single-purpose field instead of a generic "Text"
+run. For a real-world reference of a block plugin shipping its own descriptors,
+[Anchor Blocks](https://github.com/anchorhost/anchor-blocks) registers insert templates
+and semantic labels from its own plugin (`app/MinnAdmin.php`) — the filter is a no-op when
+Minn isn't installed, so block plugins can ship it unconditionally.
 
 ## Island previews — free path first, adapter only when stuck
 
