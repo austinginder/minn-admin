@@ -1799,6 +1799,11 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-sys-ext-active { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--green); background: rgba(70,184,129,0.12); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
 .minn-sys-ext-parent { font-size: 11px; color: var(--text3); font-style: italic; }
 
+/* Integrations card — descriptor-contract problems flagged per entry */
+.minn-sys-int-problem { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 11.5px; color: var(--amber); white-space: normal; }
+.minn-sys-int-problem svg { width: 12px; height: 12px; flex: none; }
+.minn-sys-int-warn { color: var(--amber); font-weight: 600; }
+
 @media (max-width: 640px) {
   .minn-inspector { width: calc(100vw - 20px); left: 10px !important; }
 }

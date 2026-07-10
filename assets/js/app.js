@@ -4585,6 +4585,18 @@
 			lines.push( '', '## Themes' );
 			ext.themes.forEach( ( th ) => lines.push( `- ${ th.name } — ${ th.version }${ th.active ? ' (active)' : '' }${ th.parent ? ' [child of ' + th.parent + ']' : '' }` ) );
 		}
+		const intg = s.integrations;
+		if ( intg ) {
+			const probs = ( r ) => ( r.problems && r.problems.length ? ` — PROBLEMS: ${ r.problems.join( '; ' ) }` : '' );
+			lines.push( '', '## Integrations' );
+			intg.surfaces.forEach( ( r ) => lines.push( `- Surface ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
+			intg.panels.forEach( ( r ) => lines.push( `- Editor panel ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
+			intg.designs.forEach( ( r ) => lines.push( `- Design source ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
+			intg.cache.forEach( ( r ) => lines.push( `- Cache purger ${ r.id } (${ r.label }) — ${ r.owner }` ) );
+			intg.builders.forEach( ( r ) => lines.push( `- Page builder ${ r.id } (${ r.label }) — ${ r.owner }` ) );
+			intg.blockForms.forEach( ( r ) => lines.push( `- Block forms: ${ r.owner } — ${ r.count } block${ r.count === 1 ? '' : 's' }` ) );
+			intg.listeners.forEach( ( l ) => lines.push( `- ${ l.hook }: ${ l.owners.join( ', ' ) }` ) );
+		}
 		return lines.join( '\n' );
 	}
 
@@ -4684,6 +4696,49 @@
 				${ extSection( 'Themes', ext.themes, true ) }
 			</div>` : '';
 
+		// Integrations — the live registry of everything hooked into Minn:
+		// each entry attributed to the plugin that registered it, with
+		// descriptor-contract problems flagged (the author feedback loop —
+		// a malformed descriptor fails silently in the app, loudly here).
+		const intg = s.integrations;
+		const intProblems = intg
+			? [ ...intg.surfaces, ...intg.panels, ...intg.designs ].reduce( ( n, r ) => n + ( r.problems || [] ).length, 0 )
+			: 0;
+		const intRow = ( r, meta ) => `
+			<div class="minn-sys-ext-item">
+				<span class="minn-sys-ext-name">${ esc( r.label || r.id ) } <span class="minn-sys-ext-parent mono">${ esc( r.id ) }</span>${ meta ? ` <span class="minn-sys-ext-parent">${ esc( meta ) }</span>` : '' }
+					${ ( r.problems || [] ).map( ( p ) => `<div class="minn-sys-int-problem">${ icon( 'warn' ) }${ esc( p ) }</div>` ).join( '' ) }
+				</span>
+				<span class="minn-sys-ext-ver">${ esc( r.owner || '' ) }</span>
+			</div>`;
+		const intSection = ( label, rows, metaFn ) => rows && rows.length ? `
+			<div class="minn-sys-ext-section">
+				<div class="minn-sys-ext-label">${ esc( label ) }</div>
+				<div class="minn-sys-ext-grid">${ rows.map( ( r ) => intRow( r, metaFn ? metaFn( r ) : '' ) ).join( '' ) }</div>
+			</div>` : '';
+		const intPlain = ( label, rows ) => rows && rows.length ? `
+			<div class="minn-sys-ext-section">
+				<div class="minn-sys-ext-label">${ esc( label ) }</div>
+				<div class="minn-sys-ext-grid">${ rows.map( ( r ) => `
+					<div class="minn-sys-ext-item">
+						<span class="minn-sys-ext-name${ r.mono ? ' mono' : '' }">${ esc( r.a ) }</span>
+						<span class="minn-sys-ext-ver">${ esc( r.b ) }</span>
+					</div>` ).join( '' ) }</div>
+			</div>` : '';
+		const intCard = intg ? `
+			<div class="minn-card minn-sys-ext" id="minn-sys-integrations">
+				<div class="minn-sys-card-head">${ icon( 'grid' ) }<span>Integrations</span>
+					<span class="minn-sys-debug-hint">${ intg.surfaces.length } surfaces · ${ intg.panels.length } panels · ${ intg.designs.length } design sources${ intProblems ? ` · <span class="minn-sys-int-warn">${ intProblems } problem${ intProblems === 1 ? '' : 's' }</span>` : '' }</span>
+				</div>
+				${ intSection( 'Surfaces', intg.surfaces, ( r ) => [ r.family ? 'family: ' + r.family : '', 'cap: ' + r.cap ].filter( Boolean ).join( ' · ' ) ) }
+				${ intSection( 'Editor panels', intg.panels, ( r ) => 'cap: ' + r.cap ) }
+				${ intSection( 'Design sources', intg.designs ) }
+				${ intSection( 'Cache purgers', intg.cache ) }
+				${ intSection( 'Page builders', intg.builders ) }
+				${ intPlain( 'Block inspector forms', intg.blockForms.map( ( r ) => ( { a: r.owner, b: r.count + ' block' + ( r.count === 1 ? '' : 's' ) } ) ) ) }
+				${ intPlain( 'Hook listeners', intg.listeners.map( ( l ) => ( { a: l.hook, b: l.owners.join( ', ' ), mono: true } ) ) ) }
+			</div>` : '';
+
 		view.innerHTML = `
 			<div class="minn-sys-topbar">
 				<div class="minn-sys-summary">
@@ -4708,6 +4763,7 @@
 				${ s.groups.map( groupCard ).join( '' ) }
 			</div>
 			${ extCard }
+			${ intCard }
 			<div class="minn-sys-foot">Generated ${ esc( timeAgo( s.generated ) ) }</div>`;
 
 		$$( '[data-const]', view ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {

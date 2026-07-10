@@ -85,6 +85,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 That's a working, paginated, capability-gated view in the Minn sidebar.
 
+**While you build, watch the Integrations card** on Minn's System page
+(`/minn-admin/system`): it lists every registered surface, editor panel, design source,
+cache purger, page builder and hook listener, attributes each to the plugin that
+registered it, and flags contract problems (unknown keys, missing routes, columns
+without keys). A descriptor the app quietly can't render explains itself there, and the
+page's copy-report carries the section for bug reports.
+
 ## Descriptor reference
 
 ### Top level

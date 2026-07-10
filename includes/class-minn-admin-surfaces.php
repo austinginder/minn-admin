@@ -44,6 +44,287 @@ class Minn_Admin_Surfaces {
 		return $out;
 	}
 
+	/* ===== Integration diagnostics (System page) ==========================
+	 *
+	 * A live registry view of everything hooked into Minn, with each entry
+	 * attributed to the plugin that registered it and validated against the
+	 * documented descriptor contract (docs/for-plugin-authors.md). This is
+	 * the feedback loop for integration authors: a malformed descriptor
+	 * fails silently in the client, but shows its problems here.
+	 */
+
+	// The documented descriptor vocabulary. Undocumented keys are internal
+	// (see the Compatibility section of for-plugin-authors.md), so anything
+	// outside these lists is flagged as unknown rather than silently ignored.
+	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'collection', 'manage' );
+	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel' );
+	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
+	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
+	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
+	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href' );
+	const PANEL_KEYS      = array( 'label', 'sub', 'cap', 'fieldsRoute', 'valuesKey', 'writeKey' );
+
+	/**
+	 * Replay a registry filter callback-by-callback, attributing each added
+	 * entry to the plugin that owns the callback's file (the notices class's
+	 * Reflection technique). Assoc registries diff by key; list registries
+	 * (cache purgers) diff by each entry's `id`.
+	 *
+	 * @param string $hook    Filter name.
+	 * @param array  $initial Seed value (what the caller passes to apply_filters).
+	 * @return array { value: final array, owners: entry-key => owner name }
+	 */
+	private static function contributions( $hook, $initial = array() ) {
+		global $wp_filter;
+		$value  = $initial;
+		$owners = array();
+		if ( empty( $wp_filter[ $hook ] ) ) {
+			return array( 'value' => $value, 'owners' => $owners );
+		}
+		$entry_keys = function ( $arr ) {
+			if ( ! is_array( $arr ) ) {
+				return array();
+			}
+			if ( wp_is_numeric_array( $arr ) ) {
+				return array_values( array_filter( array_map( function ( $e ) {
+					return is_array( $e ) && isset( $e['id'] ) ? (string) $e['id'] : null;
+				}, $arr ) ) );
+			}
+			return array_map( 'strval', array_keys( $arr ) );
+		};
+		foreach ( $wp_filter[ $hook ]->callbacks as $callbacks ) {
+			foreach ( $callbacks as $cb ) {
+				$before = $entry_keys( $value );
+				try {
+					$next = call_user_func( $cb['function'], $value );
+				} catch ( \Throwable $e ) {
+					continue; // a broken callback keeps the running value
+				}
+				if ( ! is_array( $next ) ) {
+					continue;
+				}
+				$owner = class_exists( 'Minn_Admin_Notices' ) ? Minn_Admin_Notices::owner_of( $cb['function'] ) : null;
+				$name  = $owner ? $owner['name'] : 'Unknown';
+				foreach ( array_diff( $entry_keys( $next ), $before ) as $added ) {
+					$owners[ $added ] = $name;
+				}
+				$value = $next;
+			}
+		}
+		return array( 'value' => $value, 'owners' => $owners );
+	}
+
+	private static function unknown_keys( $arr, $known ) {
+		return array_values( array_diff( array_map( 'strval', array_keys( (array) $arr ) ), $known ) );
+	}
+
+	/** Contract problems for one surface descriptor (documented keys only). */
+	private static function surface_problems( $surface ) {
+		$problems = array();
+		if ( ! is_array( $surface ) ) {
+			return array( 'descriptor is not an array' );
+		}
+		if ( empty( $surface['label'] ) ) {
+			$problems[] = 'missing label';
+		}
+		foreach ( self::unknown_keys( $surface, self::SURFACE_KEYS ) as $k ) {
+			$problems[] = "unknown key \"$k\" (ignored)";
+		}
+		if ( empty( $surface['collection'] ) || ! is_array( $surface['collection'] ) ) {
+			$problems[] = 'missing collection';
+		}
+		foreach ( array( 'collection', 'manage' ) as $ck ) {
+			if ( empty( $surface[ $ck ] ) || ! is_array( $surface[ $ck ] ) ) {
+				continue;
+			}
+			$coll = $surface[ $ck ];
+			if ( empty( $coll['route'] ) || ! is_string( $coll['route'] ) ) {
+				$problems[] = "$ck: missing route";
+			}
+			foreach ( self::unknown_keys( $coll, self::COLLECTION_KEYS ) as $k ) {
+				$problems[] = "$ck: unknown key \"$k\" (ignored)";
+			}
+			foreach ( (array) ( $coll['columns'] ?? array() ) as $col ) {
+				if ( ! is_array( $col ) || empty( $col['key'] ) ) {
+					$problems[] = "$ck: column without a key";
+					continue;
+				}
+				if ( isset( $col['format'] ) && ! in_array( $col['format'], self::COLUMN_FORMATS, true ) ) {
+					$problems[] = "$ck: unknown column format \"{$col['format']}\"";
+				}
+				foreach ( self::unknown_keys( $col, self::COLUMN_KEYS ) as $k ) {
+					$problems[] = "$ck: unknown column key \"$k\"";
+				}
+			}
+			// An EMPTY detail array is legitimate (modal shows the raw list
+			// item) — only the key vocabulary is checked.
+			if ( isset( $coll['detail'] ) && is_array( $coll['detail'] ) ) {
+				foreach ( self::unknown_keys( $coll['detail'], self::DETAIL_KEYS ) as $k ) {
+					$problems[] = "$ck: unknown detail key \"$k\" (ignored)";
+				}
+			}
+			foreach ( (array) ( $coll['actions'] ?? array() ) as $a ) {
+				if ( ! is_array( $a ) || empty( $a['label'] ) ) {
+					$problems[] = "$ck: action without a label";
+					continue;
+				}
+				if ( empty( $a['route'] ) && empty( $a['href'] ) ) {
+					$problems[] = "$ck: action \"{$a['label']}\" has neither route nor href";
+				}
+				foreach ( self::unknown_keys( $a, self::ACTION_KEYS ) as $k ) {
+					$problems[] = "$ck: unknown action key \"$k\" (ignored)";
+				}
+			}
+		}
+		return $problems;
+	}
+
+	/** Contract problems for one editor-panel descriptor. */
+	private static function panel_problems( $panel ) {
+		$problems = array();
+		if ( ! is_array( $panel ) ) {
+			return array( 'descriptor is not an array' );
+		}
+		foreach ( array( 'label', 'fieldsRoute', 'valuesKey', 'writeKey' ) as $req ) {
+			if ( empty( $panel[ $req ] ) ) {
+				$problems[] = "missing $req";
+			}
+		}
+		foreach ( self::unknown_keys( $panel, self::PANEL_KEYS ) as $k ) {
+			$problems[] = "unknown key \"$k\" (ignored)";
+		}
+		return $problems;
+	}
+
+	/**
+	 * The full integrations model for the System page: every registry hook's
+	 * live entries with owner + contract problems, plus listener owners for
+	 * the data hooks that can't be enumerated as entries.
+	 *
+	 * @return array
+	 */
+	public static function integrations() {
+		global $wp_filter;
+
+		$surfaces = self::contributions( 'minn_admin_surfaces' );
+		$s_rows   = array();
+		foreach ( (array) $surfaces['value'] as $id => $s ) {
+			$s_rows[] = array(
+				'id'       => sanitize_key( (string) $id ),
+				'label'    => is_array( $s ) && isset( $s['label'] ) ? (string) $s['label'] : '',
+				'family'   => is_array( $s ) && isset( $s['family'] ) ? (string) $s['family'] : '',
+				'cap'      => is_array( $s ) && isset( $s['cap'] ) ? (string) $s['cap'] : 'manage_options',
+				'owner'    => isset( $surfaces['owners'][ (string) $id ] ) ? $surfaces['owners'][ (string) $id ] : 'Unknown',
+				'problems' => self::surface_problems( $s ),
+			);
+		}
+
+		$panels = self::contributions( 'minn_admin_editor_panels' );
+		$p_rows = array();
+		foreach ( (array) $panels['value'] as $id => $p ) {
+			$p_rows[] = array(
+				'id'       => sanitize_key( (string) $id ),
+				'label'    => is_array( $p ) && isset( $p['label'] ) ? (string) $p['label'] : '',
+				'cap'      => is_array( $p ) && isset( $p['cap'] ) ? (string) $p['cap'] : 'edit_posts',
+				'owner'    => isset( $panels['owners'][ (string) $id ] ) ? $panels['owners'][ (string) $id ] : 'Unknown',
+				'problems' => self::panel_problems( $p ),
+			);
+		}
+
+		$designs = self::contributions( 'minn_admin_design_sources' );
+		$d_rows  = array();
+		foreach ( (array) $designs['value'] as $id => $d ) {
+			$problems = array();
+			if ( ! is_array( $d ) || empty( $d['route'] ) || ! is_string( $d['route'] ) ) {
+				$problems[] = 'missing route (source dropped)';
+			}
+			$d_rows[] = array(
+				'id'       => sanitize_key( (string) $id ),
+				'label'    => is_array( $d ) && ! empty( $d['label'] ) ? (string) $d['label'] : ucfirst( sanitize_key( (string) $id ) ),
+				'owner'    => isset( $designs['owners'][ (string) $id ] ) ? $designs['owners'][ (string) $id ] : 'Unknown',
+				'problems' => $problems,
+			);
+		}
+
+		// Cache purgers: the bundled detections seed the final list inside
+		// minn_admin_cache_purgers(); the filter replay (empty seed) only
+		// attributes third-party additions — bundled ones default to Minn.
+		$c_rows = array();
+		if ( function_exists( 'minn_admin_cache_purgers' ) ) {
+			$purgers = self::contributions( 'minn_admin_cache_purgers', array() );
+			foreach ( minn_admin_cache_purgers() as $p ) {
+				if ( ! is_array( $p ) || empty( $p['id'] ) ) {
+					continue;
+				}
+				$c_rows[] = array(
+					'id'    => (string) $p['id'],
+					'label' => isset( $p['name'] ) ? (string) $p['name'] : (string) $p['id'],
+					'owner' => isset( $purgers['owners'][ $p['id'] ] ) ? $purgers['owners'][ $p['id'] ] : 'Minn Admin',
+				);
+			}
+		}
+
+		// Page builders: the registry is already active-only (each bundled
+		// entry gates on its plugin's constant; `detect` is per-post, not
+		// plugin-active). Bundled entries seed before the filter, so the
+		// replay only attributes third-party additions.
+		$b_rows = array();
+		if ( function_exists( 'minn_admin_page_builders' ) ) {
+			$builders = self::contributions( 'minn_admin_page_builders' );
+			foreach ( minn_admin_page_builders() as $id => $b ) {
+				$b_rows[] = array(
+					'id'    => sanitize_key( (string) $id ),
+					'label' => is_array( $b ) && isset( $b['name'] ) ? (string) $b['name'] : (string) $id,
+					'owner' => isset( $builders['owners'][ (string) $id ] ) ? $builders['owners'][ (string) $id ] : 'Minn Admin',
+				);
+			}
+		}
+
+		// Block-form descriptors: aggregate per owner (per-block rows would
+		// drown the card — Anchor Blocks alone registers a dozen).
+		$forms = self::contributions( 'minn_admin_block_forms' );
+		$f_by  = array();
+		foreach ( array_keys( (array) $forms['value'] ) as $block ) {
+			$owner          = isset( $forms['owners'][ (string) $block ] ) ? $forms['owners'][ (string) $block ] : 'Unknown';
+			$f_by[ $owner ] = isset( $f_by[ $owner ] ) ? $f_by[ $owner ] + 1 : 1;
+		}
+		$f_rows = array();
+		foreach ( $f_by as $owner => $count ) {
+			$f_rows[] = array( 'owner' => $owner, 'count' => $count );
+		}
+
+		// Data hooks that can't be enumerated as entries — list who's listening.
+		$listeners  = array();
+		$data_hooks = array(
+			'minn_admin_traffic', 'minn_admin_before_render_blocks', 'minn_admin_render_styles',
+			'minn_admin_rendered_html', 'minn_admin_insert_blocks', 'minn_admin_template_footer',
+			'minn_admin_comments_enabled',
+		);
+		foreach ( $data_hooks as $hook ) {
+			if ( empty( $wp_filter[ $hook ] ) ) {
+				continue;
+			}
+			$names = array();
+			foreach ( $wp_filter[ $hook ]->callbacks as $callbacks ) {
+				foreach ( $callbacks as $cb ) {
+					$owner   = class_exists( 'Minn_Admin_Notices' ) ? Minn_Admin_Notices::owner_of( $cb['function'] ) : null;
+					$names[] = $owner ? $owner['name'] : 'Unknown';
+				}
+			}
+			$listeners[] = array( 'hook' => $hook, 'owners' => array_values( array_unique( $names ) ) );
+		}
+
+		return array(
+			'surfaces'   => $s_rows,
+			'panels'     => $p_rows,
+			'designs'    => $d_rows,
+			'cache'      => $c_rows,
+			'builders'   => $b_rows,
+			'blockForms' => $f_rows,
+			'listeners'  => $listeners,
+		);
+	}
+
 	/**
 	 * Editor panels — per-post field panels shown in the editor sidebar.
 	 * Registered via the `minn_admin_editor_panels` filter; same shape of
