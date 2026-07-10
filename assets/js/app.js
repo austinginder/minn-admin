@@ -3172,18 +3172,25 @@
 						<div class="minn-bulkbar">
 							<span class="minn-bulk-count">${ userSel.size } selected</span>
 							<span class="minn-bulk-label">Change role to</span>
-							<select class="minn-input" id="minn-user-bulk-role">
-								<option value="">Choose a role…</option>
-								${ roles.map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }">${ esc( label ) }</option>` ).join( '' ) }
-							</select>
+							<div class="minn-ac minn-tax-select" data-userbulkrole>
+								<input class="minn-input minn-ac-input" placeholder="Choose a role…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+								<div class="minn-ac-panel" hidden></div>
+							</div>
 							<button class="minn-btn-soft" id="minn-user-bulk-apply">Apply</button>
 							<button class="minn-btn-soft" id="minn-user-bulk-clear" style="margin-left:auto;">Clear</button>
 						</div>`;
+					// Strict combobox (matches the role filter + profile picker):
+					// the picked slug rides input.dataset.acValue, blank until chosen.
+					const roleWrap = $( '[data-userbulkrole]', slot );
+					bindAutocomplete( roleWrap,
+						[ { value: '', label: 'Choose a role…' } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label } ) ) ),
+						{ strict: true, value: '' } );
 					$( '#minn-user-bulk-apply', slot ).addEventListener( 'click', ( e ) => {
-						const selEl = $( '#minn-user-bulk-role', slot );
-						const role = selEl.value;
+						const acInput = $( '.minn-ac-input', roleWrap );
+						const role = acInput ? acInput.dataset.acValue : '';
 						if ( ! role ) { toast( 'Choose a role first', true ); return; }
-						runUserBulkRole( role, selEl.options[ selEl.selectedIndex ].text, e.currentTarget );
+						const entry = roles.find( ( r ) => r[ 0 ] === role );
+						runUserBulkRole( role, entry ? entry[ 1 ] : role, e.currentTarget );
 					} );
 					$( '#minn-user-bulk-clear', slot ).addEventListener( 'click', () => {
 						userSel.clear();
