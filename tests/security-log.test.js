@@ -20,6 +20,39 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return await r.json();
 	}, path );
 
+	// SEED THE PLUGIN BASELINE (rule: Austin toggles plugins live; the dev
+	// convention keeps Wordfence DEACTIVATED so WSAL stays the resident
+	// activity-log provider). The shim's routes only register while
+	// Wordfence is active, so activate it for the run and restore after.
+	const setWordfence = ( status ) => page.evaluate( async ( s ) => {
+		try {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/wordfence/wordfence', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( { status: s } ),
+			} );
+			return ( await r.json() ).status;
+		} catch ( e ) {
+			return 'dropped'; // plugin toggles can recycle the worker
+		}
+	}, status );
+	const wasActive = await page.evaluate( async () => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/wordfence/wordfence?_fields=status', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+		} );
+		return ( await r.json() ).status === 'active';
+	} );
+	if ( ! wasActive ) {
+		await setWordfence( 'active' );
+		// Wordfence activation is heavy (tables, config, cron) — settle, then
+		// reload so the app boots with the surface present.
+		await page.waitForTimeout( 1500 );
+		await page.reload( { waitUntil: 'domcontentloaded' } );
+		await page.waitForTimeout( 800 );
+	}
+
+	try {
 	// Seed a deterministic login mix (fixture; idempotent). The insert can
 	// recycle the PHP worker mid-response, dropping the socket even on
 	// success — tolerate the TypeError, then poll the log until data lands.
@@ -67,6 +100,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return el ? el.textContent : ( /Wordfence/.test( document.body.textContent ) ? 'Wordfence' : '' );
 	} );
 	t.check( 'Wordfence security log renders', /Wordfence/.test( providerTitle ) || /Failed login/.test( await page.evaluate( () => document.body.textContent ) ) );
+	} finally {
+		// Restore the dev-site baseline: Wordfence stays deactivated so WSAL
+		// remains the resident activity-log provider.
+		if ( ! wasActive ) {
+			await setWordfence( 'inactive' ).catch( () => {} );
+		}
+	}
 
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
