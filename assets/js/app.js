@@ -2984,6 +2984,33 @@
 
 	let userSearchTimer = null;
 
+	// Bulk role change for the users selection. The current user is skipped —
+	// demoting yourself mid-batch can lock you out, and WP would reject the
+	// last-admin demotion anyway — with a note when that happens.
+	async function runUserBulkRole( role, roleLabel, btn ) {
+		const ids = Array.from( state.userSel || [] );
+		if ( ! ids.length || ! role ) return;
+		const targets = ids.filter( ( id ) => id !== B.user.id );
+		const skippedSelf = targets.length !== ids.length;
+		if ( ! targets.length ) {
+			toast( 'Pick users other than yourself to change roles in bulk.', true );
+			return;
+		}
+		btn.disabled = true;
+		btn.textContent = 'Working…';
+		let ok = 0, fail = 0;
+		for ( const id of targets ) {
+			try { await api( `wp/v2/users/${ id }`, { method: 'POST', body: JSON.stringify( { roles: [ role ] } ) } ); ok++; }
+			catch ( e ) { fail++; }
+		}
+		state.userSel.clear();
+		state.userLastIdx = null;
+		state.cache.users = null;
+		const tail = skippedSelf ? ' (your own account was skipped)' : '';
+		toast( fail ? `Set ${ roleLabel }: ${ ok } done, ${ fail } failed${ tail }` : `Set ${ ok } user${ ok === 1 ? '' : 's' } to ${ roleLabel }${ tail }`, fail > 0 && ok === 0 );
+		if ( state.route === 'users' ) renderUsers();
+	}
+
 	function renderUsers() {
 		const view = $( '#minn-view' );
 		const c = state.cache.users;
@@ -2995,6 +3022,9 @@
 		// One searchable combobox, not a tab per role — real sites (Woo,
 		// memberships, LMS) carry 10+ roles and the tab row overflowed.
 		const roles = Object.entries( B.roles || {} );
+		// Bulk role change is gated on edit-users; lower roles get no checkboxes.
+		const bulkUsers = !! B.caps.editUsers && roles.length > 0;
+		const userSel = state.userSel || ( state.userSel = new Set() );
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			${ roles.length > 1 ? `<div class="minn-ac minn-tax-select" data-rolecombo>
@@ -3005,12 +3035,15 @@
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } Add user</button>` : '' }
 		</div>
+		${ bulkUsers ? '<div id="minn-user-bulk-slot"></div>' : '' }
 		<div class="minn-card minn-table">
-			<div class="minn-table-head minn-user-cols">
+			<div class="minn-table-head minn-user-cols${ bulkUsers ? ' has-cb' : '' }">
+				${ bulkUsers ? `<div><input type="checkbox" class="minn-cb" id="minn-user-selall"></div>` : '' }
 				<div></div><div>Name</div><div>Email</div><div>Role</div><div>Registered</div><div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( u ) => `
-				<div class="minn-table-row minn-user-cols" data-user="${ u.id }" data-uname="${ esc( u.name || '' ) }" data-uemail="${ esc( u.email || '' ) }" data-uroles="${ esc( ( u.roles || [] ).join( ',' ) ) }">
+				<div class="minn-table-row minn-user-cols${ bulkUsers ? ' has-cb' : '' }${ userSel.has( u.id ) ? ' sel' : '' }" data-user="${ u.id }" data-uname="${ esc( u.name || '' ) }" data-uemail="${ esc( u.email || '' ) }" data-uroles="${ esc( ( u.roles || [] ).join( ',' ) ) }">
+					${ bulkUsers ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-user-cb" data-cbid="${ u.id }"${ userSel.has( u.id ) ? ' checked' : '' }></div>` : '' }
 					<img class="minn-user-row-avatar" src="${ esc( ( u.avatar_urls && ( u.avatar_urls[ '48' ] || Object.values( u.avatar_urls )[ 0 ] ) ) || '' ) }" alt="">
 					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( u.email || '—' ) }</div>
@@ -3126,6 +3159,72 @@
 				openUserMenu( r.left - 160, r.bottom + 6, userFromRow( row ) );
 			} );
 		} );
+
+		// Bulk role change — same selection shape as the content list.
+		if ( bulkUsers ) {
+			const rows = c.items;
+			const syncUserBulk = () => {
+				const slot = $( '#minn-user-bulk-slot', view );
+				if ( ! slot ) return;
+				if ( ! userSel.size ) { slot.innerHTML = ''; }
+				else if ( ! $( '.minn-bulkbar', slot ) ) {
+					slot.innerHTML = `
+						<div class="minn-bulkbar">
+							<span class="minn-bulk-count">${ userSel.size } selected</span>
+							<span class="minn-bulk-label">Change role to</span>
+							<select class="minn-input" id="minn-user-bulk-role">
+								<option value="">Choose a role…</option>
+								${ roles.map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }">${ esc( label ) }</option>` ).join( '' ) }
+							</select>
+							<button class="minn-btn-soft" id="minn-user-bulk-apply">Apply</button>
+							<button class="minn-btn-soft" id="minn-user-bulk-clear" style="margin-left:auto;">Clear</button>
+						</div>`;
+					$( '#minn-user-bulk-apply', slot ).addEventListener( 'click', ( e ) => {
+						const selEl = $( '#minn-user-bulk-role', slot );
+						const role = selEl.value;
+						if ( ! role ) { toast( 'Choose a role first', true ); return; }
+						runUserBulkRole( role, selEl.options[ selEl.selectedIndex ].text, e.currentTarget );
+					} );
+					$( '#minn-user-bulk-clear', slot ).addEventListener( 'click', () => {
+						userSel.clear();
+						$$( '.minn-user-cb', view ).forEach( ( c2 ) => { c2.checked = false; c2.closest( '.minn-table-row' ).classList.remove( 'sel' ); } );
+						const sa = $( '#minn-user-selall', view );
+						if ( sa ) sa.checked = false;
+						syncUserBulk();
+					} );
+				} else {
+					$( '.minn-bulk-count', slot ).textContent = userSel.size + ' selected';
+				}
+				const sa = $( '#minn-user-selall', view );
+				if ( sa ) sa.checked = rows.length > 0 && rows.every( ( u ) => userSel.has( u.id ) );
+			};
+			syncUserBulk();
+			const setUserSel = ( id, on ) => {
+				if ( on ) userSel.add( id ); else userSel.delete( id );
+				const cb = view.querySelector( `.minn-user-cb[data-cbid="${ id }"]` );
+				if ( cb ) { cb.checked = on; cb.closest( '.minn-table-row' ).classList.toggle( 'sel', on ); }
+			};
+			$$( '.minn-user-cb', view ).forEach( ( cb ) =>
+				cb.addEventListener( 'click', ( e ) => {
+					e.stopPropagation(); // don't open the user modal
+					const id = parseInt( cb.dataset.cbid, 10 );
+					const idx = rows.findIndex( ( u ) => u.id === id );
+					if ( e.shiftKey && state.userLastIdx != null && state.userLastIdx !== idx && rows[ state.userLastIdx ] ) {
+						const lo = Math.min( state.userLastIdx, idx ), hi = Math.max( state.userLastIdx, idx );
+						for ( let i = lo; i <= hi; i++ ) setUserSel( rows[ i ].id, cb.checked );
+					} else {
+						setUserSel( id, cb.checked );
+					}
+					state.userLastIdx = idx;
+					syncUserBulk();
+				} )
+			);
+			const uSelAll = $( '#minn-user-selall', view );
+			if ( uSelAll ) uSelAll.addEventListener( 'change', () => {
+				rows.forEach( ( u ) => setUserSel( u.id, uSelAll.checked ) );
+				syncUserBulk();
+			} );
+		}
 		bindPager( view, c.page, loadUsers, () => { if ( state.route === 'users' ) renderUsers(); } );
 	}
 
