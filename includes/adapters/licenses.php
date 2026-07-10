@@ -197,6 +197,23 @@ function minn_admin_license_default_providers() {
 			'stale'   => false,
 		) );
 	};
+	// The EDD Software Licensing status vocabulary, shared by every vendor
+	// that speaks EDD's protocol under a renamed client (SearchWP, Soflyy,
+	// Perfmatters, GP Premium): the status word maps straight to a state.
+	// 'active' is Soflyy's post-activation word for a working license.
+	$edd_state = function ( $word ) {
+		$word = strtolower( trim( (string) $word ) );
+		if ( in_array( $word, array( 'valid', 'active' ), true ) ) {
+			return array( 'valid', '' );
+		}
+		if ( 'expired' === $word ) {
+			return array( 'expired', '' );
+		}
+		if ( '' === $word ) {
+			return array( 'unknown', 'key stored; no status recorded yet' );
+		}
+		return array( 'invalid', str_replace( '_', ' ', $word ) );
+	};
 
 	$providers = array();
 
@@ -569,6 +586,408 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// WPMU DEV: one Hub API key (site option wpmudev_apikey, or the
+	// WPMUDEV_APIKEY constant) unlocks the whole family. Membership status
+	// is cached verbatim from their Hub in wdp_un_membership_data; the Hub
+	// signals an invalid or expired key with an EMPTY membership string,
+	// and a NUMERIC membership is a single-project license id.
+	$providers['wpmudev'] = array(
+		'name'      => 'WPMU DEV',
+		'component' => 'wpmudev-updates/update-notifications.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'wpmudev-updates/update-notifications.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$key = ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ? WPMUDEV_APIKEY : get_site_option( 'wpmudev_apikey' );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'WPMU DEV membership', 'state' => 'missing' ) ) );
+			}
+			$data = get_site_option( 'wdp_un_membership_data' );
+			$type = ( is_array( $data ) && ! empty( $data['membership'] ) ) ? $data['membership'] : '';
+			if ( is_numeric( $type ) ) {
+				$type = 'single';
+			}
+			$map   = array(
+				'full'    => array( 'valid', 'full membership' ),
+				'unit'    => array( 'valid', 'per-plugin membership' ),
+				'single'  => array( 'valid', 'single-project membership' ),
+				'free'    => array( 'valid', 'free Hub membership' ),
+				'paused'  => array( 'invalid', 'membership paused' ),
+				'expired' => array( 'expired', '' ),
+			);
+			$state = isset( $map[ $type ] ) ? $map[ $type ][0] : 'unknown';
+			$note  = isset( $map[ $type ] ) ? $map[ $type ][1] : 'key stored; the Hub has not confirmed a membership';
+			return array( $item( array( 'name' => 'WPMU DEV membership', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
+	// Smush Pro rides the Dashboard's key but keeps its OWN validity cache:
+	// wp_smush_api_auth is a per-key map { key => { validity, timestamp } }
+	// that Smush revalidates every 24 hours.
+	$providers['smush-pro'] = array(
+		'name'      => 'Smush Pro',
+		'component' => 'wp-smush-pro/wp-smush.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'wp-smush-pro/wp-smush.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$key = ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ? WPMUDEV_APIKEY : get_site_option( 'wpmudev_apikey' );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'missing', 'note' => 'licensed through the WPMU DEV Dashboard key' ) ) );
+			}
+			$auth = get_site_option( 'wp_smush_api_auth' );
+			$rec  = ( is_array( $auth ) && isset( $auth[ $key ] ) && is_array( $auth[ $key ] ) ) ? $auth[ $key ] : null;
+			if ( ! $rec || empty( $rec['validity'] ) ) {
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'unknown', 'key' => true, 'note' => 'Dashboard key present; Smush has not validated it yet' ) ) );
+			}
+			$stale = ! empty( $rec['timestamp'] ) && ( time() - (int) $rec['timestamp'] ) > 2 * DAY_IN_SECONDS;
+			return array( $item( array( 'name' => 'Smush Pro', 'state' => 'valid' === $rec['validity'] ? 'valid' : 'invalid', 'key' => true, 'stale' => $stale ) ) );
+		},
+	);
+
+	// SearchWP: everything lives in ONE option, searchwp_license
+	// { key, status, expires, remaining, type }. Its bundled EDD updater is
+	// RENAMED (SearchWP\Updater), so the generic EDD filename sweep can
+	// never fingerprint it; this reader is the coverage.
+	$providers['searchwp'] = array(
+		'name'      => 'SearchWP',
+		'component' => 'searchwp/index.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'searchwp/index.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			$lic = get_option( 'searchwp_license' );
+			$key = ( defined( 'SEARCHWP_LICENSE_KEY' ) && SEARCHWP_LICENSE_KEY ) ? SEARCHWP_LICENSE_KEY : ( is_array( $lic ) && ! empty( $lic['key'] ) ? $lic['key'] : '' );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'SearchWP', 'state' => 'missing' ) ) );
+			}
+			list( $state, $note ) = $edd_state( is_array( $lic ) && isset( $lic['status'] ) ? $lic['status'] : '' );
+			$expires              = minn_admin_license_expiry( is_array( $lic ) && isset( $lic['expires'] ) ? $lic['expires'] : '' );
+			if ( 'valid' === $state && minn_admin_license_expired( $expires ) ) {
+				$state = 'expired';
+			}
+			if ( ! $note && is_array( $lic ) && ! empty( $lic['type'] ) ) {
+				$note = 'plan: ' . $lic['type'];
+			}
+			return array( $item( array( 'name' => 'SearchWP', 'state' => $state, 'key' => true, 'expires' => $expires, 'note' => $note ) ) );
+		},
+	);
+
+	// Gravity Perks: key in the gwp_settings SITE option (GPERKS_LICENSE_KEY
+	// constant overrides); validity cached in a VERSION-SUFFIXED 12-hour
+	// site transient gwp_license_data_{version}, so the version comes from
+	// the installed plugin header when the plugin is inactive.
+	$providers['gravityperks'] = array(
+		'name'      => 'Gravity Perks',
+		'component' => 'gravityperks/gravityperks.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'gravityperks/gravityperks.php' );
+		},
+		'read'      => function () use ( $item, $plugins ) {
+			$s   = get_site_option( 'gwp_settings' );
+			$key = ( defined( 'GPERKS_LICENSE_KEY' ) && GPERKS_LICENSE_KEY ) ? GPERKS_LICENSE_KEY : ( is_array( $s ) && ! empty( $s['license_key'] ) ? $s['license_key'] : '' );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'Gravity Perks', 'state' => 'missing' ) ) );
+			}
+			$ver  = defined( 'GRAVITY_PERKS_VERSION' ) ? GRAVITY_PERKS_VERSION : ( isset( $plugins['gravityperks/gravityperks.php']['Version'] ) ? $plugins['gravityperks/gravityperks.php']['Version'] : '' );
+			$data = $ver ? get_site_transient( 'gwp_license_data_' . $ver ) : false;
+			if ( ! is_array( $data ) || ! isset( $data['valid'] ) ) {
+				return array( $item( array( 'name' => 'Gravity Perks', 'state' => 'unknown', 'key' => true, 'stale' => true, 'note' => 'Gravity Perks re-checks every 12 hours; no cached status' ) ) );
+			}
+			$expires = minn_admin_license_expiry( isset( $data['expires'] ) ? $data['expires'] : '' );
+			if ( ! empty( $data['valid'] ) ) {
+				$state = minn_admin_license_expired( $expires ) ? 'expired' : 'valid';
+				$note  = '';
+			} else {
+				$word  = isset( $data['license'] ) ? (string) $data['license'] : '';
+				$state = 'expired' === $word ? 'expired' : 'invalid';
+				$note  = $word ? str_replace( '_', ' ', $word ) : '';
+			}
+			return array( $item( array( 'name' => 'Gravity Perks', 'state' => $state, 'key' => true, 'expires' => $expires, 'note' => $note ) ) );
+		},
+	);
+
+	// Rank Math SEO PRO: the paid plugin rides the FREE plugin's
+	// rankmath.com account connection (option rank_math_connect_data,
+	// written by the free plugin's portal handshake). No key paste exists
+	// anywhere; the activate_url below links to the registration screen.
+	$providers['rank-math-pro'] = array(
+		'name'      => 'Rank Math SEO PRO',
+		'component' => 'seo-by-rank-math-pro/rank-math-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'seo-by-rank-math-pro/rank-math-pro.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$d = get_option( 'rank_math_connect_data' );
+			if ( ! is_array( $d ) || empty( $d['api_key'] ) || empty( $d['username'] ) ) {
+				return array( $item( array( 'name' => 'Rank Math SEO PRO', 'state' => 'missing', 'note' => 'connects through a rankmath.com account' ) ) );
+			}
+			$plan = ! empty( $d['plan'] ) ? (string) $d['plan'] : 'pro';
+			return array( $item( array( 'name' => 'Rank Math SEO PRO', 'state' => 'valid', 'key' => true, 'note' => 'connected; plan: ' . $plan ) ) );
+		},
+	);
+
+	// WP All Import Pro (Soflyy): everything inside the serialized
+	// PMXI_Plugin_Options blob — licenses/statuses are CLASS-KEYED maps and
+	// the key is stored base64-wrapped in a site salt (their server strips
+	// the wrapper; the whole vendor flow sends it wrapped). 'active' is
+	// what their activate flow stores for a good license. No expiry stored.
+	$providers['wp-all-import'] = array(
+		'name'      => 'WP All Import Pro',
+		'component' => 'wp-all-import-pro/wp-all-import-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'wp-all-import-pro/wp-all-import-pro.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			$o   = get_option( 'PMXI_Plugin_Options' );
+			$key = is_array( $o ) && ! empty( $o['licenses']['PMXI_Plugin'] );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'WP All Import Pro', 'state' => 'missing' ) ) );
+			}
+			list( $state, $note ) = $edd_state( isset( $o['statuses']['PMXI_Plugin'] ) ? $o['statuses']['PMXI_Plugin'] : '' );
+			return array( $item( array( 'name' => 'WP All Import Pro', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
+	// WP All Export Pro (Soflyy): same family, but FLAT license /
+	// license_status fields in PMXE_Plugin_Options.
+	$providers['wp-all-export'] = array(
+		'name'      => 'WP All Export Pro',
+		'component' => 'wp-all-export-pro/wp-all-export-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'wp-all-export-pro/wp-all-export-pro.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			$o   = get_option( 'PMXE_Plugin_Options' );
+			$key = is_array( $o ) && ! empty( $o['license'] );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'WP All Export Pro', 'state' => 'missing' ) ) );
+			}
+			list( $state, $note ) = $edd_state( isset( $o['license_status'] ) ? $o['license_status'] : '' );
+			return array( $item( array( 'name' => 'WP All Export Pro', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
+	// Perfmatters: plain option pair (site options on multisite). Current
+	// builds replaced the bundled EDD updater with a hand-rolled client, so
+	// the generic EDD fingerprint no longer sees it (older builds matched);
+	// this dedicated reader is the coverage now. No expiry is stored.
+	$providers['perfmatters'] = array(
+		'name'      => 'Perfmatters',
+		'component' => 'perfmatters/perfmatters.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'perfmatters/perfmatters.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			$get = is_multisite() ? 'get_site_option' : 'get_option';
+			$key = ( defined( 'PERFMATTERS_LICENSE_KEY' ) && PERFMATTERS_LICENSE_KEY ) ? PERFMATTERS_LICENSE_KEY : call_user_func( $get, 'perfmatters_edd_license_key' );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'Perfmatters', 'state' => 'missing' ) ) );
+			}
+			list( $state, $note ) = $edd_state( call_user_func( $get, 'perfmatters_edd_license_status' ) );
+			return array( $item( array( 'name' => 'Perfmatters', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
+	// GeneratePress Premium: its option names break BOTH generic-sweep
+	// assumptions (prefix gen_premium vs slug gp-premium, and the status
+	// option is ..._license_key_status), so it gets a dedicated reader.
+	// No expiry is stored.
+	$providers['gp-premium'] = array(
+		'name'      => 'GP Premium',
+		'component' => 'gp-premium/gp-premium.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'gp-premium/gp-premium.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			$key = get_option( 'gen_premium_license_key' );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'GP Premium', 'state' => 'missing' ) ) );
+			}
+			list( $state, $note ) = $edd_state( get_option( 'gen_premium_license_key_status' ) );
+			return array( $item( array( 'name' => 'GP Premium', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
+	// Slider Revolution (ThemePunch): flat options; validity is the STRING
+	// 'true'/'false' in revslider-valid, and a remote deregistration leaves
+	// its reason in revslider-deregister-message.
+	$providers['revslider'] = array(
+		'name'      => 'Slider Revolution',
+		'component' => 'revslider/revslider.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'revslider/revslider.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$code = get_option( 'revslider-code', '' );
+			if ( ! $code ) {
+				return array( $item( array( 'name' => 'Slider Revolution', 'state' => 'missing' ) ) );
+			}
+			if ( 'true' === get_option( 'revslider-valid', 'false' ) ) {
+				return array( $item( array( 'name' => 'Slider Revolution', 'state' => 'valid', 'key' => true ) ) );
+			}
+			$why = wp_strip_all_tags( (string) get_option( 'revslider-deregister-message', '' ) );
+			return array( $item( array( 'name' => 'Slider Revolution', 'state' => 'invalid', 'key' => true, 'note' => $why ? substr( $why, 0, 120 ) : 'code stored but not registered' ) ) );
+		},
+	);
+
+	// LayerSlider (Kreatura): purchase code + a server-issued activation
+	// id; layerslider-authorized-site is the 1/0 validity flag. A remote
+	// cancellation zeroes it and stamps ls-show-canceled_activation_notice.
+	$providers['layerslider'] = array(
+		'name'      => 'LayerSlider',
+		'component' => 'LayerSlider/layerslider.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'LayerSlider/layerslider.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$code = get_option( 'layerslider-purchase-code', '' );
+			if ( ! $code ) {
+				return array( $item( array( 'name' => 'LayerSlider', 'state' => 'missing' ) ) );
+			}
+			if ( get_option( 'layerslider-authorized-site' ) ) {
+				return array( $item( array( 'name' => 'LayerSlider', 'state' => 'valid', 'key' => true ) ) );
+			}
+			$canceled = get_option( 'ls-show-canceled_activation_notice' );
+			return array( $item( array( 'name' => 'LayerSlider', 'state' => 'invalid', 'key' => true, 'note' => $canceled ? 'activation was canceled remotely' : 'code stored but the site is not authorized' ) ) );
+		},
+	);
+
+	// Envato Market: an account OAuth token (presence-only; Envato records
+	// no local validity) plus optional per-item single-use tokens that DO
+	// carry an authorized success/failed flag. Purchased-item counts ride
+	// the plugin's own hourly site transients when warm.
+	$providers['envato-market'] = array(
+		'name'      => 'Envato Market',
+		'component' => 'envato-market/envato-market.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'envato-market/envato-market.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$o = get_option( 'envato_market' );
+			if ( ( ! is_array( $o ) || ! $o ) && is_multisite() ) {
+				$o = get_site_option( 'envato_market' );
+			}
+			$o     = is_array( $o ) ? $o : array();
+			$items = ( ! empty( $o['items'] ) && is_array( $o['items'] ) ) ? $o['items'] : array();
+			$rows  = array();
+			if ( empty( $o['token'] ) && ! $items ) {
+				return array( $item( array( 'name' => 'Envato Market', 'state' => 'missing', 'note' => 'no account token or item tokens stored' ) ) );
+			}
+			if ( ! empty( $o['token'] ) ) {
+				$counts = array();
+				foreach ( array( 'themes' => 'envato_market_themes', 'plugins' => 'envato_market_plugins' ) as $label => $tr ) {
+					$t = get_site_transient( $tr );
+					if ( is_array( $t ) && isset( $t['purchased'] ) && is_array( $t['purchased'] ) && $t['purchased'] ) {
+						$counts[] = count( $t['purchased'] ) . ' ' . $label;
+					}
+				}
+				$note   = $counts ? 'covers ' . implode( ' + ', $counts ) . ' purchased' : 'Envato keeps no local validity record';
+				$rows[] = $item( array( 'name' => 'Envato Market account token', 'state' => 'unknown', 'key' => true, 'note' => $note ) );
+			}
+			foreach ( $items as $it ) {
+				if ( ! is_array( $it ) || empty( $it['name'] ) ) {
+					continue;
+				}
+				$auth  = isset( $it['authorized'] ) ? (string) $it['authorized'] : '';
+				$state = 'success' === $auth ? 'valid' : ( 'failed' === $auth ? 'invalid' : 'unknown' );
+				$rows[] = $item( array( 'name' => (string) $it['name'], 'kind' => ( isset( $it['type'] ) && 'theme' === $it['type'] ) ? 'theme' : 'plugin', 'state' => $state, 'key' => ! empty( $it['token'] ), 'note' => 'Envato single-item token' ) );
+			}
+			return $rows;
+		},
+	);
+
+	// Avada (theme): fusion_registration_data['avada'] carries the purchase
+	// code and a STRICT is_valid flag; one code covers the bundled Avada
+	// plugins. Its store paths are nonce- or WP-CLI-coupled, so the row is
+	// read-only for now (the Bricks-until-lab precedent).
+	$providers['avada'] = array(
+		'name'      => 'Avada',
+		'component' => 'theme:Avada',
+		'detect'    => function () use ( $has_theme ) {
+			return $has_theme( 'Avada' );
+		},
+		'read'      => function () use ( $item ) {
+			$d = get_option( 'fusion_registration_data' );
+			$a = ( is_array( $d ) && isset( $d['avada'] ) && is_array( $d['avada'] ) ) ? $d['avada'] : array();
+			if ( empty( $a['purchase_code'] ) && empty( $a['token'] ) ) {
+				return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'missing' ) ) );
+			}
+			if ( true === ( isset( $a['is_valid'] ) ? $a['is_valid'] : false ) ) {
+				return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'valid', 'key' => true, 'note' => 'covers the bundled Avada plugins' ) ) );
+			}
+			$err = ! empty( $a['errors'] ) ? wp_strip_all_tags( (string) $a['errors'] ) : '';
+			return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'invalid', 'key' => true, 'note' => $err ? substr( $err, 0, 120 ) : '' ) ) );
+		},
+	);
+
+	// The Events Calendar family (PUE) + StellarWP Uplink, registry-style:
+	// PUE keys live in per-plugin options pue_install_key_{slug} with NO
+	// local validity (the checker lives in tribe-common), so those rows are
+	// honest presence-only. Uplink stores per-slug key options plus a
+	// DOMAIN-SUFFIXED status option that does classify.
+	$providers['stellarwp'] = array(
+		'name'      => 'StellarWP / The Events Calendar',
+		'component' => 'stellarwp-registry',
+		'detect'    => function () use ( $has ) {
+			global $wpdb;
+			if ( $has( 'events-calendar-pro/events-calendar-pro.php' ) ) {
+				return true;
+			}
+			return (bool) $wpdb->get_var( "SELECT option_id FROM {$wpdb->options} WHERE option_name LIKE 'pue\\_install\\_key\\_%' OR option_name LIKE 'stellarwp\\_uplink\\_license\\_key\\_%' LIMIT 1" );
+		},
+		'read'      => function () use ( $item, $has ) {
+			global $wpdb;
+			$rows  = array();
+			$names = array(
+				'events_calendar_pro' => 'The Events Calendar Pro',
+				'event_tickets_plus'  => 'Event Tickets Plus',
+				'tribe_filterbar'     => 'The Events Calendar Filter Bar',
+				'events_community'    => 'The Events Calendar Community',
+			);
+			$seen_ecp = false;
+			foreach ( (array) $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'pue\\_install\\_key\\_%'" ) as $row ) {
+				$slug = substr( $row->option_name, strlen( 'pue_install_key_' ) );
+				if ( 'events_calendar_pro' === $slug ) {
+					$seen_ecp = true;
+				}
+				$name = isset( $names[ $slug ] ) ? $names[ $slug ] : ucwords( str_replace( '_', ' ', $slug ) );
+				$key  = '' !== trim( (string) $row->option_value );
+				$rows[] = $item( array(
+					'name'  => $name,
+					'state' => $key ? 'unknown' : 'missing',
+					'key'   => $key,
+					'note'  => $key ? 'key stored; validity is checked on The Events Calendar licenses screen' : '',
+				) );
+			}
+			if ( ! $seen_ecp && $has( 'events-calendar-pro/events-calendar-pro.php' ) ) {
+				$rows[] = $item( array( 'name' => 'The Events Calendar Pro', 'state' => 'missing' ) );
+			}
+			foreach ( (array) $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'stellarwp\\_uplink\\_license\\_key\\_%' AND option_name NOT LIKE 'stellarwp\\_uplink\\_license\\_key\\_status\\_%'" ) as $row ) {
+				$slug   = substr( $row->option_name, strlen( 'stellarwp_uplink_license_key_' ) );
+				$key    = '' !== trim( (string) $row->option_value );
+				$status = $wpdb->get_var( $wpdb->prepare(
+					"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 1",
+					$wpdb->esc_like( 'stellarwp_uplink_license_key_status_' . $slug . '_' ) . '%'
+				) );
+				if ( ! $key ) {
+					$state = 'missing';
+				} elseif ( null === $status ) {
+					$state = 'unknown';
+				} else {
+					$state = ( 'valid' === $status ) ? 'valid' : 'invalid';
+				}
+				$rows[] = $item( array(
+					'name'  => ucwords( str_replace( array( '-', '_' ), ' ', $slug ) ),
+					'state' => $state,
+					'key'   => $key,
+					'note'  => ( $key && null === $status ) ? 'key stored; Uplink has not recorded a status yet' : '',
+				) );
+			}
+			return $rows;
+		},
+	);
+
 	// ----- Phase 1 actions -------------------------------------------------
 	// Attached only while the vendor's own code is LOADED (active plugin/
 	// theme), so the client never draws a control that cannot work. Every
@@ -870,6 +1289,276 @@ function minn_admin_license_default_providers() {
 		};
 	}
 
+	// WPMU DEV: mirror their auth endpoint minus the redirect — set_key,
+	// then a FORCED hub_sync. The Hub answers an invalid or expired key
+	// with an empty membership (hub_sync itself logs the site out in that
+	// case). No paste field while the key is pinned in wp-config: set_key
+	// would be silently overridden on the next boot.
+	if ( class_exists( 'WPMUDEV_Dashboard' ) && ! ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ) {
+		$providers['wpmudev']['secret_label'] = 'WPMU DEV API key';
+		$providers['wpmudev']['activate']     = function ( $secret ) {
+			WPMUDEV_Dashboard::$api->set_key( $secret );
+			$res = WPMUDEV_Dashboard::$api->hub_sync( false, true );
+			if ( false === $res ) {
+				WPMUDEV_Dashboard::$api->set_key( '' ); // the rollback their own endpoint does
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach the WPMU DEV Hub' );
+			}
+			if ( empty( $res['membership'] ) ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'The Hub did not recognize that API key' );
+			}
+			return array( 'ok' => true );
+		};
+		$providers['wpmudev']['deactivate'] = function () {
+			WPMUDEV_Dashboard::$site->logout( false );
+			return array( 'ok' => true );
+		};
+		$providers['wpmudev']['verify'] = function () {
+			if ( ! WPMUDEV_Dashboard::$api->has_key() ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+			}
+			$res = WPMUDEV_Dashboard::$api->hub_sync( false, true );
+			$ok  = is_array( $res ) && ! empty( $res['membership'] );
+			return array( 'ok' => $ok, 'code' => $ok ? '' : 'invalid', 'message' => $ok ? '' : 'The Hub reports no active membership for this key' );
+		};
+	}
+
+	// SearchWP: License::activate/deactivate return { success, data } where
+	// a failure's data is the human message; maintenance() is their own
+	// daily check_license pass and rewrites the stored status.
+	if ( class_exists( '\SearchWP\License' ) ) {
+		$providers['searchwp']['secret_label'] = 'SearchWP license key';
+		$providers['searchwp']['activate']     = function ( $secret ) {
+			$res = \SearchWP\License::activate( $secret );
+			if ( is_array( $res ) && ! empty( $res['success'] ) ) {
+				return array( 'ok' => true );
+			}
+			$msg  = ( is_array( $res ) && isset( $res['data'] ) && is_string( $res['data'] ) ) ? wp_strip_all_tags( $res['data'] ) : '';
+			$code = ( false !== stripos( $msg, 'limit' ) ) ? 'site_limit' : ( false !== stripos( $msg, 'expired' ) ? 'expired' : 'invalid' );
+			return array( 'ok' => false, 'code' => $code, 'message' => $msg ? $msg : 'SearchWP did not accept that key' );
+		};
+		$providers['searchwp']['deactivate'] = function () {
+			$lic = get_option( 'searchwp_license' );
+			$key = ( is_array( $lic ) && ! empty( $lic['key'] ) ) ? (string) $lic['key'] : '';
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'No key stored' );
+			}
+			$res = \SearchWP\License::deactivate( $key );
+			$ok  = is_array( $res ) && ! empty( $res['success'] );
+			$msg = ( is_array( $res ) && isset( $res['data'] ) && is_string( $res['data'] ) ) ? wp_strip_all_tags( $res['data'] ) : '';
+			return array( 'ok' => $ok, 'code' => $ok ? '' : 'error', 'message' => $ok ? '' : $msg );
+		};
+		$providers['searchwp']['verify'] = function () {
+			\SearchWP\License::maintenance();
+			$lic = get_option( 'searchwp_license' );
+			$ok  = is_array( $lic ) && isset( $lic['status'] ) && 'valid' === $lic['status'];
+			return array( 'ok' => $ok, 'code' => $ok ? '' : 'invalid', 'message' => $ok ? '' : 'SearchWP did not confirm the license' );
+		};
+	}
+
+	// Gravity Perks: mirror their form handler — store the key in the
+	// gwp_settings site option, flush their 12-hour caches, then let their
+	// own check flow (which self-activates an inactive key) decide.
+	if ( class_exists( 'GravityPerks' ) && class_exists( 'GWPerks' ) ) {
+		$gwp_save_key = function ( $key ) {
+			$settings                = get_site_option( 'gwp_settings' );
+			$settings                = is_array( $settings ) ? $settings : array();
+			$settings['license_key'] = trim( (string) $key );
+			update_site_option( 'gwp_settings', $settings );
+		};
+		$providers['gravityperks']['secret_label'] = 'Gravity Perks license key';
+		$providers['gravityperks']['activate']     = function ( $secret ) use ( $gwp_save_key ) {
+			$gwp_save_key( $secret );
+			GWPerks::flush_license( true );
+			if ( GWPerks::has_valid_license() ) {
+				return array( 'ok' => true );
+			}
+			$data = GravityPerks::get_api()->get_license_data();
+			if ( is_array( $data ) && isset( $data['activations_left'] ) && 0 === (int) $data['activations_left'] ) {
+				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'That key has reached its site limit' );
+			}
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Gravity Wiz did not validate that key' );
+		};
+		$providers['gravityperks']['deactivate'] = function () use ( $gwp_save_key ) {
+			GravityPerks::get_api()->deactivate_license();
+			$gwp_save_key( '' ); // their handler blanks the stored key after the remote release
+			GWPerks::flush_license( true );
+			return array( 'ok' => true );
+		};
+		$providers['gravityperks']['verify'] = function () {
+			GWPerks::flush_license( true );
+			$ok = GWPerks::has_valid_license();
+			return array( 'ok' => (bool) $ok, 'code' => $ok ? '' : 'invalid', 'message' => $ok ? '' : 'Gravity Wiz reports the license as not valid for this site' );
+		};
+	}
+
+	// Perfmatters: their static License methods take the key directly but
+	// store only STATUS — their form saves the key first, so mirror that.
+	// activate() is boolean-only; check() supplies the why on failure.
+	if ( class_exists( '\Perfmatters\License' ) ) {
+		$providers['perfmatters']['secret_label'] = 'Perfmatters license key';
+		$providers['perfmatters']['activate']     = function ( $secret ) {
+			update_option( 'perfmatters_edd_license_key', sanitize_text_field( $secret ), false );
+			if ( \Perfmatters\License::activate( $secret ) ) {
+				return array( 'ok' => true );
+			}
+			$info = \Perfmatters\License::check( $secret );
+			$word = ( is_object( $info ) && ! empty( $info->license ) ) ? (string) $info->license : '';
+			$code = 'expired' === $word ? 'expired' : ( 'no_activations_left' === $word ? 'site_limit' : 'invalid' );
+			return array( 'ok' => false, 'code' => $code, 'message' => $word ? str_replace( '_', ' ', $word ) : 'Perfmatters did not accept that key' );
+		};
+		$providers['perfmatters']['deactivate'] = function () {
+			$ok = \Perfmatters\License::deactivate();
+			return array( 'ok' => (bool) $ok, 'code' => $ok ? '' : 'error', 'message' => $ok ? '' : 'Perfmatters could not release this site' );
+		};
+		$providers['perfmatters']['verify'] = function () {
+			$info = \Perfmatters\License::check(); // also refreshes the stored status
+			$word = ( is_object( $info ) && ! empty( $info->license ) ) ? (string) $info->license : '';
+			$ok   = 'valid' === $word;
+			return array( 'ok' => $ok, 'code' => $ok ? '' : ( 'expired' === $word ? 'expired' : 'invalid' ), 'message' => $ok ? '' : ( $word ? str_replace( '_', ' ', $word ) : 'No response from the Perfmatters server' ) );
+		};
+	}
+
+	// GeneratePress Premium: drive its OWN REST route (the same code its
+	// dashboard runs) via rest_do_request. Empty key + a valid stored one
+	// is their deactivate branch; '***' is their masked-key flow, which
+	// re-activates the stored key — a re-verify.
+	if ( class_exists( 'GeneratePress_Pro_Rest' ) ) {
+		$gpp_route = function ( $key ) {
+			$req = new WP_REST_Request( 'POST', '/generatepress-pro/v1/license/' );
+			$req->set_param( 'key', $key );
+			$res  = rest_do_request( $req );
+			$data = json_decode( wp_json_encode( $res->get_data() ), true );
+			$ok   = is_array( $data ) && ! empty( $data['success'] );
+			$msg  = ( is_array( $data ) && isset( $data['response'] ) && is_string( $data['response'] ) ) ? wp_strip_all_tags( $data['response'] ) : '';
+			$code = '';
+			if ( ! $ok ) {
+				$code = ( false !== stripos( $msg, 'activation limit' ) ) ? 'site_limit' : ( false !== stripos( $msg, 'expired' ) ? 'expired' : 'invalid' );
+			}
+			return array( 'ok' => $ok, 'code' => $code, 'message' => $ok ? '' : $msg );
+		};
+		$providers['gp-premium']['secret_label'] = 'GP Premium license key';
+		$providers['gp-premium']['activate']     = function ( $secret ) use ( $gpp_route ) {
+			return $gpp_route( $secret );
+		};
+		$providers['gp-premium']['deactivate'] = function () use ( $gpp_route ) {
+			return $gpp_route( '' );
+		};
+		$providers['gp-premium']['verify'] = function () use ( $gpp_route ) {
+			if ( ! get_option( 'gen_premium_license_key' ) ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+			}
+			return $gpp_route( '***' );
+		};
+	}
+
+	// WP All Export Pro: their LicenseActivator (no constructor deps) reads
+	// the stored key, calls home and stores the status — so store the key
+	// first, their way (updateOption salt-wraps it).
+	if ( class_exists( 'PMXE_Plugin' ) && class_exists( '\Wpae\App\Service\License\LicenseActivator' ) ) {
+		$pmxe_result = function ( $word ) {
+			$ok = in_array( (string) $word, array( 'valid', 'active' ), true );
+			if ( $ok ) {
+				return array( 'ok' => true );
+			}
+			$code = 'expired' === $word ? 'expired' : ( 'no_activations_left' === $word ? 'site_limit' : 'invalid' );
+			return array( 'ok' => false, 'code' => $code, 'message' => $word ? str_replace( '_', ' ', (string) $word ) : 'wpallimport.com did not confirm the license' );
+		};
+		$providers['wp-all-export']['secret_label'] = 'WP All Export license key';
+		$providers['wp-all-export']['activate']     = function ( $secret ) use ( $pmxe_result ) {
+			PMXE_Plugin::getInstance()->updateOption( 'license', trim( $secret ) );
+			( new \Wpae\App\Service\License\LicenseActivator() )->activateLicense( PMXE_Plugin::getEddName(), \Wpae\App\Service\License\LicenseActivator::CONTEXT_PMXE );
+			$o = get_option( 'PMXE_Plugin_Options' );
+			return $pmxe_result( is_array( $o ) && isset( $o['license_status'] ) ? $o['license_status'] : '' );
+		};
+		$providers['wp-all-export']['verify'] = function () use ( $pmxe_result ) {
+			$word = ( new \Wpae\App\Service\License\LicenseActivator() )->checkLicense( PMXE_Plugin::getEddName(), PMXE_Plugin::getInstance()->getOption(), \Wpae\App\Service\License\LicenseActivator::CONTEXT_PMXE );
+			if ( false === $word ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach wpallimport.com (or no key is stored)' );
+			}
+			PMXE_Plugin::getInstance()->updateOption( 'license_status', (string) $word );
+			return $pmxe_result( $word );
+		};
+	}
+
+	// WP All Import Pro: its only paste-activation path reads $_POST inside
+	// a nonce-gated admin controller, so activation stays on its screen
+	// (linked below); verify rides the public static check their own
+	// licenses screen uses and stores the result exactly as it does.
+	if ( class_exists( 'PMXI_Plugin' ) && class_exists( 'PMXI_Admin_License' ) ) {
+		$providers['wp-all-import']['verify'] = function () {
+			$word = PMXI_Admin_License::check_license( 'PMXI_Plugin' );
+			if ( false === $word ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach wpallimport.com (or no key is stored)' );
+			}
+			$o = PMXI_Plugin::getInstance()->getOption();
+			$o['statuses']['PMXI_Plugin'] = (string) $word;
+			PMXI_Plugin::getInstance()->updateOption( $o );
+			$ok = in_array( (string) $word, array( 'valid', 'active' ), true );
+			return array( 'ok' => $ok, 'code' => $ok ? '' : ( 'expired' === $word ? 'expired' : 'invalid' ), 'message' => $ok ? '' : str_replace( '_', ' ', (string) $word ) );
+		};
+		$providers['wp-all-import']['activate_url'] = admin_url( 'admin.php?page=pmxi-admin-settings' );
+	}
+
+	// Slider Revolution: activate_plugin() answers true | 'exist' (the code
+	// is registered to another site) | 'banned' | false.
+	if ( class_exists( 'RevSliderLicense' ) ) {
+		$providers['revslider']['secret_label'] = 'Slider Revolution purchase code';
+		$providers['revslider']['activate']     = function ( $secret ) {
+			$res = ( new RevSliderLicense() )->activate_plugin( $secret );
+			if ( true === $res ) {
+				return array( 'ok' => true );
+			}
+			if ( 'exist' === $res ) {
+				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'That purchase code is already registered on another site' );
+			}
+			if ( 'banned' === $res ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'ThemePunch reports that purchase code as banned' );
+			}
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => 'ThemePunch did not recognize that purchase code' );
+		};
+		$providers['revslider']['deactivate'] = function () {
+			$ok = ( new RevSliderLicense() )->deactivate_plugin();
+			return array( 'ok' => (bool) $ok, 'code' => $ok ? '' : 'error', 'message' => $ok ? '' : 'ThemePunch did not confirm the release' );
+		};
+	}
+
+	// LayerSlider: the global updater instance exposes handleActivation
+	// with an explicit skip-referer mode (their own re-validation path
+	// uses it). Its deactivation handler die()s mid-request, so releasing
+	// the seat stays on their screen; verify re-runs activation with the
+	// stored code, which IS their re-validation flow.
+	if ( ! empty( $GLOBALS['LS_AutoUpdate'] ) && method_exists( $GLOBALS['LS_AutoUpdate'], 'handleActivation' ) ) {
+		$ls_activate = function ( $code ) {
+			$json = $GLOBALS['LS_AutoUpdate']->handleActivation( $code, array( 'skipRefererCheck' => true, 'returnData' => true ) );
+			if ( is_object( $json ) && empty( $json->errCode ) ) {
+				return array( 'ok' => true );
+			}
+			$msg  = ( is_object( $json ) && ! empty( $json->message ) ) ? wp_strip_all_tags( (string) $json->message ) : 'Kreatura did not accept that license key';
+			$code = ( false !== stripos( $msg, 'another site' ) || false !== stripos( $msg, 'in use' ) || false !== stripos( $msg, 'limit' ) ) ? 'site_limit' : 'invalid';
+			return array( 'ok' => false, 'code' => $code, 'message' => $msg );
+		};
+		$providers['layerslider']['secret_label'] = 'LayerSlider license key';
+		$providers['layerslider']['activate']     = $ls_activate;
+		$providers['layerslider']['verify']       = function () use ( $ls_activate ) {
+			$code = get_option( 'layerslider-purchase-code', '' );
+			if ( '' === $code ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No license key stored' );
+			}
+			return $ls_activate( $code );
+		};
+	}
+
+	// Rank Math: activation is the rankmath.com portal handshake owned by
+	// the FREE plugin — link to its registration screen while it is loaded.
+	if ( defined( 'RANK_MATH_VERSION' ) ) {
+		$providers['rank-math-pro']['activate_url'] = admin_url( 'admin.php?page=rank-math&view=registration' );
+	}
+
+	// Envato Market: token entry is a nonce-coupled Settings-API screen.
+	if ( defined( 'ENVATO_MARKET_VERSION' ) ) {
+		$providers['envato-market']['activate_url'] = admin_url( 'admin.php?page=' . ( defined( 'ENVATO_MARKET_SLUG' ) ? ENVATO_MARKET_SLUG : 'envato-market' ) );
+	}
+
 	// WPBakery activation is a token handshake through support.wpbakery.com
 	// (no paste-a-code callable exists), so the honest control is a link to
 	// its own activation screen.
@@ -1138,7 +1827,12 @@ function minn_admin_licenses() {
 			if ( ! empty( $p['activate_url'] ) ) {
 				$row['activateUrl'] = (string) ( is_callable( $p['activate_url'] ) ? call_user_func( $p['activate_url'] ) : $p['activate_url'] );
 			}
-			if ( ! empty( $p['component'] ) && 'bsf-registry' !== $p['component'] && ! $component_active( $p['component'] ) ) {
+			// Registry-style providers (bsf-registry, stellarwp-registry)
+			// span several components, so only a real plugin-file or
+			// theme: component can dim its rows.
+			$component    = isset( $p['component'] ) ? (string) $p['component'] : '';
+			$is_component = $component && ( false !== strpos( $component, '/' ) || 0 === strpos( $component, 'theme:' ) );
+			if ( $is_component && ! $component_active( $component ) ) {
 				$row['off'] = true;
 			}
 			$items[] = $row;
