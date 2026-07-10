@@ -22,8 +22,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 ## Features
 
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
-  is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP), and a
-  recent-activity feed
+  is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP, or
+  Google Analytics through **Site Kit**), and a recent-activity feed
 - **Content** — posts, pages and custom post types sorted by publish date (scheduled posts
   lead with their go-out dates), with search, category/tag filters, status pills, **bulk
   actions** (set status or trash, with shift-click range select), and **row actions**:
@@ -46,8 +46,10 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Post Types & Taxonomies** — see every registered post type and taxonomy and manage
   definitions through whoever owns them: ACF, Custom Post Type UI, or Minn's own store when
   neither is active; code-registered ones shown read-only
-- **Settings** — General (with timezone picker), Writing, Reading, Discussion and Permalinks
-  (structure presets + custom, with automatic rewrite flushing), plus built-in maintenance mode
+- **Settings** — General (with timezone picker), Writing, Reading, Discussion, Permalinks
+  (structure presets + custom, with automatic rewrite flushing), a **Spam** page showing who
+  filters comment spam (Akismet, Antispam Bee, CleanTalk) with safe toggles and blocked counts,
+  plus built-in maintenance mode
 - **Editor** — a calm, block-aware writing surface that stores **native Gutenberg markup**
   (zero lock-in: open any post in the block editor, any time). Markdown typing conventions
   (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), a link popover
@@ -72,7 +74,9 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   headings as a live table of contents; **focus mode** (⌘⇧D) fades all but the current
   paragraph; **outline mode** (⌘⇧O) leaves just the writing and the outline. The **internal
   link picker** searches your own posts from the link popover, and a themed **date-time
-  picker** handles scheduling. ⌘⏎ publishes; the help dialog documents every shortcut.
+  picker** handles scheduling. **Find & replace** (⌘⇧F) matches across inline formatting,
+  never touches protected islands, and every replace is a native undo step. ⌘⏎ publishes;
+  the help dialog documents every shortcut.
   Where this is heading: [the editor roadmap](docs/editor-roadmap.md)
 - **Never lose work** — post locking on WordPress's own `_edit_lock` (Minn, the classic editor
   and Gutenberg all honor each other, with takeover), plus a localStorage **crash net** that
@@ -89,20 +93,42 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   bloat, cron health) / server facts, an **installed extensions manifest** (plugins,
   must-use, themes with versions), live **debug toggles** that safely rewrite
   `wp-config.php`, a clickable **debug-log viewer**, and one-click **Copy report** as markdown
-- **SEO panel** — Yoast SEO / Rank Math title, meta description and focus keyword in the
-  editor sidebar
-- **Command palette** — ⌘K / Ctrl-K everywhere
+- **SEO panel** — Yoast SEO, Rank Math, All in One SEO or SEOPress title, meta description and
+  focus keyword in the editor sidebar (first active plugin wins)
 - **Menus & Widgets** — classic nav menus with drag-to-reorder (children travel with their
   parent); classic sidebars with **drag grips** to reorder widgets in an area, plus move
   between areas and in-place edit for block/text/HTML widgets
-- **Plugin surfaces** — bundled adapters for **Gravity Forms** (readable entries with real
-  field labels, **←/→** to step through the list, plus a Forms view with activate/deactivate),
-  **Gravity SMTP** (email log with a real HTML preview and resend), **Simple History**,
-  **WP Activity Log**, **Activity Log (Aryo)** and **Stream** (audit logs), **Redirection**,
-  **Safe Redirect Manager** and **Simple 301 Redirects** (redirects: list, search, create,
-  edit and delete), **ACF** (editor panels) and **Yoast / Rank Math** (SEO panel), plus
-  one-filter APIs for any plugin to register views, editor panels, traffic data or
-  block-inspector forms
+- **Surfaces** — Minn's answer to plugin sprawl: one sidebar item per *job*, not per plugin,
+  with every capable plugin layered in behind it and a provider switcher when more than one is
+  active. **Forms** (Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 via Flamingo
+  or CFDB7) shows entries as contact cards with real field labels and ←/→ stepping;
+  **Email Log** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP) shows sent mail with HTML
+  previews and resend; **Activity Log** (Simple History, WP Activity Log, Aryo, Stream,
+  Wordfence login security) reads like an audit feed; **Redirects** (Redirection, Safe Redirect
+  Manager, Simple 301 Redirects) lists, searches, creates and edits; **Snippets** (Code
+  Snippets, WPCode, FluentSnippets) lists, toggles and edits; **Backups** (UpdraftPlus,
+  Disembark) below. The sidebar organizes into **Workspace / Tools / Manage** groups so daily
+  inboxes stay separate from site plumbing
+- **Backups** — with **UpdraftPlus**: every backup set listed, a System health check answering
+  "is my site backed up?", and **Back up site now** from ⌘K through UpdraftPlus's own
+  background machinery. With **Disembark**: a status card (last scan, database size, working
+  files), the exact `disembark connect` command click-to-copy, scan sessions with cleanup, and
+  token regeneration
+- **Notifications that respect you** — comments, plugin/theme/core updates and new users in one
+  panel, plus an **admin-notice digest**: the notices other plugins print in wp-admin are
+  extracted as structured data (never their HTML or JavaScript) into a Notices tab, their action
+  links run in the background, and any notice can be hidden with Undo. The Updates tab pins
+  **Update everything**: plugins, themes and core in one click, with poll-verified core
+  completion. A pending WordPress update also shows as an amber topbar chip and Overview banner
+- **Command palette** — ⌘K / Ctrl-K everywhere, with site-care actions built in: **Clear site
+  cache** purges every layer the site runs (Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket,
+  WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor
+  CSS), each in its own isolated request
+- **Extending** — one-filter APIs for any plugin to register views (with status cards, tabs,
+  detail layouts and actions), editor panels, traffic data, cache purgers, spam providers,
+  design libraries, page builders or block-inspector forms; the System page's **Integrations**
+  card shows everything registered and flags descriptor problems instead of failing silently.
+  The full coverage map lives in [docs/plugin-support.md](docs/plugin-support.md)
 - **Dark & light themes**, bundled fonts, zero external requests from the app, responsive down
   to phones
 
