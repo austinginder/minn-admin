@@ -13905,14 +13905,30 @@
 
 	let tiSearchTimer = null;
 
+	async function loadThemeResults( m, q ) {
+		m.searching = true;
+		renderOverlays();
+		try {
+			const r = await api( 'minn-admin/v1/themes/search?q=' + encodeURIComponent( q ) );
+			if ( state.modal !== m ) return;
+			m.results = r.themes;
+		} catch ( e ) {
+			toast( e.message, true );
+			m.results = [];
+		}
+		m.searching = false;
+		renderOverlays();
+	}
+
 	function bindThemeInstallModal( m ) {
 		const input = $( '#minn-ti-search' );
 		input.focus();
 		input.setSelectionRange( input.value.length, input.value.length );
+		// Preload the popular directory so the dialog isn't a blank box.
+		if ( ! m.results && ! m.searching ) loadThemeResults( m, '' );
 		input.addEventListener( 'input', () => {
 			m.q = input.value.trim();
 			clearTimeout( tiSearchTimer );
-			if ( ! m.q ) return;
 			tiSearchTimer = setTimeout( async () => {
 				m.searching = true;
 				renderOverlays();
