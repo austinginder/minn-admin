@@ -1,15 +1,19 @@
 <?php
 /**
- * Bundled adapter: Yoast SEO / Rank Math editor panel.
+ * Bundled adapter: SEO editor panel — Yoast, Rank Math, AIOSEO, SEOPress.
  *
- * The valuable 90% of both plugins at write time is three fields: SEO title,
- * meta description and focus keyword. Neither plugin exposes its post meta
- * over REST, so this adapter registers a dedicated `minn_seo` REST field
- * (NOT the generic meta API — the editor writes its whole panel object back
- * on save, and a dedicated field keeps that write scoped to these three
- * values) and describes the panel through the standard editor-panels
- * framework. Scores and content analysis stay in wp-admin — that's the
- * plugins' moat, not Minn's.
+ * The valuable 90% of every SEO plugin at write time is three fields: SEO
+ * title, meta description and focus keyword. None of them expose those over
+ * REST, so this adapter registers a dedicated `minn_seo` REST field (NOT
+ * the generic meta API — the editor writes its whole panel object back on
+ * save, and a dedicated field keeps that write scoped to these values) and
+ * describes the panel through the standard editor-panels framework. Scores
+ * and content analysis stay in wp-admin — that's the plugins' moat.
+ *
+ * Yoast, Rank Math and SEOPress store postmeta; AIOSEO v4 keeps its own
+ * {prefix}aioseo_posts table, so providers carry read/write callables and
+ * AIOSEO's go through its own Post model (never raw SQL into their table).
+ * Detection order follows install base; the first active plugin wins.
  *
  * @package minn-admin
  */
@@ -17,30 +21,126 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * The active SEO plugin and its meta keys — Yoast wins if both are active.
+ * Provider backed by simple postmeta keys. Empty values delete the meta.
+ */
+function minn_admin_seo_meta_provider( $name, $keys ) {
+	return array(
+		'name'  => $name,
+		'read'  => function ( $post_id ) use ( $keys ) {
+			$out = array();
+			foreach ( $keys as $field => $meta_key ) {
+				$out[ $field ] = (string) get_post_meta( (int) $post_id, $meta_key, true );
+			}
+			return $out;
+		},
+		'write' => function ( $post_id, $field, $clean ) use ( $keys ) {
+			if ( ! isset( $keys[ $field ] ) ) {
+				return;
+			}
+			if ( '' === $clean ) {
+				delete_post_meta( $post_id, $keys[ $field ] );
+			} else {
+				update_post_meta( $post_id, $keys[ $field ], $clean );
+			}
+		},
+	);
+}
+
+/**
+ * AIOSEO v4 provider — reads and writes through AIOSEO's own Post model so
+ * its table shape, sanitization and caches stay its business. The focus
+ * keyword lives inside the `keyphrases` JSON blob; additional keyphrases
+ * are preserved untouched.
+ */
+function minn_admin_seo_aioseo_provider() {
+	$model = '\AIOSEO\Plugin\Common\Models\Post';
+	// The model auto-decodes JSON columns, so `keyphrases` may arrive as an
+	// object, an array or a raw string depending on code path — normalize
+	// to a plain array before touching it.
+	$phrases_of = function ( $post ) {
+		$raw = $post->keyphrases;
+		if ( is_string( $raw ) ) {
+			$decoded = json_decode( $raw, true );
+		} else {
+			$decoded = json_decode( (string) wp_json_encode( $raw ), true );
+		}
+		return is_array( $decoded ) ? $decoded : array();
+	};
+	return array(
+		'name'  => 'AIOSEO',
+		'read'  => function ( $post_id ) use ( $model, $phrases_of ) {
+			$out = array( 'title' => '', 'description' => '', 'focus_keyword' => '' );
+			try {
+				$post = $model::getPost( (int) $post_id );
+				if ( $post ) {
+					$out['title']       = (string) $post->title;
+					$out['description'] = (string) $post->description;
+					$phrases            = $phrases_of( $post );
+					if ( ! empty( $phrases['focus']['keyphrase'] ) ) {
+						$out['focus_keyword'] = (string) $phrases['focus']['keyphrase'];
+					}
+				}
+			} catch ( \Throwable $e ) { /* their schema, their exceptions — read as empty */ }
+			return $out;
+		},
+		'write' => function ( $post_id, $field, $clean ) use ( $model, $phrases_of ) {
+			try {
+				$post = $model::getPost( (int) $post_id );
+				if ( ! $post ) {
+					return;
+				}
+				if ( 'title' === $field ) {
+					$post->title = '' === $clean ? null : $clean;
+				} elseif ( 'description' === $field ) {
+					$post->description = '' === $clean ? null : $clean;
+				} elseif ( 'focus_keyword' === $field ) {
+					$phrases = $phrases_of( $post );
+					if ( '' === $clean ) {
+						unset( $phrases['focus'] );
+					} else {
+						$phrases['focus'] = array_merge(
+							isset( $phrases['focus'] ) && is_array( $phrases['focus'] ) ? $phrases['focus'] : array(),
+							array( 'keyphrase' => $clean )
+						);
+					}
+					$post->keyphrases = $phrases ? wp_json_encode( $phrases ) : null;
+				}
+				$post->save();
+			} catch ( \Throwable $e ) { /* never let their model break the post save */ }
+		},
+	);
+}
+
+/**
+ * The active SEO plugin as { name, read, write } — first active wins, in
+ * install-base order.
  *
- * @return array|null { name, keys: { title, description, focus_keyword } }
+ * @return array|null
  */
 function minn_admin_seo_plugin() {
 	if ( defined( 'WPSEO_VERSION' ) ) {
-		return array(
-			'name' => 'Yoast SEO',
-			'keys' => array(
-				'title'         => '_yoast_wpseo_title',
-				'description'   => '_yoast_wpseo_metadesc',
-				'focus_keyword' => '_yoast_wpseo_focuskw',
-			),
-		);
+		return minn_admin_seo_meta_provider( 'Yoast SEO', array(
+			'title'         => '_yoast_wpseo_title',
+			'description'   => '_yoast_wpseo_metadesc',
+			'focus_keyword' => '_yoast_wpseo_focuskw',
+		) );
 	}
 	if ( defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ) ) {
-		return array(
-			'name' => 'Rank Math',
-			'keys' => array(
-				'title'         => 'rank_math_title',
-				'description'   => 'rank_math_description',
-				'focus_keyword' => 'rank_math_focus_keyword',
-			),
-		);
+		return minn_admin_seo_meta_provider( 'Rank Math', array(
+			'title'         => 'rank_math_title',
+			'description'   => 'rank_math_description',
+			'focus_keyword' => 'rank_math_focus_keyword',
+		) );
+	}
+	if ( defined( 'AIOSEO_VERSION' ) && class_exists( '\AIOSEO\Plugin\Common\Models\Post' ) ) {
+		return minn_admin_seo_aioseo_provider();
+	}
+	if ( defined( 'SEOPRESS_VERSION' ) ) {
+		return minn_admin_seo_meta_provider( 'SEOPress', array(
+			'title'         => '_seopress_titles_title',
+			'description'   => '_seopress_titles_desc',
+			'focus_keyword' => '_seopress_analysis_target_kw',
+		) );
 	}
 	return null;
 }
@@ -66,7 +166,6 @@ add_action( 'rest_api_init', function () {
 	if ( ! $plugin ) {
 		return;
 	}
-	$keys = $plugin['keys'];
 
 	register_rest_route( 'minn-admin/v1', '/seo/fields', array(
 		'methods'             => 'GET',
@@ -97,32 +196,24 @@ add_action( 'rest_api_init', function () {
 		$types[] = $obj->name;
 	}
 	register_rest_field( $types, 'minn_seo', array(
-		'get_callback'    => function ( $post_arr ) use ( $keys ) {
-			$out = array();
-			foreach ( $keys as $field => $meta_key ) {
-				$out[ $field ] = (string) get_post_meta( (int) $post_arr['id'], $meta_key, true );
-			}
-			return $out;
+		'get_callback'    => function ( $post_arr ) use ( $plugin ) {
+			return call_user_func( $plugin['read'], (int) $post_arr['id'] );
 		},
-		'update_callback' => function ( $value, $post ) use ( $keys ) {
+		'update_callback' => function ( $value, $post ) use ( $plugin ) {
 			if ( ! is_array( $value ) ) {
 				return null;
 			}
 			if ( ! current_user_can( 'edit_post', $post->ID ) ) {
 				return new WP_Error( 'rest_forbidden', 'You cannot edit SEO fields on this post.', array( 'status' => 403 ) );
 			}
-			foreach ( $keys as $field => $meta_key ) {
+			foreach ( array( 'title', 'description', 'focus_keyword' ) as $field ) {
 				if ( ! array_key_exists( $field, $value ) ) {
 					continue;
 				}
 				$clean = 'description' === $field
 					? sanitize_textarea_field( (string) $value[ $field ] )
 					: sanitize_text_field( (string) $value[ $field ] );
-				if ( '' === $clean ) {
-					delete_post_meta( $post->ID, $meta_key );
-				} else {
-					update_post_meta( $post->ID, $meta_key, $clean );
-				}
+				call_user_func( $plugin['write'], $post->ID, $field, $clean );
 			}
 			return null;
 		},
