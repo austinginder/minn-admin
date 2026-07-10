@@ -843,6 +843,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   padding: 9px 12px; color: var(--text); font-size: 14.5px;
 }
 .minn-input:focus { outline: none; border-color: var(--accent); }
+textarea.minn-input { font-family: inherit; line-height: 1.5; resize: vertical; min-height: 38px; }
 .minn-input.mono { font-family: 'JetBrains Mono', monospace; font-size: 14px; }
 select.minn-input {
   -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 32px;

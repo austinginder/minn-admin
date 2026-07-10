@@ -1944,6 +1944,10 @@
 			size: fmtBytes( md.filesize ),
 			date: m.date,
 			alt: m.alt_text || '',
+			// caption/description are edit-context raw, filled lazily when the
+			// detail modal opens (the list fetch stays view-context + light).
+			caption: ( m.caption && typeof m.caption.raw === 'string' ) ? m.caption.raw : '',
+			description: ( m.description && typeof m.description.raw === 'string' ) ? m.description.raw : '',
 		};
 	}
 
@@ -13986,6 +13990,10 @@
 							<input class="minn-input" id="minn-media-title" value="${ esc( it.name ) }">
 							<div class="minn-field-label" style="margin-top:10px;">Alt text</div>
 							<input class="minn-input" id="minn-media-alt" placeholder="Describe this image…" value="${ esc( it.alt || '' ) }">
+							<div class="minn-field-label" style="margin-top:10px;">Caption</div>
+							<textarea class="minn-input" id="minn-media-caption" rows="2" placeholder="Shown beneath the image…">${ esc( it.caption || '' ) }</textarea>
+							<div class="minn-field-label" style="margin-top:10px;">Description</div>
+							<textarea class="minn-input" id="minn-media-description" rows="3" placeholder="Longer detail, shown on the attachment page…">${ esc( it.description || '' ) }</textarea>
 						</div>` : '' }
 					</div>
 					<div class="minn-modal-actions">
@@ -14751,16 +14759,38 @@
 				}
 			} );
 			$( '#minn-media-open' ).addEventListener( 'click', () => window.open( it.url, '_blank' ) );
+			// Caption + description are edit-context raw; fetch them once when
+			// the detail modal opens and fill the fields in place (the list
+			// stays view-context). The inputs render from it.caption/it.description
+			// which start empty, so this is the first real value.
+			const capEl = $( '#minn-media-caption' );
+			const descEl = $( '#minn-media-description' );
+			if ( capEl && ! it._metaLoaded ) {
+				it._metaLoaded = true;
+				api( `wp/v2/media/${ it.id }?context=edit&_fields=caption,description` ).then( ( full ) => {
+					it.caption = ( full.caption && full.caption.raw ) || '';
+					it.description = ( full.description && full.description.raw ) || '';
+					// Only overwrite if the user hasn't started typing.
+					const c = $( '#minn-media-caption' );
+					const d = $( '#minn-media-description' );
+					if ( c && document.activeElement !== c && ! c.value ) c.value = it.caption;
+					if ( d && document.activeElement !== d && ! d.value ) d.value = it.description;
+				} ).catch( () => {} );
+			}
 			const saveBtn = $( '#minn-media-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 				const title = $( '#minn-media-title' ).value.trim();
 				const alt = $( '#minn-media-alt' ).value;
+				const caption = capEl ? capEl.value : '';
+				const description = descEl ? descEl.value : '';
 				saveBtn.disabled = true;
 				saveBtn.textContent = 'Saving…';
 				try {
-					await api( `wp/v2/media/${ it.id }`, { method: 'POST', body: JSON.stringify( { title, alt_text: alt } ) } );
+					await api( `wp/v2/media/${ it.id }`, { method: 'POST', body: JSON.stringify( { title, alt_text: alt, caption, description } ) } );
 					it.name = title || it.name;
 					it.alt = alt;
+					it.caption = caption;
+					it.description = description;
 					// Reflect the change in the cached list without a full refetch.
 					const cached = state.cache.media && state.cache.media.items.find( ( x ) => x.id === it.id );
 					if ( cached ) { cached.title = { rendered: title }; cached.alt_text = alt; }
