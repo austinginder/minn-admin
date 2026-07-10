@@ -1227,6 +1227,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
   background: var(--panel); border: 1px solid var(--accent); border-radius: 12px;
 }
 .minn-bulk-count { font-weight: 600; font-size: 13.5px; }
+.minn-bulk-label { font-size: 13px; color: var(--text3); }
 .minn-bulkbar select.minn-input { width: auto; }
 .minn-sessions { padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .minn-session-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
@@ -1349,6 +1350,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 
 /* ===== Users ===== */
 .minn-user-cols { grid-template-columns: 40px 1.2fr 1.4fr 130px 110px 40px; }
+.minn-user-cols.has-cb { grid-template-columns: 34px 40px 1.2fr 1.4fr 130px 110px 40px; }
 
 /* Terms manager */
 .minn-term-cols { grid-template-columns: 1.6fr 1fr 90px 40px; }
@@ -2060,6 +2062,11 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-user-cols { grid-template-columns: 40px 1fr 100px; }
   .minn-user-cols > :nth-child(3), .minn-user-cols > :nth-child(5),
   .minn-user-cols > :nth-child(6) { display: none; }
+  /* With the checkbox column the cells shift by one: show cb, name, role. */
+  .minn-user-cols.has-cb { grid-template-columns: 30px 1fr 100px; }
+  .minn-user-cols.has-cb > :nth-child(2), .minn-user-cols.has-cb > :nth-child(4),
+  .minn-user-cols.has-cb > :nth-child(6), .minn-user-cols.has-cb > :nth-child(7) { display: none; }
+  .minn-user-cols.has-cb > :nth-child(3), .minn-user-cols.has-cb > :nth-child(5) { display: block; }
   .minn-cpt-cols { grid-template-columns: 1fr 100px; }
   .minn-cpt-cols > :nth-child(2), .minn-cpt-cols > :nth-child(4),
   .minn-cpt-cols > :nth-child(5), .minn-cpt-cols > :nth-child(6) { display: none; }
