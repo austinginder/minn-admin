@@ -1641,12 +1641,17 @@ class Minn_Admin_REST {
 				$map[ $file ] = $data->new_version;
 			}
 		}
-		$themes       = current_user_can( 'update_themes' ) ? get_site_transient( 'update_themes' ) : null;
-		$theme_count  = ( $themes && ! empty( $themes->response ) ) ? count( $themes->response ) : 0;
+		$themes    = current_user_can( 'update_themes' ) ? get_site_transient( 'update_themes' ) : null;
+		$theme_map = array();
+		if ( $themes && ! empty( $themes->response ) ) {
+			foreach ( $themes->response as $stylesheet => $data ) {
+				$theme_map[ $stylesheet ] = is_array( $data ) ? ( $data['new_version'] ?? '' ) : '';
+			}
+		}
 		return rest_ensure_response(
 			array(
 				'updates' => $map,
-				'themes'  => $theme_count,
+				'themes'  => $theme_map,
 			)
 		);
 	}

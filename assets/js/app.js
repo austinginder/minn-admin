@@ -264,6 +264,7 @@
 			categories: null,
 			plugins: null,
 			pluginUpdates: {},
+			themeUpdates: {},
 			settings: null,
 			notifications: null,
 		},
@@ -3882,11 +3883,12 @@
 			state.cache.pluginMeta = await metaJob;
 			state.cache.plugins = plugins;
 			state.cache.pluginUpdates = ( upd && upd.updates ) || {};
-			// Pending THEME updates count toward the Extensions dot too —
-			// per-theme badges only render inside the Themes tab.
-			state.cache.themeUpdates = ( upd && upd.themes ) || 0;
+			// Pending THEME updates ({stylesheet: new_version}) count toward
+			// the Extensions dot too — per-theme badges only render inside
+			// the Themes tab. The map also feeds Update everything.
+			state.cache.themeUpdates = ( upd && upd.themes ) || {};
 			const dot = $( '#minn-plugin-dot' );
-			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! state.cache.themeUpdates;
+			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! Object.keys( state.cache.themeUpdates ).length;
 		} )().finally( () => { pluginsPromise = null; } );
 		return pluginsPromise;
 	}
@@ -3972,40 +3974,27 @@
 		</div>`;
 	}
 
-	function bindCoreBanner( view ) {
-		const btn = $( '#minn-core-update', view );
-		if ( ! btn ) return;
-		btn.addEventListener( 'click', async () => {
-			const core = state.cache.core;
-			if ( ! confirm( `Update WordPress to ${ core.update.version }? Visitors see a maintenance notice for a few seconds while files are replaced.` ) ) return;
-			btn.disabled = true;
-			btn.textContent = 'Updating WordPress…';
-			// Replacing core files recycles the PHP worker serving the update
-			// request, so its response often never arrives even when the
-			// update succeeds. The POLL is the reliable completion signal;
-			// the request's own response is just a fast-path. A false
-			// "update failed" on the scariest button in the app costs more
-			// trust than the update earns.
-			const offered = core.update.version;
+	// Run the offered core update; resolves the new version. Replacing core
+	// files recycles the PHP worker serving the update request, so its
+	// response often never arrives even when the update succeeds. The POLL
+	// is the reliable completion signal; the request's own response is just
+	// a fast-path. A false "update failed" on the scariest button in the
+	// app costs more trust than the update earns.
+	function runCoreUpdate( offered ) {
+		return new Promise( ( resolve, reject ) => {
 			const started = Date.now();
 			let settled = false;
 			const finish = ( version ) => {
 				if ( settled ) return;
 				settled = true;
 				clearInterval( poll );
-				toast( `WordPress updated to ${ version }` );
-				state.cache.notifications = null;
-				updateCoreChip();
-				if ( state.route === 'extensions' ) renderExtensions();
-				else if ( state.route === 'overview' ) renderOverview();
+				resolve( version );
 			};
 			const fail = ( msg ) => {
 				if ( settled ) return;
 				settled = true;
 				clearInterval( poll );
-				toast( msg, true );
-				btn.disabled = false;
-				btn.textContent = 'Update WordPress';
+				reject( new Error( msg ) );
 			};
 			api( 'minn-admin/v1/core/update', { method: 'POST', body: '{}' } )
 				.then( ( r ) => {
@@ -4038,6 +4027,29 @@
 					}
 				} catch ( e ) { /* mid-update requests are expected to fail */ }
 			}, 8000 );
+		} );
+	}
+
+	function bindCoreBanner( view ) {
+		const btn = $( '#minn-core-update', view );
+		if ( ! btn ) return;
+		btn.addEventListener( 'click', async () => {
+			const core = state.cache.core;
+			if ( ! confirm( `Update WordPress to ${ core.update.version }? Visitors see a maintenance notice for a few seconds while files are replaced.` ) ) return;
+			btn.disabled = true;
+			btn.textContent = 'Updating WordPress…';
+			try {
+				const version = await runCoreUpdate( core.update.version );
+				toast( `WordPress updated to ${ version }` );
+				state.cache.notifications = null;
+				updateCoreChip();
+				if ( state.route === 'extensions' ) renderExtensions();
+				else if ( state.route === 'overview' ) renderOverview();
+			} catch ( e ) {
+				toast( e.message, true );
+				btn.disabled = false;
+				btn.textContent = 'Update WordPress';
+			}
 		} );
 	}
 
@@ -12195,11 +12207,88 @@
 		if ( state.notifOpen ) loadNotifications().then( () => state.notifOpen && renderOverlays() );
 	}
 
+	// What "Update everything" would touch, gated on capabilities. Order
+	// matters downstream: plugins, themes, core LAST (core swaps the files
+	// under the running app).
+	function pendingUpdateParts() {
+		const parts = [];
+		const p = Object.keys( state.cache.pluginUpdates || {} ).length;
+		if ( p && B.caps.update ) parts.push( { kind: 'plugins', n: p, label: `${ p } plugin${ p === 1 ? '' : 's' }` } );
+		const t = Object.keys( state.cache.themeUpdates || {} ).length;
+		if ( t && B.caps.updateThemes ) parts.push( { kind: 'themes', n: t, label: `${ t } theme${ t === 1 ? '' : 's' }` } );
+		const c = state.cache.core && state.cache.core.update;
+		if ( c && B.caps.core ) parts.push( { kind: 'core', label: `WordPress ${ c.version }` } );
+		return parts;
+	}
+
+	async function runUpdateEverything() {
+		if ( state.updatingAll ) return;
+		const parts = pendingUpdateParts();
+		if ( ! parts.length ) return;
+		const hasCore = parts.some( ( p ) => p.kind === 'core' );
+		const summary = parts.map( ( p ) => p.label ).join( ', ' );
+		if ( ! confirm( `Update ${ summary }?${ hasCore ? ' The site enters maintenance mode for a few seconds while WordPress core updates.' : '' }` ) ) return;
+		const setPhase = ( label ) => { state.updatingAll = label; renderOverlays(); };
+		const doneBits = [];
+		const failures = [];
+		if ( parts.some( ( p ) => p.kind === 'plugins' ) ) {
+			setPhase( 'Updating plugins…' );
+			try {
+				const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
+				const n = ( r.updated || [] ).length;
+				doneBits.push( `${ n } plugin${ n === 1 ? '' : 's' }` );
+			} catch ( e ) {
+				failures.push( 'plugins: ' + e.message );
+			}
+		}
+		const themeMap = state.cache.themeUpdates || {};
+		if ( parts.some( ( p ) => p.kind === 'themes' ) ) {
+			let ok = 0;
+			for ( const stylesheet of Object.keys( themeMap ) ) {
+				const t = ( state.cache.themes || [] ).find( ( x ) => x.stylesheet === stylesheet );
+				setPhase( `Updating ${ t ? t.name : stylesheet }…` );
+				try {
+					await api( 'minn-admin/v1/themes/update', { method: 'POST', body: JSON.stringify( { stylesheet } ) } );
+					ok++;
+				} catch ( e ) {
+					failures.push( `${ t ? t.name : stylesheet }: ${ e.message }` );
+				}
+			}
+			if ( ok ) doneBits.push( `${ ok } theme${ ok === 1 ? '' : 's' }` );
+		}
+		if ( hasCore ) {
+			setPhase( 'Updating WordPress…' );
+			try {
+				const version = await runCoreUpdate( state.cache.core.update.version );
+				doneBits.push( `WordPress ${ version }` );
+			} catch ( e ) {
+				failures.push( 'WordPress: ' + e.message );
+			}
+		}
+		state.updatingAll = null;
+		state.cache.plugins = null;
+		state.cache.pluginUpdates = {};
+		state.cache.themeUpdates = {};
+		state.cache.themes = null;
+		state.cache.core = null;
+		state.cache.notifications = null;
+		await Promise.all( [
+			loadPlugins().catch( () => {} ),
+			B.caps.core ? loadCoreStatus().catch( () => {} ) : Promise.resolve(),
+			loadNotifications(),
+		] );
+		renderOverlays();
+		if ( state.route === 'extensions' ) renderExtensions();
+		if ( failures.length ) toast( `Some updates failed — ${ failures.join( ' · ' ) }`, true );
+		else toast( `Updated ${ doneBits.join( ', ' ) }. Everything is current.` );
+	}
+
 	function renderNotifPanel() {
 		const items = state.cache.notifications;
 		const tabs = [
 			[ 'all', 'All' ], [ 'comments', 'Comments' ], [ 'updates', 'Updates' ], [ 'notices', 'Notices' ], [ 'system', 'System' ],
 		];
+		const updParts = state.notifTab === 'updates' ? pendingUpdateParts() : [];
 		const visible = ( items || [] ).filter( ( n ) => state.notifTab === 'all' || n.kind === state.notifTab );
 		const groups = [];
 		visible.forEach( ( n ) => {
@@ -12222,6 +12311,11 @@
 						return `<button class="minn-notif-tab${ state.notifTab === id ? ' active' : '' }" data-tab="${ id }">${ label }${ c ? `<span class="minn-notif-tab-count">${ c }</span>` : '' }</button>`;
 					} ).join( '' ) }
 				</div>
+				${ updParts.length || state.updatingAll ? `
+				<div class="minn-update-all-row">
+					<button class="minn-btn-primary" id="minn-update-all"${ state.updatingAll ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( state.updatingAll || 'Update everything' ) }</button>
+					${ ! state.updatingAll ? `<div class="minn-update-all-sub">${ esc( updParts.map( ( p ) => p.label ).join( ' · ' ) ) }</div>` : '' }
+				</div>` : '' }
 				<div class="minn-notif-scroll">
 					${ items == null ? '<div class="minn-loading">Loading…</div>' : ! visible.length ? '<div class="minn-empty">You’re all caught up.</div>' : groups.map( ( g ) => `
 						<div>
@@ -14621,6 +14715,8 @@
 			$$( '.minn-notif-tab' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => { state.notifTab = btn.dataset.tab; renderOverlays(); } )
 			);
+			const updAll = $( '#minn-update-all' );
+			if ( updAll ) updAll.addEventListener( 'click', runUpdateEverything );
 			$$( '.minn-notif-row' ).forEach( ( row ) =>
 				row.addEventListener( 'click', () => {
 					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === row.dataset.nid );

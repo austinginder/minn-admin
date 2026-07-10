@@ -68,6 +68,28 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			notif.some( ( n ) => n.id === `core-${ current }` && n.title.includes( 'is available' ) )
 		);
 
+		// --- Update everything (Updates tab) ----------------------------------
+		await page.click( '#minn-notif-btn' );
+		await page.waitForSelector( '.minn-notif-panel', { timeout: 5000 } );
+		await page.click( '.minn-notif-tab[data-tab="updates"]' );
+		await page.waitForSelector( '#minn-update-all', { timeout: 5000 } );
+		const updAll = await page.evaluate( () => ( {
+			label: document.querySelector( '#minn-update-all' ).textContent.trim(),
+			sub: ( document.querySelector( '.minn-update-all-sub' ) || {} ).textContent || '',
+		} ) );
+		t.check( 'Update everything button pinned on the Updates tab', updAll.label.includes( 'Update everything' ) );
+		t.check( 'Button subtitle names WordPress', updAll.sub.includes( `WordPress ${ current }` ), updAll.sub );
+
+		// Cancelling the confirm leaves everything untouched.
+		let dialogSeen = '';
+		page.once( 'dialog', ( d ) => { dialogSeen = d.message(); d.dismiss(); } );
+		await page.click( '#minn-update-all' );
+		await page.waitForTimeout( 400 );
+		t.check( 'Confirm lists what will update', dialogSeen.includes( `WordPress ${ current }` ), dialogSeen );
+		const stillIdle = await page.evaluate( () => ! document.querySelector( '#minn-update-all' ).disabled );
+		t.check( 'Cancel leaves the button idle', stillIdle );
+		await page.keyboard.press( 'Escape' ); // close the panel
+
 		// --- System health check ---------------------------------------------
 		const checks = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/system', {
@@ -123,11 +145,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			const h = { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' };
 			const upd = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/plugin-updates', h ) ).json();
 			const notif = ( await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/notifications', h ) ).json() ).items;
-			return { themes: upd.themes, notifThemes: notif.filter( ( n ) => n.id.startsWith( 'theme-' ) ).length };
+			return { themes: Object.keys( upd.themes || {} ).length, notifThemes: notif.filter( ( n ) => n.id.startsWith( 'theme-' ) ).length };
 		} );
 		t.check(
 			'Theme-update count matches notification items',
-			typeof themeState.themes === 'number' && themeState.themes === themeState.notifThemes,
+			themeState.themes === themeState.notifThemes,
 			JSON.stringify( themeState )
 		);
 		if ( themeState.themes ) {
