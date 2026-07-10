@@ -445,9 +445,7 @@
 			const r = await api( 'minn-admin/v1/editor-blocks' );
 			B.insertBlocks = Array.isArray( r.insertBlocks ) ? r.insertBlocks : [];
 			B.blockForms = r.blockForms && typeof r.blockForms === 'object' ? r.blockForms : {};
-			B.stackable = !! r.stackable;
-			B.kadence = !! r.kadence;
-			B.generateblocks = !! r.generateblocks;
+			B.designs = Array.isArray( r.designs ) ? r.designs : [];
 			// Disable Comments (and friends) strip post-type support mid-session.
 			if ( typeof r.comments === 'boolean' ) B.comments = r.comments;
 		} catch ( e ) { /* leave the snapshot as-is */ }
@@ -11926,26 +11924,23 @@
 
 	/* ===== Slash command menu ===== */
 
-	// Design libraries (adapters/stackable.php, kadence.php): free-tier
-	// section templates scraped from each plugin's own data source — full
-	// serialized save() markup, so every design inserts as one valid island.
-	// One adapter contract per plugin (slim list + insert-ready template with
-	// sideloaded images), gated on a boot flag; lists load lazily, deduped
-	// via shared in-flight promises (the loadPlugins rule).
-	const DESIGN_SOURCES = [
-		{ flag: 'stackable', ns: 'stackable', base: 'minn-admin/v1/stackable/designs' },
-		{ flag: 'kadence', ns: 'kadence', base: 'minn-admin/v1/kadence/designs' },
-		{ flag: 'generateblocks', ns: 'generateblocks', base: 'minn-admin/v1/generateblocks/designs' },
-	];
+	// Design libraries: adapters (bundled or third-party) register
+	// { id, label, route } entries via the minn_admin_design_sources filter;
+	// the boot payload / editor-blocks re-poll carry the active list
+	// (B.designs). Each route serves a slim list (GET {route}) and an
+	// insert-ready template with sideloaded images (POST {route}/{id}) —
+	// full serialized save() markup, so every design inserts as one valid
+	// island. Lists load lazily, deduped via shared in-flight promises
+	// (the loadPlugins rule).
+	const designSources = () => ( Array.isArray( B.designs ) ? B.designs : [] );
 	const designSourcePromises = {};
 	function loadDesigns( src ) {
-		if ( ! B[ src.flag ] ) return Promise.resolve( [] );
-		if ( ! designSourcePromises[ src.ns ] ) {
-			designSourcePromises[ src.ns ] = api( src.base )
+		if ( ! designSourcePromises[ src.id ] ) {
+			designSourcePromises[ src.id ] = api( src.route )
 				.then( ( r ) => ( r && Array.isArray( r.designs ) ? r.designs : [] ) )
 				.catch( () => [] );
 		}
-		return designSourcePromises[ src.ns ];
+		return designSourcePromises[ src.id ];
 	}
 
 	// Server-registered block patterns (core, active theme, Otter, Essential
@@ -12131,17 +12126,18 @@
 					action: { block: b.name, template: `<!-- wp:${ b.name } /-->` },
 				} );
 			} );
+			const sources = designSources();
 			const [ designSets, pats ] = await Promise.all( [
-				Promise.all( DESIGN_SOURCES.map( ( src ) => loadDesigns( src ) ) ),
+				Promise.all( sources.map( ( src ) => loadDesigns( src ) ) ),
 				loadBlockPatterns(),
 			] );
 			if ( ! pickerEl ) return; // closed while loading
 			designSets.forEach( ( designs, si ) => {
-				const src = DESIGN_SOURCES[ si ];
+				const src = sources[ si ];
 				designs.forEach( ( d ) => {
-					groupFor( 'd:' + src.ns, prettyNs( src.ns ) + ' · designs' ).items.push( {
+					groupFor( 'd:' + src.id, ( src.label || prettyNs( src.id ) ) + ' · designs' ).items.push( {
 						ic: icon( 'block' ), label: d.label, meta: d.category || '',
-						action: { design: d.id, src: si },
+						action: { design: d.id, src: src.id },
 					} );
 				} );
 			} );
@@ -12226,8 +12222,11 @@
 			sel.removeAllRanges();
 			sel.addRange( range );
 			toast( 'Inserting design…' );
-			const source = DESIGN_SOURCES[ action.src ] || DESIGN_SOURCES[ 0 ];
-			api( source.base + '/' + encodeURIComponent( action.design ), { method: 'POST' } )
+			// Sources are looked up by id (not index) — the list can rebuild
+			// between menu render and click (editor-blocks re-poll).
+			const source = designSources().find( ( s ) => s.id === action.src );
+			if ( ! source ) { toast( 'Design source unavailable', true ); return; }
+			api( source.route + '/' + encodeURIComponent( action.design ), { method: 'POST' } )
 				.then( ( r ) => {
 					if ( ! r || ! r.template ) throw new Error( 'Design unavailable' );
 					if ( ! p.isConnected || ! state.editor ) return;
@@ -12397,10 +12396,10 @@
 			// Design-library sections (Stackable, Kadence…) — search-only like
 			// the auto blocks ("/pricing", "/hero"…). Lists arrive async into
 			// the live items array; applyQuery reads it fresh on every keyup.
-			DESIGN_SOURCES.forEach( ( src, si ) => {
+			designSources().forEach( ( src ) => {
 				loadDesigns( src ).then( ( designs ) => {
 					designs.forEach( ( d ) => {
-						items.push( [ icon( 'block' ), d.label, { design: d.id, src: si }, true, src.ns ] );
+						items.push( [ icon( 'block' ), d.label, { design: d.id, src: src.id }, true, src.id ] );
 					} );
 				} );
 			} );

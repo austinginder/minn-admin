@@ -362,11 +362,11 @@ class Minn_Admin {
 			// Active page builders — drives "+ New → Page in ⟨builder⟩"
 			// (docs/page-builders.md; adapters/page-builders.php).
 			'builders' => minn_admin_page_builders_boot(),
-			// Design libraries available (adapters/stackable.php, kadence.php)
-			// — gate the lazy designs fetches in the editor's slash menu.
-			'stackable' => minn_admin_stackable_active(),
-			'kadence'   => minn_admin_kadence_active(),
-			'generateblocks' => minn_admin_generateblocks_active(),
+			// Design libraries registered via minn_admin_design_sources
+			// (adapters/stackable.php, kadence.php, generateblocks.php or any
+			// third-party plugin) — drive the lazy designs fetches in the
+			// editor's slash menu and block picker.
+			'designs'  => self::design_sources(),
 			/**
 			 * Block-inspector form refinements, keyed by block name. A descriptor
 			 * can set per-attribute label/control/options/hide, an attribute
@@ -383,6 +383,38 @@ class Minn_Admin {
 
 		include MINN_ADMIN_DIR . 'includes/template.php';
 		exit;
+	}
+
+	/**
+	 * Design libraries offered in the editor's slash menu / block picker.
+	 *
+	 * Adapters (bundled or third-party) answer the `minn_admin_design_sources`
+	 * filter with `id => array( 'label' => …, 'route' => … )`, registering the
+	 * entry only while their plugin is active. Each route implements the pair
+	 * contract: GET {route} returns `{ designs: [ { id, label, category? } ] }`
+	 * (a slim list) and POST {route}/{id} returns `{ template, block? }`
+	 * (insert-ready serialized block markup, images already localized).
+	 * See docs/for-plugin-authors.md.
+	 *
+	 * @return array[] [ { id, label, route } ]
+	 */
+	public static function design_sources() {
+		$sources = apply_filters( 'minn_admin_design_sources', array() );
+		$out     = array();
+		foreach ( (array) $sources as $id => $src ) {
+			$id = sanitize_key( $id );
+			if ( '' === $id || ! is_array( $src ) || empty( $src['route'] ) || ! is_string( $src['route'] ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'    => $id,
+				'label' => ( isset( $src['label'] ) && is_string( $src['label'] ) && '' !== $src['label'] )
+					? $src['label']
+					: ucfirst( $id ),
+				'route' => $src['route'],
+			);
+		}
+		return $out;
 	}
 
 	/**

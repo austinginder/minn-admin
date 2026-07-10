@@ -49,7 +49,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 
 	try {
 		await openEditor( page, id );
-		t.check( 'boot payload flags Kadence', await page.evaluate( () => window.MINN.kadence === true ) );
+		t.check( 'boot payload lists the Kadence design source', await page.evaluate( () =>
+			( window.MINN.designs || [] ).some( ( s ) => s.id === 'kadence' && !! s.route ) ) );
 		t.check( 'designs endpoint lists free tier', probe.count > 100, probe.count + ' designs' );
 
 		// Search surfaces the first design by its label.

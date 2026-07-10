@@ -28,6 +28,17 @@ function minn_admin_kadence_active() {
 	return defined( 'KADENCE_BLOCKS_VERSION' );
 }
 
+// Register as a design source (docs/for-plugin-authors.md).
+add_filter( 'minn_admin_design_sources', function ( $sources ) {
+	if ( minn_admin_kadence_active() ) {
+		$sources['kadence'] = array(
+			'label' => 'Kadence',
+			'route' => 'minn-admin/v1/kadence/designs',
+		);
+	}
+	return $sources;
+} );
+
 /**
  * The section library via Kadence's own proxy (its file cache applies).
  *

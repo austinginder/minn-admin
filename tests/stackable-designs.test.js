@@ -55,7 +55,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 	try {
 		await openEditor( page, id );
 
-		t.check( 'boot payload flags Stackable', await page.evaluate( () => window.MINN.stackable === true ) );
+		t.check( 'boot payload lists the Stackable design source', await page.evaluate( () =>
+			( window.MINN.designs || [] ).some( ( s ) => s.id === 'stackable' && !! s.route ) ) );
 		t.check( 'designs endpoint lists free tier', probe.count > 50, probe.count + ' designs' );
 
 		// Search surfaces a design (list loads lazily — poll for it).
@@ -154,8 +155,10 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		// --- Structural add clones a static sibling (never an empty comment) ---
 		await page.click( '.minn-block-island .minn-island-chip' );
 		await page.waitForSelector( '#minn-insp-add', { timeout: 10000 } );
+		// A save-first BUTTON since the July 9 escape-hatch fix (was a bare
+		// target=_blank link) — openInBlockEditor saves, then opens the tab.
 		t.check( 'block editor escape hatch shown',
-			( await page.$( '#minn-insp-gutenberg[target="_blank"]' ) ) !== null );
+			( await page.$( 'button#minn-insp-gutenberg' ) ) !== null );
 		await page.click( '#minn-insp-add' );
 		await page.click( '#minn-insp-apply' );
 		await page.waitForTimeout( 1500 );

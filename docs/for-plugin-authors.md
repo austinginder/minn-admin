@@ -16,6 +16,7 @@ Minn's whole extension surface is a small set of public hooks. The main ones:
 | `minn_admin_block_forms` | filter | Block inspector labels/controls + slash insert templates |
 | `minn_admin_insert_blocks` | filter | Prune or extend the auto-insert slash list |
 | `minn_admin_page_builders` | filter | Register a full-canvas page builder |
+| `minn_admin_design_sources` | filter | Register a design/template library for the slash menu + block picker |
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
@@ -328,7 +329,7 @@ What Minn already does for free (no adapter):
 | Styles enqueued during render | Style-queue diff after `do_blocks` |
 | Site + block library CSS | `editor-styles` + client scoper on `.minn-island-preview` |
 | Text / image edit in islands | Generic text runs + image URL swap |
-| Design libraries / patterns | Optional; see Stackable/Kadence/GB adapters and patterns |
+| Design libraries / patterns | Registered block patterns are automatic; libraries via `minn_admin_design_sources` (below) |
 
 ### When the free path fails: diagnosis → drop-in adapter
 
@@ -339,7 +340,7 @@ What Minn already does for free (no adapter):
 | Looks right on front end after a visit, empty in Minn | CSS only exists as postmeta / browser-compiled cache | Emit CSS from `do_blocks` or enqueue a real stylesheet | `minn_admin_render_styles` (postmeta / warm URL); see Otter |
 | Empty map / slider / Lottie shell | Server outputs a div + script; `innerHTML` never runs scripts | Server-render a static fallback (image, iframe, noscript) | `minn_admin_rendered_html` swap to iframe/static |
 | Insert works, inspector empty | No attr schema server-side | Register attributes in PHP / `block.json` | `minn_admin_block_forms` labels only refine schema |
-| Static-save design library | Only editor JS can author full designs | Publish serialized templates (JSON/CDN) Minn can fetch | Design-library adapter pattern (`adapters/stackable.php`) |
+| Static-save design library | Only editor JS can author full designs | Publish serialized templates (JSON/CDN) Minn can fetch | Design source (`minn_admin_design_sources`, below) |
 
 ### Preview hooks (copy into `includes/minn-admin.php`)
 
@@ -419,6 +420,43 @@ cannot change (third-party hosting of CSS, JIT compilers, legacy registration or
 | Anchor Blocks `app/MinnAdmin.php` (external) | `minn_admin_block_forms` owned by the block plugin itself |
 
 Internal lab notes (CSS models, hybrid traps): `docs/block-suites.md`.
+
+## Design libraries — `minn_admin_design_sources`
+
+If your plugin ships a template library (whole sections of serialized block markup users
+insert as a unit), register it as a **design source**. Designs appear as search-only
+entries in the editor's slash menu and as a labeled group in the block picker (⌘/):
+
+```php
+add_filter( 'minn_admin_design_sources', function ( $sources ) {
+    $sources['my-plugin'] = array(
+        'label' => 'My Library',                 // block-picker group name
+        'route' => 'my-plugin/v1/minn-designs',  // implements the pair contract below
+    );
+    return $sources;
+} );
+```
+
+The route implements a two-endpoint contract:
+
+- `GET {route}` returns the slim list:
+  `{ "designs": [ { "id": "hero-1", "label": "Hero 1", "category": "Heroes" } ] }`
+  (`category` is optional, shown as the entry's meta). Minn fetches it lazily on the
+  first slash-menu open and caches it for the session, so keep it fast and slim.
+- `POST {route}/{id}` returns the insert payload:
+  `{ "template": "<!-- wp:… -->…", "block": "my-plugin/hero" }`. `template` is full
+  serialized block markup (your canonical save output, Gutenberg-valid by construction;
+  a single top-level block inserts as one island), and the optional `block` names the
+  island's chip.
+
+Serve content the site can actually use (free tier only if your library is gated), and
+localize remote images at insert time: when Minn is installed,
+`minn_admin_localize_images( $template )` (see `includes/adapters/media-localize.php`)
+sideloads them into the media library and rewrites the URLs, deduping by file name.
+Guard the call with `function_exists` since your route is registered even when Minn
+isn't. Give the routes a `permission_callback` (`edit_posts` matches the editor). The
+bundled Stackable, Kadence and GenerateBlocks adapters register through this same
+filter and are the references.
 
 ## Editor panels — per-post fields in the editor sidebar
 

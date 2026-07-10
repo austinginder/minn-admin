@@ -28,6 +28,17 @@ function minn_admin_generateblocks_active() {
 	return defined( 'GENERATEBLOCKS_VERSION' ) && class_exists( 'GenerateBlocks_Pattern_Library_Rest' );
 }
 
+// Register as a design source (docs/for-plugin-authors.md).
+add_filter( 'minn_admin_design_sources', function ( $sources ) {
+	if ( minn_admin_generateblocks_active() ) {
+		$sources['generateblocks'] = array(
+			'label' => 'GenerateBlocks',
+			'route' => 'minn-admin/v1/generateblocks/designs',
+		);
+	}
+	return $sources;
+} );
+
 /**
  * Enabled pattern libraries via GB's own proxy.
  *

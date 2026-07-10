@@ -975,9 +975,7 @@ class Minn_Admin_REST {
 			array(
 				'insertBlocks'   => Minn_Admin::insertable_blocks( $block_forms ),
 				'blockForms'     => $block_forms,
-				'stackable'      => function_exists( 'minn_admin_stackable_active' ) ? minn_admin_stackable_active() : false,
-				'kadence'        => function_exists( 'minn_admin_kadence_active' ) ? minn_admin_kadence_active() : false,
-				'generateblocks' => function_exists( 'minn_admin_generateblocks_active' ) ? minn_admin_generateblocks_active() : false,
+				'designs'        => Minn_Admin::design_sources(),
 				// Comments feature can vanish when Disable Comments (etc.) is
 				// toggled — same re-poll path as blocks so the nav tracks live.
 				'comments'       => Minn_Admin::comments_enabled(),

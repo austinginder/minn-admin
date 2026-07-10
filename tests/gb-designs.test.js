@@ -49,7 +49,8 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 
 	try {
 		await openEditor( page, id );
-		t.check( 'boot payload flags GenerateBlocks', await page.evaluate( () => window.MINN.generateblocks === true ) );
+		t.check( 'boot payload lists the GenerateBlocks design source', await page.evaluate( () =>
+			( window.MINN.designs || [] ).some( ( s ) => s.id === 'generateblocks' && !! s.route ) ) );
 		t.check( 'designs endpoint lists free tier', probe.count > 20, probe.count + ' designs' );
 
 		// Search surfaces the first design by its label.

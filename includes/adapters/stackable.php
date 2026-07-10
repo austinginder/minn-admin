@@ -39,6 +39,18 @@ function minn_admin_stackable_active() {
 	return class_exists( 'Stackable_Design_Library' );
 }
 
+// Register as a design source (docs/for-plugin-authors.md — the same filter
+// third-party block libraries use).
+add_filter( 'minn_admin_design_sources', function ( $sources ) {
+	if ( minn_admin_stackable_active() ) {
+		$sources['stackable'] = array(
+			'label' => 'Stackable',
+			'route' => 'minn-admin/v1/stackable/designs',
+		);
+	}
+	return $sources;
+} );
+
 /**
  * The design library, keyed by design id. Reads Stackable's transient first
  * and populates it with the exact shape Stackable_Design_Library caches

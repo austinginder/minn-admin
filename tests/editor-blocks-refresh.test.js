@@ -40,14 +40,14 @@ const OTTER = 'otter-blocks/otter-blocks';
 				ok: r.ok,
 				keys: Object.keys( j ).sort(),
 				insert: ( j.insertBlocks || [] ).map( ( b ) => b.name ),
-				stackable: !! j.stackable,
+				designs: Array.isArray( j.designs ),
 				forms: typeof j.blockForms === 'object' && j.blockForms !== null,
 			};
 		} );
 		t.check( 'editor-blocks endpoint 200', shape.ok );
 		t.check(
 			'editor-blocks returns boot-shaped keys',
-			[ 'blockForms', 'generateblocks', 'insertBlocks', 'kadence', 'stackable' ].every( ( k ) => shape.keys.includes( k ) ),
+			[ 'blockForms', 'designs', 'insertBlocks' ].every( ( k ) => shape.keys.includes( k ) ) && shape.designs,
 			shape.keys.join( ',' )
 		);
 		t.check( 'blockForms is an object', shape.forms );
@@ -90,9 +90,7 @@ const OTTER = 'otter-blocks/otter-blocks';
 			const j = await r.json();
 			window.MINN.insertBlocks = Array.isArray( j.insertBlocks ) ? j.insertBlocks : [];
 			window.MINN.blockForms = j.blockForms && typeof j.blockForms === 'object' ? j.blockForms : {};
-			window.MINN.stackable = !! j.stackable;
-			window.MINN.kadence = !! j.kadence;
-			window.MINN.generateblocks = !! j.generateblocks;
+			window.MINN.designs = Array.isArray( j.designs ) ? j.designs : [];
 			return ( window.MINN.insertBlocks || [] )
 				.filter( ( b ) => b.name.startsWith( 'themeisle-blocks/' ) ).length;
 		} );

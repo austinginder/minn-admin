@@ -29,7 +29,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Custom fields** | ACF (+ Pro) | Editor panel |
 | **Ecommerce** | WooCommerce | **Orders** surface + Overview stats |
 | **Page builders** | Elementor, Beaver Builder, Brizy, Divi, Bricks, WPBakery, Etch | Detected, fenced, "Edit in ⟨builder⟩" |
-| **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all |
+| **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
 | **Dev tools** | Query Monitor | QM panel on Minn pages |
 
