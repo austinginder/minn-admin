@@ -128,6 +128,15 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-nav-count { margin-left: auto; font-size: 12px; color: var(--text3); background: var(--panel); padding: 1px 7px; border-radius: 20px; }
 .minn-nav-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
 
+/* Notice action links — buttons inside the row; ↗ ones open a new tab. */
+.minn-notif-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.minn-notif-link {
+  font-size: 12.5px; font-weight: 600; color: var(--accent2); background: var(--accent-soft);
+  border: 1px solid transparent; border-radius: 7px; padding: 3px 10px; cursor: pointer;
+}
+.minn-notif-link:hover { border-color: var(--accent); }
+.minn-notif-link:disabled { opacity: 0.6; cursor: default; }
+
 /* "Update everything" pinned under the notification tabs. */
 .minn-update-all-row { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px 10px; border-bottom: 1px solid var(--border); }
 .minn-update-all-row .minn-btn-primary { justify-content: center; width: 100%; }
