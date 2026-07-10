@@ -354,6 +354,11 @@ class Minn_Admin {
 			// Active cache layers — drives the "Clear site cache" palette
 			// command (adapters/cache-purge.php).
 			'cache'    => current_user_can( 'manage_options' ) ? minn_admin_cache_purgers_boot() : array(),
+			// Backup provider — drives the "Back up site now" palette
+			// command (adapters/updraftplus.php).
+			'backup'   => ( current_user_can( 'manage_options' ) && minn_admin_updraftplus_active() )
+				? array( 'name' => 'UpdraftPlus', 'route' => 'minn-admin/v1/updraft/backup-now' )
+				: null,
 			// Active page builders — drives "+ New → Page in ⟨builder⟩"
 			// (docs/page-builders.md; adapters/page-builders.php).
 			'builders' => minn_admin_page_builders_boot(),

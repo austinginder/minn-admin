@@ -12414,6 +12414,17 @@
 		else toast( `Cache cleared (${ purged.join( ', ' ) })` );
 	}
 
+	// Start a backup through the provider's own background machinery; the
+	// Backups surface and the System check reflect completion.
+	async function runBackupNow() {
+		try {
+			await api( B.backup.route, { method: 'POST', body: '{}' } );
+			toast( `Backup started. ${ B.backup.name } is working in the background.` );
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
 	/* ===== Command palette ===== */
 
 	function paletteCommands() {
@@ -12465,6 +12476,12 @@
 				kind: 'action',
 				icon: '⟳',
 				run: clearSiteCache,
+			} ] : [] ),
+			...( B.backup ? [ {
+				label: `Back up site now (${ B.backup.name })`,
+				kind: 'action',
+				icon: '⛁',
+				run: runBackupNow,
 			} ] : [] ),
 		);
 		if ( B.caps.update && Object.keys( state.cache.pluginUpdates ).length ) {
