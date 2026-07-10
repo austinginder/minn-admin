@@ -1080,6 +1080,10 @@ function minn_admin_licenses() {
 	$providers = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
 	$items     = array();
 	$claimed   = array();
+	// Minn's own recorded check outcomes (see the action endpoint): used
+	// only to upgrade rows whose vendor keeps no local validity state.
+	$checks = get_option( 'minn_admin_license_checks', array() );
+	$checks = is_array( $checks ) ? $checks : array();
 	foreach ( $providers as $id => $p ) {
 		if ( empty( $p['detect'] ) || empty( $p['read'] ) || ! is_callable( $p['detect'] ) || ! is_callable( $p['read'] ) ) {
 			continue;
@@ -1106,6 +1110,20 @@ function minn_admin_licenses() {
 			}
 			$row['id']     = sanitize_key( $id . '-' . $row['name'] );
 			$row['source'] = (string) $id;
+			// Upgrade an "unknown" row from Minn's own last check of this
+			// provider, honestly timestamped. Never overrides a state the
+			// vendor's stored data produced.
+			if ( 'unknown' === ( $row['state'] ?? '' ) && ! empty( $row['key'] ) && isset( $checks[ $id ]['time'] ) ) {
+				$chk  = $checks[ $id ];
+				$when = human_time_diff( (int) $chk['time'] ) . ' ago';
+				if ( ! empty( $chk['ok'] ) ) {
+					$row['state'] = 'valid';
+					$row['note']  = 'verified ' . $when . ' from Minn';
+				} else {
+					$row['state'] = ( 'expired' === ( $chk['code'] ?? '' ) ) ? 'expired' : 'invalid';
+					$row['note']  = 'failed a check ' . $when . ' from Minn';
+				}
+			}
 			if ( $can ) {
 				$row['can']    = $can;
 				$row['secret'] = isset( $p['secret_label'] ) ? (string) $p['secret_label'] : 'License key';
@@ -1254,6 +1272,27 @@ add_action( 'rest_api_init', function () {
 					$result = minn_admin_license_result( $raw );
 				} catch ( \Throwable $e ) {
 					$result = array( 'ok' => false, 'code' => 'error', 'message' => $e->getMessage() );
+				}
+				// Some vendors (Gravity SMTP, Brizy) keep no local validity
+				// state, so their rows would read "unknown" forever even
+				// after a successful activation (Austin's anchor repro).
+				// Minn remembers ITS OWN check outcome per provider — the
+				// status word and a timestamp, never a key — and the read
+				// side upgrades unknown rows from it with "as of" honesty.
+				$checks = get_option( 'minn_admin_license_checks', array() );
+				$checks = is_array( $checks ) ? $checks : array();
+				if ( 'deactivate' === $action && ! empty( $result['ok'] ) ) {
+					unset( $checks[ $provider_id ] );
+					update_option( 'minn_admin_license_checks', $checks, false );
+				} elseif ( 'verify' === $action || ( 'activate' === $action && ! empty( $result['ok'] ) ) ) {
+					// A failed activate leaves the vendor's stored state
+					// unchanged, so the previous memory stays truthful.
+					$checks[ $provider_id ] = array(
+						'ok'   => ! empty( $result['ok'] ),
+						'code' => isset( $result['code'] ) ? (string) $result['code'] : '',
+						'time' => time(),
+					);
+					update_option( 'minn_admin_license_checks', $checks, false );
 				}
 				// Fresh classification rides along so the client repaints
 				// from the vendor's now-current stored state in one round trip.

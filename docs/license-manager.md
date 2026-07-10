@@ -182,9 +182,42 @@ options need no vendor code) but render dimmed with "not active; activate
 the theme/plugin to manage its license" in place of controls, so the
 active-theme gating reads as intended behavior instead of a missing button.
 
-Next candidates: the Freemius and EDD SDK families (one adapter, many
-products), Envato purchase-code direct activation where a vendor exposes
-one.
+**Wave 4 (shipped 2026-07-10): the Gravity family.** Gravity Forms reads
+validity + expiry from `gform_version_info` and activates through
+`GFFormsModel::save_key()` (their complete flow, including their own
+revert-on-rejection); Gravity SMTP validates through its container's
+license connector before storing via its own data store. Both verified
+against Gravity's live API with bogus keys.
+
+## Next candidates, ranked by real fleet impact (2026-07-10)
+
+Measured across 2,790 production sites on the CaptainCore fleet (the
+Manager DB inventory, classified against wp.org; full sourcing paths in the
+2026-07-10 session record). The already-covered set tops the fleet chart:
+Gravity Forms 2,543 sites, Gravity SMTP 1,440, Elementor Pro 1,191, ACF PRO
+1,001, WP Rocket 286, Divi 259, WPBakery 129+, Beaver Builder 43+, Bricks
+32. The uncovered tail, in order:
+
+1. **WPMU DEV** (Dashboard membership key): 488 sites with the dashboard,
+   425 with Smush Pro. One key unlocks the family; the largest uncovered
+   footprint by far.
+2. **Envato Market** (purchase-code/token model): 459 distinct sites carry
+   at least one Envato-licensed component (Avada + Fusion, Slider
+   Revolution, LayerSlider, betheme, jupiter, The7, salient, enfold, Total,
+   bridge, flatsome). One adapter, eleven products.
+3. **StellarWP / The Events Calendar Pro** (uplink): 116 sites.
+4. **Gravity Wiz / Gravity Perks** (~103 sites): pairs with the GF adapter.
+5. **Rank Math Pro** (92), **SearchWP** (87), **Soflyy WP All
+   Import/Export Pro** (81+), **Yoast Premium** (78), **Smash Balloon**
+   (64), **Admin Columns Pro** (140, reader already covers it).
+6. **Cheap wins**: verify the generic Freemius/EDD readers light up
+   Perfmatters (142), GP Premium, Search & Filter Pro, Unlimited Elements,
+   Stackable Premium and Permalink Manager Pro with no vendor code
+   (~380 site-installs combined).
+
+Test builds source from the CaptainCore quicksave repos
+(`captaincore quicksave archive` extracts a plugin/theme zip from a
+snapshot without touching state).
 
 The guardrails, unchanged and load-bearing:
 
