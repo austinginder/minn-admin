@@ -2620,9 +2620,85 @@
 
 	function surfaceState( id ) {
 		if ( ! state.surface[ id ] ) {
-			state.surface[ id ] = { tab: '_all', cache: null, tabs: null, labels: {}, q: '', view: 'main' };
+			state.surface[ id ] = { tab: '_all', cache: null, tabs: null, labels: {}, q: '', view: 'main', status: null };
 		}
 		return state.surface[ id ];
+	}
+
+	// Optional status card above a surface's list (descriptor key `status`):
+	// the route returns a SERVER-BUILT display model — stat rows, an optional
+	// copyable command, and action buttons — so adapters format values
+	// server-side and the client stays generic. Disembark is the reference.
+	async function loadSurfaceStatus( s ) {
+		const ss = surfaceState( s.id );
+		if ( ! s.status || ! s.status.route ) return;
+		try {
+			ss.status = await api( s.status.route );
+		} catch ( e ) {
+			ss.status = { rows: [] };
+		}
+	}
+
+	function surfaceStatusHtml( st ) {
+		if ( ! st ) return '';
+		const rows = ( st.rows || [] ).map( ( r ) => `
+			<div class="minn-sstat">
+				<div class="minn-sstat-label">${ esc( r.label ) }</div>
+				<div class="minn-sstat-value">${ esc( r.value ) }</div>
+				${ r.hint ? `<div class="minn-sstat-hint">${ esc( r.hint ) }</div>` : '' }
+			</div>` ).join( '' );
+		const cmd = st.command ? `
+			<div class="minn-sstat-cmd">
+				${ st.command.label ? `<div class="minn-sstat-label">${ esc( st.command.label ) }</div>` : '' }
+				<button type="button" class="minn-sstat-cmd-box" id="minn-sstat-copy" title="Copy command">
+					<code>${ esc( st.command.text ) }</code>${ icon( 'clipboard' ) }
+				</button>
+				${ st.command.hint ? `<div class="minn-sstat-hint">${ esc( st.command.hint ) }</div>` : '' }
+			</div>` : '';
+		const actions = ( st.actions || [] ).length ? `
+			<div class="minn-sstat-actions">
+				${ st.actions.map( ( a, i ) => a.href
+					? `<a class="minn-btn-soft" href="${ esc( a.href ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
+					: `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-sstatact="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
+			</div>` : '';
+		if ( ! rows && ! cmd && ! actions ) return '';
+		return `<div class="minn-card minn-surface-status">
+			<div class="minn-sstat-rows">${ rows }</div>
+			${ cmd }
+			${ actions }
+		</div>`;
+	}
+
+	function bindSurfaceStatus( s, view ) {
+		const ss = surfaceState( s.id );
+		const st = ss.status;
+		if ( ! st ) return;
+		const copy = $( '#minn-sstat-copy', view );
+		if ( copy && st.command ) copy.addEventListener( 'click', async () => {
+			try {
+				await navigator.clipboard.writeText( st.command.text );
+				toast( 'Command copied' );
+			} catch ( e ) {
+				toast( 'Copy failed — select the text instead', true );
+			}
+		} );
+		$$( '[data-sstatact]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const a = ( st.actions || [] )[ parseInt( btn.dataset.sstatact, 10 ) ];
+				if ( ! a || ( a.confirm && ! confirm( a.confirm ) ) ) return;
+				btn.disabled = true;
+				try {
+					await api( a.route, { method: a.method || 'POST' } );
+					toast( a.label + ' — done' );
+					ss.status = null;
+					ss.cache = null;
+					if ( state.route === s.id ) renderSurface( s );
+				} catch ( e ) {
+					toast( e.message, true );
+					btn.disabled = false;
+				}
+			} )
+		);
 	}
 
 	// A surface may declare a second collection under `manage` (e.g. Gravity
@@ -3084,9 +3160,9 @@
 		const view = $( '#minn-view' );
 		const ss = surfaceState( s.id );
 		const coll = surfaceColl( s, ss );
-		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) ) {
+		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) || ( s.status && ! ss.status ) ) {
 			view.innerHTML = '<div class="minn-loading">Loading…</div>';
-			Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ) ] )
+			Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] )
 				.then( renderIfCurrent( s.id ) )
 				.catch( showErr );
 			return;
@@ -3102,6 +3178,7 @@
 		).join( ' ' ) + ' 30px';
 
 		view.innerHTML = `
+		${ ss.view !== 'manage' ? surfaceStatusHtml( ss.status ) : '' }
 		<div class="minn-toolbar">
 			${ s.manage ? `
 			<div class="minn-tabs minn-view-switch">
@@ -3154,6 +3231,7 @@
 				if ( item ) openSurfaceDetail( s, item );
 			} )
 		);
+		bindSurfaceStatus( s, view );
 		const search = $( '#minn-surface-search', view );
 		if ( search ) {
 			let t = null;
@@ -12981,6 +13059,19 @@
 		}
 	}
 
+	// Disembark is a connector: the backup runs from a terminal, so the
+	// palette hands over the exact command. Fetched on demand — the command
+	// carries the site token, which never rides the boot payload.
+	async function copyDisembarkCommand() {
+		try {
+			const st = await api( 'minn-admin/v1/disembark/status' );
+			await navigator.clipboard.writeText( st.command.text );
+			toast( 'Disembark backup command copied' );
+		} catch ( e ) {
+			toast( 'Copy failed — the command is on the Backups page', true );
+		}
+	}
+
 	/* ===== Command palette ===== */
 
 	function paletteCommands() {
@@ -13039,6 +13130,12 @@
 				kind: 'action',
 				icon: '⛁',
 				run: runBackupNow,
+			} ] : [] ),
+			...( B.disembark ? [ {
+				label: 'Copy Disembark backup command',
+				kind: 'action',
+				icon: '⛁',
+				run: copyDisembarkCommand,
 			} ] : [] ),
 		);
 		if ( B.caps.update && Object.keys( state.cache.pluginUpdates ).length ) {
@@ -14350,6 +14447,9 @@
 						} );
 						toast( action.label + ' — done' );
 						surfaceState( m.surface.id ).cache = null;
+						// A row action can change what the status card reports
+						// (Disembark: deleting a session shrinks the workspace).
+						surfaceState( m.surface.id ).status = null;
 						closeModal();
 						if ( state.route === m.surface.id ) renderSurface( m.surface );
 					} catch ( e ) {

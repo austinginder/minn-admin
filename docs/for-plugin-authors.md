@@ -107,6 +107,38 @@ page's copy-report carries the section for bug reports.
 | `family` | Group id for surfaces that do the same job (`forms`, `mail`, `redirects`, `activity-log`, `snippets`, `backups`, or your own). Same-family surfaces share one sidebar entry with a provider switcher in the topbar badge; the user's pick is remembered per family |
 | `group` | Sidebar placement. Surfaces default to the **Tools** group (logs, redirects, snippets: site plumbing). Declare `"workspace"` only when the surface is inbox-shaped, something users check daily because new items need a human (form entries are the bundled example) |
 | `manage` | Optional second collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Gravity Forms uses it for Entries / Forms |
+| `status` | Optional status card above the list: `{ "route": "your/v1/status" }`. The route returns a server-built display model (below), so your adapter formats values server-side and the client stays generic |
+
+### `status` — a card above the list
+
+For surfaces where the list alone doesn't tell the story (Disembark's Backups
+view is the reference), declare `status.route` and return:
+
+```json
+{
+    "rows": [
+        { "label": "Last scan", "value": "3 hours ago", "hint": "142,318 files · 2.1 GB" }
+    ],
+    "command": {
+        "label": "Back up from any terminal",
+        "text": "disembark connect https://example.com abc123…",
+        "hint": "Requires the Disembark CLI."
+    },
+    "actions": [
+        { "label": "Clean up working files", "route": "your/v1/cleanup", "method": "POST", "confirm": "Really?", "danger": true },
+        { "label": "Open Disembark ↗", "href": "https://example.com/wp-admin/tools.php?page=disembark" }
+    ]
+}
+```
+
+`rows` render as a stat strip (send display-ready strings; format server-side).
+`command` renders as a click-to-copy monospace box; omit it when there's
+nothing to copy. `actions` render as buttons: with `route` they POST (or
+`method`) and re-fetch both the status and the list on success, `confirm`
+shows a native confirm first, `danger` styles the button red, and `href`
+renders a plain new-tab link instead of a request. Omit any key you don't
+need; conditional actions are just actions your route leaves out of the
+response.
 
 ### `collection`
 
