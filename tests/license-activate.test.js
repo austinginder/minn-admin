@@ -88,26 +88,42 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		} );
 		t.check( 'action-less provider rows draw no controls', staticRow === 0, String( staticRow ) );
 
-		/* ===== Paste field appears; wrong key fails safely ===== */
+		/* ===== Paste field appears; wrong key fails IN PLACE ===== */
 		await clickActivate();
 		const inputType = await page.$eval( '#minn-sys-licenses .minn-lic-key', ( el ) => el.type );
 		t.check( 'paste field is a password input', inputType === 'password' );
+		const topBefore = await page.evaluate( () => {
+			document.querySelector( '#minn-sys-licenses' ).scrollIntoView();
+			return document.querySelector( '.minn-scroll' ).scrollTop;
+		} );
 		await submitKey( 'totally-wrong-key' );
 		await waitToast( 'That key is not recognized' );
-		await cardReady();
-		st = await rowState();
-		t.check( 'wrong key leaves the row unlicensed', st.pill === 'No license', st.pill );
+		const afterFail = await page.evaluate( () => {
+			const i = document.querySelector( '#minn-sys-licenses .minn-lic-key' );
+			return {
+				top: document.querySelector( '.minn-scroll' ).scrollTop,
+				form: !! i,
+				selected: !! i && i.value.length > 0 && i.selectionEnd - i.selectionStart === i.value.length,
+			};
+		} );
+		t.check( 'failure keeps the paste field for a retry', afterFail.form );
+		t.check( 'typed key is selected for a quick retype', afterFail.selected );
+		t.check( 'no scroll jump on failure', Math.abs( afterFail.top - topBefore ) < 4, `${ topBefore } -> ${ afterFail.top }` );
 
-		/* ===== Site limit is a first-class, no-retry result ===== */
-		await clickActivate();
-		await submitKey( 'fixture-limit-key' );
+		/* ===== Site limit is a first-class, no-retry result (retry in place) ===== */
+		await page.keyboard.type( 'fixture-limit-key' );
+		await page.evaluate( () => document.querySelector( '#minn-sys-licenses [data-lic-go]' ).click() );
 		await waitToast( 'No activations left on this license' );
 		t.check( 'site-limit result names the seat problem', true );
-		await cardReady();
 
-		/* ===== The happy path ===== */
-		await clickActivate();
-		await submitKey( 'fixture-valid-key' );
+		/* ===== The happy path (third try, same field) ===== */
+		await page.evaluate( () => {
+			const i = document.querySelector( '#minn-sys-licenses .minn-lic-key' );
+			i.focus();
+			i.select();
+		} );
+		await page.keyboard.type( 'fixture-valid-key' );
+		await page.evaluate( () => document.querySelector( '#minn-sys-licenses [data-lic-go]' ).click() );
 		await waitToast( 'License activated' );
 		await page.waitForFunction( () => {
 			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]

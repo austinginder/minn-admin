@@ -4982,6 +4982,21 @@
 			const label = btn.textContent;
 			btn.disabled = true;
 			btn.textContent = action === 'activate' ? 'Activating…' : action === 'deactivate' ? 'Deactivating…' : 'Checking…';
+			// A failed activate must NOT re-render: the paste field stays put
+			// (key selected for a quick retype) and nothing moves. Re-renders
+			// happen only when server state changed, with the fresh /system
+			// loaded FIRST so the view never collapses to a loading state and
+			// clamps the scroller to the top (Austin's bad-key repro; same
+			// scrollTop-restore rule as renderExtensions).
+			const keepForm = () => {
+				btn.disabled = false;
+				btn.textContent = label;
+				const input = btn.closest( '.minn-lic-actions' )?.querySelector( '.minn-lic-key' );
+				if ( input ) {
+					input.focus( { preventScroll: true } );
+					input.select();
+				}
+			};
 			try {
 				const res = await api( 'minn-admin/v1/licenses/action', {
 					method: 'POST',
@@ -4994,12 +5009,21 @@
 				} else {
 					toast( res.message || ( action === 'activate' ? 'Activation failed — check the key' : 'The vendor reported a problem' ), true );
 				}
+				if ( 'activate' === action && ! res.ok ) {
+					keepForm();
+					return;
+				}
+				const scroller = $( '.minn-scroll' );
+				const keepTop = scroller ? scroller.scrollTop : 0;
 				state.cache.system = null; // rows + health check are server-derived
+				await loadSystem();
+				if ( state.route !== 'system' ) return;
 				renderSystem();
+				const sc = $( '.minn-scroll' );
+				if ( sc ) sc.scrollTop = keepTop;
 			} catch ( e ) {
 				toast( e.message, true );
-				btn.disabled = false;
-				btn.textContent = label;
+				keepForm();
 			}
 		};
 		$$( '[data-lic]', view ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
