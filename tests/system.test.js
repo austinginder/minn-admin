@@ -49,7 +49,7 @@ const fs = require( 'fs' );
 		hasHealthy: !! Array.from( document.querySelectorAll( '.minn-sys-pill' ) ).find( ( p ) => /healthy/.test( p.textContent ) ),
 	} ) );
 	t.check( 'health strip renders every check', ui.checks === ( api.body.checks || [] ).length && ui.checks > 0, JSON.stringify( ui ) );
-	t.check( 'four group cards render', ui.cards === 4, String( ui.cards ) );
+	t.check( 'four group cards + Tools render', ui.cards === 5, String( ui.cards ) );
 	t.check( 'summary pills + largest-tables render', ui.pills > 0 && ui.hasHealthy && ui.tableRows > 0, JSON.stringify( ui ) );
 	const alUi = await page.evaluate( () => {
 		const head = [ ...document.querySelectorAll( '.minn-sys-tables-head' ) ].find( ( h ) => /Autoloaded options/.test( h.textContent ) );
@@ -93,6 +93,28 @@ const fs = require( 'fs' );
 	} );
 	t.check( 'Licenses card sits above Debug tools', licAboveDebug !== false, String( licAboveDebug ) );
 	await page.evaluate( () => { document.querySelector( '.minn-scroll' ).scrollTop = 0; } );
+
+	/* ===== Loopback/REST self-checks + Tools card ===== */
+	const selfChecks = await page.$$eval( '.minn-sys-check', ( els ) =>
+		els.map( ( e ) => ( { text: e.textContent, cls: e.className } ) )
+			.filter( ( c ) => /Loopback requests|REST API self-check/.test( c.text ) ) );
+	t.check( 'loopback + REST self-check rows render with a grade', selfChecks.length === 2 && selfChecks.every( ( c ) => /pass|warn|fail/.test( c.cls ) ), JSON.stringify( selfChecks.map( ( c ) => c.cls ) ) );
+	const tools = await page.evaluate( () => {
+		const card = document.getElementById( 'minn-sys-tools' );
+		return card ? [ ...card.querySelectorAll( 'a.minn-sys-tool' ) ].map( ( a ) => a.getAttribute( 'href' ) ) : null;
+	} );
+	t.check( 'Tools card deep-links the one-shot jobs', !! tools && tools.length === 5 && tools.every( ( h ) => h.includes( 'wp-admin/' ) ) && tools.some( ( h ) => h.endsWith( 'site-health.php' ) ), JSON.stringify( tools ) );
+
+	/* ===== Theme follows the OS when no explicit choice is saved ===== */
+	await page.evaluate( () => localStorage.removeItem( 'minn-theme' ) );
+	await page.emulateMedia( { colorScheme: 'light' } );
+	await page.reload( { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-sys-jump', { timeout: 20000 } );
+	const themeLight = await page.evaluate( () => document.documentElement.getAttribute( 'data-theme' ) );
+	await page.emulateMedia( { colorScheme: 'dark' } );
+	await page.waitForTimeout( 250 ); // the pre-paint listener flips it live
+	const themeDark = await page.evaluate( () => document.documentElement.getAttribute( 'data-theme' ) );
+	t.check( 'theme follows the OS by default, live on change', themeLight === 'light' && themeDark === 'dark', `${ themeLight } -> ${ themeDark }` );
 
 	/* ===== Nav item + copy report ===== */
 	t.check( 'System nav item present', !! ( await page.$( '.minn-nav-btn[data-nav="system"]' ) ) );

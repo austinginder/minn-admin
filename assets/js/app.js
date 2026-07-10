@@ -653,6 +653,7 @@
 			clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
 			key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
 			tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+			wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
 			shuffle: '<path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.6-8.6c.8-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.4 0-2.6-.7-3.4-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/>',
 			trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
 			upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
@@ -930,6 +931,9 @@
 			openUserModal( B.user.id );
 		} );
 		$( '#minn-theme-btn' ).addEventListener( 'click', toggleTheme );
+		// Until the user toggles explicitly, the theme follows the OS; the
+		// pre-paint script fires this when the system setting flips live.
+		document.addEventListener( 'minn-theme-change', renderThemeBtn );
 		$( '#minn-help-btn' ).addEventListener( 'click', () => { state.modal = { type: 'help' }; renderOverlays(); } );
 		$( '#minn-notif-btn' ).addEventListener( 'click', toggleNotif );
 		// Core updates outrank everything else — the chip is visible on every
@@ -5366,6 +5370,25 @@
 			${ debugCard }
 			<div class="minn-sys-grid" id="minn-sys-grid">
 				${ s.groups.map( groupCard ).join( '' ) }
+				${ B.caps.settings ? `
+				<div class="minn-card minn-sys-card" id="minn-sys-tools">
+					<div class="minn-sys-card-head">${ icon( 'wrench' ) }<span>Tools</span>
+						<span class="minn-sys-debug-hint">one-shot jobs, in wp-admin</span>
+					</div>
+					<div class="minn-sys-rows">
+						${ [
+		[ 'Site Health', 'site-health.php', "Core's full test suite and status" ],
+		[ 'Export content', 'export.php', 'Download a WXR of posts, pages and media' ],
+		[ 'Import content', 'import.php', 'Bring content in from another site' ],
+		[ 'Export personal data', 'export-personal-data.php', 'Answer a GDPR data request' ],
+		[ 'Erase personal data', 'erase-personal-data.php', 'Handle a GDPR erasure request' ],
+	].map( ( [ label, path, hint ] ) => `
+						<a class="minn-sys-row minn-sys-tool" href="${ esc( B.site.adminUrl + path ) }" target="_blank" rel="noopener">
+							<span class="minn-sys-key">${ esc( label ) } ↗</span>
+							<span class="minn-sys-val">${ esc( hint ) }</span>
+						</a>` ).join( '' ) }
+					</div>
+				</div>` : '' }
 			</div>
 			${ extCard }
 			${ intCard }

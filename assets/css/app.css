@@ -1882,6 +1882,11 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-lic-key:focus { outline: none; border-color: var(--accent2); }
 .minn-sys-lic-foot { font-size: 11.5px; color: var(--text3); padding: 11px 17px 13px; border-top: 1px solid var(--border); }
 
+/* Tools card — deep links to wp-admin's one-shot jobs */
+.minn-sys-tool { text-decoration: none; color: inherit; cursor: pointer; }
+.minn-sys-tool .minn-sys-val { color: var(--text3); }
+.minn-sys-tool:hover .minn-sys-key { color: var(--accent2); }
+
 /* Integrations card — descriptor-contract problems flagged per entry */
 .minn-sys-int-problem { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 11.5px; color: var(--amber); white-space: normal; }
 .minn-sys-int-problem svg { width: 12px; height: 12px; flex: none; }

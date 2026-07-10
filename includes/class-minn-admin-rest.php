@@ -2812,6 +2812,60 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			),
 		);
 
+		// Loopback + REST self-checks: core's OWN Site Health tests, each a
+		// real HTTP request back to this site (broken loopback silently
+		// kills cron, scheduled posts and background updates). Cached 15
+		// minutes so the System page doesn't pay two self-requests per load.
+		$self = get_transient( 'minn_admin_self_checks' );
+		if ( ! is_array( $self ) && empty( $_COOKIE ) ) {
+			// CLI/cron context: core's REST test forwards the requester's
+			// cookies + nonce, so it would report a FALSE failure here and
+			// cache it. Skip the rows rather than poison the transient.
+			$self = array();
+		} elseif ( ! is_array( $self ) ) {
+			$self = array();
+			if ( ! class_exists( 'WP_Site_Health' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/class-wp-site-health.php';
+			}
+			try {
+				$health = WP_Site_Health::get_instance();
+				$loop   = $health->can_perform_loopback();
+				$self['loopback'] = array(
+					'status'  => isset( $loop->status ) ? (string) $loop->status : 'critical',
+					'message' => isset( $loop->message ) ? wp_strip_all_tags( (string) $loop->message ) : '',
+				);
+				$rest_test    = $health->get_test_rest_availability();
+				$self['rest'] = array(
+					'status'  => isset( $rest_test['status'] ) ? (string) $rest_test['status'] : 'critical',
+					'message' => isset( $rest_test['label'] ) ? wp_strip_all_tags( (string) $rest_test['label'] ) : '',
+				);
+			} catch ( \Throwable $e ) {
+				$self = array();
+			}
+			set_transient( 'minn_admin_self_checks', $self, 15 * MINUTE_IN_SECONDS );
+		}
+		$grade = function ( $status ) {
+			return 'good' === $status ? 'pass' : ( 'recommended' === $status ? 'warn' : 'fail' );
+		};
+		if ( isset( $self['loopback'] ) ) {
+			$checks[] = array(
+				'label'  => 'Loopback requests',
+				'status' => $grade( $self['loopback']['status'] ),
+				'detail' => 'good' === $self['loopback']['status']
+					? 'The site can reach itself (cron and scheduled posts depend on this)'
+					: ( $self['loopback']['message'] ? $self['loopback']['message'] : 'Loopback requests are failing' ),
+			);
+		}
+		if ( isset( $self['rest'] ) ) {
+			$checks[] = array(
+				'label'  => 'REST API self-check',
+				'status' => $grade( $self['rest']['status'] ),
+				'detail' => 'good' === $self['rest']['status']
+					? 'The REST API answers external requests (Minn itself rides it)'
+					: ( $self['rest']['message'] ? $self['rest']['message'] : 'The REST API did not answer' ),
+			);
+		}
+
 		// Backups — only when a backup plugin is present to report on.
 		if ( function_exists( 'minn_admin_updraftplus_active' ) && minn_admin_updraftplus_active() ) {
 			$bk  = minn_admin_updraft_last();

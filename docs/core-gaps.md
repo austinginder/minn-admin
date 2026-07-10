@@ -50,11 +50,11 @@ addition was `minn-admin/v1/terms/merge`; everything else rides core REST.
 ### Tools — System page strong, one-shot tools absent
 The System page covers diagnostics well (health checks, DB tables, autoload
 weight, cron health, debug toggles + log viewer, integrations registry,
-extensions manifest, copy-as-markdown report). No WXR export/import, no
-privacy personal-data export/erase requests, no full Site Health test-suite
-parity. Judgment: export/import and privacy requests are episodic surgery,
-acceptable long-tail. Candidate System additions: loopback/REST self-check
-rows (parked from the v0.9 bounce audit).
+extensions manifest, copy-as-markdown report). Loopback and REST self-check
+health rows shipped 2026-07-10 (core's own Site Health tests, cached 15
+minutes), and a Tools card deep-links the one-shot jobs (Site Health,
+export/import, GDPR export/erase): episodic surgery stays in wp-admin, one
+click away, by design.
 
 ### Settings — daily options covered, two screens thin
 Writable today: General (title, tagline, icon, URL, admin email, timezone,

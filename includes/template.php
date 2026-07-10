@@ -33,9 +33,21 @@ $minn_asset_ver = function ( $rel ) {
 ?>
 <link rel="stylesheet" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/css/app.css?ver=' . $minn_asset_ver( 'assets/css/app.css' ) ); ?>">
 <script>
-// Apply saved theme before first paint to avoid a flash.
+// Apply the theme before first paint to avoid a flash. An explicit choice
+// (the topbar toggle persists one) wins; otherwise follow the OS setting
+// live, until the user toggles for the first time.
 try {
 	var t = localStorage.getItem( 'minn-theme' );
+	if ( ! t && window.matchMedia ) {
+		var mq = window.matchMedia( '(prefers-color-scheme: light)' );
+		t = mq.matches ? 'light' : 'dark';
+		mq.addEventListener( 'change', function ( e ) {
+			if ( ! localStorage.getItem( 'minn-theme' ) ) {
+				document.documentElement.setAttribute( 'data-theme', e.matches ? 'light' : 'dark' );
+				document.dispatchEvent( new CustomEvent( 'minn-theme-change' ) );
+			}
+		} );
+	}
 	if ( t ) { document.documentElement.setAttribute( 'data-theme', t ); }
 } catch ( e ) {}
 window.MINN = <?php echo wp_json_encode( $boot ); ?>;
