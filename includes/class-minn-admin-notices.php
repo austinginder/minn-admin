@@ -398,6 +398,38 @@ class Minn_Admin_Notices {
 		);
 	}
 
+	/* ===== Hidden notices =====
+	 *
+	 * Some notices dismiss only through their plugin's own admin-ajax handler
+	 * wired in enqueued JS (Brizy's rating nag, WPBakery's notice list) — no
+	 * followable link exists, so Minn cannot replay the dismissal without a
+	 * per-plugin registry of action names, nonces and params. Instead, Minn
+	 * hides the notice from ITS OWN digest: ids are content-stable
+	 * (md5 of slug|text), so a hidden id stays suppressed across re-captures
+	 * until the notice's text changes — at which point it is arguably new.
+	 */
+
+	private static function hidden() {
+		$h = get_user_meta( get_current_user_id(), 'minn_admin_notice_hidden', true );
+		return is_array( $h ) ? $h : array();
+	}
+
+	public static function hide( $id ) {
+		$h        = self::hidden();
+		$h[ $id ] = time();
+		if ( count( $h ) > 200 ) {
+			arsort( $h );
+			$h = array_slice( $h, 0, 200, true );
+		}
+		update_user_meta( get_current_user_id(), 'minn_admin_notice_hidden', $h );
+	}
+
+	public static function unhide( $id ) {
+		$h = self::hidden();
+		unset( $h[ $id ] );
+		update_user_meta( get_current_user_id(), 'minn_admin_notice_hidden', $h );
+	}
+
 	public static function is_stale() {
 		return ( time() - (int) self::stored()['captured'] ) > self::STALE_AFTER;
 	}
@@ -424,10 +456,14 @@ class Minn_Admin_Notices {
 			'success' => '✅',
 			'info'    => 'ℹ️',
 		);
-		$seen  = get_user_meta( get_current_user_id(), 'minn_admin_notice_seen', true );
-		$seen  = is_array( $seen ) ? $seen : array();
-		$items = array();
+		$seen   = get_user_meta( get_current_user_id(), 'minn_admin_notice_seen', true );
+		$seen   = is_array( $seen ) ? $seen : array();
+		$hidden = self::hidden();
+		$items  = array();
 		foreach ( self::stored()['items'] as $n ) {
+			if ( isset( $hidden[ $n['id'] ] ) ) {
+				continue;
+			}
 			$text = $n['text'];
 			if ( function_exists( 'mb_substr' ) && mb_strlen( $text ) > 160 ) {
 				$text = mb_substr( $text, 0, 159 ) . '…';

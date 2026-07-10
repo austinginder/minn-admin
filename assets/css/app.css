@@ -136,6 +136,11 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-notif-link:hover { border-color: var(--accent); }
 .minn-notif-link:disabled { opacity: 0.6; cursor: default; }
+.minn-notif-hide {
+  font-size: 12.5px; font-weight: 600; color: var(--text3); background: transparent;
+  border: 1px solid var(--border); border-radius: 7px; padding: 3px 10px; cursor: pointer;
+}
+.minn-notif-hide:hover { color: var(--text); border-color: var(--text3); }
 
 /* "Update everything" pinned under the notification tabs. */
 .minn-update-all-row { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px 10px; border-bottom: 1px solid var(--border); }

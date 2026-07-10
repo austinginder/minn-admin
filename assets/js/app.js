@@ -12369,8 +12369,9 @@
 									<div class="minn-notif-icon">${ esc( n.icon ) }</div>
 									<div class="minn-notif-text">
 										${ esc( n.title ) }
-										${ ( n.links || [] ).length ? `<div class="minn-notif-links">${ n.links.map( ( l, i ) =>
-											`<button class="minn-notif-link" data-nid="${ esc( n.id ) }" data-li="${ i }">${ esc( l.text ) }${ l.action ? '' : ' ↗' }</button>` ).join( '' ) }</div>` : '' }
+										${ ( n.links || [] ).length || n.kind === 'notices' ? `<div class="minn-notif-links">${ ( n.links || [] ).map( ( l, i ) =>
+											`<button class="minn-notif-link" data-nid="${ esc( n.id ) }" data-li="${ i }">${ esc( l.text ) }${ l.action ? '' : ' ↗' }</button>` ).join( '' ) }${
+											n.kind === 'notices' ? `<button class="minn-notif-hide" data-nid="${ esc( n.id ) }" title="Hide this notice from Minn">Hide</button>` : '' }</div>` : '' }
 										<div class="minn-notif-time">${ esc( n.ago ) }</div>
 									</div>
 									${ n.unread ? '<div class="minn-notif-unread-dot"></div>' : '' }
@@ -14843,6 +14844,30 @@
 					if ( ! link ) return;
 					if ( link.action ) runNoticeAction( link, b );
 					else window.open( link.url, '_blank' );
+				} )
+			);
+			// Hide clears the notice from Minn's OWN digest — for nags whose
+			// real dismissal is plugin-specific admin-ajax JS Minn can't
+			// replay. Ids are content-stable so it survives re-captures.
+			$$( '.minn-notif-hide' ).forEach( ( b ) =>
+				b.addEventListener( 'click', async ( e ) => {
+					e.stopPropagation();
+					const nid = b.dataset.nid;
+					const hash = nid.replace( /^notice-/, '' );
+					state.cache.notifications = ( state.cache.notifications || [] ).filter( ( n ) => n.id !== nid );
+					renderOverlays();
+					updateUnreadDot();
+					try {
+						await api( 'minn-admin/v1/notices/hide', { method: 'POST', body: JSON.stringify( { id: hash } ) } );
+						toastAction( 'Notice hidden', 'Undo', async () => {
+							await api( 'minn-admin/v1/notices/unhide', { method: 'POST', body: JSON.stringify( { id: hash } ) } ).catch( () => {} );
+							state.cache.notifications = null;
+							await loadNotifications();
+							if ( state.notifOpen ) renderOverlays();
+						} );
+					} catch ( err ) {
+						toast( err.message, true );
+					}
 				} )
 			);
 			$$( '.minn-notif-row' ).forEach( ( row ) =>

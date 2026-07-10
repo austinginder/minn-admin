@@ -37,6 +37,7 @@ const { launch, login, reporter } = require( './helpers' );
 		return ( await r.json() ).items.filter( ( n ) => n.kind === 'notices' );
 	} );
 
+	let errorHash = null;
 	try {
 		t.check( 'Action fixture reset', ( await resetAction() ) === 200 );
 
@@ -88,12 +89,18 @@ const { launch, login, reporter } = require( './helpers' );
 		await page.click( '#minn-notif-btn' );
 		await page.waitForSelector( '.minn-notif-panel', { timeout: 5000 } );
 		await page.click( '.minn-notif-tab[data-tab="notices"]' );
-		await page.waitForTimeout( 300 );
+		// The panel first paints from the boot-time cache (fetched before this
+		// suite's capture); wait for the refresh fetch to re-render.
+		const rowsOk = await page.waitForFunction(
+			() => Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.filter( ( r ) => r.textContent.includes( 'Minn Fixture' ) ).length >= 5,
+			null, { timeout: 10000 }
+		).then( () => true ).catch( () => false );
 		const rowCount = await page.evaluate( () =>
 			Array.from( document.querySelectorAll( '.minn-notif-row' ) )
 				.filter( ( r ) => r.textContent.includes( 'Minn Fixture' ) ).length
 		);
-		t.check( 'Fixture rows render under the Notices tab', rowCount >= 5, `rows=${ rowCount }` );
+		t.check( 'Fixture rows render under the Notices tab', rowsOk, `rows=${ rowCount }` );
 
 		// External link button opens a new tab (stubbed); row click stays put.
 		await page.evaluate( () => {
@@ -146,8 +153,70 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'Actioned notice left the digest', gone );
 		const itemsAfter = await fetchNoticeItems();
 		t.check( 'Fresh capture no longer holds the notice', ! itemsAfter.some( ( n ) => n.title.includes( 'allow anonymous usage tracking' ) ) );
+
+		// --- Hide (Minn-side dismissal) ---------------------------------------
+		// The error fixture has no links — the same shape as notices whose only
+		// dismissal is plugin-specific admin-ajax JS Minn can't replay.
+		errorHash = error.id.replace( /^notice-/, '' );
+		const hasHideBtn = await page.evaluate( () => {
+			const row = Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.find( ( r ) => r.textContent.includes( 'nightly backup failed' ) );
+			const btn = row && row.querySelector( '.minn-notif-hide' );
+			if ( btn ) btn.click();
+			return !! btn;
+		} );
+		t.check( 'Notice row renders a Hide button', hasHideBtn );
+		await page.waitForFunction(
+			() => Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Notice hidden/.test( x.textContent ) ),
+			null, { timeout: 8000 }
+		);
+		t.check( 'Hide removes the row with an Undo toast', await page.evaluate( () =>
+			! Array.from( document.querySelectorAll( '.minn-notif-row' ) ).some( ( r ) => r.textContent.includes( 'nightly backup failed' ) )
+		) );
+
+		// Undo restores it (panel re-renders from a fresh fetch).
+		await page.click( '.minn-toast-btn' );
+		await page.waitForFunction(
+			() => Array.from( document.querySelectorAll( '.minn-notif-row' ) ).some( ( r ) => r.textContent.includes( 'nightly backup failed' ) ),
+			null, { timeout: 10000 }
+		);
+		t.check( 'Undo unhides the notice in the panel', true );
+
+		// Hide again, then prove suppression is server-side and survives a
+		// fresh capture (ids are content-stable across re-captures).
+		await page.evaluate( () => {
+			const row = Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.find( ( r ) => r.textContent.includes( 'nightly backup failed' ) );
+			row.querySelector( '.minn-notif-hide' ).click();
+		} );
+		await page.waitForFunction(
+			() => ! Array.from( document.querySelectorAll( '.minn-notif-row' ) ).some( ( r ) => r.textContent.includes( 'nightly backup failed' ) ),
+			null, { timeout: 8000 }
+		);
+		await page.evaluate( async () => { await fetch( window.MINN.notices.url, { credentials: 'same-origin' } ); } );
+		const afterHide = await fetchNoticeItems();
+		t.check( 'Hidden notice stays suppressed across a fresh capture', ! afterHide.some( ( n ) => n.title.includes( 'nightly backup failed' ) ) );
+
+		// REST unhide (the Undo endpoint) restores it in the digest.
+		const unhideStatus = await page.evaluate( async ( hash ) => ( await fetch( window.MINN.restUrl + 'minn-admin/v1/notices/unhide', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			credentials: 'same-origin',
+			body: JSON.stringify( { id: hash } ),
+		} ) ).status, errorHash );
+		const afterUnhide = await fetchNoticeItems();
+		t.check( 'REST unhide restores the notice', unhideStatus === 200 && afterUnhide.some( ( n ) => n.title.includes( 'nightly backup failed' ) ) );
 	} finally {
 		await resetAction().catch( () => {} );
+		// A failure between hide and unhide must not leave the fixture hidden.
+		if ( errorHash ) {
+			await page.evaluate( async ( hash ) => { await fetch( window.MINN.restUrl + 'minn-admin/v1/notices/unhide', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( { id: hash } ),
+			} ); }, errorHash ).catch( () => {} );
+		}
 	}
 
 	await t.done( browser, errors );

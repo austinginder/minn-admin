@@ -205,6 +205,33 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Hide/unhide a captured admin notice in Minn's own digest — the
+		// answer for notices whose dismissal only exists as plugin-specific
+		// admin-ajax JS that Minn cannot replay (see Minn_Admin_Notices).
+		foreach ( array( 'hide', 'unhide' ) as $op ) {
+			register_rest_route(
+				self::NS,
+				'/notices/' . $op,
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => function () {
+						return current_user_can( 'edit_posts' );
+					},
+					'args'                => array(
+						'id' => array(
+							'type'     => 'string',
+							'required' => true,
+							'pattern'  => '^[a-f0-9]{12}$',
+						),
+					),
+					'callback'            => function ( WP_REST_Request $request ) use ( $op ) {
+						Minn_Admin_Notices::$op( $request['id'] );
+						return rest_ensure_response( array( 'ok' => true ) );
+					},
+				)
+			);
+		}
+
 		register_rest_route(
 			self::NS,
 			'/plugin-updates',
