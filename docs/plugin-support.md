@@ -29,6 +29,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Custom fields** | ACF (+ Pro) | Editor panel |
 | **Ecommerce** | WooCommerce | **Orders** surface + Overview stats |
 | **Spam filtering** | Akismet, Antispam Bee, CleanTalk | Settings → Spam provider cards; open via `minn_admin_spam_providers` |
+| **Licenses** | Elementor Pro, ACF PRO, WP Rocket, Gravity Forms, AnalyticsWP, Bricks, Divi, Beaver Builder, WPBakery, Brizy, Astra/Brainstorm family, plus any Freemius, EDD Software Licensing or SureCart plugin generically | System → **Licenses** card + health check: valid / expired / invalid / missing per paid component, read-only; open via `minn_admin_license_providers` |
 | **Page builders** | Elementor, Beaver Builder, Brizy, Divi, Bricks, WPBakery, Etch | Detected, fenced, "Edit in ⟨builder⟩" |
 | **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
@@ -78,11 +79,10 @@ pattern that falls out: the highest-value next wave is almost entirely
 **providers into surfaces that already exist**, not new machinery. Waves in
 recommended order (installs × fit × effort):
 
-1. **License visibility (Phase 0)** — a read-only dashboard classifying every
-   paid plugin's license as valid/expired/invalid/missing from stored state,
-   no network calls, no seat risk. Nothing like it exists anywhere in
-   WordPress. Storage research is done and the design is ready to build; see
-   `docs/license-manager.md`.
+1. **License visibility (Phase 0)** — ✅ shipped 2026-07-10: the System page's
+   Licenses card classifies every paid component's license from stored state,
+   no network calls, no seat risk (see the coverage table above and
+   `docs/license-manager.md`). The activation vault remains Phase 1.
 2. **Security posture rows** — Wordfence firewall mode + last scan + issue
    count (5M installs, reads `wfConfig`/`wfIssues`, extends the adapter Minn
    already ships) and Really Simple SSL (3M, pure options read) as System

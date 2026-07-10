@@ -23,6 +23,7 @@ Minn's whole extension surface is a small set of public hooks. The main ones:
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
 | `minn_admin_cache_purgers` | filter | Join the "Clear site cache" palette command |
 | `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
+| `minn_admin_license_providers` | filter | Report your license state on the System page's Licenses card |
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
@@ -630,6 +631,46 @@ server-side with the toggle id and the new boolean. Keep toggles to the two or t
 switches a site owner actually flips; deep configuration belongs on your own screen,
 which the card links to. Bundled providers (Akismet, Antispam Bee, CleanTalk) live in
 `includes/adapters/spam.php` and are the references.
+
+## License state — `minn_admin_license_providers`
+
+The System page carries a read-only **Licenses** card: every paid component on the
+site with its license state (valid / expired / invalid / missing / unknown), read
+from stored options only. Minn never calls a licensing API and never activates
+anything; if your plugin is commercial, a provider makes your license state visible
+where the site owner already looks for site health:
+
+```php
+add_filter( 'minn_admin_license_providers', function ( $providers ) {
+    $providers['my-plugin'] = array(
+        'name'   => 'My Plugin Pro',
+        'detect' => function () {
+            return defined( 'MY_PLUGIN_VERSION' ); // installed, even if inactive
+        },
+        'read'   => function () {
+            $status = get_option( 'my_plugin_license_status' );
+            return array( array(
+                'name'    => 'My Plugin Pro',
+                'kind'    => 'plugin',           // or 'theme'
+                'state'   => $status ? $status : 'missing',
+                'key'     => (bool) get_option( 'my_plugin_license_key' ),
+                'expires' => '2027-01-01',       // or 'lifetime' or ''
+                'note'    => '',                 // optional one-line detail
+                'stale'   => false,              // true when your cached status lapsed
+            ) );
+        },
+    );
+    return $providers;
+} );
+```
+
+`read` may return several rows (one per product) and runs inside a Throwable guard,
+so a broken provider drops out rather than breaking the card. Keep `read` strictly
+local: option reads only, no HTTP. States roll into a Licenses health check (expired
+or invalid fails it, missing or unknown warns) and the copy-as-markdown report.
+Bundled readers, including generic Freemius and EDD Software Licensing coverage,
+live in `includes/adapters/licenses.php`; the endpoint is
+`GET minn-admin/v1/licenses` (gated on `manage_options`).
 
 ## Comments detection — `minn_admin_comments_enabled`
 
