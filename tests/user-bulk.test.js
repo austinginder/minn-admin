@@ -48,8 +48,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		// Clicking a checkbox must not open the user modal.
 		t.check( 'checkbox does not open the user modal', ( await page.$( '#minn-modal-overlay' ) ) === null );
 
-		// Change role to Editor.
-		await page.selectOption( '#minn-user-bulk-role', 'editor' );
+		// Change role to Editor via the strict combobox (opens on focus/click;
+		// the picked slug rides input.dataset.acValue).
+		t.check( 'role picker is a combobox, not a native select', ( await page.$( '[data-userbulkrole] .minn-ac-input' ) ) !== null && ( await page.$( '#minn-user-bulk-role' ) ) === null );
+		await page.click( '[data-userbulkrole] .minn-ac-input' );
+		await page.waitForSelector( '[data-userbulkrole] .minn-ac-item[data-acv="editor"]', { timeout: 5000 } );
+		await page.click( '[data-userbulkrole] .minn-ac-item[data-acv="editor"]' );
+		const picked = await page.evaluate( () => document.querySelector( '[data-userbulkrole] .minn-ac-input' ).dataset.acValue );
+		t.check( 'combobox picks the Editor role', picked === 'editor', picked );
 		await page.click( '#minn-user-bulk-apply' );
 		await page.waitForSelector( '#minn-user-bulk-slot .minn-bulkbar', { state: 'detached', timeout: 30000 } );
 
