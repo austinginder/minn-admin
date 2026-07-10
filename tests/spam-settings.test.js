@@ -44,10 +44,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	}, { plugin, status } );
 
 	try {
+		// Seed the baseline — live sessions (and this very bug report) leave
+		// spam plugins toggled; never assume the resident-only state.
+		await setPlugin( 'akismet/akismet', 'inactive' ).catch( () => {} );
 		await openSpam();
 
 		/* ===== Resident provider card ===== */
-		const cardText = await page.$eval( '.minn-spam-provider', ( el ) => el.textContent );
+		const cardText = await page.$$eval( '.minn-spam-provider', ( els ) =>
+			( els.find( ( el ) => el.textContent.includes( 'Antispam Bee' ) ) || { textContent: '' } ).textContent );
 		t.check( 'Antispam Bee card renders with Active pill',
 			/Antispam Bee/.test( cardText ) && /Active/.test( cardText ) );
 		t.check( 'provider toggles render from the descriptor',
@@ -91,14 +95,52 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const activeTab = await page.$eval( '.minn-tab.active', ( el ) => el.textContent.trim() );
 		t.check( 'Review spam lands on the Comments spam tab', activeTab === 'Spam', activeTab );
 
-		/* ===== A second provider appears when its plugin activates ===== */
-		t.check( 'Akismet activates over REST', await setPlugin( 'akismet/akismet', 'active' ) );
-		await openSpam();
-		const names = await page.$$eval( '.minn-spam-provider .minn-spam-name', ( els ) => els.map( ( e ) => e.textContent ) );
+		/* ===== Extensions toggle refreshes the Spam page without reload =====
+		   (Austin's report: state.cache.settings survived plugin toggles, so
+		   an activated spam plugin never appeared until a hard refresh). */
+		const spaNav = ( id ) => page.$$eval( '.minn-nav-btn', ( els, target ) => {
+			const btn = els.find( ( e ) => e.dataset.nav === target );
+			if ( btn ) btn.click();
+			return !! btn;
+		}, id );
+		const openSpamSection = async () => {
+			await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
+			await page.$$eval( '.minn-settings-nav-item', ( els ) => {
+				const spam = els.find( ( el ) => el.textContent.trim() === 'Spam' );
+				if ( spam ) spam.click();
+			} );
+			await page.waitForSelector( '.minn-spam-queue', { timeout: 10000 } );
+		};
+
+		// Prime the settings cache with Akismet absent.
+		await spaNav( 'settings' );
+		await openSpamSection();
+		let names = await page.$$eval( '.minn-spam-provider .minn-spam-name', ( els ) => els.map( ( e ) => e.textContent ) );
+		t.check( 'Akismet absent before activation', ! names.includes( 'Akismet' ), names.join( ', ' ) );
+
+		// Activate Akismet through the Extensions UI — the SPA path that
+		// must bust the settings cache.
+		await spaNav( 'extensions' );
+		await page.waitForSelector( '.minn-plugin[data-plugin^="akismet"]', { timeout: 20000 } );
+		await page.$eval( '.minn-plugin[data-plugin^="akismet"]', ( el ) => el.scrollIntoView( { block: 'center' } ) );
+		await page.click( '.minn-plugin[data-plugin^="akismet"] .minn-switch' );
+		await page.waitForFunction( () => {
+			const c = document.querySelector( '.minn-plugin[data-plugin^="akismet"]' );
+			return c && c.querySelector( '.minn-switch.on' );
+		}, null, { timeout: 30000 } );
+		await page.waitForTimeout( 1500 ); // refreshAfterPluginChange settles
+
+		// Back to Settings → Spam in the SAME session, no reload.
+		await spaNav( 'settings' );
+		await openSpamSection();
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-spam-provider .minn-spam-name' ) )
+				.some( ( e ) => e.textContent === 'Akismet' ), null, { timeout: 15000 } );
+		names = await page.$$eval( '.minn-spam-provider .minn-spam-name', ( els ) => els.map( ( e ) => e.textContent ) );
+		t.check( 'Extensions toggle refreshes the Spam page without a reload',
+			names.includes( 'Akismet' ) && names.includes( 'Antispam Bee' ), names.join( ', ' ) );
 		const akCard = await page.$$eval( '.minn-spam-provider', ( els ) =>
 			( els.find( ( el ) => el.textContent.includes( 'Akismet' ) ) || { textContent: '' } ).textContent );
-		t.check( 'Akismet card appears alongside Antispam Bee',
-			names.includes( 'Akismet' ) && names.includes( 'Antispam Bee' ), names.join( ', ' ) );
 		t.check( 'keyless Akismet shows Needs setup', /Needs setup/.test( akCard ) && /API key/.test( akCard ) );
 	} finally {
 		await setPlugin( 'akismet/akismet', 'inactive' ).catch( () => {} );

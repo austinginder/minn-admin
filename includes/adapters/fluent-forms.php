@@ -129,6 +129,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['fluent-forms'] = array(
 		'label'      => 'Forms',
 		'family'     => 'forms',
+		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Fluent Forms',
 		'icon'       => 'inbox',
 		'cap'        => 'read',

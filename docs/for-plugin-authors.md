@@ -105,6 +105,7 @@ page's copy-report carries the section for bug reports.
 | `cap` | Capability required. Checked server-side; the surface is absent from the app for users without it |
 | `collection` | The list definition (below) |
 | `family` | Group id for surfaces that do the same job (`forms`, `mail`, `redirects`, `activity-log`, `snippets`, `backups`, or your own). Same-family surfaces share one sidebar entry with a provider switcher in the topbar badge; the user's pick is remembered per family |
+| `group` | Sidebar placement. Surfaces default to the **Tools** group (logs, redirects, snippets: site plumbing). Declare `"workspace"` only when the surface is inbox-shaped, something users check daily because new items need a human (form entries are the bundled example) |
 | `manage` | Optional second collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Gravity Forms uses it for Entries / Forms |
 
 ### `collection`
