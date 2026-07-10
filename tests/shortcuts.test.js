@@ -38,11 +38,16 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	t.check( '⌘⇧D leaves focus mode', await page.evaluate( () => ! document.querySelector( '.minn-focus-dim' ) && ! document.body.classList.contains( 'minn-focus-zen' ) ), '' );
 
 	await page.keyboard.press( 'Meta+Enter' );
-	await page.waitForTimeout( 2000 );
-	const saved = await page.evaluate( async ( pid ) => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=status', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
-		return ( await r.json() ).status;
-	}, id );
+	// Poll — publish can take several seconds under server churn; a flat
+	// wait here read 'draft' mid-save and failed a working shortcut.
+	let saved = 'draft';
+	for ( let i = 0; i < 20 && saved !== 'publish'; i++ ) {
+		await page.waitForTimeout( 500 );
+		saved = await page.evaluate( async ( pid ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=status', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( await r.json() ).status;
+		}, id );
+	}
 	t.check( '⌘⏎ publishes the draft', saved === 'publish', saved );
 
 	await deletePost( page, id );

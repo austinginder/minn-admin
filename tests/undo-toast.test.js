@@ -56,10 +56,25 @@ const TABLE = '<!-- wp:table -->\n<figure class="wp-block-table"><table><tbody><
 	let r = await raw( id1 );
 	t.check( 'restored embed saves with its original markup', /wp:embed/.test( r ) && /watch\?v=abc/.test( r ), r.slice( 0, 120 ) );
 
+	// The async island-preview swap can replace the island (closing a
+	// just-opened inspector) right under an early chip click — a slow oEmbed
+	// fetch makes that window seconds wide. Re-click until it settles.
+	const openInspector = async () => {
+		for ( let i = 0; ; i++ ) {
+			await page.click( '#minn-editor-body .minn-island-chip' );
+			try {
+				await page.waitForSelector( '#minn-insp-remove', { timeout: 4000 } );
+				return;
+			} catch ( e ) {
+				if ( i >= 3 ) throw e;
+				await page.waitForTimeout( 1500 );
+			}
+		}
+	};
+
 	/* ===== Island delete via the inspector ===== */
 	const id2 = await fresh( P( 'x' ) + '\n\n' + EMBED );
-	await page.click( '#minn-editor-body .minn-island-chip' );
-	await page.waitForSelector( '#minn-insp-remove', { timeout: 4000 } );
+	await openInspector();
 	await page.click( '#minn-insp-remove' );
 	await page.waitForTimeout( 200 );
 	t.check( 'inspector remove deletes the island (no confirm)', ( await islands() ) === 0 );
@@ -70,8 +85,7 @@ const TABLE = '<!-- wp:table -->\n<figure class="wp-block-table"><table><tbody><
 
 	/* ===== Island delete — ⌘Z restores (same as toast Undo) ===== */
 	const id2b = await fresh( P( 'x' ) + '\n\n' + EMBED );
-	await page.click( '#minn-editor-body .minn-island-chip' );
-	await page.waitForSelector( '#minn-insp-remove', { timeout: 4000 } );
+	await openInspector();
 	await page.click( '#minn-insp-remove' );
 	await page.waitForTimeout( 200 );
 	t.check( 'inspector remove for ⌘Z test', ( await islands() ) === 0 );
