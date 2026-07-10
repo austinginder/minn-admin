@@ -2716,6 +2716,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'checks'     => $checks,
 				'config'     => self::config_state(),
 				'extensions' => self::extensions_manifest(),
+				// Live registry of everything hooked into Minn, with owner
+				// attribution + descriptor-contract problems — the feedback
+				// loop for integration authors (class-minn-admin-surfaces.php).
+				'integrations' => Minn_Admin_Surfaces::integrations(),
 				'groups'     => array(
 					array( 'title' => 'WordPress', 'icon' => 'wp', 'rows' => self::kv_rows( $wordpress ) ),
 					array( 'title' => 'PHP', 'icon' => 'php', 'rows' => self::kv_rows( $php ) ),
