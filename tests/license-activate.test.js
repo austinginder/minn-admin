@@ -87,6 +87,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			return el ? el.querySelectorAll( '[data-lic]' ).length : -1;
 		} );
 		t.check( 'action-less provider rows draw no controls', staticRow === 0, String( staticRow ) );
+		const linked = await page.evaluate( () => {
+			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.find( ( r ) => r.textContent.includes( 'Fixture Linked Pro' ) );
+			if ( ! el ) return null;
+			return {
+				href: !! el.querySelector( '[data-lic="href"]' ),
+				paste: !! el.querySelector( '[data-lic="activate"]' ),
+				label: el.querySelector( '[data-lic="href"]' )?.textContent || '',
+			};
+		} );
+		t.check( 'portal-handshake vendors get a link, not a paste field', linked && linked.href && ! linked.paste && /Activate ↗/.test( linked.label ), JSON.stringify( linked ) );
 
 		/* ===== Paste field appears; wrong key fails IN PLACE ===== */
 		await clickActivate();

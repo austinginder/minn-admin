@@ -149,13 +149,28 @@ key (clean `invalid` surfaced, nothing written, no retry); a real-key
 activation pass is the owner's manual step, same as the self-updater
 release-candidate test.
 
-**Deferred from wave 1: Bricks.** Its activation is an ajax handler whose
-non-ajax path only revalidates the ALREADY-STORED key; activating a new key
-without their nonce means pre-writing `bricks_license_key` and poking a
-static property, and no lab runs Bricks as the active theme to verify it.
-Next candidates: Bricks (behind a lab with the theme active), the Freemius
+**Wave 2 (shipped 2026-07-10, same day):** Beaver Builder (activate +
+re-verify via `FLUpdater::save_subscription_license` /
+`get_subscription_info`; no safe deactivate exists so none is offered),
+Brizy Pro (activate + deactivate via its singleton; its exceptions carry the
+vendor message), Etch (activate + deactivate via its SureCart wrapper
+singleton, plus a dedicated reader for its `etch_license_key` /
+`etch_license_status` options that the generic SureCart sweep missed), and
+Bricks when it is the ACTIVE theme (activate + re-verify through the public
+static key + the non-ajax `activate_license()` path, which only persists on
+a real status response; its deactivate handler nonce-checks unconditionally,
+so deactivation stays on the Bricks screen). The contract also gained
+`activate_url` for portal-handshake vendors with no callable path: WPBakery
+rows now carry an "Activate ↗" link to its own activation screen instead of
+a paste field that could not work. All four callable vendors were
+plumbing-verified with bogus keys against their live APIs (clean vendor
+messages surfaced, zero leftover state).
+
+**Still deferred: Divi** (its code only loads while the theme is active, and
+it needs two secrets: username + API key, a `secret_fields` contract
+extension nothing else requires yet). Next candidates: Divi, the Freemius
 and EDD SDK families (one adapter, many products), Envato purchase-code
-vendors (the `secret_label` key already models the different secret type).
+direct activation where a vendor exposes one.
 
 The guardrails, unchanged and load-bearing:
 

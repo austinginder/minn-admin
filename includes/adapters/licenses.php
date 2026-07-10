@@ -451,6 +451,30 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Etch: its own wrapper around the SureCart SDK stores in plain options
+	// (etch_license_key / etch_license_status, status 'valid' when active;
+	// the key may instead live in the ETCH_LICENSE_KEY constant). A dedicated
+	// reader beats the generic SureCart sweep, and claiming the component
+	// keeps the generic layer off it.
+	$providers['etch'] = array(
+		'name'      => 'Etch',
+		'component' => 'etch/etch.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'etch/etch.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$key      = get_option( 'etch_license_key' );
+			$constant = defined( 'ETCH_LICENSE_KEY' ) && ETCH_LICENSE_KEY;
+			if ( ! $key && ! $constant ) {
+				return array( $item( array( 'name' => 'Etch', 'state' => 'missing' ) ) );
+			}
+			$status = strtolower( (string) get_option( 'etch_license_status' ) );
+			$state  = 'valid' === $status ? 'valid' : ( '' === $status ? 'unknown' : 'invalid' );
+			$note   = $constant ? 'Key set in wp-config (ETCH_LICENSE_KEY)' : ( 'valid' === $status ? '' : ( $status ? str_replace( '_', ' ', $status ) : 'Key stored; no recorded status' ) );
+			return array( $item( array( 'name' => 'Etch', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
 	// AnalyticsWP: site option {key, last_check, is_expired?, is_on_free_trial,
 	// free_trial_end} via its bundled WooSoftwareLicense toolkit.
 	$providers['analyticswp'] = array(
@@ -592,6 +616,96 @@ function minn_admin_license_default_providers() {
 			$msg     = ( is_array( $errs ) && $errs ) ? wp_strip_all_tags( (string) $errs[0] ) : '';
 			return array( 'ok' => ! $flagged, 'code' => $flagged ? 'invalid' : '', 'message' => $flagged ? $msg : '' );
 		};
+	}
+
+	// Beaver Builder: save_subscription_license() is their whole flow —
+	// remote activate_domain, option write (cleared again on error) and
+	// cache busts. No safe deactivate exists (their form just clears the
+	// field locally), so none is offered.
+	if ( class_exists( 'FLUpdater' ) && method_exists( 'FLUpdater', 'save_subscription_license' ) ) {
+		$providers['beaver-builder']['secret_label'] = 'Beaver Builder license key';
+		$providers['beaver-builder']['activate']     = function ( $secret ) {
+			$res = FLUpdater::save_subscription_license( $secret );
+			$err = ( is_object( $res ) && ! empty( $res->error ) ) ? wp_strip_all_tags( (string) $res->error ) : '';
+			if ( $err ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => $err );
+			}
+			FLUpdater::get_subscription_info(); // warm their status cache for read()
+			return array( 'ok' => true );
+		};
+		$providers['beaver-builder']['verify'] = function () {
+			delete_transient( 'fl_get_subscription_info' );
+			$info   = FLUpdater::get_subscription_info();
+			$active = $info && ! empty( $info->active );
+			return array( 'ok' => (bool) $active, 'code' => $active ? '' : 'invalid', 'message' => $active ? '' : 'Beaver Builder reports the subscription as not active for this domain' );
+		};
+	}
+
+	// Brizy Pro: their singleton's activate/deactivate throw an Exception
+	// carrying the vendor message on failure; the action endpoint's
+	// Throwable guard turns that into a plain error result.
+	if ( class_exists( 'BrizyPro_Admin_License' ) ) {
+		$providers['brizy-pro']['secret_label'] = 'Brizy Pro license key';
+		$providers['brizy-pro']['activate']     = function ( $secret ) {
+			BrizyPro_Admin_License::_init()->activate( array( 'key' => $secret ) );
+			return array( 'ok' => true );
+		};
+		$providers['brizy-pro']['deactivate'] = function () {
+			BrizyPro_Admin_License::_init()->deactivate( array() );
+			return array( 'ok' => true );
+		};
+	}
+
+	// Bricks (active theme only): the non-ajax activate_license() path reads
+	// the PUBLIC static key, only persists on a real status response, and
+	// returns the status string (void = not recognized). Their deactivate
+	// and revalidate handlers nonce-check unconditionally, so deactivation
+	// stays on their screen; verify reuses activation with the stored key
+	// (their own revalidate does exactly that).
+	if ( class_exists( '\Bricks\License' ) ) {
+		$providers['bricks']['secret_label'] = 'Bricks license key';
+		$providers['bricks']['activate']     = function ( $secret ) {
+			\Bricks\License::$license_key = $secret;
+			$status = \Bricks\License::activate_license();
+			if ( 'active' === $status ) {
+				return array( 'ok' => true );
+			}
+			if ( 'error_remote' === $status ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'The Bricks license server is temporarily unavailable' );
+			}
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => $status ? 'Bricks returned status: ' . $status : 'Bricks did not recognize that key' );
+		};
+		$providers['bricks']['verify'] = function () {
+			$key = get_option( 'bricks_license_key' );
+			if ( ! $key ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+			}
+			delete_transient( 'bricks_license_status' );
+			\Bricks\License::$license_key = $key;
+			$status = \Bricks\License::activate_license();
+			return array( 'ok' => 'active' === $status, 'code' => 'active' === $status ? '' : 'invalid', 'message' => 'active' === $status ? '' : (string) $status );
+		};
+	}
+
+	// Etch: wrapper methods throw readable messages; status lands in the
+	// options its reader above consumes.
+	if ( class_exists( '\Etch\WpAdmin\License' ) ) {
+		$providers['etch']['secret_label'] = 'Etch license key';
+		$providers['etch']['activate']     = function ( $secret ) {
+			\Etch\WpAdmin\License::get_instance()->activate_license( $secret );
+			return array( 'ok' => true );
+		};
+		$providers['etch']['deactivate'] = function () {
+			\Etch\WpAdmin\License::get_instance()->deactivate_license();
+			return array( 'ok' => true );
+		};
+	}
+
+	// WPBakery activation is a token handshake through support.wpbakery.com
+	// (no paste-a-code callable exists), so the honest control is a link to
+	// its own activation screen.
+	if ( isset( $providers['js-composer'] ) ) {
+		$providers['js-composer']['activate_url'] = admin_url( 'admin.php?page=vc-updater' );
 	}
 
 	return $providers;
@@ -811,6 +925,11 @@ function minn_admin_licenses() {
 			if ( $can ) {
 				$row['can']    = $can;
 				$row['secret'] = isset( $p['secret_label'] ) ? (string) $p['secret_label'] : 'License key';
+			}
+			// Vendors with no callable activation path (portal handshakes)
+			// can still hand the user a link to their own activation screen.
+			if ( ! empty( $p['activate_url'] ) ) {
+				$row['activateUrl'] = (string) ( is_callable( $p['activate_url'] ) ? call_user_func( $p['activate_url'] ) : $p['activate_url'] );
 			}
 			$items[] = $row;
 		}

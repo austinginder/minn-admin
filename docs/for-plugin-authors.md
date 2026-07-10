@@ -704,6 +704,11 @@ buried in a generic error. Actions run through
 error result. After any action the fresh classification rides back in the same
 response, so the card repaints from your stored state.
 
+If activation happens through your own portal or an OAuth-style handshake (no
+callable path for a pasted key), declare `activate_url` (a URL string or a
+callable returning one) instead of `activate`: unlicensed rows then carry an
+"Activate ↗" link to your screen. The bundled WPBakery entry is the reference.
+
 ## Comments detection — `minn_admin_comments_enabled`
 
 Minn hides its Comments view, palette commands and badge when commenting is effectively

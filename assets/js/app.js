@@ -4855,6 +4855,8 @@
 			const controls = [
 				can.includes( 'activate' ) && it.state !== 'valid'
 					? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || 'License key' ) }">Activate…</button>` : '',
+				! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid'
+					? `<button data-lic="href" data-href="${ esc( it.activateUrl ) }">Activate ↗</button>` : '',
 				can.includes( 'deactivate' ) && it.state === 'valid'
 					? `<button data-lic="deactivate" data-provider="${ esc( it.source ) }" data-name="${ esc( it.name ) }">Deactivate</button>` : '',
 				can.includes( 'verify' ) && it.key
@@ -5029,6 +5031,10 @@
 		$$( '[data-lic]', view ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
 			const action = btn.dataset.lic;
 			const provider = btn.dataset.provider;
+			if ( 'href' === action ) {
+				window.open( btn.dataset.href, '_blank', 'noopener' );
+				return;
+			}
 			if ( 'deactivate' === action ) {
 				if ( ! confirm( `Deactivate the ${ btn.dataset.name } license on this site? The seat frees up, and the plugin may stop receiving updates until a license is activated again.` ) ) return;
 				licRun( provider, 'deactivate', '', btn );
