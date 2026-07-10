@@ -28,6 +28,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Caching** | Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket, WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor CSS | **Clear site cache** action (⌘K) |
 | **Custom fields** | ACF (+ Pro) | Editor panel |
 | **Ecommerce** | WooCommerce | **Orders** surface + Overview stats |
+| **Spam filtering** | Akismet, Antispam Bee, CleanTalk | Settings → Spam provider cards; open via `minn_admin_spam_providers` |
 | **Page builders** | Elementor, Beaver Builder, Brizy, Divi, Bricks, WPBakery, Etch | Detected, fenced, "Edit in ⟨builder⟩" |
 | **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |

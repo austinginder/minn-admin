@@ -264,6 +264,22 @@ class Minn_Admin_Surfaces {
 			}
 		}
 
+		// Spam providers: same seed-plus-filter shape as cache purgers.
+		$sp_rows = array();
+		if ( function_exists( 'minn_admin_spam_providers' ) ) {
+			$spam = self::contributions( 'minn_admin_spam_providers', array() );
+			foreach ( minn_admin_spam_providers() as $p ) {
+				if ( ! is_array( $p ) || empty( $p['id'] ) ) {
+					continue;
+				}
+				$sp_rows[] = array(
+					'id'    => (string) $p['id'],
+					'label' => isset( $p['name'] ) ? (string) $p['name'] : (string) $p['id'],
+					'owner' => isset( $spam['owners'][ $p['id'] ] ) ? $spam['owners'][ $p['id'] ] : 'Minn Admin',
+				);
+			}
+		}
+
 		// Page builders: the registry is already active-only (each bundled
 		// entry gates on its plugin's constant; `detect` is per-post, not
 		// plugin-active). Bundled entries seed before the filter, so the
@@ -319,6 +335,7 @@ class Minn_Admin_Surfaces {
 			'panels'     => $p_rows,
 			'designs'    => $d_rows,
 			'cache'      => $c_rows,
+			'spam'       => $sp_rows,
 			'builders'   => $b_rows,
 			'blockForms' => $f_rows,
 			'listeners'  => $listeners,

@@ -4593,6 +4593,7 @@
 			intg.panels.forEach( ( r ) => lines.push( `- Editor panel ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
 			intg.designs.forEach( ( r ) => lines.push( `- Design source ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
 			intg.cache.forEach( ( r ) => lines.push( `- Cache purger ${ r.id } (${ r.label }) — ${ r.owner }` ) );
+			( intg.spam || [] ).forEach( ( r ) => lines.push( `- Spam filter ${ r.id } (${ r.label }) — ${ r.owner }` ) );
 			intg.builders.forEach( ( r ) => lines.push( `- Page builder ${ r.id } (${ r.label }) — ${ r.owner }` ) );
 			intg.blockForms.forEach( ( r ) => lines.push( `- Block forms: ${ r.owner } — ${ r.count } block${ r.count === 1 ? '' : 's' }` ) );
 			intg.listeners.forEach( ( l ) => lines.push( `- ${ l.hook }: ${ l.owners.join( ', ' ) }` ) );
@@ -4734,6 +4735,7 @@
 				${ intSection( 'Editor panels', intg.panels, ( r ) => 'cap: ' + r.cap ) }
 				${ intSection( 'Design sources', intg.designs ) }
 				${ intSection( 'Cache purgers', intg.cache ) }
+				${ intSection( 'Spam filters', intg.spam || [] ) }
 				${ intSection( 'Page builders', intg.builders ) }
 				${ intPlain( 'Block inspector forms', intg.blockForms.map( ( r ) => ( { a: r.owner, b: r.count + ' block' + ( r.count === 1 ? '' : 's' ) } ) ) ) }
 				${ intPlain( 'Hook listeners', intg.listeners.map( ( l ) => ( { a: l.hook, b: l.owners.join( ', ' ), mono: true } ) ) ) }
@@ -4869,7 +4871,7 @@
 
 	/* ===== Settings ===== */
 
-	const SETTINGS_SECTIONS = [ 'General', 'Writing', 'Reading', 'Discussion', 'Permalinks' ];
+	const SETTINGS_SECTIONS = [ 'General', 'Writing', 'Reading', 'Discussion', 'Spam', 'Permalinks' ];
 	const POST_FORMATS = [ 'standard', 'aside', 'chat', 'gallery', 'link', 'image', 'quote', 'status', 'video', 'audio' ];
 	const PERMALINK_PRESETS = [
 		[ '', 'Plain' ],
@@ -4880,18 +4882,19 @@
 	];
 
 	async function loadSettings() {
-		const [ values, categories, pages, permalinks ] = await Promise.all( [
+		const [ values, categories, pages, permalinks, spam ] = await Promise.all( [
 			api( 'wp/v2/settings' ),
 			api( 'wp/v2/categories?per_page=100&_fields=id,name' ).catch( () => [] ),
 			api( 'wp/v2/pages?per_page=100&status=publish&orderby=title&order=asc&_fields=id,title' ).catch( () => [] ),
 			api( 'minn-admin/v1/permalinks' ).catch( () => null ),
+			api( 'minn-admin/v1/spam' ).catch( () => null ),
 		] );
 		const siteIcon = values.site_icon
 			? await api( `wp/v2/media/${ values.site_icon }?_fields=id,source_url,media_details` )
 				.then( ( m ) => ( { url: ( m.media_details && m.media_details.sizes && m.media_details.sizes.thumbnail && m.media_details.sizes.thumbnail.source_url ) || m.source_url } ) )
 				.catch( () => null )
 			: null;
-		state.cache.settings = { values, categories, pages, permalinks, siteIcon };
+		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon };
 	}
 
 	/**
@@ -5118,6 +5121,60 @@
 					{ id: 'show_avatars', label: 'Show avatars', desc: 'Display profile pictures next to comments.', on: !! s.show_avatars },
 				].map( toggle ).join( '' ),
 			};
+			case 'Spam': {
+				// Provider cards from minn-admin/v1/spam (adapters/spam.php):
+				// Akismet / Antispam Bee / CleanTalk bundled, third parties via
+				// the minn_admin_spam_providers filter. Provider toggles and the
+				// core blocklist save through the same endpoint (see saveBtn).
+				const sp = cache.spam;
+				if ( ! sp ) return {
+					sub: 'Spam protection couldn’t be loaded.',
+					fields: `<div class="minn-editor-locked-note">Manage spam filtering in the classic admin instead. <a href="${ esc( B.site.adminUrl ) }plugins.php">Open plugins ↗</a></div>`,
+					toggles: '',
+					noSave: true,
+				};
+				const cards = sp.providers.map( ( p ) => `
+					<div class="minn-spam-provider">
+						<div class="minn-spam-head">
+							<span class="minn-spam-name">${ esc( p.name ) }</span>
+							<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : 'Needs setup' }</span>
+							${ p.blocked ? `<span class="minn-spam-blocked">${ esc( String( p.blocked ) ) } blocked all-time</span>` : '' }
+							${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( p.adminUrl ) }" target="_blank" rel="noopener">Full settings ↗</a>` : '' }
+						</div>
+						<div class="minn-toggle-desc">${ esc( p.note ) }</div>
+						${ p.toggles.length ? `<div class="minn-toggle-rows">${ p.toggles.map( ( t ) => `
+							<div class="minn-toggle-row">
+								<div class="minn-toggle-info">
+									<div class="minn-toggle-label">${ esc( t.label ) }</div>
+									<div class="minn-toggle-desc">${ esc( t.desc ) }</div>
+								</div>
+								<button class="minn-switch${ t.on ? ' on' : '' }" data-spamtog="${ esc( p.id ) }:${ esc( t.id ) }" role="switch" aria-checked="${ t.on }"><span class="minn-switch-knob"></span></button>
+							</div>` ).join( '' ) }</div>` : '' }
+					</div>` ).join( '' );
+				const empty = sp.providers.length ? '' : `
+					<div class="minn-editor-locked-note">No spam filter plugin is active. Install Akismet, Antispam Bee or CleanTalk from <a href="#" id="minn-spam-ext">Extensions</a> and it appears here. Core's blocklist below still works on its own.</div>`;
+				// The queue row follows the app's comments detection (Disable
+				// Comments and friends) — a Review button must never navigate
+				// to a route the nav itself hides.
+				const queue = B.comments ? `
+					<div class="minn-spam-queue">
+						<span>${ sp.queue.spam } comment${ sp.queue.spam === 1 ? '' : 's' } in the spam queue${ sp.queue.pending ? ` · ${ sp.queue.pending } pending review` : '' }</span>
+						<button class="minn-btn-soft" id="minn-spam-queue" type="button">Review spam →</button>
+					</div>` : `
+					<div class="minn-spam-queue">
+						<span>Commenting is disabled on this site, so there is no comment spam queue to review.</span>
+					</div>`;
+				return {
+					sub: 'Who filters comment spam, and what happens to it.',
+					fields: cards + empty + queue + `
+						<div>
+							<div class="minn-field-label">Disallowed comment keys</div>
+							<textarea class="minn-input mono minn-surface-textarea" id="minn-spam-keys" rows="5" placeholder="one word, IP, email or URL fragment per line">${ esc( sp.disallowed_keys ) }</textarea>
+							<div class="minn-toggle-desc">Core’s built-in filter: comments containing any of these go straight to the spam folder. One entry per line.</div>
+						</div>`,
+					toggles: '',
+				};
+			}
 			default: {
 				const pl = cache.permalinks;
 				if ( ! pl ) return {
@@ -5191,6 +5248,25 @@
 					: ( INT_TOGGLES.includes( id ) ? ( on ? 1 : 0 ) : on );
 			} )
 		);
+
+		// Spam section: provider switches just flip locally (all states are
+		// collected at save); the queue button jumps to the Comments spam tab.
+		$$( '[data-spamtog]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				btn.classList.toggle( 'on' );
+				btn.setAttribute( 'aria-checked', btn.classList.contains( 'on' ) );
+			} )
+		);
+		const spamQueueBtn = $( '#minn-spam-queue', view );
+		if ( spamQueueBtn ) {
+			spamQueueBtn.addEventListener( 'click', () => {
+				state.commentTab = 'spam';
+				state.cache.comments = null;
+				go( 'comments' );
+			} );
+		}
+		const spamExt = $( '#minn-spam-ext', view );
+		if ( spamExt ) spamExt.addEventListener( 'click', ( e ) => { e.preventDefault(); go( 'extensions' ); } );
 
 		// Site icon: pick from the library, drag & drop an upload, or remove.
 		// The chosen attachment ID rides the normal save as pending.site_icon.
@@ -5276,6 +5352,27 @@
 		if ( saveBtn ) {
 			saveBtn.addEventListener( 'click', async () => {
 				saveBtn.disabled = true;
+				if ( state.settingsSection === 'Spam' ) {
+					// Provider toggles + the core blocklist save through one
+					// endpoint; the response is the fresh page state.
+					const toggles = {};
+					$$( '[data-spamtog]', view ).forEach( ( btn ) => {
+						const [ pid, tid ] = btn.dataset.spamtog.split( ':' );
+						( toggles[ pid ] = toggles[ pid ] || {} )[ tid ] = btn.classList.contains( 'on' );
+					} );
+					const body = { toggles };
+					const keysEl = $( '#minn-spam-keys', view );
+					if ( keysEl ) body.disallowed_keys = keysEl.value;
+					try {
+						cache.spam = await api( 'minn-admin/v1/spam', { method: 'POST', body: JSON.stringify( body ) } );
+						toast( 'Spam settings saved' );
+						renderSettings();
+					} catch ( err ) {
+						toast( err.message, true );
+					}
+					saveBtn.disabled = false;
+					return;
+				}
 				if ( state.settingsSection === 'Permalinks' ) {
 					const payload = {};
 					$$( '[data-key]', view ).forEach( ( input ) => {
