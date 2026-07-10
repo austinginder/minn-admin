@@ -20,6 +20,8 @@ Minn's whole extension surface is a small set of public hooks. The main ones:
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
 | `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
+| `minn_admin_cache_purgers` | filter | Join the "Clear site cache" palette command |
+| `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
 tooling that wants to render into the page attaches at `minn_admin_template_footer`; the
@@ -40,6 +42,19 @@ Minn bundles adapters (in `includes/adapters/`) only for popular plugins that do
 Minn — Gravity Forms, ACF, Redirection, the analytics providers. If you're the author of the
 plugin being integrated, ship the adapter with it instead; [Anchor Blocks](https://github.com/anchorhost/anchor-blocks)
 does exactly this in `app/MinnAdmin.php`.
+
+## Compatibility
+
+The hooks above, and the descriptor keys documented on this page, are Minn's integration
+contract. The intent is that it changes rarely, and additively:
+
+- New hooks and descriptor keys may appear in any release; documented keys keep their
+  meaning.
+- If a documented hook or key ever has to change, the old form keeps working for a
+  deprecation window and the change is called out in the changelog.
+- Keys you find in Minn's bundled adapters but not on this page are internal and may
+  change without notice. If you need one, open an issue so it can be documented and
+  stabilized here.
 
 ## Quick start
 
@@ -80,6 +95,8 @@ That's a working, paginated, capability-gated view in the Minn sidebar.
 | `icon` | Icon name from Minn's set: `inbox`, `send`, `doc`, `img`, `chat`, `cart`, `users`, `gear`, `plug`, `grid`, `list` |
 | `cap` | Capability required. Checked server-side; the surface is absent from the app for users without it |
 | `collection` | The list definition (below) |
+| `family` | Group id for surfaces that do the same job (`forms`, `mail`, `redirects`, `activity-log`, `snippets`, `backups`, or your own). Same-family surfaces share one sidebar entry with a provider switcher in the topbar badge; the user's pick is remembered per family |
+| `manage` | Optional second collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Gravity Forms uses it for Entries / Forms |
 
 ### `collection`
 
@@ -91,11 +108,12 @@ That's a working, paginated, capability-gated view in the Minn sidebar.
 | `pageQuery` | Pagination template, default `per_page=25&page={page}`. `{page}` is 1-based; use `{page0}` for zero-based APIs (Redirection). Use your API's own style, e.g. Gravity Forms' `paging[page_size]=25&paging[current_page]={page}` |
 | `itemsKey` / `totalKey` | Where items/total live in the response body. Omit both for standard WP collections (plain array + `X-WP-Total` header) |
 | `tabs` | Either `{ "route": "...", "valueKey": "id", "labelKey": "title" }` to build tabs from a REST call, or `{ "param": "status", "static": [["sent","Sent"],["failed","Failed"]] }` for fixed tabs sent as a query param. `allLabel` names the first tab |
-| `columns` | Array of `{ key, label, format }`. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `entry-summary` (first scalar values of numeric keys — useful for form entries) |
-| `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `labels` (resolve field keys to human labels from another route), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
-| `actions` | Buttons in the detail modal: `{ label, method, route, body, confirm, danger }`. `{id}` in the route is replaced with the item id |
+| `viewLabel` | Names this collection in the view switcher (with `manage`) and in the search placeholder |
+| `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `entry-summary` (first scalar values of numeric keys — useful for form entries). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`) |
+| `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `sectionsRoute` (server-built display model, an alternative to `detailRoute` + `labels`, below), `labels` (resolve field keys to human labels from another route), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
+| `actions` | Buttons in the detail modal: `{ label, method, route, body, confirm, danger, when, href }`. `{id}` in the route is replaced with the item id. `when: { key, equals }` shows the button only when the item's field matches (Activate vs Deactivate). `href` renders the action as a plain link instead of a request; `{field}` placeholders are filled from the item |
 | `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request. For APIs that take search criteria as a JSON string (Gravity Forms), use the object form: `array( 'param' => 'search', 'json' => <criteria array with '{q}' where the term goes> )` — the term is JSON-escaped and the criteria double-URL-encoded to match APIs that `urldecode()` the param themselves |
-| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along |
+| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array) |
 
 ### `detail.edit` — inline editing in the detail modal
 
@@ -122,12 +140,40 @@ reads and writes `{ "action_data": { "url": … } }`), `mono` renders a monospac
 `type: "number"` sends a numeric value. Fields shown as inputs are hidden from the static
 detail rows automatically. The bundled Redirection adapter is the reference.
 
+### `detail.sectionsRoute` — server-built detail view
+
+Instead of `detailRoute` + `labels`, your endpoint can return the whole display model in
+one response, with labels already resolved server-side. `sectionsRoute` (with `{id}`)
+must return:
+
+```json
+{
+    "kind": "entry",
+    "sections": [
+        { "title": "Response",   "rows": [ { "label": "Email", "value": "dana@example.com", "type": "email" } ] },
+        { "title": "Submission", "rows": [ { "label": "Date",  "value": "2026-07-09 14:02" } ] }
+    ],
+    "adminUrl": "https://example.com/wp-admin/admin.php?page=…"
+}
+```
+
+`kind` picks the layout: `"entry"` renders the contact-style form-entry view (name and
+email hero, message body, quiet meta), `"activity"` renders the audit-event view (who,
+event message, context chips). Omit it for a plain grouped key/value view. Surfaces in
+the `forms` family default to `entry` and `activity-log` to `activity`, so those
+usually don't need `kind` at all. A row's `type` hints rendering (`email` and `url`
+values become links). `adminUrl` links the item's wp-admin screen and suppresses any
+`href` action that points at the same place. The bundled Gravity Forms adapter
+(entries) and WP Activity Log adapter (events) are the references.
+
 ## Block inspector forms — `minn_admin_block_forms`
 
 Minn's editor renders complex blocks as read-only islands, and the **block inspector** (the ⚙
 chip on every island) generates a config form from each block's registered attribute schema.
-A schema can't express intent, though — that `role` is a two-value enum, that `content` wants
-a textarea, or what a human label is. This filter layers that on:
+The schema goes a long way on its own: attributes with an `enum` render as selects, an
+attribute named `content` (or holding long text) gets a textarea, and labels are humanized
+from the key. What a schema can't express is the rest of the intent: a friendlier label than
+the key name, human option labels, a guaranteed textarea. This filter layers that on:
 
 ```php
 add_filter( 'minn_admin_block_forms', function ( $forms ) {
@@ -153,6 +199,11 @@ Per attribute: `label`, `control` (`text` · `textarea` · `select` · `number` 
 inspector falls back to schema-derived controls, so this is refinement, not requirement.
 Attributes with a `source` (stored in saved HTML) are never form-edited.
 
+Prefer expressing what you can in the attribute schema itself: declare `enum` on
+fixed-choice attributes and the generic form renders a select with no descriptor at all
+(and every other schema consumer benefits too). Reach for `options` only when the raw
+values need human labels.
+
 ### Dynamic blocks insert automatically — no descriptor needed
 
 If your block is **fully server-rendered** (a `render_callback` or `render` file does the
@@ -174,10 +225,13 @@ To make the most of the auto-insert, register your blocks well server-side:
 
 - **`title` in PHP registration** (or `block.json`) — without it Minn falls back to a
   humanized slug ("report-card" → "Report Card").
-- **`parent` / `ancestor` for child blocks** — declared children are excluded from top-level
-  insertion, exactly like Gutenberg's inserter.
+- **`parent` / `ancestor` for child blocks, declared server-side** — declared children are
+  excluded from top-level insertion, exactly like Gutenberg's inserter. A `parent` that
+  only exists in your editor JS is invisible to Minn (and to every other server-side
+  consumer), so your child blocks would show up as standalone inserts.
 - **`supports.inserter = false`** hides a block entirely.
-- **Attribute schemas in PHP** — they are what the inspector's generated form is built from.
+- **Attribute schemas in PHP** — they are what the inspector's generated form is built
+  from; `enum` attributes become selects, defaults pre-fill.
 
 Static-save blocks (HTML produced by your editor JS `save()`) never auto-insert; only your
 JS can produce their markup. Give those an explicit `insert.template` below.
@@ -424,6 +478,43 @@ reference implementation), **WP Statistics**, **Burst Statistics** and **Indepen
 Analytics** — the first active provider answers, so a plugin registering its own adapter
 should return early when `$traffic` is already non-null.
 
+## Cache purgers — join "Clear site cache"
+
+Minn's ⌘K palette has a "Clear site cache" command that purges every detected cache
+layer, one request per provider. Caching and optimization plugins register a purger via
+the `minn_admin_cache_purgers` filter:
+
+```php
+add_filter( 'minn_admin_cache_purgers', function ( $purgers ) {
+    $purgers[] = array(
+        'id'    => 'my-cache',   // stable slug
+        'name'  => 'My Cache',   // shown in the palette entry and the result toast
+        'purge' => function () {
+            my_cache_flush_everything();
+        },
+    );
+    return $purgers;
+} );
+```
+
+The command is only exposed to users with `manage_options`, and your `purge` callback
+runs server-side on that request; no extra capability check is needed for the common
+case. A dozen providers ship bundled in `includes/adapters/cache-purge.php` (LiteSpeed,
+WP Rocket, W3 Total Cache, …); copy any of them.
+
+## Comments detection — `minn_admin_comments_enabled`
+
+Minn hides its Comments view, palette commands and badge when commenting is effectively
+off (no post type supports comments and none exist). Plugins that manage commenting can
+override the detection:
+
+```php
+add_filter( 'minn_admin_comments_enabled', function ( $enabled, $types ) {
+    // $types = post types that still support comments.
+    return false; // force-hide (or true to force-show)
+}, 10, 2 );
+```
+
 ## No REST API? Ship a shim
 
 If your data lives in custom tables, register a small read-only REST collection and point the
@@ -442,4 +533,3 @@ plus a descriptor. Rules of the road: check capabilities in `permission_callback
   checks; PRs adding adapters for widely-used plugins are welcome. Prefer shipping the
   adapter **inside your plugin** when you own the product; Minn bundles only for plugins
   that will never know about it.
-- Column keys support dot paths (`initiator_data.user_login`) plus an optional `altKey` fallback.
