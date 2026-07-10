@@ -1536,6 +1536,13 @@ class Minn_Admin_REST {
 			}
 		}
 
+		// Extracted admin notices (class-minn-admin-notices.php) — captured
+		// per user, so capability gating already happened inside the
+		// plugins' own callbacks at capture time.
+		foreach ( Minn_Admin_Notices::items_for_user() as $n ) {
+			$items[] = $n;
+		}
+
 		if ( current_user_can( 'list_users' ) ) {
 			$users = get_users(
 				array(
