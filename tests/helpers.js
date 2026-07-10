@@ -44,11 +44,15 @@ async function launch() {
 }
 
 async function login( page ) {
-	await page.goto( BASE + '/wp-login.php' );
+	await page.goto( BASE + '/wp-login.php', { waitUntil: 'domcontentloaded' } );
 	await page.fill( '#user_login', USER );
 	await page.fill( '#user_pass', PASS );
-	await page.click( '#wp-submit' );
-	await page.waitForLoadState( 'networkidle' );
+	// Never wait for networkidle here: plugins that poll from wp-admin
+	// (Site Kit) keep the network busy forever.
+	await Promise.all( [
+		page.waitForNavigation( { waitUntil: 'domcontentloaded' } ),
+		page.click( '#wp-submit' ),
+	] );
 	// Land in the app so window.MINN (restUrl + nonce) is available to helpers.
 	await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
 	await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 15000 } );
@@ -124,7 +128,9 @@ function reporter( name ) {
 			this.check( 'No console/page errors', errors.length === 0, errors.join( ' | ' ) );
 			const failed = results.filter( ( r ) => ! r ).length;
 			console.log( `\n${ name }: ${ results.length - failed }/${ results.length } passed` );
-			await browser.close();
+			// Close can hang on plugins with long-lived admin connections
+			// (Site Kit) — never let it eat a finished run's exit code.
+			await Promise.race( [ browser.close(), new Promise( ( r ) => setTimeout( r, 5000 ) ) ] );
 			process.exit( failed ? 1 : 0 );
 		},
 	};
