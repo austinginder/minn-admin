@@ -91,13 +91,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				.filter( ( el ) => /^Perfmatters/.test( el.querySelector( '.minn-sys-ext-name' ).textContent.trim() ) ).length );
 		t.check( 'Perfmatters is not double-counted by the EDD sweep', perfCount === 1, String( perfCount ) );
 
-		// The inactive plugins carry the dimmed off state + explanation.
+		// Inactive components carry the dimmed off state + explanation. Use
+		// the Avada THEME row: minnadmin's active theme is minn-admin-theme,
+		// so Avada is reliably inactive regardless of which vendor plugins
+		// happen to be active (Austin toggles plugins live — never assume a
+		// specific plugin's active state in an assertion).
 		const off = await page.evaluate( () => {
 			const row = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
-				.find( ( el ) => el.querySelector( '.minn-sys-ext-name' ).textContent.trim().startsWith( 'SearchWP' ) );
-			return row ? row.classList.contains( 'off' ) : null;
+				.find( ( el ) => el.querySelector( '.minn-sys-ext-name' ).textContent.trim().startsWith( 'Avada' ) );
+			return row ? { off: row.classList.contains( 'off' ), note: /not active; activate the theme/.test( row.textContent ) } : null;
 		} );
-		t.check( 'inactive vendor rows are dimmed', off === true, String( off ) );
+		t.check( 'inactive component rows are dimmed and explained', off && off.off && off.note, JSON.stringify( off ) );
 
 	} finally {
 		await seed( 'clear' ).catch( () => {} );
