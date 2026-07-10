@@ -304,7 +304,8 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
-	// Gravity Forms stores the key md5-hashed and no local validity state.
+	// Gravity Forms stores the key md5-hashed; validity and expiry ride the
+	// gform_version_info option their update checker maintains.
 	$providers['gravityforms'] = array(
 		'name'      => 'Gravity Forms',
 		'component' => 'gravityforms/gravityforms.php',
@@ -313,11 +314,42 @@ function minn_admin_license_default_providers() {
 		},
 		'read'      => function () use ( $item ) {
 			$key = get_option( 'rg_gforms_key' );
+			if ( ! $key ) {
+				return array( $item( array( 'name' => 'Gravity Forms', 'state' => 'missing' ) ) );
+			}
+			$vi    = get_option( 'gform_version_info' );
+			$flag  = ( is_array( $vi ) && isset( $vi['is_valid_key'] ) ) ? (string) $vi['is_valid_key'] : null;
+			$state = null === $flag ? 'unknown' : ( '1' === $flag ? 'valid' : 'invalid' );
+			$expires = ( is_array( $vi ) && ! empty( $vi['expiration_time'] ) ) ? minn_admin_license_expiry( $vi['expiration_time'] ) : '';
+			if ( 'valid' === $state && minn_admin_license_expired( $expires ) ) {
+				$state = 'expired';
+			}
 			return array( $item( array(
-				'name'  => 'Gravity Forms',
+				'name'    => 'Gravity Forms',
+				'state'   => $state,
+				'key'     => true,
+				'expires' => $expires,
+				'note'    => null === $flag ? 'Key stored (hashed); no recorded check yet' : '',
+			) ) );
+		},
+	);
+
+	// Gravity SMTP: key inside the gravitysmtp_config JSON option; validity
+	// only known via its remote connector, so the read stays presence-based.
+	$providers['gravitysmtp'] = array(
+		'name'      => 'Gravity SMTP',
+		'component' => 'gravitysmtp/gravitysmtp.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'gravitysmtp/gravitysmtp.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$cfg = json_decode( (string) get_option( 'gravitysmtp_config' ), true );
+			$key = is_array( $cfg ) && ! empty( $cfg['license_key'] );
+			return array( $item( array(
+				'name'  => 'Gravity SMTP',
 				'state' => $key ? 'unknown' : 'missing',
-				'key'   => (bool) $key,
-				'note'  => $key ? 'Key stored (hashed); Gravity Forms keeps no local validity state' : '',
+				'key'   => $key,
+				'note'  => $key ? 'Key stored; re-verify to check it with Gravity' : '',
 			) ) );
 		},
 	);
@@ -755,6 +787,86 @@ function minn_admin_license_default_providers() {
 			delete_site_option( 'et_account_status' );
 			delete_site_transient( 'et_update_themes' );
 			return array( 'ok' => true, 'message' => 'Credentials removed; Elegant Themes has no per-site seats to release' );
+		};
+	}
+
+	// Gravity Forms: GFFormsModel::save_key() is their whole flow (md5,
+	// site registration, and it reverts to the previous key itself when the
+	// new one cannot be used). Empty key = unlink the site. The version-info
+	// refresh afterwards keeps the read-side classification current.
+	if ( class_exists( 'GFFormsModel' ) && class_exists( 'GFCommon' ) ) {
+		$gf_status = function () {
+			$connector = GFForms::get_service_container()->get( \Gravity_Forms\Gravity_Forms\License\GF_License_Service_Provider::LICENSE_API_CONNECTOR );
+			$info      = $connector->check_license( false, false );
+			GFCommon::get_version_info( false ); // refresh gform_version_info for read()
+			if ( $info->is_valid() ) {
+				return array( 'ok' => true );
+			}
+			$msg  = wp_strip_all_tags( (string) $info->get_error_message() );
+			$code = ( false !== stripos( $msg, 'sites' ) ) ? 'site_limit' : ( false !== stripos( $msg, 'expired' ) ? 'expired' : 'invalid' );
+			return array( 'ok' => false, 'code' => $code, 'message' => $msg ? $msg : 'Gravity Forms did not validate the key' );
+		};
+		$providers['gravityforms']['secret_label'] = 'Gravity Forms license key';
+		$providers['gravityforms']['activate']     = function ( $secret ) use ( $gf_status ) {
+			GFFormsModel::save_key( $secret );
+			if ( get_option( 'rg_gforms_key' ) !== md5( trim( $secret ) ) ) {
+				// Their own revert fired: the key was rejected outright.
+				GFCommon::get_version_info( false );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Gravity Forms did not accept that key' );
+			}
+			return $gf_status();
+		};
+		$providers['gravityforms']['deactivate'] = function () {
+			GFFormsModel::save_key( '' ); // unlinks the site with Gravity's server
+			GFCommon::get_version_info( false );
+			return array( 'ok' => true, 'message' => 'Site unlinked from the license' );
+		};
+		$providers['gravityforms']['verify'] = $gf_status;
+	}
+
+	// Gravity SMTP: validate through its container's license connector,
+	// persist through its own plugin-opts data store (which is what its
+	// settings endpoint does; constant locks stay respected).
+	if ( class_exists( '\Gravity_Forms\Gravity_SMTP\Gravity_SMTP' ) ) {
+		$smtp_check = function ( $key ) {
+			$container = \Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+			$info      = $container->get( \Gravity_Forms\Gravity_Tools\Updates\Updates_Service_Provider::LICENSE_API_CONNECTOR )->check_license( $key );
+			$status    = $info->get_status();
+			if ( \Gravity_Forms\Gravity_Tools\License\License_Statuses::VALID_KEY === $status ) {
+				return array( 'ok' => true );
+			}
+			$msg  = method_exists( $info, 'get_error_message' ) ? wp_strip_all_tags( (string) $info->get_error_message() ) : '';
+			$code = ( false !== stripos( (string) $status, 'number_of_sites' ) || false !== stripos( $msg, 'sites' ) ) ? 'site_limit'
+				: ( false !== stripos( (string) $status, 'expired' ) ? 'expired' : 'invalid' );
+			// Gravity's API answers an unknown key with a bare REST no-route;
+			// surface that as what it means.
+			if ( 'rest_no_route' === (string) $status || false !== stripos( $msg, 'No route was found' ) ) {
+				$msg = 'Gravity did not recognize that key';
+			}
+			return array( 'ok' => false, 'code' => $code, 'message' => $msg ? $msg : str_replace( '_', ' ', (string) $status ) );
+		};
+		$smtp_store = function () {
+			return \Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container()->get( \Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::DATA_STORE_PLUGIN_OPTS );
+		};
+		$providers['gravitysmtp']['secret_label'] = 'Gravity SMTP license key';
+		$providers['gravitysmtp']['activate']     = function ( $secret ) use ( $smtp_check, $smtp_store ) {
+			$result = $smtp_check( $secret );
+			if ( ! empty( $result['ok'] ) ) {
+				$smtp_store()->save( 'license_key', $secret ); // only a validated key is stored
+			}
+			return $result;
+		};
+		$providers['gravitysmtp']['deactivate'] = function () use ( $smtp_store ) {
+			$smtp_store()->save( 'license_key', '' );
+			return array( 'ok' => true );
+		};
+		$providers['gravitysmtp']['verify'] = function () use ( $smtp_check ) {
+			$cfg = json_decode( (string) get_option( 'gravitysmtp_config' ), true );
+			$key = is_array( $cfg ) && isset( $cfg['license_key'] ) ? (string) $cfg['license_key'] : '';
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+			}
+			return $smtp_check( $key );
 		};
 	}
 
