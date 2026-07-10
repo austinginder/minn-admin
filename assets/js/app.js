@@ -12217,7 +12217,9 @@
 		try {
 			const u = new URL( link.url );
 			u.searchParams.set( 'minn_notices', '1' );
-			u.searchParams.set( '_wpnonce', B.notices.nonce );
+			// Our nonce rides its own param — the link may carry the
+			// plugin's own _wpnonce, which its handler verifies.
+			u.searchParams.set( 'minn_nonce', B.notices.nonce );
 			const r = await fetch( u.toString(), { credentials: 'same-origin' } );
 			let captured = false;
 			try {

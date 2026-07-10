@@ -40,8 +40,10 @@ class Minn_Admin_Notices {
 		if ( empty( $_GET['minn_notices'] ) ) {
 			return;
 		}
-		if ( ! current_user_can( 'edit_posts' )
-			|| ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), self::NONCE_ACTION ) ) {
+		// Our nonce rides a dedicated param — notice action links carry the
+		// PLUGIN'S own _wpnonce, which must reach its handler untouched.
+		$nonce = sanitize_text_field( wp_unslash( $_GET['minn_nonce'] ?? $_GET['_wpnonce'] ?? '' ) );
+		if ( ! current_user_can( 'edit_posts' ) || ! wp_verify_nonce( $nonce, self::NONCE_ACTION ) ) {
 			wp_send_json( array( 'ok' => false ), 403 );
 		}
 		// admin-header.php prints the document head before in_admin_header
@@ -225,7 +227,7 @@ class Minn_Admin_Notices {
 	private static function links_of( $node ) {
 		$links     = array();
 		$seen      = array();
-		$own_nonce = sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) );
+		$own_nonce = sanitize_text_field( wp_unslash( $_GET['minn_nonce'] ?? $_GET['_wpnonce'] ?? '' ) );
 		foreach ( $node->getElementsByTagName( 'a' ) as $a ) {
 			$href = trim( (string) $a->getAttribute( 'href' ) );
 			if ( '' === $href || '#' === $href[0] || 0 === stripos( $href, 'javascript:' ) ) {
@@ -240,7 +242,9 @@ class Minn_Admin_Notices {
 			}
 			$is_action = false !== strpos( $url, 'minn_notices=' );
 			if ( $is_action ) {
-				$url = remove_query_arg( 'minn_notices', $url );
+				$url = remove_query_arg( array( 'minn_notices', 'minn_nonce' ), $url );
+				// A _wpnonce here is only stripped when it's OURS (legacy
+				// capture URLs) — a plugin's own action nonce must survive.
 				if ( $own_nonce && false !== strpos( $url, '_wpnonce=' . $own_nonce ) ) {
 					$url = remove_query_arg( '_wpnonce', $url );
 				}
@@ -406,7 +410,7 @@ class Minn_Admin_Notices {
 		return add_query_arg(
 			array(
 				'minn_notices' => 1,
-				'_wpnonce'     => self::nonce(),
+				'minn_nonce'   => self::nonce(),
 			),
 			admin_url( 'index.php' )
 		);
