@@ -1426,8 +1426,15 @@ function minn_admin_license_default_providers() {
 			$code = 'expired' === $word ? 'expired' : ( 'no_activations_left' === $word ? 'site_limit' : 'invalid' );
 			return array( 'ok' => false, 'code' => $code, 'message' => $word ? str_replace( '_', ' ', $word ) : 'Perfmatters did not accept that key' );
 		};
-		$providers['perfmatters']['deactivate'] = function () {
+		$providers['perfmatters']['deactivate'] = function () use ( $pm_del ) {
 			$ok = \Perfmatters\License::deactivate();
+			// Their deactivate() releases the seat and deletes the STATUS
+			// but keeps the key (they expose a separate "remove" action for
+			// that). Minn's single Deactivate means release-and-forget, so
+			// also drop the key — the row reads missing like the others.
+			if ( $ok ) {
+				call_user_func( $pm_del, 'perfmatters_edd_license_key' );
+			}
 			return array( 'ok' => (bool) $ok, 'code' => $ok ? '' : 'error', 'message' => $ok ? '' : 'Perfmatters could not release this site' );
 		};
 		$providers['perfmatters']['verify'] = function () {
