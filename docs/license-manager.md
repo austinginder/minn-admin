@@ -126,39 +126,56 @@ Graduate to a dedicated surface when Phase 1 adds actions. The notice digest
 already captures the vendors' own nag banners; rows here should link to the
 same activation deep-links the digest extracts.
 
-## Phase 1 — the activation vault (careful, per-vendor)
+## Phase 1 — activation (wave 1 SHIPPED 2026-07-10)
 
-Unchanged in substance from the original proposal: a
-`minn_admin_license_providers` filter where each provider declares
-`{ id, name, secret_label, status(), activate($secret), deactivate() }`,
-with bundled adapters calling the plugin's OWN activation code so seat
-rules, nonces and error handling stay the vendor's.
+Shipped as paste-to-activate on the Licenses card, with the locker question
+resolved by not building one: **no key is ever retained.** A pasted secret
+rides one request into the vendor's own activation code and is never stored,
+logged or echoed back. The provider contract grew three optional callables
+(`activate( $secret )`, `deactivate()`, `verify()`; documented in
+for-plugin-authors.md), attached only while the vendor's code is loaded, so
+the card never draws a control that cannot work. Results normalize to
+`{ ok, code, message }` with `site_limit` first-class, and nothing retries.
 
-The guardrails are non-negotiable:
+Wave-1 vendors: **Elementor Pro** (activate / deactivate / re-verify through
+`API::activate_license` + `Admin::set_license_key` + `API::set_license_data`,
+mirroring its own ajax handler; `no_activations_left` maps to `site_limit`),
+**ACF PRO** (activate / deactivate via `acf_pro_activate_license` /
+`acf_pro_deactivate_license`, silent mode), and **WP Rocket** (re-verify only
+via `rocket_check_key()`: its credentials ship inside the vendor's zip, so
+there is no key to paste; this also delivers the first slice of Phase 2).
+Plumbing was proven against the real Elementor API with a deliberately bogus
+key (clean `invalid` surfaced, nothing written, no retry); a real-key
+activation pass is the owner's manual step, same as the self-updater
+release-candidate test.
+
+**Deferred from wave 1: Bricks.** Its activation is an ajax handler whose
+non-ajax path only revalidates the ALREADY-STORED key; activating a new key
+without their nonce means pre-writing `bricks_license_key` and poking a
+static property, and no lab runs Bricks as the active theme to verify it.
+Next candidates: Bricks (behind a lab with the theme active), the Freemius
+and EDD SDK families (one adapter, many products), Envato purchase-code
+vendors (the `secret_label` key already models the different secret type).
+
+The guardrails, unchanged and load-bearing:
 
 - **Never reimplement a vendor's activation HTTP call.** Route through the
   plugin's own method. No callable path (form-POST-only vendors) means
   deep-link only, no adapter.
 - **"Site limit reached" is a first-class result.** Never auto-retry a failed
   activation; retries can burn paid seats.
-- **Paste-to-activate, don't retain, is the default.** A stored key locker is
-  opt-in and encrypted at rest.
+- **Paste-to-activate, never retain.** No locker shipped, none planned unless
+  a real need appears; if one ever lands it is opt-in and encrypted at rest.
 - **manage_options only.**
 
-Sequencing within Phase 1: Elementor Pro + Bricks first (clean activation
-calls, huge install base, and Phase 0 already reads their status), then the
-EDD and Freemius SDK families (one adapter covers many products: the real
-leverage), then Envato purchase-code vendors (`secret_label` already models
-the different secret type). Needs real test licenses on a lab before any
-code; a wrong activation costs actual money.
+## Phase 2 — freshness on demand (partially delivered with Phase 1)
 
-## Phase 2 — freshness on demand
-
-An optional "Re-verify now" per row that triggers the vendor's own
-revalidation (or clears its status transient so the vendor re-checks on its
-next admin load). This executes vendor code, so it deliberately stays out of
-Phase 0. Small, but it closes the staleness gap for the transient-based
-vendors.
+The `verify` callable in the Phase-1 contract IS this: a per-row "Re-verify"
+that triggers the vendor's own revalidation. Shipped for WP Rocket
+(`rocket_check_key()`) and Elementor Pro (`get_license_data( true )`); the
+remaining work is adding `verify` to more providers as their safe
+revalidation paths are identified (Bricks, Beaver Builder and Divi are the
+transient-based vendors that would benefit most).
 
 ## What Minn will never do here
 
@@ -169,7 +186,10 @@ the vendor's product.
 
 ## Status
 
-Phase 0 shipped 2026-07-10 (see the Phase 0 section above for what landed
-and the verification record). Phase 1 (the activation vault) stays parked
-behind test licenses and a locker decision; Phase 2 (re-verify on demand)
-follows Phase 1.
+Phase 0 shipped 2026-07-10 (visibility: the Licenses card, health check,
+SDK-generic readers). Phase 1 wave 1 shipped the same day (paste-to-activate
++ deactivate for Elementor Pro and ACF PRO, re-verify for WP Rocket and
+Elementor Pro, the documented provider action contract, no locker by
+design). Remaining: a real-key activation pass by the owner, then more
+vendors (Bricks, the Freemius and EDD SDK families, Envato purchase codes)
+and `verify` coverage for the transient-based vendors.
