@@ -7749,7 +7749,7 @@
 			$( '#minn-find-repall' ).addEventListener( 'click', findReplaceAll );
 		}
 		if ( ! findState ) findState = { query: '', replace: '', matchCase: false, matches: [], idx: 0 };
-		// ⌘F on selected text finds that text — muscle memory everywhere.
+		// ⌘⇧F on selected text finds that text — muscle memory everywhere.
 		const body = $( '#minn-editor-body' );
 		const sel = window.getSelection();
 		if ( body && sel.rangeCount && ! sel.isCollapsed && body.contains( sel.anchorNode ) ) {
@@ -12988,7 +12988,7 @@
 		// View modes are palette commands, not toolbar buttons — the toolbar
 		// is for formatting; focus/outline are how you LOOK at the document.
 		if ( state.route === 'editor' && state.editor ) {
-			if ( state.editor.mode !== 'locked' ) cmds.push( { label: 'Find & replace (⌘F)', kind: 'view', icon: '⌕', run: () => openFindBar() } );
+			if ( state.editor.mode !== 'locked' ) cmds.push( { label: 'Find & replace (⌘⇧F)', kind: 'view', icon: '⌕', run: () => openFindBar() } );
 			cmds.push( { label: 'Toggle focus mode (⌘⇧D)', kind: 'view', icon: '◎', run: () => toggleFocusMode() } );
 			cmds.push( { label: 'Toggle outline mode (⌘⇧O)', kind: 'view', icon: '☰', run: () => toggleOutlineMode() } );
 		}
@@ -13786,7 +13786,7 @@
 							<span class="minn-kbd">⌘S</span><span>Save, keeping the current status</span>
 							<span class="minn-kbd">⌘⏎</span><span>Publish, Update or Schedule</span>
 							<span class="minn-kbd">⌘/</span><span>Block library: browse every block, design and pattern</span>
-							<span class="minn-kbd">⌘F</span><span>Find &amp; replace in the post</span>
+							<span class="minn-kbd">⌘⇧F</span><span>Find &amp; replace in the post</span>
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
 							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
@@ -15693,11 +15693,12 @@
 				openBlockPicker( null );
 				return;
 			}
-			// ⌘F finds within the post — the editor owns find here (native
-			// find can't count, step or replace, and would match sidebar
-			// chrome). Locked mode falls through to the browser's own find
-			// over the read-only preview.
-			if ( ( e.metaKey || e.ctrlKey ) && ! e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'f' && state.route === 'editor' && state.editor && state.editor.mode !== 'locked' ) {
+			// ⌘⇧F finds within the post (the VS Code advanced-find gesture;
+			// fits the ⌘⇧D / ⌘⇧O family). Plain ⌘F deliberately stays the
+			// BROWSER'S — developers reach for native find constantly, and
+			// Minn's bar covers what it can't (count, step, replace, ignore
+			// sidebar chrome). Locked mode falls through to native find too.
+			if ( ( e.metaKey || e.ctrlKey ) && e.shiftKey && ! e.altKey && e.key.toLowerCase() === 'f' && state.route === 'editor' && state.editor && state.editor.mode !== 'locked' ) {
 				e.preventDefault();
 				openFindBar();
 				return;
