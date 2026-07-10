@@ -2235,6 +2235,31 @@
 		}
 	}
 
+	// Bulk moderation for the comments selection. Verbs are the current tab's
+	// own row actions, so the batch can never apply a status the tab doesn't
+	// offer. Per-item so one failure never aborts the rest.
+	async function runCommentBulk( status, label, btn ) {
+		const ids = Array.from( state.commentSel || [] );
+		if ( ! ids.length ) return;
+		if ( 'delete' === status && ! confirm( `Delete ${ ids.length } comment${ ids.length === 1 ? '' : 's' } permanently?` ) ) return;
+		btn.disabled = true;
+		btn.textContent = 'Working…';
+		let ok = 0, fail = 0;
+		for ( const id of ids ) {
+			try {
+				if ( 'delete' === status ) await api( `wp/v2/comments/${ id }?force=true`, { method: 'DELETE' } );
+				else await api( `wp/v2/comments/${ id }`, { method: 'POST', body: JSON.stringify( { status } ) } );
+				ok++;
+			} catch ( e ) { fail++; }
+		}
+		state.commentSel.clear();
+		state.commentLastIdx = null;
+		state.cache.comments = null;
+		refreshCommentBadge();
+		toast( fail ? `${ label }: ${ ok } done, ${ fail } failed` : `${ label } (${ ok })`, fail > 0 && ok === 0 );
+		if ( state.route === 'comments' ) renderComments();
+	}
+
 	function renderComments() {
 		const view = $( '#minn-view' );
 		if ( ! commentsAvailable() ) {
@@ -2270,11 +2295,14 @@
 				${ COMMENT_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.commentTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
+			<label class="minn-selall-inline"${ rows.length ? '' : ' hidden' }><input type="checkbox" id="minn-comment-selall"> Select page</label>
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'comment' ) }</div>
 		</div>
+		<div id="minn-comment-bulk-slot"></div>
 		<div class="minn-card">
 			${ rows.length ? rows.map( ( r ) => `
 				<div class="minn-comment-row" data-crow="${ r.id }">
+					<label class="minn-comment-check" title="Select"><input type="checkbox" class="minn-comment-cb" data-cbid="${ r.id }"></label>
 					${ r.avatar ? `<img class="minn-comment-avatar" src="${ esc( r.avatar ) }" alt="">` : '<div class="minn-comment-avatar"></div>' }
 					<div class="minn-comment-body">
 						<div class="minn-comment-head">
@@ -2339,6 +2367,68 @@
 				if ( box ) box.focus();
 			} )
 		);
+
+		// Bulk moderation — mirrors the content-list selection (shift-range,
+		// select-page, a bar in the slot updated in place). Bar verbs are the
+		// tab's own actions, so the same labels/toasts apply.
+		const csel = state.commentSel || ( state.commentSel = new Set() );
+		const bulkLabels = { approved: 'Approved', hold: state.commentTab === 'hold' ? 'Held' : ( state.commentTab === 'spam' ? 'Marked not spam' : 'Restored' ), spam: 'Marked as spam', trash: 'Trashed', delete: 'Deleted' };
+		const syncCommentBulk = () => {
+			const slot = $( '#minn-comment-bulk-slot', view );
+			if ( ! slot ) return;
+			if ( ! csel.size ) { slot.innerHTML = ''; }
+			else if ( ! $( '.minn-bulkbar', slot ) ) {
+				slot.innerHTML = `
+					<div class="minn-bulkbar">
+						<span class="minn-bulk-count">${ csel.size } selected</span>
+						${ actionsFor().map( ( [ st, label ] ) =>
+							`<button class="minn-btn-soft${ st === 'trash' || st === 'delete' ? ' danger' : '' }" data-cbulk="${ st }">${ label }</button>` ).join( '' ) }
+						<button class="minn-btn-soft" id="minn-comment-bulk-clear" style="margin-left:auto;">Clear</button>
+					</div>`;
+				$$( '[data-cbulk]', slot ).forEach( ( b ) =>
+					b.addEventListener( 'click', ( e ) => runCommentBulk( e.currentTarget.dataset.cbulk, bulkLabels[ e.currentTarget.dataset.cbulk ] || 'Updated', e.currentTarget ) ) );
+				$( '#minn-comment-bulk-clear', slot ).addEventListener( 'click', () => {
+					csel.clear();
+					$$( '.minn-comment-cb', view ).forEach( ( c ) => { c.checked = false; c.closest( '.minn-comment-row' ).classList.remove( 'sel' ); } );
+					const sa = $( '#minn-comment-selall', view );
+					if ( sa ) sa.checked = false;
+					syncCommentBulk();
+				} );
+			} else {
+				$( '.minn-bulk-count', slot ).textContent = csel.size + ' selected';
+			}
+			const sa = $( '#minn-comment-selall', view );
+			if ( sa ) sa.checked = rows.length > 0 && rows.every( ( r ) => csel.has( r.id ) );
+		};
+		// Reflect a selection that survived a re-render.
+		$$( '.minn-comment-cb', view ).forEach( ( cb ) => {
+			if ( csel.has( parseInt( cb.dataset.cbid, 10 ) ) ) { cb.checked = true; cb.closest( '.minn-comment-row' ).classList.add( 'sel' ); }
+		} );
+		syncCommentBulk();
+		const setCommentSel = ( id, on ) => {
+			if ( on ) csel.add( id ); else csel.delete( id );
+			const cb = view.querySelector( `.minn-comment-cb[data-cbid="${ id }"]` );
+			if ( cb ) { cb.checked = on; cb.closest( '.minn-comment-row' ).classList.toggle( 'sel', on ); }
+		};
+		$$( '.minn-comment-cb', view ).forEach( ( cb ) =>
+			cb.addEventListener( 'click', ( e ) => {
+				const id = parseInt( cb.dataset.cbid, 10 );
+				const idx = rows.findIndex( ( r ) => r.id === id );
+				if ( e.shiftKey && state.commentLastIdx != null && state.commentLastIdx !== idx && rows[ state.commentLastIdx ] ) {
+					const lo = Math.min( state.commentLastIdx, idx ), hi = Math.max( state.commentLastIdx, idx );
+					for ( let i = lo; i <= hi; i++ ) setCommentSel( rows[ i ].id, cb.checked );
+				} else {
+					setCommentSel( id, cb.checked );
+				}
+				state.commentLastIdx = idx;
+				syncCommentBulk();
+			} )
+		);
+		const cselAll = $( '#minn-comment-selall', view );
+		if ( cselAll ) cselAll.addEventListener( 'change', () => {
+			rows.forEach( ( r ) => setCommentSel( r.id, cselAll.checked ) );
+			syncCommentBulk();
+		} );
 		const replySend = $( '#minn-reply-send', view );
 		if ( replySend ) replySend.addEventListener( 'click', async () => {
 			const text = ( $( '#minn-reply-text' ) || {} ).value || '';

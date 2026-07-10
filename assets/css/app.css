@@ -1078,6 +1078,11 @@ input.minn-vis-extra { width: 100%; }
 /* ===== Comments ===== */
 .minn-comment-row { display: flex; gap: 13px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .minn-comment-row:last-child { border-bottom: none; }
+.minn-comment-row.sel { background: var(--accent-soft); }
+.minn-comment-check { display: flex; align-items: flex-start; padding-top: 3px; }
+.minn-comment-check input { cursor: pointer; width: 15px; height: 15px; accent-color: var(--accent); margin: 0; }
+.minn-selall-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text3); cursor: pointer; user-select: none; }
+.minn-selall-inline input { cursor: pointer; width: 14px; height: 14px; accent-color: var(--accent); margin: 0; }
 .minn-comment-avatar { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; background: var(--panel2); object-fit: cover; }
 .minn-comment-body { flex: 1; min-width: 0; }
 .minn-comment-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
