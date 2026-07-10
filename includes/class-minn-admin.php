@@ -359,6 +359,10 @@ class Minn_Admin {
 			'backup'   => ( current_user_can( 'manage_options' ) && minn_admin_updraftplus_active() )
 				? array( 'name' => 'UpdraftPlus', 'route' => 'minn-admin/v1/updraft/backup-now' )
 				: null,
+			// Disembark connector present — a boolean only: the palette's
+			// "Copy backup command" fetches the command (with its token) on
+			// demand rather than inlining a site secret into every pageload.
+			'disembark' => current_user_can( 'manage_options' ) && minn_admin_disembark_active(),
 			// Active page builders — drives "+ New → Page in ⟨builder⟩"
 			// (docs/page-builders.md; adapters/page-builders.php).
 			'builders' => minn_admin_page_builders_boot(),

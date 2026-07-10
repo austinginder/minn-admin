@@ -56,6 +56,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/simple-301-redirects.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/query-monitor.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cache-purge.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/updraftplus.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/disembark.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/page-builders.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/seo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/media-localize.php';
