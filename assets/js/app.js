@@ -9699,7 +9699,12 @@
 			for ( const [ loc, str ] of locs ) {
 				const m = str && str.match( re );
 				if ( m && m.length >= 4 ) {
-					model.wt.push( { label: w.label || 'Text', pattern: w.pattern, loc, orig: m[ 2 ], value: m[ 2 ] } );
+					// The matched text's offsets let the generic-run pass
+					// below skip this string — without them the same text
+					// rendered twice (labeled wrapperText field + a "Text"
+					// run) and the two edits raced.
+					const textStart = m.index + m[ 1 ].length;
+					model.wt.push( { label: w.label || 'Text', pattern: w.pattern, loc, orig: m[ 2 ], value: m[ 2 ], start: textStart, end: textStart + m[ 2 ].length } );
 					break;
 				}
 			}
@@ -9708,16 +9713,19 @@
 		// Generic text runs: every text node in saved HTML becomes editable,
 		// however deep the nesting (the Stackable case — schema-less children
 		// whose content the attr form can't reach). Children that already get
-		// the single-element text editor (childTextOf) are skipped so the two
-		// paths never fight over the same string.
+		// the single-element text editor (childTextOf) are skipped, and runs
+		// covered by a matched wrapperText pattern are dropped — the labeled
+		// field wins — so no string is ever edited from two fields.
+		const wtFilter = ( loc, runs ) => runs.filter( ( r ) =>
+			! model.wt.some( ( w ) => w.loc === loc && r.start < w.end && r.end > w.start ) );
 		model.children.forEach( ( c ) => {
 			if ( ! c.selfClosing && ! childTextOf( c ) ) c.runs = textRunsOf( c.tail );
 		} );
 		if ( model.mode === 'structural' ) {
-			model.headRuns = textRunsOf( model.head );
-			model.tailRuns = textRunsOf( model.tail );
+			model.headRuns = wtFilter( 'head', textRunsOf( model.head ) );
+			model.tailRuns = wtFilter( 'tail', textRunsOf( model.tail ) );
 		} else if ( model.mode === 'none' && ! parts.selfClosing ) {
-			model.innerRuns = textRunsOf( parts.inner );
+			model.innerRuns = wtFilter( 'inner', textRunsOf( parts.inner ) );
 		}
 		return model;
 	}
