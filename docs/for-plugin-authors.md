@@ -709,6 +709,19 @@ callable path for a pasted key), declare `activate_url` (a URL string or a
 callable returning one) instead of `activate`: unlicensed rows then carry an
 "Activate ↗" link to your screen. The bundled WPBakery entry is the reference.
 
+If activation needs more than one credential, declare `secret_fields` and
+`activate` receives an id-keyed array instead of a string (every field
+required); the card renders one labeled field per secret. The bundled Divi
+adapter (Elegant Themes username + API key) is the reference:
+
+```php
+'secret_fields' => array(
+    array( 'id' => 'username', 'label' => 'Account username' ),
+    array( 'id' => 'api_key', 'label' => 'API key' ),
+),
+'activate'      => function ( $secrets ) { /* $secrets['username'], $secrets['api_key'] */ },
+```
+
 ## Comments detection — `minn_admin_comments_enabled`
 
 Minn hides its Comments view, palette commands and badge when commenting is effectively
