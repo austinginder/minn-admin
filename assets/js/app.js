@@ -1476,6 +1476,7 @@
 				<button type="button" data-ract="open">Open in Minn</button>
 				${ viewUrl ? `<a href="${ esc( viewUrl ) }" target="_blank" rel="noopener">${ p.status === 'publish' ? 'View on site' : 'Preview draft' } ↗</a>` : '' }
 				<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">Edit in block editor ↗</a>
+				<button type="button" data-ract="duplicate">Duplicate</button>
 				<div class="minn-new-menu-label">Status</div>
 				${ p.status !== 'publish' ? '<button type="button" data-ract="publish">Publish now</button>' : '' }
 				${ p.status !== 'draft' ? '<button type="button" data-ract="draft">Move to draft</button>' : '' }
@@ -1486,6 +1487,18 @@
 			$$( '[data-ract]', rowMenu ).forEach( ( b ) => b.addEventListener( 'click', () => {
 				const act = b.dataset.ract;
 				if ( act === 'open' ) { hideRowMenu(); go( `editor/${ p.type }/${ p.id }` ); }
+				else if ( act === 'duplicate' ) {
+					hideRowMenu();
+					api( `minn-admin/v1/posts/${ p.id }/duplicate`, { method: 'POST', body: '{}' } )
+						.then( async ( r ) => {
+							state.cache.content = null;
+							state.cache.cptContent = {};
+							await ( currentCpt() ? loadCpt() : loadContent() ).catch( () => {} );
+							if ( state.route === 'content' ) renderContent();
+							toastAction( `Duplicated as draft “${ r.title }”`, 'Open', () => go( `editor/${ p.type }/${ r.id }` ) );
+						} )
+						.catch( ( e ) => toast( e.message, true ) );
+				}
 				else if ( act === 'publish' ) rowQuick( p, { status: 'publish' }, 'Published' );
 				else if ( act === 'draft' ) rowQuick( p, { status: 'draft' }, 'Moved to draft' );
 				else if ( act === 'trash' ) rowQuick( p, null, 'Moved to trash', 'DELETE' );
@@ -12368,6 +12381,39 @@
 		</div>`;
 	}
 
+	// Purge every active cache layer (page cache, CDN, object cache —
+	// whatever the site's providers cover). One request PER provider: a
+	// purge that resets OPcache recycles the PHP worker, which drops the
+	// browser's kept-alive sockets — isolation keeps one layer's drop from
+	// hiding the rest, and a retry on a fresh socket confirms the outcome.
+	async function clearSiteCache() {
+		const providers = B.cache || [];
+		if ( ! providers.length ) return;
+		toast( 'Clearing cache…' );
+		const purged = [];
+		const failed = [];
+		for ( const p of providers ) {
+			const attempt = () => api( 'minn-admin/v1/cache/purge', { method: 'POST', body: JSON.stringify( { provider: p.id } ) } );
+			try {
+				const r = await attempt();
+				( r.purged.length ? purged : failed ).push( p.name );
+			} catch ( e ) {
+				if ( ! ( e instanceof TypeError ) ) { failed.push( p.name ); continue; }
+				await new Promise( ( res ) => setTimeout( res, 1200 ) );
+				try {
+					const r = await attempt();
+					( r.purged.length ? purged : failed ).push( p.name );
+				} catch ( e2 ) {
+					// The request reached the server before the worker
+					// recycled — the purge itself is what dropped the reply.
+					purged.push( p.name );
+				}
+			}
+		}
+		if ( failed.length ) toast( `Cache cleared (${ purged.join( ', ' ) }); failed: ${ failed.join( ', ' ) }`, true );
+		else toast( `Cache cleared (${ purged.join( ', ' ) })` );
+	}
+
 	/* ===== Command palette ===== */
 
 	function paletteCommands() {
@@ -12414,6 +12460,12 @@
 			...( B.caps.editPages ? [ { label: 'Create new page', kind: 'action', icon: '▭', run: () => newContent( 'pages' ) } ] : [] ),
 			{ label: 'Toggle dark / light theme', kind: 'action', icon: '◐', run: toggleTheme },
 			{ label: 'View notifications', kind: 'action', icon: '◔', run: () => { state.notifOpen = true; renderOverlays(); loadNotifications().then( () => state.notifOpen && renderOverlays() ); } },
+			...( ( B.cache || [] ).length ? [ {
+				label: `Clear site cache (${ B.cache.map( ( c ) => c.name ).join( ', ' ) })`,
+				kind: 'action',
+				icon: '⟳',
+				run: clearSiteCache,
+			} ] : [] ),
 		);
 		if ( B.caps.update && Object.keys( state.cache.pluginUpdates ).length ) {
 			cmds.push( { label: 'Update all plugins', kind: 'action', icon: '⟳', run: () => updateAllPlugins( null ) } );
