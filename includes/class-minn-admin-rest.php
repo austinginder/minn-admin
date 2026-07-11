@@ -1752,14 +1752,24 @@ class Minn_Admin_REST {
 			$current = function_exists( 'hash' ) ? hash( 'sha256', $token ) : sha1( $token );
 		}
 
+		// Match core: only NON-EXPIRED tokens are real sessions.
+		// get_user_meta reads the raw store, which can hold expired tokens
+		// WordPress has not garbage-collected yet (GC is probabilistic);
+		// core's WP_Session_Tokens::get_all() filters them via is_still_valid,
+		// so list them the same way rather than showing dead sessions.
+		$now   = time();
 		$items = array();
 		foreach ( $tokens as $verifier => $session ) {
+			$expiration = isset( $session['expiration'] ) ? (int) $session['expiration'] : 0;
+			if ( $expiration && $expiration < $now ) {
+				continue;
+			}
 			$items[] = array(
 				'verifier'   => $verifier,
 				'ip'         => isset( $session['ip'] ) ? $session['ip'] : '',
 				'ua'         => isset( $session['ua'] ) ? $session['ua'] : '',
 				'login'      => isset( $session['login'] ) ? (int) $session['login'] : 0,
-				'expiration' => isset( $session['expiration'] ) ? (int) $session['expiration'] : 0,
+				'expiration' => $expiration,
 				'current'    => $verifier === $current,
 			);
 		}
