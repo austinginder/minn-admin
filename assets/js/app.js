@@ -13393,6 +13393,12 @@
 		imgPopTarget = img;
 		const figure = img.closest( 'figure' );
 		const figcap = figure ? figure.querySelector( ':scope > figcaption' ) : null;
+		// Existing link wrapper (figure > a is where core sources `href` from)
+		// and parked block attrs (lightbox lives there — comment-only attr).
+		const linkEl = figure ? figure.querySelector( ':scope > a' ) : ( img.parentElement && 'A' === img.parentElement.tagName ? img.parentElement : null );
+		let parked = {};
+		try { parked = JSON.parse( ( figure || img ).dataset.minnAttrs || '{}' ) || {}; } catch ( e ) { parked = {}; }
+		const hasLightbox = !! ( parked.lightbox && parked.lightbox.enabled );
 
 		imgPop = document.createElement( 'div' );
 		imgPop.className = 'minn-inspector minn-img-pop';
@@ -13406,6 +13412,11 @@
 				<input class="minn-input" data-img-alt placeholder="Describe this image…" value="${ esc( img.alt || '' ) }">
 				<div class="minn-field-label">Caption</div>
 				<input class="minn-input" data-img-caption placeholder="Optional caption" value="${ esc( figcap ? figcap.textContent : '' ) }">
+				<div class="minn-field-label">Link URL</div>
+				<input class="minn-input mono" data-img-link placeholder="https://… (empty for no link)" value="${ esc( linkEl ? linkEl.getAttribute( 'href' ) || '' : '' ) }">
+				<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-img-newtab${ linkEl && '_blank' === linkEl.getAttribute( 'target' ) ? ' checked' : '' }> Open in new tab</label>
+				<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-img-lightbox${ hasLightbox ? ' checked' : '' }> Expand on click (lightbox)</label>
+				<div class="minn-toggle-desc" data-img-lb-note hidden>A linked image can’t also open a lightbox — clear the link to use it.</div>
 			</div>
 			<div class="minn-insp-actions">
 				<button class="minn-btn-primary" data-img-apply type="button">Apply</button>
@@ -13418,19 +13429,37 @@
 
 		imgPop.querySelector( '[data-close]' ).addEventListener( 'click', hideImgPop );
 
+		// Link and lightbox are mutually exclusive (core's own rule: the
+		// lightbox only arms when the image has no link destination).
+		const linkInput = imgPop.querySelector( '[data-img-link]' );
+		const lbBox = imgPop.querySelector( '[data-img-lightbox]' );
+		const lbNote = imgPop.querySelector( '[data-img-lb-note]' );
+		const syncLb = () => {
+			const linked = !! linkInput.value.trim();
+			lbBox.disabled = linked;
+			if ( linked ) lbBox.checked = false;
+			lbNote.hidden = ! linked;
+		};
+		linkInput.addEventListener( 'input', syncLb );
+		syncLb();
+
 		imgPop.querySelector( '[data-img-apply]' ).addEventListener( 'click', () => {
 			img.alt = imgPop.querySelector( '[data-img-alt]' ).value.trim();
 			const cap = imgPop.querySelector( '[data-img-caption]' ).value.trim();
+			const url = linkInput.value.trim();
+			const newTab = imgPop.querySelector( '[data-img-newtab]' ).checked;
+			const wantLb = ! url && lbBox.checked;
 			let fig = img.closest( 'figure' );
+			if ( ! fig && ( cap || url || wantLb ) ) {
+				// Bare img — give it the standard figure wrapper (caption,
+				// link and parked attrs all live on the figure).
+				fig = document.createElement( 'figure' );
+				fig.className = 'wp-block-image';
+				img.replaceWith( fig );
+				fig.appendChild( img );
+			}
 			let fc = fig ? fig.querySelector( ':scope > figcaption' ) : null;
 			if ( cap ) {
-				if ( ! fig ) {
-					// Bare img — give it the standard figure wrapper so the caption has a home.
-					fig = document.createElement( 'figure' );
-					fig.className = 'wp-block-image';
-					img.replaceWith( fig );
-					fig.appendChild( img );
-				}
 				if ( ! fc ) {
 					fc = document.createElement( 'figcaption' );
 					fc.className = 'wp-element-caption';
@@ -13441,6 +13470,46 @@
 				// Keep the (typable) caption element — empty ones are the
 				// inline affordance and never serialize.
 				fc.textContent = '';
+			}
+			// Link: core sources `href` from figure > a, so the DOM wrap IS
+			// the attribute; linkDestination/lightbox ride the parked comment
+			// attrs. Direct-DOM, so ⌘Z is a safe no-op here (the undo
+			// decision), like island and table structure ops.
+			if ( fig ) {
+				let a = fig.querySelector( ':scope > a' );
+				const attrs = ( () => {
+					try { return JSON.parse( fig.dataset.minnAttrs || '{}' ) || {}; } catch ( e ) { return {}; }
+				} )();
+				// A fresh attrs object must still carry the attachment id or
+				// Gutenberg's regenerated save loses the wp-image class.
+				if ( attrs.id == null ) {
+					const idm = img.className.match( /wp-image-(\d+)/ );
+					if ( idm ) attrs.id = parseInt( idm[ 1 ], 10 );
+				}
+				if ( url ) {
+					if ( ! a ) {
+						a = document.createElement( 'a' );
+						fig.insertBefore( a, img );
+						a.appendChild( img );
+					}
+					a.setAttribute( 'href', url );
+					if ( newTab ) {
+						a.setAttribute( 'target', '_blank' );
+						a.setAttribute( 'rel', 'noreferrer noopener' );
+					} else {
+						a.removeAttribute( 'target' );
+						a.removeAttribute( 'rel' );
+					}
+					attrs.linkDestination = 'custom';
+					delete attrs.lightbox;
+				} else {
+					if ( a ) a.replaceWith( img );
+					delete attrs.linkDestination;
+					if ( wantLb ) attrs.lightbox = { enabled: true };
+					else delete attrs.lightbox;
+				}
+				if ( Object.keys( attrs ).length ) fig.dataset.minnAttrs = JSON.stringify( attrs );
+				else fig.removeAttribute( 'data-minn-attrs' );
 			}
 			scheduleAutosave();
 			toast( 'Image updated' );

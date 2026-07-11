@@ -911,6 +911,9 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-conn-row .minn-input { flex: 1; min-width: 0; }
 .minn-conn-row .minn-toggle-desc { flex: 1; }
 .minn-conn-row button { white-space: nowrap; }
+/* A linked image's <a> wrapper must not change figure layout, and the
+   figure cutout (:has(img)) still matches through it. */
+.minn-editor-body .wp-block-image > a { display: contents; }
 /* Focus/outline exit chip (topbar, beside the editor status badge) */
 .minn-mode-chip { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg2); color: var(--text2); font-size: 11px; font-weight: 650; cursor: pointer; vertical-align: middle; }
 .minn-mode-chip:hover { color: var(--text); border-color: var(--text3); }
