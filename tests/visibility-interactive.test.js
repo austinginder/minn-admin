@@ -28,9 +28,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	const chipHidden = () => page.$eval( '#minn-vis-chip', ( c ) => c.hidden );
 
 	try {
-		// Start public.
+		// Start public. Clear the fixture provider too — a crashed
+		// visibility-partial run would otherwise leave the chip up.
 		await setOpt( 'minn_admin_maintenance', false );
 		await setOpt( 'blog_public', 1 );
+		await setOpt( 'minn_test_visibility', '' );
 
 		/* ===== Settings toggle updates the chip live (no reload) ===== */
 		// Maintenance mode lives on the Visibility tab now.

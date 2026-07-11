@@ -334,6 +334,9 @@ class Minn_Admin {
 				'orders'       => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ),
 				'themeOptions' => current_user_can( 'edit_theme_options' ),
 				'core'         => current_user_can( 'update_core' ),
+				// Drives Settings → Design (Additional CSS). Core maps this
+				// from unfiltered_html; multisite keeps it super-admin-only.
+				'editCss'      => current_user_can( 'edit_css' ),
 			),
 			'wc'       => class_exists( 'WooCommerce' ),
 			// False when Disable Comments (etc.) has removed the feature —
@@ -360,6 +363,13 @@ class Minn_Admin {
 			'backup'   => ( current_user_can( 'manage_options' ) && minn_admin_updraftplus_active() )
 				? array( 'name' => 'UpdraftPlus', 'route' => 'minn-admin/v1/updraft/backup-now' )
 				: null,
+			// Regenerate Thumbnails present + allowed — a per-image button
+			// on the media detail modal (adapters/regenerate-thumbnails.php).
+			'regenThumbs' => function_exists( 'minn_admin_regen_thumbs_available' ) && minn_admin_regen_thumbs_available(),
+			// PDF Invoices & Packing Slips — download buttons on the order
+			// detail modal (adapters/wcpdf.php). Null without the plugin or
+			// order access.
+			'wcpdf'    => function_exists( 'minn_admin_wcpdf_boot' ) ? minn_admin_wcpdf_boot() : null,
 			// Disembark connector present — a boolean only: the palette's
 			// "Copy backup command" fetches the command (with its token) on
 			// demand rather than inlining a site secret into every pageload.

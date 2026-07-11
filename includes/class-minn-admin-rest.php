@@ -665,6 +665,35 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Custom CSS — core's per-theme custom_css post (what the Customizer's
+		// "Additional CSS" edits), surfaced in Settings → Design. Cap is core's
+		// own edit_css (unfiltered_html-mapped; super-admin-only on multisite).
+		$css_perm = function () {
+			return current_user_can( 'edit_css' );
+		};
+		register_rest_route(
+			self::NS,
+			'/custom-css',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'get_custom_css' ),
+					'permission_callback' => $css_perm,
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'save_custom_css' ),
+					'permission_callback' => $css_perm,
+					'args'                => array(
+						'css' => array(
+							'type'     => 'string',
+							'required' => true,
+						),
+					),
+				),
+			)
+		);
+
 		// System diagnostics — the developer's "what am I running on" page.
 		register_rest_route(
 			self::NS,
@@ -1124,6 +1153,49 @@ class Minn_Admin_REST {
 		flush_rewrite_rules();
 
 		return rest_ensure_response( self::permalink_state() );
+	}
+
+	/**
+	 * The Custom CSS state: the active theme's stylesheet (core keeps one
+	 * custom_css post per theme) plus the theme name for the UI note.
+	 */
+	private static function custom_css_state() {
+		return array(
+			'css'   => (string) wp_get_custom_css(),
+			'theme' => wp_get_theme()->get( 'Name' ),
+		);
+	}
+
+	public static function get_custom_css() {
+		return rest_ensure_response( self::custom_css_state() );
+	}
+
+	public static function save_custom_css( WP_REST_Request $request ) {
+		$css = (string) $request['css'];
+
+		// The Customizer refuses obviously broken CSS rather than blanking the
+		// front end with it; mirror its cheap structural checks (balance only —
+		// full parsing stays out of scope, exactly like core).
+		$balance = array(
+			array( '{', '}', 'curly brackets' ),
+			array( '(', ')', 'parentheses' ),
+			array( '[', ']', 'square brackets' ),
+		);
+		foreach ( $balance as $pair ) {
+			if ( substr_count( $css, $pair[0] ) !== substr_count( $css, $pair[1] ) ) {
+				return new WP_Error( 'invalid_css', 'That CSS has unbalanced ' . $pair[2] . '. Fix it and save again; nothing was changed.', array( 'status' => 400 ) );
+			}
+		}
+		if ( substr_count( $css, '/*' ) !== substr_count( $css, '*/' ) ) {
+			return new WP_Error( 'invalid_css', 'That CSS has an unclosed comment. Fix it and save again; nothing was changed.', array( 'status' => 400 ) );
+		}
+
+		$result = wp_update_custom_css_post( $css );
+		if ( is_wp_error( $result ) ) {
+			$result->add_data( array( 'status' => 400 ) );
+			return $result;
+		}
+		return rest_ensure_response( self::custom_css_state() );
 	}
 
 	/**

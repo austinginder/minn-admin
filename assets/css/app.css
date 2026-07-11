@@ -894,6 +894,10 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-spam-provider .minn-toggle-rows { margin-top: 12px; }
 .minn-spam-queue { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--text2); }
 .minn-spam-queue .minn-btn-soft { margin-left: auto; white-space: nowrap; }
+
+/* Settings → Design: the Additional CSS editor. pre + horizontal scroll so
+   long selectors don't soft-wrap into unreadable stair-steps. */
+.minn-css-editor { min-height: 320px; resize: vertical; tab-size: 2; line-height: 1.6; font-size: 13px; white-space: pre; overflow-x: auto; }
 .minn-input {
   width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: 9px;
   padding: 9px 12px; color: var(--text); font-size: 14.5px;

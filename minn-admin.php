@@ -69,6 +69,9 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/otter.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/essential-blocks.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/spam.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/site-status.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/user-switching.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/regenerate-thumbnails.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/wcpdf.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/licenses.php';
 
 Minn_Admin::init();

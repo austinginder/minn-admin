@@ -40,11 +40,14 @@ gets a status and a judgment on whether the gap blocks daily work.
 ### Customizer and theme options — partial, mostly by design
 Covered: site identity lives in Settings → General (title, tagline, site icon
 with full upload flow, site address, admin email); homepage settings in
-Settings → Reading (latest posts vs static page, with page pickers). Missing:
-custom logo, Custom CSS (`wp_custom_css_post`), site language, theme mods,
-FSE global styles. Judgment: identity + homepage is the daily slice and it's
-covered. Custom CSS is the one arguably-daily omission; the Customizer proper
-and global styles are correctly long-tail.
+Settings → Reading (latest posts vs static page, with page pickers); and as of
+the v0.11.0 cycle, **Custom CSS** (`wp_custom_css_post`, the Customizer's
+"Additional CSS") edits in Settings → Design through
+`minn-admin/v1/custom-css` (edit_css cap, per-theme stylesheet, structural
+validation mirroring the Customizer's refusal). Missing: custom logo, site
+language, theme mods, FSE global styles. Judgment: identity + homepage +
+Custom CSS was the daily slice and it's covered; the Customizer proper and
+global styles are correctly long-tail.
 
 ### Appearance — covered where it counts
 Menus (with drag reorder) and classic widgets are fully built; themes

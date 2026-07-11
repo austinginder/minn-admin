@@ -25,6 +25,7 @@ Minn's whole extension surface is a small set of public hooks. The main ones:
 | `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
 | `minn_admin_license_providers` | filter | Report your license state on the System page's Licenses card, optionally with activate / deactivate / re-verify |
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
+| `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
 tooling that wants to render into the page attaches at `minn_admin_template_footer`; the
@@ -734,6 +735,35 @@ add_filter( 'minn_admin_comments_enabled', function ( $enabled, $types ) {
     return false; // force-hide (or true to force-show)
 }, 10, 2 );
 ```
+
+## Site visibility — `minn_admin_visibility_providers`
+
+When your plugin is hiding the site (a maintenance mode, coming-soon page or whole-site
+password), tell Minn so the owner sees the persistent "Site hidden" chip, the Overview
+banner and the System health check instead of wondering where their traffic went. Only
+register while the mode is actually ACTIVE — the filter runs on every Minn pageload:
+
+```php
+add_filter( 'minn_admin_visibility_providers', function ( $providers ) {
+    if ( my_plugin_maintenance_is_on() ) {
+        $providers[] = array(
+            'name'    => 'My Maintenance Mode',
+            'kind'    => 'maintenance', // or 'coming-soon' | 'password'
+            'note'    => 'Visitors see the holding page',          // optional
+            'url'     => admin_url( 'admin.php?page=my-settings' ), // where to turn it off
+            'partial' => false, // true when only SOME pages are covered
+                                // (WooCommerce's store-pages-only shape) —
+                                // Minn then says "part of the site" instead
+                                // of claiming the whole site is dark
+        );
+    }
+    return $providers;
+} );
+```
+
+Minn links out to `url` to fix third-party modes; it never toggles another plugin's
+option. Bundled detectors cover WP Maintenance Mode, SeedProd, Under Construction,
+Password Protected, WooCommerce coming soon and Elementor maintenance mode.
 
 ## No REST API? Ship a shim
 

@@ -31,11 +31,14 @@ shared view; "action" = a ⌘K / menu command.
 | **Ecommerce** | WooCommerce | **Orders** surface + Overview stats |
 | **Spam filtering** | Akismet, Antispam Bee, CleanTalk | Settings → Spam provider cards; open via `minn_admin_spam_providers` |
 | **Licenses** | Elementor Pro, ACF PRO, WP Rocket, Gravity Forms, Gravity SMTP, AnalyticsWP, Bricks, Divi, Beaver Builder, WPBakery, Brizy, Etch, Astra/Brainstorm family, WPMU DEV (Dashboard + Smush Pro), SearchWP, Gravity Perks, Rank Math Pro, Perfmatters, GP Premium, WP All Import/Export Pro, Slider Revolution, LayerSlider, Avada, Envato Market, The Events Calendar family + StellarWP Uplink, plus any Freemius, EDD Software Licensing or SureCart plugin generically | System → **Licenses** card + health check: valid / expired / invalid / missing per paid component; paste-to-activate for Elementor Pro, ACF PRO, Gravity Forms, Gravity SMTP, Beaver Builder, Brizy Pro, Etch, Bricks and Divi (active theme; Divi takes username + API key), WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium, WP All Export Pro and LayerSlider, deactivate and re-verify where each vendor's code allows, and an "Activate ↗" link for portal- or admin-context-bound vendors (WPBakery, Rank Math, Envato, WP All Import, Slider Revolution), all through each vendor's own code; open via `minn_admin_license_providers` |
-| **Site visibility** | WP Maintenance Mode, SeedProd, Under Construction, Password Protected, plus Minn's own maintenance mode and the `blog_public` "discourage search engines" setting | Overview banner + persistent amber topbar chip (on every route) + System health check when the site is hidden, password-gated or unindexed; open via `minn_admin_visibility_providers` |
+| **Site visibility** | WP Maintenance Mode, SeedProd, Under Construction, Password Protected, WooCommerce coming soon (incl. the store-pages-only partial shape), Elementor maintenance mode, plus Minn's own maintenance mode and the `blog_public` "discourage search engines" setting | Overview banner + persistent amber topbar chip (on every route) + System health check when the site is hidden, partly hidden, password-gated or unindexed; Settings → Visibility lists active third-party limiters; open via `minn_admin_visibility_providers` |
 | **Page builders** | Elementor, Beaver Builder, Brizy, Divi, Bricks, WPBakery, Etch | Detected, fenced, "Edit in ⟨builder⟩" |
 | **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
 | **Dev tools** | Query Monitor | QM panel on Minn pages |
+| **Users** | User Switching | "Switch to this user" in the users row menu (the plugin's own nonce URLs) |
+| **Media** | Regenerate Thumbnails | ↻ Thumbnails button on the media detail modal (per-image full rebuild) |
+| **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
 
 Beyond the named plugins: any plugin's standalone dynamic blocks and
 registered patterns appear in the editor automatically (no adapter), and
@@ -109,15 +112,16 @@ recommended order (installs × fit × effort):
    is Pro-only (free has debug events, the WP Mail SMTP shape).
 7. **Snippets providers** — Simple Custom CSS & JS (a CPT) and Header Footer
    Code Manager (`hfcm_scripts` table) into the existing Snippets surface.
-8. **Site-status rows with toggles** — SeedProd coming-soon, Maintenance,
-   Password Protected: "your site is currently hidden from the public" is
-   arguably the single most important status Minn can show. Plus a WPS Hide
-   Login compat pass (never hardcode `wp-login.php` links; show the real
-   login URL on System).
-9. **Small delights** — User Switching ("Switch to this user" from the user
-   row via its own nonce URLs), Regenerate Thumbnails on the media detail,
-   WooCommerce PDF Invoices download on the order detail, WP Armour in the
-   spam provider cards, SiteSEO in the SEO panel (SEOPress fork, near-identical
+8. **Site-status rows with toggles** — ✅ shipped (v0.11.0 cycle): the
+   visibility posture (banner + chip + popover toggles + System check) covers
+   WP Maintenance Mode, SeedProd, Under Construction, Password Protected,
+   WooCommerce coming soon (partial-aware for store-pages-only) and Elementor
+   maintenance mode; the login URL row honors login-hiders.
+9. **Small delights** — mostly shipped (v0.11.0 cycle): User Switching
+   ("Switch to this user" from the user row via its own nonce URLs),
+   Regenerate Thumbnails on the media detail and WooCommerce PDF Invoices
+   downloads on the order detail are in. Still open: WP Armour in the spam
+   provider cards, SiteSEO in the SEO panel (SEOPress fork, near-identical
    meta keys), eps-301-redirects in Redirects.
 10. **Bigger scoped bets** — WPForms Pro entries (source-verified: Lite
     stores no entries at all, so this costs a license and Pro fixtures;

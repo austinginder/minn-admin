@@ -3042,7 +3042,9 @@
 
 	async function loadUsers( page = 1 ) {
 		const ctx = usersCtx();
-		let q = `wp/v2/users?context=edit&per_page=50&orderby=registered_date&order=desc&_fields=id,name,email,roles,registered_date,avatar_urls&page=${ page }`;
+		// minn_switch_url only exists while User Switching is active — an
+		// unregistered field in _fields is silently absent (safe).
+		let q = `wp/v2/users?context=edit&per_page=50&orderby=registered_date&order=desc&_fields=id,name,email,roles,registered_date,avatar_urls,minn_switch_url&page=${ page }`;
 		if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
 		if ( state.userRole && state.userRole !== '_all' ) q += '&roles=' + encodeURIComponent( state.userRole );
 		const r = await apiPaged( q );
@@ -3190,6 +3192,12 @@
 					},
 				] : [] ),
 				{ heading: 'Access' },
+				// User Switching's own nonce URL (adapters/user-switching.php) —
+				// same-tab navigation is the point: you become that user.
+				...( u.minn_switch_url ? [ {
+					label: 'Switch to this user',
+					run: () => { window.location.href = u.minn_switch_url; },
+				} ] : [] ),
 				...( B.caps.editUsers || isSelf ? [ {
 					label: isSelf ? 'Sign out other sessions' : 'Sign out all sessions',
 					run: () => killUserSessions( u ),
@@ -4889,6 +4897,7 @@
 		if ( hide ) { closeVisPopover(); return; }
 		const label = 'hidden' === v.state ? 'Site hidden'
 			: 'password' === v.state ? 'Password gated'
+			: 'partial' === v.state ? 'Partly hidden'
 			: 'Not indexed';
 		$( '#minn-vis-chip-text' ).textContent = label;
 	}
@@ -4960,9 +4969,11 @@
 		const v = visState();
 		const title = 'password' === v.state ? 'Site password-protected'
 			: 'search-discouraged' === v.state ? 'Search engines discouraged'
+			: 'partial' === v.state ? 'Part of the site is hidden'
 			: 'Site hidden from the public';
 		const sub = 'hidden' === v.state ? 'Visitors see a maintenance or coming-soon page.'
 			: 'password' === v.state ? 'Visitors must enter a password to see any page.'
+			: 'partial' === v.state ? 'Some pages show a coming-soon page instead of their content.'
 			: 'The site is public but asks search engines not to index it.';
 		return `<div class="minn-vis-pop-title">${ esc( title ) }</div>
 			<div class="minn-vis-pop-sub">${ esc( sub ) }</div>
@@ -5007,6 +5018,11 @@
 		} else if ( 'password' === v.state ) {
 			title = 'Your site is password-protected';
 			desc = `The whole site is behind a password (${ names.join( ', ' ) }). Visitors must enter it before seeing any page.`;
+		} else if ( 'partial' === v.state ) {
+			// Provider notes say WHICH part (WooCommerce: "Only store pages…").
+			const notes = ( v.providers || [] ).map( ( p ) => p.note ).filter( Boolean );
+			title = 'Part of your site is hidden';
+			desc = `${ names.join( ', ' ) } ${ names.length === 1 ? 'is' : 'are' } showing a coming-soon page on some pages${ notes.length ? ': ' + notes.join( '; ' ).toLowerCase() : '' }.`;
 		} else {
 			title = 'Search engines are discouraged';
 			desc = 'The site is public, but "Discourage search engines" is on in Settings → Reading, so it asks not to be indexed.';
@@ -6144,7 +6160,10 @@
 	// identity/locale (Site), who-can-see-and-join (Visibility), the front
 	// page (Homepage), content defaults + URLs (Content), and everything
 	// about comments incl. spam (Comments).
-	const SETTINGS_SECTIONS = [ 'Site', 'Visibility', 'Homepage', 'Content', 'Comments' ];
+	const SETTINGS_SECTIONS = [ 'Site', 'Visibility', 'Homepage', 'Design', 'Content', 'Comments' ];
+	// Design (Additional CSS) needs core's edit_css — hidden, not disabled,
+	// for everyone else (matching how the Customizer hides the panel).
+	const settingsSections = () => SETTINGS_SECTIONS.filter( ( s ) => s !== 'Design' || B.caps.editCss );
 	const POST_FORMATS = [ 'standard', 'aside', 'chat', 'gallery', 'link', 'image', 'quote', 'status', 'video', 'audio' ];
 	const PERMALINK_PRESETS = [
 		[ '', 'Plain' ],
@@ -6155,19 +6174,20 @@
 	];
 
 	async function loadSettings() {
-		const [ values, categories, pages, permalinks, spam ] = await Promise.all( [
+		const [ values, categories, pages, permalinks, spam, customCss ] = await Promise.all( [
 			api( 'wp/v2/settings' ),
 			api( 'wp/v2/categories?per_page=100&_fields=id,name' ).catch( () => [] ),
 			api( 'wp/v2/pages?per_page=100&status=publish&orderby=title&order=asc&_fields=id,title' ).catch( () => [] ),
 			api( 'minn-admin/v1/permalinks' ).catch( () => null ),
 			api( 'minn-admin/v1/spam' ).catch( () => null ),
+			B.caps.editCss ? api( 'minn-admin/v1/custom-css' ).catch( () => null ) : Promise.resolve( null ),
 		] );
 		const siteIcon = values.site_icon
 			? await api( `wp/v2/media/${ values.site_icon }?_fields=id,source_url,media_details` )
 				.then( ( m ) => ( { url: ( m.media_details && m.media_details.sizes && m.media_details.sizes.thumbnail && m.media_details.sizes.thumbnail.source_url ) || m.source_url } ) )
 				.catch( () => null )
 			: null;
-		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon };
+		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss };
 	}
 
 	/**
@@ -6454,17 +6474,33 @@
 					{ id: 'minn_admin_default', label: 'Minn is the default admin', desc: 'After signing in, land here instead of wp-admin (deep links still work; classic stays available).', on: !! s.minn_admin_default },
 				].map( toggle ).join( '' ),
 			};
-			case 'Visibility': return {
+			case 'Visibility': {
 				// Everything about who can see, index and join the site — the
-				// group WordPress scatters across Reading and General.
-				sub: 'Who can see, index and join your site.',
-				fields: roleOptions.length ? combo( 'default_role', 'New user default role', roleOptions, s.default_role || 'subscriber' ) : '',
-				toggles: [
-					{ id: 'blog_public', label: 'Search engine visibility', desc: 'Allow search engines to index this site.', on: !! s.blog_public },
-					{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors instead of the site.', on: !! s.minn_admin_maintenance },
-					{ id: 'users_can_register', label: 'Membership', desc: 'Anyone can register an account (with the default role above).', on: !! s.users_can_register },
-				].map( toggle ).join( '' ),
-			};
+				// group WordPress scatters across Reading and General. The
+				// toggles above only control what Minn owns; when a PLUGIN is
+				// also hiding the site (WooCommerce coming soon, SeedProd, …)
+				// list it here so the section tells the whole truth.
+				const v = visState();
+				const others = v && ! v.public ? ( v.providers || [] ).filter( ( p ) => ! p.minn ) : [];
+				const posture = others.length ? subhead( 'Also limiting visibility' ) + others.map( ( p ) => `
+					<div class="minn-toggle-row">
+						<div class="minn-toggle-info">
+							<div class="minn-toggle-label">${ esc( p.name ) }</div>
+							<div class="minn-toggle-desc">${ esc( p.note || ( 'password' === p.kind ? 'The site is behind a password.' : 'Visitors see a maintenance or coming-soon page.' ) ) }</div>
+						</div>
+						${ p.url ? `<a class="minn-btn-soft" href="${ esc( p.url ) }" target="_blank" rel="noopener">Open ↗</a>` : '' }
+					</div>` ).join( '' ) : '';
+				return {
+					sub: 'Who can see, index and join your site.',
+					fields: roleOptions.length ? combo( 'default_role', 'New user default role', roleOptions, s.default_role || 'subscriber' ) : '',
+					toggles: [
+						{ id: 'blog_public', label: 'Search engine visibility', desc: 'Allow search engines to index this site.', on: !! s.blog_public },
+						{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors instead of the site.', on: !! s.minn_admin_maintenance },
+						{ id: 'users_can_register', label: 'Membership', desc: 'Anyone can register an account (with the default role above).', on: !! s.users_can_register },
+					].map( toggle ).join( '' ),
+					after: posture,
+				};
+			}
 			case 'Homepage': return {
 				sub: 'What visitors land on, and how much shows.',
 				fields: select( 'show_on_front', 'Your homepage displays', [ [ 'posts', 'Latest posts' ], [ 'page', 'A static page' ] ], s.show_on_front )
@@ -6472,6 +6508,22 @@
 					+ text( 'posts_per_page', 'Blog pages show at most', s.posts_per_page ),
 				toggles: '',
 			};
+			case 'Design': {
+				// Core's per-theme custom_css post — the Customizer's
+				// "Additional CSS", the last daily Customizer gap.
+				const cc = cache.customCss;
+				return {
+					sub: 'Site-wide CSS on top of the active theme.',
+					fields: cc ? `
+						<div>
+							<div class="minn-field-label">Additional CSS</div>
+							<textarea class="minn-input mono minn-css-editor" id="minn-custom-css" rows="18" spellcheck="false" placeholder="/* CSS added here loads on every page, after the theme's own stylesheets. */">${ esc( cc.css || '' ) }</textarea>
+							<div class="minn-toggle-desc">The same stylesheet the Customizer's "Additional CSS" edits, loaded after the theme's own styles on every page. It belongs to the active theme (${ esc( cc.theme || '' ) }); switching themes keeps a separate one per theme.</div>
+						</div>`
+						: `<div class="minn-editor-locked-note">Custom CSS couldn't be loaded. <a href="${ esc( B.site.adminUrl ) }customize.php" target="_blank" rel="noopener">Open the Customizer ↗</a></div>`,
+					toggles: '',
+				};
+			}
 			case 'Content': {
 				// Content defaults plus the URL structure. Permalinks save
 				// through their own endpoint (data-permakey), rendered after the
@@ -6579,7 +6631,7 @@
 		view.innerHTML = `
 		<div class="minn-settings">
 			<div class="minn-settings-nav">
-				${ SETTINGS_SECTIONS.map( ( label ) =>
+				${ settingsSections().map( ( label ) =>
 					`<button class="minn-settings-nav-item${ label === state.settingsSection ? ' active' : '' }" data-section="${ label }">${ label }</button>` ).join( '' ) }
 			</div>
 			<div class="minn-settings-body">
@@ -6636,6 +6688,16 @@
 		}
 		const spamExt = $( '#minn-spam-ext', view );
 		if ( spamExt ) spamExt.addEventListener( 'click', ( e ) => { e.preventDefault(); go( 'extensions' ); } );
+
+		// Design tab: Tab indents inside the CSS editor instead of leaving it
+		// (execCommand insertText keeps the browser's undo stack intact).
+		const cssEditor = $( '#minn-custom-css', view );
+		if ( cssEditor ) cssEditor.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Tab' && ! e.shiftKey ) {
+				e.preventDefault();
+				document.execCommand( 'insertText', false, '  ' );
+			}
+		} );
 
 		// Site icon: pick from the library, drag & drop an upload, or remove.
 		// The chosen attachment ID rides the normal save as pending.site_icon.
@@ -6774,6 +6836,23 @@
 					try {
 						cache.spam = await api( 'minn-admin/v1/spam', { method: 'POST', body: JSON.stringify( body ) } );
 					} catch ( err ) { toast( err.message, true ); okAll = false; }
+				}
+
+				// --- Custom CSS (minn-admin/v1/custom-css): the Design tab.
+				// Structural validation happens server-side (balanced braces,
+				// closed comments — the Customizer's refusal, mirrored). ---
+				const cssEl = $( '#minn-custom-css', view );
+				if ( cssEl ) {
+					try {
+						cache.customCss = await api( 'minn-admin/v1/custom-css', { method: 'POST', body: JSON.stringify( { css: cssEl.value } ) } );
+					} catch ( err ) {
+						// Early return: the tail re-render would rebuild the
+						// textarea from the cached (old) CSS and wipe the typed
+						// fix-in-progress. The Design tab carries nothing else.
+						toast( err.message, true );
+						saveBtn.disabled = false;
+						return;
+					}
 				}
 
 				// --- Permalinks (minn-admin/v1/permalinks): the Content tab, last. ---
@@ -14624,6 +14703,7 @@
 						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
 						<button class="minn-btn-soft" id="minn-media-open">↗ Open</button>
 						${ it.kind === 'IMG' ? `<button class="minn-btn-soft" id="minn-media-edit-image" type="button" title="Rotate and crop — saved as a new copy">✎ Edit image</button>` : '' }
+						${ it.kind === 'IMG' && B.regenThumbs ? `<button class="minn-btn-soft" id="minn-media-regen" type="button" title="Rebuild every registered thumbnail size from the original (Regenerate Thumbnails)">↻ Thumbnails</button>` : '' }
 						${ m.from === 'featured' && state.editor ? `
 						<button class="minn-btn-soft" id="minn-media-feat-replace" type="button">Replace featured</button>
 						<button class="minn-btn-soft danger" id="minn-media-feat-remove" type="button">Remove featured</button>` : '' }
@@ -14673,6 +14753,8 @@
 						</div>
 					</div>` : '' }
 					<div class="minn-modal-actions">
+						${ ( ( B.wcpdf && B.wcpdf.docs ) || [] ).map( ( d ) =>
+							`<a class="minn-btn-soft" href="${ esc( `${ B.wcpdf.ajax }?action=generate_wpo_wcpdf&document_type=${ encodeURIComponent( d.type ) }&order_ids=${ o.id }&access_key=${ encodeURIComponent( B.wcpdf.nonce ) }` ) }" target="_blank" rel="noopener" title="Generated by PDF Invoices &amp; Packing Slips">⬇ ${ esc( d.title ) } (PDF)</a>` ).join( '' ) }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }edit.php?post_type=shop_order" target="_blank" rel="noopener">↗ Manage in WooCommerce</a>
 					</div>
 				</div>
@@ -15453,6 +15535,21 @@
 				renderEditorSide();
 				if ( ed.id ) scheduleAutosave();
 				toast( 'Featured image removed' );
+			} );
+			// Regenerate Thumbnails: the plugin's regenerator runs server-side
+			// (adapters/regenerate-thumbnails.php); the modal stays open.
+			const regenBtn = $( '#minn-media-regen' );
+			if ( regenBtn ) regenBtn.addEventListener( 'click', async () => {
+				regenBtn.disabled = true;
+				regenBtn.textContent = 'Regenerating…';
+				try {
+					const r = await api( `minn-admin/v1/media/${ it.id }/regenerate`, { method: 'POST' } );
+					toast( `Regenerated ${ r.sizes } thumbnail size${ r.sizes === 1 ? '' : 's' }` );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				regenBtn.disabled = false;
+				regenBtn.textContent = '↻ Thumbnails';
 			} );
 			$( '#minn-media-delete' ).addEventListener( 'click', () => deleteMediaItem( it ) );
 		}
