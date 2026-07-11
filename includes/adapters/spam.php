@@ -134,6 +134,31 @@ function minn_admin_spam_providers() {
 		);
 	}
 
+	// --- WP Armour (honeypot, zero-config) --------------------------------
+	// Works the moment it activates: an invisible honeypot field on comments
+	// and the form plugins it integrates with. Stats live in the wpa_stats
+	// option as a JSON blob keyed by protected system, with a running
+	// 'total' bucket ({today,week,month} windows + all_time).
+	if ( function_exists( 'wpa_save_stats' ) ) {
+		$providers[] = array(
+			'id'     => 'wp-armour',
+			'name'   => 'WP Armour',
+			'status' => function () {
+				$stats = json_decode( (string) get_option( 'wpa_stats' ), true );
+				$total = is_array( $stats ) && isset( $stats['total'] ) ? (array) $stats['total'] : array();
+				$week  = isset( $total['week']['count'] ) ? (int) $total['week']['count'] : 0;
+				return array(
+					'configured' => true, // honeypot needs no setup
+					'note'       => 'Honeypot protection runs automatically on comments and supported forms' . ( $week ? ' (' . $week . ' blocked this week)' : '' ),
+					'blocked'    => isset( $total['all_time'] ) ? (int) $total['all_time'] : 0,
+					'toggles'    => array(), // its options are field/markup tuning, not policy
+					'adminUrl'   => admin_url( 'admin.php?page=wp-armour' ),
+				);
+			},
+			'set'    => function () {},
+		);
+	}
+
 	return apply_filters( 'minn_admin_spam_providers', $providers );
 }
 

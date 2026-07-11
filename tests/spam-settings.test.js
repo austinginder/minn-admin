@@ -46,8 +46,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 	try {
 		// Seed the baseline — live sessions (and this very bug report) leave
-		// spam plugins toggled; never assume the resident-only state.
+		// spam plugins toggled; never assume the resident-only state. WP
+		// Armour (honeypot) is an ACTIVE resident alongside Antispam Bee.
 		await setPlugin( 'akismet/akismet', 'inactive' ).catch( () => {} );
+		await setPlugin( 'honeypot/wp-armour', 'active' ).catch( () => {} );
 		await openSpam();
 
 		/* ===== Resident provider card ===== */
@@ -58,6 +60,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'provider toggles render from the descriptor',
 			( await page.$( '[data-spamtog="antispam-bee:email_notify"]' ) ) !== null
 			&& ( await page.$( '[data-spamtog="antispam-bee:flag_spam"]' ) ) !== null );
+		// WP Armour: zero-config honeypot, always-Active card, no toggles.
+		const armourText = await page.$$eval( '.minn-spam-provider', ( els ) =>
+			( els.find( ( el ) => el.textContent.includes( 'WP Armour' ) ) || { textContent: '' } ).textContent );
+		t.check( 'WP Armour card renders Active with the honeypot note',
+			/WP Armour/.test( armourText ) && /Active/.test( armourText ) && /Honeypot protection runs automatically/.test( armourText ), armourText.slice( 0, 120 ) );
+		t.check( 'WP Armour card carries no toggles (tuning stays on its screen)',
+			( await page.$( '[data-spamtog^="wp-armour:"]' ) ) === null );
 		// minnadmin runs Disable Comments (fixture): the queue row must
 		// explain itself instead of offering a Review button into a route
 		// the nav hides (B.comments gating).
