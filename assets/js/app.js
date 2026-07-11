@@ -635,6 +635,7 @@
 			doc: '<path d="M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
 			img: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
 			plug: '<path d="M14 7V5a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2H7a1 1 0 0 0-1 1v3h2a2 2 0 0 1 0 4H6v3a1 1 0 0 0 1 1h3v-2a2 2 0 0 1 4 0v2h3a1 1 0 0 0 1-1v-3h-2a2 2 0 0 1 0-4h2V8a1 1 0 0 0-1-1Z"/>',
+			power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
 			gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
 			search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
 			bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
@@ -5773,7 +5774,8 @@
 		const licLabel = { valid: 'Valid', expired: 'Expired', invalid: 'Invalid', missing: 'No license', unknown: 'Unknown' };
 		const licRow = ( it ) => {
 			const meta = [
-				it.off ? `not active; activate the ${ it.kind === 'theme' ? 'theme' : 'plugin' } to manage its license` : '',
+				// With a Turn on button right below, the long hint is noise.
+				it.off ? ( it.turnOn ? 'not active' : `not active; activate the ${ it.kind === 'theme' ? 'theme' : 'plugin' } to manage its license` ) : '',
 				it.note,
 				it.expires === 'lifetime' ? 'lifetime license' : ( it.expires ? ( it.state === 'expired' ? 'expired ' : 'renews ' ) + it.expires : '' ),
 				it.stale ? 'may be stale' : '',
@@ -5783,6 +5785,12 @@
 			// is never stored or echoed back.
 			const can = it.can || [];
 			const controls = [
+				// Inactive component: one small "turn it back on" control. The
+				// vendor's license actions only exist while its code is loaded,
+				// so activating is what reveals them (the card re-renders from
+				// a fresh /system fetch afterwards).
+				it.off && it.turnOn
+					? `<button data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ it.turnOn.startsWith( 'theme:' ) ? 'Switch the site to this theme' : 'Activate this plugin' }">${ icon( 'power' ) } Turn on</button>` : '',
 				can.includes( 'activate' ) && it.state !== 'valid'
 					? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || 'License key' ) }"${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>Activate…</button>` : '',
 				! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid'
@@ -6019,9 +6027,47 @@
 				keepForm();
 			}
 		};
+		// Turn an inactive licensed component back on from its row. Plugins
+		// flip via core's plugins endpoint; a theme SWITCHES the site's active
+		// theme, so it confirms first. The fresh /system fetch afterwards is
+		// what reveals the vendor's license controls (action callables only
+		// attach while its code is loaded).
+		const licTurnOn = async ( btn ) => {
+			const component = btn.dataset.component;
+			const orig = btn.innerHTML;
+			btn.disabled = true;
+			btn.textContent = 'Turning on…';
+			try {
+				if ( component.startsWith( 'theme:' ) ) {
+					await api( 'minn-admin/v1/themes/activate', { method: 'POST', body: JSON.stringify( { stylesheet: component.slice( 6 ) } ) } );
+				} else {
+					await api( 'wp/v2/plugins/' + component.replace( /\.php$/, '' ), { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+				}
+				toast( `${ btn.dataset.name } turned on` );
+				await refreshAfterPluginChange();
+				const scroller = $( '.minn-scroll' );
+				const keepTop = scroller ? scroller.scrollTop : 0;
+				state.cache.system = null;
+				await loadSystem();
+				if ( state.route !== 'system' ) return;
+				renderSystem();
+				const sc = $( '.minn-scroll' );
+				if ( sc ) sc.scrollTop = keepTop;
+			} catch ( e ) {
+				toast( e.message, true );
+				btn.disabled = false;
+				btn.innerHTML = orig;
+			}
+		};
 		$$( '[data-lic]', view ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
 			const action = btn.dataset.lic;
 			const provider = btn.dataset.provider;
+			if ( 'turnon' === action ) {
+				if ( btn.dataset.component.startsWith( 'theme:' )
+					&& ! confirm( `Activate the ${ btn.dataset.name } theme? It becomes the site's active theme and the current theme turns off.` ) ) return;
+				licTurnOn( btn );
+				return;
+			}
 			if ( 'href' === action ) {
 				window.open( btn.dataset.href, '_blank', 'noopener' );
 				return;

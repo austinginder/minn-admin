@@ -1831,6 +1831,17 @@ function minn_admin_licenses() {
 		}
 		return is_plugin_active( $component );
 	};
+	// An off row carries its component so the client can offer "Turn on"
+	// (activate the plugin / switch to the theme) right on the card — but
+	// only when the file is really there to activate and the user holds
+	// the matching cap.
+	$turn_on_component = function ( $component ) {
+		if ( 0 === strpos( (string) $component, 'theme:' ) ) {
+			$slug = substr( $component, 6 );
+			return current_user_can( 'switch_themes' ) && wp_get_theme( $slug )->exists() ? $component : '';
+		}
+		return current_user_can( 'activate_plugins' ) && file_exists( WP_PLUGIN_DIR . '/' . $component ) ? $component : '';
+	};
 
 	$providers = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
 	$items     = array();
@@ -1900,6 +1911,10 @@ function minn_admin_licenses() {
 			$is_component = $component && ( false !== strpos( $component, '/' ) || 0 === strpos( $component, 'theme:' ) );
 			if ( $is_component && ! $component_active( $component ) ) {
 				$row['off'] = true;
+				$on = $turn_on_component( $component );
+				if ( $on ) {
+					$row['turnOn'] = $on;
+				}
 			}
 			$items[] = $row;
 		}
@@ -1921,6 +1936,10 @@ function minn_admin_licenses() {
 			$row['source'] = $sdk;
 			if ( ! empty( $row['component'] ) && ! $component_active( $row['component'] ) ) {
 				$row['off'] = true;
+				$on = $turn_on_component( $row['component'] );
+				if ( $on ) {
+					$row['turnOn'] = $on;
+				}
 			}
 			unset( $row['component'] );
 			$row           = wp_parse_args( $row, array( 'expires' => '', 'note' => '', 'stale' => false, 'key' => false ) );
