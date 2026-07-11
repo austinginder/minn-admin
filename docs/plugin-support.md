@@ -130,7 +130,13 @@ recommended order (installs × fit × effort):
     Meta Box editor panel (runtime field discovery; ACF precedent), Matomo
     traffic provider (small base but the best-behaved local analytics data
     source), The Events Calendar editor panel (events already list natively;
-    the panel covers date/venue meta).
+    the panel covers date/venue meta), and **ecommerce analytics** (Austin,
+    2026-07-11): an Analytics view alongside Orders, pill-style switcher on
+    the Orders surface. WooCommerce ships the data over its own
+    `wc-analytics` REST namespace (revenue/orders/products stats the Woo
+    Admin dashboard uses), so the read layer is free; the build cost is the
+    charting UI. Deserves its own cycle rather than riding an Orders
+    change; the pill switcher lands with it.
 
 Parked as structural: **multilingual** (WPML / Polylang / TranslatePress)
 needs a language dimension in content lists.
