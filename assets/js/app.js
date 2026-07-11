@@ -6885,6 +6885,7 @@
 		};
 		let repositionBound = null;
 		let escaped = false;
+		let openedAt = 0;
 		const resetPanelStyle = () => {
 			escaped = false;
 			[ 'position', 'left', 'right', 'width', 'top', 'bottom', 'maxHeight' ].forEach( ( p ) => { panel.style[ p ] = ''; } );
@@ -6932,19 +6933,52 @@
 				|| '<div class="minn-ac-empty">No matches</div>' )
 				+ ( matches.length > 500 ? `<div class="minn-ac-empty">${ matches.length - 500 } more — keep typing…</div>` : '' );
 			panel.hidden = false;
+			openedAt = performance.now();
 			placePanel();
 			if ( ! repositionBound ) {
-				// Keep the panel anchored while its input scrolls; capture:true
-				// so a modal's own scroll (not just window) reanchors it. Only
-				// matters once escaped, but cheap to leave attached while open.
-				repositionBound = () => { if ( escaped ) placeFixed(); };
+				// An ESCAPED (fixed) panel cannot ride a scrolling anchor
+				// frame-accurately: JS repositioning lags the compositor, and
+				// macOS elastic overscroll reports nothing until it settles —
+				// a fast scroll showed the panel detached from its input with
+				// the page visible through the gap (Austin's report; the
+				// outline-ping lesson). Ancestor scroll therefore CLOSES an
+				// escaped panel, like a native select; scrolling the panel's
+				// own option list stays open, and resize just re-anchors.
+				// In-flow panels ride the scroll natively and never close.
+				repositionBound = ( e ) => {
+					if ( ! escaped ) return;
+					if ( e && e.type === 'resize' ) {
+						placeFixed();
+						return;
+					}
+					if ( e && e.target instanceof Node && panel.contains( e.target ) ) return;
+					// The input's own focus reveal (focusing scrolls it into
+					// view — the preventScroll rule) fires an ancestor scroll
+					// a frame after open; inside the settle window re-anchor
+					// instead of self-closing.
+					if ( performance.now() - openedAt < 250 ) {
+						placeFixed();
+						return;
+					}
+					close();
+				};
 				window.addEventListener( 'scroll', repositionBound, true );
 				window.addEventListener( 'resize', repositionBound );
 			}
 			input.setAttribute( 'aria-expanded', 'true' );
 			const cur = $( '.minn-ac-item.current', panel );
-			if ( cur ) cur.scrollIntoView( { block: 'nearest' } );
+			if ( cur ) revealInPanel( cur );
 		};
+		// Reveal by scrollTop math ONLY — scrollIntoView propagates to scroll
+		// ancestors (the tab-strip lesson), and that programmatic ancestor
+		// scroll would land a frame later and instantly re-close an escaped
+		// panel through close-on-scroll.
+		function revealInPanel( el ) {
+			const pr = panel.getBoundingClientRect();
+			const er = el.getBoundingClientRect();
+			if ( er.bottom > pr.bottom ) panel.scrollTop += er.bottom - pr.bottom;
+			else if ( er.top < pr.top ) panel.scrollTop -= pr.top - er.top;
+		}
 		const close = () => {
 			panel.hidden = true;
 			idx = -1;
@@ -6983,7 +7017,7 @@
 				e.preventDefault();
 				idx = e.key === 'ArrowDown' ? Math.min( idx + 1, items.length - 1 ) : Math.max( idx - 1, 0 );
 				items.forEach( ( el, i ) => el.classList.toggle( 'active', i === idx ) );
-				items[ idx ].scrollIntoView( { block: 'nearest' } );
+				revealInPanel( items[ idx ] );
 			} else if ( e.key === 'Enter' ) {
 				// enterPicksFirst:false (tags) — plain Enter submits the typed text
 				// (a possibly-new term); only an arrowed-to item is picked here.
