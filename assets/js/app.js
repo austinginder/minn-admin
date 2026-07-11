@@ -4397,7 +4397,9 @@
 		}
 		const addBtn = $( '#minn-surface-add', view );
 		if ( addBtn ) addBtn.addEventListener( 'click', () => {
-			state.modal = { type: 'surface-form', surface: s };
+			// Carry the ACTIVE collection — `create` can live on `manage`
+			// (Gravity SMTP's Suppressions), not just the main list.
+			state.modal = { type: 'surface-form', surface: s, coll };
 			renderOverlays();
 		} );
 		bindPager( view, c.page, ( p ) => loadSurfaceItems( s, p ), () => { if ( state.route === s.id ) renderSurface( s ); } );
@@ -16007,7 +16009,7 @@
 		}
 
 		if ( m.type === 'surface-form' ) {
-			const cr = m.surface.collection.create;
+			const cr = ( m.coll || m.surface.collection ).create;
 			const formWide = ( cr.fields || [] ).some( ( f ) => f.type === 'textarea' );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
@@ -16485,7 +16487,7 @@
 		if ( m.type === 'surface-form' ) {
 			const createBtn = $( '#minn-surface-create' );
 			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
-				const cr = m.surface.collection.create;
+				const cr = ( m.coll || m.surface.collection ).create;
 				// Defaults first, then the typed fields (dot paths supported).
 				const body = JSON.parse( JSON.stringify( cr.defaults || {} ) );
 				let missing = false;

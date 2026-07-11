@@ -100,6 +100,41 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		),
+		// Suppressed addresses Gravity SMTP refuses to send to — list, add,
+		// reactivate through their own model. Reads/writes gate on their
+		// granular suppression caps server-side.
+		'manage'     => array(
+			'viewLabel' => 'Suppressions',
+			'route'     => 'minn-admin/v1/gravity-smtp/suppressed',
+			'pageQuery' => 'per_page=25&page={page}',
+			'itemsKey'  => 'items',
+			'totalKey'  => 'total',
+			'search'    => 'search={q}',
+			'columns'   => array(
+				array( 'key' => 'email', 'label' => 'Email', 'format' => 'title' ),
+				array( 'key' => 'reason', 'label' => 'Reason', 'format' => 'pill' ),
+				array( 'key' => 'notes', 'label' => 'Notes' ),
+				// Their model stamps current_time( 'mysql', true ) — UTC.
+				array( 'key' => 'date_created', 'label' => 'Since', 'format' => 'ago', 'utc' => true ),
+			),
+			'detail'    => array(),
+			'create'    => array(
+				'label'  => 'Suppress email',
+				'route'  => 'minn-admin/v1/gravity-smtp/suppressed',
+				'fields' => array(
+					array( 'key' => 'email', 'label' => 'Email address', 'type' => 'email' ),
+					array( 'key' => 'notes', 'label' => 'Notes', 'required' => false, 'placeholder' => 'Why sending to this address is off' ),
+				),
+			),
+			'actions'   => array(
+				array(
+					'label'   => 'Reactivate (allow sending again)',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/gravity-smtp/suppressed/{id}/reactivate',
+					'confirm' => 'Allow Gravity SMTP to send to this address again?',
+				),
+			),
+		),
 		'settings'   => array(
 			'cap'   => minn_admin_gsmtp_cap( 'VIEW_GENERAL_SETTINGS' ),
 			'tabs'  => array(
@@ -328,6 +363,92 @@ add_action( 'rest_api_init', function () {
 		'callback'            => 'minn_admin_gravity_smtp_resend',
 	) );
 
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/suppressed', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $can( 'VIEW_EMAIL_SUPPRESSION_SETTINGS' ),
+			'callback'            => function ( WP_REST_Request $request ) {
+				// Reads are a prefix-scoped LIKE shim (the DB-shim
+				// convention): their model's count() and paginate() DISAGREE
+				// on partial search terms (FULLTEXT quirks — count says 1,
+				// paginate returns nothing for "bounce"), which breaks the
+				// pager and reads as a broken filter. Writes still go
+				// through their model.
+				global $wpdb;
+				$table    = $wpdb->prefix . 'gravitysmtp_suppressed_emails';
+				$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
+				$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
+				$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
+				$where    = '';
+				$args     = array();
+				if ( '' !== $search ) {
+					$like  = '%' . $wpdb->esc_like( $search ) . '%';
+					$where = 'WHERE email LIKE %s OR notes LIKE %s';
+					$args  = array( $like, $like );
+				}
+				$total = (int) $wpdb->get_var( $args
+					? $wpdb->prepare( "SELECT COUNT(*) FROM {$table} {$where}", ...$args ) // phpcs:ignore
+					: "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore
+				$rows  = $wpdb->get_results( $wpdb->prepare(
+					"SELECT id, email, reason, notes, date_created FROM {$table} {$where} ORDER BY date_created DESC, id DESC LIMIT %d OFFSET %d", // phpcs:ignore
+					...array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
+				), ARRAY_A );
+				$items = array_map( function ( $row ) {
+					return array(
+						'id'           => (int) $row['id'],
+						'email'        => (string) $row['email'],
+						'reason'       => str_replace( '_', ' ', (string) $row['reason'] ),
+						'notes'        => (string) $row['notes'],
+						'date_created' => (string) $row['date_created'],
+					);
+				}, is_array( $rows ) ? $rows : array() );
+				return rest_ensure_response( array(
+					'items' => $items,
+					'total' => $total,
+				) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => $can( 'EDIT_EMAIL_SUPPRESSION_SETTINGS' ),
+			'callback'            => function ( WP_REST_Request $request ) {
+				$body  = $request->get_json_params();
+				$email = sanitize_email( (string) ( isset( $body['email'] ) ? $body['email'] : '' ) );
+				if ( ! is_email( $email ) ) {
+					return new WP_Error( 'bad_email', 'Enter a valid email address.', array( 'status' => 400 ) );
+				}
+				$notes = sanitize_text_field( (string) ( isset( $body['notes'] ) ? $body['notes'] : '' ) );
+				$model = new Gravity_Forms\Gravity_SMTP\Models\Suppressed_Emails_Model();
+				// 'manually_added' is their manual-suppression reason enum value.
+				$model->suppress_email( $email, 'manually_added', $notes );
+				return rest_ensure_response( array( 'suppressed' => $email ) );
+			},
+		),
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/suppressed/(?P<id>\d+)/reactivate', array(
+		'methods'             => 'POST',
+		'permission_callback' => $can( 'EDIT_EMAIL_SUPPRESSION_SETTINGS' ),
+		'callback'            => function ( WP_REST_Request $request ) {
+			global $wpdb;
+			// Their model keys reactivation by ADDRESS; resolve the row id
+			// (prefix-scoped read — the shim convention).
+			$email = $wpdb->get_var( $wpdb->prepare(
+				"SELECT email FROM {$wpdb->prefix}gravitysmtp_suppressed_emails WHERE id = %d", // phpcs:ignore
+				(int) $request['id']
+			) );
+			if ( ! $email ) {
+				return new WP_Error( 'not_found', 'Suppressed address not found.', array( 'status' => 404 ) );
+			}
+			$model = new Gravity_Forms\Gravity_SMTP\Models\Suppressed_Emails_Model();
+			$model->reactivate_email( $email );
+			return rest_ensure_response( array(
+				'reactivated' => $email,
+				'message'     => 'Reactivated — Gravity SMTP can send to ' . $email . ' again.',
+			) );
+		},
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/status', array(
 		'methods'             => 'GET',
 		'permission_callback' => $can( 'VIEW_EMAIL_LOG' ),
@@ -354,17 +475,27 @@ add_action( 'rest_api_init', function () {
 					),
 				),
 			);
+			$out['actions'] = array();
 			if ( current_user_can( minn_admin_gsmtp_cap( 'VIEW_TOOLS_SENDATEST' ) ) ) {
-				$out['actions'] = array(
-					array(
-						'label'  => 'Send a test email',
-						'route'  => 'minn-admin/v1/gravity-smtp/send-test',
-						'method' => 'POST',
-						'fields' => array(
-							array( 'key' => 'email', 'label' => 'Send to', 'type' => 'email', 'placeholder' => 'you@example.com' ),
-						),
+				$out['actions'][] = array(
+					'label'  => 'Send a test email',
+					'route'  => 'minn-admin/v1/gravity-smtp/send-test',
+					'method' => 'POST',
+					'fields' => array(
+						array( 'key' => 'email', 'label' => 'Send to', 'type' => 'email', 'placeholder' => 'you@example.com' ),
 					),
 				);
+			}
+			if ( current_user_can( minn_admin_gsmtp_cap( 'VIEW_DEBUG_LOG' ) ) ) {
+				// The debug log stays a link-out until surfaces grow a third
+				// list view; Suppressions holds the manage slot.
+				$out['actions'][] = array(
+					'label' => 'Debug log ↗',
+					'href'  => admin_url( 'admin.php?page=gravitysmtp-tools' ),
+				);
+			}
+			if ( ! $out['actions'] ) {
+				unset( $out['actions'] );
 			}
 			return rest_ensure_response( $out );
 		},

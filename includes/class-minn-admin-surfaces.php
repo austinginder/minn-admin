@@ -166,7 +166,7 @@ class Minn_Admin_Surfaces {
 	const CREATE_KEYS     = array( 'label', 'route', 'method', 'fields', 'defaults' );
 	const EDIT_KEYS       = array( 'route', 'method', 'preserve', 'fields' );
 	const FIELD_KEYS      = array( 'key', 'label', 'type', 'options', 'value', 'placeholder', 'rows', 'mono', 'required' );
-	const FIELD_TYPES     = array( 'text', 'number', 'textarea', 'select', 'tags' );
+	const FIELD_TYPES     = array( 'text', 'number', 'textarea', 'select', 'tags', 'email', 'url' );
 	const PANEL_KEYS      = array( 'label', 'sub', 'cap', 'fieldsRoute', 'valuesKey', 'writeKey' );
 
 	/**
