@@ -3329,6 +3329,17 @@
 		renderOverlays();
 	}
 
+	// "Name · email", but collapse to a single value when a user has no
+	// distinct display name (WordPress defaults display_name to the login,
+	// which for imported accounts is often the email — hence "email · email").
+	function fmtUserLabel( name, email ) {
+		name = ( name || '' ).trim();
+		email = ( email || '' ).trim();
+		if ( ! name || name.toLowerCase() === email.toLowerCase() ) return email || name;
+		if ( ! email ) return name;
+		return name + ' · ' + email;
+	}
+
 	function openUserDeleteModal( u ) {
 		state.modal = {
 			type: 'user-delete',
@@ -6018,6 +6029,62 @@
 			input.dataset.acValue = selected;
 		}
 		const isCurrent = ( o ) => ( opts.strict ? String( o.value ) === selected : o.value === input.value );
+		// An in-flow absolute panel is clipped by any scroll/overflow ancestor
+		// (a modal's overflow-y:auto, or .minn-shell's overflow:hidden) —
+		// absolutely-positioned panels add no scroll height, so options past
+		// the ancestor's edge become unreachable (the modal role dropdown lost
+		// its lower roles). Only WHEN a panel would actually clip do we anchor
+		// it fixed to the viewport (flipping above if there's no room below);
+		// panels that fit keep the default in-flow behavior untouched, so the
+		// surface switcher's right-aligned panel and every other combobox are
+		// unchanged.
+		const nearestClip = () => {
+			let n = wrap.parentElement;
+			while ( n && n !== document.body ) {
+				const cs = getComputedStyle( n );
+				if ( [ 'auto', 'scroll', 'hidden' ].includes( cs.overflowY ) || [ 'auto', 'scroll', 'hidden' ].includes( cs.overflowX ) ) return n;
+				n = n.parentElement;
+			}
+			return null;
+		};
+		let repositionBound = null;
+		let escaped = false;
+		const resetPanelStyle = () => {
+			escaped = false;
+			[ 'position', 'left', 'right', 'width', 'top', 'bottom', 'maxHeight' ].forEach( ( p ) => { panel.style[ p ] = ''; } );
+		};
+		const placeFixed = () => {
+			const r = input.getBoundingClientRect();
+			const MAXH = 260;
+			const below = window.innerHeight - r.bottom - 10;
+			const above = r.top - 10;
+			panel.style.position = 'fixed';
+			panel.style.left = r.left + 'px';
+			panel.style.width = r.width + 'px';
+			panel.style.right = 'auto';
+			if ( below < 160 && above > below ) {
+				panel.style.top = 'auto';
+				panel.style.bottom = ( window.innerHeight - r.top + 4 ) + 'px';
+				panel.style.maxHeight = Math.min( MAXH, above ) + 'px';
+			} else {
+				panel.style.bottom = 'auto';
+				panel.style.top = ( r.bottom + 4 ) + 'px';
+				panel.style.maxHeight = Math.min( MAXH, below ) + 'px';
+			}
+		};
+		// Measure the natural (in-flow) panel; escape to fixed only if it
+		// spills past its nearest clipping ancestor.
+		const placePanel = () => {
+			if ( ! escaped ) resetPanelStyle();
+			const anc = nearestClip();
+			if ( ! anc ) return;
+			const pr = panel.getBoundingClientRect();
+			const ar = anc.getBoundingClientRect();
+			if ( escaped || pr.bottom > ar.bottom - 2 || pr.top < ar.top + 2 ) {
+				escaped = true;
+				placeFixed();
+			}
+		};
 		// Opening (focus/click) browses the FULL list with the current value
 		// highlighted; filtering starts only once the user actually types.
 		const render = ( browseAll ) => {
@@ -6029,6 +6096,15 @@
 				|| '<div class="minn-ac-empty">No matches</div>' )
 				+ ( matches.length > 500 ? `<div class="minn-ac-empty">${ matches.length - 500 } more — keep typing…</div>` : '' );
 			panel.hidden = false;
+			placePanel();
+			if ( ! repositionBound ) {
+				// Keep the panel anchored while its input scrolls; capture:true
+				// so a modal's own scroll (not just window) reanchors it. Only
+				// matters once escaped, but cheap to leave attached while open.
+				repositionBound = () => { if ( escaped ) placeFixed(); };
+				window.addEventListener( 'scroll', repositionBound, true );
+				window.addEventListener( 'resize', repositionBound );
+			}
 			input.setAttribute( 'aria-expanded', 'true' );
 			const cur = $( '.minn-ac-item.current', panel );
 			if ( cur ) cur.scrollIntoView( { block: 'nearest' } );
@@ -6037,6 +6113,12 @@
 			panel.hidden = true;
 			idx = -1;
 			input.setAttribute( 'aria-expanded', 'false' );
+			if ( repositionBound ) {
+				window.removeEventListener( 'scroll', repositionBound, true );
+				window.removeEventListener( 'resize', repositionBound );
+				repositionBound = null;
+			}
+			resetPanelStyle();
 			// Strict mode never leaves free text behind.
 			if ( opts.strict ) input.value = labelOf( selected );
 		};
@@ -14623,7 +14705,7 @@
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">Send email</div>
-							<div class="minn-modal-sub">To ${ esc( u.name || 'user' ) }${ u.email ? ' · ' + esc( u.email ) : '' }</div>
+							<div class="minn-modal-sub">To ${ esc( fmtUserLabel( u.name, u.email ) || 'user' ) }</div>
 						</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -14655,7 +14737,7 @@
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">Delete user</div>
-							<div class="minn-modal-sub">${ esc( u.name || '' ) }${ u.email ? ' · ' + esc( u.email ) : '' }</div>
+							<div class="minn-modal-sub">${ esc( fmtUserLabel( u.name, u.email ) ) }</div>
 						</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -15503,7 +15585,7 @@
 			if ( ac && cands.length ) {
 				bindAutocomplete( ac, cands.map( ( u ) => ( {
 					value: String( u.id ),
-					label: u.name + ( u.email ? ' · ' + u.email : '' ),
+					label: fmtUserLabel( u.name, u.email ),
 				} ) ), {
 					strict: true,
 					value: m.reassign || String( B.user.id ),
