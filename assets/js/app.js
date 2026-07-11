@@ -6106,13 +6106,18 @@
 				return;
 			}
 			// Multi-secret vendors (Divi's username + API key) declare their
-			// fields; everyone else gets the single paste field.
+			// fields; everyone else gets the single paste field. Plain text,
+			// not type=password: a license key isn't a credential, the value
+			// is used once and never stored, and the password type summons
+			// 1Password/LastPass/Bitwarden over the field (Austin's report;
+			// the data-*-ignore attributes are each manager's documented
+			// opt-out for non-login fields).
 			const fields = btn.dataset.fields ? JSON.parse( btn.dataset.fields ) : null;
 			const wrap = btn.closest( '.minn-lic-actions' );
 			wrap.innerHTML = `
 				${ fields
-		? fields.map( ( f ) => `<input type="password" class="minn-lic-key" data-sid="${ esc( f.id ) }" placeholder="${ esc( f.label ) }" autocomplete="off" spellcheck="false">` ).join( '' )
-		: `<input type="password" class="minn-lic-key" placeholder="${ esc( btn.dataset.secret ) }" autocomplete="off" spellcheck="false">` }
+		? fields.map( ( f ) => `<input type="text" class="minn-lic-key" data-sid="${ esc( f.id ) }" placeholder="${ esc( f.label ) }" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true">` ).join( '' )
+		: `<input type="text" class="minn-lic-key" placeholder="${ esc( btn.dataset.secret ) }" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true">` }
 				<button data-lic-go>Activate</button>
 				<button data-lic-cancel>Cancel</button>`;
 			const inputs = $$( '.minn-lic-key', wrap );

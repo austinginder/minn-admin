@@ -1154,6 +1154,71 @@ function minn_admin_license_default_providers() {
 	// action routes through the vendor's own activation path; Minn never
 	// reimplements a vendor HTTP call and never retries a failure.
 
+	// Slider Revolution: RevSliderLicense::activate_plugin($code) against the
+	// ThemePunch servers returns true (stored + valid), 'exist' (the code is
+	// registered to another site: a real seat-limit answer), 'banned', or
+	// false. The license class and its RevSliderTracking dependency only load
+	// in wp-admin, so they're included manually here (the load balancer is
+	// lazily bound by RevSliderGlobals either way). NOTE: an unregistered
+	// Slider Revolution cannot download updates at all (their update request
+	// only carries the purchase code when revslider-valid is 'true'), so
+	// activation is also what unblocks their "Activate To Update" screen.
+	if ( class_exists( 'RevSliderGlobals' ) && defined( 'RS_PLUGIN_PATH' ) ) {
+		$revslider_license = function () {
+			foreach ( array( 'admin/includes/license.class.php', 'admin/includes/tracking.class.php', 'admin/includes/loadbalancer.class.php' ) as $inc ) {
+				if ( file_exists( RS_PLUGIN_PATH . $inc ) ) {
+					include_once RS_PLUGIN_PATH . $inc;
+				}
+			}
+			return class_exists( 'RevSliderLicense' ) ? new RevSliderLicense() : null;
+		};
+		$providers['revslider']['secret_label'] = 'Purchase code';
+		$providers['revslider']['activate']     = function ( $secret ) use ( $revslider_license ) {
+			$lic = $revslider_license();
+			if ( ! $lic ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Slider Revolution\'s license class could not be loaded.' );
+			}
+			$res = $lic->activate_plugin( trim( (string) $secret ) );
+			if ( true === $res ) {
+				return array( 'ok' => true, 'code' => '', 'message' => '' );
+			}
+			if ( 'exist' === $res ) {
+				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'This purchase code is already registered to another site. Deregister it there (or in your ThemePunch account) first.' );
+			}
+			if ( 'banned' === $res ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'ThemePunch reports this purchase code as banned.' );
+			}
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => 'ThemePunch did not accept this purchase code.' );
+		};
+		$providers['revslider']['deactivate']   = function () use ( $revslider_license ) {
+			$lic = $revslider_license();
+			if ( ! $lic ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Slider Revolution\'s license class could not be loaded.' );
+			}
+			// Their own deregistration flow: frees the seat server-side.
+			return (bool) $lic->deactivate_plugin()
+				? array( 'ok' => true, 'code' => '', 'message' => 'The purchase code was deregistered with ThemePunch and the seat freed.' )
+				: array( 'ok' => false, 'code' => 'error', 'message' => 'ThemePunch did not confirm the deregistration.' );
+		};
+		$providers['revslider']['verify']       = function () use ( $revslider_license ) {
+			$code = trim( (string) get_option( 'revslider-code', '' ) );
+			if ( '' === $code ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'No purchase code is stored.' );
+			}
+			$lic = $revslider_license();
+			if ( ! $lic ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Slider Revolution\'s license class could not be loaded.' );
+			}
+			// Re-activating the stored code is their own revalidation path;
+			// 'exist' here means the registration moved to another site.
+			$res = $lic->activate_plugin( $code );
+			if ( true === $res ) {
+				return array( 'ok' => true, 'code' => '', 'message' => '' );
+			}
+			return array( 'ok' => false, 'code' => 'exist' === $res ? 'site_limit' : 'invalid', 'message' => 'exist' === $res ? 'The stored code is now registered to another site.' : 'ThemePunch no longer accepts the stored code.' );
+		};
+	}
+
 	// The Events Calendar family: everything through Tribe__PUE__Checker,
 	// constructed with each plugin's own args. validate_key() is their
 	// COMPLETE flow (PUE service call, key persisted only when accepted,
