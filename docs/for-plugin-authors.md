@@ -105,7 +105,7 @@ page's copy-report carries the section for bug reports.
 | `sub` | Subtitle badge (usually your plugin name) |
 | `icon` | Icon name from Minn's set: `inbox`, `send`, `doc`, `img`, `chat`, `cart`, `users`, `gear`, `plug`, `grid`, `list` |
 | `cap` | Capability required. Checked server-side; the surface is absent from the app for users without it |
-| `collection` | The list definition (below) |
+| `collection` | The list definition (below). Optional when the surface declares `settings`: a settings-only surface renders its settings view as the whole page (right for settings-shaped plugins with no list to show; the bundled Perfmatters adapter is the example) |
 | `family` | Group id for surfaces that do the same job (`forms`, `mail`, `redirects`, `activity-log`, `snippets`, `backups`, or your own). Same-family surfaces share one sidebar entry with a provider switcher in the topbar badge; the user's pick is remembered per family |
 | `group` | Sidebar placement. Surfaces default to the **Tools** group (logs, redirects, snippets: site plumbing). Declare `"workspace"` only when the surface is inbox-shaped, something users check daily because new items need a human (form entries are the bundled example) |
 | `manage` | Optional second collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Gravity Forms uses it for Entries / Forms |
@@ -259,6 +259,11 @@ Rules of the road:
   the stored secret.
 - Read and write through your plugin's **own** settings APIs inside the
   route, so constant-lock, encryption and validation semantics stay yours.
+- A surface may be **settings-only**: omit `collection` entirely and the
+  settings view renders as the whole page, with no view switcher. If your
+  plugin registers its options through the core WP Settings API, the bundled
+  Perfmatters adapter is the reference for reading that registry as the
+  schema at runtime instead of hand-copying fields.
 
 ### `collection`
 

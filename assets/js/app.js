@@ -4222,6 +4222,8 @@
 	// renderer and the settings view, which each own the whole #minn-view.
 	function surfaceViewSwitchHtml( s, ss ) {
 		if ( ! s.manage && ! s.settings ) return '';
+		// Settings-only surface (no collection): one view, nothing to switch.
+		if ( ! s.collection ) return '';
 		return `
 			<div class="minn-tabs minn-view-switch">
 				<button class="minn-tab${ ss.view !== 'manage' && ss.view !== 'settings' ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
@@ -4256,7 +4258,8 @@
 			return;
 		}
 		const ss = surfaceState( s.id );
-		if ( ss.view === 'settings' && s.settings ) {
+		// A settings-only surface (no collection) is its settings view.
+		if ( s.settings && ( ss.view === 'settings' || ! s.collection ) ) {
 			renderSurfaceSettings( s, view );
 			return;
 		}

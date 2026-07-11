@@ -107,6 +107,18 @@ outs until then). Phase 2's remaining half is the GF Settings mapper
 (form settings + notifications/confirmations via full-form PUT) — the
 natural v0.13.0 opener.
 
+**The multiplier, proven on a fresh plugin (2026-07-11):** the theory behind
+this document was tested cold against Perfmatters, a settings-shaped plugin
+with no prior Minn contact. Result: the whole build (a ~280-line adapter, a
+15-check suite, zero new client field code) took one session fragment, and
+the only machinery Minn had to grow was **settings-only surfaces** (a
+surface may omit `collection` when it declares `settings` — three small
+edits). Because Perfmatters registers everything through the core WP
+Settings API, the adapter reads `$wp_settings_fields` as its schema at
+runtime; that mapper pattern transfers to the thousands of plugins on the
+same API and is the third schema framework covered (Gravity SMTP component
+trees, Minn's own form vocabulary, core Settings API).
+
 ## The architectural framework: four rungs
 
 The proposal is an escalation ladder. Each rung is independently shippable, each makes

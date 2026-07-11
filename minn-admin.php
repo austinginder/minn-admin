@@ -74,6 +74,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/user-switching.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/regenerate-thumbnails.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wcpdf.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/licenses.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/perfmatters.php';
 
 Minn_Admin::init();
 Minn_Admin_REST::init();

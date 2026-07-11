@@ -267,7 +267,11 @@ class Minn_Admin_Surfaces {
 			$problems[] = "unknown key \"$k\" (ignored)";
 		}
 		if ( empty( $surface['collection'] ) || ! is_array( $surface['collection'] ) ) {
-			$problems[] = 'missing collection';
+			// Settings-only surfaces are legal: a settings-shaped plugin
+			// (Perfmatters is the bundled example) has no list to show.
+			if ( empty( $surface['settings'] ) || ! is_array( $surface['settings'] ) ) {
+				$problems[] = 'missing collection';
+			}
 		}
 		if ( isset( $surface['setup'] ) ) {
 			if ( ! is_array( $surface['setup'] ) ) {
