@@ -40,6 +40,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	// --- Surface UI -----------------------------------------------------------
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
 	await page.waitForFunction( () => window.MINN && document.querySelector( '.minn-sidebar' ), null, { timeout: 15000 } );
+	// Gravity SMTP is ALSO an active mail provider on this site (license-cycle
+	// fixture, 2026-07-10) and registers first, so a fresh context's family
+	// default is gravity-smtp. This suite drives FluentSMTP — pin the family
+	// pick like a user who chose it (rule: suites seed their baseline).
+	await page.evaluate( () => localStorage.setItem( 'minn-sf-mail', 'fluent-smtp' ) );
+	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
+	await page.waitForFunction( () => window.MINN && document.querySelector( '.minn-sidebar' ), null, { timeout: 15000 } );
 	const navLabel = await page.evaluate( () => {
 		const btn = Array.from( document.querySelectorAll( '.minn-nav-btn' ) )
 			.find( ( b ) => b.textContent.includes( 'Email Log' ) );
