@@ -2,6 +2,10 @@
  * Surface detail prev/next (←/→): Gravity Forms entry detail opens from the
  * list, then ArrowRight / ArrowLeft (and the head ‹ › buttons) step through
  * the loaded page of entries without leaving the modal.
+ *
+ * The entry id lives in `.minn-modal-sub` ("Entry #12") since the contact-card
+ * redesign (57fb053) moved it out of the title — navigation matches on that
+ * id, not the form name, so a late title swap can't look like navigation.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
@@ -39,59 +43,62 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	);
 	t.check( 'row indexes load', ids.length >= 2, JSON.stringify( ids ) );
 
-	// Open the first entry and wait for the sections fetch to settle
-	// (title swaps from the surface label to the form name). Stepping is
-	// ignored while loading, so arrows only after the loading row is gone.
+	// The open entry's id, read from the "Entry #N" sub line.
+	const modalId = () => page.evaluate( () => {
+		const sub = document.querySelector( '.minn-modal-sub' );
+		const m = sub && sub.textContent.match( /#(\d+)\s*$/ );
+		return m ? m[ 1 ] : null;
+	} );
+
+	// Open the first entry and wait for the sections fetch to settle.
+	// Stepping is ignored while loading, so arrows only after the loading
+	// row is gone.
 	await page.click( '.minn-table-row[data-sitem="0"]' );
 	await page.waitForSelector( '.minn-modal-title', { timeout: 10000 } );
 	await page.waitForFunction( () => {
-		const title = document.querySelector( '.minn-modal-title' );
+		const sub = document.querySelector( '.minn-modal-sub' );
 		const loading = document.querySelector( '.minn-modal .minn-loading' );
 		const next = document.querySelector( '#minn-surface-next' );
-		return title && ! loading && next && ! next.disabled;
+		return sub && ! loading && next && ! next.disabled;
 	}, null, { timeout: 15000 } );
-	const title1 = await page.$eval( '.minn-modal-title', ( el ) => el.textContent.trim() );
-	const id1 = ( title1.match( /#(\d+)\s*$/ ) || [] )[ 1 ];
+	const id1 = await modalId();
 	const countLabel = await page.$eval( '.minn-modal-count', ( el ) => el.textContent.trim() );
 	t.check( 'detail shows position 1 / N', /^1\s*\/\s*\d+$/.test( countLabel ), countLabel );
-	t.check( 'first entry title has an id', !! id1, title1 );
+	t.check( 'first entry carries its id in the sub line', !! id1, String( id1 ) );
 
 	// → next entry (match on the #id, not the form name, so a late title
 	// swap can't look like navigation).
 	await page.keyboard.press( 'ArrowRight' );
 	await page.waitForFunction( ( prevId ) => {
-		const el = document.querySelector( '.minn-modal-title' );
+		const sub = document.querySelector( '.minn-modal-sub' );
 		const loading = document.querySelector( '.minn-modal .minn-loading' );
-		const m = el && el.textContent.match( /#(\d+)\s*$/ );
+		const m = sub && sub.textContent.match( /#(\d+)\s*$/ );
 		return ! loading && m && m[ 1 ] !== prevId;
 	}, id1, { timeout: 10000 } );
-	const title2 = await page.$eval( '.minn-modal-title', ( el ) => el.textContent.trim() );
-	const id2 = ( title2.match( /#(\d+)\s*$/ ) || [] )[ 1 ];
-	t.check( '→ opens the next entry', id2 && id2 !== id1, `${ title1 } → ${ title2 }` );
+	const id2 = await modalId();
+	t.check( '→ opens the next entry', id2 && id2 !== id1, `#${ id1 } → #${ id2 }` );
 	const count2 = await page.$eval( '.minn-modal-count', ( el ) => el.textContent.trim() );
 	t.check( 'position advances to 2 / N', /^2\s*\/\s*\d+$/.test( count2 ), count2 );
 
 	// ← previous entry
 	await page.keyboard.press( 'ArrowLeft' );
 	await page.waitForFunction( ( wantId ) => {
-		const el = document.querySelector( '.minn-modal-title' );
+		const sub = document.querySelector( '.minn-modal-sub' );
 		const loading = document.querySelector( '.minn-modal .minn-loading' );
-		const m = el && el.textContent.match( /#(\d+)\s*$/ );
+		const m = sub && sub.textContent.match( /#(\d+)\s*$/ );
 		return ! loading && m && m[ 1 ] === wantId;
 	}, id1, { timeout: 10000 } );
-	const titleBack = await page.$eval( '.minn-modal-title', ( el ) => el.textContent.trim() );
-	t.check( '← returns to the first entry', titleBack === title1, `${ title2 } → ${ titleBack }` );
+	t.check( '← returns to the first entry', ( await modalId() ) === id1, `#${ id2 } → #${ await modalId() }` );
 
 	// Head button also works
 	await page.click( '#minn-surface-next' );
 	await page.waitForFunction( ( wantId ) => {
-		const el = document.querySelector( '.minn-modal-title' );
+		const sub = document.querySelector( '.minn-modal-sub' );
 		const loading = document.querySelector( '.minn-modal .minn-loading' );
-		const m = el && el.textContent.match( /#(\d+)\s*$/ );
+		const m = sub && sub.textContent.match( /#(\d+)\s*$/ );
 		return ! loading && m && m[ 1 ] === wantId;
 	}, id2, { timeout: 10000 } );
-	const titleBtn = await page.$eval( '.minn-modal-title', ( el ) => el.textContent.trim() );
-	t.check( '› button steps forward', titleBtn === title2, titleBtn );
+	t.check( '› button steps forward', ( await modalId() ) === id2, `#${ await modalId() }` );
 
 	// At the last item of a 2-entry page, → is a no-op (button disabled).
 	if ( count === 2 ) {
@@ -99,8 +106,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'next disabled on last entry', nextDisabled, '' );
 		await page.keyboard.press( 'ArrowRight' );
 		await page.waitForTimeout( 400 );
-		const still = await page.$eval( '.minn-modal-title', ( el ) => el.textContent.trim() );
-		t.check( '→ on last entry is a no-op', still === titleBtn, still );
+		t.check( '→ on last entry is a no-op', ( await modalId() ) === id2, `#${ await modalId() }` );
 	}
 
 	await t.done( browser, errors );
