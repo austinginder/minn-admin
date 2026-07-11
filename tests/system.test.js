@@ -194,5 +194,29 @@ const fs = require( 'fs' );
 		t.check( 'Escape closes the log overlay', ! ( await page.$( '.minn-log-modal' ) ) );
 	}
 
+	/* ===== Autoload + Cron summary rows expand to detail modals ===== */
+	await page.evaluate( () => document.querySelector( '[data-sysdetail="autoload"]' ).click() );
+	await page.waitForFunction( () => document.querySelectorAll( '.minn-sysd-row' ).length > 2, null, { timeout: 15000 } );
+	const alModal = await page.evaluate( () => ( {
+		title: document.querySelector( '#minn-modal-overlay .minn-modal-title' ).textContent,
+		rows: document.querySelectorAll( '.minn-sysd-row' ).length,
+		sub: document.querySelector( '.minn-sysd-sub' ).textContent,
+	} ) );
+	t.check( 'autoload row opens the full-detail modal', /Autoloaded options/.test( alModal.title ) && alModal.rows > 5 && /autoloaded options load on every request/.test( alModal.sub ), JSON.stringify( alModal ) );
+	await page.keyboard.press( 'Escape' );
+	await page.waitForTimeout( 250 );
+
+	await page.evaluate( () => document.querySelector( '[data-sysdetail="cron"]' ).click() );
+	await page.waitForFunction( () => {
+		const t2 = document.querySelector( '#minn-modal-overlay .minn-modal-title' );
+		return t2 && /cron/i.test( t2.textContent ) && document.querySelectorAll( '.minn-sysd-row' ).length > 2;
+	}, null, { timeout: 15000 } );
+	const cronModal = await page.evaluate( () => ( {
+		rows: document.querySelectorAll( '.minn-sysd-row' ).length,
+		hasRecurrence: [ ...document.querySelectorAll( '.minn-sysd-dim' ) ].some( ( e ) => /daily|hourly|once|off/i.test( e.textContent ) ),
+	} ) );
+	t.check( 'cron row opens the events modal with recurrences', cronModal.rows > 2 && cronModal.hasRecurrence, JSON.stringify( cronModal ) );
+	await page.keyboard.press( 'Escape' );
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
