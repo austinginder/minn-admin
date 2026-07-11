@@ -54,6 +54,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'itemsKey'  => 'entries',
 			'totalKey'  => 'total_count',
+			// Second list dimension beside the form tabs. gf/v2 takes status
+			// inside the same JSON `search` criteria the search box uses, so
+			// the json form merges with it instead of clobbering the param.
+			'filter'    => array(
+				'label'   => 'Status',
+				'options' => array(
+					array( 'active', 'Received' ),
+					array( 'spam', 'Spam' ),
+					array( 'trash', 'Trash' ),
+				),
+				'param'   => 'search',
+				'json'    => array( 'status' => '{v}' ),
+			),
 			'tabs'      => array(
 				'route'    => 'gf/v2/forms',
 				'valueKey' => 'id',
@@ -115,8 +128,23 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'method'  => 'PUT',
 					'route'   => 'gf/v2/entries/{id}/properties',
 					'body'    => array( 'status' => 'spam' ),
-					'confirm' => 'Mark this entry as spam? It leaves this list (manage spam in Gravity Forms).',
+					'confirm' => 'Mark this entry as spam? Find it under the Spam filter.',
 					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
+				),
+				array(
+					'label'  => 'Not spam',
+					'method' => 'PUT',
+					'route'  => 'gf/v2/entries/{id}/properties',
+					'body'   => array( 'status' => 'active' ),
+					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
+				),
+				array(
+					'label'  => 'Restore',
+					'method' => 'PUT',
+					'route'  => 'gf/v2/entries/{id}/properties',
+					'body'   => array( 'status' => 'active' ),
+					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
 					'label'   => 'Trash entry',
@@ -124,6 +152,23 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'   => 'gf/v2/entries/{id}',
 					'confirm' => 'Move this entry to trash?',
 					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'gf/v2/entries/{id}?force=1',
+					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'gf/v2/entries/{id}?force=1',
+					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 			),
 			'bulk'      => array(
@@ -148,6 +193,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'body'    => array( 'status' => 'spam' ),
 					'confirm' => 'Mark the selected entries as spam?',
 					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
+				),
+				array(
+					'label'  => 'Not spam',
+					'method' => 'PUT',
+					'route'  => 'gf/v2/entries/{id}/properties',
+					'body'   => array( 'status' => 'active' ),
+					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
+				),
+				array(
+					'label'  => 'Restore',
+					'method' => 'PUT',
+					'route'  => 'gf/v2/entries/{id}/properties',
+					'body'   => array( 'status' => 'active' ),
+					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
 					'label'   => 'Trash',
@@ -155,6 +215,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'   => 'gf/v2/entries/{id}',
 					'confirm' => 'Move the selected entries to trash?',
 					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'gf/v2/entries/{id}?force=1',
+					'confirm' => 'Delete the selected entries permanently? There is no undo.',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 			),
 		),

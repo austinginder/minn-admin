@@ -47,15 +47,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.evaluate( () => localStorage.setItem( 'minn-sf-mail', 'fluent-smtp' ) );
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
 	await page.waitForFunction( () => window.MINN && document.querySelector( '.minn-sidebar' ), null, { timeout: 15000 } );
+	// The mail family surface is labeled "Email" since the v0.12.0 cycle
+	// (it grew settings + a status card; "Email Log" undersold it).
 	const navLabel = await page.evaluate( () => {
 		const btn = Array.from( document.querySelectorAll( '.minn-nav-btn' ) )
-			.find( ( b ) => b.textContent.includes( 'Email Log' ) );
+			.find( ( b ) => b.textContent.trim() === 'Email' );
 		return btn ? btn.textContent.trim() : '';
 	} );
-	t.check( 'Email Log appears in the nav', navLabel.includes( 'Email Log' ), navLabel );
+	t.check( 'Email appears in the nav', navLabel === 'Email', navLabel );
 	await page.evaluate( () => {
 		Array.from( document.querySelectorAll( '.minn-nav-btn' ) )
-			.find( ( b ) => b.textContent.includes( 'Email Log' ) ).click();
+			.find( ( b ) => b.textContent.trim() === 'Email' ).click();
 	} );
 	await page.waitForFunction(
 		() => document.body.textContent.includes( 'Minn mail test' ),

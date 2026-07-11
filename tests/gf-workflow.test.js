@@ -167,6 +167,83 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'trashed entries left the list', await page.evaluate( () =>
 			! document.querySelector( '.minn-table' ).textContent.includes( 'wf-two' ) ) );
 
+		/* ===== Status filter: trash view, restore, delete permanently ===== */
+		// wf-two and wf-three sit in trash from the bulk step.
+		t.check( 'filter pills render with Received active', await page.$eval( '[data-sfilter="active"]', ( el ) => el.classList.contains( 'active' ) ) );
+		// Bulk-bar declutter: on the Received view no page item is spam/trash,
+		// so Restore and Not spam are not offered.
+		await selectByText( 'gf workflow wf-one' );
+		await page.waitForSelector( '.minn-bulkbar', { timeout: 10000 } );
+		const offeredReceived = await page.$$eval( '[data-sbulk]', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
+		t.check( 'bulk bar hides verbs no page item can take',
+			! offeredReceived.includes( 'Restore' ) && ! offeredReceived.includes( 'Not spam' ) && offeredReceived.includes( 'Spam' ),
+			offeredReceived.join( ',' ) );
+		await page.click( '#minn-sbulk-clear' );
+
+		await page.click( '[data-sfilter="trash"]' );
+		await page.waitForFunction( () => {
+			const tbl = document.querySelector( '.minn-table' );
+			return tbl && tbl.textContent.includes( 'wf-two' );
+		}, { timeout: 20000 } );
+		t.check( 'trash filter lists the trashed entries', await page.evaluate( () =>
+			document.querySelector( '.minn-table' ).textContent.includes( 'wf-three' ) ) );
+
+		// Restore wf-two through the detail actions.
+		await page.$$eval( '.minn-table-row', ( rows ) => {
+			const row = rows.find( ( r ) => r.textContent.includes( 'wf-two' ) );
+			if ( row ) row.click();
+		} );
+		await page.waitForFunction( () => {
+			const m = document.querySelector( '.minn-modal' );
+			return m && [ ...m.querySelectorAll( '[data-saction]' ) ].some( ( b ) => b.textContent.trim() === 'Restore' );
+		}, { timeout: 25000 } );
+		t.check( 'trash view offers Restore + Delete permanently', await page.evaluate( () => {
+			const labels = [ ...document.querySelectorAll( '[data-saction]' ) ].map( ( b ) => b.textContent.trim() );
+			return labels.includes( 'Restore' ) && labels.includes( 'Delete permanently' )
+				&& ! labels.includes( 'Trash entry' ) && ! labels.includes( 'Mark as spam' );
+		} ) );
+		await page.evaluate( () => {
+			[ ...document.querySelectorAll( '[data-saction]' ) ].find( ( b ) => b.textContent.trim() === 'Restore' ).click();
+		} );
+		await page.waitForFunction( () => {
+			const tEl = document.querySelector( '.minn-toast-msg' );
+			return tEl && /Restore — done/.test( tEl.textContent );
+		}, { timeout: 20000 } );
+		const restored = await entry( ids[ 1 ] );
+		t.check( 'restore lands the entry back in active', restored.status === 'active', restored.status );
+
+		// Delete wf-three permanently from the trash view.
+		await page.waitForFunction( () => {
+			const tbl = document.querySelector( '.minn-table' );
+			return tbl && ! tbl.classList.contains( 'minn-busy' );
+		}, { timeout: 20000 } );
+		await page.$$eval( '.minn-table-row', ( rows ) => {
+			const row = rows.find( ( r ) => r.textContent.includes( 'wf-three' ) );
+			if ( row ) row.click();
+		} );
+		await page.waitForFunction( () => {
+			const m = document.querySelector( '.minn-modal' );
+			return m && [ ...m.querySelectorAll( '[data-saction]' ) ].some( ( b ) => b.textContent.trim() === 'Delete permanently' );
+		}, { timeout: 25000 } );
+		page.once( 'dialog', ( d ) => d.accept() );
+		await page.evaluate( () => {
+			[ ...document.querySelectorAll( '[data-saction]' ) ].find( ( b ) => b.textContent.trim() === 'Delete permanently' ).click();
+		} );
+		await page.waitForFunction( () => {
+			const tEl = document.querySelector( '.minn-toast-msg' );
+			return tEl && /Delete permanently — done/.test( tEl.textContent );
+		}, { timeout: 20000 } );
+		const gone = await gf( `gf/v2/entries/${ ids[ 2 ] }` );
+		t.check( 'permanent delete really deletes', gone.status === 404 || ( gone.body && gone.body.code ), String( gone.status ) );
+
+		// Back on Received, the restored entry lists again.
+		await page.click( '[data-sfilter="active"]' );
+		await page.waitForFunction( () => {
+			const tbl = document.querySelector( '.minn-table' );
+			return tbl && tbl.textContent.includes( 'wf-two' );
+		}, { timeout: 20000 } );
+		t.check( 'restored entry back on the Received view', true );
+
 		/* ===== Standing fixtures untouched ===== */
 		const standing = ( await gf( 'gf/v2/forms/1/entries?paging[page_size]=50' ) ).body;
 		const standingActive = ( standing.entries || [] ).filter( ( e ) => ! String( e[ fieldKey ] || '' ).startsWith( 'gf workflow' ) );
