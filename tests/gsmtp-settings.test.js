@@ -79,11 +79,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.fill( '[data-actfield="email"]', 'minn-test@example.com' );
 		await page.evaluate( () => document.querySelectorAll( '.minn-toast' ).forEach( ( e ) => e.remove() ) );
 		await page.click( '[data-actgo]' );
+		// FluentSMTP owns wp_mail on this site, so the honest outcome message
+		// says another mailer carried the test (Austin's repro: delivered to
+		// Mailpit, absent from Gravity SMTP's log).
 		await page.waitForFunction( () => {
 			const tEl = document.querySelector( '.minn-toast-msg' );
-			return tEl && /Send a test email — done/.test( tEl.textContent );
+			return tEl && /Test email sent/.test( tEl.textContent );
 		}, { timeout: 30000 } );
 		t.check( 'test email sent through the inline address field', true );
+		t.check( 'toast says who carried the send when GS did not log it', await page.evaluate( () => {
+			const tEl = document.querySelector( '.minn-toast-msg' );
+			return !! tEl && /another active mail plugin/.test( tEl.textContent );
+		} ) );
 		await page.waitForSelector( '[data-sview="settings"]', { timeout: 20000 } );
 
 		/* ===== Sending tab: mapped connector schema ===== */

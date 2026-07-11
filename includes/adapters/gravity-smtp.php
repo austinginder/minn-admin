@@ -390,16 +390,34 @@ add_action( 'rest_api_init', function () {
 					'connector' => $connector,
 				);
 			}, 8, 2 );
+			// Only ONE mail plugin can own the wp_mail pipeline. If another
+			// active mailer (FluentSMTP on a typical multi-mailer site)
+			// carries the send, Gravity SMTP never sees it and nothing lands
+			// in ITS log — deliverable but invisible here (Austin's repro).
+			// Their own Event_Model fires this action when GS records the
+			// send; its absence is the honest tell.
+			$logged   = 0;
+			$listener = function ( $created_id ) use ( &$logged ) {
+				$logged = (int) $created_id;
+			};
+			add_action( 'gravitysmtp_after_mail_created', $listener );
 			$sent = wp_mail(
 				$email,
 				'Test email from Minn Admin (Gravity SMTP)',
 				"This is a test email sent through the {$connector} connector, triggered from Minn Admin's Email Log.",
 				array()
 			);
+			remove_action( 'gravitysmtp_after_mail_created', $listener );
 			if ( ! $sent ) {
 				return new WP_Error( 'send_failed', 'The mailer reported the test could not be sent.', array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( array( 'sent' => true ) );
+			return rest_ensure_response( array(
+				'sent'    => true,
+				'logged'  => (bool) $logged,
+				'message' => $logged
+					? 'Test email sent and logged.'
+					: 'Test email sent, but another active mail plugin carried it, so it appears in that plugin’s log, not Gravity SMTP’s.',
+			) );
 		},
 	) );
 
@@ -683,11 +701,25 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 		$headers = $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array();
 	}
 
+	// Same tell as send-test: if another active mailer carries the resend,
+	// Gravity SMTP records nothing and the log won't show a new row.
+	$logged   = 0;
+	$listener = function ( $created_id ) use ( &$logged ) {
+		$logged = (int) $created_id;
+	};
+	add_action( 'gravitysmtp_after_mail_created', $listener );
 	$sent = wp_mail( $to, (string) $row->subject, (string) $row->message, $headers, $attachments );
+	remove_action( 'gravitysmtp_after_mail_created', $listener );
 	if ( ! $sent ) {
 		return new WP_Error( 'send_failed', 'The mailer reported the message could not be sent.', array( 'status' => 500 ) );
 	}
-	return rest_ensure_response( array( 'resent' => true ) );
+	return rest_ensure_response( array(
+		'resent'  => true,
+		'logged'  => (bool) $logged,
+		'message' => $logged
+			? 'Resent to the original recipients.'
+			: 'Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s.',
+	) );
 }
 
 /**

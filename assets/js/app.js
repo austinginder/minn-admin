@@ -3562,6 +3562,15 @@
 		return { body, missing };
 	}
 
+	// An action route may return { message } to replace the default
+	// "⟨label⟩ — done" toast — the honest channel for outcomes the label
+	// can't promise (Gravity SMTP's "sent, but another mailer carried it").
+	function actionToast( response, action ) {
+		return response && typeof response.message === 'string' && response.message
+			? response.message
+			: action.label + ' — done';
+	}
+
 	// Swap `btn`'s row for the field form; `run(body)` fires on Go.
 	function armActionFields( btn, action, onCancel, run ) {
 		const rowEl = btn.parentElement;
@@ -3611,8 +3620,8 @@
 				};
 				if ( a.fields && a.fields.length ) {
 					armActionFields( btn, a, () => renderSurface( s ), async ( body ) => {
-						await api( a.route, { method: a.method || 'POST', body: JSON.stringify( body ) } );
-						toast( a.label + ' — done' );
+						const r = await api( a.route, { method: a.method || 'POST', body: JSON.stringify( body ) } );
+						toast( actionToast( r, a ) );
 						finish();
 					} );
 					return;
@@ -3620,8 +3629,8 @@
 				if ( a.confirm && ! confirm( a.confirm ) ) return;
 				btn.disabled = true;
 				try {
-					await api( a.route, { method: a.method || 'POST' } );
-					toast( a.label + ' — done' );
+					const r = await api( a.route, { method: a.method || 'POST' } );
+					toast( actionToast( r, a ) );
 					finish();
 				} catch ( e ) {
 					toast( e.message, true );
@@ -16643,11 +16652,11 @@
 						// Cancel rebuilds the modal from state, so the action
 						// row (and its handlers) come back exactly as declared.
 						armActionFields( btn, action, () => renderOverlays(), async ( body ) => {
-							await api( action.route.replace( '{id}', m.item.id ), {
+							const r = await api( action.route.replace( '{id}', m.item.id ), {
 								method: action.method || 'POST',
 								body: JSON.stringify( body ),
 							} );
-							toast( action.label + ' — done' );
+							toast( actionToast( r, action ) );
 							finish();
 						} );
 						return;
@@ -16655,11 +16664,11 @@
 					if ( action.confirm && ! confirm( action.confirm ) ) return;
 					btn.disabled = true;
 					try {
-						await api( action.route.replace( '{id}', m.item.id ), {
+						const r = await api( action.route.replace( '{id}', m.item.id ), {
 							method: action.method || 'POST',
 							...( action.body ? { body: JSON.stringify( action.body ) } : {} ),
 						} );
-						toast( action.label + ' — done' );
+						toast( actionToast( r, action ) );
 						finish();
 					} catch ( e ) {
 						toast( e.message, true );
