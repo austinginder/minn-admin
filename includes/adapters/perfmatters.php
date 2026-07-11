@@ -47,6 +47,11 @@ function minn_admin_perfmatters_tabs() {
 function minn_admin_perfmatters_registry() {
 	static $primed = false;
 	if ( ! $primed ) {
+		// add_settings_section()/add_settings_field() live in an admin
+		// include that REST requests don't load.
+		if ( ! function_exists( 'add_settings_section' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/template.php';
+		}
 		perfmatters_settings();
 		$primed = true;
 	}
