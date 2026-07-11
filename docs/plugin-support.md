@@ -142,7 +142,10 @@ recommended order (installs × fit × effort):
     change; the pill switcher lands with it.
 
 Parked as structural: **multilingual** (WPML / Polylang / TranslatePress)
-needs a language dimension in content lists.
+needs a language dimension in content lists. Also parked, with scope and
+boundaries drawn in `docs/native-editors.md`: **native editors over clean
+documents** (the Gravity Forms "80% form editor") and **developer surfaces
+over site primitives** (read-only database viewer, file browsing).
 
 Explicitly skip (link-out or nothing is the honest answer): image optimizers
 (Smush, EWWW, Imagify, ShortPixel: background processors), consent/GDPR

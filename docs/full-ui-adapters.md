@@ -228,7 +228,9 @@ field palette is programmatic (`GF_Fields::get_all()`), per-type setting keys ar
 enumerable, and conditional logic is a trivial rule JSON. A Minn-built form editor is
 therefore *possible* without touching GF's JS. It would be a product decision on the
 scale of "Minn builds a second editor", not an adapter feature, and nothing in rungs
-1-3 forecloses it.
+1-3 forecloses it. That option (the "80% editor"), plus the developer-surface
+siblings (read-only database viewer, file browsing), is now scoped with its
+boundaries drawn in `docs/native-editors.md` — parked, not scheduled.
 
 ## Case study: Gravity Forms coverage map
 
