@@ -2903,6 +2903,15 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			) ) );
 		}
 
+		// Site visibility — surfaced high because "the public can't see the
+		// site" is one of the loudest things Minn can tell an owner.
+		if ( function_exists( 'minn_admin_visibility_check' ) ) {
+			$vis = minn_admin_visibility_check();
+			if ( is_array( $vis ) ) {
+				array_splice( $checks, 1, 0, array( $vis ) );
+			}
+		}
+
 		// Licenses — read-only visibility (adapters/licenses.php); the health
 		// check only renders when the site has license-wanting components.
 		$licenses = function_exists( 'minn_admin_licenses' ) ? minn_admin_licenses() : null;

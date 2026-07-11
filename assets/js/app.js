@@ -899,6 +899,7 @@
 					<div class="minn-topbar-title" id="minn-title"></div>
 					<div class="minn-topbar-sub" id="minn-sub"></div>
 					<div class="minn-topbar-actions">
+						<button class="minn-vis-chip" id="minn-vis-chip" hidden title="Your site is not fully public">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="A WordPress update is available">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
 						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="View site">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="About Minn">${ icon( 'help' ) }</button>
@@ -948,6 +949,7 @@
 		// Core updates outrank everything else — the chip is visible on every
 		// route while one pends and lands on the Overview banner's button.
 		$( '#minn-core-chip' ).addEventListener( 'click', () => go( 'overview' ) );
+		$( '#minn-vis-chip' ).addEventListener( 'click', () => go( 'overview' ) );
 		$( '#minn-new-btn' ).addEventListener( 'click', ( e ) => {
 			e.stopPropagation();
 			if ( B.caps.editPages ) toggleNewMenu( e.currentTarget );
@@ -969,6 +971,7 @@
 		const surface = surfaceById( state.route );
 		const [ title, sub ] = surface ? [ surface.label, surface.sub || '' ] : ( TITLES[ state.route ] || [ 'minn', '' ] );
 		$( '#minn-title' ).textContent = title;
+		updateVisChip();
 		const subEl = $( '#minn-sub' );
 		// The editor pill says WHAT you're editing, not just its status — a
 		// blank new page and a blank new post are otherwise indistinguishable.
@@ -1067,6 +1070,7 @@
 				<div class="minn-dash-sub">Here's what's happening across your site today.</div>
 			</div>
 		</div>
+		${ visibilityBannerHtml() }
 		${ coreBannerHtml() }
 		<div class="minn-stats">
 			${ o.stats.map( ( s ) => {
@@ -1125,6 +1129,8 @@
 			} )
 		);
 		bindCoreBanner( view );
+		$$( '.minn-vis-banner [data-goto]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => go( btn.dataset.goto ) ) );
 		$$( '.minn-stat[data-goto]', view ).forEach( ( card ) => {
 			const open = () => {
 				const [ route, filter ] = card.dataset.goto.split( ':' );
@@ -4849,6 +4855,65 @@
 		const u = state.cache.core && state.cache.core.update;
 		chip.hidden = ! u;
 		if ( u ) $( '#minn-core-chip-text' ).textContent = `WordPress ${ u.version }`;
+	}
+
+	// Persistent amber chip on EVERY route when the site is not fully public —
+	// it follows the owner around until they fix it, since a hidden or
+	// unindexed site is easy to forget and expensive to leave broken.
+	function updateVisChip() {
+		const chip = $( '#minn-vis-chip' );
+		if ( ! chip ) return;
+		const v = B.visibility;
+		const hide = ! v || v.public;
+		chip.hidden = hide;
+		if ( ! hide ) {
+			const label = 'hidden' === v.state ? 'Site hidden'
+				: 'password' === v.state ? 'Password gated'
+				: 'Not indexed';
+			$( '#minn-vis-chip-text' ).textContent = label;
+		}
+	}
+
+	// "Your site is hidden from the public" — the loudest thing Minn can warn
+	// about. Rendered on Overview from the boot payload (B.visibility), so it
+	// shows instantly. Maintenance/coming-soon fully blocks visitors (amber);
+	// a password gate or search-discouraged is a softer note.
+	function visibilityBannerHtml() {
+		const v = B.visibility;
+		if ( ! v || v.public ) return '';
+		const names = ( v.providers || [] ).map( ( p ) => p.name );
+		// All non-public states use the amber warning treatment — "discourage
+		// search engines" left on is a common, costly silent mistake worth
+		// nagging about, not just a footnote.
+		let title, desc;
+		const cls = 'block';
+		if ( 'hidden' === v.state ) {
+			title = 'Your site is hidden from the public';
+			desc = `Visitors can't see the site — ${ names.join( ', ' ) } ${ names.length === 1 ? 'is' : 'are' } showing a maintenance or coming-soon page instead.`;
+		} else if ( 'password' === v.state ) {
+			title = 'Your site is password-protected';
+			desc = `The whole site is behind a password (${ names.join( ', ' ) }). Visitors must enter it before seeing any page.`;
+		} else {
+			title = 'Search engines are discouraged';
+			desc = 'The site is public, but "Discourage search engines" is on in Settings → Reading, so it asks not to be indexed.';
+		}
+		// A link to fix it: a third-party screen (url), Minn's own maintenance
+		// setting, or the Reading settings for the search-engine toggle.
+		const withUrl = ( v.providers || [] ).find( ( p ) => p.url );
+		const minnOne = ( v.providers || [] ).find( ( p ) => p.minn );
+		const action = withUrl
+			? `<a class="minn-btn-soft" href="${ esc( withUrl.url ) }" target="_blank" rel="noopener">Review ↗</a>`
+			: minnOne
+				? `<button class="minn-btn-soft" data-goto="settings">Maintenance settings</button>`
+				: ( 'search-discouraged' === v.state ? `<button class="minn-btn-soft" data-goto="settings">Reading settings</button>` : '' );
+		return `
+		<div class="minn-card minn-vis-banner ${ cls }">
+			<div class="minn-vis-info">
+				<div class="minn-panel-title">${ icon( 'warn' ) } ${ esc( title ) }</div>
+				<div class="minn-toggle-desc">${ esc( desc ) }</div>
+			</div>
+			${ action }
+		</div>`;
 	}
 
 	function coreBannerHtml() {
