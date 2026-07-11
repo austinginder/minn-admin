@@ -446,10 +446,13 @@ function minn_admin_gsmtp_connector_options() {
 		$factory    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::CONNECTOR_FACTORY );
 		foreach ( (array) $registered as $key => $class ) {
 			try {
-				$c    = $factory->create( $key );
-				$name = strtolower( (string) $key );
-				$sf   = $c->settings_fields();
-				$out[] = array( $name, isset( $sf['title'] ) && $sf['title'] ? (string) $sf['title'] : ucfirst( $name ) );
+				$c     = $factory->create( $key );
+				$name  = strtolower( (string) $key );
+				$sf    = $c->settings_fields();
+				$title = isset( $sf['title'] ) && $sf['title'] ? (string) $sf['title'] : ucfirst( $name );
+				// Their titles are settings-page headings ("SendGrid
+				// Settings") — the picker wants the service name.
+				$out[] = array( $name, preg_replace( '/\s+Settings$/', '', $title ) );
 			} catch ( \Throwable $e ) {
 				continue;
 			}

@@ -39,6 +39,16 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		return res.status();
 	};
 
+	// Seed the primary-connector baseline: live sessions switch it (Austin
+	// was on Google when reporting the combobox bug) — never assume generic.
+	const seedPrimary = () => page.evaluate( async () => {
+		await fetch( window.MINN.restUrl + 'minn-admin/v1/gravity-smtp/settings/sending', {
+			method: 'POST', credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			body: JSON.stringify( { values: { primary_connector: 'generic' } } ),
+		} );
+	} );
+
 	const openSettings = async () => {
 		await page.goto( BASE + '/minn-admin/gravity-smtp', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '[data-sview="settings"]', { timeout: 20000 } );
@@ -48,6 +58,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 	try {
 		/* ===== List + seeded events ===== */
+		await page.goto( BASE + '/minn-admin/gravity-smtp', { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+		await seedPrimary();
+		// Reload so the status card reflects the seeded primary.
 		await page.goto( BASE + '/minn-admin/gravity-smtp', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
 		const listText = await page.$eval( '.minn-table', ( el ) => el.textContent );
