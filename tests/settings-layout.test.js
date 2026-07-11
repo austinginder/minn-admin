@@ -41,6 +41,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		/* ===== Section nav is sticky ===== */
 		t.check( 'section nav is sticky', ( await page.$eval( '.minn-settings-nav', ( el ) => getComputedStyle( el ).position ) ) === 'sticky' );
 
+		/* ===== Nav doesn't shift between short and tall tabs ===== */
+		// A tall tab shows a scrollbar and a short one doesn't; scrollbar-gutter:
+		// stable keeps the centered page from drifting sideways.
+		const navLeft = async ( tab ) => {
+			await openTab( tab );
+			return page.$eval( '.minn-settings-nav', ( el ) => Math.round( el.getBoundingClientRect().left ) );
+		};
+		const shortTab = await navLeft( 'Homepage' ); // short — no scrollbar
+		const tallTab = await navLeft( 'Comments' );  // tall — scrollbar
+		t.check( 'section nav stays put between short and tall tabs', shortTab === tallTab, `${ shortTab } vs ${ tallTab }` );
+
 		/* ===== Visibility groups search-engine + maintenance + membership ===== */
 		await openTab( 'Visibility' );
 		const vis = await page.evaluate( () => ( {
