@@ -18,7 +18,7 @@ shared view; "action" = a ⌘K / menu command.
 | Area | Plugins | How it shows up |
 |---|---|---|
 | **SEO** | Yoast, Rank Math, AIOSEO, SEOPress, SiteSEO | Editor panel (title, meta description, focus keyword) |
-| **Forms** | Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 (via Flamingo), CFDB7 | **Forms** surface — entries as contact cards. Gravity Forms adds the full entry workflow through its own endpoints: Received/Spam/Trash status views, star/unstar and mark-read (open marks read like GF's own screen), restore and delete-permanently where they apply, bulk actions, entry notes on the card plus add-a-note, and resend notifications |
+| **Forms** | Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 (via Flamingo), CFDB7, Ninja Forms | **Forms** surface — entries as contact cards. Gravity Forms adds the full entry workflow through its own endpoints: Received/Spam/Trash status views, star/unstar and mark-read (open marks read like GF's own screen), restore and delete-permanently where they apply, bulk actions, entry notes on the card plus add-a-note, and resend notifications |
 | **Email** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging | **Email** surface (renamed from Email Log once it grew settings) — sent mail, resend. Gravity SMTP goes deeper: a **Settings** view maps its own settings schema into Minn (sending service across all 21 connectors, connector config with masked secrets, general/logging settings through its constant-lock-aware stores), the surface honors its granular `gravitysmtp_*` capabilities, the event detail reads through its own models (from/cc/bcc/source), resend replays its own recipient handling through the configured connector, a **Suppressions** view lists/adds/reactivates blocked addresses through its own model, and a status card reports the active service and test mode with a parameterized **Send a test email** action |
 | **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects, 301 Redirects (WebFactory) | **Redirects** surface — list + in-place edit; Redirection's first-run install runs in place via the setup gate |
 | **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence**, **Limit Login Attempts Reloaded** | **Activity Log** surface (Wordfence = login security; Limit Login Attempts = lockout log with a status card and one-click Unlock through the plugin's own store) |
@@ -97,10 +97,12 @@ recommended order (installs × fit × effort):
    Follow with Solid Security (now listed as **Kadence Security** on
    wp.org; settings in `itsec-storage`, lockouts in
    `itsec_logs`/`itsec_lockouts`) and All-In-One Security.
-3. **Forms providers** — Ninja Forms (`nf3_*` tables), Forminator
-   (`frmt_form_entry*`) and Formidable (`frm_items`), all storing entries in
-   their free tiers, into the existing Forms surface. SureForms and MetForm
-   likely fit too (free-tier storage believed but not source-verified).
+3. **Forms providers** — Ninja Forms ✅ shipped (v0.12.0 cycle: entries as
+   cards from its `nf_sub` postmeta, form tabs, labeled detail, forms view,
+   trash through its own model). Remaining: Forminator (`frmt_form_entry*`)
+   and Formidable (`frm_items`), both storing entries in their free tiers.
+   SureForms and MetForm likely fit too (free-tier storage believed but not
+   source-verified).
 4. **Backups providers** — Duplicator ✅ shipped (v0.12.0 cycle: package
    list, status card, delete via its own cleanup; no freshness claims).
    Remaining: WPvivid (`wpvivid_backup_list` option, free tier schedules so

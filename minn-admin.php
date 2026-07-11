@@ -30,6 +30,7 @@ require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-updater.php';
 // Bundled adapters for third-party plugins (each guards on its plugin).
 require_once MINN_ADMIN_DIR . 'includes/adapters/gravity-forms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-forms.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/ninja-forms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cf7-flamingo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cfdb7.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/elementor-forms.php';
