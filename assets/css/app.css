@@ -1393,6 +1393,9 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* ===== Orders ===== */
 .minn-order-cols { grid-template-columns: 120px 1fr 130px 60px 100px 40px; }
 .minn-order-items { padding: 10px 18px 14px; }
+/* The order modal's Status block sits directly in the modal (not inside
+   .minn-modal-meta, which supplies padding for the media modal's fields). */
+.minn-order-status { margin-top: 0; padding: 12px 18px 2px; }
 .minn-order-item { display: flex; gap: 10px; padding: 8px 0; font-size: 13.5px; border-bottom: 1px solid var(--border); align-items: baseline; }
 .minn-order-item:last-child { border-bottom: none; }
 .minn-order-item.total { font-weight: 700; }
