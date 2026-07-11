@@ -80,6 +80,37 @@ function minn_admin_license_expired( $expires ) {
 }
 
 /**
+ * The WPMU DEV Hub membership state, shared by the WPMU DEV and Smush Pro
+ * readers (Smush Pro is unlocked by the same membership). Reads the Hub's
+ * locally cached membership type from wdp_un_membership_data.
+ *
+ * @return array { state, note, type, key } — state is
+ *   valid|invalid|expired|unknown|missing, type is the raw membership string.
+ */
+function minn_admin_wpmudev_membership() {
+	$key = ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ? WPMUDEV_APIKEY : get_site_option( 'wpmudev_apikey' );
+	if ( ! $key ) {
+		return array( 'state' => 'missing', 'note' => '', 'type' => '', 'key' => false );
+	}
+	$data = get_site_option( 'wdp_un_membership_data' );
+	$type = ( is_array( $data ) && ! empty( $data['membership'] ) ) ? $data['membership'] : '';
+	if ( is_numeric( $type ) ) {
+		$type = 'single'; // a numeric membership is a single-project license id
+	}
+	$map = array(
+		'full'    => array( 'valid', 'full membership' ),
+		'unit'    => array( 'valid', 'per-plugin membership' ),
+		'single'  => array( 'valid', 'single-project membership' ),
+		'free'    => array( 'valid', 'free Hub membership' ),
+		'paused'  => array( 'invalid', 'membership paused' ),
+		'expired' => array( 'expired', '' ),
+	);
+	$state = isset( $map[ $type ] ) ? $map[ $type ][0] : 'unknown';
+	$note  = isset( $map[ $type ] ) ? $map[ $type ][1] : 'key stored; the Hub has not confirmed a membership';
+	return array( 'state' => $state, 'note' => $note, 'type' => (string) $type, 'key' => true );
+}
+
+/**
  * SDK fingerprints per installed component: which plugins/themes embed a
  * known licensing SDK. A bounded filename walk (never file contents),
  * cached for a day and keyed to the installed set so installs/updates
@@ -598,26 +629,11 @@ function minn_admin_license_default_providers() {
 			return $has( 'wpmudev-updates/update-notifications.php' );
 		},
 		'read'      => function () use ( $item ) {
-			$key = ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ? WPMUDEV_APIKEY : get_site_option( 'wpmudev_apikey' );
-			if ( ! $key ) {
+			$m = minn_admin_wpmudev_membership();
+			if ( 'missing' === $m['state'] ) {
 				return array( $item( array( 'name' => 'WPMU DEV membership', 'state' => 'missing' ) ) );
 			}
-			$data = get_site_option( 'wdp_un_membership_data' );
-			$type = ( is_array( $data ) && ! empty( $data['membership'] ) ) ? $data['membership'] : '';
-			if ( is_numeric( $type ) ) {
-				$type = 'single';
-			}
-			$map   = array(
-				'full'    => array( 'valid', 'full membership' ),
-				'unit'    => array( 'valid', 'per-plugin membership' ),
-				'single'  => array( 'valid', 'single-project membership' ),
-				'free'    => array( 'valid', 'free Hub membership' ),
-				'paused'  => array( 'invalid', 'membership paused' ),
-				'expired' => array( 'expired', '' ),
-			);
-			$state = isset( $map[ $type ] ) ? $map[ $type ][0] : 'unknown';
-			$note  = isset( $map[ $type ] ) ? $map[ $type ][1] : 'key stored; the Hub has not confirmed a membership';
-			return array( $item( array( 'name' => 'WPMU DEV membership', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+			return array( $item( array( 'name' => 'WPMU DEV membership', 'state' => $m['state'], 'key' => true, 'note' => $m['note'] ) ) );
 		},
 	);
 
@@ -637,11 +653,25 @@ function minn_admin_license_default_providers() {
 			}
 			$auth = get_site_option( 'wp_smush_api_auth' );
 			$rec  = ( is_array( $auth ) && isset( $auth[ $key ] ) && is_array( $auth[ $key ] ) ) ? $auth[ $key ] : null;
-			if ( ! $rec || empty( $rec['validity'] ) ) {
-				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'unknown', 'key' => true, 'note' => 'Dashboard key present; Smush has not validated it yet' ) ) );
+			if ( $rec && ! empty( $rec['validity'] ) ) {
+				$stale = ! empty( $rec['timestamp'] ) && ( time() - (int) $rec['timestamp'] ) > 2 * DAY_IN_SECONDS;
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'valid' === $rec['validity'] ? 'valid' : 'invalid', 'key' => true, 'stale' => $stale ) ) );
 			}
-			$stale = ! empty( $rec['timestamp'] ) && ( time() - (int) $rec['timestamp'] ) > 2 * DAY_IN_SECONDS;
-			return array( $item( array( 'name' => 'Smush Pro', 'state' => 'valid' === $rec['validity'] ? 'valid' : 'invalid', 'key' => true, 'stale' => $stale ) ) );
+			// Smush hasn't run its own 24h validation yet, so inherit the WPMU
+			// DEV membership state — Smush Pro is unlocked by that membership.
+			// A paid membership (full/unit/single) covers it; a free Hub
+			// membership does not, so that stays unconfirmed.
+			$m = minn_admin_wpmudev_membership();
+			if ( in_array( $m['type'], array( 'full', 'unit', 'single' ), true ) ) {
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'valid', 'key' => true, 'note' => 'covered by the WPMU DEV membership' ) ) );
+			}
+			if ( 'expired' === $m['state'] ) {
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'expired', 'key' => true, 'note' => 'the WPMU DEV membership has expired' ) ) );
+			}
+			if ( 'invalid' === $m['state'] ) {
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'invalid', 'key' => true, 'note' => 'the WPMU DEV membership is paused' ) ) );
+			}
+			return array( $item( array( 'name' => 'Smush Pro', 'state' => 'unknown', 'key' => true, 'note' => 'Dashboard key present; Smush has not validated it yet' ) ) );
 		},
 	);
 
