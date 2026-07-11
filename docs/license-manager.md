@@ -363,6 +363,40 @@ remaining work is adding `verify` to more providers as their safe
 revalidation paths are identified (Bricks, Beaver Builder and Divi are the
 transient-based vendors that would benefit most).
 
+## Tested and known working
+
+The verification bar has three levels. **Real key** means the complete loop
+ran against the live vendor service with a genuine license: activate with a
+bad key (clean refusal, nothing written), activate with the real key (Valid
+pill with vendor expiry where available), then deactivate. **Bogus key**
+means the plumbing was proven against the live service with a deliberately
+invalid key only (clean refusal, nothing written); a real-key pass is the
+owner's step. **Read** means the reader was verified against real stored
+license data on a lab site.
+
+| Product | Actions | Verified | Date | Notes |
+|---|---|---|---|---|
+| Slider Revolution | activate / deactivate / verify | real key, full loop incl. real ThemePunch deregistration | 2026-07-11 | activation is also what unblocks their updater |
+| The Events Calendar Pro | activate / deactivate / verify | real key | 2026-07-11 | PUE; local deactivate only (manage domains on theeventscalendar.com) |
+| Event Tickets Plus | activate / deactivate / verify | real key | 2026-07-11 | key ships embedded in account builds and re-registers itself |
+| TEC Filter Bar | activate / deactivate / verify | real key | 2026-07-11 | PUE |
+| TEC Community | activate / deactivate / verify | real key | 2026-07-11 | PUE |
+| Kadence Blocks Pro | activate / deactivate / verify | real key | 2026-07-11 | key ships embedded in the build; deactivate mirrors their Clear |
+| Gravity SMTP | activate / deactivate / verify | real key (owner-run, anchor.host) | 2026-07-10 | check-memory upgrades the unknown state |
+| Elementor Pro | activate / deactivate / verify | bogus key | 2026-07-10 | reader also proven against a real license |
+| ACF PRO | activate / deactivate / verify | bogus key | 2026-07-10 | reader proven against a real lifetime license |
+| WP Rocket | verify only | real license (cache lab) | 2026-07-10 | creds ship in the vendor zip; no paste by design |
+| Gravity Forms | activate / deactivate / verify | bogus key | 2026-07-10 | save_key self-reverts on rejection |
+| Beaver Builder, Brizy Pro, Etch, Bricks, Divi | per-vendor (see Phase 1) | bogus key / lab | 2026-07-10 | Divi proven on a disposable lab |
+| WP All Export Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | lifetime, unlimited activations; deactivate is local (no seats exist) |
+| WP All Import Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | same; stored keys are salt-wrapped, decode before any request |
+| WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium, LayerSlider | activate paths | bogus key | 2026-07-10 | readers proven against seeded real shapes |
+| Rank Math Pro, Envato, WPBakery | Activate ↗ link | read | 2026-07-10 | portal- or admin-context-bound activation |
+| Freemius / EDD / SureCart generics, Avada, Smush Pro, AnalyticsWP, BSF family | read | real stored data on labs | 2026-07-10 | see the verification map above |
+
+Keep this table current when a vendor gets a real-key pass or a new provider
+lands; the expansion runbook lives in the /dev-minn-admin skill.
+
 ## What Minn will never do here
 
 Own license state, silently keep plugins activated, renew or upsell, manage
