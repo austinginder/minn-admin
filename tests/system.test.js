@@ -80,12 +80,17 @@ const fs = require( 'fs' );
 	const jumped = await page.evaluate( async () => {
 		const sc = document.querySelector( '.minn-scroll' );
 		sc.scrollTop = 0;
-		const btn = [ ...document.querySelectorAll( '#minn-sys-jump [data-jump]' ) ].find( ( b ) => b.textContent === 'Integrations' );
+		// Target a MID-page section, not the terminal one: the last section
+		// can't reach the top when the page bottoms out (its height varies with
+		// how many plugins the Extensions card lists), which made this flaky.
+		// "System" (the grid) always has content below it, so the spy lands
+		// deterministically.
+		const btn = [ ...document.querySelectorAll( '#minn-sys-jump [data-jump]' ) ].find( ( b ) => b.textContent === 'System' );
 		btn.click();
 		await new Promise( ( r ) => setTimeout( r, 900 ) ); // smooth scroll
 		return { top: sc.scrollTop, active: document.querySelector( '#minn-sys-jump .active' )?.textContent };
 	} );
-	t.check( 'jump click scrolls and scroll-spy follows', jumped.top > 300 && jumped.active === 'Integrations', JSON.stringify( jumped ) );
+	t.check( 'jump click scrolls and scroll-spy follows', jumped.top > 300 && jumped.active === 'System', JSON.stringify( jumped ) );
 	const licAboveDebug = await page.evaluate( () => {
 		const lic = document.getElementById( 'minn-sys-licenses' );
 		const dbg = document.getElementById( 'minn-sys-debug' );
