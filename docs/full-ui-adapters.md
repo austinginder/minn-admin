@@ -80,6 +80,22 @@ Rung status at v0.10.0: **Rung 1 not started** (three field vocabularies, one
 grew), **Rung 2 not started** (spam page is bespoke), **Rung 3 partial** (the
 `status` card only), **Rung 4 policy holding** (deep links everywhere bespoke).
 
+Rung status at v0.12.0 (updated 2026-07-11): **Rung 1 shipped** — the form
+engine section in app.js renders surface create/edit forms, editor panels and
+the inspector's generated controls from one vocabulary. **Rung 2 shipped** —
+the surface `settings` key ({label, cap, tabs, route}; GET/POST one route per
+tab so schema and values can't drift) is documented in for-plugin-authors.md,
+and the Gravity SMTP mapper is the bundled reference: its
+`settings_fields()` component tree maps once and covers all 21 connectors
+(verified live: the primary-connector switch reshapes the tab from the new
+connector's schema), writes go through its own data stores so constant locks
+and the `****************` sentinel keep their semantics, and the surface
+gates on its granular `gravitysmtp_*` caps. Suites:
+tests/settings-surface.test.js (the shape, against a fixture surface),
+tests/gsmtp-settings.test.js (the mapper, against the live plugin).
+Rung 3 next: parameterized actions (send-a-test needs an address field) and
+bulk selection.
+
 ## The architectural framework: four rungs
 
 The proposal is an escalation ladder. Each rung is independently shippable, each makes

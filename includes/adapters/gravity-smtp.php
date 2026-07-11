@@ -2,11 +2,25 @@
 /**
  * Bundled adapter: Gravity SMTP.
  *
- * Gravity SMTP keeps its email log in custom tables with no public REST
- * surface, so this adapter is the shim pattern from docs/extension-api.md:
- * a small read-only REST collection over {prefix}gravitysmtp_events, plus a
- * descriptor that renders it. The `extra` column holds serialized PHP objects
- * and is NEVER unserialized — recipients are pulled out with a regex.
+ * Gravity SMTP keeps its email log in custom tables with no REST surface
+ * (100% nonce'd admin-ajax), so this adapter is the shim pattern from
+ * docs/extension-api.md — but a deep one: alongside the read-only event
+ * list it maps Gravity SMTP's own schema-driven settings (their
+ * settings_fields() component descriptors) into Minn's `settings` surface
+ * view, reads and writes through their data-store router (so GRAVITYSMTP_*
+ * constant locks and masked-secret sentinels keep their semantics), and
+ * resends through their own recipient model.
+ *
+ * Capability model: Gravity SMTP ships granular gravitysmtp_* caps
+ * (granted to administrators by their Roles::register()); every route here
+ * gates on the matching cap when the Roles class is loaded, falling back
+ * to manage_options.
+ *
+ * The `extra` column holds serialized PHP objects. List/detail parsing
+ * NEVER unserializes it (regex only); the resend path is the documented
+ * exception: it mirrors Gravity SMTP's own Resend_Email_Endpoint verbatim,
+ * including its allowlist (Recipient_Collection + Recipient only), so
+ * their vendor code runs on their data exactly as it does in wp-admin.
  *
  * @package minn-admin
  */
@@ -15,6 +29,27 @@ defined( 'ABSPATH' ) || exit;
 
 function minn_admin_gravity_smtp_active() {
 	return defined( 'GF_GRAVITY_SMTP_VERSION' ) || class_exists( 'Gravity_Forms\Gravity_SMTP\Gravity_SMTP' );
+}
+
+/**
+ * A Gravity SMTP capability by Roles constant name, falling back to
+ * manage_options when their Roles class isn't loadable.
+ */
+function minn_admin_gsmtp_cap( $const ) {
+	$roles = 'Gravity_Forms\Gravity_SMTP\Users\Roles';
+	if ( class_exists( $roles ) && defined( "$roles::$const" ) ) {
+		return constant( "$roles::$const" );
+	}
+	return 'manage_options';
+}
+
+/** Their data-store router (constant locks first, then options). */
+function minn_admin_gsmtp_router() {
+	return new Gravity_Forms\Gravity_SMTP\Data_Store\Data_Store_Router(
+		new Gravity_Forms\Gravity_SMTP\Data_Store\Const_Data_Store(),
+		new Gravity_Forms\Gravity_SMTP\Data_Store\Opts_Data_Store(),
+		new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store()
+	);
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
@@ -26,7 +61,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => 'Email Log',
 		'sub'        => 'Gravity SMTP',
 		'icon'       => 'send',
-		'cap'        => 'manage_options',
+		'cap'        => minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG' ),
 		'family'     => 'mail',
 		'collection' => array(
 			'route'     => 'minn-admin/v1/gravity-smtp/events',
@@ -52,7 +87,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'detailRoute' => 'minn-admin/v1/gravity-smtp/events/{id}',
 				'messageKey'  => 'message',
-				'skip'        => array( 'message' ),
+				'skip'        => array( 'message', 'can_resend' ),
 			),
 			'actions'   => array(
 				array(
@@ -60,25 +95,142 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}/resend',
 					'method'  => 'POST',
 					'confirm' => 'Resend this email to the original recipients?',
+					'when'    => array( 'key' => 'can_resend', 'equals' => true ),
 				),
 			),
+		),
+		'settings'   => array(
+			'cap'   => minn_admin_gsmtp_cap( 'VIEW_GENERAL_SETTINGS' ),
+			'tabs'  => array(
+				array( 'id' => 'sending', 'label' => 'Sending' ),
+				array( 'id' => 'general', 'label' => 'General' ),
+			),
+			'route' => 'minn-admin/v1/gravity-smtp/settings/{tab}',
 		),
 	);
 	return $surfaces;
 } );
+
+/**
+ * Map one connector's settings_fields() descriptors (their React component
+ * tree, declared as data) into Minn form-engine fields. Written once, it
+ * covers all 21 connectors and whatever they add later — the schema is
+ * read from the live plugin at request time.
+ *
+ * @param object $connector Connector_Base instance.
+ * @return array { fields: array, values: array, locked: int }
+ */
+function minn_admin_gsmtp_map_connector( $connector ) {
+	$sensitive = array();
+	if ( method_exists( $connector, 'get_sensitive_fields' ) ) {
+		$sensitive = (array) $connector->get_sensitive_fields();
+	}
+	$fields = array();
+	$values = array();
+	$locked = 0;
+	$sentinel = '****************'; // Connector_Base::OBFUSCATED_STRING
+
+	$walk = function ( $items ) use ( &$walk, &$fields, &$values, &$locked, $sensitive, $sentinel ) {
+		foreach ( (array) $items as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+			$component = isset( $item['component'] ) ? $item['component'] : '';
+			$props     = isset( $item['props'] ) && is_array( $item['props'] ) ? $item['props'] : array();
+			// Containers nest their children under `fields`.
+			if ( ! empty( $item['fields'] ) && in_array( $component, array( 'Box', 'InputGroup' ), true ) && ( 'InputGroup' !== $component || empty( $props['inputType'] ) ) ) {
+				$walk( $item['fields'] );
+				continue;
+			}
+			$name = isset( $props['name'] ) ? (string) $props['name'] : '';
+			$label = isset( $props['labelAttributes']['label'] ) ? (string) $props['labelAttributes']['label'] : $name;
+			$help  = isset( $props['helpTextAttributes']['content'] ) ? wp_strip_all_tags( (string) $props['helpTextAttributes']['content'] ) : '';
+			switch ( $component ) {
+				case 'Input':
+				case 'LinkedHelpTextInput':
+					if ( '' === $name ) {
+						break;
+					}
+					$is_secret = in_array( $name, $sensitive, true );
+					$fields[]  = array_filter( array(
+						'key'   => $name,
+						'label' => $label,
+						'help'  => $help,
+						'mono'  => $is_secret || ( isset( $props['type'] ) && 'password' === $props['type'] ),
+					) );
+					$raw = isset( $props['value'] ) ? $props['value'] : '';
+					$values[ $name ] = ( $is_secret && '' !== (string) $raw ) ? $sentinel : $raw;
+					break;
+				case 'Toggle':
+					if ( '' === $name ) {
+						break;
+					}
+					$fields[] = array_filter( array(
+						'key'   => $name,
+						'label' => $label,
+						'type'  => 'toggle',
+						'help'  => $help,
+					) );
+					$values[ $name ] = ! empty( $props['initialChecked'] );
+					break;
+				case 'InputGroup': // radio group → select
+				case 'Select':
+					if ( '' === $name ) {
+						break;
+					}
+					$options = array();
+					foreach ( array( 'data', 'options', 'choices' ) as $ok ) {
+						if ( ! empty( $props[ $ok ] ) && is_array( $props[ $ok ] ) ) {
+							foreach ( $props[ $ok ] as $opt ) {
+								if ( is_array( $opt ) && isset( $opt['value'] ) ) {
+									$options[] = array( (string) $opt['value'], (string) ( isset( $opt['label'] ) ? $opt['label'] : $opt['value'] ) );
+								}
+							}
+							break;
+						}
+					}
+					if ( ! $options ) {
+						$locked++;
+						break;
+					}
+					$fields[] = array_filter( array(
+						'key'     => $name,
+						'label'   => $label,
+						'type'    => 'select',
+						'options' => $options,
+						'help'    => $help,
+					) );
+					$values[ $name ] = isset( $props['initialValue'] ) ? $props['initialValue']
+						: ( isset( $props['value'] ) ? $props['value'] : '' );
+					break;
+				case 'BrandedButton': // OAuth handshakes etc. — bespoke, wp-admin's
+					$locked++;
+					break;
+				// Heading / Label / Text / Alert / Link / LinkedText / CopyInput /
+				// Icon are chrome, not settings — nothing to map, nothing locked.
+			}
+		}
+	};
+
+	$sf = $connector->settings_fields();
+	$walk( isset( $sf['fields'] ) ? $sf['fields'] : array() );
+	return array( 'fields' => $fields, 'values' => $values, 'locked' => $locked );
+}
 
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_gravity_smtp_active() ) {
 		return;
 	}
 
-	$perm = function () {
-		return current_user_can( 'manage_options' );
+	$can = function ( $const ) {
+		return function () use ( $const ) {
+			return current_user_can( minn_admin_gsmtp_cap( $const ) );
+		};
 	};
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
+		'permission_callback' => $can( 'VIEW_EMAIL_LOG' ),
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
 			$table    = $wpdb->prefix . 'gravitysmtp_events';
@@ -111,7 +263,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events/(?P<id>\d+)', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
+		'permission_callback' => $can( 'VIEW_EMAIL_LOG_DETAILS' ),
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
 			$table = $wpdb->prefix . 'gravitysmtp_events';
@@ -122,7 +274,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
 			}
-			return rest_ensure_response( array(
+			$out = array(
 				'id'           => (int) $row->id,
 				'subject'      => $row->subject,
 				'to'           => minn_admin_gravity_smtp_recipients( $row->extra ),
@@ -130,38 +282,331 @@ add_action( 'rest_api_init', function () {
 				'service'      => $row->service,
 				'date_created' => $row->date_created,
 				'message'      => $row->message,
-			) );
+				'can_resend'   => true,
+			);
+			// Enrich through their own models (from/cc/bcc parsed by their
+			// code, attachment count, resend eligibility). Their
+			// full_details() needs container services that only register on
+			// their admin pages, so every call is Throwable-guarded and the
+			// plain row above is the floor.
+			try {
+				$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+				$events    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::EVENT_MODEL );
+				$event     = $events ? $events->get( (int) $row->id ) : null;
+				if ( is_array( $event ) && array_key_exists( 'can_resend', $event ) ) {
+					$out['can_resend'] = (bool) $event['can_resend'];
+				}
+				$details = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::LOG_DETAILS_MODEL );
+				$full    = $details ? $details->full_details( (int) $row->id ) : array();
+				if ( is_array( $full ) && $full ) {
+					foreach ( array( 'from', 'cc', 'bcc', 'source' ) as $k ) {
+						if ( ! empty( $full[ $k ] ) && is_string( $full[ $k ] ) ) {
+							// "Name <addr>" → "Name (addr)": the client
+							// strip-tags every raw detail value, which would
+							// eat an angle-bracketed address whole.
+							$out[ $k ] = trim( str_replace( array( '<', '>' ), array( '(', ')' ), $full[ $k ] ) );
+						}
+					}
+					if ( ! empty( $full['has_attachment'] ) ) {
+						$out['attachments'] = (int) $full['has_attachment'];
+					}
+				}
+			} catch ( \Throwable $e ) {
+				// The plain columns already shipped.
+			}
+			return rest_ensure_response( $out );
 		},
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events/(?P<id>\d+)/resend', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = $wpdb->prefix . 'gravitysmtp_events';
-			$row   = $wpdb->get_row( $wpdb->prepare(
-				"SELECT id, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
-			}
-			// Recipients are the addresses extracted from `extra` (never unserialized).
-			$to = array_filter( minn_admin_gravity_smtp_to_addresses( $row->extra ), 'is_email' );
-			if ( ! $to ) {
-				return new WP_Error( 'no_recipients', 'No recipient address on record for this email.', array( 'status' => 422 ) );
-			}
-			$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $row->message );
-			$headers = $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array();
-			$sent    = wp_mail( $to, (string) $row->subject, (string) $row->message, $headers );
-			if ( ! $sent ) {
-				return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'resent' => true, 'to' => implode( ', ', $to ) ) );
-		},
+		'permission_callback' => $can( 'EDIT_EMAIL_LOG_DETAILS' ),
+		'callback'            => 'minn_admin_gravity_smtp_resend',
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/settings/(?P<tab>[a-z]+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => function ( $request ) {
+				return current_user_can( minn_admin_gsmtp_cap(
+					'sending' === $request['tab'] ? 'VIEW_INTEGRATIONS' : 'VIEW_GENERAL_SETTINGS'
+				) );
+			},
+			'callback'            => function ( WP_REST_Request $request ) {
+				return rest_ensure_response( minn_admin_gsmtp_settings_shape( (string) $request['tab'] ) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => function ( $request ) {
+				return current_user_can( minn_admin_gsmtp_cap(
+					'sending' === $request['tab'] ? 'EDIT_INTEGRATIONS' : 'EDIT_GENERAL_SETTINGS'
+				) );
+			},
+			'callback'            => 'minn_admin_gsmtp_settings_save',
+		),
 	) );
 } );
+
+/** The primary connector's lowercase name ('generic' when unset). */
+function minn_admin_gsmtp_primary() {
+	$router  = minn_admin_gsmtp_router();
+	$primary = $router->get_connector_status_of_type( 'primary' );
+	if ( ! $primary ) {
+		$primary = $router->get_active_connector();
+	}
+	return is_string( $primary ) && '' !== $primary ? strtolower( $primary ) : 'generic';
+}
+
+/** Registered connector ids => titles, for the sending-service select. */
+function minn_admin_gsmtp_connector_options() {
+	$out = array();
+	try {
+		$container  = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+		$registered = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::REGISTERED_CONNECTORS );
+		$factory    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::CONNECTOR_FACTORY );
+		foreach ( (array) $registered as $key => $class ) {
+			try {
+				$c    = $factory->create( $key );
+				$name = strtolower( (string) $key );
+				$sf   = $c->settings_fields();
+				$out[] = array( $name, isset( $sf['title'] ) && $sf['title'] ? (string) $sf['title'] : ucfirst( $name ) );
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+		}
+	} catch ( \Throwable $e ) {
+		return array( array( 'generic', 'Custom SMTP' ) );
+	}
+	usort( $out, function ( $a, $b ) {
+		return strcasecmp( $a[1], $b[1] );
+	} );
+	return $out;
+}
+
+/** GET shape for one settings tab: { groups, values, adminUrl }. */
+function minn_admin_gsmtp_settings_shape( $tab ) {
+	$router = minn_admin_gsmtp_router();
+	$truthy = function ( $v ) {
+		if ( class_exists( 'Gravity_Forms\Gravity_SMTP\Utils\Booliesh' ) ) {
+			return Gravity_Forms\Gravity_SMTP\Utils\Booliesh::get( $v );
+		}
+		return filter_var( $v, FILTER_VALIDATE_BOOLEAN );
+	};
+	if ( 'sending' === $tab ) {
+		$primary = minn_admin_gsmtp_primary();
+		$groups  = array(
+			array(
+				'title'  => 'Sending service',
+				'fields' => array(
+					array(
+						'key'     => 'primary_connector',
+						'label'   => 'Primary service',
+						'type'    => 'select',
+						'options' => minn_admin_gsmtp_connector_options(),
+						'help'    => 'Saving a different service reloads this tab with its settings.',
+					),
+				),
+			),
+		);
+		$values = array( 'primary_connector' => $primary );
+		try {
+			$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+			$factory   = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::CONNECTOR_FACTORY );
+			$connector = $factory->create( $primary );
+			$mapped    = minn_admin_gsmtp_map_connector( $connector );
+			$sf        = $connector->settings_fields();
+			$groups[]  = array(
+				'title'  => isset( $sf['title'] ) ? (string) $sf['title'] : ucfirst( $primary ),
+				'fields' => $mapped['fields'],
+				'locked' => $mapped['locked'],
+			);
+			$values = array_merge( $values, $mapped['values'] );
+		} catch ( \Throwable $e ) {
+			$groups[] = array(
+				'title'  => ucfirst( $primary ),
+				'fields' => array(),
+				'locked' => 1,
+			);
+		}
+		return array(
+			'groups'   => $groups,
+			'values'   => $values,
+			'adminUrl' => admin_url( 'admin.php?page=gravitysmtp-settings' ),
+		);
+	}
+	// General: their plugin-level keys (option gravitysmtp_config), read
+	// through the router so GRAVITYSMTP_* constants win.
+	return array(
+		'groups'   => array(
+			array(
+				'title'  => 'Sending behavior',
+				'fields' => array(
+					array( 'key' => 'test_mode', 'label' => 'Test mode', 'type' => 'toggle', 'help' => 'Log emails without actually sending them.' ),
+				),
+			),
+			array(
+				'title'  => 'Email log',
+				'fields' => array(
+					array( 'key' => 'event_log_enabled', 'label' => 'Keep an email log', 'type' => 'toggle' ),
+					array( 'key' => 'save_email_body_enabled', 'label' => 'Store message bodies', 'type' => 'toggle', 'help' => 'Needed for the detail preview and resend.', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
+					array( 'key' => 'save_attachments_enabled', 'label' => 'Store attachments', 'type' => 'toggle', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
+					array( 'key' => 'event_log_retention', 'label' => 'Retention (days)', 'type' => 'number', 'min' => 0, 'help' => '0 keeps the log forever.', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
+				),
+			),
+			array(
+				'title'  => 'Debug log',
+				'fields' => array(
+					array( 'key' => 'debug_log_enabled', 'label' => 'Keep a debug log', 'type' => 'toggle' ),
+					array( 'key' => 'debug_log_retention', 'label' => 'Retention (days)', 'type' => 'number', 'min' => 0, 'showWhen' => array( 'key' => 'debug_log_enabled', 'equals' => true ) ),
+				),
+			),
+		),
+		'values'   => array(
+			'test_mode'                => $truthy( $router->get_plugin_setting( 'test_mode', 'false' ) ),
+			'event_log_enabled'        => $truthy( $router->get_plugin_setting( 'event_log_enabled', 'true' ) ),
+			'save_email_body_enabled'  => $truthy( $router->get_plugin_setting( 'save_email_body_enabled', 'true' ) ),
+			'save_attachments_enabled' => $truthy( $router->get_plugin_setting( 'save_attachments_enabled', 'false' ) ),
+			'event_log_retention'      => (int) $router->get_plugin_setting( 'event_log_retention', 7 ),
+			'debug_log_enabled'        => $truthy( $router->get_plugin_setting( 'debug_log_enabled', 'false' ) ),
+			'debug_log_retention'      => (int) $router->get_plugin_setting( 'debug_log_retention', 7 ),
+		),
+		'adminUrl' => admin_url( 'admin.php?page=gravitysmtp-settings' ),
+	);
+}
+
+/** POST: write one tab's changed values through their own stores. */
+function minn_admin_gsmtp_settings_save( WP_REST_Request $request ) {
+	$tab  = (string) $request['tab'];
+	$body = $request->get_json_params();
+	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+	if ( 'sending' === $tab ) {
+		$opts    = new Gravity_Forms\Gravity_SMTP\Data_Store\Opts_Data_Store();
+		$plugin  = new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store();
+		$current = minn_admin_gsmtp_primary();
+		$target  = $current;
+		if ( isset( $vals['primary_connector'] ) ) {
+			$next = sanitize_key( (string) $vals['primary_connector'] );
+			unset( $vals['primary_connector'] );
+			if ( $next && $next !== $current ) {
+				// Mirror their Save_Connector_Settings_Endpoint semantics:
+				// the config maps hold ONE truthy primary/enabled entry and
+				// the connector's own option mirrors the flags.
+				$plugin->save( 'primary_connector', array( $next => true ) );
+				$plugin->save( 'enabled_connector', array( $next => true ) );
+				$opts->save( 'is_primary', true, $next );
+				$opts->save( 'enabled', true, $next );
+				$opts->save( 'is_primary', false, $current );
+				$target = $next;
+			}
+		}
+		if ( $vals ) {
+			// Their store: skips the '****************' sentinel, coerces
+			// 'true'/'false' strings — the masked-secret contract for free.
+			$opts->save_all( $vals, $target );
+		}
+		delete_transient( 'gsmtp_connector_configured_' . $target );
+		return rest_ensure_response( minn_admin_gsmtp_settings_shape( 'sending' ) );
+	}
+	$allowed = array( 'test_mode', 'event_log_enabled', 'save_email_body_enabled', 'save_attachments_enabled', 'event_log_retention', 'debug_log_enabled', 'debug_log_retention' );
+	$plugin  = new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store();
+	foreach ( $vals as $k => $v ) {
+		if ( ! in_array( $k, $allowed, true ) ) {
+			continue;
+		}
+		if ( in_array( $k, array( 'event_log_retention', 'debug_log_retention' ), true ) ) {
+			$v = max( 0, (int) $v );
+		} elseif ( is_bool( $v ) ) {
+			$v = $v ? 'true' : 'false'; // their stored convention
+		}
+		$plugin->save( $k, $v );
+	}
+	return rest_ensure_response( minn_admin_gsmtp_settings_shape( 'general' ) );
+}
+
+/**
+ * Resend through Gravity SMTP's own flow — a faithful mirror of their
+ * Resend_Email_Endpoint::handle(): hydrated event, allowlisted unserialize
+ * (their two Recipient classes only, exactly their allowlist), original
+ * headers and attachments, wp_mail() so their Mail_Handler routes it
+ * through the configured connector. Falls back to the regex recipient
+ * extraction if the blob doesn't parse.
+ */
+function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
+	global $wpdb;
+	$table = $wpdb->prefix . 'gravitysmtp_events';
+	$row   = $wpdb->get_row( $wpdb->prepare(
+		"SELECT id, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
+		(int) $request['id']
+	) );
+	if ( ! $row ) {
+		return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+	}
+
+	$to          = null;
+	$headers     = array();
+	$attachments = array();
+	try {
+		$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+		$events    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::EVENT_MODEL );
+		$event     = $events ? $events->get( (int) $row->id ) : null;
+		if ( is_array( $event ) && array_key_exists( 'can_resend', $event ) && ! $event['can_resend'] ) {
+			return new WP_Error( 'cannot_resend', 'Gravity SMTP reports this email cannot be resent (body or attachments were not stored).', array( 'status' => 422 ) );
+		}
+		$extra = unserialize( // phpcs:ignore -- their own endpoint's exact allowlist on their own data.
+			(string) $row->extra,
+			array(
+				'allowed_classes' => array(
+					Gravity_Forms\Gravity_SMTP\Utils\Recipient_Collection::class,
+					Gravity_Forms\Gravity_SMTP\Utils\Recipient::class,
+				),
+			)
+		);
+		if ( is_array( $extra ) ) {
+			if ( isset( $extra['to'] ) && is_object( $extra['to'] ) ) {
+				$to = $extra['to'];
+			}
+			if ( isset( $extra['headers'] ) && is_array( $extra['headers'] ) ) {
+				$headers = $extra['headers'];
+				// Their endpoint flattens Recipient_Collections in headers
+				// to comma-joined address strings before sending.
+				foreach ( $headers as $hk => $hv ) {
+					if ( is_object( $hv ) && method_exists( $hv, 'as_string' ) ) {
+						$headers[ $hk ] = $hv->as_string();
+					} elseif ( is_object( $hv ) ) {
+						unset( $headers[ $hk ] );
+					}
+				}
+			}
+			if ( isset( $extra['source'] ) && is_string( $extra['source'] ) ) {
+				$headers['source'] = $extra['source'];
+			}
+			foreach ( (array) ( isset( $extra['attachments'] ) ? $extra['attachments'] : array() ) as $path ) {
+				if ( is_string( $path ) && file_exists( $path ) ) {
+					$attachments[] = $path;
+				}
+			}
+		}
+	} catch ( \Throwable $e ) {
+		$to = null; // fall through to the regex path
+	}
+
+	if ( ! $to ) {
+		$addresses = array_filter( minn_admin_gravity_smtp_to_addresses( $row->extra ), 'is_email' );
+		if ( ! $addresses ) {
+			return new WP_Error( 'no_recipients', 'No recipient address on record for this email.', array( 'status' => 422 ) );
+		}
+		$to      = $addresses;
+		$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $row->message );
+		$headers = $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array();
+	}
+
+	$sent = wp_mail( $to, (string) $row->subject, (string) $row->message, $headers, $attachments );
+	if ( ! $sent ) {
+		return new WP_Error( 'send_failed', 'The mailer reported the message could not be sent.', array( 'status' => 500 ) );
+	}
+	return rest_ensure_response( array( 'resent' => true ) );
+}
 
 /**
  * Pull recipient email addresses out of the serialized `extra` blob without
@@ -189,9 +634,20 @@ function minn_admin_gravity_smtp_to_addresses( $extra ) {
 		return array();
 	}
 	// The `to` collection ends at the first `}}}` (recipient → array → collection).
-	$scope = preg_match( '/s:2:"to";O:\d+:"[^"]*Recipient_Collection":\d+:\{.*?\}\}\}/s', $extra, $m ) ? $m[0] : $extra;
-	if ( ! preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', $scope, $m ) ) {
+	if ( preg_match( '/s:2:"to";O:\d+:"[^"]*Recipient_Collection":\d+:\{.*?\}\}\}/s', $extra, $m ) ) {
+		if ( preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', $m[0], $mm ) ) {
+			return array_values( array_unique( $mm[1] ) );
+		}
 		return array();
 	}
-	return array_values( array_unique( $m[1] ) );
+	// Some write paths store `to` as a plain address string instead of a
+	// Recipient_Collection (Event_Model::create keeps whatever the caller
+	// passed) — accept that shape too.
+	if ( preg_match( '/s:2:"to";s:\d+:"([^"]+)"/', $extra, $m ) && is_email( $m[1] ) ) {
+		return array( $m[1] );
+	}
+	if ( preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', $extra, $m ) ) {
+		return array_values( array_unique( $m[1] ) );
+	}
+	return array();
 }
