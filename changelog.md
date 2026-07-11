@@ -2,6 +2,9 @@
 
 ## **v0.12.0** - Unreleased
 
+### Fixed
+* **ACF panel saves failed with an empty select in the group:** ACF reports `false` over REST for any field without a value, including selects and text fields. Panel saves round-trip the whole values object, so that sentinel made ACF's own validation reject the write and every panel save on the post failed with a 400, while the editor looked fine. Empty values now normalize on load, and clearing a select sends the null ACF expects.
+
 ### Improved
 * **One form engine:** the three field renderers that grew up independently (surface create and edit forms, editor sidebar panels, the block inspector's generated controls) now render through a single engine with one field vocabulary, one value reader and one coercion path. Nothing changes for adapter authors except more consistency: edit fields accept the full create vocabulary (`textarea`, `select`, `tags`, `rows`, `placeholder`), and the Integrations card now validates `create` and `detail.edit` field lists (unknown types, selects without options, unknown keys) instead of letting them fail silently in the app.
 

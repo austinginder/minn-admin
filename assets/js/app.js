@@ -8292,7 +8292,16 @@
 				const groups = ( r.groups || [] ).filter( ( g ) => g.fields.length || g.locked );
 				if ( ! groups.length ) return;
 				ed.panels.push( { desc, groups } );
-				ed.panelValues[ desc.id ] = ( post && desc.valuesKey && post[ desc.valuesKey ] ) ? { ...post[ desc.valuesKey ] } : {};
+				const seeded = ( post && desc.valuesKey && post[ desc.valuesKey ] ) ? { ...post[ desc.valuesKey ] } : {};
+				// ACF answers `false` for a field with NO value — even on select /
+				// text fields. Saves round-trip the whole values object, so that
+				// sentinel riding back makes ACF's own REST schema reject the write
+				// ("acf[layout] must contain at least 1 item") and every panel save
+				// on the post 400s. Normalize false → null on non-boolean fields.
+				groups.forEach( ( g ) => g.fields.forEach( ( f ) => {
+					if ( f.type !== 'true_false' && seeded[ f.name ] === false ) seeded[ f.name ] = null;
+				} ) );
+				ed.panelValues[ desc.id ] = seeded;
 			} catch ( e ) { /* panel just doesn't render */ }
 		} ) );
 		if ( ed.panels.length && state.route === 'editor' && state.editor === ed ) renderEditorSide();
@@ -10147,7 +10156,15 @@
 					write( formControlValue( input ) );
 				} );
 			} else {
-				input.addEventListener( 'input', () => write( formControlValue( input ) ) );
+				input.addEventListener( 'input', () => {
+					let v = formControlValue( input );
+					// The select's "—" means "no value": send null, not "".
+					// ACF's REST schema rejects "" for choice fields (enum),
+					// while null clears them — same family as the seed-time
+					// false-sentinel normalization in loadEditorPanels.
+					if ( v === '' && input.dataset.ftype === 'select' ) v = null;
+					write( v );
+				} );
 			}
 		} );
 
