@@ -25,7 +25,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Security posture** | Wordfence, Really Simple SSL | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
 | **Snippets** | Code Snippets, WPCode, FluentSnippets | **Snippets** surface — list, toggle, edit |
 | **Analytics** | Koko, WP Statistics, Burst, Independent Analytics, AnalyticsWP, **Site Kit** | Overview **Traffic** chart |
-| **Backups** | UpdraftPlus, Disembark | **Backups** surface; health check + "Back up now" (UpdraftPlus); status card, CLI command, sessions + cleanup (Disembark) |
+| **Backups** | UpdraftPlus, Disembark, Duplicator | **Backups** surface; health check + "Back up now" (UpdraftPlus); status card, CLI command, sessions + cleanup (Disembark); package list with disk sizes, status card and delete-through-its-own-cleanup (Duplicator, no freshness claims: manual builds) |
 | **Caching** | Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket, WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor CSS | **Clear site cache** action (⌘K) |
 | **Custom fields** | ACF (+ Pro) | Editor panel |
 | **Ecommerce** | WooCommerce | **Orders** surface + Overview stats |
@@ -101,11 +101,11 @@ recommended order (installs × fit × effort):
    (`frmt_form_entry*`) and Formidable (`frm_items`), all storing entries in
    their free tiers, into the existing Forms surface. SureForms and MetForm
    likely fit too (free-tier storage believed but not source-verified).
-4. **Backups providers** — WPvivid (`wpvivid_backup_list` option, free tier
-   schedules so freshness is claimable), Duplicator (`duplicator_packages`
-   table; manual builds only in free, so no freshness claims), BackWPup, and
-   an All-in-One WP Migration local-exports listing (never claim freshness;
-   the Disembark precedent).
+4. **Backups providers** — Duplicator ✅ shipped (v0.12.0 cycle: package
+   list, status card, delete via its own cleanup; no freshness claims).
+   Remaining: WPvivid (`wpvivid_backup_list` option, free tier schedules so
+   freshness is claimable), BackWPup, and an All-in-One WP Migration
+   local-exports listing (never claim freshness; the Disembark precedent).
 5. **Cache purge pack** — SpeedyCache, Redis Object Cache (flush + drop-in
    status row), Breeze, Nginx Helper, Cloudflare. The cheapest shape in the
    codebase: one purge hook plus detection each.

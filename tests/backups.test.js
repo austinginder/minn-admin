@@ -26,6 +26,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const status = await api( 'minn-admin/v1/updraft/status' );
 	t.check( 'Status endpoint reports last/running/history', status && 'last' in status && 'running' in status && status.history >= 1, JSON.stringify( status ) );
 	const baseline = status.history;
+	// Retention (updraft_retain=2 per set type) saturates on the dev site,
+	// so a NEW backup prunes an OLD set and the set COUNT stays flat — the
+	// completion check tracks the newest backup's timestamp instead
+	// (rule-46 class: totals drift).
+	const baselineTime = ( status.last && status.last.time ) || 0;
 
 	const list = await api( 'minn-admin/v1/updraft/backups' );
 	t.check( 'History list shape', Array.isArray( list.items ) && list.total === baseline );
@@ -63,16 +68,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	// --- Real database backup through the trigger -----------------------------
 	const started = await api( 'minn-admin/v1/updraft/backup-now', { method: 'POST', body: JSON.stringify( { what: 'db' } ) } );
 	t.check( 'Backup-now accepts a db-only run', started.started === true && started.what === 'db' );
-	let after = baseline;
+	let after = baselineTime;
 	const t0 = Date.now();
 	while ( Date.now() - t0 < 120000 ) {
 		await page.waitForTimeout( 8000 );
 		// Nudge cron along; UpdraftPlus resumes itself but a kick is cheap.
 		await page.evaluate( () => fetch( '/wp-cron.php?doing_wp_cron', { credentials: 'omit' } ).catch( () => {} ) );
 		const s = await api( 'minn-admin/v1/updraft/status' );
-		if ( s.history > baseline && ! s.running ) { after = s.history; break; }
+		if ( s.last && s.last.time > baselineTime && ! s.running ) { after = s.last.time; break; }
 	}
-	t.check( 'A new backup set completed', after > baseline, `baseline=${ baseline } after=${ after }` );
+	t.check( 'A new backup set completed', after > baselineTime, `baseline=${ baselineTime } after=${ after }` );
 
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
