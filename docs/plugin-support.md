@@ -21,7 +21,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Forms** | Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 (via Flamingo), CFDB7 | **Forms** surface — entries as contact cards. Gravity Forms adds the full entry workflow through its own endpoints: Received/Spam/Trash status views, star/unstar and mark-read (open marks read like GF's own screen), restore and delete-permanently where they apply, bulk actions, entry notes on the card plus add-a-note, and resend notifications |
 | **Email** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP | **Email** surface (renamed from Email Log once it grew settings) — sent mail, resend. Gravity SMTP goes deeper: a **Settings** view maps its own settings schema into Minn (sending service across all 21 connectors, connector config with masked secrets, general/logging settings through its constant-lock-aware stores), the surface honors its granular `gravitysmtp_*` capabilities, the event detail reads through its own models (from/cc/bcc/source), resend replays its own recipient handling through the configured connector, a **Suppressions** view lists/adds/reactivates blocked addresses through its own model, and a status card reports the active service and test mode with a parameterized **Send a test email** action |
 | **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects, 301 Redirects (WebFactory) | **Redirects** surface — list + in-place edit; Redirection's first-run install runs in place via the setup gate |
-| **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence** | **Activity Log** surface (Wordfence = login security) |
+| **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence**, **Limit Login Attempts Reloaded** | **Activity Log** surface (Wordfence = login security; Limit Login Attempts = lockout log with a status card and one-click Unlock through the plugin's own store) |
 | **Security posture** | Wordfence, Really Simple SSL | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
 | **Snippets** | Code Snippets, WPCode, FluentSnippets | **Snippets** surface — list, toggle, edit |
 | **Analytics** | Koko, WP Statistics, Burst, Independent Analytics, AnalyticsWP, **Site Kit** | Overview **Traffic** chart |
@@ -92,10 +92,11 @@ recommended order (installs × fit × effort):
 2. **Security posture rows** — Wordfence firewall mode + last scan + issue
    count (5M installs, reads `wfConfig`/`wfIssues`, extends the adapter Minn
    already ships) and Really Simple SSL (3M, pure options read) as System
-   health rows. Follow with Solid Security (now listed as **Kadence
-   Security** on wp.org; settings in `itsec-storage`, lockouts in
-   `itsec_logs`/`itsec_lockouts`), All-In-One Security and Limit Login
-   Attempts Reloaded, whose lockout logs also fit the Activity Log family.
+   health rows. Limit Login Attempts Reloaded ✅ shipped (v0.12.0 cycle):
+   lockout log in the Activity Log family with status card and Unlock.
+   Follow with Solid Security (now listed as **Kadence Security** on
+   wp.org; settings in `itsec-storage`, lockouts in
+   `itsec_logs`/`itsec_lockouts`) and All-In-One Security.
 3. **Forms providers** — Ninja Forms (`nf3_*` tables), Forminator
    (`frmt_form_entry*`) and Formidable (`frm_items`), all storing entries in
    their free tiers, into the existing Forms surface. SureForms and MetForm

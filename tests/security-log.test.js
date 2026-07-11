@@ -95,11 +95,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		() => /Failed login|Signed in/.test( document.body.textContent ),
 		null, { timeout: 15000 }
 	);
-	const providerTitle = await page.evaluate( () => {
-		const el = Array.from( document.querySelectorAll( '.minn-page *' ) ).find( ( n ) => /Wordfence/.test( n.textContent || '' ) && n.children.length === 0 );
-		return el ? el.textContent : ( /Wordfence/.test( document.body.textContent ) ? 'Wordfence' : '' );
-	} );
-	t.check( 'Wordfence security log renders', /Wordfence/.test( providerTitle ) || /Failed login/.test( await page.evaluate( () => document.body.textContent ) ) );
+	// Real successful logins accumulate in wfLogins across runs and push the
+	// seeded failures off page 1 — assert through the Failed tab instead of
+	// hoping a failure row lands on the first page (totals grow; rule 46).
+	await page.click( '[data-stab="failed"]' );
+	await page.waitForFunction(
+		() => /Failed login/.test( document.body.textContent ),
+		null, { timeout: 15000 }
+	);
+	t.check( 'Wordfence security log renders (failed view)', true );
 	} finally {
 		// Restore the dev-site baseline: Wordfence stays deactivated so WSAL
 		// remains the resident activity-log provider.

@@ -49,6 +49,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/wp-activity-log.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/aryo-activity-log.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/stream.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wordfence.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/limit-login-attempts.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/code-snippets.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wpcode.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-snippets.php';
