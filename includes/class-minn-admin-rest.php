@@ -605,6 +605,19 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Run a surface's one-time plugin setup (the `setup` descriptor key)
+		// through the plugin's own installer. Capability is the SURFACE's own
+		// cap, checked in the handler where the descriptor is at hand.
+		register_rest_route(
+			self::NS,
+			'/surfaces/(?P<id>[a-z0-9_-]+)/setup',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'surface_setup' ),
+				'permission_callback' => 'is_user_logged_in',
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/patterns',
@@ -1146,6 +1159,62 @@ class Minn_Admin_REST {
 	 */
 	public static function surfaces() {
 		return rest_ensure_response( Minn_Admin_Surfaces::for_current_user() );
+	}
+
+	/**
+	 * Run a surface's one-time setup through the plugin's OWN installer
+	 * (the descriptor's `run` callable — vendor code, never a rebuild).
+	 * Choices are booleans keyed by the descriptor's declared option ids;
+	 * anything undeclared is dropped, absent ids get the declared default.
+	 *
+	 * @param WP_REST_Request $req { id, choices? }.
+	 */
+	public static function surface_setup( WP_REST_Request $req ) {
+		$id       = sanitize_key( $req['id'] );
+		$surfaces = Minn_Admin_Surfaces::all();
+		$surface  = null;
+		foreach ( $surfaces as $sid => $s ) {
+			if ( sanitize_key( $sid ) === $id ) {
+				$surface = $s;
+				break;
+			}
+		}
+		if ( ! $surface || empty( $surface['setup'] ) || ! is_array( $surface['setup'] ) ) {
+			return new WP_Error( 'no_setup', 'That surface has no setup to run.', array( 'status' => 404 ) );
+		}
+		$cap = isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options';
+		if ( ! current_user_can( $cap ) ) {
+			return new WP_Error( 'forbidden', 'You cannot set up this plugin.', array( 'status' => 403 ) );
+		}
+		$setup = $surface['setup'];
+		if ( empty( $setup['run'] ) || ! is_callable( $setup['run'] ) ) {
+			return new WP_Error( 'no_setup', 'This setup runs on the plugin\'s own screen.', array( 'status' => 400 ) );
+		}
+		if ( isset( $setup['needed'] ) && is_callable( $setup['needed'] ) && ! call_user_func( $setup['needed'] ) ) {
+			return rest_ensure_response( array( 'ok' => true, 'already' => true ) );
+		}
+		$sent    = (array) $req->get_param( 'choices' );
+		$choices = array();
+		foreach ( (array) ( $setup['options'] ?? array() ) as $opt ) {
+			if ( ! is_array( $opt ) || empty( $opt['id'] ) ) {
+				continue;
+			}
+			$oid             = sanitize_key( $opt['id'] );
+			$choices[ $oid ] = array_key_exists( $oid, $sent )
+				? rest_sanitize_boolean( $sent[ $oid ] )
+				: ! empty( $opt['default'] );
+		}
+		try {
+			$result = call_user_func( $setup['run'], $choices );
+		} catch ( \Throwable $e ) {
+			$msg = trim( wp_strip_all_tags( (string) $e->getMessage() ) );
+			return new WP_Error( 'setup_failed', '' !== $msg ? $msg : 'The plugin reported an error during setup.', array( 'status' => 500 ) );
+		}
+		if ( is_wp_error( $result ) ) {
+			$result->add_data( array( 'status' => 500 ) );
+			return $result;
+		}
+		return rest_ensure_response( array( 'ok' => true ) );
 	}
 
 	/**

@@ -23,6 +23,62 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Redirection',
 		'icon'       => 'shuffle',
 		'cap'        => apply_filters( 'redirection_role', 'manage_options' ),
+		// Fresh installs have no tables or default group until Redirection's
+		// setup wizard runs, so every write fails ("Invalid group"). The gate
+		// runs THEIR installer (Red_Latest_Database::install() is the same
+		// create-tables + create-groups sequence their wizard drives) and
+		// mirrors the wizard's three questions as toggles. Monitoring on and
+		// IP logging off by default: the wizard's spirit, and IP storage is
+		// a privacy choice Minn must not make silently.
+		'setup'      => array(
+			'needed'  => function () {
+				if ( ! defined( 'REDIRECTION_FILE' ) ) {
+					return false;
+				}
+				include_once dirname( REDIRECTION_FILE ) . '/database/database.php';
+				if ( ! class_exists( 'Red_Database_Status' ) ) {
+					return false;
+				}
+				return ( new Red_Database_Status() )->needs_installing();
+			},
+			'title'   => 'Redirection needs its one-time setup',
+			'note'    => 'Redirection stores redirects in its own database tables, which it creates on first setup. This runs the same install its own setup wizard performs; the choices below are the wizard\'s questions.',
+			'options' => array(
+				array(
+					'id'      => 'monitor',
+					'label'   => 'Monitor permalink changes in posts and pages, and add a redirect when they change',
+					'default' => true,
+				),
+				array(
+					'id'      => 'log',
+					'label'   => 'Keep a log of redirects and 404 errors (kept for 7 days)',
+					'default' => true,
+				),
+				array(
+					'id'      => 'ip',
+					'label'   => 'Store IP addresses with logged redirects and errors',
+					'default' => false,
+				),
+			),
+			'run'     => function ( $choices ) {
+				include_once dirname( REDIRECTION_FILE ) . '/database/database.php';
+				$result = Red_Database::get_latest_database()->install();
+				if ( is_wp_error( $result ) ) {
+					return $result;
+				}
+				( new Red_Database_Status() )->finish();
+				// The wizard's own option values (from its setup submit):
+				// monitor targets the default group, unchecked logging is -1.
+				red_set_options( array(
+					'monitor_post'    => ! empty( $choices['monitor'] ) ? 1 : 0,
+					'monitor_types'   => ! empty( $choices['monitor'] ) ? array( 'post', 'page' ) : array(),
+					'expire_redirect' => ! empty( $choices['log'] ) ? 7 : -1,
+					'expire_404'      => ! empty( $choices['log'] ) ? 7 : -1,
+					'ip_logging'      => ! empty( $choices['ip'] ) ? 1 : 0,
+				) );
+				return true;
+			},
+		),
 		'collection' => array(
 			'route'     => 'redirection/v1/redirect',
 			'pageQuery' => 'per_page=25&page={page0}',

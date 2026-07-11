@@ -39,9 +39,64 @@ class Minn_Admin_Surfaces {
 			}
 			unset( $surface['cap'] );
 			$surface['id'] = sanitize_key( $id );
+			$surface       = self::with_setup_state( $surface );
 			$out[]         = $surface;
 		}
 		return $out;
+	}
+
+	/**
+	 * Resolve a surface's setup gate for the client. The descriptor's
+	 * `setup` key carries callables (`needed`, `run`) that must never reach
+	 * JSON: `needed()` is evaluated here and the client gets only the card
+	 * copy plus a `setupNeeded` flag. A throwing check reads as not-needed
+	 * so a broken gate can never brick a working surface.
+	 *
+	 * @param array $surface Client-bound surface row (id already set).
+	 * @return array The row with `setup` resolved or removed.
+	 */
+	private static function with_setup_state( $surface ) {
+		if ( empty( $surface['setup'] ) || ! is_array( $surface['setup'] ) ) {
+			unset( $surface['setup'] );
+			return $surface;
+		}
+		$setup  = $surface['setup'];
+		$needed = false;
+		if ( isset( $setup['needed'] ) && is_callable( $setup['needed'] ) ) {
+			try {
+				$needed = (bool) call_user_func( $setup['needed'] );
+			} catch ( \Throwable $e ) {
+				$needed = false;
+			}
+		}
+		if ( ! $needed ) {
+			unset( $surface['setup'] );
+			return $surface;
+		}
+		$options = array();
+		foreach ( (array) ( $setup['options'] ?? array() ) as $opt ) {
+			if ( ! is_array( $opt ) || empty( $opt['id'] ) || empty( $opt['label'] ) ) {
+				continue;
+			}
+			$options[] = array(
+				'id'      => sanitize_key( $opt['id'] ),
+				'label'   => (string) $opt['label'],
+				'default' => ! empty( $opt['default'] ),
+			);
+		}
+		$client = array(
+			'title' => (string) ( $setup['title'] ?? 'This plugin needs a one-time setup' ),
+			'note'  => (string) ( $setup['note'] ?? '' ),
+		);
+		if ( $options ) {
+			$client['options'] = $options;
+		}
+		if ( ! empty( $setup['href'] ) && empty( $setup['run'] ) ) {
+			$client['href'] = (string) $setup['href'];
+		}
+		$surface['setup']       = $client;
+		$surface['setupNeeded'] = true;
+		return $surface;
 	}
 
 	/* ===== Integration diagnostics (System page) ==========================
@@ -56,7 +111,8 @@ class Minn_Admin_Surfaces {
 	// The documented descriptor vocabulary. Undocumented keys are internal
 	// (see the Compatibility section of for-plugin-authors.md), so anything
 	// outside these lists is flagged as unknown rather than silently ignored.
-	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'status' );
+	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'status', 'setup' );
+	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href' );
 	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
@@ -132,6 +188,27 @@ class Minn_Admin_Surfaces {
 		}
 		if ( empty( $surface['collection'] ) || ! is_array( $surface['collection'] ) ) {
 			$problems[] = 'missing collection';
+		}
+		if ( isset( $surface['setup'] ) ) {
+			if ( ! is_array( $surface['setup'] ) ) {
+				$problems[] = 'setup is not an array';
+			} else {
+				$setup = $surface['setup'];
+				if ( empty( $setup['needed'] ) || ! is_callable( $setup['needed'] ) ) {
+					$problems[] = 'setup: missing needed callable';
+				}
+				if ( ( empty( $setup['run'] ) || ! is_callable( $setup['run'] ) ) && empty( $setup['href'] ) ) {
+					$problems[] = 'setup: needs a run callable or an href';
+				}
+				foreach ( (array) ( $setup['options'] ?? array() ) as $opt ) {
+					if ( ! is_array( $opt ) || empty( $opt['id'] ) || empty( $opt['label'] ) ) {
+						$problems[] = 'setup: option without id and label';
+					}
+				}
+				foreach ( self::unknown_keys( $setup, self::SETUP_KEYS ) as $k ) {
+					$problems[] = "setup: unknown key \"$k\" (ignored)";
+				}
+			}
 		}
 		foreach ( array( 'collection', 'manage' ) as $ck ) {
 			if ( empty( $surface[ $ck ] ) || ! is_array( $surface[ $ck ] ) ) {

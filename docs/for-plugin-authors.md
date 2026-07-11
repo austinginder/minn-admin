@@ -110,6 +110,47 @@ page's copy-report carries the section for bug reports.
 | `group` | Sidebar placement. Surfaces default to the **Tools** group (logs, redirects, snippets: site plumbing). Declare `"workspace"` only when the surface is inbox-shaped, something users check daily because new items need a human (form entries are the bundled example) |
 | `manage` | Optional second collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Gravity Forms uses it for Entries / Forms |
 | `status` | Optional status card above the list: `{ "route": "your/v1/status" }`. The route returns a server-built display model (below), so your adapter formats values server-side and the client stays generic |
+| `setup` | Optional one-time setup gate (below). While your plugin still needs its own first-run install, the surface renders a setup card instead of the collection, and "Set up now" runs your installer server-side |
+
+### `setup` — a one-time setup gate
+
+Some plugins need a first-run install before they work at all (Redirection
+creates its tables and default group in its setup wizard; until then every
+write fails). Declaring `setup` keeps the surface honest: while setup is
+needed, the collection, create and actions are unreachable and the user sees
+a setup card in their flow instead of a raw plugin error.
+
+```php
+'setup' => array(
+    'needed'  => function () {                       // truthy = gate the surface
+        return my_plugin_needs_install();            // keep it cheap: runs on app boot
+    },
+    'title'   => 'My Plugin needs its one-time setup',
+    'note'    => 'What the setup does, in a sentence or two.',
+    'options' => array(                              // optional: your wizard's questions
+        array( 'id' => 'monitor', 'label' => 'Monitor permalink changes', 'default' => true ),
+        array( 'id' => 'ip',      'label' => 'Store IP addresses',        'default' => false ),
+    ),
+    'run'     => function ( $choices ) {             // $choices: id => bool
+        return my_plugin_install( $choices );        // true or WP_Error
+    },
+),
+```
+
+Rules:
+
+- `needed` runs on every app load, so keep it to option reads. A throwing
+  check reads as not-needed: a broken gate can never brick a working surface.
+- `run` must route through **your plugin's own installer**, never a rebuilt
+  copy of it. It receives the toggles as booleans (undeclared ids are
+  dropped, absent ones get your declared default) and runs behind the
+  surface's own `cap` via `POST minn-admin/v1/surfaces/{id}/setup`.
+- Options are the place for your wizard's questions. Default privacy-relevant
+  choices (IP logging, telemetry) to off; Minn will not make those choices
+  silently.
+- Setups Minn genuinely cannot run inline (an external auth flow, say) can
+  declare `href` instead of `run`; the card renders an honest link-out and
+  the surface comes alive once your setup marks itself done.
 
 ### `status` — a card above the list
 

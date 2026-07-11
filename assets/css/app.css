@@ -152,6 +152,20 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-notif-hide:hover { color: var(--text); border-color: var(--text3); }
 
+/* Surface setup gate — replaces a surface's collection while its plugin
+   still needs its own first-run install (descriptor `setup` key).
+   Redirection is the reference. */
+.minn-surface-setup { max-width: 640px; margin: 26px auto 0; padding: 22px 24px; display: flex; flex-direction: column; gap: 18px; }
+.minn-setup-head { display: flex; gap: 14px; align-items: flex-start; }
+.minn-setup-head > svg { flex: none; width: 22px; height: 22px; color: var(--accent2); margin-top: 2px; }
+.minn-setup-title { font-size: 16.5px; font-weight: 700; letter-spacing: -0.2px; }
+.minn-setup-note { font-size: 13.5px; color: var(--text2); line-height: 1.55; margin-top: 6px; }
+.minn-setup-opts { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; }
+.minn-setup-opt { display: flex; gap: 12px; align-items: flex-start; font-size: 13.5px; color: var(--text); }
+.minn-setup-opt .minn-switch { flex: none; margin-top: 1px; }
+.minn-setup-foot { display: flex; align-items: center; gap: 12px; }
+.minn-setup-hint { font-size: 12.5px; color: var(--text3); }
+
 /* Surface status card — server-built model above a surface's list (stat
    rows · copyable command · action buttons). Disembark is the reference. */
 .minn-surface-status { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; margin-bottom: 14px; }

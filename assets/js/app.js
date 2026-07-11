@@ -3925,8 +3925,73 @@
 		}
 	}
 
+	// One-time plugin setup gate (descriptor `setup` key): a surface whose
+	// plugin still needs its own first-run install renders this card instead
+	// of the collection, so no broken create/list path is reachable. "Set up
+	// now" runs the plugin's OWN installer server-side; href-mode setups
+	// (auth flows Minn can't do inline) render an honest link-out instead.
+	function renderSurfaceSetup( s, view ) {
+		const setup = s.setup;
+		const opts = setup.options || [];
+		view.innerHTML = `
+		<div class="minn-card minn-surface-setup" id="minn-surface-setup">
+			<div class="minn-setup-head">
+				${ icon( s.icon || 'plug' ) }
+				<div>
+					<div class="minn-setup-title">${ esc( setup.title ) }</div>
+					${ setup.note ? `<div class="minn-setup-note">${ esc( setup.note ) }</div>` : '' }
+				</div>
+			</div>
+			${ opts.length ? `<div class="minn-setup-opts">
+				${ opts.map( ( o ) => `
+				<div class="minn-setup-opt">
+					<button class="minn-switch${ o.default ? ' on' : '' }" data-setupopt="${ esc( o.id ) }" role="switch" aria-checked="${ o.default }" aria-label="${ esc( o.label ) }"><span class="minn-switch-knob"></span></button>
+					<span>${ esc( o.label ) }</span>
+				</div>` ).join( '' ) }
+			</div>` : '' }
+			<div class="minn-setup-foot">
+				${ setup.href
+					? `<a class="minn-btn-primary" href="${ esc( setup.href ) }" target="_blank" rel="noopener">Open setup ↗</a>
+					   <span class="minn-setup-hint">This plugin's setup runs on its own screen; this view comes alive once it's done.</span>`
+					: `<button class="minn-btn-primary" id="minn-setup-run">Set up now</button>` }
+			</div>
+		</div>`;
+		$$( '[data-setupopt]', view ).forEach( ( sw ) =>
+			sw.addEventListener( 'click', () => {
+				sw.classList.toggle( 'on' );
+				sw.setAttribute( 'aria-checked', sw.classList.contains( 'on' ) );
+			} )
+		);
+		const run = $( '#minn-setup-run', view );
+		if ( run ) run.addEventListener( 'click', async () => {
+			run.disabled = true;
+			run.textContent = 'Setting up…';
+			const choices = {};
+			$$( '[data-setupopt]', view ).forEach( ( sw ) => {
+				choices[ sw.dataset.setupopt ] = sw.classList.contains( 'on' );
+			} );
+			try {
+				await api( `minn-admin/v1/surfaces/${ s.id }/setup`, {
+					method: 'POST',
+					body: JSON.stringify( { choices } ),
+				} );
+				toast( `${ s.sub || s.label } is set up.` );
+				await refreshSurfaces();
+				renderView();
+			} catch ( e ) {
+				toast( e.message || 'Setup failed.', true );
+				run.disabled = false;
+				run.textContent = 'Set up now';
+			}
+		} );
+	}
+
 	function renderSurface( s ) {
 		const view = $( '#minn-view' );
+		if ( s.setupNeeded && s.setup ) {
+			renderSurfaceSetup( s, view );
+			return;
+		}
 		const ss = surfaceState( s.id );
 		const coll = surfaceColl( s, ss );
 		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) || ( s.status && ! ss.status ) ) {
