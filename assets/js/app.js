@@ -14683,7 +14683,7 @@
 							<div class="minn-session-row">
 								<div class="minn-session-info">
 									<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ' <span class="minn-session-current">this session</span>' : '' }</div>
-									<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? timeAgo( new Date( sess.login * 1000 ).toISOString() ) : '—' }</div>
+									<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 								</div>
 								<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">Sign out</button>
 							</div>` ).join( '' ) }
