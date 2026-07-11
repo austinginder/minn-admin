@@ -281,7 +281,7 @@
 		menus: [ 'Menus', 'Navigation' ],
 		widgets: [ 'Widgets', 'Sidebars & footers' ],
 		extensions: [ 'Extensions', 'Installed' ],
-		posttypes: [ 'Post Types', 'Structure' ],
+		posttypes: [ 'Structure', 'Post types, taxonomies & terms' ],
 		settings: [ 'Settings', 'General' ],
 		system: [ 'System', 'Diagnostics' ],
 		editor: [ 'Editor', 'Draft' ],
@@ -752,9 +752,6 @@
 		if ( B.caps.users ) {
 			manageItems.push( { id: 'users', label: 'Users', icon: 'users' } );
 		}
-		if ( B.caps.terms ) {
-			manageItems.push( { id: 'terms', label: 'Terms', icon: 'tag' } );
-		}
 		// Classic themes only — block themes manage navigation and widget areas
 		// in the site editor, and wp-admin hides these screens the same way.
 		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
@@ -763,8 +760,17 @@
 				manageItems.push( { id: 'widgets', label: 'Widgets', icon: 'columns' } );
 			}
 		}
+		// One "Structure" item covers Post Types, Taxonomies and Terms as tabs.
+		// Admins get all three; an editor (manage_categories only, no
+		// manage_options) gets a "Terms" item that opens the same page with
+		// just the Terms tab. Different route id per role so the nav highlight
+		// and route gating stay correct.
 		if ( B.caps.settings ) {
-			manageItems.push( { id: 'posttypes', label: 'Post Types', icon: 'grid' } );
+			manageItems.push( { id: 'posttypes', label: 'Structure', icon: 'grid' } );
+		} else if ( B.caps.terms ) {
+			manageItems.push( { id: 'terms', label: 'Terms', icon: 'tag' } );
+		}
+		if ( B.caps.settings ) {
 			manageItems.push( { id: 'system', label: 'System', icon: 'activity' } );
 			manageItems.push( { id: 'settings', label: 'Settings', icon: 'gear' } );
 		}
@@ -850,6 +856,9 @@
 		$$( '.minn-nav-btn' ).forEach( ( btn ) => {
 			const surface = surfaceById( state.route );
 			const on = btn.dataset.nav === state.route
+				// Structure folds Terms in: an admin on the 'terms' route (deep
+				// link / ⌘K) keeps the 'posttypes' Structure item highlighted.
+				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
 				|| ( surface && surface.family && btn.dataset.family === surface.family );
 			btn.classList.toggle( 'active', on );
 		} );
@@ -1000,6 +1009,9 @@
 		const activeFamily = surface && surface.family ? surface.family : '';
 		$$( '.minn-nav-btn' ).forEach( ( btn ) => {
 			const on = btn.dataset.nav === state.route
+				// Structure folds Terms in — an admin on the 'terms' route keeps
+				// the 'posttypes' Structure item highlighted.
+				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
 		} );
@@ -2655,11 +2667,56 @@
 		state.cache.terms = null;
 		state.cache.termTaxes = null; // counts changed
 		await loadTerms( page || 1 ).catch( showErr );
-		if ( state.route === 'terms' ) renderTerms();
+		if ( onStructure() ) renderStructure();
 	}
 
-	function renderTerms() {
+	// The Structure page unifies Post Types, Taxonomies and Terms under one
+	// nav item. Post Types + Taxonomies need manage_options; Terms needs only
+	// manage_categories, so the tabs are gated INDIVIDUALLY — an editor sees
+	// just Terms, an admin sees all three. Tab switching stays in-page
+	// (state.ptTab); the route is 'posttypes' for admins, 'terms' for
+	// editors and deep links.
+	const onStructure = () => 'posttypes' === state.route || 'terms' === state.route;
+
+	function structureTabsHtml( active ) {
+		const defs = [];
+		if ( B.caps.settings ) { defs.push( [ 'types', 'Post Types' ] ); defs.push( [ 'taxonomies', 'Taxonomies' ] ); }
+		if ( B.caps.terms ) defs.push( [ 'terms', 'Terms' ] );
+		if ( defs.length < 2 ) return ''; // a single available tab needs no bar
+		return `<div class="minn-tabs">${ defs.map( ( [ id, label ] ) =>
+			`<button class="minn-tab${ active === id ? ' active' : '' }" data-structtab="${ id }">${ label }</button>` ).join( '' ) }</div>`;
+	}
+
+	function structureActiveTab() {
+		let active = 'terms' === state.route ? 'terms' : ( state.ptTab || 'types' );
+		// Clamp to a tab the user can actually see — but only redirect to one
+		// that's AVAILABLE. A user with neither cap keeps the requested tab so
+		// its own permission message renders (author hitting /terms).
+		if ( ( 'types' === active || 'taxonomies' === active ) && ! B.caps.settings && B.caps.terms ) active = 'terms';
+		if ( 'terms' === active && ! B.caps.terms && B.caps.settings ) active = 'types';
+		return active;
+	}
+
+	function renderStructure() {
 		const view = $( '#minn-view' );
+		const active = structureActiveTab();
+		const tabsHtml = structureTabsHtml( active );
+		if ( 'terms' === active ) renderStructureTerms( view, tabsHtml );
+		else renderStructureTypes( view, tabsHtml, 'taxonomies' === active );
+		// Shared tab switch — in-page, no route change (admins stay on
+		// 'posttypes'; editors have only the Terms tab).
+		$$( '[data-structtab]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => { state.ptTab = btn.dataset.structtab; renderStructure(); } ) );
+	}
+
+	// Route to the Terms tab from anywhere: admins land on the Structure
+	// page's Terms tab (route stays 'posttypes'), editors on the 'terms' route.
+	function goTerms() {
+		if ( B.caps.settings ) { state.ptTab = 'terms'; go( 'posttypes' ); }
+		else { go( 'terms' ); }
+	}
+
+	function renderStructureTerms( view, tabsHtml ) {
 		if ( ! B.caps.terms ) {
 			view.innerHTML = '<div class="minn-empty">You need permission to manage terms.</div>';
 			return;
@@ -2667,18 +2724,19 @@
 		const c = state.cache.terms;
 		if ( ! c ) {
 			view.innerHTML = '<div class="minn-loading">Loading terms…</div>';
-			loadTerms().then( renderIfCurrent( 'terms' ) ).catch( showErr );
+			loadTerms().then( () => { if ( onStructure() ) renderStructure(); } ).catch( showErr );
 			return;
 		}
 		const tax = currentTermTax();
 		if ( ! tax ) {
-			view.innerHTML = '<div class="minn-empty">No manageable taxonomies on this site.</div>';
+			view.innerHTML = `<div class="minn-toolbar">${ tabsHtml }</div><div class="minn-empty">No manageable taxonomies on this site.</div>`;
 			return;
 		}
 		const taxes = termTaxes();
 		const linkable = 'category' === tax.slug || 'post_tag' === tax.slug;
 		view.innerHTML = `
 		<div class="minn-toolbar">
+			${ tabsHtml }
 			${ taxes.length > 1 ? `<div class="minn-ac minn-tax-select" data-taxcombo>
 				<input class="minn-input minn-ac-input" placeholder="${ esc( tax.label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
@@ -2714,7 +2772,7 @@
 					state.termSearch = '';
 					state.cache.terms = null;
 					await loadTerms().catch( showErr );
-					if ( state.route === 'terms' ) renderTerms();
+					if ( onStructure() ) renderStructure();
 				},
 			} );
 
@@ -2725,8 +2783,8 @@
 				state.termSearch = search.value.trim();
 				state.cache.terms = null;
 				await loadTerms().catch( showErr );
-				if ( state.route === 'terms' ) {
-					renderTerms();
+				if ( onStructure() ) {
+					renderStructure();
 					const el = $( '#minn-term-search' );
 					el.focus();
 					el.setSelectionRange( el.value.length, el.value.length );
@@ -2782,7 +2840,7 @@
 			const t = ( c.items || [] ).find( ( x ) => x.id === parseInt( btn.dataset.count, 10 ) );
 			if ( t ) viewPosts( t );
 		} ) );
-		if ( ! c.tree ) bindPager( view, c.page, loadTerms, () => { if ( state.route === 'terms' ) renderTerms(); } );
+		if ( ! c.tree ) bindPager( view, c.page, loadTerms, () => { if ( onStructure() ) renderStructure(); } );
 	}
 
 	// Inline editor row: create (null term) mounts under the table head,
@@ -5245,21 +5303,16 @@
 		state.cache.taxonomies = await api( 'minn-admin/v1/taxonomies' );
 	}
 
-	function renderPostTypes() {
-		const view = $( '#minn-view' );
+	function renderStructureTypes( view, tabsHtml, taxTab ) {
 		const c = state.cache.postTypes;
-		const taxTab = state.ptTab === 'taxonomies';
 		const tx = state.cache.taxonomies;
 		if ( ! c || ( taxTab && ! tx ) ) {
 			view.innerHTML = '<div class="minn-loading">Loading…</div>';
 			Promise.all( [ c ? null : loadPostTypes(), taxTab && ! tx ? loadTaxonomies() : null ] )
-				.then( renderIfCurrent( 'posttypes' ) ).catch( showErr );
+				.then( () => { if ( onStructure() ) renderStructure(); } ).catch( showErr );
 			return;
 		}
-		const tabs = `<div class="minn-tabs">
-			<button class="minn-tab${ taxTab ? '' : ' active' }" data-pttab="types">Post Types</button>
-			<button class="minn-tab${ taxTab ? ' active' : '' }" data-pttab="taxonomies">Taxonomies</button>
-		</div>`;
+		const tabs = tabsHtml;
 
 		if ( taxTab ) {
 			// Attached-to labels resolve through the types list.
@@ -5308,7 +5361,7 @@
 				e.stopPropagation();
 				state.termsTax = btn.dataset.managetax;
 				state.cache.terms = null;
-				go( 'terms' );
+				goTerms();
 			} ) );
 		} else {
 			view.innerHTML = `
@@ -5350,12 +5403,6 @@
 			);
 		}
 
-		$$( '[data-pttab]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				state.ptTab = btn.dataset.pttab;
-				renderPostTypes();
-			} )
-		);
 	}
 
 	// A definition changed — the Content view's type tabs must refetch.
@@ -14044,7 +14091,7 @@
 		}
 		if ( B.caps.plugins ) cmds.push( { label: 'Manage Extensions', kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
-		if ( B.caps.terms ) cmds.push( { label: 'Manage categories & tags', kind: 'nav', icon: '#', run: () => go( 'terms' ) } );
+		if ( B.caps.terms ) cmds.push( { label: 'Manage categories & tags', kind: 'nav', icon: '#', run: () => goTerms() } );
 		if ( B.caps.settings ) cmds.push( { label: 'View System diagnostics', kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		cmds.push(
@@ -15168,7 +15215,7 @@
 					toast( m.item ? 'Post type updated' : 'Post type created' );
 					bustTypeCaches();
 					closeModal();
-					if ( state.route === 'posttypes' ) renderPostTypes();
+					if ( onStructure() ) renderStructure();
 				} catch ( e ) {
 					toast( e.message, true );
 					saveBtn.disabled = false;
@@ -15183,7 +15230,7 @@
 					toast( 'Post type removed — content preserved' );
 					bustTypeCaches();
 					closeModal();
-					if ( state.route === 'posttypes' ) renderPostTypes();
+					if ( onStructure() ) renderStructure();
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -15239,7 +15286,7 @@
 					toast( m.item ? 'Taxonomy updated' : 'Taxonomy created' );
 					bustTypeCaches();
 					closeModal();
-					if ( state.route === 'posttypes' ) renderPostTypes();
+					if ( onStructure() ) renderStructure();
 				} catch ( e ) {
 					toast( e.message, true );
 					saveBtn.disabled = false;
@@ -15254,7 +15301,7 @@
 					toast( 'Taxonomy removed — terms preserved' );
 					bustTypeCaches();
 					closeModal();
-					if ( state.route === 'posttypes' ) renderPostTypes();
+					if ( onStructure() ) renderStructure();
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -16607,11 +16654,11 @@
 			case 'comments': return renderComments();
 			case 'orders': return renderOrders();
 			case 'users': return renderUsers();
-			case 'terms': return renderTerms();
+			case 'terms': return renderStructure();
 			case 'menus': return renderMenus();
 			case 'widgets': return renderWidgets();
 			case 'extensions': return renderExtensions();
-			case 'posttypes': return renderPostTypes();
+			case 'posttypes': return renderStructure();
 			case 'settings': return renderSettings();
 			case 'system': return renderSystem();
 			case 'editor': return renderEditor();
