@@ -73,7 +73,11 @@ a { color: var(--accent2); text-decoration: none; }
    overflow-anchor:none — Chrome's scroll anchoring loses its anchor node on
    every full innerHTML re-render and "helpfully" jumps the scroller (the
    plugin-toggle scroll bug); SPA views restore position themselves. */
-.minn-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; overflow-anchor: none; }
+/* scrollbar-gutter:stable reserves the scrollbar's width even when there's
+   nothing to scroll, so switching between a tall page (scrollbar shown) and a
+   short one (no scrollbar) never shifts the centered .minn-page sideways —
+   the settings section nav was drifting left/right between tabs. */
+.minn-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; overflow-anchor: none; scrollbar-gutter: stable; }
 .minn-page { animation: minnFadeUp 0.3s ease; padding: 26px 28px 60px; max-width: 1180px; margin: 0 auto; }
 
 /* ===== Sidebar ===== */
