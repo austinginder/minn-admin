@@ -55,6 +55,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-snippets.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/redirection.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/safe-redirect-manager.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/simple-301-redirects.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/eps-301-redirects.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/query-monitor.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cache-purge.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/updraftplus.php';
