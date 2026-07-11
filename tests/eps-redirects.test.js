@@ -44,8 +44,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForSelector( '[data-createfield="from"]', { timeout: 8000 } );
 		await page.type( '[data-createfield="from"]', '/eps-suite-old' );
 		await page.type( '[data-createfield="to"]', '/eps-suite-new' );
-		t.check( 'status field renders as a select', await page.$eval( '[data-createfield="status"]', ( el ) => el.tagName === 'SELECT' ) );
-		await page.selectOption( '[data-createfield="status"]', '302' );
+		t.check( 'status field renders as a themed combobox', await page.$eval( '[data-createfield="status"]', ( el ) => el.dataset.ftype === 'combobox' ) );
+		await page.click( '[data-createfield="status"] .minn-ac-input' );
+		await page.waitForSelector( '[data-createfield="status"] .minn-ac-item[data-acv="302"]', { timeout: 5000 } );
+		await page.click( '[data-createfield="status"] .minn-ac-item[data-acv="302"]' );
 		await page.click( '#minn-surface-create' );
 		await page.waitForFunction( () =>
 			! document.querySelector( '[data-createfield="from"]' )
@@ -68,7 +70,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForSelector( '[data-editfield="to"]', { timeout: 10000 } );
 		await page.evaluate( () => { document.querySelector( '[data-editfield="to"]' ).value = ''; } );
 		await page.type( '[data-editfield="to"]', '1' );
-		await page.selectOption( '[data-editfield="status"]', '301' );
+		await page.click( '[data-editfield="status"] .minn-ac-input' );
+		await page.waitForSelector( '[data-editfield="status"] .minn-ac-item[data-acv="301"]', { timeout: 5000 } );
+		await page.click( '[data-editfield="status"] .minn-ac-item[data-acv="301"]' );
 		await page.click( '#minn-surface-save' );
 		await page.waitForFunction( () =>
 			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Saved|saved/.test( x.textContent ) ),

@@ -73,8 +73,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		/* ===== Schema renders through the form engine ===== */
 		t.check( 'view switcher shows the Settings view', await page.$eval( '[data-sview="settings"]', ( el ) => el.classList.contains( 'active' ) ) );
 		const kinds = await page.$$eval( '[data-sset]', ( els ) => els.map( ( e ) => e.dataset.sset + ':' + e.dataset.ftype ).sort() );
-		t.check( 'field vocabulary renders (text/number/select/toggle)',
-			JSON.stringify( kinds ) === JSON.stringify( [ 'advanced_url:text', 'enabled:toggle', 'mode:select', 'retention:number', 'site_label:text' ] ), kinds.join( ', ' ) );
+		// Declared selects render as the themed strict combobox in adapter
+		// forms (comboUpgrade) — the native select popup is never shown.
+		t.check( 'field vocabulary renders (text/number/select-as-combobox/toggle)',
+			JSON.stringify( kinds ) === JSON.stringify( [ 'advanced_url:text', 'enabled:toggle', 'mode:combobox', 'retention:number', 'site_label:text' ] ), kinds.join( ', ' ) );
 		t.check( 'values seed the controls', await page.$eval( '[data-sset="site_label"]', ( el ) => el.value === 'Fixture' )
 			&& await page.$eval( '[data-sset="retention"]', ( el ) => el.value === '30' )
 			&& await page.$eval( '[data-sset="enabled"]', ( el ) => el.classList.contains( 'on' ) ) );

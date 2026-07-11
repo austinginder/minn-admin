@@ -406,8 +406,10 @@
 			// The themed strict select replacement. The wrapper carries the
 			// data attribute; the CALLER binds bindAutocomplete (strict) with
 			// the field's options — reads come back via the inner input's
-			// dataset.acValue in formControlValue().
-			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="combobox">
+			// dataset.acValue in formControlValue(). data-acseed carries the
+			// render-time value so bindFormComboboxes can seed without the
+			// caller re-threading it.
+			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="combobox" data-acseed="${ esc( String( v ) ) }">
 				<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || '' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>`;
@@ -443,6 +445,47 @@
 			return input && input.dataset.acValue !== undefined ? input.dataset.acValue : '';
 		}
 		return el.value;
+	}
+
+	// Adapter-form selects render as the strict themed combobox (Austin,
+	// 2026-07-11): the native <select> popup was the last OS-drawn control
+	// left in adapter surfaces. The upgrade happens at render time in the
+	// adapter-form dialects only (surface settings, create/edit, action
+	// fields) — editor panels and the block inspector keep native selects,
+	// their binders don't speak combobox and `clearable` semantics live
+	// there.
+	function comboUpgrade( nf ) {
+		if ( nf.type === 'select' && nf.options && nf.options.length ) {
+			if ( nf.clearable && ! nf.options.some( ( o ) => String( o[ 0 ] ) === '' ) ) nf.options = [ [ '', '—' ], ...nf.options ];
+			nf.type = 'combobox';
+		}
+		return nf;
+	}
+
+	// Arm every rendered combobox in `scope` from its data-acseed + the
+	// field's options. Strict mode seeds dataset.acValue (falling back to
+	// the first option when the seed isn't in the vocabulary, exactly like
+	// a native select renders), so an untouched control collects the same
+	// value an untouched select would.
+	function bindFormComboboxes( scope, attr, fields, onEdit ) {
+		if ( ! scope ) return;
+		$$( `[${ attr }][data-ftype="combobox"]`, scope ).forEach( ( wrap ) => {
+			if ( wrap._minnAcBound ) return;
+			wrap._minnAcBound = true;
+			const key = wrap.getAttribute( attr );
+			const f = ( fields || [] ).map( formNormField ).find( ( x ) => x.key === key );
+			if ( ! f || ! f.options ) return;
+			let seed = wrap.dataset.acseed || '';
+			if ( ! f.options.some( ( o ) => String( o[ 0 ] ) === seed ) ) seed = String( f.options[ 0 ][ 0 ] );
+			bindAutocomplete( wrap, f.options.map( ( [ value, label ] ) => ( { value, label } ) ), { strict: true, value: seed } );
+			if ( onEdit ) {
+				// A strict pick sets dataset.acValue programmatically (no
+				// input event fires) — edit tracking watches the attribute,
+				// bound AFTER the seed so bind time never reads as an edit.
+				const input = $( '.minn-ac-input', wrap );
+				if ( input ) new MutationObserver( () => onEdit( key ) ).observe( input, { attributes: true, attributeFilter: [ 'data-ac-value' ] } );
+			}
+		} );
 	}
 
 	/* ===== Routing =====
@@ -3567,7 +3610,7 @@
 		return `
 		<div class="minn-action-fields">
 			${ action.fields.map( ( f ) => {
-				const nf = formNormField( f );
+				const nf = comboUpgrade( formNormField( f ) );
 				return `<div>
 					<div class="minn-field-label">${ esc( nf.label || nf.key ) }</div>
 					${ formControlHtml( nf, nf.value != null ? nf.value : '', 'data-actfield', nf.key ) }
@@ -3606,6 +3649,7 @@
 	function armActionFields( btn, action, onCancel, run ) {
 		const rowEl = btn.parentElement;
 		rowEl.innerHTML = actionFieldsForm( action );
+		bindFormComboboxes( rowEl, 'data-actfield', action.fields );
 		const first = $( '[data-actfield]', rowEl );
 		if ( first ) first.focus( { preventScroll: true } );
 		$( '[data-actcancel]', rowEl ).addEventListener( 'click', onCancel );
@@ -4123,7 +4167,7 @@
 	// Shared field markup for surface create + detail.edit — a thin dialect
 	// wrapper over the form engine (see the Form engine section up top).
 	function surfaceFieldHtml( f, val, dataAttr ) {
-		const nf = formNormField( f );
+		const nf = comboUpgrade( formNormField( f ) );
 		if ( nf.type === 'textarea' ) nf.klass = 'minn-surface-textarea';
 		return formControlHtml( nf, val, dataAttr || 'data-editfield', nf.key );
 	}
@@ -4526,7 +4570,7 @@
 		const fields = [];
 		const groupHtml = ( data.groups || [] ).map( ( g ) => {
 			const rows = ( g.fields || [] ).map( ( f ) => {
-				const nf = formNormField( f );
+				const nf = comboUpgrade( formNormField( f ) );
 				fields.push( nf );
 				const ctl = formControlHtml( nf, values[ nf.key ], 'data-sset', nf.key );
 				if ( nf.type === 'toggle' ) {
@@ -4567,32 +4611,21 @@
 			if ( row ) row.hidden = String( cur ) !== String( f.showWhen.equals );
 		} );
 		applyDeps();
-		// Combobox fields (the strict themed select) bind after render; the
-		// wrapper's bubbling input events feed the same dirty tracking.
-		$$( '[data-sset][data-ftype="combobox"]', view ).forEach( ( wrap ) => {
-			const f = fields.find( ( x ) => x.key === wrap.dataset.sset );
-			if ( ! f ) return;
-			bindAutocomplete(
-				wrap,
-				( f.options || [] ).map( ( [ value, label ] ) => ( { value, label } ) ),
-				{ strict: true, value: values[ f.key ] }
-			);
-			// A strict pick sets dataset.acValue programmatically (no input
-			// event fires), so dirty tracking watches the attribute. Observing
-			// AFTER the bind keeps the bind-time seed from reading as dirty.
-			const input = $( '.minn-ac-input', wrap );
-			if ( input ) {
-				new MutationObserver( () => {
-					dirty[ wrap.dataset.sset ] = true;
-					applyDeps();
-				} ).observe( input, { attributes: true, attributeFilter: [ 'data-ac-value' ] } );
-			}
+		// Combobox fields (declared, or selects upgraded by comboUpgrade)
+		// bind after render through the shared arm-er; real picks feed the
+		// same dirty tracking via the dataset.acValue observer.
+		bindFormComboboxes( view, 'data-sset', fields, ( key ) => {
+			dirty[ key ] = true;
+			applyDeps();
 		} );
 		$$( '[data-sset]', view ).forEach( ( input ) => {
 			const mark = () => {
 				dirty[ input.dataset.sset ] = true;
 				applyDeps();
 			};
+			// Comboboxes dirty via the observer above — typing only FILTERS
+			// the panel and must not put the key on the save payload.
+			if ( input.dataset.ftype === 'combobox' ) return;
 			if ( input.dataset.ftype === 'toggle' ) {
 				input.addEventListener( 'click', () => {
 					input.classList.toggle( 'on' );
@@ -16620,6 +16653,7 @@
 		}
 
 		if ( m.type === 'surface-form' ) {
+			bindFormComboboxes( $( '.minn-modal' ), 'data-createfield', ( ( m.coll || m.surface.collection ).create || {} ).fields );
 			const createBtn = $( '#minn-surface-create' );
 			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
 				const cr = ( m.coll || m.surface.collection ).create;
@@ -16784,6 +16818,7 @@
 		}
 
 		if ( m.type === 'surface' ) {
+			bindFormComboboxes( $( '.minn-modal' ), 'data-editfield', ( ( ( m.coll || m.surface.collection ).detail || {} ).edit || {} ).fields );
 			const prevBtn = $( '#minn-surface-prev' );
 			const nextBtn = $( '#minn-surface-next' );
 			if ( prevBtn ) prevBtn.addEventListener( 'click', () => surfaceModalNav( -1 ) );

@@ -240,7 +240,8 @@ The route implements one contract per tab:
   keeps what was typed.
 
 Fields use the shared form vocabulary: `key`, `label`, `type` (`text` default ·
-`textarea` · `number` · `select` · `combobox` (the themed autocomplete over
+`textarea` · `number` · `select` (rendered as Minn's themed searchable
+dropdown, never a native select popup) · `combobox` (the themed autocomplete over
 `options`, right for long catalogs) · `toggle` · `email` · `url`), `options`
 (`[value, label]` pairs), `placeholder`, `help` (rendered under the control),
 `rows`, `min`/`max`, `mono`, and `showWhen: { "key": …, "equals": … }` (the

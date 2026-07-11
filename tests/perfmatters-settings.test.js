@@ -93,11 +93,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const dns = ( await getTab( 'preload' ) ).values[ K_DNS ];
 		t.check( 'one-per-line normalized by their sanitizer', dns === '//fonts.googleapis.com\n//example.com', JSON.stringify( dns ) );
 
-		/* ===== Select + locked escape on the JS tab ===== */
+		/* ===== Select (as themed combobox) + locked escape on the JS tab ===== */
 		await page.click( '[data-ssettab="js"]' );
 		await page.waitForSelector( `[data-sset="${ K_DELAY }"]`, { timeout: 15000 } );
-		await page.selectOption( `[data-sset="${ K_DELAY }"]`, 'all' );
-		await page.$eval( `[data-sset="${ K_DELAY }"]`, ( el ) => el.dispatchEvent( new Event( 'input', { bubbles: true } ) ) );
+		t.check( 'selects render as themed comboboxes', await page.$eval( `[data-sset="${ K_DELAY }"]`, ( el ) => el.dataset.ftype === 'combobox' )
+			&& ( await page.$$eval( 'select[data-sset]', ( els ) => els.length ) ) === 0 );
+		await page.click( `[data-sset="${ K_DELAY }"] .minn-ac-input` );
+		await page.waitForSelector( `[data-sset="${ K_DELAY }"] .minn-ac-item[data-acv="all"]`, { timeout: 5000 } );
+		await page.click( `[data-sset="${ K_DELAY }"] .minn-ac-item[data-acv="all"]` );
 		t.check( 'select save 200', ( await clickSave() ) === 200 );
 		t.check( 'select round-trips', ( await getTab( 'js' ) ).values[ K_DELAY ] === 'all' );
 		t.check( 'bespoke fields surface as locked with wp-admin escape', await page.$$eval( '.minn-panel-locked a', ( els ) =>
