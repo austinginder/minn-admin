@@ -17,10 +17,10 @@ shared view; "action" = a ⌘K / menu command.
 
 | Area | Plugins | How it shows up |
 |---|---|---|
-| **SEO** | Yoast, Rank Math, AIOSEO, SEOPress | Editor panel (title, meta description, focus keyword) |
+| **SEO** | Yoast, Rank Math, AIOSEO, SEOPress, SiteSEO | Editor panel (title, meta description, focus keyword) |
 | **Forms** | Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 (via Flamingo), CFDB7 | **Forms** surface — entries as contact cards |
 | **Email log** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP | **Email Log** surface — sent mail, resend |
-| **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects | **Redirects** surface — list + in-place edit |
+| **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects, 301 Redirects (WebFactory) | **Redirects** surface — list + in-place edit |
 | **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence** | **Activity Log** surface (Wordfence = login security) |
 | **Security posture** | Wordfence, Really Simple SSL | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
 | **Snippets** | Code Snippets, WPCode, FluentSnippets | **Snippets** surface — list, toggle, edit |
@@ -29,7 +29,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Caching** | Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket, WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor CSS | **Clear site cache** action (⌘K) |
 | **Custom fields** | ACF (+ Pro) | Editor panel |
 | **Ecommerce** | WooCommerce | **Orders** surface + Overview stats |
-| **Spam filtering** | Akismet, Antispam Bee, CleanTalk | Settings → Spam provider cards; open via `minn_admin_spam_providers` |
+| **Spam filtering** | Akismet, Antispam Bee, CleanTalk, WP Armour | Settings → Spam provider cards; open via `minn_admin_spam_providers` |
 | **Licenses** | Elementor Pro, ACF PRO, WP Rocket, Gravity Forms, Gravity SMTP, AnalyticsWP, Bricks, Divi, Beaver Builder, WPBakery, Brizy, Etch, Astra/Brainstorm family, WPMU DEV (Dashboard + Smush Pro), SearchWP, Gravity Perks, Rank Math Pro, Perfmatters, GP Premium, WP All Import/Export Pro, Slider Revolution, LayerSlider, Avada, Envato Market, The Events Calendar family + StellarWP Uplink, plus any Freemius, EDD Software Licensing or SureCart plugin generically | System → **Licenses** card + health check: valid / expired / invalid / missing per paid component; paste-to-activate for Elementor Pro, ACF PRO, Gravity Forms, Gravity SMTP, Beaver Builder, Brizy Pro, Etch, Bricks and Divi (active theme; Divi takes username + API key), WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium, WP All Export Pro and LayerSlider, deactivate and re-verify where each vendor's code allows, and an "Activate ↗" link for portal- or admin-context-bound vendors (WPBakery, Rank Math, Envato, WP All Import, Slider Revolution), all through each vendor's own code; open via `minn_admin_license_providers` |
 | **Site visibility** | WP Maintenance Mode, SeedProd, Under Construction, Password Protected, WooCommerce coming soon (incl. the store-pages-only partial shape), Elementor maintenance mode, plus Minn's own maintenance mode and the `blog_public` "discourage search engines" setting | Overview banner + persistent amber topbar chip (on every route) + System health check when the site is hidden, partly hidden, password-gated or unindexed; Settings → Visibility lists active third-party limiters; open via `minn_admin_visibility_providers` |
 | **Page builders** | Elementor, Beaver Builder, Brizy, Divi, Bricks, WPBakery, Etch | Detected, fenced, "Edit in ⟨builder⟩" |
@@ -117,12 +117,12 @@ recommended order (installs × fit × effort):
    WP Maintenance Mode, SeedProd, Under Construction, Password Protected,
    WooCommerce coming soon (partial-aware for store-pages-only) and Elementor
    maintenance mode; the login URL row honors login-hiders.
-9. **Small delights** — mostly shipped (v0.11.0 cycle): User Switching
+9. **Small delights** — ✅ shipped (v0.11.0 cycle): User Switching
    ("Switch to this user" from the user row via its own nonce URLs),
-   Regenerate Thumbnails on the media detail and WooCommerce PDF Invoices
-   downloads on the order detail are in. Still open: WP Armour in the spam
-   provider cards, SiteSEO in the SEO panel (SEOPress fork, near-identical
-   meta keys), eps-301-redirects in Redirects.
+   Regenerate Thumbnails on the media detail, WooCommerce PDF Invoices
+   downloads on the order detail, WP Armour in the spam provider cards,
+   SiteSEO in the SEO panel (SEOPress fork, own `_siteseo_` meta prefix)
+   and 301 Redirects (WebFactory) in the Redirects family.
 10. **Bigger scoped bets** — WPForms Pro entries (source-verified: Lite
     stores no entries at all, so this costs a license and Pro fixtures;
     biggest uncovered name), Jetpack Stats as a traffic provider (data lives
