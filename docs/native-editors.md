@@ -47,8 +47,8 @@ From the 2026-07-06 source research (details in `full-ui-adapters.md`):
 - The field palette is programmatic: `GF_Fields::get_all()` enumerates every
   registered field type, including add-on-provided ones.
 - Per-type settings keys are enumerable, and conditional logic is a small rule
-  JSON (`{ actionType, logicType, rules: [{ fieldId, operator, value }] }`) —
-  the same shape as Minn's `when` conditions, grown up.
+  JSON (`{ actionType, logicType, rules: [{ fieldId, operator, value }] }`),
+  which is Minn's own `when`-condition shape, grown up.
 - GF's own editor is hand-authored inline JS on top of this document. Nothing
   it does is privileged; a foreign editor writing the same document produces
   forms GF renders and edits interchangeably.
@@ -172,7 +172,7 @@ The weakest of the three cases, recorded mostly to draw its boundary.
 - Disembark note: its connector already exposes file/database primitives over
   REST (`disembark/v1/database`, `/stream-file`, `/file/save`, ...) and could
   in principle power this. Before Minn ever points UI at those routes, they
-  need real auth upstream — as of v2.7.0 they register without
+  need real auth upstream: as of v2.7.0 they register without
   `permission_callback` (token checks live elsewhere), which is already
   flagged as an upstream fix. Server-side shim access under Minn's own cap
   gate would be the pattern regardless (the rest_do_request precedent).
@@ -188,7 +188,7 @@ The weakest of the three cases, recorded mostly to draw its boundary.
 
 ## Sequencing, if any of this ever schedules
 
-1. GF Settings mapper ships first (already the v0.13.0 opener) — it is both
+1. GF Settings mapper ships first (already the v0.13.0 opener); it is both
    independently valuable and the prerequisite plumbing.
 2. Database viewer is the cheapest full item here and the best trial balloon
    for "developer surfaces": one cycle fragment, no plugin dependency.
