@@ -194,7 +194,13 @@ const fs = require( 'fs' );
 		t.check( 'Escape closes the log overlay', ! ( await page.$( '.minn-log-modal' ) ) );
 	}
 
-	/* ===== Autoload + Cron summary rows expand to detail modals ===== */
+	/* ===== Autoload + Cron health cards expand to detail modals ===== */
+	// The health CARDS are the primary entry (Austin) and wear a corner
+	// expand icon; the grid rows below share the same data-sysdetail
+	// binding. querySelector hits the card first (checks render first).
+	t.check( 'autoload + cron health cards carry the expand affordance', await page.evaluate( () =>
+		!! document.querySelector( '.minn-sys-check[data-sysdetail="autoload"] .minn-sys-check-open svg' )
+		&& !! document.querySelector( '.minn-sys-check[data-sysdetail="cron"] .minn-sys-check-open svg' ) ) );
 	await page.evaluate( () => document.querySelector( '[data-sysdetail="autoload"]' ).click() );
 	await page.waitForFunction( () => document.querySelectorAll( '.minn-sysd-row' ).length > 2, null, { timeout: 15000 } );
 	const alModal = await page.evaluate( () => ( {

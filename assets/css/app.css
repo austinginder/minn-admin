@@ -1397,9 +1397,11 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
    .minn-modal-meta, which supplies padding for the media modal's fields). */
 .minn-order-status { margin-top: 0; padding: 12px 18px 2px; }
 
-/* System page: summary rows that expand to a detail modal (autoload, cron) */
+/* System page: summary rows + health cards that expand to a detail modal
+   (autoload, cron) */
 .minn-sys-link { cursor: pointer; }
 .minn-sys-link:hover .minn-sys-key, .minn-sys-link:hover { color: var(--text); }
+.minn-sys-check.minn-sys-link:hover { border-color: var(--text3); }
 .minn-sys-more { color: var(--accent); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .minn-sysd { padding: 10px 18px 16px; }
 .minn-sysd-sub { font-size: 12.5px; color: var(--text2); margin-bottom: 10px; }
@@ -1889,7 +1891,11 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-sys-jump button.active { color: var(--text); background: var(--panel2); border-color: var(--border); }
 
 .minn-sys-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-bottom: 22px; }
-.minn-sys-check { display: flex; gap: 11px; padding: 13px 15px; background: var(--panel); border: 1px solid var(--border); border-radius: 11px; align-items: flex-start; }
+.minn-sys-check { display: flex; gap: 11px; padding: 13px 15px; background: var(--panel); border: 1px solid var(--border); border-radius: 11px; align-items: flex-start; position: relative; }
+/* the corner expand icon marks a check card that opens a detail modal */
+.minn-sys-check-open { position: absolute; top: 10px; right: 11px; color: var(--text3); line-height: 0; }
+.minn-sys-check-open svg { width: 13px; height: 13px; }
+.minn-sys-check.minn-sys-link:hover .minn-sys-check-open { color: var(--accent); }
 .minn-sys-dot { flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
 .minn-sys-dot svg { width: 14px; height: 14px; }
 .minn-sys-dot.pass { color: var(--green); background: rgba(70,184,129,0.14); }
