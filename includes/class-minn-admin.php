@@ -391,6 +391,12 @@ class Minn_Admin {
 			 * 'standard' always leads as the default.
 			 */
 			'postFormats' => self::supported_post_formats(),
+			/**
+			 * Site visibility posture (adapters/site-status.php) — drives the
+			 * Overview banner warning when a maintenance/coming-soon/password
+			 * plugin or "discourage search engines" is hiding the site.
+			 */
+			'visibility' => function_exists( 'minn_admin_site_visibility' ) ? minn_admin_site_visibility() : null,
 		);
 
 		include MINN_ADMIN_DIR . 'includes/template.php';

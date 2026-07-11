@@ -184,6 +184,16 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-core-chip:hover { border-color: var(--amber); }
 .minn-core-chip svg { width: 14px; height: 14px; }
+/* Site-visibility chip — same amber pill as the core-update chip, on every
+   route until the site is fully public again. */
+.minn-vis-chip[hidden] { display: none; }
+.minn-vis-chip:not([hidden]) {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600;
+  color: var(--amber); background: rgba(224,164,88,0.14); border: 1px solid rgba(224,164,88,0.35);
+  padding: 6px 12px; border-radius: 9px; cursor: pointer; white-space: nowrap;
+}
+.minn-vis-chip:hover { border-color: var(--amber); }
+.minn-vis-chip svg { width: 14px; height: 14px; }
 
 .minn-user { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid var(--border); cursor: pointer; border-radius: 9px; }
 .minn-user:hover { background: var(--hover); }
@@ -324,6 +334,18 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-core-info { min-width: 0; }
 .minn-core-banner .minn-btn-primary { flex-shrink: 0; }
+/* Site-visibility warning banner (Overview). Amber for a blocking state
+   (maintenance/coming-soon/password), softer for search-discouraged. */
+.minn-vis-banner {
+  display: flex; align-items: center; gap: 16px; justify-content: space-between;
+  padding: 16px 20px; margin-bottom: 16px;
+}
+.minn-vis-banner.block { border-color: rgba(224,164,88,0.5); background: rgba(224,164,88,0.09); }
+.minn-vis-banner.soft { border-color: var(--border2); }
+.minn-vis-info { min-width: 0; }
+.minn-vis-banner .minn-panel-title { display: flex; align-items: center; gap: 8px; }
+.minn-vis-banner .minn-panel-title svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--amber); }
+.minn-vis-banner .minn-btn-soft { flex-shrink: 0; }
 .minn-comment-replybox { margin-top: 10px; }
 .minn-comment-replybox textarea { resize: vertical; font-size: 13.5px; }
 .minn-unread-dot { position: absolute; top: 6px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--bg); }
@@ -2034,7 +2056,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   /* Topbar: title + theme + notifications + New (icon only). */
   .minn-topbar { padding: 0 12px; gap: 8px; }
   .minn-topbar-sub, #minn-view-site, #minn-help-btn { display: none; }
-  .minn-core-chip span { display: none; } /* icon-only pill */
+  .minn-core-chip span, .minn-vis-chip span { display: none; } /* icon-only pill */
   .minn-topbar-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .minn-topbar .minn-btn-primary { font-size: 0; gap: 0; padding: 8px 10px; }
 
