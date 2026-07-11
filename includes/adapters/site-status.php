@@ -201,3 +201,22 @@ function minn_admin_rsssl_check() {
 		'detail' => 'Really Simple SSL is enforcing HTTPS' . ( $fixer ? ', mixed-content fixer on' : '' ),
 	);
 }
+
+// Live visibility state — the boot payload is a snapshot, so the banner and
+// topbar chip refetch this after a maintenance/search toggle to update
+// without a full page reload.
+add_action( 'rest_api_init', function () {
+	register_rest_route(
+		'minn-admin/v1',
+		'/visibility',
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => function () {
+				return current_user_can( 'manage_options' );
+			},
+			'callback'            => function () {
+				return rest_ensure_response( minn_admin_site_visibility() );
+			},
+		)
+	);
+} );

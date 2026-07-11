@@ -949,7 +949,7 @@
 		// Core updates outrank everything else — the chip is visible on every
 		// route while one pends and lands on the Overview banner's button.
 		$( '#minn-core-chip' ).addEventListener( 'click', () => go( 'overview' ) );
-		$( '#minn-vis-chip' ).addEventListener( 'click', () => go( 'overview' ) );
+		$( '#minn-vis-chip' ).addEventListener( 'click', ( e ) => openVisibilityPopover( e.currentTarget ) );
 		$( '#minn-new-btn' ).addEventListener( 'click', ( e ) => {
 			e.stopPropagation();
 			if ( B.caps.editPages ) toggleNewMenu( e.currentTarget );
@@ -1129,8 +1129,12 @@
 			} )
 		);
 		bindCoreBanner( view );
-		$$( '.minn-vis-banner [data-goto]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => go( btn.dataset.goto ) ) );
+		const visBanner = $( '.minn-vis-banner', view );
+		if ( visBanner ) {
+			const controls = visibilityFixControls();
+			$$( '[data-vistoggle]', visBanner ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => runVisToggle( controls[ +btn.dataset.vistoggle ], btn ) ) );
+		}
 		$$( '.minn-stat[data-goto]', view ).forEach( ( card ) => {
 			const open = () => {
 				const [ route, filter ] = card.dataset.goto.split( ':' );
@@ -4857,36 +4861,137 @@
 		if ( u ) $( '#minn-core-chip-text' ).textContent = `WordPress ${ u.version }`;
 	}
 
+	// The live visibility state (state.visibility) falls back to the boot
+	// snapshot until the first refresh. refreshVisibility re-reads it after a
+	// maintenance/search toggle so the banner and chip update WITHOUT a page
+	// reload (Austin's report: they were stale until refresh).
+	const visState = () => state.visibility || B.visibility;
+	async function refreshVisibility() {
+		try { state.visibility = await api( 'minn-admin/v1/visibility' ); } catch ( e ) { /* keep the last state */ }
+		updateVisChip();
+		if ( state.route === 'overview' ) renderOverview();
+	}
+
 	// Persistent amber chip on EVERY route when the site is not fully public —
 	// it follows the owner around until they fix it, since a hidden or
-	// unindexed site is easy to forget and expensive to leave broken.
+	// unindexed site is easy to forget and expensive to leave broken. Clicking
+	// it opens a popover with the actual controls, not a dump to Settings.
 	function updateVisChip() {
 		const chip = $( '#minn-vis-chip' );
 		if ( ! chip ) return;
-		const v = B.visibility;
+		const v = visState();
 		const hide = ! v || v.public;
 		chip.hidden = hide;
-		if ( ! hide ) {
-			const label = 'hidden' === v.state ? 'Site hidden'
-				: 'password' === v.state ? 'Password gated'
-				: 'Not indexed';
-			$( '#minn-vis-chip-text' ).textContent = label;
+		if ( hide ) { closeVisPopover(); return; }
+		const label = 'hidden' === v.state ? 'Site hidden'
+			: 'password' === v.state ? 'Password gated'
+			: 'Not indexed';
+		$( '#minn-vis-chip-text' ).textContent = label;
+	}
+
+	// The controls that actually FIX the current visibility state, shared by
+	// the banner and the chip popover. Minn-owned settings (its own maintenance
+	// mode, the search-engine toggle) get an inline switch; third-party
+	// maintenance/coming-soon/password plugins can only be linked out to.
+	function visibilityFixControls() {
+		const v = visState();
+		const out = [];
+		( v.providers || [] ).forEach( ( p ) => {
+			if ( p.minn ) {
+				out.push( { type: 'toggle', label: 'Maintenance mode', setting: 'minn_admin_maintenance', on: true } );
+			} else {
+				out.push( { type: 'link', label: p.name, url: p.url } );
+			}
+		} );
+		if ( v.searchDiscouraged ) {
+			out.push( { type: 'toggle', label: 'Search engine visibility', setting: 'blog_public', on: false } );
+		}
+		return out;
+	}
+	function visControlHtml( c, i ) {
+		if ( 'toggle' === c.type ) {
+			return `<div class="minn-vis-ctl">
+				<span class="minn-toggle-label">${ esc( c.label ) }</span>
+				<button class="minn-switch${ c.on ? ' on' : '' }" data-vistoggle="${ i }" role="switch" aria-checked="${ c.on }" aria-label="${ esc( c.label ) }"><span class="minn-switch-knob"></span></button>
+			</div>`;
+		}
+		return `<a class="minn-btn-soft" href="${ esc( c.url || B.site.adminUrl ) }" target="_blank" rel="noopener">${ esc( c.label ) } ↗</a>`;
+	}
+	// Flip a Minn-owned visibility setting and refresh live.
+	async function runVisToggle( c, btn ) {
+		if ( btn ) btn.disabled = true;
+		const next = ! c.on;
+		const val = 'blog_public' === c.setting ? ( next ? 1 : 0 ) : next;
+		try {
+			await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { [ c.setting ]: val } ) } );
+			await refreshVisibility();
+			toast( 'minn_admin_maintenance' === c.setting
+				? ( next ? 'Maintenance mode on' : 'Maintenance mode off — the site is public' )
+				: ( next ? 'Search engines can index the site' : 'Search engines discouraged' ) );
+			// If the site is now fully public, the popover has nothing left to
+			// show; otherwise refresh its controls in place.
+			if ( visState().public ) closeVisPopover();
+			else refreshVisPopover();
+		} catch ( e ) {
+			toast( e.message, true );
+			if ( btn ) btn.disabled = false;
 		}
 	}
 
+	function closeVisPopover() {
+		const pop = $( '#minn-vis-pop' );
+		if ( pop ) pop.remove();
+		document.removeEventListener( 'mousedown', visPopOutside );
+	}
+	function visPopOutside( e ) {
+		const pop = $( '#minn-vis-pop' );
+		if ( pop && ! pop.contains( e.target ) && ! e.target.closest( '#minn-vis-chip' ) ) closeVisPopover();
+	}
+	function visPopInnerHtml() {
+		const v = visState();
+		const title = 'password' === v.state ? 'Site password-protected'
+			: 'search-discouraged' === v.state ? 'Search engines discouraged'
+			: 'Site hidden from the public';
+		const sub = 'hidden' === v.state ? 'Visitors see a maintenance or coming-soon page.'
+			: 'password' === v.state ? 'Visitors must enter a password to see any page.'
+			: 'The site is public but asks search engines not to index it.';
+		return `<div class="minn-vis-pop-title">${ esc( title ) }</div>
+			<div class="minn-vis-pop-sub">${ esc( sub ) }</div>
+			${ visibilityFixControls().map( visControlHtml ).join( '' ) }`;
+	}
+	function bindVisPop( pop ) {
+		const controls = visibilityFixControls();
+		$$( '[data-vistoggle]', pop ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => runVisToggle( controls[ +btn.dataset.vistoggle ], btn ) ) );
+	}
+	function refreshVisPopover() {
+		const pop = $( '#minn-vis-pop' );
+		if ( ! pop ) return;
+		pop.innerHTML = visPopInnerHtml();
+		bindVisPop( pop );
+	}
+	function openVisibilityPopover( anchor ) {
+		if ( $( '#minn-vis-pop' ) ) { closeVisPopover(); return; }
+		const pop = document.createElement( 'div' );
+		pop.className = 'minn-vis-pop';
+		pop.id = 'minn-vis-pop';
+		pop.innerHTML = visPopInnerHtml();
+		document.body.appendChild( pop );
+		const r = anchor.getBoundingClientRect();
+		pop.style.top = ( r.bottom + 6 ) + 'px';
+		pop.style.right = Math.max( 8, window.innerWidth - r.right ) + 'px';
+		bindVisPop( pop );
+		setTimeout( () => document.addEventListener( 'mousedown', visPopOutside ), 0 );
+	}
+
 	// "Your site is hidden from the public" — the loudest thing Minn can warn
-	// about. Rendered on Overview from the boot payload (B.visibility), so it
-	// shows instantly. Maintenance/coming-soon fully blocks visitors (amber);
-	// a password gate or search-discouraged is a softer note.
+	// about, on Overview. Minn-owned states get inline controls right in the
+	// banner; third-party ones link out.
 	function visibilityBannerHtml() {
-		const v = B.visibility;
+		const v = visState();
 		if ( ! v || v.public ) return '';
 		const names = ( v.providers || [] ).map( ( p ) => p.name );
-		// All non-public states use the amber warning treatment — "discourage
-		// search engines" left on is a common, costly silent mistake worth
-		// nagging about, not just a footnote.
 		let title, desc;
-		const cls = 'block';
 		if ( 'hidden' === v.state ) {
 			title = 'Your site is hidden from the public';
 			desc = `Visitors can't see the site — ${ names.join( ', ' ) } ${ names.length === 1 ? 'is' : 'are' } showing a maintenance or coming-soon page instead.`;
@@ -4897,22 +5002,13 @@
 			title = 'Search engines are discouraged';
 			desc = 'The site is public, but "Discourage search engines" is on in Settings → Reading, so it asks not to be indexed.';
 		}
-		// A link to fix it: a third-party screen (url), Minn's own maintenance
-		// setting, or the Reading settings for the search-engine toggle.
-		const withUrl = ( v.providers || [] ).find( ( p ) => p.url );
-		const minnOne = ( v.providers || [] ).find( ( p ) => p.minn );
-		const action = withUrl
-			? `<a class="minn-btn-soft" href="${ esc( withUrl.url ) }" target="_blank" rel="noopener">Review ↗</a>`
-			: minnOne
-				? `<button class="minn-btn-soft" data-goto="settings">Maintenance settings</button>`
-				: ( 'search-discouraged' === v.state ? `<button class="minn-btn-soft" data-goto="settings">Reading settings</button>` : '' );
 		return `
-		<div class="minn-card minn-vis-banner ${ cls }">
+		<div class="minn-card minn-vis-banner block">
 			<div class="minn-vis-info">
 				<div class="minn-panel-title">${ icon( 'warn' ) } ${ esc( title ) }</div>
 				<div class="minn-toggle-desc">${ esc( desc ) }</div>
 			</div>
-			${ action }
+			<div class="minn-vis-actions">${ visibilityFixControls().map( visControlHtml ).join( '' ) }</div>
 		</div>`;
 	}
 
@@ -6657,6 +6753,9 @@
 				try {
 					cache.values = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( payload ) } );
 					toast( 'Settings saved' );
+					// Maintenance mode / search-engine visibility live in these
+					// settings — refresh the banner + chip without a reload.
+					if ( 'minn_admin_maintenance' in payload || 'blog_public' in payload ) refreshVisibility();
 				} catch ( err ) {
 					toast( err.message, true );
 				}
@@ -16792,6 +16891,7 @@
 		$$( '.minn-row-menu' ).forEach( ( el ) => el.remove() );
 		hideImgPop();
 		hideLinkPop();
+		closeVisPopover();
 		removeLockOverlay();
 		const tip = $( '#minn-chart-tip' );
 		if ( tip ) tip.hidden = true;

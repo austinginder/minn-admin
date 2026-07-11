@@ -346,6 +346,20 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-vis-banner .minn-panel-title { display: flex; align-items: center; gap: 8px; }
 .minn-vis-banner .minn-panel-title svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--amber); }
 .minn-vis-banner .minn-btn-soft { flex-shrink: 0; }
+.minn-vis-actions { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+/* Inline toggle in the banner / popover: label + switch. */
+.minn-vis-ctl { display: flex; align-items: center; gap: 10px; }
+.minn-vis-ctl .minn-toggle-label { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+/* Chip popover — the interactive fix panel, anchored under the topbar chip. */
+.minn-vis-pop {
+  position: fixed; z-index: 90; min-width: 260px; max-width: 320px;
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;
+}
+.minn-vis-pop-title { font-weight: 700; font-size: 14.5px; }
+.minn-vis-pop-sub { font-size: 13px; color: var(--text3); margin-top: -8px; line-height: 1.5; }
+.minn-vis-pop .minn-vis-ctl { justify-content: space-between; }
+.minn-vis-pop .minn-btn-soft { align-self: flex-start; }
 .minn-comment-replybox { margin-top: 10px; }
 .minn-comment-replybox textarea { resize: vertical; font-size: 13.5px; }
 .minn-unread-dot { position: absolute; top: 6px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--bg); }
