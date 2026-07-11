@@ -54,6 +54,13 @@ background and header images: out of scope by design.
 ### Taxonomies — covered
 The Terms manager shipped 2026-07-10 (see priority #1). The only server
 addition was `minn-admin/v1/terms/merge`; everything else rides core REST.
+As of the v0.11.0 cycle, Terms is folded into the **Structure** page (Post
+Types / Taxonomies / Terms tabs) rather than a standalone nav item, to keep
+the MANAGE group short. The tabs gate individually: Post Types and
+Taxonomies need `manage_options`, Terms needs only `manage_categories`, so
+an editor's Structure item shows just the Terms tab (labeled "Terms" for
+them), while an admin sees all three. The `/minn-admin/terms` route and the
+⌘K "Manage categories & tags" command still work, landing on the Terms tab.
 
 ### Tools — System page strong, one-shot tools absent
 The System page covers diagnostics well (health checks, DB tables, autoload

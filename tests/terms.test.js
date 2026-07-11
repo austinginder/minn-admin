@@ -53,7 +53,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	try {
 		/* ===== Route + tree render ===== */
 		await openTerms();
-		t.check( 'Terms nav item present', !! ( await page.$( '.minn-nav-btn[data-nav="terms"]' ) ) );
+		// Terms folded into the Structure page: admins get a "Structure" nav
+		// item and a Terms tab (no standalone Terms item).
+		t.check( 'Structure nav item present with a Terms tab',
+			!! ( await page.$( '.minn-nav-btn[data-nav="posttypes"]' ) )
+			&& ! ( await page.$( '.minn-nav-btn[data-nav="terms"]' ) )
+			&& !! ( await page.$( '[data-structtab="terms"]' ) ) );
 		const projects = await rowFor( 'Projects' );
 		const child = await rowFor( 'Sailing' );
 		t.check( 'hierarchical taxonomy renders as an indented tree', projects && child && ! projects.padded && /px/.test( child.padded ), JSON.stringify( { projects, child } ) );
