@@ -142,6 +142,14 @@ function minn_admin_seo_plugin() {
 			'focus_keyword' => '_seopress_analysis_target_kw',
 		) );
 	}
+	// SiteSEO is the SEOPress fork; same postmeta shape under its own prefix.
+	if ( defined( 'SITESEO_VERSION' ) ) {
+		return minn_admin_seo_meta_provider( 'SiteSEO', array(
+			'title'         => '_siteseo_titles_title',
+			'description'   => '_siteseo_titles_desc',
+			'focus_keyword' => '_siteseo_analysis_target_kw',
+		) );
+	}
 	return null;
 }
 
