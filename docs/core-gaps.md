@@ -89,21 +89,23 @@ add Discussion depth only if comment-heavy sites ask.
 
 ### Users — at parity or better
 List, search, roles, add/edit, delete with content reassignment, password
-reset, send email, session kill, application passwords ("AI Access" with
-generated agent guide). Missing: bulk role change (priority #5) and the
-long-tail profile fields (bio, website, per-user locale). Application
+reset, send email, session kill, bulk role change (shipped v0.11.0),
+application passwords ("AI Access" with generated agent guide). Missing:
+the long-tail profile fields (bio, website, per-user locale). Application
 passwords and reassign-on-delete are better surfaced than classic.
 
-### Media — grid solid, editing thin
+### Media — grid solid, editing caught up
 Grid with type filter/search/pagination, multi-upload, drag-drop, image
-editor (rotate/crop to a new copy), featured-image flows, delete, copy URL.
-Missing: caption/description (priority #2), bulk delete (#3), unattached and
-date filters, "attached to" info. Folders: long-tail, skip.
+editor (rotate/crop to a new copy), featured-image flows, delete, copy URL,
+caption/description editing and bulk delete (both shipped v0.11.0).
+Missing: unattached and date filters, "attached to" info. Folders:
+long-tail, skip.
 
-### Comments — single-row complete, bulk absent
-Tabs for pending/approved/spam/trash, full per-row moderation, inline reply
-(auto-approves like core), context menu. Missing: bulk moderation (priority
-#4), editing a comment's text/author, per-commenter block.
+### Comments — complete, single-row and bulk
+Tabs for pending/approved/spam/trash, full per-row moderation, bulk
+moderation with per-tab verbs (shipped v0.11.0), inline reply
+(auto-approves like core), context menu. Missing: editing a comment's
+text/author, per-commenter block.
 
 ### Multisite — non-goal, degrades sanely
 Defensive gating exists (`manage_network_users`, super-admin file-mod

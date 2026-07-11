@@ -29,27 +29,36 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   actions** (set status or trash, with shift-click range select), and **row actions**:
   right-click or hover for quick publish/draft/trash, view, and a block-editor escape
 - **Media** — grid/list library, uploads, drag-and-drop, a preview overlay with arrow-key
-  navigation and in-place **title & alt text editing**, a right-click menu, and a built-in
+  navigation and in-place **title, alt text, caption & description editing**, **bulk select
+  and delete** (shift-range, on the grid and the list), a right-click menu, and a built-in
   **image editor**: rotate and crop, saved as a new copy with originals untouched
-- **Comments** — full moderation (pending / approved / spam / trash) with inline replies and
-  a right-click menu for the same verbs
-- **Orders** — WooCommerce orders with summary cards, line-item detail and **status changes**
-  (when WooCommerce is active)
-- **Users** — directory with search, a role filter, create/edit users, roles, passwords, and
-  **per-user login sessions with one-click sign-out**
+- **Comments** — full moderation (pending / approved / spam / trash) with **bulk moderation**
+  (each tab offers its own verbs), inline replies and a right-click menu for the same verbs
+- **Orders** — WooCommerce orders with summary cards, line-item detail, **status changes**, and
+  invoice / packing-slip downloads when PDF Invoices & Packing Slips is active
+- **Users** — directory with search, a role filter, create/edit users, roles, passwords,
+  **bulk role change**, **per-user login sessions with one-click sign-out**, and **Switch to
+  this user** when the User Switching plugin is active
 - **AI Access** — generate revocable **application passwords** for AI agents plus a site-tailored
   **agent guide** (markdown REST reference) to hand to a coding agent; configuration work stays
   out of Minn by design
 - **Extensions** — install plugins and themes from WordPress.org or zip upload, activate,
   deactivate, delete, per-item and bulk updates, a Themes tab with screenshots, and cards
   wearing real wp.org icons (linked to the directory) with linked author lines
-- **Post Types & Taxonomies** — see every registered post type and taxonomy and manage
-  definitions through whoever owns them: ACF, Custom Post Type UI, or Minn's own store when
-  neither is active; code-registered ones shown read-only
-- **Settings** — General (with timezone picker), Writing, Reading, Discussion, Permalinks
-  (structure presets + custom, with automatic rewrite flushing), a **Spam** page showing who
-  filters comment spam (Akismet, Antispam Bee, CleanTalk) with safe toggles and blocked counts,
-  plus built-in maintenance mode
+- **Structure** — post types, taxonomies and terms on one page. See every registered post type
+  and taxonomy and manage definitions through whoever owns them (ACF, Custom Post Type UI, or
+  Minn's own store when neither is active; code-registered ones shown read-only), and a full
+  **terms manager**: rename, re-parent, **merge** (posts move to the survivor through core's own
+  reassignment) and delete across every taxonomy, with an indented tree for hierarchical ones
+- **Settings** — reorganized by intent: **Site** (identity, locale, admin, with timezone picker),
+  **Visibility** (search engines, maintenance mode, membership), **Homepage**, **Content**
+  (new-content defaults + permalinks with automatic rewrite flushing), **Comments** (discussion +
+  spam) and **Design** (the Customizer's Additional CSS, validated before saving), under a sticky
+  section nav. The **Spam** page shows who filters comment spam (Akismet, Antispam Bee,
+  CleanTalk, WP Armour) with safe toggles and blocked counts. **Site-visibility warnings**: an
+  Overview banner and a persistent topbar chip appear whenever a maintenance plugin, password
+  gate or "discourage search engines" is hiding the site, with inline fix controls where Minn
+  can safely flip the setting (third parties register via `minn_admin_visibility_providers`)
 - **Editor** — a calm, block-aware writing surface that stores **native Gutenberg markup**
   (zero lock-in: open any post in the block editor, any time). Markdown typing conventions
   (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), a link popover
@@ -68,7 +77,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   time, scheduling and one-click publish. **Paste cleanup** turns Word / Google Docs / web
   HTML into the safe subset; **paste or drag an image** uploads at the caret with an inline
   caption. The publish sidebar edits the **slug**, **visibility** (public / password /
-  private), per-post **discussion** and **sticky**. Deleting an embed offers an **Undo**
+  private), per-post **discussion**, **sticky** and **post format** (when the theme supports
+  formats). Deleting an embed offers an **Undo**
   toast; **table** add/delete row and column undo with **⌘Z**. **Revision diffs** open a
   side-by-side, word-marked diff against the current content. An **outline panel** lists
   headings as a live table of contents; **focus mode** (⌘⇧D) fades all but the current
@@ -88,13 +98,27 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   the builder's own chrome-free surface via **Edit in ⟨builder⟩** (no wp-admin screen), and
   fenced so a stray Minn edit can't break the builder's canvas. + New can start a page in any
   active builder. Third parties register via the `minn_admin_page_builders` filter
-- **System** — a developer diagnostics page: a health strip over WordPress / PHP / database
-  (largest tables, an **autoloaded-options breakdown** with top offenders, expired-transient
-  bloat, cron health) / server facts, an **installed extensions manifest** (plugins,
-  must-use, themes with versions), live **debug toggles** that safely rewrite
-  `wp-config.php`, a clickable **debug-log viewer**, and one-click **Copy report** as markdown
-- **SEO panel** — Yoast SEO, Rank Math, All in One SEO or SEOPress title, meta description and
-  focus keyword in the editor sidebar (first active plugin wins)
+- **System** — a developer diagnostics page with a sticky section **jump bar**: a health strip
+  over WordPress / PHP / database / server facts, plus **loopback and REST self-checks**, site
+  visibility, **Wordfence firewall & scan posture**, **SSL enforcement** (Really Simple SSL),
+  backups and licenses; the **autoloaded-options breakdown** and **cron health** expand into
+  full-detail modals (every option by size, every scheduled event with its next run); the real
+  login URL (honoring login-hiders), an **installed extensions manifest**, a **Tools card**
+  linking wp-admin's one-shot jobs (Site Health, export/import, GDPR tools), live **debug
+  toggles** that safely rewrite `wp-config.php`, a clickable **debug-log viewer**, and one-click
+  **Copy report** as markdown
+- **Licenses** — every paid plugin and theme on one System card, classified **valid / expired /
+  invalid / missing** from the vendor's own locally stored state (read-only: no network calls,
+  no seat burn), with **paste-to-activate, deactivate and re-verify** wired through each
+  vendor's own code for more than twenty vendors (Elementor Pro, ACF PRO, WP Rocket, Gravity
+  Forms & SMTP, Divi, Beaver Builder, Brizy, Etch, Bricks, The Events Calendar family, Kadence
+  Blocks Pro, WPMU DEV, SearchWP, Gravity Perks, GP Premium, Perfmatters, WP All Import/Export,
+  Slider Revolution, LayerSlider), plus generic Freemius / EDD / SureCart / StellarWP detection.
+  A pasted key rides one request and is never stored or logged; failures never auto-retry;
+  inactive components can be turned back on in place. Third parties register via
+  `minn_admin_license_providers`
+- **SEO panel** — Yoast SEO, Rank Math, All in One SEO, SEOPress or SiteSEO title, meta
+  description and focus keyword in the editor sidebar (first active plugin wins)
 - **Menus & Widgets** — classic nav menus with drag-to-reorder (children travel with their
   parent); classic sidebars with **drag grips** to reorder widgets in an area, plus move
   between areas and in-place edit for block/text/HTML widgets
@@ -105,7 +129,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   **Email Log** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP) shows sent mail with HTML
   previews and resend; **Activity Log** (Simple History, WP Activity Log, Aryo, Stream,
   Wordfence login security) reads like an audit feed; **Redirects** (Redirection, Safe Redirect
-  Manager, Simple 301 Redirects) lists, searches, creates and edits; **Snippets** (Code
+  Manager, Simple 301 Redirects, 301 Redirects) lists, searches, creates and edits; **Snippets** (Code
   Snippets, WPCode, FluentSnippets) lists, toggles and edits; **Backups** (UpdraftPlus,
   Disembark) below. The sidebar organizes into **Workspace / Tools / Manage** groups so daily
   inboxes stay separate from site plumbing
@@ -126,11 +150,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   CSS), each in its own isolated request
 - **Extending** — one-filter APIs for any plugin to register views (with status cards, tabs,
   detail layouts and actions), editor panels, traffic data, cache purgers, spam providers,
-  design libraries, page builders or block-inspector forms; the System page's **Integrations**
-  card shows everything registered and flags descriptor problems instead of failing silently.
+  license providers, visibility providers, design libraries, page builders or block-inspector
+  forms; the System page's **Integrations** card shows everything registered and flags
+  descriptor problems instead of failing silently.
   The full coverage map lives in [docs/plugin-support.md](docs/plugin-support.md)
-- **Dark & light themes**, bundled fonts, zero external requests from the app, responsive down
-  to phones
+- **Dark & light themes** (follows your OS setting until you choose), bundled fonts, zero
+  external requests from the app, responsive down to phones
 
 ## Install
 
