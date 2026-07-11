@@ -3647,6 +3647,13 @@
 		return ss.view === 'manage' && s.manage ? s.manage : s.collection;
 	}
 
+	// The active filter value (a second list dimension beside tabs — GF's
+	// Received / Spam / Trash). First option is the default.
+	function surfaceFilterValue( col, ss ) {
+		if ( ! col.filter || ! col.filter.options || ! col.filter.options.length ) return '';
+		return ss.filter != null ? ss.filter : String( col.filter.options[ 0 ][ 0 ] );
+	}
+
 	function surfaceRoute( s, ss, page ) {
 		const col = surfaceColl( s, ss );
 		let route = ss.tab === '_all'
@@ -3657,17 +3664,38 @@
 		if ( col.tabs && col.tabs.param && ss.tab !== '_all' ) {
 			parts.push( col.tabs.param + '=' + encodeURIComponent( ss.tab ) );
 		}
-		// Adapter-declared search: a query template with {q}, or { param, json }
-		// for APIs that take search criteria as a JSON string (Gravity Forms).
-		// split/join instead of replace so "$&"-style queries aren't mangled.
+		// Adapter-declared search ({q}) and filter ({v}): each is either a
+		// query template, or { param, json } for APIs that take criteria as a
+		// JSON string. json forms sharing one param MERGE into a single
+		// criteria object (GF: {"status":"spam","field_filters":[…]} — both
+		// live in `search`, so two writers would clobber each other).
+		// split/join instead of replace so "$&"-style values aren't mangled.
+		const criteria = {};
+		let criteriaParam = null;
 		if ( col.search && ss.q ) {
 			if ( typeof col.search === 'string' ) {
 				parts.push( col.search.split( '{q}' ).join( encodeURIComponent( ss.q ) ) );
 			} else {
-				const json = JSON.stringify( col.search.json ).split( '{q}' ).join( JSON.stringify( ss.q ).slice( 1, -1 ) );
-				// Encoded twice: GF urldecodes the already-decoded param again.
-				parts.push( col.search.param + '=' + encodeURIComponent( encodeURIComponent( json ) ) );
+				criteriaParam = col.search.param;
+				Object.assign( criteria, JSON.parse(
+					JSON.stringify( col.search.json ).split( '{q}' ).join( JSON.stringify( ss.q ).slice( 1, -1 ) )
+				) );
 			}
+		}
+		const fv = surfaceFilterValue( col, ss );
+		if ( col.filter && fv ) {
+			if ( col.filter.query ) {
+				parts.push( col.filter.query.split( '{v}' ).join( encodeURIComponent( fv ) ) );
+			} else if ( col.filter.json ) {
+				criteriaParam = criteriaParam || col.filter.param;
+				Object.assign( criteria, JSON.parse(
+					JSON.stringify( col.filter.json ).split( '{v}' ).join( JSON.stringify( fv ).slice( 1, -1 ) )
+				) );
+			}
+		}
+		if ( criteriaParam && Object.keys( criteria ).length ) {
+			// Encoded twice: GF urldecodes the already-decoded param again.
+			parts.push( criteriaParam + '=' + encodeURIComponent( encodeURIComponent( JSON.stringify( criteria ) ) ) );
 		}
 		// {page} is 1-based; {page0} serves APIs that count pages from zero.
 		parts.push( ( col.pageQuery || 'per_page=25&page={page}' ).replace( '{page}', page ).replace( '{page0}', page - 1 ) );
@@ -3693,10 +3721,10 @@
 	async function loadSurfaceItems( s, page = 1 ) {
 		const ss = surfaceState( s.id );
 		const col = surfaceColl( s, ss );
-		const ctx = ss.tab + '|' + ( ss.q || '' );
+		const ctx = ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss );
 		const res = await apiRes( surfaceRoute( s, ss, page ) );
 		const body = await res.json();
-		if ( ctx !== ss.tab + '|' + ( ss.q || '' ) ) return; // filter changed mid-flight
+		if ( ctx !== ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss ) ) return; // context changed mid-flight
 		const items = col.itemsKey
 			? ( body[ col.itemsKey ] || [] )
 			: ( Array.isArray( body ) ? body : Object.values( body ) );
@@ -4177,6 +4205,7 @@
 					ss.tabs = null;
 					ss.tab = '_all';
 					ss.q = '';
+					ss.filter = null;
 				}
 				renderSurface( s );
 			} )
@@ -4224,6 +4253,11 @@
 				${ ss.tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>` : '' }
+			${ coll.filter && coll.filter.options ? `
+			<div class="minn-tabs">
+				${ coll.filter.options.map( ( [ v, label ] ) =>
+					`<button class="minn-tab${ surfaceFilterValue( coll, ss ) === String( v ) ? ' active' : '' }" data-sfilter="${ esc( String( v ) ) }">${ esc( String( label ) ) }</button>` ).join( '' ) }
+			</div>` : '' }
 			${ coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Search ${ esc( ( coll.viewLabel || 'items' ).toLowerCase() ) }…" value="${ esc( ss.q || '' ) }">` : '' }
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>
 			${ coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '' }
@@ -4250,6 +4284,14 @@
 				renderSurface( s );
 			} )
 		);
+		$$( '[data-sfilter]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				if ( surfaceFilterValue( coll, ss ) === btn.dataset.sfilter ) return;
+				ss.filter = btn.dataset.sfilter;
+				ss.cache = null;
+				renderSurface( s );
+			} )
+		);
 		bindSurfaceViewSwitch( s, ss, view );
 		$$( '[data-sitem]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
@@ -4270,10 +4312,17 @@
 					return;
 				}
 				if ( ! $( '.minn-bulkbar', slot ) ) {
+					// Only offer actions at least one item on this page could
+					// take — with a status filter live, Restore on the
+					// Received view (or Spam on the Trash view) is dead weight.
+					// Correctness stays per item via the when-gates.
+					const offered = bulk
+						.map( ( b, i ) => ( { b, i } ) )
+						.filter( ( { b } ) => ! b.when || c.items.some( ( it ) => String( surfaceValue( it, b.when.key ) ) === String( b.when.equals ) ) );
 					slot.innerHTML = `
 					<div class="minn-bulkbar">
 						<span class="minn-bulk-count"></span>
-						${ bulk.map( ( b, i ) => `<button class="minn-btn-soft${ b.danger ? ' danger' : '' }" data-sbulk="${ i }">${ esc( b.label ) }</button>` ).join( '' ) }
+						${ offered.map( ( { b, i } ) => `<button class="minn-btn-soft${ b.danger ? ' danger' : '' }" data-sbulk="${ i }">${ esc( b.label ) }</button>` ).join( '' ) }
 						<button class="minn-btn-soft" id="minn-sbulk-clear" style="margin-left:auto;">Clear</button>
 					</div>`;
 					$$( '[data-sbulk]', slot ).forEach( ( btn ) =>

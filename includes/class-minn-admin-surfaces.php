@@ -157,7 +157,8 @@ class Minn_Admin_Surfaces {
 	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'status', 'setup', 'settings' );
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
-	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk' );
+	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter' );
+	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
 	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
@@ -373,6 +374,25 @@ class Minn_Admin_Surfaces {
 				}
 				if ( isset( $a['fields'] ) ) {
 					$problems = array_merge( $problems, self::field_problems( $a['fields'], "$ck action \"{$a['label']}\"" ) );
+				}
+			}
+			if ( isset( $coll['filter'] ) ) {
+				$f = $coll['filter'];
+				if ( ! is_array( $f ) || empty( $f['options'] ) || ! is_array( $f['options'] ) ) {
+					$problems[] = "$ck: filter needs an options list";
+				} else {
+					foreach ( $f['options'] as $opt ) {
+						if ( ! is_array( $opt ) || 2 > count( $opt ) ) {
+							$problems[] = "$ck: filter option must be a [value, label] pair";
+							break;
+						}
+					}
+					if ( empty( $f['query'] ) && ( empty( $f['param'] ) || empty( $f['json'] ) ) ) {
+						$problems[] = "$ck: filter needs a query template or param + json";
+					}
+					foreach ( self::unknown_keys( $f, self::FILTER_KEYS ) as $k ) {
+						$problems[] = "$ck: unknown filter key \"$k\" (ignored)";
+					}
 				}
 			}
 			// Bulk actions share the action vocabulary but always need a route
