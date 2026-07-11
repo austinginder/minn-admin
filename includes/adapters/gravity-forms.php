@@ -72,12 +72,76 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// submission details — no client-side label mapping.
 				'sectionsRoute' => 'minn-admin/v1/gf/entries/{id}',
 			),
+			// Entry workflow rides GF's own gf/v2/entries/{id}/properties PUT
+			// (is_starred / is_read / status), gated by GF at
+			// gravityforms_edit_entries. The list shows active entries only
+			// (gf/v2's default), so restore-from-spam/trash stays in wp-admin
+			// until Minn grows a status filter dimension.
 			'actions'   => array(
+				array(
+					'label'  => 'Star',
+					'method' => 'PUT',
+					'route'  => 'gf/v2/entries/{id}/properties',
+					'body'   => array( 'is_starred' => 1 ),
+					'when'   => array( 'key' => 'is_starred', 'equals' => '0' ),
+				),
+				array(
+					'label'  => 'Unstar',
+					'method' => 'PUT',
+					'route'  => 'gf/v2/entries/{id}/properties',
+					'body'   => array( 'is_starred' => 0 ),
+					'when'   => array( 'key' => 'is_starred', 'equals' => '1' ),
+				),
+				array(
+					'label'   => 'Resend notifications',
+					'method'  => 'POST',
+					'route'   => 'gf/v2/entries/{id}/notifications',
+					'confirm' => 'Resend this entry’s notifications (all active ones for its form)?',
+				),
+				array(
+					'label'   => 'Mark as spam',
+					'method'  => 'PUT',
+					'route'   => 'gf/v2/entries/{id}/properties',
+					'body'    => array( 'status' => 'spam' ),
+					'confirm' => 'Mark this entry as spam? It leaves this list (manage spam in Gravity Forms).',
+					'danger'  => true,
+				),
 				array(
 					'label'   => 'Trash entry',
 					'method'  => 'DELETE',
 					'route'   => 'gf/v2/entries/{id}',
 					'confirm' => 'Move this entry to trash?',
+					'danger'  => true,
+				),
+			),
+			'bulk'      => array(
+				array(
+					'label'  => 'Star',
+					'method' => 'PUT',
+					'route'  => 'gf/v2/entries/{id}/properties',
+					'body'   => array( 'is_starred' => 1 ),
+					'when'   => array( 'key' => 'is_starred', 'equals' => '0' ),
+				),
+				array(
+					'label'  => 'Mark read',
+					'method' => 'PUT',
+					'route'  => 'gf/v2/entries/{id}/properties',
+					'body'   => array( 'is_read' => 1 ),
+					'when'   => array( 'key' => 'is_read', 'equals' => '0' ),
+				),
+				array(
+					'label'   => 'Spam',
+					'method'  => 'PUT',
+					'route'   => 'gf/v2/entries/{id}/properties',
+					'body'    => array( 'status' => 'spam' ),
+					'confirm' => 'Mark the selected entries as spam?',
+					'danger'  => true,
+				),
+				array(
+					'label'   => 'Trash',
+					'method'  => 'DELETE',
+					'route'   => 'gf/v2/entries/{id}',
+					'confirm' => 'Move the selected entries to trash?',
 					'danger'  => true,
 				),
 			),
@@ -178,6 +242,32 @@ add_action( 'rest_api_init', function () {
 				$meta[] = array( 'label' => 'Payment', 'value' => trim( $entry['payment_status'] . ' ' . rgar( $entry, 'payment_amount' ) ) );
 			}
 
+			// Notes (admin + notification logs) — display-only; adding notes
+			// stays in GF until actions can carry input.
+			$note_rows = array();
+			if ( class_exists( 'GFFormsModel' ) && method_exists( 'GFFormsModel', 'get_lead_notes' ) ) {
+				foreach ( (array) GFFormsModel::get_lead_notes( $entry['id'] ) as $note ) {
+					$note_rows[] = array(
+						'label' => trim( ( isset( $note->user_name ) ? $note->user_name : '' ) . ' · ' . date_i18n( 'M j, g:i a', strtotime( get_date_from_gmt( $note->date_created ) ) ), ' ·' ),
+						'value' => (string) $note->value,
+					);
+				}
+			}
+
+			// Opening the entry in Minn marks it read, exactly like opening it
+			// in GF's own entries screen (same view capability gates both).
+			if ( empty( $entry['is_read'] ) ) {
+				GFAPI::update_entry_property( $entry['id'], 'is_read', 1 );
+			}
+
+			$sections = array(
+				array( 'title' => 'Responses', 'rows' => $answers ),
+				array( 'title' => 'Submission', 'rows' => $meta ),
+			);
+			if ( $note_rows ) {
+				$sections[] = array( 'title' => 'Notes', 'rows' => $note_rows );
+			}
+
 			return rest_ensure_response( array(
 				// Form name only — the client entry layout promotes name/email
 				// into a hero; never dump every answer into the modal title.
@@ -186,10 +276,7 @@ add_action( 'rest_api_init', function () {
 				// GF's "active" just means not spam/trash — surface as
 				// "received" so the pill doesn't look like a form toggle.
 				'status'   => ( 'active' === $entry['status'] ) ? 'received' : $entry['status'],
-				'sections' => array(
-					array( 'title' => 'Responses', 'rows' => $answers ),
-					array( 'title' => 'Submission', 'rows' => $meta ),
-				),
+				'sections' => $sections,
 				'adminUrl' => admin_url( 'admin.php?page=gf_entries&view=entry&id=' . $entry['form_id'] . '&lid=' . $entry['id'] ),
 			) );
 		},

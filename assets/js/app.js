@@ -3611,6 +3611,10 @@
 		// Adapters declare page size inside their own pageQuery template, so
 		// derive it from the first full page instead of parsing the template.
 		const perPage = page === 1 ? items.length : ( ss.cache && ss.cache.perPage ) || items.length;
+		// Bulk selection is page-scoped by design: a reload (tab, search,
+		// pager, post-action refresh) drops it rather than carrying invisible
+		// off-page selections into the next bulk run.
+		if ( ss.sel ) ss.sel.clear();
 		ss.cache = {
 			items,
 			page,
@@ -3659,8 +3663,10 @@
 	// right-aligned key/value dump that reads like raw data.
 	function renderEntryDetail( sec ) {
 		const groups = sec.sections || [];
-		const answers = ( groups.find( ( g ) => /response/i.test( g.title || '' ) ) || groups[ 0 ] || {} ).rows || [];
-		const meta = ( groups.find( ( g ) => /submission|meta|detail/i.test( g.title || '' ) ) || groups[ 1 ] || {} ).rows || [];
+		const answersGroup = groups.find( ( g ) => /response/i.test( g.title || '' ) ) || groups[ 0 ] || {};
+		const metaGroup = groups.find( ( g ) => /submission|meta|detail/i.test( g.title || '' ) ) || groups[ 1 ] || {};
+		const answers = answersGroup.rows || [];
+		const meta = metaGroup.rows || [];
 
 		const isEmail = ( r ) => r.type === 'email' || /e-?mail/i.test( r.label || '' ) || isEmailish( r.value );
 		const isName = ( r ) => r.type === 'name' || /^(full\s*)?name$|your name|first name|last name/i.test( r.label || '' );
@@ -3730,12 +3736,26 @@
 
 		const metaHtml = metaBits ? `<div class="minn-entry-meta">${ metaBits }</div>` : '';
 
+		// Sections beyond Responses/Submission (GF entry notes) render as
+		// quiet titled groups — the card layout used to drop them silently.
+		const extraHtml = groups
+			.filter( ( g ) => g !== answersGroup && g !== metaGroup && ( g.rows || [] ).length )
+			.map( ( g ) => `
+			<div class="minn-entry-extra">
+				${ g.title ? `<div class="minn-entry-field-label">${ esc( g.title ) }</div>` : '' }
+				${ g.rows.map( ( r ) => `
+				<div class="minn-entry-note">
+					${ r.label ? `<div class="minn-entry-note-meta">${ esc( r.label ) }</div>` : '' }
+					<div>${ esc( String( r.value == null ? '' : r.value ) ) }</div>
+				</div>` ).join( '' ) }
+			</div>` ).join( '' );
+
 		if ( ! hero && ! bodies && ! fields ) {
 			// Empty entry — fall back to a simple note.
-			return `<div class="minn-entry"><div class="minn-entry-empty">No answers on this entry.</div>${ metaHtml }</div>`;
+			return `<div class="minn-entry"><div class="minn-entry-empty">No answers on this entry.</div>${ extraHtml }${ metaHtml }</div>`;
 		}
 
-		return `<div class="minn-entry">${ hero }${ bodies }${ fields }${ metaHtml }</div>`;
+		return `<div class="minn-entry">${ hero }${ bodies }${ fields }${ extraHtml }${ metaHtml }</div>`;
 	}
 
 	// Activity-log event layout (Simple History / WSAL / Aryo / Stream): who →
@@ -4089,11 +4109,14 @@
 		}
 		const c = ss.cache;
 		const cols = coll.columns || [];
+		const bulk = coll.bulk || [];
+		const hasBulk = bulk.length > 0;
+		if ( hasBulk && ! ss.sel ) ss.sel = new Set();
 		// Column widths: an adapter's explicit `width` wins; otherwise size by
 		// role — flexible for the title/text columns, fixed and narrow for the
 		// short ones (codes, counts, dates, pills) so long values get the room.
 		const FIXED = { ago: '128px', pill: '110px', mono: '84px', num: '84px' };
-		const gridCols = cols.map( ( col, i ) =>
+		const gridCols = ( hasBulk ? '30px ' : '' ) + cols.map( ( col, i ) =>
 			col.width || FIXED[ col.format ] || ( i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)' )
 		).join( ' ' ) + ' 30px';
 
@@ -4110,12 +4133,15 @@
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>
 			${ coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '' }
 		</div>
+		${ hasBulk ? '<div id="minn-sbulk-slot"></div>' : '' }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head" style="grid-template-columns:${ gridCols };">
+				${ hasBulk ? '<div><input type="checkbox" class="minn-cb" id="minn-sbulk-all" title="Select page"></div>' : '' }
 				${ cols.map( ( col ) => `<div${ col.format === 'num' ? ' class="minn-num"' : '' }>${ esc( col.label ) }</div>` ).join( '' ) }<div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( item, i ) => `
 				<div class="minn-table-row" style="grid-template-columns:${ gridCols };" data-sitem="${ i }">
+					${ hasBulk ? `<div><input type="checkbox" class="minn-cb" data-scheck="${ i }"${ ss.sel.has( item.id ) ? ' checked' : '' }></div>` : '' }
 					${ cols.map( ( col ) => surfaceCell( item, col ) ).join( '' ) }
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : '<div class="minn-empty">Nothing here.</div>' }
@@ -4136,6 +4162,75 @@
 				if ( item ) openSurfaceDetail( s, item );
 			} )
 		);
+		if ( hasBulk ) {
+			// Checkbox column + selection bar — the content-list conventions
+			// (shift-range, Select page, per-item application) generalized to
+			// any surface that declares `bulk` actions.
+			let lastIdx = null;
+			const syncBulk = () => {
+				const slot = $( '#minn-sbulk-slot', view );
+				if ( ! slot ) return;
+				if ( ! ss.sel.size ) {
+					slot.innerHTML = '';
+					return;
+				}
+				if ( ! $( '.minn-bulkbar', slot ) ) {
+					slot.innerHTML = `
+					<div class="minn-bulkbar">
+						<span class="minn-bulk-count"></span>
+						${ bulk.map( ( b, i ) => `<button class="minn-btn-soft${ b.danger ? ' danger' : '' }" data-sbulk="${ i }">${ esc( b.label ) }</button>` ).join( '' ) }
+						<button class="minn-btn-soft" id="minn-sbulk-clear" style="margin-left:auto;">Clear</button>
+					</div>`;
+					$$( '[data-sbulk]', slot ).forEach( ( btn ) =>
+						btn.addEventListener( 'click', () => runSurfaceBulk( s, bulk[ parseInt( btn.dataset.sbulk, 10 ) ] ) )
+					);
+					$( '#minn-sbulk-clear', slot ).addEventListener( 'click', () => {
+						ss.sel.clear();
+						$$( '[data-scheck]', view ).forEach( ( cb ) => { cb.checked = false; } );
+						const all = $( '#minn-sbulk-all', view );
+						if ( all ) all.checked = false;
+						syncBulk();
+					} );
+				}
+				$( '.minn-bulk-count', slot ).textContent = ss.sel.size + ' selected';
+			};
+			syncBulk();
+			$$( '[data-scheck]', view ).forEach( ( cb ) =>
+				// click (not change) so shiftKey is readable for range select;
+				// stopPropagation keeps the row from opening its detail modal.
+				cb.addEventListener( 'click', ( e ) => {
+					e.stopPropagation();
+					const idx = parseInt( cb.dataset.scheck, 10 );
+					const setTo = cb.checked;
+					const apply = ( i ) => {
+						const it = c.items[ i ];
+						const box = view.querySelector( `[data-scheck="${ i }"]` );
+						if ( ! it || ! box ) return;
+						box.checked = setTo;
+						if ( setTo ) ss.sel.add( it.id );
+						else ss.sel.delete( it.id );
+					};
+					if ( e.shiftKey && lastIdx != null && lastIdx !== idx ) {
+						for ( let i = Math.min( lastIdx, idx ); i <= Math.max( lastIdx, idx ); i++ ) apply( i );
+					} else {
+						apply( idx );
+					}
+					lastIdx = idx;
+					syncBulk();
+				} )
+			);
+			const allBox = $( '#minn-sbulk-all', view );
+			if ( allBox ) allBox.addEventListener( 'click', ( e ) => {
+				e.stopPropagation();
+				c.items.forEach( ( it, i ) => {
+					const box = view.querySelector( `[data-scheck="${ i }"]` );
+					if ( box ) box.checked = allBox.checked;
+					if ( allBox.checked ) ss.sel.add( it.id );
+					else ss.sel.delete( it.id );
+				} );
+				syncBulk();
+			} );
+		}
 		bindSurfaceStatus( s, view );
 		const search = $( '#minn-surface-search', view );
 		if ( search ) {
@@ -4162,6 +4257,41 @@
 			renderOverlays();
 		} );
 		bindPager( view, c.page, ( p ) => loadSurfaceItems( s, p ), () => { if ( state.route === s.id ) renderSurface( s ); } );
+	}
+
+	/* Bulk actions run PER ITEM (one failure never aborts the rest — the
+	 * media bulk-delete convention), with `when` evaluated per item so a
+	 * mixed selection skips ineligible rows and says so. */
+	async function runSurfaceBulk( s, action ) {
+		const ss = surfaceState( s.id );
+		const c = ss.cache;
+		if ( ! c || ! ss.sel || ! ss.sel.size ) return;
+		if ( action.confirm && ! confirm( action.confirm ) ) return;
+		const targets = c.items.filter( ( it ) => ss.sel.has( it.id ) );
+		let done = 0;
+		let skipped = 0;
+		let failed = 0;
+		for ( const it of targets ) {
+			if ( action.when && String( surfaceValue( it, action.when.key ) ) !== String( action.when.equals ) ) {
+				skipped++;
+				continue;
+			}
+			try {
+				await api( action.route.replace( '{id}', it.id ), {
+					method: action.method || 'POST',
+					body: action.body ? JSON.stringify( action.body ) : undefined,
+				} );
+				done++;
+			} catch ( e ) {
+				failed++;
+			}
+		}
+		ss.cache = null;
+		toast(
+			`${ action.label }: ${ done } done${ skipped ? `, ${ skipped } skipped` : '' }${ failed ? `, ${ failed } failed` : '' }`,
+			! done && !! failed
+		);
+		if ( state.route === s.id ) renderSurface( s );
 	}
 
 	/* Settings view — a schema-driven form the adapter serves per tab:

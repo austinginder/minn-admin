@@ -157,7 +157,7 @@ class Minn_Admin_Surfaces {
 	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'status', 'setup', 'settings' );
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
-	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel' );
+	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
 	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
@@ -370,6 +370,20 @@ class Minn_Admin_Surfaces {
 				}
 				foreach ( self::unknown_keys( $a, self::ACTION_KEYS ) as $k ) {
 					$problems[] = "$ck: unknown action key \"$k\" (ignored)";
+				}
+			}
+			// Bulk actions share the action vocabulary but always need a route
+			// (there is no href form of a batch).
+			foreach ( (array) ( $coll['bulk'] ?? array() ) as $b ) {
+				if ( ! is_array( $b ) || empty( $b['label'] ) ) {
+					$problems[] = "$ck: bulk action without a label";
+					continue;
+				}
+				if ( empty( $b['route'] ) ) {
+					$problems[] = "$ck: bulk action \"{$b['label']}\" has no route";
+				}
+				foreach ( self::unknown_keys( $b, self::ACTION_KEYS ) as $k ) {
+					$problems[] = "$ck: unknown bulk action key \"$k\" (ignored)";
 				}
 			}
 		}
