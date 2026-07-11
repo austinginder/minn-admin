@@ -323,15 +323,26 @@ add_action( 'rest_api_init', function () {
 				$meta[] = array( 'label' => 'Payment', 'value' => trim( $entry['payment_status'] . ' ' . rgar( $entry, 'payment_amount' ) ) );
 			}
 
-			// Notes (admin + notification logs) — display-only; adding notes
-			// stays in GF until actions can carry input.
+			// Notes (admin + notification logs). Notification notes store raw
+			// HTML (<div> wrappers, a "View Email" anchor) that wp-admin
+			// renders; Minn escapes detail values, so serve display-ready
+			// text and surface the first link as its own url row.
 			$note_rows = array();
 			if ( class_exists( 'GFFormsModel' ) && method_exists( 'GFFormsModel', 'get_lead_notes' ) ) {
 				foreach ( (array) GFFormsModel::get_lead_notes( $entry['id'] ) as $note ) {
+					$raw  = (string) $note->value;
+					$text = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( $raw ) ) );
 					$note_rows[] = array(
 						'label' => trim( ( isset( $note->user_name ) ? $note->user_name : '' ) . ' · ' . date_i18n( 'M j, g:i a', strtotime( get_date_from_gmt( $note->date_created ) ) ), ' ·' ),
-						'value' => (string) $note->value,
+						'value' => $text,
 					);
+					if ( preg_match( '/<a\s[^>]*href=["\']([^"\']+)["\'][^>]*>([^<]*)</i', $raw, $m ) && wp_http_validate_url( $m[1] ) ) {
+						$note_rows[] = array(
+							'label' => trim( wp_strip_all_tags( $m[2] ) ) ? trim( wp_strip_all_tags( $m[2] ) ) : 'Link',
+							'value' => $m[1],
+							'type'  => 'url',
+						);
+					}
 				}
 			}
 

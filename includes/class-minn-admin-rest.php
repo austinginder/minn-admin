@@ -1557,10 +1557,18 @@ class Minn_Admin_REST {
 			}
 			$author = get_the_author_meta( 'display_name', $p->post_author );
 			$verb   = 'publish' === $p->post_status ? 'published' : ( 'future' === $p->post_status ? 'scheduled' : 'drafted' );
+			$pto    = get_post_type_object( $p->post_type );
 			$activity[] = array(
 				'text'  => sprintf( '%s %s “%s”', $author, $verb, self::plain_title( $p ) ),
 				'time'  => $time,
 				'color' => 'publish' === $p->post_status ? 'green' : ( 'future' === $p->post_status ? 'blue' : 'accent' ),
+				// Rows are clickable: land in the editor (Austin's ask). The
+				// editor route takes the REST base, not the post type.
+				'goto'  => array(
+					'kind' => 'editor',
+					'type' => $pto && $pto->rest_base ? $pto->rest_base : $p->post_type . 's',
+					'id'   => $p->ID,
+				),
 			);
 		}
 
@@ -1575,6 +1583,10 @@ class Minn_Admin_REST {
 				),
 				'time'  => strtotime( $c->comment_date_gmt . ' UTC' ),
 				'color' => $pending ? 'amber' : 'blue',
+				'goto'  => array(
+					'kind' => 'comments',
+					'tab'  => $pending ? 'hold' : 'approve',
+				),
 			);
 		}
 

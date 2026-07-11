@@ -1200,8 +1200,8 @@
 			<div class="minn-card minn-panel-pad">
 				<div class="minn-panel-title">Recent activity</div>
 				<div class="minn-activity">
-					${ o.activity.length ? o.activity.map( ( a ) => `
-						<div class="minn-activity-row">
+					${ o.activity.length ? o.activity.map( ( a, i ) => `
+						<div class="minn-activity-row${ a.goto ? ' linked' : '' }"${ a.goto ? ` data-agoto="${ i }"` : '' }>
 							<div class="minn-activity-dot dot-${ esc( a.color ) }"></div>
 							<div style="min-width:0;">
 								<div class="minn-activity-text">${ esc( a.text ) }</div>
@@ -1217,6 +1217,21 @@
 				state.range = parseInt( btn.dataset.range, 10 );
 				state.cache.overview = null;
 				renderOverview();
+			} )
+		);
+		// Activity rows land where the activity happened: posts open in the
+		// editor, comments land on the matching moderation tab.
+		$$( '[data-agoto]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => {
+				const g = ( o.activity[ parseInt( row.dataset.agoto, 10 ) ] || {} ).goto;
+				if ( ! g ) return;
+				if ( g.kind === 'editor' ) {
+					go( `editor/${ g.type }/${ g.id }` );
+				} else if ( g.kind === 'comments' ) {
+					state.commentTab = g.tab || 'hold';
+					state.cache.comments = null;
+					go( 'comments' );
+				}
 			} )
 		);
 		bindCoreBanner( view );
@@ -3866,11 +3881,17 @@
 			.map( ( g ) => `
 			<div class="minn-entry-extra">
 				${ g.title ? `<div class="minn-entry-field-label">${ esc( g.title ) }</div>` : '' }
-				${ g.rows.map( ( r ) => `
+				${ g.rows.map( ( r ) => {
+					const raw = String( r.value == null ? '' : r.value );
+					const val = r.type === 'url' && /^https?:\/\//.test( raw )
+						? `<a href="${ esc( raw ) }" target="_blank" rel="noopener">${ esc( r.label || raw ) } ↗</a>`
+						: esc( raw );
+					return `
 				<div class="minn-entry-note">
-					${ r.label ? `<div class="minn-entry-note-meta">${ esc( r.label ) }</div>` : '' }
-					<div>${ esc( String( r.value == null ? '' : r.value ) ) }</div>
-				</div>` ).join( '' ) }
+					${ r.label && r.type !== 'url' ? `<div class="minn-entry-note-meta">${ esc( r.label ) }</div>` : '' }
+					<div>${ val }</div>
+				</div>`;
+				} ).join( '' ) }
 			</div>` ).join( '' );
 
 		if ( ! hero && ! bodies && ! fields ) {
