@@ -37,6 +37,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/gravity-smtp.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-smtp.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-mail-smtp.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/post-smtp.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/wp-mail-logging.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/acf.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/koko-analytics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-statistics.php';

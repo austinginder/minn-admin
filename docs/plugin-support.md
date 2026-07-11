@@ -19,7 +19,7 @@ shared view; "action" = a ⌘K / menu command.
 |---|---|---|
 | **SEO** | Yoast, Rank Math, AIOSEO, SEOPress, SiteSEO | Editor panel (title, meta description, focus keyword) |
 | **Forms** | Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 (via Flamingo), CFDB7 | **Forms** surface — entries as contact cards. Gravity Forms adds the full entry workflow through its own endpoints: Received/Spam/Trash status views, star/unstar and mark-read (open marks read like GF's own screen), restore and delete-permanently where they apply, bulk actions, entry notes on the card plus add-a-note, and resend notifications |
-| **Email** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP | **Email** surface (renamed from Email Log once it grew settings) — sent mail, resend. Gravity SMTP goes deeper: a **Settings** view maps its own settings schema into Minn (sending service across all 21 connectors, connector config with masked secrets, general/logging settings through its constant-lock-aware stores), the surface honors its granular `gravitysmtp_*` capabilities, the event detail reads through its own models (from/cc/bcc/source), resend replays its own recipient handling through the configured connector, a **Suppressions** view lists/adds/reactivates blocked addresses through its own model, and a status card reports the active service and test mode with a parameterized **Send a test email** action |
+| **Email** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging | **Email** surface (renamed from Email Log once it grew settings) — sent mail, resend. Gravity SMTP goes deeper: a **Settings** view maps its own settings schema into Minn (sending service across all 21 connectors, connector config with masked secrets, general/logging settings through its constant-lock-aware stores), the surface honors its granular `gravitysmtp_*` capabilities, the event detail reads through its own models (from/cc/bcc/source), resend replays its own recipient handling through the configured connector, a **Suppressions** view lists/adds/reactivates blocked addresses through its own model, and a status card reports the active service and test mode with a parameterized **Send a test email** action |
 | **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects, 301 Redirects (WebFactory) | **Redirects** surface — list + in-place edit; Redirection's first-run install runs in place via the setup gate |
 | **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence**, **Limit Login Attempts Reloaded** | **Activity Log** surface (Wordfence = login security; Limit Login Attempts = lockout log with a status card and one-click Unlock through the plugin's own store) |
 | **Security posture** | Wordfence, Really Simple SSL | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
@@ -109,9 +109,10 @@ recommended order (installs × fit × effort):
 5. **Cache purge pack** — SpeedyCache, Redis Object Cache (flush + drop-in
    status row), Breeze, Nginx Helper, Cloudflare. The cheapest shape in the
    codebase: one purge hook plus detection each.
-6. **Email log providers** — WP Mail Logging (`wpml_mails`, the cheapest one
-   left), GoSMTP (logs free), SureMails, Site Mailer; Easy WP SMTP's full log
-   is Pro-only (free has debug events, the WP Mail SMTP shape).
+6. **Email log providers** — WP Mail Logging ✅ shipped (v0.12.0 cycle:
+   list, detail, resend through its own resender service, delete).
+   Remaining: GoSMTP (logs free), SureMails, Site Mailer; Easy WP SMTP's
+   full log is Pro-only (free has debug events, the WP Mail SMTP shape).
 7. **Snippets providers** — Simple Custom CSS & JS (a CPT) and Header Footer
    Code Manager (`hfcm_scripts` table) into the existing Snippets surface.
 8. **Site-status rows with toggles** — ✅ shipped (v0.11.0 cycle): the
