@@ -118,6 +118,10 @@ class Minn_Admin_Surfaces {
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
 	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
 	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href' );
+	const CREATE_KEYS     = array( 'label', 'route', 'method', 'fields', 'defaults' );
+	const EDIT_KEYS       = array( 'route', 'method', 'preserve', 'fields' );
+	const FIELD_KEYS      = array( 'key', 'label', 'type', 'options', 'value', 'placeholder', 'rows', 'mono', 'required' );
+	const FIELD_TYPES     = array( 'text', 'number', 'textarea', 'select', 'tags' );
 	const PANEL_KEYS      = array( 'label', 'sub', 'cap', 'fieldsRoute', 'valuesKey', 'writeKey' );
 
 	/**
@@ -172,6 +176,37 @@ class Minn_Admin_Surfaces {
 
 	private static function unknown_keys( $arr, $known ) {
 		return array_values( array_diff( array_map( 'strval', array_keys( (array) $arr ) ), $known ) );
+	}
+
+	/**
+	 * Contract problems for a create/detail.edit `fields` array (the form
+	 * engine's field vocabulary). $where labels the problem source
+	 * ("collection create" / "manage detail.edit").
+	 */
+	private static function field_problems( $fields, $where ) {
+		$problems = array();
+		if ( ! is_array( $fields ) || ! wp_is_numeric_array( $fields ) ) {
+			return array( "$where: fields is not a list" );
+		}
+		foreach ( $fields as $f ) {
+			if ( ! is_array( $f ) || empty( $f['key'] ) ) {
+				$problems[] = "$where: field without a key";
+				continue;
+			}
+			if ( isset( $f['type'] ) && ! in_array( $f['type'], self::FIELD_TYPES, true ) ) {
+				$problems[] = "$where: field \"{$f['key']}\" has unknown type \"{$f['type']}\"";
+			}
+			if ( isset( $f['type'] ) && 'select' === $f['type'] && empty( $f['options'] ) ) {
+				$problems[] = "$where: select field \"{$f['key']}\" has no options";
+			}
+			if ( isset( $f['options'] ) && ! wp_is_numeric_array( $f['options'] ) ) {
+				$problems[] = "$where: field \"{$f['key']}\" options must be a list of [value, label] pairs";
+			}
+			foreach ( self::unknown_keys( $f, self::FIELD_KEYS ) as $k ) {
+				$problems[] = "$where: unknown field key \"$k\" on \"{$f['key']}\"";
+			}
+		}
+		return $problems;
 	}
 
 	/** Contract problems for one surface descriptor (documented keys only). */
@@ -238,6 +273,28 @@ class Minn_Admin_Surfaces {
 			if ( isset( $coll['detail'] ) && is_array( $coll['detail'] ) ) {
 				foreach ( self::unknown_keys( $coll['detail'], self::DETAIL_KEYS ) as $k ) {
 					$problems[] = "$ck: unknown detail key \"$k\" (ignored)";
+				}
+				if ( isset( $coll['detail']['edit'] ) ) {
+					$edit = $coll['detail']['edit'];
+					if ( ! is_array( $edit ) || empty( $edit['route'] ) ) {
+						$problems[] = "$ck: detail.edit without a route";
+					} else {
+						foreach ( self::unknown_keys( $edit, self::EDIT_KEYS ) as $k ) {
+							$problems[] = "$ck: unknown detail.edit key \"$k\" (ignored)";
+						}
+						$problems = array_merge( $problems, self::field_problems( $edit['fields'] ?? array(), "$ck detail.edit" ) );
+					}
+				}
+			}
+			if ( isset( $coll['create'] ) ) {
+				$create = $coll['create'];
+				if ( ! is_array( $create ) || empty( $create['route'] ) ) {
+					$problems[] = "$ck: create without a route";
+				} else {
+					foreach ( self::unknown_keys( $create, self::CREATE_KEYS ) as $k ) {
+						$problems[] = "$ck: unknown create key \"$k\" (ignored)";
+					}
+					$problems = array_merge( $problems, self::field_problems( $create['fields'] ?? array(), "$ck create" ) );
 				}
 			}
 			foreach ( (array) ( $coll['actions'] ?? array() ) as $a ) {

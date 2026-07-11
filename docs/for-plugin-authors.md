@@ -198,7 +198,7 @@ response.
 | `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `sectionsRoute` (server-built display model, an alternative to `detailRoute` + `labels`, below), `labels` (resolve field keys to human labels from another route), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
 | `actions` | Buttons in the detail modal: `{ label, method, route, body, confirm, danger, when, href }`. `{id}` in the route is replaced with the item id. `when: { key, equals }` shows the button only when the item's field matches (Activate vs Deactivate). `href` renders the action as a plain link instead of a request; `{field}` placeholders are filled from the item |
 | `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request. For APIs that take search criteria as a JSON string (Gravity Forms), use the object form: `array( 'param' => 'search', 'json' => <criteria array with '{q}' where the term goes> )` — the term is JSON-escaped and the criteria double-URL-encoded to match APIs that `urldecode()` the param themselves |
-| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array) |
+| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array). Every field is required unless it declares `required: false` |
 
 ### `detail.edit` — inline editing in the detail modal
 
@@ -222,7 +222,9 @@ Let users edit an item's fields in place and save through your plugin's own upda
 
 Each field is `{ key, label, mono, type }` — `key` supports dot paths (`action_data.url`
 reads and writes `{ "action_data": { "url": … } }`), `mono` renders a monospace input, and
-`type: "number"` sends a numeric value. Fields shown as inputs are hidden from the static
+`type: "number"` sends a numeric value. Edit fields accept the same vocabulary as `create`
+fields (`textarea`, `select` with `options`, `tags`, `rows`, `placeholder`): both render
+through the same form engine. Fields shown as inputs are hidden from the static
 detail rows automatically. The bundled Redirection adapter is the reference.
 
 ### `detail.sectionsRoute` — server-built detail view

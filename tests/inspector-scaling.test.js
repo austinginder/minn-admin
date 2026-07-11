@@ -30,8 +30,16 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 			els.filter( ( e ) => e.offsetParent !== null ).map( ( e ) => e.dataset.insp ) );
 		t.check( 'only explicitly-set fields visible', visible.length === 2
 			&& visible.includes( 'own:title' ) && visible.includes( 'own:setting3' ), visible.join( ', ' ) );
+		// The fixture registers 31 attrs (29 collapse), but plugins that inject
+		// attributes into EVERY block schema (Otter's customCSS/hasCustomCSS)
+		// legitimately raise the count — assert the button's number against the
+		// really rendered rows instead of a hard-coded 29 (rule: suites seed or
+		// tolerate the live plugin baseline, never assume it).
 		const btnText = await page.$eval( '[data-inspmore]', ( e ) => e.textContent );
-		t.check( 'More settings shows the collapsed count', /More settings \(29\)/.test( btnText ), btnText );
+		const rowCount = await page.$$eval( '.minn-insp-more .minn-insp-row', ( els ) => els.length );
+		t.check( 'More settings shows the collapsed count',
+			rowCount >= 29 && new RegExp( 'More settings \\(' + rowCount + '\\)' ).test( btnText ),
+			btnText + ' / ' + rowCount + ' rows' );
 		t.check( 'panel starts hidden', await page.$eval( '.minn-insp-more', ( e ) => e.hidden ) );
 
 		// Expand and filter.
