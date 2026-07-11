@@ -168,11 +168,10 @@ function minn_admin_visibility_check() {
 			'detail' => 'Search engines are discouraged (Settings → Reading) — the site is public but asks not to be indexed',
 		);
 	}
-	return array(
-		'label'  => 'Site visibility',
-		'status' => 'pass',
-		'detail' => 'Public and indexable',
-	);
+	// Fully public: no row. Like the backup/licenses checks, the visibility
+	// check only appears when there's something to say (the banner and chip
+	// likewise show nothing when the site is public).
+	return null;
 }
 
 /**
