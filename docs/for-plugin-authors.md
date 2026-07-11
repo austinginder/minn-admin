@@ -111,6 +111,7 @@ page's copy-report carries the section for bug reports.
 | `manage` | Optional second collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Gravity Forms uses it for Entries / Forms |
 | `status` | Optional status card above the list: `{ "route": "your/v1/status" }`. The route returns a server-built display model (below), so your adapter formats values server-side and the client stays generic |
 | `setup` | Optional one-time setup gate (below). While your plugin still needs its own first-run install, the surface renders a setup card instead of the collection, and "Set up now" runs your installer server-side |
+| `settings` | Optional settings view (below): schema-driven tabs served by your own route, rendered by Minn's form engine, saved back through your plugin's own settings APIs. Adds a Settings entry to the view switcher |
 
 ### `setup` — a one-time setup gate
 
@@ -182,6 +183,78 @@ shows a native confirm first, `danger` styles the button red, and `href`
 renders a plain new-tab link instead of a request. Omit any key you don't
 need; conditional actions are just actions your route leaves out of the
 response.
+
+### `settings` — a schema-driven settings view
+
+Your plugin's settings, rendered by Minn from a schema your route serves at
+runtime. Declare the tabs and one route; Minn draws the forms with the same
+field engine that powers create/edit forms and editor panels, so when your
+plugin adds a field, coverage updates itself with no Minn release:
+
+```php
+'settings' => array(
+    'label' => 'Settings',                 // view-switcher label (default "Settings")
+    'cap'   => 'manage_options',           // optional: hides the VIEW from users
+                                           // without the capability (the surface
+                                           // itself may be readable more widely);
+                                           // your route's permission_callback is
+                                           // the real write gate
+    'tabs'  => array(
+        array( 'id' => 'general', 'label' => 'General' ),
+        array( 'id' => 'logging', 'label' => 'Logging' ),
+    ),
+    'route' => 'my-plugin/v1/minn-settings/{tab}',
+),
+```
+
+The route implements one contract per tab:
+
+- `GET {route}` returns the schema and current values in one response:
+
+```json
+{
+    "groups": [
+        {
+            "title":  "Sending",
+            "fields": [
+                { "key": "from_name", "label": "From name", "help": "Shown on outgoing mail." },
+                { "key": "retention", "label": "Retention (days)", "type": "number", "min": 1 },
+                { "key": "mode",      "label": "Mode", "type": "select", "options": [ ["digest", "Daily digest"], ["instant", "Instant"] ] },
+                { "key": "enabled",   "label": "Advanced routing", "type": "toggle" },
+                { "key": "route_url", "label": "Routing URL", "mono": true, "showWhen": { "key": "enabled", "equals": true } }
+            ],
+            "locked": 2
+        }
+    ],
+    "values":   { "from_name": "Minnow", "retention": 30, "mode": "digest", "enabled": false },
+    "adminUrl": "https://example.com/wp-admin/admin.php?page=my-settings"
+}
+```
+
+- `POST {route}` receives `{ "values": { … } }` holding **only the keys the
+  user actually edited** and returns the same shape, fresh. Return a
+  `WP_Error` to refuse a save; the message shows as a toast and the form
+  keeps what was typed.
+
+Fields use the shared form vocabulary: `key`, `label`, `type` (`text` default ·
+`textarea` · `number` · `select` · `toggle` · `email` · `url`), `options`
+(`[value, label]` pairs), `placeholder`, `help` (rendered under the control),
+`rows`, `min`/`max`, `mono`, and `showWhen: { "key": …, "equals": … }` (the
+row shows only while the controlling field holds that value, evaluated live
+as the user edits). A group's `locked` count says "N advanced settings —
+edit in wp-admin ↗" via `adminUrl` for anything too bespoke to render
+generically.
+
+Rules of the road:
+
+- Because only edited keys ride the save, untouched values never round-trip
+  through your sanitizers.
+- **Secrets**: serve them masked with a recognizable sentinel and skip the
+  write when the sentinel rides back (Gravity SMTP's `****************`
+  semantics). A field the user touched but left masked must never clobber
+  the stored secret.
+- Read and write through your plugin's **own** settings APIs inside the
+  route, so constant-lock, encryption and validation semantics stay yours.
 
 ### `collection`
 

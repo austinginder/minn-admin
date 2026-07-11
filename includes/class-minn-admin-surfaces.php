@@ -40,6 +40,7 @@ class Minn_Admin_Surfaces {
 			unset( $surface['cap'] );
 			$surface['id'] = sanitize_key( $id );
 			$surface       = self::with_setup_state( $surface );
+			$surface       = self::with_settings_state( $surface );
 			$out[]         = $surface;
 		}
 		return $out;
@@ -99,6 +100,48 @@ class Minn_Admin_Surfaces {
 		return $surface;
 	}
 
+	/**
+	 * Resolve a surface's `settings` view for the client. The view can be
+	 * gated tighter than the surface itself (an email log any admin reads
+	 * vs. transport settings only settings-capable users touch): a `cap`
+	 * the user lacks removes the view from the boot payload. The real
+	 * write gate stays the adapter route's own permission_callback.
+	 *
+	 * @param array $surface Client-bound surface row (id already set).
+	 * @return array The row with `settings` normalized or removed.
+	 */
+	private static function with_settings_state( $surface ) {
+		if ( empty( $surface['settings'] ) || ! is_array( $surface['settings'] ) ) {
+			unset( $surface['settings'] );
+			return $surface;
+		}
+		$cfg = $surface['settings'];
+		if ( ! empty( $cfg['cap'] ) && ! current_user_can( $cfg['cap'] ) ) {
+			unset( $surface['settings'] );
+			return $surface;
+		}
+		$tabs = array();
+		foreach ( (array) ( $cfg['tabs'] ?? array() ) as $tab ) {
+			if ( ! is_array( $tab ) || empty( $tab['id'] ) || empty( $tab['label'] ) ) {
+				continue;
+			}
+			$tabs[] = array(
+				'id'    => sanitize_key( $tab['id'] ),
+				'label' => (string) $tab['label'],
+			);
+		}
+		if ( empty( $cfg['route'] ) || ! is_string( $cfg['route'] ) || ! $tabs ) {
+			unset( $surface['settings'] );
+			return $surface;
+		}
+		$surface['settings'] = array(
+			'label' => (string) ( $cfg['label'] ?? 'Settings' ),
+			'route' => $cfg['route'],
+			'tabs'  => $tabs,
+		);
+		return $surface;
+	}
+
 	/* ===== Integration diagnostics (System page) ==========================
 	 *
 	 * A live registry view of everything hooked into Minn, with each entry
@@ -111,8 +154,9 @@ class Minn_Admin_Surfaces {
 	// The documented descriptor vocabulary. Undocumented keys are internal
 	// (see the Compatibility section of for-plugin-authors.md), so anything
 	// outside these lists is flagged as unknown rather than silently ignored.
-	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'status', 'setup' );
+	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'status', 'setup', 'settings' );
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href' );
+	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
 	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
@@ -242,6 +286,25 @@ class Minn_Admin_Surfaces {
 				}
 				foreach ( self::unknown_keys( $setup, self::SETUP_KEYS ) as $k ) {
 					$problems[] = "setup: unknown key \"$k\" (ignored)";
+				}
+			}
+		}
+		if ( isset( $surface['settings'] ) ) {
+			$cfg = $surface['settings'];
+			if ( ! is_array( $cfg ) || empty( $cfg['route'] ) || ! is_string( $cfg['route'] ) ) {
+				$problems[] = 'settings: missing route';
+			} else {
+				$tabs = isset( $cfg['tabs'] ) && is_array( $cfg['tabs'] ) ? $cfg['tabs'] : array();
+				if ( ! $tabs ) {
+					$problems[] = 'settings: needs at least one tab';
+				}
+				foreach ( $tabs as $tab ) {
+					if ( ! is_array( $tab ) || empty( $tab['id'] ) || empty( $tab['label'] ) ) {
+						$problems[] = 'settings: tab without id and label';
+					}
+				}
+				foreach ( self::unknown_keys( $cfg, self::SETTINGS_KEYS ) as $k ) {
+					$problems[] = "settings: unknown key \"$k\" (ignored)";
 				}
 			}
 		}

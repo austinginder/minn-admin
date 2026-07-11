@@ -4038,6 +4038,36 @@
 		} );
 	}
 
+	// View switcher (Entries / Manage / Settings) — shared between the list
+	// renderer and the settings view, which each own the whole #minn-view.
+	function surfaceViewSwitchHtml( s, ss ) {
+		if ( ! s.manage && ! s.settings ) return '';
+		return `
+			<div class="minn-tabs minn-view-switch">
+				<button class="minn-tab${ ss.view !== 'manage' && ss.view !== 'settings' ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
+				${ s.manage ? `<button class="minn-tab${ ss.view === 'manage' ? ' active' : '' }" data-sview="manage">${ esc( s.manage.viewLabel || 'Manage' ) }</button>` : '' }
+				${ s.settings ? `<button class="minn-tab${ ss.view === 'settings' ? ' active' : '' }" data-sview="settings">${ esc( s.settings.label || 'Settings' ) }</button>` : '' }
+			</div>`;
+	}
+
+	function bindSurfaceViewSwitch( s, ss, view ) {
+		$$( '[data-sview]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				if ( ss.view === btn.dataset.sview ) return;
+				ss.view = btn.dataset.sview;
+				if ( ss.view !== 'settings' ) {
+					// The list views are different collections — nothing
+					// carries over. Entering settings leaves list state alone.
+					ss.cache = null;
+					ss.tabs = null;
+					ss.tab = '_all';
+					ss.q = '';
+				}
+				renderSurface( s );
+			} )
+		);
+	}
+
 	function renderSurface( s ) {
 		const view = $( '#minn-view' );
 		if ( s.setupNeeded && s.setup ) {
@@ -4045,6 +4075,10 @@
 			return;
 		}
 		const ss = surfaceState( s.id );
+		if ( ss.view === 'settings' && s.settings ) {
+			renderSurfaceSettings( s, view );
+			return;
+		}
 		const coll = surfaceColl( s, ss );
 		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) || ( s.status && ! ss.status ) ) {
 			view.innerHTML = '<div class="minn-loading">Loading…</div>';
@@ -4066,11 +4100,7 @@
 		view.innerHTML = `
 		${ ss.view !== 'manage' ? surfaceStatusHtml( ss.status ) : '' }
 		<div class="minn-toolbar">
-			${ s.manage ? `
-			<div class="minn-tabs minn-view-switch">
-				<button class="minn-tab${ ss.view !== 'manage' ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
-				<button class="minn-tab${ ss.view === 'manage' ? ' active' : '' }" data-sview="manage">${ esc( s.manage.viewLabel || 'Manage' ) }</button>
-			</div>` : '' }
+			${ surfaceViewSwitchHtml( s, ss ) }
 			${ ss.tabs && ss.tabs.length > 1 ? `
 			<div class="minn-tabs">
 				${ ss.tabs.map( ( [ id, label ] ) =>
@@ -4099,18 +4129,7 @@
 				renderSurface( s );
 			} )
 		);
-		$$( '[data-sview]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				if ( ss.view === btn.dataset.sview ) return;
-				ss.view = btn.dataset.sview;
-				// The views are different collections — nothing carries over.
-				ss.cache = null;
-				ss.tabs = null;
-				ss.tab = '_all';
-				ss.q = '';
-				renderSurface( s );
-			} )
-		);
+		bindSurfaceViewSwitch( s, ss, view );
 		$$( '[data-sitem]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				const item = c.items[ parseInt( row.dataset.sitem, 10 ) ];
@@ -4143,6 +4162,131 @@
 			renderOverlays();
 		} );
 		bindPager( view, c.page, ( p ) => loadSurfaceItems( s, p ), () => { if ( state.route === s.id ) renderSurface( s ); } );
+	}
+
+	/* Settings view — a schema-driven form the adapter serves per tab:
+	 *   GET  route → { groups: [ { title, fields, locked } ], values, adminUrl }
+	 *   POST route { values: { changed only } } → the same shape, fresh.
+	 * Fields are form-engine vocabulary plus help and showWhen. Only DIRTY
+	 * keys ride the save — that is what keeps vendor masked-secret
+	 * sentinels honest (an untouched masked value never travels back), and
+	 * a refused save keeps the form as typed (the Custom CSS lesson). */
+	function renderSurfaceSettings( s, view ) {
+		const ss = surfaceState( s.id );
+		const cfg = s.settings;
+		if ( ! ss.settingsTab || ! cfg.tabs.some( ( t ) => t.id === ss.settingsTab ) ) ss.settingsTab = cfg.tabs[ 0 ].id;
+		ss.settingsCache = ss.settingsCache || {};
+		const tab = ss.settingsTab;
+		const data = ss.settingsCache[ tab ];
+		const head = `
+		<div class="minn-toolbar">
+			${ surfaceViewSwitchHtml( s, ss ) }
+			${ cfg.tabs.length > 1 ? `
+			<div class="minn-tabs">
+				${ cfg.tabs.map( ( t ) => `<button class="minn-tab${ tab === t.id ? ' active' : '' }" data-ssettab="${ esc( t.id ) }">${ esc( t.label ) }</button>` ).join( '' ) }
+			</div>` : '' }
+		</div>`;
+		const bindChrome = () => {
+			bindSurfaceViewSwitch( s, ss, view );
+			$$( '[data-ssettab]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					ss.settingsTab = btn.dataset.ssettab;
+					renderSurface( s );
+				} )
+			);
+		};
+		if ( ! data ) {
+			view.innerHTML = head + '<div class="minn-loading">Loading…</div>';
+			bindChrome();
+			api( cfg.route.replace( '{tab}', tab ) )
+				.then( ( r ) => {
+					ss.settingsCache[ tab ] = r || { groups: [] };
+					if ( state.route === s.id ) renderSurface( s );
+				} )
+				.catch( showErr );
+			return;
+		}
+		const values = data.values || {};
+		const fields = [];
+		const groupHtml = ( data.groups || [] ).map( ( g ) => {
+			const rows = ( g.fields || [] ).map( ( f ) => {
+				const nf = formNormField( f );
+				fields.push( nf );
+				const ctl = formControlHtml( nf, values[ nf.key ], 'data-sset', nf.key );
+				if ( nf.type === 'toggle' ) {
+					return `<div class="minn-toggle-row" data-srow="${ esc( nf.key ) }">
+						<div class="minn-toggle-info">
+							<div class="minn-toggle-label">${ esc( nf.label || nf.key ) }</div>
+							${ nf.help ? `<div class="minn-toggle-desc">${ esc( nf.help ) }</div>` : '' }
+						</div>
+						${ ctl }
+					</div>`;
+				}
+				return `<div data-srow="${ esc( nf.key ) }">
+					<div class="minn-field-label">${ esc( nf.label || nf.key ) }</div>
+					${ ctl }
+					${ nf.help ? `<div class="minn-toggle-desc">${ esc( nf.help ) }</div>` : '' }
+				</div>`;
+			} ).join( '' );
+			return `${ g.title ? `<div class="minn-fields-sub">${ esc( g.title ) }</div>` : '' }
+				<div class="minn-fields">${ rows }</div>
+				${ g.locked ? `<div class="minn-panel-locked">${ g.locked } advanced setting${ g.locked === 1 ? '' : 's' } — ${ data.adminUrl ? `<a href="${ esc( data.adminUrl ) }" target="_blank" rel="noopener">edit in wp-admin ↗</a>` : 'edit in wp-admin' }</div>` : '' }`;
+		} ).join( '<div class="minn-divider"></div>' );
+
+		view.innerHTML = head + `
+		<div class="minn-card minn-surface-settings">
+			${ groupHtml || '<div class="minn-empty">Nothing to configure here.</div>' }
+			${ ( data.groups || [] ).length ? '<div><button class="minn-btn-primary" id="minn-sset-save">Save changes</button></div>' : '' }
+		</div>`;
+		bindChrome();
+
+		const dirty = {};
+		// showWhen: { key, equals } — row visibility follows the controlling
+		// field LIVE, reading the current control value, not the saved one.
+		const applyDeps = () => fields.forEach( ( f ) => {
+			if ( ! f.showWhen || ! f.showWhen.key ) return;
+			const row = view.querySelector( `[data-srow="${ f.key }"]` );
+			const dep = view.querySelector( `[data-sset="${ f.showWhen.key }"]` );
+			const cur = dep ? formControlValue( dep ) : values[ f.showWhen.key ];
+			if ( row ) row.hidden = String( cur ) !== String( f.showWhen.equals );
+		} );
+		applyDeps();
+		$$( '[data-sset]', view ).forEach( ( input ) => {
+			const mark = () => {
+				dirty[ input.dataset.sset ] = true;
+				applyDeps();
+			};
+			if ( input.dataset.ftype === 'toggle' ) {
+				input.addEventListener( 'click', () => {
+					input.classList.toggle( 'on' );
+					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
+					mark();
+				} );
+			} else {
+				input.addEventListener( 'input', mark );
+			}
+		} );
+		const saveBtn = $( '#minn-sset-save', view );
+		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+			const payload = {};
+			$$( '[data-sset]', view ).forEach( ( input ) => {
+				if ( dirty[ input.dataset.sset ] ) payload[ input.dataset.sset ] = formControlValue( input );
+			} );
+			if ( ! Object.keys( payload ).length ) {
+				toast( 'Nothing changed yet' );
+				return;
+			}
+			saveBtn.disabled = true;
+			try {
+				const r = await api( cfg.route.replace( '{tab}', tab ), { method: 'POST', body: JSON.stringify( { values: payload } ) } );
+				ss.settingsCache[ tab ] = r || { groups: [] };
+				toast( 'Settings saved' );
+				renderSurface( s );
+			} catch ( e ) {
+				toast( e.message, true );
+				saveBtn.disabled = false;
+			}
+		} );
 	}
 
 	async function openSurfaceDetail( s, item ) {
