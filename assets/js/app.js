@@ -249,7 +249,7 @@
 		paletteSel: 0,
 		saving: false,
 		editor: null,
-		settingsSection: 'General',
+		settingsSection: 'Site',
 		cache: {
 			overview: null,
 			content: null,
@@ -282,7 +282,7 @@
 		widgets: [ 'Widgets', 'Sidebars & footers' ],
 		extensions: [ 'Extensions', 'Installed' ],
 		posttypes: [ 'Structure', 'Post types, taxonomies & terms' ],
-		settings: [ 'Settings', 'General' ],
+		settings: [ 'Settings', 'Site' ],
 		system: [ 'System', 'Diagnostics' ],
 		editor: [ 'Editor', 'Draft' ],
 	};
@@ -6131,7 +6131,11 @@
 
 	/* ===== Settings ===== */
 
-	const SETTINGS_SECTIONS = [ 'General', 'Writing', 'Reading', 'Discussion', 'Spam', 'Permalinks' ];
+	// Grouped by the job you're doing, not WordPress's historical tabs:
+	// identity/locale (Site), who-can-see-and-join (Visibility), the front
+	// page (Homepage), content defaults + URLs (Content), and everything
+	// about comments incl. spam (Comments).
+	const SETTINGS_SECTIONS = [ 'Site', 'Visibility', 'Homepage', 'Content', 'Comments' ];
 	const POST_FORMATS = [ 'standard', 'aside', 'chat', 'gallery', 'link', 'image', 'quote', 'status', 'video', 'audio' ];
 	const PERMALINK_PRESETS = [
 		[ '', 'Plain' ],
@@ -6367,6 +6371,22 @@
 				</div>
 				<button class="minn-switch${ t.on ? ' on' : '' }" data-setting="${ t.id }" role="switch" aria-checked="${ t.on }"><span class="minn-switch-knob"></span></button>
 			</div>`;
+		// Permalink fields live on the Content tab now, but they save through
+		// their own endpoint (rewrite-rule rebuild), so they carry data-permakey
+		// — the wp/v2/settings save (which sweeps data-key) must not pick them up.
+		const permaText = ( key, label, value, mono ) => `
+			<div>
+				<div class="minn-field-label">${ label }</div>
+				<input class="minn-input${ mono ? ' mono' : '' }" data-permakey="${ key }" value="${ esc( value == null ? '' : value ) }">
+			</div>`;
+		const permaSelect = ( key, label, options, current ) => `
+			<div>
+				<div class="minn-field-label">${ label }</div>
+				<select class="minn-input" data-permakey="${ key }">
+					${ options.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( current ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+				</select>
+			</div>`;
+		const subhead = ( label ) => `<div class="minn-fields-sub">${ label }</div>`;
 		const pageOptions = [ [ 0, '— Select —' ], ...cache.pages.map( ( p ) => [ p.id, decodeEntities( p.title.rendered ) ] ) ];
 
 		const DAYS = [ 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' ];
@@ -6399,8 +6419,8 @@
 		const roleOptions = Object.entries( B.roles || {} );
 
 		switch ( section ) {
-			case 'General': return {
-				sub: 'Basic information about your site.',
+			case 'Site': return {
+				sub: 'Your site’s identity, locale and admin.',
 				fields: text( 'title', 'Site title', s.title )
 					+ text( 'description', 'Tagline', s.description )
 					+ siteIconField
@@ -6420,111 +6440,119 @@
 					</div>`
 					+ text( 'date_format', 'Date format', s.date_format, true )
 					+ text( 'time_format', 'Time format', s.time_format, true )
-					+ select( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week )
-					+ ( roleOptions.length ? combo( 'default_role', 'New user default role', roleOptions, s.default_role || 'subscriber' ) : '' ),
+					+ select( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week ),
 				toggles: [
-					{ id: 'users_can_register', label: 'Membership', desc: 'Anyone can register an account.', on: !! s.users_can_register },
-					{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors.', on: !! s.minn_admin_maintenance },
 					{ id: 'minn_admin_default', label: 'Minn is the default admin', desc: 'After signing in, land here instead of wp-admin (deep links still work; classic stays available).', on: !! s.minn_admin_default },
 				].map( toggle ).join( '' ),
 			};
-			case 'Writing': return {
-				sub: 'Defaults for new posts.',
-				fields: combo( 'default_category', 'Default post category', cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
-					+ select( 'default_post_format', 'Default post format', POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
-				toggles: [ { id: 'use_smilies', label: 'Convert emoticons', desc: 'Turn :-) and :-P into graphics when displayed.', on: !! s.use_smilies } ].map( toggle ).join( '' ),
+			case 'Visibility': return {
+				// Everything about who can see, index and join the site — the
+				// group WordPress scatters across Reading and General.
+				sub: 'Who can see, index and join your site.',
+				fields: roleOptions.length ? combo( 'default_role', 'New user default role', roleOptions, s.default_role || 'subscriber' ) : '',
+				toggles: [
+					{ id: 'blog_public', label: 'Search engine visibility', desc: 'Allow search engines to index this site.', on: !! s.blog_public },
+					{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors instead of the site.', on: !! s.minn_admin_maintenance },
+					{ id: 'users_can_register', label: 'Membership', desc: 'Anyone can register an account (with the default role above).', on: !! s.users_can_register },
+				].map( toggle ).join( '' ),
 			};
-			case 'Reading': return {
-				sub: 'What visitors see, and who else can see it.',
+			case 'Homepage': return {
+				sub: 'What visitors land on, and how much shows.',
 				fields: select( 'show_on_front', 'Your homepage displays', [ [ 'posts', 'Latest posts' ], [ 'page', 'A static page' ] ], s.show_on_front )
 					+ ( s.show_on_front === 'page' ? combo( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + combo( 'page_for_posts', 'Posts page', pageOptions, s.page_for_posts ) : '' )
 					+ text( 'posts_per_page', 'Blog pages show at most', s.posts_per_page ),
-				toggles: [ { id: 'blog_public', label: 'Search engine visibility', desc: 'Allow search engines to index this site.', on: !! s.blog_public } ].map( toggle ).join( '' ),
+				toggles: '',
 			};
-			case 'Discussion': return {
-				sub: 'How comments and pingbacks behave on new posts.',
-				fields: '',
-				toggles: [
+			case 'Content': {
+				// Content defaults plus the URL structure. Permalinks save
+				// through their own endpoint (data-permakey), rendered after the
+				// content toggles via the `after` slot.
+				const pl = cache.permalinks;
+				let perma;
+				if ( ! pl ) {
+					perma = subhead( 'URLs' ) + `<div class="minn-editor-locked-note">Permalink settings couldn’t be loaded. <a href="${ esc( B.site.adminUrl ) }options-permalink.php">Open in the classic admin ↗</a></div>`;
+				} else {
+					const isPreset = PERMALINK_PRESETS.some( ( [ v ] ) => v === pl.structure );
+					perma = subhead( 'URLs' )
+						+ `<div class="minn-fields">`
+						+ permaSelect( '_preset', 'Permalink structure', [ ...PERMALINK_PRESETS, [ '_custom', 'Custom structure' ] ], isPreset ? pl.structure : '_custom' )
+						+ permaText( 'structure', 'Custom structure', pl.structure, true )
+						+ `<div class="minn-toggle-desc">Tags: %year% %monthnum% %day% %postname% %post_id% %category% %author%. With Plain permalinks, Minn itself moves from /minn-admin/ to ?minn_admin=1 and reloads after saving.</div>`
+						+ permaText( 'category_base', 'Category base (optional)', pl.category_base, true )
+						+ permaText( 'tag_base', 'Tag base (optional)', pl.tag_base, true )
+						+ `</div>`;
+				}
+				return {
+					sub: 'Defaults for new content, and the URL structure.',
+					fields: combo( 'default_category', 'Default post category', cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
+						+ select( 'default_post_format', 'Default post format', POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
+					toggles: [ { id: 'use_smilies', label: 'Convert emoticons', desc: 'Turn :-) and :-P into graphics when displayed.', on: !! s.use_smilies } ].map( toggle ).join( '' ),
+					after: perma,
+				};
+			}
+			case 'Comments': {
+				// Comment behavior plus spam (they're the same job). The spam
+				// section (provider cards from adapters/spam.php + the core
+				// blocklist) renders after the toggles and saves through the
+				// spam endpoint; see the composable save handler.
+				const commentToggles = [
 					{ id: 'default_comment_status', label: 'Allow comments', desc: 'Let readers respond to new posts.', on: s.default_comment_status === 'open' },
 					{ id: 'default_ping_status', label: 'Allow pingbacks & trackbacks', desc: 'Accept link notifications from other blogs on new posts.', on: s.default_ping_status === 'open' },
 					{ id: 'comment_moderation', label: 'Moderate all comments', desc: 'Every comment must be manually approved before it appears.', on: !! s.comment_moderation },
 					{ id: 'comment_registration', label: 'Registered users only', desc: 'Users must be registered and logged in to comment.', on: !! s.comment_registration },
 					{ id: 'show_avatars', label: 'Show avatars', desc: 'Display profile pictures next to comments.', on: !! s.show_avatars },
-				].map( toggle ).join( '' ),
-			};
-			case 'Spam': {
-				// Provider cards from minn-admin/v1/spam (adapters/spam.php):
-				// Akismet / Antispam Bee / CleanTalk bundled, third parties via
-				// the minn_admin_spam_providers filter. Provider toggles and the
-				// core blocklist save through the same endpoint (see saveBtn).
+				].map( toggle ).join( '' );
 				const sp = cache.spam;
-				if ( ! sp ) return {
-					sub: 'Spam protection couldn’t be loaded.',
-					fields: `<div class="minn-editor-locked-note">Manage spam filtering in the classic admin instead. <a href="${ esc( B.site.adminUrl ) }plugins.php">Open plugins ↗</a></div>`,
-					toggles: '',
-					noSave: true,
-				};
-				const cards = sp.providers.map( ( p ) => `
-					<div class="minn-spam-provider">
-						<div class="minn-spam-head">
-							<span class="minn-spam-name">${ esc( p.name ) }</span>
-							<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : 'Needs setup' }</span>
-							${ p.blocked ? `<span class="minn-spam-blocked">${ esc( String( p.blocked ) ) } blocked all-time</span>` : '' }
-							${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( p.adminUrl ) }" target="_blank" rel="noopener">Full settings ↗</a>` : '' }
-						</div>
-						<div class="minn-toggle-desc">${ esc( p.note ) }</div>
-						${ p.toggles.length ? `<div class="minn-toggle-rows">${ p.toggles.map( ( t ) => `
-							<div class="minn-toggle-row">
-								<div class="minn-toggle-info">
-									<div class="minn-toggle-label">${ esc( t.label ) }</div>
-									<div class="minn-toggle-desc">${ esc( t.desc ) }</div>
-								</div>
-								<button class="minn-switch${ t.on ? ' on' : '' }" data-spamtog="${ esc( p.id ) }:${ esc( t.id ) }" role="switch" aria-checked="${ t.on }"><span class="minn-switch-knob"></span></button>
-							</div>` ).join( '' ) }</div>` : '' }
-					</div>` ).join( '' );
-				const empty = sp.providers.length ? '' : `
-					<div class="minn-editor-locked-note">No spam filter plugin is active. Install Akismet, Antispam Bee or CleanTalk from <a href="#" id="minn-spam-ext">Extensions</a> and it appears here. Core's blocklist below still works on its own.</div>`;
-				// The queue row follows the app's comments detection (Disable
-				// Comments and friends) — a Review button must never navigate
-				// to a route the nav itself hides.
-				const queue = B.comments ? `
-					<div class="minn-spam-queue">
-						<span>${ sp.queue.spam } comment${ sp.queue.spam === 1 ? '' : 's' } in the spam queue${ sp.queue.pending ? ` · ${ sp.queue.pending } pending review` : '' }</span>
-						<button class="minn-btn-soft" id="minn-spam-queue" type="button">Review spam →</button>
-					</div>` : `
-					<div class="minn-spam-queue">
-						<span>Commenting is disabled on this site, so there is no comment spam queue to review.</span>
-					</div>`;
-				return {
-					sub: 'Who filters comment spam, and what happens to it.',
-					fields: cards + empty + queue + `
+				let spamHtml;
+				if ( ! sp ) {
+					spamHtml = subhead( 'Spam' ) + `<div class="minn-editor-locked-note">Spam protection couldn’t be loaded. <a href="${ esc( B.site.adminUrl ) }plugins.php">Open plugins ↗</a></div>`;
+				} else {
+					const cards = sp.providers.map( ( p ) => `
+						<div class="minn-spam-provider">
+							<div class="minn-spam-head">
+								<span class="minn-spam-name">${ esc( p.name ) }</span>
+								<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : 'Needs setup' }</span>
+								${ p.blocked ? `<span class="minn-spam-blocked">${ esc( String( p.blocked ) ) } blocked all-time</span>` : '' }
+								${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( p.adminUrl ) }" target="_blank" rel="noopener">Full settings ↗</a>` : '' }
+							</div>
+							<div class="minn-toggle-desc">${ esc( p.note ) }</div>
+							${ p.toggles.length ? `<div class="minn-toggle-rows">${ p.toggles.map( ( t ) => `
+								<div class="minn-toggle-row">
+									<div class="minn-toggle-info">
+										<div class="minn-toggle-label">${ esc( t.label ) }</div>
+										<div class="minn-toggle-desc">${ esc( t.desc ) }</div>
+									</div>
+									<button class="minn-switch${ t.on ? ' on' : '' }" data-spamtog="${ esc( p.id ) }:${ esc( t.id ) }" role="switch" aria-checked="${ t.on }"><span class="minn-switch-knob"></span></button>
+								</div>` ).join( '' ) }</div>` : '' }
+						</div>` ).join( '' );
+					const empty = sp.providers.length ? '' : `
+						<div class="minn-editor-locked-note">No spam filter plugin is active. Install Akismet, Antispam Bee or CleanTalk from <a href="#" id="minn-spam-ext">Extensions</a> and it appears here. Core's blocklist below still works on its own.</div>`;
+					// The queue row follows the app's comments detection (Disable
+					// Comments and friends) — a Review button must never navigate
+					// to a route the nav itself hides.
+					const queue = B.comments ? `
+						<div class="minn-spam-queue">
+							<span>${ sp.queue.spam } comment${ sp.queue.spam === 1 ? '' : 's' } in the spam queue${ sp.queue.pending ? ` · ${ sp.queue.pending } pending review` : '' }</span>
+							<button class="minn-btn-soft" id="minn-spam-queue" type="button">Review spam →</button>
+						</div>` : `
+						<div class="minn-spam-queue">
+							<span>Commenting is disabled on this site, so there is no comment spam queue to review.</span>
+						</div>`;
+					spamHtml = subhead( 'Spam' ) + cards + empty + queue + `
 						<div>
 							<div class="minn-field-label">Disallowed comment keys</div>
 							<textarea class="minn-input mono minn-surface-textarea" id="minn-spam-keys" rows="5" placeholder="one word, IP, email or URL fragment per line">${ esc( sp.disallowed_keys ) }</textarea>
 							<div class="minn-toggle-desc">Core’s built-in filter: comments containing any of these go straight to the spam folder. One entry per line.</div>
-						</div>`,
-					toggles: '',
-				};
-			}
-			default: {
-				const pl = cache.permalinks;
-				if ( ! pl ) return {
-					sub: 'Permalink settings couldn’t be loaded.',
-					fields: `<div class="minn-editor-locked-note">Manage the permalink structure in the classic admin instead. <a href="${ esc( B.site.adminUrl ) }options-permalink.php">Open permalink settings ↗</a></div>`,
-					toggles: '',
-					noSave: true,
-				};
-				const isPreset = PERMALINK_PRESETS.some( ( [ v ] ) => v === pl.structure );
+						</div>`;
+				}
 				return {
-					sub: 'URL structure for posts, categories and tags. Saving rebuilds the rewrite rules.',
-					fields: select( '_preset', 'Structure', [ ...PERMALINK_PRESETS, [ '_custom', 'Custom structure' ] ], isPreset ? pl.structure : '_custom' )
-						+ text( 'structure', 'Custom structure', pl.structure, true )
-						+ `<div class="minn-toggle-desc">Tags: %year% %monthnum% %day% %postname% %post_id% %category% %author%. Note: with Plain permalinks, Minn itself moves from /minn-admin/ to ?minn_admin=1 — the app reloads there after saving.</div>`
-						+ text( 'category_base', 'Category base (optional)', pl.category_base, true )
-						+ text( 'tag_base', 'Tag base (optional)', pl.tag_base, true ),
-					toggles: '',
+					sub: 'How comments behave, and how spam is handled.',
+					fields: '',
+					toggles: commentToggles,
+					after: spamHtml,
 				};
 			}
+			default: return { sub: '', fields: '', toggles: '' };
 		}
 	}
 
@@ -6553,6 +6581,7 @@
 				${ section.fields ? `<div class="minn-fields">${ section.fields }</div>` : '' }
 				${ section.fields && section.toggles ? '<div class="minn-divider"></div>' : '' }
 				${ section.toggles ? `<div class="minn-toggle-rows">${ section.toggles }</div>` : '' }
+				${ section.after ? `<div class="minn-divider"></div>${ section.after }` : '' }
 				${ section.noSave ? '' : '<div><button class="minn-btn-primary" id="minn-save-settings">Save changes</button></div>' }
 			</div>
 		</div>`;
@@ -6668,9 +6697,9 @@
 		} );
 
 		// Permalinks: keep the preset select and the custom-structure input in sync.
-		const presetSel = $( '[data-key="_preset"]', view );
+		const presetSel = $( '[data-permakey="_preset"]', view );
 		if ( presetSel ) {
-			const structInput = $( '[data-key="structure"]', view );
+			const structInput = $( '[data-permakey="structure"]', view );
 			presetSel.addEventListener( 'change', () => {
 				if ( presetSel.value !== '_custom' ) structInput.value = presetSel.value;
 			} );
@@ -6683,61 +6712,25 @@
 		if ( saveBtn ) {
 			saveBtn.addEventListener( 'click', async () => {
 				saveBtn.disabled = true;
-				if ( state.settingsSection === 'Spam' ) {
-					// Provider toggles + the core blocklist save through one
-					// endpoint; the response is the fresh page state.
-					const toggles = {};
-					$$( '[data-spamtog]', view ).forEach( ( btn ) => {
-						const [ pid, tid ] = btn.dataset.spamtog.split( ':' );
-						( toggles[ pid ] = toggles[ pid ] || {} )[ tid ] = btn.classList.contains( 'on' );
-					} );
-					const body = { toggles };
-					const keysEl = $( '#minn-spam-keys', view );
-					if ( keysEl ) body.disallowed_keys = keysEl.value;
-					try {
-						cache.spam = await api( 'minn-admin/v1/spam', { method: 'POST', body: JSON.stringify( body ) } );
-						toast( 'Spam settings saved' );
-						renderSettings();
-					} catch ( err ) {
-						toast( err.message, true );
-					}
-					saveBtn.disabled = false;
-					return;
-				}
-				if ( state.settingsSection === 'Permalinks' ) {
-					const payload = {};
-					$$( '[data-key]', view ).forEach( ( input ) => {
-						if ( input.dataset.key !== '_preset' ) payload[ input.dataset.key ] = input.value;
-					} );
-					try {
-						const r = await api( 'minn-admin/v1/permalinks', { method: 'POST', body: JSON.stringify( payload ) } );
-						cache.permalinks = r;
-						if ( r.pretty !== !! B.pretty ) {
-							// Routing mode flipped (path ↔ ?minn_admin=1) — reload at the app's new home.
-							toast( 'Permalinks saved — reloading…' );
-							setTimeout( () => { window.location.href = r.app_url + ( r.pretty ? 'settings' : '#/settings' ); }, 700 );
-							return;
-						}
-						toast( 'Permalinks saved' );
-						renderSettings();
-					} catch ( err ) {
-						toast( err.message, true );
-					}
-					saveBtn.disabled = false;
-					return;
-				}
+				// A tab can carry any mix of core settings, the spam config and
+				// the permalink structure (each with its own endpoint), so the
+				// save runs whichever the current tab actually shows — detected
+				// by the elements present, not the tab name. Permalinks go LAST
+				// because a routing-mode flip reloads the page.
+				let okAll = true;
+
+				// --- Core settings (wp/v2/settings): [data-setting] toggles +
+				// [data-key] fields. Permalink fields carry data-permakey, so
+				// they're excluded here. ---
 				const NUMERIC = [ 'default_category', 'posts_per_page', 'page_on_front', 'page_for_posts', 'start_of_week' ];
 				const payload = { ...pending };
 				$$( '[data-key]', view ).forEach( ( input ) => {
 					const key = input.dataset.key;
-					// Strict comboboxes display the label; the value rides on data-ac-value.
 					let value = input.dataset.acValue !== undefined ? input.dataset.acValue : input.value;
 					if ( key === 'url' && value.trim() === s.url ) return;
 					if ( NUMERIC.includes( key ) ) value = parseInt( value, 10 ) || 0;
 					payload[ key ] = value;
 				} );
-				// The timezone field is free-typed with datalist suggestions —
-				// only let a real zone id (or a case-corrected match) through.
 				if ( 'timezone' in payload ) {
 					payload.timezone = payload.timezone.trim();
 					let zones = [ 'UTC', s.timezone ];
@@ -6750,15 +6743,50 @@
 					}
 					payload.timezone = match;
 				}
-				try {
-					cache.values = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( payload ) } );
-					toast( 'Settings saved' );
-					// Maintenance mode / search-engine visibility live in these
-					// settings — refresh the banner + chip without a reload.
-					if ( 'minn_admin_maintenance' in payload || 'blog_public' in payload ) refreshVisibility();
-				} catch ( err ) {
-					toast( err.message, true );
+				if ( Object.keys( payload ).length ) {
+					try {
+						cache.values = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( payload ) } );
+						// Maintenance mode / search-engine visibility live here —
+						// refresh the banner + chip without a reload.
+						if ( 'minn_admin_maintenance' in payload || 'blog_public' in payload ) refreshVisibility();
+					} catch ( err ) { toast( err.message, true ); okAll = false; }
 				}
+
+				// --- Spam (minn-admin/v1/spam): only when the Comments tab shows it. ---
+				if ( $( '[data-spamtog]', view ) || $( '#minn-spam-keys', view ) ) {
+					const toggles = {};
+					$$( '[data-spamtog]', view ).forEach( ( btn ) => {
+						const [ pid, tid ] = btn.dataset.spamtog.split( ':' );
+						( toggles[ pid ] = toggles[ pid ] || {} )[ tid ] = btn.classList.contains( 'on' );
+					} );
+					const body = { toggles };
+					const keysEl = $( '#minn-spam-keys', view );
+					if ( keysEl ) body.disallowed_keys = keysEl.value;
+					try {
+						cache.spam = await api( 'minn-admin/v1/spam', { method: 'POST', body: JSON.stringify( body ) } );
+					} catch ( err ) { toast( err.message, true ); okAll = false; }
+				}
+
+				// --- Permalinks (minn-admin/v1/permalinks): the Content tab, last. ---
+				if ( $( '[data-permakey]', view ) ) {
+					const pl = {};
+					$$( '[data-permakey]', view ).forEach( ( input ) => {
+						if ( input.dataset.permakey !== '_preset' ) pl[ input.dataset.permakey ] = input.value;
+					} );
+					try {
+						const r = await api( 'minn-admin/v1/permalinks', { method: 'POST', body: JSON.stringify( pl ) } );
+						cache.permalinks = r;
+						if ( r.pretty !== !! B.pretty ) {
+							// Routing mode flipped (path ↔ ?minn_admin=1) — reload at the app's new home.
+							toast( 'Settings saved — reloading…' );
+							setTimeout( () => { window.location.href = r.app_url + ( r.pretty ? 'settings' : '#/settings' ); }, 700 );
+							return;
+						}
+					} catch ( err ) { toast( err.message, true ); okAll = false; }
+				}
+
+				if ( okAll ) toast( 'Settings saved' );
+				renderSettings();
 				saveBtn.disabled = false;
 			} );
 		}

@@ -866,7 +866,10 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 
 /* ===== Settings ===== */
 .minn-settings { display: grid; grid-template-columns: 180px 1fr; gap: 30px; }
-.minn-settings-nav { display: flex; flex-direction: column; gap: 2px; }
+/* The section nav sticks so it stays visible while scrolling a long tab
+   (Site, Comments). align-self:start keeps it from stretching the grid row;
+   the list is short + non-scrollable, so no sticky-compositor wiggle. */
+.minn-settings-nav { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 8px; align-self: start; }
 .minn-settings-nav-item { padding: 7px 11px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; color: var(--text2); background: transparent; border: none; text-align: left; }
 .minn-settings-nav-item.active { background: var(--panel2); color: var(--text); font-weight: 600; }
 .minn-settings-body { max-width: 560px; display: flex; flex-direction: column; gap: 26px; }
@@ -900,6 +903,11 @@ select.minn-input {
   background-repeat: no-repeat; background-position: right 11px center;
 }
 .minn-divider { height: 1px; background: var(--border); }
+/* Subsection heading within a settings tab (e.g. URLs, Spam). */
+.minn-fields-sub {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--text3); margin: 2px 0 -4px;
+}
 /* Combobox: option panel anchored in-flow below the input — position is stable
    while typing, unlike the native datalist popup. */
 .minn-ac { position: relative; }

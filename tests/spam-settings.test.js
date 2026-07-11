@@ -17,12 +17,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	const { browser, page, errors } = await launch();
 	await login( page );
 
+	// Spam is a subsection of the Comments settings tab now (it's comment spam).
 	const openSpam = async () => {
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
 		await page.$$eval( '.minn-settings-nav-item', ( els ) => {
-			const spam = els.find( ( el ) => el.textContent.trim() === 'Spam' );
-			if ( spam ) spam.click();
+			const tab = els.find( ( el ) => el.textContent.trim() === 'Comments' );
+			if ( tab ) tab.click();
 		} );
 		await page.waitForSelector( '.minn-spam-queue', { timeout: 10000 } );
 	};
