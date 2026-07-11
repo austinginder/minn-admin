@@ -4878,11 +4878,27 @@
 	async function refreshVisibility() {
 		try { state.visibility = await api( 'minn-admin/v1/visibility' ); } catch ( e ) { /* keep the last state */ }
 		updateVisChip();
+		// The System page's "Site visibility" health check is server-derived
+		// from the same posture — bust it so the row appears/disappears with
+		// the toggle instead of going stale (Austin's report).
+		state.cache.system = null;
 		if ( state.route === 'overview' ) renderOverview();
 		// The Settings page's Visibility toggles read from state.cache.settings,
 		// so a toggle from the chip/banner must re-render it too — otherwise the
 		// switch there shows stale (Austin's report).
 		else if ( state.route === 'settings' ) renderSettings();
+		else if ( state.route === 'system' ) {
+			// Load first, then swap with the scroll kept — a null-cache render
+			// collapses to the loading state and clamps the scroller (rule
+			// from the license-activate flow).
+			const scroller = $( '.minn-scroll' );
+			const keepTop = scroller ? scroller.scrollTop : 0;
+			await loadSystem();
+			if ( state.route !== 'system' ) return;
+			renderSystem();
+			const sc = $( '.minn-scroll' );
+			if ( sc ) sc.scrollTop = keepTop;
+		}
 	}
 
 	// Persistent amber chip on EVERY route when the site is not fully public —
@@ -14789,7 +14805,7 @@
 						</div>
 					</div>
 					${ B.caps.orders ? `
-					<div class="minn-media-edit">
+					<div class="minn-media-edit minn-order-status">
 						<div class="minn-field-label">Status</div>
 						<div style="display:flex; gap:8px;">
 							<select class="minn-input" id="minn-order-status">
@@ -16424,6 +16440,23 @@
 		return ed.content || '';
 	}
 
+	// The ordered revision ids the History card shows — the list ←/→ steps
+	// through while the revision modal is open.
+	function revisionNavIds() {
+		const ed = state.editor;
+		return ed ? historyRowsFor( ed ).map( ( r ) => r.id ) : [];
+	}
+
+	function revisionModalNav( dir ) {
+		const m = state.modal;
+		if ( ! m || m.type !== 'revision' || ! state.editor ) return;
+		const ids = revisionNavIds();
+		const idx = ids.indexOf( m.revId );
+		const next = ids[ idx + dir ];
+		if ( idx === -1 || next === undefined ) return;
+		openRevision( state.editor, next );
+	}
+
 	function openRevision( ed, revId ) {
 		// Capture the current side NOW — the serializer needs the editor DOM,
 		// and the diff must reflect what the writer sees, unsaved edits included.
@@ -16520,11 +16553,19 @@
 					<button class="minn-btn-primary" id="minn-restore-rev">Restore this revision</button>
 				</div>`;
 		}
-		return `
+		// ←/→ steps through the History card's revisions (the surface-detail
+	// pattern: count + step buttons in the head, arrows on the keyboard).
+	const ids = revisionNavIds();
+	const idx = ids.indexOf( m.revId );
+	const canStep = idx !== -1 && ids.length > 1;
+	return `
 		<div class="minn-modal-overlay" id="minn-modal-overlay">
 			<div class="minn-modal xl">
 				<div class="minn-modal-head">
 					<div class="minn-modal-title">${ rev ? 'Revision · ' + timeAgo( rev.modified ) : 'Revision' }</div>
+					${ canStep ? `<span class="minn-modal-count">${ idx + 1 } / ${ ids.length }</span>
+					<button class="minn-modal-step" id="minn-rev-prev" type="button" title="Newer (←)"${ idx <= 0 ? ' disabled' : '' }>‹</button>
+					<button class="minn-modal-step" id="minn-rev-next" type="button" title="Older (→)"${ idx >= ids.length - 1 ? ' disabled' : '' }>›</button>` : '' }
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
 				${ ! rev ? '<div class="minn-loading">Loading revision…</div>' : bodyHtml }
@@ -16533,6 +16574,12 @@
 	}
 
 	function bindRevisionModal( m ) {
+		// Step buttons live in the head, present even while the revision body
+		// is still loading — bind them before the loading-state early return.
+		const prev = $( '#minn-rev-prev' );
+		const next = $( '#minn-rev-next' );
+		if ( prev ) prev.addEventListener( 'click', () => revisionModalNav( -1 ) );
+		if ( next ) next.addEventListener( 'click', () => revisionModalNav( 1 ) );
 		const rev = m.rev;
 		if ( ! rev ) return;
 		// Raw-preview fallback only exists when the post was too large to diff.
@@ -17266,6 +17313,7 @@
 					const dir = e.key === 'ArrowLeft' ? -1 : 1;
 					if ( state.modal.type === 'media' ) { e.preventDefault(); mediaModalNav( dir ); }
 					else if ( state.modal.type === 'surface' ) { e.preventDefault(); surfaceModalNav( dir ); }
+					else if ( state.modal.type === 'revision' ) { e.preventDefault(); revisionModalNav( dir ); }
 				}
 			}
 			if ( e.key === 'Escape' && ( state.paletteOpen || state.notifOpen || state.modal ) ) {

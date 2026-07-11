@@ -36,9 +36,13 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 
 	await openEditor( page, id );
 	await page.waitForSelector( '.minn-history-row', { timeout: 15000 } );
-	const revRows = await page.$$( '.minn-history-row' );
+	// The async author-name lookup re-renders the sidebar shortly after the
+	// rows first appear, detaching any stored handles — settle, then always
+	// query fresh (never keep .minn-history-row handles across awaits).
+	await page.waitForTimeout( 1000 );
+	const revCount = await page.evaluate( () => document.querySelectorAll( '.minn-history-row' ).length );
 	// Clean editor: API has V2 (mirror) + V1; UI shows only V1.
-	t.check( 'history card lists previous revision(s), not the live-post mirror', revRows.length >= 1, String( revRows.length ) );
+	t.check( 'history card lists previous revision(s), not the live-post mirror', revCount >= 1, String( revCount ) );
 
 	const nApi = await page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '/revisions?per_page=6&_fields=id', {
@@ -46,10 +50,13 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 		} );
 		return ( await r.json() ).length;
 	}, id );
-	t.check( 'UI hides one more revision than the API returns (the mirror)', revRows.length === nApi - 1, `ui=${ revRows.length } api=${ nApi }` );
+	t.check( 'UI hides one more revision than the API returns (the mirror)', revCount === nApi - 1, `ui=${ revCount } api=${ nApi }` );
 
 	/* ===== Oldest visible revision (v1) vs current (v2) ===== */
-	await revRows[ revRows.length - 1 ].click();
+	await page.evaluate( () => {
+		const rows = document.querySelectorAll( '.minn-history-row' );
+		rows[ rows.length - 1 ].click();
+	} );
 	await page.waitForSelector( '#minn-diff', { timeout: 10000 } );
 	const d = await page.evaluate( () => ( {
 		summary: [ ...document.querySelectorAll( '#minn-modal-overlay .minn-side-row' ) ].map( ( r ) => r.textContent ).join( ' ' ),
@@ -82,7 +89,8 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 	/* ===== After restore, top History row is a previous version with a real diff ===== */
 	await openEditor( page, id );
 	await page.waitForSelector( '.minn-history-row', { timeout: 15000 } );
-	await ( await page.$( '.minn-history-row' ) ).click();
+	await page.waitForTimeout( 1000 ); // the same re-render settle as above
+	await page.evaluate( () => document.querySelector( '.minn-history-row' ).click() );
 	await page.waitForSelector( '#minn-modal-overlay .minn-side-row', { timeout: 10000 } );
 	await page.waitForTimeout( 400 );
 	const topText = await page.evaluate( () => [ ...document.querySelectorAll( '#minn-modal-overlay .minn-side-row' ) ].map( ( r ) => r.textContent ).join( ' ' ) );
@@ -91,6 +99,32 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 		! /Identical to the current content/.test( topText ),
 		topText.slice( 0, 140 )
 	);
+
+	/* ===== ←/→ steps through revisions while the modal is open ===== */
+	const countOf = () => page.evaluate( () => {
+		const c = document.querySelector( '#minn-modal-overlay .minn-modal-count' );
+		return c ? c.textContent.trim() : '';
+	} );
+	const start = await countOf();
+	t.check( 'revision modal shows its position in the list', /^1 \/ [2-9]/.test( start ), start );
+	await page.keyboard.press( 'ArrowRight' );
+	await page.waitForFunction( ( prev ) => {
+		const c = document.querySelector( '#minn-modal-overlay .minn-modal-count' );
+		return c && c.textContent.trim() !== prev;
+	}, start, { timeout: 10000 } );
+	t.check( 'ArrowRight steps to the older revision', /^2 \//.test( await countOf() ), await countOf() );
+	await page.keyboard.press( 'ArrowLeft' );
+	await page.waitForFunction( () => {
+		const c = document.querySelector( '#minn-modal-overlay .minn-modal-count' );
+		return c && /^1 \//.test( c.textContent.trim() );
+	}, null, { timeout: 10000 } );
+	t.check( 'ArrowLeft steps back to the newer revision', true );
+	t.check( 'head step buttons render with the newer side disabled at the top', await page.evaluate( () => {
+		const prev = document.querySelector( '#minn-rev-prev' );
+		const next = document.querySelector( '#minn-rev-next' );
+		return !! prev && !! next && prev.disabled && ! next.disabled;
+	} ) );
+	await page.evaluate( () => document.querySelector( '#minn-modal-close' ).click() );
 
 	await deletePost( page, id );
 	await t.done( browser, errors );
