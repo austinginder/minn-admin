@@ -101,8 +101,16 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		/* ===== Paste field appears; wrong key fails IN PLACE ===== */
 		await clickActivate();
-		const inputType = await page.$eval( '#minn-sys-licenses .minn-lic-key', ( el ) => el.type );
-		t.check( 'paste field is a password input', inputType === 'password' );
+		// Plain text on purpose: a license key isn't a credential and the
+		// password type summoned 1Password over the field (Austin's report);
+		// the data-*-ignore trio is each manager's documented opt-out.
+		const field = await page.$eval( '#minn-sys-licenses .minn-lic-key', ( el ) => ( {
+			type: el.type,
+			onep: el.hasAttribute( 'data-1p-ignore' ),
+			lp: el.dataset.lpignore === 'true',
+			bw: el.dataset.bwignore === 'true',
+		} ) );
+		t.check( 'paste field is plain text with password-manager opt-outs', field.type === 'text' && field.onep && field.lp && field.bw, JSON.stringify( field ) );
 		const topBefore = await page.evaluate( () => {
 			document.querySelector( '#minn-sys-licenses' ).scrollIntoView();
 			return document.querySelector( '.minn-scroll' ).scrollTop;

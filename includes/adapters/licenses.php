@@ -118,6 +118,33 @@ function minn_admin_wpmudev_membership() {
  * 'kind', 'name', 'slug', 'sdk' => freemius|edd|surecart ].
  */
 /**
+ * The Soflyy (WP All Import / WP All Export) EDD request, byte-identical to
+ * the ones their $_POST-driven protected controllers build: edd_action +
+ * license + item_name against the plugin's OWN stored info_api_url_new
+ * '/check_license' endpoint. Returns the response's license status word
+ * ('valid', 'invalid', 'expired', 'deactivated', …) or null when the
+ * service is unreachable. Exists only because those controllers expose no
+ * public callable; the params come from reading their code, never invented.
+ *
+ * @return string|null
+ */
+function minn_admin_soflyy_edd( $edd_action, $license, $item_name, $api_url ) {
+	if ( '' === $license || '' === $api_url ) {
+		return null;
+	}
+	$response = wp_remote_get( esc_url_raw( add_query_arg( array(
+		'edd_action' => $edd_action,
+		'license'    => $license,
+		'item_name'  => urlencode( $item_name ),
+	), $api_url . '/check_license' ) ), array( 'timeout' => 15, 'sslverify' => true ) );
+	if ( is_wp_error( $response ) ) {
+		return null;
+	}
+	$data = json_decode( wp_remote_retrieve_body( $response ) );
+	return ( is_object( $data ) && isset( $data->license ) ) ? (string) $data->license : null;
+}
+
+/**
  * The Events Calendar paid family, one entry per licensed product. `slug` is
  * the PUE slug (dashed; the key option underscores it), `url`/`file` are the
  * exact Tribe__PUE__Checker constructor args each plugin uses itself, and
@@ -1932,36 +1959,85 @@ function minn_admin_license_default_providers() {
 			PMXE_Plugin::getInstance()->updateOption( 'license_status', (string) $word );
 			return $pmxe_result( $word );
 		};
+		$providers['wp-all-export']['deactivate'] = function () {
+			// Soflyy licenses are unlimited-activation (license_limit 0):
+			// their endpoint answers a deactivate_license request with the
+			// plain license status and releases nothing, PROVEN 2026-07-11
+			// against a real key. There is no seat to free; the honest
+			// deactivate is removing the key from this site (their own
+			// button only flips local state on a 'deactivated' word the
+			// service never sends for these licenses).
+			PMXE_Plugin::getInstance()->updateOption( array( 'license' => '', 'license_status' => '' ) );
+			return array( 'ok' => true, 'code' => '', 'message' => 'The key was removed from this site. Soflyy licenses have no per-site seats to free.' );
+		};
 	}
 
-	// WP All Import Pro: its only paste-activation path reads $_POST inside
-	// a nonce-gated admin controller, so activation stays on its screen
-	// (linked below); verify rides the public static check their own
-	// licenses screen uses and stores the result exactly as it does.
+	// WP All Import Pro: its whole license lifecycle (activate, deactivate)
+	// lives in $_POST-driven protected controller methods with no public
+	// callable, so these mirror those requests byte for byte through the
+	// shared Soflyy helper: the class-keyed licenses/statuses maps in
+	// PMXI_Plugin_Options are the storage (keys stored raw, verified against
+	// their own form save), and the status word is stored exactly as their
+	// controller stores it. Verify rides their public static check.
 	if ( class_exists( 'PMXI_Plugin' ) && class_exists( 'PMXI_Admin_License' ) ) {
-		$providers['wp-all-import']['verify'] = function () {
-			$word = PMXI_Admin_License::check_license( 'PMXI_Plugin' );
-			if ( false === $word ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach wpallimport.com (or no key is stored)' );
+		$pmxi_word = function ( $word ) {
+			$ok = in_array( (string) $word, array( 'valid', 'active' ), true );
+			return array( 'ok' => $ok, 'code' => $ok ? '' : ( 'expired' === $word ? 'expired' : ( 'no_activations_left' === $word ? 'site_limit' : 'invalid' ) ), 'message' => $ok ? '' : ( $word ? str_replace( '_', ' ', (string) $word ) : 'wpallimport.com did not answer' ) );
+		};
+		$providers['wp-all-import']['secret_label'] = 'WP All Import license key';
+		$providers['wp-all-import']['activate']     = function ( $secret ) use ( $pmxi_word ) {
+			$o    = PMXI_Plugin::getInstance()->getOption();
+			$prev = array(
+				'license' => isset( $o['licenses']['PMXI_Plugin'] ) ? $o['licenses']['PMXI_Plugin'] : '',
+				'status'  => isset( $o['statuses']['PMXI_Plugin'] ) ? $o['statuses']['PMXI_Plugin'] : '',
+			);
+			$word = minn_admin_soflyy_edd( 'activate_license', trim( (string) $secret ), PMXI_Plugin::getEddName(), isset( $o['info_api_url_new'] ) ? (string) $o['info_api_url_new'] : '' );
+			$out  = $pmxi_word( $word );
+			// GOTCHA: updateOption salt+base64-wraps every value in the
+			// licenses map, INCLUDING '' (which becomes a truthy blob the
+			// reader mistakes for a stored key) — an empty key must be
+			// UNSET, never written as ''.
+			$keep = $out['ok'] ? trim( (string) $secret ) : (string) $prev['license'];
+			if ( '' === $keep ) {
+				unset( $o['licenses']['PMXI_Plugin'] );
+			} else {
+				$o['licenses']['PMXI_Plugin'] = $keep;
 			}
+			$o['statuses']['PMXI_Plugin'] = $out['ok'] ? (string) $word : $prev['status'];
+			PMXI_Plugin::getInstance()->updateOption( $o );
+			return $out;
+		};
+		$providers['wp-all-import']['deactivate']   = function () {
+			// Same as WP All Export: no per-site seats (proven live), so
+			// deactivation is local key removal. UNSET, never '' — their
+			// option layer wraps '' into a truthy blob (see activate).
 			$o = PMXI_Plugin::getInstance()->getOption();
+			unset( $o['licenses']['PMXI_Plugin'] );
+			$o['statuses']['PMXI_Plugin'] = '';
+			PMXI_Plugin::getInstance()->updateOption( $o );
+			return array( 'ok' => true, 'code' => '', 'message' => 'The key was removed from this site. Soflyy licenses have no per-site seats to free.' );
+		};
+		$providers['wp-all-import']['verify'] = function () use ( $pmxi_word ) {
+			// NOT their PMXI_Admin_License::check_license static: it sends
+			// the stored key still salt+base64-wrapped (their option layer
+			// encodes on write and that static never decodes), so it always
+			// answers 'invalid' for a wrapped key. Decode, then check.
+			$o   = PMXI_Plugin::getInstance()->getOption();
+			$key = PMXI_Plugin::decode( isset( $o['licenses']['PMXI_Plugin'] ) ? (string) $o['licenses']['PMXI_Plugin'] : '' );
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'No key is stored.' );
+			}
+			$word = minn_admin_soflyy_edd( 'check_license', $key, PMXI_Plugin::getEddName(), isset( $o['info_api_url_new'] ) ? (string) $o['info_api_url_new'] : '' );
+			$out  = $pmxi_word( $word );
 			$o['statuses']['PMXI_Plugin'] = (string) $word;
 			PMXI_Plugin::getInstance()->updateOption( $o );
-			$ok = in_array( (string) $word, array( 'valid', 'active' ), true );
-			return array( 'ok' => $ok, 'code' => $ok ? '' : ( 'expired' === $word ? 'expired' : 'invalid' ), 'message' => $ok ? '' : str_replace( '_', ' ', (string) $word ) );
+			return $out;
 		};
-		$providers['wp-all-import']['activate_url'] = admin_url( 'admin.php?page=pmxi-admin-settings' );
 	}
 
-	// Slider Revolution: its RevSliderLicense::activate_plugin() is welded to
-	// admin-only classes (RevSliderTracking, the RevSliderLoadBalancer that
-	// is only registered in RevSliderGlobals during admin init), none of
-	// which load in a REST request. Reproducing that boot order is exactly
-	// the vendor-internals guessing the guardrails forbid, so the honest
-	// control is a link to its own activation screen.
-	if ( defined( 'RS_REVISION' ) ) {
-		$providers['revslider']['activate_url'] = admin_url( 'admin.php?page=revslider' );
-	}
+	// (Slider Revolution's full actions are attached above — the admin-only
+	// classes turned out to be two plain include_once's away, proven with a
+	// real purchase code 2026-07-11.)
 
 	// LayerSlider: the global updater instance exposes handleActivation
 	// with an explicit skip-referer mode (their own re-validation path
