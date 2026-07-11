@@ -117,6 +117,48 @@ function minn_admin_wpmudev_membership() {
  * re-scan. Returns array of [ 'component' => 'dir/file.php'|'theme:slug',
  * 'kind', 'name', 'slug', 'sdk' => freemius|edd|surecart ].
  */
+/**
+ * The Events Calendar paid family, one entry per licensed product. `slug` is
+ * the PUE slug (dashed; the key option underscores it), `url`/`file` are the
+ * exact Tribe__PUE__Checker constructor args each plugin uses itself, and
+ * `class` is the main class whose presence proves the vendor code is loaded
+ * (actions attach only then).
+ *
+ * @return array
+ */
+function minn_admin_license_tec_products() {
+	return array(
+		'tec-events-calendar-pro' => array(
+			'name'  => 'The Events Calendar Pro',
+			'slug'  => 'events-calendar-pro',
+			'file'  => 'events-calendar-pro/events-calendar-pro.php',
+			'class' => 'Tribe__Events__Pro__Main',
+			'url'   => 'http://tri.be/',
+		),
+		'tec-event-tickets-plus'  => array(
+			'name'  => 'Event Tickets Plus',
+			'slug'  => 'event-tickets-plus',
+			'file'  => 'event-tickets-plus/event-tickets-plus.php',
+			'class' => 'Tribe__Tickets_Plus__Main',
+			'url'   => 'http://theeventscalendar.com/',
+		),
+		'tec-filterbar'           => array(
+			'name'  => 'The Events Calendar Filter Bar',
+			'slug'  => 'tribe-filterbar',
+			'file'  => 'the-events-calendar-filterbar/the-events-calendar-filter-view.php',
+			'class' => 'Tribe__Events__Filterbar__View',
+			'url'   => 'http://tri.be/',
+		),
+		'tec-community'           => array(
+			'name'  => 'The Events Calendar Community',
+			'slug'  => 'events-community',
+			'file'  => 'the-events-calendar-community-events/tribe-community-events.php',
+			'class' => 'Tribe__Events__Community__Main',
+			'url'   => 'https://pue.theeventscalendar.com/',
+		),
+	);
+}
+
 function minn_admin_license_fingerprints() {
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	$plugins = get_plugins();
@@ -951,11 +993,99 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
-	// The Events Calendar family (PUE) + StellarWP Uplink, registry-style:
-	// PUE keys live in per-plugin options pue_install_key_{slug} with NO
-	// local validity (the checker lives in tribe-common), so those rows are
-	// honest presence-only. Uplink stores per-slug key options plus a
-	// DOMAIN-SUFFIXED status option that does classify.
+	// The Events Calendar family: DEDICATED per-product providers with full
+	// activate/deactivate/verify (below, Phase 1). PUE stores the key in
+	// pue_install_key_{slug with underscores} and the recorded status in
+	// pue_key_status_{dashed slug}_{domain} (plus a _timeout sibling); Event
+	// Tickets Plus ALSO registers a StellarWP Uplink resource, whose stored
+	// key wins inside their checker. minn_admin_license_tec_products() is the
+	// single source for slugs/files so the registry reader below can skip
+	// what these claim.
+	foreach ( minn_admin_license_tec_products() as $pid => $tp ) {
+		$providers[ $pid ] = array(
+			'name'      => $tp['name'],
+			'component' => $tp['file'],
+			'detect'    => function () use ( $has, $tp ) {
+				return $has( $tp['file'] );
+			},
+			'read'      => function () use ( $item, $tp ) {
+				global $wpdb;
+				$key = trim( (string) get_option( 'pue_install_key_' . str_replace( '-', '_', $tp['slug'] ), '' ) );
+				if ( '' === $key ) {
+					// Uplink-registered products (Event Tickets Plus) may hold
+					// the key in the uplink option instead.
+					$key = trim( (string) get_option( 'stellarwp_uplink_license_key_' . $tp['slug'], '' ) );
+				}
+				// Recorded status: 'valid' | 'invalid', domain-suffixed. The
+				// _timeout sibling row must not match.
+				$status = $wpdb->get_var( $wpdb->prepare(
+					"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name NOT LIKE %s LIMIT 1",
+					$wpdb->esc_like( 'pue_key_status_' . $tp['slug'] . '_' ) . '%',
+					'%' . $wpdb->esc_like( '_timeout' )
+				) );
+				if ( '' === $key ) {
+					$state = 'missing';
+				} elseif ( null === $status ) {
+					$state = 'unknown';
+				} else {
+					$state = ( 'valid' === $status ) ? 'valid' : 'invalid';
+				}
+				return array( $item( array(
+					'name'  => $tp['name'],
+					'state' => $state,
+					'key'   => '' !== $key,
+					'note'  => ( '' !== $key && null === $status ) ? 'key stored; not validated yet' : '',
+				) ) );
+			},
+		);
+	}
+
+	// Kadence Blocks Pro: StellarWP Uplink under the free kadence-blocks
+	// plugin's vendor namespace, slug 'kadence-blocks-pro'. The purchaser's
+	// key SHIPS INSIDE THE PLUGIN BUILD (includes/uplink/Helper.php DATA
+	// constant, the WP Rocket pattern), so a site can be fully licensed with
+	// no key option stored; the uplink option overrides the file key.
+	$providers['kadence-blocks-pro'] = array(
+		'name'      => 'Kadence Blocks Pro',
+		'component' => 'kadence-blocks-pro/kadence-blocks-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'kadence-blocks-pro/kadence-blocks-pro.php' );
+		},
+		'read'      => function () use ( $item ) {
+			global $wpdb;
+			$key  = trim( (string) get_option( 'stellarwp_uplink_license_key_kadence-blocks-pro', '' ) );
+			$note = '';
+			if ( '' === $key && function_exists( '\KadenceWP\KadenceBlocks\StellarWP\Uplink\get_license_key' ) ) {
+				try {
+					$key = trim( (string) \KadenceWP\KadenceBlocks\StellarWP\Uplink\get_license_key( 'kadence-blocks-pro' ) );
+					if ( '' !== $key ) {
+						$note = 'key ships inside the plugin build';
+					}
+				} catch ( \Throwable $e ) { /* stays missing */ }
+			}
+			$status = $wpdb->get_var( $wpdb->prepare(
+				"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 1",
+				$wpdb->esc_like( 'stellarwp_uplink_license_key_status_kadence-blocks-pro_' ) . '%'
+			) );
+			if ( '' === $key ) {
+				$state = 'missing';
+			} elseif ( null === $status ) {
+				$state = 'unknown';
+			} else {
+				$state = ( 'valid' === $status ) ? 'valid' : 'invalid';
+			}
+			return array( $item( array(
+				'name'  => 'Kadence Blocks Pro',
+				'state' => $state,
+				'key'   => '' !== $key,
+				'note'  => $note,
+			) ) );
+		},
+	);
+
+	// Anything ELSE speaking PUE or Uplink, registry-style: presence-only for
+	// PUE (no local validity), status-classified for Uplink. Slugs the
+	// dedicated providers above claim are skipped.
 	$providers['stellarwp'] = array(
 		'name'      => 'StellarWP / The Events Calendar',
 		'component' => 'stellarwp-registry',
@@ -968,20 +1098,20 @@ function minn_admin_license_default_providers() {
 		},
 		'read'      => function () use ( $item, $has ) {
 			global $wpdb;
-			$rows  = array();
-			$names = array(
-				'events_calendar_pro' => 'The Events Calendar Pro',
-				'event_tickets_plus'  => 'Event Tickets Plus',
-				'tribe_filterbar'     => 'The Events Calendar Filter Bar',
-				'events_community'    => 'The Events Calendar Community',
-			);
-			$seen_ecp = false;
+			$rows = array();
+			// Claimed by the dedicated providers above.
+			$claimed_pue    = array();
+			$claimed_uplink = array( 'kadence-blocks-pro' );
+			foreach ( minn_admin_license_tec_products() as $tp ) {
+				$claimed_pue[]    = str_replace( '-', '_', $tp['slug'] );
+				$claimed_uplink[] = $tp['slug'];
+			}
 			foreach ( (array) $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'pue\\_install\\_key\\_%'" ) as $row ) {
 				$slug = substr( $row->option_name, strlen( 'pue_install_key_' ) );
-				if ( 'events_calendar_pro' === $slug ) {
-					$seen_ecp = true;
+				if ( in_array( $slug, $claimed_pue, true ) ) {
+					continue;
 				}
-				$name = isset( $names[ $slug ] ) ? $names[ $slug ] : ucwords( str_replace( '_', ' ', $slug ) );
+				$name = ucwords( str_replace( '_', ' ', $slug ) );
 				$key  = '' !== trim( (string) $row->option_value );
 				$rows[] = $item( array(
 					'name'  => $name,
@@ -990,11 +1120,11 @@ function minn_admin_license_default_providers() {
 					'note'  => $key ? 'key stored; validity is checked on The Events Calendar licenses screen' : '',
 				) );
 			}
-			if ( ! $seen_ecp && $has( 'events-calendar-pro/events-calendar-pro.php' ) ) {
-				$rows[] = $item( array( 'name' => 'The Events Calendar Pro', 'state' => 'missing' ) );
-			}
 			foreach ( (array) $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'stellarwp\\_uplink\\_license\\_key\\_%' AND option_name NOT LIKE 'stellarwp\\_uplink\\_license\\_key\\_status\\_%'" ) as $row ) {
 				$slug   = substr( $row->option_name, strlen( 'stellarwp_uplink_license_key_' ) );
+				if ( in_array( $slug, $claimed_uplink, true ) ) {
+					continue;
+				}
 				$key    = '' !== trim( (string) $row->option_value );
 				$status = $wpdb->get_var( $wpdb->prepare(
 					"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 1",
@@ -1023,6 +1153,186 @@ function minn_admin_license_default_providers() {
 	// theme), so the client never draws a control that cannot work. Every
 	// action routes through the vendor's own activation path; Minn never
 	// reimplements a vendor HTTP call and never retries a failure.
+
+	// The Events Calendar family: everything through Tribe__PUE__Checker,
+	// constructed with each plugin's own args. validate_key() is their
+	// COMPLETE flow (PUE service call, key persisted only when accepted,
+	// status + domain-suffixed options recorded). Response: status >= 1 is
+	// valid; api_expired / api_invalid classify failures, and an api_invalid
+	// message naming the install limit maps to site_limit. GOTCHA: for a
+	// product with an Uplink resource (Event Tickets Plus), validate_key
+	// IGNORES its argument and reads the resource's stored key, so activate
+	// seeds the resource first and rolls it back if the service says no.
+	if ( class_exists( 'Tribe__PUE__Checker' ) ) {
+		$tec_checker  = function ( $tp ) {
+			return new Tribe__PUE__Checker( $tp['url'], $tp['slug'], array(), $tp['file'] );
+		};
+		$tec_classify = function ( $res ) {
+			if ( ! is_array( $res ) || empty( $res ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'The key validation service did not answer.' );
+			}
+			$msg = isset( $res['message'] ) ? trim( wp_strip_all_tags( (string) $res['message'] ) ) : '';
+			if ( ! empty( $res['status'] ) ) {
+				return array( 'ok' => true, 'code' => '', 'message' => $msg );
+			}
+			$code = ! empty( $res['api_expired'] ) ? 'expired' : 'invalid';
+			if ( false !== stripos( $msg, 'limit' ) || false !== stripos( $msg, 'installation' ) ) {
+				$code = 'site_limit';
+			}
+			return array( 'ok' => false, 'code' => $code, 'message' => '' !== $msg ? $msg : 'The key was not accepted.' );
+		};
+		foreach ( minn_admin_license_tec_products() as $pid => $tp ) {
+			if ( ! class_exists( $tp['class'] ) || ! isset( $providers[ $pid ] ) ) {
+				continue;
+			}
+			$providers[ $pid ]['secret_label'] = $tp['name'] . ' license key';
+			$providers[ $pid ]['activate']     = function ( $secret ) use ( $tp, $tec_checker, $tec_classify ) {
+				$checker  = $tec_checker( $tp );
+				$resource = $checker->get_uplink_resource( $tp['slug'] );
+				$prev     = $resource ? (string) $resource->get_license_key() : null;
+				if ( $resource ) {
+					$resource->set_license_key( $secret, 'local' );
+				}
+				$out = $tec_classify( $checker->validate_key( (string) $secret ) );
+				if ( ! $out['ok'] && $resource ) {
+					// Roll the seeded resource key back; the PUE option was
+					// never written (validate_key stores only on success).
+					$resource->set_license_key( (string) $prev, 'local' );
+				}
+				return $out;
+			};
+			$providers[ $pid ]['deactivate']   = function () use ( $tp, $tec_checker ) {
+				global $wpdb;
+				$checker = $tec_checker( $tp );
+				delete_option( 'pue_install_key_' . str_replace( '-', '_', $tp['slug'] ) );
+				$resource = $checker->get_uplink_resource( $tp['slug'] );
+				if ( $resource ) {
+					$resource->set_license_key( '', 'local' );
+				}
+				// Recorded statuses: the domain-suffixed option, its _timeout
+				// sibling and the md5 transient (all named by the checker).
+				$names = $wpdb->get_col( $wpdb->prepare(
+					"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
+					$wpdb->esc_like( 'pue_key_status_' . $tp['slug'] . '_' ) . '%'
+				) );
+				foreach ( $names as $name ) {
+					delete_option( $name );
+				}
+				if ( ! empty( $checker->pue_key_status_transient_name ) ) {
+					delete_transient( $checker->pue_key_status_transient_name );
+				}
+				// Builds downloaded from a TEC account can EMBED the key (a
+				// PUE Helper / Uplink KeyFactory constant); their checker
+				// re-seeds the option from it on the next load, so removal
+				// can only be temporary for those. Say so.
+				$embedded = '';
+				try {
+					$embedded = (string) $checker->get_key( 'default' );
+				} catch ( \Throwable $e ) { /* fine */ }
+				return array(
+					'ok'      => true,
+					'message' => '' !== $embedded
+						? 'The stored key was cleared, but this plugin build ships with the key embedded and will re-register it. Manage licensed domains on theeventscalendar.com.'
+						: 'The key was removed from this site. Manage its licensed domains on theeventscalendar.com.',
+				);
+			};
+			$providers[ $pid ]['verify']       = function () use ( $tp, $tec_checker, $tec_classify ) {
+				$checker = $tec_checker( $tp );
+				$key     = (string) $checker->get_key();
+				if ( '' === $key ) {
+					return array( 'ok' => false, 'code' => 'error', 'message' => 'No key is stored for this product.' );
+				}
+				return $tec_classify( $checker->validate_key( $key ) );
+			};
+		}
+	}
+
+	// Kadence Blocks Pro: StellarWP Uplink primitives under the free
+	// kadence-blocks vendor namespace. validate_license() records the status
+	// itself; the pasted key is stored first (uplink validates the STORED
+	// key) and rolled back with its status if the service rejects it.
+	// Deactivate mirrors their own Clear button (the option goes away; a key
+	// baked into the plugin build remains as the fallback).
+	if ( defined( 'KBP_VERSION' ) && function_exists( '\KadenceWP\KadenceBlocks\StellarWP\Uplink\validate_license' ) ) {
+		$kbp_snapshot = function () {
+			global $wpdb;
+			return array(
+				'key'    => get_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' ),
+				'status' => $wpdb->get_results( $wpdb->prepare(
+					"SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s",
+					$wpdb->esc_like( 'stellarwp_uplink_license_key_status_kadence-blocks-pro_' ) . '%'
+				), ARRAY_A ),
+			);
+		};
+		$kbp_restore  = function ( $snap ) {
+			if ( false === $snap['key'] ) {
+				delete_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' );
+			} else {
+				update_option( 'stellarwp_uplink_license_key_kadence-blocks-pro', $snap['key'] );
+			}
+			foreach ( (array) $snap['status'] as $row ) {
+				update_option( $row['option_name'], $row['option_value'] );
+			}
+		};
+		$kbp_classify = function ( $res ) {
+			if ( ! $res ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'The Kadence licensing service did not answer.' );
+			}
+			if ( $res->is_valid() ) {
+				return array( 'ok' => true, 'code' => '', 'message' => '' );
+			}
+			$result = (string) $res->get_result();
+			$code   = 'expired' === $result ? 'expired' : ( 'unreachable' === $result ? 'error' : 'invalid' );
+			return array( 'ok' => false, 'code' => $code, 'message' => 'unreachable' === $result ? 'The Kadence licensing service is unreachable.' : 'The key was not accepted (' . $result . ').' );
+		};
+		$providers['kadence-blocks-pro']['secret_label'] = 'Kadence license key';
+		$providers['kadence-blocks-pro']['activate']     = function ( $secret ) use ( $kbp_snapshot, $kbp_restore, $kbp_classify ) {
+			$snap = $kbp_snapshot();
+			try {
+				\KadenceWP\KadenceBlocks\StellarWP\Uplink\set_license_key( 'kadence-blocks-pro', (string) $secret );
+				$res = \KadenceWP\KadenceBlocks\StellarWP\Uplink\validate_license( 'kadence-blocks-pro', (string) $secret );
+			} catch ( \Throwable $e ) {
+				$kbp_restore( $snap );
+				return array( 'ok' => false, 'code' => 'error', 'message' => $e->getMessage() );
+			}
+			$out = $kbp_classify( $res );
+			if ( ! $out['ok'] ) {
+				$kbp_restore( $snap );
+			}
+			return $out;
+		};
+		$providers['kadence-blocks-pro']['deactivate']   = function () {
+			global $wpdb;
+			delete_option( 'stellarwp_uplink_license_key_kadence-blocks-pro' );
+			$names = $wpdb->get_col( $wpdb->prepare(
+				"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
+				$wpdb->esc_like( 'stellarwp_uplink_license_key_status_kadence-blocks-pro_' ) . '%'
+			) );
+			foreach ( $names as $name ) {
+				delete_option( $name );
+			}
+			$baked = '';
+			try {
+				$baked = function_exists( '\KadenceWP\KadenceBlocks\StellarWP\Uplink\get_license_key' )
+					? (string) \KadenceWP\KadenceBlocks\StellarWP\Uplink\get_license_key( 'kadence-blocks-pro' )
+					: '';
+			} catch ( \Throwable $e ) { /* fine */ }
+			return array(
+				'ok'      => true,
+				'message' => '' !== $baked
+					? 'The stored key was cleared. A key baked into the plugin build remains as the fallback.'
+					: 'The stored key was cleared from this site.',
+			);
+		};
+		$providers['kadence-blocks-pro']['verify']       = function () use ( $kbp_classify ) {
+			try {
+				$res = \KadenceWP\KadenceBlocks\StellarWP\Uplink\validate_license( 'kadence-blocks-pro' );
+			} catch ( \Throwable $e ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => $e->getMessage() );
+			}
+			return $kbp_classify( $res );
+		};
+	}
 
 	// Elementor Pro: same sequence as its own ajax handler —
 	// API::activate_license, then set_license_key + set_license_data on

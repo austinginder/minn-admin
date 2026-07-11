@@ -252,11 +252,30 @@ CaptainCore quicksave archive and installed inactive on minnadmin:
   flag; purchased-item counts ride the plugin's own hourly transients when
   warm. Token entry is a nonce-coupled Settings-API screen, so an
   "Activate ↗" link.
-- **The Events Calendar family + StellarWP Uplink** (`stellarwp`,
-  registry-style): PUE keys in per-plugin `pue_install_key_{slug}` options
-  have NO local validity (the checker lives in tribe-common), so those
-  rows are honest presence-only; Uplink stores per-slug key options plus a
-  domain-suffixed status option that classifies valid/invalid.
+- **The Events Calendar family** (dedicated providers since 2026-07-11,
+  proven with real keys): PUE stores the key in
+  `pue_install_key_{slug with underscores}` and the recorded status in
+  `pue_key_status_{dashed slug}_{domain}` (plus a `_timeout` sibling and
+  an md5 transient). Full activate/deactivate/verify through each
+  plugin's own `Tribe__PUE__Checker` (constructed with the plugin's exact
+  args; `validate_key()` is their complete flow and persists the key only
+  on acceptance). GOTCHA: a product with an Uplink resource (Event
+  Tickets Plus) makes `validate_key` read the RESOURCE key, not the
+  argument, so activate seeds the resource first and rolls back on
+  rejection. Builds downloaded from a TEC account can EMBED the key
+  (Uplink KeyFactory helper); the checker re-seeds the option from it, so
+  local deactivation is temporary for those and the message says so.
+- **Kadence Blocks Pro** (dedicated provider since 2026-07-11, proven
+  with a real key): StellarWP Uplink under the free kadence-blocks
+  vendor namespace, slug `kadence-blocks-pro`; the purchaser's key ships
+  inside the plugin build (`includes/uplink/Helper.php` DATA constant,
+  the WP Rocket pattern), with the uplink option overriding the file
+  key. Activate stores then `validate_license()`s with
+  snapshot-restore on rejection; deactivate mirrors their own Clear
+  button (the baked-in key remains as fallback).
+- **Other StellarWP Uplink / PUE products** (`stellarwp`,
+  registry-style catch-all): presence-only for PUE, status-classified
+  for Uplink; slugs the dedicated providers claim are skipped.
 
 Read classification for every one of these is proven by
 tests/license-vendors.test.js (21 checks: seeds each real option shape,
@@ -302,8 +321,10 @@ Gravity Forms 2,543 sites, Gravity SMTP 1,440, Elementor Pro 1,191, ACF PRO
    adapter reads the account token + per-item tokens; Avada, Slider
    Revolution and LayerSlider also got their own dedicated readers (their
    codes are stored independently of the Envato Market plugin).
-3. ~~**StellarWP / The Events Calendar**~~ SHIPPED (PUE + Uplink registry):
-   116 sites.
+3. ~~**StellarWP / The Events Calendar**~~ SHIPPED and upgraded to FULL
+   activation (2026-07-11, verified with real keys: bad key → clean
+   invalid, real key → valid with expiry, deactivate): 116 sites.
+   Kadence Blocks Pro shipped the same day, same verification.
 4. ~~**Gravity Wiz / Gravity Perks**~~ SHIPPED (~103 sites): pairs with GF.
 5. ~~**Rank Math Pro**~~ SHIPPED (92), ~~**SearchWP**~~ SHIPPED (87),
    ~~**Soflyy WP All Import/Export Pro**~~ SHIPPED (81+), **Yoast Premium**
