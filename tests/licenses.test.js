@@ -53,9 +53,16 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const offRow = await page.evaluate( () => {
 			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
 				.find( ( r ) => r.textContent.includes( 'AnalyticsWP' ) );
-			return el ? { off: el.classList.contains( 'off' ), note: /not active; activate the plugin/.test( el.textContent ) } : null;
+			// With a Turn on button the meta shortens to "not active"; the
+			// long explanation only shows when Minn can't offer the button
+			// (tests/license-turnon.test.js covers the button itself).
+			return el ? {
+				off: el.classList.contains( 'off' ),
+				note: /not active/.test( el.textContent ),
+				affordance: !! el.querySelector( '[data-lic="turnon"]' ) || /activate the plugin/.test( el.textContent ),
+			} : null;
 		} );
-		t.check( 'inactive components are dimmed and explained', offRow && offRow.off && offRow.note, JSON.stringify( offRow ) );
+		t.check( 'inactive components are dimmed and explained', offRow && offRow.off && offRow.note && offRow.affordance, JSON.stringify( offRow ) );
 		t.check( 'unlicensed dev components read "No license"', /No license/.test( text ) );
 		t.check( 'card states its read-only posture', /never the network/.test( text ) );
 		const healthBase = await page.$$eval( '.minn-sys-check', ( els ) =>

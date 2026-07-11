@@ -1953,6 +1953,16 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-lic-actions button { font: inherit; font-size: 11.5px; font-weight: 600; color: var(--text2); background: var(--panel2); border: 1px solid var(--border); border-radius: 7px; padding: 3px 10px; cursor: pointer; }
 .minn-lic-actions button:hover { color: var(--text); border-color: var(--text3); }
 .minn-lic-actions button:disabled { opacity: 0.6; cursor: default; }
+/* icon() emits 17px svgs; inside these small buttons (Turn on) shrink inline */
+.minn-lic-actions button svg { width: 11px; height: 11px; vertical-align: -1.5px; margin-right: 2px; }
+/* Dim inactive license rows by COLOR, not row opacity: children can never
+   exceed a parent's opacity, and the Turn on button lives inside the dimmed
+   name span — it must render full-strength to read as clickable. */
+.minn-lic-item.off { opacity: 1; }
+.minn-lic-item.off .minn-sys-ext-name { color: var(--text3); }
+.minn-lic-item.off .minn-lic-pill { opacity: 0.55; }
+.minn-lic-item.off .minn-lic-actions button { color: var(--text2); }
+.minn-lic-item.off .minn-lic-actions button:hover { color: var(--text); }
 .minn-lic-key { font: inherit; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 3px 9px; width: min(240px, 100%); }
 .minn-lic-key:focus { outline: none; border-color: var(--accent2); }
 .minn-sys-lic-foot { font-size: 11.5px; color: var(--text3); padding: 11px 17px 13px; border-top: 1px solid var(--border); }
