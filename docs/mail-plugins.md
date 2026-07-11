@@ -9,7 +9,7 @@ total}`, serialized blobs mined with regexes and never unserialized.
 
 | Plugin | Storage | Time column | Notes |
 |---|---|---|---|
-| Gravity SMTP | `{prefix}gravitysmtp_events` | UTC datetime | Full log; Resend via `wp_mail`; recipients regex-scoped to the `to` Recipient_Collection |
+| Gravity SMTP | `{prefix}gravitysmtp_events` | UTC datetime | Deep adapter (v0.12.0): log + enriched detail through their models, Settings view mapped from their `settings_fields()` schema (all 21 connectors), Suppressions view, send-a-test, granular `gravitysmtp_*` caps; Resend mirrors their own endpoint (allowlisted Recipient unserialize, original headers/attachments) with the regex path as fallback |
 | FluentSMTP | `{prefix}fsmpt_email_logs` | `current_time('mysql')` — site-LOCAL, emit raw | Full log, free. `to`/`headers` serialized; statuses sent/failed; Resend via `wp_mail`. The dev site's ACTIVE provider (Mailpit connection, seeded sent rows) |
 | Post SMTP | `{prefix}post_smtp_logs` (+ `post_smtp_logmeta`) | `time` BIGINT = `current_time('timestamp')` — WP-LOCAL epoch, shift by gmt_offset (the Aryo trap) | All-longtext columns. `success` = `''`/`'1'` when delivered, error text otherwise. `session_transcript` deliberately NOT exposed (can carry AUTH exchanges) |
 | WP Mail SMTP (free) | `{prefix}wpmailsmtp_debug_events` | `CURRENT_TIMESTAMP` — DB clock, UTC in practice, emit ISO Z | Free stores NO full email log (Pro's `wpmailsmtp_emails_log`). Debug events answer "did my mail fail and why": event_type 0 = error, 1 = debug. `initiator` is `{"file","line"}` JSON → basename:line. Table exists only after the plugin's admin-context migration |

@@ -43,6 +43,17 @@ via `justify*` writes styles the serializer strips. **Every future feature budge
 this class of fight** — the browser-level Playwright verification loop is not optional
 overhead, it's how an editor earns trust.
 
+Two chrome-positioning corollaries joined the ledger 2026-07-11: anything
+that must visually track scrolling content lives INSIDE the scroller at
+content coordinates (fixed-position chrome chased per scroll frame lags the
+compositor and elastic overscroll reports nothing until it settles — the
+block chips wiggled; a ResizeObserver re-anchors on real reflow), and a
+panel that HAS escaped to fixed positioning closes on ancestor scroll like
+a native select rather than chasing (the combobox). Same day: images gained
+link + lightbox through the popover (the link is the saved DOM itself —
+core sources href from figure > a — and lightbox rides the attrs
+passthrough), and focus/outline modes wear a topbar exit chip.
+
 ## Horizon 1 — trust (0.6.x): nothing surprising, ever
 
 The theme: a writer who moves in must never lose work or hit a behavior that makes them

@@ -93,8 +93,19 @@ and the `****************` sentinel keep their semantics, and the surface
 gates on its granular `gravitysmtp_*` caps. Suites:
 tests/settings-surface.test.js (the shape, against a fixture surface),
 tests/gsmtp-settings.test.js (the mapper, against the live plugin).
-Rung 3 next: parameterized actions (send-a-test needs an address field) and
-bulk selection.
+**Rung 3 largely shipped** (later the same day): parameterized actions
+(`fields` on detail-modal and status-card actions — GS send-a-test with an
+address field, GF add-note; routes may return `{ message }` for honest
+outcome toasts), bulk selection (`bulk` on collections with per-item
+`when`; GF entries star/read/spam/trash), a status/filter dimension
+(`filter`, merging into a shared JSON criteria param — GF
+Received/Spam/Trash round-trip inside Minn), and GS Suppressions in the
+manage slot. Still open from the Rung 3 list: a chart row type, richer
+sectionsRoute row types (pill/code/html-preview/kv-table), row actions in
+surface lists, and a THIRD list view per surface (the GS debug log link
+outs until then). Phase 2's remaining half is the GF Settings mapper
+(form settings + notifications/confirmations via full-form PUT) — the
+natural v0.13.0 opener.
 
 ## The architectural framework: four rungs
 
