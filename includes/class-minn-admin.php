@@ -374,6 +374,10 @@ class Minn_Admin {
 			// "Copy backup command" fetches the command (with its token) on
 			// demand rather than inlining a site secret into every pageload.
 			'disembark' => current_user_can( 'manage_options' ) && minn_admin_disembark_active(),
+			// WP 7.0 Connectors registry present — gates the Settings →
+			// Connectors section; the section fetches minn-admin/v1/connectors
+			// for the display model and saves through core's wp/v2/settings.
+			'connectors' => current_user_can( 'manage_options' ) && function_exists( 'wp_get_connectors' ) && count( wp_get_connectors() ) > 0,
 			// Active page builders — drives "+ New → Page in ⟨builder⟩"
 			// (docs/page-builders.md; adapters/page-builders.php).
 			'builders' => minn_admin_page_builders_boot(),

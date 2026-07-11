@@ -2,6 +2,9 @@
 
 ## **v0.12.0** - Unreleased
 
+### Added
+* **WP 7.0 Connectors:** Settings gains a **Connectors** section mirroring core's new connector registry (AI providers and other external services). Each connector card shows its connection state and where its key comes from: a saved key, a wp-config constant or an environment variable, with the latter two honestly read-only since they win over anything saved. Cards install or activate the provider's companion plugin in place, link to the vendor's key page, and save keys through core's own settings route, so core masks every response (a raw key is never echoed back to the browser) and validates AI provider keys against the live provider. A rejected key is named plainly, kept in the field for a retype, and never stored. Third-party connectors registered through core's `wp_connectors_init` appear automatically.
+
 ### Fixed
 * **ACF panel saves failed with an empty select in the group:** ACF reports `false` over REST for any field without a value, including selects and text fields. Panel saves round-trip the whole values object, so that sentinel made ACF's own validation reject the write and every panel save on the post failed with a 400, while the editor looked fine. Empty values now normalize on load, and clearing a select sends the null ACF expects.
 
