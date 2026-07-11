@@ -393,6 +393,7 @@ license data on a lab site.
 | WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium, LayerSlider | activate paths | bogus key | 2026-07-10 | readers proven against seeded real shapes |
 | Rank Math Pro, Envato, WPBakery | Activate ↗ link | read | 2026-07-10 | portal- or admin-context-bound activation |
 | Freemius / EDD / SureCart generics, Avada, Smush Pro, AnalyticsWP, BSF family | read | real stored data on labs | 2026-07-10 | see the verification map above |
+| StellarWP Uplink / PUE catch-all | read | real stored data (TEC six-pack) | 2026-07-11 | registry reader; skips slugs claimed by dedicated providers |
 
 Keep this table current when a vendor gets a real-key pass or a new provider
 lands; the expansion runbook lives in the /dev-minn-admin skill.
