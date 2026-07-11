@@ -731,6 +731,30 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Full autoload + cron detail behind the System page's summary rows.
+		register_rest_route(
+			self::NS,
+			'/system/autoload',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'autoload_detail' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/system/cron',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'cron_detail' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
+
 		// Read (tail) or clear the WordPress debug log.
 		register_rest_route(
 			self::NS,
@@ -752,6 +776,77 @@ class Minn_Admin_REST {
 				),
 			)
 		);
+	}
+
+	/**
+	 * Every autoloaded option by size, for the System page's detail modal.
+	 * Same variant-aware autoload IN() as the summary; capped at 200 rows
+	 * (past that the long tail is sub-100-byte noise).
+	 */
+	public static function autoload_detail() {
+		global $wpdb;
+		$autoload_in  = function_exists( 'wp_autoload_values_to_autoload' )
+			? array_values( (array) wp_autoload_values_to_autoload() )
+			: array( 'yes', 'on', 'auto', 'auto-on' );
+		$placeholders = implode( ',', array_fill( 0, count( $autoload_in ), '%s' ) );
+		// phpcs:disable WordPress.DB.PreparedSQL -- placeholders built above
+		$totals = $wpdb->get_row( $wpdb->prepare(
+			"SELECT COUNT(*) AS c, COALESCE(SUM(LENGTH(option_value)),0) AS s FROM {$wpdb->options} WHERE autoload IN ($placeholders)",
+			$autoload_in
+		) );
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT option_name AS name, LENGTH(option_value) AS len, autoload FROM {$wpdb->options} WHERE autoload IN ($placeholders) ORDER BY len DESC LIMIT 200",
+			$autoload_in
+		) );
+		// phpcs:enable
+		return rest_ensure_response( array(
+			'count'      => (int) $totals->c,
+			'size'       => (int) $totals->s,
+			'size_human' => size_format( (int) $totals->s, 1 ),
+			'shown'      => count( (array) $rows ),
+			'items'      => array_map( function ( $r ) {
+				return array(
+					'name'     => (string) $r->name,
+					'size'     => (int) $r->len,
+					'sizeh'    => size_format( (int) $r->len, 1 ),
+					'autoload' => (string) $r->autoload,
+				);
+			}, (array) $rows ),
+		) );
+	}
+
+	/**
+	 * Every scheduled cron event with its next run and recurrence, for the
+	 * System page's detail modal. Times are UTC epochs (cron stores GMT);
+	 * the client renders relative times.
+	 */
+	public static function cron_detail() {
+		$schedules = wp_get_schedules();
+		$items     = array();
+		foreach ( (array) _get_cron_array() as $ts => $hooks ) {
+			if ( ! is_numeric( $ts ) ) {
+				continue; // the 'version' key
+			}
+			foreach ( (array) $hooks as $hook => $entries ) {
+				foreach ( (array) $entries as $entry ) {
+					$schedule = isset( $entry['schedule'] ) ? (string) $entry['schedule'] : '';
+					$items[]  = array(
+						'hook'       => (string) $hook,
+						'next'       => (int) $ts,
+						'overdue'    => $ts < time() - 5 * MINUTE_IN_SECONDS,
+						'recurrence' => $schedule
+							? ( isset( $schedules[ $schedule ]['display'] ) ? (string) $schedules[ $schedule ]['display'] : $schedule )
+							: 'One-off',
+						'args'       => isset( $entry['args'] ) ? count( (array) $entry['args'] ) : 0,
+					);
+				}
+			}
+		}
+		return rest_ensure_response( array(
+			'now'      => time(),
+			'disabled' => defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON,
+			'items'    => $items, // already time-ordered (cron array is)
+		) );
 	}
 
 	/**

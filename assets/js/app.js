@@ -5702,7 +5702,11 @@
 			<div class="minn-card minn-sys-card">
 				<div class="minn-sys-card-head">${ icon( g.icon ) }<span>${ esc( g.title ) }</span></div>
 				<div class="minn-sys-rows">
-					${ g.rows.map( ( r ) => `
+					${ g.rows.map( ( r ) => r.key === 'Cron' ? `
+						<div class="minn-sys-row minn-sys-link" data-sysdetail="cron" role="button" tabindex="0" title="View every scheduled event">
+							<span class="minn-sys-key">${ esc( r.key ) }</span>
+							<span class="minn-sys-val mono" title="${ esc( r.value ) }">${ r.value ? esc( r.value ) : '—' } <span class="minn-sys-more">›</span></span>
+						</div>` : `
 						<div class="minn-sys-row">
 							<span class="minn-sys-key">${ esc( r.key ) }</span>
 							<span class="minn-sys-val mono" title="${ esc( r.value ) }">${ r.value ? esc( r.value ) : '—' }</span>
@@ -5720,7 +5724,7 @@
 				</div>` : '' }
 				${ g.autoload ? `
 				<div class="minn-sys-tables">
-					<div class="minn-sys-tables-head">Autoloaded options — ${ esc( String( g.autoload.count ) ) } options · ${ esc( g.autoload.size_human ) } on every request</div>
+					<div class="minn-sys-tables-head minn-sys-link" data-sysdetail="autoload" role="button" tabindex="0" title="View every autoloaded option">Autoloaded options — ${ esc( String( g.autoload.count ) ) } options · ${ esc( g.autoload.size_human ) } on every request <span class="minn-sys-more">view all ›</span></div>
 					${ g.autoload.top.map( ( t ) => `
 						<div class="minn-sys-trow">
 							<span class="minn-sys-tname mono">${ esc( t.name ) }</span>
@@ -5991,6 +5995,10 @@
 		const viewLog = $( '#minn-view-log', view );
 		if ( viewLog ) viewLog.addEventListener( 'click', openDebugLog );
 
+		// Autoload + Cron summary rows open their full-detail modals.
+		$$( '[data-sysdetail]', view ).forEach( ( el ) =>
+			el.addEventListener( 'click', () => openSysDetail( el.dataset.sysdetail ) ) );
+
 		// License actions (Phase 1): activate swaps in an inline paste field;
 		// the secret rides one request and is never stored or echoed back.
 		// Failures never auto-retry (a retried activation can burn a paid
@@ -6151,6 +6159,63 @@
 				ta.remove();
 			}
 		} );
+	}
+
+	// Autoload / cron detail modal: the System page's summary rows expand to
+	// the full picture (every autoloaded option by size; every scheduled
+	// event with its next run and recurrence).
+	function openSysDetail( kind ) {
+		state.modal = { type: 'sys-detail', kind, data: null };
+		renderOverlays();
+		api( 'minn-admin/v1/system/' + ( kind === 'cron' ? 'cron' : 'autoload' ) )
+			.then( ( data ) => {
+				if ( state.modal && state.modal.type === 'sys-detail' && state.modal.kind === kind ) {
+					state.modal.data = data;
+					renderOverlays();
+				}
+			} )
+			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
+	}
+
+	function renderSysDetailModal( m ) {
+		const d = m.data;
+		const isAuto = m.kind === 'autoload';
+		let body = '<div class="minn-loading">Loading…</div>';
+		if ( d && isAuto ) {
+			body = `
+			<div class="minn-sysd">
+				<div class="minn-sysd-sub">${ esc( String( d.count ) ) } autoloaded options load on every request (${ esc( d.size_human ) } total)${ d.count > d.shown ? `; showing the ${ esc( String( d.shown ) ) } largest` : '' }.</div>
+				<div class="minn-sysd-row head"><span>Option</span><span>Size</span><span>Autoload</span></div>
+				${ d.items.map( ( it ) => `
+				<div class="minn-sysd-row">
+					<span class="mono minn-cell-clip" title="${ esc( it.name ) }">${ esc( it.name ) }</span>
+					<span class="mono">${ esc( it.sizeh ) }</span>
+					<span class="minn-sysd-dim">${ esc( it.autoload ) }</span>
+				</div>` ).join( '' ) }
+			</div>`;
+		} else if ( d ) {
+			body = `
+			<div class="minn-sysd">
+				<div class="minn-sysd-sub">${ esc( String( d.items.length ) ) } scheduled event${ d.items.length === 1 ? '' : 's' }.${ d.disabled ? ' WP-Cron is disabled (DISABLE_WP_CRON); a system cron is expected to run these.' : '' }</div>
+				<div class="minn-sysd-row head"><span>Hook</span><span>Next run</span><span>Recurrence</span></div>
+				${ d.items.map( ( it ) => `
+				<div class="minn-sysd-row">
+					<span class="mono minn-cell-clip" title="${ esc( it.hook ) }">${ esc( it.hook ) }</span>
+					<span class="${ it.overdue ? 'minn-sysd-overdue' : '' }">${ it.overdue ? 'overdue · ' : '' }${ esc( timeAgo( new Date( it.next * 1000 ).toISOString() ) ) }</span>
+					<span class="minn-sysd-dim">${ esc( it.recurrence ) }</span>
+				</div>` ).join( '' ) }
+			</div>`;
+		}
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal wide">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title">${ isAuto ? 'Autoloaded options' : 'Scheduled cron events' }</div>
+					<button class="minn-x-btn" id="minn-modal-close">×</button>
+				</div>
+				${ body }
+			</div>
+		</div>`;
 	}
 
 	// Full-screen debug-log viewer: the tail of the log in a scrollable
@@ -15109,6 +15174,10 @@
 
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
+		}
+
+		if ( m.type === 'sys-detail' ) {
+			return renderSysDetailModal( m );
 		}
 
 		if ( m.type === 'minn-off' ) {
