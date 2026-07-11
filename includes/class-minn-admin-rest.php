@@ -2912,6 +2912,15 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 
+		// Security posture — Wordfence firewall + scan rows (adapters/
+		// wordfence.php). Appended (not spliced high) since they're informative
+		// rather than the loudest thing on the page.
+		if ( function_exists( 'minn_admin_wordfence_checks' ) ) {
+			foreach ( minn_admin_wordfence_checks() as $wf_check ) {
+				$checks[] = $wf_check;
+			}
+		}
+
 		// Licenses — read-only visibility (adapters/licenses.php); the health
 		// check only renders when the site has license-wanting components.
 		$licenses = function_exists( 'minn_admin_licenses' ) ? minn_admin_licenses() : null;

@@ -144,3 +144,60 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 } );
+
+/**
+ * Security posture health rows for the System page: firewall mode, last
+ * scan and open-issue count. Read through Wordfence's OWN public APIs
+ * (guarded, Throwable-caught), never its private storage, so a Wordfence
+ * version change degrades to fewer rows rather than a fatal. Returns [] when
+ * Wordfence is not loaded. Firewall/scan config stays in wp-admin; these are
+ * a glanceable status, not a control.
+ *
+ * @return array[] of { label, status, detail }
+ */
+function minn_admin_wordfence_checks() {
+	if ( ! defined( 'WORDFENCE_VERSION' ) ) {
+		return array();
+	}
+	$rows = array();
+
+	// Firewall (WAF) mode: enabled | learning-mode | disabled.
+	try {
+		if ( class_exists( 'wfFirewall' ) ) {
+			$mode = ( new wfFirewall() )->firewallMode();
+			$map  = array(
+				'enabled'       => array( 'pass', 'Enabled and blocking' ),
+				'learning-mode' => array( 'warn', 'In learning mode — it is watching traffic but not blocking yet' ),
+				'disabled'      => array( 'warn', 'The firewall is turned off' ),
+			);
+			$m = isset( $map[ $mode ] ) ? $map[ $mode ] : array( 'warn', 'Mode: ' . (string) $mode );
+			$rows[] = array( 'label' => 'Wordfence firewall', 'status' => $m[0], 'detail' => $m[1] );
+		}
+	} catch ( \Throwable $e ) {
+		// A version mismatch just drops the row.
+	}
+
+	// Last scan + unresolved issues.
+	try {
+		if ( class_exists( 'wfScanner' ) && class_exists( 'wfIssues' ) ) {
+			$last   = wfScanner::shared()->lastScanTime();
+			$issues = (int) ( new wfIssues() )->getIssueCount();
+			if ( ! $last ) {
+				$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'warn', 'detail' => 'No malware scan has run yet' );
+			} else {
+				$when = human_time_diff( (int) $last ) . ' ago';
+				if ( $issues > 0 ) {
+					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'fail', 'detail' => $issues . ' unresolved issue' . ( 1 === $issues ? '' : 's' ) . ' from the last scan (' . $when . ')' );
+				} elseif ( time() - (int) $last > 14 * DAY_IN_SECONDS ) {
+					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'warn', 'detail' => 'Last scan was ' . $when . ' — run a fresh one' );
+				} else {
+					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'pass', 'detail' => 'Last scan ' . $when . ', no issues found' );
+				}
+			}
+		}
+	} catch ( \Throwable $e ) {
+		// Ditto.
+	}
+
+	return $rows;
+}
