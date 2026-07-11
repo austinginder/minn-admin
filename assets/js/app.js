@@ -4870,6 +4870,10 @@
 		try { state.visibility = await api( 'minn-admin/v1/visibility' ); } catch ( e ) { /* keep the last state */ }
 		updateVisChip();
 		if ( state.route === 'overview' ) renderOverview();
+		// The Settings page's Visibility toggles read from state.cache.settings,
+		// so a toggle from the chip/banner must re-render it too — otherwise the
+		// switch there shows stale (Austin's report).
+		else if ( state.route === 'settings' ) renderSettings();
 	}
 
 	// Persistent amber chip on EVERY route when the site is not fully public —
@@ -4924,6 +4928,11 @@
 		const val = 'blog_public' === c.setting ? ( next ? 1 : 0 ) : next;
 		try {
 			await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { [ c.setting ]: val } ) } );
+			// Keep the Settings page's cached toggle state in sync so it's
+			// correct whether or not it's the current view.
+			if ( state.cache.settings && state.cache.settings.values ) {
+				state.cache.settings.values[ c.setting ] = val;
+			}
 			await refreshVisibility();
 			toast( 'minn_admin_maintenance' === c.setting
 				? ( next ? 'Maintenance mode on' : 'Maintenance mode off — the site is public' )

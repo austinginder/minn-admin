@@ -33,8 +33,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await setOpt( 'blog_public', 1 );
 
 		/* ===== Settings toggle updates the chip live (no reload) ===== */
+		// Maintenance mode lives on the Visibility tab now.
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '[data-setting="minn_admin_maintenance"]', { timeout: 20000 } );
+		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
+		await page.evaluate( () => { [ ...document.querySelectorAll( '.minn-settings-nav-item' ) ].find( ( b ) => b.textContent.trim() === 'Visibility' ).click(); } );
+		await page.waitForSelector( '[data-setting="minn_admin_maintenance"]', { timeout: 8000 } );
 		t.check( 'chip hidden while public', await chipHidden() === true );
 		await page.click( '[data-setting="minn_admin_maintenance"]' );
 		await page.click( '#minn-save-settings' );
@@ -65,6 +68,27 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForFunction( () => document.querySelector( '#minn-vis-chip' ).hidden && ! document.querySelector( '.minn-vis-banner' ), null, { timeout: 8000 } );
 		t.check( 'banner + chip clear after enabling indexing from the banner', ( await page.$( '.minn-vis-banner' ) ) === null && await chipHidden() === true );
 		t.check( 'blog_public is back on', !! ( await serverOpt( 'blog_public' ) ) );
+
+		/* ===== Toggling from the chip syncs the Settings page (Austin's bug) ===== */
+		// Drive everything through the UI to avoid the REST-settings write race.
+		// On the Settings Visibility tab, discourage indexing via the switch + Save.
+		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
+		await page.evaluate( () => { [ ...document.querySelectorAll( '.minn-settings-nav-item' ) ].find( ( b ) => b.textContent.trim() === 'Visibility' ).click(); } );
+		await page.waitForSelector( '[data-setting="blog_public"]', { timeout: 8000 } );
+		if ( await page.$eval( '[data-setting="blog_public"]', ( b ) => b.classList.contains( 'on' ) ) ) {
+			await page.click( '[data-setting="blog_public"]' ); // turn indexing OFF
+			await page.click( '#minn-save-settings' );
+			await page.waitForFunction( () => ! document.querySelector( '#minn-vis-chip' ).hidden, null, { timeout: 8000 } );
+		}
+		t.check( 'Settings shows search-engine visibility OFF', await page.$eval( '[data-setting="blog_public"]', ( b ) => b.classList.contains( 'on' ) ) === false );
+		// Turn it back ON from the topbar chip popover while ON the Settings page.
+		await page.click( '#minn-vis-chip' );
+		await page.waitForSelector( '#minn-vis-pop [data-vistoggle]', { timeout: 5000 } );
+		await page.click( '#minn-vis-pop [data-vistoggle]' );
+		await page.waitForFunction( () => document.querySelector( '#minn-vis-chip' ).hidden, null, { timeout: 8000 } );
+		await page.waitForSelector( '[data-setting="blog_public"]', { timeout: 8000 } );
+		t.check( 'the Settings toggle reflects the chip change without a reload', await page.$eval( '[data-setting="blog_public"]', ( b ) => b.classList.contains( 'on' ) ) === true );
 
 	} finally {
 		await setOpt( 'minn_admin_maintenance', false ).catch( () => {} );
