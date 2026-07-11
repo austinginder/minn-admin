@@ -2589,6 +2589,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'Environment'      => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
 			'Site URL'         => site_url(),
 			'Home URL'         => home_url(),
+			// The REAL login URL — wp_login_url() honors login-hiders (WPS Hide
+			// Login and friends filter it), so this shows the custom slug when
+			// one is active rather than a wp-login.php that would 404.
+			'Login URL'        => wp_login_url(),
 			'Multisite'        => is_multisite() ? 'Yes (' . get_blog_count() . ' sites)' : 'No',
 			'Language'         => get_locale(),
 			'Timezone'         => wp_timezone_string() ? wp_timezone_string() : (string) get_option( 'gmt_offset' ),
@@ -2909,6 +2913,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$vis = minn_admin_visibility_check();
 			if ( is_array( $vis ) ) {
 				array_splice( $checks, 1, 0, array( $vis ) );
+			}
+		}
+
+		// SSL enforcement (Really Simple SSL) — near the HTTPS check.
+		if ( function_exists( 'minn_admin_rsssl_check' ) ) {
+			$rsssl = minn_admin_rsssl_check();
+			if ( is_array( $rsssl ) ) {
+				$checks[] = $rsssl;
 			}
 		}
 

@@ -22,7 +22,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Email log** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP | **Email Log** surface — sent mail, resend |
 | **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects | **Redirects** surface — list + in-place edit |
 | **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence** | **Activity Log** surface (Wordfence = login security) |
-| **Security posture** | Wordfence | System health rows: firewall mode (enabled / learning / off) + last scan and unresolved-issue count, read through Wordfence's own public APIs |
+| **Security posture** | Wordfence, Really Simple SSL | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
 | **Snippets** | Code Snippets, WPCode, FluentSnippets | **Snippets** surface — list, toggle, edit |
 | **Analytics** | Koko, WP Statistics, Burst, Independent Analytics, AnalyticsWP, **Site Kit** | Overview **Traffic** chart |
 | **Backups** | UpdraftPlus, Disembark | **Backups** surface; health check + "Back up now" (UpdraftPlus); status card, CLI command, sessions + cleanup (Disembark) |

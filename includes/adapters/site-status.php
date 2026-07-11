@@ -174,3 +174,31 @@ function minn_admin_visibility_check() {
 		'detail' => 'Public and indexable',
 	);
 }
+
+/**
+ * Really Simple SSL enforcement row. The generic HTTPS check only proves the
+ * CURRENT request is over TLS; this reports whether RSSSL is enforcing HTTPS
+ * site-wide (redirects + optional mixed-content fixer). Read through RSSSL's
+ * own accessor. Returns null when RSSSL is not loaded.
+ *
+ * @return array|null { label, status, detail }
+ */
+function minn_admin_rsssl_check() {
+	if ( ! defined( 'rsssl_version' ) || ! function_exists( 'rsssl_get_option' ) ) {
+		return null;
+	}
+	$enabled = (bool) rsssl_get_option( 'ssl_enabled' );
+	if ( ! $enabled ) {
+		return array(
+			'label'  => 'SSL enforcement',
+			'status' => 'warn',
+			'detail' => 'Really Simple SSL is installed but SSL is not enabled yet — finish its setup',
+		);
+	}
+	$fixer = (bool) rsssl_get_option( 'mixed_content_fixer' );
+	return array(
+		'label'  => 'SSL enforcement',
+		'status' => 'pass',
+		'detail' => 'Really Simple SSL is enforcing HTTPS' . ( $fixer ? ', mixed-content fixer on' : '' ),
+	);
+}
