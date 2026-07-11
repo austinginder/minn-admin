@@ -911,6 +911,10 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-conn-row .minn-input { flex: 1; min-width: 0; }
 .minn-conn-row .minn-toggle-desc { flex: 1; }
 .minn-conn-row button { white-space: nowrap; }
+/* Focus/outline exit chip (topbar, beside the editor status badge) */
+.minn-mode-chip { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg2); color: var(--text2); font-size: 11px; font-weight: 650; cursor: pointer; vertical-align: middle; }
+.minn-mode-chip:hover { color: var(--text); border-color: var(--text3); }
+.minn-mode-chip-x { opacity: 0.7; }
 /* Parameterized action inline form (detail modal + status card) */
 .minn-action-fields { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .minn-action-fields-btns { display: flex; gap: 8px; }
@@ -1847,9 +1851,20 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-insp-ctl button:disabled { opacity: 0.35; cursor: default; }
 .minn-insp-add-row { display: flex; gap: 8px; margin-top: 10px; }
 .minn-insp-add-row select.minn-input { flex: 1; min-width: 0; }
-/* Floating config chip for editable code blocks (island-chip twin, lives on body). */
+/* Floating config chips for editable tables/images/code — like island chips
+   they straddle the cutout, but they live INSIDE .minn-scroll at content
+   coordinates so they ride scrolling natively. They used to be fixed on
+   body, chased per scroll frame: JS repositioning lags the compositor and
+   elastic overscroll reports nothing until it settles, so fast scrolling
+   made them wiggle, drift past their line and snap back (Austin's report;
+   the outline-ping rule). z-index stays below the sticky toolbar (35) so
+   sliding under it is natural occlusion, not a JS visibility clamp. */
+#minn-table-chips { position: absolute; top: 0; left: 0; z-index: 30; }
 .minn-code-chip {
-  position: fixed; z-index: 69; font-size: 10.5px; font-weight: 600;
+  /* nowrap is load-bearing: the chips' containing block is a zero-size
+     anchor box, and absolute shrink-to-fit against it wraps "⚙ table"
+     into two smashed lines without it. */
+  position: absolute; white-space: nowrap; font-size: 10.5px; font-weight: 600;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
 }

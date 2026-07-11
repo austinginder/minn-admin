@@ -1067,9 +1067,25 @@
 		// The editor pill says WHAT you're editing, not just its status — a
 		// blank new page and a blank new post are otherwise indistinguishable.
 		if ( state.route === 'editor' && state.editor ) {
-			subEl.textContent = state.editor.id
-				? `${ editorNoun( state.editor ) } · ${ STATUS_LABELS[ state.editor.status ] || 'Draft' }`
-				: `New ${ editorNoun( state.editor ).toLowerCase() }`;
+			const ed = state.editor;
+			subEl.textContent = ed.id
+				? `${ editorNoun( ed ) } · ${ STATUS_LABELS[ ed.status ] || 'Draft' }`
+				: `New ${ editorNoun( ed ).toLowerCase() }`;
+			// Focus/outline had no visible exit (Austin's report: the entry
+			// toast names the shortcut, then you're stranded). A back arrow
+			// would read as "leave the editor" — this is a MODE, so it wears
+			// a dismissible chip beside the status badge instead.
+			const mode = ed.focus ? 'Focus' : ( ed.outlineMode ? 'Outline' : '' );
+			if ( mode ) {
+				const chip = document.createElement( 'button' );
+				chip.type = 'button';
+				chip.id = 'minn-mode-chip';
+				chip.className = 'minn-mode-chip';
+				chip.title = 'Focus' === mode ? 'Exit focus mode (⌘⇧D)' : 'Exit outline mode (⌘⇧O)';
+				chip.innerHTML = `${ mode } mode <span class="minn-mode-chip-x">✕</span>`;
+				chip.addEventListener( 'click', () => ( 'Focus' === mode ? toggleFocusMode() : toggleOutlineMode() ) );
+				subEl.appendChild( chip );
+			}
 		} else if ( state.route === 'settings' ) {
 			subEl.textContent = state.settingsSection || '';
 		} else if ( surface && surface.family && surfacesInFamily( surface.family ).length > 1 ) {
@@ -9787,6 +9803,7 @@
 		// The collapse/restore transition (250ms) reflows everything the
 		// fixed-position chrome is anchored to — re-sync after it settles.
 		setTimeout( updateEditorStats, 300 );
+		renderTopbar(); // the exit chip tracks the mode
 	}
 
 	document.addEventListener( 'selectionchange', () => queueFocusDim( false ) );
@@ -9810,6 +9827,7 @@
 		}
 		toast( ed.outlineMode ? 'Outline mode on — ⌘⇧O to leave' : 'Outline mode off' );
 		document.body.classList.toggle( 'minn-outline-mode', ed.outlineMode );
+		renderTopbar(); // the exit chip tracks the mode
 	}
 
 	function removeOutlineMode() {
@@ -11316,6 +11334,9 @@
 		try { ed.outlineMode = ed.outlineMode || !! localStorage.getItem( 'minn-outline-mode' ); } catch ( e ) { /* private mode */ }
 		if ( ed.focus && ed.outlineMode ) ed.outlineMode = false;
 		document.body.classList.toggle( 'minn-outline-mode', !! ed.outlineMode );
+		// Restored modes surface their exit chip — the topbar rendered
+		// before these flags came back from localStorage.
+		if ( ed.focus || ed.outlineMode ) renderTopbar();
 		updateEditorStats();
 		ensureEditorStyles();
 		renderBackupNotice();
@@ -12701,6 +12722,7 @@
 	 * document.body so they can never leak into serialized content. */
 
 	let tableChipsBox = null;
+	let tableChipsRo = null;
 	let tablePop = null;
 	let tableChipsRaf = 0;
 
@@ -12717,6 +12739,10 @@
 	function clearTableChips() {
 		if ( tableChipsBox ) tableChipsBox.remove();
 		tableChipsBox = null;
+		if ( tableChipsRo ) {
+			tableChipsRo.disconnect();
+			tableChipsRo = null;
+		}
 		hideTablePop();
 	}
 
@@ -12745,9 +12771,9 @@
 	}
 
 	// One persistent chip per top-level editable table, straddling the cutout
-	// border like island chips do. Repositioned (not hidden) on scroll and
-	// after every edit; hidden only when the table slides under the sticky
-	// toolbar or out of the viewport.
+	// border like island chips do. Positioned at CONTENT coordinates inside
+	// the scroller (rides scrolling natively; re-synced only when layout
+	// changes); the sticky toolbar covers passing chips by z-order.
 	function syncTableChips() {
 		const body = $( '#minn-editor-body' );
 		const ed = state.editor;
@@ -12760,14 +12786,26 @@
 		// target. Verse/preformatted pres have no language to configure.
 		$$( ':scope > pre:not(.wp-block-verse):not(.wp-block-preformatted)', body ).forEach( ( p ) => targets.push( { el: p, kind: 'code' } ) );
 		if ( ! targets.length ) return clearTableChips();
-		if ( ! tableChipsBox ) {
+		// The chips live INSIDE the scroller at content coordinates and ride
+		// scrolling natively — fixed-on-body chips chased per scroll frame
+		// wiggled and overshot during fast/elastic scrolling (the
+		// outline-ping rule; same class as the combobox-panel fix).
+		const sc = $( '.minn-scroll' ) || document.body;
+		if ( ! tableChipsBox || tableChipsBox.parentElement !== sc ) {
+			if ( tableChipsBox ) tableChipsBox.remove();
 			tableChipsBox = document.createElement( 'div' );
 			tableChipsBox.id = 'minn-table-chips';
-			document.body.appendChild( tableChipsBox );
+			sc.appendChild( tableChipsBox );
+			// Content-coordinate chips go STALE when layout shifts under
+			// them (async island previews, late image loads — the per-scroll
+			// chase used to paper over this). Re-sync on real layout change:
+			// the editor body's size is the honest signal for all of them.
+			if ( tableChipsRo ) tableChipsRo.disconnect();
+			tableChipsRo = new ResizeObserver( queueTableChips );
+			tableChipsRo.observe( body );
 		}
 		while ( tableChipsBox.children.length > targets.length ) tableChipsBox.lastChild.remove();
-		const toolbar = $( '.minn-editor-toolbar' );
-		const minTop = toolbar ? toolbar.getBoundingClientRect().bottom - 4 : 0;
+		const scRect = sc.getBoundingClientRect();
 		targets.forEach( ( t, i ) => {
 			let chip = tableChipsBox.children[ i ];
 			if ( ! chip ) {
@@ -12796,14 +12834,18 @@
 				: 'Image \u2014 alt, caption, replace';
 			const box = t.el.closest( 'figure' ) || t.el;
 			const rect = box.getBoundingClientRect();
-			const top = rect.top - 10;
-			chip.style.top = top + 'px';
-			chip.style.left = Math.max( 10, Math.min( rect.right - chip.offsetWidth - 12, window.innerWidth - chip.offsetWidth - 12 ) ) + 'px';
-			chip.style.visibility = top < minTop || top > window.innerHeight ? 'hidden' : 'visible';
+			// Content coordinates: rect is viewport-relative, the chip's home
+			// is scroller-relative — add the current scroll offset once.
+			chip.style.top = ( rect.top - scRect.top + sc.scrollTop - 10 ) + 'px';
+			chip.style.left = Math.max( 10, Math.min(
+				rect.right - scRect.left - chip.offsetWidth - 12,
+				sc.clientWidth - chip.offsetWidth - 12
+			) ) + 'px';
 		} );
 	}
 
-	document.addEventListener( 'scroll', queueTableChips, true );
+	// No scroll listener: the chips ride the scroller natively. Layout
+	// changes (resize, zen collapse, image loads, edits) still re-sync.
 	window.addEventListener( 'resize', queueTableChips );
 
 	// The cell the caret sits in; falls back to the table's first cell.
