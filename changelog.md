@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.12.0** - Unreleased
+
+### Improved
+* **One form engine:** the three field renderers that grew up independently (surface create and edit forms, editor sidebar panels, the block inspector's generated controls) now render through a single engine with one field vocabulary, one value reader and one coercion path. Nothing changes for adapter authors except more consistency: edit fields accept the full create vocabulary (`textarea`, `select`, `tags`, `rows`, `placeholder`), and the Integrations card now validates `create` and `detail.edit` field lists (unknown types, selects without options, unknown keys) instead of letting them fail silently in the app.
+
 ## **v0.11.0** - July 11, 2026
 
 The licenses release. The System page grows a full license manager: every paid plugin and theme classified from the vendor's own locally stored state, with paste-to-activate, deactivate and re-verify wired through each vendor's own code and proven against the live licensing services of more than twenty vendors. Around it, the daily-work gaps close (a terms manager, bulk actions for media, comments and users, media captions, post formats, Custom CSS), Settings reorganizes around intent instead of history, and the site's posture becomes glanceable: Minn now warns when the site is hidden from the public and reports firewall, SSL, loopback and REST health at the same glance.

@@ -356,6 +356,81 @@
 		return true;
 	}
 
+	/* ===== Form engine =====
+	 * One field vocabulary behind surface create/detail.edit forms, editor
+	 * panels and the block inspector's generated controls (and any future
+	 * schema-driven settings view). Canonical field:
+	 *   { key, label, type, options, placeholder, help, rows, min, max,
+	 *     mono, required, clearable, klass }
+	 * Types: text (default) · textarea · number · select · toggle ·
+	 * checkbox · tags · email · url · hidden. formNormField() absorbs the
+	 * dialects adapter descriptors already ship: name→key, ACF's
+	 * true_false → toggle, range → number, radio → select (the app always
+	 * rendered radios as selects), choices object-map → [value, label]
+	 * pairs, options implying select on an untyped field. Controls carry
+	 * `${ attr }="${ id }"` plus data-ftype so formControlValue() coerces
+	 * reads: number '' → null, tags ⇄ array, toggle/checkbox → boolean.
+	 * Callers own labels and layout; `clearable` prepends a "—" empty
+	 * option to selects that lack one; `klass` is an internal extra-class
+	 * hook for the callers' existing CSS, not a descriptor key. */
+
+	function formNormField( f ) {
+		const alias = { true_false: 'toggle', range: 'number', radio: 'select' };
+		let type = alias[ f.type ] || f.type || 'text';
+		let options = null;
+		if ( Array.isArray( f.options ) && f.options.length ) {
+			options = f.options.map( ( o ) => ( Array.isArray( o ) ? [ o[ 0 ], o[ 1 ] != null ? o[ 1 ] : o[ 0 ] ] : [ o, o ] ) );
+		} else if ( f.choices && typeof f.choices === 'object' ) {
+			options = Object.entries( f.choices );
+		}
+		if ( options && type === 'text' ) type = 'select';
+		return Object.assign( {}, f, { key: f.key || f.name, type, options } );
+	}
+
+	function formControlHtml( f, val, attr, idKey ) {
+		const id = idKey != null ? idKey : f.key;
+		const v = val == null ? '' : val;
+		const cls = `minn-input${ f.mono ? ' mono' : '' }${ f.klass ? ' ' + f.klass : '' }`;
+		const t = f.type || 'text';
+		if ( t === 'textarea' ) {
+			const rows = f.rows || ( f.mono ? 12 : 3 );
+			return `<textarea class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="textarea" rows="${ rows }" placeholder="${ esc( f.placeholder || '' ) }">${ esc( String( v ) ) }</textarea>`;
+		}
+		if ( t === 'select' ) {
+			let options = f.options || [];
+			if ( f.clearable && ! options.some( ( o ) => String( o[ 0 ] ) === '' ) ) options = [ [ '', '—' ], ...options ];
+			const opts = options.map( ( [ ov, ol ] ) => `<option value="${ esc( String( ov ) ) }"${ String( ov ) === String( v ) ? ' selected' : '' }>${ esc( String( ol ) ) }</option>` ).join( '' );
+			return `<select class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="select">${ opts }</select>`;
+		}
+		if ( t === 'toggle' ) {
+			return `<button type="button" class="minn-switch${ v ? ' on' : '' }" ${ attr }="${ esc( id ) }" data-ftype="toggle" role="switch" aria-checked="${ !! v }"><span class="minn-switch-knob"></span></button>`;
+		}
+		if ( t === 'checkbox' ) {
+			return `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" ${ attr }="${ esc( id ) }" data-ftype="checkbox"${ v ? ' checked' : '' }> ${ esc( f.label || '' ) }</label>`;
+		}
+		if ( t === 'tags' ) {
+			const shown = Array.isArray( v ) ? v.join( ', ' ) : String( v );
+			return `<input class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="tags" value="${ esc( shown ) }" placeholder="${ esc( f.placeholder || 'tag-one, tag-two' ) }">`;
+		}
+		if ( t === 'hidden' ) {
+			return `<input type="hidden" ${ attr }="${ esc( id ) }" data-ftype="hidden" value="${ esc( String( v ) ) }">`;
+		}
+		if ( t === 'number' ) {
+			return `<input class="${ cls }" type="number" ${ attr }="${ esc( id ) }" data-ftype="number" value="${ esc( String( v ) ) }"${ f.min != null ? ` min="${ esc( String( f.min ) ) }"` : '' }${ f.max != null ? ` max="${ esc( String( f.max ) ) }"` : '' } placeholder="${ esc( f.placeholder || '' ) }">`;
+		}
+		const itype = t === 'email' || t === 'url' ? t : 'text';
+		return `<input class="${ cls }" type="${ itype }" ${ attr }="${ esc( id ) }" data-ftype="${ esc( t ) }" value="${ esc( String( v ) ) }" placeholder="${ esc( f.placeholder || '' ) }">`;
+	}
+
+	function formControlValue( el ) {
+		const kind = el.dataset.ftype || el.type || 'text';
+		if ( kind === 'number' ) return el.value === '' ? null : Number( el.value );
+		if ( kind === 'tags' ) return el.value.split( /,\s*/ ).map( ( t ) => t.trim() ).filter( Boolean );
+		if ( kind === 'toggle' ) return el.classList.contains( 'on' );
+		if ( kind === 'checkbox' ) return el.checked;
+		return el.value;
+	}
+
 	/* ===== Routing =====
 	 * Path-based ( /minn-admin/content ) when pretty permalinks are on,
 	 * falling back to hash routing ( #/content ) on plain permalinks. */
@@ -3865,39 +3940,16 @@
 		o[ parts[ parts.length - 1 ] ] = val;
 	}
 
-	// Shared field markup for surface create + detail.edit. Supports text
-	// (default), number, textarea, and select (options: [[value, label], …]).
-	// data-edittype rides so the save path can coerce tags/numbers correctly.
+	// Shared field markup for surface create + detail.edit — a thin dialect
+	// wrapper over the form engine (see the Form engine section up top).
 	function surfaceFieldHtml( f, val, dataAttr ) {
-		const attr = dataAttr || 'data-editfield';
-		const cls = `minn-input${ f.mono ? ' mono' : '' }${ f.type === 'textarea' ? ' minn-surface-textarea' : '' }`;
-		const type = f.type || 'text';
-		const v = val == null ? '' : val;
-		if ( type === 'textarea' ) {
-			const rows = f.rows || ( f.mono ? 12 : 3 );
-			return `<textarea class="${ cls }" ${ attr }="${ esc( f.key ) }" data-edittype="textarea" rows="${ rows }" placeholder="${ esc( f.placeholder || '' ) }">${ esc( String( v ) ) }</textarea>`;
-		}
-		if ( type === 'select' ) {
-			const opts = ( f.options || [] ).map( ( o ) => {
-				const value = Array.isArray( o ) ? o[ 0 ] : o;
-				const label = Array.isArray( o ) ? ( o[ 1 ] != null ? o[ 1 ] : o[ 0 ] ) : o;
-				return `<option value="${ esc( String( value ) ) }"${ String( value ) === String( v ) ? ' selected' : '' }>${ esc( String( label ) ) }</option>`;
-			} ).join( '' );
-			return `<select class="${ cls }" ${ attr }="${ esc( f.key ) }" data-edittype="select">${ opts }</select>`;
-		}
-		if ( type === 'tags' ) {
-			const shown = Array.isArray( v ) ? v.join( ', ' ) : String( v );
-			return `<input class="${ cls }" ${ attr }="${ esc( f.key ) }" data-edittype="tags" value="${ esc( shown ) }" placeholder="${ esc( f.placeholder || 'tag-one, tag-two' ) }">`;
-		}
-		return `<input class="${ cls }" ${ attr }="${ esc( f.key ) }" data-edittype="${ esc( type ) }"${ type === 'number' ? ' type="number"' : '' } value="${ esc( String( v ) ) }" placeholder="${ esc( f.placeholder || '' ) }">`;
+		const nf = formNormField( f );
+		if ( nf.type === 'textarea' ) nf.klass = 'minn-surface-textarea';
+		return formControlHtml( nf, val, dataAttr || 'data-editfield', nf.key );
 	}
 
 	function surfaceFieldValue( el ) {
-		let v = el.value;
-		const kind = el.dataset.edittype || el.type || 'text';
-		if ( kind === 'number' ) return v === '' ? null : Number( v );
-		if ( kind === 'tags' ) return v.split( /,\s*/ ).map( ( t ) => t.trim() ).filter( Boolean );
-		return v;
+		return formControlValue( el );
 	}
 
 	function surfaceCell( item, colDef ) {
@@ -9682,27 +9734,11 @@
 	}
 
 	function panelInput( pid, f, value ) {
-		const key = `${ pid }:${ f.name }`;
-		const v = value == null ? '' : value;
-		switch ( f.type ) {
-			case 'textarea':
-				return `<textarea class="minn-input" rows="3" data-pf="${ esc( key ) }">${ esc( String( v ) ) }</textarea>`;
-			case 'number':
-			case 'range':
-				return `<input class="minn-input" type="number" data-pf="${ esc( key ) }" value="${ esc( String( v ) ) }"${ f.min != null ? ` min="${ esc( String( f.min ) ) }"` : '' }${ f.max != null ? ` max="${ esc( String( f.max ) ) }"` : '' }>`;
-			case 'select':
-			case 'radio': {
-				const choices = Object.entries( f.choices || {} );
-				return `<select class="minn-input" data-pf="${ esc( key ) }">
-					<option value=""${ v === '' ? ' selected' : '' }>—</option>
-					${ choices.map( ( [ val, label ] ) => `<option value="${ esc( val ) }"${ String( v ) === String( val ) ? ' selected' : '' }>${ esc( String( label ) ) }</option>` ).join( '' ) }
-				</select>`;
-			}
-			case 'true_false':
-				return `<button class="minn-switch${ v ? ' on' : '' }" data-pftoggle="${ esc( key ) }" role="switch" aria-checked="${ !! v }"><span class="minn-switch-knob"></span></button>`;
-			default:
-				return `<input class="minn-input" data-pf="${ esc( key ) }" value="${ esc( String( v ) ) }">`;
-		}
+		// Panel selects always offer the "—" empty choice: clearing a field
+		// is how ACF / SEO values get deleted on save.
+		const nf = formNormField( f );
+		if ( nf.type === 'select' ) nf.clearable = true;
+		return formControlHtml( nf, value, 'data-pf', `${ pid }:${ nf.key }` );
 	}
 
 	function panelCard( ed, p ) {
@@ -10098,25 +10134,22 @@
 		}
 
 		$$( '[data-pf]', el ).forEach( ( input ) => {
-			input.addEventListener( 'input', () => {
+			const write = ( val ) => {
 				const [ pid, name ] = input.dataset.pf.split( ':' );
-				const val = input.type === 'number' ? ( input.value === '' ? null : Number( input.value ) ) : input.value;
 				( state.editor.panelValues[ pid ] = state.editor.panelValues[ pid ] || {} )[ name ] = val;
 				state.editor.panelDirty[ pid ] = true;
 				scheduleAutosave();
-			} );
+			};
+			if ( input.dataset.ftype === 'toggle' ) {
+				input.addEventListener( 'click', () => {
+					input.classList.toggle( 'on' );
+					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
+					write( formControlValue( input ) );
+				} );
+			} else {
+				input.addEventListener( 'input', () => write( formControlValue( input ) ) );
+			}
 		} );
-		$$( '[data-pftoggle]', el ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const [ pid, name ] = btn.dataset.pftoggle.split( ':' );
-				btn.classList.toggle( 'on' );
-				const on = btn.classList.contains( 'on' );
-				btn.setAttribute( 'aria-checked', on );
-				( state.editor.panelValues[ pid ] = state.editor.panelValues[ pid ] || {} )[ name ] = on;
-				state.editor.panelDirty[ pid ] = true;
-				scheduleAutosave();
-			} )
-		);
 
 		$$( '[data-rev]', el ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => openRevision( ed, parseInt( btn.dataset.rev, 10 ) ) )
@@ -11306,7 +11339,7 @@
 			const type = Array.isArray( def.type ) ? def.type[ 0 ] : def.type;
 			const cur = attrs && key in attrs ? attrs[ key ] : def.default;
 			const id = `${ prefix }:${ key }`;
-			const label = esc( fd.label || humanizeAttrKey( key ) );
+			const label = fd.label || humanizeAttrKey( key );
 			// Descriptor options are [value, label] pairs; schema enums are bare values.
 			const options = Array.isArray( fd.options ) && fd.options.length
 				? fd.options.map( ( o ) => ( Array.isArray( o ) ? o : [ o, o ] ) )
@@ -11319,29 +11352,17 @@
 					: null ) ) ) );
 			if ( ! control ) return; // object / array attrs — too structural for a generic form
 			const priority = ( attrs && key in attrs ) || ( Array.isArray( form.order ) && form.order.includes( key ) );
-			const push = ( html ) => rows.push( { key, label, priority, html } );
-			if ( control === 'select' && options ) {
-				// An enum with no current value and no default must offer an
-				// empty choice — otherwise the select forces its first option
-				// and Apply injects an attr the block never had.
-				const opts = ( cur == null && def.default === undefined && ! options.some( ( [ v ] ) => v === '' ) )
-					? [ [ '', '—' ], ...options ] : options;
-				push( `<div class="minn-field-label">${ label }</div>
-				<select class="minn-input" data-insp="${ esc( id ) }">
-					${ opts.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( cur == null ? '' : cur ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-				</select>` );
-			} else if ( control === 'checkbox' ) {
-				push( `<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-insp="${ esc( id ) }" data-type="boolean"${ cur ? ' checked' : '' }> ${ label }</label>` );
-			} else if ( control === 'number' ) {
-				push( `<div class="minn-field-label">${ label }</div>
-				<input type="number" class="minn-input" data-insp="${ esc( id ) }" data-type="number" value="${ cur == null ? '' : esc( cur ) }">` );
-			} else if ( control === 'textarea' ) {
-				push( `<div class="minn-field-label">${ label }</div>
-				<textarea class="minn-input minn-insp-textarea" data-insp="${ esc( id ) }">${ esc( cur == null ? '' : String( cur ) ) }</textarea>` );
-			} else {
-				push( `<div class="minn-field-label">${ label }</div>
-				<input class="minn-input" data-insp="${ esc( id ) }" value="${ esc( cur == null ? '' : String( cur ) ) }">` );
-			}
+			// Rendered by the form engine. `clearable` covers the enum-with-no-
+			// current-value case: without the empty choice the select would
+			// force its first option and Apply would inject an attr the block
+			// never had.
+			const controlHtml = formControlHtml( {
+				key, label, type: control, options,
+				clearable: cur == null && def.default === undefined,
+				klass: control === 'textarea' ? 'minn-insp-textarea' : '',
+			}, cur, 'data-insp', id );
+			rows.push( { key, label, priority, html: control === 'checkbox' ? controlHtml
+				: `<div class="minn-field-label">${ esc( label ) }</div>${ controlHtml }` } );
 		} );
 		// SCALING: design suites register huge schemas (Spectra's post-grid:
 		// 315 attributes) — a flat wall of fields is unusable. Fields the
@@ -11514,10 +11535,10 @@
 			$$( '[data-insp]', inspectorEl ).forEach( ( input ) => {
 				const [ t, key ] = input.dataset.insp.split( ':' );
 				if ( t !== target ) return;
-				let v;
-				if ( input.dataset.type === 'boolean' ) v = input.checked;
-				else if ( input.dataset.type === 'number' ) v = input.value === '' ? undefined : Number( input.value );
-				else v = input.value;
+				// Engine read; fold's contract is undefined = cleared (remove
+				// the attribute), and the engine reads an empty number as null.
+				let v = formControlValue( input );
+				if ( v === null ) v = undefined;
 				const def = ( defs || {} )[ key ] || {};
 				const wasExplicit = key in attrs;
 				if ( v === undefined ) {
@@ -15838,7 +15859,7 @@
 					const empty = v == null || v === '' || ( Array.isArray( v ) && ! v.length );
 					// Number 0 is a real value; optional fields can set required:false.
 					const field = ( cr.fields || [] ).find( ( f ) => f.key === input.dataset.createfield );
-					if ( empty && ( ! field || field.required !== false ) && input.dataset.edittype !== 'number' ) missing = true;
+					if ( empty && ( ! field || field.required !== false ) && input.dataset.ftype !== 'number' ) missing = true;
 					setDeepPath( body, input.dataset.createfield, v );
 				} );
 				if ( missing ) { toast( 'Fill in all fields first', true ); return; }
