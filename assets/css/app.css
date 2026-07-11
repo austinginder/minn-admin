@@ -911,6 +911,9 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-conn-row .minn-input { flex: 1; min-width: 0; }
 .minn-conn-row .minn-toggle-desc { flex: 1; }
 .minn-conn-row button { white-space: nowrap; }
+/* Parameterized action inline form (detail modal + status card) */
+.minn-action-fields { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.minn-action-fields-btns { display: flex; gap: 8px; }
 /* Surface settings view (adapter-served schema forms) */
 .minn-surface-settings { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 16px; max-width: 720px; }
 .minn-spam-queue { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--text2); }

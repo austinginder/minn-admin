@@ -53,12 +53,38 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const listText = await page.$eval( '.minn-table', ( el ) => el.textContent );
 		t.check( 'seeded events list', /Welcome to Minn/.test( listText ) && /dana@example.com/.test( listText ) );
 
+		/* ===== Status card + parameterized send-a-test ===== */
+		await page.waitForSelector( '.minn-surface-status', { timeout: 15000 } );
+		const statText = await page.$eval( '.minn-surface-status', ( el ) => el.textContent );
+		t.check( 'status card names the sending service', /Sending through/.test( statText ) && /Custom SMTP/.test( statText ), statText.slice( 0, 120 ) );
+		await page.evaluate( () => {
+			const btn = [ ...document.querySelectorAll( '[data-sstatact]' ) ].find( ( b ) => /Send a test/.test( b.textContent ) );
+			btn.click();
+		} );
+		await page.waitForSelector( '[data-actfield="email"]', { timeout: 10000 } );
+		await page.fill( '[data-actfield="email"]', 'minn-test@example.com' );
+		await page.evaluate( () => document.querySelectorAll( '.minn-toast' ).forEach( ( e ) => e.remove() ) );
+		await page.click( '[data-actgo]' );
+		await page.waitForFunction( () => {
+			const tEl = document.querySelector( '.minn-toast-msg' );
+			return tEl && /Send a test email — done/.test( tEl.textContent );
+		}, { timeout: 30000 } );
+		t.check( 'test email sent through the inline address field', true );
+		await page.waitForSelector( '[data-sview="settings"]', { timeout: 20000 } );
+
 		/* ===== Sending tab: mapped connector schema ===== */
 		await page.click( '[data-sview="settings"]' );
 		await page.waitForSelector( '[data-sset="primary_connector"]', { timeout: 15000 } );
-		t.check( 'primary select reads generic', await page.$eval( '[data-sset="primary_connector"]', ( el ) => el.value === 'generic' ) );
-		t.check( 'primary select lists the connector catalog', await page.$eval( '[data-sset="primary_connector"]', ( el ) => el.options.length >= 15 ),
-			String( await page.$eval( '[data-sset="primary_connector"]', ( el ) => el.options.length ) ) );
+		// Primary service is a strict combobox (Austin's ask) — the wrapper
+		// carries data-sset, the picked value rides the inner input's acValue.
+		const combo = '[data-sset="primary_connector"] .minn-ac-input';
+		t.check( 'primary combobox reads Custom SMTP', await page.$eval( combo,
+			( el ) => el.dataset.acValue === 'generic' && /Custom SMTP/.test( el.value ) ) );
+		await page.click( combo );
+		await page.waitForSelector( '[data-sset="primary_connector"] .minn-ac-panel:not([hidden])', { timeout: 10000 } );
+		const catalog = await page.$$eval( '[data-sset="primary_connector"] .minn-ac-item', ( o ) => o.length );
+		t.check( 'combobox browses the connector catalog', catalog >= 15, String( catalog ) );
+		await page.keyboard.press( 'Escape' );
 		t.check( 'mapped host field carries the stored value', await page.$eval( '[data-sset="host"]', ( el ) => el.value === '127.0.0.1' ) );
 		t.check( 'password renders as the sentinel, never raw', await page.$eval( '[data-sset="password"]', ( el ) => /^\*+$/.test( el.value ) ) );
 		t.check( 'group titled from their schema', ( await page.$eval( '.minn-surface-settings', ( el ) => el.textContent ) ).includes( 'Custom SMTP' ) );
@@ -79,8 +105,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await clickSave();
 
 		/* ===== Primary switch reshapes the tab from the new schema ===== */
-		await page.waitForSelector( '[data-sset="primary_connector"]', { timeout: 15000 } );
-		await page.selectOption( '[data-sset="primary_connector"]', 'postmark' );
+		await page.waitForSelector( combo, { timeout: 15000 } );
+		await page.click( combo );
+		await page.keyboard.type( 'postmark' );
+		await page.waitForTimeout( 250 );
+		await page.keyboard.press( 'Enter' );
 		t.check( 'switch to Postmark saves', ( await clickSave() ) === 200 );
 		await page.waitForSelector( '[data-sset="primary_connector"]', { timeout: 15000 } );
 		const reshaped = await page.$$eval( '[data-sset]', ( els ) => els.map( ( e ) => e.dataset.sset ) );
@@ -88,7 +117,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		stored = await raw();
 		t.check( 'config maps flipped to postmark', JSON.stringify( stored.config.primary_connector ) === '{"postmark":true}', JSON.stringify( stored.config.primary_connector ) );
 		// Restore generic as primary.
-		await page.selectOption( '[data-sset="primary_connector"]', 'generic' );
+		await page.waitForSelector( combo, { timeout: 15000 } );
+		await page.click( combo );
+		await page.keyboard.type( 'custom smtp' );
+		await page.waitForTimeout( 250 );
+		await page.keyboard.press( 'Enter' );
 		await clickSave();
 		await page.waitForSelector( '[data-sset="host"]', { timeout: 15000 } );
 		stored = await raw();

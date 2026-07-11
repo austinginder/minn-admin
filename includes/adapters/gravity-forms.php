@@ -99,6 +99,18 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'confirm' => 'Resend this entry’s notifications (all active ones for its form)?',
 				),
 				array(
+					'label'  => 'Add note',
+					'method' => 'POST',
+					// Shimmed: gf/v2's notes POST creates the note but then 500s
+					// preparing its own response (prepare_note_for_response returns
+					// a WP_Error their controller set_status()es — their admin UI
+					// never exercises this route). GFAPI::add_note is reliable.
+					'route'  => 'minn-admin/v1/gf/entries/{id}/notes',
+					'fields' => array(
+						array( 'key' => 'value', 'label' => 'Note', 'type' => 'textarea', 'rows' => 3, 'placeholder' => 'Visible on the entry here and in Gravity Forms.' ),
+					),
+				),
+				array(
 					'label'   => 'Mark as spam',
 					'method'  => 'PUT',
 					'route'   => 'gf/v2/entries/{id}/properties',
@@ -279,6 +291,30 @@ add_action( 'rest_api_init', function () {
 				'sections' => $sections,
 				'adminUrl' => admin_url( 'admin.php?page=gf_entries&view=entry&id=' . $entry['form_id'] . '&lid=' . $entry['id'] ),
 			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)/notes', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			$entry = GFAPI::get_entry( (int) $request['id'] );
+			if ( is_wp_error( $entry ) ) {
+				return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+			}
+			$body  = $request->get_json_params();
+			$value = sanitize_textarea_field( (string) ( isset( $body['value'] ) ? $body['value'] : '' ) );
+			if ( '' === $value ) {
+				return new WP_Error( 'empty_note', 'Write a note first.', array( 'status' => 400 ) );
+			}
+			$user    = wp_get_current_user();
+			$note_id = GFAPI::add_note( (int) $entry['id'], $user->ID, $user->display_name, $value );
+			if ( is_wp_error( $note_id ) ) {
+				return new WP_Error( 'note_failed', $note_id->get_error_message(), array( 'status' => 400 ) );
+			}
+			return rest_ensure_response( array( 'id' => $note_id ) );
 		},
 	) );
 

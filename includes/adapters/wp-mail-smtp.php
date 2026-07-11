@@ -43,7 +43,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['wp-mail-smtp'] = array(
-		'label'      => 'Email Log',
+		'label'      => 'Email',
 		'sub'        => 'WP Mail SMTP',
 		'icon'       => 'send',
 		'cap'        => 'manage_options',

@@ -93,13 +93,37 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.click( '#minn-modal-close' );
 
 		/* ===== Notes section ===== */
-		await gf( `gf/v2/entries/${ ids[ 0 ] }/notes`, { method: 'POST', body: { value: 'Followed up by phone.' } } );
+		await gf( `minn-admin/v1/gf/entries/${ ids[ 0 ] }/notes`, { method: 'POST', body: { value: 'Followed up by phone.' } } );
 		await openEntry();
 		const modalText = await page.$eval( '.minn-modal', ( el ) => el.textContent );
 		t.check( 'notes render as a detail section', /Notes/.test( modalText ) && /Followed up by phone/.test( modalText ) );
-		await page.click( '#minn-modal-close' );
+
+		/* ===== Parameterized action: Add note through the inline form ===== */
+		await page.evaluate( () => {
+			const btn = [ ...document.querySelectorAll( '[data-saction]' ) ].find( ( b ) => b.textContent.trim() === 'Add note' );
+			btn.click();
+		} );
+		await page.waitForSelector( '[data-actfield="value"]', { timeout: 10000 } );
+		t.check( 'action fields swap in as an inline form', true );
+		await page.evaluate( () => document.querySelectorAll( '.minn-toast' ).forEach( ( e ) => e.remove() ) );
+		await page.click( '[data-actgo]' );
+		await page.waitForFunction( () => {
+			const tEl = document.querySelector( '.minn-toast-msg' );
+			return tEl && /Fill in all fields/.test( tEl.textContent );
+		}, { timeout: 10000 } );
+		t.check( 'empty required field refuses to fire', true );
+		await page.fill( '[data-actfield="value"]', 'Added from the Minn inline form.' );
+		await page.click( '[data-actgo]' );
+		await page.waitForFunction( () => {
+			const tEl = document.querySelector( '.minn-toast-msg' );
+			return tEl && /Add note — done/.test( tEl.textContent );
+		}, { timeout: 20000 } );
+		const notes = ( await gf( `gf/v2/entries/${ ids[ 0 ] }/notes` ) ).body;
+		t.check( 'note created through the parameterized action', JSON.stringify( notes ).includes( 'Added from the Minn inline form.' ) );
 
 		/* ===== Bulk: mixed-selection skip semantics ===== */
+		// The Add note action closed the modal and reloaded the list.
+		await page.waitForSelector( '[data-scheck]', { timeout: 20000 } );
 		// Select wf-one (starred) + wf-two (not starred), run Star: 1 done, 1 skipped.
 		const selectByText = ( needle ) => page.$$eval( '.minn-table-row', ( rows, n ) => {
 			const row = rows.find( ( r ) => r.textContent.includes( n ) );

@@ -47,7 +47,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['fluent-smtp'] = array(
-		'label'      => 'Email Log',
+		'label'      => 'Email',
 		'sub'        => 'FluentSMTP',
 		'icon'       => 'send',
 		'cap'        => 'manage_options',

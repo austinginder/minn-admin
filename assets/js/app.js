@@ -402,6 +402,16 @@
 			const opts = options.map( ( [ ov, ol ] ) => `<option value="${ esc( String( ov ) ) }"${ String( ov ) === String( v ) ? ' selected' : '' }>${ esc( String( ol ) ) }</option>` ).join( '' );
 			return `<select class="${ cls }" ${ attr }="${ esc( id ) }" data-ftype="select">${ opts }</select>`;
 		}
+		if ( t === 'combobox' ) {
+			// The themed strict select replacement. The wrapper carries the
+			// data attribute; the CALLER binds bindAutocomplete (strict) with
+			// the field's options — reads come back via the inner input's
+			// dataset.acValue in formControlValue().
+			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="combobox">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || '' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<div class="minn-ac-panel" hidden></div>
+			</div>`;
+		}
 		if ( t === 'toggle' ) {
 			return `<button type="button" class="minn-switch${ v ? ' on' : '' }" ${ attr }="${ esc( id ) }" data-ftype="toggle" role="switch" aria-checked="${ !! v }"><span class="minn-switch-knob"></span></button>`;
 		}
@@ -428,6 +438,10 @@
 		if ( kind === 'tags' ) return el.value.split( /,\s*/ ).map( ( t ) => t.trim() ).filter( Boolean );
 		if ( kind === 'toggle' ) return el.classList.contains( 'on' );
 		if ( kind === 'checkbox' ) return el.checked;
+		if ( kind === 'combobox' ) {
+			const input = el.querySelector( '.minn-ac-input' );
+			return input && input.dataset.acValue !== undefined ? input.dataset.acValue : '';
+		}
 		return el.value;
 	}
 
@@ -3513,6 +3527,66 @@
 		</div>`;
 	}
 
+	/* Parameterized actions: an action declaring `fields` swaps its button
+	 * row for an inline form (the licenses-card paste-field pattern — no
+	 * second modal layer), and the collected values merge into the action
+	 * body (dot paths supported). Shared by detail-modal and status-card
+	 * actions; Cancel re-renders the owning view so handlers rebind. */
+	function actionFieldsForm( action ) {
+		return `
+		<div class="minn-action-fields">
+			${ action.fields.map( ( f ) => {
+				const nf = formNormField( f );
+				return `<div>
+					<div class="minn-field-label">${ esc( nf.label || nf.key ) }</div>
+					${ formControlHtml( nf, nf.value != null ? nf.value : '', 'data-actfield', nf.key ) }
+				</div>`;
+			} ).join( '' ) }
+			<div class="minn-action-fields-btns">
+				<button type="button" class="minn-btn-primary" data-actgo>${ esc( action.label ) }</button>
+				<button type="button" class="minn-btn-soft" data-actcancel>Cancel</button>
+			</div>
+		</div>`;
+	}
+
+	function collectActionFields( container, action ) {
+		const body = JSON.parse( JSON.stringify( action.body || {} ) );
+		let missing = false;
+		$$( '[data-actfield]', container ).forEach( ( input ) => {
+			const v = formControlValue( input );
+			const f = ( action.fields || [] ).find( ( x ) => ( x.key || x.name ) === input.dataset.actfield );
+			const empty = v == null || v === '' || ( Array.isArray( v ) && ! v.length );
+			if ( empty && ( ! f || f.required !== false ) && input.dataset.ftype !== 'number' ) missing = true;
+			setDeepPath( body, input.dataset.actfield, v );
+		} );
+		return { body, missing };
+	}
+
+	// Swap `btn`'s row for the field form; `run(body)` fires on Go.
+	function armActionFields( btn, action, onCancel, run ) {
+		const rowEl = btn.parentElement;
+		rowEl.innerHTML = actionFieldsForm( action );
+		const first = $( '[data-actfield]', rowEl );
+		if ( first ) first.focus( { preventScroll: true } );
+		$( '[data-actcancel]', rowEl ).addEventListener( 'click', onCancel );
+		$( '[data-actgo]', rowEl ).addEventListener( 'click', async () => {
+			const { body, missing } = collectActionFields( rowEl, action );
+			if ( missing ) {
+				toast( 'Fill in all fields first', true );
+				return;
+			}
+			if ( action.confirm && ! confirm( action.confirm ) ) return;
+			const go = $( '[data-actgo]', rowEl );
+			go.disabled = true;
+			try {
+				await run( body );
+			} catch ( e ) {
+				toast( e.message, true );
+				go.disabled = false;
+			}
+		} );
+	}
+
 	function bindSurfaceStatus( s, view ) {
 		const ss = surfaceState( s.id );
 		const st = ss.status;
@@ -3529,14 +3603,26 @@
 		$$( '[data-sstatact]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const a = ( st.actions || [] )[ parseInt( btn.dataset.sstatact, 10 ) ];
-				if ( ! a || ( a.confirm && ! confirm( a.confirm ) ) ) return;
+				if ( ! a ) return;
+				const finish = () => {
+					ss.status = null;
+					ss.cache = null;
+					if ( state.route === s.id ) renderSurface( s );
+				};
+				if ( a.fields && a.fields.length ) {
+					armActionFields( btn, a, () => renderSurface( s ), async ( body ) => {
+						await api( a.route, { method: a.method || 'POST', body: JSON.stringify( body ) } );
+						toast( a.label + ' — done' );
+						finish();
+					} );
+					return;
+				}
+				if ( a.confirm && ! confirm( a.confirm ) ) return;
 				btn.disabled = true;
 				try {
 					await api( a.route, { method: a.method || 'POST' } );
 					toast( a.label + ' — done' );
-					ss.status = null;
-					ss.cache = null;
-					if ( state.route === s.id ) renderSurface( s );
+					finish();
 				} catch ( e ) {
 					toast( e.message, true );
 					btn.disabled = false;
@@ -4381,6 +4467,27 @@
 			if ( row ) row.hidden = String( cur ) !== String( f.showWhen.equals );
 		} );
 		applyDeps();
+		// Combobox fields (the strict themed select) bind after render; the
+		// wrapper's bubbling input events feed the same dirty tracking.
+		$$( '[data-sset][data-ftype="combobox"]', view ).forEach( ( wrap ) => {
+			const f = fields.find( ( x ) => x.key === wrap.dataset.sset );
+			if ( ! f ) return;
+			bindAutocomplete(
+				wrap,
+				( f.options || [] ).map( ( [ value, label ] ) => ( { value, label } ) ),
+				{ strict: true, value: values[ f.key ] }
+			);
+			// A strict pick sets dataset.acValue programmatically (no input
+			// event fires), so dirty tracking watches the attribute. Observing
+			// AFTER the bind keeps the bind-time seed from reading as dirty.
+			const input = $( '.minn-ac-input', wrap );
+			if ( input ) {
+				new MutationObserver( () => {
+					dirty[ wrap.dataset.sset ] = true;
+					applyDeps();
+				} ).observe( input, { attributes: true, attributeFilter: [ 'data-ac-value' ] } );
+			}
+		} );
 		$$( '[data-sset]', view ).forEach( ( input ) => {
 			const mark = () => {
 				dirty[ input.dataset.sset ] = true;
@@ -16490,6 +16597,27 @@
 				btn.addEventListener( 'click', async () => {
 					const action = ( m.coll || m.surface.collection ).actions[ parseInt( btn.dataset.saction, 10 ) ];
 					if ( ! action ) return;
+					const finish = () => {
+						surfaceState( m.surface.id ).cache = null;
+						// A row action can change what the status card reports
+						// (Disembark: deleting a session shrinks the workspace).
+						surfaceState( m.surface.id ).status = null;
+						closeModal();
+						if ( state.route === m.surface.id ) renderSurface( m.surface );
+					};
+					if ( action.fields && action.fields.length ) {
+						// Cancel rebuilds the modal from state, so the action
+						// row (and its handlers) come back exactly as declared.
+						armActionFields( btn, action, () => renderOverlays(), async ( body ) => {
+							await api( action.route.replace( '{id}', m.item.id ), {
+								method: action.method || 'POST',
+								body: JSON.stringify( body ),
+							} );
+							toast( action.label + ' — done' );
+							finish();
+						} );
+						return;
+					}
 					if ( action.confirm && ! confirm( action.confirm ) ) return;
 					btn.disabled = true;
 					try {
@@ -16498,12 +16626,7 @@
 							...( action.body ? { body: JSON.stringify( action.body ) } : {} ),
 						} );
 						toast( action.label + ' — done' );
-						surfaceState( m.surface.id ).cache = null;
-						// A row action can change what the status card reports
-						// (Disembark: deleting a session shrinks the workspace).
-						surfaceState( m.surface.id ).status = null;
-						closeModal();
-						if ( state.route === m.surface.id ) renderSurface( m.surface );
+						finish();
 					} catch ( e ) {
 						toast( e.message, true );
 						btn.disabled = false;

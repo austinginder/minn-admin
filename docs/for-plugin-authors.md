@@ -180,9 +180,12 @@ view is the reference), declare `status.route` and return:
 nothing to copy. `actions` render as buttons: with `route` they POST (or
 `method`) and re-fetch both the status and the list on success, `confirm`
 shows a native confirm first, `danger` styles the button red, and `href`
-renders a plain new-tab link instead of a request. Omit any key you don't
-need; conditional actions are just actions your route leaves out of the
-response.
+renders a plain new-tab link instead of a request. An action may declare
+`fields` (the create-field vocabulary) to become parameterized: the button
+swaps for an inline form and the values merge into the request body
+("Send a test email" with an address field is the bundled Gravity SMTP
+reference). Omit any key you don't need; conditional actions are just
+actions your route leaves out of the response.
 
 ### `settings` — a schema-driven settings view
 
@@ -237,7 +240,8 @@ The route implements one contract per tab:
   keeps what was typed.
 
 Fields use the shared form vocabulary: `key`, `label`, `type` (`text` default ·
-`textarea` · `number` · `select` · `toggle` · `email` · `url`), `options`
+`textarea` · `number` · `select` · `combobox` (the themed autocomplete over
+`options`, right for long catalogs) · `toggle` · `email` · `url`), `options`
 (`[value, label]` pairs), `placeholder`, `help` (rendered under the control),
 `rows`, `min`/`max`, `mono`, and `showWhen: { "key": …, "equals": … }` (the
 row shows only while the controlling field holds that value, evaluated live
@@ -269,7 +273,7 @@ Rules of the road:
 | `viewLabel` | Names this collection in the view switcher (with `manage`) and in the search placeholder |
 | `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `entry-summary` (first scalar values of numeric keys — useful for form entries). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`) |
 | `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `sectionsRoute` (server-built display model, an alternative to `detailRoute` + `labels`, below), `labels` (resolve field keys to human labels from another route), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
-| `actions` | Buttons in the detail modal: `{ label, method, route, body, confirm, danger, when, href }`. `{id}` in the route is replaced with the item id. `when: { key, equals }` shows the button only when the item's field matches (Activate vs Deactivate). `href` renders the action as a plain link instead of a request; `{field}` placeholders are filled from the item |
+| `actions` | Buttons in the detail modal: `{ label, method, route, body, confirm, danger, when, href, fields }`. `{id}` in the route is replaced with the item id. `when: { key, equals }` shows the button only when the item's field matches (Activate vs Deactivate). `href` renders the action as a plain link instead of a request; `{field}` placeholders are filled from the item. `fields` makes the action **parameterized**: clicking swaps the button row for an inline form (create-field vocabulary; every field required unless `required: false`) and the typed values merge into `body` (dot paths supported) before the request fires — "Add note" and "send to ⟨address⟩" shapes. Status-card actions accept `fields` the same way |
 | `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request. For APIs that take search criteria as a JSON string (Gravity Forms), use the object form: `array( 'param' => 'search', 'json' => <criteria array with '{q}' where the term goes> )` — the term is JSON-escaped and the criteria double-URL-encoded to match APIs that `urldecode()` the param themselves |
 | `bulk` | Bulk actions: the same shape as `actions` minus `href` (a batch always needs a `route`). Declaring any adds a checkbox column (shift-range, Select page) and a selection bar. Each action runs **per selected item** (`{id}` replaced; one failure never aborts the rest), `when` is evaluated per item so a mixed selection skips ineligible rows, and the result toast reports done / skipped / failed |
 | `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array). Every field is required unless it declares `required: false` |

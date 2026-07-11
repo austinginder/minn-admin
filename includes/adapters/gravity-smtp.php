@@ -58,12 +58,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['gravity-smtp'] = array(
-		'label'      => 'Email Log',
+		'label'      => 'Email',
 		'sub'        => 'Gravity SMTP',
 		'icon'       => 'send',
 		'cap'        => minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG' ),
 		'family'     => 'mail',
 		'collection' => array(
+			'viewLabel' => 'Log',
 			'route'     => 'minn-admin/v1/gravity-smtp/events',
 			'pageQuery' => 'per_page=25&page={page}',
 			'itemsKey'  => 'items',
@@ -106,6 +107,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'id' => 'general', 'label' => 'General' ),
 			),
 			'route' => 'minn-admin/v1/gravity-smtp/settings/{tab}',
+		),
+		'status'     => array(
+			'route' => 'minn-admin/v1/gravity-smtp/status',
 		),
 	);
 	return $surfaces;
@@ -324,6 +328,81 @@ add_action( 'rest_api_init', function () {
 		'callback'            => 'minn_admin_gravity_smtp_resend',
 	) );
 
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can( 'VIEW_EMAIL_LOG' ),
+		'callback'            => function () {
+			$router  = minn_admin_gsmtp_router();
+			$primary = minn_admin_gsmtp_primary();
+			$title   = ucfirst( $primary );
+			foreach ( minn_admin_gsmtp_connector_options() as $opt ) {
+				if ( $opt[0] === $primary ) {
+					$title = $opt[1];
+					break;
+				}
+			}
+			$test_mode = filter_var( $router->get_plugin_setting( 'test_mode', 'false' ), FILTER_VALIDATE_BOOLEAN )
+				|| ( class_exists( 'Gravity_Forms\Gravity_SMTP\Utils\Booliesh' )
+					&& Gravity_Forms\Gravity_SMTP\Utils\Booliesh::get( $router->get_plugin_setting( 'test_mode', 'false' ) ) );
+			$out = array(
+				'rows' => array(
+					array( 'label' => 'Sending through', 'value' => $title ),
+					array(
+						'label' => 'Test mode',
+						'value' => $test_mode ? 'On' : 'Off',
+						'hint'  => $test_mode ? 'Emails are logged, not sent.' : '',
+					),
+				),
+			);
+			if ( current_user_can( minn_admin_gsmtp_cap( 'VIEW_TOOLS_SENDATEST' ) ) ) {
+				$out['actions'] = array(
+					array(
+						'label'  => 'Send a test email',
+						'route'  => 'minn-admin/v1/gravity-smtp/send-test',
+						'method' => 'POST',
+						'fields' => array(
+							array( 'key' => 'email', 'label' => 'Send to', 'type' => 'email', 'placeholder' => 'you@example.com' ),
+						),
+					),
+				);
+			}
+			return rest_ensure_response( $out );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/send-test', array(
+		'methods'             => 'POST',
+		'permission_callback' => $can( 'VIEW_TOOLS_SENDATEST' ),
+		'callback'            => function ( WP_REST_Request $request ) {
+			$body  = $request->get_json_params();
+			$email = sanitize_email( (string) ( isset( $body['email'] ) ? $body['email'] : '' ) );
+			if ( ! is_email( $email ) ) {
+				return new WP_Error( 'bad_email', 'Enter a valid email address.', array( 'status' => 400 ) );
+			}
+			// Their own Send_Test_Endpoint pattern: force the chosen
+			// connector for this send, then let the wp_mail interception
+			// route it. (Another active mail plugin owning wp_mail sends it
+			// instead — same behavior as their own test screen.)
+			$connector = minn_admin_gsmtp_primary();
+			add_filter( 'gravitysmtp_connector_for_sending', function () use ( $connector ) {
+				return array(
+					'force'     => true,
+					'connector' => $connector,
+				);
+			}, 8, 2 );
+			$sent = wp_mail(
+				$email,
+				'Test email from Minn Admin (Gravity SMTP)',
+				"This is a test email sent through the {$connector} connector, triggered from Minn Admin's Email Log.",
+				array()
+			);
+			if ( ! $sent ) {
+				return new WP_Error( 'send_failed', 'The mailer reported the test could not be sent.', array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'sent' => true ) );
+		},
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/settings/(?P<tab>[a-z]+)', array(
 		array(
 			'methods'             => 'GET',
@@ -402,7 +481,7 @@ function minn_admin_gsmtp_settings_shape( $tab ) {
 					array(
 						'key'     => 'primary_connector',
 						'label'   => 'Primary service',
-						'type'    => 'select',
+						'type'    => 'combobox',
 						'options' => minn_admin_gsmtp_connector_options(),
 						'help'    => 'Saving a different service reloads this tab with its settings.',
 					),

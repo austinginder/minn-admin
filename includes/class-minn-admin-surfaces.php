@@ -161,7 +161,7 @@ class Minn_Admin_Surfaces {
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
 	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
-	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href' );
+	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href', 'fields' );
 	const CREATE_KEYS     = array( 'label', 'route', 'method', 'fields', 'defaults' );
 	const EDIT_KEYS       = array( 'route', 'method', 'preserve', 'fields' );
 	const FIELD_KEYS      = array( 'key', 'label', 'type', 'options', 'value', 'placeholder', 'rows', 'mono', 'required' );
@@ -371,9 +371,13 @@ class Minn_Admin_Surfaces {
 				foreach ( self::unknown_keys( $a, self::ACTION_KEYS ) as $k ) {
 					$problems[] = "$ck: unknown action key \"$k\" (ignored)";
 				}
+				if ( isset( $a['fields'] ) ) {
+					$problems = array_merge( $problems, self::field_problems( $a['fields'], "$ck action \"{$a['label']}\"" ) );
+				}
 			}
 			// Bulk actions share the action vocabulary but always need a route
-			// (there is no href form of a batch).
+			// (there is no href form of a batch) and cannot carry fields — a
+			// batch has no place to ask per-item questions.
 			foreach ( (array) ( $coll['bulk'] ?? array() ) as $b ) {
 				if ( ! is_array( $b ) || empty( $b['label'] ) ) {
 					$problems[] = "$ck: bulk action without a label";
@@ -381,6 +385,9 @@ class Minn_Admin_Surfaces {
 				}
 				if ( empty( $b['route'] ) ) {
 					$problems[] = "$ck: bulk action \"{$b['label']}\" has no route";
+				}
+				if ( isset( $b['fields'] ) ) {
+					$problems[] = "$ck: bulk action \"{$b['label']}\" declares fields (not supported on bulk)";
 				}
 				foreach ( self::unknown_keys( $b, self::ACTION_KEYS ) as $k ) {
 					$problems[] = "$ck: unknown bulk action key \"$k\" (ignored)";
