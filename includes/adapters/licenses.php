@@ -1459,7 +1459,18 @@ function minn_admin_license_default_providers() {
 			return array( 'ok' => true );
 		};
 		$providers['elementor-pro']['verify'] = function () {
-			\ElementorPro\License\API::get_license_data( true ); // force a fresh check into their own cache
+			$data = \ElementorPro\License\API::get_license_data( true ); // force a fresh check into their own cache
+			if ( is_wp_error( $data ) ) {
+				return $data;
+			}
+			// Report their answer, never a blanket success: the endpoint's
+			// check-memory records verify outcomes, and an unconditional ok
+			// could stamp an unverified license "valid" forever.
+			if ( ! is_array( $data ) || empty( $data['success'] ) ) {
+				$err  = ( is_array( $data ) && isset( $data['error'] ) ) ? (string) $data['error'] : '';
+				$code = ( 'expired' === $err ) ? 'expired' : 'invalid';
+				return array( 'ok' => false, 'code' => $code, 'message' => '' !== $err ? str_replace( '_', ' ', $err ) : 'Elementor did not confirm the license' );
+			}
 			return array( 'ok' => true );
 		};
 	}
@@ -1659,13 +1670,27 @@ function minn_admin_license_default_providers() {
 		};
 		$providers['gravityforms']['secret_label'] = 'Gravity Forms license key';
 		$providers['gravityforms']['activate']     = function ( $secret ) use ( $gf_status ) {
+			$prev = get_option( 'rg_gforms_key' );
 			GFFormsModel::save_key( $secret );
 			if ( get_option( 'rg_gforms_key' ) !== md5( trim( $secret ) ) ) {
 				// Their own revert fired: the key was rejected outright.
 				GFCommon::get_version_info( false );
 				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Gravity Forms did not accept that key' );
 			}
-			return $gf_status();
+			$res = $gf_status();
+			if ( empty( $res['ok'] ) ) {
+				// save_key accepted the key's shape but the license check
+				// refused it (expired / site limit). Restore the prior state
+				// so a failed activation never retains the pasted key.
+				if ( is_string( $prev ) && '' !== $prev ) {
+					update_option( 'rg_gforms_key', $prev );
+				} else {
+					GFFormsModel::save_key( '' ); // unlinks the site registration too
+					delete_option( 'rg_gforms_key' );
+				}
+				GFCommon::get_version_info( false );
+			}
+			return $res;
 		};
 		$providers['gravityforms']['deactivate'] = function () {
 			GFFormsModel::save_key( '' ); // unlinks the site with Gravity's server
@@ -2501,7 +2526,10 @@ add_action( 'rest_api_init', function () {
 						: call_user_func( $p[ $action ] );
 					$result = minn_admin_license_result( $raw );
 				} catch ( \Throwable $e ) {
-					$result = array( 'ok' => false, 'code' => 'error', 'message' => $e->getMessage() );
+					// Vendor exceptions can carry markup or PHP-error noise;
+					// strip to plain text like every deliberate vendor message.
+					$msg    = trim( wp_strip_all_tags( (string) $e->getMessage() ) );
+					$result = array( 'ok' => false, 'code' => 'error', 'message' => '' !== $msg ? $msg : 'The plugin reported an error during the request.' );
 				}
 				// Some vendors (Gravity SMTP, Brizy) keep no local validity
 				// state, so their rows would read "unknown" forever even
