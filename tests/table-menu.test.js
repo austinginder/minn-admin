@@ -21,10 +21,19 @@ const TABLE = '<!-- wp:table --><figure class="wp-block-table"><table><thead><tr
 	await page.waitForSelector( '#minn-editor-body table td', { timeout: 15000 } );
 
 	const saved = async () => page.evaluate( async ( pid ) => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw&_cb=' + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
 		return ( await r.json() ).content.raw;
 	}, id );
-	const save = async () => { await page.keyboard.press( 'Meta+s' ); await page.waitForTimeout( 1400 ); };
+	// Wait on the real save response — a flat delay races a slow worker and
+	// saved() then reads PRE-save content (looked exactly like table ops not
+	// persisting; the rule-51 fixed-wait lesson).
+	const save = async () => {
+		const wait = page.waitForResponse( ( res ) =>
+			res.request().method() === 'POST' && new RegExp( 'wp/v2/posts/' + id ).test( res.url() ), { timeout: 20000 } );
+		await page.keyboard.press( 'Meta+s' );
+		await wait;
+		await page.waitForTimeout( 300 );
+	};
 
 	/* ===== Right-click opens the menu ===== */
 	await page.click( 'td >> text=b2', { button: 'right' } );
