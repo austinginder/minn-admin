@@ -80,7 +80,10 @@ date/time format, week start, default role, membership, maintenance, default
 admin), Writing (default category/format, smilies), Reading (front page,
 posts per page, search visibility), Discussion (default comment/ping status,
 moderation, registration required, avatars on/off), Permalinks (structure +
-bases), Spam (provider cards + disallowed keys). Missing: the entire Media
+bases), Spam (provider cards + disallowed keys), Connectors (WP 7.0's
+connector registry: provider keys with core-side masking and validation,
+key-source honesty for wp-config/env keys, companion-plugin install in
+place). Missing: the entire Media
 settings screen (thumbnail sizes, month/year folders), site language,
 `posts_per_rss` / feed excerpt, and most of the Discussion matrix (threading
 depth, per-page, previously-approved shortcut, close-after-days, notification

@@ -534,6 +534,18 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/connectors',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'connectors' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/posts/(?P<id>\d+)/duplicate',
 			array(
 				'methods'             => 'POST',
@@ -2688,6 +2700,97 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			array(
 				'purged' => $purged,
 				'failed' => $failed,
+			)
+		);
+	}
+
+	/**
+	 * WP 7.0 Connectors (Settings → Connectors): the core registry reduced
+	 * to a display model. Raw keys never leave the server — only the source
+	 * (env / constant / database / none) and the last four characters of a
+	 * database-stored key ride out. Saves go through core's OWN
+	 * wp/v2/settings route, where core masks responses and validates
+	 * AI-provider keys against the live provider; a connector's setting is
+	 * only REST-registered while its companion plugin is active, so the
+	 * client gates the key field on `registered`.
+	 */
+	public static function connectors() {
+		if ( ! function_exists( 'wp_get_connectors' ) ) {
+			return rest_ensure_response(
+				array(
+					'supported'  => false,
+					'connectors' => array(),
+				)
+			);
+		}
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$registered = get_registered_settings();
+		$out        = array();
+		foreach ( wp_get_connectors() as $id => $c ) {
+			$auth    = isset( $c['authentication'] ) && is_array( $c['authentication'] ) ? $c['authentication'] : array();
+			$setting = isset( $auth['setting_name'] ) ? (string) $auth['setting_name'] : '';
+			// Key source in core's own precedence (env → constant →
+			// database). Core's resolver is @access private, so the three
+			// checks are mirrored here rather than called.
+			$source  = 'none';
+			$db_key  = '';
+			$env     = isset( $auth['env_var_name'] ) ? (string) $auth['env_var_name'] : '';
+			$const   = isset( $auth['constant_name'] ) ? (string) $auth['constant_name'] : '';
+			if ( '' !== $env && false !== getenv( $env ) && '' !== getenv( $env ) ) {
+				$source = 'env';
+			} elseif ( '' !== $const && defined( $const ) && is_string( constant( $const ) ) && '' !== constant( $const ) ) {
+				$source = 'constant';
+			} elseif ( '' !== $setting ) {
+				$db_key = (string) get_option( $setting, '' );
+				if ( '' !== $db_key ) {
+					$source = 'database';
+				}
+			}
+			$plugin = null;
+			if ( ! empty( $c['plugin']['file'] ) && is_string( $c['plugin']['file'] ) ) {
+				$file      = $c['plugin']['file'];
+				$installed = file_exists( WP_PLUGIN_DIR . '/' . $file );
+				$active    = false;
+				if ( isset( $c['plugin']['is_active'] ) && is_callable( $c['plugin']['is_active'] ) ) {
+					try {
+						$active = (bool) call_user_func( $c['plugin']['is_active'] );
+					} catch ( \Throwable $e ) {
+						$active = false;
+					}
+				} else {
+					$active = is_plugin_active( $file );
+				}
+				$plugin = array(
+					'file'        => $file,
+					'slug'        => dirname( $file ),
+					'installed'   => $installed,
+					'active'      => $active,
+					'canInstall'  => ! $installed && current_user_can( 'install_plugins' ) && wp_is_file_mod_allowed( 'install_plugins' ),
+					'canActivate' => $installed && ! $active && current_user_can( 'activate_plugins' ),
+				);
+			}
+			$out[] = array(
+				'id'             => (string) $id,
+				'name'           => isset( $c['name'] ) ? (string) $c['name'] : (string) $id,
+				'description'    => isset( $c['description'] ) ? (string) $c['description'] : '',
+				'type'           => isset( $c['type'] ) ? (string) $c['type'] : '',
+				'method'         => isset( $auth['method'] ) ? (string) $auth['method'] : 'none',
+				'settingName'    => $setting,
+				'registered'     => '' !== $setting && isset( $registered[ $setting ] ),
+				'credentialsUrl' => isset( $auth['credentials_url'] ) ? (string) $auth['credentials_url'] : '',
+				'constantName'   => $const,
+				'envVarName'     => $env,
+				'source'         => $source,
+				'keyTail'        => ( 'database' === $source && strlen( $db_key ) > 8 ) ? substr( $db_key, -4 ) : '',
+				'plugin'         => $plugin,
+			);
+		}
+		return rest_ensure_response(
+			array(
+				'supported'  => true,
+				'connectors' => $out,
 			)
 		);
 	}

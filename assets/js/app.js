@@ -6417,10 +6417,13 @@
 	// identity/locale (Site), who-can-see-and-join (Visibility), the front
 	// page (Homepage), content defaults + URLs (Content), and everything
 	// about comments incl. spam (Comments).
-	const SETTINGS_SECTIONS = [ 'Site', 'Visibility', 'Homepage', 'Design', 'Content', 'Comments' ];
+	const SETTINGS_SECTIONS = [ 'Site', 'Visibility', 'Homepage', 'Design', 'Content', 'Comments', 'Connectors' ];
 	// Design (Additional CSS) needs core's edit_css — hidden, not disabled,
 	// for everyone else (matching how the Customizer hides the panel).
-	const settingsSections = () => SETTINGS_SECTIONS.filter( ( s ) => s !== 'Design' || B.caps.editCss );
+	// Connectors needs the WP 7.0 registry (and manage_options, folded into
+	// the boot flag).
+	const settingsSections = () => SETTINGS_SECTIONS.filter( ( s ) =>
+		( s !== 'Design' || B.caps.editCss ) && ( s !== 'Connectors' || B.connectors ) );
 	const POST_FORMATS = [ 'standard', 'aside', 'chat', 'gallery', 'link', 'image', 'quote', 'status', 'video', 'audio' ];
 	const PERMALINK_PRESETS = [
 		[ '', 'Plain' ],
@@ -6431,20 +6434,21 @@
 	];
 
 	async function loadSettings() {
-		const [ values, categories, pages, permalinks, spam, customCss ] = await Promise.all( [
+		const [ values, categories, pages, permalinks, spam, customCss, connectors ] = await Promise.all( [
 			api( 'wp/v2/settings' ),
 			api( 'wp/v2/categories?per_page=100&_fields=id,name' ).catch( () => [] ),
 			api( 'wp/v2/pages?per_page=100&status=publish&orderby=title&order=asc&_fields=id,title' ).catch( () => [] ),
 			api( 'minn-admin/v1/permalinks' ).catch( () => null ),
 			api( 'minn-admin/v1/spam' ).catch( () => null ),
 			B.caps.editCss ? api( 'minn-admin/v1/custom-css' ).catch( () => null ) : Promise.resolve( null ),
+			B.connectors ? api( 'minn-admin/v1/connectors' ).catch( () => null ) : Promise.resolve( null ),
 		] );
 		const siteIcon = values.site_icon
 			? await api( `wp/v2/media/${ values.site_icon }?_fields=id,source_url,media_details` )
 				.then( ( m ) => ( { url: ( m.media_details && m.media_details.sizes && m.media_details.sizes.thumbnail && m.media_details.sizes.thumbnail.source_url ) || m.source_url } ) )
 				.catch( () => null )
 			: null;
-		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss };
+		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss, connectors };
 	}
 
 	/**
@@ -6870,6 +6874,71 @@
 					after: spamHtml,
 				};
 			}
+			case 'Connectors': {
+				// WP 7.0's connector registry (Settings → Connectors in
+				// wp-admin) as Minn cards. Keys save through core's OWN
+				// wp/v2/settings route: core masks every response and
+				// validates AI-provider keys against the live provider, so a
+				// raw key never reaches this client after the save request.
+				const cn = cache.connectors;
+				let cards;
+				if ( ! cn || ! cn.supported ) {
+					cards = '<div class="minn-editor-locked-note">Connectors couldn’t be loaded.</div>';
+				} else {
+					const TYPE_LABELS = { ai_provider: 'AI provider', spam_filtering: 'Spam filtering' };
+					cards = cn.connectors.map( ( c ) => {
+						const pill = c.source === 'none'
+							? '<span class="minn-spam-pill warn">Not connected</span>'
+							: `<span class="minn-spam-pill ok">${ c.source === 'database' ? 'Connected' : ( c.source === 'constant' ? 'Key in wp-config' : 'Key in environment' ) }</span>`;
+						let controls = '';
+						if ( c.method !== 'api_key' ) {
+							controls = '';
+						} else if ( c.source === 'constant' || c.source === 'env' ) {
+							// Env/constant keys win over the database by core's
+							// precedence — honest lock, no controls.
+							controls = `<div class="minn-toggle-desc">The key is supplied by ${ c.source === 'constant' ? `the <code>${ esc( c.constantName ) }</code> constant in wp-config.php` : `the <code>${ esc( c.envVarName ) }</code> environment variable` }, so it can only be changed there.</div>`;
+						} else if ( c.plugin && ! c.plugin.installed ) {
+							controls = `<div class="minn-conn-row">
+								<span class="minn-toggle-desc">Needs the ${ esc( c.name ) } provider plugin before a key can be saved.</span>
+								${ c.plugin.canInstall ? `<button class="minn-btn-soft" data-conn-install="${ esc( c.plugin.slug ) }">Install &amp; activate</button>` : '' }
+							</div>`;
+						} else if ( c.plugin && ! c.plugin.active ) {
+							controls = `<div class="minn-conn-row">
+								<span class="minn-toggle-desc">The provider plugin is installed but not active.</span>
+								${ c.plugin.canActivate ? `<button class="minn-btn-soft" data-conn-activate="${ esc( c.plugin.file ) }">Activate</button>` : '' }
+							</div>`;
+						} else if ( ! c.registered ) {
+							controls = '<div class="minn-toggle-desc">This connector’s key isn’t writable right now: its plugin registers the setting while active.</div>';
+						} else {
+							// Plain text + password-manager ignore attributes:
+							// API keys aren't login credentials and the value
+							// rides exactly one request (the licenses rule).
+							controls = `<div class="minn-conn-row">
+								<input class="minn-input mono" data-conn-key="${ esc( c.settingName ) }" placeholder="${ c.keyTail ? `Replace the saved key (ends in ${ esc( c.keyTail ) })` : 'Paste an API key' }" data-1p-ignore data-lpignore="true" data-bwignore>
+								<button class="minn-btn-soft" data-conn-save="${ esc( c.id ) }">Save key</button>
+								${ c.source === 'database' ? `<button class="minn-btn-soft danger" data-conn-clear="${ esc( c.id ) }">Remove</button>` : '' }
+							</div>`;
+						}
+						return `
+						<div class="minn-spam-provider" data-conn-card="${ esc( c.id ) }">
+							<div class="minn-spam-head">
+								<span class="minn-spam-name">${ esc( c.name ) }</span>
+								${ pill }
+								<span class="minn-spam-blocked">${ esc( TYPE_LABELS[ c.type ] || String( c.type || '' ).replace( /_/g, ' ' ) ) }</span>
+								${ c.credentialsUrl ? `<a class="minn-spam-link" href="${ esc( c.credentialsUrl ) }" target="_blank" rel="noopener">Get an API key ↗</a>` : '' }
+							</div>
+							<div class="minn-toggle-desc">${ esc( c.description ) }</div>
+							${ controls }
+						</div>`;
+					} ).join( '' );
+				}
+				return {
+					sub: 'External services WordPress can use: AI providers and other connected APIs. Keys are stored by core, validated on save, and never shown again once saved.',
+					fields: cards,
+					toggles: '',
+					noSave: true,
+				};
+			}
 			default: return { sub: '', fields: '', toggles: '' };
 		}
 	}
@@ -6945,6 +7014,82 @@
 		}
 		const spamExt = $( '#minn-spam-ext', view );
 		if ( spamExt ) spamExt.addEventListener( 'click', ( e ) => { e.preventDefault(); go( 'extensions' ); } );
+
+		// Connectors: per-card actions. Keys save through core's wp/v2/settings,
+		// where core masks the response and validates AI keys against the live
+		// provider — an invalid key comes back reset to ''. That reset IS the
+		// rejection signal; on it the typed key stays selected for a retype
+		// (the licenses-card failed-activate UX), and nothing is stored.
+		const connRefresh = async () => {
+			cache.connectors = await api( 'minn-admin/v1/connectors' ).catch( () => null );
+			renderSettings();
+		};
+		$$( '[data-conn-save]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const input = $( '[data-conn-key]', btn.closest( '[data-conn-card]' ) );
+				const setting = input.dataset.connKey;
+				const key = input.value.trim();
+				if ( ! key ) { toast( 'Paste a key first', true ); input.focus(); return; }
+				btn.disabled = true;
+				btn.textContent = 'Checking…';
+				try {
+					const res = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { [ setting ]: key } ) } );
+					if ( ! String( res[ setting ] || '' ) ) {
+						toast( 'The provider rejected that key.', true );
+						btn.disabled = false;
+						btn.textContent = 'Save key';
+						input.focus( { preventScroll: true } );
+						input.select();
+						return;
+					}
+					toast( 'Key saved' );
+					await connRefresh();
+				} catch ( e ) {
+					toast( e.message, true );
+					btn.disabled = false;
+					btn.textContent = 'Save key';
+				}
+			} )
+		);
+		$$( '[data-conn-clear]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				if ( ! confirm( 'Remove the saved key?' ) ) return;
+				const input = $( '[data-conn-key]', btn.closest( '[data-conn-card]' ) );
+				btn.disabled = true;
+				try {
+					await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { [ input.dataset.connKey ]: '' } ) } );
+					toast( 'Key removed' );
+					await connRefresh();
+				} catch ( e ) { toast( e.message, true ); btn.disabled = false; }
+			} )
+		);
+		$$( '[data-conn-install]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				btn.disabled = true;
+				btn.textContent = 'Installing…';
+				try {
+					await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: btn.dataset.connInstall, status: 'active' } ) } );
+					toast( 'Provider plugin installed' );
+					refreshAfterPluginChange();
+					await connRefresh();
+				} catch ( e ) {
+					toast( e.message, true );
+					btn.disabled = false;
+					btn.textContent = 'Install & activate';
+				}
+			} )
+		);
+		$$( '[data-conn-activate]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				btn.disabled = true;
+				try {
+					await api( 'wp/v2/plugins/' + btn.dataset.connActivate.replace( /\.php$/, '' ), { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+					toast( 'Provider plugin activated' );
+					refreshAfterPluginChange();
+					await connRefresh();
+				} catch ( e ) { toast( e.message, true ); btn.disabled = false; }
+			} )
+		);
 
 		// Design tab: Tab indents inside the CSS editor instead of leaving it
 		// (execCommand insertText keeps the browser's undo stack intact).
