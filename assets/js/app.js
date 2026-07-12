@@ -5856,6 +5856,56 @@
 	}
 
 	/**
+	 * Apply a force-check payload (from licenses/action or /check-updates)
+	 * into the plugin/theme update caches, refresh the Extensions nav dot,
+	 * and re-fetch notifications so pending updates appear in the panel.
+	 * Returns { update } when a specific component update was named.
+	 */
+	function applyForcedUpdateCheck( res ) {
+		if ( ! res || typeof res !== 'object' ) return null;
+		if ( res.pluginUpdates && typeof res.pluginUpdates === 'object' ) {
+			state.cache.pluginUpdates = res.pluginUpdates;
+		}
+		if ( res.themeUpdates && typeof res.themeUpdates === 'object' ) {
+			state.cache.themeUpdates = res.themeUpdates;
+		}
+		const pCount = Object.keys( state.cache.pluginUpdates || {} ).length;
+		const tCount = Object.keys( state.cache.themeUpdates || {} ).length;
+		const dot = $( '#minn-plugin-dot' );
+		if ( dot ) dot.hidden = ! pCount && ! tCount;
+		// Notifications are built from the same update_plugins transient the
+		// force-check just refreshed — drop the cache and re-pull so the
+		// Updates tab picks up newly-unlocked commercial updates.
+		state.cache.notifications = null;
+		loadNotifications().catch( () => {} );
+		return { update: res.update || null, plugins: pCount, themes: tCount };
+	}
+
+	/** Explicit "Check for updates" (Extensions toolbar + ⌘K). */
+	async function checkForUpdates( btn ) {
+		const label = btn ? btn.textContent : '';
+		if ( btn ) { btn.disabled = true; btn.textContent = 'Checking…'; }
+		try {
+			const res = await api( 'minn-admin/v1/check-updates', { method: 'POST', body: '{}' } );
+			const applied = applyForcedUpdateCheck( res );
+			const n = ( applied?.plugins || 0 ) + ( applied?.themes || 0 );
+			toast( n
+				? `${ n } update${ n === 1 ? '' : 's' } available`
+				: 'Everything is up to date' );
+			// Re-render Extensions so Update-all / per-card badges refresh
+			// without a full plugin list refetch.
+			if ( state.route === 'extensions' ) {
+				if ( state.extTab === 'plugins' ) renderExtensions();
+				else if ( state.extTab === 'themes' ) renderThemes();
+			}
+		} catch ( e ) {
+			toast( e.message || 'Could not check for updates', true );
+		} finally {
+			if ( btn ) { btn.disabled = false; btn.textContent = label; }
+		}
+	}
+
+	/**
 	 * License actions (Phase 1), shared machinery: activate swaps in an
 	 * inline paste field; the secret rides one request and is never stored
 	 * or echoed back. Failures never auto-retry (a retried activation can
@@ -5892,7 +5942,26 @@
 					body: JSON.stringify( { provider, action, ...( payload || {} ) } ),
 				} );
 				if ( res.ok ) {
-					toast( action === 'activate' ? 'License activated' : action === 'deactivate' ? 'License deactivated' : 'License re-verified' );
+					// Successful activate/verify also force-checks updates
+					// server-side (licensed commercial plugins only report
+					// once a key is stored). Apply the maps, toast, and
+					// refresh notifications so the Updates tab lights up
+					// without leaving Minn.
+					const applied = applyForcedUpdateCheck( res );
+					if ( action === 'deactivate' ) {
+						toast( 'License deactivated' );
+					} else if ( applied && applied.update ) {
+						const u = applied.update;
+						toastAction(
+							`${ action === 'activate' ? 'License activated' : 'License re-verified' } · ${ u.name } ${ u.version } is available`,
+							'View updates',
+							() => { state.extTab = 'plugins'; state.extFilter = 'updates'; go( 'extensions' ); }
+						);
+					} else if ( action === 'activate' ) {
+						toast( res.updates_checked ? 'License activated · checked for updates' : 'License activated' );
+					} else {
+						toast( res.updates_checked ? 'License re-verified · checked for updates' : 'License re-verified' );
+					}
 				} else if ( res.code === 'site_limit' ) {
 					toast( 'No activations left on this license. Free a seat with the vendor first — Minn never retries an activation.', true );
 				} else {
@@ -6367,10 +6436,14 @@
 		${ coreBannerHtml() }
 		<div class="minn-toolbar minn-toolbar-views">
 			${ extTabsHtml() }
-			${ updateCount && B.caps.update ? `
-				<button class="minn-btn-soft" id="minn-update-all" style="margin-left:auto;">
-					${ icon( 'refresh' ) } Update all (${ updateCount })
-				</button>` : '' }
+			${ B.caps.update ? `
+				<span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+					<button class="minn-btn-soft" id="minn-check-updates" title="Force a fresh check against WordPress.org and licensed vendors">${ icon( 'refresh' ) } Check for updates</button>
+					${ updateCount ? `
+					<button class="minn-btn-soft" id="minn-update-all">
+						${ icon( 'refresh' ) } Update all (${ updateCount })
+					</button>` : '' }
+				</span>` : '' }
 		</div>
 		<div class="minn-toolbar">
 			${ extFilterBarHtml( filterDefs, counts, 'Search plugins…' ) }
@@ -6519,6 +6592,10 @@
 			} )
 		);
 
+		const checkUpdBtn = $( '#minn-check-updates', view );
+		if ( checkUpdBtn ) {
+			checkUpdBtn.addEventListener( 'click', () => checkForUpdates( checkUpdBtn ) );
+		}
 		const updateAllBtn = $( '#minn-update-all', view );
 		if ( updateAllBtn ) {
 			updateAllBtn.addEventListener( 'click', () => updateAllPlugins( updateAllBtn ) );
@@ -6569,6 +6646,8 @@
 		view.innerHTML = `
 		<div class="minn-toolbar minn-toolbar-views">
 			${ extTabsHtml() }
+			${ B.caps.updateThemes ? `
+				<button class="minn-btn-soft" id="minn-check-updates" style="margin-left:auto;" title="Force a fresh check against WordPress.org and licensed vendors">${ icon( 'refresh' ) } Check for updates</button>` : '' }
 		</div>
 		<div class="minn-toolbar">
 			${ extFilterBarHtml( filterDefs, counts, 'Search themes…' ) }
@@ -6596,6 +6675,10 @@
 
 		bindExtTabs( view );
 		bindExtFilterBar( view );
+		const checkThemesUpd = $( '#minn-check-updates', view );
+		if ( checkThemesUpd ) {
+			checkThemesUpd.addEventListener( 'click', () => checkForUpdates( checkThemesUpd ) );
+		}
 		const addTheme = $( '#minn-add-theme', view );
 		if ( addTheme ) {
 			addTheme.addEventListener( 'click', () => {
@@ -16316,7 +16399,10 @@
 				run: copyDisembarkCommand,
 			} ] : [] ),
 		);
-		if ( B.caps.update && Object.keys( state.cache.pluginUpdates ).length ) {
+		if ( B.caps.update || B.caps.updateThemes ) {
+			cmds.push( { label: 'Check for updates', kind: 'action', icon: '⟳', run: () => checkForUpdates( null ) } );
+		}
+		if ( B.caps.update && Object.keys( state.cache.pluginUpdates || {} ).length ) {
 			cmds.push( { label: 'Update all plugins', kind: 'action', icon: '⟳', run: () => updateAllPlugins( null ) } );
 		}
 		cmds.push(

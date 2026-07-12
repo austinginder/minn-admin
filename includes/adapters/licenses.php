@@ -2466,6 +2466,94 @@ function minn_admin_license_result( $raw ) {
 	return array( 'ok' => false, 'code' => 'error', 'message' => '' );
 }
 
+/**
+ * Force a fresh plugins (and themes) update check. Commercial plugins often
+ * only report updates once a license is stored (the key rides their request),
+ * so a just-activated license would otherwise wait up to 12h for core's next
+ * check. Clears the site transients first so wp_update_* actually re-hits the
+ * endpoints (core short-circuits when last_checked is still fresh).
+ *
+ * @param string $component Optional 'dir/file.php' or 'theme:slug' to pick
+ *                          out that one component's available update.
+ * @return array {
+ *   @type array      $plugins Map of plugin_file => new_version.
+ *   @type array      $themes  Map of stylesheet => new_version.
+ *   @type array|null $update  The component's pending update, or null.
+ * }
+ */
+function minn_admin_force_update_check( $component = '' ) {
+	$out = array(
+		'plugins' => array(),
+		'themes'  => array(),
+		'update'  => null,
+	);
+	$component = is_string( $component ) ? $component : '';
+	$is_theme  = 0 === strpos( $component, 'theme:' );
+	$stylesheet = $is_theme ? substr( $component, 6 ) : '';
+
+	if ( current_user_can( 'update_plugins' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/update.php';
+		delete_site_transient( 'update_plugins' );
+		// Extra stats force core past the "nothing changed" short-circuit
+		// even if something re-seeds the transient mid-request.
+		wp_update_plugins( array( 'minn_admin' => 1 ) );
+		$tr = get_site_transient( 'update_plugins' );
+		if ( $tr && ! empty( $tr->response ) && is_array( $tr->response ) ) {
+			foreach ( $tr->response as $file => $data ) {
+				if ( is_object( $data ) && ! empty( $data->new_version ) ) {
+					$out['plugins'][ $file ] = (string) $data->new_version;
+				}
+			}
+		}
+	}
+
+	// Themes: always refresh when the component is a theme; otherwise only
+	// if the caller is doing a full check (empty component).
+	if ( current_user_can( 'update_themes' ) && ( $is_theme || '' === $component ) ) {
+		require_once ABSPATH . 'wp-admin/includes/theme.php';
+		require_once ABSPATH . 'wp-admin/includes/update.php';
+		delete_site_transient( 'update_themes' );
+		wp_update_themes( array( 'minn_admin' => 1 ) );
+		$tr = get_site_transient( 'update_themes' );
+		if ( $tr && ! empty( $tr->response ) && is_array( $tr->response ) ) {
+			foreach ( $tr->response as $slug => $data ) {
+				$ver = is_array( $data ) ? (string) ( $data['new_version'] ?? '' ) : '';
+				if ( $ver ) {
+					$out['themes'][ $slug ] = $ver;
+				}
+			}
+		}
+	}
+
+	if ( $component && $is_theme && $stylesheet && ! empty( $out['themes'][ $stylesheet ] ) ) {
+		$theme = wp_get_theme( $stylesheet );
+		$out['update'] = array(
+			'kind'    => 'theme',
+			'file'    => $stylesheet,
+			'name'    => $theme->exists() ? (string) $theme->get( 'Name' ) : $stylesheet,
+			'version' => $out['themes'][ $stylesheet ],
+			'current' => $theme->exists() ? (string) $theme->get( 'Version' ) : '',
+		);
+	} elseif ( $component && ! $is_theme && ! empty( $out['plugins'][ $component ] ) ) {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$all  = get_plugins();
+		$name = isset( $all[ $component ]['Name'] ) ? (string) $all[ $component ]['Name'] : $component;
+		$cur  = isset( $all[ $component ]['Version'] ) ? (string) $all[ $component ]['Version'] : '';
+		$out['update'] = array(
+			'kind'    => 'plugin',
+			'file'    => $component,
+			'name'    => $name,
+			'version' => $out['plugins'][ $component ],
+			'current' => $cur,
+		);
+	}
+
+	return $out;
+}
+
 add_action( 'rest_api_init', function () {
 	$can = function () {
 		return current_user_can( 'manage_options' );
@@ -2555,7 +2643,59 @@ add_action( 'rest_api_init', function () {
 				// Fresh classification rides along so the client repaints
 				// from the vendor's now-current stored state in one round trip.
 				$result['licenses'] = minn_admin_licenses();
+
+				// After a successful activate (or re-verify), force a fresh
+				// update check. Licensed commercial plugins (Gravity SMTP,
+				// Elementor Pro, …) only report updates once a key is stored;
+				// without this the user would wait for core's 12h cadence or
+				// leave Minn for wp-admin's "Check again". The response
+				// carries the component's pending update (if any) plus full
+				// maps so the client can refresh badges/notifications without
+				// a second round trip.
+				if ( ! empty( $result['ok'] ) && in_array( $action, array( 'activate', 'verify' ), true ) ) {
+					$component = isset( $p['component'] ) ? (string) $p['component'] : '';
+					try {
+						$checked = minn_admin_force_update_check( $component );
+						$result['updates_checked'] = true;
+						$result['pluginUpdates']   = $checked['plugins'];
+						$result['themeUpdates']    = $checked['themes'];
+						if ( ! empty( $checked['update'] ) ) {
+							$result['update'] = $checked['update'];
+						}
+					} catch ( \Throwable $e ) {
+						// Update check is best-effort; never fail the license action.
+						$result['updates_checked'] = false;
+					}
+				}
+
 				return rest_ensure_response( $result );
+			},
+		)
+	);
+
+	// Explicit "Check for updates" (Extensions toolbar / palette). Same
+	// force path as post-activate; returns fresh plugin + theme maps.
+	register_rest_route(
+		'minn-admin/v1',
+		'/check-updates',
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => function () {
+				return current_user_can( 'update_plugins' ) || current_user_can( 'update_themes' );
+			},
+			'callback'            => function () {
+				try {
+					$checked = minn_admin_force_update_check( '' );
+				} catch ( \Throwable $e ) {
+					return new WP_Error( 'check_failed', 'Could not check for updates.', array( 'status' => 500 ) );
+				}
+				return rest_ensure_response( array(
+					'ok'             => true,
+					'pluginUpdates'  => $checked['plugins'],
+					'themeUpdates'   => $checked['themes'],
+					'plugins'        => count( $checked['plugins'] ),
+					'themes'         => count( $checked['themes'] ),
+				) );
 			},
 		)
 	);

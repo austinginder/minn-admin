@@ -161,6 +161,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		} );
 		await page.keyboard.type( 'fixture-valid-key' );
 		await page.evaluate( () => document.querySelector( '#minn-sys-licenses [data-lic-go]' ).click() );
+		// Post-activate force-checks updates (commercial plugins only report
+		// once a key is stored); toast is either plain or "· checked for
+		// updates" / "· Name version is available".
 		await waitToast( 'License activated' );
 		await page.waitForFunction( () => {
 			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
@@ -169,6 +172,25 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		}, null, { timeout: 15000 } );
 		st = await rowState();
 		t.check( 'activated row flips to Valid with Deactivate + Re-verify', st.buttons.includes( 'deactivate' ) && st.buttons.includes( 'verify' ) && ! st.buttons.includes( 'activate' ), JSON.stringify( st ) );
+
+		// Server-side shape: successful activate/verify carry updates_checked
+		// + plugin/theme maps (the force-check that unlocks commercial updates).
+		const forceShape = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/licenses/action', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( { provider: 'minn-fixture-activatable', action: 'verify' } ),
+			} );
+			const j = await r.json();
+			return {
+				ok: j.ok === true,
+				checked: j.updates_checked === true,
+				pluginsMap: j.pluginUpdates && typeof j.pluginUpdates === 'object',
+				themesMap: j.themeUpdates && typeof j.themeUpdates === 'object',
+			};
+		} );
+		t.check( 'verify force-checks updates and returns maps', forceShape.ok && forceShape.checked && forceShape.pluginsMap && forceShape.themesMap, JSON.stringify( forceShape ) );
 
 		/* ===== The secret never comes back ===== */
 		const echoes = await page.evaluate( async () => {
@@ -179,7 +201,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		} );
 		t.check( 'pasted key never appears in GET /licenses', ! echoes );
 
-		/* ===== Re-verify ===== */
+		/* ===== Re-verify (UI) ===== */
 		const row = await fixtureRow();
 		await row.evaluate( ( el ) => el.querySelector( '[data-lic="verify"]' ).click() );
 		await waitToast( 'License re-verified' );
