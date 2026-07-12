@@ -23,7 +23,9 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
   is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP, or
-  Google Analytics through **Site Kit**), and a recent-activity feed
+  Google Analytics through **Site Kit**), **click a bar for that day's top pages and referrers**
+  (Koko and WP Statistics today; others join via `minn_admin_traffic_day`), and a recent-activity
+  feed
 - **Content** — posts, pages and custom post types sorted by publish date (scheduled posts
   lead with their go-out dates), with search, category/tag filters, status pills, **bulk
   actions** (set status or trash, with shift-click range select), and **row actions**:
@@ -66,32 +68,37 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   can safely flip the setting (third parties register via `minn_admin_visibility_providers`)
 - **Editor** — a calm, block-aware writing surface that stores **native Gutenberg markup**
   (zero lock-in: open any post in the block editor, any time). Markdown typing conventions
-  (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), a link popover
-  on ⌘K, text alignment, table & image controls in island-style cutouts, complex blocks
-  preserved byte-for-byte as **configurable islands** with real front-end styles (and full
-  height; previews no longer clip tall grids). Slash commands stay curated and type-to-filter;
-  **Browse all** or **⌘/** opens the **block picker**, grouped by source (basics, plugin
-  blocks, design libraries, patterns). **Dynamic third-party blocks** that render standalone
-  auto-appear in search (no adapter); **Stackable**, **Kadence**, and **GenerateBlocks**
-  free design/pattern libraries insert as valid Gutenberg markup with images sideloaded;
-  **block patterns** from core, the theme, and plugins join the same search. Island content
-  is editable: **text runs** and an **Images** section rewrite only what you change; block
-  settings scale (used fields first, the rest behind **More settings**); every island links
-  out to the block editor for layout controls. Previews pick up lazy CSS and **auto-warm**
-  browser-compiled styles when needed. Syntax-highlighted code blocks, word count · reading
-  time, scheduling and one-click publish. **Paste cleanup** turns Word / Google Docs / web
-  HTML into the safe subset; **paste or drag an image** uploads at the caret with an inline
-  caption. The publish sidebar edits the **slug**, **visibility** (public / password /
-  private), per-post **discussion**, **sticky** and **post format** (when the theme supports
-  formats). Deleting an embed offers an **Undo**
-  toast; **table** add/delete row and column undo with **⌘Z**. **Revision diffs** open a
-  side-by-side, word-marked diff against the current content. An **outline panel** lists
-  headings as a live table of contents; **focus mode** (⌘⇧D) fades all but the current
+  (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), with wraps
+  that stay on the undo stack (including inline code). Link popover on ⌘K, text alignment,
+  table and image controls in island-style cutouts, complex blocks preserved byte-for-byte
+  as **configurable islands** with real front-end styles (full height; previews no longer
+  clip tall grids). Slash commands stay curated and type-to-filter; **Browse all** or **⌘/**
+  opens the **block picker**, grouped by source (basics, plugin blocks, design libraries,
+  patterns). Plugins can register free-form slash items through
+  **`minn_admin_editor_commands`** (boilerplate HTML, island templates, or an async REST
+  route). **Dynamic third-party blocks** that render standalone auto-appear in search (no
+  adapter); **Stackable**, **Kadence**, and **GenerateBlocks** free design/pattern libraries
+  insert as valid Gutenberg markup with images sideloaded; **block patterns** from core, the
+  theme, and plugins join the same search. Island content is editable: **text runs** and an
+  **Images** section rewrite only what you change; block settings scale (used fields first,
+  the rest behind **More settings**); every island links out to the block editor for layout
+  controls. Previews pick up lazy CSS and **auto-warm** browser-compiled styles when needed.
+  Syntax-highlighted code blocks; **writing stats** on the sticky pill (words, reading time,
+  session delta, optional word goal); scheduling and one-click publish. **Paste cleanup**
+  turns Word / Google Docs / web HTML into the safe subset; **paste or drag an image**
+  uploads at the caret with an inline caption. The publish sidebar edits the **slug**,
+  **visibility** (a themed Public / Password / Private combobox), per-post **discussion**,
+  **sticky** and **post format** (when the theme supports formats). Deleting an embed offers
+  an **Undo** toast; **table** add/delete row and column undo with **⌘Z**. **Revision diffs**
+  open a side-by-side, word-marked diff against the current content. An **outline panel**
+  lists headings as a live table of contents; **focus mode** (⌘⇧D) fades all but the current
   paragraph; **outline mode** (⌘⇧O) leaves just the writing and the outline. The **internal
   link picker** searches your own posts from the link popover, and a themed **date-time
   picker** handles scheduling. **Find & replace** (⌘⇧F) matches across inline formatting,
-  never touches protected islands, and every replace is a native undo step. ⌘⏎ publishes;
-  the help dialog documents every shortcut.
+  never touches protected islands, and every replace is a native undo step. Built for real
+  writing sessions: **IME-safe** composition (CJK and dead keys), **mobile Safari** keyboard
+  and hit-target polish, and a first-cut **accessible** toolbar, slash menu, and block
+  popovers. ⌘⏎ publishes; the help dialog documents every shortcut.
   Where this is heading: [the editor roadmap](docs/editor-roadmap.md)
 - **Never lose work** — post locking on WordPress's own `_edit_lock` (Minn, the classic editor
   and Gutenberg all honor each other, with takeover), plus a localStorage **crash net** that
@@ -163,12 +170,13 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   cache** purges every layer the site runs (Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket,
   WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor
   CSS), each in its own isolated request
-- **Extending** — one-filter APIs for any plugin to register views (with status cards, tabs,
-  status filters, detail layouts, actions with inline fields, **bulk actions**, schema-driven
-  **settings views** and **setup gates**), editor panels, traffic data, cache purgers, spam providers,
-  license providers, visibility providers, design libraries, page builders or block-inspector
-  forms; the System page's **Integrations** card shows everything registered and flags
-  descriptor problems instead of failing silently.
+- **Extending** — one-filter APIs for any plugin to register views (with status cards and optional
+  **charts**, extra **list views**, tabs, status filters, detail layouts, actions with inline
+  fields, **bulk actions**, schema-driven **settings views** including **item-scoped settings**,
+  and **setup gates**), editor panels, **editor slash commands**, traffic data (including
+  per-day drill-down), cache purgers, spam providers, license providers, visibility providers,
+  design libraries, page builders or block-inspector forms; the System page's **Integrations**
+  card shows everything registered and flags descriptor problems instead of failing silently.
   The full coverage map lives in [docs/plugin-support.md](docs/plugin-support.md)
 - **Dark & light themes** (follows your OS setting until you choose), bundled fonts, zero
   external requests from the app, responsive down to phones

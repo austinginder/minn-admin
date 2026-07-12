@@ -150,8 +150,8 @@ distrust the surface.
 ## Horizon 2 — delight (0.7–0.9): things Gutenberg will never feel like
 
 The theme: features that only make sense in a *writing* tool, where the calm surface is
-the point. Most of this horizon shipped across v0.8.0–v0.13.0; remaining item is the
-slash-command extension point.
+the point. This horizon is closed as of v0.13.0 (writing stats + slash-command extension
+point were the last items).
 
 - **Outline panel.** ✅ *Shipped 2026-07-05 (v0.8.0)* — heading ToC as the last sidebar
   card, sticky; rebuilds on the stats cadence; click ping lives inside the scroller at
