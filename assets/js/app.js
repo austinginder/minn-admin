@@ -11244,7 +11244,7 @@
 		if ( visWrap ) {
 			bindAutocomplete( visWrap, [
 				{ value: 'public', label: 'Public' },
-				{ value: 'password', label: 'Password protected' },
+				{ value: 'password', label: 'Password' },
 				{ value: 'private', label: 'Private' },
 			], {
 				strict: true,
