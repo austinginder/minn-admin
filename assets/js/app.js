@@ -12242,6 +12242,8 @@
 			// block's text in — both are no-ops, like Gutenberg.
 			body.addEventListener( 'keydown', ( e ) => {
 				if ( e.key !== 'Enter' && e.key !== 'Backspace' && e.key !== 'Delete' ) return;
+				// Enter confirms an IME candidate; don't exit the caption mid-composition.
+				if ( isImeComposing( e ) ) return;
 				const s = window.getSelection();
 				if ( ! s.rangeCount ) return;
 				let n = s.anchorNode;
@@ -14222,6 +14224,9 @@
 				return;
 			}
 			if ( e.metaKey || e.ctrlKey || e.altKey ) return;
+			// Backspace during IME deletes the candidate syllable — never
+			// arm/remove an island while composing.
+			if ( isImeComposing( e ) ) return;
 
 			// 1) Focus in a live-field island (shortcode input, etc.).
 			const liveIsland = liveFieldReady( e.target, e.key );
@@ -14326,6 +14331,17 @@
 		return code;
 	}
 
+	// IME / composition (CJK, dead keys): keydown fires for intermediate
+	// composition steps. isComposing is the standard signal; keyCode 229 is
+	// the legacy "IME processing" value still set by Blink/WebKit when
+	// isComposing can lag a frame. Any handler that preventDefault's a
+	// printable key or steals Enter/Backspace must bail here or CJK input
+	// breaks (markdown wraps mid-candidate, slash Enter confirms a menu
+	// instead of the IME, island Backspace arms while deleting a syllable).
+	function isImeComposing( e ) {
+		return !!( e && ( e.isComposing || e.keyCode === 229 ) );
+	}
+
 	function setCaret( node, offset ) {
 		const range = document.createRange();
 		range.setStart( node, offset );
@@ -14425,6 +14441,9 @@
 
 		body.addEventListener( 'keydown', ( e ) => {
 			if ( e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1 ) return;
+			// Never intercept during IME composition — the closing delimiter
+			// of a markdown wrap can arrive as a composition keystroke.
+			if ( isImeComposing( e ) ) return;
 			const sel = window.getSelection();
 			if ( ! sel.rangeCount || ! sel.isCollapsed ) return;
 			const node = sel.anchorNode;
@@ -15805,6 +15824,8 @@
 
 		body.addEventListener( 'keydown', ( e ) => {
 			if ( ! menu ) return;
+			// Enter confirms IME candidates — never run a slash action mid-composition.
+			if ( isImeComposing( e ) ) return;
 			if ( e.key === 'ArrowDown' ) { e.preventDefault(); selIdx = ( selIdx + 1 ) % filtered.length; highlight(); }
 			else if ( e.key === 'ArrowUp' ) { e.preventDefault(); selIdx = ( selIdx - 1 + filtered.length ) % filtered.length; highlight(); }
 			else if ( e.key === 'Enter' ) { e.preventDefault(); run( filtered[ selIdx ] ); }

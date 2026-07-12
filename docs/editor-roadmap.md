@@ -114,8 +114,17 @@ distrust the surface.
   every edit to localStorage within ~1.2s, offers recovery on the next open (including
   never-saved new posts) and clears itself on successful saves. Suites: `tests/lock.test.js`,
   `tests/localnet.test.js`. This also delivers Horizon 3's presence groundwork.
-- **Input long tail.** IME/composition input audit (CJK), mobile Safari pass,
-  accessibility pass (keyboard access to chips/popovers/islands, ARIA on the toolbar).
+- **Input long tail.** IME/composition, mobile Safari, accessibility.
+  - **IME / composition (CJK).** ✅ *Shipped 2026-07-12* — every keydown path that
+    `preventDefault`s printable keys or steals Enter/Backspace bails on
+    `isComposing` / keyCode 229: markdown wraps + code-edge escape, island
+    arming, slash-menu Enter, figcaption Enter. Real IME engines aren't in
+    headless Chrome; `tests/ime.test.js` synthesizes composition-shaped
+    KeyboardEvents. Remaining long-tail items below are still open.
+  - **Mobile Safari pass.** Still open — visualViewport vs fixed chips/stats,
+    sticky toolbar, touch targets.
+  - **Accessibility pass.** Still open — toolbar `aria-label`s, chip focus,
+    popover focus trap, toast live regions.
 - **Inline media flow.** Paste/drag an image from the clipboard straight to the media
   library at the caret; inline figcaption editing.
   ✅ *Shipped 2026-07-05* — screenshot ⌘V and dropped image files upload to the library
