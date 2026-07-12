@@ -100,9 +100,11 @@ Reference depth: **Gravity Forms**.
 | safe-redirect-manager | Y | · | Y | Y | — | · | — | · | — | · | | |
 | simple-301-redirects | Y | · | Y | Y | — | · | — | · | — | · | | |
 | eps-301-redirects | Y | · | Y | Y | — | · | — | · | — | Y | | No leading slash on source |
-| code-snippets | Y | · | · | Y | — | · | — | · | — | · | | |
-| wpcode | Y | · | · | Y | — | · | — | · | — | · | | |
-| fluent-snippets | Y | · | · | Y | — | · | — | · | — | · | | |
+| code-snippets | Y | · | Y | Y | — | · | — | · | — | Y | | |
+| wpcode | Y | Y | Y | Y | — | · | — | · | — | Y | | |
+| fluent-snippets | Y | Y | Y | Y | — | · | — | · | — | Y | | |
+| custom-css-js | Y | Y | Y | Y | — | · | — | · | — | Y | 2026-07-12 | CPT shim; tree rebuild on write |
+| hfcm | Y | Y | Y | Y | — | · | — | · | — | Y | 2026-07-12 | hfcm_scripts; page targeting = **L** |
 
 ### settings-only / other surfaces
 

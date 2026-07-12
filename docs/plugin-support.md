@@ -23,7 +23,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects, 301 Redirects (WebFactory) | **Redirects** surface — list + in-place edit + bulk delete; Redirection's first-run install runs in place via the setup gate, and its daily options (monitor, log retention, IP logging) live in a Settings view through its own `red_set_options` |
 | **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence**, **Limit Login Attempts Reloaded**, **Solid Security** | **Activity Log** surface — severity/level tabs (Simple History, WSAL), connector tabs (Stream), action tabs (Aryo); Wordfence = login security with a status card (24h failures + firewall/scan); Limit Login Attempts and Solid Security = lockout logs with status cards and one-click Unlock/Release through each plugin's own store |
 | **Security posture** | Wordfence, Really Simple SSL, Solid Security | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
-| **Snippets** | Code Snippets, WPCode, FluentSnippets | **Snippets** surface — list, toggle, edit |
+| **Snippets** | Code Snippets, WPCode, FluentSnippets, Simple Custom CSS and JS, Header Footer Code Manager | **Snippets** surface — list, toggle, edit, create, bulk (provider switcher when more than one is active) |
 | **Analytics** | Koko, WP Statistics, Burst, Independent Analytics, AnalyticsWP, **Site Kit** | Overview **Traffic** chart (daily visitors/pageviews). Day-click drill-down (top pages + referrers via `minn_admin_traffic_day`): **Koko** and **WP Statistics** (WPS pages table stores hits only, so vis/views both report that total) |
 | **Backups** | UpdraftPlus, Disembark, Duplicator, WPvivid, BackWPup, All-in-One WP Migration | **Backups** surface; health check + "Back up now" (UpdraftPlus, else WPvivid); status card, CLI command, sessions + cleanup (Disembark); package list with disk sizes, status card and delete-through-its-own-cleanup (Duplicator, no freshness claims: manual builds); backup list + status card + schedule + backup-now + delete-through-its-own-cleanup (WPvivid); local FOLDER archives + run-job-now + delete through their destination (BackWPup); local .wpress export list + delete through their Backups model, no freshness claims (All-in-One WP Migration; export/import stay deep links) |
 | **Caching** | Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket, WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor CSS, SpeedyCache, Redis Object Cache, Breeze, Nginx Helper, Cloudflare | **Clear site cache** action (⌘K). Redis Object Cache also adds a System health row for drop-in + connection posture |
@@ -94,13 +94,11 @@ remains, re-ranked (installs × fit × effort):
 1. **Email log providers** — GoSMTP (logs free), SureMails, Site Mailer;
    Easy WP SMTP's full log is Pro-only (free has debug events, the
    WP Mail SMTP shape).
-2. **Snippets providers** — Simple Custom CSS & JS (a CPT) and Header Footer
-   Code Manager (`hfcm_scripts` table) into the existing Snippets surface.
-3. **Security leftover** — All-In-One Security (activity-log family +
+2. **Security leftover** — All-In-One Security (activity-log family +
    posture row; the LLA-R / Solid Security pattern).
-4. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
+3. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
    believed but not source-verified; verify before promising).
-5. **Bigger scoped bets** — WPForms Pro entries (source-verified: Lite
+4. **Bigger scoped bets** — WPForms Pro entries (source-verified: Lite
    stores no entries at all, so this costs a license and Pro fixtures;
    biggest uncovered name), Jetpack Stats as a traffic provider (data lives
    on WordPress.com behind its connection auth; scope to stats only),

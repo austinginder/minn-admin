@@ -59,6 +59,8 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/solid-security.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/code-snippets.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wpcode.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/fluent-snippets.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/custom-css-js.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/hfcm.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/redirection.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/safe-redirect-manager.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/simple-301-redirects.php';

@@ -1,3 +1,5 @@
 node_modules/
 .DS_Store
 tests/package-lock.json
+# local full-suite run logs (release preflight)
+tests/.release-*
