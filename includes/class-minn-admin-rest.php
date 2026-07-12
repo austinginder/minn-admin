@@ -3284,6 +3284,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 
+		// Solid Security posture (adapters/solid-security.php), same shape.
+		if ( function_exists( 'minn_admin_solid_security_checks' ) ) {
+			foreach ( minn_admin_solid_security_checks() as $ss_check ) {
+				$checks[] = $ss_check;
+			}
+		}
+
 		// Licenses — read-only visibility (adapters/licenses.php); the health
 		// check only renders when the site has license-wanting components.
 		$licenses = function_exists( 'minn_admin_licenses' ) ? minn_admin_licenses() : null;
