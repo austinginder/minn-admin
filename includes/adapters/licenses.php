@@ -2467,6 +2467,86 @@ function minn_admin_license_result( $raw ) {
 }
 
 /**
+ * Flush vendor-side update caches that would otherwise hide a just-unlocked
+ * commercial update. Gravity SMTP (and Gravity Tools siblings) are the hard
+ * case: their Auto_Updater freezes the license key on a Common object at
+ * container build, and version offerings sit in GFCache for a day. Their own
+ * plugins.php / update-core.php screens flush that cache; Minn has to do the
+ * same, plus refresh the Common key mid-request after an activate.
+ */
+function minn_admin_flush_vendor_update_caches() {
+	// Gravity SMTP — request-scoped Common key + DAY GFCache of offerings.
+	// Their Utils_Service_Provider lives in the shared Gravity_Tools ns
+	// (vendored into gravitysmtp), not under Gravity_SMTP\Utils.
+	if ( class_exists( '\Gravity_Forms\Gravity_SMTP\Gravity_SMTP' )
+		&& class_exists( '\Gravity_Forms\Gravity_Tools\Utils\Utils_Service_Provider' )
+		&& class_exists( '\Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider' )
+		&& class_exists( '\Gravity_Forms\Gravity_Tools\Updates\Updates_Service_Provider' ) ) {
+		try {
+			$c = \Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+			// Re-read the key the activate path just wrote — Common is a
+			// singleton built at request start with the previous (empty)
+			// value, so get_key() would otherwise still be ''.
+			if ( method_exists( $c, 'get' ) ) {
+				$common = $c->get( \Gravity_Forms\Gravity_Tools\Utils\Utils_Service_Provider::COMMON );
+				$router = $c->get( \Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::DATA_STORE_ROUTER );
+				$key    = '';
+				if ( $router && method_exists( $router, 'get_plugin_setting' ) ) {
+					$key = (string) $router->get_plugin_setting( 'license_key', '' );
+				}
+				if ( $common && is_object( $common ) ) {
+					$ref = new \ReflectionObject( $common );
+					if ( $ref->hasProperty( 'key' ) ) {
+						$prop = $ref->getProperty( 'key' );
+						$prop->setAccessible( true );
+						$prop->setValue( $common, $key );
+					}
+				}
+				// Drop the DAY offerings cache (mirrors their plugins.php
+				// "always show updates when you visit" filter).
+				$cache = $c->get( \Gravity_Forms\Gravity_Tools\Utils\Utils_Service_Provider::CACHE );
+				if ( $cache && method_exists( $cache, 'delete' ) ) {
+					$cache->delete( 'gsmtp_gforms_plugins' );
+				}
+				// License connector keeps static request caches too.
+				$conn = $c->get( \Gravity_Forms\Gravity_Tools\Updates\Updates_Service_Provider::LICENSE_API_CONNECTOR );
+				if ( $conn ) {
+					$cr = new \ReflectionClass( $conn );
+					foreach ( array( 'plugins', 'license_info' ) as $static ) {
+						if ( $cr->hasProperty( $static ) ) {
+							$sp = $cr->getProperty( $static );
+							$sp->setAccessible( true );
+							$sp->setValue( null, null );
+						}
+					}
+				}
+			}
+			delete_option( 'gsmtp_version_info' );
+		} catch ( \Throwable $e ) {
+			// Best-effort; never break the update check.
+		}
+	}
+
+	// Gravity Forms core: its version_info option is the equivalent cache.
+	// get_version_info( false ) is what their own force-check does.
+	if ( class_exists( 'GFCommon' ) && method_exists( 'GFCommon', 'get_version_info' ) ) {
+		try {
+			// Their helper with cache=false hits the API and rewrites the option.
+			\GFCommon::get_version_info( false );
+		} catch ( \Throwable $e ) {
+			// ignore
+		}
+	}
+
+	/**
+	 * Let third-party adapters flush their own update caches when Minn
+	 * force-checks. Fire before wp_update_plugins so their
+	 * site_transient_update_plugins filters see fresh data.
+	 */
+	do_action( 'minn_admin_flush_vendor_update_caches' );
+}
+
+/**
  * Force a fresh plugins (and themes) update check. Commercial plugins often
  * only report updates once a license is stored (the key rides their request),
  * so a just-activated license would otherwise wait up to 12h for core's next
@@ -2490,6 +2570,11 @@ function minn_admin_force_update_check( $component = '' ) {
 	$component = is_string( $component ) ? $component : '';
 	$is_theme  = 0 === strpos( $component, 'theme:' );
 	$stylesheet = $is_theme ? substr( $component, 6 ) : '';
+
+	// Vendor caches BEFORE the core check — Gravity SMTP's Auto_Updater
+	// only injects into the transient when its Common key + offerings
+	// cache already know about the license.
+	minn_admin_flush_vendor_update_caches();
 
 	if ( current_user_can( 'update_plugins' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
