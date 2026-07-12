@@ -160,6 +160,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/formidable/entries/{id}',
+					'confirm' => 'Delete the selected entries permanently? There is no undo.',
+					'danger'  => true,
+				),
+			),
 		),
 		'manage'     => array(
 			'viewLabel' => 'Forms',

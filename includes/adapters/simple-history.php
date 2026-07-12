@@ -30,8 +30,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'tabs'      => array(
 				'param'    => 'loglevels',
 				'static'   => array(
-					array( 'warning', 'Warnings' ),
 					array( 'error', 'Errors' ),
+					array( 'warning', 'Warnings' ),
+					array( 'notice', 'Notices' ),
+					array( 'info', 'Info' ),
 				),
 				'allLabel' => 'All',
 			),

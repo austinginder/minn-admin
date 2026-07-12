@@ -40,6 +40,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
+			// Action is Aryo's first-class verb (logged_in / updated / installed…).
+			'tabs'      => array(
+				'route'    => 'minn-admin/v1/aryo/actions',
+				'valueKey' => 'id',
+				'labelKey' => 'title',
+				'param'    => 'action',
+				'allLabel' => 'All actions',
+			),
 			'columns'   => array(
 				array( 'key' => 'message', 'label' => 'Event', 'format' => 'title' ),
 				array( 'key' => 'who', 'label' => 'Who' ),
@@ -59,6 +67,25 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
+	register_rest_route( 'minn-admin/v1', '/aryo/actions', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_aryo_can_view',
+		'callback'            => function () {
+			global $wpdb;
+			$table = $wpdb->prefix . 'aryo_activity_log';
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$cols = $wpdb->get_col( "SELECT DISTINCT action FROM {$table} WHERE action != '' ORDER BY action ASC" );
+			$out  = array();
+			foreach ( (array) $cols as $a ) {
+				$out[] = array(
+					'id'    => (string) $a,
+					'title' => ucwords( str_replace( array( '-', '_' ), ' ', (string) $a ) ),
+				);
+			}
+			return rest_ensure_response( $out );
+		},
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/aryo/events', array(
 		'methods'             => 'GET',
 		'permission_callback' => 'minn_admin_aryo_can_view',
@@ -67,22 +94,27 @@ add_action( 'rest_api_init', function () {
 			$table    = $wpdb->prefix . 'aryo_activity_log';
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$where    = '1=1';
+			$where    = array( '1=1' );
 			$args     = array();
 
-			if ( $request['search'] ) {
-				$like  = '%' . $wpdb->esc_like( $request['search'] ) . '%';
-				$where = '(object_name LIKE %s OR action LIKE %s OR object_type LIKE %s)';
-				$args  = array( $like, $like, $like );
+			if ( $request['action'] ) {
+				$where[] = 'action = %s';
+				$args[]  = sanitize_key( (string) $request['action'] );
 			}
+			if ( $request['search'] ) {
+				$like    = '%' . $wpdb->esc_like( $request['search'] ) . '%';
+				$where[] = '(object_name LIKE %s OR action LIKE %s OR object_type LIKE %s)';
+				array_push( $args, $like, $like, $like );
+			}
+			$where_sql = implode( ' AND ', $where );
 
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-derived; WHERE is placeholder-built.
 			$total = (int) ( $args
-				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) )
-				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ) );
+				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", ...$args ) )
+				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}" ) );
 			$rows = $wpdb->get_results( $wpdb->prepare(
 				"SELECT histid, action, object_type, object_subtype, object_name, user_id, hist_ip, hist_time
-				 FROM {$table} WHERE {$where} ORDER BY hist_time DESC LIMIT %d OFFSET %d",
+				 FROM {$table} WHERE {$where_sql} ORDER BY hist_time DESC LIMIT %d OFFSET %d",
 				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 			// phpcs:enable

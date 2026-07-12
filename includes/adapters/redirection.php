@@ -145,7 +145,152 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
+			// Same routes as single actions — Redirection's bulk endpoint is
+			// already per-item under the hood.
+			'bulk'      => array(
+				array(
+					'label'  => 'Disable',
+					'method' => 'POST',
+					'route'  => 'redirection/v1/bulk/redirect/disable?items={id}',
+				),
+				array(
+					'label'  => 'Enable',
+					'method' => 'POST',
+					'route'  => 'redirection/v1/bulk/redirect/enable?items={id}',
+				),
+				array(
+					'label'   => 'Delete',
+					'method'  => 'POST',
+					'route'   => 'redirection/v1/bulk/redirect/delete?items={id}',
+					'confirm' => 'Delete the selected redirects permanently?',
+					'danger'  => true,
+				),
+			),
+		),
+		// Daily options only (monitor + logging + IP). Schema served at
+		// request time; writes go through red_set_options (their sanitizer).
+		'settings'   => array(
+			'label' => 'Settings',
+			'cap'   => apply_filters( 'redirection_role', 'manage_options' ),
+			'tabs'  => array(
+				array( 'id' => 'general', 'label' => 'General' ),
+			),
+			'route' => 'minn-admin/v1/redirection/settings/{tab}',
 		),
 	);
 	return $surfaces;
+} );
+
+add_action( 'rest_api_init', function () {
+	if ( ! defined( 'REDIRECTION_VERSION' ) || ! function_exists( 'red_get_options' ) ) {
+		return;
+	}
+	$perm = function () {
+		$cap = apply_filters( 'redirection_role', 'manage_options' );
+		return current_user_can( $cap );
+	};
+
+	register_rest_route( 'minn-admin/v1', '/redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $perm,
+			'callback'            => function () {
+				$opts = red_get_options();
+				// monitor_post is a group id when on; 0 is off.
+				$monitor_on = ! empty( $opts['monitor_post'] );
+				$log_days   = isset( $opts['expire_redirect'] ) ? (int) $opts['expire_redirect'] : 7;
+				$log_on     = $log_days >= 0;
+				$ip_on      = ! empty( $opts['ip_logging'] );
+				return rest_ensure_response( array(
+					'groups' => array(
+						array(
+							'title'  => 'Permalink monitor',
+							'fields' => array(
+								array(
+									'key'   => 'monitor',
+									'label' => 'Monitor permalink changes',
+									'type'  => 'toggle',
+									'help'  => 'Add a redirect when a post or page slug changes.',
+								),
+							),
+						),
+						array(
+							'title'  => 'Logging',
+							'fields' => array(
+								array(
+									'key'   => 'log',
+									'label' => 'Keep a log of redirects and 404s',
+									'type'  => 'toggle',
+									'help'  => 'When on, logs are kept for the number of days below.',
+								),
+								array(
+									'key'      => 'expire_days',
+									'label'    => 'Keep logs for (days)',
+									'type'     => 'number',
+									'min'      => 1,
+									'max'      => 60,
+									'showWhen' => array( 'key' => 'log', 'equals' => true ),
+								),
+								array(
+									'key'      => 'ip_logging',
+									'label'    => 'Store IP addresses with logs',
+									'type'     => 'toggle',
+									'help'     => 'A privacy choice — off by default on fresh installs.',
+									'showWhen' => array( 'key' => 'log', 'equals' => true ),
+								),
+							),
+						),
+					),
+					'values'   => array(
+						'monitor'     => $monitor_on,
+						'log'         => $log_on,
+						'expire_days' => $log_on ? max( 1, $log_days ) : 7,
+						'ip_logging'  => $ip_on,
+					),
+					'adminUrl' => admin_url( 'tools.php?page=redirection.php' ),
+				) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$vals = $request->get_param( 'values' );
+				if ( ! is_array( $vals ) ) {
+					$vals = array();
+				}
+				$opts    = red_get_options();
+				$payload = array();
+
+				if ( array_key_exists( 'monitor', $vals ) ) {
+					$on = ! empty( $vals['monitor'] );
+					// Same shape the setup wizard writes: default group 1 + post/page types.
+					$payload['monitor_post']  = $on ? ( ! empty( $opts['monitor_post'] ) ? (int) $opts['monitor_post'] : 1 ) : 0;
+					$payload['monitor_types'] = $on ? array( 'post', 'page' ) : array();
+				}
+				if ( array_key_exists( 'log', $vals ) || array_key_exists( 'expire_days', $vals ) ) {
+					$log_on = array_key_exists( 'log', $vals )
+						? ! empty( $vals['log'] )
+						: ( isset( $opts['expire_redirect'] ) && (int) $opts['expire_redirect'] >= 0 );
+					$days   = array_key_exists( 'expire_days', $vals )
+						? max( 1, min( 60, (int) $vals['expire_days'] ) )
+						: ( isset( $opts['expire_redirect'] ) && (int) $opts['expire_redirect'] > 0 ? (int) $opts['expire_redirect'] : 7 );
+					// -1 disables logging (their convention).
+					$payload['expire_redirect'] = $log_on ? $days : -1;
+					$payload['expire_404']      = $log_on ? $days : -1;
+				}
+				if ( array_key_exists( 'ip_logging', $vals ) ) {
+					$payload['ip_logging'] = ! empty( $vals['ip_logging'] ) ? 1 : 0;
+				}
+				if ( $payload ) {
+					red_set_options( $payload );
+				}
+
+				// Return a fresh GET so the client repaints.
+				$req = new WP_REST_Request( 'GET', '/minn-admin/v1/redirection/settings/general' );
+				$res = rest_do_request( $req );
+				return $res;
+			},
+		),
+	) );
 } );
