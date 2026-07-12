@@ -179,6 +179,11 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-sstat-label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text3); margin-bottom: 3px; }
 .minn-sstat-value { font-size: 17px; font-weight: 650; color: var(--text); }
 .minn-sstat-hint { font-size: 12px; color: var(--text3); margin-top: 2px; }
+/* Status-card chart: compact Overview bars. Tip reuses #minn-chart-tip.
+   Specificity must beat the standalone .minn-chart { height: 150px }. */
+.minn-sstat-chart { min-width: 0; }
+.minn-sstat-chart .minn-sstat-label { margin-bottom: 10px; }
+.minn-sstat-chart .minn-chart { height: 88px; gap: 3px; }
 .minn-sstat-cmd { min-width: 0; }
 .minn-sstat-cmd-box {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;

@@ -188,6 +188,29 @@ swaps for an inline form and the values merge into the request body
 reference). Omit any key you don't need; conditional actions are just
 actions your route leaves out of the response.
 
+Optional `chart` draws a compact bar series under the rows (same visual
+language as the Overview traffic/activity chart). Shape:
+
+```json
+{
+    "title": "Last 14 days",
+    "primary": "Sent",
+    "secondary": "Failed",
+    "points": [
+        { "label": "Jul 1", "value": 5, "secondary": 1 },
+        { "label": "Jul 2", "value": 3, "secondary": 0 }
+    ]
+}
+```
+
+`points` is required (skip the key when empty). `label` is display-ready;
+`value` is the solid bar and the first tip row. When `secondary` is present
+on the chart (or on any point), bars become dual: a soft total bar
+(`value + secondary`) behind the solid primary bar, with tip rows named by
+`primary` / `secondary` (defaults "Count" / "Other"). Single-series charts
+omit `secondary` and render one accent bar per point. The bundled Gravity
+SMTP adapter is the reference (daily sent/failed from its events table).
+
 ### `settings` — a schema-driven settings view
 
 Your plugin's settings, rendered by Minn from a schema your route serves at
