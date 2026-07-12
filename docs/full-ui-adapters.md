@@ -43,108 +43,73 @@ whether the adapter approach scales to full coverage.
    has a proven answer: delegate, exactly like page builders ("Edit in Gravity Forms"
    is one click, with no wp-admin chrome needed for the builder-style screens).
 
-## Where the adapter system stands today (re-verified at v0.10.0, 2026-07-10)
+## Where the adapter system stands today (re-verified at v0.13.0, 2026-07-12)
 
-The current vocabulary (docs/for-plugin-authors.md; ground truth is the validator
-constants in `class-minn-admin-surfaces.php`) expresses: paginated list tables with
-tabs and search, a second `manage` collection with a `viewLabel` switcher, sidebar
-placement via `group`, a detail modal (raw dump, server-shaped `sectionsRoute`
-sections, or a sandboxed `messageKey` body), inline `detail.edit` and `create` forms
-(text, number, textarea, select, tags), declarative `actions` (route + method +
-static body, `when`-gated, `confirm`, `href`), column refinements (`altKey`,
-`width`, `utc`, formats incl. `entry-summary`), and the `status` card: a
-server-built display model above the list with stat rows, a click-to-copy command
-box and action buttons (shipped 2026-07-10, Disembark is the reference). Provider
-families beyond surfaces also grew their own filters: traffic, cache purgers, spam
-provider cards, design sources, page builders, insert blocks.
+The thesis held. Rungs 1–2 are shipped, Rung 3 is mostly shipped, and two
+hard case studies (Gravity Forms + Gravity SMTP) plus a cold third
+(Perfmatters) proved the multiplier. Ground truth for the vocabulary is
+still `docs/for-plugin-authors.md` and the validator constants in
+`class-minn-admin-surfaces.php`.
 
-What no descriptor can express today, re-confirmed against app.js at v0.10.0:
+### Shipped rungs
 
-- **Settings pages.** No surface shape maps to "a form that reads and writes
-  options." The Spam settings page (2026-07-10) is the closest thing shipped, and
-  it is deliberately bespoke: a fixed Settings tab rendering provider cards with a
-  narrow `{configured, note, blocked, toggles}` vocabulary, not a schema-driven
-  form. It proves the appetite; it is not the Rung-2 engine.
-- **Real form fields with semantics.** Surface `create`/`detail.edit` grew
-  textarea/select/tags, but still no `required`/`default`/`help`/`placeholder`/
-  `dependency`. Editor panels know select, radio, toggle, textarea, min/max, but
-  stay trapped in the editor sidebar and hard-wired to the `wp/v2` post save. The
-  block inspector remains a third vocabulary. Rung 1 is still the keystone.
-- **Parameterized actions.** An action body is static JSON; it cannot carry user
-  input ("resend to ⟨address⟩") or item values beyond `{id}` in `href`.
-- **Bulk operations, row-level actions in surface lists, charts, wizards, nested
-  navigation.** The `status` card covers part of the old `stats` sketch (rows +
-  actions), but there is no chart row type and no generic stat-tile grid.
+| Rung | Status | What landed |
+|---|---|---|
+| **1 — form engine** | ✅ shipped (v0.12.0) | One vocabulary renders surface create/edit, editor panels and inspector controls (`required` / `default` / `help` / `placeholder` / `showWhen`, toggles, selects as themed comboboxes in adapter dialects). |
+| **2 — settings surfaces + mappers** | ✅ shipped (v0.12.0–v0.13.0) | Surface `settings` key (tabs + one GET/POST route per tab); **settings-only** surfaces (no `collection`); **item-scoped** settings (`route` with `{id}`, entered via `settingsItem` actions). Four schema frameworks covered: Gravity SMTP component trees, Minn's form vocabulary, core WP Settings API (Perfmatters), GF Settings framework (form settings). |
+| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards, `views[]` extra list views, manage-slot second collections. Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. |
+| **4 — bespoke** | policy holding | Deep-link everywhere a screen is a canvas. The "80% form editor" over clean documents is scoped in `docs/native-editors.md` (parked, prerequisite plumbing now live). |
 
-Rung status at v0.10.0: **Rung 1 not started** (three field vocabularies, one
-grew), **Rung 2 not started** (spam page is bespoke), **Rung 3 partial** (the
-`status` card only), **Rung 4 policy holding** (deep links everywhere bespoke).
+### Still open from the Rung-3 list
 
-Rung status at v0.12.0 (updated 2026-07-11): **Rung 1 shipped** — the form
-engine section in app.js renders surface create/edit forms, editor panels and
-the inspector's generated controls from one vocabulary. **Rung 2 shipped** —
-the surface `settings` key ({label, cap, tabs, route}; GET/POST one route per
-tab so schema and values can't drift) is documented in for-plugin-authors.md,
-and the Gravity SMTP mapper is the bundled reference: its
-`settings_fields()` component tree maps once and covers all 21 connectors
-(verified live: the primary-connector switch reshapes the tab from the new
-connector's schema), writes go through its own data stores so constant locks
-and the `****************` sentinel keep their semantics, and the surface
-gates on its granular `gravitysmtp_*` caps. Suites:
-tests/settings-surface.test.js (the shape, against a fixture surface),
-tests/gsmtp-settings.test.js (the mapper, against the live plugin).
-**Rung 3 largely shipped** (later the same day): parameterized actions
-(`fields` on detail-modal and status-card actions — GS send-a-test with an
-address field, GF add-note; routes may return `{ message }` for honest
-outcome toasts), bulk selection (`bulk` on collections with per-item
-`when`; GF entries star/read/spam/trash), a status/filter dimension
-(`filter`, merging into a shared JSON criteria param — GF
-Received/Spam/Trash round-trip inside Minn), and GS Suppressions in the
-manage slot. Still open from the Rung 3 list: a chart row type, richer
-sectionsRoute row types (pill/code/html-preview/kv-table), and row
-actions in surface lists. The third list view shipped in the v0.13.0
-cycle (2026-07-12): a surface may declare a `views` array of additional
-collections (each with its own optional `cap`), and the Gravity SMTP
-debug log is the bundled reference (its status-card link-out is gone).
-Phase 2's remaining half, the GF Settings mapper, shipped in the v0.13.0
-cycle (2026-07-12) in two pieces. **Form settings**: the `settings`
-contract grew ITEM scope (a route containing `{id}` renders per item,
-entered from a row's `settingsItem: true` action), and the GF adapter maps
-`GFFormSettings::form_settings_fields()` at request time — the fourth
-schema framework covered (GF's Settings framework joins Gravity SMTP
-component trees, Minn's own form vocabulary and the core Settings API).
-Mapper facts that transfer: GF's single-checkbox idiom (one choice named
-like the field) is a boolean toggle with nested dependent fields;
-`text_and_select` composites split into two Minn fields; `dependency`
-rules map to `showWhen` (last rule = nearest parent; empty values =
-truthy); the save whitelist derives from the same walk (selects validate
-against their own choices) so schema and write path can't drift; the
-composite save-and-continue keys route through GF's own
-`activate_save`/`deactivate_save`, spam confirmation through
-`toggle_spam_confirmation`, and everything lands in one
-`GFAPI::update_form` (which round-trips notifications/confirmations
-safely). Schedule date-times stay locked (no date type in the settings
-vocabulary) and `markupVersion` stays locked (inverted 1/2 semantics).
-**Notifications**: a `views` list across forms with type-aware
-recipients, GF's own activate/deactivate, and daily-field editing
-(name/send-to/subject/message) through `save_form_notifications`.
-Confirmations editing is deliberately NOT built (edited at form-build
-time, not daily; GF's screen is the deep link) — revisit only if real
-use asks for it. Plugin settings (currency, logging) also remain unbuilt:
-set-once config, and the license key already lives in Minn's license
-manager.
+- **Chart row type** (and per-item stat tiles). Unlocks Gravity SMTP dashboard
+  numbers and GF `/forms/{id}/results`, and pairs with the ecommerce-analytics
+  bet in `docs/plugin-support.md`.
+- **Richer `sectionsRoute` row types** — `pill`, `code`, `html-preview`
+  (sandboxed iframe; `messageKey` generalized), `kv-table`. Email-log detail
+  (headers, audit trail, rendered body) becomes fully expressible.
+- **Row actions in surface lists** — the content-list `⋯` row-menu pattern,
+  generalized so adapters declare list-row menus instead of burying every
+  verb in the detail modal.
 
-**The multiplier, proven on a fresh plugin (2026-07-11):** the theory behind
-this document was tested cold against Perfmatters, a settings-shaped plugin
-with no prior Minn contact. Result: the whole build (a ~280-line adapter, a
-15-check suite, zero new client field code) took one session fragment, and
-the only machinery Minn had to grow was **settings-only surfaces** (a
-surface may omit `collection` when it declares `settings` — three small
-edits). Because Perfmatters registers everything through the core WP
-Settings API, the adapter reads `$wp_settings_fields` as its schema at
-runtime; that mapper pattern transfers to the thousands of plugins on the
-same API and is the third schema framework covered (Gravity SMTP component
-trees, Minn's own form vocabulary, core Settings API).
+### Schema frameworks covered (the multiplier)
+
+1. **Gravity SMTP component trees** — `settings_fields()` once → all 21
+   connectors (v0.12.0). Suite: `tests/gsmtp-settings.test.js`.
+2. **Minn's own form vocabulary** — the Rung-1 engine every surface form
+   and editor panel already speaks.
+3. **Core WP Settings API** — Perfmatters cold-build (v0.12.0): read
+   `$wp_settings_fields` at runtime after forcing the plugin's registration
+   under REST (must `require` `wp-admin/includes/template.php` first).
+   Suite: `tests/perfmatters-settings.test.js`.
+4. **Gravity Forms Settings framework** — form settings at request time from
+   `GFFormSettings::form_settings_fields()` (v0.13.0). Mapper facts that
+   transfer: single-checkbox idiom → boolean toggle with nested dependents;
+   `text_and_select` → two Minn fields; `dependency` → `showWhen` (last rule
+   = nearest parent; empty values = truthy); save whitelist derived from the
+   same walk; composites through GF's own `activate_save` /
+   `deactivate_save` / `toggle_spam_confirmation`; everything lands in one
+   `GFAPI::update_form`. Schedule date-times and inverted `markupVersion`
+   stay locked. Suite: `tests/gf-form-settings.test.js`.
+
+### Views and item settings (v0.13.0 opener)
+
+- A surface may declare `views` (array of collections, optional per-view
+  `cap`); client ids `x0`/`x1`…; Gravity SMTP **Debug log** is the reference
+  (status-card link-out removed).
+- Item-scoped settings: `settings.route` containing `{id}`, entered only via
+  a row action with `settingsItem: true`. Gravity Forms per-form settings is
+  the reference.
+- **Notifications** as a `views` list (composite row id `form:nid`; toggle +
+  daily-field edit through GF's own store). Confirmations editing and
+  plugin-wide GF settings (currency, logging) deliberately unbuilt:
+  form-build-time / set-once work; license key already lives in the license
+  manager.
+
+Historical note: at v0.10.0 none of Rungs 1–2 existed (Spam settings was a
+bespoke card page; three field vocabularies; actions were static JSON only).
+That baseline is why this document exists; the tables above are the current
+state.
 
 ## The architectural framework: four rungs
 
@@ -261,21 +226,23 @@ boundaries drawn in `docs/native-editors.md` — parked, not scheduled.
 
 ## Case study: Gravity Forms coverage map
 
-Current adapter (includes/adapters/gravity-forms.php): entries list + sectioned
-detail, forms list with activate/deactivate. With the rungs:
+Adapter: `includes/adapters/gravity-forms.php`. Daily form work lives in Minn;
+form *building* stays a deep link (Rung 4).
 
-| Surface | Rung | Mechanics |
+| Surface | Status | Mechanics |
 |---|---|---|
-| Forms list + trash/duplicate | 1-3 | REST covers trash; duplicate needs a one-line shim route (`GFAPI::duplicate_form` has no REST route) |
-| Entries: search, bulk, star/read, spam/trash | 3 | `gf/v2` entries CRUD + `/field-filters` even supplies the filter-builder schema |
-| Entry detail: notes, resend, edit values | 2-3 | notes have full REST; editing entry values is form-engine rendering of field-type inputs |
-| Form settings | 2 | Settings-framework schema via mapper; persist via full-form PUT |
-| Notifications + confirmations | 2 | Settings-framework pages; stored inside the form JSON, so writes are read-modify-write full-form PUTs in the shim (concurrency note below) |
-| Plugin settings (license, reCAPTCHA, currency, logging) | 2 | no REST today; shim reads/writes the `rg_gforms_*` options through GF's own accessors |
-| Add-on settings + feeds (all add-ons) | 2 | feeds already have full REST CRUD; only the schema export is new. This is the multiplier: one mapper, every add-on |
-| Results/reports | 3 | `GET /forms/{id}/results` + stat cards/chart |
-| Import/export | 3 | form JSON is just GET/POST of `/forms`; entry CSV via a shim route |
-| Form editor (drag-drop) | 4 | delegate: "Edit form in Gravity Forms ↗" |
+| Forms list + activate/deactivate | ✅ | Manage view; deep link to GF editor |
+| Entries: search, bulk, star/read, spam/trash | ✅ | `gf/v2` + status `filter` + bulk; detail shim for labeled answers |
+| Entry detail: notes, resend | ✅ | notes REST; resend as parameterized action; edit field *values* still open (form-engine over field-type inputs) |
+| Form settings | ✅ (v0.13.0) | Item-scoped settings; Settings-framework schema at request time; `GFAPI::update_form` |
+| Notifications (list + toggle + daily fields) | ✅ (v0.13.0) | `views[]` list; `save_form_notifications` read-modify-write |
+| Confirmations editing | deliberately unbuilt | Form-build-time; GF screen is the deep link |
+| Plugin settings (reCAPTCHA, currency, logging) | unbuilt | Set-once; license already in the license manager |
+| Forms list trash/duplicate | partial | REST covers trash; `GFAPI::duplicate_form` has no REST route (one-line shim if demand) |
+| Add-on settings + feeds | open | feeds already have full REST CRUD; schema export is the remaining multiplier |
+| Results/reports | open (needs chart row) | `GET /forms/{id}/results` + status/chart |
+| Import/export | open | form JSON is GET/POST of `/forms`; entry CSV via a shim |
+| Form editor (drag-drop) | Rung 4 forever | "Edit form in Gravity Forms ↗" |
 
 Capability model: mirror GF exactly. Surface cap stays `read` with every shim gated
 through `GFCommon::current_user_can_any()` per the hard-won rule (admins hold
@@ -283,20 +250,19 @@ through `GFCommon::current_user_can_any()` per the hard-won rule (admins hold
 
 ## Case study: Gravity SMTP coverage map
 
-Current adapter (includes/adapters/gravity-smtp.php): email log surface. Gravity SMTP
-is the stronger full-coverage candidate because it has no drag-drop equivalent: with
-rungs 1-3 complete, effectively the whole plugin is expressible.
+Adapter: `includes/adapters/gravity-smtp.php`. No drag-drop equivalent, so with
+Rungs 1–3 it is nearly the whole plugin.
 
-| Surface | Rung | Mechanics |
+| Surface | Status | Mechanics |
 |---|---|---|
-| Email log + detail (headers, audit trail, HTML preview, resend) | 1-3 | custom tables already shimmed; preview via the sandboxed iframe row type; resend as a parameterized action |
-| Connector config (21 connectors) | 2 | `settings_fields()` descriptors via the container, mapped once; sensitive-sentinel semantics preserved on save |
-| Primary/backup routing, general/test-mode/logging/alerts settings | 2 | two JSON option shapes (`gravitysmtp_config`, `gravitysmtp_{connector}`) read through the data-store router so constant locks are respected |
-| Dashboard | 3 | stat cards + chart from `get_dashboard_data` equivalents computed in the shim |
-| Send a test | 3 | parameterized action |
-| Suppression list | 1 | today's vocabulary nearly suffices (list + create + reactivate action) |
-| Debug log | 1 | list + detail, same shape as Minn's own System debug-log viewer |
-| OAuth connectors (Google/Microsoft/Zoho) | 4 | delegate: external handshake via wp-admin deep link; everything after connection renders normally |
+| Email log + detail + resend | ✅ | custom tables; resend through its models (regex fallback); richer HTML-preview row type still open |
+| Connector config (21 connectors) | ✅ (v0.12.0) | `settings_fields()` once; sensitive-sentinel preserved |
+| General / test-mode / logging settings | ✅ | through its own data stores + constant-lock awareness |
+| Suppressions | ✅ | manage-slot list + create + reactivate |
+| Debug log | ✅ (v0.13.0) | first `views[]` consumer; priority tabs; status-card link-out removed |
+| Send a test | ✅ | parameterized action with honest outcome toast |
+| Dashboard / charts | open (needs chart row) | status card already reports service + test mode |
+| OAuth connectors (Google/Microsoft/Zoho) | Rung 4 | external handshake via wp-admin deep link |
 
 Transport note: Gravity SMTP has no REST API at all (100% admin-ajax with per-action
 nonces, and its read state is server-rendered into its page payload). The adapter
@@ -304,27 +270,23 @@ therefore does not talk to its ajax endpoints; the shim calls its service contai
 directly server-side, which is both simpler and immune to its pre-rendered
 component-tree response shapes.
 
-## Suggested sequencing
+## Sequencing (phases against reality)
 
-- **Phase 1 (the keystone):** unified form engine; port editor panels onto it;
-  upgrade surface `create`/`detail.edit` to the full vocabulary. Pure consolidation,
-  no new product surface, immediately pays down three-systems drift.
-- **Phase 2 (prove the multiplier):** `settings` surface shape + the Gravity SMTP
-  mapper first (smaller vocabulary, no full-form round-trips, instant visible win:
-  connector config in Minn), then the GF Settings mapper with form settings and
-  notifications/confirmations.
-- **Phase 3 (daily-work depth):** parameterized actions, bulk selection, stat
-  cards/chart, richer detail row types; GF entries workflow and the Gravity SMTP
-  dashboard as the proving grounds.
-- **Phase 4 (declare victory):** document the mapper-authoring pattern in
-  for-plugin-authors.md so third parties can ship their own (the Anchor Blocks
-  convention, extended); the GF form editor stays a deep link unless a deliberate
-  product decision reopens it.
+| Phase | Plan | Status |
+|---|---|---|
+| **1 — keystone** | Unified form engine; port panels; upgrade create/edit | ✅ shipped v0.12.0 |
+| **2 — multiplier** | `settings` surface + Gravity SMTP mapper, then GF form settings + notifications | ✅ shipped v0.12.0–v0.13.0 (confirmations + GF plugin settings deliberately skipped) |
+| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards | mostly ✅; remaining: chart row, richer sectionsRoute rows, list row-actions |
+| **4 — declare victory** | Document mapper pattern for third parties; GF form editor stays deep link | docs live in `for-plugin-authors.md`; 80% editor parked in `native-editors.md` |
 
-Each phase ends the way Minn features end: browser-verified suites against the live
-fixtures (GF is installed on minnadmin with seeded forms/entries; Gravity SMTP is
-active on anchor for read-only walks and should get a minnadmin install with seeded
-log fixtures before Phase 2).
+Natural next builds inside this ladder (not a ranked product roadmap; see
+`docs/plugin-support.md` for install-weighted adapter waves):
+
+1. Chart row type (also unlocks ecommerce analytics).
+2. Richer detail row types (email HTML preview, kv tables).
+3. Surface list row-actions (⋯ menus).
+4. GF add-on/feed settings mapper (the original "one mapper, every add-on" payoff).
+5. Only after dogfooding: reconsider the 80% form editor.
 
 ## Risks and open questions
 

@@ -105,10 +105,11 @@ settings mapper covers. The deep link is one click and GF's editor is good.
 ### Cost, honestly
 
 This is "Minn builds a second editor" scale: think the block-inspector effort,
-not an adapter. Ballpark a full cycle for field-list + basics + suites, with
-the settings mapper as a prerequisite already on the roadmap. It should not
-start until the GF Settings mapper (Phase 2) has shipped and survived contact
-with real use, because that work builds the exact schema plumbing this reuses.
+not an adapter. Ballpark a full cycle for field-list + basics + suites. The
+prerequisite plumbing (item-scoped settings, the Settings-framework mapper,
+notifications write path) shipped in the v0.13.0 cycle; what remains before
+committing is dogfooding that form-management depth on a real site
+(anchor.localhost's Gravity Forms use) so the bet is earned, not assumed.
 
 ### The generalization
 

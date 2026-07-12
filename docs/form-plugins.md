@@ -1,143 +1,103 @@
-# Form plugins — adapter hunt (2026-07-09)
+# Form plugins — Forms family map
 
-**Question:** Minn only ships a Gravity Forms surface today. Which other form
-plugins are worth a Forms family member (list + entry detail, same pattern as
-Snippets / Activity Log / Redirects)?
+Originally a 2026-07-09 source hunt ("which form plugins are worth a Forms
+family member?"). Stale-checked 2026-07-12 during the v0.13.0 cycle: the
+family is live with **eight** providers, the adapter ladder proved out on
+Gravity Forms (entries → notifications → form settings), and the remaining
+work is thin leftovers plus one big brand (WPForms Pro) that needs a
+license for fixtures.
 
-**Today:** `includes/adapters/gravity-forms.php` only. Label `Forms`,
-`sub` Gravity Forms. Pure descriptor over `gf/v2` when REST is enabled, plus
-small shims for labeled entry detail and the forms manage list.
+**Today:** `family: 'forms'` with a provider switcher. Deliberately **not**
+a form builder: deep-link to each plugin's editor for create/edit of the
+form document. Scope and boundaries for a future "80% form editor" over
+clean documents live in `docs/native-editors.md` (parked).
 
-**Goal:** `family: 'forms'` with a topbar provider switcher when more than one
-entries-capable form plugin is active. Deliberately **not** a form builder —
-deep-link to each plugin's editor for create/edit.
+## Coverage (shipped)
 
----
+| Plugin | Adapter | What Minn surfaces |
+|---|---|---|
+| **Gravity Forms** | `gravity-forms.php` | Entries as contact cards with Received/Spam/Trash, star/read, notes, resend, bulk; **Forms** manage view (activate/deactivate); **Notifications** view (toggle + daily-field edit); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
+| **Fluent Forms** | `fluent-forms.php` | Entries list + labeled detail; forms manage view. Pure-REST shape over `fluentform/v1` (Laravel paginator normalized). |
+| **Elementor Pro Forms** | `elementor-forms.php` | Submissions via Elementor's own Query class; soft-trash through `move_to_trash_submission`. Free Elementor has no submissions store. |
+| **Contact Form 7 + Flamingo** | `cf7-flamingo.php` | Inbound messages through Flamingo's own model (spam/unspam/trash); CF7 forms in manage with live channel counts. CF7 alone stores nothing. |
+| **CFDB7** | `cfdb7.php` | Entries from `{prefix}db7_forms` (serialized map scanned by byte-length tokens, never unserialized); open-marks-read; permanent delete. |
+| **Ninja Forms** | `ninja-forms.php` | Entries as `nf_sub` postmeta cards, form tabs, labeled detail, trash through its own model, forms manage with live entry counts. |
+| **Forminator** | `forminator.php` | Entries from Forminator's own models, labels resolved at runtime, permanent delete through `Forminator_API::delete_entry`, forms manage. Honors `forminator-entries` permission model. |
+| **Formidable** | `formidable.php` | Entries via `FrmEntry`, labels from field models at runtime, UTC stamps, permanent delete through `FrmEntry::destroy`, caps mirroring granular-or-administrator. |
 
-## Landscape (wp.org active installs, free slugs)
+The family lives under Workspace. Provider preference key: `minn-sf-forms`.
 
-| Plugin | Free installs | Entries storage | REST / API for entries | Minn fit |
-|---|---|---|---|---|
-| **Contact Form 7** | 10M+ | **None** unless Flamingo (CPT `flamingo_inbound`) | CF7 has form REST; entries need Flamingo + shim | Weak alone; Flamingo pair is possible later |
-| **Elementor** | 10M+ | **Pro only** — `{prefix}e_submissions` + `e_submissions_values` (+ actions log) | **No public REST** for submissions | **High value shim** if Pro is on the site |
-| **WPForms Lite** | 5M+ | Lite does **not** store local entries (email / Lite Connect); **Pro** uses `wpforms_entries` + meta/fields tables | Abilities API (`wpforms/*` via `/wp-abilities/v1/…/run`) since 1.9.9; entries abilities **Pro** | Reach king; Lite useless for Minn entries; Pro = abilities **or** SQL shim |
-| **Gravity Forms** | paid (not on wp.org) | Custom tables via GFAPI | **`gf/v2`** first-class (cookie auth) | **Shipped** |
-| **Fluent Forms** | 700k+ | Custom tables; full entry UI | **`fluentform/v1`** — forms + **submissions** (15 submission routes) | **Best next pure-REST adapter** |
-| **Ninja Forms** | 600k+ | Custom tables | Limited / addon-ish | Later |
-| **Forminator** | 600k+ | Custom tables | Some REST under `forminator/v1` | Later |
-| **Formidable** | 300k+ | Custom tables | **`frm/v2`** (often API / higher tier) | Strong if license exposes REST |
-| Everest / JetFormBuilder | ~90k | Varies | Varies | Low priority |
+## Landscape leftovers (not yet adapted)
 
-Sources: wordpress.org plugin API (install counts), vendor developer docs (Fluent, WPForms Abilities, Formidable `frm/v2`), Elementor help + community DB notes (`e_submissions*`).
+| Plugin | Free installs (approx.) | Why it is still open | Fit |
+|---|---|---|---|
+| **WPForms Pro** | 5M+ Lite brand | Lite stores **no** local entries (email / Lite Connect only). Pro uses `wpforms_entries` + meta/fields. Abilities API since 1.9.9 is awkward for the collection descriptor; a SQL/internal shim is cleaner. **Needs a Pro license + fixtures.** | Highest-value uncovered brand; costs a license. |
+| **SureForms** | growing | Free-tier entry storage believed but not source-verified. | Verify storage before promising. |
+| **MetForm** | ~100k+ | Same: free-tier storage not source-verified. | Verify first. |
+| Everest / JetFormBuilder | ~90k | Lower reach; varies by storage. | Low priority. |
 
----
+Sources for install counts: wordpress.org plugin API (ballpark; refresh when ranking again).
 
-## Ranked for Minn
-
-### 1. Fluent Forms — **best next free adapter**
-
-| Concern | Finding |
-|---|---|
-| Reach | 700k+ free; modern UI; same vendor family as FluentSnippets (already adapted) |
-| REST | Namespace `fluentform/v1`. Auth: `X-WP-Nonce` (same cookie model as Minn). |
-| Entries | `GET …/submissions`, `GET …/submissions/{id}`, delete, status, notes, bulk-actions, print. Forms group has 16 routes. |
-| Shape for Minn | Likely **pure descriptor** for list + trash; detail may need a thin shim to map field labels (same reason GF has `minn-admin/v1/gf/entries/{id}`). |
-| Cap | Their SubmissionPolicy (map to `fluentform_view_entries` / manage equivalents). |
-
-**Surface sketch:** `label: Forms`, `family: forms`, `sub: Fluent Forms`. Collection = submissions list with form tabs; manage view = forms list + "Edit in Fluent Forms ↗".
-
----
-
-### 2. Elementor Pro Forms — **best "builder that is also forms" pick**
-
-Austin's ask. Forms are **not** in free Elementor; the Form widget + Submissions UI are **Elementor Pro**.
-
-| Concern | Finding |
-|---|---|
-| Storage | Three tables (prefix-scoped): `e_submissions`, `e_submissions_values`, `e_submissions_actions_log`. Values are EAV-style (submission_id + key/label + value). |
-| Admin | **Elementor → Submissions** when Collect Submissions is enabled on the form. |
-| REST | **None** for browsing submissions (community + Elementor discussions). Outbound webhooks / "Actions after submit" exist; that is the wrong direction for Minn. |
-| Cap | Typically `manage_options` / Elementor Pro form caps — verify against live Pro. |
-| Lab gap | `builders.localhost` has free Elementor only; **no Elementor Pro zip** on hand. Need Pro to fixture + probe columns and any internal Query classes. |
-
-**Surface sketch:** shim `minn-admin/v1/elementor/submissions` (list + detail) — prefix-scoped `$wpdb` SELECTs only; **never** unserialize third-party blobs. Columns: summary (name/email heuristics from values), form name, status, date. Detail: labeled field rows from `e_submissions_values`. Action: trash/delete if Pro supports it safely. Deep link: `admin.php?page=e-form-submissions` (confirm path on Pro version).
-
-**Why it ranks high:** Elementor sites often have **no** Gravity/Fluent/WPForms — only the Pro form widget. Without this adapter, Minn's Forms nav is empty on a huge slice of sites that still get daily contact spam.
-
----
-
-### 3. WPForms Pro — **largest brand; entries are Pro-gated**
-
-| Concern | Finding |
-|---|---|
-| Lite | No local entry store for Minn to list. Skip Lite for entries surface. |
-| Pro storage | `wp_wpforms_entries`, `wpforms_entry_meta`, `wpforms_entry_fields`. |
-| Official API | Not classic `wpforms/v1/entries`. Since 1.9.9 / 1.10.x they expose **Abilities API** abilities: `wpforms/get-entry-summaries`, `wpforms/get-entry`, `wpforms/search-entries` (Pro), invoked via `/wp-json/wp-abilities/v1/abilities/…/run`. Awkward for Minn's generic collection descriptor (expects a normal list route + page query). |
-| Better path | SQL / internal API shim `minn-admin/v1/wpforms/entries` (same style as WSAL/Stream), **or** a thin wrapper that calls `wp_get_ability(…)->execute()` server-side and normalizes to `{ items, total }`. |
-| Cap | `wpforms_current_user_can()` / `view_entries` family. |
-
-**Surface sketch:** `sub: WPForms`. Gate on Pro + entry tables or ability existence.
-
----
-
-### 4. Formidable Forms — **clean REST if available**
-
-`frm/v2/entries`, `frm/v2/forms/{id}/entries` documented. Often tied to API / paid tier. Pure descriptor candidate when the routes register. Lower free installs than Fluent; still a clean fit.
-
-### 5. Contact Form 7 + Flamingo — **reach without structure**
-
-CF7 alone stores nothing. Flamingo CPT `flamingo_inbound` + meta can be listed via `wp/v2` if `show_in_rest` or a small shim. Field model is free-form meta keys (`_field_*`). Worth a later "Inbox" style surface, not first-class form tabs like GF.
-
-### 6. Ninja Forms / Forminator — backlog
-
-Solid install base; adapt after Fluent + Elementor + WPForms prove the family UX.
-
----
-
-## Family pattern (same as Snippets)
+## Family pattern
 
 ```php
 $surfaces['gravity-forms'] = array(
   'label'  => 'Forms',
   'family' => 'forms',
+  'group'  => 'workspace',   // inbox-shaped
   'sub'    => 'Gravity Forms',
-  // …
+  // collection / manage / views / settings …
 );
-// Fluent Forms, Elementor, WPForms, Formidable → same family + distinct sub.
+// Every other forms adapter uses the same family + distinct sub.
 ```
 
-Sidebar: one **Forms** item. Topbar autocomplete when `surfacesInFamily('forms').length > 1`. Preference key `minn-sf-forms`.
+Sidebar: one **Forms** item. Topbar autocomplete when
+`surfacesInFamily('forms').length > 1`.
 
----
+## Build history (for orientation)
 
-## Recommended build order
+1. Tag Gravity Forms with `family: 'forms'` — done 2026-07-09.
+2. Fluent Forms + Elementor Pro Forms — done same wave.
+3. CF7 via Flamingo + CFDB7 — done v0.10.0 cycle.
+4. Ninja Forms — done v0.12.0 cycle.
+5. Forminator + Formidable — done v0.13.0 cycle.
+6. GF depth (status filters, bulk, notifications view, form settings) — done
+   across v0.12.0–v0.13.0; see `docs/full-ui-adapters.md`.
 
-1. **Tag Gravity Forms** with `family: 'forms'` — **done** (2026-07-09).
-2. **Fluent Forms** shim (`includes/adapters/fluent-forms.php`) — **done**. Normalizes Laravel paginator + JSON `response` blobs to `{ items, total }` + labeled detail.
-3. **Elementor Pro** submissions shim (`includes/adapters/elementor-forms.php`) — **done** against Pro 4.1.2. Uses `Query` class; soft-trash via `move_to_trash_submission`.
-4. **WPForms Pro** entries shim (or abilities wrapper) when a Pro license is available for fixtures.
-5. Formidable / Flamingo as capacity allows.
+## Lab fixtures (minnadmin)
 
-## Lab needs
-
-| Adapter | Needs on minnadmin / builders |
+| Adapter | Fixture state |
 |---|---|
-| Fluent Forms | `fluentform` free from wp.org + seed form + entries |
-| Elementor Forms | **Elementor Pro** zip + Form widget + Collect Submissions + 1–2 fixture posts |
-| WPForms entries | **WPForms Pro** (Lite insufficient) |
-| Formidable | Free or Pro with API routes registered |
+| Gravity Forms | ACTIVE resident; form 1 "Contact Form" + form 2 inactive; seeded entries |
+| Fluent Forms | installed (family switcher) |
+| Elementor Pro Forms | Pro forms fixture when Elementor Pro is active |
+| Flamingo + CFDB7 | both active; standing Dana/Miguel/Priya fixtures + one-shot seeders |
+| Ninja Forms | ACTIVE resident; default "Contact Me" form id 1 |
+| Forminator | ACTIVE; standing "Feedback Form" + `minn_test_seed_forminator` |
+| Formidable | ACTIVE; standing "Survey Form" key `minn-survey` + `minn_test_seed_formidable` |
+| WPForms entries | needs **WPForms Pro** zip + license |
 
-## Out of scope (same as GF)
+## Out of scope (same as day one)
 
-- Form field builders, conditional logic, payment feeds, spam settings UIs.
-- Creating forms inside Minn.
-- Unifying entries across plugins into one merged inbox (family switcher is enough).
+- Form field builders, conditional-logic rule builders, payment feeds, spam
+  settings UIs that belong to the form plugin's own product.
+- Creating forms inside Minn (the 80% editor, if it ever ships, is a
+  deliberate product bet over clean documents: `docs/native-editors.md`).
+- Unifying entries across plugins into one merged inbox (the family
+  switcher is enough).
 
----
+## Gravity Forms depth (the reference adapter)
 
-## Gravity Forms (shipped) — quick recap
-
-- Gate: `GFAPI` + REST API setting enabled + `GFCommon::current_user_can_any(…view_entries…)`.
-- List: `gf/v2/forms/{tab}/entries` + all-entries route; tabs from `gf/v2/forms`.
-- Detail shim: `minn-admin/v1/gf/entries/{id}` (labeled answers).
-- Manage: `minn-admin/v1/gf/forms` activate/deactivate + deep link to GF editor.
+- Gate: `GFAPI` + REST API setting enabled +
+  `GFCommon::current_user_can_any(…)` (never a raw granular cap).
+- Entries: `gf/v2` + status filters + bulk + notes + resend; detail shim
+  `minn-admin/v1/gf/entries/{id}` for labeled answers.
+- Forms manage: `minn-admin/v1/gf/forms` activate/deactivate + deep link.
+- Notifications view: composite row id `form:nid`; toggle via
+  `GFFormsModel::update_notification_active`; edits via
+  `save_form_notifications`.
+- Form settings: item-scoped settings from
+  `GFFormSettings::form_settings_fields()` at request time; save through
+  `GFAPI::update_form` with GF's own helpers for composites.
+- Confirmations editing and plugin-wide settings (currency, logging) stay
+  deep-linked: set-once / form-build-time work, not daily.

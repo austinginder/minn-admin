@@ -81,12 +81,15 @@ themselves through the extension filters.
 ## Roadmap candidates
 
 Refreshed 2026-07-12 during the v0.13.0 cycle (originally ranked 2026-07-10
-against the wp.org top-500 by active installs). The 2026-07-10 wave list is
-mostly drained: license visibility and activation, the lockout logs, Ninja
+against the wp.org top-500 by active installs; re-checked the same day after
+the forms opener and surface-toolbar polish landed). The 2026-07-10 wave list
+is mostly drained: license visibility and activation, the lockout logs, Ninja
 Forms / Forminator / Formidable, Duplicator, WP Mail Logging, the visibility
 posture and the small-delights wave all shipped across v0.11.0–v0.13.0 and
-live in the coverage table above now. What remains, re-ranked (installs ×
-fit × effort):
+live in the coverage table above now. v0.13.0 so far also shipped surface
+`views[]`, item-scoped settings, GF form settings + notifications, the
+Gravity SMTP debug log, and calmer surface toolbars (see changelog). What
+remains, re-ranked (installs × fit × effort):
 
 1. **Cache purge pack** — SpeedyCache, Redis Object Cache (flush + drop-in
    status row), Breeze, Nginx Helper, Cloudflare. The cheapest shape in the
