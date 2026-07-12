@@ -1061,15 +1061,19 @@ select.minn-input {
 }
 .minn-editor-title::placeholder { color: var(--text3); }
 /* Sticky so the formatting tools stay reachable in long posts; opaque so
-   content scrolls beneath, below the fixed word-count pill (40) and chips. */
+   content scrolls beneath, below the fixed word-count pill (40) and chips.
+   -webkit-sticky first for older iOS; solid background is load-bearing
+   (transparent sticky lags / shows through on Safari). */
 .minn-editor-toolbar {
   display: flex; gap: 2px; padding: 6px 0 14px; border-bottom: 1px solid var(--border);
   margin-bottom: 18px; color: var(--text2);
-  position: sticky; top: 0; z-index: 35; background: var(--bg);
+  position: -webkit-sticky; position: sticky; top: 0; z-index: 35; background: var(--bg);
 }
 .minn-tool {
   display: inline-flex; align-items: center; justify-content: center; padding: 6px 8px;
   border-radius: 7px; cursor: pointer; background: none; border: none; color: var(--text2);
+  /* Drop the 300ms double-tap-zoom delay on touch. */
+  touch-action: manipulation;
 }
 .minn-tool:hover { background: var(--hover); color: var(--text); }
 .minn-tool svg { display: block; }
@@ -1117,9 +1121,15 @@ select.minn-input {
 .minn-editor-body .has-text-align-right { text-align: right; }
 /* Word count / reading time / session / goal — fixed bottom-right. Click
    opens the goal popover. Below chips (69) but under modals (55+ wait —
-   z 40 sits under modal 55; goal pop is 70 so it can clear the pill). */
+   z 40 sits under modal 55; goal pop is 70 so it can clear the pill).
+   bottom uses --minn-kb-inset (visualViewport, set in app.js) so the pill
+   rides above the software keyboard on mobile Safari, plus safe-area for
+   notched phones (viewport-fit=cover). */
 .minn-editor-stats {
-  position: fixed; right: 22px; bottom: 18px; z-index: 40;
+  position: fixed;
+  right: calc(22px + env(safe-area-inset-right, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px) + var(--minn-kb-inset, 0px));
+  z-index: 40;
   display: inline-flex; align-items: baseline; gap: 4px; padding: 8px 15px;
   background: var(--panel); border: 1px solid var(--border2); border-radius: 999px;
   font-size: 13px; color: var(--text2); box-shadow: var(--shadow);
@@ -1666,6 +1676,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   position: absolute; top: -10px; right: 12px; font-size: 10.5px; font-weight: 600;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
+  touch-action: manipulation;
 }
 .minn-island-chip:hover, .minn-block-island:hover .minn-island-chip { color: var(--accent2); border-color: var(--accent); }
 /* No max-height: a hard cap (was 420px) clipped multi-card grids and tall
@@ -1963,6 +1974,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   position: absolute; white-space: nowrap; font-size: 10.5px; font-weight: 600;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
+  touch-action: manipulation;
 }
 .minn-code-chip:hover, .minn-code-chip.hot { color: var(--accent2); border-color: var(--accent); }
 .minn-code-pop { width: 250px; }
@@ -2238,9 +2250,11 @@ button.minn-ac-item:hover { background: var(--hover); }
 
 /* ===== Toast ===== */
 .minn-toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 60;
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px) + var(--minn-kb-inset, 0px));
   display: flex; align-items: center; gap: 11px; background: var(--panel); border: 1px solid var(--border2);
   border-radius: 11px; padding: 12px 16px; box-shadow: var(--shadow); animation: minnToastIn 0.3s cubic-bezier(0.16,1,0.3,1);
+  max-width: calc(100vw - 24px);
 }
 .minn-toast-icon { width: 22px; height: 22px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .minn-toast-icon.err { background: var(--red); }
@@ -2321,8 +2335,26 @@ button.minn-ac-item:hover { background: var(--hover); }
   /* Summary card rows that set their column count inline (orders) go 2-up. */
   .minn-stats[style] { grid-template-columns: repeat(2, 1fr) !important; }
   .minn-editor-title { font-size: 26px; }
-  .minn-editor-toolbar { flex-wrap: wrap; }
+  .minn-editor-toolbar { flex-wrap: wrap; gap: 4px; padding-bottom: 10px; }
   .minn-tool-hint { display: none; }
+  /* ~44px hit targets: desktop tools are compact; fingers need more. */
+  .minn-tool { min-width: 40px; min-height: 40px; padding: 9px; }
+  .minn-code-chip, .minn-island-chip {
+    font-size: 12px; padding: 8px 12px; min-height: 36px;
+    display: inline-flex; align-items: center;
+  }
+  /* Room under the last block so the stats pill doesn't cover typing. */
+  .minn-editor-body { padding-bottom: 72px; }
+  .minn-editor-stats {
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--minn-kb-inset, 0px));
+    font-size: 12.5px; padding: 9px 14px;
+  }
+  /* Find bar is fixed and wide — fit the phone and keep 16px inputs (no zoom). */
+  .minn-find-bar { width: min(340px, calc(100vw - 20px)); max-width: calc(100vw - 20px); }
+  .minn-find-row input { font-size: 16px; padding: 8px 10px; }
+  .minn-find-btn { width: 36px; height: 36px; }
+  .minn-find-act { padding: 8px 12px; font-size: 13.5px; }
   .minn-modal-overlay { padding: 3vh 10px; }
   .minn-email-frame { width: calc(100% - 24px); margin: 0 12px 12px; height: 56vh; }
   .minn-surface-message { margin: 0 12px 12px; }
@@ -2335,3 +2367,18 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-cb { width: 18px; height: 18px; }
   .minn-input, select.minn-input, .minn-schedule input { font-size: 16px; }
 }
+
+/* Coarse pointers (phones/tablets) even when the layout is wide landscape. */
+@media (hover: none) and (pointer: coarse) {
+  .minn-tool { min-width: 40px; min-height: 40px; padding: 9px; touch-action: manipulation; }
+  .minn-code-chip, .minn-island-chip {
+    font-size: 12px; padding: 8px 12px; min-height: 36px;
+    display: inline-flex; align-items: center; touch-action: manipulation;
+  }
+  .minn-find-row input { font-size: 16px; }
+}
+
+/* Keyboard open: keep the typing surface clear of fixed chrome; the stats
+   pill still tracks --minn-kb-inset above the keyboard. */
+body.minn-kb-open .minn-editor-body { padding-bottom: 96px; }
+body.minn-kb-open .minn-editor-stats .minn-stats-session { display: none; }

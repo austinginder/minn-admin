@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
 <html lang="<?php echo esc_attr( get_bloginfo( 'language' ) ); ?>" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>Minn Admin — <?php echo esc_html( get_bloginfo( 'name' ) ); ?></title>
 <?php

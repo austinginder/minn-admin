@@ -120,9 +120,14 @@ distrust the surface.
     `isComposing` / keyCode 229: markdown wraps + code-edge escape, island
     arming, slash-menu Enter, figcaption Enter. Real IME engines aren't in
     headless Chrome; `tests/ime.test.js` synthesizes composition-shaped
-    KeyboardEvents. Remaining long-tail items below are still open.
-  - **Mobile Safari pass.** Still open — visualViewport vs fixed chips/stats,
-    sticky toolbar, touch targets.
+    KeyboardEvents.
+  - **Mobile Safari pass.** ✅ *Shipped 2026-07-12* — `visualViewport` writes
+    `--minn-kb-inset` so fixed bottom chrome (stats pill, toasts) rides above
+    the software keyboard; `viewport-fit=cover` + safe-area insets; larger
+    toolbar/chip/find hit targets on phones and coarse pointers; body padding
+    under the stats pill; find inputs 16px (no iOS focus-zoom). Sticky toolbar
+    keeps `-webkit-sticky` + opaque background. Suite: `tests/mobile-editor.test.js`
+    (phone viewport + simulated keyboard inset; not a real iOS device).
   - **Accessibility pass.** Still open — toolbar `aria-label`s, chip focus,
     popover focus trap, toast live regions.
 - **Inline media flow.** Paste/drag an image from the clipboard straight to the media

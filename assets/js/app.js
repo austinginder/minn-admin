@@ -18870,6 +18870,37 @@
 
 	/* ===== Boot ===== */
 
+	// Software keyboard inset for fixed chrome (editor stats pill, toasts).
+	// visualViewport.height shrinks when the keyboard opens; layout
+	// window.innerHeight does not. The gap is written as --minn-kb-inset
+	// (px) and body.minn-kb-open when the inset is large enough to matter.
+	function syncVisualViewport() {
+		const root = document.documentElement;
+		const vv = window.visualViewport;
+		if ( ! vv ) {
+			root.style.setProperty( '--minn-kb-inset', '0px' );
+			document.body.classList.remove( 'minn-kb-open' );
+			return;
+		}
+		const inset = Math.max( 0, Math.round( window.innerHeight - vv.height - vv.offsetTop ) );
+		root.style.setProperty( '--minn-kb-inset', inset + 'px' );
+		// ~80px filters tiny browser-chrome shifts; real keyboards are larger.
+		document.body.classList.toggle( 'minn-kb-open', inset > 80 );
+	}
+
+	function bindVisualViewport() {
+		syncVisualViewport();
+		const vv = window.visualViewport;
+		if ( vv ) {
+			vv.addEventListener( 'resize', syncVisualViewport );
+			vv.addEventListener( 'scroll', syncVisualViewport );
+		}
+		window.addEventListener( 'resize', syncVisualViewport );
+		// iOS sometimes reports the final inset a tick after focus.
+		window.addEventListener( 'focusin', () => setTimeout( syncVisualViewport, 50 ) );
+		window.addEventListener( 'focusout', () => setTimeout( syncVisualViewport, 50 ) );
+	}
+
 	function boot() {
 		// Migrate legacy #/route links onto path routing.
 		if ( PATH_MODE ) {
@@ -18883,6 +18914,13 @@
 		renderShell();
 		parseHash();
 		renderView();
+
+		// Mobile Safari (and any browser with a software keyboard): fixed
+		// bottom chrome sits on the LAYOUT viewport, which stays full-height
+		// while the visual viewport shrinks behind the keyboard. Track the
+		// gap as --minn-kb-inset so .minn-editor-stats / toasts / goal pop
+		// can sit above the keyboard. No-ops on desktop (inset stays 0).
+		bindVisualViewport();
 
 		// Overflowing tab strips (e.g. every user role) get ‹ › scroll buttons that
 		// show only when there's more to scroll. Runs for any view that renders tabs.
