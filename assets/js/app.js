@@ -11106,13 +11106,13 @@
 			<div class="minn-side-title">Publish</div>
 			<div class="minn-side-rows">
 				<div class="minn-side-row"><span class="minn-side-key">Status</span><span class="minn-side-val${ ed.status === 'publish' ? ' green' : ' amber' }" style="font-weight:600;" id="minn-status-state">${ esc( statusLabel ) }</span></div>
+				<div class="minn-side-row"><span class="minn-side-key">Saved</span><span class="minn-side-val ${ saved.cls }" id="minn-saved-state">${ esc( saved.text ) }</span></div>
 				<div class="minn-side-row"><span class="minn-side-key">Visibility</span>
 					<div class="minn-ac minn-vis-ac" id="minn-visibility">
 						<input class="minn-input minn-ac-input" id="minn-visibility-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Visibility">
 						<div class="minn-ac-panel" hidden></div>
 					</div>
 				</div>
-				<div class="minn-side-row"><span class="minn-side-key">Saved</span><span class="minn-side-val ${ saved.cls }" id="minn-saved-state">${ esc( saved.text ) }</span></div>
 			</div>
 			${ ed.visibility === 'password' ? `<input type="text" class="minn-input minn-vis-extra" id="minn-password-input" placeholder="Enter a password" value="${ esc( ed.password ) }" autocomplete="off">` : '' }
 			${ ed.supportsSticky && ed.visibility !== 'password' ? `<label class="minn-check-row minn-vis-extra"><input type="checkbox" id="minn-sticky"${ ed.sticky ? ' checked' : '' }> Stick to the top of the blog</label>` : '' }
