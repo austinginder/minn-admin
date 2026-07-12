@@ -1,6 +1,6 @@
 /**
- * Media grid: multi-select checkbox (top-left) must not overlap the type
- * badge (IMG / VID / …). Badge lives top-right after the 2026-07-12 fix.
+ * Media grid: type badge (IMG / VID / …) top-left, multi-select checkbox
+ * top-right — opposite corners so hover/select never covers the kind label.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
@@ -45,8 +45,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		} );
 
 		t.check( 'card has checkbox + badge', ! layout.err, JSON.stringify( layout ) );
-		t.check( 'checkbox sits in the left half', layout.check && layout.check.left < layout.cardW / 2, JSON.stringify( layout.check ) );
-		t.check( 'badge sits in the right half', layout.badge && layout.badge.left > layout.cardW / 2, JSON.stringify( layout.badge ) );
+		t.check( 'badge sits in the left half', layout.badge && layout.badge.left < layout.cardW / 2, JSON.stringify( layout.badge ) );
+		t.check( 'checkbox sits in the right half', layout.check && layout.check.left > layout.cardW / 2, JSON.stringify( layout.check ) );
 		t.check( 'checkbox and badge do not overlap', layout.separate === true, JSON.stringify( layout ) );
 
 		// Select two and re-check geometry under selected state (opacity forced on).
