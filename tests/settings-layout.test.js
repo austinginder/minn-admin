@@ -32,11 +32,22 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
 
-		/* ===== The five intent tabs ===== */
+		/* ===== Intent tabs (Design + Connectors are capability-gated) ===== */
 		const tabs = await page.$$eval( '.minn-settings-nav-item', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
-		t.check( 'tabs are Site / Visibility / Homepage / Content / Comments',
-			JSON.stringify( tabs ) === JSON.stringify( [ 'Site', 'Visibility', 'Homepage', 'Content', 'Comments' ] ), JSON.stringify( tabs ) );
+		const always = [ 'Site', 'Visibility', 'Homepage', 'Content', 'Comments' ];
+		const known = [ ...always, 'Design', 'Connectors' ];
+		t.check( 'the always-present intent tabs are all there', always.every( ( x ) => tabs.includes( x ) ), JSON.stringify( tabs ) );
+		t.check( 'every tab is a known intent tab (no raw WP screens)', tabs.every( ( x ) => known.includes( x ) ), JSON.stringify( tabs ) );
 		t.check( 'no WordPress tabs remain', ! tabs.some( ( x ) => [ 'General', 'Reading', 'Writing', 'Discussion', 'Permalinks' ].includes( x ) ) );
+
+		/* ===== Week starts on is a themed combobox, not a native select ===== */
+		t.check( 'Week starts on renders as a combobox', await page.evaluate( () => {
+			const wrap = document.querySelector( '[data-combo="start_of_week"]' );
+			const input = wrap && wrap.querySelector( '.minn-ac-input' );
+			return !! input && input.getAttribute( 'role' ) === 'combobox'
+				&& [ 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' ].includes( input.value )
+				&& ! document.querySelector( 'select[data-key="start_of_week"]' );
+		} ) );
 
 		/* ===== Section nav is sticky ===== */
 		t.check( 'section nav is sticky', ( await page.$eval( '.minn-settings-nav', ( el ) => getComputedStyle( el ).position ) ) === 'sticky' );
