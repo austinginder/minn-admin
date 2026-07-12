@@ -6775,17 +6775,29 @@
 					// detail modals as the grid rows below (Austin: the
 					// CARDS are what you reach for first).
 					const detail = c.label === 'Autoload size' ? 'autoload' : ( c.label === 'Cron' ? 'cron' : '' );
-					// The Licenses check IS the license manager's doorway from
-					// System — the manager itself lives on Extensions → Licenses.
-					const goLic = c.label === 'Licenses';
+					// A card with the arrow always goes somewhere you can act:
+					// Licenses/Backups/pending-core → the page with the fix,
+					// Debug mode → the Debug tools card below, visibility →
+					// its Settings section. Facts with no in-app destination
+					// (PHP version, HTTPS, …) stay plain — a dead click
+					// trains people to stop clicking the live ones. Adapter
+					// checks may carry `href` (Wordfence, Solid Security):
+					// those open the plugin's own wp-admin screen.
+					const goto = c.label === 'Licenses' ? 'licenses'
+						: ( c.label === 'Debug mode' && showDebug ) ? 'debug'
+						: c.label === 'Backups' ? 'backups'
+						: c.label === 'Site visibility' ? 'visibility'
+						: ( c.label === 'WordPress version' && 'pass' !== c.status ) ? 'core'
+						: '';
+					const clickable = detail || goto || c.href;
 					return `
-					<div class="minn-sys-check ${ esc( c.status ) }${ detail || goLic ? ' minn-sys-link' : '' }"${ detail ? ` data-sysdetail="${ detail }" role="button" tabindex="0" title="View the full list"` : '' }${ goLic ? ' data-sysgoto="licenses" role="button" tabindex="0" title="Manage licenses"' : '' }>
+					<div class="minn-sys-check ${ esc( c.status ) }${ clickable ? ' minn-sys-link' : '' }"${ detail ? ` data-sysdetail="${ detail }" role="button" tabindex="0" title="View the full list"` : '' }${ goto ? ` data-sysgoto="${ goto }" role="button" tabindex="0"` : '' }${ ! detail && ! goto && c.href ? ` data-syshref="${ esc( c.href ) }" role="button" tabindex="0" title="Open in wp-admin"` : '' }>
 						${ dot( c.status ) }
 						<div class="minn-sys-check-body">
 							<div class="minn-sys-check-label">${ esc( c.label ) }</div>
 							<div class="minn-sys-check-detail">${ esc( c.detail ) }</div>
 						</div>
-						${ detail || goLic ? `<span class="minn-sys-check-open">${ icon( 'arrow-up-right' ) }</span>` : '' }
+						${ clickable ? `<span class="minn-sys-check-open">${ icon( 'arrow-up-right' ) }</span>` : '' }
 					</div>`;
 				} ).join( '' ) }
 			</div>
@@ -6873,12 +6885,29 @@
 		$$( '[data-sysdetail]', view ).forEach( ( el ) =>
 			el.addEventListener( 'click', () => openSysDetail( el.dataset.sysdetail ) ) );
 
-		// The Licenses health check is the doorway to Extensions → Licenses.
-		$$( '[data-sysgoto="licenses"]', view ).forEach( ( el ) =>
+		// Health cards that go somewhere (the checks map above says where).
+		$$( '[data-sysgoto]', view ).forEach( ( el ) =>
 			el.addEventListener( 'click', () => {
-				state.extTab = 'licenses';
-				go( 'extensions' );
+				const k = el.dataset.sysgoto;
+				if ( 'licenses' === k ) {
+					state.extTab = 'licenses';
+					go( 'extensions' );
+				} else if ( 'core' === k ) {
+					go( 'extensions' ); // the core-update banner + Update all
+				} else if ( 'backups' === k ) {
+					go( preferredSurfaceId( 'backups' ) || 'updraftplus' );
+				} else if ( 'visibility' === k ) {
+					state.settingsSection = 'Visibility';
+					go( 'settings' );
+				} else if ( 'debug' === k ) {
+					const t = document.getElementById( 'minn-sys-debug' );
+					const sc = $( '.minn-scroll' );
+					if ( t && sc ) sc.scrollTo( { top: t.offsetTop - 14, behavior: 'smooth' } );
+				}
 			} ) );
+		// Adapter checks with an href open the plugin's own screen.
+		$$( '[data-syshref]', view ).forEach( ( el ) =>
+			el.addEventListener( 'click', () => window.open( el.dataset.syshref, '_blank', 'noopener' ) ) );
 
 		$( '#minn-sys-copy', view ).addEventListener( 'click', async () => {
 			const text = systemReportText( s );

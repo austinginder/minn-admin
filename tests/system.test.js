@@ -96,6 +96,12 @@ const fs = require( 'fs' );
 	t.check( 'Licenses health check is clickable, card is gone', await page.evaluate( () =>
 		!! document.querySelector( '.minn-sys-check[data-sysgoto="licenses"]' )
 		&& ! document.getElementById( 'minn-sys-licenses' ) ) );
+	// Act-on-it health cards: Backups → the Backups surface, Debug mode →
+	// the Debug tools card (both deterministic on the dev site: UpdraftPlus
+	// is a resident-active fixture and wp-config is writable).
+	t.check( 'Backups + Debug mode health cards are clickable', await page.evaluate( () =>
+		!! document.querySelector( '.minn-sys-check[data-sysgoto="backups"]' )
+		&& !! document.querySelector( '.minn-sys-check[data-sysgoto="debug"]' ) ) );
 	await page.evaluate( () => { document.querySelector( '.minn-scroll' ).scrollTop = 0; } );
 
 	/* ===== Loopback/REST self-checks + Tools card ===== */

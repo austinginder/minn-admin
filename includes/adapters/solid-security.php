@@ -281,12 +281,14 @@ function minn_admin_solid_security_checks() {
 				'label'  => 'Solid Security',
 				'status' => 'pass',
 				'detail' => 'Brute force protection is on' . ( $extra ? ' (with ' . implode( ' and ', $extra ) . ')' : '' ),
+				'href'   => minn_admin_solid_security_admin_url(),
 			);
 		} else {
 			$rows[] = array(
 				'label'  => 'Solid Security',
 				'status' => 'warn',
 				'detail' => 'Brute force protection is turned off',
+				'href'   => minn_admin_solid_security_admin_url(),
 			);
 		}
 	} catch ( \Throwable $e ) {

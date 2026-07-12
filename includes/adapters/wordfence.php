@@ -171,7 +171,7 @@ function minn_admin_wordfence_checks() {
 				'disabled'      => array( 'warn', 'The firewall is turned off' ),
 			);
 			$m = isset( $map[ $mode ] ) ? $map[ $mode ] : array( 'warn', 'Mode: ' . (string) $mode );
-			$rows[] = array( 'label' => 'Wordfence firewall', 'status' => $m[0], 'detail' => $m[1] );
+			$rows[] = array( 'label' => 'Wordfence firewall', 'status' => $m[0], 'detail' => $m[1], 'href' => admin_url( 'admin.php?page=WordfenceWAF' ) );
 		}
 	} catch ( \Throwable $e ) {
 		// A version mismatch just drops the row.
@@ -183,15 +183,15 @@ function minn_admin_wordfence_checks() {
 			$last   = wfScanner::shared()->lastScanTime();
 			$issues = (int) ( new wfIssues() )->getIssueCount();
 			if ( ! $last ) {
-				$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'warn', 'detail' => 'No malware scan has run yet' );
+				$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'warn', 'detail' => 'No malware scan has run yet' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 			} else {
 				$when = human_time_diff( (int) $last ) . ' ago';
 				if ( $issues > 0 ) {
-					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'fail', 'detail' => $issues . ' unresolved issue' . ( 1 === $issues ? '' : 's' ) . ' from the last scan (' . $when . ')' );
+					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'fail', 'detail' => $issues . ' unresolved issue' . ( 1 === $issues ? '' : 's' ) . ' from the last scan (' . $when . ')' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				} elseif ( time() - (int) $last > 14 * DAY_IN_SECONDS ) {
-					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'warn', 'detail' => 'Last scan was ' . $when . ' — run a fresh one' );
+					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'warn', 'detail' => 'Last scan was ' . $when . ' — run a fresh one' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				} else {
-					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'pass', 'detail' => 'Last scan ' . $when . ', no issues found' );
+					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'pass', 'detail' => 'Last scan ' . $when . ', no issues found' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				}
 			}
 		}
