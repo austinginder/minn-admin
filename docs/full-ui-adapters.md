@@ -57,14 +57,17 @@ still `docs/for-plugin-authors.md` and the validator constants in
 |---|---|---|
 | **1 — form engine** | ✅ shipped (v0.12.0) | One vocabulary renders surface create/edit, editor panels and inspector controls (`required` / `default` / `help` / `placeholder` / `showWhen`, toggles, selects as themed comboboxes in adapter dialects). |
 | **2 — settings surfaces + mappers** | ✅ shipped (v0.12.0–v0.13.0) | Surface `settings` key (tabs + one GET/POST route per tab); **settings-only** surfaces (no `collection`); **item-scoped** settings (`route` with `{id}`, entered via `settingsItem` actions). Four schema frameworks covered: Gravity SMTP component trees, Minn's form vocabulary, core WP Settings API (Perfmatters), GF Settings framework (form settings). |
-| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards, `views[]` extra list views, manage-slot second collections. Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. |
+| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards (incl. chart series, v0.13.0), `views[]` extra list views, manage-slot second collections. Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. |
 | **4 — bespoke** | policy holding | Deep-link everywhere a screen is a canvas. The "80% form editor" over clean documents is scoped in `docs/native-editors.md` (parked, prerequisite plumbing now live). |
 
 ### Still open from the Rung-3 list
 
-- **Chart row type** (and per-item stat tiles). Unlocks Gravity SMTP dashboard
-  numbers and GF `/forms/{id}/results`, and pairs with the ecommerce-analytics
-  bet in `docs/plugin-support.md`.
+- ~~**Chart row type**~~ ✅ shipped (v0.13.0): status cards accept optional
+  `chart: { title, primary, secondary, points:[{label,value,secondary?}] }`
+  and render Overview-style bars with a hover tip. Gravity SMTP's Email
+  status card is the first consumer (14-day sent/failed from its events
+  table). Still open beside it: per-item stat tiles, and other chart
+  consumers (GF form results, ecommerce analytics).
 - **Richer `sectionsRoute` row types** — `pill`, `code`, `html-preview`
   (sandboxed iframe; `messageKey` generalized), `kv-table`. Email-log detail
   (headers, audit trail, rendered body) becomes fully expressible.
@@ -261,7 +264,7 @@ Rungs 1–3 it is nearly the whole plugin.
 | Suppressions | ✅ | manage-slot list + create + reactivate |
 | Debug log | ✅ (v0.13.0) | first `views[]` consumer; priority tabs; status-card link-out removed |
 | Send a test | ✅ | parameterized action with honest outcome toast |
-| Dashboard / charts | open (needs chart row) | status card already reports service + test mode |
+| Dashboard / charts | ✅ partial (v0.13.0) | status card reports service + test mode + 14-day sent/failed chart; richer dashboard tiles still open |
 | OAuth connectors (Google/Microsoft/Zoho) | Rung 4 | external handshake via wp-admin deep link |
 
 Transport note: Gravity SMTP has no REST API at all (100% admin-ajax with per-action
@@ -276,13 +279,14 @@ component-tree response shapes.
 |---|---|---|
 | **1 — keystone** | Unified form engine; port panels; upgrade create/edit | ✅ shipped v0.12.0 |
 | **2 — multiplier** | `settings` surface + Gravity SMTP mapper, then GF form settings + notifications | ✅ shipped v0.12.0–v0.13.0 (confirmations + GF plugin settings deliberately skipped) |
-| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards | mostly ✅; remaining: chart row, richer sectionsRoute rows, list row-actions |
+| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards + chart | mostly ✅; remaining: richer sectionsRoute rows, list row-actions, more chart consumers |
 | **4 — declare victory** | Document mapper pattern for third parties; GF form editor stays deep link | docs live in `for-plugin-authors.md`; 80% editor parked in `native-editors.md` |
 
 Natural next builds inside this ladder (not a ranked product roadmap; see
 `docs/plugin-support.md` for install-weighted adapter waves):
 
-1. Chart row type (also unlocks ecommerce analytics).
+1. More chart consumers (GF form results, ecommerce analytics) on the
+   status-card chart shape.
 2. Richer detail row types (email HTML preview, kv tables).
 3. Surface list row-actions (⋯ menus).
 4. GF add-on/feed settings mapper (the original "one mapper, every add-on" payoff).

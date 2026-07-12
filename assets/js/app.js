@@ -3656,6 +3656,84 @@
 		}
 	}
 
+	// Status-card chart: same bar language as Overview (soft/solid dual bars
+	// when `secondary` is present, single accent bars otherwise). Points are
+	// display-ready — the server formats labels. Optional primary/secondary
+	// strings name the tip rows (default "Count" / "Secondary").
+	function surfaceChartHtml( chart ) {
+		if ( ! chart || ! Array.isArray( chart.points ) || ! chart.points.length ) return '';
+		const points = chart.points;
+		const dual = !! chart.secondary || points.some( ( p ) => p.secondary != null );
+		const max = Math.max( 1, ...points.map( ( p ) => dual
+			? Math.max( Number( p.value ) || 0, Number( p.secondary ) || 0, ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) )
+			: ( Number( p.value ) || 0 ) ) );
+		const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
+		return `
+			<div class="minn-sstat-chart">
+				${ chart.title ? `<div class="minn-sstat-label">${ esc( chart.title ) }</div>` : '' }
+				<div class="minn-chart minn-sstat-chart-bars" data-sstat-chart>
+					${ points.map( ( p, i ) => {
+						const v = Number( p.value ) || 0;
+						const s = Number( p.secondary ) || 0;
+						if ( dual ) {
+							// Soft bar = total (value + secondary), solid = primary value.
+							// Same stacking idiom as Overview traffic (pageviews/visitors).
+							const total = v + s;
+							return `<div class="minn-chart-col" data-ci="${ i }">
+								<div class="minn-chart-views" style="height:${ pct( total ) }%"></div>
+								<div class="minn-chart-visitors" style="height:${ pct( v ) }%"></div>
+							</div>`;
+						}
+						return `<div class="minn-chart-col" data-ci="${ i }">
+							<div class="minn-chart-bar${ i === points.length - 1 ? ' last' : '' }" style="height:${ Math.max( v > 0 ? 3 : 0, pct( v ) ) }%"></div>
+						</div>`;
+					} ).join( '' ) }
+				</div>
+			</div>`;
+	}
+
+	function bindSurfaceChart( view, chart ) {
+		if ( ! chart || ! chart.points || ! chart.points.length ) return;
+		const el = $( '[data-sstat-chart]', view );
+		if ( ! el ) return;
+		const primary = chart.primary || 'Count';
+		const secondary = chart.secondary || '';
+		const dual = !! chart.secondary || chart.points.some( ( p ) => p.secondary != null );
+		const tip = chartTip();
+		let current = -1;
+		const hide = () => {
+			tip.hidden = true;
+			current = -1;
+			$$( '.minn-chart-col.hover', el ).forEach( ( c ) => c.classList.remove( 'hover' ) );
+		};
+		el.addEventListener( 'mousemove', ( e ) => {
+			const col = e.target.closest( '[data-ci]' );
+			if ( ! col || ! el.contains( col ) ) return hide();
+			const i = parseInt( col.dataset.ci, 10 );
+			if ( i !== current ) {
+				current = i;
+				const p = chart.points[ i ];
+				if ( ! p ) return hide();
+				const v = Number( p.value ) || 0;
+				const s = Number( p.secondary ) || 0;
+				tip.innerHTML = `
+					<div class="minn-chart-tip-date">${ esc( p.label ) }</div>
+					<div class="minn-chart-tip-stats">
+						<div><b>${ v.toLocaleString() }</b><span>${ esc( primary ) }</span></div>
+						${ dual ? `<div><b>${ s.toLocaleString() }</b><span>${ esc( secondary || 'Other' ) }</span></div>` : '' }
+					</div>`;
+				$$( '.minn-chart-col.hover', el ).forEach( ( c ) => c.classList.remove( 'hover' ) );
+				col.classList.add( 'hover' );
+				tip.hidden = false;
+			}
+			const rect = col.getBoundingClientRect();
+			const tw = tip.offsetWidth;
+			tip.style.left = Math.min( Math.max( 8, rect.left + rect.width / 2 - tw / 2 ), window.innerWidth - tw - 8 ) + 'px';
+			tip.style.top = Math.max( 8, rect.top - tip.offsetHeight - 10 ) + 'px';
+		} );
+		el.addEventListener( 'mouseleave', hide );
+	}
+
 	function surfaceStatusHtml( st ) {
 		if ( ! st ) return '';
 		const rows = ( st.rows || [] ).map( ( r ) => `
@@ -3664,6 +3742,7 @@
 				<div class="minn-sstat-value">${ esc( r.value ) }</div>
 				${ r.hint ? `<div class="minn-sstat-hint">${ esc( r.hint ) }</div>` : '' }
 			</div>` ).join( '' );
+		const chart = surfaceChartHtml( st.chart );
 		const cmd = st.command ? `
 			<div class="minn-sstat-cmd">
 				${ st.command.label ? `<div class="minn-sstat-label">${ esc( st.command.label ) }</div>` : '' }
@@ -3678,9 +3757,10 @@
 					? `<a class="minn-btn-soft" href="${ esc( a.href ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
 					: `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-sstatact="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 			</div>` : '';
-		if ( ! rows && ! cmd && ! actions ) return '';
+		if ( ! rows && ! chart && ! cmd && ! actions ) return '';
 		return `<div class="minn-card minn-surface-status">
-			<div class="minn-sstat-rows">${ rows }</div>
+			${ rows ? `<div class="minn-sstat-rows">${ rows }</div>` : '' }
+			${ chart }
 			${ cmd }
 			${ actions }
 		</div>`;
@@ -3760,6 +3840,7 @@
 		const ss = surfaceState( s.id );
 		const st = ss.status;
 		if ( ! st ) return;
+		bindSurfaceChart( view, st.chart );
 		const copy = $( '#minn-sstat-copy', view );
 		if ( copy && st.command ) copy.addEventListener( 'click', async () => {
 			try {

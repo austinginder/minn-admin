@@ -552,6 +552,12 @@ add_action( 'rest_api_init', function () {
 					),
 				),
 			);
+			// Rung-3 chart row: daily sent/failed for the last 14 UTC days.
+			// First consumer of the status-card chart shape.
+			$chart = minn_admin_gsmtp_send_chart( 14 );
+			if ( $chart ) {
+				$out['chart'] = $chart;
+			}
 			$out['actions'] = array();
 			if ( current_user_can( minn_admin_gsmtp_cap( 'VIEW_TOOLS_SENDATEST' ) ) ) {
 				$out['actions'][] = array(
@@ -920,6 +926,83 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 			? 'Resent to the original recipients.'
 			: 'Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s.',
 	) );
+}
+
+/**
+ * Daily sent/failed counts for the status-card chart.
+ *
+ * date_created is UTC MySQL (current_time( 'mysql', true )). Points cover a
+ * contiguous window so empty days still render as zero-height bars. Returns
+ * null when the events table is missing (fresh install before migration).
+ *
+ * @param int $days Number of UTC calendar days, inclusive of today. Capped 7–90.
+ * @return array|null { title, primary, secondary, points:[{label,value,secondary}] }
+ */
+function minn_admin_gsmtp_send_chart( $days = 14 ) {
+	global $wpdb;
+	$days  = max( 7, min( 90, (int) $days ) );
+	$table = $wpdb->prefix . 'gravitysmtp_events';
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefix-scoped.
+	$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+	if ( ! $exists ) {
+		return null;
+	}
+
+	$tz    = new DateTimeZone( 'UTC' );
+	$today = new DateTime( 'now', $tz );
+	$today->setTime( 0, 0, 0 );
+	$start = clone $today;
+	$start->modify( '-' . ( $days - 1 ) . ' days' );
+
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefix-scoped.
+	$rows = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT DATE(date_created) AS d, status, COUNT(*) AS c
+			FROM {$table}
+			WHERE date_created >= %s
+			GROUP BY DATE(date_created), status",
+			$start->format( 'Y-m-d H:i:s' )
+		),
+		ARRAY_A
+	);
+
+	$by = array();
+	foreach ( (array) $rows as $row ) {
+		$d = (string) $row['d'];
+		if ( ! isset( $by[ $d ] ) ) {
+			$by[ $d ] = array( 'sent' => 0, 'failed' => 0 );
+		}
+		$status = (string) $row['status'];
+		$count  = (int) $row['c'];
+		// Only the two delivery outcomes; sandboxed/other stay out of the
+		// tip labels so "Failed" never means "held".
+		if ( 'sent' === $status ) {
+			$by[ $d ]['sent'] += $count;
+		} elseif ( 'failed' === $status ) {
+			$by[ $d ]['failed'] += $count;
+		}
+	}
+
+	$points = array();
+	for ( $i = 0; $i < $days; $i++ ) {
+		$day = clone $start;
+		$day->modify( '+' . $i . ' days' );
+		$key   = $day->format( 'Y-m-d' );
+		$sent  = isset( $by[ $key ] ) ? (int) $by[ $key ]['sent'] : 0;
+		$fail  = isset( $by[ $key ] ) ? (int) $by[ $key ]['failed'] : 0;
+		$points[] = array(
+			'label'     => $day->format( 'M j' ),
+			'value'     => $sent,
+			'secondary' => $fail,
+		);
+	}
+
+	return array(
+		'title'     => 'Last ' . $days . ' days',
+		'primary'   => 'Sent',
+		'secondary' => 'Failed',
+		'points'    => $points,
+	);
 }
 
 /**
