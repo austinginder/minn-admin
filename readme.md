@@ -37,14 +37,16 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Orders** — WooCommerce orders with summary cards, line-item detail, **status changes**, and
   invoice / packing-slip downloads when PDF Invoices & Packing Slips is active
 - **Users** — directory with search, a role filter, create/edit users, roles, passwords,
-  **bulk role change**, **per-user login sessions with one-click sign-out**, and **Switch to
-  this user** when the User Switching plugin is active
+  **bulk role change**, **per-user login sessions with one-click sign-out**, **Switch to
+  this user** when the User Switching plugin is active (a switched session shows a **Switch
+  back** bar in Minn), and **Copy one-time login link** when One Time Login is active
 - **AI Access** — generate revocable **application passwords** for AI agents plus a site-tailored
   **agent guide** (markdown REST reference) to hand to a coding agent; configuration work stays
   out of Minn by design
 - **Extensions** — install plugins and themes from WordPress.org or zip upload, activate,
-  deactivate, delete, per-item and bulk updates, a Themes tab with screenshots, and cards
-  wearing real wp.org icons (linked to the directory) with linked author lines
+  deactivate, delete, per-item and bulk updates, a Themes tab with screenshots, cards
+  wearing real wp.org icons (linked to the directory) with linked author lines, and a
+  **Licenses** tab (below)
 - **Structure** — post types, taxonomies and terms on one page. See every registered post type
   and taxonomy and manage definitions through whoever owns them (ACF, Custom Post Type UI, or
   Minn's own store when neither is active; code-registered ones shown read-only), and a full
@@ -53,7 +55,10 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Settings** — reorganized by intent: **Site** (identity, locale, admin, with timezone picker),
   **Visibility** (search engines, maintenance mode, membership), **Homepage**, **Content**
   (new-content defaults + permalinks with automatic rewrite flushing), **Comments** (discussion +
-  spam) and **Design** (the Customizer's Additional CSS, validated before saving), under a sticky
+  spam), **Design** (the Customizer's Additional CSS, validated before saving) and
+  **Connectors** (WP 7.0's registry of AI providers and external services: connection state,
+  where each key comes from (saved, wp-config constant or environment variable), install the
+  companion plugin in place, keys saved through core's own masked route), under a sticky
   section nav. The **Spam** page shows who filters comment spam (Akismet, Antispam Bee,
   CleanTalk, WP Armour) with safe toggles and blocked counts. **Site-visibility warnings**: an
   Overview banner and a persistent topbar chip appear whenever a maintenance plugin, password
@@ -107,9 +112,11 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   linking wp-admin's one-shot jobs (Site Health, export/import, GDPR tools), live **debug
   toggles** that safely rewrite `wp-config.php`, a clickable **debug-log viewer**, and one-click
   **Copy report** as markdown
-- **Licenses** — every paid plugin and theme on one System card, classified **valid / expired /
-  invalid / missing** from the vendor's own locally stored state (read-only: no network calls,
-  no seat burn), with **paste-to-activate, deactivate and re-verify** wired through each
+- **Licenses** — a license manager on **Extensions → Licenses**, beside the plugins and themes
+  it describes: every paid product classified **valid / expired / invalid / missing** from the
+  vendor's own locally stored state (read-only: no network calls, no seat burn), grouped by
+  state with inactive components collapsed, with **paste-to-activate, deactivate and
+  re-verify** wired through each
   vendor's own code for more than twenty vendors (Elementor Pro, ACF PRO, WP Rocket, Gravity
   Forms & SMTP, Divi, Beaver Builder, Brizy, Etch, Bricks, The Events Calendar family, Kadence
   Blocks Pro, WPMU DEV, SearchWP, Gravity Perks, GP Premium, Perfmatters, WP All Import/Export,
@@ -124,20 +131,28 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   between areas and in-place edit for block/text/HTML widgets
 - **Surfaces** — Minn's answer to plugin sprawl: one sidebar item per *job*, not per plugin,
   with every capable plugin layered in behind it and a provider switcher when more than one is
-  active. **Forms** (Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 via Flamingo
-  or CFDB7) shows entries as contact cards with real field labels and ←/→ stepping;
-  **Email Log** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP) shows sent mail with HTML
-  previews and resend; **Activity Log** (Simple History, WP Activity Log, Aryo, Stream,
-  Wordfence login security) reads like an audit feed; **Redirects** (Redirection, Safe Redirect
+  active. **Forms** (Gravity Forms, Ninja Forms, Fluent Forms, Elementor Pro, Contact Form 7
+  via Flamingo or CFDB7) shows entries as contact cards with real field labels and ←/→
+  stepping, with the full **Gravity Forms workflow** inside Minn: star, spam, trash, restore,
+  **bulk actions**, notes and resent notifications across Received / Spam / Trash views;
+  **Email** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging) shows sent
+  mail with HTML previews and resend, plus Gravity SMTP's **full settings** (all 21 connectors,
+  drawn at runtime from its own schema), suppressions and **send a test email**;
+  **Activity Log** (Simple History, WP Activity Log, Aryo, Stream, Wordfence login security,
+  plus **Limit Login Attempts Reloaded** and **Solid Security** lockouts with unlock/release
+  actions) reads like an audit feed; **Redirects** (Redirection, Safe Redirect
   Manager, Simple 301 Redirects, 301 Redirects) lists, searches, creates and edits; **Snippets** (Code
-  Snippets, WPCode, FluentSnippets) lists, toggles and edits; **Backups** (UpdraftPlus,
-  Disembark) below. The sidebar organizes into **Workspace / Tools / Manage** groups so daily
-  inboxes stay separate from site plumbing
+  Snippets, WPCode, FluentSnippets) lists, toggles and edits; **Performance** (Perfmatters)
+  renders all nine of its settings tabs from the plugin's own registrations; **Backups**
+  (UpdraftPlus, Duplicator, Disembark) below. Plugins that need their own first-run install
+  get a **setup card** that runs their installer in place. The sidebar organizes into
+  **Workspace / Tools / Manage** groups so daily inboxes stay separate from site plumbing
 - **Backups** — with **UpdraftPlus**: every backup set listed, a System health check answering
   "is my site backed up?", and **Back up site now** from ⌘K through UpdraftPlus's own
-  background machinery. With **Disembark**: a status card (last scan, database size, working
-  files), the exact `disembark connect` command click-to-copy, scan sessions with cleanup, and
-  token regeneration
+  background machinery. With **Duplicator**: packages with archive sizes read from disk and
+  delete through its own cleanup. With **Disembark**: a status card (last scan, database size,
+  working files), the exact `disembark connect` command click-to-copy, scan sessions with
+  cleanup, and token regeneration
 - **Notifications that respect you** — comments, plugin/theme/core updates and new users in one
   panel, plus an **admin-notice digest**: the notices other plugins print in wp-admin are
   extracted as structured data (never their HTML or JavaScript) into a Notices tab, their action
@@ -149,7 +164,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor
   CSS), each in its own isolated request
 - **Extending** — one-filter APIs for any plugin to register views (with status cards, tabs,
-  detail layouts and actions), editor panels, traffic data, cache purgers, spam providers,
+  status filters, detail layouts, actions with inline fields, **bulk actions**, schema-driven
+  **settings views** and **setup gates**), editor panels, traffic data, cache purgers, spam providers,
   license providers, visibility providers, design libraries, page builders or block-inspector
   forms; the System page's **Integrations** card shows everything registered and flags
   descriptor problems instead of failing silently.
