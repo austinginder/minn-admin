@@ -5932,12 +5932,15 @@
 			renderLicenses();
 		} );
 		// ⋯ menu per row, built from the row's own hidden buttons.
+		// openMinnMenu calls entry.run (same key as every other context menu
+		// — content rows, comments, users). A stale `fn` key silently no-op'd
+		// Deactivate/Re-verify (Austin's 2026-07-12 report).
 		$$( '[data-licmore]', view ).forEach( ( more ) => more.addEventListener( 'click', ( e ) => {
 			const row = more.closest( '.minn-lic-row' );
 			const entries = $$( '.minn-lic-actions .lic-menu', row ).map( ( btn ) => ( {
 				label: btn.textContent.trim(),
 				danger: btn.classList.contains( 'lic-danger' ),
-				fn: () => btn.click(),
+				run: () => btn.click(),
 			} ) );
 			if ( entries.length ) openMinnMenu( e.clientX, e.clientY, entries );
 		} ) );
@@ -13714,7 +13717,10 @@
 		$$( 'button[data-mi]', minnMenuEl ).forEach( ( b ) => b.addEventListener( 'click', () => {
 			const en = entries[ parseInt( b.dataset.mi, 10 ) ];
 			hideMinnMenu();
-			if ( en && en.run ) en.run();
+			// `run` is the contract (comment/content/users menus). Accept a
+			// legacy `fn` alias so a misnamed entry never silently no-ops.
+			const go = en && ( en.run || en.fn );
+			if ( typeof go === 'function' ) go();
 		} ) );
 		$$( 'a', minnMenuEl ).forEach( ( a ) => a.addEventListener( 'click', hideMinnMenu ) );
 		document.addEventListener( 'mousedown', minnMenuAway, true );

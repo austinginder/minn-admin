@@ -201,18 +201,31 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		} );
 		t.check( 'pasted key never appears in GET /licenses', ! echoes );
 
-		/* ===== Re-verify (UI) ===== */
-		const row = await fixtureRow();
-		await row.evaluate( ( el ) => el.querySelector( '[data-lic="verify"]' ).click() );
+		/* ===== Re-verify via the ⋯ menu (the real UI path) =====
+		 * Direct-clicking the hidden .lic-menu button still works; the
+		 * regression was openMinnMenu looking for entry.run while the
+		 * license ⋯ menu shipped entry.fn — a silent no-op. Drive both
+		 * actions through the menu so that bug can't return. */
+		const openLicMenu = async ( label ) => {
+			const row = await fixtureRow();
+			await row.evaluate( ( el ) => el.querySelector( '[data-licmore]' ).click() );
+			await page.waitForSelector( '.minn-ctx-menu button', { timeout: 5000 } );
+			await page.evaluate( ( lab ) => {
+				const b = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ]
+					.find( ( x ) => x.textContent.trim() === lab );
+				if ( ! b ) throw new Error( 'menu missing ' + lab );
+				b.click();
+			}, label );
+		};
+		await openLicMenu( 'Re-verify' );
 		await waitToast( 'License re-verified' );
-		t.check( 'verify round-trips', true );
+		t.check( 'verify round-trips through the ⋯ menu', true );
 		await cardReady();
 
 		/* ===== Deactivate asks first, then frees the row ===== */
 		let dialogText = '';
 		page.once( 'dialog', ( d ) => { dialogText = d.message(); d.accept(); } );
-		const row2 = await fixtureRow();
-		await row2.evaluate( ( el ) => el.querySelector( '[data-lic="deactivate"]' ).click() );
+		await openLicMenu( 'Deactivate' );
 		await waitToast( 'License deactivated' );
 		t.check( 'deactivate confirmed first', /frees the seat|seat frees/i.test( dialogText ), dialogText );
 		await page.waitForFunction( () => {
