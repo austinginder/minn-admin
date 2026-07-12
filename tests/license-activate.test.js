@@ -34,9 +34,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		return false;
 	};
 
+	// The license manager lives on Extensions -> Licenses now; inactive
+	// components render collapsed, so expand them for off-row checks.
 	const openSystem = async () => {
-		await page.goto( BASE + '/minn-admin/system', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '#minn-sys-licenses', { timeout: 20000 } );
+		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '[data-xtab="licenses"]', { timeout: 20000 } );
+		await page.click( '[data-xtab="licenses"]' );
+		await page.waitForSelector( '#minn-sys-licenses .minn-lic-item', { timeout: 20000 } );
+		const off = await page.$( '#minn-lic-off-toggle' );
+		if ( off && await page.$eval( '#minn-lic-off-toggle', ( el ) => el.getAttribute( 'aria-expanded' ) !== 'true' ) ) {
+			await page.click( '#minn-lic-off-toggle' );
+			await page.waitForTimeout( 250 );
+		}
 	};
 	const fixtureRow = () => page.evaluateHandle( () =>
 		[ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
@@ -54,7 +63,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	};
 	const submitKey = async ( key ) => {
 		const row = await fixtureRow();
-		await row.evaluate( ( el ) => { el.querySelector( '.minn-lic-key' ).focus(); } );
+		// preventScroll: a bare focus() reveals the input by scrolling the
+		// panel — the no-scroll-jump check would measure the HELPER's scroll,
+		// not the app's (a real user focuses by click, which doesn't scroll).
+		await row.evaluate( ( el ) => { el.querySelector( '.minn-lic-key' ).focus( { preventScroll: true } ); } );
 		await page.keyboard.type( key );
 		await row.evaluate( ( el ) => el.querySelector( '[data-lic-go]' ).click() );
 	};
@@ -111,11 +123,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			bw: el.dataset.bwignore === 'true',
 		} ) );
 		t.check( 'paste field is plain text with password-manager opt-outs', field.type === 'text' && field.onep && field.lp && field.bw, JSON.stringify( field ) );
-		const topBefore = await page.evaluate( () => {
-			document.querySelector( '#minn-sys-licenses' ).scrollIntoView();
-			return document.querySelector( '.minn-scroll' ).scrollTop;
-		} );
-		await submitKey( 'totally-wrong-key' );
+		// Type FIRST, then take the scroll baseline: Chrome's caret reveal
+		// scrolls the input into view on the first keystroke (real typing
+		// does this too) — the check guards the FAILURE path, so the
+		// baseline is the position the user typed at.
+		await page.evaluate( () => document.querySelector( '#minn-sys-licenses' ).scrollIntoView() );
+		const rowT = await fixtureRow();
+		await rowT.evaluate( ( el ) => { el.querySelector( '.minn-lic-key' ).focus( { preventScroll: true } ); } );
+		await page.keyboard.type( 'totally-wrong-key' );
+		const topBefore = await page.evaluate( () => document.querySelector( '.minn-scroll' ).scrollTop );
+		const rowGo = await fixtureRow();
+		await rowGo.evaluate( ( el ) => el.querySelector( '[data-lic-go]' ).click() );
 		await waitToast( 'That key is not recognized' );
 		const afterFail = await page.evaluate( () => {
 			const i = document.querySelector( '#minn-sys-licenses .minn-lic-key' );
