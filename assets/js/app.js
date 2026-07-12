@@ -4445,24 +4445,44 @@
 			col.width || FIXED[ col.format ] || ( i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)' )
 		).join( ' ' ) + ' 30px';
 
-		view.innerHTML = `
-		${ ss.view === 'main' ? surfaceStatusHtml( ss.status ) : '' }
-		<div class="minn-toolbar">
-			${ surfaceViewSwitchHtml( s, ss ) }
-			${ ss.tabs && ss.tabs.length > 1 ? `
+		// A long tab list (a site with a dozen forms) turns the pill strip
+		// into a scroll hunt — swap it for the themed strict combobox (the
+		// Users role-picker precedent). Short lists keep the pills.
+		const manyTabs = ss.tabs && ss.tabs.length > 6;
+		const allTab = ss.tabs && ss.tabs.length ? ss.tabs[ 0 ] : null;
+		const tabsHtml = ss.tabs && ss.tabs.length > 1 ? ( manyTabs ? `
+			<div class="minn-ac minn-tax-select" data-stabcombo>
+				<input class="minn-input minn-ac-input" placeholder="${ esc( allTab ? allTab[ 1 ] : 'All' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<div class="minn-ac-panel" hidden></div>
+			</div>` : `
 			<div class="minn-tabs">
 				${ ss.tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
-			</div>` : '' }
-			${ coll.filter && coll.filter.options ? `
-			<div class="minn-tabs">
+			</div>` ) : '';
+		// The filter is the SECOND strip on its row, so it wears the quiet
+		// text style (one boxed pill strip per row — the Extensions rule:
+		// stacked bordered containers read as chrome soup).
+		const filterHtml = coll.filter && coll.filter.options ? `
+			<div class="minn-tabs minn-quiet-tabs">
 				${ coll.filter.options.map( ( [ v, label ] ) =>
 					`<button class="minn-tab${ surfaceFilterValue( coll, ss ) === String( v ) ? ' active' : '' }" data-sfilter="${ esc( String( v ) ) }">${ esc( String( label ) ) }</button>` ).join( '' ) }
-			</div>` : '' }
-			${ coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Search ${ esc( ( coll.viewLabel || 'items' ).toLowerCase() ) }…" value="${ esc( ss.q || '' ) }">` : '' }
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>
-			${ coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '' }
-		</div>
+			</div>` : '';
+		const searchHtml = coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Search ${ esc( ( coll.viewLabel || 'items' ).toLowerCase() ) }…" value="${ esc( ss.q || '' ) }">` : '';
+		const createHtml = coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '';
+		const rowTwo = tabsHtml + filterHtml + searchHtml
+			+ `<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>` + createHtml;
+		const switchHtml = surfaceViewSwitchHtml( s, ss );
+		// With a view switcher AND list controls, the toolbar splits into two
+		// rows (the Extensions pattern): views on top, this view's own
+		// controls underneath. Simple surfaces keep the single row.
+		const toolbarHtml = switchHtml && ( tabsHtml || filterHtml || searchHtml || createHtml )
+			? `<div class="minn-toolbar minn-toolbar-views">${ switchHtml }</div>
+			   <div class="minn-toolbar">${ rowTwo }</div>`
+			: `<div class="minn-toolbar">${ switchHtml }${ rowTwo }</div>`;
+
+		view.innerHTML = `
+		${ ss.view === 'main' ? surfaceStatusHtml( ss.status ) : '' }
+		${ toolbarHtml }
 		${ hasBulk ? '<div id="minn-sbulk-slot"></div>' : '' }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head" style="grid-template-columns:${ gridCols };">
@@ -4485,6 +4505,19 @@
 				renderSurface( s );
 			} )
 		);
+		const tabCombo = view.querySelector( '[data-stabcombo]' );
+		if ( tabCombo ) bindAutocomplete( tabCombo,
+			ss.tabs.map( ( [ id, label ] ) => ( { value: id === '_all' ? '' : String( id ), label } ) ), {
+				strict: true,
+				value: ss.tab !== '_all' ? String( ss.tab ) : '',
+				onPick: ( v ) => {
+					const next = v === '' ? '_all' : v;
+					if ( String( ss.tab ) === String( next ) ) return;
+					ss.tab = next;
+					ss.cache = null;
+					renderSurface( s );
+				},
+			} );
 		$$( '[data-sfilter]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				if ( surfaceFilterValue( coll, ss ) === btn.dataset.sfilter ) return;
@@ -4666,15 +4699,18 @@
 		const tab = ss.settingsTab;
 		const cacheKey = itemScoped ? ss.settingsItem.id + ':' + tab : tab;
 		const data = ss.settingsCache[ cacheKey ];
-		const head = `
-		<div class="minn-toolbar">
-			${ surfaceViewSwitchHtml( s, ss ) }
-			${ cfg.tabs.length > 1 ? `
+		const setTabsHtml = cfg.tabs.length > 1 ? `
 			<div class="minn-tabs">
 				${ cfg.tabs.map( ( t ) => `<button class="minn-tab${ tab === t.id ? ' active' : '' }" data-ssettab="${ esc( t.id ) }">${ esc( t.label ) }</button>` ).join( '' ) }
-			</div>` : '' }
-			${ itemScoped ? `<div class="minn-toolbar-meta">${ esc( ss.settingsItem.label || '' ) } · ${ esc( cfg.label || 'Settings' ) }</div>` : '' }
-		</div>`;
+			</div>` : '';
+		const setMetaHtml = itemScoped ? `<div class="minn-toolbar-meta">${ esc( ss.settingsItem.label || '' ) } · ${ esc( cfg.label || 'Settings' ) }</div>` : '';
+		const setSwitch = surfaceViewSwitchHtml( s, ss );
+		// Same two-row split as the list renderer: views on top, this view's
+		// own tabs (and the item label) underneath.
+		const head = setSwitch && ( setTabsHtml || setMetaHtml )
+			? `<div class="minn-toolbar minn-toolbar-views">${ setSwitch }</div>
+			   <div class="minn-toolbar">${ setTabsHtml }${ setMetaHtml }</div>`
+			: `<div class="minn-toolbar">${ setSwitch }${ setTabsHtml }${ setMetaHtml }</div>`;
 		const bindChrome = () => {
 			bindSurfaceViewSwitch( s, ss, view );
 			$$( '[data-ssettab]', view ).forEach( ( btn ) =>

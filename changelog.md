@@ -13,6 +13,9 @@
 
 * **Formidable support:** its entries join the Forms surface the same way: answer summaries in form order, per-form tabs, search across every answer, labeled detail cards read from Formidable's own field models at runtime, and permanent delete through Formidable's own destroy flow (its hooks fire; it has no entry trash and the confirm says so). Its permission model is honored: the granular entry capabilities its role settings can grant, with the administrator fallback its own screens use.
 
+### Improved
+* **Surface toolbars, calmed:** a surface with a view switcher (Entries / Forms / Notifications) now stacks it on its own row with the current view's controls underneath, the same two-row shape Extensions settled on, instead of cramming the switcher, form tabs, status filters and search into one clipped line. On the second row, only one boxed strip remains: the status filter (Received / Spam / Trash) wears the quiet text style, and a long tab list (a site with more than a handful of forms) becomes the themed searchable dropdown instead of a pill strip that scrolls past the edge. Short tab lists keep their pills, and simple surfaces keep the single row.
+
 ### Fixed
 * **Detail-modal link actions now fill every `{field}` placeholder:** an adapter action's `href` documented `{field}` substitution from the item, but the modal renderer only filled `{id}`, so multi-key deep links (a form id plus a notification id) rendered with literal braces. Both now use the same substitution.
 

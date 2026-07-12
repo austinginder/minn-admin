@@ -96,6 +96,56 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForSelector( '.minn-surface-status', { timeout: 20000 } );
 		t.check( 'main view returns with its status card', true );
 
+		/* ===== Toolbar: two rows with a switcher; long tab lists → combobox ===== */
+		await page.goto( BASE + '/minn-admin/gravity-forms', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-table-row, .minn-empty', { timeout: 20000 } );
+		t.check( 'switcher sits on its own row above the list controls',
+			!! ( await page.$( '.minn-toolbar-views .minn-view-switch' ) ) );
+		t.check( 'status filter wears the quiet style beside the tabs',
+			!! ( await page.$( '.minn-quiet-tabs [data-sfilter]' ) ) );
+		t.check( 'short tab lists keep the pill strip', !! ( await page.$( '[data-stab]' ) ) && ! ( await page.$( '[data-stabcombo]' ) ) );
+
+		// Grow the form list past the threshold: the strip becomes the themed
+		// strict combobox (Users role-picker pattern). Temp forms ride gf/v2.
+		const tempIds = await page.evaluate( async () => {
+			const ids = [];
+			for ( let i = 1; i <= 6; i++ ) {
+				const r = await fetch( window.MINN.restUrl + 'gf/v2/forms', {
+					method: 'POST', credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+					body: JSON.stringify( { title: 'Temp Combo Form ' + i, fields: [] } ),
+				} );
+				ids.push( ( await r.json() ).id );
+			}
+			return ids;
+		} );
+		try {
+			await page.goto( BASE + '/minn-admin/gravity-forms', { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '[data-stabcombo]', { timeout: 20000 } );
+			t.check( 'long tab lists render as a combobox', true );
+			await page.click( '[data-stabcombo] .minn-ac-input' );
+			await page.waitForSelector( '.minn-ac-panel:not([hidden]) .minn-ac-item', { timeout: 10000 } );
+			await page.keyboard.type( 'contact' );
+			await page.waitForFunction( () =>
+				document.querySelectorAll( '.minn-ac-panel .minn-ac-item:not([hidden])' ).length === 1, { timeout: 10000 } );
+			t.check( 'typing filters the form list', true );
+			await page.click( '.minn-ac-item[data-acv="1"]' );
+			await page.waitForFunction( () => {
+				const input = document.querySelector( '[data-stabcombo] .minn-ac-input' );
+				return input && input.value === 'Contact Form' && document.querySelectorAll( '.minn-table-row' ).length > 0;
+			}, { timeout: 20000 } );
+			t.check( 'picking a form reloads the list scoped to it', true );
+		} finally {
+			await page.evaluate( async ( ids ) => {
+				for ( const id of ids ) {
+					await fetch( window.MINN.restUrl + 'gf/v2/forms/' + id + '?force=1', {
+						method: 'DELETE', credentials: 'same-origin',
+						headers: { 'X-WP-Nonce': window.MINN.nonce },
+					} );
+				}
+			}, tempIds );
+		}
+
 		/* ===== The descriptor passes the Integrations validator ===== */
 		const problems = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/system?_cb=' + Math.random(), {

@@ -479,10 +479,10 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-toolbar-views { margin-bottom: 10px; }
 /* Extensions filters: quiet text links, not a second boxed pill strip —
    two stacked bordered containers read as chrome soup (Austin). */
-.minn-tabs.minn-ext-filters { background: none; border: none; padding: 0; gap: 4px; overflow: visible; }
-.minn-ext-filters .minn-tab { background: none; border: none; padding: 6px 9px; color: var(--text3); font-weight: 500; }
-.minn-ext-filters .minn-tab:hover { color: var(--text2); }
-.minn-ext-filters .minn-tab.active { color: var(--text); font-weight: 600; background: none; box-shadow: none; }
+.minn-tabs.minn-ext-filters, .minn-tabs.minn-quiet-tabs { background: none; border: none; padding: 0; gap: 4px; overflow: visible; }
+.minn-ext-filters .minn-tab, .minn-quiet-tabs .minn-tab { background: none; border: none; padding: 6px 9px; color: var(--text3); font-weight: 500; }
+.minn-ext-filters .minn-tab:hover, .minn-quiet-tabs .minn-tab:hover { color: var(--text2); }
+.minn-ext-filters .minn-tab.active, .minn-quiet-tabs .minn-tab.active { color: var(--text); font-weight: 600; background: none; box-shadow: none; }
 .minn-ext-filters .minn-tab.active .minn-tab-count { color: var(--accent2); }
 .minn-ext-filters .minn-tab .minn-tab-count { background: none; border: none; padding: 0; margin-left: 3px; }
 .minn-toolbar-meta { margin-left: auto; color: var(--text3); font-size: 14px; white-space: nowrap; flex-shrink: 0; }
