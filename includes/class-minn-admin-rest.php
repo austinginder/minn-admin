@@ -1190,12 +1190,13 @@ class Minn_Admin_REST {
 		$block_forms = apply_filters( 'minn_admin_block_forms', array() );
 		return rest_ensure_response(
 			array(
-				'insertBlocks'   => Minn_Admin::insertable_blocks( $block_forms ),
-				'blockForms'     => $block_forms,
-				'designs'        => Minn_Admin::design_sources(),
+				'insertBlocks'    => Minn_Admin::insertable_blocks( $block_forms ),
+				'blockForms'      => $block_forms,
+				'designs'         => Minn_Admin::design_sources(),
+				'editorCommands'  => Minn_Admin::editor_commands(),
 				// Comments feature can vanish when Disable Comments (etc.) is
 				// toggled — same re-poll path as blocks so the nav tracks live.
-				'comments'       => Minn_Admin::comments_enabled(),
+				'comments'        => Minn_Admin::comments_enabled(),
 			)
 		);
 	}

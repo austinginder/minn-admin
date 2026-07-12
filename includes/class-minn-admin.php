@@ -399,6 +399,11 @@ class Minn_Admin {
 			// editor's slash menu and block picker.
 			'designs'  => self::design_sources(),
 			/**
+			 * Plugin-declared slash-menu commands (boilerplate, async inserts).
+			 * See minn_admin_editor_commands / docs/for-plugin-authors.md.
+			 */
+			'editorCommands' => self::editor_commands(),
+			/**
 			 * Block-inspector form refinements, keyed by block name. A descriptor
 			 * can set per-attribute label/control/options/hide, an attribute
 			 * `order`, and `wrapperText` patterns for editable text in an
@@ -481,6 +486,109 @@ class Minn_Admin {
 					: ucfirst( $id ),
 				'route' => $src['route'],
 			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Plugin-declared slash-menu / block-picker commands.
+	 *
+	 * Unlike auto-insert blocks (dynamic blocks with a render probe), these
+	 * are free-form entries plugins register for writing actions: paste a
+	 * boilerplate paragraph, drop a pre-built island template, or fetch
+	 * markup from a REST route. Pure descriptors — no third-party JS in the
+	 * Minn document. See docs/for-plugin-authors.md.
+	 *
+	 * Each command needs an id, a label, and exactly one insert shape:
+	 * `html` (prose HTML), `template` (+ optional `block` for an island),
+	 * or `route` (async: POST/GET returns { html } or { template, block? }).
+	 *
+	 * @return array[]
+	 */
+	public static function editor_commands() {
+		$raw = apply_filters( 'minn_admin_editor_commands', array() );
+		$out = array();
+		foreach ( (array) $raw as $cmd ) {
+			if ( ! is_array( $cmd ) || empty( $cmd['id'] ) || empty( $cmd['label'] ) ) {
+				continue;
+			}
+			$id = preg_replace( '/[^a-z0-9_\-\/]/', '', strtolower( (string) $cmd['id'] ) );
+			if ( '' === $id ) {
+				continue;
+			}
+			$has_html     = ! empty( $cmd['html'] ) && is_string( $cmd['html'] );
+			$has_template = ! empty( $cmd['template'] ) && is_string( $cmd['template'] );
+			$has_route    = ! empty( $cmd['route'] ) && is_string( $cmd['route'] );
+			// Exactly one insert shape — refuse ambiguous descriptors.
+			if ( (int) $has_html + (int) $has_template + (int) $has_route !== 1 ) {
+				continue;
+			}
+			$item = array(
+				'id'    => $id,
+				'label' => sanitize_text_field( (string) $cmd['label'] ),
+			);
+			if ( ! empty( $cmd['icon'] ) && is_string( $cmd['icon'] ) ) {
+				// Lucide key (file, send…) or a single glyph — client picks.
+				$item['icon'] = sanitize_text_field( $cmd['icon'] );
+			}
+			if ( ! empty( $cmd['ns'] ) && is_string( $cmd['ns'] ) ) {
+				$item['ns'] = sanitize_text_field( $cmd['ns'] );
+			}
+			if ( ! empty( $cmd['keywords'] ) && is_array( $cmd['keywords'] ) ) {
+				$item['keywords'] = array_values(
+					array_filter(
+						array_map(
+							static function ( $k ) {
+								return is_string( $k ) ? sanitize_text_field( $k ) : '';
+							},
+							$cmd['keywords']
+						)
+					)
+				);
+			}
+			if ( ! empty( $cmd['searchOnly'] ) ) {
+				$item['searchOnly'] = true;
+			}
+			if ( $has_html ) {
+				// Trusted PHP source (the registering plugin) — the client
+				// inserts as prose HTML the same way pullquote/table do.
+				$item['html'] = $cmd['html'];
+			} elseif ( $has_template ) {
+				$item['template'] = $cmd['template'];
+				if ( ! empty( $cmd['block'] ) && is_string( $cmd['block'] ) ) {
+					$item['block'] = sanitize_text_field( $cmd['block'] );
+				}
+			} else {
+				// Relative REST path under the site's rest root, no leading slash.
+				$route = ltrim( $cmd['route'], '/' );
+				if ( ! preg_match( '/^[a-z0-9_\-\/{}]+$/i', $route ) ) {
+					continue;
+				}
+				$item['route']  = $route;
+				$method         = ! empty( $cmd['method'] ) ? strtoupper( (string) $cmd['method'] ) : 'POST';
+				$item['method'] = in_array( $method, array( 'GET', 'POST' ), true ) ? $method : 'POST';
+				if ( ! empty( $cmd['body'] ) && is_array( $cmd['body'] ) ) {
+					// Shallow sanitize string values only — nested free-form
+					// is the plugin's responsibility on its own route.
+					$body = array();
+					foreach ( $cmd['body'] as $k => $v ) {
+						if ( ! is_string( $k ) ) {
+							continue;
+						}
+						$key = sanitize_key( $k );
+						if ( '' === $key ) {
+							continue;
+						}
+						if ( is_scalar( $v ) || null === $v ) {
+							$body[ $key ] = $v;
+						}
+					}
+					if ( $body ) {
+						$item['body'] = $body;
+					}
+				}
+			}
+			$out[] = $item;
 		}
 		return $out;
 	}

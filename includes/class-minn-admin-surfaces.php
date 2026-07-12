@@ -645,7 +645,7 @@ class Minn_Admin_Surfaces {
 		$listeners  = array();
 		$data_hooks = array(
 			'minn_admin_traffic', 'minn_admin_traffic_day', 'minn_admin_before_render_blocks', 'minn_admin_render_styles',
-			'minn_admin_rendered_html', 'minn_admin_insert_blocks', 'minn_admin_template_footer',
+			'minn_admin_rendered_html', 'minn_admin_insert_blocks', 'minn_admin_editor_commands', 'minn_admin_template_footer',
 			'minn_admin_comments_enabled',
 		);
 		foreach ( $data_hooks as $hook ) {

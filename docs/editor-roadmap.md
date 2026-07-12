@@ -161,10 +161,11 @@ slash-command extension point.
   post is clean so late island previews don't inflate "session") and an optional word
   goal (global, localStorage `minn-writing-goal`, click the pill to set/clear). Goal-met
   paints green. Suite: `tests/writing-stats.test.js`.
-- **Slash-command extension point.** `minn_admin_editor_commands` filter so plugins add
-  their own slash items the way they already add blocks, panels and surfaces. Still open
-  (auto-insert blocks, design libraries and patterns already cover the plugin-content
-  half without a new filter).
+- **Slash-command extension point.** Shipped: `minn_admin_editor_commands` filter so
+  plugins add free-form slash items (boilerplate `html`, island `template`, or async
+  `route` returning either). Pure descriptors, no third-party JS. Documented in
+  `docs/for-plugin-authors.md`; suite `tests/editor-commands.test.js`. Auto-insert
+  blocks, design libraries and patterns still cover the plugin-content half.
 
 ## Horizon 3 — the editor as platform (1.0+)
 
