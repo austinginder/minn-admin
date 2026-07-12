@@ -42,6 +42,9 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+/* WebKit paints the scrollbar CORNER (where X/Y meet) white by default —
+   a bright square on dark UI (revision diff modal). Match the track. */
+::-webkit-scrollbar-corner { background: transparent; }
 
 @keyframes minnFadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
 @keyframes minnScaleIn { from { opacity:0; transform: translateY(-6px) scale(0.98); } to { opacity:1; transform: none; } }
@@ -885,8 +888,14 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
    tokens, which hold in both themes. */
 .minn-diff {
   margin: 0 18px 14px; border: 1px solid var(--border); border-radius: 10px;
-  max-height: 64vh; overflow-y: auto; font-size: 13.5px; line-height: 1.6;
+  max-height: 64vh; overflow-y: auto; overflow-x: hidden; font-size: 13.5px; line-height: 1.6;
+  /* Firefox track + WebKit UA chrome (scrollbar corner) follow color-scheme,
+     same hard-won as .minn-css-editor — default light paints a white square. */
+  scrollbar-color: var(--border2) transparent;
+  color-scheme: dark;
 }
+[data-theme="light"] .minn-diff { color-scheme: light; }
+.minn-diff::-webkit-scrollbar-corner { background: var(--bg); }
 .minn-diff-headrow {
   display: grid; grid-template-columns: 1fr 1fr; position: sticky; top: 0; z-index: 1;
   background: var(--bg2); border-bottom: 1px solid var(--border);
