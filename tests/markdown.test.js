@@ -109,6 +109,38 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 	h = await lastHtml();
 	t.check( 'Cmd+Z unwinds a wrap to literal text', h.includes( '**this*' ) && ! h.includes( '<strong>' ), h );
 
+	// Inline code used to be a direct-DOM wrap (outside Blink's undo stack)
+	// because insertHTML rewrote <code> into a styled span. The wrap now
+	// rides insertHTML + a trailing ZWSP so ⌘Z restores the backticks.
+	// Type only through the closing tick (no trailing prose) so one ⌘Z
+	// targets the wrap, same shape as the bold undo check above.
+	await freshParagraph( page );
+	await page.keyboard.type( 'see `code`' );
+	h = await lastHtml();
+	t.check( '`code` wraps in <code>',
+		( /see(\s|&nbsp;)*<code>code<\/code>/.test( h ) ) && ! h.includes( '\u200B' ), h );
+	await page.keyboard.press( 'Meta+z' );
+	h = await lastHtml();
+	t.check( 'Cmd+Z unwinds an inline code wrap to backticks',
+		h.includes( '`code' ) && ! h.includes( '<code>' ), h );
+
+	// Mid-sentence: wrap then type a space+letter; undo the letter/space first,
+	// then the wrap.
+	await freshParagraph( page );
+	await page.keyboard.type( 'a `b`' );
+	h = await lastHtml();
+	t.check( 'mid-sentence `b` is a code chip', /<code>b<\/code>/.test( h ) && ! h.includes( '\u200B' ), h );
+	await page.keyboard.type( ' c' );
+	await page.keyboard.press( 'Meta+z' ); // undo "c" or " c"
+	await page.keyboard.press( 'Meta+z' ); // may need a second for the space
+	// Keep undoing until the wrap reverts or we hit a cap.
+	for ( let i = 0; i < 4 && ( await lastHtml() ).includes( '<code>' ); i++ ) {
+		await page.keyboard.press( 'Meta+z' );
+	}
+	h = await lastHtml();
+	t.check( 'Cmd+Z unwinds mid-sentence code wrap',
+		h.includes( '`b' ) && ! h.includes( '<code>' ), h );
+
 	await freshParagraph( page );
 	await page.dispatchEvent( '.minn-tool[data-cmd="bold"]', 'mousedown' );
 	await page.keyboard.type( 'xy' );
