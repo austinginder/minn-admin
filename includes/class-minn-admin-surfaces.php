@@ -41,6 +41,7 @@ class Minn_Admin_Surfaces {
 			$surface['id'] = sanitize_key( $id );
 			$surface       = self::with_setup_state( $surface );
 			$surface       = self::with_settings_state( $surface );
+			$surface       = self::with_views_state( $surface );
 			$out[]         = $surface;
 		}
 		return $out;
@@ -142,6 +143,43 @@ class Minn_Admin_Surfaces {
 		return $surface;
 	}
 
+	/**
+	 * Resolve a surface's extra list views (`views`) for the client. Each
+	 * entry is a collection like `manage`, and like `settings` it may carry
+	 * its own `cap` gating the VIEW tighter than the surface (an email log
+	 * any admin reads vs. a debug log only settings-capable users see); the
+	 * real gate stays the adapter route's own permission_callback. Entries
+	 * without a route or a viewLabel are dropped — the switcher can't name
+	 * a nameless tab, and index-based view ids mean a malformed entry must
+	 * vanish here, consistently, not sometimes-render.
+	 *
+	 * @param array $surface Client-bound surface row (id already set).
+	 * @return array The row with `views` normalized or removed.
+	 */
+	private static function with_views_state( $surface ) {
+		if ( empty( $surface['views'] ) || ! is_array( $surface['views'] ) ) {
+			unset( $surface['views'] );
+			return $surface;
+		}
+		$views = array();
+		foreach ( $surface['views'] as $v ) {
+			if ( ! is_array( $v ) || empty( $v['route'] ) || ! is_string( $v['route'] ) || empty( $v['viewLabel'] ) ) {
+				continue;
+			}
+			if ( ! empty( $v['cap'] ) && ! current_user_can( $v['cap'] ) ) {
+				continue;
+			}
+			unset( $v['cap'] );
+			$views[] = $v;
+		}
+		if ( $views ) {
+			$surface['views'] = array_values( $views );
+		} else {
+			unset( $surface['views'] );
+		}
+		return $surface;
+	}
+
 	/* ===== Integration diagnostics (System page) ==========================
 	 *
 	 * A live registry view of everything hooked into Minn, with each entry
@@ -154,7 +192,7 @@ class Minn_Admin_Surfaces {
 	// The documented descriptor vocabulary. Undocumented keys are internal
 	// (see the Compatibility section of for-plugin-authors.md), so anything
 	// outside these lists is flagged as unknown rather than silently ignored.
-	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'status', 'setup', 'settings' );
+	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'views', 'status', 'setup', 'settings' );
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
 	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter' );
@@ -313,11 +351,34 @@ class Minn_Admin_Surfaces {
 				}
 			}
 		}
+		// Every list view validates with the same collection vocabulary:
+		// `collection`, `manage`, and each `views` entry (which additionally
+		// needs a viewLabel to name its switcher tab and may carry `cap`).
+		$colls = array();
 		foreach ( array( 'collection', 'manage' ) as $ck ) {
-			if ( empty( $surface[ $ck ] ) || ! is_array( $surface[ $ck ] ) ) {
-				continue;
+			if ( ! empty( $surface[ $ck ] ) && is_array( $surface[ $ck ] ) ) {
+				$colls[ $ck ] = $surface[ $ck ];
 			}
-			$coll = $surface[ $ck ];
+		}
+		if ( isset( $surface['views'] ) ) {
+			if ( ! is_array( $surface['views'] ) || ! wp_is_numeric_array( $surface['views'] ) ) {
+				$problems[] = 'views: must be a list of collections';
+			} else {
+				foreach ( $surface['views'] as $i => $v ) {
+					$vk = "views[$i]";
+					if ( ! is_array( $v ) ) {
+						$problems[] = "$vk: entry is not an array";
+						continue;
+					}
+					if ( empty( $v['viewLabel'] ) ) {
+						$problems[] = "$vk: missing viewLabel (entry dropped)";
+					}
+					unset( $v['cap'] ); // view-level gate, legal here only
+					$colls[ $vk ] = $v;
+				}
+			}
+		}
+		foreach ( $colls as $ck => $coll ) {
 			if ( empty( $coll['route'] ) || ! is_string( $coll['route'] ) ) {
 				$problems[] = "$ck: missing route";
 			}

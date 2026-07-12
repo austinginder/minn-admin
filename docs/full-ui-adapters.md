@@ -101,11 +101,14 @@ outcome toasts), bulk selection (`bulk` on collections with per-item
 (`filter`, merging into a shared JSON criteria param — GF
 Received/Spam/Trash round-trip inside Minn), and GS Suppressions in the
 manage slot. Still open from the Rung 3 list: a chart row type, richer
-sectionsRoute row types (pill/code/html-preview/kv-table), row actions in
-surface lists, and a THIRD list view per surface (the GS debug log link
-outs until then). Phase 2's remaining half is the GF Settings mapper
-(form settings + notifications/confirmations via full-form PUT) — the
-natural v0.13.0 opener.
+sectionsRoute row types (pill/code/html-preview/kv-table), and row
+actions in surface lists. The third list view shipped in the v0.13.0
+cycle (2026-07-12): a surface may declare a `views` array of additional
+collections (each with its own optional `cap`), and the Gravity SMTP
+debug log is the bundled reference (its status-card link-out is gone).
+Phase 2's remaining half is the GF Settings mapper (form settings +
+notifications/confirmations via full-form PUT) — the natural v0.13.0
+opener, in progress.
 
 **The multiplier, proven on a fresh plugin (2026-07-11):** the theory behind
 this document was tested cold against Perfmatters, a settings-shaped plugin

@@ -1,5 +1,11 @@
 # Changelog
 
+## **v0.13.0** - Unreleased
+
+### Added
+* **Surfaces can declare any number of list views:** beyond the main collection and the Manage slot, a surface (bundled or third-party) may declare a `views` array of additional collections, each a full citizen (its own tabs, search, filters, detail modal, actions, bulk) with an optional capability gating just that view. Documented in `docs/for-plugin-authors.md` and validated on the System page's Integrations card.
+* **Gravity SMTP debug log:** the Email surface grows a **Debug log** view, the first consumer of the new slot: every debug line with priority tabs (Errors / Warnings / Info / Debug), search, and a detail view, gated on Gravity SMTP's own debug-log capability. The status card's "Debug log ↗" link-out to wp-admin is gone; the log lives in Minn now.
+
 ## **v0.12.0** - July 12, 2026
 
 The workflow release. Surfaces grow from lists into complete workflows: schema-driven settings views, bulk actions with shift-select, status filters, parameterized actions, setup gates for first-run installs, and honest outcome reporting, all proven end to end on Gravity Forms and Gravity SMTP. Six more plugins join the families (Perfmatters, Ninja Forms, Solid Security, Limit Login Attempts Reloaded, WP Mail Logging, Duplicator), Settings mirrors WP 7.0's new Connectors registry, the license manager settles in beside the plugins it describes on Extensions → Licenses, and the header wears the site's own name and icon so you can tell which site you're in at a glance.

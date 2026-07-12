@@ -3801,10 +3801,15 @@
 	}
 
 	// A surface may declare a second collection under `manage` (e.g. Gravity
-	// Forms: entries by default, the forms themselves in the Manage view).
-	// Everything below renders whichever collection the current view resolves.
+	// Forms: entries by default, the forms themselves in the Manage view) and
+	// further list views under `views` (view ids x0, x1, … by index — the
+	// server drops malformed entries so indexes are stable). Everything below
+	// renders whichever collection the current view resolves.
 	function surfaceColl( s, ss ) {
-		return ss.view === 'manage' && s.manage ? s.manage : s.collection;
+		if ( ss.view === 'manage' && s.manage ) return s.manage;
+		const x = /^x(\d+)$/.exec( ss.view || '' );
+		if ( x && s.views && s.views[ +x[ 1 ] ] ) return s.views[ +x[ 1 ] ];
+		return s.collection;
 	}
 
 	// The active filter value (a second list dimension beside tabs — GF's
@@ -3909,9 +3914,9 @@
 
 	const PILL_STYLES = {
 		green: [ 'sent', 'active', 'completed', 'publish', 'approved', 'success', 'read', 'received', 'unlocked' ],
-		red: [ 'failed', 'spam', 'error', 'cancelled', 'locked' ],
+		red: [ 'failed', 'spam', 'error', 'fatal', 'cancelled', 'locked' ],
 		// inactive (Code Snippets / GF forms) is a quiet draft-like state.
-		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread' ],
+		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread', 'warning' ],
 	};
 
 	function surfacePill( value ) {
@@ -4347,16 +4352,19 @@
 		} );
 	}
 
-	// View switcher (Entries / Manage / Settings) — shared between the list
-	// renderer and the settings view, which each own the whole #minn-view.
+	// View switcher (Entries / Manage / extra views / Settings) — shared
+	// between the list renderer and the settings view, which each own the
+	// whole #minn-view.
 	function surfaceViewSwitchHtml( s, ss ) {
-		if ( ! s.manage && ! s.settings ) return '';
+		const extra = s.views || [];
+		if ( ! s.manage && ! s.settings && ! extra.length ) return '';
 		// Settings-only surface (no collection): one view, nothing to switch.
 		if ( ! s.collection ) return '';
 		return `
 			<div class="minn-tabs minn-view-switch">
-				<button class="minn-tab${ ss.view !== 'manage' && ss.view !== 'settings' ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
+				<button class="minn-tab${ ss.view !== 'manage' && ss.view !== 'settings' && ! /^x\d+$/.test( ss.view ) ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
 				${ s.manage ? `<button class="minn-tab${ ss.view === 'manage' ? ' active' : '' }" data-sview="manage">${ esc( s.manage.viewLabel || 'Manage' ) }</button>` : '' }
+				${ extra.map( ( v, i ) => `<button class="minn-tab${ ss.view === 'x' + i ? ' active' : '' }" data-sview="x${ i }">${ esc( v.viewLabel ) }</button>` ).join( '' ) }
 				${ s.settings ? `<button class="minn-tab${ ss.view === 'settings' ? ' active' : '' }" data-sview="settings">${ esc( s.settings.label || 'Settings' ) }</button>` : '' }
 			</div>`;
 	}
@@ -4387,6 +4395,18 @@
 			return;
 		}
 		const ss = surfaceState( s.id );
+		// A stale view id (plugin toggles re-shape the descriptor mid-session)
+		// falls back to the main list — with its cache cleared, since the
+		// cached page belongs to the collection that no longer exists.
+		const missing = ( ss.view === 'manage' && ! s.manage )
+			|| ( ss.view === 'settings' && ! s.settings )
+			|| ( /^x\d+$/.test( ss.view ) && ! ( s.views && s.views[ +ss.view.slice( 1 ) ] ) );
+		if ( missing ) {
+			ss.view = 'main';
+			ss.cache = null;
+			ss.tabs = null;
+			ss.tab = '_all';
+		}
 		// A settings-only surface (no collection) is its settings view.
 		if ( s.settings && ( ss.view === 'settings' || ! s.collection ) ) {
 			renderSurfaceSettings( s, view );
@@ -4414,7 +4434,7 @@
 		).join( ' ' ) + ' 30px';
 
 		view.innerHTML = `
-		${ ss.view !== 'manage' ? surfaceStatusHtml( ss.status ) : '' }
+		${ ss.view === 'main' ? surfaceStatusHtml( ss.status ) : '' }
 		<div class="minn-toolbar">
 			${ surfaceViewSwitchHtml( s, ss ) }
 			${ ss.tabs && ss.tabs.length > 1 ? `
