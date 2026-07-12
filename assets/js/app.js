@@ -15647,12 +15647,22 @@
 		const setPhase = ( label ) => { state.updatingAll = label; renderOverlays(); };
 		const doneBits = [];
 		const failures = [];
+		// Offered version before the bulk runs (map is plugin_file => new_version).
+		// Used only for the reload toast if Minn itself is in the batch.
+		const minnOfferKey = Object.keys( state.cache.pluginUpdates || {} ).find( isMinnAdminPluginFile );
+		const minnOfferVersion = minnOfferKey ? state.cache.pluginUpdates[ minnOfferKey ] : '';
+		let minnSelfUpdated = false;
 		if ( parts.some( ( p ) => p.kind === 'plugins' ) ) {
 			setPhase( 'Updating plugins…' );
 			try {
 				const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
-				const n = ( r.updated || [] ).length;
+				const updated = r.updated || [];
+				const n = updated.length;
 				doneBits.push( `${ n } plugin${ n === 1 ? '' : 's' }` );
+				// Same hard-reload need as Extensions bulk and single-plugin
+				// Update: new app.js / CSS / boot payload stay stale until a
+				// full navigation (Austin's notif-panel repro, 2026-07-12).
+				if ( updated.some( isMinnAdminPluginFile ) ) minnSelfUpdated = true;
 			} catch ( e ) {
 				failures.push( 'plugins: ' + e.message );
 			}
@@ -15682,6 +15692,13 @@
 			}
 		}
 		state.updatingAll = null;
+		// Minn self-update: skip the soft cache refresh and hard-reload so
+		// the new version's assets and boot payload replace this SPA.
+		if ( minnSelfUpdated ) {
+			renderOverlays();
+			reloadAfterMinnSelfUpdate( minnOfferVersion );
+			return;
+		}
 		state.cache.plugins = null;
 		state.cache.pluginUpdates = {};
 		state.cache.themeUpdates = {};
