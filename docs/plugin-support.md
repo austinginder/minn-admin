@@ -37,7 +37,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
 | **Performance** | Perfmatters | **Performance** surface (settings-only): its whole settings estate (General, JavaScript, CSS, Code, Preload, Lazy Loading, Fonts, CDN, Analytics) rendered from its live core-Settings-API registrations, saved through its own sanitizer; the few bespoke fields (input rows, font subsets) count as locked with a wp-admin link. Its license was already in the Licenses card |
 | **Dev tools** | Query Monitor | QM panel on Minn pages |
-| **Users** | User Switching | "Switch to this user" in the users row menu (the plugin's own nonce URLs) |
+| **Users** | User Switching, One Time Login | "Switch to this user" in the users row menu (the plugin's own nonce URLs), plus a Switch-back bar for a switched session; "Copy one-time login link" mints a single-use login-as link through One Time Login's own token generator (that CLI-only plugin's first UI), gated on `edit_user` for the target |
 | **Media** | Regenerate Thumbnails | ↻ Thumbnails button on the media detail modal (per-image full rebuild) |
 | **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
 

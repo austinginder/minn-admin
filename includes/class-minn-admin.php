@@ -370,6 +370,10 @@ class Minn_Admin {
 			// detail modal (adapters/wcpdf.php). Null without the plugin or
 			// order access.
 			'wcpdf'    => function_exists( 'minn_admin_wcpdf_boot' ) ? minn_admin_wcpdf_boot() : null,
+			// One Time Login present (adapters/one-time-login.php) — a boolean
+			// only; the users row menu mints the single-use link on demand so
+			// the secret never rides a pageload.
+			'otl'      => function_exists( 'minn_admin_otl_active' ) && minn_admin_otl_active(),
 			// A User Switching session's way home (adapters/user-switching.php):
 			// { name, url } of the account to switch back to, else null. The
 			// plugin's own back-link lives in the admin bar Minn never renders.

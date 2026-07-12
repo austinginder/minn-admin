@@ -3371,6 +3371,14 @@
 					label: 'Switch to this user',
 					run: () => { window.location.href = u.minn_switch_url; },
 				} ] : [] ),
+				// One Time Login (adapters/one-time-login.php): mint a
+				// single-use login-as link on demand and copy it. The server
+				// gates on edit_user for this account; a 403 surfaces as a
+				// toast. Menu gated on B.otl + editUsers to match.
+				...( B.otl && B.caps.editUsers ? [ {
+					label: 'Copy one-time login link',
+					run: () => copyOtlLink( u ),
+				} ] : [] ),
 				...( B.caps.editUsers || isSelf ? [ {
 					label: isSelf ? 'Sign out other sessions' : 'Sign out all sessions',
 					run: () => killUserSessions( u ),
@@ -3492,6 +3500,29 @@
 			toast( 'Reset email sent' + ( r && r.email ? ' to ' + r.email : '' ) );
 		} catch ( e ) {
 			toast( e.message, true );
+		}
+	}
+
+	// Mint a One Time Login link for a user and copy it. The link signs its
+	// holder in AS that user once, so it's generated on demand (never stored
+	// or boot-inlined) and the toast says what it is. Clipboard write must
+	// stay in the click's user-gesture chain — so the copy happens right
+	// after the fetch resolves, no extra await hop.
+	async function copyOtlLink( u ) {
+		if ( ! u || ! u.id ) return;
+		try {
+			const r = await api( `minn-admin/v1/otl/${ u.id }`, { method: 'POST', body: '{}' } );
+			if ( ! r || ! r.url ) throw new Error( 'No link returned' );
+			try {
+				await navigator.clipboard.writeText( r.url );
+				toast( `One-time login link for ${ r.name } copied — it signs its holder in once, then expires.` );
+			} catch ( err ) {
+				// Clipboard denied (permissions/focus): show the link so it's
+				// still usable rather than silently losing the minted token.
+				prompt( 'One-time login link (copy it now):', r.url );
+			}
+		} catch ( e ) {
+			toast( e.message || 'Could not generate a login link', true );
 		}
 	}
 
