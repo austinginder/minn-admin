@@ -3902,6 +3902,89 @@
 			: action.label + ' — done';
 	}
 
+	// Fill {field} placeholders on an action href from the item.
+	function surfaceFillHref( href, item ) {
+		return String( href ).replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( item[ k ] ?? '' ) );
+	}
+
+	// when-gate (+ optional adminUrl-dup filter for detail modal hrefs).
+	function surfaceActionVisible( action, item, sections ) {
+		if ( action.when && String( surfaceValue( item, action.when.key ) ) !== String( action.when.equals ) ) {
+			return false;
+		}
+		if ( action.href && sections && sections.adminUrl ) {
+			const resolved = surfaceFillHref( action.href, item );
+			const admin = String( sections.adminUrl );
+			if ( resolved === admin || resolved.includes( admin.replace( /#.*$/, '' ) ) ) return false;
+		}
+		return true;
+	}
+
+	// Actions that ride the list-row ⋯ / right-click menu. Parameterized
+	// `fields` actions stay detail-only (they need the modal's form chrome);
+	// set `list: false` to hide any other verb from the list while keeping
+	// it on the detail card.
+	function surfaceListMenuActions( coll, item ) {
+		return ( coll.actions || [] )
+			.map( ( a, i ) => ( { a, i } ) )
+			.filter( ( { a } ) => a.list !== false )
+			.filter( ( { a } ) => ! ( a.fields && a.fields.length ) )
+			.filter( ( { a } ) => surfaceActionVisible( a, item, null ) );
+	}
+
+	function collHasListActions( coll ) {
+		return ( coll.actions || [] ).some( ( a ) => a.list !== false && ! ( a.fields && a.fields.length ) );
+	}
+
+	// Shared by the detail modal and the list-row menu. Busts list + status
+	// caches and re-renders. Parameterized `fields` actions use armActionFields
+	// instead (detail modal only).
+	async function runSurfaceItemAction( s, item, action ) {
+		if ( action.settingsItem ) {
+			const ss = surfaceState( s.id );
+			ss.view = 'settings';
+			ss.settingsItem = { id: item.id, label: item.title || item.name || ( '#' + item.id ) };
+			closeModal();
+			if ( state.route === s.id ) renderSurface( s );
+			return;
+		}
+		if ( action.confirm && ! confirm( action.confirm ) ) return;
+		const r = await api( action.route.replace( '{id}', item.id ), {
+			method: action.method || 'POST',
+			...( action.body ? { body: JSON.stringify( action.body ) } : {} ),
+		} );
+		toast( actionToast( r, action ) );
+		const ss = surfaceState( s.id );
+		ss.cache = null;
+		ss.status = null;
+		closeModal();
+		if ( state.route === s.id ) renderSurface( s );
+	}
+
+	function openSurfaceRowMenu( s, coll, item, x, y ) {
+		const entries = [
+			{ label: 'Open', run: () => openSurfaceDetail( s, item ) },
+		];
+		surfaceListMenuActions( coll, item ).forEach( ( { a } ) => {
+			if ( a.href ) {
+				entries.push( { label: a.label, href: surfaceFillHref( a.href, item ), danger: !! a.danger } );
+				return;
+			}
+			entries.push( {
+				label: a.label,
+				danger: !! a.danger,
+				run: async () => {
+					try {
+						await runSurfaceItemAction( s, item, a );
+					} catch ( e ) {
+						toast( e.message, true );
+					}
+				},
+			} );
+		} );
+		openMinnMenu( x, y, entries );
+	}
+
 	// Swap `btn`'s row for the field form; `run(body)` fires on Go.
 	function armActionFields( btn, action, onCancel, run ) {
 		const rowEl = btn.parentElement;
@@ -4609,6 +4692,7 @@
 		const cols = coll.columns || [];
 		const bulk = coll.bulk || [];
 		const hasBulk = bulk.length > 0;
+		const hasRowMenu = collHasListActions( coll );
 		if ( hasBulk && ! ss.sel ) ss.sel = new Set();
 		// Column widths: an adapter's explicit `width` wins; otherwise size by
 		// role — flexible for the title/text columns, fixed and narrow for the
@@ -4666,7 +4750,9 @@
 				<div class="minn-table-row" style="grid-template-columns:${ gridCols };" data-sitem="${ i }">
 					${ hasBulk ? `<div><input type="checkbox" class="minn-cb" data-scheck="${ i }"${ ss.sel.has( item.id ) ? ' checked' : '' }></div>` : '' }
 					${ cols.map( ( col ) => surfaceCell( item, col ) ).join( '' ) }
-					<div class="minn-row-arrow">›</div>
+					${ hasRowMenu
+						? `<div class="minn-row-end"><button type="button" class="minn-row-more" title="Actions" aria-label="Actions">⋯</button></div>`
+						: `<div class="minn-row-arrow">›</div>` }
 				</div>` ).join( '' ) : '<div class="minn-empty">Nothing here.</div>' }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
@@ -4700,12 +4786,28 @@
 			} )
 		);
 		bindSurfaceViewSwitch( s, ss, view );
-		$$( '[data-sitem]', view ).forEach( ( row ) =>
-			row.addEventListener( 'click', () => {
-				const item = c.items[ parseInt( row.dataset.sitem, 10 ) ];
-				if ( item ) openSurfaceDetail( s, item );
-			} )
-		);
+		// Row click opens the detail; ⋯ / right-click open the action menu
+		// (content-list pattern generalized — verbs live on collection.actions).
+		$$( '[data-sitem]', view ).forEach( ( row ) => {
+			const item = c.items[ parseInt( row.dataset.sitem, 10 ) ];
+			if ( ! item ) return;
+			row.addEventListener( 'click', ( e ) => {
+				if ( e.target.closest( '.minn-row-more' ) ) return;
+				openSurfaceDetail( s, item );
+			} );
+			if ( hasRowMenu ) {
+				row.addEventListener( 'contextmenu', ( e ) => {
+					e.preventDefault();
+					openSurfaceRowMenu( s, coll, item, e.clientX, e.clientY );
+				} );
+				const more = row.querySelector( '.minn-row-more' );
+				if ( more ) more.addEventListener( 'click', ( e ) => {
+					e.stopPropagation();
+					const r = more.getBoundingClientRect();
+					openSurfaceRowMenu( s, coll, item, r.left - 160, r.bottom + 6 );
+				} );
+			}
+		} );
 		if ( hasBulk ) {
 			// Checkbox column + selection bar — the content-list conventions
 			// (shift-range, Select page, per-item application) generalized to
@@ -16959,13 +17061,7 @@
 			// (GF/Fluent/Elementor all used to show "Open in X" twice).
 			const visibleActions = ( coll.actions || [] )
 				.map( ( a, i ) => ( { a, i } ) )
-				.filter( ( { a } ) => ! a.when || String( surfaceValue( it, a.when.key ) ) === String( a.when.equals ) )
-				.filter( ( { a } ) => {
-					if ( ! a.href || ! m.sections || ! m.sections.adminUrl ) return true;
-					const resolved = String( a.href ).replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( it[ k ] ?? '' ) );
-					return resolved !== m.sections.adminUrl
-						&& ! resolved.includes( String( m.sections.adminUrl ).replace( /#.*$/, '' ) );
-				} );
+				.filter( ( { a } ) => surfaceActionVisible( a, it, m.sections ) );
 			const sec = m.sections;
 			// Form entries (GF / Fluent / Elementor) get a contact-style layout;
 			// activity-log events get the same treatment (who → message → meta).
@@ -17045,7 +17141,7 @@
 						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'log' ) } ↗</a>` : '' }
 						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( l.url ) }" target="_blank" rel="noopener">${ esc( l.label ) }</a>` ).join( '' ) }
 						${ visibleActions.map( ( { a, i } ) => a.href
-							? `<a class="minn-btn-soft" href="${ esc( String( a.href ).replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( it[ k ] ?? '' ) ) ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
+							? `<a class="minn-btn-soft" href="${ esc( surfaceFillHref( a.href, it ) ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
 							: `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 					</div>` : '' }` }
 				</div>
@@ -18018,26 +18114,8 @@
 				btn.addEventListener( 'click', async () => {
 					const action = ( m.coll || m.surface.collection ).actions[ parseInt( btn.dataset.saction, 10 ) ];
 					if ( ! action ) return;
-					const finish = () => {
-						surfaceState( m.surface.id ).cache = null;
-						// A row action can change what the status card reports
-						// (Disembark: deleting a session shrinks the workspace).
-						surfaceState( m.surface.id ).status = null;
-						closeModal();
-						if ( state.route === m.surface.id ) renderSurface( m.surface );
-					};
-					if ( action.settingsItem ) {
-						// Not a request: open the surface's item-scoped
-						// settings view for this row (the {id} in the
-						// settings route names the item).
-						const it = m.item;
-						const ss = surfaceState( m.surface.id );
-						ss.view = 'settings';
-						ss.settingsItem = { id: it.id, label: it.title || it.name || ( '#' + it.id ) };
-						closeModal();
-						if ( state.route === m.surface.id ) renderSurface( m.surface );
-						return;
-					}
+					// Parameterized actions keep the modal open for the form;
+					// everything else shares the list-row runner.
 					if ( action.fields && action.fields.length ) {
 						// Cancel rebuilds the modal from state, so the action
 						// row (and its handlers) come back exactly as declared.
@@ -18047,19 +18125,17 @@
 								body: JSON.stringify( body ),
 							} );
 							toast( actionToast( r, action ) );
-							finish();
+							const ss = surfaceState( m.surface.id );
+							ss.cache = null;
+							ss.status = null;
+							closeModal();
+							if ( state.route === m.surface.id ) renderSurface( m.surface );
 						} );
 						return;
 					}
-					if ( action.confirm && ! confirm( action.confirm ) ) return;
 					btn.disabled = true;
 					try {
-						const r = await api( action.route.replace( '{id}', m.item.id ), {
-							method: action.method || 'POST',
-							...( action.body ? { body: JSON.stringify( action.body ) } : {} ),
-						} );
-						toast( actionToast( r, action ) );
-						finish();
+						await runSurfaceItemAction( m.surface, m.item, action );
 					} catch ( e ) {
 						toast( e.message, true );
 						btn.disabled = false;

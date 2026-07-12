@@ -57,7 +57,7 @@ still `docs/for-plugin-authors.md` and the validator constants in
 |---|---|---|
 | **1 — form engine** | ✅ shipped (v0.12.0) | One vocabulary renders surface create/edit, editor panels and inspector controls (`required` / `default` / `help` / `placeholder` / `showWhen`, toggles, selects as themed comboboxes in adapter dialects). |
 | **2 — settings surfaces + mappers** | ✅ shipped (v0.12.0–v0.13.0) | Surface `settings` key (tabs + one GET/POST route per tab); **settings-only** surfaces (no `collection`); **item-scoped** settings (`route` with `{id}`, entered via `settingsItem` actions). Four schema frameworks covered: Gravity SMTP component trees, Minn's form vocabulary, core WP Settings API (Perfmatters), GF Settings framework (form settings). |
-| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards (incl. chart series, v0.13.0), `views[]` extra list views, manage-slot second collections. Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. |
+| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards (incl. chart series, v0.13.0), `views[]` extra list views, manage-slot second collections, **list-row ⋯ menus** from `actions` (v0.13.0). Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. Remaining: richer `sectionsRoute` row types. |
 | **4 — bespoke** | policy holding | Deep-link everywhere a screen is a canvas. The "80% form editor" over clean documents is scoped in `docs/native-editors.md` (parked, prerequisite plumbing now live). |
 
 ### Still open from the Rung-3 list
@@ -71,9 +71,11 @@ still `docs/for-plugin-authors.md` and the validator constants in
 - **Richer `sectionsRoute` row types** — `pill`, `code`, `html-preview`
   (sandboxed iframe; `messageKey` generalized), `kv-table`. Email-log detail
   (headers, audit trail, rendered body) becomes fully expressible.
-- **Row actions in surface lists** — the content-list `⋯` row-menu pattern,
-  generalized so adapters declare list-row menus instead of burying every
-  verb in the detail modal.
+- ~~**Row actions in surface lists**~~ ✅ shipped (v0.13.0): any collection
+  with `actions` grows a content-list-style ⋯ / right-click menu (Open +
+  when-gated verbs). Parameterized `fields` actions stay detail-only; opt
+  out of the list with `list: false`. No per-adapter menu duplication —
+  the same `actions` array drives both surfaces.
 
 ### Schema frameworks covered (the multiplier)
 
@@ -279,7 +281,7 @@ component-tree response shapes.
 |---|---|---|
 | **1 — keystone** | Unified form engine; port panels; upgrade create/edit | ✅ shipped v0.12.0 |
 | **2 — multiplier** | `settings` surface + Gravity SMTP mapper, then GF form settings + notifications | ✅ shipped v0.12.0–v0.13.0 (confirmations + GF plugin settings deliberately skipped) |
-| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards + chart | mostly ✅; remaining: richer sectionsRoute rows, list row-actions, more chart consumers |
+| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards + chart, list row-actions | mostly ✅; remaining: richer sectionsRoute rows, more chart consumers |
 | **4 — declare victory** | Document mapper pattern for third parties; GF form editor stays deep link | docs live in `for-plugin-authors.md`; 80% editor parked in `native-editors.md` |
 
 Natural next builds inside this ladder (not a ranked product roadmap; see
@@ -288,7 +290,7 @@ Natural next builds inside this ladder (not a ranked product roadmap; see
 1. More chart consumers (GF form results, ecommerce analytics) on the
    status-card chart shape.
 2. Richer detail row types (email HTML preview, kv tables).
-3. Surface list row-actions (⋯ menus).
+3. ~~Surface list row-actions (⋯ menus)~~ ✅ shipped (v0.13.0).
 4. GF add-on/feed settings mapper (the original "one mapper, every add-on" payoff).
 5. Only after dogfooding: reconsider the 80% form editor.
 
