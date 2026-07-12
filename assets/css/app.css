@@ -584,9 +584,13 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-media-check.row { position: static; opacity: 1; background: none; backdrop-filter: none; padding: 0; }
 .minn-media-check input { cursor: pointer; width: 15px; height: 15px; accent-color: var(--accent); margin: 0; }
 .minn-media-thumb { height: 110px; position: relative; display: flex; align-items: flex-start; background-size: cover; background-position: center; }
+/* Type badge sits top-right so it never stacks under the multi-select
+   checkbox (top-left on the card). Overlap bit us when both revealed. */
 .minn-media-badge {
-  margin: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: #fff;
+  position: absolute; top: 8px; right: 8px; margin: 0;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: #fff;
   background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); padding: 2px 7px; border-radius: 5px;
+  z-index: 1; pointer-events: none;
 }
 .minn-media-info { padding: 10px 12px; }
 .minn-media-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
