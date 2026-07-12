@@ -18,6 +18,18 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		return r.json();
 	}, { id, fields } );
 	const save = async () => { await page.keyboard.press( 'Meta+s' ); await page.waitForTimeout( 2000 ); };
+	// Saves ride a serialized promise chain and REST writes carry every
+	// active plugin's hooks, so a flat post-⌘S wait reads mid-save state
+	// (the shortcuts-suite lesson). Poll the SAVED post until it converges.
+	const savedWhen = async ( id2, pred, timeout = 12000 ) => {
+		const start = Date.now();
+		let st = await saved( id2 );
+		while ( ! pred( st ) && Date.now() - start < timeout ) {
+			await page.waitForTimeout( 500 );
+			st = await saved( id2 );
+		}
+		return st;
+	};
 
 	/* ===== Slug + Discussion on a draft (saves in place) ===== */
 	const id = await createPost( page, { title: 'Sidebar test', content: '<!-- wp:paragraph -->\n<p>Body.</p>\n<!-- /wp:paragraph -->' } );
@@ -29,7 +41,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.uncheck( '#minn-comment-status' );
 	await page.uncheck( '#minn-ping-status' );
 	await save();
-	let s = await saved( id );
+	let s = await savedWhen( id, ( x ) => x.slug === 'a-custom-slug' && x.comment_status === 'closed' && x.ping_status === 'closed' );
 	t.check( 'slug persists', s.slug === 'a-custom-slug', s.slug );
 	t.check( 'comments closed persists', s.comment_status === 'closed', s.comment_status );
 	t.check( 'pingbacks closed persists', s.ping_status === 'closed', s.ping_status );
@@ -47,7 +59,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	/* ===== Sticky (public post) ===== */
 	await page.check( '#minn-sticky' );
 	await save();
-	s = await saved( id );
+	s = await savedWhen( id, ( x ) => x.sticky === true );
 	t.check( 'sticky persists on a public post', s.sticky === true, String( s.sticky ) );
 
 	/* ===== Switch to Password — sticky must auto-clear (WP forbids the pair) ===== */
@@ -56,7 +68,9 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	t.check( 'sticky control hidden under password visibility', ! ( await page.$( '#minn-sticky' ) ) );
 	await page.fill( '#minn-password-input', 'sekret' );
 	await save();
-	s = await saved( id );
+	// The unstick rides a separate chained request BEFORE the password save
+	// (WP validates the pair against CURRENT sticky), so two writes land here.
+	s = await savedWhen( id, ( x ) => x.password === 'sekret' && x.sticky === false );
 	t.check( 'password set and sticky auto-cleared', s.password === 'sekret' && s.sticky === false, JSON.stringify( { password: s.password, sticky: s.sticky } ) );
 
 	/* ===== Back to Public clears the password ===== */
@@ -64,7 +78,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.selectOption( '#minn-visibility', 'public' );
 	await page.waitForTimeout( 200 );
 	await save();
-	s = await saved( id );
+	s = await savedWhen( id, ( x ) => ! x.password );
 	t.check( 'returning to Public clears the password', ! s.password, JSON.stringify( s.password ) );
 
 	/* ===== Private is a status; publishing keeps it private ===== */

@@ -66,7 +66,13 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	// Top row is a previous version — opening it must show a real diff, not
 	// "Identical to the current content" (the off-by-one Austin hit).
-	await before[ 0 ].click();
+	// Click via a fresh query: the sidebar re-renders on the autosave cadence
+	// and a held ElementHandle detaches between capture and click (rule-31
+	// class — the mousedown/mouseup detach).
+	await page.evaluate( () => {
+		const row = document.querySelector( '.minn-history-row' );
+		if ( row ) row.click();
+	} );
 	await page.waitForSelector( '#minn-modal-overlay .minn-side-row', { timeout: 10000 } );
 	await page.waitForTimeout( 400 );
 	const topDiff = await page.evaluate( () =>

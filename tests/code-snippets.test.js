@@ -140,8 +140,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			actions: [ ...document.querySelectorAll( '#minn-modal-overlay .minn-modal-actions button, #minn-modal-overlay .minn-modal-actions a' ) ]
 				.map( ( e ) => e.textContent.trim() ),
 			editHref: ( document.querySelector( '#minn-modal-overlay a[href*="edit-snippet"]' ) || {} ).href || '',
+			idTag: ( document.querySelector( '#minn-modal-overlay .minn-modal-id-tag' ) || {} ).textContent || '',
 		} ) );
-		t.check( 'detail title includes snippet id', modal.title.includes( '#' + seed.off.id ), modal.title );
+		// The id moved from the title into its own tag (57fb053's contact-card head).
+		t.check( 'detail head shows snippet id tag', modal.idTag.trim() === '#' + seed.off.id, modal.idTag );
 		t.check( 'detail shows inactive pill', /inactive/i.test( modal.pill ), modal.pill );
 		t.check( 'detail is wide for the code editor', modal.wide );
 		t.check( 'detail name field is editable', modal.name === nameOff, modal.name );
