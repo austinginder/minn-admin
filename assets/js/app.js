@@ -11107,11 +11107,10 @@
 			<div class="minn-side-rows">
 				<div class="minn-side-row"><span class="minn-side-key">Status</span><span class="minn-side-val${ ed.status === 'publish' ? ' green' : ' amber' }" style="font-weight:600;" id="minn-status-state">${ esc( statusLabel ) }</span></div>
 				<div class="minn-side-row"><span class="minn-side-key">Visibility</span>
-					<select class="minn-mini-select" id="minn-visibility">
-						<option value="public"${ ed.visibility === 'public' ? ' selected' : '' }>Public</option>
-						<option value="password"${ ed.visibility === 'password' ? ' selected' : '' }>Password protected</option>
-						<option value="private"${ ed.visibility === 'private' ? ' selected' : '' }>Private</option>
-					</select>
+					<div class="minn-ac minn-vis-ac" id="minn-visibility">
+						<input class="minn-input minn-ac-input" id="minn-visibility-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Visibility">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
 				</div>
 				<div class="minn-side-row"><span class="minn-side-key">Saved</span><span class="minn-side-val ${ saved.cls }" id="minn-saved-state">${ esc( saved.text ) }</span></div>
 			</div>
@@ -11238,25 +11237,38 @@
 			} );
 			slugInput.addEventListener( 'blur', () => { slugInput.value = ed.slugValue; } );
 		}
-		const visSel = $( '#minn-visibility', el );
-		if ( visSel ) visSel.addEventListener( 'change', () => {
-			ed.visibility = visSel.value;
-			ed.visibilityDirty = true;
-			ed.passwordDirty = true; // password is set or cleared by the choice
-			// A password-protected post can't be sticky (WP rejects the pair) —
-			// drop stickiness when password is chosen.
-			if ( ed.visibility === 'password' && ed.sticky ) {
-				ed.sticky = false;
-				ed.stickyDirty = true;
-			}
-			// Re-render to show/hide the password field. renderEditorSide skips
-			// a full render while ANY sidebar input is focused — blur whatever
-			// holds focus (could be a checkbox the user just toggled, not the
-			// select), or the password field would never appear.
-			if ( document.activeElement && document.activeElement.blur ) document.activeElement.blur();
-			renderEditorSide();
-			if ( ed.id ) scheduleAutosave();
-		} );
+		// Visibility is a strict themed combobox (was a native mini-select —
+		// the last OS popup in the Publish card). Same onPick shape as
+		// Parent / Template below.
+		const visWrap = $( '#minn-visibility', el );
+		if ( visWrap ) {
+			bindAutocomplete( visWrap, [
+				{ value: 'public', label: 'Public' },
+				{ value: 'password', label: 'Password protected' },
+				{ value: 'private', label: 'Private' },
+			], {
+				strict: true,
+				value: ed.visibility || 'public',
+				onPick: ( v ) => {
+					if ( v === ed.visibility ) return;
+					ed.visibility = v;
+					ed.visibilityDirty = true;
+					ed.passwordDirty = true; // password is set or cleared by the choice
+					// A password-protected post can't be sticky (WP rejects the pair) —
+					// drop stickiness when password is chosen.
+					if ( ed.visibility === 'password' && ed.sticky ) {
+						ed.sticky = false;
+						ed.stickyDirty = true;
+					}
+					// Re-render to show/hide the password field. renderEditorSide
+					// skips a full render while ANY sidebar input is focused —
+					// blur first or the password field never appears.
+					if ( document.activeElement && document.activeElement.blur ) document.activeElement.blur();
+					renderEditorSide();
+					if ( ed.id ) scheduleAutosave();
+				},
+			} );
+		}
 		const pwInput = $( '#minn-password-input', el );
 		if ( pwInput ) pwInput.addEventListener( 'input', () => {
 			ed.password = pwInput.value;

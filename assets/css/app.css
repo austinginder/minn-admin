@@ -1213,6 +1213,16 @@ a.minn-entry-meta-chip:hover { color: var(--accent); text-decoration: underline;
   border-radius: 7px; padding: 2px 6px; font-size: 13px; font-weight: 500; cursor: pointer;
   max-width: 55%;
 }
+/* Publish-card Visibility combobox — compact, right-aligned in the side row
+   (same footprint the old mini-select occupied). */
+.minn-vis-ac {
+  max-width: 58%; min-width: 0; flex: 0 1 auto;
+}
+.minn-vis-ac .minn-ac-input {
+  padding: 3px 26px 3px 9px; font-size: 13px; font-weight: 500;
+  background-color: var(--panel2); border-radius: 7px;
+  background-position: right 8px center;
+}
 .minn-vis-extra { margin-top: 9px; }
 input.minn-vis-extra { width: 100%; }
 .minn-check-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--text2); cursor: pointer; font-size: 13px; }

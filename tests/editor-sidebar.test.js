@@ -52,7 +52,9 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		slug: document.querySelector( '#minn-slug-input' ).value,
 		comments: document.querySelector( '#minn-comment-status' ).checked,
 		pings: document.querySelector( '#minn-ping-status' ).checked,
-		visibility: document.querySelector( '#minn-visibility' ).value,
+		// Visibility is a themed combobox (value rides data-ac-value).
+		visibility: document.querySelector( '#minn-visibility-input' )?.dataset.acValue
+			|| document.querySelector( '#minn-visibility' )?.dataset?.acValue,
 	} ) );
 	t.check( 'reopened UI reflects saved slug + discussion', ui.slug === 'a-custom-slug' && ! ui.comments && ! ui.pings && ui.visibility === 'public', JSON.stringify( ui ) );
 
@@ -62,10 +64,23 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	s = await savedWhen( id, ( x ) => x.sticky === true );
 	t.check( 'sticky persists on a public post', s.sticky === true, String( s.sticky ) );
 
+	// Strict combobox pick: open the panel, click the option (mousedown is
+	// what bindAutocomplete listens for — page.selectOption no longer works).
+	const pickVisibility = async ( value ) => {
+		await page.click( '#minn-visibility-input' );
+		await page.waitForSelector( `#minn-visibility .minn-ac-item[data-acv="${ value }"]`, { timeout: 5000 } );
+		await page.locator( `#minn-visibility .minn-ac-item[data-acv="${ value }"]` ).dispatchEvent( 'mousedown' );
+		await page.waitForTimeout( 200 );
+	};
+
 	/* ===== Switch to Password — sticky must auto-clear (WP forbids the pair) ===== */
-	await page.selectOption( '#minn-visibility', 'password' );
+	await pickVisibility( 'password' );
 	await page.waitForFunction( () => !! document.querySelector( '#minn-password-input' ), null, { timeout: 8000 } );
 	t.check( 'sticky control hidden under password visibility', ! ( await page.$( '#minn-sticky' ) ) );
+	// Combobox is themed (not a native select).
+	t.check( 'visibility control is a combobox', await page.evaluate( () =>
+		!! document.querySelector( '#minn-visibility.minn-ac' )
+		&& document.querySelector( '#minn-visibility-input' )?.getAttribute( 'role' ) === 'combobox' ) );
 	await page.fill( '#minn-password-input', 'sekret' );
 	await save();
 	// The unstick rides a separate chained request BEFORE the password save
@@ -75,7 +90,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	/* ===== Back to Public clears the password ===== */
 	await openEditor( page, id );
-	await page.selectOption( '#minn-visibility', 'public' );
+	await pickVisibility( 'public' );
 	await page.waitForTimeout( 200 );
 	await save();
 	s = await savedWhen( id, ( x ) => ! x.password );
@@ -84,7 +99,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	/* ===== Private is a status; publishing keeps it private ===== */
 	const pid = await createPost( page, { title: 'Private test', content: '<!-- wp:paragraph -->\n<p>secret</p>\n<!-- /wp:paragraph -->' } );
 	await openEditor( page, pid );
-	await page.selectOption( '#minn-visibility', 'private' );
+	await pickVisibility( 'private' );
 	await page.waitForTimeout( 200 );
 	await save();
 	s = await saved( pid );
@@ -93,7 +108,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	/* ===== Autosave must NOT auto-publish a private-selected draft ===== */
 	const gid = await createPost( page, { title: 'Autosave guard', content: '<!-- wp:paragraph -->\n<p>x</p>\n<!-- /wp:paragraph -->' } );
 	await openEditor( page, gid );
-	await page.selectOption( '#minn-visibility', 'private' );
+	await pickVisibility( 'private' );
 	await page.click( '#minn-editor-body p' );
 	await page.keyboard.press( 'End' );
 	await page.keyboard.type( ' typing' );
