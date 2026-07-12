@@ -294,8 +294,11 @@
 		$$( '.minn-toast' ).forEach( ( el ) => el.remove() );
 		const el = document.createElement( 'div' );
 		el.className = 'minn-toast';
+		// status/alert + live region so assistive tech hears save/error toasts.
+		el.setAttribute( 'role', isError ? 'alert' : 'status' );
+		el.setAttribute( 'aria-live', isError ? 'assertive' : 'polite' );
 		el.innerHTML = `
-			<div class="minn-toast-icon${ isError ? ' err' : '' }">
+			<div class="minn-toast-icon${ isError ? ' err' : '' }" aria-hidden="true">
 				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3">
 					${ isError ? '<path d="M18 6 6 18M6 6l12 12"/>' : '<path d="M20 6 9 17l-5-5"/>' }
 				</svg>
@@ -324,8 +327,10 @@
 		clearPendingToastUndo();
 		const el = document.createElement( 'div' );
 		el.className = 'minn-toast minn-toast-action';
+		el.setAttribute( 'role', 'status' );
+		el.setAttribute( 'aria-live', 'polite' );
 		el.innerHTML = `
-			<div class="minn-toast-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>
+			<div class="minn-toast-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></div>
 			<div class="minn-toast-msg">${ esc( msg ) }</div>
 			<button class="minn-toast-btn" type="button">${ esc( actionLabel ) }</button>`;
 		document.body.appendChild( el );
@@ -8368,7 +8373,7 @@
 		if ( short === 'shortcode' ) {
 			const code = stripBlockComments( raw || '' ).trim();
 			return `<div class="minn-block-island minn-shortcode-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
-				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ shortcode</button>
+				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure shortcode block">⚙ shortcode</button>
 				<label class="minn-shortcode-label" for="minn-sc-${ idx }">Shortcode</label>
 				<input id="minn-sc-${ idx }" class="minn-shortcode-input" type="text" data-shortcode="${ idx }" value="${ esc( code ) }" placeholder="[shortcode attr=&quot;value&quot;]" spellcheck="false" autocomplete="off">
 			</div>`;
@@ -8382,7 +8387,7 @@
 				? parts.bodyHtml
 				: '<p><br></p>';
 			return `<div class="minn-block-island minn-details-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
-				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ details</button>
+				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure details block">⚙ details</button>
 				<details class="minn-details-edit" open>
 					<summary class="minn-details-sum-row">
 						<input type="text" class="minn-details-summary" data-details-summary="${ idx }" value="${ esc( parts.summary ) }" placeholder="Details" spellcheck="true" autocomplete="off">
@@ -8399,14 +8404,15 @@
 				? ` data-btn-wrap-attrs="${ esc( JSON.stringify( parts.wrapAttrs ) ) }"`
 				: '';
 			return `<div class="minn-block-island minn-buttons-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }" data-btn-stamped="1"${ wrapData }>
-				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ buttons</button>
+				<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure buttons block">⚙ buttons</button>
 				<div class="minn-buttons-rows">${ rows }</div>
 				<button type="button" class="minn-btn-soft minn-buttons-add">+ Add button</button>
 			</div>`;
 		}
 		const inner = stripBlockComments( raw ).trim();
+		const chipLabel = short || name || 'block';
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
-			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button">⚙ ${ esc( short || name ) }</button>
+			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 		</div>`;
 	}
@@ -10158,6 +10164,16 @@
 		el.title = goal
 			? `Goal ${ goal.toLocaleString() } words · click to change`
 			: 'Click to set a word goal';
+		// aria-label carries the readable stats for screen readers (the pill
+		// is a button that opens the goal popover — not a live region, so
+		// counts don't chatter on every keystroke).
+		el.setAttribute( 'aria-label',
+			( words || session
+				? `${ words.toLocaleString() } words, ${ mins } minute read`
+				: '0 words' )
+			+ ( goal ? `, goal ${ goal.toLocaleString() }` : '' )
+			+ ( session ? `, session ${ session > 0 ? '+' : '' }${ session.toLocaleString() }` : '' )
+			+ '. Click to set a word goal' );
 		el.classList.toggle( 'has-goal', !! goal );
 		el.classList.toggle( 'goal-met', !!( goal && words >= goal ) );
 		syncTableChips();
@@ -11669,7 +11685,7 @@
 		if ( ! title ) return;
 		const who = ed.lockHolder ? ed.lockHolder.name : 'Someone else';
 		title.insertAdjacentHTML( 'afterend', `
-			<div class="minn-backup-note minn-lock-note" id="minn-lock-note">
+			<div class="minn-backup-note minn-lock-note" id="minn-lock-note" role="alert">
 				<span><b>${ esc( who ) }</b> took over editing \u2014 this copy is read-only and won\u2019t save.</span>
 				<button class="minn-btn-soft" id="minn-lock-retake" type="button">Take back</button>
 			</div>` );
@@ -11818,7 +11834,7 @@
 		view.innerHTML = `
 		<div class="minn-editor">
 			<div>
-				<input class="minn-editor-title" id="minn-editor-title" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" value="${ esc( ed.title ) }">
+				<input class="minn-editor-title" id="minn-editor-title" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" value="${ esc( ed.title ) }" aria-label="Title">
 				${ ed.builder && ed.builder.edit_url ? `
 				<div class="minn-editor-locked-note minn-builder-note">
 					<span>${ ed.builder.owns_content
@@ -11835,27 +11851,27 @@
 					<button type="button" class="minn-linkish" id="minn-open-block-editor">Open in block editor ↗</button>
 				</div>` : '' }
 				${ locked ? `` : `
-				<div class="minn-editor-toolbar">
-					<button class="minn-tool b" data-cmd="bold" title="Bold">${ icon( 'bold' ) }</button>
-					<button class="minn-tool i" data-cmd="italic" title="Italic">${ icon( 'italic' ) }</button>
-					<button class="minn-tool" data-cmd="strikeThrough" title="Strikethrough — or wrap it in ~~tildes~~">${ icon( 'strike' ) }</button>
-					<button class="minn-tool code" data-cmd="inline-code" title="Inline code — or wrap it in backticks">${ icon( 'code' ) }</button>
-					<button class="minn-tool" data-block="h2" title="Heading 2">${ icon( 'h2' ) }</button>
-					<button class="minn-tool" data-block="h3" title="Heading 3">${ icon( 'h3' ) }</button>
-					<button class="minn-tool" data-block="blockquote" title="Quote">${ icon( 'quote' ) }</button>
-					<button class="minn-tool" data-block="pre" title="Code block">${ icon( 'braces' ) }</button>
-					<button class="minn-tool" data-cmd="insertUnorderedList" title="Bulleted list">${ icon( 'list' ) }</button>
-					<button class="minn-tool" data-cmd="insertOrderedList" title="Numbered list">${ icon( 'olist' ) }</button>
-					<button class="minn-tool" data-align="center" title="Center — press again to clear">${ icon( 'alignCenter' ) }</button>
-					<button class="minn-tool" data-align="right" title="Align right — press again to clear">${ icon( 'alignRight' ) }</button>
-					<button class="minn-tool" data-cmd="link" title="Link — or ⌘K">${ icon( 'link' ) }</button>
-					<button class="minn-tool" data-cmd="image" title="Insert image">${ icon( 'img' ) }</button>
-					<button class="minn-tool" data-block="p" title="Paragraph">${ icon( 'pilcrow' ) }</button>
-					<button class="minn-tool" data-cmd="removeFormat" title="Clear formatting">${ icon( 'eraser' ) }</button>
-					<span class="minn-tool-hint">type / for blocks</span>
+				<div class="minn-editor-toolbar" role="toolbar" aria-label="Formatting">
+					<button type="button" class="minn-tool b" data-cmd="bold" title="Bold" aria-label="Bold">${ icon( 'bold' ) }</button>
+					<button type="button" class="minn-tool i" data-cmd="italic" title="Italic" aria-label="Italic">${ icon( 'italic' ) }</button>
+					<button type="button" class="minn-tool" data-cmd="strikeThrough" title="Strikethrough — or wrap it in ~~tildes~~" aria-label="Strikethrough">${ icon( 'strike' ) }</button>
+					<button type="button" class="minn-tool code" data-cmd="inline-code" title="Inline code — or wrap it in backticks" aria-label="Inline code">${ icon( 'code' ) }</button>
+					<button type="button" class="minn-tool" data-block="h2" title="Heading 2" aria-label="Heading 2">${ icon( 'h2' ) }</button>
+					<button type="button" class="minn-tool" data-block="h3" title="Heading 3" aria-label="Heading 3">${ icon( 'h3' ) }</button>
+					<button type="button" class="minn-tool" data-block="blockquote" title="Quote" aria-label="Quote">${ icon( 'quote' ) }</button>
+					<button type="button" class="minn-tool" data-block="pre" title="Code block" aria-label="Code block">${ icon( 'braces' ) }</button>
+					<button type="button" class="minn-tool" data-cmd="insertUnorderedList" title="Bulleted list" aria-label="Bulleted list">${ icon( 'list' ) }</button>
+					<button type="button" class="minn-tool" data-cmd="insertOrderedList" title="Numbered list" aria-label="Numbered list">${ icon( 'olist' ) }</button>
+					<button type="button" class="minn-tool" data-align="center" title="Center — press again to clear" aria-label="Align center">${ icon( 'alignCenter' ) }</button>
+					<button type="button" class="minn-tool" data-align="right" title="Align right — press again to clear" aria-label="Align right">${ icon( 'alignRight' ) }</button>
+					<button type="button" class="minn-tool" data-cmd="link" title="Link — or ⌘K" aria-label="Link">${ icon( 'link' ) }</button>
+					<button type="button" class="minn-tool" data-cmd="image" title="Insert image" aria-label="Insert image">${ icon( 'img' ) }</button>
+					<button type="button" class="minn-tool" data-block="p" title="Paragraph" aria-label="Paragraph">${ icon( 'pilcrow' ) }</button>
+					<button type="button" class="minn-tool" data-cmd="removeFormat" title="Clear formatting" aria-label="Clear formatting">${ icon( 'eraser' ) }</button>
+					<span class="minn-tool-hint" aria-hidden="true">type / for blocks</span>
 				</div>` }
-				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }"></div>
-				<div class="minn-editor-stats" id="minn-editor-stats" aria-live="off" role="button" tabindex="0"></div>
+				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }" role="textbox" aria-multiline="true" aria-label="Post content"></div>
+				<div class="minn-editor-stats" id="minn-editor-stats" role="button" tabindex="0" aria-label="Writing stats"></div>
 			</div>
 			<div class="minn-editor-side" id="minn-editor-side"></div>
 		</div>`;
@@ -12634,6 +12650,9 @@
 	let inspectorScrollFn = null;
 
 	function closeInspector() {
+		if ( inspectorEl && inspectorEl._minnA11yEsc ) {
+			document.removeEventListener( 'keydown', inspectorEl._minnA11yEsc, true );
+		}
 		if ( inspectorEl ) inspectorEl.remove();
 		inspectorEl = null;
 		inspectorState = null;
@@ -12658,6 +12677,48 @@
 		const fitsRight = rect.right + 10 + w < window.innerWidth;
 		pop.style.left = ( fitsRight ? rect.right + 10 : Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) ) + 'px';
 		pop.style.top = Math.max( 10, Math.min( fitsRight ? rect.top : rect.bottom + 8, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
+	}
+
+	// Shared a11y for fixed block popovers (table/image/code/inspector/link):
+	// dialog role, labelled close, Escape dismisses (document capture so it
+	// works even when focus hasn't moved into the pop yet), first control
+	// focused. Safe to re-call after an innerHTML rebuild.
+	function armBlockPopA11y( pop, { label, onClose, focus } = {} ) {
+		if ( ! pop ) return;
+		pop.setAttribute( 'role', 'dialog' );
+		pop.setAttribute( 'aria-modal', 'true' );
+		if ( label ) pop.setAttribute( 'aria-label', label );
+		$$( '[data-close], .minn-x-btn', pop ).forEach( ( btn ) => {
+			if ( ! btn.getAttribute( 'aria-label' ) ) btn.setAttribute( 'aria-label', 'Close' );
+		} );
+		pop._minnA11yOnClose = onClose;
+		if ( ! pop._minnA11yBound ) {
+			pop._minnA11yBound = true;
+			// Capture on document: focus may still be in the editor body when
+			// Escape is pressed (chip click used mousedown preventDefault).
+			const onEsc = ( e ) => {
+				if ( e.key !== 'Escape' ) return;
+				if ( ! pop.isConnected ) {
+					document.removeEventListener( 'keydown', onEsc, true );
+					return;
+				}
+				// Nested open panels (autocomplete) own Escape first.
+				if ( e.target && e.target.closest && e.target.closest( '.minn-ac-panel:not([hidden])' ) ) return;
+				e.preventDefault();
+				e.stopPropagation();
+				document.removeEventListener( 'keydown', onEsc, true );
+				pop._minnA11yBound = false;
+				if ( typeof pop._minnA11yOnClose === 'function' ) pop._minnA11yOnClose();
+			};
+			pop._minnA11yEsc = onEsc;
+			document.addEventListener( 'keydown', onEsc, true );
+		}
+		const prefer = focus
+			? pop.querySelector( focus )
+			: pop.querySelector( 'input:not([type="hidden"]), select, textarea, button:not([data-close]):not(.minn-x-btn)' );
+		if ( prefer && typeof prefer.focus === 'function' ) {
+			setTimeout( () => prefer.focus( { preventScroll: true } ), 0 );
+		}
 	}
 
 	function positionInspector( islandEl ) {
@@ -13012,6 +13073,7 @@
 		document.body.appendChild( inspectorEl );
 		positionInspector( islandEl );
 		document.addEventListener( 'mousedown', inspectorAway, true );
+		armBlockPopA11y( inspectorEl, { label: 'Block settings', onClose: closeInspector } );
 		// Track the island while the editor scrolls under the fixed popover.
 		inspectorScrollFn = () => positionInspector( islandEl );
 		const scroller = document.querySelector( '.minn-scroll' );
@@ -13024,6 +13086,12 @@
 
 		inspectorState = { idx, model, types, islandEl, images: islandImageUrls( raw ) };
 		renderInspectorBody();
+		// Re-apply dialog attrs after the body swap (innerHTML rebuild).
+		armBlockPopA11y( inspectorEl, {
+			label: 'Block settings',
+			onClose: closeInspector,
+			focus: 'input:not([type="hidden"]), textarea, select, button:not([data-close]):not(.minn-x-btn)',
+		} );
 
 		// Filter box inside a "More settings" panel — narrow by label/key.
 		inspectorEl.addEventListener( 'input', ( e ) => {
@@ -13295,6 +13363,9 @@
 	}
 
 	function hideTablePop() {
+		if ( tablePop && tablePop._minnA11yEsc ) {
+			document.removeEventListener( 'keydown', tablePop._minnA11yEsc, true );
+		}
 		if ( tablePop ) tablePop.remove();
 		tablePop = null;
 		document.removeEventListener( 'mousedown', tablePopAway, true );
@@ -13390,12 +13461,17 @@
 			chip._target = t.el;
 			chip._kind = t.kind;
 			// Code chips wear the language so a glance tells you what's set.
-			chip.textContent = '\u2699 ' + ( t.kind === 'code'
+			const chipText = t.kind === 'code'
 				? ( codeLangOf( t.el ) === 'auto' ? 'code' : codeLangOf( t.el ) )
-				: t.kind );
+				: t.kind;
+			chip.textContent = '\u2699 ' + chipText;
 			chip.title = t.kind === 'table' ? 'Table \u2014 rows, columns, header'
 				: t.kind === 'code' ? 'Code block \u2014 syntax highlighting'
 				: 'Image \u2014 alt, caption, replace';
+			chip.setAttribute( 'aria-label',
+				t.kind === 'table' ? 'Table settings'
+				: t.kind === 'code' ? `Code block settings${ chipText !== 'code' ? ', ' + chipText : '' }`
+				: 'Image settings' );
 			const box = t.el.closest( 'figure' ) || t.el;
 			const rect = box.getBoundingClientRect();
 			// Content coordinates: rect is viewport-relative, the chip's home
@@ -13545,6 +13621,7 @@
 			b.addEventListener( 'click', () => tableOp( table, b.dataset.op ) );
 		} );
 		document.addEventListener( 'mousedown', tablePopAway, true );
+		armBlockPopA11y( tablePop, { label: 'Table settings', onClose: hideTablePop, focus: '[data-op]' } );
 	}
 
 	// Apply a structural table mutation to a (detached) table. Returns
@@ -13740,6 +13817,9 @@
 	}
 
 	function hideCodePop() {
+		if ( codePop && codePop._minnA11yEsc ) {
+			document.removeEventListener( 'keydown', codePop._minnA11yEsc, true );
+		}
 		if ( codePop ) codePop.remove();
 		codePop = null;
 		document.removeEventListener( 'mousedown', codePopAway, true );
@@ -13763,6 +13843,7 @@
 		document.body.appendChild( codePop );
 		positionBlockPop( codePop, pre );
 		codePop.querySelector( '[data-close]' ).addEventListener( 'click', hideCodePop );
+		armBlockPopA11y( codePop, { label: 'Code block settings', onClose: hideCodePop, focus: '[data-lang]' } );
 		codePop.querySelector( '[data-lang]' ).addEventListener( 'change', ( e ) => {
 			setCodeLang( pre, e.target.value );
 			syncTableChips(); // refresh the chip's language label
@@ -13811,6 +13892,9 @@
 	}
 
 	function hideLinkPop() {
+		if ( linkPop && linkPop._minnA11yEsc ) {
+			document.removeEventListener( 'keydown', linkPop._minnA11yEsc, true );
+		}
 		if ( linkPop ) linkPop.remove();
 		linkPop = null;
 		linkPopSaved = null;
@@ -13847,6 +13931,7 @@
 		linkPop.style.left = Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) + 'px';
 		linkPop.style.top = Math.max( 10, Math.min( rect.bottom + 8, window.innerHeight - linkPop.offsetHeight - 10 ) ) + 'px';
 		document.addEventListener( 'mousedown', linkPopAway, true );
+		armBlockPopA11y( linkPop, { label: 'Link', onClose: hideLinkPop, focus: '[data-link-url]' } );
 
 		const urlInput = linkPop.querySelector( '[data-link-url]' );
 		const apply = () => {
@@ -13940,10 +14025,13 @@
 		} );
 		const rm = linkPop.querySelector( '[data-link-remove]' );
 		if ( rm ) rm.addEventListener( 'click', unlink );
-		if ( ! a ) urlInput.focus();
+		// armBlockPopA11y already focuses the URL field.
 	}
 
 	function hideImgPop() {
+		if ( imgPop && imgPop._minnA11yEsc ) {
+			document.removeEventListener( 'keydown', imgPop._minnA11yEsc, true );
+		}
 		if ( imgPop ) imgPop.remove();
 		imgPop = null;
 		imgPopTarget = null;
@@ -13992,6 +14080,7 @@
 		document.addEventListener( 'mousedown', imgPopAway, true );
 
 		imgPop.querySelector( '[data-close]' ).addEventListener( 'click', hideImgPop );
+		armBlockPopA11y( imgPop, { label: 'Image settings', onClose: hideImgPop, focus: '[data-img-alt]' } );
 
 		// Link and lightbox are mutually exclusive (core's own rule: the
 		// lightbox only arms when the image has no link destination).
@@ -15718,8 +15807,14 @@
 		const highlight = () => {
 			if ( ! menu ) return;
 			$$( '.minn-slash-item', menu ).forEach( ( el, i ) => {
-				el.classList.toggle( 'selected', i === selIdx );
-				if ( i === selIdx ) el.scrollIntoView( { block: 'nearest' } );
+				const on = i === selIdx;
+				el.classList.toggle( 'selected', on );
+				el.setAttribute( 'aria-selected', on ? 'true' : 'false' );
+				if ( on ) {
+					el.scrollIntoView( { block: 'nearest' } );
+					// Active option for assistive tech (listbox pattern).
+					if ( el.id ) menu.setAttribute( 'aria-activedescendant', el.id );
+				}
 			} );
 		};
 
@@ -15738,10 +15833,10 @@
 			// to the full picker.
 			const hidden = query ? 0 : items.filter( ( it ) => it[ 3 ] ).length;
 			menu.innerHTML = filtered.map( ( idx, i ) => `
-				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" data-slash="${ idx }">
-					<span class="minn-slash-icon">${ items[ idx ][ 0 ] }</span>${ esc( items[ idx ][ 1 ] ) }${ items[ idx ][ 4 ] ? `<span class="minn-slash-ns">${ esc( items[ idx ][ 4 ] ) }</span>` : '' }
+				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" role="option" id="minn-slash-opt-${ i }" data-slash="${ idx }" aria-selected="${ i === selIdx ? 'true' : 'false' }">
+					<span class="minn-slash-icon" aria-hidden="true">${ items[ idx ][ 0 ] }</span>${ esc( items[ idx ][ 1 ] ) }${ items[ idx ][ 4 ] ? `<span class="minn-slash-ns">${ esc( items[ idx ][ 4 ] ) }</span>` : '' }
 				</div>` ).join( '' )
-				+ ( ! query ? `<div class="minn-slash-hint" data-browse>Browse all${ hidden ? ` — ${ hidden } more blocks…` : '…' }</div>` : '' );
+				+ ( ! query ? `<div class="minn-slash-hint" data-browse role="option" id="minn-slash-browse">Browse all${ hidden ? ` — ${ hidden } more blocks…` : '…' }</div>` : '' );
 			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
 				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
 			);
@@ -15752,6 +15847,7 @@
 				close();
 				openBlockPicker( t );
 			} );
+			highlight();
 		};
 
 		// Keep typing after the "/" to narrow the list — "/co" finds Code.
@@ -15789,6 +15885,8 @@
 			selIdx = 0;
 			menu = document.createElement( 'div' );
 			menu.className = 'minn-slash-menu';
+			menu.setAttribute( 'role', 'listbox' );
+			menu.setAttribute( 'aria-label', 'Insert block' );
 			document.body.appendChild( menu );
 		};
 

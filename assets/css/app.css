@@ -1076,6 +1076,7 @@ select.minn-input {
   touch-action: manipulation;
 }
 .minn-tool:hover { background: var(--hover); color: var(--text); }
+.minn-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; background: var(--hover); color: var(--text); }
 .minn-tool svg { display: block; }
 /* overflow-x: clip (not hidden) contains wide content horizontally WITHOUT
    forcing overflow-y to auto — hidden would clip a first-block island's ⚙ chip,
@@ -1977,6 +1978,9 @@ button.minn-ac-item:hover { background: var(--hover); }
   touch-action: manipulation;
 }
 .minn-code-chip:hover, .minn-code-chip.hot { color: var(--accent2); border-color: var(--accent); }
+.minn-code-chip:focus-visible, .minn-island-chip:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; color: var(--accent2); border-color: var(--accent);
+}
 .minn-code-pop { width: 250px; }
 .minn-table-pop { width: 300px; }
 .minn-link-pop { width: 340px; }
