@@ -1011,7 +1011,7 @@
 				<div class="minn-logo">
 					<button class="minn-logo-home" id="minn-logo-home" title="Overview">
 						<span class="minn-logo-mark">m</span>
-						<span class="minn-logo-name">minn</span>
+						<span class="minn-logo-name">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</span>
 					</button>
 					<button class="minn-logo-ver" id="minn-ver-btn" title="What's new — full changelog">v${ esc( B.version ) }</button>
 				</div>
