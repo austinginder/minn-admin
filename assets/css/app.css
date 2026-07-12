@@ -507,8 +507,14 @@ button.minn-nav-label:hover { color: var(--text2); }
 /* ===== Content ===== */
 .minn-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 /* View-switcher row stacked above a controls row (Extensions grew a third
-   tab and the single row clipped both tab strips into scroll arrows). */
+   tab and the single row clipped both tab strips into scroll arrows).
+   Content uses the same split: types on row 1, tax/search on row 2. */
 .minn-toolbar-views { margin-bottom: 10px; }
+.minn-toolbar-views .minn-tabscroll,
+.minn-toolbar-views > .minn-tabs { flex: 1 1 auto; min-width: 0; }
+.minn-toolbar-views .minn-type-select { flex: 0 1 220px; max-width: 260px; }
+/* Filters row carries the bottom gap to the table (views row is tighter). */
+.minn-toolbar.minn-toolbar-filters { margin-bottom: 18px; }
 /* Extensions filters: quiet text links, not a second boxed pill strip —
    two stacked bordered containers read as chrome soup (Austin). */
 .minn-tabs.minn-ext-filters, .minn-tabs.minn-quiet-tabs { background: none; border: none; padding: 0; gap: 4px; overflow: visible; }
@@ -2304,6 +2310,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-toolbar { flex-wrap: wrap; gap: 8px; }
   .minn-tabscroll, .minn-toolbar > .minn-tabs { flex: 1 1 100%; }
   .minn-toolbar > .minn-tabs.minn-tabs-aux { flex: 0 0 auto; }
+  .minn-toolbar-views .minn-type-select { flex: 1 1 auto; max-width: none; }
   .minn-toolbar-search { flex: 1 1 140px; width: auto; margin-left: 0; }
   .minn-toolbar-meta { display: none; }
   .minn-tax-select { flex: 1 1 40%; max-width: none; }

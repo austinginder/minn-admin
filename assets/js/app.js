@@ -272,7 +272,8 @@
 
 	const TITLES = {
 		overview: [ 'Overview', 'Dashboard' ],
-		content: [ 'Content', 'Posts & Pages' ],
+		// Sub is dynamic — contentTopbarSub() names the active filter / type set.
+		content: [ 'Content', '' ],
 		media: [ 'Media', 'Library' ],
 		comments: [ 'Comments', 'Moderation' ],
 		orders: [ 'Orders', 'WooCommerce' ],
@@ -286,6 +287,29 @@
 		system: [ 'System', 'Diagnostics' ],
 		editor: [ 'Editor', 'Draft' ],
 	};
+
+	// Topbar badge for Content: names the active type filter (or Trash), and
+	// when "All" is selected it reflects the real roster (posts + pages +
+	// CPTs) instead of the hard-coded "Posts & Pages" that lied once
+	// Products / Venues / Organizers joined the list.
+	function contentTopbarSub() {
+		if ( state.contentTrash ) return 'Trash';
+		const filter = state.filter || 'all';
+		if ( filter === 'posts' ) return 'Posts';
+		if ( filter === 'pages' ) return 'Pages';
+		if ( filter !== 'all' ) {
+			const t = ( state.cache.types || [] ).find( ( x ) => x.restBase === filter );
+			return t ? t.name : filter;
+		}
+		const types = state.cache.types || [];
+		const bits = [ 'Posts' ];
+		if ( B.caps.editPages ) bits.push( 'pages' );
+		if ( types.length === 1 ) bits.push( types[ 0 ].name );
+		else if ( types.length > 1 ) bits.push( types.length + ' types' );
+		if ( bits.length === 1 ) return bits[ 0 ];
+		if ( bits.length === 2 ) return bits[ 0 ] + ' & ' + bits[ 1 ];
+		return bits[ 0 ] + ', ' + bits.slice( 1, -1 ).join( ', ' ) + ' & ' + bits[ bits.length - 1 ];
+	}
 
 	/* ===== Toast ===== */
 
@@ -1209,6 +1233,8 @@
 			}
 		} else if ( state.route === 'settings' ) {
 			subEl.textContent = state.settingsSection || '';
+		} else if ( state.route === 'content' ) {
+			subEl.textContent = contentTopbarSub();
 		} else if ( surface && surface.family && surfacesInFamily( surface.family ).length > 1 ) {
 			// Multiple adapters of the same family → topbar badge is a switcher.
 			const members = surfacesInFamily( surface.family );
@@ -1704,6 +1730,9 @@
 
 	function renderContent() {
 		const view = $( '#minn-view' );
+		// Keep the topbar badge in sync with the active type / trash filter
+		// (renderView only runs on route change; tab clicks re-render here).
+		if ( state.route === 'content' ) renderTopbar();
 		if ( ! state.cache.types ) {
 			loadTypes().then( () => { if ( state.route === 'content' ) renderContent(); } ).catch( () => {} );
 		}
@@ -1737,19 +1766,40 @@
 		const taxComboOptions = ( allLabel, list ) => [ { value: '', label: allLabel } ].concat(
 			list.map( ( t ) => ( { value: String( t.id ), label: t.count != null ? `${ t.name } (${ t.count })` : t.name } ) )
 		);
-		view.innerHTML = `
-		<div class="minn-toolbar">
+		// Two-row toolbar (surface / Extensions pattern): type filter on its
+		// own row so a long CPT list never clips category/search off the edge.
+		// >6 types → searchable combobox (same threshold as surface form tabs).
+		const manyTypes = tabs.length > 6;
+		const typeActiveLabel = ( () => {
+			const hit = tabs.find( ( [ id ] ) => id === state.filter );
+			return hit ? hit[ 1 ] : 'All';
+		} )();
+		const typeHtml = manyTypes ? `
+			<div class="minn-ac minn-tax-select minn-type-select" data-typecombo title="Post type">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( typeActiveLabel ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Post type">
+				<div class="minn-ac-panel" hidden></div>
+			</div>` : `
 			<div class="minn-tabs">
 				${ tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.filter === id ? ' active' : '' }" data-filter="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
-			</div>
-			<div class="minn-tabs minn-tabs-aux">
+			</div>`;
+		// Trash is a quiet text control (one boxed pill strip per row).
+		const trashHtml = `
+			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
 				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">Trash</button>
-			</div>
+			</div>`;
+		const filtersHtml = `
 			${ showTax ? taxCombo( 'cat', 'All categories' ) : '' }
 			${ showTax ? taxCombo( 'tag', 'All tags' ) : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="Search content…" value="${ esc( state.contentSearch || '' ) }">
-			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>`;
+		view.innerHTML = `
+		<div class="minn-toolbar minn-toolbar-views">
+			${ typeHtml }
+			${ trashHtml }
+		</div>
+		<div class="minn-toolbar minn-toolbar-filters">
+			${ filtersHtml }
 		</div>
 		<div id="minn-bulk-slot"></div>
 		<div class="minn-card minn-table">
@@ -1780,22 +1830,33 @@
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
 
+		const applyTypeFilter = ( nf ) => {
+			// Leaving the posts context clears post-only taxonomy filters.
+			if ( ( nf === 'pages' || ( state.cache.types || [] ).some( ( t ) => t.restBase === nf ) ) && ( state.contentCat || state.contentTag ) ) {
+				state.contentCat = null;
+				state.contentTag = null;
+			}
+			state.filter = nf;
+			// Tabs are a server-side query now — refetch from page 1.
+			state.cache.content = null;
+			state.cache.cptContent = {};
+			sel.clear();
+			renderContent();
+		};
 		$$( '.minn-tab[data-filter]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const nf = btn.dataset.filter;
-				// Leaving the posts context clears post-only taxonomy filters.
-				if ( ( nf === 'pages' || ( state.cache.types || [] ).some( ( t ) => t.restBase === nf ) ) && ( state.contentCat || state.contentTag ) ) {
-					state.contentCat = null;
-					state.contentTag = null;
-				}
-				state.filter = nf;
-				// Tabs are a server-side query now — refetch from page 1.
-				state.cache.content = null;
-				state.cache.cptContent = {};
-				sel.clear();
-				renderContent();
-			} )
+			btn.addEventListener( 'click', () => applyTypeFilter( btn.dataset.filter ) )
 		);
+		const typeCombo = view.querySelector( '[data-typecombo]' );
+		if ( typeCombo ) bindAutocomplete( typeCombo,
+			tabs.map( ( [ id, label ] ) => ( { value: id === 'all' ? '' : id, label } ) ), {
+				strict: true,
+				value: state.filter && state.filter !== 'all' ? state.filter : '',
+				onPick: ( v ) => {
+					const next = v === '' ? 'all' : v;
+					if ( String( state.filter || 'all' ) === String( next ) ) return;
+					applyTypeFilter( next );
+				},
+			} );
 		const reloadContent = async () => {
 			sel.clear();
 			state.cache.content = null;
