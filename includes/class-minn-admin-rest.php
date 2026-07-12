@@ -2693,11 +2693,24 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/update.php';
 
 		$file = sanitize_text_field( $request['plugin'] );
+		// Normalize: list rows use "dir/file", the update map uses ".php".
+		if ( $file && ! str_ends_with( $file, '.php' ) ) {
+			$file .= '.php';
+		}
 
-		wp_update_plugins();
+		// Only re-hit the update API when this file is not already known
+		// pending. Calling wp_update_plugins() on every single-plugin click
+		// races when two updates fire close together (network + transient
+		// rewrite) and is the slow half of "Failed to fetch" after a second
+		// concurrent upgrade recycled the worker.
 		$updates = get_site_transient( 'update_plugins' );
+		if ( ! $updates || empty( $updates->response[ $file ] ) ) {
+			wp_update_plugins();
+			$updates = get_site_transient( 'update_plugins' );
+		}
 		if ( ! $updates || empty( $updates->response[ $file ] ) ) {
 			return new WP_Error( 'no_update', 'No update available for that plugin.', array( 'status' => 400 ) );
 		}

@@ -5706,6 +5706,107 @@
 		return pluginsPromise;
 	}
 
+	// After a plugin upgrade the PHP worker often recycles (OPcache /
+	// FrankenPHP), so the NEXT fetch fails instantly with TypeError
+	// "Failed to fetch". Retry a few times rather than blanking Extensions
+	// with showErr (Austin's dual-update crash).
+	async function loadPluginsResilient( attempts = 5 ) {
+		let lastErr = null;
+		for ( let i = 0; i < attempts; i++ ) {
+			try {
+				pluginsPromise = null;
+				await loadPlugins();
+				return;
+			} catch ( e ) {
+				lastErr = e;
+				await new Promise( ( r ) => setTimeout( r, 700 + i * 500 ) );
+			}
+		}
+		throw lastErr || new Error( 'Could not reload plugins' );
+	}
+
+	// Single-plugin updates MUST run one at a time. Concurrent
+	// Plugin_Upgrader runs race on the filesystem and recycle the worker,
+	// so a second in-flight update (and the follow-up list fetch) die with
+	// "Failed to fetch" and Extensions paints "Something went wrong".
+	// Queue serializes them; the list reloads only when the queue is empty.
+	const pluginUpdatePending = new Set(); // list keys: "dir/file" (no .php)
+	let pluginUpdateChain = Promise.resolve();
+
+	function markPluginCardBusy( file, busy ) {
+		const card = document.querySelector( `.minn-plugin[data-plugin="${ CSS.escape( file ) }"]` );
+		if ( ! card ) return;
+		card.classList.toggle( 'minn-busy', !! busy );
+		const btn = card.querySelector( '[data-update]' );
+		if ( btn ) {
+			btn.disabled = !! busy;
+			if ( busy && ! btn.dataset.minnUpdLabel ) {
+				btn.dataset.minnUpdLabel = btn.textContent;
+				btn.textContent = 'Updating…';
+			} else if ( ! busy && btn.dataset.minnUpdLabel ) {
+				btn.textContent = btn.dataset.minnUpdLabel;
+				delete btn.dataset.minnUpdLabel;
+			}
+		}
+	}
+
+	function queuePluginUpdate( file, name ) {
+		if ( pluginUpdatePending.has( file ) ) return pluginUpdateChain;
+		pluginUpdatePending.add( file );
+		markPluginCardBusy( file, true );
+		const depth = pluginUpdatePending.size;
+		toast( depth > 1
+			? `Queued ${ name } (${ depth } in line)…`
+			: `Updating ${ name }…` );
+
+		pluginUpdateChain = pluginUpdateChain.then( async () => {
+			// Bail if a hard-reload already started (self-update of Minn).
+			if ( ! pluginUpdatePending.has( file ) ) return;
+			try {
+				const r = await api( 'minn-admin/v1/plugins/update', {
+					method: 'POST',
+					body: JSON.stringify( { plugin: file + '.php' } ),
+				} );
+				if ( isMinnAdminPluginFile( file ) ) {
+					reloadAfterMinnSelfUpdate( r && r.version );
+					return;
+				}
+				toast( `${ name } updated${ r.version ? ' to v' + r.version : '' }` );
+				// Optimistic so a mid-queue re-render doesn't re-offer the badge.
+				if ( state.cache.pluginUpdates ) {
+					delete state.cache.pluginUpdates[ file + '.php' ];
+				}
+				if ( Array.isArray( state.cache.plugins ) && r.version ) {
+					const p = state.cache.plugins.find( ( x ) => x.plugin === file );
+					if ( p ) p.version = r.version;
+				}
+			} catch ( e ) {
+				toast( e.message || `Could not update ${ name }`, true );
+			} finally {
+				pluginUpdatePending.delete( file );
+				markPluginCardBusy( file, false );
+			}
+			if ( pluginUpdatePending.size > 0 ) return;
+			// Queue drained — one resilient list refresh, never showErr.
+			const prev = state.cache.plugins;
+			const prevUpd = state.cache.pluginUpdates;
+			try {
+				state.cache.plugins = null;
+				await loadPluginsResilient();
+				state.cache.notifications = null;
+				loadNotifications().catch( () => {} );
+			} catch ( e ) {
+				if ( prev ) state.cache.plugins = prev;
+				if ( prevUpd ) state.cache.pluginUpdates = prevUpd;
+				toast( 'Updated, but the plugin list could not refresh yet. Reload if badges look stale.', true );
+			}
+			if ( state.route === 'extensions' && state.extTab === 'plugins' ) {
+				renderExtensions();
+			}
+		} );
+		return pluginUpdateChain;
+	}
+
 	const extTabsHtml = () => B.caps.themes || B.caps.settings ? `
 			<div class="minn-tabs">
 				<button class="minn-tab${ state.extTab === 'plugins' ? ' active' : '' }" data-xtab="plugins">Plugins</button>
@@ -6455,19 +6556,20 @@
 			${ visible.map( ( p ) => {
 				const name = cleanPluginName( p.name );
 				const hasUpdate = !! updates[ p.plugin + '.php' ];
+				const isUpdating = pluginUpdatePending.has( p.plugin );
 				const on = p.status === 'active';
 				// wp.org plugins wear their real icon, and the icon links to
 				// their directory page; everything else keeps the letter tile.
 				const meta = ( state.cache.pluginMeta || {} )[ p.plugin + '.php' ];
 				const tile = `<div class="minn-plugin-icon" style="background:${ colorFor( name ) }">${ esc( name.charAt( 0 ) ) }${ meta && meta.icon ? `<img src="${ esc( meta.icon ) }" alt="" loading="lazy">` : '' }</div>`;
 				return `
-				<div class="minn-card minn-plugin" data-plugin="${ esc( p.plugin ) }">
+				<div class="minn-card minn-plugin${ isUpdating ? ' minn-busy' : '' }" data-plugin="${ esc( p.plugin ) }">
 					${ meta && meta.url ? `<a class="minn-plugin-icon-link" href="${ esc( meta.url ) }" target="_blank" rel="noopener" title="${ /wordpress\.org/.test( meta.url ) ? `View ${ esc( name ) } on WordPress.org` : `${ esc( name ) } plugin page` }">${ tile }</a>` : tile }
 					<div class="minn-plugin-body">
 						<div class="minn-plugin-head">
 							<div class="minn-plugin-name">${ esc( name ) }</div>
-							${ hasUpdate ? ( B.caps.update
-								? `<button class="minn-badge-update as-btn" data-update="${ esc( p.plugin ) }" title="Update to ${ esc( updates[ p.plugin + '.php' ] ) }">Update → ${ esc( updates[ p.plugin + '.php' ] ) }</button>`
+							${ hasUpdate || isUpdating ? ( B.caps.update
+								? `<button class="minn-badge-update as-btn" data-update="${ esc( p.plugin ) }" ${ isUpdating ? 'disabled' : '' } title="${ isUpdating ? 'Update in progress' : 'Update to ' + esc( updates[ p.plugin + '.php' ] || '' ) }">${ isUpdating ? 'Updating…' : `Update → ${ esc( updates[ p.plugin + '.php' ] ) }` }</button>`
 								: `<span class="minn-badge-update">Update</span>` ) : '' }
 						</div>
 						<div class="minn-plugin-desc">${ esc( stripTags( ( ( p.description && p.description.rendered ) || '' ).replace( /<cite>[\s\S]*?<\/cite>/, '' ) ) ) }</div>
@@ -6536,33 +6638,13 @@
 		);
 
 		$$( '[data-update]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', async () => {
+			btn.addEventListener( 'click', () => {
 				const file = btn.dataset.update;
 				const plugin = plugins.find( ( p ) => p.plugin === file );
-				const name = cleanPluginName( plugin.name );
-				btn.disabled = true;
-				const card = btn.closest( '.minn-plugin' );
-				if ( card ) card.classList.add( 'minn-busy' );
-				toast( `Updating ${ name }…` );
-				try {
-					const r = await api( 'minn-admin/v1/plugins/update', {
-						method: 'POST',
-						body: JSON.stringify( { plugin: file + '.php' } ),
-					} );
-					// Self-update replaces app.js / CSS / boot payload — a soft
-					// re-render keeps the old SPA in memory. Hard-reload so the
-					// version badge, new routes, and cache-busted assets land.
-					if ( isMinnAdminPluginFile( file ) ) {
-						reloadAfterMinnSelfUpdate( r && r.version );
-						return;
-					}
-					toast( `${ name } updated${ r.version ? ' to v' + r.version : '' }` );
-				} catch ( e ) {
-					toast( e.message, true );
-				}
-				state.cache.plugins = null;
-				await loadPlugins().catch( () => {} );
-				if ( state.route === 'extensions' ) renderExtensions();
+				if ( ! plugin ) return;
+				// Serial queue: concurrent upgrades crash the worker and blank
+				// the page (Austin's "two Update clicks → Failed to fetch").
+				queuePluginUpdate( file, cleanPluginName( plugin.name ) );
 			} )
 		);
 
@@ -6722,11 +6804,16 @@
 	}
 
 	async function updateAllPlugins( btn ) {
+		if ( pluginUpdatePending.size ) {
+			toast( 'Finish the in-progress update first, or wait for the queue to drain.', true );
+			return;
+		}
 		if ( btn ) {
 			btn.disabled = true;
 			btn.textContent = 'Updating…';
 		}
 		toast( 'Updating plugins — this can take a minute…' );
+		const prev = state.cache.plugins;
 		try {
 			const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
 			const updated = r.updated || [];
@@ -6745,7 +6832,15 @@
 		} catch ( e ) {
 			toast( e.message, true );
 		}
-		state.cache.plugins = null;
+		try {
+			state.cache.plugins = null;
+			await loadPluginsResilient();
+			state.cache.notifications = null;
+			loadNotifications().catch( () => {} );
+		} catch ( e ) {
+			if ( prev ) state.cache.plugins = prev;
+			toast( 'Updated, but the plugin list could not refresh yet. Reload if badges look stale.', true );
+		}
 		if ( state.route === 'extensions' ) renderExtensions();
 	}
 
