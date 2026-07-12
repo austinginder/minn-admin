@@ -130,6 +130,32 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Traffic day drill-down: top pages (and optional referrers) for a
+		// chart bar's date window. Providers answer minn_admin_traffic_day.
+		register_rest_route(
+			self::NS,
+			'/overview/traffic-day',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'overview_traffic_day' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'from' => array(
+						'type'     => 'string',
+						'required' => true,
+						'pattern'  => '^\d{4}-\d{2}-\d{2}$',
+					),
+					'to'   => array(
+						'type'     => 'string',
+						'required' => true,
+						'pattern'  => '^\d{4}-\d{2}-\d{2}$',
+					),
+				),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/templates',
@@ -1503,13 +1529,19 @@ class Minn_Admin_REST {
 			$tchart = array();
 			foreach ( $tseries as $i => $bucket ) {
 				$offset   = ( $buckets - 1 - $i ) * $bucket_days;
+				// Inclusive calendar window for the traffic-day drill-down
+				// (Y-m-d — matches how analytics plugins store daily rows).
+				$from_ts  = time() - ( $offset + $bucket_days - 1 ) * DAY_IN_SECONDS;
+				$to_ts    = time() - $offset * DAY_IN_SECONDS;
 				$label    = 1 === $bucket_days
-					? date_i18n( 'M j, Y', time() - $offset * DAY_IN_SECONDS )
-					: 'Week of ' . date_i18n( 'M j, Y', time() - ( $offset + $bucket_days - 1 ) * DAY_IN_SECONDS );
+					? date_i18n( 'M j, Y', $to_ts )
+					: 'Week of ' . date_i18n( 'M j, Y', $from_ts );
 				$tchart[] = array(
 					'label' => $label,
 					'value' => $bucket['v'],
 					'views' => $bucket['p'],
+					'from'  => gmdate( 'Y-m-d', $from_ts ),
+					'to'    => gmdate( 'Y-m-d', $to_ts ),
 				);
 			}
 
@@ -1518,14 +1550,18 @@ class Minn_Admin_REST {
 			};
 			$prev  = isset( $traffic['prev_visitors'] ) ? (int) $traffic['prev_visitors'] : 0;
 			$delta = $prev > 0 ? round( ( $visitors - $prev ) / $prev * 100, 1 ) : null;
+			// Always surface pageviews on the card; when a period delta exists
+			// it leads, with pageviews as a quiet second clause.
+			$views_bit = $compact( $pageviews ) . ' pageviews';
+			$delta_bit = null !== $delta
+				? ( $delta >= 0 ? '↑ ' : '↓ ' ) . abs( $delta ) . '% vs prior ' . $days . 'd · ' . $views_bit
+				: $views_bit;
 			array_unshift(
 				$stats,
 				array(
 					'label' => 'Visitors',
 					'value' => $compact( $visitors ),
-					'delta' => null !== $delta
-						? ( $delta >= 0 ? '↑ ' : '↓ ' ) . abs( $delta ) . '% vs prior ' . $days . 'd'
-						: $compact( $pageviews ) . ' pageviews',
+					'delta' => $delta_bit,
 					'up'    => null !== $delta ? ( $delta >= 0 ? true : 'down' ) : null,
 				)
 			);
@@ -1624,6 +1660,78 @@ class Minn_Admin_REST {
 	 * The events behind one activity-chart bar: posts/pages published and
 	 * comments received in the (from, to] GMT window the overview handed out.
 	 */
+	/**
+	 * Traffic chart bar drill-down: top pages (and optional referrers) for a
+	 * date window. Providers answer the `minn_admin_traffic_day` filter with
+	 * { source, pages:[{title,path,url?,postId?,visitors,pageviews}],
+	 *   referrers?:[{label,visitors,pageviews}], adminUrl? }.
+	 * First non-null wins, same priority convention as minn_admin_traffic.
+	 */
+	public static function overview_traffic_day( WP_REST_Request $request ) {
+		$from = $request['from'];
+		$to   = $request['to'];
+		if ( $from > $to ) {
+			return new WP_Error( 'bad_range', 'from must be on or before to.', array( 'status' => 400 ) );
+		}
+		// Cap the window so a bad client can't ask for years of aggregation.
+		$span = (int) ( ( strtotime( $to . ' UTC' ) - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
+		if ( $span > 31 ) {
+			return new WP_Error( 'range_too_long', 'Pick a window of 31 days or fewer.', array( 'status' => 400 ) );
+		}
+
+		/**
+		 * Traffic day detail for the Overview chart drill-down.
+		 *
+		 * @param array|null $data Existing answer (return early when non-null).
+		 * @param string     $from Inclusive Y-m-d start.
+		 * @param string     $to   Inclusive Y-m-d end.
+		 */
+		$data = apply_filters( 'minn_admin_traffic_day', null, $from, $to );
+		if ( ! is_array( $data ) ) {
+			return rest_ensure_response(
+				array(
+					'source'    => '',
+					'pages'     => array(),
+					'referrers' => array(),
+					'adminUrl'  => '',
+				)
+			);
+		}
+		$pages = array();
+		foreach ( (array) ( $data['pages'] ?? array() ) as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$pages[] = array(
+				'title'     => isset( $row['title'] ) ? (string) $row['title'] : '',
+				'path'      => isset( $row['path'] ) ? (string) $row['path'] : '',
+				'url'       => isset( $row['url'] ) ? (string) $row['url'] : '',
+				'postId'    => isset( $row['postId'] ) ? (int) $row['postId'] : 0,
+				'visitors'  => isset( $row['visitors'] ) ? (int) $row['visitors'] : 0,
+				'pageviews' => isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0,
+			);
+		}
+		$referrers = array();
+		foreach ( (array) ( $data['referrers'] ?? array() ) as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$referrers[] = array(
+				'label'     => isset( $row['label'] ) ? (string) $row['label'] : '',
+				'visitors'  => isset( $row['visitors'] ) ? (int) $row['visitors'] : 0,
+				'pageviews' => isset( $row['pageviews'] ) ? (int) $row['pageviews'] : 0,
+			);
+		}
+		return rest_ensure_response(
+			array(
+				'source'    => isset( $data['source'] ) ? (string) $data['source'] : '',
+				'pages'     => $pages,
+				'referrers' => $referrers,
+				'adminUrl'  => isset( $data['adminUrl'] ) ? (string) $data['adminUrl'] : '',
+			)
+		);
+	}
+
 	public static function overview_activity( WP_REST_Request $request ) {
 		global $wpdb;
 

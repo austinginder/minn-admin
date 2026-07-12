@@ -13,6 +13,7 @@ Minn's whole extension surface is a small set of public hooks. The main ones:
 | `minn_admin_surfaces` | filter | Sidebar views (lists, tabs, detail modals) |
 | `minn_admin_editor_panels` | filter | Per-post fields in the editor sidebar |
 | `minn_admin_traffic` | filter | Overview chart traffic provider |
+| `minn_admin_traffic_day` | filter | Overview traffic bar drill-down (top pages / referrers for a date window) |
 | `minn_admin_block_forms` | filter | Block inspector labels/controls + slash insert templates |
 | `minn_admin_insert_blocks` | filter | Prune or extend the auto-insert slash list |
 | `minn_admin_page_builders` | filter | Register a full-canvas page builder |
@@ -724,6 +725,43 @@ Visitors and a period-over-period delta. Bundled adapters cover **Koko Analytics
 reference implementation), **WP Statistics**, **Burst Statistics** and **Independent
 Analytics** — the first active provider answers, so a plugin registering its own adapter
 should return early when `$traffic` is already non-null.
+
+### Day drill-down — top pages for a chart bar
+
+Clicking a Traffic bar opens a modal with the top pages (and optional referrers)
+for that bar's date window. Providers answer a second filter:
+
+```php
+add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
+    if ( null !== $data ) {
+        return $data; // another provider already answered
+    }
+    // $from / $to are inclusive Y-m-d calendar dates for the bar (one day
+    // on the 7/30d chart; up to a week on 90d).
+    return array(
+        'source'    => 'My Analytics',
+        'pages'     => array(
+            array(
+                'title'     => 'Homepage',
+                'path'      => '/',
+                'url'       => home_url( '/' ),
+                'postId'    => 0,      // optional; >0 when the hit maps to a post
+                'visitors'  => 120,
+                'pageviews' => 310,
+            ),
+        ),
+        'referrers' => array(  // optional
+            array( 'label' => 'google.com', 'visitors' => 40, 'pageviews' => 55 ),
+        ),
+        'adminUrl'  => admin_url( 'admin.php?page=my-analytics' ), // optional footer link
+    );
+}, 10, 3 );
+```
+
+Return `null` (or leave `$data` alone) when you have no page breakdown for the
+window — the modal shows an empty state and still offers `adminUrl` when set.
+The bundled **Koko Analytics** adapter is the reference (`post_stats` + `paths`
++ referrer tables). Same first-non-null rule as `minn_admin_traffic`.
 
 ## Cache purgers — join "Clear site cache"
 

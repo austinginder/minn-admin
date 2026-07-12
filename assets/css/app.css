@@ -466,6 +466,27 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-chart-tip-stats span { font-size: 11.5px; color: var(--text3); }
 .minn-chart-tip-hint { padding: 0 13px 8px; font-size: 11px; color: var(--text3); text-align: center; }
 .minn-chart.clickable .minn-chart-col { cursor: pointer; }
+
+/* Traffic day drill-down (Overview chart bar click). */
+.minn-traf-day { padding: 4px 18px 16px; }
+.minn-traf-sec-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text3); margin: 14px 0 6px;
+}
+.minn-traf-sec-label:first-child { margin-top: 4px; }
+.minn-traf-row {
+  display: flex; align-items: center; gap: 14px; padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.minn-traf-row:last-of-type { border-bottom: none; }
+.minn-traf-row.linked { cursor: pointer; border-radius: 8px; margin: 0 -8px; padding: 9px 8px; border-bottom-color: transparent; }
+.minn-traf-row.linked:hover { background: var(--panel2); }
+.minn-traf-main { min-width: 0; flex: 1; }
+.minn-traf-title { font-size: 14px; font-weight: 550; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.minn-traf-path { font-size: 12px; color: var(--text3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, ui-monospace, monospace); }
+.minn-traf-nums { display: flex; gap: 12px; flex: none; font-size: 13px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.minn-traf-nums em { font-style: normal; font-weight: 500; font-size: 11px; color: var(--text3); margin-left: 2px; }
+.minn-traf-foot { padding: 12px 0 2px; }
 .minn-activity { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
 .minn-modal .minn-activity { margin: 0; padding: 8px 18px 14px; }
 .minn-activity-row { display: flex; gap: 11px; padding: 9px 0; align-items: flex-start; }

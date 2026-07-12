@@ -1299,7 +1299,7 @@
 						</div>
 					</div>
 				</div>
-				<div class="minn-chart${ isTraffic ? '' : ' clickable' }" id="minn-chart">
+				<div class="minn-chart clickable" id="minn-chart">
 					${ chartData.map( ( c, i ) => isTraffic ? `
 						<div class="minn-chart-col" data-ci="${ i }">
 							<div class="minn-chart-views" style="height:${ pct( c.views || 0 ) }%"></div>
@@ -1371,15 +1371,19 @@
 			renderOverview();
 		} );
 		bindChartTooltip( $( '#minn-chart', view ), chartData, isTraffic );
-		// Activity bars open the events behind them; traffic bars stay hover-only.
-		if ( ! isTraffic ) {
-			$$( '.minn-chart-col', view ).forEach( ( col ) =>
-				col.addEventListener( 'click', () => {
-					const c = chartData[ parseInt( col.dataset.ci, 10 ) ];
-					if ( c && c.from && c.value > 0 ) openChartActivity( c );
-				} )
-			);
-		}
+		// Activity bars open the events behind them; traffic bars open the
+		// day's top pages (and referrers when the provider has them).
+		$$( '.minn-chart-col', view ).forEach( ( col ) =>
+			col.addEventListener( 'click', () => {
+				const c = chartData[ parseInt( col.dataset.ci, 10 ) ];
+				if ( ! c || ! c.from ) return;
+				if ( isTraffic ) {
+					if ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) openChartTraffic( c );
+				} else if ( c.value > 0 ) {
+					openChartActivity( c );
+				}
+			} )
+		);
 	}
 
 	async function openChartActivity( bucket ) {
@@ -1389,6 +1393,21 @@
 			const r = await api( `minn-admin/v1/overview/activity?from=${ encodeURIComponent( bucket.from ) }&to=${ encodeURIComponent( bucket.to ) }` );
 			if ( state.modal && state.modal.type === 'chart-activity' && state.modal.bucket === bucket ) {
 				state.modal.items = r.items || [];
+				renderOverlays();
+			}
+		} catch ( e ) {
+			toast( e.message, true );
+			closeModal();
+		}
+	}
+
+	async function openChartTraffic( bucket ) {
+		state.modal = { type: 'chart-traffic', bucket, data: null };
+		renderOverlays();
+		try {
+			const r = await api( `minn-admin/v1/overview/traffic-day?from=${ encodeURIComponent( bucket.from ) }&to=${ encodeURIComponent( bucket.to ) }` );
+			if ( state.modal && state.modal.type === 'chart-traffic' && state.modal.bucket === bucket ) {
+				state.modal.data = r;
 				renderOverlays();
 			}
 		} catch ( e ) {
@@ -1436,7 +1455,8 @@
 						<div><b>${ Number( c.views || 0 ).toLocaleString() }</b><span>Pageviews</span></div>` : `
 						<div><b>${ Number( c.value ).toLocaleString() }</b><span>Event${ c.value === 1 ? '' : 's' }</span></div>` }
 					</div>
-					${ ! isTraffic && c.value > 0 ? '<div class="minn-chart-tip-hint">Click for details</div>' : '' }`;
+					${ ( isTraffic ? ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) : c.value > 0 )
+						? '<div class="minn-chart-tip-hint">Click for details</div>' : '' }`;
 				$$( '.minn-chart-col.hover', chart ).forEach( ( el ) => el.classList.remove( 'hover' ) );
 				col.classList.add( 'hover' );
 				tip.hidden = false;
@@ -16014,6 +16034,61 @@
 			</div>`;
 		}
 
+		if ( m.type === 'chart-traffic' ) {
+			const d = m.data;
+			const visitors = Number( m.bucket.value ) || 0;
+			const views = Number( m.bucket.views ) || 0;
+			const countLabel = visitors
+				? `${ visitors.toLocaleString() } visitor${ visitors === 1 ? '' : 's' } · ${ views.toLocaleString() } views`
+				: `${ views.toLocaleString() } pageview${ views === 1 ? '' : 's' }`;
+			const pages = d && d.pages ? d.pages : null;
+			const refs = d && d.referrers ? d.referrers : [];
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ esc( m.bucket.label ) }${ d && d.source ? ` <span class="minn-panel-sub">${ esc( d.source ) }</span>` : '' }</div>
+						<span class="minn-modal-count">${ esc( countLabel ) }</span>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ d == null ? '<div class="minn-loading">Loading top pages…</div>'
+					: ! pages.length && ! refs.length ? `
+					<div class="minn-empty">No page breakdown for this period.${ d.adminUrl ? ` <a class="minn-link-btn" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a>` : '' }</div>` : `
+					<div class="minn-modal-scroll minn-traf-day">
+						${ pages.length ? `
+						<div class="minn-traf-sec-label">Top pages</div>
+						${ pages.map( ( p, i ) => {
+							const linked = !! ( p.postId || p.url );
+							return `
+							<div class="minn-traf-row${ linked ? ' linked' : '' }"${ linked ? ` data-tp="${ i }"` : '' }>
+								<div class="minn-traf-main">
+									<div class="minn-traf-title">${ esc( p.title || p.path || '—' ) }</div>
+									${ p.path && p.path !== p.title ? `<div class="minn-traf-path">${ esc( p.path ) }</div>` : '' }
+								</div>
+								<div class="minn-traf-nums">
+									<span title="Visitors">${ Number( p.visitors ).toLocaleString() } <em>vis</em></span>
+									<span title="Pageviews">${ Number( p.pageviews ).toLocaleString() } <em>views</em></span>
+								</div>
+							</div>`;
+						} ).join( '' ) }` : '' }
+						${ refs.length ? `
+						<div class="minn-traf-sec-label">Top referrers</div>
+						${ refs.map( ( r ) => `
+							<div class="minn-traf-row">
+								<div class="minn-traf-main">
+									<div class="minn-traf-title">${ esc( r.label ) }</div>
+								</div>
+								<div class="minn-traf-nums">
+									<span title="Visitors">${ Number( r.visitors ).toLocaleString() } <em>vis</em></span>
+									<span title="Pageviews">${ Number( r.pageviews ).toLocaleString() } <em>views</em></span>
+								</div>
+							</div>` ).join( '' ) }` : '' }
+						${ d.adminUrl ? `<div class="minn-traf-foot"><a class="minn-link-btn" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a></div>` : '' }
+					</div>` }
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'widget' ) {
 			const w = m.widget;
 			const ws = widgetsState();
@@ -16854,6 +16929,18 @@
 					closeModal();
 					if ( it.kind === 'post' ) go( `editor/${ it.type }/${ it.id }` );
 					else go( 'comments' );
+				} )
+			);
+		}
+
+		if ( m.type === 'chart-traffic' ) {
+			// Analytics drill-down: open the front-end URL (the page that
+			// got the traffic). Editor deep-links would need a type resolve
+			// and aren't the job of a traffic modal.
+			$$( '[data-tp]' ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const it = ( m.data && m.data.pages || [] )[ parseInt( row.dataset.tp, 10 ) ];
+					if ( it && it.url ) window.open( it.url, '_blank' );
 				} )
 			);
 		}
