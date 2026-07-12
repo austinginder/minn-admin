@@ -11,6 +11,8 @@
 
 * **Forminator support:** its entries join the Forms surface as contact cards: answers summarized in form order, per-form tabs, search across every answer, and a detail card with labeled answers read from Forminator's own form models at runtime (so editing a form updates old entries' cards too). Delete routes through Forminator's own cleanup and is named honestly: Forminator has no entry trash, so the confirm says permanent. A Forms view lists each form with a live entry count and a one-click jump into Forminator's builder, and the whole surface honors Forminator's own permissions model, so a site that grants submissions to editors grants Minn's view the same way.
 
+* **Formidable support:** its entries join the Forms surface the same way: answer summaries in form order, per-form tabs, search across every answer, labeled detail cards read from Formidable's own field models at runtime, and permanent delete through Formidable's own destroy flow (its hooks fire; it has no entry trash and the confirm says so). Its permission model is honored: the granular entry capabilities its role settings can grant, with the administrator fallback its own screens use.
+
 ### Fixed
 * **Detail-modal link actions now fill every `{field}` placeholder:** an adapter action's `href` documented `{field}` substitution from the item, but the modal renderer only filled `{id}`, so multi-key deep links (a form id plus a notification id) rendered with literal braces. Both now use the same substitution.
 
