@@ -95,6 +95,9 @@ a { color: var(--accent2); text-decoration: none; }
   width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent2));
   display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 16px; letter-spacing: -0.5px; flex: none;
 }
+/* Site Icon variant: the site's own favicon fills the tile (Settings → Site
+   icon); falls back to the gradient "m" when no icon is set. */
+.minn-logo-mark-icon { background: var(--panel2); background-size: cover; background-position: center; border: 1px solid var(--border); }
 /* The wordmark is the SITE NAME now (falls back to "minn") — truncate so a
    long site title can't push the version pill off or wrap the logo row. */
 .minn-logo-name { font-weight: 700; font-size: 17px; letter-spacing: -0.3px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -956,6 +956,47 @@
 		} );
 	}
 
+	// Update the sidebar brand in place from B.site (name + Site Icon). The
+	// logo is part of the app shell rendered once at boot, so a Settings save
+	// that changes the site title or icon must patch it here rather than wait
+	// for a reload.
+	function updateLogo() {
+		const mark = $( '.minn-logo-mark' );
+		const name = $( '.minn-logo-name' );
+		if ( name ) name.textContent = ( B.site.name || '' ).trim() || 'minn';
+		if ( ! mark ) return;
+		if ( B.site.icon ) {
+			mark.classList.add( 'minn-logo-mark-icon' );
+			mark.textContent = '';
+			mark.style.backgroundImage = `url('${ B.site.icon }')`;
+		} else {
+			mark.classList.remove( 'minn-logo-mark-icon' );
+			mark.style.backgroundImage = '';
+			mark.textContent = 'm';
+		}
+	}
+
+	// After a Settings save, sync B.site + the logo from the fresh values.
+	// `cache.siteIcon.url` is the URL the icon picker already resolved; only
+	// fall back to a media fetch when the icon changed some other way.
+	async function refreshBrand( payload, values, cache ) {
+		if ( 'title' in payload ) B.site.name = values.title || '';
+		if ( 'site_icon' in payload ) {
+			const id = values.site_icon;
+			if ( ! id ) {
+				B.site.icon = '';
+			} else if ( cache && cache.siteIcon && cache.siteIcon.url ) {
+				B.site.icon = cache.siteIcon.url;
+			} else {
+				try {
+					const m = await api( `wp/v2/media/${ id }?_fields=source_url` );
+					B.site.icon = m.source_url || '';
+				} catch ( e ) { /* keep the old icon on a fetch miss */ }
+			}
+		}
+		updateLogo();
+	}
+
 	// Rebuild all nav groups from the current B.surfaces without wiping
 	// #minn-view — used after plugin activate/deactivate. Empty groups keep
 	// their (hidden) wrapper so a later toggle has somewhere to land.
@@ -1010,7 +1051,9 @@
 			<aside class="minn-sidebar">
 				<div class="minn-logo">
 					<button class="minn-logo-home" id="minn-logo-home" title="Overview">
-						<span class="minn-logo-mark">m</span>
+						${ B.site.icon
+							? `<span class="minn-logo-mark minn-logo-mark-icon" style="background-image:url('${ esc( B.site.icon ) }')"></span>`
+							: '<span class="minn-logo-mark">m</span>' }
 						<span class="minn-logo-name">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</span>
 					</button>
 					<button class="minn-logo-ver" id="minn-ver-btn" title="What's new — full changelog">v${ esc( B.version ) }</button>
@@ -7930,6 +7973,9 @@
 						// Maintenance mode / search-engine visibility live here —
 						// refresh the banner + chip without a reload.
 						if ( 'minn_admin_maintenance' in payload || 'blog_public' in payload ) refreshVisibility();
+						// Site title / Site icon feed the sidebar brand — patch
+						// it in place so it doesn't wait for a reload.
+						if ( 'title' in payload || 'site_icon' in payload ) await refreshBrand( payload, cache.values, cache );
 					} catch ( err ) { toast( err.message, true ); okAll = false; }
 				}
 

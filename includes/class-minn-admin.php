@@ -299,6 +299,10 @@ class Minn_Admin {
 			),
 			'site'     => array(
 				'name'       => get_bloginfo( 'name' ),
+				// The WordPress Site Icon (Settings → Site icon), used as the
+				// sidebar mark when set; the client falls back to the Minn
+				// "m" tile. '' when no icon is configured.
+				'icon'       => get_site_icon_url( 64 ),
 				'url'        => home_url( '/' ),
 				'adminUrl'   => admin_url(),
 				'logout'     => str_replace( '&amp;', '&', wp_logout_url( home_url( '/' ) ) ),
