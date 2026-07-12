@@ -18,6 +18,7 @@ Minn's whole extension surface is a small set of public hooks. The main ones:
 | `minn_admin_insert_blocks` | filter | Prune or extend the auto-insert slash list |
 | `minn_admin_page_builders` | filter | Register a full-canvas page builder |
 | `minn_admin_design_sources` | filter | Register a design/template library for the slash menu + block picker |
+| `minn_admin_editor_commands` | filter | Register free-form slash-menu / block-picker commands (boilerplate HTML, island templates, async routes) |
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
@@ -540,6 +541,7 @@ What Minn already does for free (no adapter):
 | Site + block library CSS | `editor-styles` + client scoper on `.minn-island-preview` |
 | Text / image edit in islands | Generic text runs + image URL swap |
 | Design libraries / patterns | Registered block patterns are automatic; libraries via `minn_admin_design_sources` (below) |
+| Writing shortcuts / boilerplate | Free-form slash commands via `minn_admin_editor_commands` (below) |
 
 ### When the free path fails: diagnosis → drop-in adapter
 
@@ -667,6 +669,75 @@ Guard the call with `function_exists` since your route is registered even when M
 isn't. Give the routes a `permission_callback` (`edit_posts` matches the editor). The
 bundled Stackable, Kadence and GenerateBlocks adapters register through this same
 filter and are the references.
+
+## Editor slash commands — `minn_admin_editor_commands`
+
+When your plugin wants a **writing action** rather than a block (boilerplate paragraphs,
+a pre-built island template, or markup fetched from your REST API), register a
+slash-menu command. Commands appear in the editor's `/` menu and the block picker (⌘/),
+with no third-party JavaScript in the Minn document:
+
+```php
+add_filter( 'minn_admin_editor_commands', function ( $commands ) {
+    // 1. Synchronous prose HTML (paragraphs, simple markup the serializers keep).
+    $commands[] = array(
+        'id'         => 'my-plugin/cta',
+        'label'      => 'CTA boilerplate',
+        'icon'       => 'send',              // lucide key or a short glyph
+        'ns'         => 'my-plugin',         // badge in the slash menu; picker group
+        'keywords'   => array( 'cta', 'convert' ),
+        'searchOnly' => true,               // hide until the writer types a match
+        'html'       => '<p><strong>Ready?</strong> Book a call this week.</p>',
+    );
+
+    // 2. Synchronous island template (serialized block markup).
+    $commands[] = array(
+        'id'       => 'my-plugin/callout',
+        'label'    => 'Callout',
+        'icon'     => 'block',
+        'ns'       => 'my-plugin',
+        'block'    => 'my-plugin/callout',  // island chip name; defaults to core/group
+        'template' => '<!-- wp:my-plugin/callout -->…<!-- /wp:my-plugin/callout -->',
+    );
+
+    // 3. Async route: Minn POSTs/GETs and inserts the response.
+    $commands[] = array(
+        'id'     => 'my-plugin/latest',
+        'label'  => 'Latest announcement',
+        'icon'   => 'file',
+        'ns'     => 'my-plugin',
+        'route'  => 'my-plugin/v1/minn-command/latest',
+        'method' => 'POST',                 // GET or POST; default POST
+        'body'   => array( 'tone' => 'short' ), // optional JSON body (scalars only)
+    );
+    return $commands;
+} );
+```
+
+**Exactly one** of `html`, `template`, or `route` is required. Descriptors with none or
+more than one are dropped. Keys:
+
+| Key | Required | Notes |
+|---|---|---|
+| `id` | yes | Stable slug (`a-z0-9_-/`) |
+| `label` | yes | Slash-menu / picker title |
+| `html` *or* `template` *or* `route` | one | Insert shape |
+| `block` | with `template` | Island block name (default `core/group`) |
+| `method` | with `route` | `GET` or `POST` (default `POST`) |
+| `body` | with `route` | Shallow map of scalar values for POST |
+| `icon` | no | Lucide key Minn already ships, or a short glyph |
+| `ns` | no | Namespace badge + picker group (`{Ns} · commands`) |
+| `keywords` | no | Extra search terms (slash menu and picker) |
+| `searchOnly` | no | When true, hide until the query matches (keeps `/` curated) |
+
+Route responses must be one of:
+
+- `{ "html": "<p>…</p>" }` — inserted as prose (same path as a static `html` command)
+- `{ "template": "<!-- wp:… -->…", "block": "my-plugin/x" }` — inserted as an island
+
+Give the route a `permission_callback` (`edit_posts` matches the editor). The command
+list rides the boot payload and the mid-session `editor-blocks` re-poll (plugin toggles
+refresh it without a hard reload).
 
 ## Editor panels — per-post fields in the editor sidebar
 

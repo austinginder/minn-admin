@@ -582,6 +582,7 @@
 			B.insertBlocks = Array.isArray( r.insertBlocks ) ? r.insertBlocks : [];
 			B.blockForms = r.blockForms && typeof r.blockForms === 'object' ? r.blockForms : {};
 			B.designs = Array.isArray( r.designs ) ? r.designs : [];
+			B.editorCommands = Array.isArray( r.editorCommands ) ? r.editorCommands : [];
 			// Disable Comments (and friends) strip post-type support mid-session.
 			if ( typeof r.comments === 'boolean' ) B.comments = r.comments;
 		} catch ( e ) { /* leave the snapshot as-is */ }
@@ -15191,6 +15192,41 @@
 		];
 	}
 
+	// Plugin slash commands from minn_admin_editor_commands (boot + re-poll).
+	// Tuple shape matches bindSlashMenu items: [iconHtml, label, action,
+	// searchOnly?, ns?, keywords[]].
+	function editorCommandSlashItems() {
+		return ( Array.isArray( B.editorCommands ) ? B.editorCommands : [] ).map( ( c ) => {
+			if ( ! c || ! c.id || ! c.label ) return null;
+			let action = null;
+			if ( c.route ) {
+				action = {
+					command: c.id,
+					route: c.route,
+					method: c.method || 'POST',
+					body: c.body && typeof c.body === 'object' ? c.body : {},
+				};
+			} else if ( c.template ) {
+				action = { block: c.block || 'core/group', template: String( c.template ) };
+			} else if ( c.html ) {
+				action = { html: String( c.html ) };
+			}
+			if ( ! action ) return null;
+			// Lucide keys → icon(); free glyphs/emoji pass through raw.
+			const glyph = ( c.icon && /^[a-z][a-z0-9-]*$/i.test( c.icon ) )
+				? icon( c.icon )
+				: ( c.icon || icon( 'file' ) );
+			return [
+				glyph,
+				c.label,
+				action,
+				!! c.searchOnly,
+				c.ns || '',
+				Array.isArray( c.keywords ) ? c.keywords : [],
+			];
+		} ).filter( Boolean );
+	}
+
 	function detailsTemplate( summary, body ) {
 		const s = summary != null ? String( summary ) : 'Details';
 		const b = body != null ? String( body ) : '';
@@ -15286,6 +15322,13 @@
 			if ( ! byKey[ key ] ) { byKey[ key ] = { title, items: [] }; groups.push( byKey[ key ] ); }
 			return byKey[ key ];
 		};
+		// Plugin commands (minn_admin_editor_commands) — group by ns badge.
+		editorCommandSlashItems().forEach( ( [ ic, label, action, _so, ns, keywords ] ) => {
+			const title = ns ? prettyNs( ns ) + ' · commands' : 'Commands';
+			groupFor( 'c:' + ( ns || '_' ), title ).items.push( {
+				ic, label, meta: '', action, keywords: keywords || [],
+			} );
+		} );
 		if ( blocksMode ) {
 			Object.keys( B.blockForms || {} ).forEach( ( name ) => {
 				const ins = ( B.blockForms[ name ] || {} ).insert;
@@ -15331,9 +15374,14 @@
 			bpBody.innerHTML = groups.map( ( g, gi ) => {
 				const vis = g.items
 					.map( ( it, j ) => ( { it, j } ) )
-					.filter( ( { it } ) => ! q || it.label.toLowerCase().includes( q )
-						|| ( it.meta || '' ).toLowerCase().includes( q )
-						|| g.title.toLowerCase().includes( q ) );
+					.filter( ( { it } ) => {
+						if ( ! q ) return true;
+						if ( it.label.toLowerCase().includes( q )
+							|| ( it.meta || '' ).toLowerCase().includes( q )
+							|| g.title.toLowerCase().includes( q ) ) return true;
+						const kws = it.keywords;
+						return Array.isArray( kws ) && kws.some( ( k ) => String( k ).toLowerCase().includes( q ) );
+					} );
 				if ( ! vis.length ) return '';
 				return `<section class="minn-bp-group"><h3>${ esc( g.title ) } <span>${ vis.length }</span></h3>
 					<div class="minn-bp-grid">${ vis.map( ( { it, j } ) => `
@@ -15383,6 +15431,43 @@
 	// full block picker. `target` is the block to insert before/replace
 	// (the emptied "/" block, or a fresh paragraph the picker created).
 	function runSlashAction( action, target, body, insertImage ) {
+		// Plugin command with a REST route: async insert (html or template).
+		// Same placeholder dance as design/pattern inserts so the "/" block
+		// is never left half-typed while the network is in flight.
+		if ( action && action.command && action.route ) {
+			const p = document.createElement( 'p' );
+			p.appendChild( document.createElement( 'br' ) );
+			target.replaceWith( p );
+			const range = document.createRange();
+			range.selectNodeContents( p );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			toast( 'Inserting…' );
+			const opts = { method: action.method || 'POST' };
+			if ( opts.method !== 'GET' && action.body && typeof action.body === 'object' ) {
+				opts.body = JSON.stringify( action.body );
+			}
+			api( action.route, opts )
+				.then( ( r ) => {
+					if ( ! p.isConnected || ! state.editor ) return;
+					if ( r && r.template ) {
+						if ( ! ensureBlocksMode() ) return;
+						const islandEl = insertIsland( p, r.block || 'core/group', r.template );
+						if ( islandEl ) openInspector( islandEl );
+					} else if ( r && r.html ) {
+						if ( /wp-block-(pullquote|table)/.test( r.html ) ) ensureBlocksMode();
+						p.insertAdjacentHTML( 'beforebegin', r.html );
+						// Leave the empty p as the caret landing (already focused).
+						scheduleAutosave();
+					} else {
+						throw new Error( 'Command returned no content' );
+					}
+				} )
+				.catch( ( e ) => toast( 'Insert failed: ' + e.message, true ) );
+			return;
+		}
 		if ( action && action.design ) {
 			// Stackable design: the template arrives async (the server may
 			// be sideloading its CDN images), so swap the "/" block for a
@@ -15551,6 +15636,10 @@
 		let filtered = [];
 		let query = '';
 		const items = basicSlashItems( state.editor && state.editor.mode === 'blocks' );
+		// Plugin-declared slash commands (html / template / route). Available
+		// in classic and blocks — template/route-island inserts promote via
+		// ensureBlocksMode inside runSlashAction.
+		editorCommandSlashItems().forEach( ( it ) => items.push( it ) );
 		// Custom blocks that declared an `insert` template via
 		// minn_admin_block_forms land as configurable islands — blocks mode
 		// only (classic serialization would flatten them to plain HTML).
@@ -15637,7 +15726,7 @@
 		// Keep typing after the "/" to narrow the list — "/co" finds Code.
 		// No matches left closes the menu (the "/" was probably literal text).
 		// Search-only entries (auto-registered dynamic blocks, item[3]) need a
-		// query; they match on title or namespace (item[4]).
+		// query; they match on title, namespace (item[4]), or keywords (item[5]).
 		const applyQuery = ( q ) => {
 			q = q.toLowerCase();
 			query = q;
@@ -15646,7 +15735,9 @@
 				.filter( ( i ) => {
 					const it = items[ i ];
 					if ( it[ 3 ] && ! q ) return false;
-					return it[ 1 ].toLowerCase().includes( q ) || ( it[ 4 ] && it[ 4 ].toLowerCase().includes( q ) );
+					if ( it[ 1 ].toLowerCase().includes( q ) || ( it[ 4 ] && it[ 4 ].toLowerCase().includes( q ) ) ) return true;
+					const kws = it[ 5 ];
+					return Array.isArray( kws ) && kws.some( ( k ) => String( k ).toLowerCase().includes( q ) );
 				} );
 			filtered.sort( ( a, b ) =>
 				Number( items[ b ][ 1 ].toLowerCase().startsWith( q ) ) - Number( items[ a ][ 1 ].toLowerCase().startsWith( q ) ) );
