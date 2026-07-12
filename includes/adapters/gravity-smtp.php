@@ -135,6 +135,36 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		),
+		// Extra list views beyond collection/manage. The debug log lived as a
+		// wp-admin link-out on the status card until surfaces grew this slot.
+		'views'      => array(
+			array(
+				'viewLabel' => 'Debug log',
+				'cap'       => minn_admin_gsmtp_cap( 'VIEW_DEBUG_LOG' ),
+				'route'     => 'minn-admin/v1/gravity-smtp/debug',
+				'pageQuery' => 'per_page=25&page={page}',
+				'itemsKey'  => 'items',
+				'totalKey'  => 'total',
+				'search'    => 'search={q}',
+				'tabs'      => array(
+					'param'    => 'priority',
+					'static'   => array(
+						array( 'error', 'Errors' ),
+						array( 'warning', 'Warnings' ),
+						array( 'info', 'Info' ),
+						array( 'debug', 'Debug' ),
+					),
+					'allLabel' => 'All',
+				),
+				'columns'   => array(
+					array( 'key' => 'line', 'label' => 'Message', 'format' => 'title' ),
+					array( 'key' => 'priority', 'label' => 'Priority', 'format' => 'pill' ),
+					// Their Debug_Log_Model stamps current_time( 'mysql', true ) — UTC.
+					array( 'key' => 'date_created', 'label' => 'Date', 'format' => 'ago', 'utc' => true ),
+				),
+				'detail'    => array(),
+			),
+		),
 		'settings'   => array(
 			'cap'   => minn_admin_gsmtp_cap( 'VIEW_GENERAL_SETTINGS' ),
 			'tabs'  => array(
@@ -363,6 +393,53 @@ add_action( 'rest_api_init', function () {
 		'callback'            => 'minn_admin_gravity_smtp_resend',
 	) );
 
+	// Debug log — the "Debug log" list view. Read-only, prefix-scoped (the
+	// shim convention); their Debug_Log_Model has no keyed search, so the
+	// LIKE filter lives here. Rows only exist while the General settings'
+	// debug_log_enabled toggle is on.
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/debug', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can( 'VIEW_DEBUG_LOG' ),
+		'callback'            => function ( WP_REST_Request $request ) {
+			global $wpdb;
+			$table    = $wpdb->prefix . 'gravitysmtp_debug_log';
+			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
+			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
+			$priority = sanitize_key( (string) $request->get_param( 'priority' ) );
+			$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
+
+			$where = array();
+			$args  = array();
+			if ( $priority ) {
+				$where[] = 'priority = %s';
+				$args[]  = $priority;
+			}
+			if ( '' !== $search ) {
+				$where[] = 'line LIKE %s';
+				$args[]  = '%' . $wpdb->esc_like( $search ) . '%';
+			}
+			$where_sql = $where ? 'WHERE ' . implode( ' AND ', $where ) : '';
+			$total     = (int) $wpdb->get_var( $args
+				? $wpdb->prepare( "SELECT COUNT(*) FROM {$table} {$where_sql}", ...$args ) // phpcs:ignore
+				: "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore
+			$rows      = $wpdb->get_results( $wpdb->prepare(
+				"SELECT id, priority, line, date_created FROM {$table} {$where_sql} ORDER BY id DESC LIMIT %d OFFSET %d", // phpcs:ignore
+				...array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
+			), ARRAY_A );
+
+			$items = array_map( function ( $row ) {
+				return array(
+					'id'           => (int) $row['id'],
+					'line'         => (string) $row['line'],
+					'priority'     => (string) $row['priority'],
+					'date_created' => (string) $row['date_created'],
+				);
+			}, is_array( $rows ) ? $rows : array() );
+
+			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/suppressed', array(
 		array(
 			'methods'             => 'GET',
@@ -484,14 +561,6 @@ add_action( 'rest_api_init', function () {
 					'fields' => array(
 						array( 'key' => 'email', 'label' => 'Send to', 'type' => 'email', 'placeholder' => 'you@example.com' ),
 					),
-				);
-			}
-			if ( current_user_can( minn_admin_gsmtp_cap( 'VIEW_DEBUG_LOG' ) ) ) {
-				// The debug log stays a link-out until surfaces grow a third
-				// list view; Suppressions holds the manage slot.
-				$out['actions'][] = array(
-					'label' => 'Debug log ↗',
-					'href'  => admin_url( 'admin.php?page=gravitysmtp-tools' ),
 				);
 			}
 			if ( ! $out['actions'] ) {
