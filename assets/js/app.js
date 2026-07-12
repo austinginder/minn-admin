@@ -14462,11 +14462,14 @@
 		if ( ! body.contains( range.commonAncestorContainer ) ) return;
 		const existing = closestInlineCode( range.commonAncestorContainer );
 		if ( existing ) {
-			// Toggle off — the whole <code> becomes plain text again.
-			const parent = existing.parentNode;
-			while ( existing.firstChild ) parent.insertBefore( existing.firstChild, existing );
-			parent.removeChild( existing );
-			parent.normalize();
+			// Toggle off via insertHTML so ⌘Z re-wraps (direct unwrap is not
+			// on the undo stack — same class as the markdown-code bug).
+			const r = document.createRange();
+			r.selectNode( existing );
+			sel.removeAllRanges();
+			sel.addRange( r );
+			// Escape text; nested markup inside code is rare and becomes text.
+			document.execCommand( 'insertHTML', false, esc( existing.textContent ) );
 			return;
 		}
 		if ( range.collapsed ) return;
@@ -14476,15 +14479,31 @@
 			return n;
 		};
 		if ( blockOf( range.startContainer ) !== blockOf( range.endContainer ) ) return;
-		const code = document.createElement( 'code' );
-		code.appendChild( range.extractContents() );
-		// Any <code> swallowed by the selection collapses into the new one.
-		$$( 'code', code ).forEach( ( c ) => {
+		// Clone selection HTML (may include bold/etc.), wrap as code. Trailing
+		// ZWSP keeps Blink from rewriting CODE → styled SPAN at block end.
+		const holder = document.createElement( 'div' );
+		holder.appendChild( range.cloneContents() );
+		$$( 'code', holder ).forEach( ( c ) => {
 			while ( c.firstChild ) c.parentNode.insertBefore( c.firstChild, c );
 			c.remove();
 		} );
-		range.insertNode( code );
-		setCaretAfterInline( code );
+		document.execCommand( 'insertHTML', false, `<code>${ holder.innerHTML }</code>\u200B` );
+		// Heal + drop ZWSP (see wrapInline code path).
+		const anchor = sel.anchorNode;
+		let code = closestInlineCode( anchor );
+		if ( ! code && anchor && anchor.parentNode ) {
+			const prev = anchor.nodeType === Node.TEXT_NODE ? anchor.previousSibling : null;
+			if ( prev && prev.tagName === 'CODE' ) code = prev;
+			else if ( anchor.previousSibling && anchor.previousSibling.tagName === 'CODE' ) code = anchor.previousSibling;
+		}
+		if ( code ) {
+			const zw = code.nextSibling;
+			if ( zw && zw.nodeType === Node.TEXT_NODE && zw.textContent.charAt( 0 ) === '\u200B' ) {
+				if ( zw.textContent.length === 1 ) zw.remove();
+				else zw.textContent = zw.textContent.slice( 1 );
+			}
+			setCaretAfterInline( code );
+		}
 	}
 
 	// Markdown typing rules + the inline-boundary escape, bound on the editor
@@ -14609,23 +14628,54 @@
 				const r = document.createRange();
 				r.setStart( node, startIdx );
 				r.setEnd( node, sel.anchorOffset );
-				if ( tag === 'code' ) {
-					// Blink's insertHTML keeps strong/em/s/a but rewrites <code>
-					// into a styled <span> — build it manually (this one wrap
-					// sits outside the undo stack, the others don't).
-					r.deleteContents();
-					const codeEl = document.createElement( 'code' );
-					codeEl.textContent = inner;
-					r.insertNode( codeEl );
-					setCaretAfterInline( codeEl );
-					scheduleAutosave();
-					return;
-				}
 				sel.removeAllRanges();
 				sel.addRange( r );
-				document.execCommand( 'insertHTML', false, `<${ tag }${ attrs }>${ esc( inner ) }</${ tag }>` );
-				const el = justInserted( tag.toUpperCase() );
+				// Code: Blink's insertHTML rewrites a bare <code> into a styled
+				// <span> (our mono CSS inlined) when the insert sits at the end
+				// of a paragraph — which is every markdown close. A trailing
+				// ZWSP after </code> keeps a real CODE element and still rides
+				// the undo stack; we strip the ZWSP right after (DOM-only —
+				// ⌘Z still restores the pre-wrap text). Manual createElement
+				// sat outside undo (Austin's report).
+				const html = tag === 'code'
+					? `<code${ attrs }>${ esc( inner ) }</code>\u200B`
+					: `<${ tag }${ attrs }>${ esc( inner ) }</${ tag }>`;
+				document.execCommand( 'insertHTML', false, html );
+				let el = justInserted( tag.toUpperCase() );
+				// After code+ZWSP the caret often sits *in* the ZWSP text node
+				// (offset 1), so justInserted misses the CODE (it only checks
+				// offset 0 / element-child). Walk back from the caret.
+				if ( tag === 'code' && ! el ) {
+					const n = sel.anchorNode;
+					if ( n && n.nodeType === Node.TEXT_NODE && n.previousSibling
+						&& n.previousSibling.nodeType === Node.ELEMENT_NODE
+						&& n.previousSibling.tagName === 'CODE' ) {
+						el = n.previousSibling;
+					} else if ( n && n.nodeType === Node.ELEMENT_NODE && sel.anchorOffset > 0 ) {
+						for ( let i = sel.anchorOffset - 1; i >= 0; i-- ) {
+							const c = n.childNodes[ i ];
+							if ( c && c.nodeType === Node.ELEMENT_NODE && c.tagName === 'CODE' ) {
+								el = c;
+								break;
+							}
+							if ( c && c.nodeType === Node.ELEMENT_NODE && c.tagName === 'SPAN'
+								&& /monospace|JetBrains/i.test( c.getAttribute( 'style' ) || '' ) ) {
+								const codeEl = document.createElement( 'code' );
+								codeEl.textContent = c.textContent;
+								c.replaceWith( codeEl );
+								el = codeEl;
+								break;
+							}
+						}
+					}
+				}
 				if ( el ) {
+					// Drop the anti-rewrite ZWSP sibling (not part of the prose).
+					const zw = el.nextSibling;
+					if ( zw && zw.nodeType === Node.TEXT_NODE && zw.textContent.charAt( 0 ) === '\u200B' ) {
+						if ( zw.textContent.length === 1 ) zw.remove();
+						else zw.textContent = zw.textContent.slice( 1 );
+					}
 					// insertHTML rebalances a preceding mid-sentence space into
 					// nbsp — put the plain space back.
 					const prev = el.previousSibling;
@@ -14633,6 +14683,9 @@
 						prev.textContent = prev.textContent.slice( 0, -1 ) + ' ';
 					}
 					mdEscape = el;
+					// Code: land outside so the next keystroke doesn't extend
+					// the chip (same as strong/em via setCaretAfterInline path).
+					if ( tag === 'code' ) setCaretAfterInline( el );
 				}
 				scheduleAutosave();
 			};
