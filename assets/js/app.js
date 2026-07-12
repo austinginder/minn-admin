@@ -1033,7 +1033,10 @@
 						<div class="minn-user-name">${ esc( B.user.name ) }</div>
 						<div class="minn-user-role">${ esc( B.user.role ) }</div>
 					</div>
-					<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="Log out">${ icon( 'logout' ) }</a>
+					<div class="minn-user-acts">
+						<a class="minn-user-logout" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="WordPress admin (opens in a new tab)">${ icon( 'wp' ) }</a>
+						<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="Log out">${ icon( 'logout' ) }</a>
+					</div>
 				</div>
 			</aside>
 			<main class="minn-main">
