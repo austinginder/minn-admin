@@ -32,6 +32,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
+			// Connector is Stream's first-class source dimension (posts/users/…).
+			'tabs'      => array(
+				'route'    => 'minn-admin/v1/stream/connectors',
+				'valueKey' => 'id',
+				'labelKey' => 'title',
+				'param'    => 'connector',
+				'allLabel' => 'All sources',
+			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => 'Event', 'format' => 'title' ),
 				array( 'key' => 'who', 'label' => 'Who' ),
@@ -51,6 +59,30 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
+	register_rest_route( 'minn-admin/v1', '/stream/connectors', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () {
+			return current_user_can( 'view_stream' ) || current_user_can( 'manage_options' );
+		},
+		'callback'            => function () {
+			global $wpdb;
+			$table = $wpdb->prefix . 'stream';
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$cols = $wpdb->get_col( $wpdb->prepare(
+				"SELECT DISTINCT connector FROM {$table} WHERE blog_id = %d AND connector != '' ORDER BY connector ASC",
+				get_current_blog_id()
+			) );
+			$out = array();
+			foreach ( (array) $cols as $c ) {
+				$out[] = array(
+					'id'    => (string) $c,
+					'title' => ucwords( str_replace( array( '-', '_' ), ' ', (string) $c ) ),
+				);
+			}
+			return rest_ensure_response( $out );
+		},
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/stream/records', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
@@ -64,6 +96,10 @@ add_action( 'rest_api_init', function () {
 			$where    = array( 'blog_id = %d' );
 			$args     = array( get_current_blog_id() );
 
+			if ( $request['connector'] ) {
+				$where[] = 'connector = %s';
+				$args[]  = sanitize_key( (string) $request['connector'] );
+			}
 			if ( $request['search'] ) {
 				$like    = '%' . $wpdb->esc_like( $request['search'] ) . '%';
 				$where[] = '(summary LIKE %s OR connector LIKE %s OR context LIKE %s)';

@@ -53,6 +53,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'critical', 'Critical' ),
 					array( 'high', 'High' ),
 					array( 'medium', 'Medium' ),
+					array( 'low', 'Low' ),
+					array( 'info', 'Info' ),
 				),
 				'allLabel' => 'All',
 			),

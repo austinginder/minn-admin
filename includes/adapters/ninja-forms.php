@@ -8,8 +8,9 @@
  * is WP_Query + postmeta reads: no custom-table SQL and nothing serialized.
  * Field labels come from Ninja Forms' own field models at runtime, so a
  * form edit updates the entry cards with no adapter change. Trash routes
- * through their own Submission model (their screen's semantics); restoring
- * stays on their screen and the confirm says so honestly.
+ * through their own Submission model; restore uses wp_untrash_post (Ninja
+ * has no restore helper of its own). Received / Trash status filter keeps
+ * trashed rows visible and restorable inside Minn.
  *
  * Caps mirror the plugin: everything gates through its own
  * `ninja_forms_admin_submissions_capabilities` filter (default
@@ -151,9 +152,18 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'param'    => 'form_id',
 				'allLabel' => 'All entries',
 			),
+			'filter'    => array(
+				'label'   => 'Status',
+				'options' => array(
+					array( 'publish', 'Received' ),
+					array( 'trash', 'Trash' ),
+				),
+				'query'   => 'status={v}',
+			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'form_title', 'label' => 'Form' ),
+				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '96px' ),
 				array( 'key' => 'seq', 'label' => '#', 'format' => 'num' ),
 				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
 			),
@@ -165,8 +175,47 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Trash entry',
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}/trash',
-					'confirm' => 'Trash this entry? Restoring happens on Ninja Forms\' own screen.',
+					'confirm' => 'Move this entry to trash?',
 					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
+				),
+				array(
+					'label'  => 'Restore',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/ninja-forms/entries/{id}/restore',
+					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}',
+					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
+				),
+			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Trash',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}/trash',
+					'confirm' => 'Move the selected entries to trash?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
+				),
+				array(
+					'label'  => 'Restore',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/ninja-forms/entries/{id}/restore',
+					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}',
+					'confirm' => 'Delete the selected entries permanently?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 			),
 		),
@@ -246,9 +295,13 @@ add_action( 'rest_api_init', function () {
 					'compare' => 'LIKE',
 				);
 			}
+			$status = sanitize_key( (string) ( $request['status'] ?: 'publish' ) );
+			if ( ! in_array( $status, array( 'publish', 'trash' ), true ) ) {
+				$status = 'publish';
+			}
 			$q = new WP_Query( array(
 				'post_type'      => 'nf_sub',
-				'post_status'    => 'publish',
+				'post_status'    => $status,
 				'posts_per_page' => $per_page,
 				'paged'          => $page,
 				'orderby'        => 'ID',
@@ -276,6 +329,7 @@ add_action( 'rest_api_init', function () {
 					'id'         => (int) $post->ID,
 					'summary'    => $parts ? implode( ' · ', $parts ) : '(empty entry)',
 					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
+					'status'     => (string) $post->post_status,
 					'seq'        => (int) get_post_meta( $post->ID, '_seq_num', true ),
 					// post_date is site-local; emit naked (client parses local).
 					'date'       => str_replace( ' ', 'T', (string) $post->post_date ),
@@ -317,10 +371,12 @@ add_action( 'rest_api_init', function () {
 			$meta = array(
 				array( 'label' => 'Form', 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
 				array( 'label' => 'Entry', 'value' => '#' . (int) get_post_meta( $post->ID, '_seq_num', true ) ),
+				array( 'label' => 'Status', 'value' => (string) $post->post_status ),
 				array( 'label' => 'Submitted', 'value' => date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ) ),
 			);
 			return rest_ensure_response( array(
 				'kind'     => 'entry',
+				'status'   => (string) $post->post_status,
 				'sections' => array(
 					array( 'title' => 'Answers', 'rows' => $rows ),
 					array( 'title' => 'Submission', 'rows' => $meta ),
@@ -347,7 +403,50 @@ add_action( 'rest_api_init', function () {
 			if ( 'trash' !== get_post_status( $post->ID ) ) {
 				return new WP_Error( 'trash_failed', 'Ninja Forms reported success but the entry is not in the trash.', array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( array( 'ok' => true, 'message' => 'Moved to trash. Restore from Ninja Forms\' screen.' ) );
+			return rest_ensure_response( array( 'ok' => true, 'status' => 'trash', 'message' => 'Moved to trash.' ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/ninja-forms/entries/(?P<id>\d+)/restore', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_ninja_forms_can',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$post = get_post( (int) $request['id'] );
+			if ( ! $post || 'nf_sub' !== $post->post_type ) {
+				return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+			}
+			if ( 'trash' !== $post->post_status ) {
+				return new WP_Error( 'not_trashed', 'Only trashed entries can be restored.', array( 'status' => 400 ) );
+			}
+			// Ninja has no restore helper — wp_untrash_post matches core trash.
+			$result = wp_untrash_post( $post->ID );
+			if ( ! $result ) {
+				return new WP_Error( 'restore_failed', 'Could not restore the entry.', array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'status' => 'publish', 'message' => 'Entry restored.' ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/ninja-forms/entries/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => 'minn_admin_ninja_forms_can',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$post = get_post( (int) $request['id'] );
+			if ( ! $post || 'nf_sub' !== $post->post_type ) {
+				return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+			}
+			if ( 'trash' !== $post->post_status ) {
+				return new WP_Error( 'not_trashed', 'Move the entry to trash before deleting permanently.', array( 'status' => 400 ) );
+			}
+			try {
+				Ninja_Forms()->form()->sub( $post->ID )->get()->delete();
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'delete_failed', 'Ninja Forms could not delete: ' . $e->getMessage(), array( 'status' => 500 ) );
+			}
+			if ( get_post( $post->ID ) ) {
+				return new WP_Error( 'delete_failed', 'Entry still exists after delete.', array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'message' => 'Entry deleted permanently.' ) );
 		},
 	) );
 } );

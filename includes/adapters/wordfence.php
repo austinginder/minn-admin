@@ -55,6 +55,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Wordfence',
 		'icon'       => 'shield',
 		'cap'        => 'manage_options',
+		// Status card reuses the System posture rows (firewall + last scan).
+		'status'     => array( 'route' => 'minn-admin/v1/wordfence/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/wordfence/logins',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -83,6 +85,53 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 	return $surfaces;
 } );
+
+/** Status-card model: login totals + System-page firewall/scan posture. */
+function minn_admin_wordfence_status_model() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'wfLogins';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$failed_24h = (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT COUNT(*) FROM {$table} WHERE fail = 1 AND ctime >= %d",
+		time() - DAY_IN_SECONDS
+	) );
+	$ok_24h = (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT COUNT(*) FROM {$table} WHERE fail = 0 AND ctime >= %d",
+		time() - DAY_IN_SECONDS
+	) );
+	// phpcs:enable
+
+	$rows = array(
+		array(
+			'label' => 'Failed logins (24h)',
+			'value' => number_format_i18n( $failed_24h ),
+			'hint'  => $ok_24h ? number_format_i18n( $ok_24h ) . ' successful' : 'No successful logins in the window',
+		),
+	);
+	// Reuse the System posture helpers so the card and health strip never drift.
+	foreach ( minn_admin_wordfence_checks() as $check ) {
+		$rows[] = array(
+			'label' => $check['label'],
+			'value' => 'pass' === $check['status'] ? 'OK' : ( 'fail' === $check['status'] ? 'Attention' : 'Watch' ),
+			'hint'  => $check['detail'],
+		);
+	}
+
+	$actions = array(
+		array( 'label' => 'Open Wordfence ↗', 'href' => admin_url( 'admin.php?page=Wordfence' ) ),
+	);
+	foreach ( minn_admin_wordfence_checks() as $check ) {
+		if ( ! empty( $check['href'] ) && false !== strpos( $check['label'], 'scan' ) ) {
+			$actions[] = array( 'label' => 'Scan ↗', 'href' => $check['href'] );
+			break;
+		}
+	}
+
+	return array(
+		'rows'    => $rows,
+		'actions' => $actions,
+	);
+}
 
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_wordfence_active() ) {
@@ -141,6 +190,16 @@ add_action( 'rest_api_init', function () {
 				);
 			}
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wordfence/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () {
+			return current_user_can( 'manage_options' );
+		},
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_wordfence_status_model() );
 		},
 	) );
 } );

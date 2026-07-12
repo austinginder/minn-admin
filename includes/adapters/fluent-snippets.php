@@ -126,6 +126,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'pageQuery' => 'per_page=25&page={page}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
+			'filter'    => array(
+				'label'   => 'Status',
+				'options' => array(
+					array( 'all', 'All' ),
+					array( 'active', 'Active' ),
+					array( 'inactive', 'Inactive' ),
+				),
+				'query'   => 'active={v}',
+			),
 			'create'    => array(
 				'label'    => 'Add snippet',
 				'route'    => 'minn-admin/v1/fluent-snippets',
@@ -187,6 +196,29 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
+			'bulk'      => array(
+				array(
+					'label'  => 'Activate',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/fluent-snippets/{id}/active',
+					'body'   => array( 'active' => true ),
+					'when'   => array( 'key' => 'active', 'equals' => false ),
+				),
+				array(
+					'label'  => 'Deactivate',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/fluent-snippets/{id}/active',
+					'body'   => array( 'active' => false ),
+					'when'   => array( 'key' => 'active', 'equals' => true ),
+				),
+				array(
+					'label'   => 'Delete',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/fluent-snippets/{id}',
+					'confirm' => 'Delete the selected snippets permanently?',
+					'danger'  => true,
+				),
+			),
 		),
 	);
 	return $surfaces;
@@ -228,6 +260,14 @@ add_action( 'rest_api_init', function () {
 					// Defensive: some code paths return a pack object.
 					if ( isset( $all['data'] ) && is_array( $all['data'] ) ) {
 						$all = $all['data'];
+					}
+					$active = sanitize_key( (string) ( $request['active'] ?? 'all' ) );
+					if ( 'active' === $active || 'inactive' === $active ) {
+						$want = ( 'active' === $active );
+						$all  = array_values( array_filter( $all, function ( $row ) use ( $want ) {
+							$item = minn_admin_fluent_item( $row );
+							return ! empty( $item['active'] ) === $want;
+						} ) );
 					}
 					$total = count( $all );
 					$slice = array_slice( $all, ( $page - 1 ) * $per_page, $per_page );

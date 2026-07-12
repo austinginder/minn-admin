@@ -95,6 +95,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'pageQuery' => 'per_page=25&page={page}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
+			'filter'    => array(
+				'label'   => 'Status',
+				'options' => array(
+					array( 'all', 'All' ),
+					array( 'active', 'Active' ),
+					array( 'inactive', 'Inactive' ),
+				),
+				'query'   => 'active={v}',
+			),
 			'create'    => array(
 				'label'    => 'Add snippet',
 				'route'    => 'minn-admin/v1/wpcode/snippets',
@@ -156,6 +165,29 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
+			'bulk'      => array(
+				array(
+					'label'  => 'Activate',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/wpcode/snippets/{id}/active',
+					'body'   => array( 'active' => true ),
+					'when'   => array( 'key' => 'active', 'equals' => false ),
+				),
+				array(
+					'label'  => 'Deactivate',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/wpcode/snippets/{id}/active',
+					'body'   => array( 'active' => false ),
+					'when'   => array( 'key' => 'active', 'equals' => true ),
+				),
+				array(
+					'label'   => 'Delete',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/wpcode/snippets/{id}',
+					'confirm' => 'Delete the selected snippets permanently?',
+					'danger'  => true,
+				),
+			),
 		),
 	);
 	return $surfaces;
@@ -183,10 +215,19 @@ add_action( 'rest_api_init', function () {
 				'callback'            => function ( WP_REST_Request $request ) {
 					$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?? 25 ) ) );
 					$page     = max( 1, (int) ( $request['page'] ?? 1 ) );
-					$q        = new WP_Query(
+					// Active filter: WPCode stores active as post status
+					// publish=active, draft/private=inactive (their model).
+					$active = sanitize_key( (string) ( $request['active'] ?? 'all' ) );
+					$status = array( 'publish', 'draft', 'private' );
+					if ( 'active' === $active ) {
+						$status = array( 'publish' );
+					} elseif ( 'inactive' === $active ) {
+						$status = array( 'draft', 'private' );
+					}
+					$q = new WP_Query(
 						array(
 							'post_type'      => 'wpcode',
-							'post_status'    => array( 'publish', 'draft', 'private' ),
+							'post_status'    => $status,
 							'posts_per_page' => $per_page,
 							'paged'          => $page,
 							'orderby'        => 'modified',

@@ -77,8 +77,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		const list = await rows();
 		t.check( 'Standing messages listed with sender + subject', list.some( ( r ) => r.includes( 'Dana Tester' ) && r.includes( 'Question about pricing' ) ), list[ 0 ] );
-		t.check( 'Spam message wears the spam pill', list.some( ( r ) => r.includes( 'Casino Bonanza' ) && r.includes( 'spam' ) ) );
 		t.check( 'Disposable message listed', list.some( ( r ) => r.includes( 'Minn Fixture Disposable' ) ) );
+		// Standing spam lives under the Spam filter (no longer mixed into Received).
+		await page.click( '[data-sfilter="spam"]' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Casino Bonanza' ) ),
+		null, { timeout: 10000 } );
+		const spamList = await rows();
+		t.check( 'Spam filter lists standing spam with the spam pill', spamList.some( ( r ) => r.includes( 'Casino Bonanza' ) && r.includes( 'spam' ) ), spamList[ 0 ] );
+		await page.click( '[data-sfilter="inbox"]' );
+		await waitRow( 'Dana Tester' );
 
 		// --- Entry detail ------------------------------------------------------
 		t.check( 'Row opens detail', await clickRow( 'Question about pricing' ) );
@@ -95,35 +103,36 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 300 );
 
-		// --- Spam → unspam (when-conditional action pair) ------------------------
+		// --- Spam → unspam (status filter moves the row between buckets) ---------
 		await clickRow( 'Minn Fixture Disposable' );
 		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
 		t.check( 'Fresh message offers Mark as spam', await clickModalBtn( 'Mark as spam' ) );
-		await waitToast( 'Mark as spam — done' );
+		await waitToast( 'Marked as spam' );
+		// Spam leaves the Received bucket — open the Spam filter to see it.
+		await page.click( '[data-sfilter="spam"]' );
 		await waitRow( 'Minn Fixture Disposable' );
 		await page.waitForFunction( () =>
 			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) =>
 				r.textContent.includes( 'Minn Fixture Disposable' ) && r.textContent.includes( 'spam' ) ),
 		null, { timeout: 10000 } );
-		t.check( 'Message now wears the spam pill', true );
+		t.check( 'Spam filter lists the marked message', true );
 
 		await clickRow( 'Minn Fixture Disposable' );
 		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
 		t.check( 'Spam message offers Not spam instead', await clickModalBtn( 'Not spam' ) );
-		await waitToast( 'Not spam — done' );
-		await page.waitForFunction( () =>
-			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) =>
-				r.textContent.includes( 'Minn Fixture Disposable' ) && ! r.textContent.includes( 'spam' ) ),
-		null, { timeout: 10000 } );
-		t.check( 'Unspam restores the message', true );
+		await waitToast( 'Marked not spam' );
+		// Back on Received after unspam.
+		await page.click( '[data-sfilter="inbox"]' );
+		await waitRow( 'Minn Fixture Disposable' );
+		t.check( 'Unspam restores the message to Received', true );
 
 		// --- Trash ---------------------------------------------------------------
 		await clickRow( 'Minn Fixture Disposable' );
 		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
 		t.check( 'Trash action offered', await clickModalBtn( 'Trash message' ) );
-		await waitToast( 'Trash message — done' );
+		await waitToast( 'Moved to trash' );
 		await waitRow( 'Minn Fixture Disposable', false );
-		t.check( 'Trashed message leaves the list', true );
+		t.check( 'Trashed message leaves the Received list', true );
 
 		// --- Search --------------------------------------------------------------
 		await page.type( '#minn-surface-search', 'nonprofit' );

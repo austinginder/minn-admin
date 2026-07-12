@@ -147,6 +147,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'param'    => 'form_id',
 				'allLabel' => 'All entries',
 			),
+			// Their status column: unread/read/spam/trashed (favorites is a separate flag).
+			'filter'    => array(
+				'label'   => 'Status',
+				'options' => array(
+					array( 'inbox', 'Received' ),
+					array( 'spam', 'Spam' ),
+					array( 'trashed', 'Trash' ),
+				),
+				'query'   => 'status={v}',
+			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'form_title', 'label' => 'Form' ),
@@ -158,16 +168,99 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Delete entry',
+					'label'  => 'Mark as read',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/fluent-forms/entries/{id}/status',
+					'body'   => array( 'status' => 'read' ),
+					'when'   => array( 'key' => 'status', 'equals' => 'unread' ),
+				),
+				array(
+					'label'   => 'Mark as spam',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
+					'body'    => array( 'status' => 'spam' ),
+					'confirm' => 'Mark this entry as spam? Find it under the Spam filter.',
+					'danger'  => true,
+					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
+				),
+				array(
+					'label'  => 'Not spam',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/fluent-forms/entries/{id}/status',
+					'body'   => array( 'status' => 'unread' ),
+					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
+				),
+				array(
+					'label'   => 'Trash entry',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
+					'body'    => array( 'status' => 'trashed' ),
+					'confirm' => 'Move this entry to trash?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
+				),
+				array(
+					'label'  => 'Restore',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/fluent-forms/entries/{id}/status',
+					'body'   => array( 'status' => 'unread' ),
+					'when'   => array( 'key' => 'status', 'equals' => 'trashed' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}',
-					'confirm' => 'Delete this entry permanently?',
+					'confirm' => 'Delete this entry permanently? There is no undo.',
 					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'trashed' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}',
+					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
 					'label' => 'Open in Fluent Forms ↗',
 					// Detail modal also carries adminUrl with the form-scoped entry deep link.
 					'href'  => admin_url( 'admin.php?page=fluent_forms&route=entries#/entries/{id}' ),
+				),
+			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Mark as spam',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
+					'body'    => array( 'status' => 'spam' ),
+					'confirm' => 'Mark the selected entries as spam?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
+				),
+				array(
+					'label'   => 'Trash',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
+					'body'    => array( 'status' => 'trashed' ),
+					'confirm' => 'Move the selected entries to trash?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
+				),
+				array(
+					'label'  => 'Restore',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/fluent-forms/entries/{id}/status',
+					'body'   => array( 'status' => 'unread' ),
+					'when'   => array( 'key' => 'status', 'equals' => 'trashed' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}',
+					'confirm' => 'Delete the selected entries permanently?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'trashed' ),
 				),
 			),
 		),
@@ -242,8 +335,21 @@ add_action( 'rest_api_init', function () {
 			$per_page    = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page        = max( 1, (int) ( $request['page'] ?: 1 ) );
 
+			$bucket = sanitize_key( (string) ( $request['status'] ?: 'inbox' ) );
+			if ( ! in_array( $bucket, array( 'inbox', 'spam', 'trashed' ), true ) ) {
+				$bucket = 'inbox';
+			}
+
 			$where = array( '1=1' );
 			$args  = array();
+			if ( 'inbox' === $bucket ) {
+				// Received = not spam and not trash (unread + read + favorites).
+				$where[] = "s.status NOT IN ('spam','trashed')";
+			} elseif ( 'spam' === $bucket ) {
+				$where[] = "s.status = 'spam'";
+			} else {
+				$where[] = "s.status = 'trashed'";
+			}
 			if ( $request['form_id'] ) {
 				$where[] = 's.form_id = %d';
 				$args[]  = (int) $request['form_id'];
@@ -256,10 +362,9 @@ add_action( 'rest_api_init', function () {
 			$where_sql = implode( ' AND ', $where );
 
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$total = (int) $wpdb->get_var( $wpdb->prepare(
-				"SELECT COUNT(*) FROM `{$subs_table}` s WHERE {$where_sql}",
-				$args
-			) );
+			$total = (int) ( $args
+				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$subs_table}` s WHERE {$where_sql}", ...$args ) )
+				: $wpdb->get_var( "SELECT COUNT(*) FROM `{$subs_table}` s WHERE {$where_sql}" ) );
 			$rows = $wpdb->get_results( $wpdb->prepare(
 				"SELECT s.id, s.form_id, s.response, s.status, s.created_at, f.title AS form_title
 				 FROM `{$subs_table}` s
@@ -274,12 +379,14 @@ add_action( 'rest_api_init', function () {
 			$items = array();
 			foreach ( (array) $rows as $r ) {
 				$map     = minn_admin_fluent_forms_response_map( $r->response );
+				$status  = $r->status ? (string) $r->status : 'unread';
 				$items[] = array(
 					'id'         => (int) $r->id,
 					'form_id'    => (int) $r->form_id,
 					'summary'    => minn_admin_fluent_forms_summary( $map ),
 					'form_title' => $r->form_title ?: ( 'Form #' . $r->form_id ),
-					'status'     => $r->status ? (string) $r->status : 'unread',
+					'status'     => $status,
+					'bucket'     => $bucket,
 					// Fluent stores site-local datetimes; timeAgo treats bare
 					// strings as UTC, so leave as local-looking ISO without Z.
 					'date'       => $r->created_at ? str_replace( ' ', 'T', (string) $r->created_at ) : '',
@@ -307,6 +414,18 @@ add_action( 'rest_api_init', function () {
 				) );
 				if ( ! $row ) {
 					return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+				}
+
+				// Opening a detail marks unread → read (Fluent Forms' own screen semantics).
+				if ( 'unread' === (string) $row->status ) {
+					$wpdb->update(
+						$subs_table,
+						array( 'status' => 'read' ),
+						array( 'id' => (int) $row->id ),
+						array( '%s' ),
+						array( '%d' )
+					);
+					$row->status = 'read';
 				}
 
 				$map    = minn_admin_fluent_forms_response_map( $row->response );
@@ -383,19 +502,69 @@ add_action( 'rest_api_init', function () {
 				$subs_table = $wpdb->prefix . 'fluentform_submissions';
 				$det_table  = $wpdb->prefix . 'fluentform_entry_details';
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$exists = $wpdb->get_var( $wpdb->prepare(
-					"SELECT id FROM `{$subs_table}` WHERE id = %d",
+				$row = $wpdb->get_row( $wpdb->prepare(
+					"SELECT id, status FROM `{$subs_table}` WHERE id = %d",
 					$id
 				) );
-				if ( ! $exists ) {
+				if ( ! $row ) {
 					return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+				}
+				// Permanent delete is for trash/spam only (Received → Trash first).
+				if ( ! in_array( (string) $row->status, array( 'trashed', 'spam' ), true ) ) {
+					return new WP_Error( 'not_trashed', 'Move the entry to trash (or spam) before deleting permanently.', array( 'status' => 400 ) );
 				}
 				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$wpdb->delete( $det_table, array( 'submission_id' => $id ), array( '%d' ) );
 				$wpdb->delete( $subs_table, array( 'id' => $id ), array( '%d' ) );
 				// phpcs:enable
-				return rest_ensure_response( array( 'id' => $id, 'deleted' => true ) );
+				return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => 'Entry deleted permanently.' ) );
 			},
 		),
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/fluent-forms/entries/(?P<id>\d+)/status', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return current_user_can( 'fluentform_manage_entries' )
+				|| current_user_can( 'fluentform_full_access' )
+				|| current_user_can( 'manage_options' );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			global $wpdb;
+			$id         = (int) $request['id'];
+			$status     = sanitize_key( (string) ( $request['status'] ?? '' ) );
+			$allowed    = array( 'unread', 'read', 'spam', 'trashed' );
+			$subs_table = $wpdb->prefix . 'fluentform_submissions';
+			if ( ! in_array( $status, $allowed, true ) ) {
+				return new WP_Error( 'bad_status', 'Unknown status.', array( 'status' => 400 ) );
+			}
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$exists = $wpdb->get_var( $wpdb->prepare(
+				"SELECT id FROM `{$subs_table}` WHERE id = %d",
+				$id
+			) );
+			if ( ! $exists ) {
+				return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+			}
+			$wpdb->update(
+				$subs_table,
+				array( 'status' => $status ),
+				array( 'id' => $id ),
+				array( '%s' ),
+				array( '%d' )
+			);
+			$msgs = array(
+				'unread'  => 'Entry restored.',
+				'read'    => 'Marked as read.',
+				'spam'    => 'Marked as spam.',
+				'trashed' => 'Moved to trash.',
+			);
+			return rest_ensure_response( array(
+				'id'      => $id,
+				'status'  => $status,
+				'ok'      => true,
+				'message' => $msgs[ $status ] ?? 'Status updated.',
+			) );
+		},
 	) );
 } );

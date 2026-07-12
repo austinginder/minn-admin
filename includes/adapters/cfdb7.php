@@ -167,6 +167,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'param'    => 'form_post_id',
 				'allLabel' => 'All messages',
 			),
+			// Read/unread lives in the serialized blob as cfdb7_status.
+			'filter'    => array(
+				'label'   => 'Status',
+				'options' => array(
+					array( 'all', 'All' ),
+					array( 'unread', 'Unread' ),
+					array( 'read', 'Read' ),
+				),
+				'query'   => 'status={v}',
+			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'form', 'label' => 'Form' ),
@@ -178,6 +188,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
+					'label'  => 'Mark as unread',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/cfdb7/entries/{id}/unread',
+					'when'   => array( 'key' => 'status', 'equals' => 'read' ),
+				),
+				array(
 					'label'   => 'Delete entry',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/cfdb7/entries/{id}',
@@ -187,6 +203,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label' => 'Open in CFDB7 ↗',
 					'href'  => admin_url( 'admin.php?page=cfdb7-list.php&fid={form_post_id}&ufid={id}' ),
+				),
+			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Delete',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/cfdb7/entries/{id}',
+					'confirm' => 'Delete the selected entries permanently? CFDB7 has no trash.',
+					'danger'  => true,
 				),
 			),
 		),
@@ -223,6 +248,11 @@ add_action( 'rest_api_init', function () {
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
 
+			$status = sanitize_key( (string) ( $request['status'] ?: 'all' ) );
+			if ( ! in_array( $status, array( 'all', 'read', 'unread' ), true ) ) {
+				$status = 'all';
+			}
+
 			$where = array( '1=1' );
 			$args  = array();
 			if ( $request['form_post_id'] ) {
@@ -234,13 +264,23 @@ add_action( 'rest_api_init', function () {
 				$where[] = 'form_value LIKE %s';
 				$args[]  = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
 			}
+			// Read/unread is a fixed token inside the serialized blob.
+			if ( 'read' === $status ) {
+				$where[] = 'form_value LIKE %s';
+				$args[]  = '%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%';
+			} elseif ( 'unread' === $status ) {
+				// Absent or "unread" both count as unread for their screen.
+				$where[] = '(form_value LIKE %s OR form_value NOT LIKE %s)';
+				$args[]  = '%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:6:"unread"' ) . '%';
+				$args[]  = '%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%';
+			}
 			$where_sql = implode( ' AND ', $where );
 
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$total = (int) $wpdb->get_var(
 				$args
-					? $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE {$where_sql}", $args )
-					: "SELECT COUNT(*) FROM `{$table}`"
+					? $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE {$where_sql}", ...$args )
+					: "SELECT COUNT(*) FROM `{$table}` WHERE {$where_sql}"
 			);
 			$rows = $wpdb->get_results( $wpdb->prepare(
 				"SELECT form_id, form_post_id, form_value, form_date FROM `{$table}`
@@ -364,8 +404,36 @@ add_action( 'rest_api_init', function () {
 				}
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->delete( $table, array( 'form_id' => (int) $request['id'] ), array( '%d' ) );
-				return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true ) );
+				return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true, 'message' => 'Entry deleted permanently.' ) );
 			},
 		),
+	) );
+
+	// Mark unread: reverse of the fixed-token read surgery (never re-serialize).
+	register_rest_route( 'minn-admin/v1', '/cfdb7/entries/(?P<id>\d+)/unread', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_cfdb7_can_view',
+		'callback'            => function ( WP_REST_Request $request ) {
+			global $wpdb;
+			$table = $wpdb->prefix . 'db7_forms';
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$row = $wpdb->get_row( $wpdb->prepare(
+				"SELECT form_id, form_value FROM `{$table}` WHERE form_id = %d",
+				(int) $request['id']
+			) );
+			if ( ! $row ) {
+				return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+			}
+			$patched = str_replace(
+				's:12:"cfdb7_status";s:4:"read"',
+				's:12:"cfdb7_status";s:6:"unread"',
+				(string) $row->form_value
+			);
+			if ( $patched !== (string) $row->form_value ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+				$wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) );
+			}
+			return rest_ensure_response( array( 'id' => (int) $row->form_id, 'status' => 'unread', 'message' => 'Marked as unread.' ) );
+		},
 	) );
 } );

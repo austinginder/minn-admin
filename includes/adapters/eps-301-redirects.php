@@ -135,6 +135,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
+			'bulk'     => array(
+				array(
+					'label'   => 'Delete',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/eps301/redirects/{id}',
+					'confirm' => 'Delete the selected redirects permanently?',
+					'danger'  => true,
+				),
+			),
 		),
 	);
 	return $surfaces;

@@ -76,6 +76,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// Their lesser-viewer cap is a setting; the filter above is the
 		// real gate (the LLA-R / Gravity Forms cap-model precedent).
 		'cap'        => 'read',
+		'status'     => array( 'route' => 'minn-admin/v1/wpml/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/wpml/emails',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -116,10 +117,75 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Delete',
+					'route'   => 'minn-admin/v1/wpml/emails/{id}',
+					'method'  => 'DELETE',
+					'confirm' => 'Delete the selected log entries permanently?',
+					'danger'  => true,
+				),
+			),
 		),
 	);
 	return $surfaces;
 } );
+
+/** Status-card model: log totals + 14-day sent/failed chart. */
+function minn_admin_wpml_status_model() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'wpml_mails';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+		return array(
+			'rows'    => array( array( 'label' => 'Email log', 'value' => 'Not ready', 'hint' => 'WP Mail Logging has not created its table yet' ) ),
+			'actions' => array(),
+		);
+	}
+	$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+	$failed = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE error IS NOT NULL AND error != ''" );
+	// timestamp is site-local current_time('mysql').
+	$since  = date_i18n( 'Y-m-d H:i:s', current_time( 'timestamp' ) - 14 * DAY_IN_SECONDS );
+	$days   = $wpdb->get_results( $wpdb->prepare(
+		"SELECT DATE(timestamp) AS d,
+			SUM(CASE WHEN error IS NULL OR error = '' THEN 1 ELSE 0 END) AS sent,
+			SUM(CASE WHEN error IS NOT NULL AND error != '' THEN 1 ELSE 0 END) AS failed
+		 FROM {$table} WHERE timestamp >= %s GROUP BY DATE(timestamp) ORDER BY d ASC",
+		$since
+	) );
+	// phpcs:enable
+	$by_day = array();
+	for ( $i = 13; $i >= 0; $i-- ) {
+		$d            = date_i18n( 'Y-m-d', current_time( 'timestamp' ) - $i * DAY_IN_SECONDS );
+		$by_day[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+	}
+	foreach ( (array) $days as $row ) {
+		$d = (string) $row->d;
+		if ( ! isset( $by_day[ $d ] ) ) {
+			continue;
+		}
+		$by_day[ $d ]['value']     = (int) $row->sent;
+		$by_day[ $d ]['secondary'] = (int) $row->failed;
+	}
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Logged emails',
+				'value' => number_format_i18n( $total ),
+				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
+			),
+		),
+		'chart'   => array(
+			'title'     => 'Last 14 days',
+			'primary'   => 'Sent',
+			'secondary' => 'Failed',
+			'points'    => array_values( $by_day ),
+		),
+		'actions' => array(
+			array( 'label' => 'Open WP Mail Logging ↗', 'href' => admin_url( 'admin.php?page=wpml_plugin_log' ) ),
+		),
+	);
+}
 
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_wpml_active() ) {
@@ -215,9 +281,17 @@ add_action( 'rest_api_init', function () {
 				if ( ! $deleted ) {
 					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
 				}
-				return rest_ensure_response( array( 'deleted' => true ) );
+				return rest_ensure_response( array( 'deleted' => true, 'message' => 'Log entry deleted.' ) );
 			},
 		),
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wpml/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_wpml_can',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_wpml_status_model() );
+		},
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/wpml/emails/(?P<id>\d+)/resend', array(

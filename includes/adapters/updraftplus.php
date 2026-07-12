@@ -79,6 +79,66 @@ function minn_admin_updraft_last() {
 	);
 }
 
+/** Server-built model for the surface status card (distinct from /updraft/status). */
+function minn_admin_updraft_status_model() {
+	$last    = minn_admin_updraft_last();
+	$running = minn_admin_updraft_running();
+	$history = minn_admin_updraft_history();
+	$count   = count( $history );
+
+	if ( $running ) {
+		$last_value = 'Running now…';
+		$last_hint  = 'UpdraftPlus is building or resuming a set';
+	} elseif ( $last ) {
+		$last_value = human_time_diff( $last['time'] ) . ' ago';
+		$last_hint  = $last['success'] ? 'Completed successfully' : 'Finished with errors — check UpdraftPlus';
+	} else {
+		$last_value = 'Never';
+		$last_hint  = 'No finished backup recorded yet';
+	}
+
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Last backup',
+				'value' => $last_value,
+				'hint'  => $last_hint,
+			),
+			array(
+				'label' => 'Sets kept',
+				'value' => (string) $count,
+				'hint'  => $count
+					? 'Newest first in the list below (retention may prune older sets)'
+					: 'Nothing on disk yet',
+			),
+			array(
+				'label' => 'Status',
+				'value' => $running ? 'Running' : 'Idle',
+				'hint'  => 'Jobs run through UpdraftPlus\'s own cron machinery',
+			),
+		),
+		'actions' => array(
+			array(
+				'label'   => 'Back up everything now',
+				'route'   => 'minn-admin/v1/updraft/backup-now',
+				'method'  => 'POST',
+				'body'    => array( 'what' => 'all' ),
+				'confirm' => 'Start a full backup now? UpdraftPlus will run it in the background.',
+			),
+			array(
+				'label'  => 'Database only',
+				'route'  => 'minn-admin/v1/updraft/backup-now',
+				'method' => 'POST',
+				'body'   => array( 'what' => 'db' ),
+			),
+			array(
+				'label' => 'Open UpdraftPlus ↗',
+				'href'  => admin_url( 'options-general.php?page=updraftplus' ),
+			),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_updraftplus_active() ) {
 		return $surfaces;
@@ -89,6 +149,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'database',
 		'cap'        => 'manage_options',
 		'family'     => 'backups',
+		'status'     => array( 'route' => 'minn-admin/v1/updraft/card' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/updraft/backups',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -127,6 +188,7 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// Machine-readable status (System health + suite + poll completion).
 	register_rest_route( 'minn-admin/v1', '/updraft/status', array(
 		'methods'             => 'GET',
 		'permission_callback' => $perm,
@@ -136,6 +198,15 @@ add_action( 'rest_api_init', function () {
 				'running' => minn_admin_updraft_running(),
 				'history' => count( minn_admin_updraft_history() ),
 			) );
+		},
+	) );
+
+	// Surface status card (rows + actions) — same shape as Disembark/Duplicator.
+	register_rest_route( 'minn-admin/v1', '/updraft/card', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_updraft_status_model() );
 		},
 	) );
 
@@ -156,9 +227,11 @@ add_action( 'rest_api_init', function () {
 			// Kick cron immediately so the job starts without waiting for
 			// the next visitor; UpdraftPlus resumes itself from there.
 			spawn_cron();
+			$label = 'db' === $what ? 'Database backup' : 'Full backup';
 			return rest_ensure_response( array(
 				'started' => true,
 				'what'    => 'db' === $what ? 'db' : 'all',
+				'message' => $label . ' started — UpdraftPlus is running it in the background.',
 			) );
 		},
 	) );

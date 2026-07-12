@@ -164,9 +164,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'param'    => 'form_id',
 				'allLabel' => 'All entries',
 			),
+			// is_spam column + status field — Received vs Spam (no trash in free).
+			'filter'    => array(
+				'label'   => 'Status',
+				'options' => array(
+					array( 'received', 'Received' ),
+					array( 'spam', 'Spam' ),
+				),
+				'query'   => 'status={v}',
+			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'form_title', 'label' => 'Form' ),
+				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '96px' ),
 				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
 			),
 			'detail'    => array(
@@ -174,10 +184,41 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
+					'label'   => 'Mark as spam',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/forminator/entries/{id}/spam',
+					'confirm' => 'Mark this entry as spam? Find it under the Spam filter.',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'received' ),
+				),
+				array(
+					'label'  => 'Not spam',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/forminator/entries/{id}/unspam',
+					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
+				),
+				array(
 					'label'   => 'Delete permanently',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/forminator/entries/{id}',
 					'confirm' => 'Delete this entry permanently? Forminator has no entry trash — there is no undo.',
+					'danger'  => true,
+				),
+			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Mark as spam',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/forminator/entries/{id}/spam',
+					'confirm' => 'Mark the selected entries as spam?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'status', 'equals' => 'received' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/forminator/entries/{id}',
+					'confirm' => 'Delete the selected entries permanently? There is no undo.',
 					'danger'  => true,
 				),
 			),
@@ -244,10 +285,19 @@ add_action( 'rest_api_init', function () {
 			$entry    = $wpdb->prefix . 'frmt_form_entry';
 			$meta     = $wpdb->prefix . 'frmt_form_entry_meta';
 
-			// Active custom-form entries only (drafts/abandoned/spam are
-			// Forminator's own workflows on its screen).
-			$where = "WHERE e.entry_type = 'custom-forms' AND e.status = 'active' AND e.is_spam = 0";
-			$args  = array();
+			// Custom-form entries; spam is a separate bucket (is_spam column).
+			// Drafts/abandoned stay on Forminator's own screen.
+			$bucket = sanitize_key( (string) ( $request['status'] ?: 'received' ) );
+			if ( ! in_array( $bucket, array( 'received', 'spam' ), true ) ) {
+				$bucket = 'received';
+			}
+			$where = "WHERE e.entry_type = 'custom-forms' AND e.status IN ('active','spam')";
+			if ( 'spam' === $bucket ) {
+				$where .= ' AND e.is_spam = 1';
+			} else {
+				$where .= ' AND e.is_spam = 0 AND e.status = \'active\'';
+			}
+			$args = array();
 			if ( $request['form_id'] ) {
 				$where .= ' AND e.form_id = %d';
 				$args[] = (int) $request['form_id'];
@@ -263,7 +313,7 @@ add_action( 'rest_api_init', function () {
 				? $wpdb->prepare( "SELECT COUNT(*) FROM {$entry} e {$where}", ...$args ) // phpcs:ignore
 				: "SELECT COUNT(*) FROM {$entry} e {$where}" ); // phpcs:ignore
 			$rows  = $wpdb->get_results( $wpdb->prepare(
-				"SELECT e.entry_id, e.form_id, e.date_created FROM {$entry} e {$where} ORDER BY e.entry_id DESC LIMIT %d OFFSET %d", // phpcs:ignore
+				"SELECT e.entry_id, e.form_id, e.date_created, e.is_spam FROM {$entry} e {$where} ORDER BY e.entry_id DESC LIMIT %d OFFSET %d", // phpcs:ignore
 				...array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 
@@ -286,6 +336,7 @@ add_action( 'rest_api_init', function () {
 					'id'         => (int) $row->entry_id,
 					'summary'    => $parts ? implode( ' · ', $parts ) : '(empty entry)',
 					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
+					'status'     => ! empty( $row->is_spam ) ? 'spam' : 'received',
 					// date_i18n stamp — site-local, emitted naked.
 					'date'       => str_replace( ' ', 'T', (string) $row->date_created ),
 				);
@@ -370,4 +421,45 @@ add_action( 'rest_api_init', function () {
 			},
 		),
 	) );
+
+	foreach ( array(
+		'spam'   => array( 1, 'spam', 'Marked as spam.' ),
+		'unspam' => array( 0, 'active', 'Marked not spam.' ),
+	) as $slug => $cfg ) {
+		list( $is_spam, $status, $msg ) = $cfg;
+		register_rest_route( 'minn-admin/v1', '/forminator/entries/(?P<id>\d+)/' . $slug, array(
+			'methods'             => 'POST',
+			'permission_callback' => 'minn_admin_forminator_can',
+			'callback'            => function ( WP_REST_Request $request ) use ( $is_spam, $status, $msg ) {
+				global $wpdb;
+				$id  = (int) $request['id'];
+				$row = $wpdb->get_row( $wpdb->prepare(
+					"SELECT entry_id, form_id FROM {$wpdb->prefix}frmt_form_entry WHERE entry_id = %d AND entry_type = 'custom-forms'", // phpcs:ignore
+					$id
+				) );
+				if ( ! $row ) {
+					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+				}
+				// Their entry table owns is_spam + status (same columns their model writes).
+				$wpdb->update(
+					$wpdb->prefix . 'frmt_form_entry',
+					array(
+						'is_spam' => (int) $is_spam,
+						'status'  => $status,
+					),
+					array( 'entry_id' => $id ),
+					array( '%d', '%s' ),
+					array( '%d' )
+				);
+				if ( class_exists( 'Forminator_Form_Entry_Model' ) && method_exists( 'Forminator_Form_Entry_Model', 'delete_form_entry_cache' ) ) {
+					Forminator_Form_Entry_Model::delete_form_entry_cache( (int) $row->form_id );
+				}
+				return rest_ensure_response( array(
+					'ok'      => true,
+					'status'  => $is_spam ? 'spam' : 'received',
+					'message' => $msg,
+				) );
+			},
+		) );
+	}
 } );

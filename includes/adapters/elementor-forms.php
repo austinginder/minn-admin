@@ -79,6 +79,8 @@ function minn_admin_elementor_forms_item( $sub ) {
 		'form_name' => $form_name ?: 'Form',
 		'form_key'  => $form_key,
 		'status'    => $status,
+		// bucket drives when-gates across Received / Trash filters.
+		'bucket'    => 'trash' === $status ? 'trash' : 'inbox',
 		'date'      => $date,
 		'referer'   => isset( $sub['referer'] ) ? (string) $sub['referer'] : '',
 	);
@@ -113,6 +115,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'param'    => 'form',
 				'allLabel' => 'All entries',
 			),
+			// Their Query filter_status: all (not trash) / unread / read / trash.
+			'filter'    => array(
+				'label'   => 'Status',
+				'options' => array(
+					array( 'all', 'Received' ),
+					array( 'unread', 'Unread' ),
+					array( 'read', 'Read' ),
+					array( 'trash', 'Trash' ),
+				),
+				'query'   => 'status={v}',
+			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'form_name', 'label' => 'Form' ),
@@ -124,15 +137,60 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
+					'label'  => 'Mark as read',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/elementor/submissions/{id}/read',
+					'when'   => array( 'key' => 'status', 'equals' => 'unread' ),
+				),
+				array(
 					'label'   => 'Trash submission',
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/elementor/submissions/{id}',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/elementor/submissions/{id}/trash',
 					'confirm' => 'Move this submission to trash?',
 					'danger'  => true,
+					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
+				),
+				array(
+					'label'  => 'Restore',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/elementor/submissions/{id}/restore',
+					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/elementor/submissions/{id}',
+					'confirm' => 'Delete this submission permanently? There is no undo.',
+					'danger'  => true,
+					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
 				array(
 					'label' => 'Open in Elementor ↗',
 					'href'  => admin_url( 'admin.php?page=e-form-submissions#/form-submissions/{id}' ),
+				),
+			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Trash',
+					'method'  => 'POST',
+					'route'   => 'minn-admin/v1/elementor/submissions/{id}/trash',
+					'confirm' => 'Move the selected submissions to trash?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
+				),
+				array(
+					'label'  => 'Restore',
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/elementor/submissions/{id}/restore',
+					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
+				),
+				array(
+					'label'   => 'Delete permanently',
+					'method'  => 'DELETE',
+					'route'   => 'minn-admin/v1/elementor/submissions/{id}',
+					'confirm' => 'Delete the selected submissions permanently?',
+					'danger'  => true,
+					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
 			),
 		),
@@ -180,9 +238,13 @@ add_action( 'rest_api_init', function () {
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
 
+			// Their filter_status: all | unread | read | trash.
+			$status = sanitize_key( (string) ( $request['status'] ?: 'all' ) );
+			if ( ! in_array( $status, array( 'all', 'unread', 'read', 'trash' ), true ) ) {
+				$status = 'all';
+			}
 			$filters = array(
-				// Hide trash from the default list (matches Elementor admin).
-				'status' => array( 'value' => 'all' ),
+				'status' => array( 'value' => $status ),
 			);
 			if ( $request['search'] ) {
 				$filters['search'] = array( 'value' => (string) $request['search'] );
@@ -203,11 +265,6 @@ add_action( 'rest_api_init', function () {
 
 			$items = array();
 			foreach ( (array) ( $result['data'] ?? array() ) as $sub ) {
-				// Skip trash rows when filter is "all" (Elementor still returns them
-				// under some filter combos; keep list clean).
-				if ( isset( $sub['status'] ) && 'trash' === $sub['status'] ) {
-					continue;
-				}
 				$items[] = minn_admin_elementor_forms_item( $sub );
 			}
 
@@ -291,6 +348,12 @@ add_action( 'rest_api_init', function () {
 
 				$item = minn_admin_elementor_forms_item( $sub );
 
+				// Opening a detail marks unread → read (their screen semantics).
+				if ( empty( $sub['is_read'] ) && ( empty( $sub['status'] ) || 'trash' !== $sub['status'] ) ) {
+					$query->update_submission( (int) $sub['id'], array( 'is_read' => 1 ) );
+					$item['status'] = 'read';
+				}
+
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
 					// Form name in the title; answers render in the entry body.
@@ -308,18 +371,73 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'DELETE',
 			'permission_callback' => 'minn_admin_elementor_forms_can_view',
 			'callback'            => function ( WP_REST_Request $request ) {
-				$query  = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-				$id     = (int) $request['id'];
-				$raw    = $query->get_submission( $id );
+				$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+				$id    = (int) $request['id'];
+				$raw   = $query->get_submission( $id );
 				if ( ! $raw || empty( $raw['data'] ) ) {
 					return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
 				}
-				$ok = $query->move_to_trash_submission( $id );
-				if ( false === $ok ) {
-					return new WP_Error( 'trash_failed', 'Could not trash submission.', array( 'status' => 500 ) );
+				// Permanent delete only for trashed rows (Received → Trash first).
+				if ( empty( $raw['data']['status'] ) || 'trash' !== $raw['data']['status'] ) {
+					return new WP_Error( 'not_trashed', 'Move the submission to trash before deleting permanently.', array( 'status' => 400 ) );
 				}
-				return rest_ensure_response( array( 'id' => $id, 'status' => 'trash' ) );
+				$ok = $query->delete_submission( $id );
+				if ( false === $ok ) {
+					return new WP_Error( 'delete_failed', 'Could not delete submission.', array( 'status' => 500 ) );
+				}
+				return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => 'Submission deleted permanently.' ) );
 			},
 		),
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/elementor/submissions/(?P<id>\d+)/trash', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_elementor_forms_can_view',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+			$id    = (int) $request['id'];
+			$raw   = $query->get_submission( $id );
+			if ( ! $raw || empty( $raw['data'] ) ) {
+				return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
+			}
+			$ok = $query->move_to_trash_submission( $id );
+			if ( false === $ok ) {
+				return new WP_Error( 'trash_failed', 'Could not trash submission.', array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'id' => $id, 'status' => 'trash', 'message' => 'Moved to trash.' ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/elementor/submissions/(?P<id>\d+)/restore', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_elementor_forms_can_view',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+			$id    = (int) $request['id'];
+			$raw   = $query->get_submission( $id );
+			if ( ! $raw || empty( $raw['data'] ) ) {
+				return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
+			}
+			$ok = $query->restore( $id );
+			if ( false === $ok ) {
+				return new WP_Error( 'restore_failed', 'Could not restore submission.', array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'id' => $id, 'status' => 'unread', 'message' => 'Submission restored.' ) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/elementor/submissions/(?P<id>\d+)/read', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'minn_admin_elementor_forms_can_view',
+		'callback'            => function ( WP_REST_Request $request ) {
+			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+			$id    = (int) $request['id'];
+			$raw   = $query->get_submission( $id );
+			if ( ! $raw || empty( $raw['data'] ) ) {
+				return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
+			}
+			$query->update_submission( $id, array( 'is_read' => 1 ) );
+			return rest_ensure_response( array( 'id' => $id, 'status' => 'read', 'message' => 'Marked as read.' ) );
+		},
 	) );
 } );

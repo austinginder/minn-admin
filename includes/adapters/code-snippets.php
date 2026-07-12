@@ -138,6 +138,30 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
+			// Their list has no active= filter, so bulk is the multi-item win.
+			'bulk'      => array(
+				array(
+					'label'  => 'Activate',
+					'method' => 'PUT',
+					'route'  => 'code-snippets/v1/snippets/{id}',
+					'body'   => array( 'active' => true ),
+					'when'   => array( 'key' => 'active', 'equals' => false ),
+				),
+				array(
+					'label'  => 'Deactivate',
+					'method' => 'PUT',
+					'route'  => 'code-snippets/v1/snippets/{id}',
+					'body'   => array( 'active' => false ),
+					'when'   => array( 'key' => 'active', 'equals' => true ),
+				),
+				array(
+					'label'   => 'Delete',
+					'method'  => 'DELETE',
+					'route'   => 'code-snippets/v1/snippets/{id}',
+					'confirm' => 'Delete the selected snippets permanently?',
+					'danger'  => true,
+				),
+			),
 		),
 	);
 	return $surfaces;

@@ -41,6 +41,95 @@ function minn_admin_fluent_smtp_recipients( $to, $all = false ) {
 	return $out;
 }
 
+/** Server-built model for the surface status card. */
+function minn_admin_fluent_smtp_status_model() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'fsmpt_email_logs';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+	if ( ! $found ) {
+		return array(
+			'rows'    => array( array( 'label' => 'Email log', 'value' => 'Not ready', 'hint' => 'FluentSMTP has not created its log table yet' ) ),
+			'actions' => array(
+				array( 'label' => 'Open FluentSMTP ↗', 'href' => admin_url( 'options-general.php?page=fluent-mail#/' ) ),
+			),
+		);
+	}
+	$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+	$failed = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'failed'" );
+	// created_at is site-local current_time — compare against site-local 14d ago.
+	$since_local = date_i18n( 'Y-m-d H:i:s', current_time( 'timestamp' ) - 14 * DAY_IN_SECONDS );
+	$days        = $wpdb->get_results( $wpdb->prepare(
+		"SELECT DATE(created_at) AS d, status, COUNT(*) AS c FROM {$table}
+		 WHERE created_at >= %s GROUP BY DATE(created_at), status ORDER BY d ASC",
+		$since_local
+	) );
+	// phpcs:enable
+	$by_day = array();
+	for ( $i = 13; $i >= 0; $i-- ) {
+		$d            = date_i18n( 'Y-m-d', current_time( 'timestamp' ) - $i * DAY_IN_SECONDS );
+		$by_day[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+	}
+	foreach ( (array) $days as $row ) {
+		$d = (string) $row->d;
+		if ( ! isset( $by_day[ $d ] ) ) {
+			continue;
+		}
+		if ( 'failed' === $row->status ) {
+			$by_day[ $d ]['secondary'] = (int) $row->c;
+		} else {
+			$by_day[ $d ]['value'] = (int) $row->c;
+		}
+	}
+
+	// Connection count from FluentSMTP settings (never touch secrets).
+	$connections = 0;
+	$settings    = get_option( 'fluentmail-settings', array() );
+	if ( is_array( $settings ) && ! empty( $settings['connections'] ) && is_array( $settings['connections'] ) ) {
+		$connections = count( $settings['connections'] );
+	}
+
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Logged emails',
+				'value' => number_format_i18n( $total ),
+				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
+			),
+			array(
+				'label' => 'Connections',
+				'value' => (string) $connections,
+				'hint'  => $connections ? 'Configured in FluentSMTP' : 'No mailer connected yet',
+			),
+		),
+		'chart'   => array(
+			'title'     => 'Last 14 days',
+			'primary'   => 'Sent',
+			'secondary' => 'Failed',
+			'points'    => array_values( $by_day ),
+		),
+		'actions' => array(
+			array(
+				'label'  => 'Send a test email',
+				'route'  => 'minn-admin/v1/fluent-smtp/test',
+				'method' => 'POST',
+				'fields' => array(
+					array(
+						'key'         => 'email',
+						'label'       => 'Send to',
+						'placeholder' => wp_get_current_user()->user_email,
+						'required'    => true,
+					),
+				),
+			),
+			array(
+				'label' => 'Open FluentSMTP ↗',
+				'href'  => admin_url( 'options-general.php?page=fluent-mail#/' ),
+			),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_fluent_smtp_active() ) {
 		return $surfaces;
@@ -52,6 +141,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'send',
 		'cap'        => 'manage_options',
 		'family'     => 'mail',
+		'status'     => array( 'route' => 'minn-admin/v1/fluent-smtp/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/fluent-smtp/emails',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -188,7 +278,58 @@ add_action( 'rest_api_init', function () {
 			if ( ! $sent ) {
 				return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( array( 'resent' => true, 'to' => implode( ', ', $to ) ) );
+			return rest_ensure_response( array(
+				'resent'  => true,
+				'to'      => implode( ', ', $to ),
+				'message' => 'Resent to ' . implode( ', ', $to ),
+			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/fluent-smtp/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_fluent_smtp_status_model() );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/fluent-smtp/test', array(
+		'methods'             => 'POST',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) {
+			$email = sanitize_email( (string) ( $request['email'] ?? '' ) );
+			if ( ! is_email( $email ) ) {
+				return new WP_Error( 'bad_email', 'Enter a valid email address.', array( 'status' => 400 ) );
+			}
+			// Prefer FluentSMTP's own test helper when their Settings model loads.
+			if ( class_exists( 'FluentMail\\App\\Models\\Settings' ) ) {
+				try {
+					$settings = new \FluentMail\App\Models\Settings();
+					$result   = $settings->sendTestEmail(
+						array( 'email' => $email, 'isHtml' => 'true' ),
+						$settings->get()
+					);
+					if ( false === $result ) {
+						return new WP_Error( 'send_failed', 'FluentSMTP could not send the test email.', array( 'status' => 500 ) );
+					}
+					return rest_ensure_response( array(
+						'ok'      => true,
+						'message' => 'Test email sent to ' . $email,
+					) );
+				} catch ( \Throwable $e ) {
+					return new WP_Error( 'send_failed', $e->getMessage(), array( 'status' => 500 ) );
+				}
+			}
+			// Fallback: plain wp_mail (still rides FluentSMTP when it owns the pipeline).
+			$sent = wp_mail( $email, 'Fluent SMTP: Test Email - ' . get_bloginfo( 'name' ), "This is a test email from Minn Admin.\n" );
+			if ( ! $sent ) {
+				return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array(
+				'ok'      => true,
+				'message' => 'Test email sent to ' . $email,
+			) );
 		},
 	) );
 } );
