@@ -28,7 +28,7 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 | `includes/class-minn-admin.php` | Routing, auth gate, boot payload (`window.MINN`), oEmbed shims |
 | `includes/class-minn-admin-rest.php` | `minn-admin/v1` endpoints (overview, render-blocks, editor-styles, …) |
 | `includes/adapters/` | Bundled third-party integrations — each guards on its plugin; `acf.php` is the panel reference, `seo.php` the REST-field reference |
-| `docs/` | Decisions live here. `editor-direction.md` (safety model — read before touching editor scope), `editor-roadmap.md` (where it's going), `block-inspector.md`, `for-plugin-authors.md` |
+| `docs/` | Decisions live here. `editor-direction.md` (safety model — read before touching editor scope), `editor-roadmap.md` (where it's going), `block-inspector.md`, `for-plugin-authors.md`, `plugin-support.md` (coverage map), `adapter-coverage.md` (primitive matrix for adapter sweeps) |
 | `tests/` | Self-contained Playwright suites + `helpers.js` harness |
 
 ## Editor invariants (violations are data loss)

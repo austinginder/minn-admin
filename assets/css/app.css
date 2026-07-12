@@ -291,6 +291,9 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-new-menu button:hover { background: var(--hover); }
 .minn-new-menu button.danger { color: var(--red); }
+.minn-new-menu button.is-on, .minn-new-menu a.is-on {
+  color: var(--accent2); font-weight: 600;
+}
 .minn-new-menu a {
   display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px;
   border-radius: 8px; color: var(--text); font-size: 14px; font-weight: 500; text-decoration: none;
