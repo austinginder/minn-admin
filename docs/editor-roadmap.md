@@ -129,28 +129,38 @@ distrust the surface.
 ## Horizon 2 — delight (0.7–0.9): things Gutenberg will never feel like
 
 The theme: features that only make sense in a *writing* tool, where the calm surface is
-the point.
+the point. Most of this horizon shipped across v0.8.0–v0.10.0; remaining items are
+stats growth and a slash extension point.
 
-- **Outline panel.** Headings as a clickable table of contents in the sidebar; doubles as
-  structure feedback while drafting.
-- **Focus mode.** Fade everything but the current paragraph; typewriter scroll. The
-  feature that markets itself in a screenshot.
-- **Revision diffs.** The History card opens a side-by-side diff instead of a raw
-  restore — writers think in "what changed," not in revision IDs.
-- **Internal link picker.** ⌘K link flow searches your own posts first — linking to your
-  own writing should be faster than pasting a URL.
+- **Outline panel.** ✅ *Shipped 2026-07-05 (v0.8.0)* — heading ToC as the last sidebar
+  card, sticky; rebuilds on the stats cadence; click ping lives inside the scroller at
+  content coordinates. Outline *mode* (⌘⇧O) collapses nav + every sidebar card except the
+  outline. Suite: `tests/outline.test.js`.
+- **Focus mode.** ✅ *Shipped 2026-07-05 / zen 2026-07-06* — caret-block dim bands,
+  typewriter scroll (capped instant steps; smooth scroll is canceled by caret-reveal),
+  zen collapses nav + editor sidebar. ⌘⇧D palette command (not a toolbar icon). Suite:
+  `tests/focus.test.js`.
+- **Revision diffs.** ✅ *Shipped 2026-07-05 (v0.8.0)* — History card opens a side-by-side
+  word diff vs the current serializer output (unsaved edits count); LCS with sameRatio
+  gate so unrelated del/add paragraphs stay separate. Suite: `tests/revision-diff.test.js`.
+- **Internal link picker.** ✅ *Shipped 2026-07-05 (v0.8.0)* — link popover URL field
+  searches `wp/v2/search` for non-URL text; pick applies immediately. Suite:
+  `tests/link-picker.test.js`.
 - **Find & replace** within the post, markdown-aware.
-  ✅ *Shipped 2026-07-10* — ⌘F find bar (the "Find & replace" section in app.js; also a ⌘K
-  command). Matching runs over the text writers see: text nodes concatenated per block, so a
+  ✅ *Shipped 2026-07-10* — ⌘⇧F (rebound from ⌘F so the browser keeps plain find; also a
+  ⌘K command). Matching runs over the text writers see: text nodes concatenated per block, so a
   match crosses inline marks (a split `<strong>`) but never a block boundary, and islands /
   `contenteditable=false` subtrees are excluded entirely. Highlights are overlay rects inside
   the scroller at content coordinates (nothing touches the typing surface); replaces select
   the match Range and run `execCommand insertText`, so every replacement is a native undo
   entry and Replace-all applies last-to-first to keep earlier ranges valid. Locked mode falls
   through to browser find. Suite: `tests/find-replace.test.js`.
-- **Writing stats that matter.** Session word counts, per-post goals; the pill grows up.
+- **Writing stats that matter.** Session word counts, per-post goals; the pill (word count
+  + reading time) is the seed. Still open.
 - **Slash-command extension point.** `minn_admin_editor_commands` filter so plugins add
-  their own slash items the way they already add blocks, panels and surfaces.
+  their own slash items the way they already add blocks, panels and surfaces. Still open
+  (auto-insert blocks, design libraries and patterns already cover the plugin-content
+  half without a new filter).
 
 ## Horizon 3 — the editor as platform (1.0+)
 
