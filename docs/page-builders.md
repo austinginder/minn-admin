@@ -12,11 +12,12 @@ editor corrupt what the builder owns. Shipped as `includes/adapters/page-builder
 
 ## Lab method
 
-Fresh Cove site (`builders.localhost`) with minn-admin symlinked; installed Divi 5
+Disposable local WordPress site with minn-admin active; installed Divi 5
 (theme), Etch 1.6.1, Beaver Builder agency + theme, Brizy 2.8.17 + Pro, Elementor free
-(wp.org — no Elementor Pro zip was on hand, but Pro rides free's storage/URLs). For each
-builder: opened its editor surface in a real Chrome, saved where scriptable, then
-inspected `post_content`, postmeta, and how Minn's editor presented the same post.
+(wp.org; no Elementor Pro zip was on hand for that pass, but Pro rides free's
+storage/URLs). For each builder: opened its editor surface in a real browser,
+saved where scriptable, then inspected `post_content`, postmeta, and how Minn's
+editor presented the same post.
 
 ## What each builder actually does
 
@@ -126,6 +127,6 @@ template with no app and no console error — a silent white page (reported and 
 
 ## Lab artifacts
 
-`builders.localhost` Cove site (kept for follow-ups; delete with
-`cove delete builders`). Demo pages: Elementor (7), Beaver (11), Brizy (16), Etch (17,
-21, 24), Divi (18), Divi-5-style blocks (20).
+The disposable multi-builder site is kept only while builder work is active.
+Typical demo pages on that lab: one post per builder (Elementor, Beaver, Brizy,
+Etch, Divi 4 shortcodes, Divi 5 blocks).

@@ -28,8 +28,9 @@ Gutenberg" — a different tool for a different job. Gutenberg is the layout too
 where the writing happens; islands and the one-click handoff are the seam between them.
 Saying "that's Gutenberg's job" is the strategy, not a limitation to apologize for.
 
-The bar for "it works": **every anchor.host post gets written and edited in Minn without
-opening the block editor once.** Dogfooding is the roadmap's referee.
+The bar for "it works": **every post on a real production site gets written and
+edited in Minn without opening the block editor once.** Dogfooding is the
+roadmap's referee.
 
 ## What was learned building v0.5.x (the paper-cut ledger)
 

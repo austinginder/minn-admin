@@ -64,18 +64,18 @@ Sidebar: one **Forms** item. Topbar autocomplete when
 6. GF depth (status filters, bulk, notifications view, form settings) — done
    across v0.12.0–v0.13.0; see `docs/full-ui-adapters.md`.
 
-## Lab fixtures (minnadmin)
+## Fixture expectations (for suites)
 
-| Adapter | Fixture state |
+| Adapter | What a test site needs |
 |---|---|
-| Gravity Forms | ACTIVE resident; form 1 "Contact Form" + form 2 inactive; seeded entries |
-| Fluent Forms | installed (family switcher) |
-| Elementor Pro Forms | Pro forms fixture when Elementor Pro is active |
-| Flamingo + CFDB7 | both active; standing Dana/Miguel/Priya fixtures + one-shot seeders |
-| Ninja Forms | ACTIVE resident; default "Contact Me" form id 1 |
-| Forminator | ACTIVE; standing "Feedback Form" + `minn_test_seed_forminator` |
-| Formidable | ACTIVE; standing "Survey Form" key `minn-survey` + `minn_test_seed_formidable` |
-| WPForms entries | needs **WPForms Pro** zip + license |
+| Gravity Forms | Active; at least one form with seeded entries (and ideally one inactive form) |
+| Fluent Forms | Installed so the family switcher has another provider |
+| Elementor Pro Forms | Elementor Pro with Collect Submissions + at least one form submission |
+| Flamingo + CFDB7 | Both active with a few standing inbound rows; suites may use one-shot seed options |
+| Ninja Forms | Active; default form is fine once `Ninja_Forms()->activation()` has run |
+| Forminator | Active form + entries; suites can arm `minn_test_seed_forminator` |
+| Formidable | Active form + entries after `FrmAppController::install()`; suites can arm `minn_test_seed_formidable` |
+| WPForms entries | **WPForms Pro** zip + license (Lite has no local entry store) |
 
 ## Out of scope (same as day one)
 

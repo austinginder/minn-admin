@@ -191,7 +191,7 @@ against Gravity's live API with bogus keys.
 
 **Wave 5 (shipped 2026-07-10): the fleet-ranked uncovered tail.** Eleven
 new readers, source-verified against real builds pulled from the
-CaptainCore quicksave archive and installed inactive on minnadmin:
+CaptainCore quicksave archive and installed inactive on the primary test site:
 
 - **WPMU DEV** (`wpmudev`): one Hub API key (site option `wpmudev_apikey`
   or the `WPMUDEV_APIKEY` constant) unlocks the family. Membership status
@@ -382,7 +382,7 @@ license data on a lab site.
 | TEC Filter Bar | activate / deactivate / verify | real key | 2026-07-11 | PUE |
 | TEC Community | activate / deactivate / verify | real key | 2026-07-11 | PUE |
 | Kadence Blocks Pro | activate / deactivate / verify | real key | 2026-07-11 | key ships embedded in the build; deactivate mirrors their Clear |
-| Gravity SMTP | activate / deactivate / verify | real key (owner-run, anchor.host) | 2026-07-10 | check-memory upgrades the unknown state |
+| Gravity SMTP | activate / deactivate / verify | real key (owner-run on a live site) | 2026-07-10 | check-memory upgrades the unknown state |
 | Elementor Pro | activate / deactivate / verify | bogus key | 2026-07-10 | reader also proven against a real license |
 | ACF PRO | activate / deactivate / verify | bogus key | 2026-07-10 | reader proven against a real lifetime license |
 | WP Rocket | verify only | real license (cache lab) | 2026-07-10 | creds ship in the vendor zip; no paste by design |

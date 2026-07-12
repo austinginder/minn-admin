@@ -1,7 +1,7 @@
-# Block-suite lab findings — blocks.localhost sweep (July 6, 2026)
+# Block-suite lab findings (July 6, 2026)
 
-Lab site: `blocks.localhost` (Cove), minn-admin symlinked, five suites installed and
-active: **Kadence Blocks 3.7.8, Spectra 2.19.29, GenerateBlocks 2.3.0, Otter 3.2.0,
+Disposable local WordPress site with minn-admin active and five suites installed:
+**Kadence Blocks 3.7.8, Spectra 2.19.29, GenerateBlocks 2.3.0, Otter 3.2.0,
 Essential Blocks 6.3.0**. Stackable findings (the reference integration) live in
 [block-inspector.md](block-inspector.md) and `adapters/stackable.php`.
 
@@ -143,5 +143,5 @@ shims — candidates ranked in the roadmap.
 
 ## Lab housekeeping
 
-Fixture: page 5 ("Otter pattern: CTA Banner"). The lab is a local Cove site;
-`cove delete blocks` when it has served its purpose.
+A multi-root Otter pattern page is a useful standing fixture for pattern-insert
+and preview-CSS checks. Tear down the disposable lab when suite work is done.

@@ -108,8 +108,8 @@ This is "Minn builds a second editor" scale: think the block-inspector effort,
 not an adapter. Ballpark a full cycle for field-list + basics + suites. The
 prerequisite plumbing (item-scoped settings, the Settings-framework mapper,
 notifications write path) shipped in the v0.13.0 cycle; what remains before
-committing is dogfooding that form-management depth on a real site
-(anchor.localhost's Gravity Forms use) so the bet is earned, not assumed.
+committing is dogfooding that form-management depth on a real site with
+active Gravity Forms use, so the bet is earned, not assumed.
 
 ### The generalization
 
@@ -201,7 +201,7 @@ The weakest of the three cases, recorded mostly to draw its boundary.
 3. The GF 80% editor is a full cycle and should be a deliberate product bet,
    made when form management in Minn (entries + settings + notifications,
    all live as of v0.13.0) has proven that users stay in Minn for form
-   work. Dogfooding on anchor.localhost's real Gravity Forms use is the
+   work. Dogfooding on a real site with active Gravity Forms traffic is the
    honest test before committing.
 4. File browsing only ever ships as read-only, and only if a real diagnostic
    need surfaces that the debug-log viewer doesn't already cover.

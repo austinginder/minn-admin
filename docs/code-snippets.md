@@ -1,18 +1,18 @@
-# Code-snippet plugins — source audit (builders.localhost)
+# Code-snippet plugins — source audit
 
-Lab: `builders.localhost` (Cove; minn-admin symlinked). Audited 2026-07-09 against
-live installs of the free plugins. Goal: rank candidates for a Minn surface
-(same pattern as audit-log adapters).
+Audited 2026-07-09 against live installs of the free plugins on a disposable
+local WordPress site with minn-admin active. Goal: rank candidates for a Minn
+surface (same pattern as audit-log adapters).
 
-## Installed on the lab
+## Plugins audited
 
-| Plugin | Slug | Version | Status on lab |
+| Plugin | Slug | Version | Status during audit |
 |---|---|---|---|
 | Code Snippets | `code-snippets` | 3.9.6 | Active |
 | WPCode | `insert-headers-and-footers` | 2.3.7 | Active |
 | FluentSnippets | `easy-code-manager` | 10.55 | Active |
 | Header Footer Code Manager | `header-footer-code-manager` | 1.1.45 | Active |
-| Woody | `insert-php` | 2.7.5 | **Install OK; activate fatals** (`add_capabilities()` on null in `class.plugin.php:168` under this WP/CLI stack) |
+| Woody | `insert-php` | 2.7.5 | **Install OK; activate fatals** (`add_capabilities()` on null in `class.plugin.php:168` under that WP/CLI stack) |
 
 Fixtures created: Code Snippets #5/#6, WPCode post 82, Fluent `1-minn-audit-fluent.php`, HFCM row 1.
 
@@ -136,5 +136,5 @@ Edit ↗ into the plugin’s own admin.
 
 ## Lab housekeeping
 
-Plugins left installed on `builders.localhost` for follow-up work. Woody remains inactive.
-`cove delete builders` when the lab is done.
+Woody was left inactive after the audit (activate fatals). Tear down the
+disposable lab when snippet work is done.
