@@ -11,6 +11,15 @@
  * constant locks and masked-secret sentinels keep their semantics), and
  * resends through their own recipient model.
  *
+ * Email Routing (2.3.0+, feature flag smart_routing): recipes live in
+ * plugin option routing_settings. Minn lists them (name, connector,
+ * enabled, condition summary), toggles enable, and deletes through the
+ * same store their Save_Routing_Settings_Endpoint uses. Building /
+ * testing condition trees stays on their React screen (admin.php?page=
+ * gravitysmtp-settings&tab=routing) — the condition editor is not a
+ * surface-field vocabulary fit. The log also knows their 2.3.0
+ * partially-sent status ("Filtered": suppressed recipients stripped).
+ *
  * Capability model: Gravity SMTP ships granular gravitysmtp_* caps
  * (granted to administrators by their Roles::register()); every route here
  * gates on the matching cap when the Roles class is loaded, falling back
@@ -52,6 +61,199 @@ function minn_admin_gsmtp_router() {
 	);
 }
 
+/** Plugin opts store (gravitysmtp_config JSON) — where routing_settings lives. */
+function minn_admin_gsmtp_plugin_opts() {
+	return new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store();
+}
+
+/** Email Routing (2.3.0+) is behind their smart_routing feature flag. */
+function minn_admin_gsmtp_routing_available() {
+	if ( ! class_exists( 'Gravity_Forms\Gravity_SMTP\Feature_Flags\Feature_Flag_Manager' ) ) {
+		return false;
+	}
+	return (bool) Gravity_Forms\Gravity_SMTP\Feature_Flags\Feature_Flag_Manager::is_enabled( 'smart_routing' );
+}
+
+/** Deep link into their React routing screen. */
+function minn_admin_gsmtp_routing_admin_url() {
+	return admin_url( 'admin.php?page=gravitysmtp-settings&tab=routing' );
+}
+
+/**
+ * Routing recipes as stored by Save_Routing_Settings_Endpoint
+ * (option key routing_settings inside gravitysmtp_config).
+ *
+ * @return array
+ */
+function minn_admin_gsmtp_routing_recipes() {
+	$store = minn_admin_gsmtp_plugin_opts();
+	// Their Config reads get( key, 'config', default ); Plugin_Opts::get
+	// signature is get( $setting_name, $connector = 'config', $default ).
+	$settings = $store->get( 'routing_settings', 'config', array() );
+	if ( ! is_array( $settings ) ) {
+		// Router path (constants first) as a fallback.
+		$settings = minn_admin_gsmtp_router()->get_plugin_setting( 'routing_settings', array() );
+	}
+	return is_array( $settings ) ? array_values( $settings ) : array();
+}
+
+/**
+ * Persist recipes through their own plugin-opts store (same as their
+ * save_routing_settings ajax endpoint).
+ *
+ * @param array $recipes
+ */
+function minn_admin_gsmtp_routing_save( array $recipes ) {
+	minn_admin_gsmtp_plugin_opts()->save( 'routing_settings', array_values( $recipes ) );
+}
+
+/** Human label for a connector slug from their live data map. */
+function minn_admin_gsmtp_connector_title( $slug ) {
+	$slug = (string) $slug;
+	if ( '' === $slug ) {
+		return '—';
+	}
+	try {
+		$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+		$map       = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::CONNECTOR_DATA_MAP );
+		if ( is_array( $map ) && ! empty( $map[ $slug ]['title'] ) ) {
+			return (string) $map[ $slug ]['title'];
+		}
+	} catch ( \Throwable $e ) {
+		// Fall through.
+	}
+	return $slug;
+}
+
+/**
+ * One-line condition summary for a recipe (not a full reimplementation of
+ * their Settings_to_Conditionals_Parser — just enough to scan a list).
+ *
+ * @param array $conditions
+ * @return string
+ */
+function minn_admin_gsmtp_condition_summary( $conditions ) {
+	if ( ! is_array( $conditions ) ) {
+		return '—';
+	}
+	$labels = array(
+		'subject'          => 'Subject',
+		'message'          => 'Message',
+		'from_email'       => 'From',
+		'from_name'        => 'From name',
+		'to'               => 'To',
+		'cc'               => 'CC',
+		'bcc'              => 'BCC',
+		'reply_to'         => 'Reply-To',
+		'source'           => 'Source',
+		'source_subtype'   => 'Source type',
+		'to_count'         => 'To count',
+		'cc_count'         => 'CC count',
+		'bcc_count'        => 'BCC count',
+		'has_attachments'  => 'Has attachments',
+		'attachments_count'=> 'Attachments',
+		'content_type'     => 'Content type',
+		'message_size'     => 'Message size',
+		'attachment_size'  => 'Attachment size',
+	);
+	$comps = array(
+		'='                 => 'is',
+		'!='                => 'is not',
+		'>'                 => '>',
+		'>='                => '≥',
+		'<'                 => '<',
+		'<='                => '≤',
+		'contains'          => 'contains',
+		'does_not_contain'  => 'does not contain',
+		'starts_with'       => 'starts with',
+		'ends_with'         => 'ends with',
+	);
+	$parts = array();
+	$walk  = function ( $node ) use ( &$walk, &$parts, $labels, $comps ) {
+		if ( ! is_array( $node ) ) {
+			return;
+		}
+		// Leaf condition.
+		if ( isset( $node['email_field'], $node['comparator'] ) ) {
+			$field = $labels[ $node['email_field'] ] ?? $node['email_field'];
+			$comp  = $comps[ $node['comparator'] ] ?? $node['comparator'];
+			$val   = isset( $node['value'] ) ? (string) $node['value'] : '';
+			if ( ! empty( $node['regex'] ) ) {
+				$val .= ' (regex)';
+			}
+			$parts[] = trim( $field . ' ' . $comp . ' ' . $val );
+			return;
+		}
+		// Group with nested rules.
+		if ( ! empty( $node['rules'] ) && is_array( $node['rules'] ) ) {
+			foreach ( $node['rules'] as $child ) {
+				$walk( $child );
+			}
+		}
+	};
+	$walk( $conditions );
+	if ( ! $parts ) {
+		return 'No conditions';
+	}
+	// Cap for list display.
+	$shown = array_slice( $parts, 0, 3 );
+	$out   = implode( ' · ', $shown );
+	if ( count( $parts ) > 3 ) {
+		$out .= ' · +' . ( count( $parts ) - 3 ) . ' more';
+	}
+	return $out;
+}
+
+/** Display rows for the Routing list view, index-stable for REST actions. */
+function minn_admin_gsmtp_routing_rows() {
+	$recipes = minn_admin_gsmtp_routing_recipes();
+	$items   = array();
+	foreach ( $recipes as $i => $recipe ) {
+		if ( ! is_array( $recipe ) ) {
+			continue;
+		}
+		$enabled = true;
+		if ( array_key_exists( 'enabled', $recipe ) ) {
+			$enabled = class_exists( 'Gravity_Forms\Gravity_SMTP\Utils\Booliesh' )
+				? (bool) Gravity_Forms\Gravity_SMTP\Utils\Booliesh::get( $recipe['enabled'] )
+				: (bool) $recipe['enabled'];
+		}
+		$connector = isset( $recipe['connector'] ) ? (string) $recipe['connector'] : '';
+		$items[]   = array(
+			'id'         => (int) $i,
+			'name'       => isset( $recipe['name'] ) && $recipe['name'] !== ''
+				? (string) $recipe['name']
+				: ( 'Rule ' . ( $i + 1 ) ),
+			'provider'   => minn_admin_gsmtp_connector_title( $connector ),
+			'connector'  => $connector,
+			'enabled'    => $enabled ? 'on' : 'off',
+			'conditions' => minn_admin_gsmtp_condition_summary( $recipe['conditions'] ?? array() ),
+			'order'      => $i + 1,
+		);
+	}
+	return $items;
+}
+
+/** How many connectors are currently enabled (routing needs ≥ 2). */
+function minn_admin_gsmtp_active_connector_count() {
+	try {
+		$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+		$map       = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::CONNECTOR_DATA_MAP );
+		if ( ! is_array( $map ) ) {
+			return 0;
+		}
+		$count = 0;
+		foreach ( $map as $entry ) {
+			if ( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Base::is_data_map_entry_active( $entry ) ) {
+				$count++;
+			}
+		}
+		return $count;
+	} catch ( \Throwable $e ) {
+		return 0;
+	}
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_gravity_smtp_active() ) {
 		return $surfaces;
@@ -75,6 +277,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'sent', 'Sent' ),
 					array( 'failed', 'Failed' ),
 					array( 'sandboxed', 'Sandboxed' ),
+					// 2.3.0: suppressed recipients stripped from to/cc/bcc.
+					array( 'partially-sent', 'Filtered' ),
 				),
 				'allLabel' => 'All',
 			),
@@ -137,7 +341,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 		// Extra list views beyond collection/manage. The debug log lived as a
 		// wp-admin link-out on the status card until surfaces grew this slot.
-		'views'      => array(
+		'views'      => array_values( array_filter( array(
 			array(
 				'viewLabel' => 'Debug log',
 				'cap'       => minn_admin_gsmtp_cap( 'VIEW_DEBUG_LOG' ),
@@ -164,7 +368,52 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'detail'    => array(),
 			),
-		),
+			// Email Routing (2.3.0+). List + enable/disable/delete only —
+			// the condition builder stays on their React screen.
+			minn_admin_gsmtp_routing_available() ? array(
+				'viewLabel' => 'Routing',
+				'cap'       => minn_admin_gsmtp_cap( 'VIEW_ROUTING' ),
+				'route'     => 'minn-admin/v1/gravity-smtp/routing',
+				'pageQuery' => 'per_page=50&page={page}',
+				'itemsKey'  => 'items',
+				'totalKey'  => 'total',
+				'columns'   => array(
+					array( 'key' => 'order', 'label' => '#', 'format' => 'text', 'width' => '48px' ),
+					array( 'key' => 'name', 'label' => 'Rule', 'format' => 'title' ),
+					array( 'key' => 'provider', 'label' => 'Send with', 'format' => 'text' ),
+					array( 'key' => 'conditions', 'label' => 'When', 'format' => 'text' ),
+					array( 'key' => 'enabled', 'label' => 'Enabled', 'format' => 'pill' ),
+				),
+				'detail'    => array(
+					'skip' => array( 'order', 'connector' ),
+				),
+				'actions'   => array(
+					array(
+						'label'  => 'Enable',
+						'method' => 'POST',
+						'route'  => 'minn-admin/v1/gravity-smtp/routing/{id}/enable',
+						'when'   => array( 'key' => 'enabled', 'equals' => 'off' ),
+					),
+					array(
+						'label'  => 'Disable',
+						'method' => 'POST',
+						'route'  => 'minn-admin/v1/gravity-smtp/routing/{id}/disable',
+						'when'   => array( 'key' => 'enabled', 'equals' => 'on' ),
+					),
+					array(
+						'label'   => 'Delete rule',
+						'method'  => 'DELETE',
+						'route'   => 'minn-admin/v1/gravity-smtp/routing/{id}',
+						'confirm' => 'Delete this routing rule permanently?',
+						'danger'  => true,
+					),
+					array(
+						'label' => 'Edit in Gravity SMTP ↗',
+						'href'  => minn_admin_gsmtp_routing_admin_url(),
+					),
+				),
+			) : null,
+		) ) ),
 		'settings'   => array(
 			'cap'   => minn_admin_gsmtp_cap( 'VIEW_GENERAL_SETTINGS' ),
 			'tabs'  => array(
@@ -542,15 +791,35 @@ add_action( 'rest_api_init', function () {
 			$test_mode = filter_var( $router->get_plugin_setting( 'test_mode', 'false' ), FILTER_VALIDATE_BOOLEAN )
 				|| ( class_exists( 'Gravity_Forms\Gravity_SMTP\Utils\Booliesh' )
 					&& Gravity_Forms\Gravity_SMTP\Utils\Booliesh::get( $router->get_plugin_setting( 'test_mode', 'false' ) ) );
-			$out = array(
-				'rows' => array(
-					array( 'label' => 'Sending through', 'value' => $title ),
-					array(
-						'label' => 'Test mode',
-						'value' => $test_mode ? 'On' : 'Off',
-						'hint'  => $test_mode ? 'Emails are logged, not sent.' : '',
-					),
+			$rows = array(
+				array( 'label' => 'Sending through', 'value' => $title ),
+				array(
+					'label' => 'Test mode',
+					'value' => $test_mode ? 'On' : 'Off',
+					'hint'  => $test_mode ? 'Emails are logged, not sent.' : '',
 				),
+			);
+			// Email Routing (2.3.0+): count of recipes + whether evaluation
+			// can run (needs ≥ 2 active connectors, same gate as their UI).
+			if ( minn_admin_gsmtp_routing_available() && current_user_can( minn_admin_gsmtp_cap( 'VIEW_ROUTING' ) ) ) {
+				$all     = minn_admin_gsmtp_routing_rows();
+				$on      = count( array_filter( $all, function ( $r ) {
+					return 'on' === $r['enabled'];
+				} ) );
+				$active  = minn_admin_gsmtp_active_connector_count();
+				$hint    = $active < 2
+					? 'Needs at least 2 active integrations to evaluate (same as Gravity SMTP).'
+					: ( $all ? 'First matching rule wins, top to bottom.' : 'No rules yet — add them in Gravity SMTP.' );
+				$rows[]  = array(
+					'label' => 'Routing',
+					'value' => $all
+						? ( count( $all ) . ' rule' . ( 1 === count( $all ) ? '' : 's' ) . ' · ' . $on . ' on' )
+						: 'None',
+					'hint'  => $hint,
+				);
+			}
+			$out = array(
+				'rows' => $rows,
 			);
 			// Rung-3 chart row: daily sent/failed for the last 14 UTC days.
 			// First consumer of the status-card chart shape.
@@ -569,12 +838,78 @@ add_action( 'rest_api_init', function () {
 					),
 				);
 			}
+			if ( minn_admin_gsmtp_routing_available() && current_user_can( minn_admin_gsmtp_cap( 'VIEW_ROUTING' ) ) ) {
+				$out['actions'][] = array(
+					'label' => 'Edit routing rules ↗',
+					'href'  => minn_admin_gsmtp_routing_admin_url(),
+				);
+			}
 			if ( ! $out['actions'] ) {
 				unset( $out['actions'] );
 			}
 			return rest_ensure_response( $out );
 		},
 	) );
+
+	// ----- Email Routing (2.3.0+) ----------------------------------------
+	if ( minn_admin_gsmtp_routing_available() ) {
+		register_rest_route( 'minn-admin/v1', '/gravity-smtp/routing', array(
+			'methods'             => 'GET',
+			'permission_callback' => $can( 'VIEW_ROUTING' ),
+			'callback'            => function ( WP_REST_Request $request ) {
+				$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 50 ) );
+				$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
+				$all      = minn_admin_gsmtp_routing_rows();
+				return rest_ensure_response( array(
+					'items'    => array_slice( $all, ( $page - 1 ) * $per_page, $per_page ),
+					'total'    => count( $all ),
+					'adminUrl' => minn_admin_gsmtp_routing_admin_url(),
+					// Their UI (and send path) ignore rules until ≥ 2 connectors.
+					'connectors_active' => minn_admin_gsmtp_active_connector_count(),
+				) );
+			},
+		) );
+
+		// Enable / disable — flip the enabled flag and rewrite the list.
+		foreach ( array( 'enable' => true, 'disable' => false ) as $verb => $on ) {
+			register_rest_route( 'minn-admin/v1', '/gravity-smtp/routing/(?P<id>\d+)/' . $verb, array(
+				'methods'             => 'POST',
+				'permission_callback' => $can( 'EDIT_ROUTING' ),
+				'callback'            => function ( WP_REST_Request $request ) use ( $on, $verb ) {
+					$recipes = minn_admin_gsmtp_routing_recipes();
+					$id      = (int) $request['id'];
+					if ( ! isset( $recipes[ $id ] ) || ! is_array( $recipes[ $id ] ) ) {
+						return new WP_Error( 'not_found', 'Routing rule not found.', array( 'status' => 404 ) );
+					}
+					$recipes[ $id ]['enabled'] = $on;
+					minn_admin_gsmtp_routing_save( $recipes );
+					return rest_ensure_response( array(
+						'updated' => true,
+						'enabled' => $on,
+						'message' => $on ? 'Rule enabled.' : 'Rule disabled.',
+					) );
+				},
+			) );
+		}
+
+		register_rest_route( 'minn-admin/v1', '/gravity-smtp/routing/(?P<id>\d+)', array(
+			'methods'             => 'DELETE',
+			'permission_callback' => $can( 'EDIT_ROUTING' ),
+			'callback'            => function ( WP_REST_Request $request ) {
+				$recipes = minn_admin_gsmtp_routing_recipes();
+				$id      = (int) $request['id'];
+				if ( ! isset( $recipes[ $id ] ) ) {
+					return new WP_Error( 'not_found', 'Routing rule not found.', array( 'status' => 404 ) );
+				}
+				array_splice( $recipes, $id, 1 );
+				minn_admin_gsmtp_routing_save( $recipes );
+				return rest_ensure_response( array(
+					'deleted' => true,
+					'message' => 'Routing rule deleted.',
+				) );
+			},
+		) );
+	}
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/send-test', array(
 		'methods'             => 'POST',
