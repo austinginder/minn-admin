@@ -16127,7 +16127,7 @@
 						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'log' ) } ↗</a>` : '' }
 						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( l.url ) }" target="_blank" rel="noopener">${ esc( l.label ) }</a>` ).join( '' ) }
 						${ visibleActions.map( ( { a, i } ) => a.href
-							? `<a class="minn-btn-soft" href="${ esc( String( a.href ).replace( '{id}', encodeURIComponent( it.id ) ) ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
+							? `<a class="minn-btn-soft" href="${ esc( String( a.href ).replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( it[ k ] ?? '' ) ) ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
 							: `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 					</div>` : '' }` }
 				</div>
