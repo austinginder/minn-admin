@@ -3433,6 +3433,15 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 
+		// Redis Object Cache drop-in + connection (adapters/cache-purge.php).
+		// Only renders when the plugin is loaded; complements the generic
+		// "Persistent object cache" row with vendor-specific status.
+		if ( function_exists( 'minn_admin_redis_object_cache_checks' ) ) {
+			foreach ( minn_admin_redis_object_cache_checks() as $redis_check ) {
+				$checks[] = $redis_check;
+			}
+		}
+
 		// Licenses — read-only visibility (adapters/licenses.php); the health
 		// check only renders when the site has license-wanting components.
 		$licenses = function_exists( 'minn_admin_licenses' ) ? minn_admin_licenses() : null;
