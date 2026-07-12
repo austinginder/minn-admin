@@ -213,6 +213,14 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-vis-chip:hover { border-color: var(--amber); }
 .minn-vis-chip svg { width: 14px; height: 14px; }
 
+/* Switched-session escape (User Switching): the plugin's own back-link
+   lives in the admin bar Minn never renders, so the nav carries it. The
+   switchback bar takes over margin-top:auto so the user card stacks
+   directly beneath it. */
+.minn-switchback { margin-top: auto; display: flex; align-items: center; gap: 7px; padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--amber); background: rgba(224,164,88,0.09); border: 1px solid rgba(224,164,88,0.28); border-radius: 9px; text-decoration: none; }
+.minn-switchback:hover { background: rgba(224,164,88,0.16); }
+.minn-switchback svg { width: 13px; height: 13px; flex: none; }
+.minn-switchback + .minn-user { margin-top: 8px; }
 .minn-user { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid var(--border); cursor: pointer; border-radius: 9px; }
 .minn-user:hover { background: var(--hover); }
 .minn-user-avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--pink), var(--amber)); flex-shrink: 0; object-fit: cover; }

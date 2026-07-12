@@ -42,3 +42,35 @@ add_action( 'rest_api_init', function () {
 		)
 	);
 } );
+
+/**
+ * A switched session's way home (the boot payload `switchBack` key). The
+ * plugin's own switch-back link lives in wp-admin's admin bar, which Minn
+ * never renders — without this, switching to a lesser account from Minn is
+ * a one-way door. Returns { name, url } via the plugin's own nonce URL
+ * (redirecting back into Minn), or null when this session isn't switched.
+ */
+function minn_admin_user_switching_back() {
+	if ( ! class_exists( 'user_switching' ) || ! method_exists( 'user_switching', 'get_old_user' ) ) {
+		return null;
+	}
+	try {
+		$old = user_switching::get_old_user();
+		if ( ! $old ) {
+			return null;
+		}
+		$url = user_switching::switch_back_url( $old );
+		if ( ! $url ) {
+			return null;
+		}
+		// wp_nonce_url() output is HTML-escaped (the wp_logout_url rule).
+		$url = str_replace( '&amp;', '&', $url );
+		$url = add_query_arg( 'redirect_to', rawurlencode( Minn_Admin::app_url() ), $url );
+		return array(
+			'name' => $old->display_name ? $old->display_name : $old->user_login,
+			'url'  => $url,
+		);
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+}

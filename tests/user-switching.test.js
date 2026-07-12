@@ -48,6 +48,25 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForFunction( () => window.MINN && window.MINN.user, null, { timeout: 20000 } );
 		const who = await page.evaluate( () => window.MINN.user.login );
 		t.check( 'after switching, Minn boots as the target user', who === 'minn-author', who );
+
+		// The way home: a switched session boots with switchBack and the nav
+		// wears the escape (the plugin's back-link lives in the admin bar
+		// Minn never renders). Clicking it lands back in Minn as the admin.
+		const back = await page.evaluate( () => window.MINN.switchBack );
+		t.check( 'switched boot carries switchBack', !! back && !! back.url && !! back.name, JSON.stringify( back ) );
+		await page.waitForSelector( '.minn-switchback', { timeout: 10000 } );
+		t.check( 'nav wears the Switch back bar', await page.$eval( '.minn-switchback', ( el ) => /Switch back to/.test( el.textContent ) ) );
+		await Promise.all( [
+			page.waitForNavigation( { waitUntil: 'domcontentloaded', timeout: 30000 } ),
+			page.click( '.minn-switchback' ),
+		] );
+		await page.waitForFunction( () => window.MINN && window.MINN.user, null, { timeout: 20000 } );
+		const home = await page.evaluate( () => ( {
+			login: window.MINN.user.login,
+			inMinn: location.pathname.includes( 'minn-admin' ),
+			bar: !! document.querySelector( '.minn-switchback' ),
+		} ) );
+		t.check( 'switch back lands in Minn as the original admin', home.login === 'admin' && home.inMinn && ! home.bar, JSON.stringify( home ) );
 	} else {
 		t.check( 'after switching, Minn boots as the target user', false, 'no switch entry to click' );
 	}

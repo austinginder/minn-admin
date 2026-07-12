@@ -370,6 +370,10 @@ class Minn_Admin {
 			// detail modal (adapters/wcpdf.php). Null without the plugin or
 			// order access.
 			'wcpdf'    => function_exists( 'minn_admin_wcpdf_boot' ) ? minn_admin_wcpdf_boot() : null,
+			// A User Switching session's way home (adapters/user-switching.php):
+			// { name, url } of the account to switch back to, else null. The
+			// plugin's own back-link lives in the admin bar Minn never renders.
+			'switchBack' => function_exists( 'minn_admin_user_switching_back' ) ? minn_admin_user_switching_back() : null,
 			// Disembark connector present — a boolean only: the palette's
 			// "Copy backup command" fetches the command (with its token) on
 			// demand rather than inlining a site secret into every pageload.
