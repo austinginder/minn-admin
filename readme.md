@@ -138,10 +138,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   between areas and in-place edit for block/text/HTML widgets
 - **Surfaces** — Minn's answer to plugin sprawl: one sidebar item per *job*, not per plugin,
   with every capable plugin layered in behind it and a provider switcher when more than one is
-  active. **Forms** (Gravity Forms, Ninja Forms, Fluent Forms, Elementor Pro, Contact Form 7
-  via Flamingo or CFDB7) shows entries as contact cards with real field labels and ←/→
-  stepping, with the full **Gravity Forms workflow** inside Minn: star, spam, trash, restore,
-  **bulk actions**, notes and resent notifications across Received / Spam / Trash views;
+  active. **Forms** (Gravity Forms, Ninja Forms, Fluent Forms, Forminator, Formidable, Everest
+  Forms, Elementor Pro, Contact Form 7 via Flamingo or CFDB7) shows entries as contact cards
+  with real field labels and ←/→ stepping, with the full **Gravity Forms workflow** inside
+  Minn: star, spam, trash, restore, **bulk actions**, notes and resent notifications across
+  Received / Spam / Trash views (Everest Forms carries the same three status views through
+  its own entry helpers);
   **Email** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging) shows sent
   mail with HTML previews and resend, plus Gravity SMTP's **full settings** (all 21 connectors,
   drawn at runtime from its own schema), suppressions and **send a test email**;

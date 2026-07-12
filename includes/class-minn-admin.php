@@ -363,10 +363,20 @@ class Minn_Admin {
 			// command (adapters/cache-purge.php).
 			'cache'    => current_user_can( 'manage_options' ) ? minn_admin_cache_purgers_boot() : array(),
 			// Backup provider — drives the "Back up site now" palette
-			// command (adapters/updraftplus.php).
-			'backup'   => ( current_user_can( 'manage_options' ) && minn_admin_updraftplus_active() )
-				? array( 'name' => 'UpdraftPlus', 'route' => 'minn-admin/v1/updraft/backup-now' )
-				: null,
+			// command. UpdraftPlus wins when both are active (its suite
+			// and health check already own the slot); WPvivid is next.
+			'backup'   => ( function () {
+				if ( ! current_user_can( 'manage_options' ) ) {
+					return null;
+				}
+				if ( function_exists( 'minn_admin_updraftplus_active' ) && minn_admin_updraftplus_active() ) {
+					return array( 'name' => 'UpdraftPlus', 'route' => 'minn-admin/v1/updraft/backup-now' );
+				}
+				if ( function_exists( 'minn_admin_wpvivid_active' ) && minn_admin_wpvivid_active() ) {
+					return array( 'name' => 'WPvivid', 'route' => 'minn-admin/v1/wpvivid/backup-now' );
+				}
+				return null;
+			} )(),
 			// Regenerate Thumbnails present + allowed — a per-image button
 			// on the media detail modal (adapters/regenerate-thumbnails.php).
 			'regenThumbs' => function_exists( 'minn_admin_regen_thumbs_available' ) && minn_admin_regen_thumbs_available(),

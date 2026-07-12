@@ -3351,12 +3351,22 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 
 		// Backups — only when a backup plugin is present to report on.
+		// UpdraftPlus first (existing health slot owner); WPvivid when
+		// Updraft is not the active reporter.
+		$bk_provider = null;
+		$bk          = null;
 		if ( function_exists( 'minn_admin_updraftplus_active' ) && minn_admin_updraftplus_active() ) {
-			$bk  = minn_admin_updraft_last();
+			$bk_provider = 'UpdraftPlus';
+			$bk          = minn_admin_updraft_last();
+		} elseif ( function_exists( 'minn_admin_wpvivid_active' ) && minn_admin_wpvivid_active() ) {
+			$bk_provider = 'WPvivid';
+			$bk          = minn_admin_wpvivid_last();
+		}
+		if ( $bk_provider ) {
 			$age = $bk ? time() - $bk['time'] : null;
 			if ( ! $bk ) {
 				$bk_status = 'warn';
-				$bk_detail = 'UpdraftPlus is active but no backup has completed yet';
+				$bk_detail = $bk_provider . ' is active but no backup has completed yet';
 			} elseif ( ! $bk['success'] ) {
 				$bk_status = 'fail';
 				$bk_detail = 'The last backup reported errors (' . human_time_diff( $bk['time'] ) . ' ago)';
