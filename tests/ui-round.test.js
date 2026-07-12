@@ -31,17 +31,26 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	const tab = await page.$eval( '.minn-tab.active', ( e ) => e.textContent.trim() );
 	t.check( 'Published posts card lands on the Posts tab', tab === 'Posts', tab );
 
-	/* ===== Header brand: the wordmark is the site name ===== */
-	// The "m" mark stays (product identity); the wordmark carries the site
-	// name so you know which site you're in (falls back to "minn" if unnamed).
-	const brand = await page.evaluate( () => ( {
-		mark: document.querySelector( '.minn-logo-mark' ).textContent,
-		name: document.querySelector( '.minn-logo-name' ).textContent,
-		bootName: window.MINN.site.name,
-		verShown: !! document.querySelector( '.minn-logo-ver' ) && document.querySelector( '.minn-logo-ver' ).offsetWidth > 0,
-	} ) );
-	t.check( 'header shows the m mark + the site name + version', brand.mark === 'm'
-		&& brand.name === ( brand.bootName || 'minn' ) && brand.verShown, JSON.stringify( brand ) );
+	/* ===== Header brand: site icon (or m fallback) + site name ===== */
+	// The mark is the WordPress Site Icon when set, else the gradient "m"
+	// tile; the wordmark is the site name (falls back to "minn" if unnamed).
+	const brand = await page.evaluate( () => {
+		const mark = document.querySelector( '.minn-logo-mark' );
+		return {
+			markText: mark.textContent,
+			isIcon: mark.classList.contains( 'minn-logo-mark-icon' ),
+			bg: getComputedStyle( mark ).backgroundImage,
+			name: document.querySelector( '.minn-logo-name' ).textContent,
+			bootName: window.MINN.site.name,
+			bootIcon: window.MINN.site.icon,
+			verShown: !! document.querySelector( '.minn-logo-ver' ) && document.querySelector( '.minn-logo-ver' ).offsetWidth > 0,
+		};
+	} );
+	const markOk = brand.bootIcon
+		? ( brand.isIcon && brand.bg.includes( 'url(' ) )     // site-icon variant
+		: brand.markText === 'm';                              // gradient m fallback
+	t.check( 'header shows the site-icon-or-m mark + site name + version',
+		markOk && brand.name === ( brand.bootName || 'minn' ) && brand.verShown, JSON.stringify( brand ) );
 
 	/* ===== Version badge → changelog modal ===== */
 	await page.click( '#minn-ver-btn' );
