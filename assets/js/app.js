@@ -5964,8 +5964,16 @@
 	 * into the plugin/theme update caches, refresh the Extensions nav dot,
 	 * and re-fetch notifications so pending updates appear in the panel.
 	 * Returns { update } when a specific component update was named.
+	 *
+	 * @param {object} res
+	 * @param {object} [opts]
+	 * @param {boolean} [opts.refetch=false] When true, also re-hit the
+	 *   plugins/updates endpoints after applying the payload. Needed after
+	 *   license activate: some vendors freeze the key at request start, so
+	 *   the activate response's map can miss an update that a fresh request
+	 *   (with the key now loaded) would see (Gravity SMTP 2.3.1 case).
 	 */
-	function applyForcedUpdateCheck( res ) {
+	function applyForcedUpdateCheck( res, opts ) {
 		if ( ! res || typeof res !== 'object' ) return null;
 		if ( res.pluginUpdates && typeof res.pluginUpdates === 'object' ) {
 			state.cache.pluginUpdates = res.pluginUpdates;
@@ -5982,7 +5990,23 @@
 		// Updates tab picks up newly-unlocked commercial updates.
 		state.cache.notifications = null;
 		loadNotifications().catch( () => {} );
-		return { update: res.update || null, plugins: pCount, themes: tCount };
+		const out = { update: res.update || null, plugins: pCount, themes: tCount };
+		if ( opts && opts.refetch ) {
+			// Second-pass fetch on a clean request after the license is
+			// already stored — vendors whose key is request-scoped need this.
+			state.cache.plugins = null;
+			pluginsPromise = null;
+			loadPluginsResilient().then( () => {
+				const p2 = Object.keys( state.cache.pluginUpdates || {} ).length;
+				const t2 = Object.keys( state.cache.themeUpdates || {} ).length;
+				const d = $( '#minn-plugin-dot' );
+				if ( d ) d.hidden = ! p2 && ! t2;
+				if ( state.route === 'extensions' && state.extTab === 'plugins' ) {
+					renderExtensions();
+				}
+			} ).catch( () => {} );
+		}
+		return out;
 	}
 
 	/** Explicit "Check for updates" (Extensions toolbar + ⌘K). */
@@ -6050,8 +6074,12 @@
 					// server-side (licensed commercial plugins only report
 					// once a key is stored). Apply the maps, toast, and
 					// refresh notifications so the Updates tab lights up
-					// without leaving Minn.
-					const applied = applyForcedUpdateCheck( res );
+					// without leaving Minn. refetch:true re-hits the maps
+					// on a clean request so vendors that freeze the key at
+					// container boot (Gravity SMTP) still surface updates.
+					const applied = ( action === 'activate' || action === 'verify' )
+						? applyForcedUpdateCheck( res, { refetch: true } )
+						: null;
 					if ( action === 'deactivate' ) {
 						toast( 'License deactivated' );
 					} else if ( applied && applied.update ) {
