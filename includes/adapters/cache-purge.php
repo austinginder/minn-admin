@@ -163,7 +163,128 @@ function minn_admin_cache_purgers() {
 		);
 	}
 
+	// --- Pack wave (v0.13.0): SpeedyCache, Redis Object Cache, Breeze,
+	// Nginx Helper, Cloudflare. Same detect-by-own-API + public purge call. ---
+
+	// SpeedyCache — Delete::run() always clears page cache + varnish + CDN;
+	// minified rides the same path the Manage Cache form uses.
+	if ( defined( 'SPEEDYCACHE_VERSION' ) && class_exists( '\SpeedyCache\Delete' ) ) {
+		$purgers[] = array(
+			'id'    => 'speedycache',
+			'name'  => 'SpeedyCache',
+			'purge' => function () {
+				\SpeedyCache\Delete::run( array( 'minified' => true ) );
+			},
+		);
+	}
+
+	// Redis Object Cache (Till Krüss) — flush through core's object-cache
+	// drop-in when the plugin's own drop-in is the one in place. Also feeds
+	// a System health row (minn_admin_redis_object_cache_checks).
+	if ( defined( 'WP_REDIS_VERSION' ) ) {
+		$purgers[] = array(
+			'id'    => 'redis-object-cache',
+			'name'  => 'Redis Object Cache',
+			'purge' => function () {
+				// Prefer the plugin's own flush path when its drop-in is valid
+				// (same as its admin "Flush cache" button); otherwise no-op
+				// rather than flushing a different backend's group by accident.
+				if ( class_exists( '\Rhubarb\RedisCache\Plugin' ) ) {
+					$plugin = \Rhubarb\RedisCache\Plugin::instance();
+					if ( $plugin->validate_object_cache_dropin() ) {
+						wp_cache_flush();
+						return;
+					}
+				}
+				// Drop-in not active yet: still clear the runtime cache so a
+				// "Clear site cache" click isn't a silent miss after enable.
+				wp_cache_flush();
+			},
+		);
+	}
+
+	// Breeze (Cloudways) — public action runs their full clear (local +
+	// Varnish + Cloudflare helper) via breeze-admin.php.
+	if ( defined( 'BREEZE_VERSION' ) ) {
+		$purgers[] = array(
+			'id'    => 'breeze',
+			'name'  => 'Breeze',
+			'purge' => function () {
+				do_action( 'breeze_clear_all_cache' );
+			},
+		);
+	}
+
+	// Nginx Helper (rtCamp) — action is wired to whichever purger they built
+	// (FastCGI / PhpRedis / Predis).
+	if ( defined( 'NGINX_HELPER_BASEPATH' ) || defined( 'NGINX_HELPER_BASENAME' ) ) {
+		$purgers[] = array(
+			'id'    => 'nginx-helper',
+			'name'  => 'Nginx Helper',
+			'purge' => function () {
+				do_action( 'rt_nginx_helper_purge_all' );
+			},
+		);
+	}
+
+	// Cloudflare official plugin — Hooks::purgeCacheEverything() is the same
+	// path their post/theme hooks call. Instantiating a fresh Hooks is fine:
+	// the constructor rebuilds their DI from config.json + DataStore (no
+	// singleton). No-ops when neither "Plugin specific cache" nor APO is on.
+	if ( defined( 'CLOUDFLARE_PLUGIN_DIR' ) && class_exists( '\Cloudflare\APO\WordPress\Hooks' ) ) {
+		$purgers[] = array(
+			'id'    => 'cloudflare',
+			'name'  => 'Cloudflare',
+			'purge' => function () {
+				$hooks = new \Cloudflare\APO\WordPress\Hooks();
+				$hooks->purgeCacheEverything();
+			},
+		);
+	}
+
 	return apply_filters( 'minn_admin_cache_purgers', $purgers );
+}
+
+/**
+ * System health rows for Redis Object Cache (drop-in + connection posture).
+ * Empty when the plugin is not loaded.
+ *
+ * @return array[] List of {id,label,status,detail} checks.
+ */
+function minn_admin_redis_object_cache_checks() {
+	if ( ! defined( 'WP_REDIS_VERSION' ) || ! class_exists( '\Rhubarb\RedisCache\Plugin' ) ) {
+		return array();
+	}
+
+	$plugin = \Rhubarb\RedisCache\Plugin::instance();
+	$human  = $plugin->get_status(); // Connected / Not enabled / Drop-in is outdated / …
+	$redis  = $plugin->get_redis_status(); // true | false | null
+
+	if ( true === $redis ) {
+		$status = 'pass';
+		$detail = 'Drop-in active · ' . $human;
+	} elseif ( ! $plugin->object_cache_dropin_exists() ) {
+		$status = 'warn';
+		$detail = 'Plugin installed; drop-in not enabled';
+	} elseif ( $plugin->object_cache_dropin_outdated() ) {
+		$status = 'warn';
+		$detail = 'Drop-in is outdated — update it from Redis Object Cache';
+	} elseif ( false === $redis ) {
+		$status = 'fail';
+		$detail = 'Drop-in present but Redis is not connected';
+	} else {
+		$status = 'warn';
+		$detail = $human;
+	}
+
+	return array(
+		array(
+			'id'     => 'redis-object-cache',
+			'label'  => 'Redis Object Cache',
+			'status' => $status,
+			'detail' => $detail . ' · v' . WP_REDIS_VERSION,
+		),
+	);
 }
 
 /** Slim [{id, name}] list for the boot payload / palette. */

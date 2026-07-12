@@ -858,8 +858,9 @@ add_filter( 'minn_admin_cache_purgers', function ( $purgers ) {
 
 The command is only exposed to users with `manage_options`, and your `purge` callback
 runs server-side on that request; no extra capability check is needed for the common
-case. A dozen providers ship bundled in `includes/adapters/cache-purge.php` (LiteSpeed,
-WP Rocket, W3 Total Cache, …); copy any of them.
+case. Bundled providers in `includes/adapters/cache-purge.php` include LiteSpeed,
+WP Rocket, W3 Total Cache, SpeedyCache, Redis Object Cache, Breeze, Nginx Helper,
+Cloudflare, and more; copy any of them.
 
 ## Spam providers — Settings → Spam
 

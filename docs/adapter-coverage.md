@@ -110,7 +110,7 @@ Reference depth: **Gravity Forms**.
 | licenses | Extensions → Licenses (filter providers) | Y | | Use license-manager skill loop for new vendors |
 | spam | Settings → Spam cards | Y | | |
 | seo | Editor panel (providers) | Y | | |
-| cache-purge | ⌘K purgers | Y | | |
+| cache-purge | ⌘K purgers (+ Redis System row) | Y | 2026-07-12 | SpeedyCache, Redis, Breeze, Nginx Helper, Cloudflare pack |
 | site-kit / koko / … | Traffic providers | partial | | Overview chart only |
 
 ## Deliberate deep-links (do not re-propose as Axis B)
