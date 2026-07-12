@@ -96,6 +96,40 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		}, adminId );
 		t.check( 'editor cannot mint a link for another user (edit_user gate)', refused === 403, String( refused ) );
 		await ctx2.close();
+
+		// "Minn is the default admin" is honored for one-time logins too: the
+		// plugin hardcodes a wp-admin redirect that bypasses login_redirect,
+		// so the adapter intercepts its post-auth action. Toggle the setting
+		// on, follow a fresh minted link unauthenticated, land in Minn.
+		const setDefault = ( on ) => p.evaluate( async ( v ) => {
+			await fetch( window.MINN.restUrl + 'wp/v2/settings', {
+				method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin', body: JSON.stringify( { minn_admin_default: v } ),
+			} );
+		}, on );
+		const wasDefault = await p.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/settings', { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+			return !! ( await r.json() ).minn_admin_default;
+		} );
+		const follow = async () => {
+			const url = ( await api( `minn-admin/v1/otl/${ editor.id }`, { method: 'POST', body: '{}' } ) ).body.url;
+			const c = await b.newContext( { ignoreHTTPSErrors: true } );
+			const fp = await c.newPage();
+			await fp.goto( url, { waitUntil: 'domcontentloaded' } );
+			await fp.waitForTimeout( 500 );
+			const landed = fp.url();
+			await c.close();
+			return landed;
+		};
+		try {
+			await setDefault( true );
+			t.check( 'default-admin on: one-time link lands in Minn', /\/minn-admin\/?$/.test( await follow() ) );
+			await setDefault( false );
+			const landed = await follow();
+			t.check( 'default-admin off: one-time link keeps the plugin wp-admin landing', /\/wp-admin\//.test( landed ), landed );
+		} finally {
+			await setDefault( wasDefault );
+		}
 	} finally {
 		// nothing to clean — tokens are single-use and self-expiring
 	}

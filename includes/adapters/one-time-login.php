@@ -26,6 +26,23 @@ function minn_admin_otl_active() {
 	return function_exists( 'one_time_login_generate_tokens' );
 }
 
+/**
+ * Honor "Minn is the default admin" for one-time logins too. The plugin
+ * sets the auth cookie and then hardcodes wp_safe_redirect( admin_url() ),
+ * which never passes through the `login_redirect` filter Minn's setting
+ * rides on — so a one-time link always landed in wp-admin even when the
+ * site prefers Minn. Its own post-auth action fires immediately before that
+ * redirect, so we redirect into Minn first, under the same gate as the
+ * normal login flow (setting on + the user can actually use Minn).
+ */
+add_action( 'one_time_login_after_auth_cookie_set', function ( $user ) {
+	if ( ! get_option( 'minn_admin_default' ) || ! ( $user instanceof WP_User ) || ! $user->has_cap( 'edit_posts' ) ) {
+		return;
+	}
+	wp_safe_redirect( Minn_Admin::app_url() );
+	exit;
+} );
+
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_otl_active() ) {
 		return;
