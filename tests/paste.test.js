@@ -48,9 +48,20 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 		return { ok: true, text: target.textContent.slice( 0, 40 ) };
 	}, { sel, offset } );
 
-	const save = async () => {
+	// ⌘S then poll the SAVED content until it changes — a flat wait reads
+	// mid-save state (saves ride a serialized chain and REST writes carry
+	// every active plugin's hooks; the editor-sidebar/shortcuts lesson).
+	// Every call site pastes fresh content first, so "changed" is the signal.
+	const save = async ( id ) => {
+		const before = await savedRaw( id );
 		await page.keyboard.press( 'Meta+s' );
-		await page.waitForTimeout( 1500 );
+		const start = Date.now();
+		let raw = await savedRaw( id );
+		while ( raw === before && Date.now() - start < 12000 ) {
+			await page.waitForTimeout( 400 );
+			raw = await savedRaw( id );
+		}
+		return raw;
 	};
 	const savedRaw = ( id ) => page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ pid }?context=edit&_fields=content`, {
@@ -64,8 +75,7 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	await openEditor( page, docsId );
 	await freshParagraph( page );
 	await paste( { 'text/html': DOCS_FIXTURE, 'text/plain': 'x' } );
-	await save();
-	let raw = await savedRaw( docsId );
+	let raw = await save( docsId );
 	t.check( 'Docs: bold/italic map to strong/em', /<strong>bold text<\/strong> and <em>italics<\/em>/.test( raw ), raw );
 	t.check( 'Docs: heading becomes a heading block', /<!-- wp:heading \{"level":2\} -->\n<h2 class="wp-block-heading">A Section Heading<\/h2>/.test( raw ), raw );
 	t.check( 'Docs: list with list-item blocks', /<!-- wp:list -->[\s\S]*<!-- wp:list-item -->[\s\S]*First bullet[\s\S]*<!-- \/wp:list -->/.test( raw ), raw );
@@ -77,8 +87,7 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	await openEditor( page, wordId );
 	await freshParagraph( page );
 	await paste( { 'text/html': WORD_FIXTURE, 'text/plain': 'x' } );
-	await save();
-	raw = await savedRaw( wordId );
+	raw = await save( wordId );
 	t.check( 'Word: mso list run becomes a nested ul', /<ul[^>]*><!-- wp:list-item -->\n<li>Bullet one<ul><li>Nested bullet<\/li><\/ul><\/li>\n<!-- \/wp:list-item --><\/ul>/.test( raw.replace( / class="wp-block-list"/g, '' ) ), raw );
 	t.check( 'Word: separate mso list id becomes its own ol', /<!-- wp:list \{"ordered":true\} -->[\s\S]*Numbered item/.test( raw ), raw );
 	t.check( 'Word: table becomes a table block', /<!-- wp:table -->[\s\S]*<td>Cell A<\/td><td>Cell B<\/td>/.test( raw ), raw );
@@ -89,8 +98,7 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	await openEditor( page, webId );
 	const caretDiag = await caretIn( 'p', 5 ); // between "Hello" and " world"
 	const pasteDiag = await paste( { 'text/html': WEB_FIXTURE, 'text/plain': 'x' } );
-	await save();
-	raw = await savedRaw( webId );
+	raw = await save( webId );
 	t.check( 'Web: paste handler took the event', pasteDiag === true, `caret=${ JSON.stringify( caretDiag ) } prevented=${ pasteDiag }` );
 	t.check( 'Web: caret paragraph splits around the paste', /<p>Hello<\/p>/.test( raw ) && /<p> ?world<\/p>/.test( raw ), raw );
 	t.check( 'Web: split-off tail carries no nbsp indent', ! /<p> /.test( raw ), raw );
@@ -128,8 +136,7 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	await paste( { 'text/html': '<p>one</p><h3>two</h3>', 'text/plain': 'x' } );
 	await caretIn( 'pre code', 2 );
 	await paste( { 'text/html': '<p><b>rich</b> stuff</p>', 'text/plain': 'plain\ntext' } );
-	await save();
-	raw = await savedRaw( ctxId );
+	raw = await save( ctxId );
 	t.check( 'list pasted into list merges items', ( raw.match( /<!-- wp:list-item -->/g ) || [] ).length === 4 && /merged A/.test( raw ), raw );
 	t.check( 'blocks pasted into heading flatten to text', /<h2 class="wp-block-heading">Headone two line<\/h2>/.test( raw ), raw );
 	t.check( 'rich paste into code block takes plain text, newline intact', /<code>seplain\ntexted<\/code>/.test( raw ), raw );
@@ -140,8 +147,7 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	await freshParagraph( page );
 	const preventedMulti = await paste( { 'text/plain': 'para one line one\nline two\n\npara two' } );
 	const preventedSingle = await paste( { 'text/plain': 'just one line' } );
-	await save();
-	raw = await savedRaw( textId );
+	raw = await save( textId );
 	t.check( 'multi-line text becomes paragraphs with <br>', /<p>para one line one<br>line two<\/p>/.test( raw ) && /<p>para two<\/p>/.test( raw ), raw );
 	t.check( 'single-line text keeps native handling', preventedMulti === true && preventedSingle === false, `multi=${ preventedMulti } single=${ preventedSingle }` );
 
@@ -150,8 +156,7 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	await openEditor( page, classicId );
 	await freshParagraph( page );
 	await paste( { 'text/html': DOCS_FIXTURE, 'text/plain': 'x' } );
-	await save();
-	raw = await savedRaw( classicId );
+	raw = await save( classicId );
 	t.check( 'classic: sanitized markup, no block comments introduced', ! /<!-- wp:/.test( raw ) && /<strong>bold text<\/strong>/.test( raw ) && /<h2>A Section Heading<\/h2>/.test( raw ), raw );
 	t.check( 'classic: no vendor spans/styles', ! /<span|style="/.test( raw ), raw );
 
@@ -167,8 +172,7 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 		} ) ] );
 	}, '<h2>Real clipboard heading</h2><p>With <b>bold</b>.</p>' );
 	await page.keyboard.press( 'Meta+v' );
-	await save();
-	raw = await savedRaw( e2eId );
+	raw = await save( e2eId );
 	t.check( 'real ⌘V paste lands sanitized', /<h2 class="wp-block-heading">Real clipboard heading<\/h2>/.test( raw ) && /<strong>bold<\/strong>/.test( raw ), raw );
 
 	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, classicId, e2eId ] ) await deletePost( page, id );

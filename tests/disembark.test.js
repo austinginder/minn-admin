@@ -95,6 +95,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	);
 
 	try {
+		// Baseline: a REAL Disembark scan on the dev site leaves session dirs
+		// that break the "Working files: None" asserts below (Austin tests
+		// live). The workspace is disposable — the suite's own teardown wipes
+		// it — so establish the empty baseline up front the same way.
+		await page.evaluate( async () => {
+			await fetch( window.MINN.restUrl + 'minn-admin/v1/disembark/cleanup', {
+				method: 'POST', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} ).catch( () => {} );
+		} ).catch( () => {} );
+
 		t.check( 'Fixture seeded', await seed() );
 		await openSurface();
 

@@ -27,7 +27,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.keyboard.press( 'Escape' );
 	await page.waitForTimeout( 300 );
 
-	/* ===== Comments (seed a pending comment, moderate via the menu) ===== */
+	/* ===== Comments (seed a pending comment, moderate via the menu) =====
+	   Disable Comments is an ACTIVE resident fixture (spam-settings cycle);
+	   it blocks REST comment creation and nav-gates the route, so seed the
+	   baseline like spam-settings does and restore it no matter what. */
+	const setPlugin = ( plugin, status ) => page.evaluate( async ( a ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.plugin, {
+			method: 'PUT', credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			body: JSON.stringify( { status: a.status } ),
+		} );
+		return r.ok;
+	}, { plugin, status } );
+	await setPlugin( 'disable-comments/disable-comments', 'inactive' ).catch( () => {} );
+	try {
 	const cid = await page.evaluate( async () => {
 		const mk = await fetch( window.MINN.restUrl + 'wp/v2/comments', {
 			method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
@@ -58,6 +71,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.evaluate( async ( id ) => {
 		await fetch( window.MINN.restUrl + 'wp/v2/comments/' + id + '?force=true', { method: 'DELETE', headers: { 'X-WP-Nonce': window.MINN.nonce } } );
 	}, cid );
+	} finally {
+		await setPlugin( 'disable-comments/disable-comments', 'active' ).catch( () => {} );
+	}
 
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

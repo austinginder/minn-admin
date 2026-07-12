@@ -43,13 +43,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const checks = await sysChecks();
 		const fw = checks.find( ( c ) => /Wordfence firewall/.test( c.text ) );
 		const scan = checks.find( ( c ) => /Wordfence scan/.test( c.text ) );
+		// Rows with an href carry extra classes now (minn-sys-link, the
+		// clickable-health-cards change) — parse the status TOKEN, never
+		// exact-match the class string.
+		const statusOf = ( c ) => ( c && c.status || '' ).split( /\s+/ ).find( ( w ) => [ 'pass', 'warn', 'fail' ].includes( w ) ) || '';
 		t.check( 'Wordfence firewall row present', !! fw, JSON.stringify( fw ) );
-		t.check( 'firewall row has a valid status', fw && [ 'pass', 'warn', 'fail' ].includes( fw.status ), fw && fw.status );
+		t.check( 'firewall row has a valid status', !! statusOf( fw ), fw && fw.status );
 		t.check( 'Wordfence scan row present', !! scan, JSON.stringify( scan ) );
-		t.check( 'scan row has a valid status', scan && [ 'pass', 'warn', 'fail' ].includes( scan.status ), scan && scan.status );
+		t.check( 'scan row has a valid status', !! statusOf( scan ), scan && scan.status );
 
 		// With no scan run on this fresh install, the scan row warns.
-		t.check( 'a never-scanned site warns on the scan row', scan && ( /no malware scan/i.test( scan.text ) ? scan.status === 'warn' : true ), JSON.stringify( scan ) );
+		t.check( 'a never-scanned site warns on the scan row', scan && ( /no malware scan/i.test( scan.text ) ? statusOf( scan ) === 'warn' : true ), JSON.stringify( scan ) );
 
 		// The rows are gone when Wordfence is inactive.
 		await setPlugin( 'wordfence/wordfence', 'inactive' );

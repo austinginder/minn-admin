@@ -39,10 +39,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.waitForSelector( '#minn-media-edit-image', { timeout: 10000 } );
 	await page.click( '#minn-media-edit-image' );
 	await page.waitForSelector( '#minn-imged-canvas', { timeout: 5000 } );
+	// An UNDRAWN canvas is 300×150 by spec, so width>0 passes before the
+	// image ever loads (the fixture PNG can take ~700ms to arrive) — and a
+	// rotate clicked in that window no-ops while the crop drag measures a
+	// canvas that resizes mid-drag. Wait for the drawn fixture itself: the
+	// 200×100 image draws at scale 1, so the canvas reads exactly 200×100.
 	await page.waitForFunction( () => {
 		const c = document.querySelector( '#minn-imged-canvas' );
-		return c && c.width > 0;
-	}, { timeout: 5000 } );
+		return c && c.width === 200 && c.height === 100;
+	}, { timeout: 10000 } );
 
 	/* ===== Rotate right: canvas aspect flips ===== */
 	const before = await page.$eval( '#minn-imged-canvas', ( c ) => ( { w: c.width, h: c.height } ) );
