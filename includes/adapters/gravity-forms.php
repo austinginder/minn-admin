@@ -30,6 +30,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 
+	// Notifications are form-admin config (recipient addresses live in them),
+	// so the whole view is gated on GF's edit-forms capability — evaluated
+	// through GF's own resolver here at build time, because a view-level
+	// `cap` runs plain current_user_can and admins hold gform_full_access,
+	// not the granular caps.
+	$can_edit_forms = GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) );
+
 	$surfaces['gravity-forms'] = array(
 		'label'      => 'Forms',
 		// Shared with Fluent Forms / Elementor / WPForms adapters when present;
@@ -262,6 +269,70 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 	);
+
+	// The Notifications view: every notification across forms (or per form
+	// via the tabs), with activate/deactivate and the daily edits (name,
+	// send-to address, subject, message) through GF's own storage. NOT a
+	// notification builder — routing rules, conditional logic and events
+	// are GF's editor, one click away.
+	if ( $can_edit_forms ) {
+		$surfaces['gravity-forms']['views'] = array(
+			array(
+				'viewLabel' => 'Notifications',
+				'route'     => 'minn-admin/v1/gf/forms/{tab}/notifications',
+				'allRoute'  => 'minn-admin/v1/gf/notifications',
+				'pageQuery' => 'per_page=25&page={page}',
+				'itemsKey'  => 'items',
+				'totalKey'  => 'total',
+				'tabs'      => array(
+					'route'    => 'gf/v2/forms',
+					'valueKey' => 'id',
+					'labelKey' => 'title',
+					'allLabel' => 'All notifications',
+				),
+				'columns'   => array(
+					array( 'key' => 'name', 'label' => 'Notification', 'format' => 'title' ),
+					array( 'key' => 'form', 'label' => 'Form' ),
+					array( 'key' => 'event', 'label' => 'Event' ),
+					array( 'key' => 'to', 'label' => 'To' ),
+					array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+				),
+				'detail'    => array(
+					'skip' => array( 'form_id', 'nid' ),
+					'edit' => array(
+						'route'  => 'minn-admin/v1/gf/notifications/{id}',
+						'fields' => array(
+							array( 'key' => 'name', 'label' => 'Name' ),
+							array( 'key' => 'to_email', 'label' => 'Send to', 'required' => false, 'placeholder' => 'address@example.com, {admin_email} — email-type notifications only' ),
+							array( 'key' => 'subject', 'label' => 'Subject' ),
+							array( 'key' => 'message', 'label' => 'Message', 'type' => 'textarea', 'rows' => 8 ),
+						),
+					),
+				),
+				'actions'   => array(
+					array(
+						'label'  => 'Deactivate',
+						'method' => 'POST',
+						'route'  => 'minn-admin/v1/gf/notifications/{id}/active',
+						'body'   => array( 'active' => false ),
+						'when'   => array( 'key' => 'status', 'equals' => 'active' ),
+					),
+					array(
+						'label'  => 'Activate',
+						'method' => 'POST',
+						'route'  => 'minn-admin/v1/gf/notifications/{id}/active',
+						'body'   => array( 'active' => true ),
+						'when'   => array( 'key' => 'status', 'equals' => 'inactive' ),
+					),
+					array(
+						'label' => 'Edit in Gravity Forms ↗',
+						'href'  => admin_url( 'admin.php?page=gf_edit_forms&view=settings&subview=notification&id={form_id}&nid={nid}' ),
+					),
+				),
+			),
+		);
+	}
+
 	return $surfaces;
 } );
 
@@ -415,6 +486,175 @@ add_action( 'rest_api_init', function () {
 				);
 			}
 			return rest_ensure_response( $rows );
+		},
+	) );
+
+	$can_edit_forms = function () {
+		return GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) );
+	};
+
+	// One notification row for the Notifications view. Composite id
+	// "{form_id}:{notification_id}" — notification ids are uniqid() strings,
+	// unique only within their form.
+	$notification_row = function ( $form, $n ) {
+		$to_type = isset( $n['toType'] ) && '' !== $n['toType'] ? $n['toType'] : 'email';
+		$to      = '';
+		if ( 'email' === $to_type ) {
+			$to = (string) ( isset( $n['to'] ) ? $n['to'] : '' );
+		} elseif ( 'field' === $to_type ) {
+			$field = GFFormsModel::get_field( $form, isset( $n['to'] ) ? $n['to'] : 0 );
+			$to    = 'Field: ' . ( $field ? wp_strip_all_tags( GFCommon::get_label( $field ) ) : '#' . ( isset( $n['to'] ) ? $n['to'] : '?' ) );
+		} elseif ( 'routing' === $to_type ) {
+			$rules = isset( $n['routing'] ) && is_array( $n['routing'] ) ? count( $n['routing'] ) : 0;
+			$to    = sprintf( 'Routing (%d rule%s)', $rules, 1 === $rules ? '' : 's' );
+		} else {
+			$to = '—';
+		}
+		$events = array(
+			'form_submission'           => 'Form is submitted',
+			'form_saved'                => 'Draft is saved',
+			'form_save_email_requested' => 'Draft link is requested',
+		);
+		$event  = isset( $n['event'] ) && '' !== $n['event'] ? (string) $n['event'] : 'form_submission';
+		return array(
+			'id'       => $form['id'] . ':' . $n['id'],
+			'form_id'  => (int) $form['id'],
+			'nid'      => (string) $n['id'],
+			'name'     => (string) ( isset( $n['name'] ) ? $n['name'] : '' ),
+			'form'     => (string) $form['title'],
+			'event'    => isset( $events[ $event ] ) ? $events[ $event ] : ucfirst( str_replace( '_', ' ', $event ) ),
+			'to'       => $to,
+			// The edit form's send-to field: only an email-type notification
+			// has an editable address (field/routing recipients are GF's
+			// editor); the save route refuses writes for other types.
+			'to_email' => 'email' === $to_type ? (string) ( isset( $n['to'] ) ? $n['to'] : '' ) : '',
+			'subject'  => (string) ( isset( $n['subject'] ) ? $n['subject'] : '' ),
+			'message'  => (string) ( isset( $n['message'] ) ? $n['message'] : '' ),
+			'status'   => ( ! isset( $n['isActive'] ) || false !== $n['isActive'] ) ? 'active' : 'inactive',
+		);
+	};
+
+	// List: one form's notifications, or every form's (the All tab).
+	$list_notifications = function ( WP_REST_Request $request ) use ( $notification_row ) {
+		$form_id  = (int) $request['form'];
+		$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
+		$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
+		$rows     = array();
+		if ( $form_id ) {
+			$form = GFAPI::get_form( $form_id );
+			if ( ! $form ) {
+				return new WP_Error( 'not_found', 'Form not found.', array( 'status' => 404 ) );
+			}
+			$forms = array( $form );
+		} else {
+			$forms = array();
+			foreach ( GFFormsModel::get_forms( null, 'title' ) as $f ) {
+				$form = GFAPI::get_form( $f->id );
+				if ( $form ) {
+					$forms[] = $form;
+				}
+			}
+		}
+		foreach ( $forms as $form ) {
+			foreach ( (array) ( isset( $form['notifications'] ) ? $form['notifications'] : array() ) as $n ) {
+				if ( is_array( $n ) && isset( $n['id'] ) ) {
+					$rows[] = $notification_row( $form, $n );
+				}
+			}
+		}
+		return rest_ensure_response( array(
+			'items' => array_slice( $rows, ( $page - 1 ) * $per_page, $per_page ),
+			'total' => count( $rows ),
+		) );
+	};
+
+	register_rest_route( 'minn-admin/v1', '/gf/notifications', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can_edit_forms,
+		'callback'            => $list_notifications,
+	) );
+	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<form>\d+)/notifications', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can_edit_forms,
+		'callback'            => $list_notifications,
+	) );
+
+	// Activate/deactivate through GF's own toggle (it fires their
+	// gform_pre_notification_(de)activated hooks and writes their column).
+	register_rest_route( 'minn-admin/v1', '/gf/notifications/(?P<form>\d+):(?P<nid>[a-zA-Z0-9_.-]+)/active', array(
+		'methods'             => 'POST',
+		'permission_callback' => $can_edit_forms,
+		'args'                => array(
+			'active' => array( 'type' => 'boolean', 'required' => true ),
+		),
+		'callback'            => function ( WP_REST_Request $request ) {
+			$result = GFFormsModel::update_notification_active( (int) $request['form'], (string) $request['nid'], (bool) $request['active'] );
+			if ( is_wp_error( $result ) ) {
+				$result->add_data( array( 'status' => 404 ) );
+				return $result;
+			}
+			GFFormsModel::flush_current_forms();
+			return rest_ensure_response( array( 'id' => $request['form'] . ':' . $request['nid'], 'active' => (bool) $request['active'] ) );
+		},
+	) );
+
+	// Edit the daily fields (name, send-to, subject, message) — a
+	// read-modify-write on the form's own notifications array through
+	// GFFormsModel::save_form_notifications, GF's dedicated write path.
+	register_rest_route( 'minn-admin/v1', '/gf/notifications/(?P<form>\d+):(?P<nid>[a-zA-Z0-9_.-]+)', array(
+		'methods'             => 'POST',
+		'permission_callback' => $can_edit_forms,
+		'callback'            => function ( WP_REST_Request $request ) {
+			$form_id = (int) $request['form'];
+			$nid     = (string) $request['nid'];
+			$form    = GFFormsModel::get_form_meta( $form_id );
+			if ( ! $form || ! isset( $form['notifications'][ $nid ] ) ) {
+				return new WP_Error( 'not_found', 'Notification not found.', array( 'status' => 404 ) );
+			}
+			$body = $request->get_json_params();
+			$n    = $form['notifications'][ $nid ];
+
+			$name = sanitize_text_field( (string) ( isset( $body['name'] ) ? $body['name'] : '' ) );
+			if ( '' === $name ) {
+				return new WP_Error( 'empty_name', 'Give the notification a name.', array( 'status' => 400 ) );
+			}
+			// GF enforces unique names per form (its is_unique_name check).
+			foreach ( $form['notifications'] as $other_id => $other ) {
+				if ( $other_id !== $nid && isset( $other['name'] ) && strtolower( $other['name'] ) === strtolower( $name ) ) {
+					return new WP_Error( 'dup_name', 'Another notification on this form already uses that name.', array( 'status' => 400 ) );
+				}
+			}
+			$n['name']    = $name;
+			$n['subject'] = sanitize_text_field( (string) ( isset( $body['subject'] ) ? $body['subject'] : '' ) );
+			if ( '' === $n['subject'] ) {
+				return new WP_Error( 'empty_subject', 'Give the notification a subject.', array( 'status' => 400 ) );
+			}
+			// Message is email-body HTML; kses keeps normal markup and GF
+			// merge tags ({all_fields}) are plain text that passes untouched.
+			$n['message'] = wp_kses_post( (string) ( isset( $body['message'] ) ? $body['message'] : '' ) );
+
+			$to_type = isset( $n['toType'] ) && '' !== $n['toType'] ? $n['toType'] : 'email';
+			$to      = trim( (string) ( isset( $body['to_email'] ) ? $body['to_email'] : '' ) );
+			if ( '' !== $to ) {
+				if ( 'email' !== $to_type ) {
+					return new WP_Error( 'not_email_type', 'This notification routes by ' . $to_type . '; edit its recipients in Gravity Forms.', array( 'status' => 400 ) );
+				}
+				// GF accepts comma-separated addresses and merge tags
+				// ({admin_email}, {Email:2}) in the To field.
+				foreach ( array_map( 'trim', explode( ',', $to ) ) as $piece ) {
+					if ( ! is_email( $piece ) && ! preg_match( '/^\{[^{}]+\}$/', $piece ) ) {
+						return new WP_Error( 'bad_to', '"' . $piece . '" is not an email address or merge tag.', array( 'status' => 400 ) );
+					}
+				}
+				$n['to'] = $to;
+			}
+			// An empty send-to never clears the stored address (the field
+			// also rides along empty for field/routing notifications).
+
+			$form['notifications'][ $nid ] = $n;
+			GFFormsModel::flush_current_forms();
+			GFFormsModel::save_form_notifications( $form_id, $form['notifications'] );
+			return rest_ensure_response( array( 'id' => $form_id . ':' . $nid ) );
 		},
 	) );
 
