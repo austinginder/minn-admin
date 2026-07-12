@@ -128,8 +128,14 @@ distrust the surface.
     under the stats pill; find inputs 16px (no iOS focus-zoom). Sticky toolbar
     keeps `-webkit-sticky` + opaque background. Suite: `tests/mobile-editor.test.js`
     (phone viewport + simulated keyboard inset; not a real iOS device).
-  - **Accessibility pass.** Still open — toolbar `aria-label`s, chip focus,
-    popover focus trap, toast live regions.
+  - **Accessibility pass.** ✅ *Shipped 2026-07-12 (first cut)* — formatting
+    toolbar is `role="toolbar"` with labelled tools; body is a multiline
+    textbox; island/table/image/code chips carry `aria-label`; slash menu is a
+    listbox with `aria-activedescendant`; block popovers (table/image/code/
+    link/inspector) are modal dialogs with Escape dismiss + initial focus;
+    toasts are `status`/`alert` live regions; lock takeover is `role="alert"`.
+    Suite: `tests/editor-a11y.test.js`. Not a full WCAG audit (no focus trap
+    ring, no axe CI) — the named writer-facing affordances.
 - **Inline media flow.** Paste/drag an image from the clipboard straight to the media
   library at the caret; inline figcaption editing.
   ✅ *Shipped 2026-07-05* — screenshot ⌘V and dropped image files upload to the library
