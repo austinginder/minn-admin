@@ -80,75 +80,47 @@ themselves through the extension filters.
 
 ## Roadmap candidates
 
-Refreshed 2026-07-10 against the wp.org top-500 by active installs. The
-pattern that falls out: the highest-value next wave is almost entirely
-**providers into surfaces that already exist**, not new machinery. Waves in
-recommended order (installs × fit × effort):
+Refreshed 2026-07-12 during the v0.13.0 cycle (originally ranked 2026-07-10
+against the wp.org top-500 by active installs). The 2026-07-10 wave list is
+mostly drained: license visibility and activation, the lockout logs, Ninja
+Forms / Forminator / Formidable, Duplicator, WP Mail Logging, the visibility
+posture and the small-delights wave all shipped across v0.11.0–v0.13.0 and
+live in the coverage table above now. What remains, re-ranked (installs ×
+fit × effort):
 
-1. **License visibility (Phase 0)** — ✅ shipped 2026-07-10: the System page's
-   Licenses card classifies every paid component's license from stored state,
-   no network calls, no seat risk (see the coverage table above and
-   `docs/license-manager.md`). The activation vault remains Phase 1.
-2. **Security posture rows** — Wordfence firewall mode + last scan + issue
-   count (5M installs, reads `wfConfig`/`wfIssues`, extends the adapter Minn
-   already ships) and Really Simple SSL (3M, pure options read) as System
-   health rows. Limit Login Attempts Reloaded ✅ and Solid Security ✅
-   shipped (v0.12.0 cycle): lockout logs in the Activity Log family with
-   status cards, Unlock/Release through each plugin's own store, and a
-   Solid Security brute-force posture row on System. Remaining:
-   All-In-One Security.
-3. **Forms providers** — Ninja Forms ✅ shipped (v0.12.0 cycle: entries as
-   cards from its `nf_sub` postmeta, form tabs, labeled detail, forms view,
-   trash through its own model). Forminator ✅ shipped (v0.13.0 cycle:
-   entries from `frmt_form_entry*` hydrated through its own entry model,
-   labels from its form models at runtime, search over answer meta,
-   permanent delete through `Forminator_API::delete_entry` — it has no
-   entry trash — and its own `forminator-entries` permission model).
-   Formidable ✅ shipped (v0.13.0 cycle: entries from
-   `frm_items` hydrated through FrmEntry, labels from FrmField at runtime,
-   UTC stamps, search over answer meta, permanent delete through
-   `FrmEntry::destroy`, caps mirroring its granular-cap-or-administrator
-   model). Remaining candidates: SureForms and MetForm (free-tier storage
-   believed but not source-verified).
-4. **Backups providers** — Duplicator ✅ shipped (v0.12.0 cycle: package
-   list, status card, delete via its own cleanup; no freshness claims).
-   Remaining: WPvivid (`wpvivid_backup_list` option, free tier schedules so
-   freshness is claimable), BackWPup, and an All-in-One WP Migration
-   local-exports listing (never claim freshness; the Disembark precedent).
-5. **Cache purge pack** — SpeedyCache, Redis Object Cache (flush + drop-in
+1. **Cache purge pack** — SpeedyCache, Redis Object Cache (flush + drop-in
    status row), Breeze, Nginx Helper, Cloudflare. The cheapest shape in the
-   codebase: one purge hook plus detection each.
-6. **Email log providers** — WP Mail Logging ✅ shipped (v0.12.0 cycle:
-   list, detail, resend through its own resender service, delete).
-   Remaining: GoSMTP (logs free), SureMails, Site Mailer; Easy WP SMTP's
-   full log is Pro-only (free has debug events, the WP Mail SMTP shape).
-7. **Snippets providers** — Simple Custom CSS & JS (a CPT) and Header Footer
+   codebase: one purge hook plus detection each. Good seasoning for any
+   release's Added section.
+2. **Backups providers** — WPvivid (`wpvivid_backup_list` option; its free
+   tier schedules, so freshness is claimable), BackWPup, and an All-in-One
+   WP Migration local-exports listing (never claim freshness; the Disembark
+   precedent).
+3. **Email log providers** — GoSMTP (logs free), SureMails, Site Mailer;
+   Easy WP SMTP's full log is Pro-only (free has debug events, the
+   WP Mail SMTP shape).
+4. **Snippets providers** — Simple Custom CSS & JS (a CPT) and Header Footer
    Code Manager (`hfcm_scripts` table) into the existing Snippets surface.
-8. **Site-status rows with toggles** — ✅ shipped (v0.11.0 cycle): the
-   visibility posture (banner + chip + popover toggles + System check) covers
-   WP Maintenance Mode, SeedProd, Under Construction, Password Protected,
-   WooCommerce coming soon (partial-aware for store-pages-only) and Elementor
-   maintenance mode; the login URL row honors login-hiders.
-9. **Small delights** — ✅ shipped (v0.11.0 cycle): User Switching
-   ("Switch to this user" from the user row via its own nonce URLs),
-   Regenerate Thumbnails on the media detail, WooCommerce PDF Invoices
-   downloads on the order detail, WP Armour in the spam provider cards,
-   SiteSEO in the SEO panel (SEOPress fork, own `_siteseo_` meta prefix)
-   and 301 Redirects (WebFactory) in the Redirects family.
-10. **Bigger scoped bets** — WPForms Pro entries (source-verified: Lite
-    stores no entries at all, so this costs a license and Pro fixtures;
-    biggest uncovered name), Jetpack Stats as a traffic provider (data lives
-    on WordPress.com behind its connection auth; scope to stats only),
-    Meta Box editor panel (runtime field discovery; ACF precedent), Matomo
-    traffic provider (small base but the best-behaved local analytics data
-    source), The Events Calendar editor panel (events already list natively;
-    the panel covers date/venue meta), and **ecommerce analytics** (Austin,
-    2026-07-11): an Analytics view alongside Orders, pill-style switcher on
-    the Orders surface. WooCommerce ships the data over its own
-    `wc-analytics` REST namespace (revenue/orders/products stats the Woo
-    Admin dashboard uses), so the read layer is free; the build cost is the
-    charting UI. Deserves its own cycle rather than riding an Orders
-    change; the pill switcher lands with it.
+5. **Security leftover** — All-In-One Security (activity-log family +
+   posture row; the LLA-R / Solid Security pattern).
+6. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
+   believed but not source-verified; verify before promising).
+7. **Bigger scoped bets** — WPForms Pro entries (source-verified: Lite
+   stores no entries at all, so this costs a license and Pro fixtures;
+   biggest uncovered name), Jetpack Stats as a traffic provider (data lives
+   on WordPress.com behind its connection auth; scope to stats only),
+   Meta Box editor panel (runtime field discovery; ACF precedent), Matomo
+   traffic provider (small base but the best-behaved local analytics data
+   source), The Events Calendar editor panel (events already list natively;
+   the panel covers date/venue meta), and **ecommerce analytics** (Austin,
+   2026-07-11): an Analytics view alongside Orders, pill-style switcher on
+   the Orders surface. WooCommerce ships the data over its own
+   `wc-analytics` REST namespace (revenue/orders/products stats the Woo
+   Admin dashboard uses), so the read layer is free; the build cost is the
+   charting UI. Deserves its own cycle rather than riding an Orders change;
+   the pill switcher lands with it — and it pairs naturally with the Rung-3
+   chart row type (`docs/full-ui-adapters.md`): build Minn's charting once
+   and both consume it.
 
 Parked as structural: **multilingual** (WPML / Polylang / TranslatePress)
 needs a language dimension in content lists. Also parked, with scope and

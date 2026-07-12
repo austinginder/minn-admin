@@ -1,8 +1,11 @@
 # Core coverage audit — gaps vs classic wp-admin
 
-Audited 2026-07-10 against v0.10.0. Minn's positioning grades these: daily work
-belongs in Minn, the long tail stays one click away in wp-admin. Each area below
-gets a status and a judgment on whether the gap blocks daily work.
+Audited 2026-07-10 against v0.10.0; stale-checked 2026-07-12 during the
+v0.13.0 cycle (WP 7.0.1): every ranked priority remains shipped, no new
+daily-work gaps surfaced, and the long-tail judgments below stand. Minn's
+positioning grades these: daily work belongs in Minn, the long tail stays
+one click away in wp-admin. Each area below gets a status and a judgment on
+whether the gap blocks daily work.
 
 ## Priority ranking (the gaps that matter)
 

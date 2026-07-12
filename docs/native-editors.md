@@ -72,9 +72,12 @@ that already exist:
   label. Field types whose settings map onto the form vocabulary get full
   editing; the rest render their mapped subset plus a locked count with
   "edit in Gravity Forms ↗" (the ACF locked-fields pattern).
-- **Form settings, notifications, confirmations** — these are the Phase-2 GF
-  Settings mapper (the planned v0.13.0 opener) and land regardless of this
-  doc. The 80% editor composes with them rather than containing them.
+- **Form settings, notifications, confirmations** — the Phase-2 GF Settings
+  mapper ✅ shipped (v0.13.0 cycle, 2026-07-12): per-form settings via the
+  item-scoped settings view, notifications as a list view with daily-field
+  editing; confirmations editing was deliberately skipped (form-build-time
+  work, not daily). The 80% editor composes with them rather than
+  containing them.
 - **Conditional logic, read-first**: render existing rules as sentences
   ("Show when Budget is greater than 500"). Editing rules is a v2 decision;
   the rule JSON is trivial but the UX of building rules well is not.
@@ -188,12 +191,16 @@ The weakest of the three cases, recorded mostly to draw its boundary.
 
 ## Sequencing, if any of this ever schedules
 
-1. GF Settings mapper ships first (already the v0.13.0 opener); it is both
-   independently valuable and the prerequisite plumbing.
+1. ~~GF Settings mapper ships first~~ ✅ shipped (v0.13.0 cycle,
+   2026-07-12) — the prerequisite plumbing for the 80% editor now exists:
+   item-scoped settings views, the Settings-framework mapper, and the
+   notifications write path through `save_form_notifications`.
 2. Database viewer is the cheapest full item here and the best trial balloon
    for "developer surfaces": one cycle fragment, no plugin dependency.
 3. The GF 80% editor is a full cycle and should be a deliberate product bet,
-   made when form management in Minn (entries + settings + notifications) has
-   proven that users stay in Minn for form work.
+   made when form management in Minn (entries + settings + notifications,
+   all live as of v0.13.0) has proven that users stay in Minn for form
+   work. Dogfooding on anchor.localhost's real Gravity Forms use is the
+   honest test before committing.
 4. File browsing only ever ships as read-only, and only if a real diagnostic
    need surfaces that the debug-log viewer doesn't already cover.
