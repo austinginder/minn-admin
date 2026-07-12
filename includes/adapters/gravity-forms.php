@@ -276,6 +276,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// notification builder — routing rules, conditional logic and events
 	// are GF's editor, one click away.
 	if ( $can_edit_forms ) {
+		// Per-form settings: the {id} in the route makes the settings view
+		// ITEM-scoped — entered from a form row's "Form settings" action,
+		// never from the view switcher. The schema is read from GF's own
+		// Settings framework at request time (the mapper below).
+		$surfaces['gravity-forms']['settings'] = array(
+			'label' => 'Form settings',
+			'tabs'  => array( array( 'id' => 'form', 'label' => 'Form settings' ) ),
+			'route' => 'minn-admin/v1/gf/forms/{id}/settings/{tab}',
+		);
+		array_unshift(
+			$surfaces['gravity-forms']['manage']['actions'],
+			array( 'label' => 'Form settings', 'settingsItem' => true )
+		);
 		$surfaces['gravity-forms']['views'] = array(
 			array(
 				'viewLabel' => 'Notifications',
@@ -658,6 +671,28 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// Per-form settings — the GF Settings-framework mapper (schema read from
+	// GFFormSettings::form_settings_fields() at request time; save is a
+	// read-modify-write of the mapped keys through GFAPI::update_form).
+	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<id>\d+)/settings/(?P<tab>[a-z_-]+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $can_edit_forms,
+			'callback'            => function ( WP_REST_Request $request ) {
+				$form = GFAPI::get_form( (int) $request['id'] );
+				if ( ! $form ) {
+					return new WP_Error( 'not_found', 'Form not found.', array( 'status' => 404 ) );
+				}
+				return rest_ensure_response( minn_admin_gf_form_settings_shape( $form ) );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => $can_edit_forms,
+			'callback'            => 'minn_admin_gf_form_settings_save',
+		),
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<id>\d+)/active', array(
 		'methods'             => 'POST',
 		'permission_callback' => function () {
@@ -676,3 +711,355 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 } );
+
+/* ===== Per-form settings: the GF Settings-framework mapper =============
+ *
+ * GFFormSettings::form_settings_fields( $form ) is a runtime schema (the
+ * same Settings-framework descriptors GF renders its own screen from), so
+ * the mapper is written once against the FRAMEWORK: sections walk into
+ * Minn form-engine groups, and a GF release that adds a field shows up in
+ * Minn with no adapter change. Unmappable controls (schedule date-times,
+ * legacy markupVersion, unknown types) count as locked with the deep link.
+ */
+
+/**
+ * form_settings_fields() calls gform_tooltip(), which lives in an include
+ * REST requests never load (the Settings-API lesson: load the framework's
+ * own dependencies before asking it for its schema).
+ */
+function minn_admin_gf_settings_deps() {
+	require_once GFCommon::get_base_path() . '/tooltips.php';
+	require_once GFCommon::get_base_path() . '/form_settings.php';
+}
+
+/**
+ * GF's own initial-values flattening (their get_initial_values is
+ * private): a nested form key like save.button.text reads as
+ * saveButtonText — exactly how their renderer seeds fields, so mapped
+ * fields read values the same way their own screen does.
+ */
+function minn_admin_gf_flat_form_values( $form ) {
+	$out = array();
+	foreach ( $form as $key => $value ) {
+		if ( in_array( $key, array( 'fields', 'notifications', 'confirmations' ), true ) ) {
+			continue;
+		}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $sk => $sv ) {
+				if ( is_array( $sv ) ) {
+					foreach ( $sv as $tk => $tv ) {
+						if ( ! is_array( $tv ) ) {
+							$out[ $key . ucfirst( (string) $sk ) . ucfirst( (string) $tk ) ] = $tv;
+						}
+					}
+				} else {
+					$out[ $key . ucfirst( (string) $sk ) ] = $sv;
+				}
+			}
+			continue;
+		}
+		$out[ $key ] = $value;
+	}
+	return $out;
+}
+
+/**
+ * Walk the schema into { groups, values, spec }. `spec` is the save
+ * route's whitelist (key => type/options/allow_html), derived from the
+ * same walk so the schema and the write path can never drift.
+ *
+ * @param array $form Full form (GFAPI::get_form).
+ * @return array
+ */
+function minn_admin_gf_map_form_settings( $form ) {
+	minn_admin_gf_settings_deps();
+	$flat     = minn_admin_gf_flat_form_values( $form );
+	$sections = GFFormSettings::form_settings_fields( $form );
+	$groups   = array();
+	$values   = array();
+	$spec     = array();
+
+	// Names the generic walk must never write: markupVersion stores 1/2
+	// with inverted toggle semantics (legacy forms only).
+	$never = array( 'markupVersion' );
+
+	$options_of = function ( $choices ) {
+		$options = array();
+		foreach ( (array) $choices as $c ) {
+			if ( is_array( $c ) && array_key_exists( 'value', $c ) ) {
+				$options[] = array( (string) $c['value'], (string) ( isset( $c['label'] ) ? $c['label'] : $c['value'] ) );
+			}
+		}
+		return $options;
+	};
+
+	// Minn's showWhen is single-key; a field's LAST dependency rule is its
+	// nearest parent. Empty rule values mean "parent is truthy" (GF's
+	// convention for toggle parents). Multi-value rules don't map; the
+	// field just always shows, which is safe (it saves fine either way).
+	$show_when_of = function ( $f ) {
+		if ( empty( $f['dependency']['fields'] ) || ! is_array( $f['dependency']['fields'] ) ) {
+			return null;
+		}
+		$dep = end( $f['dependency']['fields'] );
+		if ( ! is_array( $dep ) || empty( $dep['field'] ) ) {
+			return null;
+		}
+		$vals = isset( $dep['values'] ) ? array_values( (array) $dep['values'] ) : array();
+		if ( count( $vals ) > 1 ) {
+			return null;
+		}
+		return array( 'key' => (string) $dep['field'], 'equals' => $vals ? (string) $vals[0] : true );
+	};
+
+	foreach ( $sections as $section ) {
+		$fields = array();
+		$locked = 0;
+
+		$walk = function ( $list, $inherited_show ) use ( &$walk, &$fields, &$locked, &$values, &$spec, $flat, $never, $options_of, $show_when_of ) {
+			foreach ( (array) $list as $f ) {
+				if ( ! is_array( $f ) ) {
+					continue;
+				}
+				$type = isset( $f['type'] ) ? (string) $f['type'] : 'text';
+				if ( 'html' === $type || 'save' === $type || ! empty( $f['hidden'] ) ) {
+					continue; // chrome, not settings
+				}
+				$name = isset( $f['name'] ) ? (string) $f['name'] : '';
+				$show = $show_when_of( $f );
+				if ( ! $show && $inherited_show ) {
+					$show = $inherited_show;
+				}
+				if ( '' === $name || in_array( $name, $never, true ) ) {
+					$locked++;
+					continue;
+				}
+				$label   = isset( $f['label'] ) ? wp_strip_all_tags( (string) $f['label'] ) : $name;
+				$default = isset( $f['default_value'] ) ? $f['default_value'] : null;
+				$current = array_key_exists( $name, $flat ) ? $flat[ $name ] : $default;
+
+				switch ( $type ) {
+					case 'text':
+						$number = isset( $f['input_type'] ) && 'number' === $f['input_type'];
+						$out    = array( 'key' => $name, 'label' => $label );
+						if ( $number ) {
+							$out['type'] = 'number';
+						}
+						if ( $show ) {
+							$out['showWhen'] = $show;
+						}
+						$fields[]        = $out;
+						$values[ $name ] = $number ? (string) (int) $current : (string) $current;
+						$spec[ $name ]   = array( 'type' => $number ? 'number' : 'text' );
+						break;
+					case 'textarea':
+						$out = array( 'key' => $name, 'label' => $label, 'type' => 'textarea', 'rows' => 4 );
+						if ( $show ) {
+							$out['showWhen'] = $show;
+						}
+						$fields[]        = $out;
+						$values[ $name ] = (string) $current;
+						$spec[ $name ]   = array( 'type' => 'textarea', 'allow_html' => ! empty( $f['allow_html'] ) );
+						break;
+					case 'select':
+					case 'radio':
+						$options = $options_of( isset( $f['choices'] ) ? $f['choices'] : array() );
+						if ( ! $options ) {
+							$locked++;
+							break;
+						}
+						$out = array( 'key' => $name, 'label' => $label, 'type' => 'select', 'options' => $options );
+						if ( $show ) {
+							$out['showWhen'] = $show;
+						}
+						$fields[]        = $out;
+						$values[ $name ] = (string) $current;
+						$spec[ $name ]   = array( 'type' => 'select', 'options' => wp_list_pluck( $options, 0 ) );
+						break;
+					case 'toggle':
+						$out = array( 'key' => $name, 'label' => $label, 'type' => 'toggle' );
+						if ( $show ) {
+							$out['showWhen'] = $show;
+						}
+						$fields[]        = $out;
+						$values[ $name ] = (bool) $current;
+						$spec[ $name ]   = array( 'type' => 'toggle' );
+						break;
+					case 'checkbox':
+						// GF's single-checkbox idiom is a boolean toggle whose
+						// nested fields reveal when it's on.
+						$choices = isset( $f['choices'] ) ? (array) $f['choices'] : array();
+						if ( 1 !== count( $choices ) || ! isset( $choices[0]['name'] ) || $choices[0]['name'] !== $name ) {
+							$locked++;
+							break;
+						}
+						$out = array( 'key' => $name, 'label' => $label, 'type' => 'toggle' );
+						if ( $show ) {
+							$out['showWhen'] = $show;
+						}
+						$fields[]        = $out;
+						$values[ $name ] = (bool) $current;
+						$spec[ $name ]   = array( 'type' => 'toggle' );
+						if ( ! empty( $f['fields'] ) ) {
+							$walk( $f['fields'], array( 'key' => $name, 'equals' => true ) );
+						}
+						break;
+					case 'text_and_select':
+						// A two-control composite (limit entries count +
+						// period); each input is its own Minn field.
+						$text   = isset( $f['inputs']['text'] ) ? $f['inputs']['text'] : null;
+						$select = isset( $f['inputs']['select'] ) ? $f['inputs']['select'] : null;
+						if ( ! is_array( $text ) || empty( $text['name'] ) || ! is_array( $select ) || empty( $select['name'] ) ) {
+							$locked++;
+							break;
+						}
+						$tname  = (string) $text['name'];
+						$number = isset( $text['input_type'] ) && 'number' === $text['input_type'];
+						$outt   = array( 'key' => $tname, 'label' => $label );
+						if ( $number ) {
+							$outt['type'] = 'number';
+						}
+						if ( $show ) {
+							$outt['showWhen'] = $show;
+						}
+						$fields[]         = $outt;
+						$values[ $tname ] = $number ? (string) (int) ( isset( $flat[ $tname ] ) ? $flat[ $tname ] : 0 ) : (string) ( isset( $flat[ $tname ] ) ? $flat[ $tname ] : '' );
+						$spec[ $tname ]   = array( 'type' => $number ? 'number' : 'text' );
+						$sname            = (string) $select['name'];
+						$options          = $options_of( isset( $select['choices'] ) ? $select['choices'] : array() );
+						if ( $options ) {
+							$outs = array( 'key' => $sname, 'label' => 'Period', 'type' => 'select', 'options' => $options );
+							if ( $show ) {
+								$outs['showWhen'] = $show;
+							}
+							$fields[]         = $outs;
+							$values[ $sname ] = (string) ( isset( $flat[ $sname ] ) ? $flat[ $sname ] : '' );
+							$spec[ $sname ]   = array( 'type' => 'select', 'options' => wp_list_pluck( $options, 0 ) );
+						}
+						break;
+					default:
+						// date_time (schedule), conditional-logic widgets and
+						// anything GF adds later that Minn can't draw.
+						$locked++;
+				}
+			}
+		};
+
+		$walk( isset( $section['fields'] ) ? $section['fields'] : array(), null );
+
+		if ( $fields || $locked ) {
+			$group = array(
+				'title'  => isset( $section['title'] ) ? wp_strip_all_tags( (string) $section['title'] ) : '',
+				'fields' => $fields,
+			);
+			if ( $locked ) {
+				$group['locked'] = $locked;
+			}
+			$groups[] = $group;
+		}
+	}
+
+	return array( 'groups' => $groups, 'values' => $values, 'spec' => $spec );
+}
+
+/** GET shape for the per-form settings view. */
+function minn_admin_gf_form_settings_shape( $form ) {
+	$mapped = minn_admin_gf_map_form_settings( $form );
+	return array(
+		'groups'   => $mapped['groups'],
+		'values'   => $mapped['values'],
+		'adminUrl' => admin_url( 'admin.php?page=gf_edit_forms&view=settings&subview=settings&id=' . (int) $form['id'] ),
+	);
+}
+
+/**
+ * POST: write one form's changed settings. Generic keys coerce by their
+ * own schema entry (toggles cast, selects whitelist against their own
+ * choices, numbers absint — the same rules GF's save applies); the few
+ * composite keys route through GF's own helpers (save-and-continue
+ * activation, spam-confirmation toggle). Everything lands in one
+ * GFAPI::update_form call: read-modify-write, smallest window.
+ */
+function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
+	$form = GFAPI::get_form( (int) $request['id'] );
+	if ( ! $form ) {
+		return new WP_Error( 'not_found', 'Form not found.', array( 'status' => 404 ) );
+	}
+	$body = $request->get_json_params();
+	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+
+	$mapped = minn_admin_gf_map_form_settings( $form );
+	$spec   = $mapped['spec'];
+
+	// Title mirrors GF's own validation: required, unique across forms
+	// (their screen refuses; GFAPI would silently rename to "title(2)").
+	if ( array_key_exists( 'title', $vals ) ) {
+		$title = sanitize_text_field( (string) $vals['title'] );
+		if ( '' === $title ) {
+			return new WP_Error( 'empty_title', 'Give the form a title.', array( 'status' => 400 ) );
+		}
+		foreach ( GFFormsModel::get_forms() as $f ) {
+			if ( (int) $f->id !== (int) $form['id'] && strtolower( $f->title ) === strtolower( $title ) ) {
+				return new WP_Error( 'dup_title', 'Another form already uses that title.', array( 'status' => 400 ) );
+			}
+		}
+		$vals['title'] = $title;
+	}
+
+	$save_enabled_before = ! empty( $form['save']['enabled'] );
+
+	foreach ( $vals as $key => $value ) {
+		if ( ! isset( $spec[ $key ] ) ) {
+			continue; // never write a key the live schema doesn't declare
+		}
+		$s = $spec[ $key ];
+		switch ( $s['type'] ) {
+			case 'toggle':
+				$value = (bool) $value;
+				break;
+			case 'number':
+				$value = absint( $value );
+				break;
+			case 'select':
+				if ( ! in_array( (string) $value, array_map( 'strval', $s['options'] ), true ) ) {
+					return new WP_Error( 'bad_choice', '"' . $value . '" is not one of the choices for ' . $key . '.', array( 'status' => 400 ) );
+				}
+				$value = (string) $value;
+				break;
+			case 'textarea':
+				$value = ! empty( $s['allow_html'] ) ? wp_kses_post( (string) $value ) : sanitize_textarea_field( (string) $value );
+				break;
+			default:
+				$value = sanitize_text_field( (string) $value );
+		}
+		// The composite keys write where GF's own save writes them.
+		if ( 'saveEnabled' === $key ) {
+			$form['save']['enabled']        = (bool) $value;
+			$form['save']['button']['type'] = 'link';
+		} elseif ( 'saveButtonText' === $key ) {
+			$form['save']['button']['text'] = $value;
+			if ( ! isset( $form['save']['button']['type'] ) ) {
+				$form['save']['button']['type'] = 'link';
+			}
+		} else {
+			$form[ $key ] = $value;
+		}
+	}
+
+	// GF's own side-effect helpers, exactly where their save runs them.
+	if ( isset( $vals['enableSpamConfirmation'] ) && method_exists( 'GFFormSettings', 'toggle_spam_confirmation' ) ) {
+		$form = GFFormSettings::toggle_spam_confirmation( $form );
+	}
+	$save_enabled_after = ! empty( $form['save']['enabled'] );
+	if ( $save_enabled_after !== $save_enabled_before ) {
+		$form = $save_enabled_after ? GFFormSettings::activate_save( $form ) : GFFormSettings::deactivate_save( $form );
+	}
+
+	$form['version'] = GFForms::$version;
+	$result          = GFAPI::update_form( $form );
+	if ( is_wp_error( $result ) ) {
+		$result->add_data( array( 'status' => 400 ) );
+		return $result;
+	}
+	return rest_ensure_response( minn_admin_gf_form_settings_shape( GFAPI::get_form( (int) $form['id'] ) ) );
+}

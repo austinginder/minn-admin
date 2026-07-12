@@ -4352,6 +4352,13 @@
 		} );
 	}
 
+	// A `settings` route containing {id} is ITEM-scoped: the view renders
+	// per item (a Gravity Forms form's settings), entered from a row action
+	// (`settingsItem: true`), never from the switcher.
+	function settingsItemScoped( s ) {
+		return !! ( s.settings && String( s.settings.route ).includes( '{id}' ) );
+	}
+
 	// View switcher (Entries / Manage / extra views / Settings) — shared
 	// between the list renderer and the settings view, which each own the
 	// whole #minn-view.
@@ -4360,19 +4367,23 @@
 		if ( ! s.manage && ! s.settings && ! extra.length ) return '';
 		// Settings-only surface (no collection): one view, nothing to switch.
 		if ( ! s.collection ) return '';
+		// Item-scoped settings render under their list's tab (kept active).
+		const itemScoped = settingsItemScoped( s );
+		const inItem = itemScoped && ss.view === 'settings';
+		const homeView = s.manage ? 'manage' : 'main';
 		return `
 			<div class="minn-tabs minn-view-switch">
-				<button class="minn-tab${ ss.view !== 'manage' && ss.view !== 'settings' && ! /^x\d+$/.test( ss.view ) ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
-				${ s.manage ? `<button class="minn-tab${ ss.view === 'manage' ? ' active' : '' }" data-sview="manage">${ esc( s.manage.viewLabel || 'Manage' ) }</button>` : '' }
+				<button class="minn-tab${ ( ss.view !== 'manage' && ss.view !== 'settings' && ! /^x\d+$/.test( ss.view ) ) || ( inItem && homeView === 'main' ) ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
+				${ s.manage ? `<button class="minn-tab${ ss.view === 'manage' || ( inItem && homeView === 'manage' ) ? ' active' : '' }" data-sview="manage">${ esc( s.manage.viewLabel || 'Manage' ) }</button>` : '' }
 				${ extra.map( ( v, i ) => `<button class="minn-tab${ ss.view === 'x' + i ? ' active' : '' }" data-sview="x${ i }">${ esc( v.viewLabel ) }</button>` ).join( '' ) }
-				${ s.settings ? `<button class="minn-tab${ ss.view === 'settings' ? ' active' : '' }" data-sview="settings">${ esc( s.settings.label || 'Settings' ) }</button>` : '' }
+				${ s.settings && ! itemScoped ? `<button class="minn-tab${ ss.view === 'settings' ? ' active' : '' }" data-sview="settings">${ esc( s.settings.label || 'Settings' ) }</button>` : '' }
 			</div>`;
 	}
 
 	function bindSurfaceViewSwitch( s, ss, view ) {
 		$$( '[data-sview]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				if ( ss.view === btn.dataset.sview ) return;
+				if ( ss.view === btn.dataset.sview && ! ss.settingsItem ) return;
 				ss.view = btn.dataset.sview;
 				if ( ss.view !== 'settings' ) {
 					// The list views are different collections — nothing
@@ -4382,6 +4393,7 @@
 					ss.tab = '_all';
 					ss.q = '';
 					ss.filter = null;
+					ss.settingsItem = null;
 				}
 				renderSurface( s );
 			} )
@@ -4639,10 +4651,21 @@
 	function renderSurfaceSettings( s, view ) {
 		const ss = surfaceState( s.id );
 		const cfg = s.settings;
+		// Item-scoped settings only render FOR an item; a stale entry (deep
+		// link, descriptor change) falls back to the item's home list.
+		const itemScoped = settingsItemScoped( s );
+		if ( itemScoped && ! ss.settingsItem ) {
+			ss.view = s.manage ? 'manage' : 'main';
+			renderSurface( s );
+			return;
+		}
+		const routeFor = ( t ) => cfg.route.replace( '{tab}', t )
+			.replace( '{id}', itemScoped ? encodeURIComponent( ss.settingsItem.id ) : '' );
 		if ( ! ss.settingsTab || ! cfg.tabs.some( ( t ) => t.id === ss.settingsTab ) ) ss.settingsTab = cfg.tabs[ 0 ].id;
 		ss.settingsCache = ss.settingsCache || {};
 		const tab = ss.settingsTab;
-		const data = ss.settingsCache[ tab ];
+		const cacheKey = itemScoped ? ss.settingsItem.id + ':' + tab : tab;
+		const data = ss.settingsCache[ cacheKey ];
 		const head = `
 		<div class="minn-toolbar">
 			${ surfaceViewSwitchHtml( s, ss ) }
@@ -4650,6 +4673,7 @@
 			<div class="minn-tabs">
 				${ cfg.tabs.map( ( t ) => `<button class="minn-tab${ tab === t.id ? ' active' : '' }" data-ssettab="${ esc( t.id ) }">${ esc( t.label ) }</button>` ).join( '' ) }
 			</div>` : '' }
+			${ itemScoped ? `<div class="minn-toolbar-meta">${ esc( ss.settingsItem.label || '' ) } · ${ esc( cfg.label || 'Settings' ) }</div>` : '' }
 		</div>`;
 		const bindChrome = () => {
 			bindSurfaceViewSwitch( s, ss, view );
@@ -4663,9 +4687,9 @@
 		if ( ! data ) {
 			view.innerHTML = head + '<div class="minn-loading">Loading…</div>';
 			bindChrome();
-			api( cfg.route.replace( '{tab}', tab ) )
+			api( routeFor( tab ) )
 				.then( ( r ) => {
-					ss.settingsCache[ tab ] = r || { groups: [] };
+					ss.settingsCache[ cacheKey ] = r || { groups: [] };
 					if ( state.route === s.id ) renderSurface( s );
 				} )
 				.catch( showErr );
@@ -4753,8 +4777,8 @@
 			}
 			saveBtn.disabled = true;
 			try {
-				const r = await api( cfg.route.replace( '{tab}', tab ), { method: 'POST', body: JSON.stringify( { values: payload } ) } );
-				ss.settingsCache[ tab ] = r || { groups: [] };
+				const r = await api( routeFor( tab ), { method: 'POST', body: JSON.stringify( { values: payload } ) } );
+				ss.settingsCache[ cacheKey ] = r || { groups: [] };
 				toast( 'Settings saved' );
 				renderSurface( s );
 			} catch ( e ) {
@@ -17095,6 +17119,18 @@
 						closeModal();
 						if ( state.route === m.surface.id ) renderSurface( m.surface );
 					};
+					if ( action.settingsItem ) {
+						// Not a request: open the surface's item-scoped
+						// settings view for this row (the {id} in the
+						// settings route names the item).
+						const it = m.item;
+						const ss = surfaceState( m.surface.id );
+						ss.view = 'settings';
+						ss.settingsItem = { id: it.id, label: it.title || it.name || ( '#' + it.id ) };
+						closeModal();
+						if ( state.route === m.surface.id ) renderSurface( m.surface );
+						return;
+					}
 					if ( action.fields && action.fields.length ) {
 						// Cancel rebuilds the modal from state, so the action
 						// row (and its handlers) come back exactly as declared.

@@ -106,9 +106,33 @@ actions in surface lists. The third list view shipped in the v0.13.0
 cycle (2026-07-12): a surface may declare a `views` array of additional
 collections (each with its own optional `cap`), and the Gravity SMTP
 debug log is the bundled reference (its status-card link-out is gone).
-Phase 2's remaining half is the GF Settings mapper (form settings +
-notifications/confirmations via full-form PUT) — the natural v0.13.0
-opener, in progress.
+Phase 2's remaining half, the GF Settings mapper, shipped in the v0.13.0
+cycle (2026-07-12) in two pieces. **Form settings**: the `settings`
+contract grew ITEM scope (a route containing `{id}` renders per item,
+entered from a row's `settingsItem: true` action), and the GF adapter maps
+`GFFormSettings::form_settings_fields()` at request time — the fourth
+schema framework covered (GF's Settings framework joins Gravity SMTP
+component trees, Minn's own form vocabulary and the core Settings API).
+Mapper facts that transfer: GF's single-checkbox idiom (one choice named
+like the field) is a boolean toggle with nested dependent fields;
+`text_and_select` composites split into two Minn fields; `dependency`
+rules map to `showWhen` (last rule = nearest parent; empty values =
+truthy); the save whitelist derives from the same walk (selects validate
+against their own choices) so schema and write path can't drift; the
+composite save-and-continue keys route through GF's own
+`activate_save`/`deactivate_save`, spam confirmation through
+`toggle_spam_confirmation`, and everything lands in one
+`GFAPI::update_form` (which round-trips notifications/confirmations
+safely). Schedule date-times stay locked (no date type in the settings
+vocabulary) and `markupVersion` stays locked (inverted 1/2 semantics).
+**Notifications**: a `views` list across forms with type-aware
+recipients, GF's own activate/deactivate, and daily-field editing
+(name/send-to/subject/message) through `save_form_notifications`.
+Confirmations editing is deliberately NOT built (edited at form-build
+time, not daily; GF's screen is the deep link) — revisit only if real
+use asks for it. Plugin settings (currency, logging) also remain unbuilt:
+set-once config, and the license key already lives in Minn's license
+manager.
 
 **The multiplier, proven on a fresh plugin (2026-07-11):** the theory behind
 this document was tested cold against Perfmatters, a settings-shaped plugin

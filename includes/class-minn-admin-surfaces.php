@@ -200,7 +200,7 @@ class Minn_Admin_Surfaces {
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
 	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
 	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
-	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href', 'fields' );
+	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href', 'fields', 'settingsItem' );
 	const CREATE_KEYS     = array( 'label', 'route', 'method', 'fields', 'defaults' );
 	const EDIT_KEYS       = array( 'route', 'method', 'preserve', 'fields' );
 	const FIELD_KEYS      = array( 'key', 'label', 'type', 'options', 'value', 'placeholder', 'rows', 'mono', 'required' );
@@ -431,8 +431,11 @@ class Minn_Admin_Surfaces {
 					$problems[] = "$ck: action without a label";
 					continue;
 				}
-				if ( empty( $a['route'] ) && empty( $a['href'] ) ) {
+				if ( empty( $a['route'] ) && empty( $a['href'] ) && empty( $a['settingsItem'] ) ) {
 					$problems[] = "$ck: action \"{$a['label']}\" has neither route nor href";
+				}
+				if ( ! empty( $a['settingsItem'] ) && ( empty( $surface['settings'] ) || false === strpos( (string) ( $surface['settings']['route'] ?? '' ), '{id}' ) ) ) {
+					$problems[] = "$ck: action \"{$a['label']}\" declares settingsItem but the surface has no item-scoped settings route";
 				}
 				foreach ( self::unknown_keys( $a, self::ACTION_KEYS ) as $k ) {
 					$problems[] = "$ck: unknown action key \"$k\" (ignored)";
