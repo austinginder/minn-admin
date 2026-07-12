@@ -115,27 +115,39 @@ const fs = require( 'fs' );
 	} );
 	t.check( 'Tools card deep-links the one-shot jobs', !! tools && tools.length === 5 && tools.every( ( h ) => h.includes( 'wp-admin/' ) ) && tools.some( ( h ) => h.endsWith( 'site-health.php' ) ), JSON.stringify( tools ) );
 
-	/* ===== Theme follows the OS when no explicit choice is saved ===== */
+	/* ===== Theme defaults to System (follows the OS live) ===== */
 	await page.evaluate( () => localStorage.removeItem( 'minn-theme' ) );
 	await page.emulateMedia( { colorScheme: 'light' } );
 	await page.reload( { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-sys-jump', { timeout: 20000 } );
-	const themeLight = await page.evaluate( () => document.documentElement.getAttribute( 'data-theme' ) );
+	const themeBoot = await page.evaluate( () => ( {
+		theme: document.documentElement.getAttribute( 'data-theme' ),
+		pref: localStorage.getItem( 'minn-theme' ),
+	} ) );
+	t.check( 'first visit persists System as the default preference', themeBoot.pref === 'system' && themeBoot.theme === 'light', JSON.stringify( themeBoot ) );
 	await page.emulateMedia( { colorScheme: 'dark' } );
 	await page.waitForTimeout( 250 ); // the pre-paint listener flips it live
 	const themeDark = await page.evaluate( () => document.documentElement.getAttribute( 'data-theme' ) );
-	t.check( 'theme follows the OS by default, live on change', themeLight === 'light' && themeDark === 'dark', `${ themeLight } -> ${ themeDark }` );
+	t.check( 'System theme follows the OS live on change', themeDark === 'dark', themeDark );
+	// Icon shows preference (monitor), not the effective paint.
+	const systemIcon = await page.evaluate( () => {
+		const btn = document.getElementById( 'minn-theme-btn' );
+		return btn ? { title: btn.title, html: btn.innerHTML } : null;
+	} );
+	t.check( 'System preference shows monitor icon + System tooltip',
+		!! systemIcon && /Theme: System/.test( systemIcon.title ) && /rect/.test( systemIcon.html ),
+		JSON.stringify( systemIcon && { title: systemIcon.title, hasRect: /rect/.test( systemIcon.html ) } ) );
 
-	/* ===== Theme button right-click: Dark / Light / System ===== */
+	/* ===== Theme button right-click: System / Light / Dark ===== */
 	await page.click( '#minn-theme-btn', { button: 'right' } );
 	await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
 	const themeMenuLabels = await page.$$eval( '.minn-ctx-menu button', ( bs ) =>
 		bs.map( ( b ) => b.textContent.replace( /^✓\s*/, '' ).trim() ) );
-	t.check( 'theme context menu lists Dark, Light, System',
+	t.check( 'theme context menu lists System, Light, Dark (System first)',
 		themeMenuLabels.length === 3
-		&& themeMenuLabels[ 0 ] === 'Dark'
+		&& themeMenuLabels[ 0 ] === 'System'
 		&& themeMenuLabels[ 1 ] === 'Light'
-		&& themeMenuLabels[ 2 ] === 'System',
+		&& themeMenuLabels[ 2 ] === 'Dark',
 		JSON.stringify( themeMenuLabels ) );
 	// Pick Light explicitly and confirm lock.
 	await page.evaluate( () => {
@@ -168,6 +180,19 @@ const fs = require( 'fs' );
 		pref: localStorage.getItem( 'minn-theme' ),
 	} ) );
 	t.check( 'theme menu System follows OS again', systemAgain.theme === 'dark' && systemAgain.pref === 'system', JSON.stringify( systemAgain ) );
+	// Click cycles System → Light → Dark → System.
+	await page.click( '#minn-theme-btn' );
+	await page.waitForTimeout( 50 );
+	const cycledLight = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
+	await page.click( '#minn-theme-btn' );
+	await page.waitForTimeout( 50 );
+	const cycledDark = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
+	await page.click( '#minn-theme-btn' );
+	await page.waitForTimeout( 50 );
+	const cycledSystem = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
+	t.check( 'click cycles System → Light → Dark → System',
+		cycledLight === 'light' && cycledDark === 'dark' && cycledSystem === 'system',
+		`${ cycledLight } → ${ cycledDark } → ${ cycledSystem }` );
 
 	/* ===== Nav item + copy report ===== */
 	t.check( 'System nav item present', !! ( await page.$( '.minn-nav-btn[data-nav="system"]' ) ) );

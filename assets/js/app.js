@@ -784,6 +784,9 @@
 			bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
 			moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
 			sun: '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+			// Theme: System (follows OS). Distinct from sun/moon so a dark OS
+			// doesn't look like an explicit Dark lock.
+			monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
 			plus: '<path d="M12 5v14M5 12h14"/>',
 			refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
 			list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
@@ -1097,7 +1100,7 @@
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="A WordPress update is available">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
 						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="View site">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="About Minn">${ icon( 'help' ) }</button>
-						<button class="minn-icon-btn" id="minn-theme-btn" title="Theme (click to toggle, right-click for options)"></button>
+						<button class="minn-icon-btn" id="minn-theme-btn" title="Theme: System (click to cycle, right-click for options)"></button>
 						<button class="minn-icon-btn" id="minn-notif-btn" title="Notifications">
 							${ icon( 'bell' ) }<span class="minn-unread-dot" id="minn-unread-dot" hidden></span>
 						</button>
@@ -1246,20 +1249,18 @@
 	}
 
 	function renderThemeBtn() {
-		const dark = document.documentElement.getAttribute( 'data-theme' ) !== 'light';
 		const btn = $( '#minn-theme-btn' );
 		if ( ! btn ) return;
-		btn.innerHTML = icon( dark ? 'moon' : 'sun' );
-		// Reflect the preference, not only the effective paint (System can
-		// look light or dark depending on the OS).
+		// Icon shows the preference (System = monitor), not only the
+		// effective paint — otherwise System + dark OS looks like locked Dark.
 		const pref = themePref();
-		btn.title = pref === 'system'
-			? 'Theme: System (click to toggle, right-click for options)'
-			: `Theme: ${ pref === 'light' ? 'Light' : 'Dark' } (click to toggle, right-click for options)`;
+		btn.innerHTML = icon( pref === 'system' ? 'monitor' : ( pref === 'light' ? 'sun' : 'moon' ) );
+		const label = pref === 'system' ? 'System' : ( pref === 'light' ? 'Light' : 'Dark' );
+		btn.title = `Theme: ${ label } (click to cycle, right-click for options)`;
 	}
 
-	// 'light' | 'dark' | 'system' — absent or the string "system" both mean
-	// follow the OS (matches the pre-paint script in template.php).
+	// 'light' | 'dark' | 'system'. Default is System (absent key or the
+	// string "system" — matches the pre-paint script in template.php).
 	function themePref() {
 		try {
 			const t = localStorage.getItem( 'minn-theme' );
@@ -1280,26 +1281,30 @@
 	function setThemePref( pref ) {
 		const mode = ( pref === 'light' || pref === 'dark' ) ? pref : 'system';
 		try {
-			if ( mode === 'system' ) localStorage.setItem( 'minn-theme', 'system' );
-			else localStorage.setItem( 'minn-theme', mode );
+			// Always persist explicitly so "default = system" is a real value,
+			// not only the absent-key fallback.
+			localStorage.setItem( 'minn-theme', mode );
 		} catch ( e ) { /* private mode */ }
 		document.documentElement.setAttribute( 'data-theme', mode === 'system' ? osTheme() : mode );
 		renderThemeBtn();
 	}
 
 	function toggleTheme() {
-		// Quick flip always locks an explicit light/dark (leaves System).
-		const next = document.documentElement.getAttribute( 'data-theme' ) === 'light' ? 'dark' : 'light';
-		setThemePref( next );
+		// Cycle System → Light → Dark → System. System is the default and a
+		// first-class stop, not something you only reach via the right-click menu.
+		const order = [ 'system', 'light', 'dark' ];
+		const i = order.indexOf( themePref() );
+		setThemePref( order[ ( i < 0 ? 0 : i + 1 ) % order.length ] );
 	}
 
 	function openThemeMenu( x, y ) {
 		const cur = themePref();
 		const mark = ( id, label ) => ( cur === id ? '✓ ' : '' ) + label;
+		// System first: the default.
 		openMinnMenu( x, y, [
-			{ label: mark( 'dark', 'Dark' ), active: cur === 'dark', run: () => setThemePref( 'dark' ) },
-			{ label: mark( 'light', 'Light' ), active: cur === 'light', run: () => setThemePref( 'light' ) },
 			{ label: mark( 'system', 'System' ), active: cur === 'system', run: () => setThemePref( 'system' ) },
+			{ label: mark( 'light', 'Light' ), active: cur === 'light', run: () => setThemePref( 'light' ) },
+			{ label: mark( 'dark', 'Dark' ), active: cur === 'dark', run: () => setThemePref( 'dark' ) },
 		] );
 	}
 
@@ -16571,7 +16576,7 @@
 		cmds.push(
 			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
 			...( B.caps.editPages ? [ { label: 'Create new page', kind: 'action', icon: '▭', run: () => newContent( 'pages' ) } ] : [] ),
-			{ label: 'Toggle dark / light theme', kind: 'action', icon: '◐', run: toggleTheme },
+			{ label: 'Cycle theme (System / Light / Dark)', kind: 'action', icon: '◐', run: toggleTheme },
 			{ label: 'View notifications', kind: 'action', icon: '◔', run: () => { state.notifOpen = true; renderOverlays(); loadNotifications().then( () => state.notifOpen && renderOverlays() ); } },
 			...( ( B.cache || [] ).length ? [ {
 				label: `Clear site cache (${ B.cache.map( ( c ) => c.name ).join( ', ' ) })`,
