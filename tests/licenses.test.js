@@ -42,12 +42,26 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 	const openSystem = async () => {
 		await page.goto( BASE + '/minn-admin/system', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '#minn-sys-licenses', { timeout: 20000 } );
+		await page.waitForSelector( '.minn-sys-check', { timeout: 20000 } );
+	};
+
+	// The license manager lives on Extensions → Licenses now; inactive
+	// components render collapsed, so expand them for the off-row checks.
+	const openLicenses = async () => {
+		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '[data-xtab="licenses"]', { timeout: 20000 } );
+		await page.click( '[data-xtab="licenses"]' );
+		await page.waitForSelector( '#minn-sys-licenses .minn-lic-item', { timeout: 20000 } );
+		const off = await page.$( '#minn-lic-off-toggle' );
+		if ( off && await page.$eval( '#minn-lic-off-toggle', ( el ) => el.getAttribute( 'aria-expanded' ) !== 'true' ) ) {
+			await page.click( '#minn-lic-off-toggle' );
+			await page.waitForTimeout( 250 );
+		}
 	};
 
 	try {
 		/* ===== Baseline: real fixtures classify as missing ===== */
-		await openSystem();
+		await openLicenses();
 		let text = await page.$eval( '#minn-sys-licenses', ( el ) => el.textContent );
 		t.check( 'card lists a real paid component', /Elementor Pro/.test( text ) );
 		const offRow = await page.evaluate( () => {
@@ -64,10 +78,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		} );
 		t.check( 'inactive components are dimmed and explained', offRow && offRow.off && offRow.note && offRow.affordance, JSON.stringify( offRow ) );
 		t.check( 'unlicensed dev components read "No license"', /No license/.test( text ) );
-		t.check( 'card states its read-only posture', /never the network/.test( text ) );
+		t.check( 'card states its read-only posture', /not a live lookup/.test( text ) );
+		await openSystem();
 		const healthBase = await page.$$eval( '.minn-sys-check', ( els ) =>
 			els.map( ( e ) => e.textContent ).find( ( s ) => /Licenses/.test( s ) ) || '' );
 		t.check( 'Licenses health check present (warn: missing only)', /missing/.test( healthBase ) );
+		t.check( 'Licenses health check is the clickable doorway', !! ( await page.$( '.minn-sys-check[data-sysgoto="licenses"]' ) ) );
 
 		/* ===== REST endpoint shape + summary ===== */
 		const rest = await page.evaluate( async () => {
@@ -84,7 +100,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		/* ===== Fixture provider: all five states render ===== */
 		if ( ! await setOpt( true ) ) throw new Error( 'could not enable minn_test_license' );
-		await openSystem();
+		await openLicenses();
 		text = await page.$eval( '#minn-sys-licenses', ( el ) => el.textContent );
 		t.check( 'fixture rows render', /Fixture Valid Pro/.test( text ) && /Fixture Unknown Theme/.test( text ) );
 		const pill = async ( name ) => page.evaluate( ( n ) => {
@@ -112,13 +128,15 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			return row && /theme/.test( row.querySelector( '.minn-sys-ext-parent' )?.textContent || '' );
 		} ) );
 
-		/* ===== Worst-first ordering ===== */
-		const order = await page.$$eval( '#minn-sys-licenses .minn-sys-ext-item', ( els ) =>
-			els.map( ( e ) => e.querySelector( '.minn-lic-pill' ).className.replace( /.*minn-lic-pill\s*/, '' ) ) );
-		const rank = { expired: 0, invalid: 1, missing: 2, unknown: 3, valid: 4 };
-		t.check( 'rows sort worst first', order.every( ( s, i ) => i === 0 || rank[ order[ i - 1 ] ] <= rank[ s ] ), order.join( ',' ) );
+		/* ===== Grouped ordering: attention first, inactive collapsed last ===== */
+		const groupOrder = await page.$$eval( '#minn-sys-licenses .minn-sys-ext-label, #minn-sys-licenses .minn-lic-off-toggle', ( els ) =>
+			els.map( ( e ) => e.textContent.trim() ) );
+		t.check( 'groups order attention → valid → none → inactive',
+			/Needs attention/.test( groupOrder[ 0 ] ) && /Inactive components/.test( groupOrder[ groupOrder.length - 1 ] ),
+			groupOrder.join( ' | ' ) );
 
 		/* ===== Health check goes red with expired/invalid present ===== */
+		await openSystem();
 		const healthBad = await page.$$eval( '.minn-sys-check', ( els ) => {
 			const el = els.find( ( e ) => /Licenses/.test( e.textContent ) );
 			return el ? { cls: el.className, text: el.textContent } : null;

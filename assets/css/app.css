@@ -457,6 +457,17 @@ button.minn-nav-label:hover { color: var(--text2); }
 
 /* ===== Content ===== */
 .minn-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+/* View-switcher row stacked above a controls row (Extensions grew a third
+   tab and the single row clipped both tab strips into scroll arrows). */
+.minn-toolbar-views { margin-bottom: 10px; }
+/* Extensions filters: quiet text links, not a second boxed pill strip —
+   two stacked bordered containers read as chrome soup (Austin). */
+.minn-tabs.minn-ext-filters { background: none; border: none; padding: 0; gap: 4px; overflow: visible; }
+.minn-ext-filters .minn-tab { background: none; border: none; padding: 6px 9px; color: var(--text3); font-weight: 500; }
+.minn-ext-filters .minn-tab:hover { color: var(--text2); }
+.minn-ext-filters .minn-tab.active { color: var(--text); font-weight: 600; background: none; box-shadow: none; }
+.minn-ext-filters .minn-tab.active .minn-tab-count { color: var(--accent2); }
+.minn-ext-filters .minn-tab .minn-tab-count { background: none; border: none; padding: 0; margin-left: 3px; }
 .minn-toolbar-meta { margin-left: auto; color: var(--text3); font-size: 14px; white-space: nowrap; flex-shrink: 0; }
 /* Scroll-arrow wrapper injected around overflowing tab strips (see enhanceTabStrips). */
 .minn-tabscroll { position: relative; display: flex; align-items: center; min-width: 0; }
@@ -2033,6 +2044,23 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-lic-key { font: inherit; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 3px 9px; width: min(240px, 100%); }
 .minn-lic-key:focus { outline: none; border-color: var(--accent2); }
 .minn-sys-lic-foot { font-size: 11.5px; color: var(--text3); padding: 11px 17px 13px; border-top: 1px solid var(--border); }
+
+/* Licenses tab (Extensions) — single-column grouped rows. Deactivate,
+   re-verify and turn-on live in the row's ⋯ menu; their .lic-menu buttons
+   stay in the DOM (hidden, still clickable) so the menu is built from what
+   the row can really do and can never drift. */
+.minn-lic-list { display: flex; flex-direction: column; }
+.minn-lic-row { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; min-width: 0; border-bottom: 1px solid var(--line); }
+.minn-lic-list .minn-lic-row:last-child { border-bottom: none; }
+.minn-lic-row .minn-lic-actions .lic-menu { display: none; }
+.minn-lic-more { font: inherit; font-size: 15px; line-height: 1; color: var(--text3); background: none; border: none; border-radius: 7px; padding: 2px 8px; cursor: pointer; flex-shrink: 0; align-self: center; }
+.minn-lic-more:hover { color: var(--text); background: var(--panel2); }
+.minn-lic-more-gap { width: 31px; flex-shrink: 0; }
+.minn-lic-off-toggle { font: inherit; font-size: 12px; font-weight: 600; color: var(--text3); background: none; border: none; padding: 0; cursor: pointer; }
+.minn-lic-off-toggle:hover { color: var(--text); }
+.minn-lic-off-toggle + .minn-lic-list { margin-top: 9px; }
+#minn-sys-lic-link { color: var(--accent2); text-decoration: none; }
+#minn-sys-lic-link:hover { text-decoration: underline; }
 
 /* Tools card — deep links to wp-admin's one-shot jobs */
 .minn-sys-tool { text-decoration: none; color: inherit; cursor: pointer; }

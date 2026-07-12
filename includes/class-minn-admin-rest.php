@@ -33,7 +33,17 @@ class Minn_Admin_REST {
 					// updates screen) — zero extra HTTP, and presence here IS
 					// the "this plugin is on wp.org" signal. Keyed by plugin
 					// file ("dir/plugin.php").
-					$tr  = get_site_transient( 'update_plugins' );
+					$tr = get_site_transient( 'update_plugins' );
+					// Plugin toggles wipe this transient (wp_clean_plugins_cache),
+					// and Minn may be the only admin this site ever loads — when
+					// it's near-empty, prime it ourselves instead of waiting for
+					// the next wp-cron check (one attempt per 5 minutes).
+					$have = count( (array) ( $tr->response ?? array() ) ) + count( (array) ( $tr->no_update ?? array() ) );
+					if ( $have < 5 && ! get_transient( 'minn_plugin_meta_primed' ) ) {
+						set_transient( 'minn_plugin_meta_primed', 1, 5 * MINUTE_IN_SECONDS );
+						wp_update_plugins();
+						$tr = get_site_transient( 'update_plugins' );
+					}
 					$out = array();
 					foreach ( array( 'response', 'no_update' ) as $bucket ) {
 						if ( empty( $tr->$bucket ) || ! is_array( $tr->$bucket ) ) {

@@ -46,8 +46,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const seededStatus = await seed( 'seed' );
 		t.check( 'seed route accepts admin', seededStatus === 200, String( seededStatus ) );
 
-		await page.goto( BASE + '/minn-admin/system', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '#minn-sys-licenses', { timeout: 20000 } );
+		await page.goto( BASE + '/minn-admin/extensions', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '[data-xtab="licenses"]', { timeout: 20000 } );
+		await page.click( '[data-xtab="licenses"]' );
+		await page.waitForSelector( '#minn-sys-licenses .minn-lic-item', { timeout: 20000 } );
+		{
+			const off = await page.$( '#minn-lic-off-toggle' );
+			if ( off && await page.$eval( '#minn-lic-off-toggle', ( el ) => el.getAttribute( 'aria-expanded' ) !== 'true' ) ) {
+				await page.click( '#minn-lic-off-toggle' );
+				await page.waitForTimeout( 250 );
+			}
+		}
 
 		// Vendor → expected state. These plugins are all installed, so their
 		// detect() fires and the reader classifies the seeded shape.

@@ -76,7 +76,7 @@ const fs = require( 'fs' );
 		};
 	} );
 	t.check( 'jump bar renders sticky with resolvable targets', jump && jump.sticky && jump.targetsExist && jump.active === 1, JSON.stringify( jump ) );
-	t.check( 'jump bar covers the page sections', jump && [ 'Health', 'Licenses', 'System' ].every( ( l ) => jump.labels.includes( l ) ), JSON.stringify( jump && jump.labels ) );
+	t.check( 'jump bar covers the page sections', jump && [ 'Health', 'System' ].every( ( l ) => jump.labels.includes( l ) ) && ! jump.labels.includes( 'Licenses' ), JSON.stringify( jump && jump.labels ) );
 	const jumped = await page.evaluate( async () => {
 		const sc = document.querySelector( '.minn-scroll' );
 		sc.scrollTop = 0;
@@ -91,12 +91,11 @@ const fs = require( 'fs' );
 		return { top: sc.scrollTop, active: document.querySelector( '#minn-sys-jump .active' )?.textContent };
 	} );
 	t.check( 'jump click scrolls and scroll-spy follows', jumped.top > 300 && jumped.active === 'System', JSON.stringify( jumped ) );
-	const licAboveDebug = await page.evaluate( () => {
-		const lic = document.getElementById( 'minn-sys-licenses' );
-		const dbg = document.getElementById( 'minn-sys-debug' );
-		return lic && dbg ? lic.offsetTop < dbg.offsetTop : null;
-	} );
-	t.check( 'Licenses card sits above Debug tools', licAboveDebug !== false, String( licAboveDebug ) );
+	// Licenses live on Extensions → Licenses now; System's doorway is the
+	// clickable health check (no card, no jump section).
+	t.check( 'Licenses health check is clickable, card is gone', await page.evaluate( () =>
+		!! document.querySelector( '.minn-sys-check[data-sysgoto="licenses"]' )
+		&& ! document.getElementById( 'minn-sys-licenses' ) ) );
 	await page.evaluate( () => { document.querySelector( '.minn-scroll' ).scrollTop = 0; } );
 
 	/* ===== Loopback/REST self-checks + Tools card ===== */
