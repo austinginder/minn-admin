@@ -33,22 +33,25 @@ $minn_asset_ver = function ( $rel ) {
 ?>
 <link rel="stylesheet" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/css/app.css?ver=' . $minn_asset_ver( 'assets/css/app.css' ) ); ?>">
 <script>
-// Apply the theme before first paint to avoid a flash. An explicit choice
-// (the topbar toggle persists one) wins; otherwise follow the OS setting
-// live, until the user toggles for the first time.
+// Apply the theme before first paint to avoid a flash. Explicit light/dark
+// wins; absent or "system" follows the OS live (right-click the topbar
+// theme button to pick System after locking a mode).
 try {
-	var t = localStorage.getItem( 'minn-theme' );
-	if ( ! t && window.matchMedia ) {
+	var stored = localStorage.getItem( 'minn-theme' );
+	var follow = ! stored || stored === 'system';
+	if ( follow && window.matchMedia ) {
 		var mq = window.matchMedia( '(prefers-color-scheme: light)' );
-		t = mq.matches ? 'light' : 'dark';
+		document.documentElement.setAttribute( 'data-theme', mq.matches ? 'light' : 'dark' );
 		mq.addEventListener( 'change', function ( e ) {
-			if ( ! localStorage.getItem( 'minn-theme' ) ) {
+			var cur = localStorage.getItem( 'minn-theme' );
+			if ( ! cur || cur === 'system' ) {
 				document.documentElement.setAttribute( 'data-theme', e.matches ? 'light' : 'dark' );
 				document.dispatchEvent( new CustomEvent( 'minn-theme-change' ) );
 			}
 		} );
+	} else if ( stored === 'light' || stored === 'dark' ) {
+		document.documentElement.setAttribute( 'data-theme', stored );
 	}
-	if ( t ) { document.documentElement.setAttribute( 'data-theme', t ); }
 } catch ( e ) {}
 window.MINN = <?php echo wp_json_encode( $boot ); ?>;
 </script>

@@ -126,6 +126,49 @@ const fs = require( 'fs' );
 	const themeDark = await page.evaluate( () => document.documentElement.getAttribute( 'data-theme' ) );
 	t.check( 'theme follows the OS by default, live on change', themeLight === 'light' && themeDark === 'dark', `${ themeLight } -> ${ themeDark }` );
 
+	/* ===== Theme button right-click: Dark / Light / System ===== */
+	await page.click( '#minn-theme-btn', { button: 'right' } );
+	await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+	const themeMenuLabels = await page.$$eval( '.minn-ctx-menu button', ( bs ) =>
+		bs.map( ( b ) => b.textContent.replace( /^✓\s*/, '' ).trim() ) );
+	t.check( 'theme context menu lists Dark, Light, System',
+		themeMenuLabels.length === 3
+		&& themeMenuLabels[ 0 ] === 'Dark'
+		&& themeMenuLabels[ 1 ] === 'Light'
+		&& themeMenuLabels[ 2 ] === 'System',
+		JSON.stringify( themeMenuLabels ) );
+	// Pick Light explicitly and confirm lock.
+	await page.evaluate( () => {
+		const b = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ]
+			.find( ( el ) => /Light/.test( el.textContent ) );
+		if ( b ) b.click();
+	} );
+	await page.waitForTimeout( 100 );
+	const lockedLight = await page.evaluate( () => ( {
+		theme: document.documentElement.getAttribute( 'data-theme' ),
+		pref: localStorage.getItem( 'minn-theme' ),
+	} ) );
+	t.check( 'theme menu Light locks light mode', lockedLight.theme === 'light' && lockedLight.pref === 'light', JSON.stringify( lockedLight ) );
+	// OS flip while locked must NOT change the paint.
+	await page.emulateMedia( { colorScheme: 'dark' } );
+	await page.waitForTimeout( 250 );
+	const stillLight = await page.evaluate( () => document.documentElement.getAttribute( 'data-theme' ) );
+	t.check( 'locked light ignores OS flip', stillLight === 'light', stillLight );
+	// System re-enables live follow.
+	await page.click( '#minn-theme-btn', { button: 'right' } );
+	await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+	await page.evaluate( () => {
+		const b = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ]
+			.find( ( el ) => /System/.test( el.textContent ) );
+		if ( b ) b.click();
+	} );
+	await page.waitForTimeout( 100 );
+	const systemAgain = await page.evaluate( () => ( {
+		theme: document.documentElement.getAttribute( 'data-theme' ),
+		pref: localStorage.getItem( 'minn-theme' ),
+	} ) );
+	t.check( 'theme menu System follows OS again', systemAgain.theme === 'dark' && systemAgain.pref === 'system', JSON.stringify( systemAgain ) );
+
 	/* ===== Nav item + copy report ===== */
 	t.check( 'System nav item present', !! ( await page.$( '.minn-nav-btn[data-nav="system"]' ) ) );
 	await page.click( '#minn-sys-copy' );

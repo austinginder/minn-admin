@@ -142,4 +142,6 @@ supersedes them), and Classic Editor/Widgets (Minn's classic mode already
 handles the storage reality).
 
 See `docs/for-plugin-authors.md` to add coverage from your own plugin, and
-`docs/extension-api.md` for the surface/panel/provider contracts.
+`docs/extension-api.md` for the surface/panel/provider contracts. For the
+primitive-by-adapter matrix (status cards, views, settings depth) used by
+adapter sweeps, see `docs/adapter-coverage.md`.

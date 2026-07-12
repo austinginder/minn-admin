@@ -1097,7 +1097,7 @@
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="A WordPress update is available">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
 						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="View site">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="About Minn">${ icon( 'help' ) }</button>
-						<button class="minn-icon-btn" id="minn-theme-btn" title="Toggle theme"></button>
+						<button class="minn-icon-btn" id="minn-theme-btn" title="Theme (click to toggle, right-click for options)"></button>
 						<button class="minn-icon-btn" id="minn-notif-btn" title="Notifications">
 							${ icon( 'bell' ) }<span class="minn-unread-dot" id="minn-unread-dot" hidden></span>
 						</button>
@@ -1135,8 +1135,23 @@
 			openUserModal( B.user.id );
 		} );
 		$( '#minn-theme-btn' ).addEventListener( 'click', toggleTheme );
-		// Until the user toggles explicitly, the theme follows the OS; the
-		// pre-paint script fires this when the system setting flips live.
+		// Right-click picks Dark / Light / System (click still quick-toggles).
+		$( '#minn-theme-btn' ).addEventListener( 'contextmenu', ( e ) => {
+			e.preventDefault();
+			openThemeMenu( e.clientX, e.clientY );
+		} );
+		// Follow OS live while preference is System (pre-paint also listens
+		// when the page first loads in that mode; this covers menu picks mid-session).
+		try {
+			if ( window.matchMedia ) {
+				window.matchMedia( '(prefers-color-scheme: light)' ).addEventListener( 'change', ( e ) => {
+					if ( themePref() !== 'system' ) return;
+					document.documentElement.setAttribute( 'data-theme', e.matches ? 'light' : 'dark' );
+					renderThemeBtn();
+				} );
+			}
+		} catch ( e ) { /* matchMedia unavailable */ }
+		// Pre-paint script fires this when the system setting flips live.
 		document.addEventListener( 'minn-theme-change', renderThemeBtn );
 		$( '#minn-help-btn' ).addEventListener( 'click', () => { state.modal = { type: 'help' }; renderOverlays(); } );
 		$( '#minn-notif-btn' ).addEventListener( 'click', toggleNotif );
@@ -1232,14 +1247,60 @@
 
 	function renderThemeBtn() {
 		const dark = document.documentElement.getAttribute( 'data-theme' ) !== 'light';
-		$( '#minn-theme-btn' ).innerHTML = icon( dark ? 'moon' : 'sun' );
+		const btn = $( '#minn-theme-btn' );
+		if ( ! btn ) return;
+		btn.innerHTML = icon( dark ? 'moon' : 'sun' );
+		// Reflect the preference, not only the effective paint (System can
+		// look light or dark depending on the OS).
+		const pref = themePref();
+		btn.title = pref === 'system'
+			? 'Theme: System (click to toggle, right-click for options)'
+			: `Theme: ${ pref === 'light' ? 'Light' : 'Dark' } (click to toggle, right-click for options)`;
+	}
+
+	// 'light' | 'dark' | 'system' — absent or the string "system" both mean
+	// follow the OS (matches the pre-paint script in template.php).
+	function themePref() {
+		try {
+			const t = localStorage.getItem( 'minn-theme' );
+			if ( t === 'light' || t === 'dark' ) return t;
+		} catch ( e ) { /* private mode */ }
+		return 'system';
+	}
+
+	function osTheme() {
+		try {
+			if ( window.matchMedia && window.matchMedia( '(prefers-color-scheme: light)' ).matches ) {
+				return 'light';
+			}
+		} catch ( e ) { /* matchMedia unavailable */ }
+		return 'dark';
+	}
+
+	function setThemePref( pref ) {
+		const mode = ( pref === 'light' || pref === 'dark' ) ? pref : 'system';
+		try {
+			if ( mode === 'system' ) localStorage.setItem( 'minn-theme', 'system' );
+			else localStorage.setItem( 'minn-theme', mode );
+		} catch ( e ) { /* private mode */ }
+		document.documentElement.setAttribute( 'data-theme', mode === 'system' ? osTheme() : mode );
+		renderThemeBtn();
 	}
 
 	function toggleTheme() {
+		// Quick flip always locks an explicit light/dark (leaves System).
 		const next = document.documentElement.getAttribute( 'data-theme' ) === 'light' ? 'dark' : 'light';
-		document.documentElement.setAttribute( 'data-theme', next );
-		try { localStorage.setItem( 'minn-theme', next ); } catch ( e ) {}
-		renderThemeBtn();
+		setThemePref( next );
+	}
+
+	function openThemeMenu( x, y ) {
+		const cur = themePref();
+		const mark = ( id, label ) => ( cur === id ? '✓ ' : '' ) + label;
+		openMinnMenu( x, y, [
+			{ label: mark( 'dark', 'Dark' ), active: cur === 'dark', run: () => setThemePref( 'dark' ) },
+			{ label: mark( 'light', 'Light' ), active: cur === 'light', run: () => setThemePref( 'light' ) },
+			{ label: mark( 'system', 'System' ), active: cur === 'system', run: () => setThemePref( 'system' ) },
+		] );
 	}
 
 	/* ===== Overview ===== */
@@ -13732,13 +13793,16 @@
 		hideMinnMenu();
 		minnMenuEl = document.createElement( 'div' );
 		minnMenuEl.className = 'minn-new-menu minn-ctx-menu';
-		minnMenuEl.innerHTML = entries.map( ( en, i ) =>
-			en.heading != null
-				? `<div class="minn-new-menu-label">${ esc( en.heading ) }</div>`
-				: en.href
-					? `<a href="${ esc( en.href ) }" target="_blank" rel="noopener"${ en.danger ? ' class="danger"' : '' }>${ esc( en.label ) }</a>`
-					: `<button type="button" data-mi="${ i }"${ en.danger ? ' class="danger"' : '' }>${ esc( en.label ) }</button>`
-		).join( '' );
+		minnMenuEl.innerHTML = entries.map( ( en, i ) => {
+			if ( en.heading != null ) {
+				return `<div class="minn-new-menu-label">${ esc( en.heading ) }</div>`;
+			}
+			const cls = [ en.danger && 'danger', en.active && 'is-on' ].filter( Boolean ).join( ' ' );
+			const clsAttr = cls ? ` class="${ cls }"` : '';
+			return en.href
+				? `<a href="${ esc( en.href ) }" target="_blank" rel="noopener"${ clsAttr }>${ esc( en.label ) }</a>`
+				: `<button type="button" data-mi="${ i }"${ clsAttr }>${ esc( en.label ) }</button>`;
+		} ).join( '' );
 		document.body.appendChild( minnMenuEl );
 		minnMenuEl.style.left = Math.max( 10, Math.min( x, window.innerWidth - minnMenuEl.offsetWidth - 10 ) ) + 'px';
 		minnMenuEl.style.top = Math.max( 10, Math.min( y, window.innerHeight - minnMenuEl.offsetHeight - 10 ) ) + 'px';
