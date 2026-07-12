@@ -7481,7 +7481,7 @@
 					</div>`
 					+ text( 'date_format', 'Date format', s.date_format, true )
 					+ text( 'time_format', 'Time format', s.time_format, true )
-					+ select( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week ),
+					+ combo( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week ),
 				toggles: [
 					{ id: 'minn_admin_default', label: 'Minn is the default admin', desc: 'After signing in, land here instead of wp-admin (deep links still work; classic stays available).', on: !! s.minn_admin_default },
 				].map( toggle ).join( '' ),
