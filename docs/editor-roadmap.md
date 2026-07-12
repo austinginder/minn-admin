@@ -130,8 +130,8 @@ distrust the surface.
 ## Horizon 2 — delight (0.7–0.9): things Gutenberg will never feel like
 
 The theme: features that only make sense in a *writing* tool, where the calm surface is
-the point. Most of this horizon shipped across v0.8.0–v0.10.0; remaining items are
-stats growth and a slash extension point.
+the point. Most of this horizon shipped across v0.8.0–v0.13.0; remaining item is the
+slash-command extension point.
 
 - **Outline panel.** ✅ *Shipped 2026-07-05 (v0.8.0)* — heading ToC as the last sidebar
   card, sticky; rebuilds on the stats cadence; click ping lives inside the scroller at
@@ -156,8 +156,11 @@ stats growth and a slash extension point.
   the match Range and run `execCommand insertText`, so every replacement is a native undo
   entry and Replace-all applies last-to-first to keep earlier ranges valid. Locked mode falls
   through to browser find. Suite: `tests/find-replace.test.js`.
-- **Writing stats that matter.** Session word counts, per-post goals; the pill (word count
-  + reading time) is the seed. Still open.
+- **Writing stats that matter.** ✅ *Shipped 2026-07-12 (v0.13.0)* — the sticky pill
+  grows a session delta (words since first edit this open; baseline re-bases while the
+  post is clean so late island previews don't inflate "session") and an optional word
+  goal (global, localStorage `minn-writing-goal`, click the pill to set/clear). Goal-met
+  paints green. Suite: `tests/writing-stats.test.js`.
 - **Slash-command extension point.** `minn_admin_editor_commands` filter so plugins add
   their own slash items the way they already add blocks, panels and surfaces. Still open
   (auto-insert blocks, design libraries and patterns already cover the plugin-content

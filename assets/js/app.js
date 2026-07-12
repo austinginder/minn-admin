@@ -10031,11 +10031,11 @@
 		}
 	}
 
-	function updateEditorStats() {
-		const el = $( '#minn-editor-stats' );
-		const body = $( '#minn-editor-body' );
-		if ( ! el || ! body ) return;
-		ensureTrailingParagraph( body );
+	// Sticky pill: total words · reading time · session delta · optional goal.
+	// Session baseline refreshes while the post is clean (island previews can
+	// land late); freezes on first dirty so "session" means words since you
+	// started typing this open. Goal is a global localStorage target.
+	function countEditorWords( body ) {
 		const walker = document.createTreeWalker( body, NodeFilter.SHOW_TEXT, {
 			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-empty, .minn-shortcode-label, .minn-shortcode-input' )
 				? NodeFilter.FILTER_REJECT
@@ -10043,12 +10043,122 @@
 		} );
 		let text = '';
 		while ( walker.nextNode() ) text += walker.currentNode.textContent + ' ';
-		const words = ( text.match( /\S+/g ) || [] ).length;
+		return ( text.match( /\S+/g ) || [] ).length;
+	}
+
+	function writingGoal() {
+		try {
+			const n = parseInt( localStorage.getItem( 'minn-writing-goal' ) || '0', 10 );
+			return n > 0 ? n : 0;
+		} catch ( e ) {
+			return 0;
+		}
+	}
+
+	function setWritingGoal( n ) {
+		try {
+			if ( n > 0 ) localStorage.setItem( 'minn-writing-goal', String( Math.min( 999999, Math.floor( n ) ) ) );
+			else localStorage.removeItem( 'minn-writing-goal' );
+		} catch ( e ) { /* private mode */ }
+	}
+
+	function closeWritingGoalPop() {
+		const pop = $( '#minn-stats-goal-pop' );
+		if ( pop ) pop.remove();
+		document.removeEventListener( 'mousedown', writingGoalPopAway, true );
+	}
+
+	function writingGoalPopAway( e ) {
+		const pop = $( '#minn-stats-goal-pop' );
+		if ( ! pop ) return;
+		if ( pop.contains( e.target ) || e.target.closest( '#minn-editor-stats' ) ) return;
+		closeWritingGoalPop();
+	}
+
+	function openWritingGoalPop() {
+		closeWritingGoalPop();
+		const anchor = $( '#minn-editor-stats' );
+		if ( ! anchor ) return;
+		const cur = writingGoal();
+		const pop = document.createElement( 'div' );
+		pop.id = 'minn-stats-goal-pop';
+		pop.className = 'minn-stats-goal-pop';
+		pop.innerHTML = `
+			<div class="minn-stats-goal-label">Word goal</div>
+			<div class="minn-stats-goal-row">
+				<input type="number" class="minn-input" id="minn-stats-goal-input" min="0" max="999999" step="50" placeholder="e.g. 500" value="${ cur || '' }">
+				<button type="button" class="minn-btn-primary" id="minn-stats-goal-save">Set</button>
+			</div>
+			<button type="button" class="minn-link-btn" id="minn-stats-goal-clear"${ cur ? '' : ' hidden' }>Clear goal</button>
+			<div class="minn-stats-goal-hint">Shown on every post. Session words start when you first edit.</div>`;
+		document.body.appendChild( pop );
+		const ar = anchor.getBoundingClientRect();
+		const pr = pop.getBoundingClientRect();
+		let left = ar.right - pr.width;
+		let top = ar.top - pr.height - 10;
+		if ( top < 8 ) top = ar.bottom + 10;
+		if ( left < 8 ) left = 8;
+		if ( left + pr.width > window.innerWidth - 8 ) left = window.innerWidth - pr.width - 8;
+		pop.style.left = left + 'px';
+		pop.style.top = top + 'px';
+		const input = $( '#minn-stats-goal-input', pop );
+		const save = () => {
+			const n = parseInt( input.value, 10 );
+			setWritingGoal( Number.isFinite( n ) && n > 0 ? n : 0 );
+			closeWritingGoalPop();
+			updateEditorStats();
+			toast( n > 0 ? `Word goal set to ${ n.toLocaleString() }` : 'Word goal cleared' );
+		};
+		$( '#minn-stats-goal-save', pop ).addEventListener( 'click', save );
+		input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' ) { e.preventDefault(); save(); }
+			if ( e.key === 'Escape' ) { e.preventDefault(); closeWritingGoalPop(); }
+		} );
+		const clearBtn = $( '#minn-stats-goal-clear', pop );
+		if ( clearBtn ) clearBtn.addEventListener( 'click', () => {
+			setWritingGoal( 0 );
+			closeWritingGoalPop();
+			updateEditorStats();
+			toast( 'Word goal cleared' );
+		} );
+		// Next tick so the opening click doesn't immediately dismiss.
+		setTimeout( () => document.addEventListener( 'mousedown', writingGoalPopAway, true ), 0 );
+		input.focus( { preventScroll: true } );
+		input.select();
+	}
+
+	function updateEditorStats() {
+		const el = $( '#minn-editor-stats' );
+		const body = $( '#minn-editor-body' );
+		if ( ! el || ! body ) return;
+		ensureTrailingParagraph( body );
+		const words = countEditorWords( body );
+		const ed = state.editor;
+		// While clean, keep re-basing so late island previews don't count as
+		// "session" growth. First dirty freezes the baseline.
+		if ( ed ) {
+			if ( ! ed.dirty ) ed.sessionBase = words;
+			else if ( ed.sessionBase == null ) ed.sessionBase = words;
+		}
+		const session = ed && ed.sessionBase != null ? words - ed.sessionBase : 0;
+		const goal = writingGoal();
 		// 225 wpm — the middle of the usual 200–250 adult-reading estimates.
 		const mins = Math.max( 1, Math.round( words / 225 ) );
-		el.innerHTML = words
-			? `<b>${ words.toLocaleString() }</b> words&nbsp;· <b>${ mins }</b> min read`
+		const goalCls = goal && words >= goal ? ' met' : '';
+		const goalPart = goal
+			? `&nbsp;/&nbsp;<b class="minn-stats-goal${ goalCls }">${ goal.toLocaleString() }</b>`
+			: '';
+		const sessionPart = session
+			? `&nbsp;·&nbsp;<b class="minn-stats-session${ session > 0 ? ' up' : ' down' }">${ session > 0 ? '+' : '' }${ session.toLocaleString() }</b> session`
+			: '';
+		el.innerHTML = words || session
+			? `<b>${ words.toLocaleString() }</b>${ goalPart } words&nbsp;·&nbsp;<b>${ mins }</b> min${ sessionPart }`
 			: '<b>0</b> words';
+		el.title = goal
+			? `Goal ${ goal.toLocaleString() } words · click to change`
+			: 'Click to set a word goal';
+		el.classList.toggle( 'has-goal', !! goal );
+		el.classList.toggle( 'goal-met', !!( goal && words >= goal ) );
 		syncTableChips();
 		updateOutline();
 		// Focus mode and the find bar ride the same typing cadence.
@@ -11732,7 +11842,7 @@
 					<span class="minn-tool-hint">type / for blocks</span>
 				</div>` }
 				<div class="minn-editor-body${ locked ? ' locked' : '' }" id="minn-editor-body" contenteditable="${ locked ? 'false' : 'true' }"></div>
-				<div class="minn-editor-stats" id="minn-editor-stats" aria-live="off"></div>
+				<div class="minn-editor-stats" id="minn-editor-stats" aria-live="off" role="button" tabindex="0"></div>
 			</div>
 			<div class="minn-editor-side" id="minn-editor-side"></div>
 		</div>`;
@@ -11760,7 +11870,23 @@
 		// Restored modes surface their exit chip — the topbar rendered
 		// before these flags came back from localStorage.
 		if ( ed.focus || ed.outlineMode ) renderTopbar();
+		// Fresh open: re-arm session baseline once clean content is measured.
+		ed.sessionBase = null;
 		updateEditorStats();
+		const statsEl = $( '#minn-editor-stats', view );
+		if ( statsEl && ! statsEl._minnGoalBound ) {
+			statsEl._minnGoalBound = true;
+			statsEl.addEventListener( 'click', ( e ) => {
+				e.preventDefault();
+				openWritingGoalPop();
+			} );
+			statsEl.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Enter' || e.key === ' ' ) {
+					e.preventDefault();
+					openWritingGoalPop();
+				}
+			} );
+		}
 		ensureEditorStyles();
 		renderBackupNotice();
 		renderLocalNetNotice();
@@ -16733,6 +16859,7 @@
 							<span class="minn-kbd">← →</span><span>Previous / next item in a media or entry detail</span>
 							<span class="minn-kbd">Esc</span><span>Close menus and dialogs</span>
 						</div>
+						<p class="minn-help-keys-note">The word-count pill (bottom-right in the editor) shows total words, reading time, and words written this session. Click it to set or clear a word goal.</p>
 						<p class="minn-help-keys-note">On Windows and Linux, use <span class="minn-kbd">Ctrl</span> in place of <span class="minn-kbd">⌘</span>.</p>
 
 						<h4>Get out of the way</h4>
@@ -18588,6 +18715,7 @@
 		removeFocusDim();
 		removeOutlineMode();
 		closeFindBar();
+		closeWritingGoalPop();
 		hideMinnMenu();
 		$$( '.minn-row-menu' ).forEach( ( el ) => el.remove() );
 		hideImgPop();
@@ -18790,7 +18918,10 @@
 					else if ( state.modal.type === 'revision' ) { e.preventDefault(); revisionModalNav( dir ); }
 				}
 			}
-			if ( e.key === 'Escape' && ( state.paletteOpen || state.notifOpen || state.modal ) ) {
+			if ( e.key === 'Escape' && $( '#minn-stats-goal-pop' ) ) {
+				e.preventDefault();
+				closeWritingGoalPop();
+			} else if ( e.key === 'Escape' && ( state.paletteOpen || state.notifOpen || state.modal ) ) {
 				state.paletteOpen = false;
 				state.notifOpen = false;
 				state.modal = null;
