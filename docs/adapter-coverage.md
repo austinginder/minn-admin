@@ -77,6 +77,8 @@ Reference depth: **Gravity Forms**.
 | wpvivid | Y | — | — | Y | — | Y | — | — | — | Y | | Schedule + backup-now; restore = **L** |
 | duplicator | Y | — | — | — | — | Y | — | — | — | Y | | Package list; no freshness claim |
 | disembark | Y | — | — | — | — | Y | — | — | — | Y | | Connector; CLI command + sessions; no freshness |
+| backwpup | Y | — | — | Y | — | Y | — | — | — | Y | 2026-07-12 | Local FOLDER archives; run-job-now; remote dests = **L** |
+| ai1wm | Y | — | — | Y | — | Y | — | — | — | Y | 2026-07-12 | .wpress list; export/import wizards = **L**; no freshness |
 
 ### activity-log
 

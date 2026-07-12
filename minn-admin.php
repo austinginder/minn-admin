@@ -69,6 +69,8 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/updraftplus.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/disembark.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/duplicator.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wpvivid.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/backwpup.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/ai1wm.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/page-builders.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/seo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/media-localize.php';
