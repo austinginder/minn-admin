@@ -3803,6 +3803,15 @@
 
 	function renderCoupons() {
 		const view = $( '#minn-view' );
+		// WC Settings → General → Enable coupons. When off, the REST route
+		// exists but every list call 403s — hide the surface instead of that error.
+		if ( ! B.wc || ! B.caps.coupons ) {
+			view.innerHTML = `<div class="minn-card minn-empty">
+				Coupons are turned off in WooCommerce (Settings → General → Enable coupons), or you do not have permission to manage them.
+				${ B.site && B.site.adminUrl ? ` <a href="${ esc( B.site.adminUrl ) }admin.php?page=wc-settings" target="_blank" rel="noopener">Open WooCommerce settings ↗</a>` : '' }
+			</div>`;
+			return;
+		}
 		const c = state.cache.coupons;
 		if ( ! c ) {
 			view.innerHTML = '<div class="minn-loading">Loading coupons…</div>';

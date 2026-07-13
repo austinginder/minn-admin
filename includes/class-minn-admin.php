@@ -337,7 +337,13 @@ class Minn_Admin {
 				'deleteUsers'  => current_user_can( 'delete_users' ),
 				'orders'       => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ),
 				'products'     => class_exists( 'WooCommerce' ) && current_user_can( 'edit_products' ),
-				'coupons'      => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_coupons' ),
+				// Coupons only when WC has them enabled (Settings → General →
+				// Enable coupons). When off, shop_coupon is not registered and
+				// wc/v3/coupons always 403s "cannot list resources" even for admins.
+				'coupons'      => class_exists( 'WooCommerce' )
+					&& ( ! function_exists( 'wc_coupons_enabled' ) || wc_coupons_enabled() )
+					&& post_type_exists( 'shop_coupon' )
+					&& current_user_can( 'edit_shop_coupons' ),
 				// Customers REST is manage_woocommerce-gated in WC; shop managers
 				// who can edit orders also get the list (read) when that cap holds.
 				'customers'    => class_exists( 'WooCommerce' ) && (
