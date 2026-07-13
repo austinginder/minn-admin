@@ -239,6 +239,7 @@
 		extFilter: 'all',
 		extSearch: '',
 		orderTab: 'any',
+		orderSearch: '',
 		userSearch: '',
 		range: 30,
 		modal: null,
@@ -2869,10 +2870,35 @@
 		cancelled: 'trash-status', refunded: 'draft', failed: 'trash-status',
 	};
 
+	const orderCtx = () => ( state.orderTab || 'any' ) + '|' + ( state.orderSearch || '' );
+
 	async function loadOrders( page = 1 ) {
 		const tab = state.orderTab;
-		const r = await apiPaged( `wc/v3/orders?per_page=25&page=${ page }&status=${ tab }&_fields=id,number,status,total,currency_symbol,date_created,billing,line_items` );
-		if ( tab !== state.orderTab ) return; // tab changed mid-flight — discard
+		const q0 = ( state.orderSearch || '' ).trim();
+		const ctx = orderCtx();
+		const fields = 'id,number,status,total,currency_symbol,date_created,billing,line_items';
+		// Numeric-only query: try the order by id first (WC search is fuzzy and
+		// often misses exact ids). Fall through to search if it's not found.
+		if ( q0 && /^\d+$/.test( q0 ) ) {
+			try {
+				const one = await api( `wc/v3/orders/${ q0 }?_fields=${ fields }` );
+				if ( ctx !== orderCtx() ) return;
+				if ( one && one.id ) {
+					// Honor the active status tab when it is not "any".
+					if ( tab === 'any' || one.status === tab ) {
+						state.cache.orders = { items: [ one ], page: 1, totalPages: 1, total: 1 };
+						return;
+					}
+				}
+			} catch ( e ) {
+				// 404 → fall through to search (order number may differ from id).
+			}
+		}
+		let q = `wc/v3/orders?per_page=25&page=${ page }&status=${ tab }&_fields=${ fields }`;
+		// WC search matches order id/number, billing name/email/phone, etc.
+		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
+		const r = await apiPaged( q );
+		if ( ctx !== orderCtx() ) return; // tab/search changed mid-flight — discard
 		state.cache.orders = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
@@ -3011,11 +3037,14 @@
 					${ delta ? `<div class="minn-stat-delta">${ esc( delta ) }</div>` : '' }
 				</div>` ).join( '' ) }
 		</div>` : '' }
-		<div class="minn-toolbar">
+		<div class="minn-toolbar minn-toolbar-views">
 			<div class="minn-tabs">
 				${ ORDER_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.orderTab === id ? ' active' : '' }" data-otab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
+		</div>
+		<div class="minn-toolbar">
+			<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="Search orders (ID, name, email…)" value="${ esc( state.orderSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'order' ) }</div>
 		</div>
 		<div class="minn-card minn-table">
@@ -3033,7 +3062,7 @@
 					<div class="minn-row-meta">${ ( o.line_items || [] ).reduce( ( n, li ) => n + ( li.quantity || 0 ), 0 ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
 					<div class="minn-row-arrow">›</div>
-				</div>` ).join( '' ) : '<div class="minn-empty">No orders here.</div>' }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? 'No orders match “' + esc( state.orderSearch ) + '”.' : 'No orders here.' }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'order' ) }`;
 
@@ -3044,6 +3073,29 @@
 				renderOrders();
 			} )
 		);
+		const orderSearch = $( '#minn-order-search', view );
+		if ( orderSearch ) {
+			let orderSearchTimer = null;
+			orderSearch.addEventListener( 'input', () => {
+				clearTimeout( orderSearchTimer );
+				orderSearchTimer = setTimeout( async () => {
+					state.orderSearch = orderSearch.value.trim();
+					state.cache.orders = null;
+					try {
+						await loadOrders( 1 );
+						if ( state.route === 'orders' ) renderOrders();
+					} catch ( e ) { showErr( e ); }
+				}, 280 );
+			} );
+			orderSearch.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' && orderSearch.value ) {
+					orderSearch.value = '';
+					state.orderSearch = '';
+					state.cache.orders = null;
+					loadOrders( 1 ).then( () => { if ( state.route === 'orders' ) renderOrders(); } ).catch( showErr );
+				}
+			} );
+		}
 		$$( '[data-order]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				const o = c.items.find( ( x ) => x.id === parseInt( row.dataset.order, 10 ) );
