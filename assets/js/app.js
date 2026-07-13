@@ -4233,7 +4233,7 @@
 		green: [ 'sent', 'active', 'completed', 'publish', 'approved', 'success', 'read', 'received', 'unlocked', 'pinned', 'scheduled' ],
 		red: [ 'failed', 'spam', 'error', 'fatal', 'cancelled', 'locked', 'overdue' ],
 		// inactive (Code Snippets / GF forms) is a quiet draft-like state.
-		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread', 'warning' ],
+		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread', 'warning', 'paused', 'immediate' ],
 	};
 
 	function surfacePill( value ) {

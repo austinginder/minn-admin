@@ -36,7 +36,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
 | **Performance** | Perfmatters | **Performance** surface (settings-only): its whole settings estate (General, JavaScript, CSS, Code, Preload, Lazy Loading, Fonts, CDN, Analytics) rendered from its live core-Settings-API registrations, saved through its own sanitizer; the few bespoke fields (input rows, font subsets) count as locked with a wp-admin link. Its license was already in the Licenses card |
-| **Dev tools** | Query Monitor, **Scrutoscope** | QM panel on Minn pages (this-request diagnostics). **Profiler** surface for Scrutoscope: recent profiles (duration, type, role, HTTP status) with Pinned/Session/Background tabs, detail sections from its own `/profile/{id}` (top sources, queries, HTTP calls, milestones), status card (background capture, sample rate, query profiling, profile count), Cron inventory view via its diagnostics, delete through its Storage, deep link to Tools → Scrutoscope for capture settings / pin / share |
+| **Dev tools** | Query Monitor, Scrutoscope, **WP Crontrol** | QM panel on Minn pages (this-request diagnostics). **Profiler** surface for Scrutoscope: recent profiles, detail (sources/queries/HTTP/milestones), status card, Cron attribution view, delete. **Cron** surface for WP Crontrol: full event inventory (overdue/paused/recurring/one-off filters), run-now, pause/resume hook, delete through their Event API, status card (counts + WP-Cron spawn), deep link to add/edit PHP/URL jobs |
 | **Users** | User Switching, One Time Login | "Switch to this user" in the users row menu (the plugin's own nonce URLs), plus a Switch-back bar for a switched session; "Copy one-time login link" mints a single-use login-as link through One Time Login's own token generator (that CLI-only plugin's first UI), gated on `edit_user` for the target |
 | **Media** | Regenerate Thumbnails | ↻ Thumbnails button on the media detail modal (per-image full rebuild) |
 | **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
@@ -95,10 +95,10 @@ diagnostics other plugins already store.
 1. ~~**Scrutoscope**~~ ✅ shipped (v0.14.0 cycle opener): Profiler surface
    under Tools — profiles list, detail via their REST, status card, Cron
    view, delete. Capture settings / pin / share stay deep-linked.
-2. **WP Crontrol** — cron event list / run-now / edit through its own APIs.
-   System already has an overdue-cron health row; this is the daily
-   inventory. High install base, clear Tools-group surface (or a Cron
-   family if Scrutoscope's cron inventory should share a switcher).
+2. ~~**WP Crontrol**~~ ✅ shipped (v0.14.0): **Cron** surface under Tools —
+   inventory, run-now, pause/resume, delete via `Crontrol\Event\*`. Add/edit
+   PHP/URL cron jobs stay deep-linked. Scrutoscope's Profiler → Cron view
+   remains attribution-only (no family merge).
 3. **Transients Manager** (or a thin native list) — list / search / delete
    transients. System already counts expired rows; the surface is the
    cleanup work. Prefer the popular plugin's store over reinventing.

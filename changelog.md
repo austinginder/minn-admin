@@ -4,6 +4,7 @@
 
 ### Added
 * **Scrutoscope Profiler surface:** when [Scrutoscope](https://github.com/scrutineerhq/scrutoscope) is active, Tools gains **Profiler** — recent performance profiles (duration, type, role, HTTP status) with Pinned / Session / Background tabs and search. Opening a row shows top sources, queries, HTTP calls and timeline milestones drawn from Scrutoscope's own `/profile/{id}` endpoint (sanitizer stays theirs). A status card reports background capture, sample rate, query profiling, profile count and version, with a deep link to Tools → Scrutoscope for capture settings, pin, annotate and encrypted share. A **Cron** view lists scheduled events through Scrutoscope's diagnostics (overdue filter). Profiles delete through Scrutoscope's own Storage. Complements the Query Monitor chip: QM is this request; Scrutoscope is sampled history.
+* **WP Crontrol Cron surface:** when WP Crontrol is active, Tools gains **Cron** — the full event inventory (overdue / paused / recurring / one-off filters and search) with run-now, pause/resume (hook-level) and delete through WP Crontrol's own `Event` API under its capabilities. A status card reports event counts, overdue/paused totals, WP-Cron spawn state and plugin version, with deep links to add an event or open Tools → Cron Events. Adding PHP/URL cron jobs and editing schedules stays on WP Crontrol's screen. Complements System's overdue-cron health row and Scrutoscope's attribution-only Cron view.
 
 ## **v0.13.0** - July 13, 2026
 

@@ -118,7 +118,7 @@ Reference depth: **Gravity Forms**.
 | site-kit / koko / … | Traffic providers | partial | | Overview chart only |
 | query-monitor | panel (not a surface) | — | 2026-07-13 | Footer arm + launcher chip; this-request only |
 | scrutoscope | Profiler surface (list + detail + status + Cron view) | Y | 2026-07-13 | Profiles via Storage list; detail via rest_do_request `/profile/{id}`; capture UI = **L** |
-| **wp-crontrol** | **not shipped** | — | 2026-07-13 | Candidate: cron inventory surface |
+| wp-crontrol | Cron surface (list + detail + status; run/pause/resume/delete) | Y | 2026-07-13 | Via `Crontrol\Event\*`; add/edit PHP/URL jobs = **L** |
 | **transients-manager** | **not shipped** | — | 2026-07-13 | Candidate: list/delete; System has expired count only |
 
 ## Deliberate deep-links (do not re-propose as Axis B)
@@ -136,6 +136,7 @@ Reference depth: **Gravity Forms**.
 | 2026-07-12 | Skill + this matrix seeded | Report-first runbook added to `dev-minn-admin`; no auto-ship |
 | 2026-07-13 | v0.14.0 open / Dev tools review | QM classified panel-only; Scrutoscope + WP Crontrol + Transients Manager ranked in plugin-support Wave A; no ship |
 | 2026-07-13 | Scrutoscope adapter | Profiler surface shipped (profiles, detail, status, Cron view, delete); suite 22 checks |
+| 2026-07-13 | WP Crontrol adapter | Cron surface shipped (list, run-now, pause/resume, delete, status); suite 20 checks |
 
 When a sweep updates cells or ships work, append a row and set `Reviewed` on
 touched adapters (or stamp `// last-sweep: YYYY-MM-DD` in the adapter header).
