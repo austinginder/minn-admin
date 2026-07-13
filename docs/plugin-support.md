@@ -36,7 +36,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
 | **Performance** | Perfmatters | **Performance** surface (settings-only): its whole settings estate (General, JavaScript, CSS, Code, Preload, Lazy Loading, Fonts, CDN, Analytics) rendered from its live core-Settings-API registrations, saved through its own sanitizer; the few bespoke fields (input rows, font subsets) count as locked with a wp-admin link. Its license was already in the Licenses card |
-| **Dev tools** | Query Monitor | QM panel on Minn pages |
+| **Dev tools** | Query Monitor | QM panel on Minn pages (this-request diagnostics; not a historical surface) |
 | **Users** | User Switching, One Time Login | "Switch to this user" in the users row menu (the plugin's own nonce URLs), plus a Switch-back bar for a switched session; "Copy one-time login link" mints a single-use login-as link through One Time Login's own token generator (that CLI-only plugin's first UI), gated on `edit_user` for the target |
 | **Media** | Regenerate Thumbnails | ↻ Thumbnails button on the media detail modal (per-image full rebuild) |
 | **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
@@ -80,46 +80,83 @@ themselves through the extension filters.
 
 ## Roadmap candidates
 
-Refreshed 2026-07-12 during the v0.13.0 cycle (originally ranked 2026-07-10
-against the wp.org top-500 by active installs; re-checked the same day after
-the forms opener and surface-toolbar polish landed). The 2026-07-10 wave list
-is mostly drained: license visibility and activation, the lockout logs, Ninja
-Forms / Forminator / Formidable / Everest Forms, Duplicator, WP Mail Logging, the visibility
-posture and the small-delights wave all shipped across v0.11.0–v0.13.0 and
-live in the coverage table above now. v0.13.0 so far also shipped surface
-`views[]`, item-scoped settings, GF form settings + notifications, the
-Gravity SMTP debug log, and calmer surface toolbars (see changelog). What
-remains, re-ranked (installs × fit × effort):
+Refreshed 2026-07-13 at the open of the **v0.14.0** cycle (v0.13.0 released
+the same day). Prior waves (licenses, lockouts, forms pack, backups pack,
+mail depth, surface primitives, snippets) live in the coverage table above.
+What remains, re-ranked (installs × daily-ops fit × effort, with a deliberate
+Dev tools fill-in for the still-thin row):
 
-1. **Email log providers** — GoSMTP (logs free), SureMails, Site Mailer;
+### Wave A — Dev tools (the thin row)
+
+Today Dev tools is only the Query Monitor launcher chip (this-request).
+That shape is correct for QM; what is missing is **historical / inventory**
+diagnostics other plugins already store.
+
+1. **Scrutoscope** ([scrutineerhq/scrutoscope](https://github.com/scrutineerhq/scrutoscope),
+   v1.3.4) — **strongest greenfield Dev tools adapter.** Read-only WordPress
+   performance profiler (P3's spiritual successor) with a first-class REST
+   API under `scrutoscope/v1`: routes summary, profile detail, compare,
+   regression, cron inventory, diagnostics, agent prompt. Complements QM
+   cleanly: QM = this Minn boot request; Scrutoscope = sampled history and
+   "who owns the time" across routes. Minn fit is list + detail + status
+   card (and optionally a Cron view), Tools group, `manage_options`. Capture
+   settings, pin UI, and zero-knowledge share stay in Scrutoscope. Fixture
+   install from GitHub release (not yet on wp.org as of review). Verify
+   cookie + `X-WP-Nonce` same-origin before building (README documents
+   Application Passwords for agents; logged-in REST may still work like
+   every other adapter).
+2. **WP Crontrol** — cron event list / run-now / edit through its own APIs.
+   System already has an overdue-cron health row; this is the daily
+   inventory. High install base, clear Tools-group surface (or a Cron
+   family if Scrutoscope's cron inventory should share a switcher).
+3. **Transients Manager** (or a thin native list) — list / search / delete
+   transients. System already counts expired rows; the surface is the
+   cleanup work. Prefer the popular plugin's store over reinventing.
+4. **Rewrite Rules Inspector** — read-only rules list + flush deep link.
+   Small, diagnostic, same spirit as System tools.
+
+**QM stays a panel, not a surface.** Rebuilding its HTML dispatcher inside
+Minn would be a canvas clone. Debug Bar and friends are skip (QM supersedes).
+
+**Native developer surfaces** (no plugin) stay scoped in
+`docs/native-editors.md`: read-only database viewer is still the cheapest
+full item and pairs with Scrutoscope (profiles → tables). File manager
+writes remain a permanent non-goal; read-only file view only if the debug-log
+viewer is not enough.
+
+### Wave B — leftover providers (existing families)
+
+5. **Email log providers** — GoSMTP (logs free), SureMails, Site Mailer;
    Easy WP SMTP's full log is Pro-only (free has debug events, the
    WP Mail SMTP shape).
-2. **Security leftover** — All-In-One Security (activity-log family +
+6. **Security leftover** — All-In-One Security (activity-log family +
    posture row; the LLA-R / Solid Security pattern).
-3. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
+7. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
    believed but not source-verified; verify before promising).
-4. **Bigger scoped bets** — WPForms Pro entries (source-verified: Lite
-   stores no entries at all, so this costs a license and Pro fixtures;
-   biggest uncovered name), Jetpack Stats as a traffic provider (data lives
-   on WordPress.com behind its connection auth; scope to stats only),
-   Meta Box editor panel (runtime field discovery; ACF precedent), Matomo
-   traffic provider (small base but the best-behaved local analytics data
-   source), The Events Calendar editor panel (events already list natively;
-   the panel covers date/venue meta), and **ecommerce analytics** (Austin,
-   2026-07-11): an Analytics view alongside Orders, pill-style switcher on
-   the Orders surface. WooCommerce ships the data over its own
-   `wc-analytics` REST namespace (revenue/orders/products stats the Woo
-   Admin dashboard uses), so the read layer is free; the build cost is the
-   charting UI. Deserves its own cycle rather than riding an Orders change;
-   the pill switcher lands with it — and it pairs naturally with the Rung-3
-   chart row type (`docs/full-ui-adapters.md`): build Minn's charting once
-   and both consume it.
+
+### Wave C — bigger scoped bets (own cycle or half-cycle)
+
+8. **Ecommerce analytics** — Analytics view alongside Orders (pill
+   switcher). WooCommerce `wc-analytics` REST is free; cost is charting UI
+   (Rung-3 chart row already exists for status cards).
+9. **WPForms Pro entries** — Lite stores no entries; needs Pro license +
+   fixtures; biggest uncovered forms name.
+10. **Meta Box** editor panel (ACF precedent), **The Events Calendar**
+    editor panel (date/venue meta), **Jetpack Stats** / **Matomo** traffic
+    providers (auth and data-shape study first).
+
+### Axis A leftovers (adapter depth, not new plugins)
+
+From `docs/adapter-coverage.md` and `docs/full-ui-adapters.md`: richer
+`sectionsRoute` row types (`pill`, `code`, `html-preview`, `kv-table`) for
+email-log detail fidelity; status/chart parity on thinner mail and forms
+adapters when a family sweep is scheduled (`/dev-minn-admin sweep`).
 
 Parked as structural: **multilingual** (WPML / Polylang / TranslatePress)
 needs a language dimension in content lists. Also parked, with scope and
 boundaries drawn in `docs/native-editors.md`: **native editors over clean
-documents** (the Gravity Forms "80% form editor") and **developer surfaces
-over site primitives** (read-only database viewer, file browsing).
+documents** (the Gravity Forms "80% form editor"; prerequisite plumbing
+shipped in v0.13.0; dogfood form-management depth before committing).
 
 Explicitly skip (link-out or nothing is the honest answer): image optimizers
 (Smush, EWWW, Imagify, ShortPixel: background processors), consent/GDPR
@@ -128,8 +165,9 @@ so they list anyway), email marketing platforms (MailPoet, MC4WP), one-shot
 migration tools (importers, Better Search Replace), remote-management agents
 (ManageWP, MainWP), file managers, Elementor addon packs (already fenced via
 the Elementor adapter), duplicate-post plugins (Minn's native Duplicate
-supersedes them), and Classic Editor/Widgets (Minn's classic mode already
-handles the storage reality).
+supersedes them), Classic Editor/Widgets (Minn's classic mode already
+handles the storage reality), and **Debug Bar** / P3 Profiler (QM and
+Scrutoscope supersede).
 
 See `docs/for-plugin-authors.md` to add coverage from your own plugin, and
 `docs/extension-api.md` for the surface/panel/provider contracts. For the
