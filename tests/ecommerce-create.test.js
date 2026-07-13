@@ -175,6 +175,33 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'Orders Analytics has chart or empty state',
 		analytics.hasChart || analytics.hasTop || analytics.hasGross, JSON.stringify( analytics ) );
 
+	// Long-range + list status coverage (historical orders).
+	const hasAllRange = await page.$( '[data-orange="all"]' );
+	const has1y = await page.$( '[data-orange="365"]' );
+	t.check( 'Analytics offers 1y and All ranges', !! hasAllRange && !! has1y, '' );
+	if ( hasAllRange ) {
+		await page.click( '[data-orange="all"]' );
+		await page.waitForFunction( () => {
+			const text = document.body.innerText || '';
+			return /all time/i.test( text ) && ! /Loading analytics/.test( text );
+		}, null, { timeout: 30000 } ).catch( () => null );
+		const allLabel = await page.evaluate( () => /all time/i.test( document.body.innerText || '' ) );
+		t.check( 'All-time analytics range loads', allLabel, '' );
+	}
+	const viewList = await page.$( '#minn-wc-view-orders, [data-oview="list"]' );
+	if ( viewList ) {
+		const btn = await page.$( '#minn-wc-view-orders' );
+		if ( btn ) await btn.click();
+		else await page.click( '[data-oview="list"]' );
+		await page.waitForSelector( '#minn-order-search, [data-otab]', { timeout: 15000 } );
+	}
+	const tabs = await page.evaluate( () =>
+		Array.from( document.querySelectorAll( '[data-otab]' ) ).map( ( b ) => b.dataset.otab )
+	);
+	t.check( 'Orders list has pending/cancelled/failed tabs',
+		[ 'any', 'pending', 'cancelled', 'failed', 'completed' ].every( ( id ) => tabs.includes( id ) ),
+		JSON.stringify( tabs ) );
+
 	// Cleanup.
 	if ( createdOrderId ) await api( `wc/v3/orders/${ createdOrderId }?force=true`, { method: 'DELETE' } ).catch( () => null );
 	if ( createdProductId ) await api( `wc/v3/products/${ createdProductId }?force=true`, { method: 'DELETE' } ).catch( () => null );
