@@ -36,7 +36,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
 | **Performance** | Perfmatters | **Performance** surface (settings-only): its whole settings estate (General, JavaScript, CSS, Code, Preload, Lazy Loading, Fonts, CDN, Analytics) rendered from its live core-Settings-API registrations, saved through its own sanitizer; the few bespoke fields (input rows, font subsets) count as locked with a wp-admin link. Its license was already in the Licenses card |
-| **Dev tools** | Query Monitor; **Diagnostics** family (Scrutoscope, WP Crontrol, Transients Manager) | QM panel on Minn pages (this-request). One Tools item **Diagnostics** with a provider switcher: **Scrutoscope** (performance profiles + attribution Cron view), **WP Crontrol** (event inventory, run-now, pause/resume, delete), **Transients Manager** (list/search/delete, expired purge, never unserializes blobs). Capture settings, PHP/URL cron authoring, and deep transient edit stay deep-linked to each plugin |
+| **Dev tools** | Query Monitor; **Diagnostics** family (Scrutoscope, WP Crontrol, Transients Manager, Rewrite Rules Inspector) | QM panel on Minn pages (this-request). One Tools item **Diagnostics** with a provider switcher: **Scrutoscope** (performance profiles + attribution Cron view), **WP Crontrol** (event inventory, run-now, pause/resume, delete), **Transients Manager** (list/search/delete, expired purge, never unserializes blobs), **Rewrite Rules Inspector** (registered rules by source, search by path, flush, test URL). Capture settings, PHP/URL cron authoring, deep transient edit, and the full RRI screen stay deep-linked |
 | **Users** | User Switching, One Time Login | "Switch to this user" in the users row menu (the plugin's own nonce URLs), plus a Switch-back bar for a switched session; "Copy one-time login link" mints a single-use login-as link through One Time Login's own token generator (that CLI-only plugin's first UI), gated on `edit_user` for the target |
 | **Media** | Regenerate Thumbnails | ↻ Thumbnails button on the media detail modal (per-image full rebuild) |
 | **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
@@ -100,8 +100,9 @@ diagnostics other plugins already store.
    (list/search/delete, delete-expired, bulk delete). Values stay opaque
    for serialized payloads. System's expired-transients count is the
    doorway; this is the cleanup work.
-4. **Rewrite Rules Inspector** — read-only rules list + flush deep link.
-   Candidate for the same Diagnostics family.
+4. ~~**Rewrite Rules Inspector**~~ ✅ shipped: Diagnostics → Rewrites
+   (list/search by path or text, Missing/Core/Posts/Pages/Other tabs,
+   flush + test URL via their services, detail).
 5. **IA note (2026-07-13):** Dev tools share family `diagnostics` (one Tools
    nav item + provider switcher). Do not add a top-level nav entry per
    diagnostic plugin — Tools was already crowded (Email / logs / snippets /

@@ -120,6 +120,7 @@ Reference depth: **Gravity Forms**.
 | scrutoscope | Diagnostics family (list + detail + status + Cron view) | Y | 2026-07-13 | family `diagnostics`; capture UI = **L** |
 | wp-crontrol | Diagnostics family (list + detail + status; run/pause/resume/delete) | Y | 2026-07-13 | family `diagnostics`; add/edit PHP/URL jobs = **L** |
 | transients-manager | Diagnostics family (list + detail + status; delete + delete-expired) | Y | 2026-07-13 | family `diagnostics`; never unserialize; edit UI = **L** |
+| rewrite-rules-inspector | Diagnostics family (list + detail + status; flush + test URL) | Y | 2026-07-13 | family `diagnostics`; via their RewriteRules / UrlTester; hard .htaccess flush not offered |
 
 ## Deliberate deep-links (do not re-propose as Axis B)
 
@@ -138,6 +139,7 @@ Reference depth: **Gravity Forms**.
 | 2026-07-13 | Scrutoscope adapter | Profiler surface shipped (profiles, detail, status, Cron view, delete); suite 22 checks |
 | 2026-07-13 | WP Crontrol adapter | Cron surface shipped (list, run-now, pause/resume, delete, status); suite 20 checks |
 | 2026-07-13 | Diagnostics family + Transients | Scrutoscope + Crontrol + Transients Manager collapse to one Tools item; TM suite 17 |
+| 2026-07-13 | Rewrite Rules Inspector | Diagnostics → Rewrites (list, flush, test URL); suite 15 |
 
 When a sweep updates cells or ships work, append a row and set `Reviewed` on
 touched adapters (or stamp `// last-sweep: YYYY-MM-DD` in the adapter header).
