@@ -4231,9 +4231,9 @@
 
 	const PILL_STYLES = {
 		green: [ 'sent', 'active', 'completed', 'publish', 'approved', 'success', 'read', 'received', 'unlocked', 'pinned', 'scheduled' ],
-		red: [ 'failed', 'spam', 'error', 'fatal', 'cancelled', 'locked', 'overdue' ],
+		red: [ 'failed', 'spam', 'error', 'fatal', 'cancelled', 'locked', 'overdue', 'expired' ],
 		// inactive (Code Snippets / GF forms) is a quiet draft-like state.
-		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread', 'warning', 'paused', 'immediate' ],
+		amber: [ 'sandboxed', 'pending', 'hold', 'on-hold', 'unread', 'warning', 'paused', 'immediate', 'persistent' ],
 	};
 
 	function surfacePill( value ) {

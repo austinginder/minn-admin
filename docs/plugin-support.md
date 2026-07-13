@@ -36,7 +36,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
 | **Performance** | Perfmatters | **Performance** surface (settings-only): its whole settings estate (General, JavaScript, CSS, Code, Preload, Lazy Loading, Fonts, CDN, Analytics) rendered from its live core-Settings-API registrations, saved through its own sanitizer; the few bespoke fields (input rows, font subsets) count as locked with a wp-admin link. Its license was already in the Licenses card |
-| **Dev tools** | Query Monitor, Scrutoscope, **WP Crontrol** | QM panel on Minn pages (this-request diagnostics). **Profiler** surface for Scrutoscope: recent profiles, detail (sources/queries/HTTP/milestones), status card, Cron attribution view, delete. **Cron** surface for WP Crontrol: full event inventory (overdue/paused/recurring/one-off filters), run-now, pause/resume hook, delete through their Event API, status card (counts + WP-Cron spawn), deep link to add/edit PHP/URL jobs |
+| **Dev tools** | Query Monitor; **Diagnostics** family (Scrutoscope, WP Crontrol, Transients Manager) | QM panel on Minn pages (this-request). One Tools item **Diagnostics** with a provider switcher: **Scrutoscope** (performance profiles + attribution Cron view), **WP Crontrol** (event inventory, run-now, pause/resume, delete), **Transients Manager** (list/search/delete, expired purge, never unserializes blobs). Capture settings, PHP/URL cron authoring, and deep transient edit stay deep-linked to each plugin |
 | **Users** | User Switching, One Time Login | "Switch to this user" in the users row menu (the plugin's own nonce URLs), plus a Switch-back bar for a switched session; "Copy one-time login link" mints a single-use login-as link through One Time Login's own token generator (that CLI-only plugin's first UI), gated on `edit_user` for the target |
 | **Media** | Regenerate Thumbnails | ↻ Thumbnails button on the media detail modal (per-image full rebuild) |
 | **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
@@ -92,18 +92,20 @@ Today Dev tools is only the Query Monitor launcher chip (this-request).
 That shape is correct for QM; what is missing is **historical / inventory**
 diagnostics other plugins already store.
 
-1. ~~**Scrutoscope**~~ ✅ shipped (v0.14.0 cycle opener): Profiler surface
-   under Tools — profiles list, detail via their REST, status card, Cron
-   view, delete. Capture settings / pin / share stay deep-linked.
-2. ~~**WP Crontrol**~~ ✅ shipped (v0.14.0): **Cron** surface under Tools —
-   inventory, run-now, pause/resume, delete via `Crontrol\Event\*`. Add/edit
-   PHP/URL cron jobs stay deep-linked. Scrutoscope's Profiler → Cron view
-   remains attribution-only (no family merge).
-3. **Transients Manager** (or a thin native list) — list / search / delete
-   transients. System already counts expired rows; the surface is the
-   cleanup work. Prefer the popular plugin's store over reinventing.
+1. ~~**Scrutoscope**~~ ✅ shipped: Diagnostics → Scrutoscope (profiles,
+   detail, status, Cron attribution view, delete).
+2. ~~**WP Crontrol**~~ ✅ shipped: Diagnostics → WP Crontrol (inventory,
+   run-now, pause/resume, delete).
+3. ~~**Transients Manager**~~ ✅ shipped: Diagnostics → Transients
+   (list/search/delete, delete-expired, bulk delete). Values stay opaque
+   for serialized payloads. System's expired-transients count is the
+   doorway; this is the cleanup work.
 4. **Rewrite Rules Inspector** — read-only rules list + flush deep link.
-   Small, diagnostic, same spirit as System tools.
+   Candidate for the same Diagnostics family.
+5. **IA note (2026-07-13):** Dev tools share family `diagnostics` (one Tools
+   nav item + provider switcher). Do not add a top-level nav entry per
+   diagnostic plugin — Tools was already crowded (Email / logs / snippets /
+   redirects / backups / performance).
 
 **QM stays a panel, not a surface.** Rebuilding its HTML dispatcher inside
 Minn would be a canvas clone. Debug Bar and friends are skip (QM supersedes).

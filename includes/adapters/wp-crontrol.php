@@ -13,9 +13,12 @@
  * (PHP cron run needs edit_files). PHP code bodies never leave their
  * args blob into Minn (get_args_display only).
  *
- * Complements Scrutoscope's Profiler → Cron view (attribution inventory)
- * and System's overdue-cron health row: this surface is the actionable
- * daily manager when WP Crontrol is installed.
+ * Complements Scrutoscope's attribution Cron view (under Diagnostics →
+ * Scrutoscope) and System's overdue-cron health row: this is the actionable
+ * manager when WP Crontrol is installed.
+ *
+ * Nav: family `diagnostics` (label Diagnostics) shared with Scrutoscope so
+ * Tools keeps one Dev-tools slot with a provider switcher.
  *
  * @package minn-admin
  */
@@ -366,8 +369,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['wp-crontrol'] = array(
-		'label'      => 'Cron',
+		'label'      => 'Diagnostics',
 		'sub'        => 'WP Crontrol',
+		'family'     => 'diagnostics',
 		'icon'       => 'activity',
 		'cap'        => 'manage_options',
 		'group'      => 'tools',

@@ -12,6 +12,10 @@
  * Complements the Query Monitor panel: QM is this-request; Scrutoscope is
  * sampled history across routes.
  *
+ * Nav: family `diagnostics` (label Diagnostics) shared with WP Crontrol so
+ * Tools does not grow a top-level item per profiler/cron plugin. Provider
+ * switcher picks Scrutoscope vs Cron when both are active.
+ *
  * @package minn-admin
  */
 
@@ -378,9 +382,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['scrutoscope'] = array(
-		'label'      => 'Profiler',
+		// Family collapses profiler/cron (and future transient tools) into one
+		// Tools nav item so Dev tools don't each claim a top-level slot.
+		'label'      => 'Diagnostics',
 		'sub'        => 'Scrutoscope',
-		'icon'       => 'cpu',
+		'family'     => 'diagnostics',
+		'icon'       => 'activity',
 		'cap'        => 'manage_options',
 		'group'      => 'tools',
 		'status'     => array( 'route' => 'minn-admin/v1/scrutoscope/status' ),
