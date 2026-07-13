@@ -2,6 +2,9 @@
 
 ## **v0.14.0** - Unreleased
 
+### Fixed
+* **Coupons nav when WooCommerce coupons are disabled:** if Enable coupons is off, `shop_coupon` is not registered and `wc/v3/coupons` always returns “Sorry, you cannot list resources.” Minn now only offers Coupons when WC has coupons enabled and the post type exists (and shows a clear settings link if the route is hit anyway).
+
 ### Added
 * **Customers surface:** registered WooCommerce customers at `/minn-admin/customers` (Workspace + ⌘K). Search by name, email or ID; detail modal shows profile, billing and recent orders (click through to the order modal).
 * **Create product / create order:** **Add product** on Products creates a simple product (name, price, SKU, status) then opens the edit modal. **New order** on Orders builds a processing (or pending/on-hold) order with billing details and one line item via product search.
