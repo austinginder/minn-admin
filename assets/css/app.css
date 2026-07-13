@@ -1540,6 +1540,12 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 
 /* ===== Orders ===== */
 .minn-order-cols { grid-template-columns: 120px 1fr 130px 60px 100px 40px; }
+.minn-product-cols { grid-template-columns: 1.6fr 100px 140px 100px 100px 40px; }
+.minn-prod-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.minn-prod-thumb { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
+.minn-prod-was { text-decoration: line-through; color: var(--text3); margin-left: 4px; font-size: 12px; }
+.minn-prod-modal-img { margin: 0 0 12px; }
+.minn-prod-modal-img img { max-width: 100%; max-height: 160px; border-radius: 8px; object-fit: cover; }
 .minn-order-body { max-height: min(70vh, 720px); overflow-y: auto; }
 .minn-order-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--border); }
 .minn-order-panel { padding: 14px 18px 16px; border-right: 1px solid var(--border); }
@@ -2349,6 +2355,9 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-order-cols { grid-template-columns: 86px 1fr 84px; }
   .minn-order-cols > :nth-child(3), .minn-order-cols > :nth-child(4),
   .minn-order-cols > :nth-child(6) { display: none; }
+  .minn-product-cols { grid-template-columns: 1fr 72px 40px; }
+  .minn-product-cols > :nth-child(2), .minn-product-cols > :nth-child(3),
+  .minn-product-cols > :nth-child(5) { display: none; }
   .minn-user-cols { grid-template-columns: 40px 1fr 100px; }
   .minn-user-cols > :nth-child(3), .minn-user-cols > :nth-child(5),
   .minn-user-cols > :nth-child(6) { display: none; }

@@ -240,6 +240,8 @@
 		extSearch: '',
 		orderTab: 'any',
 		orderSearch: '',
+		productTab: 'any',
+		productSearch: '',
 		userSearch: '',
 		range: 30,
 		modal: null,
@@ -261,6 +263,7 @@
 			themes: null,
 			orders: null,
 			orderSummary: null,
+			products: null,
 			users: null,
 			categories: null,
 			plugins: null,
@@ -278,6 +281,7 @@
 		media: [ 'Media', 'Library' ],
 		comments: [ 'Comments', 'Moderation' ],
 		orders: [ 'Orders', 'WooCommerce' ],
+		products: [ 'Products', 'WooCommerce' ],
 		users: [ 'Users', 'People' ],
 		terms: [ 'Terms', 'Categories & Tags' ],
 		menus: [ 'Menus', 'Navigation' ],
@@ -902,6 +906,9 @@
 		}
 		if ( B.wc && B.caps.orders ) {
 			navItems.push( { id: 'orders', label: 'Orders', icon: 'cart', orderCount: true } );
+		}
+		if ( B.wc && B.caps.products ) {
+			navItems.push( { id: 'products', label: 'Products', icon: 'tag' } );
 		}
 		surfaceNavItems().filter( ( s ) => s.group === 'workspace' ).forEach( ( s ) =>
 			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
@@ -1607,7 +1614,10 @@
 
 	// Custom post types with REST support, beyond post/page/attachment.
 	// Plugin-internal CPTs that would be noise (or dangerous) as Content tabs.
-	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'elementor_library', 'e-floating-buttons', 'e-landing-page' ];
+	// product is WooCommerce: the writing editor cannot manage price/SKU/stock —
+	// those live on the Products surface (wc/v3). product_variation is not viewable
+	// as a top-level type, but fence it too if a site exposes it.
+	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'product', 'product_variation', 'elementor_library', 'e-floating-buttons', 'e-landing-page' ];
 	let typesPromise = null;
 	function loadTypes() {
 		if ( ! typesPromise ) {
@@ -3103,6 +3113,201 @@
 			} )
 		);
 		bindPager( view, c.page, loadOrders, () => { if ( state.route === 'orders' ) renderOrders(); } );
+	}
+
+	/* ===== Products (WooCommerce) ===== */
+
+	// Daily catalog ops via wc/v3 — not the writing editor. Content deliberately
+	// hides the product CPT so price/SKU/stock never land in the wrong tool.
+	const PRODUCT_TABS = [
+		[ 'any', 'All' ],
+		[ 'publish', 'Published' ],
+		[ 'draft', 'Draft' ],
+		[ 'private', 'Private' ],
+		[ 'pending', 'Pending' ],
+	];
+	const PRODUCT_STATUS_STYLE = {
+		publish: 'publish', draft: 'draft', private: 'private', pending: 'private',
+	};
+	const STOCK_STATUS_STYLE = {
+		instock: 'publish', outofstock: 'trash-status', onbackorder: 'future',
+	};
+	const PRODUCT_LIST_FIELDS = 'id,name,type,status,sku,price,regular_price,sale_price,stock_status,stock_quantity,manage_stock,on_sale,catalog_visibility,permalink,date_created,categories,images,total_sales';
+	const PRODUCT_DETAIL_FIELDS = PRODUCT_LIST_FIELDS + ',short_description,description,date_modified';
+
+	const productCtx = () => ( state.productTab || 'any' ) + '|' + ( state.productSearch || '' );
+
+	/** True when Minn can safely edit price/stock on the product itself (not variations). */
+	function productPriceEditable( p ) {
+		const t = ( p && p.type ) || 'simple';
+		return t === 'simple' || t === 'external';
+	}
+
+	function productThumb( p ) {
+		const img = p && p.images && p.images[ 0 ];
+		if ( ! img ) return '';
+		const src = img.thumbnail || img.src || '';
+		if ( ! src ) return '';
+		return `<img class="minn-prod-thumb" src="${ esc( src ) }" alt="" loading="lazy">`;
+	}
+
+	function productPriceLabel( p ) {
+		const price = p.price != null && p.price !== '' ? String( p.price ) : '';
+		if ( ! price && ! productPriceEditable( p ) ) return '—';
+		if ( p.on_sale && p.sale_price ) {
+			return `$${ p.sale_price }` + ( p.regular_price ? ` <span class="minn-prod-was">$${ p.regular_price }</span>` : '' );
+		}
+		return price ? `$${ price }` : '—';
+	}
+
+	function productStockLabel( p ) {
+		const st = ( p.stock_status || 'instock' ).replace( /-/g, ' ' );
+		if ( p.manage_stock && p.stock_quantity != null ) return `${ st } (${ p.stock_quantity })`;
+		return st;
+	}
+
+	async function loadProducts( page = 1 ) {
+		const tab = state.productTab || 'any';
+		const q0 = ( state.productSearch || '' ).trim();
+		const ctx = productCtx();
+		// Numeric-only: try exact id first (WC search is fuzzy and often misses ids).
+		if ( q0 && /^\d+$/.test( q0 ) ) {
+			try {
+				const one = await api( `wc/v3/products/${ q0 }?_fields=${ PRODUCT_LIST_FIELDS }` );
+				if ( ctx !== productCtx() ) return;
+				if ( one && one.id ) {
+					if ( tab === 'any' || one.status === tab ) {
+						state.cache.products = { items: [ one ], page: 1, totalPages: 1, total: 1 };
+						return;
+					}
+				}
+			} catch ( e ) {
+				// 404 → fall through to search.
+			}
+		}
+		let q = `wc/v3/products?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }`;
+		if ( tab !== 'any' ) q += '&status=' + encodeURIComponent( tab );
+		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
+		const r = await apiPaged( q );
+		if ( ctx !== productCtx() ) return;
+		state.cache.products = { items: r.items, page, totalPages: r.totalPages, total: r.total };
+	}
+
+	function openProductModal( listProduct ) {
+		const id = listProduct && listProduct.id;
+		if ( ! id ) return;
+		state.modal = { type: 'product', product: listProduct, full: null, loading: true };
+		renderOverlays();
+		api( `wc/v3/products/${ id }?_fields=${ PRODUCT_DETAIL_FIELDS }` )
+			.then( ( full ) => {
+				if ( ! state.modal || state.modal.type !== 'product' || state.modal.product.id !== id ) return;
+				state.modal.full = full;
+				state.modal.loading = false;
+				if ( state.cache.products && state.cache.products.items ) {
+					const i = state.cache.products.items.findIndex( ( x ) => x.id === id );
+					if ( i >= 0 ) {
+						state.cache.products.items[ i ] = Object.assign( {}, state.cache.products.items[ i ], {
+							name: full.name,
+							status: full.status,
+							sku: full.sku,
+							price: full.price,
+							regular_price: full.regular_price,
+							sale_price: full.sale_price,
+							stock_status: full.stock_status,
+							stock_quantity: full.stock_quantity,
+							manage_stock: full.manage_stock,
+							on_sale: full.on_sale,
+						} );
+					}
+				}
+				renderOverlays();
+			} )
+			.catch( ( e ) => {
+				if ( ! state.modal || state.modal.type !== 'product' ) return;
+				state.modal.loading = false;
+				state.modal.loadError = e.message || 'Could not load product';
+				renderOverlays();
+			} );
+	}
+
+	function renderProducts() {
+		const view = $( '#minn-view' );
+		const c = state.cache.products;
+		if ( ! c ) {
+			view.innerHTML = '<div class="minn-loading">Loading products…</div>';
+			loadProducts().then( renderIfCurrent( 'products' ) ).catch( showErr );
+			return;
+		}
+		view.innerHTML = `
+		<div class="minn-toolbar minn-toolbar-views">
+			<div class="minn-tabs">
+				${ PRODUCT_TABS.map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ state.productTab === id ? ' active' : '' }" data-ptab="${ id }">${ label }</button>` ).join( '' ) }
+			</div>
+		</div>
+		<div class="minn-toolbar">
+			<input class="minn-input minn-toolbar-search" id="minn-product-search" placeholder="Search products (name, SKU, ID…)" value="${ esc( state.productSearch || '' ) }">
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'product' ) }</div>
+		</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-product-cols">
+				<div>Product</div><div>SKU</div><div>Stock</div><div>Price</div><div>Status</div><div></div>
+			</div>
+			${ c.items.length ? c.items.map( ( p ) => `
+				<div class="minn-table-row minn-product-cols" data-product="${ p.id }">
+					<div class="minn-cell-clip minn-prod-name">
+						${ productThumb( p ) }
+						<div>
+							<div class="minn-row-title">${ esc( p.name || 'Untitled' ) }</div>
+							<div class="minn-row-slug">${ esc( p.type || 'simple' ) }${ p.categories && p.categories[ 0 ] ? ' · ' + esc( p.categories[ 0 ].name ) : '' }</div>
+						</div>
+					</div>
+					<div class="minn-row-meta minn-cell-clip">${ esc( p.sku || '—' ) }</div>
+					<div><span class="minn-status ${ STOCK_STATUS_STYLE[ p.stock_status ] || 'draft' }">${ esc( productStockLabel( p ) ) }</span></div>
+					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ productPriceLabel( p ) }</div>
+					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
+					<div class="minn-row-arrow">›</div>
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.productSearch ? 'No products match “' + esc( state.productSearch ) + '”.' : 'No products here.' }</div>` }
+		</div>
+		${ pagerHtml( c.page, c.totalPages, c.total, 'product' ) }`;
+
+		$$( '[data-ptab]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.productTab = btn.dataset.ptab;
+				state.cache.products = null;
+				renderProducts();
+			} )
+		);
+		const productSearch = $( '#minn-product-search', view );
+		if ( productSearch ) {
+			let productSearchTimer = null;
+			productSearch.addEventListener( 'input', () => {
+				clearTimeout( productSearchTimer );
+				productSearchTimer = setTimeout( async () => {
+					state.productSearch = productSearch.value.trim();
+					state.cache.products = null;
+					try {
+						await loadProducts( 1 );
+						if ( state.route === 'products' ) renderProducts();
+					} catch ( e ) { showErr( e ); }
+				}, 280 );
+			} );
+			productSearch.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' && productSearch.value ) {
+					productSearch.value = '';
+					state.productSearch = '';
+					state.cache.products = null;
+					loadProducts( 1 ).then( () => { if ( state.route === 'products' ) renderProducts(); } ).catch( showErr );
+				}
+			} );
+		}
+		$$( '[data-product]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => {
+				const p = c.items.find( ( x ) => x.id === parseInt( row.dataset.product, 10 ) );
+				if ( p ) openProductModal( p );
+			} )
+		);
+		bindPager( view, c.page, loadProducts, () => { if ( state.route === 'products' ) renderProducts(); } );
 	}
 
 	/* ===== Terms (categories, tags, custom taxonomies) ===== */
@@ -16848,6 +17053,7 @@
 		);
 		if ( commentsAvailable() ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
 		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
+		if ( B.wc && B.caps.products ) cmds.push( { label: 'View Products', kind: 'nav', icon: '🏷', run: () => go( 'products' ) } );
 		if ( B.caps.users ) cmds.push( { label: 'Browse Users', kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
 		// One palette entry per surface family (preferred member); ungrouped
 		// surfaces keep a single entry as before.
@@ -17348,6 +17554,106 @@
 						${ ( ( B.wcpdf && B.wcpdf.docs ) || [] ).map( ( d ) =>
 							`<a class="minn-btn-soft" href="${ esc( `${ B.wcpdf.ajax }?action=generate_wpo_wcpdf&document_type=${ encodeURIComponent( d.type ) }&order_ids=${ o.id }&access_key=${ encodeURIComponent( B.wcpdf.nonce ) }` ) }" target="_blank" rel="noopener" title="Generated by PDF Invoices &amp; Packing slips">⬇ ${ esc( d.title ) } (PDF)</a>` ).join( '' ) }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ o.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
+					</div>` : '' }
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'product' ) {
+			const listP = m.product || {};
+			const p = m.full || listP;
+			const canEdit = B.caps.products;
+			const loading = !! m.loading && ! m.full;
+			const priceOk = productPriceEditable( p );
+			const cats = ( p.categories || [] ).map( ( c ) => c.name ).filter( Boolean ).join( ', ' );
+			const thumb = p.images && p.images[ 0 ] ? ( p.images[ 0 ].src || p.images[ 0 ].thumbnail || '' ) : '';
+			const stockOpts = [ [ 'instock', 'In stock' ], [ 'outofstock', 'Out of stock' ], [ 'onbackorder', 'On backorder' ] ];
+			const visOpts = [ [ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ];
+			const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ];
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">${ esc( p.name || listP.name || 'Product' ) }</div>
+							<div class="minn-modal-sub">${ esc( p.type || 'simple' ) }${ p.sku ? ' · SKU ' + esc( p.sku ) : '' }${ p.id ? ' · #' + p.id : '' }</div>
+						</div>
+						<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading product…</div>' : '' }
+					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+					${ ! loading && ! m.loadError ? `
+					<div class="minn-order-body">
+						<div class="minn-order-grid">
+							<div class="minn-order-panel">
+								${ thumb ? `<div class="minn-prod-modal-img"><img src="${ esc( thumb ) }" alt=""></div>` : '' }
+								<div class="minn-side-title" style="margin:0 0 8px;">Basics</div>
+								${ canEdit ? `
+								<div class="minn-order-fields">
+									<div><div class="minn-field-label">Name</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
+									<div><div class="minn-field-label">SKU</div><input class="minn-input" id="minn-p-sku" value="${ esc( p.sku || '' ) }" placeholder="Optional"></div>
+									<div><div class="minn-field-label">Status</div>
+										<select class="minn-input" id="minn-p-status">
+											${ statusOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ p.status === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+										</select>
+									</div>
+									<div><div class="minn-field-label">Catalog visibility</div>
+										<select class="minn-input" id="minn-p-vis">
+											${ visOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.catalog_visibility || 'visible' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+										</select>
+									</div>
+									${ cats ? `<div class="minn-toggle-desc">Categories: ${ esc( cats ) }</div>` : '' }
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( p.name || '' ) }</span></div>
+									${ p.sku ? `<div class="minn-side-row"><span class="minn-side-key">SKU</span><span>${ esc( p.sku ) }</span></div>` : '' }
+									${ cats ? `<div class="minn-side-row"><span class="minn-side-key">Categories</span><span>${ esc( cats ) }</span></div>` : '' }
+								</div>` }
+							</div>
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Price &amp; stock</div>
+								${ canEdit && priceOk ? `
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">Regular price</div><input class="minn-input" id="minn-p-regular" type="text" inputmode="decimal" value="${ esc( p.regular_price || '' ) }"></div>
+										<div><div class="minn-field-label">Sale price</div><input class="minn-input" id="minn-p-sale" type="text" inputmode="decimal" value="${ esc( p.sale_price || '' ) }" placeholder="Optional"></div>
+									</div>
+									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+										<input type="checkbox" id="minn-p-manage"${ p.manage_stock ? ' checked' : '' }>
+										<span>Track stock quantity</span>
+									</label>
+									<div class="minn-order-field-row" id="minn-p-stock-row" ${ p.manage_stock ? '' : 'style="display:none;"' }>
+										<div><div class="minn-field-label">Quantity</div><input class="minn-input" id="minn-p-qty" type="number" step="1" value="${ p.stock_quantity != null ? esc( String( p.stock_quantity ) ) : '' }"></div>
+									</div>
+									<div><div class="minn-field-label">Stock status</div>
+										<select class="minn-input" id="minn-p-stock">
+											${ stockOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.stock_status || 'instock' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+										</select>
+									</div>
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Price</span><span>${ productPriceLabel( p ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Stock</span><span>${ esc( productStockLabel( p ) ) }</span></div>
+									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">Price and stock for ${ esc( p.type || 'this type' ) } products are managed in WooCommerce (variations or grouped children).</div>` : '' }
+								</div>` }
+								${ canEdit ? `
+								<div style="margin-top:14px;">
+									<div class="minn-side-title" style="margin:0 0 8px;">Short description</div>
+									<textarea class="minn-input" id="minn-p-short" rows="4" placeholder="Shown near the product title…">${ esc( ( p.short_description || '' ).replace( /<[^>]+>/g, '' ) ) }</textarea>
+									<div class="minn-toggle-desc" style="margin-top:6px;">Plain text; full product description and gallery stay in WooCommerce.</div>
+								</div>` : '' }
+							</div>
+						</div>
+						${ canEdit ? `
+						<div class="minn-media-edit minn-order-status">
+							<button class="minn-btn-primary" id="minn-product-save" type="button">Save changes</button>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Saves name, SKU, status, visibility${ priceOk ? ', price and stock' : '' }, and short description.</div>
+						</div>` : '' }
+					</div>
+					<div class="minn-modal-actions">
+						${ p.permalink ? `<a class="minn-btn-soft" href="${ esc( p.permalink ) }" target="_blank" rel="noopener">↗ View product</a>` : '' }
+						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
 					</div>` : '' }
 				</div>
 			</div>`;
@@ -18351,6 +18657,75 @@
 				} catch ( err ) {
 					toast( err.message, true );
 					sendBtn.disabled = false;
+				}
+			} );
+		}
+
+		if ( m.type === 'product' ) {
+			const p = m.full || m.product;
+			const manageCb = $( '#minn-p-manage' );
+			const stockRow = $( '#minn-p-stock-row' );
+			if ( manageCb && stockRow ) {
+				manageCb.addEventListener( 'change', () => {
+					stockRow.style.display = manageCb.checked ? '' : 'none';
+				} );
+			}
+			const saveBtn = $( '#minn-product-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
+				if ( ! name ) {
+					toast( 'Name is required', true );
+					return;
+				}
+				const payload = {
+					name,
+					sku: ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim(),
+					status: ( $( '#minn-p-status' ) || {} ).value || p.status,
+					catalog_visibility: ( $( '#minn-p-vis' ) || {} ).value || 'visible',
+					short_description: ( ( $( '#minn-p-short' ) || {} ).value || '' ).trim(),
+				};
+				if ( productPriceEditable( p ) ) {
+					payload.regular_price = ( ( $( '#minn-p-regular' ) || {} ).value || '' ).trim();
+					payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
+					payload.manage_stock = !!( $( '#minn-p-manage' ) || {} ).checked;
+					payload.stock_status = ( $( '#minn-p-stock' ) || {} ).value || 'instock';
+					if ( payload.manage_stock ) {
+						const qtyRaw = ( ( $( '#minn-p-qty' ) || {} ).value || '' ).trim();
+						payload.stock_quantity = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
+					}
+				}
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+				try {
+					const updated = await api( `wc/v3/products/${ p.id }`, {
+						method: 'PUT',
+						body: JSON.stringify( payload ),
+					} );
+					const full = await api( `wc/v3/products/${ p.id }?_fields=${ PRODUCT_DETAIL_FIELDS }` );
+					if ( state.modal && state.modal.type === 'product' ) {
+						state.modal.full = full || updated;
+						state.modal.product = Object.assign( {}, state.modal.product, {
+							name: full.name,
+							status: full.status,
+							sku: full.sku,
+							price: full.price,
+							regular_price: full.regular_price,
+							sale_price: full.sale_price,
+							stock_status: full.stock_status,
+							stock_quantity: full.stock_quantity,
+							manage_stock: full.manage_stock,
+							on_sale: full.on_sale,
+							catalog_visibility: full.catalog_visibility,
+						} );
+					}
+					toast( 'Product updated' );
+					state.cache.products = null;
+					if ( state.route === 'products' ) renderProducts();
+					renderOverlays();
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = 'Save changes';
 				}
 			} );
 		}
@@ -19855,6 +20230,7 @@
 			case 'media': return renderMedia();
 			case 'comments': return renderComments();
 			case 'orders': return renderOrders();
+			case 'products': return renderProducts();
 			case 'users': return renderUsers();
 			case 'terms': return renderStructure();
 			case 'menus': return renderMenus();
