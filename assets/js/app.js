@@ -241,7 +241,11 @@
 		orderTab: 'any',
 		orderSearch: '',
 		productTab: 'any',
+		productStock: 'any',
 		productSearch: '',
+		productSel: null,
+		couponTab: 'any',
+		couponSearch: '',
 		userSearch: '',
 		range: 30,
 		modal: null,
@@ -264,6 +268,7 @@
 			orders: null,
 			orderSummary: null,
 			products: null,
+			coupons: null,
 			users: null,
 			categories: null,
 			plugins: null,
@@ -282,6 +287,7 @@
 		comments: [ 'Comments', 'Moderation' ],
 		orders: [ 'Orders', 'WooCommerce' ],
 		products: [ 'Products', 'WooCommerce' ],
+		coupons: [ 'Coupons', 'WooCommerce' ],
 		users: [ 'Users', 'People' ],
 		terms: [ 'Terms', 'Categories & Tags' ],
 		menus: [ 'Menus', 'Navigation' ],
@@ -909,6 +915,9 @@
 		}
 		if ( B.wc && B.caps.products ) {
 			navItems.push( { id: 'products', label: 'Products', icon: 'tag' } );
+		}
+		if ( B.wc && B.caps.coupons ) {
+			navItems.push( { id: 'coupons', label: 'Coupons', icon: 'key' } );
 		}
 		surfaceNavItems().filter( ( s ) => s.group === 'workspace' ).forEach( ( s ) =>
 			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
@@ -1614,10 +1623,9 @@
 
 	// Custom post types with REST support, beyond post/page/attachment.
 	// Plugin-internal CPTs that would be noise (or dangerous) as Content tabs.
-	// product is WooCommerce: the writing editor cannot manage price/SKU/stock —
-	// those live on the Products surface (wc/v3). product_variation is not viewable
-	// as a top-level type, but fence it too if a site exposes it.
-	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'product', 'product_variation', 'elementor_library', 'e-floating-buttons', 'e-landing-page' ];
+	// product / shop_coupon are WooCommerce: catalog and promo codes live on
+	// their own surfaces (wc/v3), not the writing editor.
+	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'product', 'product_variation', 'shop_coupon', 'elementor_library', 'e-floating-buttons', 'e-landing-page' ];
 	let typesPromise = null;
 	function loadTypes() {
 		if ( ! typesPromise ) {
@@ -2941,7 +2949,7 @@
 	function openOrderModal( listOrder ) {
 		const id = listOrder && listOrder.id;
 		if ( ! id ) return;
-		state.modal = { type: 'order', order: listOrder, full: null, loading: true, emails: null };
+		state.modal = { type: 'order', order: listOrder, full: null, loading: true, emails: null, notes: null };
 		renderOverlays();
 		api( `wc/v3/orders/${ id }?_fields=${ ORDER_DETAIL_FIELDS }` )
 			.then( ( full ) => {
@@ -2979,6 +2987,19 @@
 			.catch( () => {
 				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
 					state.modal.emails = [];
+				}
+			} );
+		// Order notes timeline (staff + system + customer-visible).
+		api( `wc/v3/orders/${ id }/notes?per_page=50` )
+			.then( ( notes ) => {
+				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
+					state.modal.notes = Array.isArray( notes ) ? notes : [];
+					renderOverlays();
+				}
+			} )
+			.catch( () => {
+				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
+					state.modal.notes = [];
 				}
 			} );
 	}
@@ -3126,6 +3147,13 @@
 		[ 'private', 'Private' ],
 		[ 'pending', 'Pending' ],
 	];
+	const PRODUCT_STOCK_TABS = [
+		[ 'any', 'Any stock' ],
+		[ 'instock', 'In stock' ],
+		[ 'outofstock', 'Out of stock' ],
+		[ 'onbackorder', 'On backorder' ],
+		[ 'low', 'Low stock' ],
+	];
 	const PRODUCT_STATUS_STYLE = {
 		publish: 'publish', draft: 'draft', private: 'private', pending: 'private',
 	};
@@ -3135,7 +3163,7 @@
 	const PRODUCT_LIST_FIELDS = 'id,name,type,status,sku,price,regular_price,sale_price,stock_status,stock_quantity,manage_stock,on_sale,catalog_visibility,permalink,date_created,categories,images,total_sales';
 	const PRODUCT_DETAIL_FIELDS = PRODUCT_LIST_FIELDS + ',short_description,description,date_modified';
 
-	const productCtx = () => ( state.productTab || 'any' ) + '|' + ( state.productSearch || '' );
+	const productCtx = () => ( state.productTab || 'any' ) + '|' + ( state.productStock || 'any' ) + '|' + ( state.productSearch || '' );
 
 	/** True when Minn can safely edit price/stock on the product itself (not variations). */
 	function productPriceEditable( p ) {
@@ -3166,17 +3194,89 @@
 		return st;
 	}
 
+	function productMatchesFilters( p ) {
+		const tab = state.productTab || 'any';
+		const stock = state.productStock || 'any';
+		if ( tab !== 'any' && p.status !== tab ) return false;
+		if ( stock === 'instock' || stock === 'outofstock' || stock === 'onbackorder' ) {
+			if ( p.stock_status !== stock ) return false;
+		}
+		return true;
+	}
+
 	async function loadProducts( page = 1 ) {
 		const tab = state.productTab || 'any';
+		const stock = state.productStock || 'any';
 		const q0 = ( state.productSearch || '' ).trim();
 		const ctx = productCtx();
+		// Low stock: prefer wc-analytics (lookup tables + store threshold). Fall
+		// back to a managed-stock scan when Analytics is empty (fresh writes lag).
+		if ( stock === 'low' && ! q0 ) {
+			let items = [];
+			let totalPages = 1;
+			let total = 0;
+			try {
+				const r = await apiPaged( `wc-analytics/products/low-in-stock?page=${ page }&per_page=25` );
+				if ( ctx !== productCtx() ) return;
+				const slim = r.items || [];
+				if ( slim.length ) {
+					const enriched = await Promise.all( slim.map( ( row ) =>
+						api( `wc/v3/products/${ row.id }?_fields=${ PRODUCT_LIST_FIELDS }` ).catch( () => ( {
+							id: row.id,
+							name: row.name,
+							type: row.type || 'simple',
+							status: 'publish',
+							sku: '',
+							price: '',
+							regular_price: '',
+							sale_price: '',
+							stock_status: 'instock',
+							stock_quantity: row.stock_quantity,
+							manage_stock: true,
+							on_sale: false,
+							catalog_visibility: 'visible',
+							permalink: '',
+							date_created: '',
+							categories: [],
+							images: row.images || [],
+							total_sales: 0,
+						} ) )
+					) );
+					if ( ctx !== productCtx() ) return;
+					items = enriched.filter( ( p ) => p && productMatchesFilters( p ) );
+					totalPages = r.totalPages;
+					total = r.total;
+				}
+			} catch ( e ) { /* fall through to scan */ }
+			if ( ! items.length && page === 1 ) {
+				const thr = Number( B.wcLowStock ) || 2;
+				const r = await apiPaged( `wc/v3/products?per_page=100&page=1&stock_status=instock&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }` );
+				if ( ctx !== productCtx() ) return;
+				items = ( r.items || [] ).filter( ( p ) =>
+					p.manage_stock
+					&& p.stock_quantity != null
+					&& Number( p.stock_quantity ) >= 0
+					&& Number( p.stock_quantity ) <= thr
+					&& productMatchesFilters( p )
+				);
+				total = items.length;
+				totalPages = 1;
+			}
+			state.cache.products = { items, page, totalPages, total };
+			return;
+		}
 		// Numeric-only: try exact id first (WC search is fuzzy and often misses ids).
 		if ( q0 && /^\d+$/.test( q0 ) ) {
 			try {
 				const one = await api( `wc/v3/products/${ q0 }?_fields=${ PRODUCT_LIST_FIELDS }` );
 				if ( ctx !== productCtx() ) return;
-				if ( one && one.id ) {
-					if ( tab === 'any' || one.status === tab ) {
+				if ( one && one.id && productMatchesFilters( one ) ) {
+					const thr = Number( B.wcLowStock ) || 2;
+					const isLow = one.manage_stock
+						&& one.stock_quantity != null
+						&& Number( one.stock_quantity ) >= 0
+						&& Number( one.stock_quantity ) <= thr;
+					if ( stock !== 'low' || isLow ) {
 						state.cache.products = { items: [ one ], page: 1, totalPages: 1, total: 1 };
 						return;
 					}
@@ -3187,6 +3287,9 @@
 		}
 		let q = `wc/v3/products?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ PRODUCT_LIST_FIELDS }`;
 		if ( tab !== 'any' ) q += '&status=' + encodeURIComponent( tab );
+		if ( stock === 'instock' || stock === 'outofstock' || stock === 'onbackorder' ) {
+			q += '&stock_status=' + encodeURIComponent( stock );
+		}
 		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
 		const r = await apiPaged( q );
 		if ( ctx !== productCtx() ) return;
@@ -3233,11 +3336,13 @@
 	function renderProducts() {
 		const view = $( '#minn-view' );
 		const c = state.cache.products;
+		const psel = state.productSel || ( state.productSel = new Set() );
 		if ( ! c ) {
 			view.innerHTML = '<div class="minn-loading">Loading products…</div>';
 			loadProducts().then( renderIfCurrent( 'products' ) ).catch( showErr );
 			return;
 		}
+		const canBulk = B.caps.products;
 		view.innerHTML = `
 		<div class="minn-toolbar minn-toolbar-views">
 			<div class="minn-tabs">
@@ -3246,15 +3351,22 @@
 			</div>
 		</div>
 		<div class="minn-toolbar">
+			<div class="minn-tabs minn-quiet-tabs">
+				${ PRODUCT_STOCK_TABS.map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ state.productStock === id ? ' active' : '' }" data-pstock="${ id }">${ label }</button>` ).join( '' ) }
+			</div>
 			<input class="minn-input minn-toolbar-search" id="minn-product-search" placeholder="Search products (name, SKU, ID…)" value="${ esc( state.productSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'product' ) }</div>
 		</div>
+		<div id="minn-prod-bulk-slot"></div>
 		<div class="minn-card minn-table">
-			<div class="minn-table-head minn-product-cols">
+			<div class="minn-table-head minn-product-cols${ canBulk ? ' with-cb' : '' }">
+				${ canBulk ? `<div><input type="checkbox" class="minn-cb" id="minn-prod-sel-all"${ c.items.length && c.items.every( ( p ) => psel.has( p.id ) ) ? ' checked' : '' }></div>` : '' }
 				<div>Product</div><div>SKU</div><div>Stock</div><div>Price</div><div>Status</div><div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( p ) => `
-				<div class="minn-table-row minn-product-cols" data-product="${ p.id }">
+				<div class="minn-table-row minn-product-cols${ canBulk ? ' with-cb' : '' }" data-product="${ p.id }">
+					${ canBulk ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb" data-psel="${ p.id }"${ psel.has( p.id ) ? ' checked' : '' }></div>` : '' }
 					<div class="minn-cell-clip minn-prod-name">
 						${ productThumb( p ) }
 						<div>
@@ -3267,13 +3379,22 @@
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ productPriceLabel( p ) }</div>
 					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
 					<div class="minn-row-arrow">›</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.productSearch ? 'No products match “' + esc( state.productSearch ) + '”.' : 'No products here.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.productSearch ? 'No products match “' + esc( state.productSearch ) + '”.' : ( state.productStock === 'low' ? 'No low-stock products.' : 'No products here.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'product' ) }`;
 
 		$$( '[data-ptab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				state.productTab = btn.dataset.ptab;
+				psel.clear();
+				state.cache.products = null;
+				renderProducts();
+			} )
+		);
+		$$( '[data-pstock]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.productStock = btn.dataset.pstock;
+				psel.clear();
 				state.cache.products = null;
 				renderProducts();
 			} )
@@ -3285,6 +3406,7 @@
 				clearTimeout( productSearchTimer );
 				productSearchTimer = setTimeout( async () => {
 					state.productSearch = productSearch.value.trim();
+					psel.clear();
 					state.cache.products = null;
 					try {
 						await loadProducts( 1 );
@@ -3296,18 +3418,279 @@
 				if ( e.key === 'Escape' && productSearch.value ) {
 					productSearch.value = '';
 					state.productSearch = '';
+					psel.clear();
 					state.cache.products = null;
 					loadProducts( 1 ).then( () => { if ( state.route === 'products' ) renderProducts(); } ).catch( showErr );
 				}
 			} );
 		}
+		const syncProdBulk = () => {
+			const slot = $( '#minn-prod-bulk-slot', view );
+			if ( ! slot ) return;
+			if ( ! psel.size ) { slot.innerHTML = ''; return; }
+			if ( ! $( '.minn-bulkbar', slot ) ) {
+				slot.innerHTML = `
+				<div class="minn-bulkbar">
+					<span class="minn-bulk-count">${ psel.size } selected</span>
+					<select class="minn-input" id="minn-prod-bulk-status">
+						<option value="">Set status…</option>
+						<option value="publish">Published</option>
+						<option value="draft">Draft</option>
+						<option value="private">Private</option>
+					</select>
+					<select class="minn-input" id="minn-prod-bulk-stock">
+						<option value="">Set stock…</option>
+						<option value="instock">In stock</option>
+						<option value="outofstock">Out of stock</option>
+						<option value="onbackorder">On backorder</option>
+					</select>
+					<button class="minn-btn-soft" id="minn-prod-bulk-apply">Apply</button>
+					<button class="minn-btn-soft" id="minn-prod-bulk-clear" style="margin-left:auto;">Clear</button>
+				</div>`;
+				$( '#minn-prod-bulk-clear', slot ).addEventListener( 'click', () => {
+					psel.clear();
+					renderProducts();
+				} );
+				$( '#minn-prod-bulk-apply', slot ).addEventListener( 'click', async () => {
+					const st = ( $( '#minn-prod-bulk-status', slot ) || {} ).value;
+					const sk = ( $( '#minn-prod-bulk-stock', slot ) || {} ).value;
+					if ( ! st && ! sk ) { toast( 'Pick a status or stock change', true ); return; }
+					const ids = [ ...psel ];
+					const update = ids.map( ( id ) => {
+						const row = { id };
+						if ( st ) row.status = st;
+						if ( sk ) row.stock_status = sk;
+						return row;
+					} );
+					try {
+						await api( 'wc/v3/products/batch', {
+							method: 'POST',
+							body: JSON.stringify( { update } ),
+						} );
+						toast( `Updated ${ ids.length } product${ ids.length === 1 ? '' : 's' }` );
+						psel.clear();
+						state.cache.products = null;
+						await loadProducts( c.page ).catch( showErr );
+						if ( state.route === 'products' ) renderProducts();
+					} catch ( e ) { toast( e.message, true ); }
+				} );
+			}
+			const count = $( '.minn-bulk-count', slot );
+			if ( count ) count.textContent = psel.size + ' selected';
+		};
+		if ( canBulk ) {
+			const selAll = $( '#minn-prod-sel-all', view );
+			if ( selAll ) selAll.addEventListener( 'change', () => {
+				c.items.forEach( ( p ) => { if ( selAll.checked ) psel.add( p.id ); else psel.delete( p.id ); } );
+				$$( '[data-psel]', view ).forEach( ( cb ) => { cb.checked = selAll.checked; } );
+				syncProdBulk();
+			} );
+			$$( '[data-psel]', view ).forEach( ( cb ) =>
+				cb.addEventListener( 'click', ( e ) => e.stopPropagation() )
+			);
+			$$( '[data-psel]', view ).forEach( ( cb ) =>
+				cb.addEventListener( 'change', () => {
+					const id = parseInt( cb.dataset.psel, 10 );
+					if ( cb.checked ) psel.add( id ); else psel.delete( id );
+					syncProdBulk();
+				} )
+			);
+			syncProdBulk();
+		}
 		$$( '[data-product]', view ).forEach( ( row ) =>
-			row.addEventListener( 'click', () => {
+			row.addEventListener( 'click', ( e ) => {
+				if ( e.target.closest( '.minn-cbcell' ) ) return;
 				const p = c.items.find( ( x ) => x.id === parseInt( row.dataset.product, 10 ) );
 				if ( p ) openProductModal( p );
 			} )
 		);
 		bindPager( view, c.page, loadProducts, () => { if ( state.route === 'products' ) renderProducts(); } );
+	}
+
+	/* ===== Coupons (WooCommerce) ===== */
+
+	const COUPON_TABS = [
+		[ 'any', 'All' ],
+		[ 'publish', 'Published' ],
+		[ 'draft', 'Draft' ],
+	];
+	const COUPON_TYPES = [
+		[ 'percent', 'Percentage discount' ],
+		[ 'fixed_cart', 'Fixed cart discount' ],
+		[ 'fixed_product', 'Fixed product discount' ],
+	];
+	const COUPON_LIST_FIELDS = 'id,code,amount,status,discount_type,description,date_expires,usage_count,usage_limit,usage_limit_per_user,individual_use,free_shipping,minimum_amount,maximum_amount,date_created';
+	const COUPON_DETAIL_FIELDS = COUPON_LIST_FIELDS + ',exclude_sale_items,date_expires_gmt';
+
+	const couponCtx = () => ( state.couponTab || 'any' ) + '|' + ( state.couponSearch || '' );
+
+	function couponAmountLabel( c ) {
+		const amt = c.amount != null ? String( c.amount ) : '0';
+		if ( c.discount_type === 'percent' ) return amt.replace( /\.00$/, '' ) + '%';
+		return '$' + amt;
+	}
+
+	function couponTypeLabel( type ) {
+		const hit = COUPON_TYPES.find( ( [ id ] ) => id === type );
+		return hit ? hit[ 1 ] : ( type || 'discount' );
+	}
+
+	function couponUsageLabel( c ) {
+		const used = c.usage_count || 0;
+		if ( c.usage_limit ) return `${ used } / ${ c.usage_limit }`;
+		return String( used );
+	}
+
+	function couponExpiresLabel( c ) {
+		if ( ! c.date_expires ) return 'Never';
+		return timeAgo( c.date_expires );
+	}
+
+	async function loadCoupons( page = 1 ) {
+		const tab = state.couponTab || 'any';
+		const q0 = ( state.couponSearch || '' ).trim();
+		const ctx = couponCtx();
+		if ( q0 && /^\d+$/.test( q0 ) ) {
+			try {
+				const one = await api( `wc/v3/coupons/${ q0 }?_fields=${ COUPON_LIST_FIELDS }` );
+				if ( ctx !== couponCtx() ) return;
+				if ( one && one.id && ( tab === 'any' || one.status === tab ) ) {
+					state.cache.coupons = { items: [ one ], page: 1, totalPages: 1, total: 1 };
+					return;
+				}
+			} catch ( e ) { /* fall through */ }
+		}
+		// Code search: WC search matches code/description.
+		let q = `wc/v3/coupons?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ COUPON_LIST_FIELDS }`;
+		if ( tab !== 'any' ) q += '&status=' + encodeURIComponent( tab );
+		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
+		const r = await apiPaged( q );
+		if ( ctx !== couponCtx() ) return;
+		state.cache.coupons = { items: r.items, page, totalPages: r.totalPages, total: r.total };
+	}
+
+	function openCouponModal( listCoupon, isNew ) {
+		if ( isNew ) {
+			state.modal = {
+				type: 'coupon',
+				isNew: true,
+				coupon: {},
+				full: {
+					code: '',
+					amount: '',
+					discount_type: 'percent',
+					status: 'publish',
+					description: '',
+					usage_limit: null,
+					usage_limit_per_user: null,
+					individual_use: false,
+					free_shipping: false,
+					minimum_amount: '',
+					date_expires: null,
+				},
+				loading: false,
+			};
+			renderOverlays();
+			return;
+		}
+		const id = listCoupon && listCoupon.id;
+		if ( ! id ) return;
+		state.modal = { type: 'coupon', coupon: listCoupon, full: null, loading: true, isNew: false };
+		renderOverlays();
+		api( `wc/v3/coupons/${ id }?_fields=${ COUPON_DETAIL_FIELDS }` )
+			.then( ( full ) => {
+				if ( ! state.modal || state.modal.type !== 'coupon' || ( state.modal.coupon && state.modal.coupon.id !== id ) ) return;
+				state.modal.full = full;
+				state.modal.loading = false;
+				renderOverlays();
+			} )
+			.catch( ( e ) => {
+				if ( ! state.modal || state.modal.type !== 'coupon' ) return;
+				state.modal.loading = false;
+				state.modal.loadError = e.message || 'Could not load coupon';
+				renderOverlays();
+			} );
+	}
+
+	function renderCoupons() {
+		const view = $( '#minn-view' );
+		const c = state.cache.coupons;
+		if ( ! c ) {
+			view.innerHTML = '<div class="minn-loading">Loading coupons…</div>';
+			loadCoupons().then( renderIfCurrent( 'coupons' ) ).catch( showErr );
+			return;
+		}
+		view.innerHTML = `
+		<div class="minn-toolbar minn-toolbar-views">
+			<div class="minn-tabs">
+				${ COUPON_TABS.map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ state.couponTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
+			</div>
+			${ B.caps.coupons ? `<button class="minn-btn-soft" id="minn-coupon-add" style="margin-left:auto;">${ icon( 'plus' ) } Add coupon</button>` : '' }
+		</div>
+		<div class="minn-toolbar">
+			<input class="minn-input minn-toolbar-search" id="minn-coupon-search" placeholder="Search coupons (code, ID…)" value="${ esc( state.couponSearch || '' ) }">
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'coupon' ) }</div>
+		</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-coupon-cols">
+				<div>Code</div><div>Type</div><div>Amount</div><div>Usage</div><div>Expires</div><div>Status</div><div></div>
+			</div>
+			${ c.items.length ? c.items.map( ( cp ) => `
+				<div class="minn-table-row minn-coupon-cols" data-coupon="${ cp.id }">
+					<div class="minn-cell-clip">
+						<div class="minn-row-title" style="font-family:var(--mono,ui-monospace,monospace);">${ esc( cp.code || '—' ) }</div>
+						${ cp.description ? `<div class="minn-row-slug">${ esc( cp.description ) }</div>` : '' }
+					</div>
+					<div class="minn-row-meta minn-cell-clip">${ esc( couponTypeLabel( cp.discount_type ) ) }</div>
+					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( couponAmountLabel( cp ) ) }</div>
+					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( couponUsageLabel( cp ) ) }</div>
+					<div class="minn-row-meta">${ esc( couponExpiresLabel( cp ) ) }</div>
+					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ cp.status ] || 'draft' }">${ esc( ( cp.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
+					<div class="minn-row-arrow">›</div>
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.couponSearch ? 'No coupons match “' + esc( state.couponSearch ) + '”.' : 'No coupons yet.' }</div>` }
+		</div>
+		${ pagerHtml( c.page, c.totalPages, c.total, 'coupon' ) }`;
+
+		$$( '[data-ctab]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.couponTab = btn.dataset.ctab;
+				state.cache.coupons = null;
+				renderCoupons();
+			} )
+		);
+		const addBtn = $( '#minn-coupon-add', view );
+		if ( addBtn ) addBtn.addEventListener( 'click', () => openCouponModal( null, true ) );
+		const couponSearch = $( '#minn-coupon-search', view );
+		if ( couponSearch ) {
+			let couponSearchTimer = null;
+			couponSearch.addEventListener( 'input', () => {
+				clearTimeout( couponSearchTimer );
+				couponSearchTimer = setTimeout( async () => {
+					state.couponSearch = couponSearch.value.trim();
+					state.cache.coupons = null;
+					try {
+						await loadCoupons( 1 );
+						if ( state.route === 'coupons' ) renderCoupons();
+					} catch ( e ) { showErr( e ); }
+				}, 280 );
+			} );
+			couponSearch.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' && couponSearch.value ) {
+					couponSearch.value = '';
+					state.couponSearch = '';
+					state.cache.coupons = null;
+					loadCoupons( 1 ).then( () => { if ( state.route === 'coupons' ) renderCoupons(); } ).catch( showErr );
+				}
+			} );
+		}
+		$$( '[data-coupon]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => {
+				const cp = c.items.find( ( x ) => x.id === parseInt( row.dataset.coupon, 10 ) );
+				if ( cp ) openCouponModal( cp );
+			} )
+		);
+		bindPager( view, c.page, loadCoupons, () => { if ( state.route === 'coupons' ) renderCoupons(); } );
 	}
 
 	/* ===== Terms (categories, tags, custom taxonomies) ===== */
@@ -17054,6 +17437,7 @@
 		if ( commentsAvailable() ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
 		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
 		if ( B.wc && B.caps.products ) cmds.push( { label: 'View Products', kind: 'nav', icon: '🏷', run: () => go( 'products' ) } );
+		if ( B.wc && B.caps.coupons ) cmds.push( { label: 'View Coupons', kind: 'nav', icon: '🔑', run: () => go( 'coupons' ) } );
 		if ( B.caps.users ) cmds.push( { label: 'Browse Users', kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
 		// One palette entry per surface family (preferred member); ungrouped
 		// surfaces keep a single entry as before.
@@ -17547,6 +17931,32 @@
 							</div>
 							<div class="minn-toggle-desc" style="margin-top:8px;">Resends a transactional email through WooCommerce (invoice, processing, completed, …).</div>` }
 						</div>` : '' }
+						<div class="minn-media-edit minn-order-notes">
+							<div class="minn-side-title" style="margin:0 0 8px;">Order notes</div>
+							${ m.notes == null ? '<div class="minn-loading" style="padding:8px;">Loading notes…</div>' : `
+							<div class="minn-order-notes-list">
+								${ ( m.notes || [] ).length ? ( m.notes || [] ).map( ( n ) => `
+									<div class="minn-order-note${ n.customer_note ? ' customer' : '' }">
+										<div class="minn-order-note-meta">
+											<span>${ esc( n.author || 'System' ) }</span>
+											<span>${ esc( timeAgo( n.date_created_gmt || n.date_created ) ) }</span>
+											${ n.customer_note ? '<span class="minn-status future">Customer</span>' : '<span class="minn-status draft">Private</span>' }
+										</div>
+										<div class="minn-order-note-body">${ esc( n.note || '' ) }</div>
+									</div>` ).join( '' ) : '<div class="minn-toggle-desc">No notes yet.</div>' }
+							</div>
+							${ canEdit ? `
+							<div class="minn-order-fields" style="margin-top:12px;">
+								<div><div class="minn-field-label">Add a note</div>
+									<textarea class="minn-input" id="minn-o-new-note" rows="2" placeholder="Internal note for staff…"></textarea>
+								</div>
+								<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px; margin-top:8px;">
+									<input type="checkbox" id="minn-o-note-customer">
+									<span>Visible to the customer</span>
+								</label>
+								<button class="minn-btn-soft" id="minn-o-note-add" type="button" style="margin-top:10px;">Add note</button>
+							</div>` : '' }` }
+						</div>
 					</div>
 					<div class="minn-modal-actions">
 						${ canEdit && b.email ? `<button class="minn-btn-soft" id="minn-o-email" type="button">${ icon( 'send' ) } Send email…</button>` : '' }
@@ -17655,6 +18065,99 @@
 						${ p.permalink ? `<a class="minn-btn-soft" href="${ esc( p.permalink ) }" target="_blank" rel="noopener">↗ View product</a>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
 					</div>` : '' }
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'coupon' ) {
+			const listC = m.coupon || {};
+			const c = m.full || listC;
+			const canEdit = B.caps.coupons;
+			const loading = !! m.loading && ! m.full && ! m.isNew;
+			const isNew = !! m.isNew;
+			const exp = c.date_expires ? String( c.date_expires ).slice( 0, 10 ) : '';
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">${ isNew ? 'New coupon' : esc( c.code || listC.code || 'Coupon' ) }</div>
+							<div class="minn-modal-sub">${ isNew ? 'Create a promo code' : ( couponTypeLabel( c.discount_type ) + ( c.id ? ' · #' + c.id : '' ) ) }</div>
+						</div>
+						${ ! isNew ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ c.status ] || 'draft' }">${ esc( ( c.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading coupon…</div>' : '' }
+					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+					${ ! loading && ! m.loadError ? `
+					<div class="minn-order-body">
+						<div class="minn-order-grid">
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Code &amp; discount</div>
+								${ canEdit ? `
+								<div class="minn-order-fields">
+									<div><div class="minn-field-label">Code</div><input class="minn-input" id="minn-c-code" value="${ esc( c.code || '' ) }" placeholder="e.g. SAVE10" style="font-family:var(--mono,ui-monospace,monospace); text-transform:uppercase;"></div>
+									<div><div class="minn-field-label">Discount type</div>
+										<select class="minn-input" id="minn-c-type">
+											${ COUPON_TYPES.map( ( [ v, l ] ) => `<option value="${ v }"${ ( c.discount_type || 'percent' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+										</select>
+									</div>
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">Amount</div><input class="minn-input" id="minn-c-amount" type="text" inputmode="decimal" value="${ esc( c.amount != null ? String( c.amount ) : '' ) }" placeholder="10"></div>
+										<div><div class="minn-field-label">Status</div>
+											<select class="minn-input" id="minn-c-status">
+												<option value="publish"${ ( c.status || 'publish' ) === 'publish' ? ' selected' : '' }>Published</option>
+												<option value="draft"${ c.status === 'draft' ? ' selected' : '' }>Draft</option>
+											</select>
+										</div>
+									</div>
+									<div><div class="minn-field-label">Description</div><input class="minn-input" id="minn-c-desc" value="${ esc( c.description || '' ) }" placeholder="Internal note"></div>
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Code</span><span style="font-family:var(--mono,ui-monospace,monospace);">${ esc( c.code || '' ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Amount</span><span>${ esc( couponAmountLabel( c ) ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Type</span><span>${ esc( couponTypeLabel( c.discount_type ) ) }</span></div>
+								</div>` }
+							</div>
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Limits &amp; options</div>
+								${ canEdit ? `
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">Usage limit</div><input class="minn-input" id="minn-c-limit" type="number" min="0" value="${ c.usage_limit != null ? esc( String( c.usage_limit ) ) : '' }" placeholder="Unlimited"></div>
+										<div><div class="minn-field-label">Per user</div><input class="minn-input" id="minn-c-limit-user" type="number" min="0" value="${ c.usage_limit_per_user != null ? esc( String( c.usage_limit_per_user ) ) : '' }" placeholder="Unlimited"></div>
+									</div>
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">Minimum spend</div><input class="minn-input" id="minn-c-min" type="text" inputmode="decimal" value="${ esc( c.minimum_amount && c.minimum_amount !== '0.00' ? String( c.minimum_amount ) : '' ) }" placeholder="None"></div>
+										<div><div class="minn-field-label">Expires</div><input class="minn-input" id="minn-c-expires" type="date" value="${ esc( exp ) }"></div>
+									</div>
+									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+										<input type="checkbox" id="minn-c-individual"${ c.individual_use ? ' checked' : '' }>
+										<span>Individual use only</span>
+									</label>
+									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+										<input type="checkbox" id="minn-c-ship"${ c.free_shipping ? ' checked' : '' }>
+										<span>Allow free shipping</span>
+									</label>
+									${ ! isNew ? `<div class="minn-toggle-desc">Used ${ esc( String( c.usage_count || 0 ) ) } time${ ( c.usage_count || 0 ) === 1 ? '' : 's' }.</div>` : '' }
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Usage</span><span>${ esc( couponUsageLabel( c ) ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Expires</span><span>${ esc( couponExpiresLabel( c ) ) }</span></div>
+								</div>` }
+							</div>
+						</div>
+						${ canEdit ? `
+						<div class="minn-media-edit minn-order-status">
+							<button class="minn-btn-primary" id="minn-coupon-save" type="button">${ isNew ? 'Create coupon' : 'Save changes' }</button>
+							${ ! isNew ? `<button class="minn-btn-soft danger" id="minn-coupon-delete" type="button" style="margin-left:8px;">Delete</button>` : '' }
+							<div class="minn-toggle-desc" style="margin-top:8px;">Saves code, amount, limits and options through WooCommerce.</div>
+						</div>` : '' }
+					</div>
+					${ ! isNew ? `
+					<div class="minn-modal-actions">
+						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ c.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
+					</div>` : '' }` : '' }
 				</div>
 			</div>`;
 		}
@@ -18632,6 +19135,30 @@
 				}
 				wcSend.disabled = false;
 			} );
+
+			const noteAdd = $( '#minn-o-note-add' );
+			if ( noteAdd ) noteAdd.addEventListener( 'click', async () => {
+				const ta = $( '#minn-o-new-note' );
+				const note = ( ta && ta.value || '' ).trim();
+				if ( ! note ) { toast( 'Write a note first', true ); return; }
+				const customer = !!( $( '#minn-o-note-customer' ) || {} ).checked;
+				noteAdd.disabled = true;
+				try {
+					await api( `wc/v3/orders/${ o.id }/notes`, {
+						method: 'POST',
+						body: JSON.stringify( { note, customer_note: customer } ),
+					} );
+					const notes = await api( `wc/v3/orders/${ o.id }/notes?per_page=50` );
+					if ( state.modal && state.modal.type === 'order' ) {
+						state.modal.notes = Array.isArray( notes ) ? notes : [];
+					}
+					toast( customer ? 'Customer note added' : 'Private note added' );
+					renderOverlays();
+				} catch ( e ) {
+					toast( e.message, true );
+					noteAdd.disabled = false;
+				}
+			} );
 		}
 
 		if ( m.type === 'order-email' ) {
@@ -18657,6 +19184,83 @@
 				} catch ( err ) {
 					toast( err.message, true );
 					sendBtn.disabled = false;
+				}
+			} );
+		}
+
+		if ( m.type === 'coupon' ) {
+			const c = m.full || m.coupon || {};
+			const isNew = !! m.isNew;
+			const saveBtn = $( '#minn-coupon-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const code = ( ( $( '#minn-c-code' ) || {} ).value || '' ).trim();
+				if ( ! code ) { toast( 'Code is required', true ); return; }
+				const amount = ( ( $( '#minn-c-amount' ) || {} ).value || '' ).trim();
+				if ( amount === '' ) { toast( 'Amount is required', true ); return; }
+				const limRaw = ( ( $( '#minn-c-limit' ) || {} ).value || '' ).trim();
+				const limUserRaw = ( ( $( '#minn-c-limit-user' ) || {} ).value || '' ).trim();
+				const expRaw = ( ( $( '#minn-c-expires' ) || {} ).value || '' ).trim();
+				const payload = {
+					code,
+					amount,
+					discount_type: ( $( '#minn-c-type' ) || {} ).value || 'percent',
+					status: ( $( '#minn-c-status' ) || {} ).value || 'publish',
+					description: ( ( $( '#minn-c-desc' ) || {} ).value || '' ).trim(),
+					usage_limit: limRaw === '' ? null : parseInt( limRaw, 10 ),
+					usage_limit_per_user: limUserRaw === '' ? null : parseInt( limUserRaw, 10 ),
+					minimum_amount: ( ( $( '#minn-c-min' ) || {} ).value || '' ).trim() || '0',
+					individual_use: !!( $( '#minn-c-individual' ) || {} ).checked,
+					free_shipping: !!( $( '#minn-c-ship' ) || {} ).checked,
+					date_expires: expRaw || null,
+				};
+				saveBtn.disabled = true;
+				saveBtn.textContent = isNew ? 'Creating…' : 'Saving…';
+				try {
+					let full;
+					if ( isNew ) {
+						full = await api( 'wc/v3/coupons', {
+							method: 'POST',
+							body: JSON.stringify( payload ),
+						} );
+						toast( 'Coupon created' );
+					} else {
+						await api( `wc/v3/coupons/${ c.id }`, {
+							method: 'PUT',
+							body: JSON.stringify( payload ),
+						} );
+						full = await api( `wc/v3/coupons/${ c.id }?_fields=${ COUPON_DETAIL_FIELDS }` );
+						toast( 'Coupon updated' );
+					}
+					state.cache.coupons = null;
+					if ( state.route === 'coupons' ) renderCoupons();
+					if ( isNew && full && full.id ) {
+						state.modal = { type: 'coupon', coupon: full, full, loading: false, isNew: false };
+					} else if ( state.modal && state.modal.type === 'coupon' ) {
+						state.modal.full = full;
+						state.modal.coupon = Object.assign( {}, state.modal.coupon, full );
+						state.modal.isNew = false;
+					}
+					renderOverlays();
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = isNew ? 'Create coupon' : 'Save changes';
+				}
+			} );
+			const delBtn = $( '#minn-coupon-delete' );
+			if ( delBtn ) delBtn.addEventListener( 'click', async () => {
+				if ( ! c.id ) return;
+				if ( ! confirm( `Delete coupon “${ c.code || c.id }”? This cannot be undone.` ) ) return;
+				delBtn.disabled = true;
+				try {
+					await api( `wc/v3/coupons/${ c.id }?force=true`, { method: 'DELETE' } );
+					toast( 'Coupon deleted' );
+					closeModal();
+					state.cache.coupons = null;
+					if ( state.route === 'coupons' ) renderCoupons();
+				} catch ( e ) {
+					toast( e.message, true );
+					delBtn.disabled = false;
 				}
 			} );
 		}
@@ -20231,6 +20835,7 @@
 			case 'comments': return renderComments();
 			case 'orders': return renderOrders();
 			case 'products': return renderProducts();
+			case 'coupons': return renderCoupons();
 			case 'users': return renderUsers();
 			case 'terms': return renderStructure();
 			case 'menus': return renderMenus();
