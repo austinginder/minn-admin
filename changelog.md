@@ -8,6 +8,8 @@
 
 ## **v0.13.0** - July 13, 2026
 
+The depth release. Surfaces grow a third list view and item-scoped settings, proven end to end on Gravity Forms (per-form settings drawn from its own schema, plus a Notifications view) and Gravity SMTP (Debug log, Routing, status-card charts). Three more form plugins join the family (Forminator, Formidable, Everest Forms), backups expand to WPvivid, BackWPup and All-in-One WP Migration, snippets take Simple Custom CSS and JS and Header Footer Code Manager, and Clear site cache covers five more providers. Older adapters catch up to the new primitives (status filters, bulk, charts, tabs) across mail, forms, redirects and activity log. The editor closes Horizon 2 with writing stats and a slash-command extension point, picks up IME, mobile Safari and accessibility passes, and surface/Content toolbars finally stop fighting for one row. Theme defaults to System.
+
 ### Added
 * **Editor slash-command extension filter:** plugins register free-form `/` commands through `minn_admin_editor_commands` (boilerplate HTML, island templates, or an async REST route that returns either), with keywords, namespace badges and optional search-only entries so the default menu stays curated. Same commands appear in the block picker under `{plugin} · commands`. Pure descriptors; no third-party JS in the Minn document. Documented in `docs/for-plugin-authors.md`.
 * **Writing stats on the editor pill:** total words and reading time grow a session delta (words written since you first edited this open) and an optional word goal. Click the pill to set or clear a goal; it turns green when you hit it. Goal is global and sticks across posts.
