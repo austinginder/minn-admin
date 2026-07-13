@@ -48,8 +48,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		/* ===== The switcher grows the extra view ===== */
 		const tabs = await page.$$eval( '.minn-view-switch [data-sview]', ( els ) =>
 			els.map( ( e ) => e.dataset.sview + ':' + e.textContent.trim() ) );
+		// GSMTP also ships Routing (x1) when that package is present — require the
+		// views this suite exercises, not an exact fixed switcher length.
 		t.check( 'switcher shows main, manage, x0 and settings',
-			JSON.stringify( tabs ) === JSON.stringify( [ 'main:Log', 'manage:Suppressions', 'x0:Debug log', 'settings:Settings' ] ), tabs.join( ' · ' ) );
+			tabs.includes( 'main:Log' )
+			&& tabs.includes( 'manage:Suppressions' )
+			&& tabs.includes( 'x0:Debug log' )
+			&& tabs.includes( 'settings:Settings' ), tabs.join( ' · ' ) );
 
 		/* ===== Status card is a main-view feature; the link-out is gone ===== */
 		await page.waitForSelector( '.minn-surface-status', { timeout: 20000 } );

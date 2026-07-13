@@ -29,7 +29,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		/* ===== Switcher + standing fixtures ===== */
 		t.check( 'switcher reads Log / Suppressions / Settings', await page.evaluate( () => {
 			const labels = [ ...document.querySelectorAll( '[data-sview]' ) ].map( ( b ) => b.textContent.trim() );
-			return JSON.stringify( labels ) === JSON.stringify( [ 'Log', 'Suppressions', 'Settings' ] );
+			// Extra views (Debug log, Routing) may sit between when those packages
+			// ship; require the three this suite needs rather than exact equality.
+			return labels.includes( 'Log' ) && labels.includes( 'Suppressions' ) && labels.includes( 'Settings' );
 		} ) );
 		const listText = await page.$eval( '.minn-table', ( el ) => el.textContent );
 		t.check( 'standing suppressions list', /bounce@example\.com/.test( listText ) && /unsubscribed@example\.com/.test( listText ) );
