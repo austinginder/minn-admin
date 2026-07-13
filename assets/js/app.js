@@ -2899,6 +2899,91 @@
 		return ( ( b.first_name || '' ) + ' ' + ( b.last_name || '' ) ).trim() || b.email || 'Guest';
 	}
 
+	const ORDER_DETAIL_FIELDS = 'id,number,status,total,total_tax,discount_total,shipping_total,currency,currency_symbol,date_created,date_paid,billing,shipping,line_items,refunds,payment_url,needs_payment,payment_method_title,transaction_id,customer_note,customer_id,is_editable';
+
+	/** Open the order modal and load the full WC order (list rows are slim). */
+	function openOrderModal( listOrder ) {
+		const id = listOrder && listOrder.id;
+		if ( ! id ) return;
+		state.modal = { type: 'order', order: listOrder, full: null, loading: true, emails: null };
+		renderOverlays();
+		api( `wc/v3/orders/${ id }?_fields=${ ORDER_DETAIL_FIELDS }` )
+			.then( ( full ) => {
+				if ( ! state.modal || state.modal.type !== 'order' || state.modal.order.id !== id ) return;
+				state.modal.full = full;
+				state.modal.loading = false;
+				// Merge into list cache so the row status stays in sync after edits.
+				if ( state.cache.orders && state.cache.orders.items ) {
+					const i = state.cache.orders.items.findIndex( ( x ) => x.id === id );
+					if ( i >= 0 ) {
+						state.cache.orders.items[ i ] = Object.assign( {}, state.cache.orders.items[ i ], {
+							status: full.status,
+							total: full.total,
+							billing: full.billing,
+							line_items: full.line_items,
+						} );
+					}
+				}
+				renderOverlays();
+			} )
+			.catch( ( e ) => {
+				if ( ! state.modal || state.modal.type !== 'order' ) return;
+				state.modal.loading = false;
+				state.modal.loadError = e.message || 'Could not load order';
+				renderOverlays();
+			} );
+		// Prefetch resendable WC emails in the background.
+		api( `minn-admin/v1/orders/${ id }/emails` )
+			.then( ( r ) => {
+				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
+					state.modal.emails = ( r && r.emails ) || [];
+					renderOverlays();
+				}
+			} )
+			.catch( () => {
+				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
+					state.modal.emails = [];
+				}
+			} );
+	}
+
+	function orderMoney( o, amount ) {
+		const sym = ( o && o.currency_symbol ) || '$';
+		const n = parseFloat( amount );
+		if ( Number.isNaN( n ) ) return sym + ( amount || '0' );
+		return sym + n.toFixed( 2 );
+	}
+
+	function orderRefundableTotal( o ) {
+		const total = parseFloat( o.total ) || 0;
+		const refunded = ( o.refunds || [] ).reduce( ( s, r ) => s + Math.abs( parseFloat( r.total ) || 0 ), 0 );
+		return Math.max( 0, total - refunded );
+	}
+
+	function openOrderEmailModal( o ) {
+		const b = o.billing || {};
+		const name = customerName( o );
+		const pay = o.payment_url || '';
+		const view = ( B.site && B.site.url ? B.site.url.replace( /\/$/, '' ) : '' ) + '/my-account/view-order/' + o.id + '/';
+		const lines = [
+			`Regarding order #${ o.number || o.id }.`,
+			'',
+			o.needs_payment && pay
+				? `You can pay for this order here:\n${ pay }`
+				: `You can view this order here:\n${ view }`,
+			'',
+			'If you have any questions, just reply to this email.',
+		];
+		state.modal = {
+			type: 'order-email',
+			order: o,
+			subject: `Order #${ o.number || o.id } — ${ B.site.name || 'your order' }`,
+			message: lines.join( '\n' ),
+			to: b.email || '',
+		};
+		renderOverlays();
+	}
+
 	function renderOrders() {
 		const view = $( '#minn-view' );
 		const c = state.cache.orders;
@@ -2962,7 +3047,7 @@
 		$$( '[data-order]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				const o = c.items.find( ( x ) => x.id === parseInt( row.dataset.order, 10 ) );
-				if ( o ) { state.modal = { type: 'order', order: o }; renderOverlays(); }
+				if ( o ) openOrderModal( o );
 			} )
 		);
 		bindPager( view, c.page, loadOrders, () => { if ( state.route === 'orders' ) renderOrders(); } );
@@ -17052,48 +17137,196 @@
 		}
 
 		if ( m.type === 'order' ) {
-			const o = m.order;
+			const listO = m.order || {};
+			const o = m.full || listO;
 			const b = o.billing || {};
+			const s = o.shipping || {};
 			const sym = o.currency_symbol || '$';
+			const refundable = orderRefundableTotal( o );
+			const payUrl = o.payment_url || '';
+			const canEdit = B.caps.orders;
+			const loading = !! m.loading && ! m.full;
+			const emails = m.emails;
+			const fmtAddr = ( a ) => {
+				const lines = [
+					[ a.first_name, a.last_name ].filter( Boolean ).join( ' ' ),
+					a.company, a.address_1, a.address_2,
+					[ a.city, a.state, a.postcode ].filter( Boolean ).join( ', ' ),
+					a.country, a.phone,
+				].filter( Boolean );
+				return lines.join( '\n' ) || '—';
+			};
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">Order #${ esc( o.number || listO.number || o.id ) }</div>
+							<div class="minn-modal-sub">${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }</div>
+						</div>
+						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading order…</div>' : '' }
+					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+					${ ! loading && ! m.loadError ? `
+					<div class="minn-order-body">
+						<div class="minn-order-grid">
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Customer</div>
+								${ canEdit ? `
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">First name</div><input class="minn-input" id="minn-ob-first" value="${ esc( b.first_name || '' ) }"></div>
+										<div><div class="minn-field-label">Last name</div><input class="minn-input" id="minn-ob-last" value="${ esc( b.last_name || '' ) }"></div>
+									</div>
+									<div><div class="minn-field-label">Email</div><input class="minn-input" id="minn-ob-email" type="email" value="${ esc( b.email || '' ) }"></div>
+									<div><div class="minn-field-label">Phone</div><input class="minn-input" id="minn-ob-phone" value="${ esc( b.phone || '' ) }"></div>
+									<div><div class="minn-field-label">Billing address</div>
+										<textarea class="minn-input" id="minn-ob-addr1" rows="1" placeholder="Address line 1">${ esc( b.address_1 || '' ) }</textarea>
+										<textarea class="minn-input" id="minn-ob-addr2" rows="1" placeholder="Address line 2" style="margin-top:6px;">${ esc( b.address_2 || '' ) }</textarea>
+									</div>
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">City</div><input class="minn-input" id="minn-ob-city" value="${ esc( b.city || '' ) }"></div>
+										<div><div class="minn-field-label">State</div><input class="minn-input" id="minn-ob-state" value="${ esc( b.state || '' ) }"></div>
+										<div><div class="minn-field-label">Postcode</div><input class="minn-input" id="minn-ob-postcode" value="${ esc( b.postcode || '' ) }"></div>
+									</div>
+									<div><div class="minn-field-label">Country</div><input class="minn-input" id="minn-ob-country" value="${ esc( b.country || '' ) }" placeholder="US"></div>
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( customerName( o ) ) }</span></div>
+									${ b.email ? `<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email ) }</span></div>` : '' }
+									<div class="minn-side-row"><span class="minn-side-key">Billing</span><span style="white-space:pre-line;">${ esc( fmtAddr( b ) ) }</span></div>
+								</div>` }
+							</div>
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Shipping &amp; note</div>
+								${ canEdit ? `
+								<div class="minn-order-fields">
+									<div><div class="minn-field-label">Ship to</div>
+										<textarea class="minn-input" id="minn-os-addr1" rows="1" placeholder="Address line 1">${ esc( s.address_1 || '' ) }</textarea>
+										<textarea class="minn-input" id="minn-os-addr2" rows="1" placeholder="Address line 2" style="margin-top:6px;">${ esc( s.address_2 || '' ) }</textarea>
+									</div>
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">City</div><input class="minn-input" id="minn-os-city" value="${ esc( s.city || '' ) }"></div>
+										<div><div class="minn-field-label">State</div><input class="minn-input" id="minn-os-state" value="${ esc( s.state || '' ) }"></div>
+										<div><div class="minn-field-label">Postcode</div><input class="minn-input" id="minn-os-postcode" value="${ esc( s.postcode || '' ) }"></div>
+									</div>
+									<div><div class="minn-field-label">Country</div><input class="minn-input" id="minn-os-country" value="${ esc( s.country || '' ) }"></div>
+									<div><div class="minn-field-label">Customer note</div><textarea class="minn-input" id="minn-o-note" rows="3" placeholder="Note from the customer…">${ esc( o.customer_note || '' ) }</textarea></div>
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Shipping</span><span style="white-space:pre-line;">${ esc( fmtAddr( s ) ) }</span></div>
+									${ o.customer_note ? `<div class="minn-side-row"><span class="minn-side-key">Note</span><span>${ esc( o.customer_note ) }</span></div>` : '' }
+								</div>` }
+								${ payUrl ? `
+								<div style="margin-top:12px;">
+									<div class="minn-field-label">Payment link</div>
+									<div class="minn-modal-url" style="margin:0;">
+										<span class="minn-permalink" id="minn-o-payurl" title="${ esc( payUrl ) }">${ esc( payUrl ) }</span>
+									</div>
+									<button type="button" class="minn-btn-soft" id="minn-o-copy-pay" style="margin-top:8px;">${ icon( 'copy' ) } Copy payment URL</button>
+								</div>` : '' }
+							</div>
+						</div>
+						<div class="minn-order-items">
+							${ ( o.line_items || [] ).map( ( li ) => `
+								<div class="minn-order-item">
+									<span class="minn-order-qty">${ li.quantity }×</span>
+									<span class="minn-cell-clip">${ esc( li.name ) }</span>
+									<span class="minn-order-line-total">${ esc( orderMoney( o, li.total ) ) }</span>
+								</div>` ).join( '' ) }
+							${ o.discount_total && parseFloat( o.discount_total ) > 0 ? `
+								<div class="minn-order-item"><span></span><span>Discount</span><span class="minn-order-line-total">−${ esc( orderMoney( o, o.discount_total ) ) }</span></div>` : '' }
+							${ o.shipping_total && parseFloat( o.shipping_total ) > 0 ? `
+								<div class="minn-order-item"><span></span><span>Shipping</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.shipping_total ) ) }</span></div>` : '' }
+							${ o.total_tax && parseFloat( o.total_tax ) > 0 ? `
+								<div class="minn-order-item"><span></span><span>Tax</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.total_tax ) ) }</span></div>` : '' }
+							${ ( o.refunds || [] ).map( ( r ) => `
+								<div class="minn-order-item"><span></span><span>Refund${ r.reason ? ': ' + esc( r.reason ) : '' }</span><span class="minn-order-line-total">−${ esc( orderMoney( o, Math.abs( parseFloat( r.total ) || 0 ) ) ) }</span></div>` ).join( '' ) }
+							<div class="minn-order-item total">
+								<span></span><span>Total</span>
+								<span class="minn-order-line-total">${ esc( orderMoney( o, o.total ) ) }</span>
+							</div>
+						</div>
+						${ canEdit ? `
+						<div class="minn-media-edit minn-order-status">
+							<div class="minn-field-label">Status</div>
+							<div style="display:flex; gap:8px; flex-wrap:wrap;">
+								<select class="minn-input" id="minn-order-status" style="flex:1; min-width:140px;">
+									${ Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => `<option value="${ st }"${ st === o.status ? ' selected' : '' }>${ esc( st.replace( /-/g, ' ' ) ) }</option>` ).join( '' ) }
+								</select>
+								<button class="minn-btn-primary" id="minn-order-save" type="button">Save changes</button>
+							</div>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Saves status, customer details, shipping and the customer note.</div>
+						</div>
+						${ refundable > 0.001 ? `
+						<div class="minn-media-edit minn-order-refund">
+							<div class="minn-side-title" style="margin:0 0 8px;">Refund</div>
+							<div class="minn-order-field-row">
+								<div style="flex:1;">
+									<div class="minn-field-label">Amount (max ${ esc( orderMoney( o, refundable ) ) })</div>
+									<input class="minn-input" id="minn-o-refund-amt" type="number" step="0.01" min="0.01" max="${ refundable.toFixed( 2 ) }" value="${ refundable.toFixed( 2 ) }">
+								</div>
+							</div>
+							<div style="margin-top:8px;"><div class="minn-field-label">Reason</div>
+								<input class="minn-input" id="minn-o-refund-reason" placeholder="Optional note on the refund">
+							</div>
+							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
+								<input type="checkbox" id="minn-o-refund-api" checked>
+								<span>Also refund via payment gateway when supported</span>
+							</label>
+							<button class="minn-btn-soft danger" id="minn-o-refund" type="button" style="margin-top:10px;">Issue refund</button>
+						</div>` : '' }
+						<div class="minn-media-edit minn-order-wcmail">
+							<div class="minn-side-title" style="margin:0 0 8px;">WooCommerce email</div>
+							${ emails == null ? '<div class="minn-loading" style="padding:8px;">Loading email types…</div>' : `
+							<div style="display:flex; gap:8px; flex-wrap:wrap;">
+								<select class="minn-input" id="minn-o-wcemail" style="flex:1; min-width:180px;">
+									${ ( emails || [] ).map( ( em ) => `<option value="${ esc( em.id ) }">${ esc( em.title ) }${ em.enabled ? '' : ' (disabled)' } · ${ em.to === 'customer' ? 'customer' : 'admin' }</option>` ).join( '' ) }
+								</select>
+								<button class="minn-btn-soft" id="minn-o-wcemail-send" type="button" ${ ( emails || [] ).length ? '' : 'disabled' }>${ icon( 'send' ) } Send</button>
+							</div>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Resends a transactional email through WooCommerce (invoice, processing, completed, …).</div>` }
+						</div>` : '' }
+					</div>
+					<div class="minn-modal-actions">
+						${ canEdit && b.email ? `<button class="minn-btn-soft" id="minn-o-email" type="button">${ icon( 'send' ) } Send email…</button>` : '' }
+						${ payUrl ? `<button class="minn-btn-soft" id="minn-o-copy-pay2" type="button">${ icon( 'copy' ) } Copy payment URL</button>` : '' }
+						${ ( ( B.wcpdf && B.wcpdf.docs ) || [] ).map( ( d ) =>
+							`<a class="minn-btn-soft" href="${ esc( `${ B.wcpdf.ajax }?action=generate_wpo_wcpdf&document_type=${ encodeURIComponent( d.type ) }&order_ids=${ o.id }&access_key=${ encodeURIComponent( B.wcpdf.nonce ) }` ) }" target="_blank" rel="noopener" title="Generated by PDF Invoices &amp; Packing slips">⬇ ${ esc( d.title ) } (PDF)</a>` ).join( '' ) }
+						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ o.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
+					</div>` : '' }
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'order-email' ) {
+			const o = m.order || {};
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">Order #${ esc( o.number ) }</div>
-						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( o.status.replace( '-', ' ' ) ) }</span>
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">Send email</div>
+							<div class="minn-modal-sub">Order #${ esc( o.number || o.id ) } → ${ esc( m.to || 'billing email' ) }</div>
+						</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					<div class="minn-modal-meta">
-						<div class="minn-side-row"><span class="minn-side-key">Customer</span><span>${ esc( customerName( o ) ) }</span></div>
-						${ b.email ? `<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email ) }</span></div>` : '' }
-						<div class="minn-side-row"><span class="minn-side-key">Placed</span><span>${ timeAgo( o.date_created ) }</span></div>
-					</div>
-					<div class="minn-order-items">
-						${ ( o.line_items || [] ).map( ( li ) => `
-							<div class="minn-order-item">
-								<span class="minn-order-qty">${ li.quantity }×</span>
-								<span class="minn-cell-clip">${ esc( li.name ) }</span>
-								<span class="minn-order-line-total">${ esc( sym + li.total ) }</span>
-							</div>` ).join( '' ) }
-						<div class="minn-order-item total">
-							<span></span><span>Total</span>
-							<span class="minn-order-line-total">${ esc( sym + o.total ) }</span>
+					<div class="minn-modal-form">
+						<div>
+							<div class="minn-field-label">Subject</div>
+							<input class="minn-input" id="minn-oe-subject" value="${ esc( m.subject || '' ) }" autocomplete="off">
+						</div>
+						<div>
+							<div class="minn-field-label">Message</div>
+							<textarea class="minn-input minn-insp-textarea" id="minn-oe-message" rows="9" placeholder="Write your message…">${ esc( m.message || '' ) }</textarea>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Styled Minn Admin HTML email to the order billing address. Blank lines become paragraphs. A button links to pay or view the order.</div>
 						</div>
 					</div>
-					${ B.caps.orders ? `
-					<div class="minn-media-edit minn-order-status">
-						<div class="minn-field-label">Status</div>
-						<div style="display:flex; gap:8px;">
-							<select class="minn-input" id="minn-order-status">
-								${ Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => `<option value="${ st }"${ st === o.status ? ' selected' : '' }>${ esc( st.replace( '-', ' ' ) ) }</option>` ).join( '' ) }
-							</select>
-							<button class="minn-btn-primary" id="minn-order-save" style="flex-shrink:0;">Save</button>
-						</div>
-					</div>` : '' }
 					<div class="minn-modal-actions">
-						${ ( ( B.wcpdf && B.wcpdf.docs ) || [] ).map( ( d ) =>
-							`<a class="minn-btn-soft" href="${ esc( `${ B.wcpdf.ajax }?action=generate_wpo_wcpdf&document_type=${ encodeURIComponent( d.type ) }&order_ids=${ o.id }&access_key=${ encodeURIComponent( B.wcpdf.nonce ) }` ) }" target="_blank" rel="noopener" title="Generated by PDF Invoices &amp; Packing Slips">⬇ ${ esc( d.title ) } (PDF)</a>` ).join( '' ) }
-						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }edit.php?post_type=shop_order" target="_blank" rel="noopener">↗ Manage in WooCommerce</a>
+						<button class="minn-btn-primary" id="minn-oe-send">${ icon( 'send' ) } Send email</button>
+						<button class="minn-btn-soft" id="minn-modal-cancel">Cancel</button>
 					</div>
 				</div>
 			</div>`;
@@ -17904,15 +18137,71 @@
 		}
 
 		if ( m.type === 'order' ) {
+			const o = m.full || m.order;
+			const copyPay = async () => {
+				const url = ( m.full && m.full.payment_url ) || o.payment_url || '';
+				if ( ! url ) { toast( 'No payment URL on this order', true ); return; }
+				try { await navigator.clipboard.writeText( url ); toast( 'Payment URL copied' ); }
+				catch ( err ) { toast( 'Could not copy', true ); }
+			};
+			const copyBtn = $( '#minn-o-copy-pay' );
+			const copyBtn2 = $( '#minn-o-copy-pay2' );
+			if ( copyBtn ) copyBtn.addEventListener( 'click', copyPay );
+			if ( copyBtn2 ) copyBtn2.addEventListener( 'click', copyPay );
+
+			const emailBtn = $( '#minn-o-email' );
+			if ( emailBtn ) emailBtn.addEventListener( 'click', () => openOrderEmailModal( m.full || m.order ) );
+
 			const saveBtn = $( '#minn-order-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const status = $( '#minn-order-status' ).value;
-				if ( status === m.order.status ) { closeModal(); return; }
+				const status = ( $( '#minn-order-status' ) || {} ).value;
+				const payload = {
+					status,
+					customer_note: ( $( '#minn-o-note' ) || {} ).value || '',
+					billing: {
+						first_name: ( $( '#minn-ob-first' ) || {} ).value || '',
+						last_name: ( $( '#minn-ob-last' ) || {} ).value || '',
+						email: ( $( '#minn-ob-email' ) || {} ).value || '',
+						phone: ( $( '#minn-ob-phone' ) || {} ).value || '',
+						address_1: ( $( '#minn-ob-addr1' ) || {} ).value || '',
+						address_2: ( $( '#minn-ob-addr2' ) || {} ).value || '',
+						city: ( $( '#minn-ob-city' ) || {} ).value || '',
+						state: ( $( '#minn-ob-state' ) || {} ).value || '',
+						postcode: ( $( '#minn-ob-postcode' ) || {} ).value || '',
+						country: ( $( '#minn-ob-country' ) || {} ).value || '',
+					},
+					shipping: {
+						address_1: ( $( '#minn-os-addr1' ) || {} ).value || '',
+						address_2: ( $( '#minn-os-addr2' ) || {} ).value || '',
+						city: ( $( '#minn-os-city' ) || {} ).value || '',
+						state: ( $( '#minn-os-state' ) || {} ).value || '',
+						postcode: ( $( '#minn-os-postcode' ) || {} ).value || '',
+						country: ( $( '#minn-os-country' ) || {} ).value || '',
+					},
+				};
+				// Preserve shipping names from billing when empty (common fix-up).
+				if ( ! ( m.full && m.full.shipping && m.full.shipping.first_name ) ) {
+					payload.shipping.first_name = payload.billing.first_name;
+					payload.shipping.last_name = payload.billing.last_name;
+				}
 				saveBtn.disabled = true;
 				saveBtn.textContent = 'Saving…';
 				try {
-					const updated = await api( `wc/v3/orders/${ m.order.id }`, { method: 'PUT', body: JSON.stringify( { status } ) } );
-					m.order.status = updated.status || status;
+					const updated = await api( `wc/v3/orders/${ o.id }`, {
+						method: 'PUT',
+						body: JSON.stringify( payload ),
+					} );
+					// Re-fetch full detail so refunds/totals stay accurate.
+					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
+					if ( state.modal && state.modal.type === 'order' ) {
+						state.modal.full = full || updated;
+						state.modal.order = Object.assign( {}, state.modal.order, {
+							status: full.status,
+							total: full.total,
+							billing: full.billing,
+							line_items: full.line_items,
+						} );
+					}
 					toast( 'Order updated' );
 					state.cache.orders = null;
 					if ( state.route === 'orders' ) renderOrders();
@@ -17920,7 +18209,96 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					saveBtn.disabled = false;
-					saveBtn.textContent = 'Save';
+					saveBtn.textContent = 'Save changes';
+				}
+			} );
+
+			const refundBtn = $( '#minn-o-refund' );
+			if ( refundBtn ) refundBtn.addEventListener( 'click', async () => {
+				const max = orderRefundableTotal( o );
+				const amt = parseFloat( ( $( '#minn-o-refund-amt' ) || {} ).value );
+				const reason = ( ( $( '#minn-o-refund-reason' ) || {} ).value || '' ).trim();
+				const apiRefund = !!( $( '#minn-o-refund-api' ) || {} ).checked;
+				if ( ! amt || amt <= 0 || amt > max + 0.001 ) {
+					toast( `Enter an amount between 0.01 and ${ max.toFixed( 2 ) }`, true );
+					return;
+				}
+				if ( ! confirm( `Refund ${ orderMoney( o, amt ) } on order #${ o.number || o.id }?` ) ) return;
+				refundBtn.disabled = true;
+				refundBtn.textContent = 'Refunding…';
+				try {
+					await api( `wc/v3/orders/${ o.id }/refunds`, {
+						method: 'POST',
+						body: JSON.stringify( {
+							amount: amt.toFixed( 2 ),
+							reason: reason || undefined,
+							api_refund: apiRefund,
+						} ),
+					} );
+					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
+					if ( state.modal && state.modal.type === 'order' ) {
+						state.modal.full = full;
+						state.modal.order = Object.assign( {}, state.modal.order, {
+							status: full.status,
+							total: full.total,
+						} );
+					}
+					toast( `Refunded ${ orderMoney( o, amt ) }` );
+					state.cache.orders = null;
+					state.cache.orderSummary = null;
+					if ( state.route === 'orders' ) renderOrders();
+					renderOverlays();
+				} catch ( e ) {
+					toast( e.message, true );
+					refundBtn.disabled = false;
+					refundBtn.textContent = 'Issue refund';
+				}
+			} );
+
+			const wcSend = $( '#minn-o-wcemail-send' );
+			if ( wcSend ) wcSend.addEventListener( 'click', async () => {
+				const sel = $( '#minn-o-wcemail' );
+				const emailId = sel && sel.value;
+				if ( ! emailId ) return;
+				const label = sel.options[ sel.selectedIndex ] ? sel.options[ sel.selectedIndex ].textContent : emailId;
+				if ( ! confirm( `Send “${ label.split( ' · ' )[ 0 ] }” for order #${ o.number || o.id }?` ) ) return;
+				wcSend.disabled = true;
+				try {
+					const r = await api( `minn-admin/v1/orders/${ o.id }/emails`, {
+						method: 'POST',
+						body: JSON.stringify( { email_id: emailId } ),
+					} );
+					toast( ( r && r.title ? r.title : 'Email' ) + ' sent' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				wcSend.disabled = false;
+			} );
+		}
+
+		if ( m.type === 'order-email' ) {
+			const sub = $( '#minn-oe-subject' );
+			const msg = $( '#minn-oe-message' );
+			if ( sub ) setTimeout( () => sub.focus(), 30 );
+			const sendBtn = $( '#minn-oe-send' );
+			if ( sendBtn ) sendBtn.addEventListener( 'click', async () => {
+				const subject = ( sub && sub.value || '' ).trim();
+				const message = ( msg && msg.value || '' ).trim();
+				if ( ! subject || ! message ) {
+					toast( 'Subject and message are required', true );
+					return;
+				}
+				sendBtn.disabled = true;
+				try {
+					const r = await api( `minn-admin/v1/orders/${ m.order.id }/email`, {
+						method: 'POST',
+						body: JSON.stringify( { subject, message } ),
+					} );
+					toast( 'Email sent' + ( r && r.email ? ' to ' + r.email : '' ) );
+					closeModal();
+				} catch ( err ) {
+					toast( err.message, true );
+					sendBtn.disabled = false;
 				}
 			} );
 		}

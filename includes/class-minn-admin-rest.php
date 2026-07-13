@@ -350,6 +350,58 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// WooCommerce order helpers (email + resend WC transactional emails).
+		// Order CRUD/refunds ride wc/v3; these cover what core WC REST leaves out.
+		if ( class_exists( 'WooCommerce' ) ) {
+			$order_cap = function () {
+				return current_user_can( 'edit_shop_orders' );
+			};
+			register_rest_route(
+				self::NS,
+				'/orders/(?P<id>\d+)/email',
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'order_send_email' ),
+					'permission_callback' => $order_cap,
+					'args'                => array(
+						'subject' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+						'message' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'sanitize_callback' => 'sanitize_textarea_field',
+						),
+					),
+				)
+			);
+			register_rest_route(
+				self::NS,
+				'/orders/(?P<id>\d+)/emails',
+				array(
+					array(
+						'methods'             => 'GET',
+						'callback'            => array( __CLASS__, 'order_list_emails' ),
+						'permission_callback' => $order_cap,
+					),
+					array(
+						'methods'             => 'POST',
+						'callback'            => array( __CLASS__, 'order_trigger_email' ),
+						'permission_callback' => $order_cap,
+						'args'                => array(
+							'email_id' => array(
+								'type'              => 'string',
+								'required'          => true,
+								'sanitize_callback' => 'sanitize_key',
+							),
+						),
+					),
+				)
+			);
+		}
+
 		register_rest_route(
 			self::NS,
 			'/themes',
@@ -2229,21 +2281,11 @@ class Minn_Admin_REST {
 			return new WP_Error( 'invalid_email', 'This user has no valid email address.', array( 'status' => 400 ) );
 		}
 
-		$html    = self::minn_email_html( $subject, $message, $user );
-		$from    = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
-		$headers = array(
-			'Content-Type: text/html; charset=UTF-8',
-			'From: ' . $from . ' <' . get_option( 'admin_email' ) . '>',
-		);
-		// Reply-To the acting admin when they have a different address.
-		$me = wp_get_current_user();
-		if ( $me && $me->user_email && is_email( $me->user_email ) ) {
-			$headers[] = 'Reply-To: ' . $me->display_name . ' <' . $me->user_email . '>';
-		}
-
-		$sent = wp_mail( $user->user_email, $subject, $html, $headers );
-		if ( ! $sent ) {
-			return new WP_Error( 'send_failed', 'wp_mail() could not send the message. Check your mail configuration.', array( 'status' => 500 ) );
+		$who  = $user->display_name ? $user->display_name : $user->user_login;
+		$html = self::minn_email_html( $subject, $message, $who );
+		$sent = self::minn_send_html_mail( $user->user_email, $subject, $html );
+		if ( is_wp_error( $sent ) ) {
+			return $sent;
 		}
 		return rest_ensure_response( array(
 			'ok'    => true,
@@ -2252,19 +2294,203 @@ class Minn_Admin_REST {
 	}
 
 	/**
-	 * Minn-styled HTML email wrapper for admin → user messages.
-	 *
-	 * @param string  $subject Subject line (already sanitized).
-	 * @param string  $message Plain-text body (already sanitized).
-	 * @param WP_User $user    Recipient.
+	 * Send a styled HTML email to an order's billing address (order context).
 	 */
-	public static function minn_email_html( $subject, $message, $user ) {
-		$site   = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
-		$url    = home_url( '/' );
-		$who    = $user->display_name ? $user->display_name : $user->user_login;
+	public static function order_send_email( WP_REST_Request $request ) {
+		if ( ! function_exists( 'wc_get_order' ) ) {
+			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+		}
+		$order = wc_get_order( (int) $request['id'] );
+		if ( ! $order ) {
+			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+		}
+		$to = $order->get_billing_email();
+		if ( ! is_email( $to ) ) {
+			return new WP_Error( 'invalid_email', 'This order has no valid billing email.', array( 'status' => 400 ) );
+		}
+		$subject = trim( (string) $request['subject'] );
+		$message = trim( (string) $request['message'] );
+		if ( '' === $subject || '' === $message ) {
+			return new WP_Error( 'invalid', 'Subject and message are required.', array( 'status' => 400 ) );
+		}
+
+		$who = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+		if ( '' === $who ) {
+			$who = $to;
+		}
+		// CTA: payment link when unpaid, else the customer view-order URL.
+		$cta_url   = $order->needs_payment() ? $order->get_checkout_payment_url() : $order->get_view_order_url();
+		$cta_label = $order->needs_payment() ? 'Pay for order #' . $order->get_order_number() : 'View order #' . $order->get_order_number();
+		$html      = self::minn_email_html( $subject, $message, $who, $cta_url, $cta_label );
+		$sent      = self::minn_send_html_mail( $to, $subject, $html );
+		if ( is_wp_error( $sent ) ) {
+			return $sent;
+		}
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: admin name, 2: subject */
+				__( 'Minn Admin email sent by %1$s: %2$s', 'minn-admin' ),
+				wp_get_current_user()->display_name,
+				$subject
+			),
+			false,
+			true
+		);
+		return rest_ensure_response( array(
+			'ok'    => true,
+			'email' => $to,
+		) );
+	}
+
+	/**
+	 * List WooCommerce emails that can be re-triggered for an order.
+	 */
+	public static function order_list_emails( WP_REST_Request $request ) {
+		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
+			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+		}
+		$order = wc_get_order( (int) $request['id'] );
+		if ( ! $order ) {
+			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+		}
+		// Order-scoped transactional emails only (not account/reset).
+		$allow = array(
+			'new_order',
+			'cancelled_order',
+			'failed_order',
+			'customer_on_hold_order',
+			'customer_processing_order',
+			'customer_completed_order',
+			'customer_refunded_order',
+			'customer_invoice',
+			'customer_note',
+			'customer_failed_order',
+			'customer_cancelled_order',
+		);
+		$out = array();
+		foreach ( WC()->mailer()->get_emails() as $email ) {
+			if ( ! is_object( $email ) || empty( $email->id ) || ! in_array( $email->id, $allow, true ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'      => $email->id,
+				'title'   => $email->get_title(),
+				'enabled' => (bool) $email->is_enabled(),
+				// customer_invoice is the usual "resend order details" even when disabled by default.
+				'to'      => ( method_exists( $email, 'is_customer_email' ) && $email->is_customer_email() )
+					? 'customer'
+					: 'admin',
+			);
+		}
+		usort( $out, function ( $a, $b ) {
+			return strcasecmp( $a['title'], $b['title'] );
+		} );
+		return rest_ensure_response( array(
+			'emails' => $out,
+			'order'  => (int) $order->get_id(),
+		) );
+	}
+
+	/**
+	 * Trigger a WooCommerce email for an order (their Email::trigger).
+	 */
+	public static function order_trigger_email( WP_REST_Request $request ) {
+		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
+			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+		}
+		$order = wc_get_order( (int) $request['id'] );
+		if ( ! $order ) {
+			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+		}
+		$email_id = (string) $request['email_id'];
+		$found    = null;
+		foreach ( WC()->mailer()->get_emails() as $email ) {
+			if ( is_object( $email ) && ! empty( $email->id ) && $email->id === $email_id ) {
+				$found = $email;
+				break;
+			}
+		}
+		if ( ! $found || ! is_callable( array( $found, 'trigger' ) ) ) {
+			return new WP_Error( 'unknown_email', 'That email type is not available.', array( 'status' => 400 ) );
+		}
+		// Force-send even if the email is disabled in settings (admin intent).
+		// WC_Email::trigger checks is_enabled(); temporarily enable via filter.
+		$force = function ( $enabled, $email_obj ) use ( $found ) {
+			return ( $email_obj === $found ) ? true : $enabled;
+		};
+		add_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100, 2 );
+		// Most order emails accept ( $order_id, $order ). customer_refunded_order
+		// takes ( $order_id, $partial_refund ). invoice takes ( $order_id, $order ).
+		try {
+			if ( 'customer_refunded_order' === $found->id ) {
+				$found->trigger( $order->get_id(), false );
+			} else {
+				$found->trigger( $order->get_id(), $order );
+			}
+		} catch ( \Throwable $e ) {
+			remove_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100 );
+			return new WP_Error( 'send_failed', $e->getMessage(), array( 'status' => 500 ) );
+		}
+		remove_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100 );
+
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: email title, 2: admin name */
+				__( '“%1$s” email resent via Minn Admin by %2$s.', 'minn-admin' ),
+				$found->get_title(),
+				wp_get_current_user()->display_name
+			),
+			false,
+			true
+		);
+		return rest_ensure_response( array(
+			'ok'    => true,
+			'email' => $found->id,
+			'title' => $found->get_title(),
+		) );
+	}
+
+	/**
+	 * Shared wp_mail HTML send with site From + admin Reply-To.
+	 *
+	 * @param string $to      Recipient address.
+	 * @param string $subject Subject.
+	 * @param string $html    HTML body.
+	 * @return true|WP_Error
+	 */
+	private static function minn_send_html_mail( $to, $subject, $html ) {
+		$from    = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+		$headers = array(
+			'Content-Type: text/html; charset=UTF-8',
+			'From: ' . $from . ' <' . get_option( 'admin_email' ) . '>',
+		);
+		$me = wp_get_current_user();
+		if ( $me && $me->user_email && is_email( $me->user_email ) ) {
+			$headers[] = 'Reply-To: ' . $me->display_name . ' <' . $me->user_email . '>';
+		}
+		$sent = wp_mail( $to, $subject, $html, $headers );
+		if ( ! $sent ) {
+			return new WP_Error( 'send_failed', 'wp_mail() could not send the message. Check your mail configuration.', array( 'status' => 500 ) );
+		}
+		return true;
+	}
+
+	/**
+	 * Minn-styled HTML email wrapper for admin messages.
+	 *
+	 * @param string      $subject   Subject line (already sanitized).
+	 * @param string      $message   Plain-text body (already sanitized).
+	 * @param string      $who       Recipient greeting name.
+	 * @param string|null $cta_url   Optional button URL.
+	 * @param string|null $cta_label Optional button label.
+	 */
+	public static function minn_email_html( $subject, $message, $who, $cta_url = null, $cta_label = null ) {
+		$site = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+		$url  = home_url( '/' );
+		$who  = is_string( $who ) ? $who : '';
 		// Plain text → escaped paragraphs (no untrusted HTML in the body).
-		$paras  = array_filter( array_map( 'trim', preg_split( '/\n\s*\n/', $message ) ) );
-		$body   = '';
+		$paras = array_filter( array_map( 'trim', preg_split( '/\n\s*\n/', $message ) ) );
+		$body  = '';
 		foreach ( $paras as $p ) {
 			$body .= '<p style="margin:0 0 14px;font-size:15.5px;line-height:1.55;color:#3a3a42;">'
 				. nl2br( esc_html( $p ) ) . '</p>';
@@ -2273,6 +2499,9 @@ class Minn_Admin_REST {
 			$body = '<p style="margin:0;font-size:15.5px;line-height:1.55;color:#3a3a42;">'
 				. nl2br( esc_html( $message ) ) . '</p>';
 		}
+
+		$btn_url   = $cta_url ? $cta_url : $url;
+		$btn_label = $cta_label ? $cta_label : ( 'Visit ' . $site );
 
 		return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#f4f4f6;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Helvetica,Arial,sans-serif;">
@@ -2287,7 +2516,7 @@ class Minn_Admin_REST {
 ' . $body . '
 </td></tr>
 <tr><td style="padding:8px 24px 24px;">
-<a href="' . esc_url( $url ) . '" style="display:inline-block;background:#7166f6;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 18px;border-radius:10px;">Visit ' . esc_html( $site ) . '</a>
+<a href="' . esc_url( $btn_url ) . '" style="display:inline-block;background:#7166f6;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 18px;border-radius:10px;">' . esc_html( $btn_label ) . '</a>
 </td></tr>
 <tr><td style="padding:16px 24px;border-top:1px solid #e7e7ea;font-size:12.5px;color:#9494a0;line-height:1.45;">
 Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration:none;">' . esc_html( $site ) . '</a>
