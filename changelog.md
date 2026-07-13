@@ -3,6 +3,8 @@
 ## **v0.14.0** - Unreleased
 
 ### Fixed
+* **Orders Analytics only showed the last 90 days:** the range control is now 7d / 30d / 90d / **1y** / **All**, with monthly bars on long windows so multi-year history stays readable. **View all orders** jumps back to the full list. Top products request `extended_info` so names show instead of bare IDs.
+* **Orders status tabs missed pending / cancelled / failed:** the list tabs cover the full WooCommerce set (All, Processing, Completed, On hold, Pending, Cancelled, Refunded, Failed) so older failed or pending orders are not hidden behind an incomplete filter strip.
 * **Coupons nav when WooCommerce coupons are disabled:** if Enable coupons is off, `shop_coupon` is not registered and `wc/v3/coupons` always returns “Sorry, you cannot list resources.” Minn now only offers Coupons when WC has coupons enabled and the post type exists (and shows a clear settings link if the route is hit anyway).
 
 ### Added

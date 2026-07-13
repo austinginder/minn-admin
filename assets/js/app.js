@@ -2891,7 +2891,18 @@
 
 	/* ===== Orders (WooCommerce) ===== */
 
-	const ORDER_TABS = [ [ 'any', 'All' ], [ 'processing', 'Processing' ], [ 'completed', 'Completed' ], [ 'on-hold', 'On hold' ], [ 'refunded', 'Refunded' ] ];
+	// Full WC status set so "All" + every tab can reach historical orders
+	// (pending/failed often dominate old catalogs; without tabs they look "missing").
+	const ORDER_TABS = [
+		[ 'any', 'All' ],
+		[ 'processing', 'Processing' ],
+		[ 'completed', 'Completed' ],
+		[ 'on-hold', 'On hold' ],
+		[ 'pending', 'Pending' ],
+		[ 'cancelled', 'Cancelled' ],
+		[ 'refunded', 'Refunded' ],
+		[ 'failed', 'Failed' ],
+	];
 	const ORDER_STATUS_STYLE = {
 		processing: 'future', completed: 'publish', 'on-hold': 'private', pending: 'private',
 		cancelled: 'trash-status', refunded: 'draft', failed: 'trash-status',
@@ -2921,7 +2932,8 @@
 				// 404 → fall through to search (order number may differ from id).
 			}
 		}
-		let q = `wc/v3/orders?per_page=25&page=${ page }&status=${ tab }&_fields=${ fields }`;
+		// Newest first so "All" still surfaces current work; page through for history.
+		let q = `wc/v3/orders?per_page=25&page=${ page }&status=${ encodeURIComponent( tab ) }&orderby=date&order=desc&_fields=${ fields }`;
 		// WC search matches order id/number, billing name/email/phone, etc.
 		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
 		const r = await apiPaged( q );
@@ -2947,34 +2959,53 @@
 		}
 	}
 
-	/** ISO after/before for wc-analytics (UTC). */
-	function wcAnalyticsWindow( days ) {
+	/** ISO after/before + chart interval for wc-analytics (UTC). */
+	function wcAnalyticsWindow( range ) {
 		const before = new Date();
-		const after = new Date( before.getTime() - ( days - 1 ) * 86400000 );
 		const iso = ( d, end ) => {
 			const y = d.getUTCFullYear();
 			const m = String( d.getUTCMonth() + 1 ).padStart( 2, '0' );
 			const day = String( d.getUTCDate() ).padStart( 2, '0' );
 			return `${ y }-${ m }-${ day }T${ end ? '23:59:59' : '00:00:00' }`;
 		};
-		return { after: iso( after, false ), before: iso( before, true ) };
+		// "all" = deep history (WC Analytics tables go back as far as imported).
+		// Long windows use month bars so the chart stays readable.
+		if ( range === 'all' ) {
+			return { after: '2000-01-01T00:00:00', before: iso( before, true ), interval: 'month' };
+		}
+		const days = Number( range ) || 30;
+		const after = new Date( before.getTime() - ( days - 1 ) * 86400000 );
+		return {
+			after: iso( after, false ),
+			before: iso( before, true ),
+			interval: days > 90 ? 'month' : 'day',
+		};
+	}
+
+	function orderAnalyticsRangeLabel( range ) {
+		if ( range === 'all' ) return 'all time';
+		const n = Number( range ) || 30;
+		if ( n === 365 ) return 'last 12 months';
+		return 'last ' + n + ' days';
 	}
 
 	async function loadOrderAnalytics( days ) {
-		const range = days || state.orderAnalyticsRange || 30;
-		const { after, before } = wcAnalyticsWindow( range );
+		const range = days != null ? days : ( state.orderAnalyticsRange || 30 );
+		const { after, before, interval } = wcAnalyticsWindow( range );
 		const q = `after=${ encodeURIComponent( after ) }&before=${ encodeURIComponent( before ) }`;
 		const out = { range, totals: null, chart: [], topProducts: [], error: null };
 		try {
 			const [ rev, prods ] = await Promise.all( [
-				api( `wc-analytics/reports/revenue/stats?${ q }&interval=day` ),
-				api( `wc-analytics/reports/products?${ q }&orderby=items_sold&order=desc&per_page=8` ).catch( () => [] ),
+				api( `wc-analytics/reports/revenue/stats?${ q }&interval=${ encodeURIComponent( interval ) }` ),
+				api( `wc-analytics/reports/products?${ q }&orderby=items_sold&order=desc&per_page=8&extended_info=true` ).catch( () => [] ),
 			] );
 			out.totals = ( rev && rev.totals ) || null;
 			const intervals = ( rev && rev.intervals ) || [];
 			out.chart = intervals.map( ( iv ) => {
 				const sub = iv.subtotals || {};
-				const label = ( iv.interval || '' ).slice( 5 ); // MM-DD
+				// day → MM-DD; month → YYYY-MM
+				let label = iv.interval || '';
+				if ( interval === 'day' && label.length >= 10 ) label = label.slice( 5 );
 				return {
 					label: label || iv.interval,
 					value: Number( sub.total_sales != null ? sub.total_sales : sub.net_revenue ) || 0,
@@ -3131,13 +3162,22 @@
 				[ 'Orders', String( tot.orders_count ?? '—' ) ],
 				[ 'Items sold', String( tot.num_items_sold ?? '—' ) ],
 			];
+			const rangeOpts = [
+				[ 7, '7d' ],
+				[ 30, '30d' ],
+				[ 90, '90d' ],
+				[ 365, '1y' ],
+				[ 'all', 'All' ],
+			];
+			const curRange = state.orderAnalyticsRange || 30;
 			view.innerHTML = `
 			${ viewSwitch }
 			<div class="minn-toolbar">
 				<div class="minn-range-tabs">
-					${ [ 7, 30, 90 ].map( ( d ) =>
-						`<button class="minn-range-tab${ ( state.orderAnalyticsRange || 30 ) === d ? ' active' : '' }" data-orange="${ d }">${ d }d</button>` ).join( '' ) }
+					${ rangeOpts.map( ( [ id, label ] ) =>
+						`<button class="minn-range-tab${ String( curRange ) === String( id ) ? ' active' : '' }" data-orange="${ id }">${ label }</button>` ).join( '' ) }
 				</div>
+				<button class="minn-btn-soft" id="minn-wc-view-orders" type="button" style="margin-left:auto;">View all orders</button>
 				<div class="minn-toolbar-meta">WooCommerce Analytics</div>
 			</div>
 			${ a.error ? `<div class="minn-empty">${ esc( a.error ) }</div>` : `
@@ -3150,7 +3190,7 @@
 			</div>
 			<div class="minn-card minn-panel-pad" style="margin-top:14px;">
 				<div class="minn-chart-head">
-					<div class="minn-panel-title">Revenue <span class="minn-panel-sub">last ${ a.range } days</span></div>
+					<div class="minn-panel-title">Revenue <span class="minn-panel-sub">${ esc( orderAnalyticsRangeLabel( a.range ) ) }</span></div>
 				</div>
 				${ chartData.length ? `
 				<div class="minn-chart" id="minn-wc-chart">
@@ -3179,9 +3219,17 @@
 					renderOrders();
 				} )
 			);
+			const viewOrdersBtn = $( '#minn-wc-view-orders', view );
+			if ( viewOrdersBtn ) viewOrdersBtn.addEventListener( 'click', () => {
+				state.orderView = 'list';
+				state.orderTab = 'any';
+				state.cache.orders = null;
+				renderOrders();
+			} );
 			$$( '[data-orange]', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
-					state.orderAnalyticsRange = parseInt( btn.dataset.orange, 10 );
+					const raw = btn.dataset.orange;
+					state.orderAnalyticsRange = raw === 'all' ? 'all' : parseInt( raw, 10 );
 					state.cache.orderAnalytics = null;
 					renderOrders();
 				} )
