@@ -4,13 +4,38 @@
  * and an Edit deep link into the Code Snippets admin.
  *
  * SKIPs exit-0 when Code Snippets is not active (other suites share the site).
+ *
+ * Note: Code Snippets' REST DELETE only *trashes* (active = -1); trashed rows
+ * still appear in the list and fill the first page. Suites permanently purge
+ * leftover Minn fixtures via WP-CLI before seeding.
  */
+const { execSync } = require( 'child_process' );
 const { BASE, launch, login, reporter } = require( './helpers' );
+
+const WP = process.env.MINN_TEST_WP
+	|| '/Users/austin/Cove/Sites/minnadmin.localhost/public';
+
+function purgeMinnSnippets() {
+	const php = [
+		'if ( ! function_exists( "Code_Snippets\\\\delete_snippet" ) ) { return; }',
+		'global $wpdb;',
+		'$t = $wpdb->prefix . "snippets";',
+		'$ids = $wpdb->get_col( "SELECT id FROM `$t` WHERE name LIKE \'Minn suite%\' OR name LIKE \'probe%\' OR tags LIKE \'%minn-test%\'" );',
+		'foreach ( (array) $ids as $id ) { \\Code_Snippets\\delete_snippet( (int) $id ); }',
+	].join( ' ' );
+	try {
+		execSync( `wp --path=${ WP } eval ${ JSON.stringify( php ) }`, {
+			stdio: 'ignore',
+			timeout: 60000,
+		} );
+	} catch ( e ) { /* best-effort */ }
+}
 
 ( async () => {
 	const { browser, page, errors } = await launch();
 	const t = reporter( 'code-snippets' );
 	await login( page );
+	purgeMinnSnippets();
 
 	const available = await page.evaluate( async () => {
 		const r = await fetch( window.MINN.restUrl + 'code-snippets/v1/snippets?per_page=1', {
@@ -49,22 +74,6 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const nameOn = `Minn suite on ${ uid }`;
 	const nameCreated = `Minn suite new ${ uid }`;
 
-	// Wipe any prior minn-test-tagged leftovers first.
-	await page.evaluate( async () => {
-		const r = await fetch( window.MINN.restUrl + 'code-snippets/v1/snippets?per_page=100', {
-			headers: { 'X-WP-Nonce': window.MINN.nonce },
-		} );
-		const items = await r.json();
-		for ( const s of ( items || [] ) ) {
-			if ( ( s.tags || [] ).includes( 'minn-test' ) || /^Minn suite /.test( s.name || '' ) ) {
-				await fetch( window.MINN.restUrl + 'code-snippets/v1/snippets/' + s.id, {
-					method: 'DELETE',
-					headers: { 'X-WP-Nonce': window.MINN.nonce },
-				} ).catch( () => {} );
-			}
-		}
-	} );
-
 	// Seed a pair of snippets: one active, one inactive.
 	const seed = await page.evaluate( async ( args ) => {
 		const mk = async ( name, active ) => {
@@ -91,39 +100,41 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	}, { nameOff, nameOn } );
 
 	const cleanup = async () => {
-		await page.evaluate( async ( ids ) => {
-			for ( const id of ids ) {
-				await fetch( window.MINN.restUrl + 'code-snippets/v1/snippets/' + id, {
-					method: 'DELETE',
-					headers: { 'X-WP-Nonce': window.MINN.nonce },
-				} ).catch( () => {} );
-			}
-		}, [ seed.off.id, seed.on.id ] ).catch( () => {} );
+		// Permanent purge (REST DELETE only trashes).
+		purgeMinnSnippets();
 	};
 
 	try {
+		t.check( 'seed inactive is inactive', seed.off.active === false, JSON.stringify( seed.off ) );
+		t.check( 'seed active is active', seed.on.active === true, JSON.stringify( seed.on ) );
+
 		await page.goto( `${ BASE }/minn-admin/code-snippets`, { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '.minn-table-row', { timeout: 15000 } );
+		// Wait for OUR seeds (not just any row — page-1 used to be full of trash).
+		await page.waitForFunction( ( names ) => {
+			const text = document.querySelector( '.minn-table' )?.textContent || '';
+			return names.every( ( n ) => text.includes( n ) );
+		}, [ nameOn, nameOff ], { timeout: 20000 } );
 
 		const list = await page.evaluate( () => {
 			const rows = [ ...document.querySelectorAll( '.minn-table-row' ) ];
 			return rows.map( ( r ) => ( {
+				id: r.dataset.sitem || '',
 				title: ( r.querySelector( '.minn-row-title' ) || {} ).textContent || '',
 				pills: [ ...r.querySelectorAll( '.minn-status' ) ].map( ( p ) => p.textContent.trim() ),
-				meta: [ ...r.querySelectorAll( '.minn-row-meta' ) ].map( ( m ) => m.textContent.trim() ),
 			} ) );
 		} );
-		t.check( 'seed inactive is inactive', seed.off.active === false, JSON.stringify( seed.off ) );
-		t.check( 'seed active is active', seed.on.active === true, JSON.stringify( seed.on ) );
 		t.check( 'list shows seeded snippets', list.some( ( r ) => r.title.includes( nameOn ) ) && list.some( ( r ) => r.title.includes( nameOff ) ), JSON.stringify( list.map( ( r ) => r.title ) ) );
 		const activeRow = list.find( ( r ) => r.title.includes( nameOn ) );
 		const inactiveRow = list.find( ( r ) => r.title.includes( nameOff ) );
 		t.check( 'active snippet has active pill', activeRow && activeRow.pills.includes( 'active' ), JSON.stringify( activeRow ) );
 		t.check( 'inactive snippet has inactive pill', inactiveRow && inactiveRow.pills.includes( 'inactive' ), JSON.stringify( inactiveRow ) );
 
-		// Open the inactive one by title.
-		const inactiveIdx = list.findIndex( ( r ) => r.title.includes( nameOff ) );
-		await page.click( `.minn-table-row[data-sitem="${ inactiveIdx }"]` );
+		// Open the inactive one by title (data-sitem is the row index, not the id).
+		await page.evaluate( ( name ) => {
+			const row = [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) =>
+				( ( r.querySelector( '.minn-row-title' ) || {} ).textContent || '' ).includes( name ) );
+			if ( row ) row.click();
+		}, nameOff );
 		await page.waitForSelector( '#minn-modal-overlay', { timeout: 10000 } );
 		await page.waitForFunction( () => {
 			const m = document.querySelector( '#minn-modal-overlay' );

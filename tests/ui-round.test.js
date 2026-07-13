@@ -28,8 +28,16 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'stat cards are clickable doors', statCards.length >= 3, JSON.stringify( statCards ) );
 	await page.click( '.minn-stat[data-goto="content:posts"]' );
 	await page.waitForSelector( '.minn-content-cols.minn-table-row', { timeout: 15000 } );
-	const tab = await page.$eval( '.minn-tab.active', ( e ) => e.textContent.trim() );
-	t.check( 'Published posts card lands on the Posts tab', tab === 'Posts', tab );
+	// ≤6 types → pill tabs with .active; more types (common on this fixture site)
+	// collapse the type filter to a combobox whose seed/placeholder is "Posts".
+	const typeLabel = await page.evaluate( () => {
+		const tab = document.querySelector( '.minn-tab.active[data-filter]' );
+		if ( tab ) return tab.textContent.trim();
+		const combo = document.querySelector( '[data-typecombo] .minn-ac-input' );
+		if ( ! combo ) return '';
+		return ( combo.dataset.acValueLabel || combo.placeholder || combo.value || '' ).trim();
+	} );
+	t.check( 'Published posts card lands on the Posts tab', typeLabel === 'Posts', typeLabel );
 
 	/* ===== Header brand: site icon (or m fallback) + site name ===== */
 	// The mark is the WordPress Site Icon when set, else the gradient "m"

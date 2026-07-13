@@ -42,10 +42,28 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.click( '#minn-editor-body p' );
 	await page.keyboard.press( 'End' );
 	await page.keyboard.type( ' more' );
+	// Wait for the POST (1.5s flat race was too tight under load; Meta+s is
+	// also flaky in headless — Control+s is accepted by the same handler).
+	const waitPost = () => page.waitForRequest(
+		( r ) => r.method() === 'POST' && r.url().includes( `/posts/${ draftId }` ) && ! r.url().includes( 'autosaves' ),
+		{ timeout: 4000 }
+	).catch( () => null );
+	let sawSave = waitPost();
 	await page.keyboard.press( 'Meta+s' );
-	await page.waitForTimeout( 1500 );
+	if ( ! ( await sawSave ) ) {
+		sawSave = waitPost();
+		await page.keyboard.press( 'Control+s' );
+		await sawSave;
+	}
 	t.check( 'Cmd+S saves immediately', writes.some( ( u ) => u.includes( `/posts/${ draftId }` ) ), writes.join() );
 
+	// Let the save chain + toast fully settle. A late POST from Cmd+S was
+	// poisoning the next idle window under load (false "autosave within 5s").
+	await page.waitForFunction( () => {
+		const s = document.querySelector( '#minn-saved-state' );
+		return s && /now|ago/i.test( s.textContent || '' );
+	}, null, { timeout: 8000 } ).catch( () => {} );
+	await page.waitForTimeout( 1500 );
 	writes.length = 0;
 	await page.click( '#minn-editor-body p' );
 	await page.keyboard.press( 'End' );

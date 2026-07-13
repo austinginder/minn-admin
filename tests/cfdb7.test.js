@@ -102,8 +102,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.evaluate( () => {
 			Array.from( document.querySelectorAll( '.minn-modal button' ) ).find( ( b ) => b.textContent.trim() === 'Delete entry' ).click();
 		} );
+		// actionToast prefers the route's {message} ("Entry deleted permanently.")
+		// over the default "⟨label⟩ — done" form.
 		await page.waitForFunction( () =>
-			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Delete entry — done/.test( x.textContent ) ),
+			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) =>
+				/Entry deleted permanently|Delete entry — done/.test( x.textContent ) ),
 		null, { timeout: 10000 } );
 		await page.waitForFunction( () =>
 			! Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Cast Off' ) ),
