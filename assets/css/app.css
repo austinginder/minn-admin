@@ -1547,15 +1547,24 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-fields { display: flex; flex-direction: column; gap: 8px; }
 .minn-order-field-row { display: flex; gap: 8px; }
 .minn-order-field-row > * { flex: 1; min-width: 0; }
-.minn-order-refund, .minn-order-wcmail { border-top: 1px solid var(--border); }
-.minn-order-items { padding: 10px 18px 14px; }
+.minn-order-items { padding: 10px 18px 14px; border-bottom: 1px solid var(--border); }
+/* Status / Refund / WC-email blocks: same side padding as order panels.
+   .minn-media-edit only adds top padding + border (media modal lives inside
+   .minn-modal-meta which already pads) — order body is full-bleed so these
+   need their own 18px gutters or fields hug the modal edge. */
+.minn-order-body .minn-media-edit {
+  margin-top: 0;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--border);
+}
+.minn-order-body .minn-media-edit:first-of-type { border-top: none; }
+.minn-order-status,
+.minn-order-refund,
+.minn-order-wcmail { /* class hooks for tests / future tweaks */ }
 @media (max-width: 720px) {
   .minn-order-grid { grid-template-columns: 1fr; }
   .minn-order-panel { border-right: none; border-bottom: 1px solid var(--border); }
 }
-/* The order modal's Status block sits directly in the modal (not inside
-   .minn-modal-meta, which supplies padding for the media modal's fields). */
-.minn-order-status { margin-top: 0; padding: 12px 18px 2px; }
 
 /* System page: summary rows + health cards that expand to a detail modal
    (autoload, cron) */

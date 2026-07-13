@@ -138,10 +138,26 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'partial refund skipped (no room)', true, 'total already refunded' );
 	}
 
-	// UI: open Orders, click first row, assert modal affordances.
+	// UI: open Orders, search by id, click row, assert modal affordances.
 	await page.goto( BASE + '/minn-admin/orders', { waitUntil: 'domcontentloaded' } );
-	await page.waitForSelector( '.minn-table-row, .minn-empty', { timeout: 20000 } );
+	await page.waitForSelector( '#minn-order-search, .minn-table-row, .minn-empty', { timeout: 20000 } );
 	await page.waitForTimeout( 400 );
+
+	const hasSearch = await page.$( '#minn-order-search' );
+	t.check( 'orders toolbar has search field', !! hasSearch, '' );
+	if ( hasSearch && orderId ) {
+		await page.fill( '#minn-order-search', String( orderId ) );
+		await page.waitForTimeout( 600 );
+		await page.waitForFunction( ( id ) => {
+			const rows = document.querySelectorAll( '.minn-table-row[data-order]' );
+			return rows.length >= 1 && Array.from( rows ).some( ( r ) => r.dataset.order === String( id ) );
+		}, orderId, { timeout: 10000 } ).catch( () => null );
+		const found = await page.evaluate( ( id ) => {
+			const rows = Array.from( document.querySelectorAll( '.minn-table-row[data-order]' ) );
+			return { n: rows.length, hit: rows.some( ( r ) => r.dataset.order === String( id ) ) };
+		}, orderId );
+		t.check( 'search by order id finds the order', found.hit && found.n >= 1, JSON.stringify( found ) );
+	}
 
 	const clicked = await page.evaluate( ( id ) => {
 		const row = document.querySelector( `.minn-table-row[data-order="${ id }"]` )
