@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.14.0** - Unreleased
+
+### Added
+* **Scrutoscope Profiler surface:** when [Scrutoscope](https://github.com/scrutineerhq/scrutoscope) is active, Tools gains **Profiler** — recent performance profiles (duration, type, role, HTTP status) with Pinned / Session / Background tabs and search. Opening a row shows top sources, queries, HTTP calls and timeline milestones drawn from Scrutoscope's own `/profile/{id}` endpoint (sanitizer stays theirs). A status card reports background capture, sample rate, query profiling, profile count and version, with a deep link to Tools → Scrutoscope for capture settings, pin, annotate and encrypted share. A **Cron** view lists scheduled events through Scrutoscope's diagnostics (overdue filter). Profiles delete through Scrutoscope's own Storage. Complements the Query Monitor chip: QM is this request; Scrutoscope is sampled history.
+
 ## **v0.13.0** - July 13, 2026
 
 ### Added

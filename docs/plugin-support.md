@@ -36,7 +36,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Block libraries** | Stackable, Kadence, GenerateBlocks | Design library in the editor's Browse-all; open to any plugin via `minn_admin_design_sources` |
 | **Block previews** | Otter, Essential Blocks, Spectra, Kadence, GenerateBlocks, Stackable | Real front-end styling in island previews |
 | **Performance** | Perfmatters | **Performance** surface (settings-only): its whole settings estate (General, JavaScript, CSS, Code, Preload, Lazy Loading, Fonts, CDN, Analytics) rendered from its live core-Settings-API registrations, saved through its own sanitizer; the few bespoke fields (input rows, font subsets) count as locked with a wp-admin link. Its license was already in the Licenses card |
-| **Dev tools** | Query Monitor | QM panel on Minn pages (this-request diagnostics; not a historical surface) |
+| **Dev tools** | Query Monitor, **Scrutoscope** | QM panel on Minn pages (this-request diagnostics). **Profiler** surface for Scrutoscope: recent profiles (duration, type, role, HTTP status) with Pinned/Session/Background tabs, detail sections from its own `/profile/{id}` (top sources, queries, HTTP calls, milestones), status card (background capture, sample rate, query profiling, profile count), Cron inventory view via its diagnostics, delete through its Storage, deep link to Tools → Scrutoscope for capture settings / pin / share |
 | **Users** | User Switching, One Time Login | "Switch to this user" in the users row menu (the plugin's own nonce URLs), plus a Switch-back bar for a switched session; "Copy one-time login link" mints a single-use login-as link through One Time Login's own token generator (that CLI-only plugin's first UI), gated on `edit_user` for the target |
 | **Media** | Regenerate Thumbnails | ↻ Thumbnails button on the media detail modal (per-image full rebuild) |
 | **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
@@ -92,19 +92,9 @@ Today Dev tools is only the Query Monitor launcher chip (this-request).
 That shape is correct for QM; what is missing is **historical / inventory**
 diagnostics other plugins already store.
 
-1. **Scrutoscope** ([scrutineerhq/scrutoscope](https://github.com/scrutineerhq/scrutoscope),
-   v1.3.4) — **strongest greenfield Dev tools adapter.** Read-only WordPress
-   performance profiler (P3's spiritual successor) with a first-class REST
-   API under `scrutoscope/v1`: routes summary, profile detail, compare,
-   regression, cron inventory, diagnostics, agent prompt. Complements QM
-   cleanly: QM = this Minn boot request; Scrutoscope = sampled history and
-   "who owns the time" across routes. Minn fit is list + detail + status
-   card (and optionally a Cron view), Tools group, `manage_options`. Capture
-   settings, pin UI, and zero-knowledge share stay in Scrutoscope. Fixture
-   install from GitHub release (not yet on wp.org as of review). Verify
-   cookie + `X-WP-Nonce` same-origin before building (README documents
-   Application Passwords for agents; logged-in REST may still work like
-   every other adapter).
+1. ~~**Scrutoscope**~~ ✅ shipped (v0.14.0 cycle opener): Profiler surface
+   under Tools — profiles list, detail via their REST, status card, Cron
+   view, delete. Capture settings / pin / share stay deep-linked.
 2. **WP Crontrol** — cron event list / run-now / edit through its own APIs.
    System already has an overdue-cron health row; this is the daily
    inventory. High install base, clear Tools-group surface (or a Cron

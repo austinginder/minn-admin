@@ -117,7 +117,7 @@ Reference depth: **Gravity Forms**.
 | cache-purge | ⌘K purgers (+ Redis System row) | Y | 2026-07-12 | SpeedyCache, Redis, Breeze, Nginx Helper, Cloudflare pack |
 | site-kit / koko / … | Traffic providers | partial | | Overview chart only |
 | query-monitor | panel (not a surface) | — | 2026-07-13 | Footer arm + launcher chip; this-request only |
-| **scrutoscope** | **not shipped** | — | 2026-07-13 | Candidate: REST routes/profile/cron; see plugin-support Wave A |
+| scrutoscope | Profiler surface (list + detail + status + Cron view) | Y | 2026-07-13 | Profiles via Storage list; detail via rest_do_request `/profile/{id}`; capture UI = **L** |
 | **wp-crontrol** | **not shipped** | — | 2026-07-13 | Candidate: cron inventory surface |
 | **transients-manager** | **not shipped** | — | 2026-07-13 | Candidate: list/delete; System has expired count only |
 
@@ -135,6 +135,7 @@ Reference depth: **Gravity Forms**.
 |---|---|---|
 | 2026-07-12 | Skill + this matrix seeded | Report-first runbook added to `dev-minn-admin`; no auto-ship |
 | 2026-07-13 | v0.14.0 open / Dev tools review | QM classified panel-only; Scrutoscope + WP Crontrol + Transients Manager ranked in plugin-support Wave A; no ship |
+| 2026-07-13 | Scrutoscope adapter | Profiler surface shipped (profiles, detail, status, Cron view, delete); suite 22 checks |
 
 When a sweep updates cells or ships work, append a row and set `Reviewed` on
 touched adapters (or stamp `// last-sweep: YYYY-MM-DD` in the adapter header).
