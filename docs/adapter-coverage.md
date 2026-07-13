@@ -116,6 +116,10 @@ Reference depth: **Gravity Forms**.
 | seo | Editor panel (providers) | Y | | |
 | cache-purge | ⌘K purgers (+ Redis System row) | Y | 2026-07-12 | SpeedyCache, Redis, Breeze, Nginx Helper, Cloudflare pack |
 | site-kit / koko / … | Traffic providers | partial | | Overview chart only |
+| query-monitor | panel (not a surface) | — | 2026-07-13 | Footer arm + launcher chip; this-request only |
+| **scrutoscope** | **not shipped** | — | 2026-07-13 | Candidate: REST routes/profile/cron; see plugin-support Wave A |
+| **wp-crontrol** | **not shipped** | — | 2026-07-13 | Candidate: cron inventory surface |
+| **transients-manager** | **not shipped** | — | 2026-07-13 | Candidate: list/delete; System has expired count only |
 
 ## Deliberate deep-links (do not re-propose as Axis B)
 
@@ -130,6 +134,7 @@ Reference depth: **Gravity Forms**.
 | Date | Scope | Outcome |
 |---|---|---|
 | 2026-07-12 | Skill + this matrix seeded | Report-first runbook added to `dev-minn-admin`; no auto-ship |
+| 2026-07-13 | v0.14.0 open / Dev tools review | QM classified panel-only; Scrutoscope + WP Crontrol + Transients Manager ranked in plugin-support Wave A; no ship |
 
 When a sweep updates cells or ships work, append a row and set `Reviewed` on
 touched adapters (or stamp `// last-sweep: YYYY-MM-DD` in the adapter header).

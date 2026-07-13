@@ -196,12 +196,18 @@ The weakest of the three cases, recorded mostly to draw its boundary.
    2026-07-12) — the prerequisite plumbing for the 80% editor now exists:
    item-scoped settings views, the Settings-framework mapper, and the
    notifications write path through `save_form_notifications`.
-2. Database viewer is the cheapest full item here and the best trial balloon
-   for "developer surfaces": one cycle fragment, no plugin dependency.
-3. The GF 80% editor is a full cycle and should be a deliberate product bet,
+2. **Plugin Dev tools adapters first when the cycle wants diagnostics**
+   (v0.14.0 open, 2026-07-13): Scrutoscope (REST-first profiler history)
+   complements Query Monitor's this-request panel without Minn inventing
+   a profiler. WP Crontrol / Transients Manager fill inventory gaps the
+   System page only counts. Ranked in `docs/plugin-support.md` Wave A.
+3. Database viewer is still the cheapest **native** full item and the best
+   trial balloon for "developer surfaces": one cycle fragment, no plugin
+   dependency. Pairs naturally with Scrutoscope (profile → table drill).
+4. The GF 80% editor is a full cycle and should be a deliberate product bet,
    made when form management in Minn (entries + settings + notifications,
    all live as of v0.13.0) has proven that users stay in Minn for form
    work. Dogfooding on a real site with active Gravity Forms traffic is the
    honest test before committing.
-4. File browsing only ever ships as read-only, and only if a real diagnostic
+5. File browsing only ever ships as read-only, and only if a real diagnostic
    need surfaces that the debug-log viewer doesn't already cover.
