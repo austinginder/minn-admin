@@ -3138,30 +3138,9 @@
 		</div>`;
 
 		if ( orderView === 'analytics' ) {
+			const curRange = state.orderAnalyticsRange || 30;
 			const a = state.cache.orderAnalytics;
-			if ( ! a || a.range !== ( state.orderAnalyticsRange || 30 ) ) {
-				view.innerHTML = viewSwitch + '<div class="minn-loading">Loading analytics…</div>';
-				$$( '[data-oview]', view ).forEach( ( btn ) =>
-					btn.addEventListener( 'click', () => {
-						state.orderView = btn.dataset.oview;
-						renderOrders();
-					} )
-				);
-				loadOrderAnalytics( state.orderAnalyticsRange || 30 )
-					.then( renderIfCurrent( 'orders' ) ).catch( showErr );
-				return;
-			}
-			const tot = a.totals || {};
-			const chartData = a.chart || [];
-			const max = Math.max( 1, ...chartData.map( ( c ) => c.value ) );
-			const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
-			const money = ( n ) => '$' + Number( n || 0 ).toLocaleString( undefined, { maximumFractionDigits: 2 } );
-			const cards = [
-				[ 'Gross sales', money( tot.total_sales != null ? tot.total_sales : tot.gross_sales ) ],
-				[ 'Net revenue', money( tot.net_revenue ) ],
-				[ 'Orders', String( tot.orders_count ?? '—' ) ],
-				[ 'Items sold', String( tot.num_items_sold ?? '—' ) ],
-			];
+			const loading = ! a || a.range !== curRange;
 			const rangeOpts = [
 				[ 7, '7d' ],
 				[ 30, '30d' ],
@@ -3169,7 +3148,21 @@
 				[ 365, '1y' ],
 				[ 'all', 'All' ],
 			];
-			const curRange = state.orderAnalyticsRange || 30;
+			// Always paint chrome (Orders|Analytics + range tabs + card shells)
+			// so changing 7d/30d/… does not blank the headers while WC Analytics loads.
+			const money = ( n ) => '$' + Number( n || 0 ).toLocaleString( undefined, { maximumFractionDigits: 2 } );
+			const tot = ( ! loading && a && a.totals ) || {};
+			const chartData = ( ! loading && a && a.chart ) || [];
+			const topProducts = ( ! loading && a && a.topProducts ) || [];
+			const max = Math.max( 1, ...chartData.map( ( c ) => c.value ) );
+			const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
+			const cards = [
+				[ 'Gross sales', loading ? '…' : money( tot.total_sales != null ? tot.total_sales : tot.gross_sales ) ],
+				[ 'Net revenue', loading ? '…' : money( tot.net_revenue ) ],
+				[ 'Orders', loading ? '…' : String( tot.orders_count ?? '—' ) ],
+				[ 'Items sold', loading ? '…' : String( tot.num_items_sold ?? '—' ) ],
+			];
+			const rangeLabel = orderAnalyticsRangeLabel( curRange );
 			view.innerHTML = `
 			${ viewSwitch }
 			<div class="minn-toolbar">
@@ -3177,11 +3170,10 @@
 					${ rangeOpts.map( ( [ id, label ] ) =>
 						`<button class="minn-range-tab${ String( curRange ) === String( id ) ? ' active' : '' }" data-orange="${ id }">${ label }</button>` ).join( '' ) }
 				</div>
-				<button class="minn-btn-soft" id="minn-wc-view-orders" type="button" style="margin-left:auto;">View all orders</button>
 				<div class="minn-toolbar-meta">WooCommerce Analytics</div>
 			</div>
-			${ a.error ? `<div class="minn-empty">${ esc( a.error ) }</div>` : `
-			<div class="minn-stats" style="grid-template-columns:repeat(${ cards.length },1fr);">
+			${ ( ! loading && a && a.error ) ? `<div class="minn-empty">${ esc( a.error ) }</div>` : `
+			<div class="minn-stats${ loading ? ' minn-wc-analytics-loading' : '' }" style="grid-template-columns:repeat(${ cards.length },1fr);">
 				${ cards.map( ( [ label, value ] ) => `
 					<div class="minn-card minn-stat">
 						<div class="minn-stat-label">${ esc( label ) }</div>
@@ -3190,28 +3182,32 @@
 			</div>
 			<div class="minn-card minn-panel-pad" style="margin-top:14px;">
 				<div class="minn-chart-head">
-					<div class="minn-panel-title">Revenue <span class="minn-panel-sub">${ esc( orderAnalyticsRangeLabel( a.range ) ) }</span></div>
+					<div class="minn-panel-title">Revenue <span class="minn-panel-sub">${ esc( rangeLabel ) }</span></div>
 				</div>
-				${ chartData.length ? `
+				${ loading ? '<div class="minn-loading" style="padding:28px 0;">Loading analytics…</div>' : (
+					chartData.length ? `
 				<div class="minn-chart" id="minn-wc-chart">
 					${ chartData.map( ( c, i ) => `
 						<div class="minn-chart-col" data-ci="${ i }" title="${ esc( c.label + ': ' + money( c.value ) + ' · ' + c.orders + ' orders' ) }">
 							<div class="minn-chart-bar${ i === chartData.length - 1 ? ' last' : '' }" style="height:${ Math.max( 3, pct( c.value ) ) }%"></div>
 						</div>` ).join( '' ) }
-				</div>` : '<div class="minn-empty">No sales in this range.</div>' }
+				</div>` : '<div class="minn-empty">No sales in this range.</div>'
+				) }
 			</div>
 			<div class="minn-card minn-table" style="margin-top:14px;">
 				<div class="minn-table-head minn-wc-top-cols">
 					<div>Top products</div><div>Sold</div><div>Net</div>
 				</div>
-				${ ( a.topProducts || [] ).length ? a.topProducts.map( ( p ) => `
+				${ loading ? '<div class="minn-loading" style="padding:18px;">Loading…</div>' : (
+					topProducts.length ? topProducts.map( ( p ) => `
 					<div class="minn-table-row minn-wc-top-cols">
 						<div class="minn-cell-clip">
 							<div class="minn-row-title">${ esc( p.name || ( p.extended_info && p.extended_info.name ) || ( 'Product #' + ( p.product_id || p.id ) ) ) }</div>
 						</div>
 						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( String( p.items_sold ?? '—' ) ) }</div>
 						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ money( p.net_revenue ) }</div>
-					</div>` ).join( '' ) : '<div class="minn-empty">No product sales in this range.</div>' }
+					</div>` ).join( '' ) : '<div class="minn-empty">No product sales in this range.</div>'
+				) }
 			</div>` }`;
 			$$( '[data-oview]', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
@@ -3219,21 +3215,22 @@
 					renderOrders();
 				} )
 			);
-			const viewOrdersBtn = $( '#minn-wc-view-orders', view );
-			if ( viewOrdersBtn ) viewOrdersBtn.addEventListener( 'click', () => {
-				state.orderView = 'list';
-				state.orderTab = 'any';
-				state.cache.orders = null;
-				renderOrders();
-			} );
 			$$( '[data-orange]', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
 					const raw = btn.dataset.orange;
-					state.orderAnalyticsRange = raw === 'all' ? 'all' : parseInt( raw, 10 );
-					state.cache.orderAnalytics = null;
+					const next = raw === 'all' ? 'all' : parseInt( raw, 10 );
+					if ( String( next ) === String( curRange ) ) return;
+					state.orderAnalyticsRange = next;
+					// Keep prior payload until the new range arrives so we can
+					// still paint chrome; load gates on a.range === curRange.
 					renderOrders();
 				} )
 			);
+			if ( loading ) {
+				loadOrderAnalytics( curRange )
+					.then( renderIfCurrent( 'orders' ) ).catch( showErr );
+				return;
+			}
 			if ( chartData.length ) {
 				bindChartTooltip( $( '#minn-wc-chart', view ), chartData.map( ( c ) => ( {
 					label: c.label,

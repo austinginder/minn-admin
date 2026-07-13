@@ -188,13 +188,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const allLabel = await page.evaluate( () => /all time/i.test( document.body.innerText || '' ) );
 		t.check( 'All-time analytics range loads', allLabel, '' );
 	}
-	const viewList = await page.$( '#minn-wc-view-orders, [data-oview="list"]' );
-	if ( viewList ) {
-		const btn = await page.$( '#minn-wc-view-orders' );
-		if ( btn ) await btn.click();
-		else await page.click( '[data-oview="list"]' );
-		await page.waitForSelector( '#minn-order-search, [data-otab]', { timeout: 15000 } );
-	}
+	// Range chrome must stay visible while a fetch is in flight.
+	await page.click( '[data-orange="7"]' );
+	const chromeWhileLoad = await page.evaluate( () => {
+		const ranges = Array.from( document.querySelectorAll( '[data-orange]' ) ).map( ( b ) => b.dataset.orange );
+		const labels = Array.from( document.querySelectorAll( '.minn-stat-label' ) ).map( ( el ) => el.textContent.trim() );
+		return {
+			ranges,
+			hasGrossLabel: labels.includes( 'Gross sales' ),
+			hasRangeTabs: ranges.includes( 'all' ) && ranges.includes( '7' ),
+			noViewAll: ! document.body.innerText.includes( 'View all orders' ),
+		};
+	} );
+	t.check( 'Analytics keeps range tabs and stat labels while loading',
+		chromeWhileLoad.hasRangeTabs && chromeWhileLoad.hasGrossLabel && chromeWhileLoad.noViewAll,
+		JSON.stringify( chromeWhileLoad ) );
+
+	await page.click( '[data-oview="list"]' );
+	await page.waitForSelector( '#minn-order-search, [data-otab]', { timeout: 15000 } );
 	const tabs = await page.evaluate( () =>
 		Array.from( document.querySelectorAll( '[data-otab]' ) ).map( ( b ) => b.dataset.otab )
 	);
