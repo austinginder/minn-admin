@@ -1545,6 +1545,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-coupon-cols { grid-template-columns: 1.4fr 1fr 90px 80px 100px 100px 40px; }
 .minn-customer-cols { grid-template-columns: 1.6fr 1.2fr 100px 100px 40px; }
 .minn-wc-top-cols { grid-template-columns: 1fr 80px 100px; }
+/* Dim stat values while a new Analytics range is fetching — labels stay put. */
+.minn-wc-analytics-loading .minn-stat-value { color: var(--text3); font-weight: 600; }
 .minn-prod-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .minn-order-notes-list { display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto; }
 .minn-order-note {
