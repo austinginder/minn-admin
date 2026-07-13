@@ -151,17 +151,20 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   plus **Limit Login Attempts Reloaded** and **Solid Security** lockouts with unlock/release
   actions) reads like an audit feed; **Redirects** (Redirection, Safe Redirect
   Manager, Simple 301 Redirects, 301 Redirects) lists, searches, creates and edits; **Snippets** (Code
-  Snippets, WPCode, FluentSnippets) lists, toggles and edits; **Performance** (Perfmatters)
+  Snippets, WPCode, FluentSnippets, Simple Custom CSS and JS, Header Footer Code Manager) lists,
+  toggles, creates and bulk-edits; **Performance** (Perfmatters)
   renders all nine of its settings tabs from the plugin's own registrations; **Backups**
-  (UpdraftPlus, Duplicator, Disembark) below. Plugins that need their own first-run install
-  get a **setup card** that runs their installer in place. The sidebar organizes into
-  **Workspace / Tools / Manage** groups so daily inboxes stay separate from site plumbing
-- **Backups** — with **UpdraftPlus**: every backup set listed, a System health check answering
-  "is my site backed up?", and **Back up site now** from ⌘K through UpdraftPlus's own
-  background machinery. With **Duplicator**: packages with archive sizes read from disk and
-  delete through its own cleanup. With **Disembark**: a status card (last scan, database size,
-  working files), the exact `disembark connect` command click-to-copy, scan sessions with
-  cleanup, and token regeneration
+  (UpdraftPlus, WPvivid, BackWPup, All-in-One WP Migration, Duplicator, Disembark) below.
+  Surface lists open a **⋯ / right-click** menu of that collection's actions. Plugins that need
+  their own first-run install get a **setup card** that runs their installer in place. The sidebar
+  organizes into **Workspace / Tools / Manage** groups so daily inboxes stay separate from site plumbing
+- **Backups** — with **UpdraftPlus** or **WPvivid**: sets listed, status cards, a System health
+  check answering "is my site backed up?", and **Back up site now** from ⌘K. With **BackWPup**:
+  local folder archives and run-now. With **All-in-One WP Migration**: local `.wpress` exports
+  with delete. With **Duplicator**: packages with archive sizes read from disk and delete through
+  its own cleanup. With **Disembark**: a status card (last scan, database size, working files),
+  the exact `disembark connect` command click-to-copy, scan sessions with cleanup, and token
+  regeneration
 - **Notifications that respect you** — comments, plugin/theme/core updates and new users in one
   panel, plus an **admin-notice digest**: the notices other plugins print in wp-admin are
   extracted as structured data (never their HTML or JavaScript) into a Notices tab, their action
@@ -171,7 +174,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Command palette** — ⌘K / Ctrl-K everywhere, with site-care actions built in: **Clear site
   cache** purges every layer the site runs (Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket,
   WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor
-  CSS), each in its own isolated request
+  CSS, SpeedyCache, Redis Object Cache, Breeze, Nginx Helper, Cloudflare), each in its own
+  isolated request
 - **Extending** — one-filter APIs for any plugin to register views (with status cards and optional
   **charts**, extra **list views**, tabs, status filters, detail layouts, actions with inline
   fields, **bulk actions**, schema-driven **settings views** including **item-scoped settings**,
@@ -180,8 +184,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   design libraries, page builders or block-inspector forms; the System page's **Integrations**
   card shows everything registered and flags descriptor problems instead of failing silently.
   The full coverage map lives in [docs/plugin-support.md](docs/plugin-support.md)
-- **Dark & light themes** (follows your OS setting until you choose), bundled fonts, zero
-  external requests from the app, responsive down to phones
+- **Dark, light and System themes** (follows your OS until you choose; right-click for an
+  explicit menu), bundled fonts, zero external requests from the app, responsive down to phones
 
 ## Install
 
