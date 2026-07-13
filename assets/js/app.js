@@ -240,12 +240,15 @@
 		extSearch: '',
 		orderTab: 'any',
 		orderSearch: '',
+		orderView: 'list', // list | analytics
+		orderAnalyticsRange: 30,
 		productTab: 'any',
 		productStock: 'any',
 		productSearch: '',
 		productSel: null,
 		couponTab: 'any',
 		couponSearch: '',
+		customerSearch: '',
 		userSearch: '',
 		range: 30,
 		modal: null,
@@ -267,8 +270,10 @@
 			themes: null,
 			orders: null,
 			orderSummary: null,
+			orderAnalytics: null,
 			products: null,
 			coupons: null,
+			customers: null,
 			users: null,
 			categories: null,
 			plugins: null,
@@ -288,6 +293,7 @@
 		orders: [ 'Orders', 'WooCommerce' ],
 		products: [ 'Products', 'WooCommerce' ],
 		coupons: [ 'Coupons', 'WooCommerce' ],
+		customers: [ 'Customers', 'WooCommerce' ],
 		users: [ 'Users', 'People' ],
 		terms: [ 'Terms', 'Categories & Tags' ],
 		menus: [ 'Menus', 'Navigation' ],
@@ -918,6 +924,9 @@
 		}
 		if ( B.wc && B.caps.coupons ) {
 			navItems.push( { id: 'coupons', label: 'Coupons', icon: 'key' } );
+		}
+		if ( B.wc && B.caps.customers ) {
+			navItems.push( { id: 'customers', label: 'Customers', icon: 'users' } );
 		}
 		surfaceNavItems().filter( ( s ) => s.group === 'workspace' ).forEach( ( s ) =>
 			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
@@ -2938,6 +2947,50 @@
 		}
 	}
 
+	/** ISO after/before for wc-analytics (UTC). */
+	function wcAnalyticsWindow( days ) {
+		const before = new Date();
+		const after = new Date( before.getTime() - ( days - 1 ) * 86400000 );
+		const iso = ( d, end ) => {
+			const y = d.getUTCFullYear();
+			const m = String( d.getUTCMonth() + 1 ).padStart( 2, '0' );
+			const day = String( d.getUTCDate() ).padStart( 2, '0' );
+			return `${ y }-${ m }-${ day }T${ end ? '23:59:59' : '00:00:00' }`;
+		};
+		return { after: iso( after, false ), before: iso( before, true ) };
+	}
+
+	async function loadOrderAnalytics( days ) {
+		const range = days || state.orderAnalyticsRange || 30;
+		const { after, before } = wcAnalyticsWindow( range );
+		const q = `after=${ encodeURIComponent( after ) }&before=${ encodeURIComponent( before ) }`;
+		const out = { range, totals: null, chart: [], topProducts: [], error: null };
+		try {
+			const [ rev, prods ] = await Promise.all( [
+				api( `wc-analytics/reports/revenue/stats?${ q }&interval=day` ),
+				api( `wc-analytics/reports/products?${ q }&orderby=items_sold&order=desc&per_page=8` ).catch( () => [] ),
+			] );
+			out.totals = ( rev && rev.totals ) || null;
+			const intervals = ( rev && rev.intervals ) || [];
+			out.chart = intervals.map( ( iv ) => {
+				const sub = iv.subtotals || {};
+				const label = ( iv.interval || '' ).slice( 5 ); // MM-DD
+				return {
+					label: label || iv.interval,
+					value: Number( sub.total_sales != null ? sub.total_sales : sub.net_revenue ) || 0,
+					orders: Number( sub.orders_count ) || 0,
+					from: iv.date_start,
+					to: iv.date_end,
+				};
+			} );
+			out.topProducts = Array.isArray( prods ) ? prods : [];
+		} catch ( e ) {
+			out.error = e.message || 'Could not load analytics';
+		}
+		state.cache.orderAnalytics = out;
+		return out;
+	}
+
 	function customerName( o ) {
 		const b = o.billing || {};
 		return ( ( b.first_name || '' ) + ' ' + ( b.last_name || '' ) ).trim() || b.email || 'Guest';
@@ -3043,9 +3096,117 @@
 
 	function renderOrders() {
 		const view = $( '#minn-view' );
+		const orderView = state.orderView || 'list';
+		const viewSwitch = `
+		<div class="minn-toolbar minn-toolbar-views">
+			<div class="minn-tabs">
+				<button class="minn-tab${ orderView === 'list' ? ' active' : '' }" data-oview="list">Orders</button>
+				<button class="minn-tab${ orderView === 'analytics' ? ' active' : '' }" data-oview="analytics">Analytics</button>
+			</div>
+			${ B.caps.orders && orderView === 'list' ? `<button class="minn-btn-soft" id="minn-order-add" style="margin-left:auto;">${ icon( 'plus' ) } New order</button>` : '' }
+		</div>`;
+
+		if ( orderView === 'analytics' ) {
+			const a = state.cache.orderAnalytics;
+			if ( ! a || a.range !== ( state.orderAnalyticsRange || 30 ) ) {
+				view.innerHTML = viewSwitch + '<div class="minn-loading">Loading analytics…</div>';
+				$$( '[data-oview]', view ).forEach( ( btn ) =>
+					btn.addEventListener( 'click', () => {
+						state.orderView = btn.dataset.oview;
+						renderOrders();
+					} )
+				);
+				loadOrderAnalytics( state.orderAnalyticsRange || 30 )
+					.then( renderIfCurrent( 'orders' ) ).catch( showErr );
+				return;
+			}
+			const tot = a.totals || {};
+			const chartData = a.chart || [];
+			const max = Math.max( 1, ...chartData.map( ( c ) => c.value ) );
+			const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
+			const money = ( n ) => '$' + Number( n || 0 ).toLocaleString( undefined, { maximumFractionDigits: 2 } );
+			const cards = [
+				[ 'Gross sales', money( tot.total_sales != null ? tot.total_sales : tot.gross_sales ) ],
+				[ 'Net revenue', money( tot.net_revenue ) ],
+				[ 'Orders', String( tot.orders_count ?? '—' ) ],
+				[ 'Items sold', String( tot.num_items_sold ?? '—' ) ],
+			];
+			view.innerHTML = `
+			${ viewSwitch }
+			<div class="minn-toolbar">
+				<div class="minn-range-tabs">
+					${ [ 7, 30, 90 ].map( ( d ) =>
+						`<button class="minn-range-tab${ ( state.orderAnalyticsRange || 30 ) === d ? ' active' : '' }" data-orange="${ d }">${ d }d</button>` ).join( '' ) }
+				</div>
+				<div class="minn-toolbar-meta">WooCommerce Analytics</div>
+			</div>
+			${ a.error ? `<div class="minn-empty">${ esc( a.error ) }</div>` : `
+			<div class="minn-stats" style="grid-template-columns:repeat(${ cards.length },1fr);">
+				${ cards.map( ( [ label, value ] ) => `
+					<div class="minn-card minn-stat">
+						<div class="minn-stat-label">${ esc( label ) }</div>
+						<div class="minn-stat-value">${ esc( value ) }</div>
+					</div>` ).join( '' ) }
+			</div>
+			<div class="minn-card minn-panel-pad" style="margin-top:14px;">
+				<div class="minn-chart-head">
+					<div class="minn-panel-title">Revenue <span class="minn-panel-sub">last ${ a.range } days</span></div>
+				</div>
+				${ chartData.length ? `
+				<div class="minn-chart" id="minn-wc-chart">
+					${ chartData.map( ( c, i ) => `
+						<div class="minn-chart-col" data-ci="${ i }" title="${ esc( c.label + ': ' + money( c.value ) + ' · ' + c.orders + ' orders' ) }">
+							<div class="minn-chart-bar${ i === chartData.length - 1 ? ' last' : '' }" style="height:${ Math.max( 3, pct( c.value ) ) }%"></div>
+						</div>` ).join( '' ) }
+				</div>` : '<div class="minn-empty">No sales in this range.</div>' }
+			</div>
+			<div class="minn-card minn-table" style="margin-top:14px;">
+				<div class="minn-table-head minn-wc-top-cols">
+					<div>Top products</div><div>Sold</div><div>Net</div>
+				</div>
+				${ ( a.topProducts || [] ).length ? a.topProducts.map( ( p ) => `
+					<div class="minn-table-row minn-wc-top-cols">
+						<div class="minn-cell-clip">
+							<div class="minn-row-title">${ esc( p.name || ( p.extended_info && p.extended_info.name ) || ( 'Product #' + ( p.product_id || p.id ) ) ) }</div>
+						</div>
+						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( String( p.items_sold ?? '—' ) ) }</div>
+						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ money( p.net_revenue ) }</div>
+					</div>` ).join( '' ) : '<div class="minn-empty">No product sales in this range.</div>' }
+			</div>` }`;
+			$$( '[data-oview]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					state.orderView = btn.dataset.oview;
+					renderOrders();
+				} )
+			);
+			$$( '[data-orange]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					state.orderAnalyticsRange = parseInt( btn.dataset.orange, 10 );
+					state.cache.orderAnalytics = null;
+					renderOrders();
+				} )
+			);
+			if ( chartData.length ) {
+				bindChartTooltip( $( '#minn-wc-chart', view ), chartData.map( ( c ) => ( {
+					label: c.label,
+					value: c.value,
+					views: c.orders,
+				} ) ), false );
+			}
+			return;
+		}
+
 		const c = state.cache.orders;
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading orders…</div>';
+			view.innerHTML = viewSwitch + '<div class="minn-loading">Loading orders…</div>';
+			$$( '[data-oview]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					state.orderView = btn.dataset.oview;
+					renderOrders();
+				} )
+			);
+			const addEarly = $( '#minn-order-add', view );
+			if ( addEarly ) addEarly.addEventListener( 'click', () => openNewOrderModal() );
 			Promise.all( [ loadOrders(), state.cache.orderSummary ? null : loadOrderSummary() ] )
 				.then( renderIfCurrent( 'orders' ) ).catch( showErr );
 			return;
@@ -3060,6 +3221,7 @@
 		if ( s.processing != null ) summaryCards.push( [ 'Awaiting fulfillment', s.processing, 'processing' ] );
 
 		view.innerHTML = `
+		${ viewSwitch }
 		${ summaryCards.length ? `<div class="minn-stats" style="grid-template-columns:repeat(${ summaryCards.length },1fr);">
 			${ summaryCards.map( ( [ label, value, delta ] ) => `
 				<div class="minn-card minn-stat">
@@ -3097,6 +3259,14 @@
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'order' ) }`;
 
+		$$( '[data-oview]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.orderView = btn.dataset.oview;
+				renderOrders();
+			} )
+		);
+		const addOrderBtn = $( '#minn-order-add', view );
+		if ( addOrderBtn ) addOrderBtn.addEventListener( 'click', () => openNewOrderModal() );
 		$$( '[data-otab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				state.orderTab = btn.dataset.otab;
@@ -3134,6 +3304,22 @@
 			} )
 		);
 		bindPager( view, c.page, loadOrders, () => { if ( state.route === 'orders' ) renderOrders(); } );
+	}
+
+	function openNewOrderModal() {
+		state.modal = {
+			type: 'order-new',
+			productPick: null,
+			productHits: [],
+		};
+		renderOverlays();
+	}
+
+	function openNewProductModal() {
+		state.modal = {
+			type: 'product-new',
+		};
+		renderOverlays();
 	}
 
 	/* ===== Products (WooCommerce) ===== */
@@ -3349,6 +3535,7 @@
 				${ PRODUCT_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.productTab === id ? ' active' : '' }" data-ptab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
+			${ B.caps.products ? `<button class="minn-btn-soft" id="minn-product-add" style="margin-left:auto;">${ icon( 'plus' ) } Add product</button>` : '' }
 		</div>
 		<div class="minn-toolbar">
 			<div class="minn-tabs minn-quiet-tabs">
@@ -3383,6 +3570,8 @@
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'product' ) }`;
 
+		const addProd = $( '#minn-product-add', view );
+		if ( addProd ) addProd.addEventListener( 'click', () => openNewProductModal() );
 		$$( '[data-ptab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				state.productTab = btn.dataset.ptab;
@@ -3691,6 +3880,144 @@
 			} )
 		);
 		bindPager( view, c.page, loadCoupons, () => { if ( state.route === 'coupons' ) renderCoupons(); } );
+	}
+
+	/* ===== Customers (WooCommerce) ===== */
+
+	const CUSTOMER_LIST_FIELDS = 'id,email,first_name,last_name,username,role,billing,shipping,is_paying_customer,avatar_url,date_created';
+
+	const customerCtx = () => state.customerSearch || '';
+
+	function customerDisplayName( c ) {
+		const n = ( ( c.first_name || '' ) + ' ' + ( c.last_name || '' ) ).trim();
+		if ( n ) return n;
+		const b = c.billing || {};
+		const bn = ( ( b.first_name || '' ) + ' ' + ( b.last_name || '' ) ).trim();
+		return bn || c.email || c.username || 'Customer';
+	}
+
+	async function loadCustomers( page = 1 ) {
+		const q0 = ( state.customerSearch || '' ).trim();
+		const ctx = customerCtx();
+		if ( q0 && /^\d+$/.test( q0 ) ) {
+			try {
+				const one = await api( `wc/v3/customers/${ q0 }?_fields=${ CUSTOMER_LIST_FIELDS }` );
+				if ( ctx !== customerCtx() ) return;
+				if ( one && one.id ) {
+					state.cache.customers = { items: [ one ], page: 1, totalPages: 1, total: 1 };
+					return;
+				}
+			} catch ( e ) { /* fall through */ }
+		}
+		let q = `wc/v3/customers?per_page=25&page=${ page }&orderby=registered_date&order=desc&role=all&_fields=${ CUSTOMER_LIST_FIELDS }`;
+		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
+		const r = await apiPaged( q );
+		if ( ctx !== customerCtx() ) return;
+		state.cache.customers = { items: r.items, page, totalPages: r.totalPages, total: r.total };
+	}
+
+	function openCustomerModal( listCustomer ) {
+		const id = listCustomer && listCustomer.id;
+		if ( ! id ) return;
+		state.modal = {
+			type: 'customer',
+			customer: listCustomer,
+			full: null,
+			orders: null,
+			loading: true,
+		};
+		renderOverlays();
+		api( `wc/v3/customers/${ id }?_fields=${ CUSTOMER_LIST_FIELDS }` )
+			.then( ( full ) => {
+				if ( ! state.modal || state.modal.type !== 'customer' || state.modal.customer.id !== id ) return;
+				state.modal.full = full;
+				state.modal.loading = false;
+				renderOverlays();
+			} )
+			.catch( ( e ) => {
+				if ( ! state.modal || state.modal.type !== 'customer' ) return;
+				state.modal.loading = false;
+				state.modal.loadError = e.message || 'Could not load customer';
+				renderOverlays();
+			} );
+		apiPaged( `wc/v3/orders?customer=${ id }&per_page=10&orderby=date&order=desc&_fields=id,number,status,total,currency_symbol,date_created` )
+			.then( ( r ) => {
+				if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
+					state.modal.orders = r;
+					renderOverlays();
+				}
+			} )
+			.catch( () => {
+				if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
+					state.modal.orders = { items: [], total: 0 };
+				}
+			} );
+	}
+
+	function renderCustomers() {
+		const view = $( '#minn-view' );
+		const c = state.cache.customers;
+		if ( ! c ) {
+			view.innerHTML = '<div class="minn-loading">Loading customers…</div>';
+			loadCustomers().then( renderIfCurrent( 'customers' ) ).catch( showErr );
+			return;
+		}
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			<input class="minn-input minn-toolbar-search" id="minn-customer-search" placeholder="Search customers (name, email, ID…)" value="${ esc( state.customerSearch || '' ) }">
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'customer' ) }</div>
+		</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-customer-cols">
+				<div>Customer</div><div>Email</div><div>Role</div><div>Registered</div><div></div>
+			</div>
+			${ c.items.length ? c.items.map( ( cu ) => `
+				<div class="minn-table-row minn-customer-cols" data-customer="${ cu.id }">
+					<div class="minn-cell-clip minn-prod-name">
+						${ cu.avatar_url ? `<img class="minn-prod-thumb" src="${ esc( cu.avatar_url ) }" alt="" loading="lazy">` : '' }
+						<div>
+							<div class="minn-row-title">${ esc( customerDisplayName( cu ) ) }</div>
+							<div class="minn-row-slug">${ esc( cu.username || '' ) }${ cu.is_paying_customer ? ' · paying' : '' }</div>
+						</div>
+					</div>
+					<div class="minn-row-meta minn-cell-clip">${ esc( cu.email || ( cu.billing && cu.billing.email ) || '—' ) }</div>
+					<div class="minn-row-meta">${ esc( cu.role || '—' ) }</div>
+					<div class="minn-row-meta">${ esc( cu.date_created ? timeAgo( cu.date_created ) : '—' ) }</div>
+					<div class="minn-row-arrow">›</div>
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.customerSearch ? 'No customers match “' + esc( state.customerSearch ) + '”.' : 'No customers yet.' }</div>` }
+		</div>
+		${ pagerHtml( c.page, c.totalPages, c.total, 'customer' ) }`;
+
+		const customerSearch = $( '#minn-customer-search', view );
+		if ( customerSearch ) {
+			let customerSearchTimer = null;
+			customerSearch.addEventListener( 'input', () => {
+				clearTimeout( customerSearchTimer );
+				customerSearchTimer = setTimeout( async () => {
+					state.customerSearch = customerSearch.value.trim();
+					state.cache.customers = null;
+					try {
+						await loadCustomers( 1 );
+						if ( state.route === 'customers' ) renderCustomers();
+					} catch ( e ) { showErr( e ); }
+				}, 280 );
+			} );
+			customerSearch.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' && customerSearch.value ) {
+					customerSearch.value = '';
+					state.customerSearch = '';
+					state.cache.customers = null;
+					loadCustomers( 1 ).then( () => { if ( state.route === 'customers' ) renderCustomers(); } ).catch( showErr );
+				}
+			} );
+		}
+		$$( '[data-customer]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => {
+				const cu = c.items.find( ( x ) => x.id === parseInt( row.dataset.customer, 10 ) );
+				if ( cu ) openCustomerModal( cu );
+			} )
+		);
+		bindPager( view, c.page, loadCustomers, () => { if ( state.route === 'customers' ) renderCustomers(); } );
 	}
 
 	/* ===== Terms (categories, tags, custom taxonomies) ===== */
@@ -17438,6 +17765,7 @@
 		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
 		if ( B.wc && B.caps.products ) cmds.push( { label: 'View Products', kind: 'nav', icon: '🏷', run: () => go( 'products' ) } );
 		if ( B.wc && B.caps.coupons ) cmds.push( { label: 'View Coupons', kind: 'nav', icon: '🔑', run: () => go( 'coupons' ) } );
+		if ( B.wc && B.caps.customers ) cmds.push( { label: 'View Customers', kind: 'nav', icon: '◉', run: () => go( 'customers' ) } );
 		if ( B.caps.users ) cmds.push( { label: 'Browse Users', kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
 		// One palette entry per surface family (preferred member); ungrouped
 		// surfaces keep a single entry as before.
@@ -18162,6 +18490,160 @@
 			</div>`;
 		}
 
+		if ( m.type === 'customer' ) {
+			const listC = m.customer || {};
+			const c = m.full || listC;
+			const b = c.billing || {};
+			const loading = !! m.loading && ! m.full;
+			const ords = m.orders;
+			const spent = ords && ords.items
+				? ords.items.reduce( ( s, o ) => s + ( parseFloat( o.total ) || 0 ), 0 )
+				: null;
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">${ esc( customerDisplayName( c ) ) }</div>
+							<div class="minn-modal-sub">${ esc( c.email || '' ) }${ c.id ? ' · #' + c.id : '' }</div>
+						</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading customer…</div>' : '' }
+					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+					${ ! loading && ! m.loadError ? `
+					<div class="minn-order-body">
+						<div class="minn-order-grid">
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Profile</div>
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Username</span><span>${ esc( c.username || '—' ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Role</span><span>${ esc( c.role || '—' ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Registered</span><span>${ esc( c.date_created ? timeAgo( c.date_created ) : '—' ) }</span></div>
+									${ ords ? `<div class="minn-side-row"><span class="minn-side-key">Orders</span><span>${ esc( String( ords.total ) ) }</span></div>` : '' }
+									${ spent != null ? `<div class="minn-side-row"><span class="minn-side-key">Recent total</span><span>$${ spent.toFixed( 2 ) }</span></div>` : '' }
+								</div>
+							</div>
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Billing</div>
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( [ b.first_name, b.last_name ].filter( Boolean ).join( ' ' ) || '—' ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email || c.email || '—' ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Phone</span><span>${ esc( b.phone || '—' ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Address</span><span style="white-space:pre-line;">${ esc( [ b.address_1, b.address_2, [ b.city, b.state, b.postcode ].filter( Boolean ).join( ', ' ), b.country ].filter( Boolean ).join( '\n' ) || '—' ) }</span></div>
+								</div>
+							</div>
+						</div>
+						<div class="minn-media-edit">
+							<div class="minn-side-title" style="margin:0 0 8px;">Recent orders</div>
+							${ ords == null ? '<div class="minn-loading" style="padding:8px;">Loading orders…</div>' : (
+								( ords.items || [] ).length ? ( ords.items || [] ).map( ( o ) => `
+									<button type="button" class="minn-order-note" data-open-order="${ o.id }" style="width:100%; text-align:left; cursor:pointer; background:var(--surface2,var(--panel)); border:1px solid var(--border); margin-bottom:8px;">
+										<div class="minn-order-note-meta">
+											<span>#${ esc( o.number || o.id ) }</span>
+											<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+											<span>${ esc( timeAgo( o.date_created ) ) }</span>
+										</div>
+										<div class="minn-order-note-body">${ esc( ( o.currency_symbol || '$' ) + o.total ) }</div>
+									</button>` ).join( '' ) : '<div class="minn-toggle-desc">No orders for this customer.</div>'
+							) }
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						${ B.caps.users ? `<a class="minn-btn-soft" href="#/users" id="minn-cust-users" data-goto-users="${ c.id }">↗ Users</a>` : '' }
+						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }user-edit.php?user_id=${ c.id }" target="_blank" rel="noopener">↗ Edit in WordPress</a>
+					</div>` : '' }
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'product-new' ) {
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">New product</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						<div class="minn-order-fields" style="padding:4px 2px 8px;">
+							<div><div class="minn-field-label">Name</div><input class="minn-input" id="minn-pn-name" placeholder="Product name"></div>
+							<div class="minn-order-field-row">
+								<div><div class="minn-field-label">Regular price</div><input class="minn-input" id="minn-pn-price" type="text" inputmode="decimal" placeholder="0.00"></div>
+								<div><div class="minn-field-label">SKU</div><input class="minn-input" id="minn-pn-sku" placeholder="Optional"></div>
+							</div>
+							<div><div class="minn-field-label">Status</div>
+								<select class="minn-input" id="minn-pn-status">
+									<option value="publish">Published</option>
+									<option value="draft" selected>Draft</option>
+								</select>
+							</div>
+							<div class="minn-toggle-desc">Creates a simple product. Variations, gallery and long description stay in WooCommerce.</div>
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-soft" id="minn-modal-close2" type="button">Cancel</button>
+						<button class="minn-btn-primary" id="minn-pn-create" type="button">Create product</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'order-new' ) {
+			const pick = m.productPick;
+			const hits = m.productHits || [];
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">New order</div>
+							<div class="minn-modal-sub">Simple draft or processing order with one line item</div>
+						</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-order-body">
+						<div class="minn-order-grid">
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Customer</div>
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">First name</div><input class="minn-input" id="minn-on-first" value=""></div>
+										<div><div class="minn-field-label">Last name</div><input class="minn-input" id="minn-on-last" value=""></div>
+									</div>
+									<div><div class="minn-field-label">Email</div><input class="minn-input" id="minn-on-email" type="email" placeholder="customer@example.com"></div>
+									<div><div class="minn-field-label">Status</div>
+										<select class="minn-input" id="minn-on-status">
+											<option value="pending">Pending payment</option>
+											<option value="processing" selected>Processing</option>
+											<option value="on-hold">On hold</option>
+										</select>
+									</div>
+								</div>
+							</div>
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Line item</div>
+								<div class="minn-order-fields">
+									<div><div class="minn-field-label">Product</div>
+										<input class="minn-input" id="minn-on-prod-search" placeholder="Search products…" autocomplete="off">
+										${ hits.length ? `<div class="minn-ac-panel" id="minn-on-prod-hits" style="position:relative; display:block; margin-top:6px; max-height:160px; overflow:auto;">
+											${ hits.map( ( p ) => `<button type="button" class="minn-ac-item" data-pick-prod="${ p.id }" style="display:block; width:100%; text-align:left;">${ esc( p.name ) }${ p.sku ? ' · ' + esc( p.sku ) : '' } · $${ esc( String( p.price || p.regular_price || '0' ) ) }</button>` ).join( '' ) }
+										</div>` : '' }
+									</div>
+									${ pick ? `<div class="minn-toggle-desc">Selected: <strong>${ esc( pick.name ) }</strong> (#${ pick.id })</div>` : '<div class="minn-toggle-desc">Pick a published product to add.</div>' }
+									<div><div class="minn-field-label">Quantity</div><input class="minn-input" id="minn-on-qty" type="number" min="1" value="1"></div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-soft" id="minn-modal-close2" type="button">Cancel</button>
+						<button class="minn-btn-primary" id="minn-on-create" type="button" ${ pick ? '' : 'disabled' }>Create order</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'order-email' ) {
 			const o = m.order || {};
 			return `
@@ -18837,8 +19319,171 @@
 		} );
 		const closeBtn = $( '#minn-modal-close' );
 		if ( closeBtn ) closeBtn.addEventListener( 'click', closeModal );
+		const closeBtn2 = $( '#minn-modal-close2' );
+		if ( closeBtn2 ) closeBtn2.addEventListener( 'click', closeModal );
 		const cancelBtn = $( '#minn-modal-cancel' );
 		if ( cancelBtn ) cancelBtn.addEventListener( 'click', closeModal );
+
+		if ( m.type === 'customer' ) {
+			$$( '[data-open-order]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const id = parseInt( btn.dataset.openOrder, 10 );
+					const row = ( m.orders && m.orders.items || [] ).find( ( o ) => o.id === id );
+					if ( row ) openOrderModal( row );
+					else openOrderModal( { id } );
+				} )
+			);
+		}
+
+		if ( m.type === 'product-new' ) {
+			const nameEl = $( '#minn-pn-name' );
+			if ( nameEl ) setTimeout( () => nameEl.focus(), 30 );
+			const createBtn = $( '#minn-pn-create' );
+			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
+				const name = ( ( $( '#minn-pn-name' ) || {} ).value || '' ).trim();
+				if ( ! name ) { toast( 'Name is required', true ); return; }
+				const price = ( ( $( '#minn-pn-price' ) || {} ).value || '' ).trim();
+				const payload = {
+					name,
+					type: 'simple',
+					status: ( $( '#minn-pn-status' ) || {} ).value || 'draft',
+					regular_price: price,
+					sku: ( ( $( '#minn-pn-sku' ) || {} ).value || '' ).trim(),
+				};
+				createBtn.disabled = true;
+				createBtn.textContent = 'Creating…';
+				try {
+					const created = await api( 'wc/v3/products', {
+						method: 'POST',
+						body: JSON.stringify( payload ),
+					} );
+					toast( 'Product created' );
+					state.cache.products = null;
+					closeModal();
+					if ( state.route === 'products' ) renderProducts();
+					if ( created && created.id ) openProductModal( created );
+				} catch ( e ) {
+					toast( e.message, true );
+					createBtn.disabled = false;
+					createBtn.textContent = 'Create product';
+				}
+			} );
+		}
+
+		if ( m.type === 'order-new' ) {
+			const search = $( '#minn-on-prod-search' );
+			const paintHits = ( hits ) => {
+				if ( state.modal && state.modal.type === 'order-new' ) state.modal.productHits = hits;
+				let panel = $( '#minn-on-prod-hits' );
+				if ( ! hits.length ) {
+					if ( panel ) panel.remove();
+					return;
+				}
+				const html = hits.map( ( p ) =>
+					`<button type="button" class="minn-ac-item" data-pick-prod="${ p.id }" style="display:block; width:100%; text-align:left;">${ esc( p.name ) }${ p.sku ? ' · ' + esc( p.sku ) : '' } · $${ esc( String( p.price || p.regular_price || '0' ) ) }</button>`
+				).join( '' );
+				if ( ! panel ) {
+					panel = document.createElement( 'div' );
+					panel.id = 'minn-on-prod-hits';
+					panel.className = 'minn-ac-panel';
+					panel.style.cssText = 'position:relative; display:block; margin-top:6px; max-height:160px; overflow:auto;';
+					if ( search && search.parentNode ) search.parentNode.appendChild( panel );
+				}
+				panel.innerHTML = html;
+				$$( '[data-pick-prod]', panel ).forEach( ( btn ) =>
+					btn.addEventListener( 'click', () => {
+						const id = parseInt( btn.dataset.pickProd, 10 );
+						const hit = hits.find( ( p ) => p.id === id );
+						if ( ! hit || ! state.modal || state.modal.type !== 'order-new' ) return;
+						state.modal.productPick = hit;
+						state.modal.productHits = [];
+						// Update selection line + enable create without wiping the form.
+						const createBtn = $( '#minn-on-create' );
+						if ( createBtn ) createBtn.disabled = false;
+						let sel = $( '#minn-on-picked' );
+						if ( ! sel && search && search.parentNode ) {
+							sel = document.createElement( 'div' );
+							sel.id = 'minn-on-picked';
+							sel.className = 'minn-toggle-desc';
+							search.parentNode.appendChild( sel );
+						}
+						if ( sel ) sel.innerHTML = `Selected: <strong>${ esc( hit.name ) }</strong> (#${ hit.id })`;
+						if ( panel ) panel.remove();
+					} )
+				);
+			};
+			let searchTimer = null;
+			if ( search ) {
+				search.addEventListener( 'input', () => {
+					clearTimeout( searchTimer );
+					searchTimer = setTimeout( async () => {
+						const q = search.value.trim();
+						if ( q.length < 1 ) { paintHits( [] ); return; }
+						try {
+							const r = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,price,regular_price` );
+							if ( ! state.modal || state.modal.type !== 'order-new' ) return;
+							paintHits( Array.isArray( r ) ? r : [] );
+						} catch ( e ) { /* ignore */ }
+					}, 280 );
+				} );
+			}
+			// Initial hits from a prior paint (if any).
+			$$( '[data-pick-prod]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const id = parseInt( btn.dataset.pickProd, 10 );
+					const hit = ( m.productHits || [] ).find( ( p ) => p.id === id );
+					if ( ! hit || ! state.modal || state.modal.type !== 'order-new' ) return;
+					state.modal.productPick = hit;
+					state.modal.productHits = [];
+					const createBtn = $( '#minn-on-create' );
+					if ( createBtn ) createBtn.disabled = false;
+					let sel = $( '#minn-on-picked' );
+					if ( ! sel && search && search.parentNode ) {
+						sel = document.createElement( 'div' );
+						sel.id = 'minn-on-picked';
+						sel.className = 'minn-toggle-desc';
+						search.parentNode.appendChild( sel );
+					}
+					if ( sel ) sel.innerHTML = `Selected: <strong>${ esc( hit.name ) }</strong> (#${ hit.id })`;
+					const panel = $( '#minn-on-prod-hits' );
+					if ( panel ) panel.remove();
+				} )
+			);
+			const createBtn = $( '#minn-on-create' );
+			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
+				const pick = m.productPick;
+				if ( ! pick ) { toast( 'Pick a product', true ); return; }
+				const email = ( ( $( '#minn-on-email' ) || {} ).value || '' ).trim();
+				const qty = parseInt( ( ( $( '#minn-on-qty' ) || {} ).value || '1' ), 10 ) || 1;
+				const payload = {
+					status: ( $( '#minn-on-status' ) || {} ).value || 'processing',
+					billing: {
+						first_name: ( ( $( '#minn-on-first' ) || {} ).value || '' ).trim(),
+						last_name: ( ( $( '#minn-on-last' ) || {} ).value || '' ).trim(),
+						email,
+					},
+					line_items: [ { product_id: pick.id, quantity: qty } ],
+				};
+				createBtn.disabled = true;
+				createBtn.textContent = 'Creating…';
+				try {
+					const created = await api( 'wc/v3/orders', {
+						method: 'POST',
+						body: JSON.stringify( payload ),
+					} );
+					toast( 'Order #' + ( created.number || created.id ) + ' created' );
+					state.cache.orders = null;
+					state.cache.orderSummary = null;
+					closeModal();
+					if ( state.route === 'orders' ) renderOrders();
+					if ( created && created.id ) openOrderModal( created );
+				} catch ( e ) {
+					toast( e.message, true );
+					createBtn.disabled = false;
+					createBtn.textContent = 'Create order';
+				}
+			} );
+		}
 
 		if ( m.type === 'widget' ) {
 			$( '#minn-widget-save' ).addEventListener( 'click', async ( e ) => {
@@ -20836,6 +21481,7 @@
 			case 'orders': return renderOrders();
 			case 'products': return renderProducts();
 			case 'coupons': return renderCoupons();
+			case 'customers': return renderCustomers();
 			case 'users': return renderUsers();
 			case 'terms': return renderStructure();
 			case 'menus': return renderMenus();

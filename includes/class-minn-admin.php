@@ -338,6 +338,11 @@ class Minn_Admin {
 				'orders'       => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ),
 				'products'     => class_exists( 'WooCommerce' ) && current_user_can( 'edit_products' ),
 				'coupons'      => class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_coupons' ),
+				// Customers REST is manage_woocommerce-gated in WC; shop managers
+				// who can edit orders also get the list (read) when that cap holds.
+				'customers'    => class_exists( 'WooCommerce' ) && (
+					current_user_can( 'manage_woocommerce' ) || current_user_can( 'edit_shop_orders' )
+				),
 				'themeOptions' => current_user_can( 'edit_theme_options' ),
 				'core'         => current_user_can( 'update_core' ),
 				// Drives Settings → Design (Additional CSS). Core maps this

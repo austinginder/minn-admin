@@ -1543,6 +1543,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-product-cols { grid-template-columns: 1.6fr 100px 140px 100px 100px 40px; }
 .minn-product-cols.with-cb { grid-template-columns: 36px 1.6fr 100px 140px 100px 100px 40px; }
 .minn-coupon-cols { grid-template-columns: 1.4fr 1fr 90px 80px 100px 100px 40px; }
+.minn-customer-cols { grid-template-columns: 1.6fr 1.2fr 100px 100px 40px; }
+.minn-wc-top-cols { grid-template-columns: 1fr 80px 100px; }
 .minn-prod-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .minn-order-notes-list { display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto; }
 .minn-order-note {
@@ -2379,6 +2381,9 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-coupon-cols { grid-template-columns: 1fr 72px 40px; }
   .minn-coupon-cols > :nth-child(2), .minn-coupon-cols > :nth-child(4),
   .minn-coupon-cols > :nth-child(5), .minn-coupon-cols > :nth-child(6) { display: none; }
+  .minn-customer-cols { grid-template-columns: 1fr 40px; }
+  .minn-customer-cols > :nth-child(2), .minn-customer-cols > :nth-child(3),
+  .minn-customer-cols > :nth-child(4) { display: none; }
   .minn-user-cols { grid-template-columns: 40px 1fr 100px; }
   .minn-user-cols > :nth-child(3), .minn-user-cols > :nth-child(5),
   .minn-user-cols > :nth-child(6) { display: none; }
