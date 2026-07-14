@@ -136,9 +136,28 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	} );
 	t.check( 'wp.org plugin menu says Open on WordPress.org', orgMenu.ok && orgMenu.hasOrg, JSON.stringify( orgMenu ) );
 
-	/* ===== Right-click menu on theme cards ===== */
+	/* ===== Themes: card parity + menu (right-click and ⋯) ===== */
 	await page.click( '[data-xtab="themes"]' );
 	await page.waitForSelector( '.minn-theme', { timeout: 15000 } );
+	const themeCards = await page.evaluate( () => {
+		const all = [ ...document.querySelectorAll( '.minn-theme' ) ];
+		const withMore = all.filter( ( c ) => c.querySelector( '[data-theme-more]' ) ).length;
+		const linkedShot = all.filter( ( c ) => c.querySelector( 'a.minn-theme-shot-link' ) ).length;
+		const linkedAuthor = all.filter( ( c ) => c.querySelector( 'a.minn-theme-author' ) ).length;
+		const orgShot = all.some( ( c ) => {
+			const a = c.querySelector( 'a.minn-theme-shot-link' );
+			return a && /wordpress\.org\/themes\//i.test( a.href );
+		} );
+		const ghShot = all.some( ( c ) => {
+			const a = c.querySelector( 'a.minn-theme-shot-link' );
+			return a && /github\.com\//i.test( a.href );
+		} );
+		return { total: all.length, withMore, linkedShot, linkedAuthor, orgShot, ghShot };
+	} );
+	t.check( 'theme cards have a ⋯ actions button', themeCards.withMore === themeCards.total && themeCards.total > 0, JSON.stringify( themeCards ) );
+	t.check( 'some theme screenshots link to WordPress.org or GitHub', themeCards.linkedShot > 0 && ( themeCards.orgShot || themeCards.ghShot ), JSON.stringify( themeCards ) );
+	t.check( 'theme authors are linked when AuthorURI exists', themeCards.linkedAuthor > 0, JSON.stringify( themeCards ) );
+
 	const themeMenu = await page.evaluate( () => {
 		const card = document.querySelector( '.minn-theme' );
 		if ( ! card ) return { ok: false, reason: 'no card' };
@@ -150,12 +169,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const labels = [ ...menu.querySelectorAll( 'button, a, .minn-new-menu-label' ) ]
 			.map( ( el ) => el.textContent.trim() );
 		const hasCopy = labels.some( ( l ) => /Copy stylesheet/.test( l ) );
+		const hasHub = labels.some( ( l ) => /Open on (GitHub|WordPress\.org)/.test( l ) );
 		// Active theme may only have links + copy; inactive has Activate.
 		const sensible = hasCopy && labels.length >= 1;
 		document.body.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
-		return { ok: true, labels, hasCopy, sensible };
+		return { ok: true, labels, hasCopy, hasHub, sensible };
 	} );
 	t.check( 'theme right-click opens a context menu', themeMenu.ok && themeMenu.sensible, JSON.stringify( themeMenu ) );
+
+	// ⋯ on a wp.org theme (Twenty Twenty-Five etc.) → Open on WordPress.org.
+	const themeMore = await page.evaluate( () => {
+		const card = [ ...document.querySelectorAll( '.minn-theme' ) ].find( ( c ) => {
+			const a = c.querySelector( 'a.minn-theme-shot-link' );
+			return a && /wordpress\.org\/themes\//i.test( a.href );
+		} ) || document.querySelector( '.minn-theme' );
+		if ( ! card ) return { ok: false, reason: 'no card' };
+		const btn = card.querySelector( '[data-theme-more]' );
+		if ( ! btn ) return { ok: false, reason: 'no more btn' };
+		btn.click();
+		const menu = document.querySelector( '.minn-ctx-menu' );
+		if ( ! menu ) return { ok: false, reason: 'no menu' };
+		const labels = [ ...menu.querySelectorAll( 'button, a, .minn-new-menu-label' ) ]
+			.map( ( el ) => el.textContent.trim() );
+		const hasOrg = labels.some( ( l ) => /Open on WordPress\.org/.test( l ) );
+		const hasGh = labels.some( ( l ) => /Open on GitHub/.test( l ) );
+		const hasCopy = labels.some( ( l ) => /Copy stylesheet/.test( l ) );
+		document.body.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+		return { ok: true, labels, hasOrg, hasGh, hasCopy };
+	} );
+	t.check( 'theme ⋯ menu opens with hub link and copy', themeMore.ok && themeMore.hasCopy && ( themeMore.hasOrg || themeMore.hasGh ), JSON.stringify( themeMore ) );
 
 	/* ===== Themes REST carries author/theme URIs for the menu ===== */
 	const themesApi = await page.evaluate( async () => {

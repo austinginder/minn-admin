@@ -8446,6 +8446,7 @@
 							<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="Toggle ${ esc( name ) }"><span class="minn-switch-knob"></span></button>
 							<span class="minn-state-label${ on ? ' on' : '' }">${ on ? 'Active' : 'Inactive' }</span>
 							${ ! on && B.caps.delete ? `<button class="minn-plugin-delete" data-del="${ esc( p.plugin ) }" title="Delete ${ esc( name ) }">${ icon( 'trash' ) }</button>` : '' }
+							<button type="button" class="minn-row-more minn-ext-more" data-plugin-more="${ esc( p.plugin ) }" title="More actions" aria-label="More actions for ${ esc( name ) }">⋯</button>
 						</div>
 					</div>
 				</div>`;
@@ -8596,6 +8597,20 @@
 			btn.addEventListener( 'click', () => deletePluginByFile( btn.dataset.del ) )
 		);
 
+		// ⋯ button and right-click share the same menu entries.
+		const openPluginMenuAt = ( plugin, x, y ) => {
+			if ( ! plugin ) return;
+			openMinnMenu( x, y, pluginMenuEntries( plugin ) );
+		};
+		$$( '[data-plugin-more]', view ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', ( e ) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const plugin = plugins.find( ( p ) => p.plugin === btn.dataset.pluginMore );
+				const r = btn.getBoundingClientRect();
+				openPluginMenuAt( plugin, r.left, r.bottom + 4 );
+			} );
+		} );
 		// Right-click (or long-press) on a plugin card → same verbs as the
 		// switch / update badge / trash, plus author and vendor links.
 		$$( '.minn-plugin', view ).forEach( ( card ) => {
@@ -8606,7 +8621,7 @@
 				// Don't steal the browser menu from text inputs if any land here.
 				if ( e.target && ( e.target.closest( 'input, textarea, select' ) ) ) return;
 				e.preventDefault();
-				openMinnMenu( e.clientX, e.clientY, pluginMenuEntries( plugin ) );
+				openPluginMenuAt( plugin, e.clientX, e.clientY );
 			} );
 		} );
 
@@ -8675,22 +8690,46 @@
 		</div>
 		${ visible.length ? `
 		<div class="minn-theme-grid">
-			${ visible.map( ( { t, i } ) => `
+			${ visible.map( ( { t, i } ) => {
+				// Prefer ThemeURI when it is already a hub page; otherwise
+				// fall back to the wordpress.org directory when known.
+				const hubHref = ( t.theme_uri && ( /github\.com\//i.test( t.theme_uri ) || /wordpress\.org\/themes\//i.test( t.theme_uri ) ) )
+					? t.theme_uri
+					: ( t.on_wporg && t.stylesheet
+						? 'https://wordpress.org/themes/' + encodeURIComponent( t.stylesheet ) + '/'
+						: ( t.theme_uri || '' ) );
+				const hubTitle = hubHref
+					? ( /github\.com\//i.test( hubHref )
+						? `Open ${ t.name } on GitHub`
+						: /wordpress\.org\/themes\//i.test( hubHref )
+							? `View ${ t.name } on WordPress.org`
+							: `${ t.name } theme page` )
+					: '';
+				const shotInner = `
+					${ t.active ? '<span class="minn-status publish minn-theme-badge">Active</span>' : '' }
+					${ t.update && ! B.caps.updateThemes ? `<span class="minn-badge-update minn-theme-badge-u">Update ${ esc( t.update ) }</span>` : '' }`;
+				const shot = hubHref
+					? `<a class="minn-theme-shot minn-theme-shot-link"${ t.screenshot ? ` style="background-image:url('${ esc( t.screenshot ) }')"` : '' } href="${ esc( hubHref ) }" target="_blank" rel="noopener" title="${ esc( hubTitle ) }">${ shotInner }</a>`
+					: `<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ esc( t.screenshot ) }')"` : '' }>${ shotInner }</div>`;
+				return `
 				<div class="minn-card minn-theme${ t.active ? ' is-active' : '' }" data-theme="${ i }" data-stylesheet="${ esc( t.stylesheet ) }">
-					<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ esc( t.screenshot ) }')"` : '' }>
-						${ t.active ? '<span class="minn-status publish minn-theme-badge">Active</span>' : '' }
-						${ t.update && ! B.caps.updateThemes ? `<span class="minn-badge-update minn-theme-badge-u">Update ${ esc( t.update ) }</span>` : '' }
-					</div>
+					${ shot }
 					<div class="minn-theme-info">
 						<div class="minn-row-title">${ esc( t.name ) }</div>
-						<div class="minn-pi-meta">v${ esc( t.version ) }${ t.author ? ' · ' + esc( t.author ) : '' }${ t.parent ? ' · child of ' + esc( t.parent ) : '' }</div>
+						<div class="minn-pi-meta">v${ esc( t.version ) }${ t.author
+							? ( t.author_uri
+								? ` · <a class="minn-theme-author" href="${ esc( t.author_uri ) }" target="_blank" rel="noopener">${ esc( t.author ) }</a>`
+								: ' · ' + esc( t.author ) )
+							: '' }${ t.parent ? ' · child of ' + esc( t.parent ) : '' }</div>
 						<div class="minn-theme-actions">
 							${ ! t.active ? `<button class="minn-btn-soft" data-tact="activate:${ i }">Activate</button>` : '' }
 							${ t.update && B.caps.updateThemes ? `<button class="minn-badge-update as-btn" data-tact="update:${ i }">Update → ${ esc( t.update ) }</button>` : '' }
 							${ ! t.active && B.caps.deleteThemes ? `<button class="minn-plugin-delete" data-tact="delete:${ i }" title="Delete ${ esc( t.name ) }">${ icon( 'trash' ) }</button>` : '' }
+							<button type="button" class="minn-row-more minn-ext-more" data-theme-more="${ i }" title="More actions" aria-label="More actions for ${ esc( t.name ) }">⋯</button>
 						</div>
 					</div>
-				</div>` ).join( '' ) }
+				</div>`;
+			} ).join( '' ) }
 		</div>` : `<div class="minn-card minn-empty">${ q ? 'No themes match “' + esc( state.extSearch.trim() ) + '”.' : 'No ' + state.extFilter + ' themes.' }</div>` }`;
 
 		bindExtTabs( view );
@@ -8784,7 +8823,22 @@
 			return entries;
 		};
 
-		// Right-click on a theme card — activate / update / delete + links.
+		const openThemeMenuAt = ( t, x, y ) => {
+			if ( ! t ) return;
+			const entries = themeMenuEntries( t );
+			if ( entries.length ) openMinnMenu( x, y, entries );
+		};
+		$$( '[data-theme-more]', view ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', ( e ) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const t = themes[ parseInt( btn.dataset.themeMore, 10 ) ];
+				const r = btn.getBoundingClientRect();
+				openThemeMenuAt( t, r.left, r.bottom + 4 );
+			} );
+		} );
+		// Right-click on a theme card — activate / update / delete + links
+		// (Open on WordPress.org / GitHub when the URL is a known hub).
 		$$( '.minn-theme', view ).forEach( ( card ) => {
 			card.addEventListener( 'contextmenu', ( e ) => {
 				const idx = parseInt( card.dataset.theme, 10 );
@@ -8792,8 +8846,7 @@
 				if ( ! t ) return;
 				if ( e.target && e.target.closest( 'input, textarea, select' ) ) return;
 				e.preventDefault();
-				const entries = themeMenuEntries( t );
-				if ( entries.length ) openMinnMenu( e.clientX, e.clientY, entries );
+				openThemeMenuAt( t, e.clientX, e.clientY );
 			} );
 		} );
 	}
