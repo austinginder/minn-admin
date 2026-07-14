@@ -9963,6 +9963,243 @@
 
 	const stripBlockComments = ( raw ) => raw.replace( /<!--\s*\/?wp:[\s\S]*?-->\n?/g, '' );
 
+	// --- Island-aware clipboard (copy/cut) ------------------------------------
+	// Top-level body children covered by the current selection (start block
+	// through end block). Spans islands even when the browser never "selects"
+	// their contenteditable=false interior.
+	function editorSelectionBlocks( body, range ) {
+		const kids = Array.from( body.children );
+		if ( ! kids.length ) return [];
+		const topOf = ( node ) => {
+			let n = node;
+			if ( ! n ) return null;
+			if ( n === body ) return null;
+			while ( n && n.parentNode !== body ) n = n.parentNode;
+			return n && n.parentNode === body ? n : null;
+		};
+		let a = topOf( range.startContainer );
+		let b = topOf( range.endContainer );
+		// Select-all often anchors on the body itself.
+		if ( range.startContainer === body ) a = kids[ Math.min( range.startOffset, kids.length - 1 ) ] || kids[ 0 ];
+		if ( range.endContainer === body ) {
+			const i = Math.max( 0, Math.min( range.endOffset, kids.length ) - 1 );
+			b = kids[ i ] || kids[ kids.length - 1 ];
+		}
+		let ai = a ? kids.indexOf( a ) : 0;
+		let bi = b ? kids.indexOf( b ) : kids.length - 1;
+		if ( ai < 0 ) ai = 0;
+		if ( bi < 0 ) bi = kids.length - 1;
+		if ( ai > bi ) { const t = ai; ai = bi; bi = t; }
+		return kids.slice( ai, bi + 1 );
+	}
+
+	function rangeFullyCoversNode( range, node ) {
+		try {
+			const r = document.createRange();
+			r.selectNodeContents( node );
+			return range.compareBoundaryPoints( Range.START_TO_START, r ) <= 0
+				&& range.compareBoundaryPoints( Range.END_TO_END, r ) >= 0;
+		} catch ( e ) {
+			return false;
+		}
+	}
+
+	// Intersection of `range` with a top-level prose block → {html, text}.
+	function rangeSliceBlock( range, node ) {
+		if ( rangeFullyCoversNode( range, node ) ) {
+			return {
+				html: node.outerHTML,
+				text: ( node.innerText || node.textContent || '' ).replace( /\u00a0/g, ' ' ),
+			};
+		}
+		try {
+			const nodeRange = document.createRange();
+			nodeRange.selectNodeContents( node );
+			const inter = document.createRange();
+			if ( range.compareBoundaryPoints( Range.START_TO_START, nodeRange ) > 0 ) {
+				inter.setStart( range.startContainer, range.startOffset );
+			} else {
+				inter.setStart( nodeRange.startContainer, nodeRange.startOffset );
+			}
+			if ( range.compareBoundaryPoints( Range.END_TO_END, nodeRange ) < 0 ) {
+				inter.setEnd( range.endContainer, range.endOffset );
+			} else {
+				inter.setEnd( nodeRange.endContainer, nodeRange.endOffset );
+			}
+			const frag = inter.cloneContents();
+			const wrap = document.createElement( 'div' );
+			wrap.appendChild( frag );
+			// Drop editor chrome if any leaked in.
+			$$( '.minn-island-chip, .minn-table-chip', wrap ).forEach( ( c ) => c.remove() );
+			return {
+				html: wrap.innerHTML,
+				text: ( wrap.innerText || wrap.textContent || '' ).replace( /\u00a0/g, ' ' ),
+			};
+		} catch ( e ) {
+			return {
+				html: node.outerHTML,
+				text: ( node.innerText || node.textContent || '' ).replace( /\u00a0/g, ' ' ),
+			};
+		}
+	}
+
+	// Readable clipboard payload for an island (preview HTML / live fields).
+	// Also returns the stored Gutenberg raw when available for re-paste.
+	function islandClipboardParts( el, islands ) {
+		const idx = parseInt( el.dataset.island, 10 );
+		const raw = islands && Number.isFinite( idx ) ? islands[ idx ] : null;
+		const rawStr = raw != null ? String( raw ).trim() : '';
+		const preview = el.querySelector( '.minn-island-preview' );
+		if ( preview ) {
+			const clone = preview.cloneNode( true );
+			$$( 'script, style, .minn-island-chip', clone ).forEach( ( n ) => n.remove() );
+			const html = clone.innerHTML.trim() || ( rawStr ? stripBlockComments( rawStr ).trim() : '' );
+			const text = ( clone.innerText || clone.textContent || '' ).replace( /\u00a0/g, ' ' ).trim()
+				|| ( html ? stripTags( html ).replace( /\s+/g, ' ' ).trim() : '' );
+			return { html: html || `<p>${ esc( text ) }</p>`, text, raw: rawStr };
+		}
+		const sc = el.querySelector( '.minn-shortcode-input' );
+		if ( sc ) {
+			const v = String( sc.value || '' ).trim();
+			return { html: v ? `<p>${ esc( v ) }</p>` : '', text: v, raw: rawStr };
+		}
+		const sum = el.querySelector( '.minn-details-summary' );
+		const dbody = el.querySelector( '.minn-details-body' );
+		if ( sum || dbody ) {
+			const s = sum ? String( sum.value || '' ) : '';
+			const bodyHtml = dbody ? dbody.innerHTML : '';
+			const text = [ s, ( dbody && dbody.innerText ) || '' ].filter( Boolean ).join( '\n' ).replace( /\u00a0/g, ' ' ).trim();
+			return {
+				html: `<details><summary>${ esc( s ) }</summary>${ bodyHtml }</details>`,
+				text,
+				raw: rawStr,
+			};
+		}
+		const rows = el.querySelectorAll( '.minn-btn-row' );
+		if ( rows.length ) {
+			const parts = Array.from( rows ).map( ( row ) => {
+				const label = ( row.querySelector( '.minn-btn-label' ) || {} ).value || '';
+				const url = ( row.querySelector( '.minn-btn-url' ) || {} ).value || '';
+				return { label: String( label ), url: String( url ) };
+			} );
+			const html = parts.map( ( p ) => {
+				if ( p.url && /^(https?:|mailto:|tel:|#|\/)/i.test( p.url ) ) {
+					return `<p><a href="${ esc( p.url ) }">${ esc( p.label || p.url ) }</a></p>`;
+				}
+				return p.label ? `<p>${ esc( p.label ) }</p>` : '';
+			} ).filter( Boolean ).join( '' );
+			const text = parts.map( ( p ) => ( p.label && p.url ? `${ p.label } (${ p.url })` : ( p.label || p.url ) ) )
+				.filter( Boolean ).join( '\n' );
+			return { html, text, raw: rawStr };
+		}
+		const fallback = ( el.innerText || '' ).replace( /\u00a0/g, ' ' ).trim();
+		return {
+			html: fallback ? `<p>${ esc( fallback ) }</p>` : ( rawStr ? stripBlockComments( rawStr ).trim() : '' ),
+			text: fallback,
+			raw: rawStr,
+		};
+	}
+
+	// When the selection spans islands, rebuild the clipboard. Returns true
+	// when the event was handled (caller should not fall through).
+	function onEditorCopyCut( e, body, isCut ) {
+		const ed2 = state.editor;
+		const cd = e.clipboardData;
+		if ( ! ed2 || ! cd || ed2.mode === 'locked' ) return;
+		const sel = window.getSelection();
+		if ( ! sel || ! sel.rangeCount || sel.isCollapsed ) return;
+		const range = sel.getRangeAt( 0 );
+		if ( ! body.contains( range.commonAncestorContainer )
+			&& range.commonAncestorContainer !== body ) return;
+		// Copy from inside a single live island field → native text copy.
+		const nodeEl = ( n ) => ( n && n.nodeType === Node.ELEMENT_NODE ? n : ( n && n.parentNode ) );
+		const fieldSel = '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url';
+		const startField = nodeEl( range.startContainer ) && nodeEl( range.startContainer ).closest
+			? nodeEl( range.startContainer ).closest( fieldSel ) : null;
+		const endField = nodeEl( range.endContainer ) && nodeEl( range.endContainer ).closest
+			? nodeEl( range.endContainer ).closest( fieldSel ) : null;
+		if ( startField && startField === endField ) return;
+
+		const blocks = editorSelectionBlocks( body, range );
+		if ( ! blocks.length ) return;
+		const hasIsland = blocks.some( ( el ) => el.classList && el.classList.contains( 'minn-block-island' ) );
+		if ( ! hasIsland ) return;
+
+		const htmlParts = [];
+		const textParts = [];
+		const rawParts = [];
+		blocks.forEach( ( el ) => {
+			if ( el.classList && el.classList.contains( 'minn-block-island' ) ) {
+				const p = islandClipboardParts( el, ed2.islands );
+				if ( p.html ) htmlParts.push( p.html );
+				if ( p.text ) textParts.push( p.text );
+				if ( p.raw ) rawParts.push( p.raw );
+				return;
+			}
+			const slice = rangeSliceBlock( range, el );
+			if ( slice.html ) htmlParts.push( slice.html );
+			if ( slice.text && slice.text.trim() ) textParts.push( slice.text.replace( /\s+$/g, '' ) );
+		} );
+
+		const plain = textParts.join( '\n\n' ).replace( /\n{3,}/g, '\n\n' ).trim();
+		const html = htmlParts.join( '' );
+		// text/html + text/plain carry the visible island content (preview /
+		// live fields). text/x-minn-blocks carries Gutenberg raw for the
+		// islands so a block-aware paste target can restore structure.
+		if ( ! plain && ! html ) return;
+		e.preventDefault();
+		if ( plain ) cd.setData( 'text/plain', plain );
+		if ( html ) cd.setData( 'text/html', html );
+		if ( rawParts.length ) cd.setData( 'text/x-minn-blocks', rawParts.join( '\n\n' ) );
+
+		if ( ! isCut ) return;
+
+		// Cut: remove fully-covered top-level blocks (islands + prose). Partial
+		// first/last prose uses a range delete; partial-only island cuts remove
+		// the whole island (atomic).
+		for ( let i = blocks.length - 1; i >= 0; i-- ) {
+			const el = blocks[ i ];
+			if ( ! el.isConnected ) continue;
+			if ( el.classList && el.classList.contains( 'minn-block-island' ) ) {
+				const idx = parseInt( el.dataset.island, 10 );
+				if ( ed2.islands && Number.isFinite( idx ) ) ed2.islands[ idx ] = null;
+				el.remove();
+				continue;
+			}
+			if ( rangeFullyCoversNode( range, el ) ) {
+				el.remove();
+				continue;
+			}
+			// Partial prose: delete the intersection only (first/last block).
+			try {
+				const nodeRange = document.createRange();
+				nodeRange.selectNodeContents( el );
+				const del = document.createRange();
+				if ( range.compareBoundaryPoints( Range.START_TO_START, nodeRange ) > 0 ) {
+					del.setStart( range.startContainer, range.startOffset );
+				} else {
+					del.setStart( nodeRange.startContainer, nodeRange.startOffset );
+				}
+				if ( range.compareBoundaryPoints( Range.END_TO_END, nodeRange ) < 0 ) {
+					del.setEnd( range.endContainer, range.endOffset );
+				} else {
+					del.setEnd( nodeRange.endContainer, nodeRange.endOffset );
+				}
+				del.deleteContents();
+				if ( ! ( el.textContent || '' ).replace( /\u00a0/g, ' ' ).trim() && ! el.querySelector( 'img, table, hr, video, audio' ) ) {
+					el.remove();
+				}
+			} catch ( err ) {
+				el.remove();
+			}
+		}
+		// Keep a trailing paragraph so the editor stays typeable.
+		if ( ! body.children.length ) body.innerHTML = '<p><br></p>';
+		ed2.dirty = true;
+		scheduleAutosave();
+		updateEditorStats();
+	}
+
 	// Pull summary + body HTML + attrs out of a core/details island raw string.
 	function parseDetailsRaw( raw ) {
 		const str = String( raw || '' );
@@ -13905,6 +14142,15 @@
 				const edge = e.key === 'Backspace' ? 'start' : 'end';
 				if ( caretAtCodeEdge( fc, s.anchorNode, s.anchorOffset, edge ) ) e.preventDefault();
 			} );
+
+			// Copy/cut: contenteditable=false islands are skipped by the
+			// browser's default clipboard (Select All leaves them unhighlighted
+			// and out of the payload). When the selection spans any island,
+			// rebuild text/html + text/plain from the selected top-level blocks
+			// so island preview text (and Gutenberg raw for re-paste) travel
+			// with the surrounding prose.
+			body.addEventListener( 'copy', ( e ) => onEditorCopyCut( e, body, false ) );
+			body.addEventListener( 'cut', ( e ) => onEditorCopyCut( e, body, true ) );
 
 			// Paste. Priority order: URL over a non-empty selection → hyperlink
 			// the selected text (keep the words; Notion/Docs behavior); lone

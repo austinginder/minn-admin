@@ -3,6 +3,7 @@
 ## **v0.14.0** - Unreleased
 
 ### Improved
+* **Copy includes island blocks:** Select All (or any selection that spans a dynamic/custom block island) now puts the island’s visible content on the clipboard with the surrounding prose. Browsers skip `contenteditable=false` islands by default, so the card text used to vanish from ⌘C; copy and cut rebuild `text/plain` and `text/html` from the selected top-level blocks (preview HTML for islands, plus their Gutenberg raw under `text/x-minn-blocks`).
 * **Paste a URL over selected text to hyperlink it:** in the editor, selecting words and pasting a URL (or a browser-copied link) wraps the selection in a link and keeps the original words, instead of replacing them with the URL string. Code blocks and islands still paste as plain text.
 
 ### Added
