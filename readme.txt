@@ -53,6 +53,12 @@ Pretty permalinks are recommended. Without them the app is served at `/?minn_adm
 
 == Changelog ==
 
+= 0.14.0 =
+* WooCommerce day-to-day in Minn: Products, Coupons, Customers surfaces; create product and new order; order notes, refunds, resend and compose email, pay URL; Orders Analytics (7d through All) with revenue and top products.
+* Diagnostics family under Tools: Scrutoscope, WP Crontrol, Transients Manager, Rewrite Rules Inspector (provider switcher).
+* Public Post Preview adapter (shareable draft links), FluentSMTP search and log delete, View all revisions dialog.
+* Editor: paste a URL over selected text to hyperlink it; Select All / copy includes island block content. Orders status tabs and coupons-disabled nav fixed. Full details in changelog.md.
+
 = 0.13.0 =
 * Forms and Email grow into full workflows: extra list views (Gravity SMTP debug log and routing, Gravity Forms notifications), item-scoped form settings from GF's own schema, Forminator / Formidable / Everest Forms entries, and status-card charts (Gravity SMTP 14-day series).
 * Backups family: WPvivid, BackWPup and All-in-One WP Migration join UpdraftPlus, Duplicator and Disembark. Snippets: Simple Custom CSS and JS plus Header Footer Code Manager. Clear site cache covers SpeedyCache, Redis, Breeze, Nginx Helper and Cloudflare too.
