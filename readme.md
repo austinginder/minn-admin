@@ -36,8 +36,11 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   **image editor**: rotate and crop, saved as a new copy with originals untouched
 - **Comments** — full moderation (pending / approved / spam / trash) with **bulk moderation**
   (each tab offers its own verbs), inline replies and a right-click menu for the same verbs
-- **Orders** — WooCommerce orders with summary cards, line-item detail, **status changes**, and
-  invoice / packing-slip downloads when PDF Invoices & Packing Slips is active
+- **Ecommerce** — full WooCommerce day-to-day in Minn: **Orders** (search, status, notes, refunds,
+  resend/custom email, pay URL, **New order**, **Analytics** with long-range revenue and top products),
+  **Products** (stock filters, bulk, daily fields, **Add product**), **Coupons**, and **Customers**.
+  Invoice / packing-slip downloads when PDF Invoices & Packing Slips is active. Product and coupon
+  CPTs are fenced out of Content.
 - **Users** — directory with search, a role filter, create/edit users, roles, passwords,
   **bulk role change**, **per-user login sessions with one-click sign-out**, **Switch to
   this user** when the User Switching plugin is active (a switched session shows a **Switch

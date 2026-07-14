@@ -4,7 +4,7 @@ Tags: admin, dashboard, ui, admin theme
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.13.0
+Stable tag: 0.14.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -20,7 +20,7 @@ Features:
 * **Content** — posts, pages and custom post types sorted by publish date (scheduled posts lead), with search, category/tag filters, status pills, bulk actions, and right-click row actions for quick publish/draft/trash, view, and a block-editor escape.
 * **Media** — grid and list library views with real thumbnails, uploads, drag-and-drop, a preview overlay with in-place title, alt text, caption and description editing, bulk select and delete, a right-click menu, and a built-in image editor (rotate and crop, saved as a new copy).
 * **Comments** — moderation with Pending/Approved/Spam/Trash tabs, one-click actions, bulk moderation with shift-range select, inline replies, and a right-click menu.
-* **Orders** — WooCommerce orders with summary cards, line-item detail, status changes, and invoice/packing-slip downloads when PDF Invoices & Packing Slips is active.
+* **Ecommerce** — WooCommerce day-to-day in Minn: Orders (search, status, notes, refunds, resend/custom email, pay URL, New order, Analytics), Products (stock filters, bulk, daily fields, Add product), Coupons, Customers. Invoice/packing-slip downloads when PDF Invoices & Packing Slips is active.
 * **Users** — a role filter, create/edit users, roles, passwords, bulk role change, per-user login sessions with one-click sign-out, Switch to this user when User Switching is active (a switched session shows a Switch back bar), and Copy one-time login link when One Time Login is active.
 * **AI Access** — application passwords for AI agents plus a generated, site-tailored agent guide.
 * **Extensions** — install plugins and themes from WordPress.org or zip upload; activate, deactivate, delete, per-item and bulk updates; Themes tab with screenshots; cards wear real wp.org icons linked to the directory, with linked author lines; and a Licenses tab (see below).
