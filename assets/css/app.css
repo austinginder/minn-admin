@@ -671,6 +671,12 @@ button.minn-nav-label:hover { color: var(--text2); }
 
 /* ===== Editor: view link + history ===== */
 .minn-side-viewlink { display: block; text-align: center; margin-top: 9px; font-size: 13.5px; font-weight: 600; }
+/* Public Post Preview (adapters/public-post-preview.php) under Publish. */
+.minn-ppp { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); }
+.minn-ppp .minn-check-row { margin-top: 0; }
+.minn-ppp-row { display: flex; gap: 6px; margin-top: 8px; align-items: stretch; }
+.minn-ppp-row .minn-ppp-url { flex: 1; min-width: 0; font-size: 11.5px; }
+.minn-ppp-row .minn-btn-soft { flex-shrink: 0; }
 .minn-featured-thumb {
   display: block; width: 100%; aspect-ratio: 16 / 10; border-radius: 9px; background-size: cover;
   background-position: center; border: 1px solid var(--border); cursor: pointer;

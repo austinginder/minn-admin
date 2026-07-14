@@ -407,6 +407,9 @@ class Minn_Admin {
 			// only; the users row menu mints the single-use link on demand so
 			// the secret never rides a pageload.
 			'otl'      => function_exists( 'minn_admin_otl_active' ) && minn_admin_otl_active(),
+			// Public Post Preview (adapters/public-post-preview.php) — boolean
+			// only; editor + content menu load/toggle the share URL on demand.
+			'ppp'      => function_exists( 'minn_admin_ppp_active' ) && minn_admin_ppp_active(),
 			// A User Switching session's way home (adapters/user-switching.php):
 			// { name, url } of the account to switch back to, else null. The
 			// plugin's own back-link lives in the admin bar Minn never renders.

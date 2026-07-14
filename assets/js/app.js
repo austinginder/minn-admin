@@ -1958,6 +1958,7 @@
 				<button type="button" data-ract="open">Open in Minn</button>
 				${ viewUrl ? `<a href="${ esc( viewUrl ) }" target="_blank" rel="noopener">${ p.status === 'publish' ? 'View on site' : 'Preview draft' } ↗</a>` : '' }
 				<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">Edit in block editor ↗</a>
+				${ B.ppp && p.status !== 'publish' && p.status !== 'private' && p.status !== 'trash' ? '<button type="button" data-ract="ppp">Copy public preview link</button>' : '' }
 				<button type="button" data-ract="duplicate">Duplicate</button>
 				<div class="minn-new-menu-label">Status</div>
 				${ p.status !== 'publish' ? '<button type="button" data-ract="publish">Publish now</button>' : '' }
@@ -1969,6 +1970,10 @@
 			$$( '[data-ract]', rowMenu ).forEach( ( b ) => b.addEventListener( 'click', () => {
 				const act = b.dataset.ract;
 				if ( act === 'open' ) { hideRowMenu(); go( `editor/${ p.type }/${ p.id }` ); }
+				else if ( act === 'ppp' ) {
+					hideRowMenu();
+					copyPublicPreviewLink( p.id ).catch( ( e ) => toast( e.message || 'Could not copy preview link', true ) );
+				}
 				else if ( act === 'duplicate' ) {
 					hideRowMenu();
 					api( `minn-admin/v1/posts/${ p.id }/duplicate`, { method: 'POST', body: '{}' } )
@@ -11375,6 +11380,7 @@
 			loadEditorPanels( state.editor, p );
 			loadPageAttrs( state.editor );
 			loadEditorRevisions( state.editor );
+			loadEditorPpp( state.editor );
 			// A crash or an abandoned session leaves an autosave revision newer
 			// than the post — surface it instead of silently forgetting it.
 			api( `wp/v2/${ state.editorType }/${ p.id }/autosaves?_fields=id,modified` )
@@ -11596,6 +11602,9 @@
 			// Manual save/update/publish creates a WP revision — refresh the
 			// History card so it appears without a full page reload.
 			if ( ed.id ) loadEditorRevisions( ed );
+			// Publish clears PPP eligibility; re-fetch when still draft-like.
+			if ( pppEligible( ed ) ) loadEditorPpp( ed );
+			else ed.ppp = null;
 			renderEditorSide();
 			renderTopbar();
 		} catch ( e ) {
@@ -12954,6 +12963,131 @@
 		return opts;
 	}
 
+	// Public Post Preview (B.ppp): shareable anonymous draft links via the
+	// Public Post Preview plugin. State is loaded on demand (secret URL never
+	// rides the boot payload). Eligible = not publish/private/trash.
+	function pppEligible( ed ) {
+		if ( ! B.ppp || ! ed || ! ed.id ) return false;
+		const s = ed.status || '';
+		return s !== 'publish' && s !== 'private' && s !== 'trash' && s !== 'auto-draft';
+	}
+
+	async function loadEditorPpp( ed ) {
+		if ( ! pppEligible( ed ) ) {
+			if ( ed ) ed.ppp = null;
+			return;
+		}
+		ed.ppp = undefined; // loading sentinel
+		try {
+			const r = await api( `minn-admin/v1/ppp/${ ed.id }` );
+			if ( state.editor !== ed ) return;
+			ed.ppp = r;
+			if ( state.route === 'editor' ) renderEditorSide();
+		} catch ( e ) {
+			if ( state.editor === ed ) {
+				ed.ppp = { enabled: false, url: '', hours: 48, eligible: false, reason: e.message || 'Unavailable' };
+				if ( state.route === 'editor' ) renderEditorSide();
+			}
+		}
+	}
+
+	function editorPppHtml( ed ) {
+		if ( ! pppEligible( ed ) ) return '';
+		const st = ed.ppp;
+		if ( st === undefined ) {
+			return `<div class="minn-ppp" id="minn-ppp"><div class="minn-slug-note">Loading public preview…</div></div>`;
+		}
+		if ( st && st.eligible === false ) {
+			return '';
+		}
+		const on = !!( st && st.enabled );
+		const hours = ( st && st.hours ) || 48;
+		return `<div class="minn-ppp" id="minn-ppp">
+			<label class="minn-check-row"><input type="checkbox" id="minn-ppp-on"${ on ? ' checked' : '' }> Public preview link</label>
+			${ on && st.url ? `
+			<div class="minn-ppp-row">
+				<input type="text" class="minn-input mono minn-ppp-url" id="minn-ppp-url" value="${ esc( st.url ) }" readonly spellcheck="false">
+				<button type="button" class="minn-btn-soft" id="minn-ppp-copy">Copy</button>
+			</div>
+			<div class="minn-slug-note">Anyone with the link can view this draft (~${ hours }h, Public Post Preview).</div>` : `
+			<div class="minn-slug-note">Share a link so people without accounts can preview this draft.</div>` }
+		</div>`;
+	}
+
+	function bindEditorPpp( el, ed ) {
+		const box = $( '#minn-ppp-on', el );
+		if ( box ) {
+			box.addEventListener( 'change', async () => {
+				if ( ! ed.id ) return;
+				box.disabled = true;
+				try {
+					const r = await api( `minn-admin/v1/ppp/${ ed.id }`, {
+						method: 'POST',
+						body: JSON.stringify( { enabled: box.checked } ),
+					} );
+					if ( state.editor === ed ) {
+						ed.ppp = r;
+						renderEditorSide();
+						if ( r.enabled && r.url ) {
+							try {
+								await navigator.clipboard.writeText( r.url );
+								toast( 'Public preview on · link copied' );
+							} catch ( e2 ) {
+								toast( 'Public preview enabled' );
+							}
+						} else {
+							toast( 'Public preview off' );
+						}
+					}
+				} catch ( e ) {
+					toast( e.message || 'Could not update public preview', true );
+					box.checked = ! box.checked;
+					box.disabled = false;
+				}
+			} );
+		}
+		const copy = $( '#minn-ppp-copy', el );
+		if ( copy ) {
+			copy.addEventListener( 'click', async () => {
+				const url = ed.ppp && ed.ppp.url;
+				if ( ! url ) return;
+				try {
+					await navigator.clipboard.writeText( url );
+					toast( 'Public preview link copied' );
+				} catch ( e ) {
+					const input = $( '#minn-ppp-url', el );
+					if ( input ) { input.focus(); input.select(); }
+					toast( 'Select the link and copy it', true );
+				}
+			} );
+		}
+	}
+
+	// Content row menu / ad-hoc: enable if needed, then copy the share URL.
+	async function copyPublicPreviewLink( postId ) {
+		let r = await api( `minn-admin/v1/ppp/${ postId }` );
+		if ( ! r.eligible ) throw new Error( r.reason || 'Public preview is not available for this post.' );
+		if ( ! r.enabled ) {
+			r = await api( `minn-admin/v1/ppp/${ postId }`, {
+				method: 'POST',
+				body: JSON.stringify( { enabled: true } ),
+			} );
+		}
+		if ( ! r.url ) throw new Error( 'No preview link returned.' );
+		try {
+			await navigator.clipboard.writeText( r.url );
+			toast( r.enabled ? 'Public preview link copied' : 'Public preview enabled · link copied' );
+		} catch ( e ) {
+			prompt( 'Public preview link (copy it now):', r.url );
+		}
+		// Keep the open editor's sidebar in sync if this is the same post.
+		const ed = state.editor;
+		if ( ed && ed.id === postId ) {
+			ed.ppp = r;
+			if ( state.route === 'editor' ) renderEditorSide();
+		}
+	}
+
 	function renderEditorSide() {
 		const ed = state.editor;
 		const el = $( '#minn-editor-side' );
@@ -12992,6 +13126,7 @@
 			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
 			${ LIVE_STATUSES.includes( ed.status ) ? '' : '<button class="minn-btn-soft minn-save-draft" id="minn-save-draft-btn">Save draft</button>' }
 			${ ed.id && ed.link ? `<a class="minn-side-viewlink" href="${ esc( ed.status === 'publish' ? ed.link : ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) }" target="_blank" rel="noopener">${ ed.status === 'publish' ? 'View on site ↗' : 'Preview draft ↗' }</a>` : '' }
+			${ editorPppHtml( ed ) }
 		</div>
 		${ ed.supportsThumb ? `
 		<div class="minn-side-card">
@@ -13155,6 +13290,7 @@
 			ed.stickyDirty = true;
 			if ( ed.id ) scheduleAutosave();
 		} );
+		bindEditorPpp( el, ed );
 		const commentBox = $( '#minn-comment-status', el );
 		if ( commentBox ) commentBox.addEventListener( 'change', () => {
 			ed.commentStatus = commentBox.checked ? 'open' : 'closed';
