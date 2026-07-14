@@ -542,6 +542,26 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Hover-tooltip payload for the Add-plugin catalog (one slug at a time).
+		register_rest_route(
+			self::NS,
+			'/plugins/info',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'plugin_info' ),
+				'permission_callback' => function () {
+					return current_user_can( 'install_plugins' );
+				},
+				'args'                => array(
+					'slug' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_title',
+					),
+				),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/plugins/upload',
@@ -551,6 +571,34 @@ class Minn_Admin_REST {
 				'permission_callback' => function () {
 					return current_user_can( 'install_plugins' ) && current_user_can( 'upload_files' );
 				},
+			)
+		);
+
+		// Install from a remote zip (GitHub release, etc.). Used by the curated
+		// Add-plugin catalog for plugins that are not on wordpress.org.
+		register_rest_route(
+			self::NS,
+			'/plugins/install-url',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'install_plugin_from_url' ),
+				'permission_callback' => function () {
+					return current_user_can( 'install_plugins' );
+				},
+				'args'                => array(
+					'url'    => array(
+						'type'     => 'string',
+						'required' => false,
+					),
+					'github' => array(
+						'type'     => 'string',
+						'required' => false,
+					),
+					'asset'  => array(
+						'type'     => 'string',
+						'required' => false,
+					),
+				),
 			)
 		);
 
@@ -2875,6 +2923,102 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/**
+	 * Slim plugin card for the Add-plugin catalog hover tip.
+	 *
+	 * Reads wordpress.org via plugins_api (plugin_information). Cached 12h per
+	 * slug so opening the catalog and hovering many chips stays snappy.
+	 */
+	public static function plugin_info( WP_REST_Request $request ) {
+		$slug = sanitize_title( (string) $request['slug'] );
+		if ( ! $slug ) {
+			return new WP_Error( 'no_slug', 'Plugin slug is required.', array( 'status' => 400 ) );
+		}
+
+		// Non-wp.org catalog entries (GitHub-only) answer from a small local map
+		// so the tip never 404s on Disembark et al.
+		$local = self::catalog_external_info( $slug );
+		if ( $local ) {
+			return rest_ensure_response( $local );
+		}
+
+		$cache_key = 'minn_pi_info_' . md5( $slug );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return rest_ensure_response( $cached );
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+		$res = plugins_api(
+			'plugin_information',
+			array(
+				'slug'   => $slug,
+				'fields' => array(
+					'short_description' => true,
+					'icons'             => true,
+					'active_installs'   => true,
+					'sections'          => false,
+					'description'       => false,
+					'reviews'           => false,
+					'downloaded'        => false,
+					'rating'            => true,
+					'ratings'           => false,
+					'last_updated'      => false,
+					'added'             => false,
+					'tags'              => false,
+					'homepage'          => false,
+					'donate_link'       => false,
+					'contributors'      => false,
+				),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$p     = (array) $res;
+		$icons = isset( $p['icons'] ) ? (array) $p['icons'] : array();
+		// author is HTML like <a href="…">Name</a> — strip to plain text.
+		$author = isset( $p['author'] ) ? wp_strip_all_tags( (string) $p['author'] ) : '';
+		$author = html_entity_decode( $author, ENT_QUOTES );
+		$payload = array(
+			'slug'        => $slug,
+			'name'        => html_entity_decode( wp_strip_all_tags( isset( $p['name'] ) ? $p['name'] : $slug ), ENT_QUOTES ),
+			'author'      => $author,
+			'description' => html_entity_decode( wp_strip_all_tags( isset( $p['short_description'] ) ? $p['short_description'] : '' ), ENT_QUOTES ),
+			'installs'    => isset( $p['active_installs'] ) ? (int) $p['active_installs'] : 0,
+			'version'     => isset( $p['version'] ) ? (string) $p['version'] : '',
+			'rating'      => isset( $p['rating'] ) ? (int) $p['rating'] : 0,
+			'icon'        => isset( $icons['2x'] ) ? $icons['2x'] : ( isset( $icons['1x'] ) ? $icons['1x'] : ( isset( $icons['default'] ) ? $icons['default'] : '' ) ),
+			'source'      => 'wporg',
+		);
+		set_transient( $cache_key, $payload, 12 * HOUR_IN_SECONDS );
+		return rest_ensure_response( $payload );
+	}
+
+	/**
+	 * Static tip payload for catalog plugins that are not on wordpress.org.
+	 *
+	 * @param string $slug Plugin directory slug.
+	 * @return array|null
+	 */
+	private static function catalog_external_info( $slug ) {
+		$map = array(
+			'disembark' => array(
+				'slug'        => 'disembark',
+				'name'        => 'Disembark',
+				'author'      => 'Disembark Host',
+				'description' => 'Generate a full WordPress backup (files + database) and pull it off-site with the Disembark CLI or disembark.host.',
+				'installs'    => 0,
+				'version'     => '',
+				'rating'      => 0,
+				'icon'        => '',
+				'source'      => 'github',
+				'homepage'    => 'https://disembark.host/',
+			),
+		);
+		return isset( $map[ $slug ] ) ? $map[ $slug ] : null;
+	}
+
+	/**
 	 * Install a plugin from an uploaded zip.
 	 */
 	public static function upload_plugin( WP_REST_Request $request ) {
@@ -2912,6 +3056,148 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'plugin'    => $upgrader->plugin_info(),
 			)
 		);
+	}
+
+	/**
+	 * Install a plugin from a remote zip URL or a GitHub release.
+	 *
+	 * Body: { url: "https://…/plugin.zip" } OR
+	 *       { github: "Owner/repo", asset?: "name.zip" }
+	 *
+	 * Hosts are allowlisted (GitHub release downloads + wp.org packages) so a
+	 * compromised client cannot point the server at arbitrary URLs.
+	 */
+	public static function install_plugin_from_url( WP_REST_Request $request ) {
+		$url    = trim( (string) $request['url'] );
+		$github = trim( (string) $request['github'] );
+		$asset  = trim( (string) $request['asset'] );
+
+		if ( $github ) {
+			$resolved = self::github_release_zip_url( $github, $asset );
+			if ( is_wp_error( $resolved ) ) {
+				return $resolved;
+			}
+			$url = $resolved;
+		}
+
+		if ( ! $url ) {
+			return new WP_Error( 'no_source', 'Provide a zip URL or a github owner/repo.', array( 'status' => 400 ) );
+		}
+
+		$allowed = self::plugin_install_url_allowed( $url );
+		if ( is_wp_error( $allowed ) ) {
+			return $allowed;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+
+		// Plugin_Upgrader::install accepts a remote package URL and downloads
+		// it through download_url() (follows redirects to objects.githubusercontent.com).
+		$skin     = new WP_Ajax_Upgrader_Skin();
+		$upgrader = new Plugin_Upgrader( $skin );
+		$result   = $upgrader->install( $url );
+
+		if ( ! $result || is_wp_error( $result ) ) {
+			$errors = $skin->get_error_messages();
+			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : 'Install failed.', array( 'status' => 500 ) );
+		}
+
+		return rest_ensure_response(
+			array(
+				'installed' => true,
+				'plugin'    => $upgrader->plugin_info(),
+				'url'       => $url,
+			)
+		);
+	}
+
+	/**
+	 * Resolve the latest GitHub release zip for owner/repo.
+	 *
+	 * @param string $repo  "Owner/repo".
+	 * @param string $asset Preferred asset filename (optional).
+	 * @return string|WP_Error Download URL.
+	 */
+	private static function github_release_zip_url( $repo, $asset = '' ) {
+		if ( ! preg_match( '#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', $repo ) ) {
+			return new WP_Error( 'bad_github', 'Invalid GitHub repository.', array( 'status' => 400 ) );
+		}
+		$api = 'https://api.github.com/repos/' . $repo . '/releases/latest';
+		$res = wp_remote_get(
+			$api,
+			array(
+				'timeout' => 15,
+				'headers' => array(
+					'Accept'     => 'application/vnd.github+json',
+					'User-Agent' => 'Minn-Admin/' . ( defined( 'MINN_ADMIN_VERSION' ) ? MINN_ADMIN_VERSION : '1' ),
+				),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		$body = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+		if ( 200 !== $code || ! is_array( $body ) ) {
+			return new WP_Error( 'github_api', 'Could not read the latest GitHub release.', array( 'status' => 502 ) );
+		}
+		$assets = isset( $body['assets'] ) && is_array( $body['assets'] ) ? $body['assets'] : array();
+		$pick   = null;
+		if ( $asset ) {
+			foreach ( $assets as $a ) {
+				if ( isset( $a['name'] ) && $a['name'] === $asset && ! empty( $a['browser_download_url'] ) ) {
+					$pick = $a['browser_download_url'];
+					break;
+				}
+			}
+		}
+		if ( ! $pick ) {
+			foreach ( $assets as $a ) {
+				if ( ! empty( $a['browser_download_url'] ) && preg_match( '/\.zip$/i', (string) ( $a['name'] ?? '' ) ) ) {
+					$pick = $a['browser_download_url'];
+					break;
+				}
+			}
+		}
+		if ( ! $pick ) {
+			return new WP_Error( 'github_no_zip', 'That release has no zip asset.', array( 'status' => 404 ) );
+		}
+		return $pick;
+	}
+
+	/**
+	 * Allowlist remote install hosts.
+	 *
+	 * @param string $url Candidate package URL.
+	 * @return true|WP_Error
+	 */
+	private static function plugin_install_url_allowed( $url ) {
+		$parts = wp_parse_url( $url );
+		if ( empty( $parts['scheme'] ) || 'https' !== strtolower( $parts['scheme'] ) ) {
+			return new WP_Error( 'bad_url', 'Install URL must be HTTPS.', array( 'status' => 400 ) );
+		}
+		$host = isset( $parts['host'] ) ? strtolower( $parts['host'] ) : '';
+		$ok   = array(
+			'github.com',
+			'www.github.com',
+			'objects.githubusercontent.com',
+			'release-assets.githubusercontent.com',
+			'downloads.wordpress.org',
+			'downloads.w.org',
+		);
+		if ( ! in_array( $host, $ok, true ) ) {
+			return new WP_Error( 'host_not_allowed', 'That download host is not allowed.', array( 'status' => 400 ) );
+		}
+		// GitHub release assets: /…/releases/download/…/*.zip
+		// wp.org packages: /plugin/*.zip
+		$path = isset( $parts['path'] ) ? $parts['path'] : '';
+		if ( ! preg_match( '/\.zip$/i', $path ) ) {
+			return new WP_Error( 'not_zip', 'Install URL must point at a .zip file.', array( 'status' => 400 ) );
+		}
+		return true;
 	}
 
 	/**
