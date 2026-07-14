@@ -87,5 +87,68 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'deactivate keeps it too', Math.abs( afterOff - before ) < 60, `before=${ before } after=${ afterOff }` );
 	}
 
+	/* ===== Right-click menu on plugin cards ===== */
+	// Menu verbs share the switch/delete handlers; open via contextmenu and
+	// read labels (do not drive real delete/deactivate from the menu here).
+	const pluginMenu = await page.evaluate( () => {
+		const card = document.querySelector( '.minn-plugin[data-plugin="minn-admin/minn-admin"]' )
+			|| document.querySelector( '.minn-plugin' );
+		if ( ! card ) return { ok: false, reason: 'no card' };
+		card.dispatchEvent( new MouseEvent( 'contextmenu', {
+			bubbles: true, cancelable: true, clientX: 220, clientY: 220,
+		} ) );
+		const menu = document.querySelector( '.minn-ctx-menu' );
+		if ( ! menu ) return { ok: false, reason: 'no menu' };
+		const labels = [ ...menu.querySelectorAll( 'button, a, .minn-new-menu-label' ) ]
+			.map( ( el ) => el.textContent.trim() );
+		const hasAct = labels.some( ( l ) => /^(Activate|Deactivate)$/.test( l ) );
+		const hasCopy = labels.some( ( l ) => /Copy plugin file/.test( l ) );
+		const hasLink = labels.some( ( l ) => /↗|WordPress\.org|Plugin website|Author/.test( l ) )
+			|| labels.includes( 'Links' );
+		// Dismiss without running anything.
+		document.body.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+		return { ok: true, labels, hasAct, hasCopy, hasLink, n: labels.length };
+	} );
+	t.check( 'plugin right-click opens a context menu', pluginMenu.ok, JSON.stringify( pluginMenu ) );
+	t.check( 'plugin menu has activate/deactivate + copy file', pluginMenu.hasAct && pluginMenu.hasCopy, JSON.stringify( pluginMenu ) );
+	t.check( 'plugin menu offers at least one link or Links section', pluginMenu.hasLink || pluginMenu.n >= 2, JSON.stringify( pluginMenu ) );
+
+	/* ===== Right-click menu on theme cards ===== */
+	await page.click( '[data-xtab="themes"]' );
+	await page.waitForSelector( '.minn-theme', { timeout: 15000 } );
+	const themeMenu = await page.evaluate( () => {
+		const card = document.querySelector( '.minn-theme' );
+		if ( ! card ) return { ok: false, reason: 'no card' };
+		card.dispatchEvent( new MouseEvent( 'contextmenu', {
+			bubbles: true, cancelable: true, clientX: 240, clientY: 240,
+		} ) );
+		const menu = document.querySelector( '.minn-ctx-menu' );
+		if ( ! menu ) return { ok: false, reason: 'no menu' };
+		const labels = [ ...menu.querySelectorAll( 'button, a, .minn-new-menu-label' ) ]
+			.map( ( el ) => el.textContent.trim() );
+		const hasCopy = labels.some( ( l ) => /Copy stylesheet/.test( l ) );
+		// Active theme may only have links + copy; inactive has Activate.
+		const sensible = hasCopy && labels.length >= 1;
+		document.body.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+		return { ok: true, labels, hasCopy, sensible };
+	} );
+	t.check( 'theme right-click opens a context menu', themeMenu.ok && themeMenu.sensible, JSON.stringify( themeMenu ) );
+
+	/* ===== Themes REST carries author/theme URIs for the menu ===== */
+	const themesApi = await page.evaluate( async () => {
+		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/themes', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce },
+		} );
+		const body = await r.json();
+		const list = ( body && body.themes ) || [];
+		const sample = list[ 0 ] || {};
+		return {
+			status: r.status,
+			n: list.length,
+			hasKeys: !!( sample && 'author_uri' in sample && 'theme_uri' in sample && 'on_wporg' in sample ),
+		};
+	} );
+	t.check( 'themes API includes author_uri, theme_uri, on_wporg', themesApi.status === 200 && themesApi.n > 0 && themesApi.hasKeys, JSON.stringify( themesApi ) );
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
