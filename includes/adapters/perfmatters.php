@@ -251,6 +251,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['perfmatters'] = array(
 		'label'    => 'Performance',
 		'sub'      => 'Perfmatters',
+		'family'   => 'performance',
 		'icon'     => 'gear',
 		'cap'      => 'manage_options',
 		'settings' => array(
