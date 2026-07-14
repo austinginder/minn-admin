@@ -75,7 +75,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'can select product for bulk', checked, '' );
 		if ( checked ) {
 			await page.waitForSelector( '#minn-prod-bulk-apply', { timeout: 5000 } );
-			await page.selectOption( '#minn-prod-bulk-status', 'draft' );
+			// Status is a themed combobox (same pattern as Users bulk role).
+			t.check( 'bulk status is a combobox, not a native select',
+				( await page.$( '[data-prod-bulk-status] .minn-ac-input' ) ) !== null
+				&& ( await page.$( '#minn-prod-bulk-status' ) ) === null );
+			await page.click( '[data-prod-bulk-status] .minn-ac-input' );
+			await page.waitForSelector( '[data-prod-bulk-status] .minn-ac-item[data-acv="draft"]', { timeout: 5000 } );
+			await page.click( '[data-prod-bulk-status] .minn-ac-item[data-acv="draft"]' );
 			await page.click( '#minn-prod-bulk-apply' );
 			await page.waitForFunction( async ( id ) => {
 				// Poll REST via page until status flips (batch can lag a beat).

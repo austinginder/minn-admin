@@ -2149,13 +2149,10 @@
 				</div>` : `
 				<div class="minn-bulkbar">
 					<span class="minn-bulk-count">${ sel.size } selected</span>
-					<select class="minn-input" id="minn-bulk-status">
-						<option value="">Set status…</option>
-						<option value="publish">Published</option>
-						<option value="draft">Draft</option>
-						<option value="pending">Pending</option>
-						${ B.caps.readPrivate ? '<option value="private">Private</option>' : '' }
-					</select>
+					<div class="minn-ac minn-bulk-ac" data-bulkstatus>
+						<input class="minn-input minn-ac-input" placeholder="Set status…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Set status">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
 					<button class="minn-btn-soft" id="minn-bulk-apply">Apply</button>
 					<button class="minn-btn-soft danger" id="minn-bulk-trash">${ icon( 'trash' ) } Trash</button>
 					<button class="minn-btn-soft" id="minn-bulk-clear" style="margin-left:auto;">Clear</button>
@@ -2169,9 +2166,21 @@
 					if ( ! confirm( `Permanently delete ${ sel.size } item${ sel.size === 1 ? '' : 's' }? This cannot be undone.` ) ) return;
 					runBulk( sel, e.currentTarget, deleteOne, 'Deleted permanently' );
 				} );
+				// Themed combobox (users bulk role pattern) — native <select>
+				// was the last OS-drawn control on this bar.
+				const statusWrap = $( '[data-bulkstatus]', slot );
+				const statusOpts = [
+					{ value: '', label: 'Set status…' },
+					{ value: 'publish', label: 'Published' },
+					{ value: 'draft', label: 'Draft' },
+					{ value: 'pending', label: 'Pending' },
+					...( B.caps.readPrivate ? [ { value: 'private', label: 'Private' } ] : [] ),
+				];
+				if ( statusWrap ) bindAutocomplete( statusWrap, statusOpts, { strict: true, value: '' } );
 				const bulkApply = $( '#minn-bulk-apply', slot );
 				if ( bulkApply ) bulkApply.addEventListener( 'click', ( e ) => {
-					const status = $( '#minn-bulk-status', slot ).value;
+					const acInput = statusWrap && $( '.minn-ac-input', statusWrap );
+					const status = acInput ? acInput.dataset.acValue : '';
 					if ( ! status ) { toast( 'Pick a status first', true ); return; }
 					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'POST', body: JSON.stringify( { status } ) } ), 'Status updated' );
 				} );
@@ -3974,28 +3983,38 @@
 				slot.innerHTML = `
 				<div class="minn-bulkbar">
 					<span class="minn-bulk-count">${ psel.size } selected</span>
-					<select class="minn-input" id="minn-prod-bulk-status">
-						<option value="">Set status…</option>
-						<option value="publish">Published</option>
-						<option value="draft">Draft</option>
-						<option value="private">Private</option>
-					</select>
-					<select class="minn-input" id="minn-prod-bulk-stock">
-						<option value="">Set stock…</option>
-						<option value="instock">In stock</option>
-						<option value="outofstock">Out of stock</option>
-						<option value="onbackorder">On backorder</option>
-					</select>
+					<div class="minn-ac minn-bulk-ac" data-prod-bulk-status>
+						<input class="minn-input minn-ac-input" placeholder="Set status…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Set status">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
+					<div class="minn-ac minn-bulk-ac" data-prod-bulk-stock>
+						<input class="minn-input minn-ac-input" placeholder="Set stock…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Set stock">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
 					<button class="minn-btn-soft" id="minn-prod-bulk-apply">Apply</button>
 					<button class="minn-btn-soft" id="minn-prod-bulk-clear" style="margin-left:auto;">Clear</button>
 				</div>`;
+				const stWrap = $( '[data-prod-bulk-status]', slot );
+				const skWrap = $( '[data-prod-bulk-stock]', slot );
+				if ( stWrap ) bindAutocomplete( stWrap, [
+					{ value: '', label: 'Set status…' },
+					{ value: 'publish', label: 'Published' },
+					{ value: 'draft', label: 'Draft' },
+					{ value: 'private', label: 'Private' },
+				], { strict: true, value: '' } );
+				if ( skWrap ) bindAutocomplete( skWrap, [
+					{ value: '', label: 'Set stock…' },
+					{ value: 'instock', label: 'In stock' },
+					{ value: 'outofstock', label: 'Out of stock' },
+					{ value: 'onbackorder', label: 'On backorder' },
+				], { strict: true, value: '' } );
 				$( '#minn-prod-bulk-clear', slot ).addEventListener( 'click', () => {
 					psel.clear();
 					renderProducts();
 				} );
 				$( '#minn-prod-bulk-apply', slot ).addEventListener( 'click', async () => {
-					const st = ( $( '#minn-prod-bulk-status', slot ) || {} ).value;
-					const sk = ( $( '#minn-prod-bulk-stock', slot ) || {} ).value;
+					const st = stWrap && $( '.minn-ac-input', stWrap ) ? $( '.minn-ac-input', stWrap ).dataset.acValue : '';
+					const sk = skWrap && $( '.minn-ac-input', skWrap ) ? $( '.minn-ac-input', skWrap ).dataset.acValue : '';
 					if ( ! st && ! sk ) { toast( 'Pick a status or stock change', true ); return; }
 					const ids = [ ...psel ];
 					const update = ids.map( ( id ) => {

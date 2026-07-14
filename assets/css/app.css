@@ -1494,6 +1494,11 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-bulk-count { font-weight: 600; font-size: 13.5px; }
 .minn-bulk-label { font-size: 13px; color: var(--text3); }
 .minn-bulkbar select.minn-input { width: auto; }
+/* Bulk bar comboboxes (content status, product status/stock, user role). */
+.minn-bulkbar .minn-bulk-ac,
+.minn-bulkbar .minn-tax-select { width: auto; min-width: 148px; max-width: 220px; flex: 0 1 auto; }
+.minn-bulkbar .minn-bulk-ac .minn-ac-input,
+.minn-bulkbar .minn-tax-select .minn-ac-input { width: 100%; min-width: 0; }
 .minn-sessions { padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .minn-session-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .minn-session-row:last-of-type { border-bottom: none; }
