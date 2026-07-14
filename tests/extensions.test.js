@@ -103,15 +103,38 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			.map( ( el ) => el.textContent.trim() );
 		const hasAct = labels.some( ( l ) => /^(Activate|Deactivate)$/.test( l ) );
 		const hasCopy = labels.some( ( l ) => /Copy plugin file/.test( l ) );
-		const hasLink = labels.some( ( l ) => /↗|WordPress\.org|Plugin website|Author/.test( l ) )
+		// Minn Admin's Plugin URI is GitHub — menu should name the hub.
+		const hasGithub = labels.some( ( l ) => /Open on GitHub/.test( l ) );
+		const hasLink = labels.some( ( l ) => /↗|WordPress\.org|GitHub|Plugin website|Author/.test( l ) )
 			|| labels.includes( 'Links' );
 		// Dismiss without running anything.
 		document.body.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
-		return { ok: true, labels, hasAct, hasCopy, hasLink, n: labels.length };
+		return { ok: true, labels, hasAct, hasCopy, hasLink, hasGithub, n: labels.length };
 	} );
 	t.check( 'plugin right-click opens a context menu', pluginMenu.ok, JSON.stringify( pluginMenu ) );
 	t.check( 'plugin menu has activate/deactivate + copy file', pluginMenu.hasAct && pluginMenu.hasCopy, JSON.stringify( pluginMenu ) );
 	t.check( 'plugin menu offers at least one link or Links section', pluginMenu.hasLink || pluginMenu.n >= 2, JSON.stringify( pluginMenu ) );
+	t.check( 'Minn Admin menu says Open on GitHub (Plugin URI)', pluginMenu.hasGithub, JSON.stringify( pluginMenu ) );
+
+	// A wp.org plugin should offer Open on WordPress.org (meta.url and/or Plugin URI).
+	const orgMenu = await page.evaluate( () => {
+		const card = [ ...document.querySelectorAll( '.minn-plugin' ) ]
+			.find( ( c ) => c.querySelector( '.minn-plugin-icon-link' ) );
+		if ( ! card ) return { ok: false, reason: 'no org card' };
+		card.dispatchEvent( new MouseEvent( 'contextmenu', {
+			bubbles: true, cancelable: true, clientX: 260, clientY: 260,
+		} ) );
+		const menu = document.querySelector( '.minn-ctx-menu' );
+		if ( ! menu ) return { ok: false, reason: 'no menu' };
+		const labels = [ ...menu.querySelectorAll( 'button, a, .minn-new-menu-label' ) ]
+			.map( ( el ) => el.textContent.trim() );
+		const hasOrg = labels.some( ( l ) => /Open on WordPress\.org/.test( l ) );
+		const orgHref = ( [ ...menu.querySelectorAll( 'a' ) ]
+			.find( ( a ) => /wordpress\.org\/plugins\//i.test( a.href ) ) || {} ).href || '';
+		document.body.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+		return { ok: true, labels, hasOrg, orgHref };
+	} );
+	t.check( 'wp.org plugin menu says Open on WordPress.org', orgMenu.ok && orgMenu.hasOrg, JSON.stringify( orgMenu ) );
 
 	/* ===== Right-click menu on theme cards ===== */
 	await page.click( '[data-xtab="themes"]' );
