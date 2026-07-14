@@ -3,6 +3,7 @@
 ## **v0.14.0** - Unreleased
 
 ### Added
+* **FluentSMTP search and delete:** the Email surface for FluentSMTP gains subject/from/to search (the same columns their Logger searches) plus permanent single and bulk delete through `Logger::delete`, with a prefix-scoped SQL fallback when the class is unavailable.
 * **View all revisions:** the editor History card still shows the latest few versions, and when more exist (the live total from `wp/v2/…/revisions`) a **View all revisions (N)** control opens a dialog of every revision with absolute timestamps. Pick a row to open the existing side-by-side diff; ←/→ then walks the full list.
 
 ### Fixed
