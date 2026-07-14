@@ -2583,14 +2583,25 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$active     = get_stylesheet();
 		$items      = array();
 		foreach ( wp_get_themes() as $stylesheet => $theme ) {
+			// update_themes lists only themes WordPress.org (or a licensed
+			// vendor channel) knows about — response = has update, no_update
+			// = current. Used so the context menu can offer a wp.org link
+			// without guessing for custom themes.
+			$on_wporg = $updates && (
+				isset( $updates->response[ $stylesheet ] )
+				|| isset( $updates->no_update[ $stylesheet ] )
+			);
 			$items[] = array(
 				'stylesheet' => $stylesheet,
 				'name'       => $theme->get( 'Name' ),
 				'version'    => $theme->get( 'Version' ),
 				'author'     => wp_strip_all_tags( $theme->get( 'Author' ) ),
+				'author_uri' => esc_url_raw( (string) $theme->get( 'AuthorURI' ) ),
+				'theme_uri'  => esc_url_raw( (string) $theme->get( 'ThemeURI' ) ),
 				'screenshot' => $theme->get_screenshot() ?: '',
 				'active'     => $stylesheet === $active,
 				'parent'     => $theme->parent() ? $theme->parent()->get_stylesheet() : null,
+				'on_wporg'   => (bool) $on_wporg,
 				'update'     => $updates && isset( $updates->response[ $stylesheet ]['new_version'] )
 					? $updates->response[ $stylesheet ]['new_version'] : null,
 			);

@@ -8411,47 +8411,140 @@
 		$$( '.minn-plugin-icon img', view ).forEach( ( img ) =>
 			img.addEventListener( 'error', () => img.remove() )
 		);
-		$$( '[data-toggle]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', async () => {
-				const file = btn.dataset.toggle;
-				const plugin = plugins.find( ( p ) => p.plugin === file );
-				const activating = plugin.status !== 'active';
-				if ( ! activating && file === 'minn-admin/minn-admin' ) {
-					// Turning Minn off ejects the user — that deserves a real
-					// modal and a readable landing, not a native confirm() and
-					// an instant yank to wp-admin (the bounce-audit P1).
-					state.modal = { type: 'minn-off', file, done: false };
-					renderOverlays();
+
+		// Shared by the switch, delete button, and right-click menu so the
+		// three entry points never drift (content-row menu pattern).
+		const togglePluginByFile = async ( file ) => {
+			const plugin = plugins.find( ( p ) => p.plugin === file );
+			if ( ! plugin ) return;
+			const activating = plugin.status !== 'active';
+			if ( ! activating && file === 'minn-admin/minn-admin' ) {
+				// Turning Minn off ejects the user — that deserves a real
+				// modal and a readable landing, not a native confirm() and
+				// an instant yank to wp-admin (the bounce-audit P1).
+				state.modal = { type: 'minn-off', file, done: false };
+				renderOverlays();
+				return;
+			}
+			const card = document.querySelector( `.minn-plugin[data-plugin="${ CSS.escape( file ) }"]` );
+			const btn = card && card.querySelector( '[data-toggle]' );
+			if ( btn ) btn.disabled = true;
+			if ( card ) card.classList.add( 'minn-busy' );
+			toast( `${ activating ? 'Activating' : 'Deactivating' } ${ cleanPluginName( plugin.name ) }…` );
+			try {
+				await api( 'wp/v2/plugins/' + file, {
+					method: 'PUT',
+					body: JSON.stringify( { status: activating ? 'active' : 'inactive' } ),
+				} );
+				plugin.status = activating ? 'active' : 'inactive';
+				toast( cleanPluginName( plugin.name ) + ( activating ? ' activated' : ' deactivated' ) );
+				if ( file === 'minn-admin/minn-admin' && ! activating ) {
+					window.location.href = B.site.adminUrl;
 					return;
 				}
-				btn.disabled = true;
-				const card = btn.closest( '.minn-plugin' );
-				if ( card ) card.classList.add( 'minn-busy' );
-				toast( `${ activating ? 'Activating' : 'Deactivating' } ${ cleanPluginName( plugin.name ) }…` );
-				try {
-					await api( 'wp/v2/plugins/' + file, {
-						method: 'PUT',
-						body: JSON.stringify( { status: activating ? 'active' : 'inactive' } ),
-					} );
-					plugin.status = activating ? 'active' : 'inactive';
-					toast( cleanPluginName( plugin.name ) + ( activating ? ' activated' : ' deactivated' ) );
-					if ( file === 'minn-admin/minn-admin' && ! activating ) {
-						window.location.href = B.site.adminUrl;
-						return;
+				// A plugin flip can change what the app shows elsewhere —
+				// traffic provider on Overview, registered post types, CPT
+				// tabs, page builders, and which blocks/patterns the
+				// editor can insert (Otter et al. only registered after
+				// activate — boot snapshot would stay empty until reload).
+				state.cache.overview = null;
+				bustTypeCaches();
+				await refreshAfterPluginChange();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			if ( state.route === 'extensions' ) renderExtensions();
+		};
+
+		const deletePluginByFile = async ( file ) => {
+			const plugin = plugins.find( ( p ) => p.plugin === file );
+			if ( ! plugin || plugin.status === 'active' ) return;
+			const name = cleanPluginName( plugin.name );
+			if ( ! confirm( `Delete “${ name }”? This removes its files from the server.` ) ) return;
+			const card = document.querySelector( `.minn-plugin[data-plugin="${ CSS.escape( file ) }"]` );
+			if ( card ) card.classList.add( 'minn-busy' );
+			toast( `Deleting ${ name }…` );
+			try {
+				await api( 'wp/v2/plugins/' + file, { method: 'DELETE' } );
+				toast( name + ' deleted' );
+				state.cache.plugins = null;
+				state.cache.overview = null;
+				bustTypeCaches();
+				await refreshAfterPluginChange();
+				await loadPlugins().catch( () => {} );
+			} catch ( e ) {
+				toast( e.message, true );
+				if ( card ) card.classList.remove( 'minn-busy' );
+			}
+			if ( state.route === 'extensions' ) renderExtensions();
+		};
+
+		const pluginMenuEntries = ( p ) => {
+			const file = p.plugin;
+			const name = cleanPluginName( p.name );
+			const on = p.status === 'active';
+			const meta = ( state.cache.pluginMeta || {} )[ file + '.php' ] || {};
+			const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || '';
+			const authorName = p.author ? decodeEntities( stripTags( p.author ) ) : '';
+			const entries = [];
+			entries.push( {
+				label: on ? 'Deactivate' : 'Activate',
+				run: () => togglePluginByFile( file ),
+			} );
+			if ( offered && B.caps.update && ! pluginUpdatePending.has( file ) ) {
+				entries.push( {
+					label: `Update → ${ offered }`,
+					run: () => queuePluginUpdate( file, name ),
+				} );
+			}
+			if ( ! on && B.caps.delete ) {
+				entries.push( {
+					label: 'Delete plugin',
+					danger: true,
+					run: () => deletePluginByFile( file ),
+				} );
+			}
+			// Links section (author / vendor homepage / wp.org or plugin page).
+			const links = [];
+			if ( p.plugin_uri ) {
+				links.push( {
+					label: 'Plugin website ↗',
+					href: p.plugin_uri,
+				} );
+			}
+			if ( p.author_uri ) {
+				links.push( {
+					label: ( authorName ? `Author (${ authorName }) ↗` : 'Author website ↗' ),
+					href: p.author_uri,
+				} );
+			}
+			if ( meta.url ) {
+				const isOrg = /wordpress\.org\/plugins\//i.test( meta.url );
+				links.push( {
+					label: isOrg ? 'View on WordPress.org ↗' : 'Plugin page ↗',
+					href: meta.url,
+				} );
+			}
+			if ( links.length ) {
+				entries.push( { heading: 'Links' } );
+				links.forEach( ( l ) => entries.push( l ) );
+			}
+			entries.push( {
+				label: 'Copy plugin file',
+				run: async () => {
+					try {
+						await navigator.clipboard.writeText( file + '.php' );
+						toast( 'Plugin file copied' );
+					} catch ( err ) {
+						toast( 'Could not copy', true );
 					}
-					// A plugin flip can change what the app shows elsewhere —
-					// traffic provider on Overview, registered post types, CPT
-					// tabs, page builders, and which blocks/patterns the
-					// editor can insert (Otter et al. only registered after
-					// activate — boot snapshot would stay empty until reload).
-					state.cache.overview = null;
-					bustTypeCaches();
-					await refreshAfterPluginChange();
-				} catch ( e ) {
-					toast( e.message, true );
-				}
-				renderExtensions();
-			} )
+				},
+			} );
+			return entries;
+		};
+
+		$$( '[data-toggle]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => togglePluginByFile( btn.dataset.toggle ) )
 		);
 
 		$$( '[data-update]', view ).forEach( ( btn ) =>
@@ -8466,30 +8559,22 @@
 		);
 
 		$$( '[data-del]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', async () => {
-				const file = btn.dataset.del;
-				const plugin = plugins.find( ( p ) => p.plugin === file );
-				const name = cleanPluginName( plugin.name );
-				if ( ! confirm( `Delete “${ name }”? This removes its files from the server.` ) ) return;
-				btn.disabled = true;
-				const card = btn.closest( '.minn-plugin' );
-				if ( card ) card.classList.add( 'minn-busy' );
-				toast( `Deleting ${ name }…` );
-				try {
-					await api( 'wp/v2/plugins/' + file, { method: 'DELETE' } );
-					toast( name + ' deleted' );
-					state.cache.plugins = null;
-					state.cache.overview = null;
-					bustTypeCaches();
-					await refreshAfterPluginChange();
-					await loadPlugins().catch( () => {} );
-				} catch ( e ) {
-					toast( e.message, true );
-					if ( card ) card.classList.remove( 'minn-busy' );
-				}
-				if ( state.route === 'extensions' ) renderExtensions();
-			} )
+			btn.addEventListener( 'click', () => deletePluginByFile( btn.dataset.del ) )
 		);
+
+		// Right-click (or long-press) on a plugin card → same verbs as the
+		// switch / update badge / trash, plus author and vendor links.
+		$$( '.minn-plugin', view ).forEach( ( card ) => {
+			card.addEventListener( 'contextmenu', ( e ) => {
+				const file = card.dataset.plugin;
+				const plugin = plugins.find( ( p ) => p.plugin === file );
+				if ( ! plugin ) return;
+				// Don't steal the browser menu from text inputs if any land here.
+				if ( e.target && ( e.target.closest( 'input, textarea, select' ) ) ) return;
+				e.preventDefault();
+				openMinnMenu( e.clientX, e.clientY, pluginMenuEntries( plugin ) );
+			} );
+		} );
 
 		const checkUpdBtn = $( '#minn-check-updates', view );
 		if ( checkUpdBtn ) {
@@ -8557,7 +8642,7 @@
 		${ visible.length ? `
 		<div class="minn-theme-grid">
 			${ visible.map( ( { t, i } ) => `
-				<div class="minn-card minn-theme${ t.active ? ' is-active' : '' }" data-theme="${ i }">
+				<div class="minn-card minn-theme${ t.active ? ' is-active' : '' }" data-theme="${ i }" data-stylesheet="${ esc( t.stylesheet ) }">
 					<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ esc( t.screenshot ) }')"` : '' }>
 						${ t.active ? '<span class="minn-status publish minn-theme-badge">Active</span>' : '' }
 						${ t.update && ! B.caps.updateThemes ? `<span class="minn-badge-update minn-theme-badge-u">Update ${ esc( t.update ) }</span>` : '' }
@@ -8587,39 +8672,105 @@
 				renderOverlays();
 			} );
 		}
+		const runThemeAction = async ( action, t, btn ) => {
+			if ( ! t ) return;
+			const confirms = {
+				activate: `Switch the site's theme to “${ t.name }”? This changes how the whole site looks.`,
+				delete: `Delete “${ t.name }”? This removes its files from the server.`,
+			};
+			if ( confirms[ action ] && ! confirm( confirms[ action ] ) ) return;
+			if ( btn ) btn.disabled = true;
+			const card = document.querySelector( `.minn-theme[data-stylesheet="${ CSS.escape( t.stylesheet ) }"]` )
+				|| ( btn && btn.closest( '.minn-theme' ) );
+			if ( card ) card.classList.add( 'minn-busy' );
+			const verbs = { activate: 'Activating', delete: 'Deleting', update: 'Updating' };
+			toast( `${ verbs[ action ] } ${ t.name }…` );
+			try {
+				const r = await api( 'minn-admin/v1/themes/' + action, {
+					method: 'POST',
+					body: JSON.stringify( { stylesheet: t.stylesheet } ),
+				} );
+				const done = { activate: `${ t.name } is now the active theme`, delete: `${ t.name } deleted`, update: `${ t.name } updated${ r.version ? ' to v' + r.version : '' }` };
+				toast( done[ action ] );
+				// Bricks and Divi are THEMES — a theme switch can add or
+				// remove a builder. Theme patterns + block styles also
+				// change with the active theme.
+				if ( 'activate' === action ) await refreshAfterPluginChange();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			state.cache.themes = null;
+			if ( state.route === 'extensions' ) renderExtensions();
+		};
+
 		$$( '[data-tact]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', async () => {
+			btn.addEventListener( 'click', () => {
 				const [ action, idx ] = btn.dataset.tact.split( ':' );
-				const t = themes[ parseInt( idx, 10 ) ];
-				if ( ! t ) return;
-				const confirms = {
-					activate: `Switch the site's theme to “${ t.name }”? This changes how the whole site looks.`,
-					delete: `Delete “${ t.name }”? This removes its files from the server.`,
-				};
-				if ( confirms[ action ] && ! confirm( confirms[ action ] ) ) return;
-				btn.disabled = true;
-				const card = btn.closest( '.minn-theme' );
-				if ( card ) card.classList.add( 'minn-busy' );
-				const verbs = { activate: 'Activating', delete: 'Deleting', update: 'Updating' };
-				toast( `${ verbs[ action ] } ${ t.name }…` );
-				try {
-					const r = await api( 'minn-admin/v1/themes/' + action, {
-						method: 'POST',
-						body: JSON.stringify( { stylesheet: t.stylesheet } ),
-					} );
-					const done = { activate: `${ t.name } is now the active theme`, delete: `${ t.name } deleted`, update: `${ t.name } updated${ r.version ? ' to v' + r.version : '' }` };
-					toast( done[ action ] );
-					// Bricks and Divi are THEMES — a theme switch can add or
-					// remove a builder. Theme patterns + block styles also
-					// change with the active theme.
-					if ( 'activate' === action ) await refreshAfterPluginChange();
-				} catch ( e ) {
-					toast( e.message, true );
-				}
-				state.cache.themes = null;
-				if ( state.route === 'extensions' ) renderExtensions();
+				runThemeAction( action, themes[ parseInt( idx, 10 ) ], btn );
 			} )
 		);
+
+		// Shared by the action buttons and right-click menu.
+		const themeMenuEntries = ( t ) => {
+			const entries = [];
+			if ( ! t.active ) {
+				entries.push( { label: 'Activate', run: () => runThemeAction( 'activate', t ) } );
+			}
+			if ( t.update && B.caps.updateThemes ) {
+				entries.push( { label: `Update → ${ t.update }`, run: () => runThemeAction( 'update', t ) } );
+			}
+			if ( ! t.active && B.caps.deleteThemes ) {
+				entries.push( { label: 'Delete theme', danger: true, run: () => runThemeAction( 'delete', t ) } );
+			}
+			const links = [];
+			if ( t.theme_uri ) {
+				links.push( { label: 'Theme website ↗', href: t.theme_uri } );
+			}
+			if ( t.author_uri ) {
+				links.push( {
+					label: t.author ? `Author (${ t.author }) ↗` : 'Author website ↗',
+					href: t.author_uri,
+				} );
+			}
+			// Only offer a directory link when WordPress has seen this theme
+			// on a known channel (or ThemeURI already is the org page).
+			const themeUriIsOrg = t.theme_uri && /wordpress\.org\/themes\//i.test( t.theme_uri );
+			if ( t.on_wporg && ! themeUriIsOrg && t.stylesheet ) {
+				links.push( {
+					label: 'View on WordPress.org ↗',
+					href: 'https://wordpress.org/themes/' + encodeURIComponent( t.stylesheet ) + '/',
+				} );
+			}
+			if ( links.length ) {
+				entries.push( { heading: 'Links' } );
+				links.forEach( ( l ) => entries.push( l ) );
+			}
+			entries.push( {
+				label: 'Copy stylesheet',
+				run: async () => {
+					try {
+						await navigator.clipboard.writeText( t.stylesheet );
+						toast( 'Stylesheet copied' );
+					} catch ( err ) {
+						toast( 'Could not copy', true );
+					}
+				},
+			} );
+			return entries;
+		};
+
+		// Right-click on a theme card — activate / update / delete + links.
+		$$( '.minn-theme', view ).forEach( ( card ) => {
+			card.addEventListener( 'contextmenu', ( e ) => {
+				const idx = parseInt( card.dataset.theme, 10 );
+				const t = themes[ idx ];
+				if ( ! t ) return;
+				if ( e.target && e.target.closest( 'input, textarea, select' ) ) return;
+				e.preventDefault();
+				const entries = themeMenuEntries( t );
+				if ( entries.length ) openMinnMenu( e.clientX, e.clientY, entries );
+			} );
+		} );
 	}
 
 	async function updateAllPlugins( btn ) {
