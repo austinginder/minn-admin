@@ -150,6 +150,54 @@
 		return out.length >= 2 ? out : full;
 	}
 
+	// Extensions context-menu links: name GitHub / WordPress.org when the
+	// URL is on those hosts so the menu reads "Open on …" instead of a
+	// generic "Plugin website". role = project | theme | author | directory.
+	function extHrefKey( href ) {
+		try {
+			const u = new URL( href );
+			return ( u.hostname.replace( /^www\./i, '' ) + u.pathname ).replace( /\/+$/, '' ).toLowerCase();
+		} catch ( e ) {
+			return String( href || '' ).toLowerCase();
+		}
+	}
+	function extLinkLabel( href, role, name ) {
+		const h = String( href || '' );
+		const isGithub = /github\.com\//i.test( h );
+		const isOrg = /wordpress\.org\/(?:plugins|themes)\//i.test( h );
+		if ( role === 'author' ) {
+			if ( isGithub ) {
+				return name ? `Author on GitHub (${ name }) ↗` : 'Author on GitHub ↗';
+			}
+			return name ? `Author (${ name }) ↗` : 'Author website ↗';
+		}
+		if ( isGithub ) return 'Open on GitHub ↗';
+		if ( isOrg ) return 'Open on WordPress.org ↗';
+		if ( role === 'theme' ) return 'Theme website ↗';
+		if ( role === 'directory' ) return 'Plugin page ↗';
+		return 'Plugin website ↗';
+	}
+	// items: [{ href, role, name? }] — de-duped, host-aware labels.
+	// Known hubs (wp.org / GitHub) sort first so they stay one glance away.
+	function extMenuLinks( items ) {
+		const seen = new Set();
+		const out = [];
+		( items || [] ).forEach( ( it ) => {
+			const href = ( it && it.href ) ? String( it.href ).trim() : '';
+			if ( ! href || ! /^https?:\/\//i.test( href ) ) return;
+			const key = extHrefKey( href );
+			if ( ! key || seen.has( key ) ) return;
+			seen.add( key );
+			out.push( {
+				label: extLinkLabel( href, it.role || 'project', it.name || '' ),
+				href,
+			} );
+		} );
+		const hub = ( l ) => /Open on (GitHub|WordPress\.org)/.test( l.label ) ? 0 : 1;
+		out.sort( ( a, b ) => hub( a ) - hub( b ) );
+		return out;
+	}
+
 	/* ===== Pager (shared numbered pagination) ===== */
 
 	// Quiet toolbar meta: "N thing(s)" — live feedback for the filters and
@@ -8504,27 +8552,13 @@
 					run: () => deletePluginByFile( file ),
 				} );
 			}
-			// Links section (author / vendor homepage / wp.org or plugin page).
-			const links = [];
-			if ( p.plugin_uri ) {
-				links.push( {
-					label: 'Plugin website ↗',
-					href: p.plugin_uri,
-				} );
-			}
-			if ( p.author_uri ) {
-				links.push( {
-					label: ( authorName ? `Author (${ authorName }) ↗` : 'Author website ↗' ),
-					href: p.author_uri,
-				} );
-			}
-			if ( meta.url ) {
-				const isOrg = /wordpress\.org\/plugins\//i.test( meta.url );
-				links.push( {
-					label: isOrg ? 'View on WordPress.org ↗' : 'Plugin page ↗',
-					href: meta.url,
-				} );
-			}
+			// Links: Open on WordPress.org / Open on GitHub when the URL
+			// is on those hosts; otherwise Plugin website / Author / page.
+			const links = extMenuLinks( [
+				p.plugin_uri && { href: p.plugin_uri, role: 'project' },
+				meta.url && { href: meta.url, role: 'directory' },
+				p.author_uri && { href: p.author_uri, role: 'author', name: authorName },
+			].filter( Boolean ) );
 			if ( links.length ) {
 				entries.push( { heading: 'Links' } );
 				links.forEach( ( l ) => entries.push( l ) );
@@ -8722,25 +8756,16 @@
 			if ( ! t.active && B.caps.deleteThemes ) {
 				entries.push( { label: 'Delete theme', danger: true, run: () => runThemeAction( 'delete', t ) } );
 			}
-			const links = [];
-			if ( t.theme_uri ) {
-				links.push( { label: 'Theme website ↗', href: t.theme_uri } );
-			}
-			if ( t.author_uri ) {
-				links.push( {
-					label: t.author ? `Author (${ t.author }) ↗` : 'Author website ↗',
-					href: t.author_uri,
-				} );
-			}
-			// Only offer a directory link when WordPress has seen this theme
-			// on a known channel (or ThemeURI already is the org page).
-			const themeUriIsOrg = t.theme_uri && /wordpress\.org\/themes\//i.test( t.theme_uri );
-			if ( t.on_wporg && ! themeUriIsOrg && t.stylesheet ) {
-				links.push( {
-					label: 'View on WordPress.org ↗',
+			const links = extMenuLinks( [
+				t.theme_uri && { href: t.theme_uri, role: 'theme' },
+				// Directory link only when update_themes has seen this theme
+				// (custom themes must not get a fake wordpress.org/themes/slug).
+				t.on_wporg && t.stylesheet && {
 					href: 'https://wordpress.org/themes/' + encodeURIComponent( t.stylesheet ) + '/',
-				} );
-			}
+					role: 'directory',
+				},
+				t.author_uri && { href: t.author_uri, role: 'author', name: t.author || '' },
+			].filter( Boolean ) );
 			if ( links.length ) {
 				entries.push( { heading: 'Links' } );
 				links.forEach( ( l ) => entries.push( l ) );
