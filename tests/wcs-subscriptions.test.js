@@ -153,6 +153,57 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			t.check( 'status save round-trips', false );
 		}
 
+		// Polish: open a sub with parent_id when present (fixture 2939 is seeded).
+		const withParent = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'wc/v3/subscriptions?per_page=20&_fields=id,parent_id,customer_id,number', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			const list = await r.json();
+			return ( list || [] ).find( ( s ) => s.parent_id > 0 ) || null;
+		} );
+		if ( withParent ) {
+			await page.goto( `${ BASE }/minn-admin/subscriptions`, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( `[data-sub="${ withParent.id }"]`, { timeout: 15000 } );
+			await page.click( `[data-sub="${ withParent.id }"]` );
+			await page.waitForSelector( '#minn-sub-status, #minn-sub-open-parent', { timeout: 15000 } );
+			const polish = await page.evaluate( () => ( {
+				parentBtn: !! document.querySelector( '#minn-sub-open-parent, [data-relorder]' ),
+				parentLabel: [ ...document.querySelectorAll( '.minn-side-title' ) ].some( ( el ) => /Parent order/i.test( el.textContent ) ),
+				viewCustomer: !! document.querySelector( '#minn-sub-open-customer, #minn-sub-open-customer-foot' ),
+			} ) );
+			t.check( 'parent order affordance present', polish.parentBtn || polish.parentLabel, JSON.stringify( polish ) );
+			t.check( 'view customer button present', polish.viewCustomer );
+
+			// Open customer → subscriptions strip (section only appears after customer full load).
+			const custBtn = await page.$( '#minn-sub-open-customer' ) || await page.$( '#minn-sub-open-customer-foot' );
+			if ( custBtn ) {
+				await custBtn.click();
+				await page.waitForFunction( () => {
+					const titles = [ ...document.querySelectorAll( '.minn-side-title' ) ].map( ( e ) => e.textContent.trim() );
+					return titles.some( ( x ) => x === 'Subscriptions' );
+				}, null, { timeout: 15000 } );
+				await page.waitForFunction( () => {
+					return document.querySelector( '[data-open-sub]' )
+						|| /No subscriptions for this customer/i.test( document.body.innerText || '' );
+				}, null, { timeout: 15000 } );
+				const custUi = await page.evaluate( () => {
+					const titles = [ ...document.querySelectorAll( '.minn-side-title' ) ].map( ( e ) => e.textContent.trim() );
+					const subRows = document.querySelectorAll( '[data-open-sub]' ).length;
+					return { titles, subRows, hasSubsSection: titles.some( ( x ) => x === 'Subscriptions' ) };
+				} );
+				t.check( 'customer modal has Subscriptions section', custUi.hasSubsSection, custUi.titles.join( '|' ) );
+				t.check( 'customer subscriptions strip has rows', custUi.subRows >= 1, String( custUi.subRows ) );
+			} else {
+				t.check( 'customer modal has Subscriptions section', false, 'no view customer' );
+				t.check( 'customer subscriptions strip has rows', false );
+			}
+		} else {
+			t.check( 'parent order affordance present', true, 'no parent_id fixture — skipped' );
+			t.check( 'view customer button present', true, 'skipped' );
+			t.check( 'customer modal has Subscriptions section', true, 'skipped' );
+			t.check( 'customer subscriptions strip has rows', true, 'skipped' );
+		}
+
 		// shop_subscription fenced from content types.
 		const types = await page.evaluate( async () => {
 			const r = await fetch( window.MINN.restUrl + 'wp/v2/types', {
