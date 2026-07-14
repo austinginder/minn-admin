@@ -175,6 +175,72 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	raw = await save( e2eId );
 	t.check( 'real ⌘V paste lands sanitized', /<h2 class="wp-block-heading">Real clipboard heading<\/h2>/.test( raw ) && /<strong>bold<\/strong>/.test( raw ), raw );
 
-	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, classicId, e2eId ] ) await deletePost( page, id );
+	/* ===== Paste URL over selection → hyperlink (keep selected words) ===== */
+	const linkId = await createPost( page, {
+		title: 'Paste: Link over selection',
+		content: '<!-- wp:paragraph -->\n<p>Until today, with Grok Build and a skill.</p>\n<!-- /wp:paragraph -->',
+	} );
+	await openEditor( page, linkId );
+	await page.evaluate( () => {
+		const p = document.querySelector( '#minn-editor-body p' );
+		const tn = p.firstChild;
+		const i = tn.textContent.indexOf( 'Grok Build' );
+		const r = document.createRange();
+		r.setStart( tn, i );
+		r.setEnd( tn, i + 'Grok Build'.length );
+		const s = getSelection();
+		s.removeAllRanges();
+		s.addRange( r );
+		document.querySelector( '#minn-editor-body' ).focus();
+	} );
+	const linkPrevented = await paste( {
+		'text/plain': 'https://x.ai/grok',
+		// Browser-copied URLs often carry a matching <a> HTML flavor — still
+		// must wrap the selection, not replace it with the URL text.
+		'text/html': '<a href="https://x.ai/grok">https://x.ai/grok</a>',
+	} );
+	raw = await save( linkId );
+	t.check( 'URL paste over selection is intercepted', linkPrevented === true, `prevented=${ linkPrevented }` );
+	t.check(
+		'URL paste hyperlinks the selected words',
+		/<a href="https:\/\/x\.ai\/grok">Grok Build<\/a>/.test( raw )
+		&& /Until today, with /.test( raw )
+		&& / and a skill/.test( raw ),
+		raw
+	);
+	t.check( 'URL paste does not replace selection with the URL string', ! /with https:\/\/x\.ai\/grok and/.test( raw ), raw );
+
+	// Non-URL paste over selection must not be force-linked. Synthetic
+	// single-line pastes do not run Chrome's native insert (same as the
+	// "single-line keeps native handling" check above), so we only pin that
+	// createLink was not applied.
+	const plainId = await createPost( page, {
+		title: 'Paste: Plain over selection',
+		content: '<!-- wp:paragraph -->\n<p>Replace WORD here.</p>\n<!-- /wp:paragraph -->',
+	} );
+	await openEditor( page, plainId );
+	await page.evaluate( () => {
+		const p = document.querySelector( '#minn-editor-body p' );
+		const tn = p.firstChild;
+		const i = tn.textContent.indexOf( 'WORD' );
+		const r = document.createRange();
+		r.setStart( tn, i );
+		r.setEnd( tn, i + 4 );
+		const s = getSelection();
+		s.removeAllRanges();
+		s.addRange( r );
+		document.querySelector( '#minn-editor-body' ).focus();
+	} );
+	const plainPrevented = await paste( { 'text/plain': 'not a url at all' } );
+	const plainDom = await page.evaluate( () => document.querySelector( '#minn-editor-body p' ).innerHTML );
+	t.check(
+		'non-URL paste over selection is not forced into a link',
+		plainPrevented === false && ! /<a[\s>]/i.test( plainDom ) && /WORD/.test( plainDom ),
+		`prevented=${ plainPrevented } dom=${ plainDom }`
+	);
+	raw = await save( plainId );
+	t.check( 'non-URL paste leaves the words unlinked in saved markup', /Replace WORD here\./.test( raw ) && ! /<a /.test( raw ), raw );
+
+	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, classicId, e2eId, linkId, plainId ] ) await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

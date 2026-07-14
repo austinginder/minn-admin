@@ -2,6 +2,9 @@
 
 ## **v0.14.0** - Unreleased
 
+### Improved
+* **Paste a URL over selected text to hyperlink it:** in the editor, selecting words and pasting a URL (or a browser-copied link) wraps the selection in a link and keeps the original words, instead of replacing them with the URL string. Code blocks and islands still paste as plain text.
+
 ### Added
 * **FluentSMTP search and delete:** the Email surface for FluentSMTP gains subject/from/to search (the same columns their Logger searches) plus permanent single and bulk delete through `Logger::delete`, with a prefix-scoped SQL fallback when the class is unavailable.
 * **View all revisions:** the editor History card still shows the latest few versions, and when more exist (the live total from `wp/v2/…/revisions`) a **View all revisions (N)** control opens a dialog of every revision with absolute timestamps. Pick a row to open the existing side-by-side diff; ←/→ then walks the full list.

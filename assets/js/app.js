@@ -13906,19 +13906,40 @@
 				if ( caretAtCodeEdge( fc, s.anchorNode, s.anchorOffset, edge ) ) e.preventDefault();
 			} );
 
-			// Paste. Priority order: lone oEmbed URL into an empty block →
-			// embed island (like Gutenberg); code contexts take the clipboard
-			// TEXT (Chrome's default would insert the rich flavor — and its
-			// insertText splits a pre into per-line <code>s); any rich HTML →
-			// sanitized to the safe subset (see Paste cleanup section), never
-			// inserted raw; multi-line plain text → real paragraphs. Single-line
-			// plain text keeps Chrome's native handling.
+			// Paste. Priority order: URL over a non-empty selection → hyperlink
+			// the selected text (keep the words; Notion/Docs behavior); lone
+			// oEmbed URL into an empty block → embed island (like Gutenberg);
+			// code contexts take the clipboard TEXT (Chrome's default would
+			// insert the rich flavor — and its insertText splits a pre into
+			// per-line <code>s); any rich HTML → sanitized to the safe subset
+			// (see Paste cleanup section), never inserted raw; multi-line plain
+			// text → real paragraphs. Single-line plain text keeps Chrome's
+			// native handling.
 			body.addEventListener( 'paste', ( e ) => {
 				const ed2 = state.editor;
 				const cd = e.clipboardData;
 				if ( ! ed2 || ! cd ) return;
 				const text = cd.getData( 'text/plain' ) || '';
 				const trimmed = text.trim();
+				// Paste a URL over selected text → wrap as <a>, don't replace.
+				// Runs before the HTML flavor path so browser-copied links
+				// (plain + <a href> HTML) still keep the selected words.
+				const selLink = window.getSelection();
+				if ( selLink && ! selLink.isCollapsed && selLink.rangeCount
+					&& body.contains( selLink.anchorNode ) ) {
+					const linkUrl = pasteLinkUrl( trimmed );
+					if ( linkUrl ) {
+						const aNode = selLink.anchorNode;
+						const aEl = aNode.nodeType === Node.ELEMENT_NODE ? aNode : aNode.parentNode;
+						if ( aEl && ! aEl.closest( 'pre' ) && ! closestInlineCode( aNode )
+							&& ! aEl.closest( '.minn-block-island' ) ) {
+							e.preventDefault();
+							document.execCommand( 'createLink', false, linkUrl );
+							scheduleAutosave();
+							return;
+						}
+					}
+				}
 				if ( ed2.mode === 'blocks' && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
 					const sel = window.getSelection();
 					let node = sel && sel.anchorNode;
@@ -16397,6 +16418,22 @@
 	}
 
 	/* ===== Paste cleanup (Word / Google Docs / arbitrary HTML → safe subset) ===== */
+
+	// Single URL-shaped clipboard text (no spaces). Used when pasting over a
+	// selection so the words stay and become the link label. Bare domains get
+	// https:// so createLink doesn't resolve them as relative paths.
+	function pasteLinkUrl( t ) {
+		const s = String( t || '' ).trim();
+		if ( ! s || /\s/.test( s ) ) return null;
+		if ( /^(https?:\/\/|mailto:|tel:)/i.test( s ) ) return s;
+		if ( /^(#|\/)\S*$/.test( s ) ) return s;
+		// example.com or example.com/path — not a lone filename.ext.
+		if ( /^[\w-]+(?:\.[\w-]+)+(?:\/\S*)?$/i.test( s )
+			&& ! /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|txt|md)$/i.test( s ) ) {
+			return 'https://' + s;
+		}
+		return null;
+	}
 
 	// Clipboard HTML is never inserted raw: it carries vendor styling by the
 	// kilobyte, javascript: hrefs and on* handlers. sanitizePastedHtml() rewrites
