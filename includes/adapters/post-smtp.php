@@ -9,7 +9,10 @@
  * the error text otherwise. Recipient columns can hold serialized arrays —
  * addresses are pulled with a regex, never unserialized. Resend uses wp_mail
  * with the stored subject/body (same pattern as FluentSMTP); original headers
- * stay out of the path so nothing is unserialized.
+ * stay out of the path so nothing is unserialized. Search + single/bulk
+ * delete (prefix-scoped DELETE) match WP Mail Logging / FluentSMTP parity.
+ *
+ * // last-sweep: 2026-07-14
  *
  * @package minn-admin
  */
@@ -141,6 +144,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'collection' => array(
 			'route'     => 'minn-admin/v1/post-smtp/emails',
 			'pageQuery' => 'per_page=25&page={page}',
+			'search'    => 'search={q}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'tabs'      => array(
@@ -168,6 +172,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'   => 'minn-admin/v1/post-smtp/emails/{id}/resend',
 					'method'  => 'POST',
 					'confirm' => 'Resend this email to the original recipients?',
+				),
+				array(
+					'label'   => 'Delete',
+					'route'   => 'minn-admin/v1/post-smtp/emails/{id}',
+					'method'  => 'DELETE',
+					'confirm' => 'Delete this log entry permanently? There is no trash.',
+					'danger'  => true,
+				),
+			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Delete',
+					'route'   => 'minn-admin/v1/post-smtp/emails/{id}',
+					'method'  => 'DELETE',
+					'confirm' => 'Delete the selected log entries permanently?',
+					'danger'  => true,
 				),
 			),
 		),
@@ -198,23 +218,37 @@ add_action( 'rest_api_init', function () {
 			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
 
 			$sent_sql = "(success IS NULL OR success = '' OR success = '1')";
-			$where    = '';
+			$where    = '1=1';
+			$args     = array();
 			if ( 'sent' === $status ) {
-				$where = "WHERE {$sent_sql}";
+				$where = $sent_sql;
 			} elseif ( 'failed' === $status ) {
-				$where = "WHERE NOT {$sent_sql}";
+				$where = "NOT {$sent_sql}";
 			}
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} {$where}" ); // phpcs:ignore
-			$rows  = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, original_subject, original_to, to_header, success, time FROM {$table} {$where} ORDER BY id DESC LIMIT %d OFFSET %d", // phpcs:ignore
-				$per_page,
-				( $page - 1 ) * $per_page
+			if ( $request['search'] ) {
+				// Subject + recipient columns only (session_transcript can hold SMTP AUTH).
+				$like   = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
+				$where .= ' AND (original_subject LIKE %s OR original_to LIKE %s OR to_header LIKE %s OR from_header LIKE %s)';
+				$args[] = $like;
+				$args[] = $like;
+				$args[] = $like;
+				$args[] = $like;
+			}
+
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table prefix-derived; WHERE placeholder-built.
+			$total = (int) ( $args
+				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) )
+				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where}" ) );
+			$rows = $wpdb->get_results( $wpdb->prepare(
+				"SELECT id, original_subject, original_to, to_header, success, time FROM {$table} WHERE {$where} ORDER BY id DESC LIMIT %d OFFSET %d",
+				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
+			// phpcs:enable
 
 			$items = array_map( function ( $row ) {
 				return array(
 					'id'      => (int) $row->id,
-					'subject' => $row->original_subject,
+					'subject' => $row->original_subject ? $row->original_subject : '(no subject)',
 					'to'      => minn_admin_post_smtp_recipients( $row->original_to ?: $row->to_header ),
 					'status'  => minn_admin_post_smtp_status( $row->success ),
 					'date'    => minn_admin_post_smtp_iso( $row->time ),
@@ -226,31 +260,50 @@ add_action( 'rest_api_init', function () {
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/post-smtp/emails/(?P<id>\d+)', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-			global $wpdb;
-			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT id, original_subject, original_to, to_header, from_header, original_message, success, solution, transport_uri, time FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
-			}
-			$status = minn_admin_post_smtp_status( $row->success );
-			return rest_ensure_response( array(
-				'id'        => (int) $row->id,
-				'subject'   => $row->original_subject,
-				'to'        => minn_admin_post_smtp_recipients( $row->original_to ?: $row->to_header ),
-				'from'      => minn_admin_post_smtp_recipients( $row->from_header ),
-				'status'    => $status,
-				'error'     => 'failed' === $status ? (string) $row->success : '',
-				'solution'  => (string) $row->solution,
-				'transport' => (string) $row->transport_uri,
-				'date'      => minn_admin_post_smtp_iso( $row->time ),
-				'message'   => $row->original_message,
-			) );
-		},
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
+				global $wpdb;
+				$row = $wpdb->get_row( $wpdb->prepare(
+					"SELECT id, original_subject, original_to, to_header, from_header, original_message, success, solution, transport_uri, time FROM {$table} WHERE id = %d", // phpcs:ignore
+					(int) $request['id']
+				) );
+				if ( ! $row ) {
+					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				}
+				$status = minn_admin_post_smtp_status( $row->success );
+				return rest_ensure_response( array(
+					'id'        => (int) $row->id,
+					'subject'   => $row->original_subject,
+					'to'        => minn_admin_post_smtp_recipients( $row->original_to ?: $row->to_header ),
+					'from'      => minn_admin_post_smtp_recipients( $row->from_header ),
+					'status'    => $status,
+					'error'     => 'failed' === $status ? (string) $row->success : '',
+					'solution'  => (string) $row->solution,
+					'transport' => (string) $row->transport_uri,
+					'date'      => minn_admin_post_smtp_iso( $row->time ),
+					'message'   => $row->original_message,
+				) );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => $perm,
+			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
+				global $wpdb;
+				// Permanent delete by id (same shape as WP Mail Logging / FluentSMTP).
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$deleted = $wpdb->query( $wpdb->prepare(
+					"DELETE FROM {$table} WHERE id = %d",
+					(int) $request['id']
+				) );
+				if ( ! $deleted ) {
+					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				}
+				return rest_ensure_response( array( 'deleted' => true, 'message' => 'Log entry deleted.' ) );
+			},
+		),
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/post-smtp/emails/(?P<id>\d+)/resend', array(

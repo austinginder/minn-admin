@@ -146,6 +146,164 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Resend logged a new sent email', after >= before, `before=${ before } after=${ after }` );
 	}
 
+	/* ===== Post SMTP: search + delete (family inactive fixture) =====
+	 * CLI activate + seed avoids browser plugin-toggle races (worker recycle /
+	 * stale nonce). Always restore inactive in finally. */
+	const { execSync } = require( 'child_process' );
+	const path = require( 'path' );
+	const wpPath = path.resolve( __dirname, '../../../../' );
+	const wp = ( args, extra = '' ) => {
+		try {
+			return execSync( `wp --path=${ JSON.stringify( wpPath ) } ${ extra } ${ args }`, {
+				encoding: 'utf8',
+				stdio: [ 'ignore', 'pipe', 'pipe' ],
+				timeout: 60000,
+			} );
+		} catch ( e ) {
+			return ( e.stdout || '' ) + ( e.stderr || '' );
+		}
+	};
+
+	let postSmtpInstalled = false;
+	let postSmtpWasActive = false;
+	try {
+		const list = wp( 'plugin list --field=name' );
+		postSmtpInstalled = list.split( /\r?\n/ ).map( ( s ) => s.trim() ).includes( 'post-smtp' );
+		if ( postSmtpInstalled ) {
+			try {
+				execSync( `wp --path=${ JSON.stringify( wpPath ) } plugin is-active post-smtp`, {
+					stdio: 'ignore', timeout: 30000,
+				} );
+				postSmtpWasActive = true;
+			} catch ( e ) {
+				postSmtpWasActive = false;
+			}
+		}
+	} catch ( e ) {
+		postSmtpInstalled = false;
+	}
+
+	t.check( 'Post SMTP plugin available for suite', postSmtpInstalled, postSmtpInstalled ? 'installed' : 'missing' );
+
+	if ( postSmtpInstalled ) {
+		// One SMTP mailer at a time (Fluent + Post SMTP together can white-screen).
+		const fluentWasActive = ( () => {
+			try {
+				execSync( `wp --path=${ JSON.stringify( wpPath ) } plugin is-active fluent-smtp`, {
+					stdio: 'ignore', timeout: 30000,
+				} );
+				return true;
+			} catch ( e ) {
+				return false;
+			}
+		} )();
+		try {
+			if ( fluentWasActive ) wp( 'plugin deactivate fluent-smtp' );
+			if ( ! postSmtpWasActive ) wp( 'plugin activate post-smtp' );
+
+			const stamp = 'post-smtp-minn-' + Date.now();
+			const fs = require( 'fs' );
+			const seedFile = path.join( require( 'os' ).tmpdir(), 'minn-postsmtp-seed-' + Date.now() + '.php' );
+			fs.writeFileSync( seedFile, [
+				'<?php',
+				'global $wpdb;',
+				"$t = $wpdb->prefix . 'post_smtp_logs';",
+				"if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) !== $t ) { echo 0; exit; }",
+				'$ok = $wpdb->insert( $t, array(',
+				"  'original_subject' => " + JSON.stringify( stamp ) + ',',
+				"  'original_to'      => 'post-smtp-suite@example.com',",
+				"  'to_header'        => 'post-smtp-suite@example.com',",
+				"  'from_header'      => 'admin@example.com',",
+				"  'original_message' => 'post-smtp suite body',",
+				"  'success'          => '',",
+				"  'time'             => (int) current_time( 'timestamp' ),",
+				"), array( '%s', '%s', '%s', '%s', '%s', '%s', '%d' ) );",
+				'echo $ok ? (int) $wpdb->insert_id : 0;',
+			].join( '\n' ) );
+			let seedOut = '';
+			try {
+				seedOut = execSync(
+					`wp --path=${ JSON.stringify( wpPath ) } --skip-plugins --skip-themes eval-file ${ JSON.stringify( seedFile ) }`,
+					{ encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'pipe' ], timeout: 30000 }
+				);
+			} catch ( e ) {
+				seedOut = ( e.stdout || '' ) + ( e.stderr || '' );
+			}
+			try { fs.unlinkSync( seedFile ); } catch ( e ) { /* ignore */ }
+			const m = String( seedOut ).trim().match( /^(\d+)$/m );
+			const insertedId = m ? parseInt( m[ 1 ], 10 ) : 0;
+			t.check( 'Seeded a Post SMTP log row', insertedId > 0, JSON.stringify( String( seedOut ).trim().slice( 0, 120 ) ) );
+
+			// Drive REST through WP-CLI (rest_do_request) — no browser pageload
+			// after the mailer swap (FrankenPHP / dual-mailer churn).
+			const restPhp = path.join( require( 'os' ).tmpdir(), 'minn-postsmtp-rest-' + Date.now() + '.php' );
+			fs.writeFileSync( restPhp, [
+				'<?php',
+				'wp_set_current_user( 1 );',
+				'$out = array();',
+				'$s = rest_do_request( new WP_REST_Request( "GET", "/minn-admin/v1/post-smtp/status" ) );',
+				'$out["status"] = $s->get_status();',
+				insertedId > 0 ? [
+					'$q = new WP_REST_Request( "GET", "/minn-admin/v1/post-smtp/emails" );',
+					'$q->set_param( "search", ' + JSON.stringify( stamp ) + ' );',
+					'$hit = rest_do_request( $q );',
+					'$out["search_status"] = $hit->get_status();',
+					'$out["search_total"] = is_array( $hit->get_data() ) ? (int) ( $hit->get_data()["total"] ?? 0 ) : 0;',
+					'$out["search_has"] = false;',
+					'if ( is_array( $hit->get_data() ) && ! empty( $hit->get_data()["items"] ) ) {',
+					'  foreach ( $hit->get_data()["items"] as $it ) {',
+					'    if ( (int) ( $it["id"] ?? 0 ) === ' + insertedId + ' || false !== strpos( (string) ( $it["subject"] ?? "" ), ' + JSON.stringify( stamp ) + ' ) ) { $out["search_has"] = true; }',
+					'  }',
+					'}',
+					'$m = new WP_REST_Request( "GET", "/minn-admin/v1/post-smtp/emails" );',
+					'$m->set_param( "search", "zzznomatch-postsmtp-minn" );',
+					'$miss = rest_do_request( $m );',
+					'$out["miss_total"] = is_array( $miss->get_data() ) ? (int) ( $miss->get_data()["total"] ?? -1 ) : -1;',
+					'$d = new WP_REST_Request( "DELETE", "/minn-admin/v1/post-smtp/emails/' + insertedId + '" );',
+					'$del = rest_do_request( $d );',
+					'$out["del_status"] = $del->get_status();',
+					'$out["del_deleted"] = is_array( $del->get_data() ) && ! empty( $del->get_data()["deleted"] );',
+					'$g = rest_do_request( new WP_REST_Request( "GET", "/minn-admin/v1/post-smtp/emails/' + insertedId + '" ) );',
+					'$out["gone_status"] = $g->get_status();',
+				].join( '\n' ) : '$out["skipped"] = true;',
+				'echo wp_json_encode( $out );',
+			].join( '\n' ) );
+			let restOut = '';
+			try {
+				restOut = execSync(
+					`wp --path=${ JSON.stringify( wpPath ) } eval-file ${ JSON.stringify( restPhp ) }`,
+					{ encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'pipe' ], timeout: 60000 }
+				);
+			} catch ( e ) {
+				restOut = ( e.stdout || '' ) + ( e.stderr || '' );
+			}
+			try { fs.unlinkSync( restPhp ); } catch ( e ) { /* ignore */ }
+			let rest = {};
+			try {
+				const jsonLine = String( restOut ).trim().split( /\r?\n/ ).filter( ( l ) => l.startsWith( '{' ) ).pop();
+				rest = JSON.parse( jsonLine || '{}' );
+			} catch ( e ) {
+				rest = { parse_error: String( restOut ).slice( 0, 200 ) };
+			}
+			t.check( 'Post SMTP routes register when active', rest.status === 200, JSON.stringify( rest ) );
+			if ( insertedId > 0 ) {
+				t.check( 'Post SMTP search finds the seeded subject',
+					rest.search_status === 200 && rest.search_has === true,
+					JSON.stringify( rest ) );
+				t.check( 'Post SMTP search miss is empty',
+					rest.miss_total === 0,
+					JSON.stringify( rest ) );
+				t.check( 'Post SMTP DELETE removes the log entry',
+					rest.del_status === 200 && rest.del_deleted === true && rest.gone_status === 404,
+					JSON.stringify( rest ) );
+			}
+		} finally {
+			// Restore mail residents: FluentSMTP active, Post SMTP inactive.
+			if ( ! postSmtpWasActive ) wp( 'plugin deactivate post-smtp' );
+			if ( fluentWasActive ) wp( 'plugin activate fluent-smtp' );
+		}
+	}
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
 	console.error( e );

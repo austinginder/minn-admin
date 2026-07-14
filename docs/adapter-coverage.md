@@ -49,7 +49,7 @@ Reference depth: **Gravity SMTP**. Family doc: `mail-plugins.md`.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | gravity-smtp | Y | Y | · | Y | — | Y | Y | Y | Y | Y | 2026-07-14 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; condition authoring = **L**; bulk log delete still · |
 | fluent-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + sent/failed tabs; **search** + single/bulk **delete** via Logger |
-| post-smtp | Y | Y | · | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + sent/failed tabs; resend only; **no search / no delete**; transcript not exposed |
+| post-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + tabs; resend; **search** + single/bulk **delete**; transcript not exposed |
 | wp-mail-smtp | Y | Y | · | Y | — | · | · | · | · | Y | 2026-07-14 | Free = debug events only; full log is Pro |
 | wp-mail-logging | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Log-only; bulk delete; status + chart; close to reference for a pure log |
 
@@ -149,13 +149,14 @@ Reference depth: **Gravity Forms**.
 | 2026-07-14 | Focused report: mail → forms → activity-log | Ranked backlog below; **no ship** (report-first). Mail reference = Gravity SMTP; fixtures: FluentSMTP + WP Mail Logging + Gravity SMTP active |
 | 2026-07-14 | Ship top 1: fluent-smtp search + delete/bulk | Axis A parity with GSMTP/WPML; suite mail-log 17 checks |
 | 2026-07-14 | Full report-only re-sweep (mail → forms → activity-log → redirects/snippets → backups; fixtures inventory) | Matrix cells corrected (forminator/formidable/everest/fluent-forms); **no ship**. Top ship = post-smtp search + delete/bulk |
+| 2026-07-14 | Ship: post-smtp search + single/bulk delete | Axis A mail parity with WPML/FluentSMTP; mail-log suite extended |
 
 ### Ranked backlog (2026-07-14 evening sweep)
 
 | Rank | Adapter | Axis | Gap | Effort | Why now |
 |---|---|---|---|---|---|
-| 1 | **post-smtp** | A | **Search** + **single/bulk delete** (prefix-scoped DELETE on `post_smtp_logs`, same shape as WP Mail Logging) | **S** | Clearest mail-family hole; fixture installed (inactive); resend/status/chart already ship; no search string at all today |
-| 2 | **fluent-forms** | A | Playwright **suite** (tabs/bulk already wired; matrix suite was ·) | S | Active fixture; depth is real; suite gap is coverage risk, not product |
+| ~~1~~ | ~~**post-smtp**~~ | ~~A~~ | ~~Search + single/bulk delete~~ | ~~S~~ | **Shipped 2026-07-14** (mail-log suite covers REST + surface search) |
+| 1 | **fluent-forms** | A | Playwright **suite** (tabs/bulk already wired; matrix suite was ·) | S | Active fixture; depth is real; suite gap is coverage risk, not product |
 | 3 | gravity-smtp | A | Optional bulk delete on Email log (reference has everything else) | S | Only if log hygiene is daily pain; not blocking |
 | 4 | simple-history / wp-activity-log / stream | A | Optional **status** card (24h counts) | S–M | Thin REST logs are acceptable without it; Solid/LLA-R already have cards |
 | 5 | All-In-One Security (AIOS) | B | Activity-log + posture (LLA-R/Solid pattern) | M | Wave B leftover; **not installed** on minnadmin — install first |
