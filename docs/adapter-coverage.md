@@ -48,10 +48,10 @@ Reference depth: **Gravity SMTP**. Family doc: `mail-plugins.md`.
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | gravity-smtp | Y | Y | · | Y | — | Y | Y | Y | Y | Y | 2026-07-12 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; condition authoring = **L** |
-| fluent-smtp | Y | · | · | Y | — | Y | Y | · | · | Y | 2026-07-12 | Status + chart; no settings mapper |
-| post-smtp | Y | · | · | Y | — | · | · | · | · | Y | 2026-07-12 | Log shim; transcript not exposed |
-| wp-mail-smtp | Y | · | · | Y | — | · | · | · | · | Y | 2026-07-12 | Free = debug events only; full log is Pro |
-| wp-mail-logging | Y | · | Y | Y | — | · | · | · | · | Y | 2026-07-12 | Log-only; bulk delete |
+| fluent-smtp | Y | Y | · | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + sent/failed tabs; **no search, no bulk/delete** (Logger has both upstream) |
+| post-smtp | Y | Y | · | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + tabs; resend; **no bulk delete**; transcript not exposed |
+| wp-mail-smtp | Y | Y | · | Y | — | · | · | · | · | Y | 2026-07-12 | Free = debug events only; full log is Pro |
+| wp-mail-logging | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Log-only; bulk delete; status + chart; close to reference for a pure log |
 
 ### forms
 
@@ -140,6 +140,20 @@ Reference depth: **Gravity Forms**.
 | 2026-07-13 | WP Crontrol adapter | Cron surface shipped (list, run-now, pause/resume, delete, status); suite 20 checks |
 | 2026-07-13 | Diagnostics family + Transients | Scrutoscope + Crontrol + Transients Manager collapse to one Tools item; TM suite 17 |
 | 2026-07-13 | Rewrite Rules Inspector | Diagnostics → Rewrites (list, flush, test URL); suite 15 |
+| 2026-07-14 | Focused report: mail → forms → activity-log | Ranked backlog below; **no ship** (report-first). Mail reference = Gravity SMTP; fixtures: FluentSMTP + WP Mail Logging + Gravity SMTP active |
+
+### Ranked backlog (2026-07-14 focused sweep)
+
+| Rank | Adapter | Axis | Gap | Effort | Why now |
+|---|---|---|---|---|---|
+| 1 | fluent-smtp | A | Search + delete/bulk via their `Logger` | S | Active resident; GSMTP/WPML already searchable; their model has `searchables` + `delete(ids)` |
+| 2 | post-smtp | A | Bulk delete (and single delete if missing) | S | Family consistency; inactive fixture, suite activates |
+| 3 | forminator / formidable | A | Verify spam/received tabs + bulk vs GF depth (mostly already Y) | S | Active fixtures; mostly parity — spot-check only |
+| 4 | simple-history / wp-activity-log | A | Optional status card (24h event counts) | S–M | Thin logs are acceptable; only if family wants a doorway |
+| 5 | GoSMTP / Site Mailer / SureMails | B | New Wave B providers | M | Not installed on minnadmin — verify before promising |
+| 6 | fluent-smtp | B | Settings mapper (connections) | M | GSMTP has settings views; Fluent config is canvas-ish → likely **L** |
+
+**Deliberate non-goals this sweep:** GSMTP routing tree authoring; GF form builder; backup restores; WP Mail SMTP Pro log without Pro fixture; ecommerce (just shipped).
 
 When a sweep updates cells or ships work, append a row and set `Reviewed` on
 touched adapters (or stamp `// last-sweep: YYYY-MM-DD` in the adapter header).
