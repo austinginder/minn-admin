@@ -3436,8 +3436,8 @@
 		expired: 'draft',
 		switched: 'draft',
 	};
-	const SUB_LIST_FIELDS = 'id,number,status,total,currency,date_created,billing,line_items,billing_period,billing_interval,next_payment_date_gmt,start_date_gmt,customer_id';
-	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,parent_id';
+	const SUB_LIST_FIELDS = 'id,number,status,total,currency,date_created,billing,line_items,billing_period,billing_interval,next_payment_date_gmt,start_date_gmt,customer_id,parent_id';
+	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note';
 
 	const subCtx = () => ( state.subTab || 'any' ) + '|' + ( state.subSearch || '' );
 
@@ -3536,6 +3536,7 @@
 			.catch( () => {
 				if ( state.modal && state.modal.type === 'subscription' && state.modal.sub.id === id ) {
 					state.modal.relatedOrders = [];
+					renderOverlays();
 				}
 			} );
 	}
@@ -3548,11 +3549,18 @@
 			loadSubscriptions().then( renderIfCurrent( 'subscriptions' ) ).catch( showErr );
 			return;
 		}
+		const subTab = state.subTab || 'any';
+		const subTabLabel = ( SUB_TABS.find( ( [ id ] ) => id === subTab ) || [] )[ 1 ] || '';
+		const emptyMsg = state.subSearch
+			? `No subscriptions match “${ esc( state.subSearch ) }”.`
+			: subTab !== 'any'
+				? `No ${ esc( ( subTabLabel || subTab ).toLowerCase() ) } subscriptions.`
+				: 'No subscriptions yet. When a customer buys a subscription product, it shows up here with status, next payment and related orders.';
 		view.innerHTML = `
 		<div class="minn-toolbar minn-toolbar-views">
 			<div class="minn-tabs">
 				${ SUB_TABS.map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ ( state.subTab || 'any' ) === id ? ' active' : '' }" data-stab="${ id }">${ label }</button>` ).join( '' ) }
+					`<button class="minn-tab${ subTab === id ? ' active' : '' }" data-stab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
 		</div>
 		<div class="minn-toolbar">
@@ -3567,14 +3575,14 @@
 				<div class="minn-table-row minn-sub-cols" data-sub="${ s.id }">
 					<div class="minn-cell-clip">
 						<div class="minn-row-title">#${ esc( s.number || s.id ) }</div>
-						<div class="minn-row-slug">${ esc( subPeriodLabel( s ) ) }</div>
+						<div class="minn-row-slug">${ esc( subPeriodLabel( s ) ) }${ s.parent_id ? ' · order #' + esc( String( s.parent_id ) ) : '' }</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( s ) ) }</div>
 					<div><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( ( s.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
 					<div class="minn-row-meta" title="${ esc( s.next_payment_date_gmt || '' ) }">${ esc( subNextLabel( s ) ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( subMoney( s, s.total ) ) }</div>
 					<div class="minn-row-arrow">›</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.subSearch ? 'No subscriptions match “' + esc( state.subSearch ) + '”.' : 'No subscriptions here.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ emptyMsg }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'subscription' ) }`;
 
@@ -4228,6 +4236,8 @@
 			customer: listCustomer,
 			full: null,
 			orders: null,
+			// Subscriptions strip only when WCS is active.
+			subscriptions: B.wcs ? null : [],
 			loading: true,
 		};
 		renderOverlays();
@@ -4254,8 +4264,24 @@
 			.catch( () => {
 				if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
 					state.modal.orders = { items: [], total: 0 };
+					renderOverlays();
 				}
 			} );
+		if ( B.wcs ) {
+			apiPaged( `wc/v3/subscriptions?customer=${ id }&per_page=10&orderby=date&order=desc&_fields=${ SUB_LIST_FIELDS }` )
+				.then( ( r ) => {
+					if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
+						state.modal.subscriptions = r;
+						renderOverlays();
+					}
+				} )
+				.catch( () => {
+					if ( state.modal && state.modal.type === 'customer' && state.modal.customer.id === id ) {
+						state.modal.subscriptions = { items: [], total: 0 };
+						renderOverlays();
+					}
+				} );
+		}
 	}
 
 	function renderCustomers() {
@@ -19088,12 +19114,18 @@
 			const canEdit = B.caps.subscriptions;
 			const loading = !! m.loading && ! m.full;
 			const related = m.relatedOrders;
+			const parentId = parseInt( s.parent_id, 10 ) || 0;
+			// Parent order is listed separately; avoid double-row if it also appears in related.
+			const relatedOnly = Array.isArray( related )
+				? related.filter( ( o ) => ! parentId || o.id !== parentId )
+				: related;
 			const statusOpts = SUB_TABS.filter( ( [ id ] ) => id !== 'any' )
 				.map( ( [ id, label ] ) => `<option value="${ esc( id ) }"${ s.status === id ? ' selected' : '' }>${ esc( label ) }</option>` )
 				.join( '' );
 			const items = ( s.line_items || [] ).map( ( li ) =>
 				`<div class="minn-side-row"><span class="minn-side-key">${ esc( li.name || 'Item' ) } ×${ li.quantity || 1 }</span><span>${ esc( subMoney( s, li.total ) ) }</span></div>`
 			).join( '' );
+			const canOpenCustomer = !!( s.customer_id && B.caps.customers );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
@@ -19117,6 +19149,7 @@
 									${ b.email ? `<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email ) }</span></div>` : '' }
 									${ s.customer_id ? `<div class="minn-side-row"><span class="minn-side-key">Customer ID</span><span>#${ esc( String( s.customer_id ) ) }</span></div>` : '' }
 								</div>
+								${ canOpenCustomer ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-customer" style="margin-top:10px;">View customer</button>` : '' }
 								<div class="minn-side-title" style="margin:16px 0 8px;">Schedule</div>
 								<div class="minn-modal-meta" style="padding:0;">
 									<div class="minn-side-row"><span class="minn-side-key">Billing</span><span>${ esc( subPeriodLabel( s ) ) }</span></div>
@@ -19137,10 +19170,17 @@
 								<div class="minn-side-title" style="margin:16px 0 8px;">Status</div>
 								<select class="minn-input" id="minn-sub-status">${ statusOpts }</select>
 								<div class="minn-toggle-desc" style="margin-top:8px;">Active, On hold and Cancelled cover daily work. Switched / Expired are usually set by WooCommerce Subscriptions itself.</div>` : '' }
+								${ parentId ? `
+								<div class="minn-side-title" style="margin:16px 0 8px;">Parent order</div>
+								<button type="button" class="minn-sub-order-row" data-relorder="${ parentId }" title="Order that started this subscription">
+									<span>#${ esc( String( parentId ) ) }</span>
+									<span class="minn-row-meta">Initial</span>
+									<span>›</span>
+								</button>` : '' }
 								<div class="minn-side-title" style="margin:16px 0 8px;">Related orders</div>
 								${ related == null ? '<div class="minn-session-empty">Loading…</div>'
-									: ! related.length ? '<div class="minn-session-empty">No related orders yet.</div>'
-									: related.map( ( o ) => `
+									: ! ( relatedOnly && relatedOnly.length ) ? '<div class="minn-session-empty">No renewal orders yet.</div>'
+									: relatedOnly.map( ( o ) => `
 									<button type="button" class="minn-sub-order-row" data-relorder="${ o.id }">
 										<span>#${ esc( o.number || o.id ) }</span>
 										<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
@@ -19151,6 +19191,8 @@
 					</div>
 					<div class="minn-modal-actions">
 						${ canEdit ? `<button class="minn-btn-primary" id="minn-sub-save">Save status</button>` : '' }
+						${ parentId ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-parent" data-relorder="${ parentId }">Open parent order</button>` : '' }
+						${ canOpenCustomer ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-customer-foot">View customer</button>` : '' }
 						${ B.site && B.site.adminUrl ? `<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ s.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>` : '' }
 						<button class="minn-btn-soft" id="minn-modal-close-btn">Close</button>
 					</div>` : '' }
@@ -19612,8 +19654,21 @@
 									</button>` ).join( '' ) : '<div class="minn-toggle-desc">No orders for this customer.</div>'
 							) }
 						</div>
+						${ B.wcs ? `
+						<div class="minn-media-edit">
+							<div class="minn-side-title" style="margin:0 0 8px;">Subscriptions</div>
+							${ m.subscriptions == null ? '<div class="minn-loading" style="padding:8px;">Loading subscriptions…</div>' : (
+								( m.subscriptions.items || [] ).length ? ( m.subscriptions.items || [] ).map( ( sub ) => `
+									<button type="button" class="minn-sub-order-row" data-open-sub="${ sub.id }">
+										<span>#${ esc( sub.number || sub.id ) }</span>
+										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
+										<span>${ esc( subMoney( sub, sub.total ) ) }</span>
+									</button>` ).join( '' ) : '<div class="minn-toggle-desc">No subscriptions for this customer.</div>'
+							) }
+						</div>` : '' }
 					</div>
 					<div class="minn-modal-actions">
+						${ B.wcs && B.caps.subscriptions ? `<button type="button" class="minn-btn-soft" id="minn-cust-subs-goto">All subscriptions</button>` : '' }
 						${ B.caps.users ? `<a class="minn-btn-soft" href="#/users" id="minn-cust-users" data-goto-users="${ c.id }">↗ Users</a>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }user-edit.php?user_id=${ c.id }" target="_blank" rel="noopener">↗ Edit in WordPress</a>
 					</div>` : '' }
@@ -20419,6 +20474,19 @@
 					else openOrderModal( { id } );
 				} )
 			);
+			$$( '[data-open-sub]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const id = parseInt( btn.dataset.openSub, 10 );
+					const row = ( m.subscriptions && m.subscriptions.items || [] ).find( ( s ) => s.id === id );
+					if ( row ) openSubscriptionModal( row );
+					else openSubscriptionModal( { id } );
+				} )
+			);
+			const allSubs = $( '#minn-cust-subs-goto' );
+			if ( allSubs ) allSubs.addEventListener( 'click', () => {
+				closeModal();
+				go( 'subscriptions' );
+			} );
 		}
 
 		if ( m.type === 'product-new' ) {
@@ -20731,6 +20799,23 @@
 		if ( m.type === 'subscription' ) {
 			const closeBtn = $( '#minn-modal-close-btn' );
 			if ( closeBtn ) closeBtn.addEventListener( 'click', () => closeModal() );
+			const openCustomer = () => {
+				const s = m.full || m.sub || {};
+				const cid = parseInt( s.customer_id, 10 );
+				if ( ! cid ) return;
+				const b = s.billing || {};
+				closeModal();
+				openCustomerModal( {
+					id: cid,
+					email: b.email || '',
+					first_name: b.first_name || '',
+					last_name: b.last_name || '',
+				} );
+			};
+			const custBtn = $( '#minn-sub-open-customer' );
+			if ( custBtn ) custBtn.addEventListener( 'click', openCustomer );
+			const custBtnFoot = $( '#minn-sub-open-customer-foot' );
+			if ( custBtnFoot ) custBtnFoot.addEventListener( 'click', openCustomer );
 			const saveBtn = $( '#minn-sub-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 				const status = ( $( '#minn-sub-status' ) || {} ).value;
