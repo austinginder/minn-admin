@@ -832,9 +832,11 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 Return `null` (or leave `$data` alone) when you have no page breakdown for the
 window — the modal shows an empty state and still offers `adminUrl` when set.
 Bundled day adapters: **Koko Analytics** (`post_stats` + `paths` + referrer
-tables) and **WP Statistics** (`statistics_pages` for hits +
+tables), **WP Statistics** (`statistics_pages` for hits +
 `statistics_visitor.referred` for referrers; WPS has no per-URI uniques, so
-both columns report hit totals). Same first-non-null rule as
+both columns report hit totals), **Burst Statistics** (`burst_statistics`
+page_url/page_id + `burst_sessions.referrer`), and **Independent Analytics**
+(views × resources + session referrers). Same first-non-null rule as
 `minn_admin_traffic`.
 
 ## Cache purgers — join "Clear site cache"

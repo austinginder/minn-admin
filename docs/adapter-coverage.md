@@ -110,7 +110,10 @@ Reference depth: **Gravity Forms**.
 
 | Adapter | Shape | suite | Reviewed | Notes |
 |---|---|---|---|---|
-| perfmatters | settings-only (core Settings API) | Y | 2026-07-11 | Reference for Settings-API mappers |
+| perfmatters | settings-only (core Settings API); family `performance` | Y | 2026-07-14 | Reference for Settings-API mappers |
+| autoptimize | settings-only (curated options); family `performance` | Y | 2026-07-14 | Toggle store `on`/empty; purge still in cache-purge |
+| asset-cleanup | settings-only (JSON option); family `performance` | Y | 2026-07-14 | Page-level unload manager deep-linked |
+| performance-lab | features list + status + activate/deactivate; family `performance` | Y | 2026-07-14 | Hub for WP Performance Team standalone plugins |
 | licenses | Extensions → Licenses (filter providers) | Y | | Use license-manager skill loop for new vendors |
 | spam | Settings → Spam cards | Y | | |
 | seo | Editor panel (providers) | Y | | |
