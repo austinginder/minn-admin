@@ -47,10 +47,10 @@ Reference depth: **Gravity SMTP**. Family doc: `mail-plugins.md`.
 
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gravity-smtp | Y | Y | · | Y | — | Y | Y | Y | Y | Y | 2026-07-12 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; condition authoring = **L** |
-| fluent-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + sent/failed tabs; **search** (to/from/subject) + single/bulk **delete** via Logger |
-| post-smtp | Y | Y | · | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + tabs; resend; **no bulk delete**; transcript not exposed |
-| wp-mail-smtp | Y | Y | · | Y | — | · | · | · | · | Y | 2026-07-12 | Free = debug events only; full log is Pro |
+| gravity-smtp | Y | Y | · | Y | — | Y | Y | Y | Y | Y | 2026-07-14 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; condition authoring = **L**; bulk log delete still · |
+| fluent-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + sent/failed tabs; **search** + single/bulk **delete** via Logger |
+| post-smtp | Y | Y | · | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + sent/failed tabs; resend only; **no search / no delete**; transcript not exposed |
+| wp-mail-smtp | Y | Y | · | Y | — | · | · | · | · | Y | 2026-07-14 | Free = debug events only; full log is Pro |
 | wp-mail-logging | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Log-only; bulk delete; status + chart; close to reference for a pure log |
 
 ### forms
@@ -59,15 +59,15 @@ Reference depth: **Gravity Forms**.
 
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gravity-forms | Y | Y | Y | Y | Y | · | · | Y | Y | Y | 2026-07-12 | Form settings (item), Notifications view; form builder = **L** |
-| fluent-forms | Y | Y | · | Y | Y | · | · | · | · | · | | |
-| elementor-forms | Y | Y | · | Y | · | · | · | · | · | · | | Elementor canvas = **L** |
-| cf7-flamingo | Y | Y | · | Y | Y | · | · | · | · | Y | | CF7 builder = **L** |
-| cfdb7 | Y | Y | · | Y | · | · | · | · | · | Y | | |
-| ninja-forms | Y | Y | · | Y | Y | · | · | · | · | Y | | |
-| forminator | Y | · | · | Y | Y | · | · | · | · | Y | | |
-| formidable | Y | · | · | Y | Y | · | · | · | · | Y | | |
-| everest-forms | Y | Y | · | Y | Y | · | · | · | · | · | | |
+| gravity-forms | Y | Y | Y | Y | Y | · | · | Y | Y | Y | 2026-07-14 | Form settings (item), Notifications view; form builder = **L**; status/chart not needed for GF depth |
+| fluent-forms | Y | Y | Y | Y | Y | · | · | · | · | · | 2026-07-14 | Unread/spam/trash tabs + bulk; active fixture; **no suite** |
+| elementor-forms | Y | Y | · | Y | · | · | · | · | · | · | 2026-07-14 | Elementor canvas = **L** |
+| cf7-flamingo | Y | Y | · | Y | Y | · | · | · | · | Y | 2026-07-14 | CF7 builder = **L** |
+| cfdb7 | Y | Y | · | Y | · | · | · | · | · | Y | 2026-07-14 | |
+| ninja-forms | Y | Y | · | Y | Y | · | · | · | · | Y | 2026-07-14 | |
+| forminator | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Tabs + bulk + search present (matrix was stale) |
+| formidable | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Tabs + bulk + search present (matrix was stale) |
+| everest-forms | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Received/Spam/Trash + bulk; suite `everest-forms` |
 
 ### backups
 
@@ -88,9 +88,9 @@ Reference depth: **Gravity Forms**.
 | wp-activity-log | Y | Y | — | Y | — | · | — | — | — | · | | Never unserialize meta |
 | aryo-activity-log | Y | Y | — | Y | — | · | — | — | — | · | | Local epoch trap |
 | stream | Y | Y | — | Y | — | · | — | — | — | · | | |
-| wordfence | Y | Y | — | Y | — | Y | — | — | — | Y | | Login log + posture rows |
-| limit-login-attempts | Y | · | — | Y | — | Y | — | — | — | Y | | Unlock action |
-| solid-security | Y | · | — | Y | — | Y | — | — | — | Y | | Release + posture |
+| wordfence | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-07-14 | Login log + posture rows; inactive fixture (family) |
+| limit-login-attempts | Y | · | — | Y | — | Y | — | — | — | Y | 2026-07-14 | Unlock action; active resident |
+| solid-security | Y | · | — | Y | — | Y | — | — | — | Y | 2026-07-14 | Release + posture; **active** on minnadmin now (was inactive convention) |
 
 ### redirects / snippets
 
@@ -117,8 +117,11 @@ Reference depth: **Gravity Forms**.
 | licenses | Extensions → Licenses (filter providers) | Y | | Use license-manager skill loop for new vendors |
 | spam | Settings → Spam cards | Y | | |
 | seo | Editor panel (providers) | Y | | |
+| meta-box | Editor panel (simple fields) | Y | 2026-07-14 | Clone/media = locked + deep link |
+| pods | Editor panel (simple fields on extended types) | Y | 2026-07-14 | Advanced types locked + deep link |
+| safe-svg | Media SVG filter + badge | Y | 2026-07-14 | Sanitization stays Safe SVG's job |
 | cache-purge | ⌘K purgers (+ Redis System row) | Y | 2026-07-12 | SpeedyCache, Redis, Breeze, Nginx Helper, Cloudflare pack |
-| site-kit / koko / … | Traffic providers | partial | | Overview chart only |
+| site-kit / koko / burst / ia / … | Traffic providers (+ day drill) | partial | 2026-07-14 | Overview chart + traffic_day for Koko, WP Statistics, Burst, Independent Analytics |
 | query-monitor | panel (not a surface) | — | 2026-07-13 | Footer arm + launcher chip; this-request only |
 | scrutoscope | Diagnostics family (list + detail + status + Cron view) | Y | 2026-07-13 | family `diagnostics`; capture UI = **L** |
 | wp-crontrol | Diagnostics family (list + detail + status; run/pause/resume/delete) | Y | 2026-07-13 | family `diagnostics`; add/edit PHP/URL jobs = **L** |
@@ -145,19 +148,26 @@ Reference depth: **Gravity Forms**.
 | 2026-07-13 | Rewrite Rules Inspector | Diagnostics → Rewrites (list, flush, test URL); suite 15 |
 | 2026-07-14 | Focused report: mail → forms → activity-log | Ranked backlog below; **no ship** (report-first). Mail reference = Gravity SMTP; fixtures: FluentSMTP + WP Mail Logging + Gravity SMTP active |
 | 2026-07-14 | Ship top 1: fluent-smtp search + delete/bulk | Axis A parity with GSMTP/WPML; suite mail-log 17 checks |
+| 2026-07-14 | Full report-only re-sweep (mail → forms → activity-log → redirects/snippets → backups; fixtures inventory) | Matrix cells corrected (forminator/formidable/everest/fluent-forms); **no ship**. Top ship = post-smtp search + delete/bulk |
 
-### Ranked backlog (2026-07-14 focused sweep)
+### Ranked backlog (2026-07-14 evening sweep)
 
 | Rank | Adapter | Axis | Gap | Effort | Why now |
 |---|---|---|---|---|---|
-| ~~1~~ | ~~fluent-smtp~~ | ~~A~~ | ~~Search + delete/bulk~~ | ~~S~~ | **Shipped 2026-07-14** |
-| 1 | post-smtp | A | Bulk delete (and single delete if missing) | S | Family consistency; inactive fixture, suite activates |
-| 2 | forminator / formidable | A | Verify spam/received tabs + bulk vs GF depth (mostly already Y) | S | Active fixtures; mostly parity — spot-check only |
-| 3 | simple-history / wp-activity-log | A | Optional status card (24h event counts) | S–M | Thin logs are acceptable; only if family wants a doorway |
-| 4 | GoSMTP / Site Mailer / SureMails | B | New Wave B providers | M | Not installed on minnadmin — verify before promising |
-| 5 | fluent-smtp | B | Settings mapper (connections) | M | GSMTP has settings views; Fluent config is canvas-ish → likely **L** |
+| 1 | **post-smtp** | A | **Search** + **single/bulk delete** (prefix-scoped DELETE on `post_smtp_logs`, same shape as WP Mail Logging) | **S** | Clearest mail-family hole; fixture installed (inactive); resend/status/chart already ship; no search string at all today |
+| 2 | **fluent-forms** | A | Playwright **suite** (tabs/bulk already wired; matrix suite was ·) | S | Active fixture; depth is real; suite gap is coverage risk, not product |
+| 3 | gravity-smtp | A | Optional bulk delete on Email log (reference has everything else) | S | Only if log hygiene is daily pain; not blocking |
+| 4 | simple-history / wp-activity-log / stream | A | Optional **status** card (24h counts) | S–M | Thin REST logs are acceptable without it; Solid/LLA-R already have cards |
+| 5 | All-In-One Security (AIOS) | B | Activity-log + posture (LLA-R/Solid pattern) | M | Wave B leftover; **not installed** on minnadmin — install first |
+| 6 | GoSMTP / SureMails / Site Mailer | B | New mail-log providers | M | **Not installed**; source-verify free log storage first |
+| 7 | WPForms Pro entries | B | Forms family | M–L | Needs Pro license + fixtures; biggest missing forms name |
+| 8 | fluent-smtp | B | Settings mapper (connections) | M | GSMTP has settings; Fluent connection UI is canvas-ish → likely **L** |
 
-**Deliberate non-goals this sweep:** GSMTP routing tree authoring; GF form builder; backup restores; WP Mail SMTP Pro log without Pro fixture; ecommerce (just shipped).
+**Matrix fixes this sweep (no code):** forminator/formidable/everest bulk+tabs → **Y**; fluent-forms bulk → **Y**; everest suite → **Y**; Solid Security now **active** on minnadmin; Meta Box / Pods / Safe SVG / traffic day providers noted under non-surface rows.
+
+**Deliberate non-goals:** GSMTP routing tree authoring; GF form builder / notifications events; backup restores; WP Mail SMTP Pro log without Pro; forminator "status card" (inbox plugins don't need GSMTP-style charts); ecommerce (shipped v0.14); re-proposing forminator/formidable tabs (already wired).
+
+**Fixtures snapshot (minnadmin):** mail residents FluentSMTP + WP Mail Logging + Gravity SMTP active, Post SMTP + WP Mail SMTP inactive; forms pack active (GF not listed in grep but usually is, Fluent Forms, Ninja, Forminator, Formidable, Everest, Flamingo, CFDB7, Elementor Pro); activity-log WSAL + LLA-R + **Solid active**; redirects Redirection active, SRM/S301/EPS inactive; backups Updraft/WPvivid/Duplicator/Disembark/BackWPup active.
 
 When a sweep updates cells or ships work, append a row and set `Reviewed` on
 touched adapters (or stamp `// last-sweep: YYYY-MM-DD` in the adapter header).
