@@ -271,6 +271,7 @@
 			orders: null,
 			orderSummary: null,
 			orderAnalytics: null,
+			subscriptions: null,
 			products: null,
 			coupons: null,
 			customers: null,
@@ -291,6 +292,7 @@
 		media: [ 'Media', 'Library' ],
 		comments: [ 'Comments', 'Moderation' ],
 		orders: [ 'Orders', 'WooCommerce' ],
+		subscriptions: [ 'Subscriptions', 'WooCommerce' ],
 		products: [ 'Products', 'WooCommerce' ],
 		coupons: [ 'Coupons', 'WooCommerce' ],
 		customers: [ 'Customers', 'WooCommerce' ],
@@ -918,6 +920,9 @@
 		}
 		if ( B.wc && B.caps.orders ) {
 			navItems.push( { id: 'orders', label: 'Orders', icon: 'cart', orderCount: true } );
+		}
+		if ( B.wcs && B.caps.subscriptions ) {
+			navItems.push( { id: 'subscriptions', label: 'Subscriptions', icon: 'refresh' } );
 		}
 		if ( B.wc && B.caps.products ) {
 			navItems.push( { id: 'products', label: 'Products', icon: 'tag' } );
@@ -1632,9 +1637,10 @@
 
 	// Custom post types with REST support, beyond post/page/attachment.
 	// Plugin-internal CPTs that would be noise (or dangerous) as Content tabs.
-	// product / shop_coupon are WooCommerce: catalog and promo codes live on
-	// their own surfaces (wc/v3), not the writing editor.
-	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'product', 'product_variation', 'shop_coupon', 'elementor_library', 'e-floating-buttons', 'e-landing-page' ];
+	// product / shop_coupon / shop_subscription are WooCommerce: catalog,
+	// promo codes and subscriptions live on their own surfaces (wc/v3), not
+	// the writing editor.
+	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'product', 'product_variation', 'shop_coupon', 'shop_subscription', 'elementor_library', 'e-floating-buttons', 'e-landing-page' ];
 	let typesPromise = null;
 	function loadTypes() {
 		if ( ! typesPromise ) {
@@ -2175,7 +2181,13 @@
 
 	/* ===== Media ===== */
 
-	const MEDIA_TYPES = [ [ '', 'All' ], [ 'image', 'Images' ], [ 'video', 'Video' ], [ 'audio', 'Audio' ], [ 'application', 'Docs' ] ];
+	// SVG tab only when Safe SVG is active (boot B.safeSvg) — core blocks SVG
+	// uploads otherwise, so an empty SVG filter would read as broken.
+	const mediaTypesList = () => {
+		const base = [ [ '', 'All' ], [ 'image', 'Images' ], [ 'video', 'Video' ], [ 'audio', 'Audio' ], [ 'application', 'Docs' ] ];
+		if ( B.safeSvg ) base.splice( 2, 0, [ 'svg', 'SVG' ] );
+		return base;
+	};
 
 	// Like contentCtx: a load started before the search/type filter changed
 	// must not land its rows into the new context.
@@ -2183,12 +2195,25 @@
 
 	async function loadMedia( page = 1 ) {
 		const ctx = mediaCtx();
-		let q = `wp/v2/media?per_page=48&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text&page=${ page }`;
+		// SVG is a mime filter core REST does not expose — pull images and keep
+		// image/svg* only (Safe SVG sites only; the tab is gated on B.safeSvg).
+		const svgOnly = state.mediaType === 'svg';
+		const mediaType = svgOnly ? 'image' : state.mediaType;
+		let q = `wp/v2/media?per_page=${ svgOnly ? 100 : 48 }&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text&page=${ page }`;
 		if ( state.mediaSearch ) q += '&search=' + encodeURIComponent( state.mediaSearch );
-		if ( state.mediaType ) q += '&media_type=' + encodeURIComponent( state.mediaType );
+		if ( mediaType ) q += '&media_type=' + encodeURIComponent( mediaType );
 		const r = await apiPaged( q );
 		if ( ctx !== mediaCtx() ) return; // filter changed mid-flight — discard
-		state.cache.media = { items: r.items, page, totalPages: r.totalPages, total: r.total };
+		let items = r.items;
+		let total = r.total;
+		let totalPages = r.totalPages;
+		if ( svgOnly ) {
+			items = items.filter( ( it ) => ( it.mime_type || '' ).startsWith( 'image/svg' ) );
+			// Approximate totals: we only scanned this page of images.
+			total = items.length;
+			totalPages = Math.max( 1, r.totalPages );
+		}
+		state.cache.media = { items, page, totalPages, total };
 	}
 
 	/* ===== Image editor (rotate + crop over core's media/{id}/edit) ===== */
@@ -2437,11 +2462,11 @@
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			<div class="minn-tabs">
-				${ MEDIA_TYPES.map( ( [ id, label ] ) =>
+				${ mediaTypesList().map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ ( state.mediaType || '' ) === id ? ' active' : '' }" data-mtype="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
 			<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
-			<div class="minn-toolbar-meta">${ countLabel }</div>
+			<div class="minn-toolbar-meta">${ countLabel }${ B.safeSvg ? ' · <span class="minn-media-svg-on" title="SVG uploads are sanitized and allowed by Safe SVG">SVG on</span>' : '' }</div>
 			<div class="minn-view-tabs" style="margin-left:0;">
 				<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
 				<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
@@ -3038,7 +3063,7 @@
 	function openOrderModal( listOrder ) {
 		const id = listOrder && listOrder.id;
 		if ( ! id ) return;
-		state.modal = { type: 'order', order: listOrder, full: null, loading: true, emails: null, notes: null };
+		state.modal = { type: 'order', order: listOrder, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [] };
 		renderOverlays();
 		api( `wc/v3/orders/${ id }?_fields=${ ORDER_DETAIL_FIELDS }` )
 			.then( ( full ) => {
@@ -3091,6 +3116,22 @@
 					state.modal.notes = [];
 				}
 			} );
+		// Related WooCommerce Subscriptions (parent order or renewal).
+		if ( B.wcs ) {
+			api( `wc/v3/orders/${ id }/subscriptions?per_page=10&_fields=id,number,status,total,currency,billing_period,billing_interval` )
+				.then( ( subs ) => {
+					if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
+						state.modal.relatedSubs = Array.isArray( subs ) ? subs : [];
+						renderOverlays();
+					}
+				} )
+				.catch( () => {
+					if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
+						state.modal.relatedSubs = [];
+						renderOverlays();
+					}
+				} );
+		}
 	}
 
 	function orderMoney( o, amount ) {
@@ -3370,6 +3411,210 @@
 			type: 'product-new',
 		};
 		renderOverlays();
+	}
+
+	/* ===== Subscriptions (WooCommerce Subscriptions) ===== */
+
+	// Daily ops via wc/v3/subscriptions (extension REST). shop_subscription is
+	// fenced out of Content so recurring billing never opens the writing editor.
+	const SUB_TABS = [
+		[ 'any', 'All' ],
+		[ 'active', 'Active' ],
+		[ 'on-hold', 'On hold' ],
+		[ 'pending', 'Pending' ],
+		[ 'pending-cancel', 'Pending cancel' ],
+		[ 'cancelled', 'Cancelled' ],
+		[ 'expired', 'Expired' ],
+		[ 'switched', 'Switched' ],
+	];
+	const SUB_STATUS_STYLE = {
+		active: 'publish',
+		'on-hold': 'private',
+		pending: 'private',
+		'pending-cancel': 'future',
+		cancelled: 'trash-status',
+		expired: 'draft',
+		switched: 'draft',
+	};
+	const SUB_LIST_FIELDS = 'id,number,status,total,currency,date_created,billing,line_items,billing_period,billing_interval,next_payment_date_gmt,start_date_gmt,customer_id';
+	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,parent_id';
+
+	const subCtx = () => ( state.subTab || 'any' ) + '|' + ( state.subSearch || '' );
+
+	function subPeriodLabel( s ) {
+		const interval = Math.max( 1, parseInt( s.billing_interval, 10 ) || 1 );
+		const period = ( s.billing_period || 'month' ).replace( /s$/, '' );
+		if ( interval === 1 ) return 'every ' + period;
+		return 'every ' + interval + ' ' + period + 's';
+	}
+
+	function subMoney( s, amount ) {
+		const n = parseFloat( amount );
+		const code = ( s && s.currency ) || 'USD';
+		const num = Number.isNaN( n ) ? ( amount || '0' ) : n.toFixed( 2 );
+		// REST list often omits currency_symbol; keep a compact $ when USD.
+		if ( code === 'USD' ) return '$' + num;
+		return code + ' ' + num;
+	}
+
+	function subNextLabel( s ) {
+		const next = s.next_payment_date_gmt;
+		if ( ! next ) {
+			if ( s.status === 'cancelled' || s.status === 'expired' || s.status === 'pending-cancel' ) return '—';
+			return 'None scheduled';
+		}
+		return timeAgo( next );
+	}
+
+	async function loadSubscriptions( page = 1 ) {
+		const tab = state.subTab || 'any';
+		const q0 = ( state.subSearch || '' ).trim();
+		const ctx = subCtx();
+		const fields = SUB_LIST_FIELDS;
+		if ( q0 && /^\d+$/.test( q0 ) ) {
+			try {
+				const one = await api( `wc/v3/subscriptions/${ q0 }?_fields=${ fields }` );
+				if ( ctx !== subCtx() ) return;
+				if ( one && one.id ) {
+					if ( tab === 'any' || one.status === tab ) {
+						state.cache.subscriptions = { items: [ one ], page: 1, totalPages: 1, total: 1 };
+						return;
+					}
+				}
+			} catch ( e ) { /* fall through */ }
+		}
+		let q = `wc/v3/subscriptions?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ fields }`;
+		if ( tab && tab !== 'any' ) q += '&status=' + encodeURIComponent( tab );
+		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
+		const r = await apiPaged( q );
+		if ( ctx !== subCtx() ) return;
+		state.cache.subscriptions = { items: r.items, page, totalPages: r.totalPages, total: r.total };
+	}
+
+	function openSubscriptionModal( listSub ) {
+		const id = listSub && listSub.id;
+		if ( ! id ) return;
+		state.modal = {
+			type: 'subscription',
+			sub: listSub,
+			full: null,
+			loading: true,
+			relatedOrders: null,
+		};
+		renderOverlays();
+		api( `wc/v3/subscriptions/${ id }?_fields=${ SUB_DETAIL_FIELDS }` )
+			.then( ( full ) => {
+				if ( ! state.modal || state.modal.type !== 'subscription' || state.modal.sub.id !== id ) return;
+				state.modal.full = full;
+				state.modal.loading = false;
+				if ( state.cache.subscriptions && state.cache.subscriptions.items ) {
+					const i = state.cache.subscriptions.items.findIndex( ( x ) => x.id === id );
+					if ( i >= 0 ) {
+						state.cache.subscriptions.items[ i ] = Object.assign( {}, state.cache.subscriptions.items[ i ], {
+							status: full.status,
+							total: full.total,
+							billing: full.billing,
+							next_payment_date_gmt: full.next_payment_date_gmt,
+						} );
+					}
+				}
+				renderOverlays();
+			} )
+			.catch( ( e ) => {
+				if ( ! state.modal || state.modal.type !== 'subscription' ) return;
+				state.modal.loading = false;
+				state.modal.loadError = e.message || 'Could not load subscription';
+				renderOverlays();
+			} );
+		api( `wc/v3/subscriptions/${ id }/orders?per_page=10&_fields=id,number,status,total,date_created,currency` )
+			.then( ( orders ) => {
+				if ( state.modal && state.modal.type === 'subscription' && state.modal.sub.id === id ) {
+					state.modal.relatedOrders = Array.isArray( orders ) ? orders : [];
+					renderOverlays();
+				}
+			} )
+			.catch( () => {
+				if ( state.modal && state.modal.type === 'subscription' && state.modal.sub.id === id ) {
+					state.modal.relatedOrders = [];
+				}
+			} );
+	}
+
+	function renderSubscriptions() {
+		const view = $( '#minn-view' );
+		const c = state.cache.subscriptions;
+		if ( ! c ) {
+			view.innerHTML = '<div class="minn-loading">Loading subscriptions…</div>';
+			loadSubscriptions().then( renderIfCurrent( 'subscriptions' ) ).catch( showErr );
+			return;
+		}
+		view.innerHTML = `
+		<div class="minn-toolbar minn-toolbar-views">
+			<div class="minn-tabs">
+				${ SUB_TABS.map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ ( state.subTab || 'any' ) === id ? ' active' : '' }" data-stab="${ id }">${ label }</button>` ).join( '' ) }
+			</div>
+		</div>
+		<div class="minn-toolbar">
+			<input class="minn-input minn-toolbar-search" id="minn-sub-search" placeholder="Search subscriptions (ID, name, email…)" value="${ esc( state.subSearch || '' ) }">
+			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'subscription' ) }</div>
+		</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-sub-cols">
+				<div>Subscription</div><div>Customer</div><div>Status</div><div>Next payment</div><div>Total</div><div></div>
+			</div>
+			${ c.items.length ? c.items.map( ( s ) => `
+				<div class="minn-table-row minn-sub-cols" data-sub="${ s.id }">
+					<div class="minn-cell-clip">
+						<div class="minn-row-title">#${ esc( s.number || s.id ) }</div>
+						<div class="minn-row-slug">${ esc( subPeriodLabel( s ) ) }</div>
+					</div>
+					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( s ) ) }</div>
+					<div><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( ( s.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
+					<div class="minn-row-meta" title="${ esc( s.next_payment_date_gmt || '' ) }">${ esc( subNextLabel( s ) ) }</div>
+					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( subMoney( s, s.total ) ) }</div>
+					<div class="minn-row-arrow">›</div>
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.subSearch ? 'No subscriptions match “' + esc( state.subSearch ) + '”.' : 'No subscriptions here.' }</div>` }
+		</div>
+		${ pagerHtml( c.page, c.totalPages, c.total, 'subscription' ) }`;
+
+		$$( '[data-stab]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				state.subTab = btn.dataset.stab;
+				state.cache.subscriptions = null;
+				renderSubscriptions();
+			} )
+		);
+		const subSearch = $( '#minn-sub-search', view );
+		if ( subSearch ) {
+			let t = null;
+			subSearch.addEventListener( 'input', () => {
+				clearTimeout( t );
+				t = setTimeout( async () => {
+					state.subSearch = subSearch.value.trim();
+					state.cache.subscriptions = null;
+					try {
+						await loadSubscriptions( 1 );
+						if ( state.route === 'subscriptions' ) renderSubscriptions();
+					} catch ( e ) { showErr( e ); }
+				}, 280 );
+			} );
+			subSearch.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' && subSearch.value ) {
+					subSearch.value = '';
+					state.subSearch = '';
+					state.cache.subscriptions = null;
+					loadSubscriptions( 1 ).then( () => { if ( state.route === 'subscriptions' ) renderSubscriptions(); } ).catch( showErr );
+				}
+			} );
+		}
+		$$( '[data-sub]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => {
+				const s = c.items.find( ( x ) => x.id === parseInt( row.dataset.sub, 10 ) );
+				if ( s ) openSubscriptionModal( s );
+			} )
+		);
+		bindPager( view, c.page, loadSubscriptions, () => { if ( state.route === 'subscriptions' ) renderSubscriptions(); } );
 	}
 
 	/* ===== Products (WooCommerce) ===== */
@@ -7048,9 +7293,36 @@
 
 	// After a plugin upgrade the PHP worker often recycles (OPcache /
 	// FrankenPHP), so the NEXT fetch fails instantly with TypeError
-	// "Failed to fetch". Retry a few times rather than blanking Extensions
-	// with showErr (Austin's dual-update crash).
-	async function loadPluginsResilient( attempts = 5 ) {
+	// "Failed to fetch" / ERR_CONNECTION_REFUSED. Retry a few times rather
+	// than blanking Extensions with showErr (Austin's dual-update crash).
+	function isFetchDrop( e ) {
+		if ( ! e ) return false;
+		if ( e instanceof TypeError ) return true;
+		const msg = String( e.message || e );
+		return /failed to fetch|networkerror|load failed|err_connection|connection refused/i.test( msg );
+	}
+
+	async function waitForRestAlive( maxMs = 20000 ) {
+		const start = Date.now();
+		let delay = 600;
+		while ( Date.now() - start < maxMs ) {
+			try {
+				// Light ping — users/me is always available and cheap.
+				await api( 'wp/v2/users/me?_fields=id' );
+				return true;
+			} catch ( e ) {
+				if ( ! isFetchDrop( e ) ) {
+					// Non-network error means the worker answered — treat as up.
+					return true;
+				}
+				await new Promise( ( r ) => setTimeout( r, delay ) );
+				delay = Math.min( delay + 400, 2500 );
+			}
+		}
+		return false;
+	}
+
+	async function loadPluginsResilient( attempts = 6 ) {
 		let lastErr = null;
 		for ( let i = 0; i < attempts; i++ ) {
 			try {
@@ -7059,7 +7331,8 @@
 				return;
 			} catch ( e ) {
 				lastErr = e;
-				await new Promise( ( r ) => setTimeout( r, 700 + i * 500 ) );
+				if ( isFetchDrop( e ) ) await waitForRestAlive( 8000 );
+				else await new Promise( ( r ) => setTimeout( r, 700 + i * 500 ) );
 			}
 		}
 		throw lastErr || new Error( 'Could not reload plugins' );
@@ -7069,62 +7342,193 @@
 	// Plugin_Upgrader runs race on the filesystem and recycle the worker,
 	// so a second in-flight update (and the follow-up list fetch) die with
 	// "Failed to fetch" and Extensions paints "Something went wrong".
-	// Queue serializes them; the list reloads only when the queue is empty.
+	// Queue serializes them; settle the worker between items; the list
+	// reloads only when the queue is empty. "Update all" uses this queue
+	// so each card can show Queued / Updating.
 	const pluginUpdatePending = new Set(); // list keys: "dir/file" (no .php)
+	let pluginUpdateCurrent = null; // the file whose upgrader is in flight
 	let pluginUpdateChain = Promise.resolve();
+
+	function pluginUpdateBadgeLabel( file, offeredVersion ) {
+		if ( pluginUpdateCurrent === file ) return 'Updating…';
+		if ( pluginUpdatePending.has( file ) ) return 'Queued…';
+		return offeredVersion ? `Update → ${ offeredVersion }` : 'Update';
+	}
 
 	function markPluginCardBusy( file, busy ) {
 		const card = document.querySelector( `.minn-plugin[data-plugin="${ CSS.escape( file ) }"]` );
 		if ( ! card ) return;
-		card.classList.toggle( 'minn-busy', !! busy );
+		// Stay dimmed while still in the queue (queued behind another update).
+		const stillPending = pluginUpdatePending.has( file );
+		card.classList.toggle( 'minn-busy', !! busy || stillPending );
+		card.classList.toggle( 'minn-plugin-updating', pluginUpdateCurrent === file );
+		card.classList.toggle( 'minn-plugin-queued', stillPending && pluginUpdateCurrent !== file );
 		const btn = card.querySelector( '[data-update]' );
 		if ( btn ) {
-			btn.disabled = !! busy;
-			if ( busy && ! btn.dataset.minnUpdLabel ) {
-				btn.dataset.minnUpdLabel = btn.textContent;
-				btn.textContent = 'Updating…';
-			} else if ( ! busy && btn.dataset.minnUpdLabel ) {
-				btn.textContent = btn.dataset.minnUpdLabel;
-				delete btn.dataset.minnUpdLabel;
+			const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || btn.dataset.minnOffered || '';
+			if ( offered ) btn.dataset.minnOffered = offered;
+			btn.disabled = stillPending || !! busy;
+			btn.textContent = pluginUpdateBadgeLabel( file, offered );
+			btn.title = pluginUpdateCurrent === file
+				? 'Update in progress'
+				: stillPending
+					? 'Queued — updates run one at a time'
+					: ( offered ? 'Update to ' + offered : 'Update' );
+		}
+	}
+
+	function paintPluginUpdateQueue() {
+		// Refresh every pending card's badge/busy after current shifts.
+		pluginUpdatePending.forEach( ( file ) => markPluginCardBusy( file, true ) );
+		// Toolbar "Update all" label if present.
+		const allBtn = $( '#minn-update-all' );
+		if ( allBtn ) {
+			const n = pluginUpdatePending.size;
+			if ( n ) {
+				allBtn.disabled = true;
+				allBtn.innerHTML = `${ icon( 'refresh' ) } Updating… (${ n })`;
 			}
 		}
 	}
 
-	function queuePluginUpdate( file, name ) {
+	/**
+	 * Run one plugin upgrade with worker-recycle tolerance.
+	 * After bulk/single upgrades the PHP worker often dies mid-response
+	 * (ERR_CONNECTION_REFUSED). Retry, then verify the offer is gone.
+	 */
+	async function runPluginUpdateRequest( file, offeredVersion ) {
+		const key = file + '.php';
+		const attempt = () => api( 'minn-admin/v1/plugins/update', {
+			method: 'POST',
+			body: JSON.stringify( { plugin: key } ),
+		} );
+
+		const offerStillOpen = async () => {
+			// Fresh check — don't use the SPA cache (it may be optimistic).
+			pluginsPromise = null;
+			const upd = await api( 'minn-admin/v1/plugin-updates' );
+			const map = ( upd && upd.updates ) || {};
+			// Keep cache in sync for other cards.
+			if ( state.cache ) state.cache.pluginUpdates = map;
+			if ( upd && upd.themes ) state.cache.themeUpdates = upd.themes;
+			return !! map[ key ];
+		};
+
+		try {
+			return await attempt();
+		} catch ( e ) {
+			if ( ! isFetchDrop( e ) ) throw e;
+			// Request may have completed before the worker died.
+			await waitForRestAlive( 20000 );
+			try {
+				if ( ! ( await offerStillOpen() ) ) {
+					return { updated: true, version: offeredVersion || '', inferred: true };
+				}
+			} catch ( e2 ) { /* retry upgrade below */ }
+			// Offer still there (or check failed) — retry the upgrade once.
+			try {
+				return await attempt();
+			} catch ( e3 ) {
+				if ( ! isFetchDrop( e3 ) ) throw e3;
+				await waitForRestAlive( 20000 );
+				try {
+					if ( ! ( await offerStillOpen() ) ) {
+						return { updated: true, version: offeredVersion || '', inferred: true };
+					}
+				} catch ( e4 ) { /* fall through */ }
+				throw e3;
+			}
+		}
+	}
+
+	function applyPluginUpdateOptimistic( file, version ) {
+		if ( state.cache.pluginUpdates ) {
+			delete state.cache.pluginUpdates[ file + '.php' ];
+		}
+		if ( version && Array.isArray( state.cache.plugins ) ) {
+			const p = state.cache.plugins.find( ( x ) => x.plugin === file );
+			if ( p ) p.version = version;
+		}
+	}
+
+	function clearPluginCardUpdateUi( file ) {
+		const card = document.querySelector( `.minn-plugin[data-plugin="${ CSS.escape( file ) }"]` );
+		if ( ! card ) return;
+		card.classList.remove( 'minn-busy', 'minn-plugin-updating', 'minn-plugin-queued' );
+		const badge = card.querySelector( '[data-update]' );
+		if ( badge ) badge.remove();
+		const verEl = card.querySelector( '.minn-plugin-ver' );
+		const p = Array.isArray( state.cache.plugins )
+			? state.cache.plugins.find( ( x ) => x.plugin === file )
+			: null;
+		if ( verEl && p && p.version ) verEl.textContent = 'v' + p.version;
+	}
+
+	function queuePluginUpdate( file, name, opts ) {
+		const quiet = opts && opts.quiet;
 		if ( pluginUpdatePending.has( file ) ) return pluginUpdateChain;
 		pluginUpdatePending.add( file );
 		markPluginCardBusy( file, true );
 		const depth = pluginUpdatePending.size;
-		toast( depth > 1
-			? `Queued ${ name } (${ depth } in line)…`
-			: `Updating ${ name }…` );
+		if ( ! quiet ) {
+			toast( depth > 1
+				? `Queued ${ name } (${ depth } in line)…`
+				: `Updating ${ name }…` );
+		}
 
 		pluginUpdateChain = pluginUpdateChain.then( async () => {
 			// Bail if a hard-reload already started (self-update of Minn).
 			if ( ! pluginUpdatePending.has( file ) ) return;
+			// Don't start until the previous upgrade's worker is back.
+			await waitForRestAlive( 20000 );
+			if ( ! pluginUpdatePending.has( file ) ) return;
+
+			pluginUpdateCurrent = file;
+			paintPluginUpdateQueue();
+			const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || '';
+			let succeeded = false;
 			try {
-				const r = await api( 'minn-admin/v1/plugins/update', {
-					method: 'POST',
-					body: JSON.stringify( { plugin: file + '.php' } ),
-				} );
+				const r = await runPluginUpdateRequest( file, offered );
 				if ( isMinnAdminPluginFile( file ) ) {
 					reloadAfterMinnSelfUpdate( r && r.version );
 					return;
 				}
-				toast( `${ name } updated${ r.version ? ' to v' + r.version : '' }` );
-				// Optimistic so a mid-queue re-render doesn't re-offer the badge.
-				if ( state.cache.pluginUpdates ) {
-					delete state.cache.pluginUpdates[ file + '.php' ];
-				}
-				if ( Array.isArray( state.cache.plugins ) && r.version ) {
-					const p = state.cache.plugins.find( ( x ) => x.plugin === file );
-					if ( p ) p.version = r.version;
-				}
+				const version = ( r && r.version ) || offered || '';
+				applyPluginUpdateOptimistic( file, version );
+				succeeded = true;
+				toast( `${ name } updated${ version ? ' to v' + version : '' }` );
 			} catch ( e ) {
-				toast( e.message || `Could not update ${ name }`, true );
+				// One more settle + offer check before blaming the user.
+				if ( isFetchDrop( e ) ) {
+					await waitForRestAlive( 12000 );
+					try {
+						pluginsPromise = null;
+						const upd = await api( 'minn-admin/v1/plugin-updates' );
+						const map = ( upd && upd.updates ) || {};
+						state.cache.pluginUpdates = map;
+						if ( ! map[ file + '.php' ] ) {
+							applyPluginUpdateOptimistic( file, offered );
+							succeeded = true;
+							toast( `${ name } updated${ offered ? ' to v' + offered : '' }` );
+						} else {
+							toast( `Could not update ${ name } — connection dropped mid-upgrade. Try again.`, true );
+						}
+					} catch ( e2 ) {
+						toast( `Could not update ${ name }: ${ e.message || 'Failed to fetch' }. Try again in a moment.`, true );
+					}
+				} else {
+					toast( e.message || `Could not update ${ name }`, true );
+				}
 			} finally {
 				pluginUpdatePending.delete( file );
-				markPluginCardBusy( file, false );
+				if ( pluginUpdateCurrent === file ) pluginUpdateCurrent = null;
+				if ( succeeded ) clearPluginCardUpdateUi( file );
+				else markPluginCardBusy( file, false );
+				paintPluginUpdateQueue();
+				// Critical: let FrankenPHP rebind before the next queue item.
+				// Without this, the next update fails in ~0–5ms with
+				// ERR_CONNECTION_REFUSED (Austin 2026-07-14 network panel).
+				await waitForRestAlive( 20000 );
 			}
 			if ( pluginUpdatePending.size > 0 ) return;
 			// Queue drained — one resilient list refresh, never showErr.
@@ -7885,8 +8289,10 @@
 		const keepScrollTop = scroller ? scroller.scrollTop : 0;
 		const updates = state.cache.pluginUpdates;
 		const updateCount = Object.keys( updates ).length;
+		const queueCount = pluginUpdatePending.size;
+		const bulkBusy = queueCount > 0;
 		const active = plugins.filter( ( p ) => p.status === 'active' ).length;
-		const hasUpd = ( p ) => !! updates[ p.plugin + '.php' ];
+		const hasUpd = ( p ) => !! updates[ p.plugin + '.php' ] || pluginUpdatePending.has( p.plugin );
 
 		// Client-side filter + search over the already-cached plugin set.
 		const q = ( state.extSearch || '' ).trim().toLowerCase();
@@ -7902,7 +8308,12 @@
 
 		const filterDefs = [ [ 'all', 'All' ], [ 'active', 'Active' ], [ 'inactive', 'Inactive' ] ];
 		if ( B.caps.update ) filterDefs.push( [ 'updates', 'Updates' ] );
-		const counts = { all: plugins.length, active, inactive: plugins.length - active, updates: updateCount };
+		// Count remaining offers + anything still in the update queue.
+		const updatesFilterCount = new Set( [
+			...Object.keys( updates ).map( ( k ) => k.replace( /\.php$/, '' ) ),
+			...pluginUpdatePending,
+		] ).size;
+		const counts = { all: plugins.length, active, inactive: plugins.length - active, updates: updatesFilterCount };
 
 		view.innerHTML = `
 		${ coreBannerHtml() }
@@ -7910,10 +8321,10 @@
 			${ extTabsHtml() }
 			${ B.caps.update ? `
 				<span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-					<button class="minn-btn-soft" id="minn-check-updates" title="Force a fresh check against WordPress.org and licensed vendors">${ icon( 'refresh' ) } Check for updates</button>
-					${ updateCount ? `
-					<button class="minn-btn-soft" id="minn-update-all">
-						${ icon( 'refresh' ) } Update all (${ updateCount })
+					<button class="minn-btn-soft" id="minn-check-updates" title="Force a fresh check against WordPress.org and licensed vendors"${ bulkBusy ? ' disabled' : '' }>${ icon( 'refresh' ) } Check for updates</button>
+					${ updateCount || bulkBusy ? `
+					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ bulkBusy ? 'Updates run one at a time' : 'Update every plugin with a pending offer' }">
+						${ icon( 'refresh' ) } ${ bulkBusy ? `Updating… (${ queueCount })` : `Update all (${ updateCount })` }
 					</button>` : '' }
 				</span>` : '' }
 		</div>
@@ -7926,21 +8337,28 @@
 		<div class="minn-plugin-grid">
 			${ visible.map( ( p ) => {
 				const name = cleanPluginName( p.name );
-				const hasUpdate = !! updates[ p.plugin + '.php' ];
+				const offered = updates[ p.plugin + '.php' ] || '';
 				const isUpdating = pluginUpdatePending.has( p.plugin );
+				const isCurrent = pluginUpdateCurrent === p.plugin;
 				const on = p.status === 'active';
 				// wp.org plugins wear their real icon, and the icon links to
 				// their directory page; everything else keeps the letter tile.
 				const meta = ( state.cache.pluginMeta || {} )[ p.plugin + '.php' ];
 				const tile = `<div class="minn-plugin-icon" style="background:${ colorFor( name ) }">${ esc( name.charAt( 0 ) ) }${ meta && meta.icon ? `<img src="${ esc( meta.icon ) }" alt="" loading="lazy">` : '' }</div>`;
+				const badgeLabel = pluginUpdateBadgeLabel( p.plugin, offered );
+				const badgeTitle = isCurrent
+					? 'Update in progress'
+					: isUpdating
+						? 'Queued — updates run one at a time'
+						: ( offered ? 'Update to ' + offered : 'Update' );
 				return `
-				<div class="minn-card minn-plugin${ isUpdating ? ' minn-busy' : '' }" data-plugin="${ esc( p.plugin ) }">
+				<div class="minn-card minn-plugin${ isUpdating ? ' minn-busy' : '' }${ isCurrent ? ' minn-plugin-updating' : '' }${ isUpdating && ! isCurrent ? ' minn-plugin-queued' : '' }" data-plugin="${ esc( p.plugin ) }">
 					${ meta && meta.url ? `<a class="minn-plugin-icon-link" href="${ esc( meta.url ) }" target="_blank" rel="noopener" title="${ /wordpress\.org/.test( meta.url ) ? `View ${ esc( name ) } on WordPress.org` : `${ esc( name ) } plugin page` }">${ tile }</a>` : tile }
 					<div class="minn-plugin-body">
 						<div class="minn-plugin-head">
 							<div class="minn-plugin-name">${ esc( name ) }</div>
-							${ hasUpdate || isUpdating ? ( B.caps.update
-								? `<button class="minn-badge-update as-btn" data-update="${ esc( p.plugin ) }" ${ isUpdating ? 'disabled' : '' } title="${ isUpdating ? 'Update in progress' : 'Update to ' + esc( updates[ p.plugin + '.php' ] || '' ) }">${ isUpdating ? 'Updating…' : `Update → ${ esc( updates[ p.plugin + '.php' ] ) }` }</button>`
+							${ offered || isUpdating ? ( B.caps.update
+								? `<button class="minn-badge-update as-btn" data-update="${ esc( p.plugin ) }" data-minn-offered="${ esc( offered ) }" ${ isUpdating ? 'disabled' : '' } title="${ esc( badgeTitle ) }">${ esc( badgeLabel ) }</button>`
 								: `<span class="minn-badge-update">Update</span>` ) : '' }
 						</div>
 						<div class="minn-plugin-desc">${ esc( stripTags( ( ( p.description && p.description.rendered ) || '' ).replace( /<cite>[\s\S]*?<\/cite>/, '' ) ) ) }</div>
@@ -8056,7 +8474,9 @@
 		const addBtn = $( '#minn-add-plugin', view );
 		if ( addBtn ) {
 			addBtn.addEventListener( 'click', () => {
-				state.modal = { type: 'plugin-install', q: '', category: null, results: null, searching: false, page: 1, pages: 1, total: 0 };
+				// Warm the plugins cache so catalog chips show Active/Installed.
+				loadPlugins().catch( () => {} );
+				state.modal = { type: 'plugin-install', q: '', results: null, searching: false, page: 1, pages: 1, total: 0 };
 				renderOverlays();
 			} );
 		}
@@ -8175,44 +8595,41 @@
 	}
 
 	async function updateAllPlugins( btn ) {
-		if ( pluginUpdatePending.size ) {
-			toast( 'Finish the in-progress update first, or wait for the queue to drain.', true );
+		const updates = state.cache.pluginUpdates || {};
+		// Only queue plugins that are not already in flight.
+		const files = Object.keys( updates )
+			.map( ( k ) => k.replace( /\.php$/, '' ) )
+			.filter( ( file ) => ! pluginUpdatePending.has( file ) );
+		if ( ! files.length ) {
+			if ( pluginUpdatePending.size ) {
+				toast( 'Updates are already running — watch the cards for progress.', true );
+			} else {
+				toast( 'Everything is up to date' );
+			}
 			return;
 		}
+		const plugins = state.cache.plugins || [];
+		// One toast for the batch; per-plugin toasts stay quiet until each finishes.
+		toast( files.length === 1
+			? `Updating ${ cleanPluginName( ( plugins.find( ( p ) => p.plugin === files[ 0 ] ) || {} ).name || files[ 0 ] ) }…`
+			: `Updating ${ files.length } plugins — one at a time…` );
 		if ( btn ) {
 			btn.disabled = true;
-			btn.textContent = 'Updating…';
+			btn.innerHTML = `${ icon( 'refresh' ) } Updating… (${ files.length + pluginUpdatePending.size })`;
 		}
-		toast( 'Updating plugins — this can take a minute…' );
-		const prev = state.cache.plugins;
-		try {
-			const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
-			const updated = r.updated || [];
-			const n = updated.length;
-			if ( r.failed && r.failed.length ) {
-				toast( `${ n } updated, ${ r.failed.length } failed`, true );
-			} else {
-				toast( n ? `${ n } plugin${ n === 1 ? '' : 's' } updated` : 'Everything is up to date' );
-			}
-			// Bulk path can include Minn itself — same hard-reload need as a
-			// single-plugin self-update (new features + version in boot payload).
-			if ( updated.some( isMinnAdminPluginFile ) ) {
-				reloadAfterMinnSelfUpdate();
-				return;
-			}
-		} catch ( e ) {
-			toast( e.message, true );
+		// Queue every pending offer through the serial path so each card
+		// shows Queued… then Updating… (bulk REST had no per-card progress).
+		for ( const file of files ) {
+			const plugin = plugins.find( ( p ) => p.plugin === file );
+			const name = plugin ? cleanPluginName( plugin.name ) : file;
+			queuePluginUpdate( file, name, { quiet: true } );
 		}
-		try {
-			state.cache.plugins = null;
-			await loadPluginsResilient();
-			state.cache.notifications = null;
-			loadNotifications().catch( () => {} );
-		} catch ( e ) {
-			if ( prev ) state.cache.plugins = prev;
-			toast( 'Updated, but the plugin list could not refresh yet. Reload if badges look stale.', true );
+		// Paint all cards immediately (queue marks them pending).
+		if ( state.route === 'extensions' && state.extTab === 'plugins' ) {
+			renderExtensions();
+		} else {
+			paintPluginUpdateQueue();
 		}
-		if ( state.route === 'extensions' ) renderExtensions();
 	}
 
 	// Plugin file keys appear as "minn-admin/minn-admin" (list rows) or
@@ -18315,6 +18732,7 @@
 		);
 		if ( commentsAvailable() ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
 		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
+		if ( B.wcs && B.caps.subscriptions ) cmds.push( { label: 'View Subscriptions', kind: 'nav', icon: '↻', run: () => go( 'subscriptions' ) } );
 		if ( B.wc && B.caps.products ) cmds.push( { label: 'View Products', kind: 'nav', icon: '🏷', run: () => go( 'products' ) } );
 		if ( B.wc && B.caps.coupons ) cmds.push( { label: 'View Coupons', kind: 'nav', icon: '🔑', run: () => go( 'coupons' ) } );
 		if ( B.wc && B.caps.customers ) cmds.push( { label: 'View Customers', kind: 'nav', icon: '◉', run: () => go( 'customers' ) } );
@@ -18434,6 +18852,7 @@
 
 	function closeModal() {
 		state.modal = null;
+		if ( typeof hidePluginTip === 'function' ) hidePluginTip();
 		renderOverlays();
 	}
 
@@ -18615,6 +19034,9 @@
 				[ 'Uploaded', it.date ? timeAgo( it.date ) : '—' ],
 			];
 			const canEdit = it.kind === 'IMG' || it.kind === 'SVG';
+			const svgNote = it.kind === 'SVG' && B.safeSvg
+				? '<div class="minn-media-svg-note">Sanitized by Safe SVG</div>'
+				: '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal media${ canEdit ? ' wide' : '' }">
@@ -18630,6 +19052,7 @@
 					</div>
 					<div class="minn-modal-meta">
 						${ rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ k }</span><span>${ esc( v ) }</span></div>` ).join( '' ) }
+						${ svgNote }
 						<div class="minn-modal-url"><span class="minn-permalink">${ esc( it.url ) }</span></div>
 						${ canEdit ? `
 						<div class="minn-media-edit">
@@ -18654,6 +19077,83 @@
 						<button class="minn-btn-soft danger" id="minn-media-feat-remove" type="button">Remove featured</button>` : '' }
 						<button class="minn-btn-soft danger" id="minn-media-delete">${ icon( 'trash' ) } Delete</button>
 					</div>
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'subscription' ) {
+			const listS = m.sub || {};
+			const s = m.full || listS;
+			const b = s.billing || {};
+			const canEdit = B.caps.subscriptions;
+			const loading = !! m.loading && ! m.full;
+			const related = m.relatedOrders;
+			const statusOpts = SUB_TABS.filter( ( [ id ] ) => id !== 'any' )
+				.map( ( [ id, label ] ) => `<option value="${ esc( id ) }"${ s.status === id ? ' selected' : '' }>${ esc( label ) }</option>` )
+				.join( '' );
+			const items = ( s.line_items || [] ).map( ( li ) =>
+				`<div class="minn-side-row"><span class="minn-side-key">${ esc( li.name || 'Item' ) } ×${ li.quantity || 1 }</span><span>${ esc( subMoney( s, li.total ) ) }</span></div>`
+			).join( '' );
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">Subscription #${ esc( s.number || listS.number || s.id ) }</div>
+							<div class="minn-modal-sub">${ esc( subMoney( s, s.total ) ) } · ${ esc( subPeriodLabel( s ) ) }${ s.start_date_gmt ? ' · started ' + esc( timeAgo( s.start_date_gmt ) ) : '' }</div>
+						</div>
+						<span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( ( s.status || '' ).replace( /-/g, ' ' ) ) }</span>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading subscription…</div>' : '' }
+					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+					${ ! loading && ! m.loadError ? `
+					<div class="minn-order-body">
+						<div class="minn-order-grid">
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Customer</div>
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( customerName( s ) ) }</span></div>
+									${ b.email ? `<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email ) }</span></div>` : '' }
+									${ s.customer_id ? `<div class="minn-side-row"><span class="minn-side-key">Customer ID</span><span>#${ esc( String( s.customer_id ) ) }</span></div>` : '' }
+								</div>
+								<div class="minn-side-title" style="margin:16px 0 8px;">Schedule</div>
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Billing</span><span>${ esc( subPeriodLabel( s ) ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Next payment</span><span title="${ esc( s.next_payment_date_gmt || '' ) }">${ esc( subNextLabel( s ) ) }</span></div>
+									${ s.last_payment_date_gmt ? `<div class="minn-side-row"><span class="minn-side-key">Last payment</span><span>${ esc( timeAgo( s.last_payment_date_gmt ) ) }</span></div>` : '' }
+									${ s.trial_end_date_gmt ? `<div class="minn-side-row"><span class="minn-side-key">Trial ends</span><span>${ esc( timeAgo( s.trial_end_date_gmt ) ) }</span></div>` : '' }
+									${ s.end_date_gmt ? `<div class="minn-side-row"><span class="minn-side-key">Ends</span><span>${ esc( timeAgo( s.end_date_gmt ) ) }</span></div>` : '' }
+									${ s.payment_method_title ? `<div class="minn-side-row"><span class="minn-side-key">Payment</span><span>${ esc( s.payment_method_title ) }</span></div>` : '' }
+								</div>
+							</div>
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Items</div>
+								<div class="minn-modal-meta" style="padding:0;">
+									${ items || '<div class="minn-session-empty">No line items.</div>' }
+									<div class="minn-side-row" style="margin-top:8px;font-weight:600;"><span class="minn-side-key">Recurring total</span><span>${ esc( subMoney( s, s.total ) ) }</span></div>
+								</div>
+								${ canEdit ? `
+								<div class="minn-side-title" style="margin:16px 0 8px;">Status</div>
+								<select class="minn-input" id="minn-sub-status">${ statusOpts }</select>
+								<div class="minn-toggle-desc" style="margin-top:8px;">Active, On hold and Cancelled cover daily work. Switched / Expired are usually set by WooCommerce Subscriptions itself.</div>` : '' }
+								<div class="minn-side-title" style="margin:16px 0 8px;">Related orders</div>
+								${ related == null ? '<div class="minn-session-empty">Loading…</div>'
+									: ! related.length ? '<div class="minn-session-empty">No related orders yet.</div>'
+									: related.map( ( o ) => `
+									<button type="button" class="minn-sub-order-row" data-relorder="${ o.id }">
+										<span>#${ esc( o.number || o.id ) }</span>
+										<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+										<span>${ esc( subMoney( s, o.total ) ) }</span>
+									</button>` ).join( '' ) }
+							</div>
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						${ canEdit ? `<button class="minn-btn-primary" id="minn-sub-save">Save status</button>` : '' }
+						${ B.site && B.site.adminUrl ? `<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ s.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>` : '' }
+						<button class="minn-btn-soft" id="minn-modal-close-btn">Close</button>
+					</div>` : '' }
 				</div>
 			</div>`;
 		}
@@ -18837,6 +19337,18 @@
 								<button class="minn-btn-soft" id="minn-o-note-add" type="button" style="margin-top:10px;">Add note</button>
 							</div>` : '' }` }
 						</div>
+						${ B.wcs ? `
+						<div class="minn-media-edit minn-order-subs">
+							<div class="minn-side-title" style="margin:0 0 8px;">Subscriptions</div>
+							${ m.relatedSubs == null ? '<div class="minn-loading" style="padding:8px;">Checking…</div>'
+								: ! m.relatedSubs.length ? '<div class="minn-toggle-desc">No related subscriptions on this order.</div>'
+								: m.relatedSubs.map( ( sub ) => `
+								<button type="button" class="minn-sub-order-row" data-relsub="${ sub.id }">
+									<span>#${ esc( sub.number || sub.id ) }</span>
+									<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
+									<span>${ esc( subMoney( sub, sub.total ) ) }</span>
+								</button>` ).join( '' ) }
+						</div>` : '' }
 					</div>
 					<div class="minn-modal-actions">
 						${ canEdit && b.email ? `<button class="minn-btn-soft" id="minn-o-email" type="button">${ icon( 'send' ) } Send email…</button>` : '' }
@@ -19741,20 +20253,55 @@
 
 		if ( m.type === 'plugin-install' ) {
 			const installedNow = ( slug ) => ( state.cache.plugins || [] ).find( ( p ) => p.plugin.split( '/' )[ 0 ] === slug );
-			// Category chips always show — empty state is guided, and they stay
-			// useful as one-click re-searches after results land.
-			const catChips = PLUGIN_CATEGORIES.map( ( c ) =>
-				`<button type="button" class="minn-pi-cat${ m.category === c.id ? ' active' : '' }" data-pi-cat="${ esc( c.id ) }" title="Search WordPress.org for “${ esc( c.q ) }”">${ esc( c.label ) }</button>`
-			).join( '' );
-			const emptyHint = m.results == null && ! m.q
-				? `<div class="minn-pi-guide">
-					<div class="minn-pi-guide-title">Not sure what you need?</div>
-					<div class="minn-pi-guide-sub">Pick a category to browse popular plugins, or type a name above.</div>
-				</div>`
-				: '';
+			const showCatalog = m.results == null && ! m.q && ! m.searching;
+			const catalogHtml = showCatalog ? `
+				<div class="minn-pi-catalog" role="list">
+					${ PLUGIN_CATALOG.map( ( cat ) => `
+					<div class="minn-pi-card" role="listitem">
+						<div class="minn-pi-card-head">
+							<div class="minn-pi-card-title">${ esc( cat.label ) }</div>
+							<div class="minn-pi-card-hint">${ esc( cat.hint || '' ) }</div>
+						</div>
+						<div class="minn-pi-card-chips">
+							${ cat.plugins.map( ( entry, i ) => {
+								const st = catalogChipState( entry );
+								// Native title is a fallback; the rich tip replaces it on hover.
+								const title = st === 'active' ? 'Already active'
+									: st === 'activate' ? 'Installed — click to activate'
+									: ( entry.github ? 'Install from GitHub release' : 'Install from WordPress.org' );
+								return `<button type="button" class="minn-pi-chip${ st === 'active' ? ' is-active' : '' }${ st === 'activate' ? ' is-installed' : '' }"
+									data-pi-chip="${ i }" data-cat="${ esc( cat.id ) }" data-slug="${ esc( entry.slug || '' ) }"
+									aria-label="${ esc( entry.name + ( st === 'active' ? ' (active)' : '' ) ) }"
+									data-fallback-title="${ esc( title ) }"
+									${ st === 'active' ? 'disabled' : '' }>
+									${ esc( entry.name ) }${ entry.badge ? `<span class="minn-pi-chip-badge">${ esc( entry.badge ) }</span>` : '' }${ st === 'active' ? ' ✓' : '' }
+								</button>`;
+							} ).join( '' ) }
+						</div>
+						${ cat.q ? `<button type="button" class="minn-pi-card-more" data-pi-more="${ esc( cat.id ) }">Browse more on WordPress.org →</button>` : '' }
+					</div>` ).join( '' ) }
+				</div>` : '';
+			const resultsHtml = m.searching ? '<div class="minn-loading">Searching…</div>'
+				: m.results == null ? ''
+				: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">No results for “${ esc( m.q ) }”.</div>`
+				: m.results.map( ( p, i ) => {
+					const local = installedNow( p.slug );
+					const stateLabel = local && local.status === 'active' ? 'Active'
+						: ( local || p.installed ) ? 'Activate' : 'Install';
+					return `
+					<div class="minn-pi-row">
+						${ p.icon ? `<img class="minn-pi-icon" src="${ esc( p.icon ) }" alt="">` : '<div class="minn-pi-icon"></div>' }
+						<div class="minn-pi-info">
+							<div class="minn-row-title" title="${ esc( p.name ) }">${ esc( cleanPluginName( p.name ) ) }</div>
+							<div class="minn-pi-meta">${ p.installs ? Number( p.installs ).toLocaleString() + '+ installs · ' : '' }v${ esc( p.version ) }</div>
+							<div class="minn-pi-desc">${ esc( p.description ) }</div>
+						</div>
+						<button class="minn-btn-soft" data-pi="${ i }" ${ stateLabel === 'Active' ? 'disabled' : '' }>${ stateLabel }</button>
+					</div>`;
+				} ).join( '' );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal wide">
+				<div class="minn-modal wide minn-modal-pi">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">Add plugin</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
@@ -19766,29 +20313,13 @@
 							<input type="file" id="minn-pi-file" accept=".zip" hidden>
 						</div>
 						<input class="minn-input" id="minn-pi-search" placeholder="Search the WordPress.org directory…" value="${ esc( m.q ) }" autocomplete="off">
-						<div class="minn-pi-cats" role="group" aria-label="Browse by category">
-							<span class="minn-pi-cats-label">Browse</span>
-							${ catChips }
-						</div>
-						<div class="minn-pi-results">
-							${ m.searching ? '<div class="minn-loading">Searching…</div>'
-							: m.results == null ? emptyHint || '<div class="minn-empty" style="padding:20px;">Search for a plugin, or drop a zip above.</div>'
-							: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">No results for “${ esc( m.q ) }”.</div>`
-							: m.results.map( ( p, i ) => {
-								const local = installedNow( p.slug );
-								const stateLabel = local && local.status === 'active' ? 'Active'
-									: ( local || p.installed ) ? 'Activate' : 'Install';
-								return `
-								<div class="minn-pi-row">
-									${ p.icon ? `<img class="minn-pi-icon" src="${ esc( p.icon ) }" alt="">` : '<div class="minn-pi-icon"></div>' }
-									<div class="minn-pi-info">
-										<div class="minn-row-title" title="${ esc( p.name ) }">${ esc( cleanPluginName( p.name ) ) }</div>
-										<div class="minn-pi-meta">${ p.installs ? Number( p.installs ).toLocaleString() + '+ installs · ' : '' }v${ esc( p.version ) }</div>
-										<div class="minn-pi-desc">${ esc( p.description ) }</div>
-									</div>
-									<button class="minn-btn-soft" data-pi="${ i }" ${ stateLabel === 'Active' ? 'disabled' : '' }>${ stateLabel }</button>
-								</div>`;
-							} ).join( '' ) }
+						${ m.q || m.results != null ? `
+						<div class="minn-pi-search-bar">
+							<button type="button" class="minn-btn-soft" id="minn-pi-back">← Catalog</button>
+							<span class="minn-pi-search-meta">${ m.searching ? 'Searching…' : ( m.results ? Number( m.total ).toLocaleString() + ' results for “' + esc( m.q ) + '”' : '' ) }</span>
+						</div>` : '' }
+						<div class="minn-pi-results${ showCatalog ? ' is-catalog' : '' }">
+							${ showCatalog ? catalogHtml : resultsHtml }
 							${ m.results && m.results.length && m.page < m.pages ? `<button class="minn-load-more" id="minn-pi-more" style="margin:10px 0 4px;">Load more · showing ${ m.results.length } of ${ Number( m.total ).toLocaleString() }</button>` : '' }
 						</div>
 					</div>
@@ -20197,6 +20728,51 @@
 			$( '#minn-media-delete' ).addEventListener( 'click', () => deleteMediaItem( it ) );
 		}
 
+		if ( m.type === 'subscription' ) {
+			const closeBtn = $( '#minn-modal-close-btn' );
+			if ( closeBtn ) closeBtn.addEventListener( 'click', () => closeModal() );
+			const saveBtn = $( '#minn-sub-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const status = ( $( '#minn-sub-status' ) || {} ).value;
+				if ( ! status ) return;
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+				try {
+					const updated = await api( `wc/v3/subscriptions/${ m.sub.id }`, {
+						method: 'PUT',
+						body: JSON.stringify( { status } ),
+					} );
+					toast( 'Subscription #' + ( updated.number || updated.id ) + ' updated' );
+					state.modal.full = Object.assign( {}, m.full || m.sub, updated );
+					state.modal.sub = Object.assign( {}, m.sub, { status: updated.status, total: updated.total } );
+					if ( state.cache.subscriptions && state.cache.subscriptions.items ) {
+						const i = state.cache.subscriptions.items.findIndex( ( x ) => x.id === m.sub.id );
+						if ( i >= 0 ) {
+							state.cache.subscriptions.items[ i ] = Object.assign( {}, state.cache.subscriptions.items[ i ], {
+								status: updated.status,
+								total: updated.total,
+								next_payment_date_gmt: updated.next_payment_date_gmt,
+							} );
+						}
+					}
+					renderOverlays();
+					if ( state.route === 'subscriptions' ) renderSubscriptions();
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = 'Save status';
+				}
+			} );
+			$$( '[data-relorder]' ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const oid = parseInt( row.dataset.relorder, 10 );
+					if ( ! oid ) return;
+					closeModal();
+					openOrderModal( { id: oid, number: String( oid ) } );
+				} )
+			);
+		}
+
 		if ( m.type === 'order' ) {
 			const o = m.full || m.order;
 			const copyPay = async () => {
@@ -20205,6 +20781,14 @@
 				try { await navigator.clipboard.writeText( url ); toast( 'Payment URL copied' ); }
 				catch ( err ) { toast( 'Could not copy', true ); }
 			};
+			$$( '[data-relsub]' ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const sid = parseInt( row.dataset.relsub, 10 );
+					if ( ! sid ) return;
+					closeModal();
+					openSubscriptionModal( { id: sid, number: String( sid ) } );
+				} )
+			);
 			const copyBtn = $( '#minn-o-copy-pay' );
 			const copyBtn2 = $( '#minn-o-copy-pay2' );
 			if ( copyBtn ) copyBtn.addEventListener( 'click', copyPay );
@@ -21032,28 +21616,321 @@
 		} );
 	}
 
-	/* ===== Plugin install modal (wp.org search + zip upload) ===== */
+	/* ===== Plugin install modal (catalog + wp.org search + zip upload) ===== */
 
-	// Guided starting points for the Add plugin dialog. Each chip is just a
-	// plain wp.org search string — nothing curated or ranked, just a nudge
-	// toward the kinds of plugins people usually look for. Keep queries short
-	// and everyday so the directory's own ranking surfaces popular options.
-	const PLUGIN_CATEGORIES = [
-		{ id: 'seo', label: 'SEO', q: 'SEO' },
-		{ id: 'forms', label: 'Forms', q: 'contact form' },
-		{ id: 'ecommerce', label: 'Ecommerce', q: 'ecommerce' },
-		{ id: 'security', label: 'Security', q: 'security' },
-		{ id: 'backup', label: 'Backup', q: 'backup' },
-		{ id: 'analytics', label: 'Analytics', q: 'analytics' },
-		{ id: 'cache', label: 'Cache', q: 'cache' },
-		{ id: 'email', label: 'Email / SMTP', q: 'SMTP' },
-		{ id: 'redirects', label: 'Redirects', q: 'redirect' },
-		{ id: 'devtools', label: 'Dev tools', q: 'developer' },
-		{ id: 'spam', label: 'Spam', q: 'antispam' },
-		{ id: 'blocks', label: 'Blocks', q: 'gutenberg blocks' },
+	// Discovery catalog for the Add plugin dialog. Marketing-library shape
+	// (category cards + chips) but aimed at install: popular free options
+	// people actually add to a site. Paid-only plugins are omitted (they
+	// can't install from here). GitHub-only plugins use { github, asset }.
+	// `q` is an optional "browse more" wp.org search for the card header.
+	// `slug` is the plugin directory (matches installed plugin path prefix).
+	const PLUGIN_CATALOG = [
+		{
+			id: 'seo', label: 'SEO', hint: 'Titles, meta, sitemaps', q: 'SEO',
+			plugins: [
+				{ name: 'Yoast SEO', slug: 'wordpress-seo' },
+				{ name: 'Rank Math', slug: 'seo-by-rank-math' },
+				{ name: 'All in One SEO', slug: 'all-in-one-seo-pack' },
+				{ name: 'SEOPress', slug: 'wp-seopress' },
+				{ name: 'SiteSEO', slug: 'siteseo' },
+			],
+		},
+		{
+			id: 'forms', label: 'Forms', hint: 'Contact forms & entries', q: 'contact form',
+			plugins: [
+				{ name: 'Contact Form 7', slug: 'contact-form-7' },
+				{ name: 'Flamingo', slug: 'flamingo' },
+				{ name: 'Ninja Forms', slug: 'ninja-forms' },
+				{ name: 'Fluent Forms', slug: 'fluentform' },
+				{ name: 'Forminator', slug: 'forminator' },
+				{ name: 'Formidable', slug: 'formidable' },
+				{ name: 'Everest Forms', slug: 'everest-forms' },
+				{ name: 'CFDB7', slug: 'contact-form-cfdb7' },
+			],
+		},
+		{
+			id: 'ecommerce', label: 'Ecommerce', hint: 'Store & payments', q: 'ecommerce',
+			plugins: [
+				{ name: 'WooCommerce', slug: 'woocommerce' },
+				{ name: 'WooCommerce Subscriptions', slug: 'woocommerce-subscriptions', tip: 'Recurring billing for WooCommerce. In Minn: Workspace → Subscriptions (status, next payment, related orders).' },
+				{ name: 'SureCart', slug: 'surecart' },
+				{ name: 'Easy Digital Downloads', slug: 'easy-digital-downloads' },
+			],
+		},
+		{
+			id: 'security', label: 'Security', hint: 'Firewall, login, SSL', q: 'security',
+			plugins: [
+				{ name: 'Wordfence', slug: 'wordfence' },
+				{ name: 'Solid Security', slug: 'better-wp-security' },
+				{ name: 'Limit Login Attempts', slug: 'limit-login-attempts-reloaded' },
+				{ name: 'Really Simple SSL', slug: 'really-simple-ssl' },
+				{ name: 'Sucuri Scanner', slug: 'sucuri-scanner' },
+			],
+		},
+		{
+			id: 'backup', label: 'Backup', hint: 'Sets, migrate, restore', q: 'backup',
+			plugins: [
+				{ name: 'UpdraftPlus', slug: 'updraftplus' },
+				{ name: 'WPvivid', slug: 'wpvivid-backuprestore' },
+				{ name: 'BackWPup', slug: 'backwpup' },
+				{ name: 'Duplicator', slug: 'duplicator' },
+				{ name: 'All-in-One WP Migration', slug: 'all-in-one-wp-migration' },
+				// GitHub release (not on wp.org).
+				{ name: 'Disembark', slug: 'disembark', github: 'DisembarkHost/disembark', asset: 'disembark.zip', badge: 'GitHub' },
+			],
+		},
+		{
+			id: 'analytics', label: 'Analytics', hint: 'Privacy-friendly traffic', q: 'analytics',
+			plugins: [
+				{ name: 'Koko Analytics', slug: 'koko-analytics' },
+				{ name: 'WP Statistics', slug: 'wp-statistics' },
+				{ name: 'Burst', slug: 'burst-statistics' },
+				{ name: 'Independent Analytics', slug: 'independent-analytics' },
+				{ name: 'Site Kit', slug: 'google-site-kit' },
+			],
+		},
+		{
+			id: 'cache', label: 'Cache', hint: 'Page & object cache', q: 'cache',
+			plugins: [
+				{ name: 'LiteSpeed Cache', slug: 'litespeed-cache' },
+				{ name: 'WP Super Cache', slug: 'wp-super-cache' },
+				{ name: 'W3 Total Cache', slug: 'w3-total-cache' },
+				{ name: 'WP Fastest Cache', slug: 'wp-fastest-cache' },
+				{ name: 'Cache Enabler', slug: 'cache-enabler' },
+				{ name: 'Redis Object Cache', slug: 'redis-cache' },
+				{ name: 'SpeedyCache', slug: 'speedycache' },
+			],
+		},
+		{
+			id: 'performance', label: 'Performance', hint: 'Minify, defer, unload', q: 'performance',
+			plugins: [
+				{ name: 'Autoptimize', slug: 'autoptimize' },
+				{ name: 'Asset CleanUp', slug: 'wp-asset-clean-up' },
+				{ name: 'Performance Lab', slug: 'performance-lab' },
+				{ name: 'WP-Optimize', slug: 'wp-optimize' },
+				{ name: 'Hummingbird', slug: 'hummingbird-performance' },
+			],
+		},
+		{
+			id: 'email', label: 'Email / SMTP', hint: 'Delivery & logs', q: 'SMTP',
+			plugins: [
+				{ name: 'FluentSMTP', slug: 'fluent-smtp' },
+				{ name: 'WP Mail SMTP', slug: 'wp-mail-smtp' },
+				{ name: 'Post SMTP', slug: 'post-smtp' },
+				{ name: 'WP Mail Logging', slug: 'wp-mail-logging' },
+			],
+		},
+		{
+			id: 'redirects', label: 'Redirects', hint: '301s & aliases', q: 'redirect',
+			plugins: [
+				{ name: 'Redirection', slug: 'redirection' },
+				{ name: 'Safe Redirect Manager', slug: 'safe-redirect-manager' },
+				{ name: 'Simple 301 Redirects', slug: 'simple-301-redirects' },
+				{ name: '301 Redirects', slug: 'eps-301-redirects' },
+			],
+		},
+		{
+			id: 'snippets', label: 'Snippets', hint: 'Custom code, safely', q: 'code snippets',
+			plugins: [
+				{ name: 'Code Snippets', slug: 'code-snippets' },
+				{ name: 'WPCode', slug: 'insert-headers-and-footers' },
+				{ name: 'FluentSnippets', slug: 'easy-code-manager' },
+				{ name: 'Simple Custom CSS and JS', slug: 'custom-css-js' },
+				{ name: 'Header Footer Code Manager', slug: 'header-footer-code-manager' },
+			],
+		},
+		{
+			id: 'devtools', label: 'Dev tools', hint: 'Debug & inspect', q: 'developer',
+			plugins: [
+				{ name: 'Query Monitor', slug: 'query-monitor' },
+				{ name: 'WP Crontrol', slug: 'wp-crontrol' },
+				{ name: 'Transients Manager', slug: 'transients-manager' },
+				{ name: 'Rewrite Rules Inspector', slug: 'rewrite-rules-inspector' },
+				{ name: 'Debug Bar', slug: 'debug-bar' },
+			],
+		},
+		{
+			id: 'spam', label: 'Spam', hint: 'Comment & form spam', q: 'antispam',
+			plugins: [
+				{ name: 'Akismet', slug: 'akismet' },
+				{ name: 'Antispam Bee', slug: 'antispam-bee' },
+				{ name: 'CleanTalk', slug: 'cleantalk-spam-protect' },
+				{ name: 'WP Armour', slug: 'honeypot' },
+			],
+		},
+		{
+			id: 'blocks', label: 'Blocks', hint: 'Block libraries & patterns', q: 'gutenberg blocks',
+			plugins: [
+				{ name: 'Stackable', slug: 'stackable-ultimate-gutenberg-blocks' },
+				{ name: 'Kadence Blocks', slug: 'kadence-blocks' },
+				{ name: 'GenerateBlocks', slug: 'generateblocks' },
+				{ name: 'Otter', slug: 'otter-blocks' },
+				{ name: 'Spectra', slug: 'ultimate-addons-for-gutenberg' },
+				{ name: 'Essential Blocks', slug: 'essential-blocks' },
+			],
+		},
+		{
+			id: 'fields', label: 'Custom fields', hint: 'Meta & field groups', q: 'custom fields',
+			plugins: [
+				{ name: 'Advanced Custom Fields', slug: 'advanced-custom-fields' },
+				{ name: 'Meta Box', slug: 'meta-box' },
+				{ name: 'Pods', slug: 'pods' },
+				{ name: 'Custom Post Type UI', slug: 'custom-post-type-ui' },
+			],
+		},
+		{
+			id: 'extras', label: 'Little extras', hint: 'Handy day-to-day tools', q: '',
+			plugins: [
+				{ name: 'User Switching', slug: 'user-switching' },
+				{ name: 'Public Post Preview', slug: 'public-post-preview' },
+				{ name: 'Regenerate Thumbnails', slug: 'regenerate-thumbnails' },
+				{ name: 'Duplicate Post', slug: 'duplicate-post' },
+				{ name: 'Safe SVG', slug: 'safe-svg' },
+			],
+		},
 	];
 
 	let piSearchTimer = null;
+	// Catalog hover tips: in-memory cache + one in-flight fetch per slug.
+	const piInfoCache = new Map(); // slug -> { name, author, description, installs, icon, version, source }
+	const piInfoInflight = new Map();
+	let piTipTimer = null;
+	let piTipHideTimer = null;
+	let piTipSlug = null;
+
+	function hidePluginTip() {
+		clearTimeout( piTipTimer );
+		clearTimeout( piTipHideTimer );
+		piTipTimer = null;
+		piTipHideTimer = null;
+		piTipSlug = null;
+		const el = document.getElementById( 'minn-pi-tip' );
+		if ( el ) el.remove();
+	}
+
+	function positionPluginTip( tip, anchor ) {
+		const r = anchor.getBoundingClientRect();
+		const tw = tip.offsetWidth || 280;
+		const th = tip.offsetHeight || 120;
+		const pad = 8;
+		let left = r.left + ( r.width / 2 ) - ( tw / 2 );
+		left = Math.max( pad, Math.min( left, window.innerWidth - tw - pad ) );
+		// Prefer above the chip; flip below if clipped.
+		let top = r.top - th - 10;
+		let place = 'above';
+		if ( top < pad ) {
+			top = r.bottom + 10;
+			place = 'below';
+		}
+		tip.style.left = Math.round( left ) + 'px';
+		tip.style.top = Math.round( top ) + 'px';
+		tip.dataset.place = place;
+	}
+
+	function renderPluginTip( info, anchor, loading ) {
+		let tip = document.getElementById( 'minn-pi-tip' );
+		if ( ! tip ) {
+			tip = document.createElement( 'div' );
+			tip.id = 'minn-pi-tip';
+			tip.className = 'minn-pi-tip';
+			tip.setAttribute( 'role', 'tooltip' );
+			document.body.appendChild( tip );
+			// Keep open while pointer is on the tip itself (rare but nice).
+			tip.addEventListener( 'mouseenter', () => clearTimeout( piTipHideTimer ) );
+			tip.addEventListener( 'mouseleave', () => {
+				piTipHideTimer = setTimeout( hidePluginTip, 120 );
+			} );
+		}
+		if ( loading ) {
+			tip.innerHTML = `<div class="minn-pi-tip-loading">Loading…</div>`;
+		} else if ( ! info ) {
+			tip.innerHTML = `<div class="minn-pi-tip-loading">No details available.</div>`;
+		} else {
+			const installs = info.installs > 0
+				? ( info.installs >= 1000000
+					? ( info.installs / 1000000 ).toFixed( info.installs % 1000000 === 0 ? 0 : 1 ) + 'M+'
+					: ( info.installs >= 1000
+						? Math.round( info.installs / 1000 ) + 'k+'
+						: Number( info.installs ).toLocaleString() + '+' ) ) + ' installs'
+				: ( info.source === 'github' ? 'GitHub release' : '' );
+			const meta = [ info.author, installs, info.version ? 'v' + info.version : '' ]
+				.filter( Boolean ).join( ' · ' );
+			const letter = ( info.name || '?' ).replace( /[^A-Za-z0-9]/g, '' ).charAt( 0 ).toUpperCase() || '?';
+			tip.innerHTML = `
+				${ info.icon
+					? `<img class="minn-pi-tip-icon" src="${ esc( info.icon ) }" alt="">`
+					: `<div class="minn-pi-tip-icon minn-pi-tip-letter">${ esc( letter ) }</div>` }
+				<div class="minn-pi-tip-body">
+					<div class="minn-pi-tip-name">${ esc( info.name || '' ) }</div>
+					${ meta ? `<div class="minn-pi-tip-meta">${ esc( meta ) }</div>` : '' }
+					${ info.description ? `<div class="minn-pi-tip-desc">${ esc( info.description ) }</div>` : '' }
+				</div>`;
+		}
+		// Measure then place (loading state is short; place twice is fine).
+		tip.style.visibility = 'hidden';
+		tip.style.display = 'flex';
+		positionPluginTip( tip, anchor );
+		tip.style.visibility = 'visible';
+	}
+
+	async function fetchPluginInfo( slug ) {
+		if ( ! slug ) return null;
+		if ( piInfoCache.has( slug ) ) return piInfoCache.get( slug );
+		if ( piInfoInflight.has( slug ) ) return piInfoInflight.get( slug );
+		const p = api( `minn-admin/v1/plugins/info?slug=${ encodeURIComponent( slug ) }` )
+			.then( ( r ) => {
+				piInfoCache.set( slug, r );
+				piInfoInflight.delete( slug );
+				return r;
+			} )
+			.catch( ( e ) => {
+				piInfoInflight.delete( slug );
+				throw e;
+			} );
+		piInfoInflight.set( slug, p );
+		return p;
+	}
+
+	function schedulePluginTip( entry, anchor ) {
+		const slug = entry.slug;
+		clearTimeout( piTipHideTimer );
+		clearTimeout( piTipTimer );
+		piTipTimer = setTimeout( async () => {
+			piTipSlug = slug;
+			if ( piInfoCache.has( slug ) ) {
+				renderPluginTip( piInfoCache.get( slug ), anchor, false );
+				return;
+			}
+			renderPluginTip( null, anchor, true );
+			try {
+				const info = await fetchPluginInfo( slug );
+				// Stale: user moved to another chip.
+				if ( piTipSlug !== slug ) return;
+				const still = document.querySelector( '.minn-pi-chip[data-slug="' + slug.replace( /"/g, '' ) + '"]' );
+				renderPluginTip( info, still || anchor, false );
+			} catch ( e ) {
+				if ( piTipSlug !== slug ) return;
+				renderPluginTip( null, anchor, false );
+			}
+		}, 280 );
+	}
+
+	// Match a catalog entry against an installed plugin row.
+	function catalogLocal( entry ) {
+		const list = state.cache.plugins || [];
+		const slug = entry.slug || '';
+		return list.find( ( p ) => {
+			const dir = ( p.plugin || '' ).split( '/' )[ 0 ];
+			return dir === slug;
+		} ) || null;
+	}
+
+	function catalogChipState( entry ) {
+		const local = catalogLocal( entry );
+		if ( local && local.status === 'active' ) return 'active';
+		if ( local ) return 'activate';
+		return 'install';
+	}
 
 	// One page of wp.org search results into the modal state; a null return
 	// means the modal closed or the query changed mid-flight (discard).
@@ -21067,11 +21944,9 @@
 		return r.plugins || [];
 	}
 
-	// Shared by free typing and category chips. Re-renders the modal around
-	// the in-flight search so the chip active state and input value stay in sync.
-	async function runPluginSearch( m, q, categoryId ) {
+	// Free typing / "browse more" searches. Empty query returns to the catalog.
+	async function runPluginSearch( m, q ) {
 		m.q = ( q || '' ).trim();
-		m.category = categoryId || null;
 		m.page = 1;
 		m.pages = 1;
 		m.total = 0;
@@ -21095,10 +21970,49 @@
 		renderOverlays();
 	}
 
+	// Install or activate a catalog entry (wp.org slug or GitHub release zip).
+	async function installCatalogEntry( entry, btn ) {
+		const label = entry.name || entry.slug || 'Plugin';
+		const st = catalogChipState( entry );
+		if ( st === 'active' ) return;
+		if ( btn ) {
+			btn.disabled = true;
+			btn.classList.add( 'busy' );
+			btn.textContent = st === 'activate' ? 'Activating…' : 'Installing…';
+		}
+		try {
+			if ( st === 'activate' ) {
+				const local = catalogLocal( entry );
+				const file = local ? local.plugin.replace( /\.php$/, '' ) : null;
+				if ( ! file ) throw new Error( 'Could not find the installed plugin file.' );
+				await api( 'wp/v2/plugins/' + file, { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+				toast( label + ' activated' );
+				await refreshAfterPluginChange();
+			} else if ( entry.github ) {
+				await api( 'minn-admin/v1/plugins/install-url', {
+					method: 'POST',
+					body: JSON.stringify( { github: entry.github, asset: entry.asset || '' } ),
+				} );
+				toast( label + ' installed' );
+			} else if ( entry.slug ) {
+				await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: entry.slug } ) } );
+				toast( label + ' installed' );
+			} else {
+				throw new Error( 'No install source for that plugin.' );
+			}
+			state.cache.plugins = null;
+			state.cache.overview = null;
+			bustTypeCaches();
+			await loadPlugins().catch( () => {} );
+			if ( state.route === 'extensions' ) renderExtensions();
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
 	function bindPluginInstallModal( m ) {
 		const input = $( '#minn-pi-search' );
-		// Don't steal focus when a category just filled the box (chip click
-		// re-renders and would yank the caret); focus only on a blank open.
+		// Focus the search only when the catalog is showing (empty open).
 		if ( ! m.q ) {
 			input.focus();
 			input.setSelectionRange( 0, 0 );
@@ -21108,8 +22022,6 @@
 		}
 		input.addEventListener( 'input', () => {
 			const q = input.value.trim();
-			// Free typing clears the category highlight (query may diverge).
-			m.category = null;
 			clearTimeout( piSearchTimer );
 			if ( ! q ) {
 				m.q = '';
@@ -21118,24 +22030,55 @@
 				renderOverlays();
 				return;
 			}
-			piSearchTimer = setTimeout( () => runPluginSearch( m, q, null ), 400 );
+			piSearchTimer = setTimeout( () => runPluginSearch( m, q ), 400 );
 		} );
 
-		// Category chips → same search path, with the chip marked active.
-		$$( '[data-pi-cat]' ).forEach( ( btn ) =>
+		// Catalog chip → install / activate + hover tip.
+		$$( '[data-pi-chip]' ).forEach( ( btn ) => {
+			const cat = PLUGIN_CATALOG.find( ( c ) => c.id === btn.dataset.cat );
+			const entry = cat && cat.plugins[ parseInt( btn.dataset.piChip, 10 ) ];
+			btn.addEventListener( 'click', async () => {
+				if ( ! entry ) return;
+				hidePluginTip();
+				await installCatalogEntry( entry, btn );
+				// Refresh chip states in place.
+				if ( state.modal === m ) renderOverlays();
+			} );
+			if ( entry && entry.slug ) {
+				btn.addEventListener( 'mouseenter', () => schedulePluginTip( entry, btn ) );
+				btn.addEventListener( 'mouseleave', () => {
+					clearTimeout( piTipTimer );
+					piTipHideTimer = setTimeout( hidePluginTip, 140 );
+				} );
+				btn.addEventListener( 'focus', () => schedulePluginTip( entry, btn ) );
+				btn.addEventListener( 'blur', () => {
+					clearTimeout( piTipTimer );
+					piTipHideTimer = setTimeout( hidePluginTip, 140 );
+				} );
+			}
+		} );
+		// Scroll inside the catalog hides a tip that would float wrong.
+		const results = $( '.minn-pi-results' );
+		if ( results ) results.addEventListener( 'scroll', hidePluginTip, { passive: true } );
+
+		// "Browse more on WordPress.org" under a card → directory search.
+		$$( '[data-pi-more]' ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				const cat = PLUGIN_CATEGORIES.find( ( c ) => c.id === btn.dataset.piCat );
-				if ( ! cat ) return;
-				// Second click on the active category clears back to the guide.
-				if ( m.category === cat.id ) {
-					clearTimeout( piSearchTimer );
-					runPluginSearch( m, '', null );
-					return;
-				}
+				const cat = PLUGIN_CATALOG.find( ( c ) => c.id === btn.dataset.piMore );
+				if ( ! cat || ! cat.q ) return;
 				clearTimeout( piSearchTimer );
-				runPluginSearch( m, cat.q, cat.id );
+				input.value = cat.q;
+				runPluginSearch( m, cat.q );
 			} )
 		);
+
+		// Back to catalog from a search result view.
+		const back = $( '#minn-pi-back' );
+		if ( back ) back.addEventListener( 'click', () => {
+			clearTimeout( piSearchTimer );
+			input.value = '';
+			runPluginSearch( m, '' );
+		} );
 
 		// renderOverlays rebuilds the modal, which resets the results scroll —
 		// put the reader back where they were.
@@ -22092,6 +23035,7 @@
 			case 'media': return renderMedia();
 			case 'comments': return renderComments();
 			case 'orders': return renderOrders();
+			case 'subscriptions': return renderSubscriptions();
 			case 'products': return renderProducts();
 			case 'coupons': return renderCoupons();
 			case 'customers': return renderCustomers();

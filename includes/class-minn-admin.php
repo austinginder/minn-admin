@@ -349,6 +349,11 @@ class Minn_Admin {
 				'customers'    => class_exists( 'WooCommerce' ) && (
 					current_user_can( 'manage_woocommerce' ) || current_user_can( 'edit_shop_orders' )
 				),
+				// WooCommerce Subscriptions — same order cap; routes only exist
+				// while the extension is active (B.wcs).
+				'subscriptions' => class_exists( 'WooCommerce' )
+					&& class_exists( 'WC_Subscriptions' )
+					&& current_user_can( 'edit_shop_orders' ),
 				'themeOptions' => current_user_can( 'edit_theme_options' ),
 				'core'         => current_user_can( 'update_core' ),
 				// Drives Settings → Design (Additional CSS). Core maps this
@@ -356,6 +361,8 @@ class Minn_Admin {
 				'editCss'      => current_user_can( 'edit_css' ),
 			),
 			'wc'       => class_exists( 'WooCommerce' ),
+			// WooCommerce Subscriptions extension (wc/v3/subscriptions REST).
+			'wcs'      => class_exists( 'WooCommerce' ) && class_exists( 'WC_Subscriptions' ),
 			// WooCommerce low-stock threshold (Settings → Products → Inventory).
 			// Used by the Products "Low stock" filter fallback when Analytics
 			// lookup tables lag a fresh write.
@@ -399,6 +406,9 @@ class Minn_Admin {
 			// Regenerate Thumbnails present + allowed — a per-image button
 			// on the media detail modal (adapters/regenerate-thumbnails.php).
 			'regenThumbs' => function_exists( 'minn_admin_regen_thumbs_available' ) && minn_admin_regen_thumbs_available(),
+			// Safe SVG present — media toolbar SVG filter + "SVG uploads on"
+			// affordance (adapters/safe-svg.php). Sanitization stays Safe SVG's.
+			'safeSvg'    => function_exists( 'minn_admin_safe_svg_active' ) && minn_admin_safe_svg_active(),
 			// PDF Invoices & Packing Slips — download buttons on the order
 			// detail modal (adapters/wcpdf.php). Null without the plugin or
 			// order access.

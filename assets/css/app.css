@@ -524,6 +524,24 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-ext-filters .minn-tab.active .minn-tab-count { color: var(--accent2); }
 .minn-ext-filters .minn-tab .minn-tab-count { background: none; border: none; padding: 0; margin-left: 3px; }
 .minn-toolbar-meta { margin-left: auto; color: var(--text3); font-size: 14px; white-space: nowrap; flex-shrink: 0; }
+.minn-media-svg-on {
+	display: inline-block;
+	padding: 1px 7px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--ok, #3d9a6a) 18%, transparent);
+	color: var(--ok, #3d9a6a);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+.minn-media-svg-note {
+	margin: 8px 0 0;
+	padding: 7px 10px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--ok, #3d9a6a) 12%, transparent);
+	color: var(--text2);
+	font-size: 13px;
+}
 /* Scroll-arrow wrapper injected around overflowing tab strips (see enhanceTabStrips). */
 .minn-tabscroll { position: relative; display: flex; align-items: center; min-width: 0; }
 .minn-tabscroll-btn {
@@ -642,6 +660,17 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-badge-update.as-btn { border: 1px solid rgba(224,164,88,0.3); cursor: pointer; }
 .minn-badge-update.as-btn:hover { background: rgba(224,164,88,0.28); }
 .minn-badge-update.as-btn:disabled { opacity: 0.6; cursor: default; }
+/* Update-all queue: the active card stays readable; queued ones dim. */
+.minn-plugin.minn-plugin-updating {
+	opacity: 1;
+	outline: 1px solid color-mix(in srgb, var(--amber, #e0a458) 45%, transparent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber, #e0a458) 12%, transparent);
+}
+.minn-plugin.minn-plugin-updating .minn-badge-update.as-btn {
+	opacity: 1;
+	background: rgba(224,164,88,0.28);
+}
+.minn-plugin.minn-plugin-queued { opacity: 0.55; }
 .minn-plugin-desc { font-size: 13.5px; color: var(--text2); margin-top: 4px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .minn-plugin-foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .minn-plugin-ver { font-size: 12.5px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
@@ -1470,35 +1499,115 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* ===== Plugin install modal ===== */
 .minn-pi-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
 .minn-dropzone.compact { padding: 16px; margin-bottom: 0; flex-direction: row; justify-content: center; }
-/* Category chips — guided wp.org searches (SEO, Forms, …). */
-.minn-pi-cats {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+/* Catalog cards — popular plugins to install (marketing-library shape). */
+.minn-modal-pi { max-width: min(920px, 96vw); }
+.minn-pi-search-bar {
+  display: flex; align-items: center; gap: 10px; margin: -2px 0 2px;
 }
-.minn-pi-cats-label {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--text3); margin-right: 2px; user-select: none;
+.minn-pi-search-meta {
+  font-size: 12.5px; color: var(--text3); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.minn-pi-cat {
-  appearance: none; border: 1px solid var(--border); background: var(--panel2);
-  color: var(--text2); font: inherit; font-size: 12.5px; font-weight: 500;
-  padding: 5px 11px; border-radius: 999px; cursor: pointer; line-height: 1.3;
-  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+.minn-pi-results { max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column; }
+.minn-pi-results.is-catalog { max-height: 58vh; }
+.minn-pi-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  padding: 2px 0 6px;
 }
-.minn-pi-cat:hover { border-color: var(--border2); color: var(--text); background: var(--hover); }
-.minn-pi-cat.active {
-  border-color: var(--accent); color: var(--accent2);
-  background: color-mix(in srgb, var(--accent) 14%, var(--panel2));
+.minn-pi-card {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 13px 11px;
+  display: flex; flex-direction: column; gap: 9px;
 }
-.minn-pi-guide {
-  padding: 18px 8px 10px; text-align: center;
+.minn-pi-card-title {
+  font-size: 13.5px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;
 }
-.minn-pi-guide-title {
-  font-size: 14.5px; font-weight: 600; color: var(--text); margin-bottom: 4px;
+.minn-pi-card-hint {
+  font-size: 11.5px; color: var(--text3); margin-top: 1px; line-height: 1.35;
 }
-.minn-pi-guide-sub {
-  font-size: 13px; color: var(--text3); line-height: 1.45; max-width: 36em; margin: 0 auto;
+.minn-pi-card-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.minn-pi-chip {
+  appearance: none; border: 1px solid var(--border); background: var(--panel);
+  color: var(--text2); font: inherit; font-size: 11.5px; font-weight: 500;
+  padding: 4px 9px; border-radius: 999px; cursor: pointer; line-height: 1.3;
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
 }
-.minn-pi-results { max-height: 44vh; overflow-y: auto; display: flex; flex-direction: column; }
+.minn-pi-chip:hover:not(:disabled) {
+  border-color: var(--border2); color: var(--text); background: var(--hover);
+}
+.minn-pi-chip:disabled { cursor: default; }
+.minn-pi-chip.is-active {
+  opacity: 0.72; color: var(--text3);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+}
+.minn-pi-chip.is-installed {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--accent2);
+}
+.minn-pi-chip.busy { opacity: 0.6; pointer-events: none; }
+.minn-pi-chip-badge {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--accent2);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  padding: 1px 5px; border-radius: 999px;
+}
+.minn-pi-card-more {
+  appearance: none; border: 0; background: none; padding: 0;
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--accent2);
+  cursor: pointer; text-align: left; margin-top: 1px;
+}
+.minn-pi-card-more:hover { text-decoration: underline; }
+
+/* Catalog hover tip — fixed so it escapes the results scroller. */
+.minn-pi-tip {
+  position: fixed; z-index: 90;
+  display: flex; align-items: flex-start; gap: 11px;
+  width: min(300px, calc(100vw - 24px));
+  padding: 11px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+  animation: minn-pi-tip-in 0.12s ease-out;
+}
+@keyframes minn-pi-tip-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.minn-pi-tip[data-place="below"] { animation-name: minn-pi-tip-in-below; }
+@keyframes minn-pi-tip-in-below {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.minn-pi-tip-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  background: var(--panel2); flex-shrink: 0; object-fit: cover;
+}
+.minn-pi-tip-letter {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: var(--text3);
+}
+.minn-pi-tip-body { min-width: 0; flex: 1; }
+.minn-pi-tip-name {
+  font-size: 13.5px; font-weight: 700; color: var(--text);
+  letter-spacing: -0.01em; line-height: 1.25;
+}
+.minn-pi-tip-meta {
+  font-size: 11.5px; color: var(--text3); margin-top: 2px; line-height: 1.35;
+}
+.minn-pi-tip-desc {
+  font-size: 12.5px; color: var(--text2); margin-top: 5px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.minn-pi-tip-loading {
+  font-size: 12.5px; color: var(--text3); padding: 4px 2px;
+}
 .minn-pi-row { display: flex; align-items: center; gap: 13px; padding: 11px 4px; border-bottom: 1px solid var(--border); }
 .minn-pi-row:last-child { border-bottom: none; }
 .minn-pi-icon { width: 40px; height: 40px; border-radius: 9px; background: var(--panel2); flex-shrink: 0; object-fit: cover; }
@@ -1568,6 +1677,24 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 
 /* ===== Orders ===== */
 .minn-order-cols { grid-template-columns: 120px 1fr 130px 60px 100px 40px; }
+.minn-sub-cols { grid-template-columns: 130px 1fr 120px 120px 100px 40px; }
+.minn-sub-order-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	width: 100%;
+	padding: 8px 10px;
+	margin: 0 0 6px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+	text-align: left;
+}
+.minn-sub-order-row:hover { background: var(--hover, rgba(127,127,127,.08)); }
 .minn-product-cols { grid-template-columns: 1.6fr 100px 140px 100px 100px 40px; }
 .minn-product-cols.with-cb { grid-template-columns: 36px 1.6fr 100px 140px 100px 100px 40px; }
 .minn-coupon-cols { grid-template-columns: 1.4fr 1fr 90px 80px 100px 100px 40px; }
@@ -2402,6 +2529,9 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-order-cols { grid-template-columns: 86px 1fr 84px; }
   .minn-order-cols > :nth-child(3), .minn-order-cols > :nth-child(4),
   .minn-order-cols > :nth-child(6) { display: none; }
+  .minn-sub-cols { grid-template-columns: 86px 1fr 84px; }
+  .minn-sub-cols > :nth-child(3), .minn-sub-cols > :nth-child(4),
+  .minn-sub-cols > :nth-child(6) { display: none; }
   .minn-product-cols { grid-template-columns: 1fr 72px 40px; }
   .minn-product-cols.with-cb { grid-template-columns: 36px 1fr 72px 40px; }
   .minn-product-cols > :nth-child(2), .minn-product-cols > :nth-child(3),
