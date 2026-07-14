@@ -11377,8 +11377,9 @@
 	// revs[i] was replaced by revs[i-1], so revs[i-1].modified is the moment
 	// that change landed. After a save, the top visible row therefore reads
 	// "just now" instead of the previous save's age (Austin, 2026-07-09).
-	function historyRowsFor( ed ) {
-		const revs = ed.revisions;
+	// Pass `list` to build rows from a full fetched set (the View all dialog).
+	function historyRowsFor( ed, list ) {
+		const revs = list || ( ed && ed.revisions );
 		if ( ! revs || ! revs.length ) return [];
 		const rows = [];
 		for ( let i = 0; i < revs.length; i++ ) {
@@ -11387,10 +11388,37 @@
 				id: revs[ i ].id,
 				author: revs[ i ].author,
 				when: i === 0 ? revs[ i ].modified : revs[ i - 1 ].modified,
+				// Absolute stamp for the full list (many rows share the same "2d ago").
+				whenRaw: revs[ i ].modified,
 			} );
 		}
 		return rows;
 	}
+
+	// Resolve author display names for a batch of revision payloads.
+	async function revisionAuthorNames( revs ) {
+		const names = {};
+		if ( B.user && B.user.id ) names[ B.user.id ] = B.user.name;
+		const unknown = [ ...new Set( ( revs || [] ).map( ( r ) => r.author ).filter( ( a ) => a > 0 && ! names[ a ] ) ) ];
+		if ( unknown.length ) {
+			await api( `wp/v2/users?include=${ unknown.join( ',' ) }&_fields=id,name` )
+				.then( ( users ) => ( Array.isArray( users ) ? users : [] ).forEach( ( u ) => { names[ u.id ] = u.name; } ) )
+				.catch( () => {} );
+		}
+		return names;
+	}
+
+	function mapRevisionRows( revs, names ) {
+		return ( revs || [] ).map( ( r ) => ( {
+			id: r.id,
+			modified: r.modified,
+			author: names[ r.author ] || '',
+		} ) );
+	}
+
+	// Sidebar: a short newest page + total count. Full list loads on demand.
+	const HISTORY_SIDE_LIMIT = 6;
+	const HISTORY_PAGE = 100;
 
 	// Revision history for the History sidebar card. Types without revision
 	// support 404 — that's fine. Revisions expose an `author` ID but no
@@ -11401,27 +11429,71 @@
 		if ( ! ed || ! ed.id ) return Promise.resolve();
 		const type = ed.type;
 		const id = ed.id;
-		return api( `wp/v2/${ type }/${ id }/revisions?per_page=6&_fields=id,modified,author` )
-			.then( async ( revs ) => {
-				if ( ! Array.isArray( revs ) ) revs = [];
-				const names = {};
-				if ( B.user && B.user.id ) names[ B.user.id ] = B.user.name;
-				const unknown = [ ...new Set( revs.map( ( r ) => r.author ).filter( ( a ) => a > 0 && ! names[ a ] ) ) ];
-				if ( unknown.length ) {
-					await api( `wp/v2/users?include=${ unknown.join( ',' ) }&_fields=id,name` )
-						.then( ( users ) => ( Array.isArray( users ) ? users : [] ).forEach( ( u ) => { names[ u.id ] = u.name; } ) )
-						.catch( () => {} );
-				}
+		return apiPaged( `wp/v2/${ type }/${ id }/revisions?per_page=${ HISTORY_SIDE_LIMIT }&_fields=id,modified,author` )
+			.then( async ( r ) => {
+				const revs = Array.isArray( r.items ) ? r.items : [];
+				const names = await revisionAuthorNames( revs );
 				if ( state.editor && state.editor.id === id && state.editor.type === type ) {
-					state.editor.revisions = revs.map( ( r ) => ( {
-						id: r.id,
-						modified: r.modified,
-						author: names[ r.author ] || '',
-					} ) );
+					state.editor.revisions = mapRevisionRows( revs, names );
+					state.editor.revisionsTotal = r.total || revs.length;
+					// Stale full-list cache (after a save) would miss new entries.
+					state.editor.revisionsAll = null;
 					if ( state.route === 'editor' ) renderEditorSide();
 				}
 			} )
 			.catch( () => {} );
+	}
+
+	// Every revision for the "View all" dialog (paginated REST, newest first).
+	async function loadAllEditorRevisions( ed ) {
+		if ( ! ed || ! ed.id ) return [];
+		if ( ed.revisionsAll && ed.revisionsAll.length ) return ed.revisionsAll;
+		const type = ed.type;
+		const id = ed.id;
+		let page = 1;
+		let totalPages = 1;
+		let raw = [];
+		do {
+			const r = await apiPaged( `wp/v2/${ type }/${ id }/revisions?per_page=${ HISTORY_PAGE }&page=${ page }&_fields=id,modified,author` );
+			raw = raw.concat( Array.isArray( r.items ) ? r.items : [] );
+			totalPages = r.totalPages || 1;
+			page++;
+		} while ( page <= totalPages && page <= 20 );
+		const names = await revisionAuthorNames( raw );
+		const mapped = mapRevisionRows( raw, names );
+		if ( state.editor && state.editor.id === id && state.editor.type === type ) {
+			state.editor.revisionsAll = mapped;
+			state.editor.revisionsTotal = mapped.length;
+			// Keep the side card's short list in sync with the head of the full set.
+			state.editor.revisions = mapped.slice( 0, HISTORY_SIDE_LIMIT );
+		}
+		return mapped;
+	}
+
+	function openRevisionsList( ed ) {
+		if ( ! ed || ! ed.id ) return;
+		state.modal = {
+			type: 'revisions-list',
+			ed: { id: ed.id, type: ed.type },
+			loading: true,
+			rows: null,
+			total: ed.revisionsTotal || 0,
+		};
+		renderOverlays();
+		loadAllEditorRevisions( ed )
+			.then( ( all ) => {
+				if ( ! state.modal || state.modal.type !== 'revisions-list' ) return;
+				if ( ! state.editor || state.editor.id !== ed.id ) return;
+				state.modal.rows = historyRowsFor( state.editor, all );
+				state.modal.total = state.modal.rows.length;
+				state.modal.loading = false;
+				renderOverlays();
+				if ( state.route === 'editor' ) renderEditorSide();
+			} )
+			.catch( ( e ) => {
+				toast( e.message || 'Could not load revisions', true );
+				closeModal();
+			} );
 	}
 
 	// Classic-mode save: innerHTML, but with highlight spans stripped from code
@@ -12698,14 +12770,19 @@
 		${ ( () => {
 			const historyRows = historyRowsFor( ed );
 			if ( ! historyRows.length ) return '';
+			// Side card stays short; "View all" opens the full dialog when more exist.
+			const shown = historyRows.slice( 0, 5 );
+			const total = ed.revisionsTotal || historyRows.length;
+			const hasMore = total > HISTORY_SIDE_LIMIT || historyRows.length > shown.length;
 			return `
 		<div class="minn-side-card">
-			<div class="minn-side-title">History</div>
-			${ historyRows.map( ( r ) => `
+			<div class="minn-side-title">History${ hasMore ? ` <span class="minn-panel-sub">${ total }</span>` : '' }</div>
+			${ shown.map( ( r ) => `
 				<button class="minn-history-row" data-rev="${ r.id }">
 					<span class="minn-history-when">${ timeAgo( r.when ) }</span>
 					<span class="minn-history-who">${ esc( r.author ) }</span>
 				</button>` ).join( '' ) }
+			${ hasMore ? `<button type="button" class="minn-history-more" id="minn-history-all">View all revisions (${ total })</button>` : '' }
 		</div>`;
 		} )() }
 		<div class="minn-side-card">
@@ -12936,6 +13013,8 @@
 		$$( '[data-rev]', el ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => openRevision( ed, parseInt( btn.dataset.rev, 10 ) ) )
 		);
+		const histAll = $( '#minn-history-all', el );
+		if ( histAll ) histAll.addEventListener( 'click', () => openRevisionsList( ed ) );
 
 		bindSideCollapse( el );
 		bindOutline();
@@ -19007,6 +19086,9 @@
 			</div>`;
 		}
 
+		if ( m.type === 'revisions-list' ) {
+			return renderRevisionsListModal( m );
+		}
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
 		}
@@ -20379,6 +20461,17 @@
 			} );
 		}
 
+		if ( m.type === 'revisions-list' ) {
+			$$( '[data-revlist]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const revId = parseInt( btn.dataset.revlist, 10 );
+					const ed = state.editor;
+					if ( ! ed || ! revId ) return;
+					// Replace the list with the side-by-side diff for that revision.
+					openRevision( ed, revId );
+				} )
+			);
+		}
 		if ( m.type === 'revision' ) {
 			bindRevisionModal( m );
 		}
@@ -20845,11 +20938,27 @@
 		return ed.content || '';
 	}
 
-	// The ordered revision ids the History card shows — the list ←/→ steps
-	// through while the revision modal is open.
+	// The ordered revision ids the History card / full list shows — ←/→ steps
+	// through while the revision modal is open. Prefer the full list when loaded.
 	function revisionNavIds() {
 		const ed = state.editor;
-		return ed ? historyRowsFor( ed ).map( ( r ) => r.id ) : [];
+		if ( ! ed ) return [];
+		const list = ed.revisionsAll && ed.revisionsAll.length ? ed.revisionsAll : null;
+		return historyRowsFor( ed, list ).map( ( r ) => r.id );
+	}
+
+	// Full absolute date for the revisions list dialog (many share "2d ago").
+	function revisionWhenFull( when ) {
+		const d = parseWpDate( when );
+		if ( Number.isNaN( d.getTime() ) ) return timeAgo( when );
+		try {
+			return d.toLocaleString( undefined, {
+				year: 'numeric', month: 'short', day: 'numeric',
+				hour: 'numeric', minute: '2-digit',
+			} );
+		} catch ( e ) {
+			return timeAgo( when );
+		}
 	}
 
 	function revisionModalNav( dir ) {
@@ -20922,6 +21031,37 @@
 				}
 			} )
 			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
+	}
+
+	function renderRevisionsListModal( m ) {
+		const rows = m.rows;
+		const loading = !! m.loading;
+		const total = m.total || ( rows && rows.length ) || 0;
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal wide">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title-block">
+						<div class="minn-modal-title">All revisions</div>
+						<div class="minn-modal-sub">${ total ? total + ' version' + ( total === 1 ? '' : 's' ) : 'Revision history' }</div>
+					</div>
+					<button class="minn-x-btn" id="minn-modal-close">×</button>
+				</div>
+				${ loading ? '<div class="minn-loading" style="padding:28px;">Loading revisions…</div>' : `
+				<div class="minn-rev-list" id="minn-rev-list">
+					${ rows && rows.length ? rows.map( ( r, i ) => `
+						<button type="button" class="minn-rev-list-row" data-revlist="${ r.id }">
+							<span class="minn-rev-list-idx">${ i + 1 }</span>
+							<span class="minn-rev-list-when">
+								<span class="minn-rev-list-ago">${ timeAgo( r.when ) }</span>
+								<span class="minn-rev-list-abs">${ esc( revisionWhenFull( r.whenRaw || r.when ) ) }</span>
+							</span>
+							<span class="minn-rev-list-who">${ esc( r.author || '—' ) }</span>
+							<span class="minn-row-arrow">›</span>
+						</button>` ).join( '' ) : '<div class="minn-empty">No revisions yet.</div>' }
+				</div>` }
+			</div>
+		</div>`;
 	}
 
 	function renderRevisionModal( m ) {

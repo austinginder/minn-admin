@@ -126,6 +126,51 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 	} ) );
 	await page.evaluate( () => document.querySelector( '#minn-modal-close' ).click() );
 
+	/* ===== View all revisions dialog when the post has a long history ===== */
+	for ( let i = 0; i < 8; i++ ) {
+		await update( V2 + `<!-- wp:paragraph --><p>Extra rev ${ i }.</p><!-- /wp:paragraph -->` );
+	}
+	// Re-open so loadEditorRevisions runs against the longer list.
+	await openEditor( page, id );
+	await page.waitForSelector( '.minn-history-row', { timeout: 15000 } );
+	await page.waitForTimeout( 800 );
+	const moreUi = await page.evaluate( () => {
+		const more = document.querySelector( '#minn-history-all' );
+		const n = document.querySelectorAll( '.minn-history-row' ).length;
+		return { hasMore: !! more, moreText: more ? more.textContent.trim() : '', sideRows: n };
+	} );
+	t.check( 'History card caps the short list', moreUi.sideRows <= 5, String( moreUi.sideRows ) );
+	t.check( 'View all revisions control appears when there are more', moreUi.hasMore, JSON.stringify( moreUi ) );
+
+	if ( moreUi.hasMore ) {
+		await page.click( '#minn-history-all' );
+		await page.waitForFunction( () => {
+			const m = document.querySelector( '.minn-modal' );
+			return m && ( m.textContent.includes( 'All revisions' ) )
+				&& ! m.textContent.includes( 'Loading revisions' );
+		}, null, { timeout: 20000 } ).catch( () => null );
+		const listUi = await page.evaluate( () => {
+			const rows = document.querySelectorAll( '[data-revlist]' );
+			return {
+				title: !! document.querySelector( '.minn-modal-title' )
+					&& /All revisions/.test( document.querySelector( '.minn-modal-title' ).textContent ),
+				n: rows.length,
+			};
+		} );
+		t.check( 'revisions list dialog shows many rows', listUi.title && listUi.n > 5, JSON.stringify( listUi ) );
+		await page.evaluate( () => {
+			const rows = document.querySelectorAll( '[data-revlist]' );
+			if ( rows.length ) rows[ rows.length - 1 ].click();
+		} );
+		await page.waitForSelector( '#minn-diff, #minn-restore-rev', { timeout: 15000 } );
+		t.check( 'picking a list row opens the revision diff',
+			!!( await page.$( '#minn-diff, #minn-restore-rev' ) ), '' );
+		await page.evaluate( () => {
+			const x = document.querySelector( '#minn-modal-close' );
+			if ( x ) x.click();
+		} );
+	}
+
 	await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

@@ -2,6 +2,9 @@
 
 ## **v0.14.0** - Unreleased
 
+### Added
+* **View all revisions:** the editor History card still shows the latest few versions, and when more exist (the live total from `wp/v2/…/revisions`) a **View all revisions (N)** control opens a dialog of every revision with absolute timestamps. Pick a row to open the existing side-by-side diff; ←/→ then walks the full list.
+
 ### Fixed
 * **Orders Analytics only showed the last 90 days:** the range control is now 7d / 30d / 90d / **1y** / **All**, with monthly bars on long windows so multi-year history stays readable. Top products request `extended_info` so names show instead of bare IDs. Changing the range keeps the Orders|Analytics switcher, range tabs and stat card headers on screen (values show … until the new data lands) instead of blanking to a lone “Loading…” line.
 * **Orders status tabs missed pending / cancelled / failed:** the list tabs cover the full WooCommerce set (All, Processing, Completed, On hold, Pending, Cancelled, Refunded, Failed) so older failed or pending orders are not hidden behind an incomplete filter strip.
