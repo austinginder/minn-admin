@@ -14,7 +14,7 @@
 ### Improved
 * **Update all feedback on Extensions cards:** **Update all** queues each pending plugin through the same one-at-a-time path as a single Update click, so cards show **Queued…** then **Updating…** (with a highlight on the active card) and the toolbar button reads `Updating… (N)` until the queue drains, instead of a silent bulk request with only a toast.
 * **Plugin update queue survives worker recycles:** after each upgrade (and on "Failed to fetch" / connection refused) Minn waits for REST to answer again before the next card, retries a dropped upgrade, and treats a vanished update offer as success when the reply was lost mid-upgrade. Stops a multi-update run from dying after the first successful package swap on FrankenPHP.
-* **Subscriptions polish:** clearer empty state; parent order callout and open action; View customer from the subscription modal; customer detail gains a Subscriptions strip (and All subscriptions) when WooCommerce Subscriptions is active.
+* **Subscriptions polish:** clearer empty state; parent order callout and open action; View customer from the subscription modal; customer detail gains a Subscriptions strip (and All subscriptions) when WooCommerce Subscriptions is active. Dogfooded on **WooCommerce Subscriptions 9.0.1** (same `wc/v3/subscriptions` contract; detail also shows manual renewal and suspension count when present).
 
 ## **v0.14.0** - July 14, 2026
 

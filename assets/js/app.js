@@ -3436,8 +3436,10 @@
 		expired: 'draft',
 		switched: 'draft',
 	};
+	// WCS 9.x REST is the same shape as 5.x for these fields; 9.x also
+	// exposes requires_manual_renewal + suspension_count on detail reads.
 	const SUB_LIST_FIELDS = 'id,number,status,total,currency,date_created,billing,line_items,billing_period,billing_interval,next_payment_date_gmt,start_date_gmt,customer_id,parent_id';
-	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note';
+	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,requires_manual_renewal,suspension_count';
 
 	const subCtx = () => ( state.subTab || 'any' ) + '|' + ( state.subSearch || '' );
 
@@ -19158,6 +19160,8 @@
 									${ s.trial_end_date_gmt ? `<div class="minn-side-row"><span class="minn-side-key">Trial ends</span><span>${ esc( timeAgo( s.trial_end_date_gmt ) ) }</span></div>` : '' }
 									${ s.end_date_gmt ? `<div class="minn-side-row"><span class="minn-side-key">Ends</span><span>${ esc( timeAgo( s.end_date_gmt ) ) }</span></div>` : '' }
 									${ s.payment_method_title ? `<div class="minn-side-row"><span class="minn-side-key">Payment</span><span>${ esc( s.payment_method_title ) }</span></div>` : '' }
+									${ s.requires_manual_renewal ? `<div class="minn-side-row"><span class="minn-side-key">Renewal</span><span class="minn-status private">Manual</span></div>` : '' }
+									${ s.suspension_count ? `<div class="minn-side-row"><span class="minn-side-key">Suspensions</span><span>${ esc( String( s.suspension_count ) ) }</span></div>` : '' }
 								</div>
 							</div>
 							<div class="minn-order-panel">

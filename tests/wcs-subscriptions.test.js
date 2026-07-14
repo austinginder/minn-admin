@@ -1,7 +1,10 @@
 /**
  * WooCommerce Subscriptions surface: boot flag, list + status tabs via
- * wc/v3/subscriptions, detail modal status save, shop_subscription fenced
- * from Content types.
+ * wc/v3/subscriptions, detail modal status save, parent order / customer
+ * cross-links, shop_subscription fenced from Content types.
+ *
+ * Verified against WCS 9.x (wc/v3 REST). Fixtures: subscription products +
+ * standing subs on the minnadmin dev site.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
