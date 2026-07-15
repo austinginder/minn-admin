@@ -1854,6 +1854,15 @@
 			}
 			return icon( p.type === 'pages' ? 'file' : ( p.type === 'posts' ? 'pilcrow' : 'block' ) );
 		};
+		// Human type label for the All-tab chip (thumbs hide the ¶/file glyph,
+		// and posts+pages share one list). Single-type tabs already name the
+		// type in the filter, so no chip there — not a full column.
+		const contentTypeLabel = ( p ) => {
+			if ( p.type === 'posts' ) return 'Post';
+			if ( p.type === 'pages' ) return 'Page';
+			const t = ( state.cache.types || [] ).find( ( x ) => x.restBase === p.type );
+			return t ? t.name : p.type;
+		};
 		// Category/tag filters are post taxonomies — show them for the core posts context only.
 		const showTax = ! cpt && state.filter !== 'pages';
 		if ( showTax && ! state.cache.postTerms ) {
@@ -1920,6 +1929,7 @@
 						<div class="minn-row-title">${ esc( p.title ) }</div>
 						<div class="minn-row-slug">
 							<span class="minn-row-slug-text">${ esc( p.slug ) }</span>
+							${ state.filter === 'all' ? `<span class="minn-type-chip">${ esc( contentTypeLabel( p ) ) }</span>` : '' }
 							${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }
 						</div>
 					</div>
