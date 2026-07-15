@@ -332,17 +332,19 @@ Gravity Forms 2,543 sites, Gravity SMTP 1,440, Elementor Pro 1,191, ACF PRO
    Pro, Custom Facebook Feed Pro, YouTube Feed Pro, Custom Twitter Feeds Pro,
    Social Wall, Reviews Feed Pro, TikTok Feeds Pro, Feed Analytics Pro via
    EDD on smashballoon.com; "All Plugins" multi-product keys activate each
-   product with its own EDD item_name; real-key pass 2026-07-15), **Yoast
-   Premium** (78, still open), **Admin Columns Pro** (140, reader already
-   covers it).
+   product with its own EDD item_name; real-key pass 2026-07-15), ~~**Yoast
+   Premium**~~ SHIPPED (2026-07-15: MyYoast portal reader + Activate ↗ to
+   `wpseo_licenses` + verify that refreshes site_information; no paste-a-key,
+   Rank Math shape; free wordpress-seo required), **Admin Columns Pro** (140,
+   reader already covers it).
 6. **Cheap wins**: ~~Perfmatters~~ (142) and ~~GP Premium~~ both got
    dedicated readers this wave (the generic sweep does NOT cover them:
    renamed and nonstandard option names). Still open with no vendor code:
    Search & Filter Pro, Unlimited Elements, Stackable Premium, Permalink
    Manager Pro (verify the Freemius/EDD sweeps light these up).
 
-Remaining fleet-ranked open work: Yoast Premium and the long-tail
-Freemius/EDD verification list above.
+Remaining fleet-ranked open work: the long-tail Freemius/EDD verification
+list above.
 
 Test builds source from the CaptainCore quicksave repos
 (`captaincore quicksave archive` extracts a plugin/theme zip from a
@@ -397,6 +399,8 @@ license data on a lab site.
 | WP All Import Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | same; stored keys are salt-wrapped, decode before any request |
 | WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium, LayerSlider | activate paths | bogus key | 2026-07-10 | readers proven against seeded real shapes |
 | Rank Math Pro, Envato, WPBakery | Activate ↗ link | read | 2026-07-10 | portal- or admin-context-bound activation |
+| Yoast SEO Premium | Activate ↗ + verify | read (missing until MyYoast) | 2026-07-15 | free Yoast `WPSEO_Addon_Manager`; page `wpseo_licenses`; no paste-a-key |
+| Smash Balloon family (8 products) | activate / deactivate / verify | real All Plugins key | 2026-07-15 | EDD on smashballoon.com; multi-product key per item_name |
 | Freemius / EDD / SureCart generics, Avada, Smush Pro, AnalyticsWP, BSF family | read | real stored data on labs | 2026-07-10 | see the verification map above |
 | StellarWP Uplink / PUE catch-all | read | real stored data (TEC six-pack) | 2026-07-11 | registry reader; skips slugs claimed by dedicated providers |
 
@@ -419,6 +423,7 @@ Elementor Pro, ACF PRO, WP Rocket, Gravity Forms, Gravity SMTP, Beaver
 Builder, Brizy Pro, Etch, Bricks, Divi, and the fleet-ranked tail (WPMU DEV,
 Smush Pro, SearchWP, Gravity Perks, Rank Math Pro, Perfmatters, GP Premium,
 WP All Import/Export Pro, Slider Revolution, LayerSlider, Avada, Envato
-Market, The Events Calendar family + StellarWP Uplink, Smash Balloon family).
-Remaining: a real-key activation pass by the owner for anything still untested,
-then Yoast Premium and the long-tail Freemius/EDD verification list.
+Market, The Events Calendar family + StellarWP Uplink, Smash Balloon family,
+Yoast SEO Premium MyYoast). Remaining: a real-key / portal activation pass by
+the owner for anything still untested, then the long-tail Freemius/EDD
+verification list.

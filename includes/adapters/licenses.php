@@ -1154,6 +1154,76 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Yoast SEO Premium: MyYoast portal handshake owned by free wordpress-seo
+	// (WPSEO_Addon_Manager + wpseo_site_information transient). There is no
+	// paste-a-key path; activation is "Activate ↗" to Yoast's Licenses page.
+	// Validity = has_valid_subscription( PREMIUM_SLUG ) against MyYoast
+	// site data (expiry rides the subscription product payload).
+	$providers['yoast-seo-premium'] = array(
+		'name'      => 'Yoast SEO Premium',
+		'component' => 'wordpress-seo-premium/wp-seo-premium.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'wordpress-seo-premium/wp-seo-premium.php' );
+		},
+		'read'      => function () use ( $item, $has ) {
+			if ( ! $has( 'wordpress-seo/wp-seo.php' ) ) {
+				return array( $item( array(
+					'name'  => 'Yoast SEO Premium',
+					'state' => 'missing',
+					'note'  => 'requires free Yoast SEO (wordpress-seo)',
+				) ) );
+			}
+			if ( ! class_exists( 'WPSEO_Addon_Manager' ) ) {
+				// Free plugin installed but not loaded (inactive).
+				return array( $item( array(
+					'name'  => 'Yoast SEO Premium',
+					'state' => 'unknown',
+					'note'  => 'activate free Yoast SEO to read MyYoast subscription state',
+				) ) );
+			}
+			try {
+				$mgr  = new WPSEO_Addon_Manager();
+				$slug = WPSEO_Addon_Manager::PREMIUM_SLUG;
+				$sub  = $mgr->get_subscription( $slug );
+				if ( ! $sub ) {
+					return array( $item( array(
+						'name'  => 'Yoast SEO Premium',
+						'state' => 'missing',
+						'note'  => 'activate the subscription on MyYoast',
+					) ) );
+				}
+				// map_subscription() stores expiry as expiry_date (from API expiryDate).
+				$expires = '';
+				if ( is_object( $sub ) && ! empty( $sub->expiry_date ) ) {
+					$expires = minn_admin_license_expiry( $sub->expiry_date );
+				}
+				if ( $mgr->has_valid_subscription( $slug ) ) {
+					return array( $item( array(
+						'name'    => 'Yoast SEO Premium',
+						'state'   => 'valid',
+						'key'     => true,
+						'expires' => $expires,
+						'note'    => 'MyYoast subscription',
+					) ) );
+				}
+				$state = minn_admin_license_expired( $expires ) ? 'expired' : 'invalid';
+				return array( $item( array(
+					'name'    => 'Yoast SEO Premium',
+					'state'   => $state,
+					'key'     => true,
+					'expires' => $expires,
+					'note'    => 'MyYoast subscription inactive or expired',
+				) ) );
+			} catch ( \Throwable $e ) {
+				return array( $item( array(
+					'name'  => 'Yoast SEO Premium',
+					'state' => 'unknown',
+					'note'  => 'could not read MyYoast subscription state',
+				) ) );
+			}
+		},
+	);
+
 	// WP All Import Pro (Soflyy): everything inside the serialized
 	// PMXI_Plugin_Options blob — licenses/statuses are CLASS-KEYED maps and
 	// the key is stored base64-wrapped in a site salt (their server strips
@@ -2566,6 +2636,40 @@ function minn_admin_license_default_providers() {
 	// the FREE plugin — link to its registration screen while it is loaded.
 	if ( defined( 'RANK_MATH_VERSION' ) ) {
 		$providers['rank-math-pro']['activate_url'] = admin_url( 'admin.php?page=rank-math&view=registration' );
+	}
+
+	// Yoast SEO Premium: MyYoast portal only (no paste). Link to free Yoast's
+	// Licenses / Plans page while free is loaded; verify re-fetches MyYoast
+	// site info by clearing the addon manager's site_information transients.
+	if ( class_exists( 'WPSEO_Addon_Manager' ) && ! empty( $providers['yoast-seo-premium'] ) ) {
+		$providers['yoast-seo-premium']['activate_url'] = admin_url( 'admin.php?page=wpseo_licenses' );
+		$providers['yoast-seo-premium']['verify']       = function () {
+			try {
+				$mgr = new WPSEO_Addon_Manager();
+				if ( method_exists( $mgr, 'remove_site_information_transients' ) ) {
+					$mgr->remove_site_information_transients();
+				} else {
+					delete_transient( WPSEO_Addon_Manager::SITE_INFORMATION_TRANSIENT );
+					delete_transient( WPSEO_Addon_Manager::SITE_INFORMATION_TRANSIENT_QUICK );
+				}
+				$slug = WPSEO_Addon_Manager::PREMIUM_SLUG;
+				// Force a fresh MyYoast read (get_myyoast_site_information
+				// refills the cleared transient).
+				if ( method_exists( $mgr, 'get_myyoast_site_information' ) ) {
+					$mgr->get_myyoast_site_information();
+				}
+				if ( $mgr->has_valid_subscription( $slug ) ) {
+					return array( 'ok' => true, 'message' => 'MyYoast reports a valid Premium subscription' );
+				}
+				$sub = $mgr->get_subscription( $slug );
+				if ( ! $sub ) {
+					return array( 'ok' => false, 'code' => 'missing', 'message' => 'No Premium subscription linked to this site on MyYoast' );
+				}
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'MyYoast reports the Premium subscription is inactive or expired' );
+			} catch ( \Throwable $e ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not refresh MyYoast subscription state' );
+			}
+		};
 	}
 
 	// Envato Market: token entry is a nonce-coupled Settings-API screen.
