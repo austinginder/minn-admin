@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.15.0** - Unreleased
+## **v0.15.0** - July 15, 2026
+
+The library and daily-ops cycle. Performance settings join a provider family beside Perfmatters, Add plugin opens a marketing-style catalog, Meta Box and Pods land in the editor sidebar next to ACF, WooCommerce Subscriptions gets its own Workspace surface, and Extensions finally feels like a real package manager: card menus, clearer hub links, resilient Update all, and per-row Update on notification offers. Notices and mail keep catching up to real plugins: clickable Allow / No Thanks, ThemeIsle dismiss in-panel, Post SMTP search and delete, and a Fluent Forms suite that closes the last forms-family coverage gap.
 
 ### Added
 * **Performance family pack:** the thin Performance card grows three popular peers alongside Perfmatters, sharing one Tools nav item with a provider switcher. **Autoptimize** maps its daily JS / CSS / HTML / CDN / Misc options as a settings-only surface (Critical CSS, Extra and Image stay in Autoptimize; Clear site cache still purges its cache). **Asset CleanUp** maps global minify/combine, head cleanup, Google Fonts and test-mode toggles the same way (the page-level CSS/JS unload manager stays in Asset CleanUp). **Performance Lab** lists the WordPress Performance Team standalone features with Activate (through its own install helper) and Deactivate, plus a status card.

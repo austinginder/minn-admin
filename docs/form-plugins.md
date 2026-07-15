@@ -17,7 +17,8 @@ clean documents live in `docs/native-editors.md` (parked).
 | Plugin | Adapter | What Minn surfaces |
 |---|---|---|
 | **Gravity Forms** | `gravity-forms.php` | Entries as contact cards with Received/Spam/Trash, star/read, notes, resend, bulk; **Forms** manage view (activate/deactivate); **Notifications** view (toggle + daily-field edit); **Form settings** (item-scoped settings from GF's Settings-framework schema at request time). Full workflow depth. |
-| **Fluent Forms** | `fluent-forms.php` | Entries list + labeled detail; forms manage view. Pure-REST shape over `fluentform/v1` (Laravel paginator normalized). |
+| **Fluent Forms** | `fluent-forms.php` | Entries list + labeled detail; Received/Spam/Trash filters; search; open marks read; trash/permanent delete; forms manage view. Suite `fluent-forms` (24). Normalized over `fluentform_submissions` (+ form field labels). |
+| **Everest Forms** | `everest-forms.php` | Entries with Received/Spam/Trash through EVF_Admin_Entries; form tabs; search; forms manage. Suite `everest-forms`. |
 | **Elementor Pro Forms** | `elementor-forms.php` | Submissions via Elementor's own Query class; soft-trash through `move_to_trash_submission`. Free Elementor has no submissions store. |
 | **Contact Form 7 + Flamingo** | `cf7-flamingo.php` | Inbound messages through Flamingo's own model (spam/unspam/trash); CF7 forms in manage with live channel counts. CF7 alone stores nothing. |
 | **CFDB7** | `cfdb7.php` | Entries from `{prefix}db7_forms` (serialized map scanned by byte-length tokens, never unserialized); open-marks-read; permanent delete. |
@@ -34,7 +35,7 @@ The family lives under Workspace. Provider preference key: `minn-sf-forms`.
 | **WPForms Pro** | 5M+ Lite brand | Lite stores **no** local entries (email / Lite Connect only). Pro uses `wpforms_entries` + meta/fields. Abilities API since 1.9.9 is awkward for the collection descriptor; a SQL/internal shim is cleaner. **Needs a Pro license + fixtures.** | Highest-value uncovered brand; costs a license. |
 | **SureForms** | growing | Free-tier entry storage believed but not source-verified. | Verify storage before promising. |
 | **MetForm** | ~100k+ | Same: free-tier storage not source-verified. | Verify first. |
-| Everest / JetFormBuilder | ~90k | Lower reach; varies by storage. | Low priority. |
+| JetFormBuilder | ~90k | Lower reach; varies by storage. | Low priority. |
 
 Sources for install counts: wordpress.org plugin API (ballpark; refresh when ranking again).
 

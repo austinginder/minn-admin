@@ -13,7 +13,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 <!--
   The badge/launch link above and the one in readme.txt are the URL-encoded contents of
   .wp-playground/blueprint.json (inlined because Playground intermittently fails to fetch
-  a remote blueprint-url). blueprint.json is the source of truth — after editing it, regenerate
+  a remote blueprint-url). blueprint.json is the source of truth; after editing it, regenerate
   the fragment and paste it after `https://playground.wordpress.net/#` in both readmes:
 
     node -e 'const b=require("fs").readFileSync(".wp-playground/blueprint.json","utf8");console.log("https://playground.wordpress.net/#"+encodeURIComponent(JSON.stringify(JSON.parse(b))))'
@@ -24,23 +24,25 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
   is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP, or
   Google Analytics through **Site Kit**), **click a bar for that day's top pages and referrers**
-  (Koko and WP Statistics today; others join via `minn_admin_traffic_day`), and a recent-activity
-  feed
+  (Koko, WP Statistics, Burst and Independent Analytics today; others join via
+  `minn_admin_traffic_day`), and a recent-activity feed
 - **Content** — posts, pages and custom post types sorted by publish date (scheduled posts
   lead with their go-out dates), with search, category/tag filters, status pills, **bulk
   actions** (set status or trash, with shift-click range select), and **row actions**:
   right-click or hover for quick publish/draft/trash, view, and a block-editor escape
 - **Media** — grid/list library, uploads, drag-and-drop, a preview overlay with arrow-key
   navigation and in-place **title, alt text, caption & description editing**, **bulk select
-  and delete** (shift-range, on the grid and the list), a right-click menu, and a built-in
-  **image editor**: rotate and crop, saved as a new copy with originals untouched
+  and delete** (shift-range, on the grid and the list), a right-click menu, a built-in
+  **image editor** (rotate and crop, saved as a new copy), and when **Safe SVG** is active an
+  **SVG** filter tab plus badge (sanitization stays Safe SVG's)
 - **Comments** — full moderation (pending / approved / spam / trash) with **bulk moderation**
   (each tab offers its own verbs), inline replies and a right-click menu for the same verbs
 - **Ecommerce** — full WooCommerce day-to-day in Minn: **Orders** (search, status, notes, refunds,
   resend/custom email, pay URL, **New order**, **Analytics** with long-range revenue and top products),
-  **Products** (stock filters, bulk, daily fields, **Add product**), **Coupons**, and **Customers**.
-  Invoice / packing-slip downloads when PDF Invoices & Packing Slips is active. Product and coupon
-  CPTs are fenced out of Content.
+  **Products** (stock filters, bulk, daily fields, **Add product**), **Coupons**, **Customers**, and
+  **Subscriptions** when WooCommerce Subscriptions is active (status, next payment, parent order,
+  related orders, customer strip). Invoice / packing-slip downloads when PDF Invoices & Packing Slips
+  is active. Product, coupon and subscription CPTs are fenced out of Content.
 - **Users** — directory with search, a role filter, create/edit users, roles, passwords,
   **bulk role change**, **per-user login sessions with one-click sign-out**, **Switch to
   this user** when the User Switching plugin is active (a switched session shows a **Switch
@@ -48,10 +50,13 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **AI Access** — generate revocable **application passwords** for AI agents plus a site-tailored
   **agent guide** (markdown REST reference) to hand to a coding agent; configuration work stays
   out of Minn by design
-- **Extensions** — install plugins and themes from WordPress.org or zip upload, activate,
-  deactivate, delete, per-item and bulk updates, a Themes tab with screenshots, cards
-  wearing real wp.org icons (linked to the directory) with linked author lines, and a
-  **Licenses** tab (below)
+- **Extensions** — install plugins and themes from WordPress.org or zip upload (Add plugin opens a
+  **catalog by category** with install tips, not only free-text search), activate, deactivate,
+  delete, per-item and bulk updates with **Queued… / Updating…** feedback that survives worker
+  recycles, a Themes tab with screenshots, cards wearing real wp.org icons (linked to the
+  directory) with linked author lines, **right-click / ⋯ menus** on plugin and theme cards
+  (Activate, Update, Delete, Open on WordPress.org or GitHub, Copy file), and a **Licenses** tab
+  (below)
 - **Structure** — post types, taxonomies and terms on one page. See every registered post type
   and taxonomy and manage definitions through whoever owns them (ACF, Custom Post Type UI, or
   Minn's own store when neither is active; code-registered ones shown read-only), and a full
@@ -134,8 +139,10 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   A pasted key rides one request and is never stored or logged; failures never auto-retry;
   inactive components can be turned back on in place. Third parties register via
   `minn_admin_license_providers`
-- **SEO panel** — Yoast SEO, Rank Math, All in One SEO, SEOPress or SiteSEO title, meta
-  description and focus keyword in the editor sidebar (first active plugin wins)
+- **Editor field panels** — **ACF**, **Meta Box** and **Pods** simple fields in the sidebar
+  (advanced types count as locked with a wp-admin link); **SEO panel** for Yoast SEO, Rank Math,
+  All in One SEO, SEOPress or SiteSEO title, meta description and focus keyword (first active
+  SEO plugin wins)
 - **Menus & Widgets** — classic nav menus with drag-to-reorder (children travel with their
   parent); classic sidebars with **drag grips** to reorder widgets in an area, plus move
   between areas and in-place edit for block/text/HTML widgets
@@ -148,15 +155,16 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   Received / Spam / Trash views (Everest Forms carries the same three status views through
   its own entry helpers);
   **Email** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging) shows sent
-  mail with HTML previews and resend, plus Gravity SMTP's **full settings** (all 21 connectors,
-  drawn at runtime from its own schema), suppressions and **send a test email**;
+  mail with HTML previews, resend, and search plus delete where the logger supports it, plus
+  Gravity SMTP's **full settings** (all 21 connectors, drawn at runtime from its own schema),
+  suppressions and **send a test email**;
   **Activity Log** (Simple History, WP Activity Log, Aryo, Stream, Wordfence login security,
   plus **Limit Login Attempts Reloaded** and **Solid Security** lockouts with unlock/release
   actions) reads like an audit feed; **Redirects** (Redirection, Safe Redirect
   Manager, Simple 301 Redirects, 301 Redirects) lists, searches, creates and edits; **Snippets** (Code
   Snippets, WPCode, FluentSnippets, Simple Custom CSS and JS, Header Footer Code Manager) lists,
-  toggles, creates and bulk-edits; **Performance** (Perfmatters)
-  renders all nine of its settings tabs from the plugin's own registrations; **Backups**
+  toggles, creates and bulk-edits; **Performance** (Perfmatters, Autoptimize, Asset CleanUp,
+  Performance Lab) shares one Tools item with a provider switcher; **Backups**
   (UpdraftPlus, WPvivid, BackWPup, All-in-One WP Migration, Duplicator, Disembark) below.
   Surface lists open a **⋯ / right-click** menu of that collection's actions. Plugins that need
   their own first-run install get a **setup card** that runs their installer in place. The sidebar
@@ -170,10 +178,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   regeneration
 - **Notifications that respect you** — comments, plugin/theme/core updates and new users in one
   panel, plus an **admin-notice digest**: the notices other plugins print in wp-admin are
-  extracted as structured data (never their HTML or JavaScript) into a Notices tab, their action
-  links run in the background, and any notice can be hidden with Undo. The Updates tab pins
-  **Update everything**: plugins, themes and core in one click, with poll-verified core
-  completion. A pending WordPress update also shows as an amber topbar chip and Overview banner
+  extracted as structured data (never their HTML or JavaScript) into a Notices tab; **Allow /
+  No Thanks** and ThemeIsle-style dismiss links run in the background (not a new wp-admin tab),
+  and any notice can be hidden with Undo. Each update offer has its own **Update → version**
+  button; the Updates tab also pins **Update everything** (plugins, themes and core in one
+  click, poll-verified core). A pending WordPress update also shows as an amber topbar chip and
+  Overview banner
 - **Command palette** — ⌘K / Ctrl-K everywhere, with site-care actions built in: **Clear site
   cache** purges every layer the site runs (Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket,
   WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor
