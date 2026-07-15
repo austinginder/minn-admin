@@ -751,13 +751,15 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-rev-heat {
   padding: 12px 18px 10px; border-bottom: 1px solid var(--border);
 }
+/* Left-aligned: matches the revision list reading order and the modal’s
+   left-weighted hierarchy. Right-align left a lonely island of cells. */
 .minn-rev-heat-track {
-  display: flex; flex-direction: column; align-items: flex-end;
+  display: flex; flex-direction: column; align-items: flex-start;
   gap: 4px; width: 100%; overflow: hidden;
 }
 .minn-rev-heat-months,
 .minn-rev-heat-grid {
-  display: flex; gap: 3px; justify-content: flex-end;
+  display: flex; gap: 3px; justify-content: flex-start;
 }
 .minn-rev-heat-months { height: 14px; overflow: visible; }
 /* Fixed week-width slot; label text may spill into empty neighbor slots. */
@@ -784,7 +786,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-rev-heat-cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .minn-rev-heat-legend {
-  display: flex; align-items: center; gap: 4px; justify-content: flex-end;
+  display: flex; align-items: center; gap: 4px; justify-content: flex-start;
   margin-top: 8px; font-size: 11px; color: var(--text3);
 }
 .minn-rev-heat-legend .minn-rev-heat-cell { cursor: default; pointer-events: none; }
