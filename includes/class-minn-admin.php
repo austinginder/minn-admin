@@ -159,9 +159,9 @@ class Minn_Admin {
 				'default'      => false,
 			)
 		);
-		// minn_admin_default was a site option; it's now per-user on
-		// minn_admin_appearance.defaultAdmin (profile). Leave the option
-		// registered without REST so old values still migrate on read.
+		// Legacy site option — no longer used (default admin is per-user opt-in
+		// on minn_admin_appearance.defaultAdmin). Keep registered so old rows
+		// don't fatals if something still reads the option.
 		register_setting(
 			'minn_admin',
 			'minn_admin_default',
@@ -300,8 +300,8 @@ class Minn_Admin {
 		return array(
 			'scheme'       => 'minn',
 			'custom'       => self::scheme_base_tokens(),
-			// Site option was the old global; seed new profiles from it once.
-			'defaultAdmin' => (bool) get_option( 'minn_admin_default' ),
+			// Opt-in only — never seed from the old site option.
+			'defaultAdmin' => false,
 		);
 	}
 
@@ -380,14 +380,14 @@ class Minn_Admin {
 				return array(
 					'scheme'       => $hex ? 'custom' : 'minn',
 					'custom'       => $custom,
-					'defaultAdmin' => ! empty( $defaults['defaultAdmin'] ),
+					'defaultAdmin' => false,
 				);
 			}
 			if ( in_array( $accent, $ids, true ) ) {
 				return array(
 					'scheme'       => $accent,
 					'custom'       => $defaults['custom'],
-					'defaultAdmin' => ! empty( $defaults['defaultAdmin'] ),
+					'defaultAdmin' => false,
 				);
 			}
 			return $defaults;
@@ -409,13 +409,11 @@ class Minn_Admin {
 			'light' => self::normalize_scheme_tokens( isset( $custom_in['light'] ) ? $custom_in['light'] : array(), 'light' ),
 		);
 
-		// defaultAdmin: explicit key wins; missing key falls back to legacy site option
-		// so existing installs keep behavior until the user saves their profile.
-		if ( array_key_exists( 'defaultAdmin', $raw ) ) {
-			$default_admin = ! empty( $raw['defaultAdmin'] ) && '0' !== (string) $raw['defaultAdmin'] && 'false' !== (string) $raw['defaultAdmin'];
-		} else {
-			$default_admin = (bool) get_option( 'minn_admin_default' );
-		}
+		// Opt-in only: true only when the user explicitly saved defaultAdmin.
+		$default_admin = array_key_exists( 'defaultAdmin', $raw )
+			&& ! empty( $raw['defaultAdmin'] )
+			&& '0' !== (string) $raw['defaultAdmin']
+			&& 'false' !== (string) $raw['defaultAdmin'];
 
 		return array(
 			'scheme'       => $scheme,
