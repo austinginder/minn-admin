@@ -13604,13 +13604,12 @@
 		return formControlHtml( nf, value, 'data-pf', `${ pid }:${ nf.key }` );
 	}
 
-	function panelCard( ed, p ) {
+	/** Panel field body (modal). Doors on the rail open this in a large modal. */
+	function editorPanelFieldsHtml( ed, p ) {
 		const pid = p.desc.id;
 		const values = ed.panelValues[ pid ] || {};
 		const lockedTotal = p.groups.reduce( ( n, g ) => n + ( g.locked || 0 ), 0 );
 		return `
-		<div class="minn-side-card">
-			<div class="minn-side-title">${ esc( p.desc.label ) }${ p.desc.sub ? ` <span class="minn-panel-sub">${ esc( p.desc.sub ) }</span>` : '' }</div>
 			<div class="minn-panel-fields">
 				${ p.groups.map( ( g ) => `
 					${ p.groups.length > 1 ? `<div class="minn-panel-group">${ esc( g.group ) }</div>` : '' }
@@ -13620,8 +13619,314 @@
 							${ panelInput( pid, f, values[ f.name ] ) }
 						</div>` ).join( '' ) }` ).join( '' ) }
 				${ lockedTotal && ed.id ? `<div class="minn-panel-locked">${ lockedTotal } advanced field${ lockedTotal === 1 ? '' : 's' } — <a href="${ esc( B.site.adminUrl ) }post.php?post=${ ed.id }&action=edit">edit in wp-admin ↗</a></div>` : '' }
-			</div>
-		</div>`;
+			</div>`;
+	}
+
+	function editorSettingsFieldsHtml( ed ) {
+		const cats = state.cache.categories;
+		return `
+			<div class="minn-editor-door-fields" style="display:flex; flex-direction:column; gap:14px; font-size:13.5px; color:var(--text2);">
+				<div>Permalink
+					<div class="minn-slug-field">
+						<span class="minn-slug-prefix">/</span>
+						<input class="minn-input minn-slug-input" id="minn-slug-input" value="${ esc( ed.slugValue ) }" placeholder="${ ed.id ? 'post-slug' : 'set on first save' }" autocomplete="off" spellcheck="false"${ ed.id ? '' : ' disabled' }>
+					</div>
+					${ LIVE_STATUSES.includes( ed.status ) ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
+				</div>
+				${ ed.supportsFormat ? `<div>Format
+					<select class="minn-input" id="minn-post-format">
+						${ Object.entries( B.postFormats ).map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }"${ ed.format === slug ? ' selected' : '' }>${ esc( label ) }</option>` ).join( '' ) }
+					</select>
+				</div>` : '' }
+				${ ed.type === 'posts' ? `<div>Categories<div class="minn-chips" id="minn-editor-cats">${
+					cats == null ? '<span class="minn-chip">Loading…</span>'
+					: cats.map( ( c ) => `<button class="minn-chip pick${ ed.categoryIds.has( c.id ) ? ' sel' : '' }" data-cat="${ c.id }">${ esc( c.name ) }</button>` ).join( '' )
+				}</div></div>` : '' }
+				${ ed.type === 'posts' ? `<div>Tags
+					<div class="minn-chips" id="minn-editor-tags">${ tagChipsHtml( ed ) }</div>
+					<div class="minn-ac" id="minn-tag-ac">
+						<input class="minn-input minn-ac-input minn-tag-input" id="minn-editor-tag-input" placeholder="Add a tag, press Enter" autocomplete="off" spellcheck="false">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
+				</div>` : '' }
+				${ ed.supportsExcerpt ? `<div>Excerpt
+					<textarea class="minn-input minn-excerpt-input" id="minn-editor-excerpt" rows="3" placeholder="Optional summary for archives, feeds and shares…">${ esc( ed.excerpt ) }</textarea>
+				</div>` : '' }
+				${ ed.supportsDiscussion ? `<div>Discussion
+					<label class="minn-check-row"><input type="checkbox" id="minn-comment-status"${ ed.commentStatus === 'open' ? ' checked' : '' }> Allow comments</label>
+					<label class="minn-check-row"><input type="checkbox" id="minn-ping-status"${ ed.pingStatus === 'open' ? ' checked' : '' }> Allow pingbacks &amp; trackbacks</label>
+				</div>` : '' }
+				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
+			</div>`;
+	}
+
+	function editorAttrsFieldsHtml( ed ) {
+		return `
+			<div class="minn-editor-door-fields" style="display:flex; flex-direction:column; gap:14px; font-size:13.5px; color:var(--text2);">
+				${ ed.supportsParent ? `<div>Parent
+					<div class="minn-ac" id="minn-parent-ac" style="margin-top:5px;">
+						<input class="minn-input minn-ac-input" placeholder="${ ed.parentPick ? '— none —' : 'Loading…' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
+				</div>` : '' }
+				${ ed.templates && ed.templates.length ? `<div>Template
+					<div class="minn-ac" id="minn-template-ac" style="margin-top:5px;">
+						<input class="minn-input minn-ac-input" placeholder="Default template" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+						<div class="minn-ac-panel" hidden></div>
+					</div>
+				</div>` : '' }
+				${ ed.supportsOrder ? `<div>Order
+					<input type="number" class="minn-input" id="minn-order-input" value="${ ed.menuOrder }" style="margin-top:5px;">
+				</div>` : '' }
+			</div>`;
+	}
+
+	function editorDoorHtml( door ) {
+		return `
+		<button type="button" class="minn-side-door" data-side-door="${ esc( door.id ) }" title="${ esc( door.title ) }">
+			<span class="minn-side-door-text">
+				<span class="minn-side-door-title">${ esc( door.title ) }${ door.sub ? ` <span class="minn-panel-sub">${ esc( door.sub ) }</span>` : '' }</span>
+				${ door.summary ? `<span class="minn-side-door-sum">${ esc( door.summary ) }</span>` : '' }
+			</span>
+			<span class="minn-side-door-chev" aria-hidden="true">›</span>
+		</button>`;
+	}
+
+	function editorSettingsSummary( ed ) {
+		const bits = [];
+		if ( ed.type === 'posts' && state.cache.categories ) {
+			const names = state.cache.categories.filter( ( c ) => ed.categoryIds.has( c.id ) ).map( ( c ) => c.name );
+			if ( names.length ) bits.push( names.slice( 0, 2 ).join( ', ' ) + ( names.length > 2 ? ` +${ names.length - 2 }` : '' ) );
+		}
+		if ( ed.type === 'posts' && ed.tags && ed.tags.length ) {
+			bits.push( ed.tags.length === 1 ? '1 tag' : `${ ed.tags.length } tags` );
+		}
+		if ( ed.slugValue ) bits.push( '/' + ed.slugValue );
+		if ( ed.supportsFormat && ed.format && ed.format !== 'standard' && B.postFormats && B.postFormats[ ed.format ] ) {
+			bits.push( B.postFormats[ ed.format ] );
+		}
+		return bits.join( ' · ' ) || 'Permalink, taxonomies, discussion…';
+	}
+
+	function editorAttrsSummary( ed ) {
+		const bits = [];
+		if ( ed.supportsParent && ed.parent && ed.parentPick ) {
+			const p = ed.parentPick.find( ( x ) => x.id === ed.parent );
+			if ( p ) bits.push( p.title );
+		}
+		if ( ed.template && ed.templates ) {
+			const t = ed.templates.find( ( x ) => x.file === ed.template );
+			bits.push( t ? t.name : ed.template );
+		}
+		if ( ed.supportsOrder && ed.menuOrder ) bits.push( 'Order ' + ed.menuOrder );
+		return bits.join( ' · ' ) || 'Parent, template, order';
+	}
+
+	function editorHistorySummary( ed ) {
+		const rows = historyRowsFor( ed );
+		if ( ! rows.length ) return 'No revisions yet';
+		const total = ed.revisionsTotal || rows.length;
+		const last = rows[ 0 ];
+		return ( total > 1 ? `${ total } revisions · ` : '' ) + timeAgo( last.when ) + ( last.author ? ' · ' + last.author : '' );
+	}
+
+	function editorPanelSummary( ed, p ) {
+		const values = ed.panelValues[ p.desc.id ] || {};
+		const fields = [];
+		p.groups.forEach( ( g ) => ( g.fields || [] ).forEach( ( f ) => fields.push( f ) ) );
+		const filled = fields.filter( ( f ) => {
+			const v = values[ f.name ];
+			return v != null && v !== '' && v !== false;
+		} );
+		const locked = p.groups.reduce( ( n, g ) => n + ( g.locked || 0 ), 0 );
+		if ( p.desc.id === 'seo' ) {
+			if ( values.focus_keyword ) return values.focus_keyword;
+			if ( values.title ) return values.title;
+			return filled.length ? `${ filled.length } set` : 'Title, description, keyword…';
+		}
+		const bits = [];
+		if ( fields.length ) bits.push( fields.length === 1 ? '1 field' : `${ fields.length } fields` );
+		if ( filled.length ) bits.push( `${ filled.length } set` );
+		if ( locked ) bits.push( `${ locked } advanced` );
+		return bits.join( ' · ' ) || 'Edit fields';
+	}
+
+	function openEditorSideDoor( doorId ) {
+		const ed = state.editor;
+		if ( ! ed ) return;
+		if ( doorId === 'history' ) {
+			openRevisionsList( ed );
+			return;
+		}
+		state.modal = { type: 'editor-side', id: doorId };
+		renderOverlays();
+	}
+
+	function editorSideDoorMeta( doorId ) {
+		const ed = state.editor;
+		if ( ! ed ) return null;
+		if ( doorId === 'settings' ) {
+			return {
+				title: 'Settings',
+				sub: '',
+				body: editorSettingsFieldsHtml( ed ),
+				bind: ( root ) => bindEditorSettingsFields( root, ed ),
+			};
+		}
+		if ( doorId === 'attrs' ) {
+			return {
+				title: 'Page attributes',
+				sub: '',
+				body: editorAttrsFieldsHtml( ed ),
+				bind: ( root ) => bindEditorAttrsFields( root, ed ),
+			};
+		}
+		if ( doorId.indexOf( 'panel:' ) === 0 ) {
+			const pid = doorId.slice( 6 );
+			const p = ( ed.panels || [] ).find( ( x ) => x.desc.id === pid );
+			if ( ! p ) return null;
+			return {
+				title: p.desc.label,
+				sub: p.desc.sub || '',
+				body: editorPanelFieldsHtml( ed, p ),
+				bind: ( root ) => bindEditorPanelFields( root, ed ),
+			};
+		}
+		return null;
+	}
+
+	function bindEditorPanelFields( root, ed ) {
+		$$( '[data-pf]', root ).forEach( ( input ) => {
+			const write = ( val ) => {
+				const [ pid, name ] = input.dataset.pf.split( ':' );
+				( state.editor.panelValues[ pid ] = state.editor.panelValues[ pid ] || {} )[ name ] = val;
+				state.editor.panelDirty[ pid ] = true;
+				scheduleAutosave();
+			};
+			if ( input.dataset.ftype === 'toggle' ) {
+				input.addEventListener( 'click', () => {
+					input.classList.toggle( 'on' );
+					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
+					write( formControlValue( input ) );
+				} );
+			} else {
+				input.addEventListener( 'input', () => {
+					let v = formControlValue( input );
+					if ( v === '' && input.dataset.ftype === 'select' ) v = null;
+					write( v );
+				} );
+			}
+		} );
+		// Adapter selects → themed comboboxes (editor panels keep native selects
+		// for schema enums; panel form dialect is bindFormComboboxes only when
+		// already upgraded — leave native here for suite selectOption).
+	}
+
+	function bindEditorSettingsFields( root, ed ) {
+		const excerptInput = $( '#minn-editor-excerpt', root );
+		if ( excerptInput ) excerptInput.addEventListener( 'input', () => {
+			ed.excerpt = excerptInput.value;
+			ed.excerptDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const fmtSel = $( '#minn-post-format', root );
+		if ( fmtSel ) fmtSel.addEventListener( 'change', () => {
+			ed.format = fmtSel.value;
+			ed.formatDirty = true;
+			ed.dirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const slugInput = $( '#minn-slug-input', root );
+		if ( slugInput ) {
+			slugInput.addEventListener( 'input', () => {
+				ed.slugValue = slugInput.value.toLowerCase().replace( /[^a-z0-9\-_%]+/g, '-' ).replace( /-+/g, '-' );
+				ed.slugDirty = true;
+				if ( ed.id ) scheduleAutosave();
+			} );
+			slugInput.addEventListener( 'blur', () => { slugInput.value = ed.slugValue; } );
+		}
+		const commentBox = $( '#minn-comment-status', root );
+		if ( commentBox ) commentBox.addEventListener( 'change', () => {
+			ed.commentStatus = commentBox.checked ? 'open' : 'closed';
+			ed.commentDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const pingBox = $( '#minn-ping-status', root );
+		if ( pingBox ) pingBox.addEventListener( 'change', () => {
+			ed.pingStatus = pingBox.checked ? 'open' : 'closed';
+			ed.pingDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		$$( '[data-cat]', root ).forEach( ( chip ) =>
+			chip.addEventListener( 'click', () => {
+				const id = parseInt( chip.dataset.cat, 10 );
+				if ( ed.categoryIds.has( id ) ) ed.categoryIds.delete( id );
+				else ed.categoryIds.add( id );
+				ed.catsDirty = true;
+				chip.classList.toggle( 'sel' );
+				if ( ed.id ) scheduleAutosave();
+			} )
+		);
+		$$( '[data-tagchip]', root ).forEach( ( ch ) =>
+			ch.addEventListener( 'click', () => removeEditorTag( parseInt( ch.dataset.tagchip, 10 ) ) )
+		);
+		const tagInput = $( '#minn-editor-tag-input', root );
+		if ( tagInput ) {
+			const tagWrap = $( '#minn-tag-ac', root );
+			const tagOptions = ( state.cache.postTerms ? state.cache.postTerms.tags : [] )
+				.map( ( t ) => ( { value: t.name, label: t.count != null ? `${ t.name } (${ t.count })` : t.name } ) );
+			bindAutocomplete( tagWrap, tagOptions, {
+				enterPicksFirst: false,
+				onPick: ( v ) => { tagInput.value = ''; addEditorTag( v ); },
+			} );
+			tagInput.addEventListener( 'keydown', ( e ) => {
+				if ( e.defaultPrevented ) return;
+				if ( e.key === 'Enter' || e.key === ',' ) {
+					e.preventDefault();
+					const val = tagInput.value;
+					tagInput.value = '';
+					addEditorTag( val );
+				} else if ( e.key === 'Backspace' && ! tagInput.value && ed.tags && ed.tags.length ) {
+					removeEditorTag( ed.tags[ ed.tags.length - 1 ].id );
+				}
+			} );
+		}
+	}
+
+	function bindEditorAttrsFields( root, ed ) {
+		const parentWrap = $( '#minn-parent-ac', root );
+		if ( parentWrap && ed.parentPick ) {
+			bindAutocomplete( parentWrap, parentOptions( ed ), {
+				strict: true,
+				value: String( ed.parent || 0 ),
+				onPick: ( v ) => {
+					ed.parent = parseInt( v, 10 ) || 0;
+					ed.parentDirty = true;
+					if ( ed.id ) scheduleAutosave();
+				},
+			} );
+		}
+		const tplWrap = $( '#minn-template-ac', root );
+		if ( tplWrap ) {
+			bindAutocomplete( tplWrap,
+				[ { value: '', label: 'Default template' }, ...( ed.templates || [] ).map( ( t ) => ( { value: t.file, label: t.name } ) ) ],
+				{
+					strict: true,
+					value: ed.template || '',
+					onPick: ( v ) => {
+						ed.template = v;
+						ed.templateDirty = true;
+						if ( ed.id ) scheduleAutosave();
+					},
+				}
+			);
+		}
+		const orderInput = $( '#minn-order-input', root );
+		if ( orderInput ) orderInput.addEventListener( 'input', () => {
+			ed.menuOrder = parseInt( orderInput.value, 10 ) || 0;
+			ed.orderDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
 	}
 
 	function tagChipsHtml( ed ) {
@@ -13886,7 +14191,14 @@
 		}
 		const saved = savedState( ed );
 		const dateValue = ( ed.newDate || ( ed.date ? ed.date.slice( 0, 16 ) : '' ) );
-		const cats = state.cache.categories;
+		const historyRows = historyRowsFor( ed );
+		const showAttrs = !!( ed.supportsParent || ( ed.templates && ed.templates.length ) || ed.supportsOrder );
+		const panelDoors = ( ed.panels || [] ).map( ( p ) => editorDoorHtml( {
+			id: 'panel:' + p.desc.id,
+			title: p.desc.label,
+			sub: p.desc.sub || '',
+			summary: editorPanelSummary( ed, p ),
+		} ) ).join( '' );
 		el.innerHTML = `
 		<div class="minn-side-card">
 			<div class="minn-side-title">Publish</div>
@@ -13922,116 +14234,20 @@
 			</div>` : ed.featuredMedia ? '<div class="minn-session-empty">Loading…</div>' : `
 			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } Set featured image</button>` }
 		</div>` : '' }
-		${ ( () => {
-			const historyRows = historyRowsFor( ed );
-			if ( ! historyRows.length ) return '';
-			// Side card stays short; "View all" opens the full dialog when more exist.
-			const shown = historyRows.slice( 0, 5 );
-			const total = ed.revisionsTotal || historyRows.length;
-			const hasMore = total > HISTORY_SIDE_LIMIT || historyRows.length > shown.length;
-			return `
-		<div class="minn-side-card">
-			<div class="minn-side-title">History${ hasMore ? ` <span class="minn-panel-sub">${ total }</span>` : '' }</div>
-			${ shown.map( ( r ) => `
-				<button class="minn-history-row" data-rev="${ r.id }">
-					<span class="minn-history-when">${ timeAgo( r.when ) }</span>
-					<span class="minn-history-who">${ esc( r.author ) }</span>
-				</button>` ).join( '' ) }
-			${ hasMore ? `<button type="button" class="minn-history-more" id="minn-history-all">View all revisions (${ total })</button>` : '' }
-		</div>`;
-		} )() }
-		<div class="minn-side-card">
-			<div class="minn-side-title">Settings</div>
-			<div style="display:flex; flex-direction:column; gap:11px; font-size: 13.5px; color:var(--text2);">
-				<div>Permalink
-					<div class="minn-slug-field">
-						<span class="minn-slug-prefix">/</span>
-						<input class="minn-input minn-slug-input" id="minn-slug-input" value="${ esc( ed.slugValue ) }" placeholder="${ ed.id ? 'post-slug' : 'set on first save' }" autocomplete="off" spellcheck="false"${ ed.id ? '' : ' disabled' }>
-					</div>
-					${ LIVE_STATUSES.includes( ed.status ) ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
-				</div>
-				${ ed.supportsFormat ? `<div>Format
-					<select class="minn-input" id="minn-post-format">
-						${ Object.entries( B.postFormats ).map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }"${ ed.format === slug ? ' selected' : '' }>${ esc( label ) }</option>` ).join( '' ) }
-					</select>
-				</div>` : '' }
-				${ ed.type === 'posts' ? `<div>Categories<div class="minn-chips" id="minn-editor-cats">${
-					cats == null ? '<span class="minn-chip">Loading…</span>'
-					: cats.map( ( c ) => `<button class="minn-chip pick${ ed.categoryIds.has( c.id ) ? ' sel' : '' }" data-cat="${ c.id }">${ esc( c.name ) }</button>` ).join( '' )
-				}</div></div>` : '' }
-				${ ed.type === 'posts' ? `<div>Tags
-					<div class="minn-chips" id="minn-editor-tags">${ tagChipsHtml( ed ) }</div>
-					<div class="minn-ac" id="minn-tag-ac">
-						<input class="minn-input minn-ac-input minn-tag-input" id="minn-editor-tag-input" placeholder="Add a tag, press Enter" autocomplete="off" spellcheck="false">
-						<div class="minn-ac-panel" hidden></div>
-					</div>
-				</div>` : '' }
-				${ ed.supportsExcerpt ? `<div>Excerpt
-					<textarea class="minn-input minn-excerpt-input" id="minn-editor-excerpt" rows="3" placeholder="Optional summary for archives, feeds and shares…">${ esc( ed.excerpt ) }</textarea>
-				</div>` : '' }
-				${ ed.supportsDiscussion ? `<div>Discussion
-					<label class="minn-check-row"><input type="checkbox" id="minn-comment-status"${ ed.commentStatus === 'open' ? ' checked' : '' }> Allow comments</label>
-					<label class="minn-check-row"><input type="checkbox" id="minn-ping-status"${ ed.pingStatus === 'open' ? ' checked' : '' }> Allow pingbacks &amp; trackbacks</label>
-				</div>` : '' }
-				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
-			</div>
-		</div>
-		${ ed.supportsParent || ( ed.templates && ed.templates.length ) ? `
-		<div class="minn-side-card">
-			<div class="minn-side-title">Page attributes</div>
-			<div style="display:flex; flex-direction:column; gap:11px; font-size:13.5px; color:var(--text2);">
-				${ ed.supportsParent ? `<div>Parent
-					<div class="minn-ac" id="minn-parent-ac" style="margin-top:5px;">
-						<input class="minn-input minn-ac-input" placeholder="${ ed.parentPick ? '— none —' : 'Loading…' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
-						<div class="minn-ac-panel" hidden></div>
-					</div>
-				</div>` : '' }
-				${ ed.templates && ed.templates.length ? `<div>Template
-					<div class="minn-ac" id="minn-template-ac" style="margin-top:5px;">
-						<input class="minn-input minn-ac-input" placeholder="Default template" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
-						<div class="minn-ac-panel" hidden></div>
-					</div>
-				</div>` : '' }
-				${ ed.supportsOrder ? `<div>Order
-					<input type="number" class="minn-input" id="minn-order-input" value="${ ed.menuOrder }" style="margin-top:5px;">
-				</div>` : '' }
-			</div>
-		</div>` : '' }
-		${ ( ed.panels || [] ).map( ( p ) => panelCard( ed, p ) ).join( '' ) }
+		${ editorDoorHtml( { id: 'settings', title: 'Settings', summary: editorSettingsSummary( ed ) } ) }
+		${ showAttrs ? editorDoorHtml( { id: 'attrs', title: 'Page attributes', summary: editorAttrsSummary( ed ) } ) : '' }
+		${ historyRows.length || ( ed.revisionsTotal && ed.revisionsTotal > 0 )
+			? editorDoorHtml( { id: 'history', title: 'History', summary: editorHistorySummary( ed ) } )
+			: '' }
+		${ panelDoors }
 		${ ed.id ? '<button class="minn-trash-link" id="minn-trash-post">Move to trash</button>' : '' }
 		<div class="minn-side-card" id="minn-outline-card" hidden>
 			<div class="minn-side-title">Outline</div>
 			<div id="minn-outline"></div>
 		</div>`;
 
-		const excerptInput = $( '#minn-editor-excerpt', el );
-		if ( excerptInput ) excerptInput.addEventListener( 'input', () => {
-			ed.excerpt = excerptInput.value;
-			ed.excerptDirty = true;
-			if ( ed.id ) scheduleAutosave();
-		} );
-		const fmtSel = $( '#minn-post-format', el );
-		if ( fmtSel ) fmtSel.addEventListener( 'change', () => {
-			ed.format = fmtSel.value;
-			ed.formatDirty = true;
-			ed.dirty = true;
-			if ( ed.id ) scheduleAutosave();
-		} );
-		const slugInput = $( '#minn-slug-input', el );
-		if ( slugInput ) {
-			// Sanitize toward a real slug (WP finishes the job on save). Kept in
-			// ed.slugValue while typing; the field itself is normalized on blur
-			// so the caret doesn't jump mid-edit (matches Gutenberg).
-			slugInput.addEventListener( 'input', () => {
-				ed.slugValue = slugInput.value.toLowerCase().replace( /[^a-z0-9\-_%]+/g, '-' ).replace( /-+/g, '-' );
-				ed.slugDirty = true;
-				if ( ed.id ) scheduleAutosave();
-			} );
-			slugInput.addEventListener( 'blur', () => { slugInput.value = ed.slugValue; } );
-		}
 		// Visibility is a strict themed combobox (was a native mini-select —
-		// the last OS popup in the Publish card). Same onPick shape as
-		// Parent / Template below.
+		// the last OS popup in the Publish card).
 		const visWrap = $( '#minn-visibility', el );
 		if ( visWrap ) {
 			bindAutocomplete( visWrap, [
@@ -14045,16 +14261,11 @@
 					if ( v === ed.visibility ) return;
 					ed.visibility = v;
 					ed.visibilityDirty = true;
-					ed.passwordDirty = true; // password is set or cleared by the choice
-					// A password-protected post can't be sticky (WP rejects the pair) —
-					// drop stickiness when password is chosen.
+					ed.passwordDirty = true;
 					if ( ed.visibility === 'password' && ed.sticky ) {
 						ed.sticky = false;
 						ed.stickyDirty = true;
 					}
-					// Re-render to show/hide the password field. renderEditorSide
-					// skips a full render while ANY sidebar input is focused —
-					// blur first or the password field never appears.
 					if ( document.activeElement && document.activeElement.blur ) document.activeElement.blur();
 					renderEditorSide();
 					if ( ed.id ) scheduleAutosave();
@@ -14074,51 +14285,10 @@
 			if ( ed.id ) scheduleAutosave();
 		} );
 		bindEditorPpp( el, ed );
-		const commentBox = $( '#minn-comment-status', el );
-		if ( commentBox ) commentBox.addEventListener( 'change', () => {
-			ed.commentStatus = commentBox.checked ? 'open' : 'closed';
-			ed.commentDirty = true;
-			if ( ed.id ) scheduleAutosave();
-		} );
-		const pingBox = $( '#minn-ping-status', el );
-		if ( pingBox ) pingBox.addEventListener( 'change', () => {
-			ed.pingStatus = pingBox.checked ? 'open' : 'closed';
-			ed.pingDirty = true;
-			if ( ed.id ) scheduleAutosave();
-		} );
-		const parentWrap = $( '#minn-parent-ac', el );
-		if ( parentWrap && ed.parentPick ) {
-			bindAutocomplete( parentWrap, parentOptions( ed ), {
-				strict: true,
-				value: String( ed.parent || 0 ),
-				onPick: ( v ) => {
-					ed.parent = parseInt( v, 10 ) || 0;
-					ed.parentDirty = true;
-					if ( ed.id ) scheduleAutosave();
-				},
-			} );
-		}
-		const tplWrap = $( '#minn-template-ac', el );
-		if ( tplWrap ) {
-			bindAutocomplete( tplWrap,
-				[ { value: '', label: 'Default template' }, ...( ed.templates || [] ).map( ( t ) => ( { value: t.file, label: t.name } ) ) ],
-				{
-					strict: true,
-					value: ed.template || '',
-					onPick: ( v ) => {
-						ed.template = v;
-						ed.templateDirty = true;
-						if ( ed.id ) scheduleAutosave();
-					},
-				}
-			);
-		}
-		const orderInput = $( '#minn-order-input', el );
-		if ( orderInput ) orderInput.addEventListener( 'input', () => {
-			ed.menuOrder = parseInt( orderInput.value, 10 ) || 0;
-			ed.orderDirty = true;
-			if ( ed.id ) scheduleAutosave();
-		} );
+
+		$$( '[data-side-door]', el ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => openEditorSideDoor( btn.dataset.sideDoor ) )
+		);
 
 		const trashBtn = $( '#minn-trash-post', el );
 		if ( trashBtn ) {
@@ -14140,38 +14310,8 @@
 			} );
 		}
 
-		$$( '[data-pf]', el ).forEach( ( input ) => {
-			const write = ( val ) => {
-				const [ pid, name ] = input.dataset.pf.split( ':' );
-				( state.editor.panelValues[ pid ] = state.editor.panelValues[ pid ] || {} )[ name ] = val;
-				state.editor.panelDirty[ pid ] = true;
-				scheduleAutosave();
-			};
-			if ( input.dataset.ftype === 'toggle' ) {
-				input.addEventListener( 'click', () => {
-					input.classList.toggle( 'on' );
-					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
-					write( formControlValue( input ) );
-				} );
-			} else {
-				input.addEventListener( 'input', () => {
-					let v = formControlValue( input );
-					// The select's "—" means "no value": send null, not "".
-					// ACF's REST schema rejects "" for choice fields (enum),
-					// while null clears them — same family as the seed-time
-					// false-sentinel normalization in loadEditorPanels.
-					if ( v === '' && input.dataset.ftype === 'select' ) v = null;
-					write( v );
-				} );
-			}
-		} );
-
-		$$( '[data-rev]', el ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => openRevision( ed, parseInt( btn.dataset.rev, 10 ) ) )
-		);
-		const histAll = $( '#minn-history-all', el );
-		if ( histAll ) histAll.addEventListener( 'click', () => openRevisionsList( ed ) );
-
+		// Collapse only the remaining inline cards (Publish / Featured / Outline).
+		// Doors are not collapsible.
 		bindSideCollapse( el );
 		bindOutline();
 
@@ -14193,8 +14333,6 @@
 		if ( featSet ) featSet.addEventListener( 'click', pickFeatured );
 		const featRemove = $( '#minn-featured-remove', el );
 		if ( featRemove ) featRemove.addEventListener( 'click', clearFeatured );
-		// Thumb opens the same media preview used in the library — full image,
-		// Edit image, Copy URL, plus Replace/Remove featured from that context.
 		const featPrev = $( '#minn-featured-preview', el );
 		if ( featPrev ) {
 			featPrev.addEventListener( 'click', async () => {
@@ -14219,42 +14357,6 @@
 			const btn = $( '#minn-publish-btn' );
 			if ( btn ) btn.textContent = publishLabel( state.editor );
 		} );
-
-		$$( '[data-cat]', el ).forEach( ( chip ) =>
-			chip.addEventListener( 'click', () => {
-				const id = parseInt( chip.dataset.cat, 10 );
-				if ( ed.categoryIds.has( id ) ) ed.categoryIds.delete( id );
-				else ed.categoryIds.add( id );
-				ed.catsDirty = true;
-				chip.classList.toggle( 'sel' );
-				if ( ed.id ) scheduleAutosave();
-			} )
-		);
-
-		$$( '[data-tagchip]', el ).forEach( ( ch ) =>
-			ch.addEventListener( 'click', () => removeEditorTag( parseInt( ch.dataset.tagchip, 10 ) ) )
-		);
-		const tagInput = $( '#minn-editor-tag-input', el );
-		if ( tagInput ) {
-			const tagWrap = $( '#minn-tag-ac', el );
-			const tagOptions = ( state.cache.postTerms ? state.cache.postTerms.tags : [] )
-				.map( ( t ) => ( { value: t.name, label: t.count != null ? `${ t.name } (${ t.count })` : t.name } ) );
-			bindAutocomplete( tagWrap, tagOptions, {
-				enterPicksFirst: false,
-				onPick: ( v ) => { tagInput.value = ''; addEditorTag( v ); },
-			} );
-			tagInput.addEventListener( 'keydown', ( e ) => {
-				if ( e.defaultPrevented ) return; // the autocomplete picked an item
-				if ( e.key === 'Enter' || e.key === ',' ) {
-					e.preventDefault();
-					const val = tagInput.value;
-					tagInput.value = '';
-					addEditorTag( val );
-				} else if ( e.key === 'Backspace' && ! tagInput.value && ed.tags && ed.tags.length ) {
-					removeEditorTag( ed.tags[ ed.tags.length - 1 ].id );
-				}
-			} );
-		}
 
 		const saveDraftBtn = $( '#minn-save-draft-btn', el );
 		if ( saveDraftBtn ) {
@@ -20562,6 +20664,22 @@
 		if ( m.type === 'revision' ) {
 			return renderRevisionModal( m );
 		}
+		if ( m.type === 'editor-side' ) {
+			const meta = editorSideDoorMeta( m.id );
+			if ( ! meta ) return '';
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide minn-editor-side-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ esc( meta.title ) }${ meta.sub ? ` <span class="minn-panel-sub">${ esc( meta.sub ) }</span>` : '' }</div>
+						<button class="minn-x-btn" id="minn-modal-close" type="button">×</button>
+					</div>
+					<div class="minn-modal-scroll minn-editor-door-body">
+						${ meta.body }
+					</div>
+				</div>
+			</div>`;
+		}
 
 		if ( m.type === 'sys-detail' ) {
 			return renderSysDetailModal( m );
@@ -20948,6 +21066,12 @@
 		if ( closeBtn2 ) closeBtn2.addEventListener( 'click', closeModal );
 		const cancelBtn = $( '#minn-modal-cancel' );
 		if ( cancelBtn ) cancelBtn.addEventListener( 'click', closeModal );
+
+		if ( m.type === 'editor-side' ) {
+			const meta = editorSideDoorMeta( m.id );
+			const body = $( '.minn-editor-door-body' );
+			if ( meta && meta.bind && body && state.editor ) meta.bind( body );
+		}
 
 		if ( m.type === 'customer' ) {
 			$$( '[data-open-order]' ).forEach( ( btn ) =>

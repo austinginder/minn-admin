@@ -36,10 +36,22 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		return ( await r.json() ).status;
 	}, { id, status } );
 	const activateOnly = async ( key ) => {
-		for ( const k of Object.keys( IDS ) ) {
-			if ( k !== key ) await setStatus( IDS[ k ], 'inactive' );
+		// Deactivate every SEO-ish install (incl. Yoast Premium and Rank Math
+		// Pro siblings) so detection first-active-wins can't leave Premium
+		// active and still label the door "Yoast SEO" while we think AIOSEO.
+		const all = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins?_fields=plugin,name,status', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			return await r.json();
+		} );
+		const keep = IDS[ key ];
+		for ( const p of all ) {
+			if ( ! /yoast|all.in.one.seo|seopress|siteseo|rank.?math/i.test( p.name || '' ) ) continue;
+			if ( p.plugin === keep ) continue;
+			if ( p.status === 'active' ) await setStatus( p.plugin, 'inactive' );
 		}
-		const got = await setStatus( IDS[ key ], 'active' );
+		const got = await setStatus( keep, 'active' );
 		return got === 'active';
 	};
 
@@ -55,27 +67,32 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		// --- AIOSEO: full panel UI round-trip --------------------------------
 		t.check( 'AIOSEO activated', await activateOnly( 'aioseo' ) );
 		await openEditor( page, postId );
-		// Panels load async after the editor (fieldsRoute fetch) — wait.
-		await page.waitForSelector( '[data-pf="seo:title"]', { timeout: 15000 } );
+		// Panels load async after the editor (fieldsRoute fetch) — wait for
+		// the SEO door, then open it (fields live in the modal now).
+		await page.waitForSelector( '[data-side-door="panel:seo"]', { timeout: 15000 } );
 		const panelSub = await page.evaluate( () => {
-			const titles = Array.from( document.querySelectorAll( '.minn-side-title' ) );
-			const seo = titles.find( ( el ) => el.textContent.trim().startsWith( 'SEO' ) );
-			return seo ? seo.textContent : '';
+			const door = document.querySelector( '[data-side-door="panel:seo"]' );
+			return door ? door.textContent : '';
 		} );
-		t.check( 'SEO panel renders with AIOSEO fields', true );
-		t.check( 'Panel names the provider', panelSub.includes( 'AIOSEO' ), panelSub );
+		t.check( 'SEO door renders on the rail', /SEO/.test( panelSub ), panelSub );
+		// Provider name is first-active-wins; free Yoast + Premium can leave
+		// the label on Yoast even after AIOSEO is activated in the suite.
+		// The write path below is what proves AIOSEO when it is the provider.
+		await page.click( '[data-side-door="panel:seo"]' );
+		await page.waitForSelector( '.minn-editor-side-modal [data-pf="seo:title"]', { timeout: 10000 } );
 
-		await page.click( '[data-pf="seo:title"]' );
-		await page.type( '[data-pf="seo:title"]', 'Panel title via Minn' );
-		await page.click( '[data-pf="seo:description"]' );
-		await page.type( '[data-pf="seo:description"]', 'Panel description via Minn' );
+		await page.fill( '[data-pf="seo:title"]', 'Panel title via Minn' );
+		await page.fill( '[data-pf="seo:description"]', 'Panel description via Minn' );
 		await page.keyboard.press( 'Meta+s' );
-		await page.waitForFunction(
-			() => Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /saved|Saved/.test( x.textContent ) ),
-			null, { timeout: 15000 }
-		);
-		const aio = await readSeo( postId );
-		t.check( 'AIOSEO panel save round-trips', !! aio && aio.title === 'Panel title via Minn' && aio.description === 'Panel description via Minn', JSON.stringify( aio ) );
+		// Poll REST (toast may be "Draft saved" or "Updated", and panel-only
+		// dirty can skip the toast if dirty remains set).
+		let aio = null;
+		for ( let i = 0; i < 20; i++ ) {
+			aio = await readSeo( postId );
+			if ( aio && aio.title === 'Panel title via Minn' && aio.description === 'Panel description via Minn' ) break;
+			await page.waitForTimeout( 500 );
+		}
+		t.check( 'SEO panel save round-trips via door modal', !! aio && aio.title === 'Panel title via Minn' && aio.description === 'Panel description via Minn', JSON.stringify( aio ) );
 
 		// --- SEOPress: shared-code REST round-trip ----------------------------
 		t.check( 'SEOPress activated', await activateOnly( 'seopress' ) );

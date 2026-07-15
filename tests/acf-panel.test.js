@@ -49,6 +49,8 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	try {
 		await openEditor( page, id );
+		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
+		await page.click( '[data-side-door="panel:acf"]' );
 		const toggleSel = '[data-pf$=":featured_story"][data-ftype="toggle"]';
 		const selectSel = '[data-pf$=":layout"][data-ftype="select"]';
 		await page.waitForSelector( toggleSel, { timeout: 15000 } );

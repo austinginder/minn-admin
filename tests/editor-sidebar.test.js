@@ -31,15 +31,25 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		return st;
 	};
 
+	// Settings / custom fields live behind a side door → large modal.
+	const openSettings = async () => {
+		await page.click( '[data-side-door="settings"]' );
+		await page.waitForSelector( '.minn-editor-side-modal #minn-slug-input', { timeout: 10000 } );
+	};
+
 	/* ===== Slug + Discussion on a draft (saves in place) ===== */
 	const id = await createPost( page, { title: 'Sidebar test', content: '<!-- wp:paragraph -->\n<p>Body.</p>\n<!-- /wp:paragraph -->' } );
 	await openEditor( page, id );
+	t.check( 'Settings is a door on the rail', !! ( await page.$( '[data-side-door="settings"]' ) ) );
+	await openSettings();
 	await page.fill( '#minn-slug-input', 'A Custom Slug!' );
 	await page.evaluate( () => document.querySelector( '#minn-slug-input' ).blur() ); // normalizes the field
 	const shownSlug = await page.inputValue( '#minn-slug-input' );
 	t.check( 'slug input normalizes on blur', shownSlug === 'a-custom-slug-', shownSlug );
 	await page.uncheck( '#minn-comment-status' );
 	await page.uncheck( '#minn-ping-status' );
+	await page.keyboard.press( 'Escape' );
+	await page.waitForTimeout( 200 );
 	await save();
 	let s = await savedWhen( id, ( x ) => x.slug === 'a-custom-slug' && x.comment_status === 'closed' && x.ping_status === 'closed' );
 	t.check( 'slug persists', s.slug === 'a-custom-slug', s.slug );
@@ -48,15 +58,18 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	/* ===== Values round-trip back into the UI on reopen ===== */
 	await openEditor( page, id );
+	await openSettings();
 	const ui = await page.evaluate( () => ( {
 		slug: document.querySelector( '#minn-slug-input' ).value,
 		comments: document.querySelector( '#minn-comment-status' ).checked,
 		pings: document.querySelector( '#minn-ping-status' ).checked,
-		// Visibility is a themed combobox (value rides data-ac-value).
+		// Visibility stays on the Publish card (themed combobox).
 		visibility: document.querySelector( '#minn-visibility-input' )?.dataset.acValue
 			|| document.querySelector( '#minn-visibility' )?.dataset?.acValue,
 	} ) );
 	t.check( 'reopened UI reflects saved slug + discussion', ui.slug === 'a-custom-slug' && ! ui.comments && ! ui.pings && ui.visibility === 'public', JSON.stringify( ui ) );
+	await page.keyboard.press( 'Escape' );
+	await page.waitForTimeout( 200 );
 
 	/* ===== Sticky (public post) ===== */
 	await page.check( '#minn-sticky' );
