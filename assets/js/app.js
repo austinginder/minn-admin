@@ -14553,6 +14553,14 @@
 		return dpMonthInflight[ cacheKey ];
 	}
 
+	function dpMarkTip( list ) {
+		if ( ! list || ! list.length ) return '';
+		const lines = list.slice( 0, 6 ).map( ( x ) =>
+			( x.status === 'future' ? 'Scheduled' : 'Published' ) + ' · ' + x.title );
+		if ( list.length > 6 ) lines.push( '…and ' + ( list.length - 6 ) + ' more' );
+		return lines.join( '\n' );
+	}
+
 	function dpPaintDayMarks( byDay ) {
 		if ( ! dpPop || ! byDay ) return;
 		$$( '.minn-dp-day', dpPop ).forEach( ( b ) => {
@@ -14560,18 +14568,15 @@
 			const n = list ? list.length : 0;
 			b.classList.toggle( 'has-posts', n > 0 );
 			b.classList.toggle( 'has-scheduled', n > 0 && list.some( ( x ) => x.status === 'future' ) );
-			if ( n ) {
-				const lines = list.slice( 0, 6 ).map( ( x ) =>
-					( x.status === 'future' ? 'Scheduled' : 'Published' ) + ': ' + x.title );
-				if ( n > 6 ) lines.push( '…and ' + ( n - 6 ) + ' more' );
-				b.title = lines.join( '\n' );
-			} else {
-				b.removeAttribute( 'title' );
-			}
+			const tip = dpMarkTip( list );
+			if ( tip ) b.dataset.dptip = tip;
+			else delete b.dataset.dptip;
+			b.removeAttribute( 'title' );
 		} );
 	}
 
 	function hideDatePicker() {
+		hideFloatTip();
 		if ( dpPop ) dpPop.remove();
 		dpPop = null;
 		document.removeEventListener( 'mousedown', dpAway, true );
@@ -14614,7 +14619,8 @@
 					const key = dpMachine( d ).slice( 0, 10 );
 					const has = cached && cached[ key ] && cached[ key ].length;
 					const hasFuture = has && cached[ key ].some( ( x ) => x.status === 'future' );
-					days += `<button type="button" class="minn-dp-day${ d.getMonth() !== view.getMonth() ? ' out' : '' }${ key === selKey ? ' sel' : '' }${ key === todayKey ? ' today' : '' }${ has ? ' has-posts' : '' }${ hasFuture ? ' has-scheduled' : '' }" data-day="${ key }"${ has ? ` title="${ esc( cached[ key ].map( ( x ) => ( x.status === 'future' ? 'Scheduled' : 'Published' ) + ': ' + x.title ).join( '\n' ) ) }"` : '' }>${ d.getDate() }</button>`;
+					// Tip text rides data-dptip (set below) — styled float tip, not title=.
+					days += `<button type="button" class="minn-dp-day${ d.getMonth() !== view.getMonth() ? ' out' : '' }${ key === selKey ? ' sel' : '' }${ key === todayKey ? ' today' : '' }${ has ? ' has-posts' : '' }${ hasFuture ? ' has-scheduled' : '' }" data-day="${ key }">${ d.getDate() }</button>`;
 					d.setDate( d.getDate() + 1 );
 				}
 				dpPop.innerHTML = `
@@ -14648,7 +14654,10 @@
 					const n = byDay ? Object.keys( byDay ).length : 0;
 					leg.hidden = n === 0;
 				};
-				if ( cached ) syncLegend( cached );
+				if ( cached ) {
+					dpPaintDayMarks( cached );
+					syncLegend( cached );
+				}
 
 				// Soft paint when the month's other posts arrive (no full re-render).
 				if ( ! cached ) {
@@ -14661,13 +14670,34 @@
 					} );
 				}
 
+				// Styled tip on marked days (heatmap pattern — not native title=).
+				const grid = $( '.minn-dp-grid', dpPop );
+				if ( grid ) {
+					grid.addEventListener( 'mouseover', ( e ) => {
+						const day = e.target.closest( '.minn-dp-day' );
+						if ( day && day.dataset.dptip ) showFloatTip( day, day.dataset.dptip );
+						else if ( day ) hideFloatTip();
+					} );
+					grid.addEventListener( 'mouseout', ( e ) => {
+						const to = e.relatedTarget;
+						if ( ! to || ! grid.contains( to ) ) hideFloatTip();
+					} );
+					grid.addEventListener( 'focusin', ( e ) => {
+						const day = e.target.closest( '.minn-dp-day' );
+						if ( day && day.dataset.dptip ) showFloatTip( day, day.dataset.dptip );
+					} );
+					grid.addEventListener( 'focusout', () => hideFloatTip() );
+				}
+
 				const timeOf = () => dpParseTime( $( '.minn-dp-time-input', dpPop ).value )
 					|| { h: seed.getHours(), m: seed.getMinutes() };
 				$$( '.minn-dp-nav', dpPop ).forEach( ( b ) => b.addEventListener( 'click', () => {
+					hideFloatTip();
 					view.setMonth( view.getMonth() + parseInt( b.dataset.nav, 10 ) );
 					render();
 				} ) );
 				$$( '.minn-dp-day', dpPop ).forEach( ( b ) => b.addEventListener( 'click', () => {
+					hideFloatTip();
 					const t = timeOf();
 					const picked = new Date( b.dataset.day + 'T00:00' );
 					picked.setHours( t.h, t.m );
@@ -24594,31 +24624,31 @@
 		return { html, counts };
 	}
 
-	function hideRevHeatTip() {
-		const el = document.getElementById( 'minn-rev-heat-tip' );
+	/** Shared floating tip (revision heatmap, schedule calendar marks, …). */
+	function hideFloatTip() {
+		const el = document.getElementById( 'minn-float-tip' );
 		if ( el ) el.remove();
 	}
 
-	function showRevHeatTip( cell ) {
-		const text = cell && cell.dataset && cell.dataset.revtip;
-		if ( ! text || cell.disabled ) {
-			hideRevHeatTip();
+	function showFloatTip( anchor, text ) {
+		if ( ! text || ! anchor ) {
+			hideFloatTip();
 			return;
 		}
-		let tip = document.getElementById( 'minn-rev-heat-tip' );
+		let tip = document.getElementById( 'minn-float-tip' );
 		if ( ! tip ) {
 			tip = document.createElement( 'div' );
-			tip.id = 'minn-rev-heat-tip';
-			tip.className = 'minn-rev-heat-tip';
+			tip.id = 'minn-float-tip';
+			tip.className = 'minn-float-tip';
 			tip.setAttribute( 'role', 'tooltip' );
 			document.body.appendChild( tip );
 		}
 		tip.textContent = text;
-		// Measure off-screen then pin above (or below) the cell, clamped to viewport.
+		// Measure off-screen then pin above (or below) the anchor, clamped to viewport.
 		tip.style.visibility = 'hidden';
 		tip.style.left = '0';
 		tip.style.top = '0';
-		const r = cell.getBoundingClientRect();
+		const r = anchor.getBoundingClientRect();
 		const tw = tip.offsetWidth || 160;
 		const th = tip.offsetHeight || 28;
 		const pad = 8;
@@ -24634,6 +24664,17 @@
 		tip.style.top = Math.round( top ) + 'px';
 		tip.dataset.place = place;
 		tip.style.visibility = 'visible';
+	}
+
+	function hideRevHeatTip() { hideFloatTip(); }
+
+	function showRevHeatTip( cell ) {
+		const text = cell && cell.dataset && cell.dataset.revtip;
+		if ( ! text || cell.disabled ) {
+			hideFloatTip();
+			return;
+		}
+		showFloatTip( cell, text );
 	}
 
 	function renderRevisionsListModal( m ) {

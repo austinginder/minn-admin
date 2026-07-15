@@ -901,7 +901,8 @@ button.minn-nav-label:hover { color: var(--text2); }
   margin-top: 8px; font-size: 11px; color: var(--text3);
 }
 .minn-rev-heat-legend .minn-rev-heat-cell { cursor: default; pointer-events: none; }
-/* Styled hover tip for heatmap cells (replaces native title=). */
+/* Styled hover tip (heatmap cells, schedule calendar days — not native title=). */
+.minn-float-tip,
 .minn-rev-heat-tip {
   position: fixed; z-index: 95;
   max-width: min(280px, calc(100vw - 16px));
@@ -911,15 +912,17 @@ button.minn-nav-label:hover { color: var(--text2); }
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 1px 4px rgba(0, 0, 0, 0.12);
   font-size: 12px; font-weight: 600; color: var(--text);
-  line-height: 1.35; pointer-events: none;
-  animation: minn-rev-heat-tip-in 0.1s ease-out;
+  line-height: 1.4; pointer-events: none;
+  white-space: pre-line;
+  animation: minn-float-tip-in 0.1s ease-out;
 }
-.minn-rev-heat-tip[data-place="below"] { animation-name: minn-rev-heat-tip-in-below; }
-@keyframes minn-rev-heat-tip-in {
+.minn-float-tip[data-place="below"],
+.minn-rev-heat-tip[data-place="below"] { animation-name: minn-float-tip-in-below; }
+@keyframes minn-float-tip-in {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@keyframes minn-rev-heat-tip-in-below {
+@keyframes minn-float-tip-in-below {
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
 }

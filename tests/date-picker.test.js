@@ -111,12 +111,18 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		const leg = document.querySelector( '[data-dp-legend]' );
 		return btn ? {
 			has: btn.classList.contains( 'has-posts' ),
-			title: btn.title || '',
+			dptip: btn.dataset.dptip || '',
+			nativeTitle: btn.title || '',
 			legend: leg && ! leg.hidden ? leg.textContent : '',
 		} : null;
 	}, dayKey );
 	t.check( 'days with other published posts wear a mark', mark && mark.has, JSON.stringify( mark ) );
-	t.check( 'mark tooltip names the other post', mark && /Calendar Mark Fixture ZQX/.test( mark.title ), JSON.stringify( mark ) );
+	t.check( 'mark tip is on data-dptip, not native title', mark && /Calendar Mark Fixture ZQX/.test( mark.dptip ) && ! mark.nativeTitle, JSON.stringify( mark ) );
+	// Hover shows the shared float tip (heatmap-style UI).
+	await page.hover( `.minn-dp-day[data-day="${ dayKey }"]` );
+	await page.waitForSelector( '#minn-float-tip', { timeout: 3000 } );
+	const tipText = await page.$eval( '#minn-float-tip', ( el ) => el.textContent );
+	t.check( 'float tip shows the other post title', /Calendar Mark Fixture ZQX/.test( tipText ), tipText );
 	t.check( 'legend explains the highlights', mark && /other posts/.test( mark.legend ), JSON.stringify( mark ) );
 
 	await deletePost( page, id );
