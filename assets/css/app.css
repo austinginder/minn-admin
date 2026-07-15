@@ -25,11 +25,16 @@ body {
   color: var(--text);
 }
 
+/*
+ * Color schemes (user meta minn_admin_appearance).
+ * data-theme = light|dark surface mode (System/Light/Dark preference).
+ * data-scheme = named package | custom (inline CSS vars from JS).
+ * Status colors (--green/--amber/--red/…) stay semantic and are NOT scheme-bound.
+ * --accent-soft / --accent-ring always derive from --accent.
+ */
 :root, [data-theme="dark"] {
   --bg:#0b0b0d; --bg2:#101013; --panel:#151518; --panel2:#1b1b1f; --hover:#202027;
   --border:#242429; --border2:#31313a; --text:#ececed; --text2:#9d9da7; --text3:#63636d;
-  /* Default accent = Minn violet. Per-user presets via data-accent (user meta
-     minn_admin_appearance); soft/ring derive from --accent so custom works. */
   --accent:#6e62f5; --accent2:#8a80f8; --accent-fg:#fff;
   --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
   --accent-ring: color-mix(in srgb, var(--accent) 35%, transparent);
@@ -45,23 +50,88 @@ body {
   --shadow:0 12px 40px rgba(30,30,50,0.14); --shadow-sm:0 3px 14px rgba(30,30,50,0.08);
 }
 
-/* Accent presets — surface tokens stay on data-theme; only the brand hue changes.
-   Tuned so each reads on both dark panels and light white cards. */
-[data-theme="dark"][data-accent="ocean"]  { --accent:#3b82f6; --accent2:#60a5fa; }
-[data-theme="light"][data-accent="ocean"] { --accent:#2563eb; --accent2:#1d4ed8; }
-[data-theme="dark"][data-accent="forest"]  { --accent:#34a06c; --accent2:#4fc48a; }
-[data-theme="light"][data-accent="forest"] { --accent:#1f8a56; --accent2:#176b43; }
-[data-theme="dark"][data-accent="amber"]  { --accent:#d4923a; --accent2:#e8b05c; }
-[data-theme="light"][data-accent="amber"] { --accent:#c47a18; --accent2:#a36512; }
-[data-theme="dark"][data-accent="rose"]  { --accent:#d063b0; --accent2:#e08cc8; }
-[data-theme="light"][data-accent="rose"] { --accent:#b84496; --accent2:#9a347d; }
-[data-theme="dark"][data-accent="coral"]  { --accent:#e06b5a; --accent2:#f08a7c; }
-[data-theme="light"][data-accent="coral"] { --accent:#d14a38; --accent2:#b53a2a; }
-[data-theme="dark"][data-accent="teal"]  { --accent:#2aa8a0; --accent2:#4bc4bc; }
-[data-theme="light"][data-accent="teal"] { --accent:#1f8a84; --accent2:#176e69; }
-[data-theme="dark"][data-accent="slate"]  { --accent:#7b8599; --accent2:#9aa3b5; }
-[data-theme="light"][data-accent="slate"] { --accent:#5c6678; --accent2:#4a5363; }
-/* minn + custom: minn uses root defaults; custom sets inline CSS vars from JS. */
+/* —— Named schemes: full packages (surfaces + brand) —— */
+[data-theme="dark"][data-scheme="ocean"] {
+  --bg:#0a0e14; --bg2:#0e1420; --panel:#121a28; --panel2:#182234; --hover:#1e2a40;
+  --border:#243044; --border2:#334860; --text:#e8eef6; --text2:#93a4bc; --text3:#6a7c96;
+  --accent:#3b82f6; --accent2:#60a5fa; --accent-fg:#fff;
+}
+[data-theme="light"][data-scheme="ocean"] {
+  --bg:#f3f6fb; --bg2:#ffffff; --panel:#ffffff; --panel2:#eef3fa; --hover:#e4ebf6;
+  --border:#d5e0ee; --border2:#c0cfe3; --text:#152033; --text2:#4d607a; --text3:#7a8da8;
+  --accent:#2563eb; --accent2:#1d4ed8; --accent-fg:#fff;
+}
+[data-theme="dark"][data-scheme="forest"] {
+  --bg:#0a100c; --bg2:#0e1611; --panel:#131c16; --panel2:#1a261e; --hover:#213028;
+  --border:#2a3a30; --border2:#3a4e40; --text:#e8f0ea; --text2:#95ad9c; --text3:#6a8272;
+  --accent:#34a06c; --accent2:#4fc48a; --accent-fg:#fff;
+}
+[data-theme="light"][data-scheme="forest"] {
+  --bg:#f3f7f4; --bg2:#ffffff; --panel:#ffffff; --panel2:#eef4f0; --hover:#e4ede7;
+  --border:#d2e0d6; --border2:#b9ccbf; --text:#15241a; --text2:#4a6554; --text3:#73907d;
+  --accent:#1f8a56; --accent2:#176b43; --accent-fg:#fff;
+}
+[data-theme="dark"][data-scheme="amber"] {
+  --bg:#100e0a; --bg2:#16130e; --panel:#1c1812; --panel2:#262018; --hover:#2e271d;
+  --border:#3a3226; --border2:#4e4434; --text:#f3eee4; --text2:#b3a58c; --text3:#847866;
+  --accent:#d4923a; --accent2:#e8b05c; --accent-fg:#14110c;
+}
+[data-theme="light"][data-scheme="amber"] {
+  --bg:#faf6f0; --bg2:#ffffff; --panel:#ffffff; --panel2:#f5efe6; --hover:#eee4d6;
+  --border:#e4d6c0; --border2:#d2c0a4; --text:#2a2114; --text2:#6b5a3e; --text3:#978564;
+  --accent:#c47a18; --accent2:#a36512; --accent-fg:#fff;
+}
+[data-theme="dark"][data-scheme="rose"] {
+  --bg:#100a0e; --bg2:#160e14; --panel:#1c121a; --panel2:#261822; --hover:#301e2c;
+  --border:#3c2838; --border2:#523a4c; --text:#f4e8f0; --text2:#b89aaf; --text3:#876a7e;
+  --accent:#d063b0; --accent2:#e08cc8; --accent-fg:#fff;
+}
+[data-theme="light"][data-scheme="rose"] {
+  --bg:#faf3f7; --bg2:#ffffff; --panel:#ffffff; --panel2:#f6ecf2; --hover:#efdfe9;
+  --border:#e5cddc; --border2:#d4b3c8; --text:#2a1524; --text2:#6b4560; --text3:#987288;
+  --accent:#b84496; --accent2:#9a347d; --accent-fg:#fff;
+}
+[data-theme="dark"][data-scheme="coral"] {
+  --bg:#120c0b; --bg2:#18110f; --panel:#1e1614; --panel2:#2a1e1b; --hover:#342622;
+  --border:#42322e; --border2:#58443e; --text:#f4ebe8; --text2:#b8a09a; --text3:#87746e;
+  --accent:#e06b5a; --accent2:#f08a7c; --accent-fg:#fff;
+}
+[data-theme="light"][data-scheme="coral"] {
+  --bg:#faf4f2; --bg2:#ffffff; --panel:#ffffff; --panel2:#f6eeeb; --hover:#efe3df;
+  --border:#e5d2cc; --border2:#d4b8b0; --text:#2a1612; --text2:#6b4a42; --text3:#98756c;
+  --accent:#d14a38; --accent2:#b53a2a; --accent-fg:#fff;
+}
+[data-theme="dark"][data-scheme="teal"] {
+  --bg:#0a1010; --bg2:#0e1616; --panel:#121c1c; --panel2:#182626; --hover:#1e3030;
+  --border:#283c3c; --border2:#385050; --text:#e6f2f1; --text2:#92b0ae; --text3:#688482;
+  --accent:#2aa8a0; --accent2:#4bc4bc; --accent-fg:#fff;
+}
+[data-theme="light"][data-scheme="teal"] {
+  --bg:#f2f7f7; --bg2:#ffffff; --panel:#ffffff; --panel2:#eaf3f2; --hover:#dfeceb;
+  --border:#c9dedc; --border2:#b0ccc9; --text:#122422; --text2:#44615e; --text3:#6f8f8b;
+  --accent:#1f8a84; --accent2:#176e69; --accent-fg:#fff;
+}
+[data-theme="dark"][data-scheme="slate"] {
+  --bg:#0c0d10; --bg2:#111318; --panel:#16181e; --panel2:#1d2028; --hover:#262a34;
+  --border:#303540; --border2:#424856; --text:#e8eaef; --text2:#9aa1b0; --text3:#6d7484;
+  --accent:#7b8599; --accent2:#9aa3b5; --accent-fg:#fff;
+}
+[data-theme="light"][data-scheme="slate"] {
+  --bg:#f4f5f7; --bg2:#ffffff; --panel:#ffffff; --panel2:#eef0f3; --hover:#e5e8ed;
+  --border:#d5d9e0; --border2:#c0c5d0; --text:#181b22; --text2:#555c6b; --text3:#838a9a;
+  --accent:#5c6678; --accent2:#4a5363; --accent-fg:#fff;
+}
+[data-theme="dark"][data-scheme="dusk"] {
+  --bg:#0e0b12; --bg2:#14101a; --panel:#1a1522; --panel2:#221c2c; --hover:#2a2436;
+  --border:#342e42; --border2:#463e58; --text:#efeaf6; --text2:#a89ab8; --text3:#7a6e8e;
+  --accent:#9b7aef; --accent2:#b59af5; --accent-fg:#fff;
+}
+[data-theme="light"][data-scheme="dusk"] {
+  --bg:#f6f3fb; --bg2:#ffffff; --panel:#ffffff; --panel2:#f0ebf8; --hover:#e7dff3;
+  --border:#d8cee8; --border2:#c4b6db; --text:#1c1528; --text2:#5a4d72; --text3:#87789e;
+  --accent:#7c5ce0; --accent2:#6548c4; --accent-fg:#fff;
+}
+/* minn = root defaults. custom = inline CSS vars from JS (data-scheme="custom"). */
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
@@ -1134,43 +1204,58 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-theme-author { color: var(--text2); text-decoration: none; border-bottom: 1px solid var(--border2); }
 .minn-theme-author:hover { color: var(--accent2); border-bottom-color: var(--accent2); }
 
-/* ===== Accent swatches (profile Appearance) ===== */
-.minn-accent-row {
+/* ===== Scheme swatches + custom slot editors (profile) ===== */
+.minn-scheme-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px;
 }
-.minn-accent-swatch {
-  width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
-  padding: 0; cursor: pointer; background: var(--sw, var(--accent));
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+.minn-scheme-swatch {
+  position: relative; width: 34px; height: 34px; border-radius: 10px; border: 2px solid transparent;
+  padding: 0; cursor: pointer; background: transparent;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
-.minn-accent-swatch:hover { transform: scale(1.08); }
-.minn-accent-swatch.sel {
-  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--sw, var(--accent));
+.minn-scheme-swatch-face {
+  display: block; width: 100%; height: 100%; border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);
 }
-.minn-accent-swatch:focus-visible {
+.minn-scheme-swatch-dot {
+  position: absolute; right: 3px; bottom: 3px; width: 11px; height: 11px;
+  border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.55);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+.minn-scheme-swatch:hover { transform: scale(1.06); }
+.minn-scheme-swatch.sel {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+.minn-scheme-swatch:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
 }
-.minn-accent-custom {
-  position: relative; display: inline-flex; align-items: center; justify-content: center;
-  background: var(--panel2); border: 1px dashed var(--border2);
-  box-shadow: none;
+.minn-scheme-custom-face {
+  display: flex !important; align-items: center; justify-content: center;
+  background: var(--panel2); color: var(--text2); font-size: 16px; font-weight: 600;
+  border: 1px dashed var(--border2); box-shadow: none;
 }
-.minn-accent-custom.sel {
-  border-style: solid; border-color: transparent;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+.minn-scheme-custom-btn.sel .minn-scheme-custom-face {
+  background: var(--accent); color: var(--accent-fg); border-style: solid; border-color: transparent;
 }
-.minn-accent-custom input[type="color"] {
-  position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%;
-  cursor: pointer; border: 0; padding: 0;
+.minn-scheme-custom { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.minn-scheme-group-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 6px;
 }
-.minn-accent-custom-plus {
-  font-size: 16px; font-weight: 600; color: var(--text2); line-height: 1; pointer-events: none;
+.minn-scheme-slot {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 6px; cursor: pointer;
 }
-.minn-accent-custom.sel .minn-accent-custom-plus { color: var(--accent-fg); }
-/* Profile theme mode: denser exclusive switches under accent swatches. */
+.minn-scheme-slot-swatch {
+  width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+}
+.minn-scheme-slot-label { flex: 1; font-size: 13px; font-weight: 500; color: var(--text2); min-width: 0; }
+.minn-scheme-slot input[type="color"] {
+  width: 36px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel2); cursor: pointer;
+}
+/* Profile theme mode: denser exclusive switches under scheme swatches. */
 .minn-theme-mode-toggles { margin-top: 6px; gap: 8px; }
 .minn-theme-mode-toggles .minn-toggle-desc { margin-top: 1px; }
 

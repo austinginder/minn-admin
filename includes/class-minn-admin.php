@@ -182,60 +182,191 @@ class Minn_Admin {
 	 * URL of the Minn Admin app.
 	 */
 	/**
-	 * Per-user Minn UI appearance (accent palette). User meta key
-	 * `minn_admin_appearance`. Shape: { accent: preset|custom, custom: #hex }.
+	 * Per-user Minn UI appearance. User meta key `minn_admin_appearance`.
+	 *
+	 * Shape:
+	 *   { scheme: 'minn'|…|'custom', custom: { dark: {slot: #hex…}, light: {…} } }
+	 *
+	 * Scheme slots map to CSS variables (status colors stay fixed). Soft/ring
+	 * accents are derived client-side from accent.
 	 */
 	const APPEARANCE_META = 'minn_admin_appearance';
 
-	/** Curated accent presets (not wp-admin color schemes). */
-	public static function accent_presets() {
-		return array( 'minn', 'ocean', 'forest', 'amber', 'rose', 'coral', 'teal', 'slate' );
+	/** Configurable scheme slots → CSS custom properties. */
+	public static function scheme_slots() {
+		return array(
+			'bg'       => '--bg',
+			'bg2'      => '--bg2',
+			'panel'    => '--panel',
+			'panel2'   => '--panel2',
+			'hover'    => '--hover',
+			'border'   => '--border',
+			'border2'  => '--border2',
+			'text'     => '--text',
+			'text2'    => '--text2',
+			'text3'    => '--text3',
+			'accent'   => '--accent',
+			'accent2'  => '--accent2',
+			'accentFg' => '--accent-fg',
+		);
+	}
+
+	/** Named schemes (not wp-admin color schemes). CSS owns the token maps. */
+	public static function scheme_ids() {
+		return array( 'minn', 'ocean', 'forest', 'amber', 'rose', 'coral', 'teal', 'slate', 'dusk' );
+	}
+
+	/**
+	 * Default Minn tokens for dark/light — also the fill base for incomplete custom maps.
+	 *
+	 * @return array{dark:array<string,string>,light:array<string,string>}
+	 */
+	public static function scheme_base_tokens() {
+		return array(
+			'dark'  => array(
+				'bg'       => '#0b0b0d',
+				'bg2'      => '#101013',
+				'panel'    => '#151518',
+				'panel2'   => '#1b1b1f',
+				'hover'    => '#202027',
+				'border'   => '#242429',
+				'border2'  => '#31313a',
+				'text'     => '#ececed',
+				'text2'    => '#9d9da7',
+				'text3'    => '#63636d',
+				'accent'   => '#6e62f5',
+				'accent2'  => '#8a80f8',
+				'accentFg' => '#ffffff',
+			),
+			'light' => array(
+				'bg'       => '#f6f6f7',
+				'bg2'      => '#ffffff',
+				'panel'    => '#ffffff',
+				'panel2'   => '#f4f4f6',
+				'hover'    => '#eeeef1',
+				'border'   => '#e7e7ea',
+				'border2'  => '#dadade',
+				'text'     => '#1a1a1f',
+				'text2'    => '#5e5e69',
+				'text3'    => '#9696a0',
+				'accent'   => '#6a5ef2',
+				'accent2'  => '#5a4ef0',
+				'accentFg' => '#ffffff',
+			),
+		);
 	}
 
 	public static function appearance_defaults() {
 		return array(
-			'accent' => 'minn',
-			'custom' => '',
+			'scheme' => 'minn',
+			'custom' => self::scheme_base_tokens(),
 		);
 	}
 
 	/**
-	 * Normalize a raw appearance array (meta, REST body, boot).
+	 * Sanitize a single #rgb / #rrggbb value → lowercase #rrggbb or ''.
+	 */
+	public static function sanitize_hex_color( $hex ) {
+		$hex = strtolower( trim( (string) $hex ) );
+		if ( ! preg_match( '/^#([0-9a-f]{3}|[0-9a-f]{6})$/', $hex ) ) {
+			return '';
+		}
+		if ( 4 === strlen( $hex ) ) {
+			return '#' . $hex[1] . $hex[1] . $hex[2] . $hex[2] . $hex[3] . $hex[3];
+		}
+		return $hex;
+	}
+
+	/**
+	 * Merge a partial slot map onto the Minn base for one mode.
+	 *
+	 * @param array  $partial Raw slot => hex map.
+	 * @param string $mode    dark|light
+	 * @return array<string,string>
+	 */
+	public static function normalize_scheme_tokens( $partial, $mode ) {
+		$base  = self::scheme_base_tokens();
+		$mode  = ( 'light' === $mode ) ? 'light' : 'dark';
+		$out   = $base[ $mode ];
+		$slots = array_keys( self::scheme_slots() );
+		if ( ! is_array( $partial ) ) {
+			return $out;
+		}
+		foreach ( $slots as $slot ) {
+			if ( empty( $partial[ $slot ] ) ) {
+				continue;
+			}
+			$hex = self::sanitize_hex_color( $partial[ $slot ] );
+			if ( $hex ) {
+				$out[ $slot ] = $hex;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Normalize appearance meta / REST body. Migrates legacy {accent,custom:#hex}.
 	 *
 	 * @param mixed $raw User meta value or request params.
-	 * @return array{accent:string,custom:string}
+	 * @return array{scheme:string,custom:array{dark:array,light:array}}
 	 */
 	public static function normalize_appearance( $raw ) {
 		$defaults = self::appearance_defaults();
 		if ( ! is_array( $raw ) ) {
 			return $defaults;
 		}
-		$presets = self::accent_presets();
-		$accent  = isset( $raw['accent'] ) ? sanitize_key( (string) $raw['accent'] ) : 'minn';
-		if ( 'custom' !== $accent && ! in_array( $accent, $presets, true ) ) {
-			$accent = 'minn';
-		}
-		$custom = '';
-		if ( ! empty( $raw['custom'] ) ) {
-			$hex = strtolower( trim( (string) $raw['custom'] ) );
-			if ( preg_match( '/^#([0-9a-f]{3}|[0-9a-f]{6})$/', $hex ) ) {
-				// Expand #rgb → #rrggbb.
-				if ( 4 === strlen( $hex ) ) {
-					$custom = '#' . $hex[1] . $hex[1] . $hex[2] . $hex[2] . $hex[3] . $hex[3];
-				} else {
-					$custom = $hex;
+
+		// Legacy v1: { accent: preset|custom, custom: '#hex' }.
+		if ( ! isset( $raw['scheme'] ) && isset( $raw['accent'] ) ) {
+			$accent = sanitize_key( (string) $raw['accent'] );
+			$ids    = self::scheme_ids();
+			if ( 'custom' === $accent ) {
+				$hex = self::sanitize_hex_color( isset( $raw['custom'] ) ? $raw['custom'] : '' );
+				$custom = $defaults['custom'];
+				if ( $hex ) {
+					// Seed both modes from Minn, swap brand accents only.
+					foreach ( array( 'dark', 'light' ) as $mode ) {
+						$custom[ $mode ]['accent'] = $hex;
+						// Mild second tone: leave accent2 as base unless light needs darker.
+						if ( 'light' === $mode ) {
+							$custom[ $mode ]['accent2'] = $hex;
+						} else {
+							$custom[ $mode ]['accent2'] = $hex;
+						}
+					}
 				}
+				return array(
+					'scheme' => $hex ? 'custom' : 'minn',
+					'custom' => $custom,
+				);
 			}
+			if ( in_array( $accent, $ids, true ) ) {
+				return array(
+					'scheme' => $accent,
+					'custom' => $defaults['custom'],
+				);
+			}
+			return $defaults;
 		}
-		if ( 'custom' === $accent && '' === $custom ) {
-			// Custom without a valid hex falls back to Minn.
-			$accent = 'minn';
+
+		$ids    = self::scheme_ids();
+		$scheme = isset( $raw['scheme'] ) ? sanitize_key( (string) $raw['scheme'] ) : 'minn';
+		if ( 'custom' !== $scheme && ! in_array( $scheme, $ids, true ) ) {
+			$scheme = 'minn';
 		}
-		if ( 'custom' !== $accent ) {
-			$custom = '';
+
+		$custom_in = isset( $raw['custom'] ) && is_array( $raw['custom'] ) ? $raw['custom'] : array();
+		// Legacy custom was a string hex — ignore here (handled above).
+		if ( ! is_array( $custom_in ) ) {
+			$custom_in = array();
 		}
+		$custom = array(
+			'dark'  => self::normalize_scheme_tokens( isset( $custom_in['dark'] ) ? $custom_in['dark'] : array(), 'dark' ),
+			'light' => self::normalize_scheme_tokens( isset( $custom_in['light'] ) ? $custom_in['light'] : array(), 'light' ),
+		);
+
 		return array(
-			'accent' => $accent,
+			'scheme' => $scheme,
 			'custom' => $custom,
 		);
 	}
@@ -370,8 +501,35 @@ class Minn_Admin {
 				'name'       => $user->display_name,
 				'role'       => translate_user_role( $role ),
 				'avatar'     => get_avatar_url( $user->ID, array( 'size' => 64 ) ),
-				// Per-user accent palette (user meta minn_admin_appearance).
+				// Per-user color scheme (user meta minn_admin_appearance).
 				'appearance' => self::get_user_appearance( $user->ID ),
+			),
+			// Scheme slot metadata for the profile custom editor (key + CSS var + label).
+			'appearanceSlots' => array_map(
+				function ( $css, $key ) {
+					$labels = array(
+						'bg'       => 'Background',
+						'bg2'      => 'Background elevated',
+						'panel'    => 'Panel',
+						'panel2'   => 'Panel elevated',
+						'hover'    => 'Hover',
+						'border'   => 'Border',
+						'border2'  => 'Border strong',
+						'text'     => 'Text',
+						'text2'    => 'Text secondary',
+						'text3'    => 'Text muted',
+						'accent'   => 'Accent',
+						'accent2'  => 'Accent hover / links',
+						'accentFg' => 'Text on accent',
+					);
+					return array(
+						'key'   => $key,
+						'css'   => $css,
+						'label' => isset( $labels[ $key ] ) ? $labels[ $key ] : $key,
+					);
+				},
+				array_values( self::scheme_slots() ),
+				array_keys( self::scheme_slots() )
 			),
 			'site'     => array(
 				'name'       => get_bloginfo( 'name' ),

@@ -368,7 +368,7 @@ class Minn_Admin_REST {
 			)
 		);
 
-		// Current user's Minn UI appearance (accent palette). Self only.
+		// Current user's Minn UI appearance (color scheme). Self only.
 		register_rest_route(
 			self::NS,
 			'/me/appearance',
@@ -387,12 +387,17 @@ class Minn_Admin_REST {
 						return is_user_logged_in() && current_user_can( 'edit_posts' );
 					},
 					'args'                => array(
-						'accent' => array(
+						'scheme' => array(
 							'type'              => 'string',
 							'required'          => false,
 							'sanitize_callback' => 'sanitize_key',
 						),
 						'custom' => array(
+							'type'     => 'object',
+							'required' => false,
+						),
+						// Legacy fields still accepted and migrated in normalize_appearance.
+						'accent' => array(
 							'type'     => 'string',
 							'required' => false,
 						),
@@ -2377,22 +2382,38 @@ class Minn_Admin_REST {
 	}
 
 	/**
-	 * GET minn-admin/v1/me/appearance — current user's accent preference.
+	 * GET minn-admin/v1/me/appearance — current user's color scheme preference.
 	 */
 	public static function get_my_appearance() {
 		return rest_ensure_response( Minn_Admin::get_user_appearance( get_current_user_id() ) );
 	}
 
 	/**
-	 * POST minn-admin/v1/me/appearance — save accent for the current user only.
+	 * POST minn-admin/v1/me/appearance — save scheme for the current user only.
+	 * Body: { scheme, custom?: { dark: {slot:hex}, light: {slot:hex} } }
+	 * Partial custom maps merge onto Minn defaults. Legacy {accent,custom:#hex}
+	 * still migrates via normalize_appearance.
 	 */
 	public static function update_my_appearance( WP_REST_Request $request ) {
-		$uid  = get_current_user_id();
-		$cur  = Minn_Admin::get_user_appearance( $uid );
-		$raw  = array(
-			'accent' => $request->has_param( 'accent' ) ? $request->get_param( 'accent' ) : $cur['accent'],
-			'custom' => $request->has_param( 'custom' ) ? $request->get_param( 'custom' ) : $cur['custom'],
+		$uid = get_current_user_id();
+		$cur = Minn_Admin::get_user_appearance( $uid );
+		// JSON body may put nested custom under get_json_params.
+		$json = $request->get_json_params();
+		if ( ! is_array( $json ) ) {
+			$json = array();
+		}
+		$raw = array(
+			'scheme' => array_key_exists( 'scheme', $json )
+				? $json['scheme']
+				: ( $request->has_param( 'scheme' ) ? $request->get_param( 'scheme' ) : $cur['scheme'] ),
+			'custom' => array_key_exists( 'custom', $json )
+				? $json['custom']
+				: ( $request->has_param( 'custom' ) ? $request->get_param( 'custom' ) : $cur['custom'] ),
 		);
+		// Legacy accent-only body (no scheme key).
+		if ( ! array_key_exists( 'scheme', $json ) && isset( $json['accent'] ) ) {
+			$raw = $json;
+		}
 		$norm = Minn_Admin::save_user_appearance( $uid, $raw );
 		return rest_ensure_response( $norm );
 	}
