@@ -376,6 +376,12 @@ values become links). `adminUrl` links the item's wp-admin screen and suppresses
 
 ## Block inspector forms — `minn_admin_block_forms`
 
+> **Building blocks for Minn?** Start with [content-blocks.md](content-blocks.md): the north
+> star (writing editor vs layout tool), the content-block contract, and when to use islands
+> vs a full schema. This section is the filter/descriptor reference for that contract.
+> [Anchor Blocks](https://github.com/anchorhost/anchor-blocks) `app/MinnAdmin.php` is the
+> reference adapter.
+
 Minn's editor renders complex blocks as read-only islands, and the **block inspector** (the ⚙
 chip on every island) generates a config form from each block's registered attribute schema.
 The schema goes a long way on its own: attributes with an `enum` render as selects, an

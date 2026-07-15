@@ -124,6 +124,11 @@ can produce; that's the parity treadmill editor-direction.md refuses to get on. 
 display and survive edits safely, and WordPress has pushed block development server-side for
 years, so the reachable set keeps growing on its own.
 
+Authors who want first-class Minn editing should follow the **content-block contract** in
+[content-blocks.md](content-blocks.md) (dynamic leaves, PHP schema, optional
+`minn_admin_block_forms`). That is how Anchor Blocks stay editable in Minn without Minn
+becoming a layout runtime.
+
 ## Extension point
 
 Schema types alone can't express intent: `role` is really a user/assistant enum, `content`

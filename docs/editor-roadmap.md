@@ -198,10 +198,21 @@ point were the last items).
 
 ## What we will never build (unchanged, load-bearing)
 
-Columns, groups, patterns, cover blocks, page building, FSE, block parity of any kind.
-Islands make the cost of *not* supporting a block small — it displays, survives, and can
-be configured through the inspector. If a post is mostly layout, Gutenberg is the right
-tool and the handoff is one click. This list is what keeps the editor good.
+**North star:** Minn is the writing editor for WordPress. Gutenberg is the layout tool.
+See [content-blocks.md](content-blocks.md) for the author-facing contract.
+
+Never: columns/groups/covers as a live layout canvas, pattern or design **authoring**,
+page building, FSE, hosting third-party block editor JS, regenerating static `save()` HTML,
+or "block parity" as a KPI.
+
+OK (not the never-build list): **insert** finished patterns/design-library markup as
+islands; content-edit text/images/attrs inside islands; ship **content blocks** that
+Minn edits fully (dynamic + schema-first).
+
+Islands make the cost of *not* supporting a layout block small — it displays, survives, and
+can be configured through the inspector where the server allows. If a post is mostly layout,
+Gutenberg is the right tool and the handoff is one click. This list is what keeps the editor
+good.
 
 ## Engineering posture
 

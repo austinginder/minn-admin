@@ -2,6 +2,10 @@
 
 > Where this is all heading: [editor-roadmap.md](editor-roadmap.md) — the editor as the
 > selling feature, the horizons, and the never-build list.
+>
+> **North star:** Minn is the writing editor for WordPress. Gutenberg is the layout tool.
+> Building document components that stay editable in Minn is welcome; see
+> [content-blocks.md](content-blocks.md).
 
 **Decision: keep and deepen Minn's own editor. Use Gutenberg as the escape hatch, not the foundation.**
 
@@ -92,3 +96,7 @@ excluded: contenteditable splits clone element attributes, which would duplicate
 displays and survives — so there is no pressure to chase parity. If a site's content is mostly
 complex layouts, Gutenberg is simply the right tool and Minn should be great at everything
 *around* the editor.
+
+Authors who want first-class Minn editing should build **content blocks** (dynamic, schema-
+first, words in attributes), not layout kits. The contract and Anchor Blocks reference are in
+[content-blocks.md](content-blocks.md).
