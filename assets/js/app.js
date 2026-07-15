@@ -8122,11 +8122,13 @@
 	}
 
 	// Shared filter/search bar for both Extensions tabs. `counts` is a map of
-	// filter id → count; only ids present get a pill. Wires the pills + search
-	// (client-side; the full plugin/theme set is already cached) to re-render.
+	// filter id → count; zero-count pills are hidden UNLESS that filter is the
+	// active one (otherwise Updates vanishes after the last offer is applied
+	// while extFilter stays 'updates' → empty grid + "No updates plugins"
+	// with All looking de-selected — Austin, 2026-07-15 notif-panel update).
 	function extFilterBarHtml( filters, counts, placeholder ) {
 		const pills = filters
-			.filter( ( [ id ] ) => id === 'all' || counts[ id ] )
+			.filter( ( [ id ] ) => id === 'all' || counts[ id ] || state.extFilter === id )
 			.map( ( [ id, label ] ) =>
 				`<button class="minn-tab${ state.extFilter === id ? ' active' : '' }" data-xfilter="${ id }">${ esc( label ) }${ counts[ id ] != null ? ` <span class="minn-tab-count">${ counts[ id ] }</span>` : '' }</button>` )
 			.join( '' );
@@ -8463,12 +8465,23 @@
 		// innerHTML swap can clamp the scroller to the top mid-list. Restore.
 		const scroller = $( '.minn-scroll' );
 		const keepScrollTop = scroller ? scroller.scrollTop : 0;
-		const updates = state.cache.pluginUpdates;
+		const updates = state.cache.pluginUpdates || {};
 		const updateCount = Object.keys( updates ).length;
 		const queueCount = pluginUpdatePending.size;
 		const bulkBusy = queueCount > 0;
 		const active = plugins.filter( ( p ) => p.status === 'active' ).length;
 		const hasUpd = ( p ) => !! updates[ p.plugin + '.php' ] || pluginUpdatePending.has( p.plugin );
+		// Count remaining offers + anything still in the update queue.
+		const updatesFilterCount = new Set( [
+			...Object.keys( updates ).map( ( k ) => k.replace( /\.php$/, '' ) ),
+			...pluginUpdatePending,
+		] ).size;
+		// After the last plugin update finishes, the Updates filter is empty
+		// and its pill used to vanish — leave the user on a blank "No updates
+		// plugins" page. Snap back to All when nothing is left to show.
+		if ( state.extFilter === 'updates' && updatesFilterCount === 0 ) {
+			state.extFilter = 'all';
+		}
 
 		// Client-side filter + search over the already-cached plugin set.
 		const q = ( state.extSearch || '' ).trim().toLowerCase();
@@ -8484,12 +8497,16 @@
 
 		const filterDefs = [ [ 'all', 'All' ], [ 'active', 'Active' ], [ 'inactive', 'Inactive' ] ];
 		if ( B.caps.update ) filterDefs.push( [ 'updates', 'Updates' ] );
-		// Count remaining offers + anything still in the update queue.
-		const updatesFilterCount = new Set( [
-			...Object.keys( updates ).map( ( k ) => k.replace( /\.php$/, '' ) ),
-			...pluginUpdatePending,
-		] ).size;
 		const counts = { all: plugins.length, active, inactive: plugins.length - active, updates: updatesFilterCount };
+		const emptyMsg = q
+			? 'No plugins match “' + esc( state.extSearch.trim() ) + '”.'
+			: state.extFilter === 'updates'
+				? 'No plugins need updates.'
+				: state.extFilter === 'active'
+					? 'No active plugins.'
+					: state.extFilter === 'inactive'
+						? 'No inactive plugins.'
+						: 'No plugins.';
 
 		view.innerHTML = `
 		${ coreBannerHtml() }
@@ -8550,7 +8567,7 @@
 					</div>
 				</div>`;
 			} ).join( '' ) }
-		</div>` : `<div class="minn-card minn-empty">${ q ? 'No plugins match “' + esc( state.extSearch.trim() ) + '”.' : 'No ' + state.extFilter + ' plugins.' }</div>` }`;
+		</div>` : `<div class="minn-card minn-empty">${ emptyMsg }</div>` }`;
 
 		if ( scroller ) scroller.scrollTop = keepScrollTop;
 		bindCoreBanner( view );
@@ -8747,6 +8764,10 @@
 		}
 		const activeCount = themes.filter( ( t ) => t.active ).length;
 		const updateCount = themes.filter( ( t ) => t.update ).length;
+		// Same stuck-filter trap as plugins when the last theme offer is applied.
+		if ( state.extFilter === 'updates' && updateCount === 0 ) {
+			state.extFilter = 'all';
+		}
 
 		// Client-side filter + search; keep the original index for data-tact refs.
 		const q = ( state.extSearch || '' ).trim().toLowerCase();
@@ -8815,7 +8836,13 @@
 					</div>
 				</div>`;
 			} ).join( '' ) }
-		</div>` : `<div class="minn-card minn-empty">${ q ? 'No themes match “' + esc( state.extSearch.trim() ) + '”.' : 'No ' + state.extFilter + ' themes.' }</div>` }`;
+		</div>` : `<div class="minn-card minn-empty">${ q
+			? 'No themes match “' + esc( state.extSearch.trim() ) + '”.'
+			: state.extFilter === 'updates'
+				? 'No themes need updates.'
+				: state.extFilter === 'active'
+					? 'No active theme.'
+					: 'No themes.' }</div>` }`;
 
 		bindExtTabs( view );
 		bindExtFilterBar( view );
