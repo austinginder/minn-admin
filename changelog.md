@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.16.0** - Unreleased
+
+### Added
+* **Smash Balloon licenses:** Extensions → Licenses gains dedicated rows for Instagram Feed Pro, Custom Facebook Feed Pro, YouTube Feed Pro, Custom Twitter Feeds Pro, Social Wall, Reviews Feed Pro, TikTok Feeds Pro and Feed Analytics Pro. Paste-to-activate, deactivate and re-verify go through Smash Balloon's own EDD store (`smashballoon.com`); an **All Plugins** multi-product key activates each product with that product's own download name.
+
 ## **v0.15.0** - July 15, 2026
 
 The library and daily-ops cycle. Performance settings join a provider family beside Perfmatters, Add plugin opens a marketing-style catalog, Meta Box and Pods land in the editor sidebar next to ACF, WooCommerce Subscriptions gets its own Workspace surface, and Extensions finally feels like a real package manager: card menus, clearer hub links, resilient Update all, and per-row Update on notification offers. Notices and mail keep catching up to real plugins: clickable Allow / No Thanks, ThemeIsle dismiss in-panel, Post SMTP search and delete, and a Fluent Forms suite that closes the last forms-family coverage gap.

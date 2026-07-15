@@ -186,6 +186,334 @@ function minn_admin_license_tec_products() {
 	);
 }
 
+/**
+ * Smash Balloon Pro family. Every product speaks EDD Software Licensing
+ * against https://smashballoon.com/ (including "All Plugins" multi-product
+ * keys). Storage shapes differ by generation:
+ *  - triple: sbi_/cff_/sby_/ctf_/sbsw_ license_key + status + data options
+ *  - settings: Reviews (sbr_settings) / TikTok (sbtt_global_settings) arrays
+ *  - info: Feed Analytics (sb_analytics_license_info {key,status,expires})
+ *
+ * `item_const` is defined only while the plugin is loaded; `fallback_item`
+ * is the EDD download name baked into that build (verified from source).
+ *
+ * @return array
+ */
+function minn_admin_license_smash_products() {
+	return array(
+		'smash-instagram'  => array(
+			'name'          => 'Instagram Feed Pro',
+			'file'          => 'instagram-feed-pro/instagram-feed.php',
+			'item_const'    => 'SBI_PLUGIN_NAME',
+			'fallback_item' => 'Instagram Feed Pro Developer',
+			'storage'       => 'triple',
+			'key_opt'       => 'sbi_license_key',
+			'status_opt'    => 'sbi_license_status',
+			'data_opt'      => 'sbi_license_data',
+		),
+		'smash-facebook'   => array(
+			'name'          => 'Custom Facebook Feed Pro',
+			'file'          => 'custom-facebook-feed-pro/custom-facebook-feed.php',
+			'item_const'    => 'WPW_SL_ITEM_NAME',
+			'fallback_item' => 'Custom Facebook Feed WordPress Plugin Smash',
+			'storage'       => 'triple',
+			'key_opt'       => 'cff_license_key',
+			'status_opt'    => 'cff_license_status',
+			'data_opt'      => 'cff_license_data',
+		),
+		'smash-youtube'    => array(
+			'name'          => 'YouTube Feed Pro',
+			'file'          => 'youtube-feed-pro/youtube-feed.php',
+			'item_const'    => 'SBY_PLUGIN_EDD_NAME',
+			'fallback_item' => 'Youtube Feed Pro Developer',
+			'storage'       => 'triple',
+			'key_opt'       => 'sby_license_key',
+			'status_opt'    => 'sby_license_status',
+			'data_opt'      => 'sby_license_data',
+		),
+		'smash-twitter'    => array(
+			'name'          => 'Custom Twitter Feeds Pro',
+			'file'          => 'custom-twitter-feeds-pro/custom-twitter-feed.php',
+			'item_const'    => 'CTF_PRODUCT_NAME',
+			'fallback_item' => 'Custom Twitter Feeds Developer',
+			'storage'       => 'triple',
+			'key_opt'       => 'ctf_license_key',
+			'status_opt'    => 'ctf_license_status',
+			'data_opt'      => 'ctf_license_data',
+		),
+		'smash-social-wall' => array(
+			'name'          => 'Social Wall',
+			'file'          => 'social-wall/social-wall.php',
+			'item_const'    => 'SBSW_PLUGIN_EDD_NAME',
+			'fallback_item' => 'Social Wall',
+			'storage'       => 'triple',
+			'key_opt'       => 'sbsw_license_key',
+			'status_opt'    => 'sbsw_license_status',
+			'data_opt'      => 'sbsw_license_data',
+		),
+		'smash-reviews'    => array(
+			'name'          => 'Reviews Feed Pro',
+			'file'          => 'reviews-feed-pro/sb-reviews-pro.php',
+			'item_const'    => 'SBR_PLUGIN_NAME',
+			'fallback_item' => 'Reviews Feed Pro',
+			'storage'       => 'settings',
+			'settings_opt'  => 'sbr_settings',
+			'key_field'     => 'license_key',
+			'status_field'  => 'license_status',
+		),
+		'smash-tiktok'     => array(
+			'name'          => 'TikTok Feeds Pro',
+			'file'          => 'tiktok-feeds-pro/tiktok-feeds-pro.php',
+			'item_const'    => 'SBTT_PLUGIN_NAME',
+			'fallback_item' => 'TikTok Feeds Pro Elite',
+			'storage'       => 'settings',
+			'settings_opt'  => 'sbtt_global_settings',
+			'key_field'     => 'license_key',
+			'status_field'  => 'license_status',
+		),
+		'smash-analytics'  => array(
+			'name'          => 'Feed Analytics Pro',
+			'file'          => 'sb-analytics/sb-analytics-pro.php',
+			'item_const'    => 'SB_ANALYTICS_PLUGIN_EDD_NAME',
+			'fallback_item' => 'Feed Analytics Pro',
+			'storage'       => 'info',
+			'info_opt'      => 'sb_analytics_license_info',
+		),
+	);
+}
+
+/**
+ * Smash Balloon EDD Software Licensing request (activate / deactivate / check).
+ * Mirrors each product's own params against smashballoon.com: edd_action,
+ * license, item_name, url. Returns the decoded response as an array (empty on
+ * transport failure).
+ *
+ * @param string $edd_action activate_license|deactivate_license|check_license
+ * @param string $license    License key.
+ * @param string $item_name  EDD download name for this product.
+ * @return array
+ */
+function minn_admin_smash_edd( $edd_action, $license, $item_name ) {
+	$license   = trim( (string) $license );
+	$item_name = (string) $item_name;
+	if ( '' === $license || '' === $item_name ) {
+		return array();
+	}
+	$response = wp_remote_get(
+		esc_url_raw(
+			add_query_arg(
+				array(
+					'edd_action' => $edd_action,
+					'license'    => $license,
+					'item_name'  => rawurlencode( $item_name ),
+					'url'        => home_url(),
+				),
+				'https://smashballoon.com/'
+			)
+		),
+		array(
+			'timeout'   => 30,
+			'sslverify' => true,
+		)
+	);
+	if ( is_wp_error( $response ) ) {
+		return array();
+	}
+	$data = json_decode( wp_remote_retrieve_body( $response ), true );
+	return is_array( $data ) ? $data : array();
+}
+
+/**
+ * Resolve the EDD item name for a Smash product (constant while loaded).
+ *
+ * @param array $sp Product descriptor from minn_admin_license_smash_products().
+ * @return string
+ */
+function minn_admin_smash_item_name( $sp ) {
+	if ( ! empty( $sp['item_const'] ) && defined( $sp['item_const'] ) ) {
+		$v = constant( $sp['item_const'] );
+		if ( is_string( $v ) && '' !== $v ) {
+			return $v;
+		}
+	}
+	return isset( $sp['fallback_item'] ) ? (string) $sp['fallback_item'] : '';
+}
+
+/**
+ * Read key/status/expires from a Smash product's stored options.
+ *
+ * @param array $sp Product descriptor.
+ * @return array{key:string,status:string,expires:string,data:array}
+ */
+function minn_admin_smash_read_store( $sp ) {
+	$out = array(
+		'key'     => '',
+		'status'  => '',
+		'expires' => '',
+		'data'    => array(),
+	);
+	$storage = isset( $sp['storage'] ) ? $sp['storage'] : 'triple';
+	if ( 'triple' === $storage ) {
+		$out['key']    = trim( (string) get_option( $sp['key_opt'], '' ) );
+		$out['status'] = strtolower( trim( (string) get_option( $sp['status_opt'], '' ) ) );
+		$data          = get_option( $sp['data_opt'], array() );
+		if ( is_object( $data ) ) {
+			$data = (array) $data;
+		}
+		$out['data'] = is_array( $data ) ? $data : array();
+		if ( isset( $out['data']['expires'] ) ) {
+			$out['expires'] = (string) $out['data']['expires'];
+		}
+		if ( '' === $out['status'] && isset( $out['data']['license'] ) ) {
+			$out['status'] = strtolower( trim( (string) $out['data']['license'] ) );
+		}
+		return $out;
+	}
+	if ( 'settings' === $storage ) {
+		$settings = get_option( $sp['settings_opt'], array() );
+		if ( ! is_array( $settings ) ) {
+			$settings = array();
+		}
+		$kf            = $sp['key_field'];
+		$sf            = $sp['status_field'];
+		$out['key']    = isset( $settings[ $kf ] ) ? trim( (string) $settings[ $kf ] ) : '';
+		$out['status'] = isset( $settings[ $sf ] ) ? strtolower( trim( (string) $settings[ $sf ] ) ) : '';
+		// Reviews / TikTok may park the EDD payload under license_info; fall
+		// back when the flat status field is empty (post-migration wipe).
+		if ( ! empty( $settings['license_info'] ) && is_array( $settings['license_info'] ) ) {
+			if ( isset( $settings['license_info']['expires'] ) ) {
+				$out['expires'] = (string) $settings['license_info']['expires'];
+			}
+			if ( '' === $out['status'] && isset( $settings['license_info']['license'] ) ) {
+				$out['status'] = strtolower( trim( (string) $settings['license_info']['license'] ) );
+			}
+		}
+		$out['data'] = $settings;
+		return $out;
+	}
+	if ( 'info' === $storage ) {
+		$info = get_option( $sp['info_opt'], array() );
+		if ( ! is_array( $info ) ) {
+			$info = array();
+		}
+		$out['key']     = isset( $info['key'] ) ? trim( (string) $info['key'] ) : '';
+		$out['status']  = isset( $info['status'] ) ? strtolower( trim( (string) $info['status'] ) ) : '';
+		$out['expires'] = isset( $info['expires'] ) ? (string) $info['expires'] : '';
+		$out['data']    = $info;
+		return $out;
+	}
+	return $out;
+}
+
+/**
+ * Persist a Smash license after a successful EDD activate/check.
+ *
+ * @param array  $sp     Product descriptor.
+ * @param string $key    License key.
+ * @param array  $remote Decoded EDD response.
+ */
+function minn_admin_smash_write_store( $sp, $key, $remote ) {
+	$status  = isset( $remote['license'] ) ? (string) $remote['license'] : '';
+	$expires = isset( $remote['expires'] ) ? (string) $remote['expires'] : '';
+	$storage = isset( $sp['storage'] ) ? $sp['storage'] : 'triple';
+	if ( 'triple' === $storage ) {
+		update_option( $sp['key_opt'], $key );
+		update_option( $sp['status_opt'], $status );
+		update_option( $sp['data_opt'], $remote );
+		return;
+	}
+	if ( 'settings' === $storage ) {
+		$settings = get_option( $sp['settings_opt'], array() );
+		if ( ! is_array( $settings ) ) {
+			$settings = array();
+		}
+		$settings[ $sp['key_field'] ]    = $key;
+		$settings[ $sp['status_field'] ] = $status;
+		if ( $remote ) {
+			$settings['license_info'] = $remote;
+		}
+		update_option( $sp['settings_opt'], $settings );
+		return;
+	}
+	if ( 'info' === $storage ) {
+		update_option(
+			$sp['info_opt'],
+			array(
+				'key'     => $key,
+				'status'  => $status,
+				'expires' => $expires,
+			)
+		);
+	}
+}
+
+/**
+ * Clear or mark inactive a Smash license after deactivate (key may stay for
+ * one-click re-activate on Reviews/TikTok; classic products keep the key
+ * and set status inactive, matching their own UI).
+ *
+ * @param array $sp    Product descriptor.
+ * @param array $remote Optional deactivate response.
+ */
+function minn_admin_smash_clear_store( $sp, $remote = array() ) {
+	$storage = isset( $sp['storage'] ) ? $sp['storage'] : 'triple';
+	if ( 'triple' === $storage ) {
+		if ( $remote ) {
+			update_option( $sp['data_opt'], $remote );
+		}
+		update_option( $sp['status_opt'], 'inactive' );
+		return;
+	}
+	if ( 'settings' === $storage ) {
+		$settings = get_option( $sp['settings_opt'], array() );
+		if ( ! is_array( $settings ) ) {
+			$settings = array();
+		}
+		// Preserve license_key for one-click re-activate (Reviews contract).
+		$settings[ $sp['status_field'] ] = '';
+		if ( isset( $settings['license_info'] ) ) {
+			$settings['license_info'] = '';
+		}
+		update_option( $sp['settings_opt'], $settings );
+		return;
+	}
+	if ( 'info' === $storage ) {
+		delete_option( $sp['info_opt'] );
+	}
+}
+
+/**
+ * Map an EDD license response to Minn's {ok,code,message} result shape.
+ *
+ * @param array $remote EDD response array.
+ * @return array
+ */
+function minn_admin_smash_classify( $remote ) {
+	if ( ! $remote ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach smashballoon.com' );
+	}
+	$word  = isset( $remote['license'] ) ? strtolower( (string) $remote['license'] ) : '';
+	$error = isset( $remote['error'] ) ? strtolower( (string) $remote['error'] ) : '';
+	if ( 'valid' === $word ) {
+		return array( 'ok' => true );
+	}
+	if ( 'no_activations_left' === $error || 'no_activations_left' === $word ) {
+		$msg = 'You have reached the maximum number of sites for this Smash Balloon license';
+		if ( isset( $remote['site_count'], $remote['max_sites'] ) ) {
+			$msg .= ' (' . (int) $remote['site_count'] . '/' . (int) $remote['max_sites'] . ')';
+		}
+		return array( 'ok' => false, 'code' => 'site_limit', 'message' => $msg );
+	}
+	if ( 'expired' === $word || 'expired' === $error ) {
+		return array( 'ok' => false, 'code' => 'expired', 'message' => 'This Smash Balloon license has expired' );
+	}
+	$msg = isset( $remote['errorMsg'] ) ? wp_strip_all_tags( (string) $remote['errorMsg'] ) : '';
+	if ( ! $msg && $error ) {
+		$msg = str_replace( '_', ' ', $error );
+	}
+	return array( 'ok' => false, 'code' => 'invalid', 'message' => $msg ? $msg : 'Smash Balloon did not accept that key' );
+}
+
 function minn_admin_license_fingerprints() {
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	$plugins = get_plugins();
@@ -1109,6 +1437,44 @@ function minn_admin_license_default_providers() {
 			) ) );
 		},
 	);
+
+	// Smash Balloon Pro family: dedicated per-product providers (EDD on
+	// smashballoon.com). Covers Instagram / Facebook / YouTube / Twitter /
+	// Social Wall / Reviews / TikTok / Feed Analytics. An "All Plugins"
+	// license activates each product with that product's own EDD item_name.
+	// Actions attach only while the product is loaded (item_const defined).
+	foreach ( minn_admin_license_smash_products() as $pid => $sp ) {
+		$providers[ $pid ] = array(
+			'name'      => $sp['name'],
+			'component' => $sp['file'],
+			'detect'    => function () use ( $has, $sp ) {
+				return $has( $sp['file'] );
+			},
+			'read'      => function () use ( $item, $sp, $edd_state ) {
+				$store = minn_admin_smash_read_store( $sp );
+				if ( '' === $store['key'] ) {
+					return array( $item( array( 'name' => $sp['name'], 'state' => 'missing' ) ) );
+				}
+				list( $state, $note ) = $edd_state( $store['status'] );
+				// inactive / empty status with a stored key = not activated yet
+				if ( in_array( $store['status'], array( '', 'inactive', 'deactivated' ), true ) ) {
+					$state = 'invalid';
+					$note  = $note ? $note : 'key stored but not activated on this site';
+				}
+				$expires = minn_admin_license_expiry( $store['expires'] );
+				if ( minn_admin_license_expired( $expires ) && 'valid' === $state ) {
+					$state = 'expired';
+				}
+				return array( $item( array(
+					'name'    => $sp['name'],
+					'state'   => $state,
+					'key'     => true,
+					'expires' => $expires,
+					'note'    => $note,
+				) ) );
+			},
+		);
+	}
 
 	// Anything ELSE speaking PUE or Uplink, registry-style: presence-only for
 	// PUE (no local validity), status-classified for Uplink. Slugs the
@@ -2087,6 +2453,112 @@ function minn_admin_license_default_providers() {
 				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No license key stored' );
 			}
 			return $ls_activate( $code );
+		};
+	}
+
+	// Smash Balloon: EDD activate/deactivate/check against smashballoon.com
+	// using each product's own item_name. Snapshot-restore key+status on a
+	// rejected activate so a bad paste never clobbers a working seat.
+	foreach ( minn_admin_license_smash_products() as $pid => $sp ) {
+		if ( empty( $providers[ $pid ] ) ) {
+			continue;
+		}
+		// Actions need the product loaded so constants/option writers match
+		// the vendor's own storage shape.
+		if ( empty( $sp['item_const'] ) || ! defined( $sp['item_const'] ) ) {
+			continue;
+		}
+		$providers[ $pid ]['secret_label'] = $sp['name'] . ' license key';
+		$providers[ $pid ]['activate']     = function ( $secret ) use ( $sp ) {
+			$secret = trim( (string) $secret );
+			$item   = minn_admin_smash_item_name( $sp );
+			if ( '' === $secret || '' === $item ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Missing license key or product name' );
+			}
+			$snap = minn_admin_smash_read_store( $sp );
+			$remote = minn_admin_smash_edd( 'activate_license', $secret, $item );
+			$out    = minn_admin_smash_classify( $remote );
+			if ( ! empty( $out['ok'] ) ) {
+				minn_admin_smash_write_store( $sp, $secret, $remote );
+				return $out;
+			}
+			// Snapshot-restore: never leave a rejected key as "active".
+			if ( '' !== $snap['key'] ) {
+				if ( 'info' === $sp['storage'] ) {
+					update_option(
+						$sp['info_opt'],
+						array(
+							'key'     => $snap['key'],
+							'status'  => $snap['status'],
+							'expires' => $snap['expires'],
+						)
+					);
+				} elseif ( 'settings' === $sp['storage'] ) {
+					$settings = get_option( $sp['settings_opt'], array() );
+					if ( ! is_array( $settings ) ) {
+						$settings = array();
+					}
+					$settings[ $sp['key_field'] ]    = $snap['key'];
+					$settings[ $sp['status_field'] ] = $snap['status'];
+					update_option( $sp['settings_opt'], $settings );
+				} else {
+					update_option( $sp['key_opt'], $snap['key'] );
+					update_option( $sp['status_opt'], $snap['status'] );
+					if ( $snap['data'] ) {
+						update_option( $sp['data_opt'], $snap['data'] );
+					}
+				}
+			} else {
+				// No prior key: ensure we did not partially write on a weird path.
+				// activate_license only writes on success above, so nothing to undo.
+			}
+			return $out;
+		};
+		$providers[ $pid ]['deactivate'] = function () use ( $sp ) {
+			$store = minn_admin_smash_read_store( $sp );
+			$item  = minn_admin_smash_item_name( $sp );
+			if ( '' === $store['key'] || '' === $item ) {
+				minn_admin_smash_clear_store( $sp );
+				return array( 'ok' => true, 'message' => 'No active Smash Balloon license on this product' );
+			}
+			$remote = minn_admin_smash_edd( 'deactivate_license', $store['key'], $item );
+			minn_admin_smash_clear_store( $sp, $remote );
+			return array( 'ok' => true, 'message' => 'License deactivated for ' . $sp['name'] );
+		};
+		$providers[ $pid ]['verify'] = function () use ( $sp ) {
+			$store = minn_admin_smash_read_store( $sp );
+			$item  = minn_admin_smash_item_name( $sp );
+			if ( '' === $store['key'] || '' === $item ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key is stored' );
+			}
+			$remote = minn_admin_smash_edd( 'check_license', $store['key'], $item );
+			$out    = minn_admin_smash_classify( $remote );
+			if ( ! empty( $out['ok'] ) ) {
+				minn_admin_smash_write_store( $sp, $store['key'], $remote );
+			} elseif ( $remote ) {
+				// Record the failed status without clearing the key.
+				if ( 'triple' === $sp['storage'] && isset( $remote['license'] ) ) {
+					update_option( $sp['status_opt'], (string) $remote['license'] );
+					update_option( $sp['data_opt'], $remote );
+				} elseif ( 'settings' === $sp['storage'] && isset( $remote['license'] ) ) {
+					$settings = get_option( $sp['settings_opt'], array() );
+					if ( ! is_array( $settings ) ) {
+						$settings = array();
+					}
+					$settings[ $sp['status_field'] ] = (string) $remote['license'];
+					update_option( $sp['settings_opt'], $settings );
+				} elseif ( 'info' === $sp['storage'] && isset( $remote['license'] ) ) {
+					update_option(
+						$sp['info_opt'],
+						array(
+							'key'     => $store['key'],
+							'status'  => (string) $remote['license'],
+							'expires' => isset( $remote['expires'] ) ? (string) $remote['expires'] : '',
+						)
+					);
+				}
+			}
+			return $out;
 		};
 	}
 

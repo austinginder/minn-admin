@@ -327,17 +327,22 @@ Gravity Forms 2,543 sites, Gravity SMTP 1,440, Elementor Pro 1,191, ACF PRO
    Kadence Blocks Pro shipped the same day, same verification.
 4. ~~**Gravity Wiz / Gravity Perks**~~ SHIPPED (~103 sites): pairs with GF.
 5. ~~**Rank Math Pro**~~ SHIPPED (92), ~~**SearchWP**~~ SHIPPED (87),
-   ~~**Soflyy WP All Import/Export Pro**~~ SHIPPED (81+), **Yoast Premium**
-   (78, still open), **Smash Balloon** (64, still open), **Admin Columns
-   Pro** (140, reader already covers it).
+   ~~**Soflyy WP All Import/Export Pro**~~ SHIPPED (81+), ~~**Smash Balloon**~~
+   SHIPPED (2026-07-15: full activate/deactivate/verify for Instagram Feed
+   Pro, Custom Facebook Feed Pro, YouTube Feed Pro, Custom Twitter Feeds Pro,
+   Social Wall, Reviews Feed Pro, TikTok Feeds Pro, Feed Analytics Pro via
+   EDD on smashballoon.com; "All Plugins" multi-product keys activate each
+   product with its own EDD item_name; real-key pass 2026-07-15), **Yoast
+   Premium** (78, still open), **Admin Columns Pro** (140, reader already
+   covers it).
 6. **Cheap wins**: ~~Perfmatters~~ (142) and ~~GP Premium~~ both got
    dedicated readers this wave (the generic sweep does NOT cover them:
    renamed and nonstandard option names). Still open with no vendor code:
    Search & Filter Pro, Unlimited Elements, Stackable Premium, Permalink
    Manager Pro (verify the Freemius/EDD sweeps light these up).
 
-Remaining fleet-ranked open work: Yoast Premium, Smash Balloon, and the
-long-tail Freemius/EDD verification list above.
+Remaining fleet-ranked open work: Yoast Premium and the long-tail
+Freemius/EDD verification list above.
 
 Test builds source from the CaptainCore quicksave repos
 (`captaincore quicksave archive` extracts a plugin/theme zip from a
@@ -414,6 +419,6 @@ Elementor Pro, ACF PRO, WP Rocket, Gravity Forms, Gravity SMTP, Beaver
 Builder, Brizy Pro, Etch, Bricks, Divi, and the fleet-ranked tail (WPMU DEV,
 Smush Pro, SearchWP, Gravity Perks, Rank Math Pro, Perfmatters, GP Premium,
 WP All Import/Export Pro, Slider Revolution, LayerSlider, Avada, Envato
-Market, The Events Calendar family + StellarWP Uplink). Remaining: a
-real-key activation pass by the owner, then Yoast Premium, Smash Balloon,
-and the long-tail Freemius/EDD verification list.
+Market, The Events Calendar family + StellarWP Uplink, Smash Balloon family).
+Remaining: a real-key activation pass by the owner for anything still untested,
+then Yoast Premium and the long-tail Freemius/EDD verification list.

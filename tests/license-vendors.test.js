@@ -78,17 +78,26 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			t.check( `${ name } → ${ want }`, got && got.state === want, got ? `${ got.state } "${ got.meta }"` : 'row missing' );
 		}
 
-		// The Events Calendar family + Kadence Blocks Pro are LIVE fixtures
-		// (active plugins, real license machinery, two with keys embedded in
-		// the build that re-seed themselves), so their states drift with
-		// reality. Assert the dedicated providers exist and carry the action
-		// set the vendor code allows, never an exact pill.
+		// The Events Calendar family + Kadence Blocks Pro + Smash Balloon are
+		// LIVE fixtures (active plugins, real license machinery; TEC has
+		// builds that re-seed embedded keys). States drift with reality.
+		// Assert the dedicated providers exist and carry the action set the
+		// vendor code allows, never an exact pill.
 		const FAMILY = [
 			'The Events Calendar Pro',
 			'The Events Calendar Community',
 			'The Events Calendar Filter Bar',
 			'Event Tickets Plus',
 			'Kadence Blocks Pro',
+			// Smash Balloon (EDD on smashballoon.com; All Plugins key covers each).
+			'Instagram Feed Pro',
+			'Custom Facebook Feed Pro',
+			'YouTube Feed Pro',
+			'Custom Twitter Feeds Pro',
+			'Social Wall',
+			'Reviews Feed Pro',
+			'TikTok Feeds Pro',
+			'Feed Analytics Pro',
 		];
 		for ( const name of FAMILY ) {
 			const info = await page.evaluate( ( n ) => {
