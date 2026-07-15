@@ -9,8 +9,9 @@
  * the magic key 'minn-valid-key-2026' validates, everything else 401s.
  *
  * Fixtures: ai-provider-for-anthropic ACTIVE (its setting is registered, so
- * the Anthropic card carries the key field), ai-provider-for-google and
- * -openai not installed (install path renders), akismet installed-inactive.
+ * the Anthropic card carries the key field), akismet installed-inactive.
+ * OpenAI / Google may be installed mid-session (Austin dogfoods Install &
+ * activate) — the suite asserts a sane card state, not a fixed install pill.
  */
 const { launch, login, reporter, BASE } = require( './helpers' );
 
@@ -78,7 +79,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			/Anthropic/.test( anthropic ) && !! ( await page.$( '[data-conn-card="anthropic"] [data-conn-key]' ) ), anthropic.slice( 0, 120 ) );
 		t.check( 'Anthropic starts Not connected', /Not connected/.test( anthropic ) );
 		const openai = await cardText( 'openai' );
-		t.check( 'uninstalled provider offers install', /Install & activate/.test( openai ), openai.slice( 0, 160 ) );
+		// Live-robust: not installed → Install; installed inactive → Activate;
+		// active → key field. Never an empty / "couldn't be loaded" card.
+		const openaiOk = /Install & activate/.test( openai )
+			|| /Activate/.test( openai )
+			|| !! ( await page.$( '[data-conn-card="openai"] [data-conn-key]' ) )
+			|| /Key in wp-config|Key in environment|Connected|Not connected/.test( openai );
+		t.check( 'OpenAI card is actionable (install, activate, or key)', openaiOk, openai.slice( 0, 200 ) );
 		const akismet = await cardText( 'akismet' );
 		t.check( 'installed-inactive companion offers activate', /installed but not active/.test( akismet ) && /Activate/.test( akismet ), akismet.slice( 0, 160 ) );
 		// The href comes from the live AI-client registry metadata (not core's
@@ -125,6 +132,35 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		}, { timeout: 20000 } );
 		t.check( 'remove clears back to Not connected', true );
 		t.check( 'stored key cleared', ( await settingValue() ) === '' );
+
+		/* ===== Failed load → Retry recovers (the OpenAI install empty state) =====
+		 * Block minn-admin/v1/connectors until the failed note paints, then
+		 * unblock and click Retry — cards must repaint without a full page
+		 * reload. The resilient loader retries several times, so keep the
+		 * route blocked for the whole first load. */
+		let blockConnectors = true;
+		await page.route( '**/minn-admin/v1/connectors**', async ( route ) => {
+			if ( blockConnectors ) {
+				await route.abort( 'failed' );
+				return;
+			}
+			await route.continue();
+		} );
+		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-settings-nav-item', { timeout: 20000 } );
+		await page.$$eval( '.minn-settings-nav-item', ( els ) => {
+			const tab = els.find( ( el ) => el.textContent.trim() === 'Connectors' );
+			if ( tab ) tab.click();
+		} );
+		// loadConnectorsResilient retries (~a few seconds of backoff).
+		await page.waitForSelector( '[data-conn-retry]', { timeout: 45000 } );
+		t.check( 'failed connectors load offers Retry', true );
+		blockConnectors = false;
+		await page.click( '[data-conn-retry]' );
+		await page.waitForSelector( '[data-conn-card]', { timeout: 20000 } );
+		t.check( 'Retry repaints connector cards without full reload',
+			!! ( await page.$( '[data-conn-card="anthropic"]' ) ) );
+		await page.unroute( '**/minn-admin/v1/connectors**' ).catch( () => {} );
 	} finally {
 		await page.evaluate( async () => {
 			await fetch( window.MINN.restUrl + 'wp/v2/settings', {

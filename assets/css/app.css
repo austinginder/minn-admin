@@ -1051,6 +1051,9 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-conn-row .minn-input { flex: 1; min-width: 0; }
 .minn-conn-row .minn-toggle-desc { flex: 1; }
 .minn-conn-row button { white-space: nowrap; }
+/* Failed connectors load (post-install worker recycle) — Retry in-place. */
+.minn-conn-failed { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.minn-conn-failed .minn-btn-soft { flex-shrink: 0; }
 /* A linked image's <a> wrapper must not change figure layout, and the
    figure cutout (:has(img)) still matches through it. */
 .minn-editor-body .wp-block-image > a { display: contents; }

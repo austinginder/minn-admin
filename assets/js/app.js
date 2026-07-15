@@ -7456,6 +7456,24 @@
 		throw lastErr || new Error( 'Could not reload plugins' );
 	}
 
+	// Settings → Connectors list. After Install & activate the PHP worker often
+	// recycles (same class as plugin updates), so a single GET can fail even
+	// though the provider plugin is on disk. Retry rather than paint
+	// "Connectors couldn't be loaded" over a successful install.
+	async function loadConnectorsResilient( attempts = 6 ) {
+		let lastErr = null;
+		for ( let i = 0; i < attempts; i++ ) {
+			try {
+				return await api( 'minn-admin/v1/connectors' );
+			} catch ( e ) {
+				lastErr = e;
+				if ( isFetchDrop( e ) ) await waitForRestAlive( 8000 );
+				else await new Promise( ( r ) => setTimeout( r, 500 + i * 400 ) );
+			}
+		}
+		throw lastErr || new Error( 'Could not load connectors' );
+	}
+
 	// Single-plugin updates MUST run one at a time. Concurrent
 	// Plugin_Upgrader runs race on the filesystem and recycle the worker,
 	// so a second in-flight update (and the follow-up list fetch) die with
@@ -9594,7 +9612,7 @@
 			api( 'minn-admin/v1/permalinks' ).catch( () => null ),
 			api( 'minn-admin/v1/spam' ).catch( () => null ),
 			B.caps.editCss ? api( 'minn-admin/v1/custom-css' ).catch( () => null ) : Promise.resolve( null ),
-			B.connectors ? api( 'minn-admin/v1/connectors' ).catch( () => null ) : Promise.resolve( null ),
+			B.connectors ? loadConnectorsResilient().catch( () => null ) : Promise.resolve( null ),
 		] );
 		const siteIcon = values.site_icon
 			? await api( `wp/v2/media/${ values.site_icon }?_fields=id,source_url,media_details` )
@@ -10070,7 +10088,12 @@
 				const cn = cache.connectors;
 				let cards;
 				if ( ! cn || ! cn.supported ) {
-					cards = '<div class="minn-editor-locked-note">Connectors couldn’t be loaded.</div>';
+					// Transient after Install & activate (worker recycle) — Retry
+					// re-fetches without a full page reload.
+					cards = `<div class="minn-editor-locked-note minn-conn-failed">
+						<span>Connectors couldn’t be loaded.</span>
+						<button type="button" class="minn-btn-soft" data-conn-retry>Retry</button>
+					</div>`;
 				} else {
 					const TYPE_LABELS = { ai_provider: 'AI provider', spam_filtering: 'Spam filtering' };
 					cards = cn.connectors.map( ( c ) => {
@@ -10207,10 +10230,53 @@
 		// provider — an invalid key comes back reset to ''. That reset IS the
 		// rejection signal; on it the typed key stays selected for a retype
 		// (the licenses-card failed-activate UX), and nothing is stored.
-		const connRefresh = async () => {
-			cache.connectors = await api( 'minn-admin/v1/connectors' ).catch( () => null );
-			renderSettings();
+		//
+		// Install/activate recycle the PHP worker (FrankenPHP / OPcache). Never
+		// paint "Connectors couldn't be loaded" from a single dropped fetch —
+		// wait for REST, retry, and only then fall through to Retry UI.
+		const connApply = ( next ) => {
+			if ( state.cache.settings ) state.cache.settings.connectors = next;
+			// Local `cache` is the object renderSettings closed over; keep it
+			// in sync when it is still the live settings object.
+			if ( cache && state.cache.settings === cache ) cache.connectors = next;
 		};
+		const connRefresh = async () => {
+			try {
+				const next = await loadConnectorsResilient();
+				connApply( next );
+				renderSettings();
+			} catch ( e ) {
+				// Keep the previous list when we have one (save/clear path).
+				if ( cache.connectors && cache.connectors.supported ) {
+					toast( 'Could not refresh connectors — try again in a moment.', true );
+					renderSettings();
+					return;
+				}
+				connApply( null );
+				renderSettings();
+			}
+		};
+		// Full settings rebuild after install/activate: refreshAfterPluginChange
+		// nulls the settings cache (spam/SEO providers change with plugins), so
+		// re-enter through loadSettings rather than patching an orphaned object.
+		const connAfterPluginChange = async () => {
+			await waitForRestAlive( 20000 );
+			try { await refreshAfterPluginChange(); } catch ( e ) { /* surfaces optional */ }
+			state.cache.settings = null;
+			if ( state.route !== 'settings' ) return;
+			try {
+				await loadSettings();
+			} catch ( e ) {
+				// loadSettings may still leave connectors null; Retry covers it.
+			}
+			if ( state.route === 'settings' ) renderSettings();
+		};
+		const connRetry = $( '[data-conn-retry]', view );
+		if ( connRetry ) connRetry.addEventListener( 'click', async () => {
+			connRetry.disabled = true;
+			connRetry.textContent = 'Loading…';
+			await connRefresh();
+		} );
 		$$( '[data-conn-save]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const input = $( '[data-conn-key]', btn.closest( '[data-conn-card]' ) );
@@ -10255,10 +10321,14 @@
 				btn.disabled = true;
 				btn.textContent = 'Installing…';
 				try {
-					await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: btn.dataset.connInstall, status: 'active' } ) } );
+					try {
+						await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: btn.dataset.connInstall, status: 'active' } ) } );
+					} catch ( e ) {
+						// Install often succeeds; the reply dies with the worker.
+						if ( ! isFetchDrop( e ) ) throw e;
+					}
 					toast( 'Provider plugin installed' );
-					refreshAfterPluginChange();
-					await connRefresh();
+					await connAfterPluginChange();
 				} catch ( e ) {
 					toast( e.message, true );
 					btn.disabled = false;
@@ -10270,10 +10340,13 @@
 			btn.addEventListener( 'click', async () => {
 				btn.disabled = true;
 				try {
-					await api( 'wp/v2/plugins/' + btn.dataset.connActivate.replace( /\.php$/, '' ), { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+					try {
+						await api( 'wp/v2/plugins/' + btn.dataset.connActivate.replace( /\.php$/, '' ), { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+					} catch ( e ) {
+						if ( ! isFetchDrop( e ) ) throw e;
+					}
 					toast( 'Provider plugin activated' );
-					refreshAfterPluginChange();
-					await connRefresh();
+					await connAfterPluginChange();
 				} catch ( e ) { toast( e.message, true ); btn.disabled = false; }
 			} )
 		);
