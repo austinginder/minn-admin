@@ -368,6 +368,39 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Current user's Minn UI appearance (accent palette). Self only.
+		register_rest_route(
+			self::NS,
+			'/me/appearance',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'get_my_appearance' ),
+					'permission_callback' => function () {
+						return is_user_logged_in() && current_user_can( 'edit_posts' );
+					},
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'update_my_appearance' ),
+					'permission_callback' => function () {
+						return is_user_logged_in() && current_user_can( 'edit_posts' );
+					},
+					'args'                => array(
+						'accent' => array(
+							'type'              => 'string',
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_key',
+						),
+						'custom' => array(
+							'type'     => 'string',
+							'required' => false,
+						),
+					),
+				),
+			)
+		);
+
 		// Users list with session-status filter (active / expired / never).
 		// Core wp/v2/users can't filter on session_tokens (serialized meta with
 		// nested expiration), so this endpoint classifies tokens in PHP then
@@ -2341,6 +2374,27 @@ class Minn_Admin_REST {
 				'themes'  => $theme_map,
 			)
 		);
+	}
+
+	/**
+	 * GET minn-admin/v1/me/appearance — current user's accent preference.
+	 */
+	public static function get_my_appearance() {
+		return rest_ensure_response( Minn_Admin::get_user_appearance( get_current_user_id() ) );
+	}
+
+	/**
+	 * POST minn-admin/v1/me/appearance — save accent for the current user only.
+	 */
+	public static function update_my_appearance( WP_REST_Request $request ) {
+		$uid  = get_current_user_id();
+		$cur  = Minn_Admin::get_user_appearance( $uid );
+		$raw  = array(
+			'accent' => $request->has_param( 'accent' ) ? $request->get_param( 'accent' ) : $cur['accent'],
+			'custom' => $request->has_param( 'custom' ) ? $request->get_param( 'custom' ) : $cur['custom'],
+		);
+		$norm = Minn_Admin::save_user_appearance( $uid, $raw );
+		return rest_ensure_response( $norm );
 	}
 
 	/**

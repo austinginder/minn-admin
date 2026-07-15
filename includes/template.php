@@ -57,6 +57,50 @@ try {
 	}
 } catch ( e ) {}
 window.MINN = <?php echo wp_json_encode( $boot ); ?>;
+// Accent palette from user meta (boot.user.appearance) — apply before paint
+// so a custom/preset color doesn't flash the default violet.
+(function () {
+	try {
+		var ap = ( window.MINN && window.MINN.user && window.MINN.user.appearance ) || { accent: 'minn', custom: '' };
+		var root = document.documentElement;
+		var accent = ap.accent || 'minn';
+		root.setAttribute( 'data-accent', accent );
+		if ( accent !== 'custom' || ! ap.custom ) {
+			root.style.removeProperty( '--accent' );
+			root.style.removeProperty( '--accent2' );
+			root.style.removeProperty( '--accent-soft' );
+			root.style.removeProperty( '--accent-fg' );
+			return;
+		}
+		// Compact custom derivation (mirrored in app.js applyAppearance).
+		var hex = String( ap.custom ).replace( /^#/, '' );
+		if ( hex.length === 3 ) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+		if ( ! /^[0-9a-fA-F]{6}$/.test( hex ) ) return;
+		var r = parseInt( hex.slice( 0, 2 ), 16 ), g = parseInt( hex.slice( 2, 4 ), 16 ), b = parseInt( hex.slice( 4, 6 ), 16 );
+		var mode = root.getAttribute( 'data-theme' ) || 'dark';
+		function clamp( n ) { return Math.max( 0, Math.min( 255, Math.round( n ) ) ); }
+		function toHex( rr, gg, bb ) {
+			return '#' + [ rr, gg, bb ].map( function ( n ) {
+				var s = clamp( n ).toString( 16 );
+				return s.length === 1 ? '0' + s : s;
+			} ).join( '' );
+		}
+		function mix( t ) {
+			// t > 0 lighten toward white; t < 0 darken toward black.
+			if ( t >= 0 ) return toHex( r + ( 255 - r ) * t, g + ( 255 - g ) * t, b + ( 255 - b ) * t );
+			var k = 1 + t;
+			return toHex( r * k, g * k, b * k );
+		}
+		var base = '#' + hex.toLowerCase();
+		var accent2 = mode === 'light' ? mix( -0.12 ) : mix( 0.18 );
+		var softA = mode === 'light' ? 0.10 : 0.15;
+		var lum = ( 0.2126 * r + 0.7152 * g + 0.0722 * b ) / 255;
+		root.style.setProperty( '--accent', base );
+		root.style.setProperty( '--accent2', accent2 );
+		root.style.setProperty( '--accent-soft', 'rgba(' + r + ',' + g + ',' + b + ',' + softA + ')' );
+		root.style.setProperty( '--accent-fg', lum > 0.62 ? '#14141a' : '#ffffff' );
+	} catch ( e2 ) {}
+})();
 </script>
 </head>
 <body>

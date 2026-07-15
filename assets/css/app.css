@@ -28,16 +28,40 @@ body {
 :root, [data-theme="dark"] {
   --bg:#0b0b0d; --bg2:#101013; --panel:#151518; --panel2:#1b1b1f; --hover:#202027;
   --border:#242429; --border2:#31313a; --text:#ececed; --text2:#9d9da7; --text3:#63636d;
-  --accent:#6e62f5; --accent2:#8a80f8; --accent-soft:rgba(110,98,245,0.15); --accent-fg:#fff;
+  /* Default accent = Minn violet. Per-user presets via data-accent (user meta
+     minn_admin_appearance); soft/ring derive from --accent so custom works. */
+  --accent:#6e62f5; --accent2:#8a80f8; --accent-fg:#fff;
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 35%, transparent);
   --green:#46b881; --amber:#e0a458; --red:#e46b6b; --blue:#5b9be0; --pink:#d073c0;
   --shadow:0 12px 40px rgba(0,0,0,0.5); --shadow-sm:0 4px 16px rgba(0,0,0,0.35);
 }
 [data-theme="light"] {
   --bg:#f6f6f7; --bg2:#ffffff; --panel:#ffffff; --panel2:#f4f4f6; --hover:#eeeef1;
   --border:#e7e7ea; --border2:#dadade; --text:#1a1a1f; --text2:#5e5e69; --text3:#9696a0;
-  --accent:#6a5ef2; --accent2:#5a4ef0; --accent-soft:rgba(110,98,245,0.10); --accent-fg:#fff;
+  --accent:#6a5ef2; --accent2:#5a4ef0; --accent-fg:#fff;
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 28%, transparent);
   --shadow:0 12px 40px rgba(30,30,50,0.14); --shadow-sm:0 3px 14px rgba(30,30,50,0.08);
 }
+
+/* Accent presets — surface tokens stay on data-theme; only the brand hue changes.
+   Tuned so each reads on both dark panels and light white cards. */
+[data-theme="dark"][data-accent="ocean"]  { --accent:#3b82f6; --accent2:#60a5fa; }
+[data-theme="light"][data-accent="ocean"] { --accent:#2563eb; --accent2:#1d4ed8; }
+[data-theme="dark"][data-accent="forest"]  { --accent:#34a06c; --accent2:#4fc48a; }
+[data-theme="light"][data-accent="forest"] { --accent:#1f8a56; --accent2:#176b43; }
+[data-theme="dark"][data-accent="amber"]  { --accent:#d4923a; --accent2:#e8b05c; }
+[data-theme="light"][data-accent="amber"] { --accent:#c47a18; --accent2:#a36512; }
+[data-theme="dark"][data-accent="rose"]  { --accent:#d063b0; --accent2:#e08cc8; }
+[data-theme="light"][data-accent="rose"] { --accent:#b84496; --accent2:#9a347d; }
+[data-theme="dark"][data-accent="coral"]  { --accent:#e06b5a; --accent2:#f08a7c; }
+[data-theme="light"][data-accent="coral"] { --accent:#d14a38; --accent2:#b53a2a; }
+[data-theme="dark"][data-accent="teal"]  { --accent:#2aa8a0; --accent2:#4bc4bc; }
+[data-theme="light"][data-accent="teal"] { --accent:#1f8a84; --accent2:#176e69; }
+[data-theme="dark"][data-accent="slate"]  { --accent:#7b8599; --accent2:#9aa3b5; }
+[data-theme="light"][data-accent="slate"] { --accent:#5c6678; --accent2:#4a5363; }
+/* minn + custom: minn uses root defaults; custom sets inline CSS vars from JS. */
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
@@ -454,7 +478,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-chart-bar.last { background: var(--accent); }
 .minn-chart-views { background: var(--accent-soft); }
 .minn-chart-visitors { background: var(--accent); opacity: 0.85; }
-.minn-chart-col.hover .minn-chart-views { background: rgba(110,98,245,0.3); }
+.minn-chart-col.hover .minn-chart-views { background: color-mix(in srgb, var(--accent) 30%, transparent); }
 .minn-chart-col.hover .minn-chart-visitors, .minn-chart-col.hover .minn-chart-bar { opacity: 1; background: var(--accent2); }
 
 #minn-chart-tip {
@@ -583,7 +607,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-th-sort.is-active { color: var(--text2); }
 .minn-th-sort:focus-visible {
   outline: none; color: var(--accent2);
-  box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.18);
+  box-shadow: 0 0 0 3px var(--accent-ring);
   border-radius: 4px;
 }
 .minn-table-row { padding: 13px 16px; cursor: pointer; }
@@ -729,7 +753,7 @@ button.minn-nav-label:hover { color: var(--text2); }
   padding: 0; background-color: var(--panel2); position: relative; transition: border-color 0.12s, box-shadow 0.12s;
 }
 .minn-featured-thumb:hover, .minn-featured-thumb:focus-visible {
-  border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.18); outline: none;
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); outline: none;
 }
 .minn-featured-thumb.loading { opacity: 0.55; cursor: wait; }
 .minn-featured-empty {
@@ -1110,6 +1134,43 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-theme-author { color: var(--text2); text-decoration: none; border-bottom: 1px solid var(--border2); }
 .minn-theme-author:hover { color: var(--accent2); border-bottom-color: var(--accent2); }
 
+/* ===== Accent swatches (profile Appearance) ===== */
+.minn-accent-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px;
+}
+.minn-accent-swatch {
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
+  padding: 0; cursor: pointer; background: var(--sw, var(--accent));
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.minn-accent-swatch:hover { transform: scale(1.08); }
+.minn-accent-swatch.sel {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--sw, var(--accent));
+}
+.minn-accent-swatch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+.minn-accent-custom {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel2); border: 1px dashed var(--border2);
+  box-shadow: none;
+}
+.minn-accent-custom.sel {
+  border-style: solid; border-color: transparent;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+.minn-accent-custom input[type="color"] {
+  position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%;
+  cursor: pointer; border: 0; padding: 0;
+}
+.minn-accent-custom-plus {
+  font-size: 16px; font-weight: 600; color: var(--text2); line-height: 1; pointer-events: none;
+}
+.minn-accent-custom.sel .minn-accent-custom-plus { color: var(--accent-fg); }
+
 /* ===== Switch ===== */
 .minn-switch {
   position: relative; width: 34px; height: 20px; border-radius: 20px; border: none; cursor: pointer;
@@ -1352,7 +1413,7 @@ select.minn-input {
   transition: border-color 0.12s, background 0.12s;
 }
 .minn-side-door:hover { border-color: var(--border2); background: var(--hover); }
-.minn-side-door:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.18); }
+.minn-side-door:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 .minn-side-door-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .minn-side-door-title { font-weight: 700; font-size: 14px; color: var(--text); }
 .minn-side-door-sum { font-size: 12.5px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1390,7 +1451,7 @@ select.minn-input {
 }
 .minn-rev-day-clear:focus-visible {
   outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.18);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 .minn-modal-id-tag { font-size: 12.5px; color: var(--text3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .minn-entry { padding: 18px 20px 8px; display: flex; flex-direction: column; gap: 18px; }

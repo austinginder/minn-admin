@@ -1274,12 +1274,16 @@
 				window.matchMedia( '(prefers-color-scheme: light)' ).addEventListener( 'change', ( e ) => {
 					if ( themePref() !== 'system' ) return;
 					document.documentElement.setAttribute( 'data-theme', e.matches ? 'light' : 'dark' );
+					applyAppearance( B.user && B.user.appearance );
 					renderThemeBtn();
 				} );
 			}
 		} catch ( e ) { /* matchMedia unavailable */ }
 		// Pre-paint script fires this when the system setting flips live.
-		document.addEventListener( 'minn-theme-change', renderThemeBtn );
+		document.addEventListener( 'minn-theme-change', () => {
+			applyAppearance( B.user && B.user.appearance );
+			renderThemeBtn();
+		} );
 		$( '#minn-help-btn' ).addEventListener( 'click', () => { state.modal = { type: 'help' }; renderOverlays(); } );
 		$( '#minn-notif-btn' ).addEventListener( 'click', toggleNotif );
 		// Core updates outrank everything else — the chip is visible on every
@@ -1292,6 +1296,9 @@
 			else newContent( 'posts' );
 		} );
 		renderThemeBtn();
+		// Pre-paint already applied boot appearance; re-run so app.js and
+		// template derivation stay identical after boot payload normalizes.
+		applyAppearance( B.user && B.user.appearance );
 	}
 
 	// "Page"/"Post"/CPT singular-ish noun for the thing the editor holds.
@@ -1412,7 +1419,181 @@
 			localStorage.setItem( 'minn-theme', mode );
 		} catch ( e ) { /* private mode */ }
 		document.documentElement.setAttribute( 'data-theme', mode === 'system' ? osTheme() : mode );
+		// Custom accent tokens are mode-dependent — re-derive after light/dark flips.
+		applyAppearance( B.user && B.user.appearance );
 		renderThemeBtn();
+	}
+
+	/* ===== Accent appearance (user meta minn_admin_appearance) ===== */
+
+	const ACCENT_PRESETS = [
+		{ id: 'minn', label: 'Minn', swatch: '#6e62f5' },
+		{ id: 'ocean', label: 'Ocean', swatch: '#3b82f6' },
+		{ id: 'forest', label: 'Forest', swatch: '#34a06c' },
+		{ id: 'amber', label: 'Amber', swatch: '#d4923a' },
+		{ id: 'rose', label: 'Rose', swatch: '#d063b0' },
+		{ id: 'coral', label: 'Coral', swatch: '#e06b5a' },
+		{ id: 'teal', label: 'Teal', swatch: '#2aa8a0' },
+		{ id: 'slate', label: 'Slate', swatch: '#7b8599' },
+	];
+
+	function appearanceOf( ap ) {
+		const a = ap && typeof ap === 'object' ? ap : {};
+		const accent = a.accent === 'custom' || ACCENT_PRESETS.some( ( p ) => p.id === a.accent )
+			? a.accent
+			: 'minn';
+		let custom = '';
+		if ( accent === 'custom' && a.custom ) {
+			const m = String( a.custom ).trim().toLowerCase().match( /^#([0-9a-f]{3}|[0-9a-f]{6})$/ );
+			if ( m ) {
+				custom = m[ 0 ].length === 4
+					? '#' + m[ 1 ][ 0 ] + m[ 1 ][ 0 ] + m[ 1 ][ 1 ] + m[ 1 ][ 1 ] + m[ 1 ][ 2 ] + m[ 1 ][ 2 ]
+					: m[ 0 ];
+			}
+		}
+		return { accent: accent === 'custom' && ! custom ? 'minn' : accent, custom: accent === 'custom' ? custom : '' };
+	}
+
+	function customAccentTokens( hex, mode ) {
+		let h = String( hex || '' ).replace( /^#/, '' );
+		if ( h.length === 3 ) h = h[ 0 ] + h[ 0 ] + h[ 1 ] + h[ 1 ] + h[ 2 ] + h[ 2 ];
+		if ( ! /^[0-9a-fA-F]{6}$/.test( h ) ) return null;
+		const r = parseInt( h.slice( 0, 2 ), 16 );
+		const g = parseInt( h.slice( 2, 4 ), 16 );
+		const b = parseInt( h.slice( 4, 6 ), 16 );
+		const clamp = ( n ) => Math.max( 0, Math.min( 255, Math.round( n ) ) );
+		const toHex = ( rr, gg, bb ) => '#' + [ rr, gg, bb ].map( ( n ) => clamp( n ).toString( 16 ).padStart( 2, '0' ) ).join( '' );
+		const mix = ( t ) => {
+			if ( t >= 0 ) return toHex( r + ( 255 - r ) * t, g + ( 255 - g ) * t, b + ( 255 - b ) * t );
+			const k = 1 + t;
+			return toHex( r * k, g * k, b * k );
+		};
+		const base = '#' + h.toLowerCase();
+		const accent2 = mode === 'light' ? mix( -0.12 ) : mix( 0.18 );
+		const softA = mode === 'light' ? 0.10 : 0.15;
+		const lum = ( 0.2126 * r + 0.7152 * g + 0.0722 * b ) / 255;
+		return {
+			accent: base,
+			accent2,
+			soft: `rgba(${ r },${ g },${ b },${ softA })`,
+			fg: lum > 0.62 ? '#14141a' : '#ffffff',
+		};
+	}
+
+	function applyAppearance( ap ) {
+		const norm = appearanceOf( ap || ( B.user && B.user.appearance ) );
+		if ( B.user ) B.user.appearance = norm;
+		const root = document.documentElement;
+		const mode = root.getAttribute( 'data-theme' ) || 'dark';
+		root.setAttribute( 'data-accent', norm.accent || 'minn' );
+		if ( norm.accent === 'custom' && norm.custom ) {
+			const tok = customAccentTokens( norm.custom, mode );
+			if ( tok ) {
+				root.style.setProperty( '--accent', tok.accent );
+				root.style.setProperty( '--accent2', tok.accent2 );
+				root.style.setProperty( '--accent-soft', tok.soft );
+				root.style.setProperty( '--accent-fg', tok.fg );
+				return;
+			}
+		}
+		root.style.removeProperty( '--accent' );
+		root.style.removeProperty( '--accent2' );
+		root.style.removeProperty( '--accent-soft' );
+		root.style.removeProperty( '--accent-fg' );
+	}
+
+	async function saveAppearance( next ) {
+		const prev = appearanceOf( B.user && B.user.appearance );
+		const norm = appearanceOf( next );
+		applyAppearance( norm ); // optimistic
+		try {
+			const saved = await api( 'minn-admin/v1/me/appearance', {
+				method: 'POST',
+				body: JSON.stringify( norm ),
+			} );
+			applyAppearance( saved );
+			return appearanceOf( saved );
+		} catch ( e ) {
+			applyAppearance( prev );
+			throw e;
+		}
+	}
+
+	function appearanceSwatchesHtml( ap ) {
+		const cur = appearanceOf( ap );
+		const dots = ACCENT_PRESETS.map( ( p ) =>
+			`<button type="button" class="minn-accent-swatch${ cur.accent === p.id ? ' sel' : '' }" data-accent="${ esc( p.id ) }" title="${ esc( p.label ) }" aria-label="${ esc( p.label ) }" aria-pressed="${ cur.accent === p.id ? 'true' : 'false' }" style="--sw:${ esc( p.swatch ) }"></button>`
+		).join( '' );
+		const customOn = cur.accent === 'custom';
+		return `
+			<div class="minn-accent-row" role="group" aria-label="Accent color">
+				${ dots }
+				<label class="minn-accent-swatch minn-accent-custom${ customOn ? ' sel' : '' }" title="Custom color" aria-label="Custom color">
+					<input type="color" id="minn-accent-custom" value="${ esc( cur.custom || '#6e62f5' ) }" aria-label="Pick a custom accent">
+					<span class="minn-accent-custom-plus">+</span>
+				</label>
+			</div>
+			<div class="minn-toggle-desc" style="margin-top:6px;">Accent color for buttons, links and active chrome. Light and dark mode stay independent.</div>`;
+	}
+
+	function bindAppearanceSwatches( root ) {
+		const wrap = root || document;
+		$$( '[data-accent]', wrap ).forEach( ( btn ) => {
+			if ( ! btn.classList.contains( 'minn-accent-swatch' ) ) return;
+			btn.addEventListener( 'click', async () => {
+				const id = btn.dataset.accent;
+				if ( ! id || id === 'custom' ) return;
+				try {
+					await saveAppearance( { accent: id, custom: '' } );
+					// Refresh selected state without closing the profile modal.
+					if ( state.modal && state.modal.type === 'user' ) renderOverlays();
+					else {
+						$$( '.minn-accent-swatch', wrap ).forEach( ( el ) => {
+							const on = el.dataset.accent === id;
+							el.classList.toggle( 'sel', on );
+							el.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+						} );
+						const customLab = $( '.minn-accent-custom', wrap );
+						if ( customLab ) customLab.classList.remove( 'sel' );
+					}
+					const lab = ( ACCENT_PRESETS.find( ( p ) => p.id === id ) || {} ).label || id;
+					toast( 'Accent: ' + lab );
+				} catch ( e ) {
+					toast( e.message || 'Could not save accent', true );
+				}
+			} );
+		} );
+		const picker = $( '#minn-accent-custom', wrap );
+		if ( picker ) {
+			let t = null;
+			const commit = async () => {
+				try {
+					await saveAppearance( { accent: 'custom', custom: picker.value } );
+					if ( state.modal && state.modal.type === 'user' ) renderOverlays();
+					else {
+						$$( '.minn-accent-swatch[data-accent]', wrap ).forEach( ( el ) => {
+							el.classList.remove( 'sel' );
+							el.setAttribute( 'aria-pressed', 'false' );
+						} );
+						const customLab = $( '.minn-accent-custom', wrap );
+						if ( customLab ) customLab.classList.add( 'sel' );
+					}
+					toast( 'Custom accent saved' );
+				} catch ( e ) {
+					toast( e.message || 'Could not save accent', true );
+				}
+			};
+			picker.addEventListener( 'input', () => {
+				// Live preview while dragging; debounce the meta write.
+				applyAppearance( { accent: 'custom', custom: picker.value } );
+				clearTimeout( t );
+				t = setTimeout( commit, 400 );
+			} );
+			picker.addEventListener( 'change', () => {
+				clearTimeout( t );
+				commit();
+			} );
+		}
 	}
 
 	function toggleTheme() {
@@ -20771,6 +20952,11 @@
 								<button class="minn-btn-soft" id="minn-uf-genpass" style="flex-shrink:0;">Generate</button>
 							</div>
 						</div>
+						${ isSelf ? `
+						<div>
+							<div class="minn-field-label">Accent color</div>
+							${ appearanceSwatchesHtml( B.user.appearance ) }
+						</div>` : '' }
 					</div>
 					${ ! isNew && m.userId === B.user.id ? `
 					<div class="minn-sessions">
@@ -23792,6 +23978,7 @@
 		}
 
 		if ( m.userId === B.user.id ) {
+			bindAppearanceSwatches( document );
 			const copyText = async ( text, label ) => {
 				try {
 					await navigator.clipboard.writeText( text );

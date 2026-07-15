@@ -181,6 +181,80 @@ class Minn_Admin {
 	/**
 	 * URL of the Minn Admin app.
 	 */
+	/**
+	 * Per-user Minn UI appearance (accent palette). User meta key
+	 * `minn_admin_appearance`. Shape: { accent: preset|custom, custom: #hex }.
+	 */
+	const APPEARANCE_META = 'minn_admin_appearance';
+
+	/** Curated accent presets (not wp-admin color schemes). */
+	public static function accent_presets() {
+		return array( 'minn', 'ocean', 'forest', 'amber', 'rose', 'coral', 'teal', 'slate' );
+	}
+
+	public static function appearance_defaults() {
+		return array(
+			'accent' => 'minn',
+			'custom' => '',
+		);
+	}
+
+	/**
+	 * Normalize a raw appearance array (meta, REST body, boot).
+	 *
+	 * @param mixed $raw User meta value or request params.
+	 * @return array{accent:string,custom:string}
+	 */
+	public static function normalize_appearance( $raw ) {
+		$defaults = self::appearance_defaults();
+		if ( ! is_array( $raw ) ) {
+			return $defaults;
+		}
+		$presets = self::accent_presets();
+		$accent  = isset( $raw['accent'] ) ? sanitize_key( (string) $raw['accent'] ) : 'minn';
+		if ( 'custom' !== $accent && ! in_array( $accent, $presets, true ) ) {
+			$accent = 'minn';
+		}
+		$custom = '';
+		if ( ! empty( $raw['custom'] ) ) {
+			$hex = strtolower( trim( (string) $raw['custom'] ) );
+			if ( preg_match( '/^#([0-9a-f]{3}|[0-9a-f]{6})$/', $hex ) ) {
+				// Expand #rgb → #rrggbb.
+				if ( 4 === strlen( $hex ) ) {
+					$custom = '#' . $hex[1] . $hex[1] . $hex[2] . $hex[2] . $hex[3] . $hex[3];
+				} else {
+					$custom = $hex;
+				}
+			}
+		}
+		if ( 'custom' === $accent && '' === $custom ) {
+			// Custom without a valid hex falls back to Minn.
+			$accent = 'minn';
+		}
+		if ( 'custom' !== $accent ) {
+			$custom = '';
+		}
+		return array(
+			'accent' => $accent,
+			'custom' => $custom,
+		);
+	}
+
+	public static function get_user_appearance( $user_id = 0 ) {
+		$uid = $user_id ? (int) $user_id : get_current_user_id();
+		if ( $uid <= 0 ) {
+			return self::appearance_defaults();
+		}
+		return self::normalize_appearance( get_user_meta( $uid, self::APPEARANCE_META, true ) );
+	}
+
+	public static function save_user_appearance( $user_id, $raw ) {
+		$uid  = (int) $user_id;
+		$norm = self::normalize_appearance( $raw );
+		update_user_meta( $uid, self::APPEARANCE_META, $norm );
+		return $norm;
+	}
+
 	public static function app_url() {
 		if ( get_option( 'permalink_structure' ) ) {
 			return home_url( '/minn-admin/' );
@@ -291,11 +365,13 @@ class Minn_Admin {
 			'appUrl'   => self::app_url(),
 			'version'  => MINN_ADMIN_VERSION,
 			'user'     => array(
-				'id'     => $user->ID,
-				'login'  => $user->user_login,
-				'name'   => $user->display_name,
-				'role'   => translate_user_role( $role ),
-				'avatar' => get_avatar_url( $user->ID, array( 'size' => 64 ) ),
+				'id'         => $user->ID,
+				'login'      => $user->user_login,
+				'name'       => $user->display_name,
+				'role'       => translate_user_role( $role ),
+				'avatar'     => get_avatar_url( $user->ID, array( 'size' => 64 ) ),
+				// Per-user accent palette (user meta minn_admin_appearance).
+				'appearance' => self::get_user_appearance( $user->ID ),
 			),
 			'site'     => array(
 				'name'       => get_bloginfo( 'name' ),
