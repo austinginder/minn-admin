@@ -60,7 +60,7 @@ Reference depth: **Gravity Forms**.
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | gravity-forms | Y | Y | Y | Y | Y | · | · | Y | Y | Y | 2026-07-14 | Form settings (item), Notifications view; form builder = **L**; status/chart not needed for GF depth |
-| fluent-forms | Y | Y | Y | Y | Y | · | · | · | · | · | 2026-07-14 | Unread/spam/trash tabs + bulk; active fixture; **no suite** |
+| fluent-forms | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Unread/spam/trash tabs + bulk; suite `fluent-forms` (24); active fixture |
 | elementor-forms | Y | Y | · | Y | · | · | · | · | · | · | 2026-07-14 | Elementor canvas = **L** |
 | cf7-flamingo | Y | Y | · | Y | Y | · | · | · | · | Y | 2026-07-14 | CF7 builder = **L** |
 | cfdb7 | Y | Y | · | Y | · | · | · | · | · | Y | 2026-07-14 | |
@@ -150,19 +150,20 @@ Reference depth: **Gravity Forms**.
 | 2026-07-14 | Ship top 1: fluent-smtp search + delete/bulk | Axis A parity with GSMTP/WPML; suite mail-log 17 checks |
 | 2026-07-14 | Full report-only re-sweep (mail → forms → activity-log → redirects/snippets → backups; fixtures inventory) | Matrix cells corrected (forminator/formidable/everest/fluent-forms); **no ship**. Top ship = post-smtp search + delete/bulk |
 | 2026-07-14 | Ship: post-smtp search + single/bulk delete | Axis A mail parity with WPML/FluentSMTP; mail-log suite extended |
+| 2026-07-14 | Ship: fluent-forms Playwright suite | Axis A coverage gap closed; 24 checks (list/tabs/filters/search/detail/trash/delete/manage); seeder `minn_test_seed_fluent_forms` |
 
 ### Ranked backlog (2026-07-14 evening sweep)
 
 | Rank | Adapter | Axis | Gap | Effort | Why now |
 |---|---|---|---|---|---|
 | ~~1~~ | ~~**post-smtp**~~ | ~~A~~ | ~~Search + single/bulk delete~~ | ~~S~~ | **Shipped 2026-07-14** (mail-log suite covers REST + surface search) |
-| 1 | **fluent-forms** | A | Playwright **suite** (tabs/bulk already wired; matrix suite was ·) | S | Active fixture; depth is real; suite gap is coverage risk, not product |
-| 3 | gravity-smtp | A | Optional bulk delete on Email log (reference has everything else) | S | Only if log hygiene is daily pain; not blocking |
-| 4 | simple-history / wp-activity-log / stream | A | Optional **status** card (24h counts) | S–M | Thin REST logs are acceptable without it; Solid/LLA-R already have cards |
-| 5 | All-In-One Security (AIOS) | B | Activity-log + posture (LLA-R/Solid pattern) | M | Wave B leftover; **not installed** on minnadmin — install first |
-| 6 | GoSMTP / SureMails / Site Mailer | B | New mail-log providers | M | **Not installed**; source-verify free log storage first |
-| 7 | WPForms Pro entries | B | Forms family | M–L | Needs Pro license + fixtures; biggest missing forms name |
-| 8 | fluent-smtp | B | Settings mapper (connections) | M | GSMTP has settings; Fluent connection UI is canvas-ish → likely **L** |
+| ~~1~~ | ~~**fluent-forms**~~ | ~~A~~ | ~~Playwright **suite**~~ | ~~S~~ | **Shipped 2026-07-14** (`tests/fluent-forms.test.js`, 24 checks) |
+| 1 | gravity-smtp | A | Optional bulk delete on Email log (reference has everything else) | S | Only if log hygiene is daily pain; not blocking |
+| 2 | simple-history / wp-activity-log / stream | A | Optional **status** card (24h counts) | S–M | Thin REST logs are acceptable without it; Solid/LLA-R already have cards |
+| 3 | All-In-One Security (AIOS) | B | Activity-log + posture (LLA-R/Solid pattern) | M | Wave B leftover; **not installed** on minnadmin — install first |
+| 4 | GoSMTP / SureMails / Site Mailer | B | New mail-log providers | M | **Not installed**; source-verify free log storage first |
+| 5 | WPForms Pro entries | B | Forms family | M–L | Needs Pro license + fixtures; biggest missing forms name |
+| 6 | fluent-smtp | B | Settings mapper (connections) | M | GSMTP has settings; Fluent connection UI is canvas-ish → likely **L** |
 
 **Matrix fixes this sweep (no code):** forminator/formidable/everest bulk+tabs → **Y**; fluent-forms bulk → **Y**; everest suite → **Y**; Solid Security now **active** on minnadmin; Meta Box / Pods / Safe SVG / traffic day providers noted under non-surface rows.
 

@@ -18,6 +18,7 @@
 * **Notification panel keeps scroll on mark-read:** clicking a notice to clear its unread dot no longer jumps the list back to the top.
 
 ### Improved
+* **Fluent Forms suite:** Playwright coverage for the Fluent Forms entries surface (form tabs, Received/Spam/Trash filters, search, labeled detail + mark-read on open, trash and permanent delete, Forms manage view). Closes the last forms-family suite gap for an adapter that already had full depth.
 * **Notice “No, Thanks” / “Allow” buttons work:** telemetry and opt-in nags that only use `href="#"` buttons (Everest Forms contribute notice, and the same shape) show as real action buttons in the Notifications panel instead of dead text. **No, Thanks** runs the plugin’s dismiss path (whitelist) so the nag does not bounce back; **Hide** still works for everything else.
 * **Post SMTP email log:** search (subject / to / from) and permanent single + bulk delete on the log, matching FluentSMTP and WP Mail Logging. Session transcripts stay out of the surface.
 * **Content bulk status is a themed combobox:** the bulk bar's **Set status…** control (and Products' status / stock pickers) uses the same searchable autocomplete as Users bulk role, instead of a native OS `<select>`.
