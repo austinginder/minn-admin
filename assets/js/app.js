@@ -1533,7 +1533,29 @@
 					<span class="minn-accent-custom-plus">+</span>
 				</label>
 			</div>
-			<div class="minn-toggle-desc" style="margin-top:6px;">Accent color for buttons, links and active chrome. Light and dark mode stay independent.</div>`;
+			<div class="minn-toggle-desc" style="margin-top:6px;">Accent color for buttons, links and active chrome. Preview against light or dark below.</div>`;
+	}
+
+	function themeModeHtml() {
+		const cur = themePref();
+		const opts = [
+			{ id: 'system', label: 'System', desc: 'Match the device setting' },
+			{ id: 'light', label: 'Light', desc: 'Always light' },
+			{ id: 'dark', label: 'Dark', desc: 'Always dark' },
+		];
+		// Exclusive switches (one on at a time) so folks can flip mode while
+		// previewing accent swatches without leaving the profile.
+		return `
+			<div class="minn-toggle-rows minn-side-toggles minn-theme-mode-toggles" role="radiogroup" aria-label="Theme mode">
+				${ opts.map( ( o ) => `
+				<div class="minn-toggle-row">
+					<button type="button" class="minn-switch${ cur === o.id ? ' on' : '' }" data-theme-pref="${ esc( o.id ) }" role="radio" aria-checked="${ cur === o.id ? 'true' : 'false' }" aria-label="${ esc( o.label ) }"><span class="minn-switch-knob"></span></button>
+					<div class="minn-toggle-info">
+						<div class="minn-toggle-label">${ esc( o.label ) }</div>
+						<div class="minn-toggle-desc">${ esc( o.desc ) }</div>
+					</div>
+				</div>` ).join( '' ) }
+			</div>`;
 	}
 
 	function bindAppearanceSwatches( root ) {
@@ -1594,6 +1616,23 @@
 				commit();
 			} );
 		}
+		// Theme mode (System / Light / Dark) — exclusive switches, same store
+		// as the topbar theme button (localStorage minn-theme).
+		$$( '[data-theme-pref]', wrap ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => {
+				const next = btn.dataset.themePref;
+				if ( ! next || next === themePref() ) return;
+				setThemePref( next );
+				// Update switch group in place so accent swatches stay put.
+				$$( '[data-theme-pref]', wrap ).forEach( ( el ) => {
+					const on = el.dataset.themePref === next;
+					el.classList.toggle( 'on', on );
+					el.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				} );
+				const labels = { system: 'System', light: 'Light', dark: 'Dark' };
+				toast( 'Theme: ' + ( labels[ next ] || next ) );
+			} );
+		} );
 	}
 
 	function toggleTheme() {
@@ -20956,6 +20995,10 @@
 						<div>
 							<div class="minn-field-label">Accent color</div>
 							${ appearanceSwatchesHtml( B.user.appearance ) }
+						</div>
+						<div>
+							<div class="minn-field-label">Theme</div>
+							${ themeModeHtml() }
 						</div>` : '' }
 					</div>
 					${ ! isNew && m.userId === B.user.id ? `
