@@ -235,14 +235,46 @@
 			btn.addEventListener( 'click', async () => {
 				const p = parseInt( btn.dataset.pg, 10 );
 				if ( ! p || p === current || btn.disabled ) return;
-				const tbl = $( '.minn-card, .minn-media-grid', view );
-				if ( tbl ) tbl.classList.add( 'minn-busy' );
+				markListBusy( view );
 				await load( p ).catch( showErr );
 				render();
 				const scroll = $( '.minn-scroll' );
 				if ( scroll ) scroll.scrollTop = 0;
 			} )
 		);
+	}
+
+	// Soft list reload: keep toolbar/tabs painted while the body dims and
+	// refetches (Media tabs pattern). First paint of a route still uses the
+	// full "Loading…" shell when there's no chrome yet.
+	function markListBusy( view ) {
+		if ( ! view ) return;
+		$$(
+			'.minn-table, .minn-media-grid, .minn-media-list, .minn-plugin-grid, .minn-pager, .minn-empty, .minn-card',
+			view
+		).forEach( ( el ) => {
+			// Toolbar-only cards (rare) still get dimmed; that's fine.
+			el.classList.add( 'minn-busy' );
+		} );
+	}
+
+	/**
+	 * @param {object} opts
+	 * @param {() => void} [opts.clear]  Null caches before load.
+	 * @param {() => Promise<any>} opts.load
+	 * @param {() => void} opts.render
+	 * @param {string} opts.route  Guard: only re-render if still on this route.
+	 * @param {Element} [opts.view]
+	 * @param {() => void} [opts.paintChrome]  Immediate tab/filter active state.
+	 */
+	async function softListReload( opts ) {
+		const view = opts.view || $( '#minn-view' );
+		if ( typeof opts.clear === 'function' ) opts.clear();
+		if ( typeof opts.paintChrome === 'function' ) opts.paintChrome();
+		const hasChrome = view && view.querySelector( '.minn-toolbar, .minn-tabs' );
+		if ( hasChrome ) markListBusy( view );
+		await opts.load().catch( showErr );
+		if ( ! opts.route || state.route === opts.route ) opts.render();
 	}
 
 	const PALETTE_COLORS = [ '#46b881', '#5b9be0', '#e0a458', '#d073c0', '#8a80f8', '#e46b6b' ];
@@ -2336,12 +2368,25 @@
 				state.contentCat = null;
 				state.contentTag = null;
 			}
+			if ( String( state.filter || 'all' ) === String( nf ) ) return;
 			state.filter = nf;
-			// Tabs are a server-side query now — refetch from page 1.
-			state.cache.content = null;
-			state.cache.cptContent = {};
 			sel.clear();
-			renderContent();
+			// Soft reload: keep All/Posts/Pages (and search) painted while the
+			// table refetches (same idea as Media type tabs).
+			softListReload( {
+				route: 'content',
+				view,
+				clear: () => {
+					state.cache.content = null;
+					state.cache.cptContent = {};
+				},
+				paintChrome: () => {
+					$$( '.minn-tab[data-filter]', view ).forEach( ( b ) =>
+						b.classList.toggle( 'active', b.dataset.filter === nf ) );
+				},
+				load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+				render: renderContent,
+			} );
 		};
 		$$( '.minn-tab[data-filter]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => applyTypeFilter( btn.dataset.filter ) )
@@ -2357,15 +2402,17 @@
 					applyTypeFilter( next );
 				},
 			} );
-		const reloadContent = async () => {
-			sel.clear();
-			state.cache.content = null;
-			state.cache.cptContent = {};
-			const tbl = $( '.minn-table', view );
-			if ( tbl ) tbl.classList.add( 'minn-busy' );
-			await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
-			if ( state.route === 'content' ) renderContent();
-		};
+		const reloadContent = () => softListReload( {
+			route: 'content',
+			view,
+			clear: () => {
+				sel.clear();
+				state.cache.content = null;
+				state.cache.cptContent = {};
+			},
+			load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+			render: renderContent,
+		} );
 		const catWrap = view.querySelector( '[data-taxcombo="cat"]' );
 		if ( catWrap ) bindAutocomplete( catWrap, taxComboOptions( 'All categories', terms.categories ), {
 			strict: true, value: state.contentCat || '',
@@ -2381,16 +2428,21 @@
 			clearTimeout( contentSearchTimer );
 			contentSearchTimer = setTimeout( async () => {
 				state.contentSearch = search.value.trim();
-				sel.clear();
-				state.cache.content = null;
-				state.cache.cptContent = {};
-				await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
-				if ( state.route === 'content' ) {
-					renderContent();
-					const s = $( '#minn-content-search' );
-					s.focus();
-					s.setSelectionRange( s.value.length, s.value.length );
-				}
+				await softListReload( {
+					route: 'content',
+					view,
+					clear: () => {
+						sel.clear();
+						state.cache.content = null;
+						state.cache.cptContent = {};
+					},
+					load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+					render: () => {
+						renderContent();
+						const s = $( '#minn-content-search' );
+						if ( s ) { s.focus(); s.setSelectionRange( s.value.length, s.value.length ); }
+					},
+				} );
 			}, 350 );
 		} );
 		// Row actions — right-click a row (or its hover ⋯) for quick moves
@@ -2495,9 +2547,19 @@
 		if ( trashBtn ) trashBtn.addEventListener( 'click', () => {
 			state.contentTrash = ! state.contentTrash;
 			sel.clear();
-			state.cache.content = null;
-			state.cache.cptContent = {};
-			renderContent();
+			softListReload( {
+				route: 'content',
+				view,
+				clear: () => {
+					state.cache.content = null;
+					state.cache.cptContent = {};
+				},
+				paintChrome: () => {
+					trashBtn.classList.toggle( 'active', !! state.contentTrash );
+				},
+				load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+				render: renderContent,
+			} );
 		} );
 		$$( '.minn-table-row', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', ( e ) => {
@@ -2985,25 +3047,24 @@
 		$$( '.minn-view-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => { state.mediaView = btn.dataset.view; renderMedia(); } )
 		);
-		// Type tabs: keep the toolbar (and active tab) painted while the grid
-		// reloads — nulling the cache + full re-render used to flash
-		// "Loading media…" over the whole view (Austin, 2026-07-15).
-		const mediaReload = async () => {
-			state.cache.media = null;
-			$$( '.minn-media-grid, .minn-media-list, .minn-card.minn-empty, .minn-pager', view )
-				.forEach( ( el ) => el.classList.add( 'minn-busy' ) );
-			await loadMedia().catch( showErr );
-			if ( state.route === 'media' ) renderMedia();
-		};
+		// Soft reload shared with content/orders/… (keep tabs painted).
+		const mediaReload = ( paintChrome ) => softListReload( {
+			route: 'media',
+			view,
+			clear: () => { state.cache.media = null; },
+			paintChrome,
+			load: () => loadMedia(),
+			render: renderMedia,
+		} );
 		$$( '[data-mtype]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', async () => {
+			btn.addEventListener( 'click', () => {
 				const next = btn.dataset.mtype || '';
 				if ( ( state.mediaType || '' ) === next ) return;
 				state.mediaType = next || null;
-				// Flip the active pill immediately so the click feels sticky.
-				$$( '[data-mtype]', view ).forEach( ( b ) =>
-					b.classList.toggle( 'active', ( b.dataset.mtype || '' ) === next ) );
-				await mediaReload();
+				mediaReload( () => {
+					$$( '[data-mtype]', view ).forEach( ( b ) =>
+						b.classList.toggle( 'active', ( b.dataset.mtype || '' ) === next ) );
+				} );
 			} )
 		);
 		const mediaSearch = $( '#minn-media-search', view );
@@ -3268,9 +3329,20 @@
 
 		$$( '[data-ctab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				state.commentTab = btn.dataset.ctab;
-				state.cache.comments = null;
-				renderComments();
+				const tab = btn.dataset.ctab;
+				if ( state.commentTab === tab ) return;
+				state.commentTab = tab;
+				softListReload( {
+					route: 'comments',
+					view,
+					clear: () => { state.cache.comments = null; },
+					paintChrome: () => {
+						$$( '[data-ctab]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', b.dataset.ctab === tab ) );
+					},
+					load: () => loadComments(),
+					render: renderComments,
+				} );
 			} )
 		);
 		// Right-click a comment: the row's own action buttons as a menu —
@@ -3845,9 +3917,20 @@
 		if ( addOrderBtn ) addOrderBtn.addEventListener( 'click', () => openNewOrderModal() );
 		$$( '[data-otab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				state.orderTab = btn.dataset.otab;
-				state.cache.orders = null;
-				renderOrders();
+				const tab = btn.dataset.otab;
+				if ( state.orderTab === tab ) return;
+				state.orderTab = tab;
+				softListReload( {
+					route: 'orders',
+					view,
+					clear: () => { state.cache.orders = null; },
+					paintChrome: () => {
+						$$( '[data-otab]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', b.dataset.otab === tab ) );
+					},
+					load: () => loadOrders( 1 ),
+					render: renderOrders,
+				} );
 			} )
 		);
 		const orderSearch = $( '#minn-order-search', view );
@@ -3855,21 +3938,28 @@
 			let orderSearchTimer = null;
 			orderSearch.addEventListener( 'input', () => {
 				clearTimeout( orderSearchTimer );
-				orderSearchTimer = setTimeout( async () => {
+				orderSearchTimer = setTimeout( () => {
 					state.orderSearch = orderSearch.value.trim();
-					state.cache.orders = null;
-					try {
-						await loadOrders( 1 );
-						if ( state.route === 'orders' ) renderOrders();
-					} catch ( e ) { showErr( e ); }
+					softListReload( {
+						route: 'orders',
+						view,
+						clear: () => { state.cache.orders = null; },
+						load: () => loadOrders( 1 ),
+						render: renderOrders,
+					} );
 				}, 280 );
 			} );
 			orderSearch.addEventListener( 'keydown', ( e ) => {
 				if ( e.key === 'Escape' && orderSearch.value ) {
 					orderSearch.value = '';
 					state.orderSearch = '';
-					state.cache.orders = null;
-					loadOrders( 1 ).then( () => { if ( state.route === 'orders' ) renderOrders(); } ).catch( showErr );
+					softListReload( {
+						route: 'orders',
+						view,
+						clear: () => { state.cache.orders = null; },
+						load: () => loadOrders( 1 ),
+						render: renderOrders,
+					} );
 				}
 			} );
 		}
@@ -4075,9 +4165,20 @@
 
 		$$( '[data-stab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				state.subTab = btn.dataset.stab;
-				state.cache.subscriptions = null;
-				renderSubscriptions();
+				const tab = btn.dataset.stab;
+				if ( state.subTab === tab ) return;
+				state.subTab = tab;
+				softListReload( {
+					route: 'subscriptions',
+					view,
+					clear: () => { state.cache.subscriptions = null; },
+					paintChrome: () => {
+						$$( '[data-stab]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', b.dataset.stab === tab ) );
+					},
+					load: () => loadSubscriptions( 1 ),
+					render: renderSubscriptions,
+				} );
 			} )
 		);
 		const subSearch = $( '#minn-sub-search', view );
@@ -4085,21 +4186,28 @@
 			let t = null;
 			subSearch.addEventListener( 'input', () => {
 				clearTimeout( t );
-				t = setTimeout( async () => {
+				t = setTimeout( () => {
 					state.subSearch = subSearch.value.trim();
-					state.cache.subscriptions = null;
-					try {
-						await loadSubscriptions( 1 );
-						if ( state.route === 'subscriptions' ) renderSubscriptions();
-					} catch ( e ) { showErr( e ); }
+					softListReload( {
+						route: 'subscriptions',
+						view,
+						clear: () => { state.cache.subscriptions = null; },
+						load: () => loadSubscriptions( 1 ),
+						render: renderSubscriptions,
+					} );
 				}, 280 );
 			} );
 			subSearch.addEventListener( 'keydown', ( e ) => {
 				if ( e.key === 'Escape' && subSearch.value ) {
 					subSearch.value = '';
 					state.subSearch = '';
-					state.cache.subscriptions = null;
-					loadSubscriptions( 1 ).then( () => { if ( state.route === 'subscriptions' ) renderSubscriptions(); } ).catch( showErr );
+					softListReload( {
+						route: 'subscriptions',
+						view,
+						clear: () => { state.cache.subscriptions = null; },
+						load: () => loadSubscriptions( 1 ),
+						render: renderSubscriptions,
+					} );
 				}
 			} );
 		}
@@ -4364,18 +4472,40 @@
 		if ( addProd ) addProd.addEventListener( 'click', () => openNewProductModal() );
 		$$( '[data-ptab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				state.productTab = btn.dataset.ptab;
+				const tab = btn.dataset.ptab;
+				if ( state.productTab === tab ) return;
+				state.productTab = tab;
 				psel.clear();
-				state.cache.products = null;
-				renderProducts();
+				softListReload( {
+					route: 'products',
+					view,
+					clear: () => { state.cache.products = null; },
+					paintChrome: () => {
+						$$( '[data-ptab]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', b.dataset.ptab === tab ) );
+					},
+					load: () => loadProducts( 1 ),
+					render: renderProducts,
+				} );
 			} )
 		);
 		$$( '[data-pstock]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				state.productStock = btn.dataset.pstock;
+				const stock = btn.dataset.pstock;
+				if ( state.productStock === stock ) return;
+				state.productStock = stock;
 				psel.clear();
-				state.cache.products = null;
-				renderProducts();
+				softListReload( {
+					route: 'products',
+					view,
+					clear: () => { state.cache.products = null; },
+					paintChrome: () => {
+						$$( '[data-pstock]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', b.dataset.pstock === stock ) );
+					},
+					load: () => loadProducts( 1 ),
+					render: renderProducts,
+				} );
 			} )
 		);
 		const productSearch = $( '#minn-product-search', view );
@@ -4383,14 +4513,16 @@
 			let productSearchTimer = null;
 			productSearch.addEventListener( 'input', () => {
 				clearTimeout( productSearchTimer );
-				productSearchTimer = setTimeout( async () => {
+				productSearchTimer = setTimeout( () => {
 					state.productSearch = productSearch.value.trim();
 					psel.clear();
-					state.cache.products = null;
-					try {
-						await loadProducts( 1 );
-						if ( state.route === 'products' ) renderProducts();
-					} catch ( e ) { showErr( e ); }
+					softListReload( {
+						route: 'products',
+						view,
+						clear: () => { state.cache.products = null; },
+						load: () => loadProducts( 1 ),
+						render: renderProducts,
+					} );
 				}, 280 );
 			} );
 			productSearch.addEventListener( 'keydown', ( e ) => {
@@ -4398,8 +4530,13 @@
 					productSearch.value = '';
 					state.productSearch = '';
 					psel.clear();
-					state.cache.products = null;
-					loadProducts( 1 ).then( () => { if ( state.route === 'products' ) renderProducts(); } ).catch( showErr );
+					softListReload( {
+						route: 'products',
+						view,
+						clear: () => { state.cache.products = null; },
+						load: () => loadProducts( 1 ),
+						render: renderProducts,
+					} );
 				}
 			} );
 		}
@@ -4652,9 +4789,20 @@
 
 		$$( '[data-ctab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				state.couponTab = btn.dataset.ctab;
-				state.cache.coupons = null;
-				renderCoupons();
+				const tab = btn.dataset.ctab;
+				if ( state.couponTab === tab ) return;
+				state.couponTab = tab;
+				softListReload( {
+					route: 'coupons',
+					view,
+					clear: () => { state.cache.coupons = null; },
+					paintChrome: () => {
+						$$( '[data-ctab]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', b.dataset.ctab === tab ) );
+					},
+					load: () => loadCoupons( 1 ),
+					render: renderCoupons,
+				} );
 			} )
 		);
 		const addBtn = $( '#minn-coupon-add', view );
@@ -4664,21 +4812,28 @@
 			let couponSearchTimer = null;
 			couponSearch.addEventListener( 'input', () => {
 				clearTimeout( couponSearchTimer );
-				couponSearchTimer = setTimeout( async () => {
+				couponSearchTimer = setTimeout( () => {
 					state.couponSearch = couponSearch.value.trim();
-					state.cache.coupons = null;
-					try {
-						await loadCoupons( 1 );
-						if ( state.route === 'coupons' ) renderCoupons();
-					} catch ( e ) { showErr( e ); }
+					softListReload( {
+						route: 'coupons',
+						view,
+						clear: () => { state.cache.coupons = null; },
+						load: () => loadCoupons( 1 ),
+						render: renderCoupons,
+					} );
 				}, 280 );
 			} );
 			couponSearch.addEventListener( 'keydown', ( e ) => {
 				if ( e.key === 'Escape' && couponSearch.value ) {
 					couponSearch.value = '';
 					state.couponSearch = '';
-					state.cache.coupons = null;
-					loadCoupons( 1 ).then( () => { if ( state.route === 'coupons' ) renderCoupons(); } ).catch( showErr );
+					softListReload( {
+						route: 'coupons',
+						view,
+						clear: () => { state.cache.coupons = null; },
+						load: () => loadCoupons( 1 ),
+						render: renderCoupons,
+					} );
 				}
 			} );
 		}
@@ -4820,21 +4975,28 @@
 			let customerSearchTimer = null;
 			customerSearch.addEventListener( 'input', () => {
 				clearTimeout( customerSearchTimer );
-				customerSearchTimer = setTimeout( async () => {
+				customerSearchTimer = setTimeout( () => {
 					state.customerSearch = customerSearch.value.trim();
-					state.cache.customers = null;
-					try {
-						await loadCustomers( 1 );
-						if ( state.route === 'customers' ) renderCustomers();
-					} catch ( e ) { showErr( e ); }
+					softListReload( {
+						route: 'customers',
+						view,
+						clear: () => { state.cache.customers = null; },
+						load: () => loadCustomers( 1 ),
+						render: renderCustomers,
+					} );
 				}, 280 );
 			} );
 			customerSearch.addEventListener( 'keydown', ( e ) => {
 				if ( e.key === 'Escape' && customerSearch.value ) {
 					customerSearch.value = '';
 					state.customerSearch = '';
-					state.cache.customers = null;
-					loadCustomers( 1 ).then( () => { if ( state.route === 'customers' ) renderCustomers(); } ).catch( showErr );
+					softListReload( {
+						route: 'customers',
+						view,
+						clear: () => { state.cache.customers = null; },
+						load: () => loadCustomers( 1 ),
+						render: renderCustomers,
+					} );
 				}
 			} );
 		}
