@@ -71,6 +71,42 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	}, id );
 	t.check( 'typed URL still applies classically', saved2.includes( '<a href="https://example.com/page">announcement</a>' ), saved2.slice( 0, 160 ) );
 
+	/* ===== Open in new tab switch ===== */
+	await page.click( '#minn-editor-body a' );
+	await page.waitForSelector( '.minn-link-pop [data-link-newtab]', { timeout: 5000 } );
+	t.check( 'new-tab switch is offered', await page.$eval( '.minn-link-pop [data-link-newtab]', ( el ) => el.getAttribute( 'role' ) === 'switch' ), '' );
+	await page.click( '.minn-link-pop [data-link-newtab]' );
+	t.check( 'switch turns on', await page.$eval( '.minn-link-pop [data-link-newtab]', ( el ) => el.classList.contains( 'on' ) ), '' );
+	await page.click( '.minn-link-pop [data-link-apply]' );
+	await page.waitForFunction( () => ! document.querySelector( '.minn-link-pop' ), { timeout: 5000 } );
+	await page.keyboard.press( 'Meta+s' );
+	await page.waitForTimeout( 1500 );
+	const savedTab = await page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+		return ( await r.json() ).content.raw;
+	}, id );
+	t.check( 'new tab rides target + rel on saved link',
+		/<a href="https:\/\/example\.com\/page"[^>]*target="_blank"[^>]*rel="noreferrer noopener"[^>]*>announcement<\/a>/.test( savedTab )
+		|| /<a href="https:\/\/example\.com\/page"[^>]*rel="noreferrer noopener"[^>]*target="_blank"[^>]*>announcement<\/a>/.test( savedTab ),
+		savedTab.slice( 0, 220 ) );
+	// Toggle off and confirm target/rel drop.
+	await page.click( '#minn-editor-body a' );
+	await page.waitForSelector( '.minn-link-pop [data-link-newtab].on', { timeout: 5000 } );
+	t.check( 'existing _blank seeds the switch on', await page.$eval( '.minn-link-pop [data-link-newtab]', ( el ) => el.classList.contains( 'on' ) && el.getAttribute( 'aria-checked' ) === 'true' ), '' );
+	await page.click( '.minn-link-pop [data-link-newtab]' );
+	await page.click( '.minn-link-pop [data-link-apply]' );
+	await page.waitForFunction( () => ! document.querySelector( '.minn-link-pop' ), { timeout: 5000 } );
+	await page.keyboard.press( 'Meta+s' );
+	await page.waitForTimeout( 1500 );
+	const savedOff = await page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+		return ( await r.json() ).content.raw;
+	}, id );
+	t.check( 'clearing new-tab drops target/rel',
+		savedOff.includes( '<a href="https://example.com/page">announcement</a>' )
+		&& ! /target="_blank"/.test( savedOff ),
+		savedOff.slice( 0, 220 ) );
+
 	/* ===== Apply deep in a long post must not scroll to the top =====
 	   (body.focus() without preventScroll scrolls the contenteditable's TOP
 	   into view before the saved range restores.) ===== */

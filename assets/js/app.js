@@ -18029,6 +18029,7 @@
 		if ( ! body ) return;
 		linkPopSaved = ! a && range ? range.cloneRange() : null;
 		const href = a ? a.getAttribute( 'href' ) || '' : '';
+		const newTabSeed = !!( a && a.getAttribute( 'target' ) === '_blank' );
 		linkPop = document.createElement( 'div' );
 		linkPop.className = 'minn-inspector minn-link-pop';
 		linkPop.innerHTML = `
@@ -18040,6 +18041,12 @@
 				<div class="minn-field-label">URL or search</div>
 				<input class="minn-input" data-link-url placeholder="https://\u2026 or search your content" value="${ esc( href ) }" spellcheck="false" autocomplete="off">
 				<div class="minn-link-results" data-link-results hidden></div>
+				<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
+					<div class="minn-toggle-row">
+						<button type="button" class="minn-switch${ newTabSeed ? ' on' : '' }" data-link-newtab role="switch" aria-checked="${ newTabSeed ? 'true' : 'false' }" aria-label="Open in new tab"><span class="minn-switch-knob"></span></button>
+						<div class="minn-toggle-info"><div class="minn-toggle-label">Open in new tab</div></div>
+					</div>
+				</div>
 			</div>
 			<div class="minn-insp-actions">
 				<button class="minn-btn-primary" data-link-apply type="button">Apply</button>
@@ -18055,11 +18062,33 @@
 		armBlockPopA11y( linkPop, { label: 'Link', onClose: hideLinkPop, focus: '[data-link-url]' } );
 
 		const urlInput = linkPop.querySelector( '[data-link-url]' );
+		const newTabBtn = linkPop.querySelector( '[data-link-newtab]' );
+		if ( newTabBtn ) {
+			newTabBtn.addEventListener( 'click', () => {
+				const on = ! newTabBtn.classList.contains( 'on' );
+				newTabBtn.classList.toggle( 'on', on );
+				newTabBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+			} );
+		}
+		// Match image-link / core buttons: target=_blank + noreferrer noopener.
+		const applyNewTab = ( el, on ) => {
+			if ( ! el ) return;
+			if ( on ) {
+				el.setAttribute( 'target', '_blank' );
+				el.setAttribute( 'rel', 'noreferrer noopener' );
+			} else {
+				el.removeAttribute( 'target' );
+				el.removeAttribute( 'rel' );
+			}
+		};
 		const apply = () => {
 			const url = urlInput.value.trim();
+			const newTab = !!( newTabBtn && newTabBtn.classList.contains( 'on' ) );
 			if ( a && a.isConnected ) {
-				if ( url ) a.setAttribute( 'href', url );
-				else unlink();
+				if ( url ) {
+					a.setAttribute( 'href', url );
+					applyNewTab( a, newTab );
+				} else unlink();
 			} else if ( url && linkPopSaved && linkPopSaved.startContainer.isConnected ) {
 				// preventScroll matters on every editor-body focus: focusing the
 				// contenteditable scrolls its TOP into view BEFORE the saved
@@ -18070,6 +18099,12 @@
 				sel.removeAllRanges();
 				sel.addRange( linkPopSaved );
 				document.execCommand( 'createLink', false, url );
+				// createLink only sets href — stamp target/rel on the new <a>.
+				const node = sel.anchorNode;
+				const made = node && ( node.nodeType === 3
+					? node.parentElement && node.parentElement.closest( 'a' )
+					: ( node.closest ? node.closest( 'a' ) : null ) );
+				if ( made && body.contains( made ) ) applyNewTab( made, newTab );
 			}
 			scheduleAutosave();
 			hideLinkPop();
