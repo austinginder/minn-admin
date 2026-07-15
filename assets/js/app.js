@@ -23204,17 +23204,30 @@
 			counts.set( k, ( counts.get( k ) || 0 ) + 1 );
 		} );
 		if ( ! counts.size ) return { html: '', counts };
-		// Span: from earliest activity (or 12 months ago) through today.
+		// Compact window: activity span with a little pad, not a full empty year.
+		// Cap ~26 weeks so the grid fits a wide modal without a scrollbar;
+		// floor ~12 weeks so a single busy day still has context.
+		const MAX_DAYS = 26 * 7;
+		const MIN_DAYS = 12 * 7;
 		const today = new Date();
 		today.setHours( 12, 0, 0, 0 );
-		let start = new Date( today );
-		start.setDate( start.getDate() - 365 );
 		const keys = [ ...counts.keys() ].sort();
 		const earliest = keys[ 0 ];
+		let start = new Date( today );
+		start.setDate( start.getDate() - ( MIN_DAYS - 1 ) );
 		if ( earliest ) {
 			const [ y, mo, d ] = earliest.split( '-' ).map( Number );
-			const ed = new Date( y, mo - 1, d, 12 );
-			if ( ed < start ) start = ed;
+			const first = new Date( y, mo - 1, d, 12 );
+			const maxStart = new Date( today );
+			maxStart.setDate( maxStart.getDate() - ( MAX_DAYS - 1 ) );
+			if ( first < start && first >= maxStart ) {
+				// All activity fits under the cap: start a week before the first hit.
+				start = new Date( first );
+				start.setDate( start.getDate() - 7 );
+			} else if ( first < maxStart ) {
+				// Older history exists: show the most recent MAX_DAYS only.
+				start = maxStart;
+			}
 		}
 		// Align start to Sunday (GitHub grid).
 		start.setDate( start.getDate() - start.getDay() );
@@ -23263,7 +23276,7 @@
 			</div>` ).join( '' );
 		const html = `
 			<div class="minn-rev-heat" id="minn-rev-heat">
-				<div class="minn-rev-heat-months" style="grid-template-columns:repeat(${ weeks.length },12px)">${ monthLabels }</div>
+				<div class="minn-rev-heat-months" style="grid-template-columns:repeat(${ weeks.length },15px)">${ monthLabels }</div>
 				<div class="minn-rev-heat-grid">${ cells }</div>
 				<div class="minn-rev-heat-legend">
 					<span>Less</span>

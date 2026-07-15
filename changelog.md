@@ -10,7 +10,7 @@
 * **Connectors after Install & activate:** installing a provider plugin (e.g. OpenAI) no longer leaves Settings → Connectors on “Connectors couldn’t be loaded” when the PHP worker recycles mid-response. Minn waits for REST, retries the connectors fetch, and offers an in-panel **Retry** if a load still fails. A dropped install reply after a successful package install is treated as success and reloads the list the same way.
 
 ### Improved
-* **Revision heatmap:** the All revisions dialog opens with a GitHub-style activity grid. Click a day to filter the list to that day; click again or **Show all** to clear.
+* **Revision heatmap:** the All revisions dialog opens with a GitHub-style activity grid (activity window capped ~3–6 months so empty years don’t dominate). Click a day to filter the list to that day; click again or **Show all** to clear.
 * **Rank Math social thumbnail:** when Rank Math is the active SEO provider, the SEO panel gains a **Social thumbnail** image field (Facebook OG image; Twitter inherits via Rank Math’s own flag). Set / replace / remove through the media picker; values write `rank_math_facebook_image` + `_id`.
 * **Settings door summary omits Uncategorized:** only real category picks appear on the Settings door one-liner.
 * **Sticky moved to Settings:** “Stick to the top of the blog” leaves the Publish card (still hidden under password visibility) and lives in the Settings modal with discussion.

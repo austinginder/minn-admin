@@ -745,22 +745,25 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-history-more:hover { color: var(--accent); }
 
-/* Full revision list dialog + GitHub-style activity heatmap */
+/* Full revision list dialog + GitHub-style activity heatmap.
+   Grid is intentionally compact (≤ ~26 weeks) so it fits the wide modal
+   without a horizontal scrollbar or a year of empty cells. */
 .minn-rev-heat {
-  padding: 12px 18px 8px; border-bottom: 1px solid var(--border);
+  padding: 12px 18px 10px; border-bottom: 1px solid var(--border);
 }
 .minn-rev-heat-months {
-  display: grid; grid-auto-flow: column; grid-auto-columns: 12px;
-  gap: 3px; margin: 0 0 4px 0; height: 14px; font-size: 10px; color: var(--text3);
-  overflow: hidden;
+  display: grid; gap: 3px; margin: 0 0 4px 0; height: 14px;
+  font-size: 10px; color: var(--text3); overflow: hidden;
 }
 .minn-rev-heat-m { white-space: nowrap; font-weight: 600; letter-spacing: 0.02em; }
 .minn-rev-heat-grid {
-  display: flex; gap: 3px; overflow-x: auto; padding-bottom: 4px;
+  display: flex; gap: 3px; justify-content: flex-end;
+  /* No overflow-x: the week count is capped to fit the modal. */
+  overflow: hidden; padding-bottom: 2px;
 }
 .minn-rev-heat-week { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
 .minn-rev-heat-cell {
-  width: 11px; height: 11px; border-radius: 2px; border: 0; padding: 0;
+  width: 12px; height: 12px; border-radius: 2px; border: 0; padding: 0;
   background: var(--panel2); cursor: pointer; display: block;
   box-sizing: border-box;
 }
