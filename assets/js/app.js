@@ -18754,26 +18754,45 @@
 		if ( state.notifOpen ) loadNotifications().then( () => state.notifOpen && renderOverlays() );
 	}
 
-	// Run a notice's own action link (allow / dismiss / opt-in) in the
-	// background. The link points at the admin page the notice rendered on;
-	// re-adding the capture params makes ONE request run the plugin's
-	// handler (admin_init) AND return a fresh digest (in_admin_header), so
-	// the panel reflects the result immediately.
+	// Run a notice's own action (allow / dismiss / opt-in) in the background.
+	// Three shapes: (1) real admin URL with capture piggyback, (2) whitelisted
+	// ajax for href="#" buttons (Everest "No, Thanks"), (3) plain button → hide.
 	async function runNoticeAction( link, btn ) {
 		if ( btn ) { btn.disabled = true; btn.textContent = 'Working…'; }
+		const noticeId = btn && btn.dataset.nid ? btn.dataset.nid.replace( /^notice-/, '' ) : '';
 		try {
-			const u = new URL( link.url );
-			u.searchParams.set( 'minn_notices', '1' );
-			// Our nonce rides its own param — the link may carry the
-			// plugin's own _wpnonce, which its handler verifies.
-			u.searchParams.set( 'minn_nonce', B.notices.nonce );
-			const r = await fetch( u.toString(), { credentials: 'same-origin' } );
-			let captured = false;
-			try {
-				captured = ( await r.json() ).ok === true;
-			} catch ( e ) { /* the handler redirected before our capture ran */ }
-			if ( ! captured ) {
+			if ( link.ajax && link.ajax.action ) {
+				await api( 'minn-admin/v1/notices/ajax', {
+					method: 'POST',
+					body: JSON.stringify( {
+						action: link.ajax.action,
+						args: link.ajax.args || {},
+						notice_id: noticeId,
+					} ),
+				} );
 				await fetch( B.notices.url, { credentials: 'same-origin' } ).catch( () => {} );
+			} else if ( link.url ) {
+				const u = new URL( link.url );
+				u.searchParams.set( 'minn_notices', '1' );
+				// Our nonce rides its own param — the link may carry the
+				// plugin's own _wpnonce, which its handler verifies.
+				u.searchParams.set( 'minn_nonce', B.notices.nonce );
+				const r = await fetch( u.toString(), { credentials: 'same-origin' } );
+				let captured = false;
+				try {
+					captured = ( await r.json() ).ok === true;
+				} catch ( e ) { /* the handler redirected before our capture ran */ }
+				if ( ! captured ) {
+					await fetch( B.notices.url, { credentials: 'same-origin' } ).catch( () => {} );
+				}
+			} else if ( link.button && noticeId ) {
+				// Hash CTA with no mapped ajax — hide from Minn's digest only.
+				await api( 'minn-admin/v1/notices/hide', {
+					method: 'POST',
+					body: JSON.stringify( { id: noticeId } ),
+				} );
+			} else {
+				throw new Error( 'No action available' );
 			}
 			state.cache.notifications = null;
 			await loadNotifications();
