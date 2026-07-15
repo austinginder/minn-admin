@@ -146,6 +146,82 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Resend logged a new sent email', after >= before, `before=${ before } after=${ after }` );
 	}
 
+	/* ===== Gravity SMTP: single + bulk delete (active mail reference) =====
+	 * Seed disposable event rows via REST-side insert is awkward (custom table
+	 * shape); use rest_do_request after a CLI insert, then DELETE through the
+	 * adapter. GSMTP is already an active resident on minnadmin. */
+	{
+		const { execSync } = require( 'child_process' );
+		const path = require( 'path' );
+		const fs = require( 'fs' );
+		const wpPath = path.resolve( __dirname, '../../../../' );
+		const gsmtpActive = ( () => {
+			try {
+				execSync( `wp --path=${ JSON.stringify( wpPath ) } plugin is-active gravitysmtp`, {
+					stdio: 'ignore', timeout: 30000,
+				} );
+				return true;
+			} catch ( e ) {
+				return false;
+			}
+		} )();
+		t.check( 'Gravity SMTP active for delete suite', gsmtpActive, gsmtpActive ? 'active' : 'inactive' );
+		if ( gsmtpActive ) {
+			const seedFile = path.join( require( 'os' ).tmpdir(), 'minn-gsmtp-seed-' + Date.now() + '.php' );
+			fs.writeFileSync( seedFile, [
+				'<?php',
+				'global $wpdb;',
+				"$t = $wpdb->prefix . 'gravitysmtp_events';",
+				"if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) !== $t ) { echo wp_json_encode( array( 'ok' => false ) ); exit; }",
+				'$ids = array();',
+				'for ( $i = 0; $i < 2; $i++ ) {',
+				'  $wpdb->insert( $t, array(',
+				"    'date_created' => gmdate( 'Y-m-d H:i:s' ),",
+				"    'date_updated' => gmdate( 'Y-m-d H:i:s' ),",
+				"    'status'       => 'sent',",
+				"    'service'      => 'phpmail',",
+				"    'subject'      => 'Minn GSMTP delete suite ' . $i . ' ' . time(),",
+				"    'message'      => 'suite body',",
+				"    'extra'        => '',",
+				'  ) );',
+				'  $ids[] = (int) $wpdb->insert_id;',
+				'}',
+				'echo wp_json_encode( array( "ok" => true, "ids" => $ids ) );',
+			].join( '\n' ) );
+			let seedOut = '';
+			try {
+				seedOut = execSync(
+					`wp --path=${ JSON.stringify( wpPath ) } --skip-plugins --skip-themes eval-file ${ JSON.stringify( seedFile ) }`,
+					{ encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'pipe' ], timeout: 30000 }
+				);
+			} catch ( e ) {
+				seedOut = ( e.stdout || '' ) + ( e.stderr || '' );
+			}
+			try { fs.unlinkSync( seedFile ); } catch ( e ) { /* ignore */ }
+			let seed = {};
+			try {
+				const line = String( seedOut ).trim().split( /\r?\n/ ).filter( ( l ) => l.startsWith( '{' ) ).pop();
+				seed = JSON.parse( line || '{}' );
+			} catch ( e ) {
+				seed = {};
+			}
+			const ids = Array.isArray( seed.ids ) ? seed.ids.filter( ( n ) => n > 0 ) : [];
+			t.check( 'Seeded two Gravity SMTP events', ids.length === 2, JSON.stringify( seed ) );
+			if ( ids.length === 2 ) {
+				const del1 = await api( 'minn-admin/v1/gravity-smtp/events/' + ids[ 0 ], { method: 'DELETE' } );
+				const gone1 = await api( 'minn-admin/v1/gravity-smtp/events/' + ids[ 0 ] );
+				t.check( 'GSMTP DELETE removes one log entry',
+					del1.status === 200 && del1.body && del1.body.deleted && gone1.status === 404,
+					JSON.stringify( { del: del1.status, body: del1.body, gone: gone1.status } ) );
+				const del2 = await api( 'minn-admin/v1/gravity-smtp/events/' + ids[ 1 ], { method: 'DELETE' } );
+				const gone2 = await api( 'minn-admin/v1/gravity-smtp/events/' + ids[ 1 ] );
+				t.check( 'GSMTP bulk path deletes second entry (same DELETE route)',
+					del2.status === 200 && del2.body && del2.body.deleted && gone2.status === 404,
+					JSON.stringify( { del: del2.status, body: del2.body, gone: gone2.status } ) );
+			}
+		}
+	}
+
 	/* ===== Post SMTP: search + delete (family inactive fixture) =====
 	 * CLI activate + seed avoids browser plugin-toggle races (worker recycle /
 	 * stale nonce). Always restore inactive in finally. */

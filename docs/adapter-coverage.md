@@ -47,7 +47,7 @@ Reference depth: **Gravity SMTP**. Family doc: `mail-plugins.md`.
 
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gravity-smtp | Y | Y | · | Y | — | Y | Y | Y | Y | Y | 2026-07-14 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; condition authoring = **L**; bulk log delete still · |
+| gravity-smtp | Y | Y | Y | Y | — | Y | Y | Y | Y | Y | 2026-07-15 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; **single + bulk log delete** via Event_Model; condition authoring = **L** |
 | fluent-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + sent/failed tabs; **search** + single/bulk **delete** via Logger |
 | post-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + tabs; resend; **search** + single/bulk **delete**; transcript not exposed |
 | wp-mail-smtp | Y | Y | · | Y | — | · | · | · | · | Y | 2026-07-14 | Free = debug events only; full log is Pro |
@@ -62,9 +62,9 @@ Reference depth: **Gravity Forms**.
 | gravity-forms | Y | Y | Y | Y | Y | · | · | Y | Y | Y | 2026-07-14 | Form settings (item), Notifications view; form builder = **L**; status/chart not needed for GF depth |
 | fluent-forms | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Unread/spam/trash tabs + bulk; suite `fluent-forms` (24); active fixture |
 | elementor-forms | Y | Y | · | Y | · | · | · | · | · | · | 2026-07-14 | Elementor canvas = **L** |
-| cf7-flamingo | Y | Y | · | Y | Y | · | · | · | · | Y | 2026-07-14 | CF7 builder = **L** |
-| cfdb7 | Y | Y | · | Y | · | · | · | · | · | Y | 2026-07-14 | |
-| ninja-forms | Y | Y | · | Y | Y | · | · | · | · | Y | 2026-07-14 | |
+| cf7-flamingo | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-15 | CF7 builder = **L**; bulk restore/delete already wired (matrix was stale) |
+| cfdb7 | Y | Y | Y | Y | · | · | · | · | · | Y | 2026-07-15 | bulk delete already wired (matrix was stale) |
+| ninja-forms | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-15 | bulk trash/delete already wired (matrix was stale) |
 | forminator | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Tabs + bulk + search present (matrix was stale) |
 | formidable | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Tabs + bulk + search present (matrix was stale) |
 | everest-forms | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Received/Spam/Trash + bulk; suite `everest-forms` |
@@ -151,21 +151,21 @@ Reference depth: **Gravity Forms**.
 | 2026-07-14 | Full report-only re-sweep (mail → forms → activity-log → redirects/snippets → backups; fixtures inventory) | Matrix cells corrected (forminator/formidable/everest/fluent-forms); **no ship**. Top ship = post-smtp search + delete/bulk |
 | 2026-07-14 | Ship: post-smtp search + single/bulk delete | Axis A mail parity with WPML/FluentSMTP; mail-log suite extended |
 | 2026-07-14 | Ship: fluent-forms Playwright suite | Axis A coverage gap closed; 24 checks (list/tabs/filters/search/detail/trash/delete/manage); seeder `minn_test_seed_fluent_forms` |
+| 2026-07-15 | Axis A: gravity-smtp bulk log delete | Single + bulk Delete via Event_Model (DELETE_EMAIL_LOG); mail-log suite extended; matrix fixed for cf7/cfdb7/ninja bulk (were already Y in code) |
 
-### Ranked backlog (2026-07-14 evening sweep)
+### Ranked backlog (2026-07-15 Axis A pass)
 
 | Rank | Adapter | Axis | Gap | Effort | Why now |
 |---|---|---|---|---|---|
-| ~~1~~ | ~~**post-smtp**~~ | ~~A~~ | ~~Search + single/bulk delete~~ | ~~S~~ | **Shipped 2026-07-14** (mail-log suite covers REST + surface search) |
-| ~~1~~ | ~~**fluent-forms**~~ | ~~A~~ | ~~Playwright **suite**~~ | ~~S~~ | **Shipped 2026-07-14** (`tests/fluent-forms.test.js`, 24 checks) |
-| 1 | gravity-smtp | A | Optional bulk delete on Email log (reference has everything else) | S | Only if log hygiene is daily pain; not blocking |
-| 2 | simple-history / wp-activity-log / stream | A | Optional **status** card (24h counts) | S–M | Thin REST logs are acceptable without it; Solid/LLA-R already have cards |
+| ~~1~~ | ~~**gravity-smtp**~~ | ~~A~~ | ~~Bulk log delete~~ | ~~S~~ | **Shipped 2026-07-15** |
+| 1 | simple-history / wp-activity-log / stream | A | Optional **status** card (24h counts) | S–M | Thin REST logs are acceptable without it; Solid/LLA-R already have cards |
+| 2 | sectionsRoute row types (`pill`, `code`, `html-preview`, `kv-table`) | A | Email-log detail fidelity | M | Shared primitive; benefits GSMTP/Fluent/Post detail |
 | 3 | All-In-One Security (AIOS) | B | Activity-log + posture (LLA-R/Solid pattern) | M | Wave B leftover; **not installed** on minnadmin — install first |
 | 4 | GoSMTP / SureMails / Site Mailer | B | New mail-log providers | M | **Not installed**; source-verify free log storage first |
 | 5 | WPForms Pro entries | B | Forms family | M–L | Needs Pro license + fixtures; biggest missing forms name |
 | 6 | fluent-smtp | B | Settings mapper (connections) | M | GSMTP has settings; Fluent connection UI is canvas-ish → likely **L** |
 
-**Matrix fixes this sweep (no code):** forminator/formidable/everest bulk+tabs → **Y**; fluent-forms bulk → **Y**; everest suite → **Y**; Solid Security now **active** on minnadmin; Meta Box / Pods / Safe SVG / traffic day providers noted under non-surface rows.
+**Matrix fixes this sweep:** gravity-smtp bulk → **Y**; cf7-flamingo / cfdb7 / ninja-forms bulk → **Y** (code already had bulk; cells were stale).
 
 **Deliberate non-goals:** GSMTP routing tree authoring; GF form builder / notifications events; backup restores; WP Mail SMTP Pro log without Pro; forminator "status card" (inbox plugins don't need GSMTP-style charts); ecommerce (shipped v0.14); re-proposing forminator/formidable tabs (already wired).
 

@@ -4,8 +4,10 @@
 
 ### Added
 * **Yoast SEO Premium license:** Extensions → Licenses gains a **Yoast SEO Premium** row. Subscription state comes from free Yoast SEO's MyYoast site info (`WPSEO_Addon_Manager`); there is no paste-a-key path. **Activate ↗** opens Yoast's Licenses page, and **Verify** refreshes the MyYoast cache.
-
 * **Smash Balloon licenses:** Extensions → Licenses gains dedicated rows for Instagram Feed Pro, Custom Facebook Feed Pro, YouTube Feed Pro, Custom Twitter Feeds Pro, Social Wall, Reviews Feed Pro, TikTok Feeds Pro and Feed Analytics Pro. Paste-to-activate, deactivate and re-verify go through Smash Balloon's own EDD store (`smashballoon.com`); an **All Plugins** multi-product key activates each product with that product's own download name.
+
+### Improved
+* **Gravity SMTP bulk log delete:** the Email log (the mail family reference) gains single-row and bulk **Delete**, through Gravity SMTP's own `Event_Model::delete` and gated on its `DELETE_EMAIL_LOG` capability. Permanent, no trash; same shape FluentSMTP and Post SMTP already had.
 
 ## **v0.15.0** - July 15, 2026
 

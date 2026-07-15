@@ -20,6 +20,10 @@
  * surface-field vocabulary fit. The log also knows their 2.3.0
  * partially-sent status ("Filtered": suppressed recipients stripped).
  *
+ * Log delete (single + bulk) goes through Event_Model::delete() — the
+ * same model their Delete_Email_Endpoint / Delete_Events_Endpoint use —
+ * gated on DELETE_EMAIL_LOG. Permanent; no trash.
+ *
  * Capability model: Gravity SMTP ships granular gravitysmtp_* caps
  * (granted to administrators by their Roles::register()); every route here
  * gates on the matching cap when the Roles class is loaded, falling back
@@ -77,6 +81,52 @@ function minn_admin_gsmtp_routing_available() {
 /** Deep link into their React routing screen. */
 function minn_admin_gsmtp_routing_admin_url() {
 	return admin_url( 'admin.php?page=gravitysmtp-settings&tab=routing' );
+}
+
+/**
+ * Delete one or more Gravity SMTP event log rows through their Event_Model
+ * (Delete_Email_Endpoint / Delete_Events_Endpoint path). Permanent.
+ *
+ * @param int[] $ids Event ids.
+ * @return int Number of ids that no longer exist after the attempt.
+ */
+function minn_admin_gsmtp_delete_event_ids( array $ids ) {
+	$ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+	if ( ! $ids ) {
+		return 0;
+	}
+	$deleted = 0;
+	// Prefer their model so foreign-key checks and hooks match wp-admin.
+	try {
+		if ( class_exists( 'Gravity_Forms\Gravity_SMTP\Gravity_SMTP' ) ) {
+			$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+			$events    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::EVENT_MODEL );
+			if ( $events && method_exists( $events, 'delete' ) ) {
+				foreach ( $ids as $id ) {
+					$events->delete( $id );
+				}
+			}
+		}
+	} catch ( \Throwable $e ) {
+		// Fall through to prefix-scoped SQL below.
+	}
+	global $wpdb;
+	$table = $wpdb->prefix . 'gravitysmtp_events';
+	foreach ( $ids as $id ) {
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$still = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
+		if ( $still ) {
+			// Model missing or no-oped; last-resort prefix-scoped delete.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$still = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
+		}
+		if ( ! $still ) {
+			$deleted++;
+		}
+	}
+	return $deleted;
 }
 
 /**
@@ -301,6 +351,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'method'  => 'POST',
 					'confirm' => 'Resend this email to the original recipients?',
 					'when'    => array( 'key' => 'can_resend', 'equals' => true ),
+				),
+				array(
+					'label'   => 'Delete',
+					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}',
+					'method'  => 'DELETE',
+					'confirm' => 'Delete this log entry permanently? There is no trash.',
+					'danger'  => true,
+				),
+			),
+			'bulk'      => array(
+				array(
+					'label'   => 'Delete',
+					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}',
+					'method'  => 'DELETE',
+					'confirm' => 'Delete the selected log entries permanently?',
+					'danger'  => true,
 				),
 			),
 		),
@@ -580,60 +646,83 @@ add_action( 'rest_api_init', function () {
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events/(?P<id>\d+)', array(
-		'methods'             => 'GET',
-		'permission_callback' => $can( 'VIEW_EMAIL_LOG_DETAILS' ),
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = $wpdb->prefix . 'gravitysmtp_events';
-			$row   = $wpdb->get_row( $wpdb->prepare(
-				"SELECT id, date_created, status, service, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
-			}
-			$out = array(
-				'id'           => (int) $row->id,
-				'subject'      => $row->subject,
-				'to'           => minn_admin_gravity_smtp_recipients( $row->extra ),
-				'status'       => $row->status,
-				'service'      => $row->service,
-				'date_created' => $row->date_created,
-				'message'      => $row->message,
-				'can_resend'   => true,
-			);
-			// Enrich through their own models (from/cc/bcc parsed by their
-			// code, attachment count, resend eligibility). Their
-			// full_details() needs container services that only register on
-			// their admin pages, so every call is Throwable-guarded and the
-			// plain row above is the floor.
-			try {
-				$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
-				$events    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::EVENT_MODEL );
-				$event     = $events ? $events->get( (int) $row->id ) : null;
-				if ( is_array( $event ) && array_key_exists( 'can_resend', $event ) ) {
-					$out['can_resend'] = (bool) $event['can_resend'];
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $can( 'VIEW_EMAIL_LOG_DETAILS' ),
+			'callback'            => function ( WP_REST_Request $request ) {
+				global $wpdb;
+				$table = $wpdb->prefix . 'gravitysmtp_events';
+				$row   = $wpdb->get_row( $wpdb->prepare(
+					"SELECT id, date_created, status, service, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
+					(int) $request['id']
+				) );
+				if ( ! $row ) {
+					return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
 				}
-				$details = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::LOG_DETAILS_MODEL );
-				$full    = $details ? $details->full_details( (int) $row->id ) : array();
-				if ( is_array( $full ) && $full ) {
-					foreach ( array( 'from', 'cc', 'bcc', 'source' ) as $k ) {
-						if ( ! empty( $full[ $k ] ) && is_string( $full[ $k ] ) ) {
-							// "Name <addr>" → "Name (addr)": the client
-							// strip-tags every raw detail value, which would
-							// eat an angle-bracketed address whole.
-							$out[ $k ] = trim( str_replace( array( '<', '>' ), array( '(', ')' ), $full[ $k ] ) );
+				$out = array(
+					'id'           => (int) $row->id,
+					'subject'      => $row->subject,
+					'to'           => minn_admin_gravity_smtp_recipients( $row->extra ),
+					'status'       => $row->status,
+					'service'      => $row->service,
+					'date_created' => $row->date_created,
+					'message'      => $row->message,
+					'can_resend'   => true,
+				);
+				// Enrich through their own models (from/cc/bcc parsed by their
+				// code, attachment count, resend eligibility). Their
+				// full_details() needs container services that only register on
+				// their admin pages, so every call is Throwable-guarded and the
+				// plain row above is the floor.
+				try {
+					$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+					$events    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::EVENT_MODEL );
+					$event     = $events ? $events->get( (int) $row->id ) : null;
+					if ( is_array( $event ) && array_key_exists( 'can_resend', $event ) ) {
+						$out['can_resend'] = (bool) $event['can_resend'];
+					}
+					$details = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::LOG_DETAILS_MODEL );
+					$full    = $details ? $details->full_details( (int) $row->id ) : array();
+					if ( is_array( $full ) && $full ) {
+						foreach ( array( 'from', 'cc', 'bcc', 'source' ) as $k ) {
+							if ( ! empty( $full[ $k ] ) && is_string( $full[ $k ] ) ) {
+								// "Name <addr>" → "Name (addr)": the client
+								// strip-tags every raw detail value, which would
+								// eat an angle-bracketed address whole.
+								$out[ $k ] = trim( str_replace( array( '<', '>' ), array( '(', ')' ), $full[ $k ] ) );
+							}
+						}
+						if ( ! empty( $full['has_attachment'] ) ) {
+							$out['attachments'] = (int) $full['has_attachment'];
 						}
 					}
-					if ( ! empty( $full['has_attachment'] ) ) {
-						$out['attachments'] = (int) $full['has_attachment'];
-					}
+				} catch ( \Throwable $e ) {
+					// The plain columns already shipped.
 				}
-			} catch ( \Throwable $e ) {
-				// The plain columns already shipped.
-			}
-			return rest_ensure_response( $out );
-		},
+				return rest_ensure_response( $out );
+			},
+		),
+		array(
+			'methods'             => 'DELETE',
+			'permission_callback' => $can( 'DELETE_EMAIL_LOG' ),
+			'callback'            => function ( WP_REST_Request $request ) {
+				global $wpdb;
+				$id    = (int) $request['id'];
+				$table = $wpdb->prefix . 'gravitysmtp_events';
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
+				if ( ! $exists ) {
+					return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+				}
+				if ( minn_admin_gsmtp_delete_event_ids( array( $id ) ) < 1 ) {
+					return new WP_Error( 'delete_failed', 'Could not delete this log entry.', array( 'status' => 500 ) );
+				}
+				return rest_ensure_response( array(
+					'deleted' => true,
+					'message' => 'Log entry deleted.',
+				) );
+			},
+		),
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events/(?P<id>\d+)/resend', array(
