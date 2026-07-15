@@ -719,7 +719,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-side-viewlink { display: block; text-align: center; margin-top: 9px; font-size: 13.5px; font-weight: 600; }
 /* Public Post Preview (adapters/public-post-preview.php) under Publish. */
 .minn-ppp { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); }
-.minn-ppp .minn-check-row { margin-top: 0; }
+.minn-ppp-toggle { margin-top: 0; max-width: none; gap: 0; }
 .minn-ppp-row { display: flex; gap: 6px; margin-top: 8px; align-items: stretch; }
 .minn-ppp-row .minn-ppp-url { flex: 1; min-width: 0; font-size: 11.5px; }
 .minn-ppp-row .minn-btn-soft { flex-shrink: 0; }
@@ -770,7 +770,12 @@ button.minn-nav-label:hover { color: var(--text2); }
    left-weighted hierarchy. Right-align left a lonely island of cells. */
 .minn-rev-heat-track {
   display: flex; flex-direction: column; align-items: flex-start;
-  gap: 4px; width: 100%; overflow: hidden;
+  gap: 4px; width: 100%;
+  /* Room for the 2px sel outline + 1px offset — overflow:hidden clipped the
+     ring on edge cells (esp. bottom row). */
+  overflow: visible;
+  padding: 3px;
+  margin: -3px;
 }
 .minn-rev-heat-months,
 .minn-rev-heat-grid {
@@ -783,7 +788,10 @@ button.minn-nav-label:hover { color: var(--text2); }
   font-size: 10px; font-weight: 600; letter-spacing: 0.02em;
   color: var(--text3); white-space: nowrap; line-height: 14px;
 }
-.minn-rev-heat-week { display: flex; flex-direction: column; gap: 3px; flex: 0 0 12px; width: 12px; }
+.minn-rev-heat-week {
+  display: flex; flex-direction: column; gap: 3px;
+  flex: 0 0 12px; width: 12px; overflow: visible;
+}
 .minn-rev-heat-cell {
   width: 12px; height: 12px; border-radius: 2px; border: 0; padding: 0;
   background: var(--panel2); cursor: pointer; display: block;
@@ -798,8 +806,12 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-rev-heat-cell:hover:not(:disabled),
 .minn-rev-heat-cell:focus-visible:not(:disabled) {
   outline: 1px solid var(--text3); outline-offset: 1px;
+  position: relative; z-index: 1;
 }
-.minn-rev-heat-cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.minn-rev-heat-cell.sel {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+  position: relative; z-index: 2;
+}
 .minn-rev-heat-legend {
   display: flex; align-items: center; gap: 4px; justify-content: flex-start;
   margin-top: 8px; font-size: 11px; color: var(--text3);
@@ -1214,9 +1226,18 @@ select.minn-input {
 .minn-icon-btns { display: flex; gap: 8px; margin-top: 8px; }
 .minn-toggle-rows { display: flex; flex-direction: column; gap: 14px; }
 .minn-toggle-row { display: flex; align-items: center; gap: 14px; }
-.minn-toggle-info { flex: 1; }
+.minn-toggle-info { flex: 1; min-width: 0; }
 .minn-toggle-label { font-size: 14.5px; font-weight: 600; }
 .minn-toggle-desc { font-size: 13px; color: var(--text3); margin-top: 2px; }
+/* Editor Settings door: switch LEADS the label (same side as the old
+   checkboxes). Avoids the wide-modal “label … big empty … switch” gap. */
+.minn-side-toggles { margin-top: 8px; gap: 10px; max-width: 420px; }
+.minn-side-toggles .minn-toggle-row { gap: 10px; justify-content: flex-start; }
+.minn-side-toggles .minn-toggle-info { flex: 0 1 auto; }
+.minn-side-toggles .minn-toggle-label {
+  font-size: 13.5px; font-weight: 500; color: var(--text2); line-height: 1.35;
+}
+.minn-side-toggles .minn-switch { flex-shrink: 0; }
 
 /* ===== Editor ===== */
 .minn-editor { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 26px; max-width: 1000px; margin: 0 auto; }
@@ -1915,8 +1936,9 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-status.trash-status { color: var(--red); background: rgba(228,107,107,0.12); }
 
 /* ===== Users ===== */
-.minn-user-cols { grid-template-columns: 40px 1.2fr 1.4fr 130px 110px 40px; }
-.minn-user-cols.has-cb { grid-template-columns: 34px 40px 1.2fr 1.4fr 130px 110px 40px; }
+.minn-user-cols { grid-template-columns: 40px 52px 1.2fr 1.4fr 130px 110px 40px; }
+.minn-user-cols.has-cb { grid-template-columns: 34px 40px 52px 1.2fr 1.4fr 130px 110px 40px; }
+.minn-user-id { font-variant-numeric: tabular-nums; color: var(--text3); }
 
 /* Terms manager */
 .minn-term-cols { grid-template-columns: 1.6fr 1fr 90px 40px; }
@@ -2690,14 +2712,16 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-customer-cols { grid-template-columns: 1fr 40px; }
   .minn-customer-cols > :nth-child(2), .minn-customer-cols > :nth-child(3),
   .minn-customer-cols > :nth-child(4) { display: none; }
+  /* Avatar · name · role — hide ID, email, registered, actions. */
   .minn-user-cols { grid-template-columns: 40px 1fr 100px; }
-  .minn-user-cols > :nth-child(3), .minn-user-cols > :nth-child(5),
-  .minn-user-cols > :nth-child(6) { display: none; }
-  /* With the checkbox column the cells shift by one: show cb, name, role. */
+  .minn-user-cols > :nth-child(2), .minn-user-cols > :nth-child(4),
+  .minn-user-cols > :nth-child(6), .minn-user-cols > :nth-child(7) { display: none; }
+  /* With checkbox: show cb, name, role. */
   .minn-user-cols.has-cb { grid-template-columns: 30px 1fr 100px; }
-  .minn-user-cols.has-cb > :nth-child(2), .minn-user-cols.has-cb > :nth-child(4),
-  .minn-user-cols.has-cb > :nth-child(6), .minn-user-cols.has-cb > :nth-child(7) { display: none; }
-  .minn-user-cols.has-cb > :nth-child(3), .minn-user-cols.has-cb > :nth-child(5) { display: block; }
+  .minn-user-cols.has-cb > :nth-child(2), .minn-user-cols.has-cb > :nth-child(3),
+  .minn-user-cols.has-cb > :nth-child(5), .minn-user-cols.has-cb > :nth-child(7),
+  .minn-user-cols.has-cb > :nth-child(8) { display: none; }
+  .minn-user-cols.has-cb > :nth-child(4), .minn-user-cols.has-cb > :nth-child(6) { display: block; }
   .minn-cpt-cols { grid-template-columns: 1fr 100px; }
   .minn-cpt-cols > :nth-child(2), .minn-cpt-cols > :nth-child(4),
   .minn-cpt-cols > :nth-child(5), .minn-cpt-cols > :nth-child(6) { display: none; }
