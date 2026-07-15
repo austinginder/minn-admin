@@ -167,7 +167,17 @@ class Minn_Admin_Notices {
 
 		$entries = array();
 		foreach ( $boxes as $box ) {
-			$text = self::text_of( $box );
+			$links = self::links_of( $box );
+			$text  = self::text_of( $box );
+			// Button CTAs (Allow / No, Thanks) also appear as textContent of
+			// the notice — strip their labels so the body is not "Allow No, Thanks"
+			// with no way to click them (Everest Forms allow-usage pattern).
+			foreach ( $links as $l ) {
+				if ( ! empty( $l['button'] ) && ! empty( $l['text'] ) ) {
+					$text = str_replace( $l['text'], '', $text );
+				}
+			}
+			$text = preg_replace( '/\s+/u', ' ', trim( $text ) );
 			if ( strlen( $text ) < 8 ) {
 				continue;
 			}
@@ -176,7 +186,7 @@ class Minn_Admin_Notices {
 				'severity'    => self::severity_of( $class ),
 				'dismissible' => (bool) preg_match( '/\bis-dismissible\b/', $class ),
 				'text'        => $text,
-				'links'       => self::links_of( $box ),
+				'links'       => $links,
 			);
 		}
 		return $entries;
@@ -223,16 +233,58 @@ class Minn_Admin_Notices {
 	 * page it rendered on. They get flagged `action` so the client can run
 	 * them in the background, and our params are stripped (only OUR nonce —
 	 * a plugin's own _wpnonce value is preserved).
+	 *
+	 * Button CTAs with href="#" (or empty) are also extracted when they look
+	 * like real choices (WP .button class, or labels like "No, Thanks" /
+	 * "Allow"). Those fire only via plugin admin-ajax JS in wp-admin; Minn
+	 * surfaces them as action buttons and, when the class maps to a known
+	 * handler, runs it through minn-admin/v1/notices/ajax (whitelist).
 	 */
 	private static function links_of( $node ) {
 		$links     = array();
 		$seen      = array();
 		$own_nonce = sanitize_text_field( wp_unslash( $_GET['minn_nonce'] ?? $_GET['_wpnonce'] ?? '' ) );
 		foreach ( $node->getElementsByTagName( 'a' ) as $a ) {
-			$href = trim( (string) $a->getAttribute( 'href' ) );
-			if ( '' === $href || '#' === $href[0] || 0 === stripos( $href, 'javascript:' ) ) {
+			$href  = trim( (string) $a->getAttribute( 'href' ) );
+			$class = (string) $a->getAttribute( 'class' );
+			$label = preg_replace( '/\s+/u', ' ', trim( (string) $a->textContent ) );
+			if ( function_exists( 'mb_substr' ) ) {
+				$label = mb_substr( $label, 0, 80 );
+			} else {
+				$label = substr( $label, 0, 80 );
+			}
+			$label = $label ?: 'Open';
+
+			// JS-only button CTAs (href="#" / empty / javascript:).
+			$is_hash = ( '' === $href || '#' === $href || 0 === strpos( $href, '#' ) || 0 === stripos( $href, 'javascript:' ) );
+			if ( $is_hash ) {
+				$looks_button = (bool) preg_match( '/\bbutton\b/', $class )
+					|| (bool) preg_match( '/^(No,?\s*thanks|Allow|Dismiss|Not now|Maybe later|Skip|Deny|Opt\s*out)\b/i', $label );
+				if ( ! $looks_button ) {
+					continue;
+				}
+				$key = 'btn:' . strtolower( $label ) . '|' . $class;
+				if ( isset( $seen[ $key ] ) ) {
+					continue;
+				}
+				$seen[ $key ] = true;
+				$entry        = array(
+					'text'   => $label,
+					'url'    => '',
+					'action' => true,
+					'button' => true,
+				);
+				$ajax = self::ajax_for_button( $class, $label );
+				if ( $ajax ) {
+					$entry['ajax'] = $ajax;
+				}
+				$links[] = $entry;
+				if ( count( $links ) >= 3 ) {
+					break;
+				}
 				continue;
 			}
+
 			if ( preg_match( '#^https?://#i', $href ) ) {
 				$url = $href;
 			} elseif ( '/' === $href[0] ) {
@@ -254,14 +306,8 @@ class Minn_Admin_Notices {
 				continue;
 			}
 			$seen[ $url ] = true;
-			$label        = preg_replace( '/\s+/u', ' ', trim( (string) $a->textContent ) );
-			if ( function_exists( 'mb_substr' ) ) {
-				$label = mb_substr( $label, 0, 80 );
-			} else {
-				$label = substr( $label, 0, 80 );
-			}
-			$links[] = array(
-				'text'   => $label ?: 'Open',
+			$links[]      = array(
+				'text'   => $label,
 				'url'    => $url,
 				'action' => $is_action,
 			);
@@ -270,6 +316,120 @@ class Minn_Admin_Notices {
 			}
 		}
 		return $links;
+	}
+
+	/**
+	 * Map known JS-dismiss button classes to a whitelist ajax action.
+	 * Handlers run via Minn_Admin_Notices::run_ajax() (never arbitrary ajax).
+	 *
+	 * @return array{action:string,args:array}|null
+	 */
+	private static function ajax_for_button( $class, $label ) {
+		$class = ' ' . $class . ' ';
+		// Everest Forms allow-usage notice (html-notice-allow-usage.php).
+		if ( false !== strpos( $class, 'evf-deny-data-sharing' ) ) {
+			return array(
+				'action' => 'everest_forms_allow_usage_dismiss',
+				'args'   => array( 'allow_usage_tracking' => 'false' ),
+			);
+		}
+		if ( false !== strpos( $class, 'evf-allow-data-sharing' ) ) {
+			return array(
+				'action' => 'everest_forms_allow_usage_dismiss',
+				'args'   => array( 'allow_usage_tracking' => 'true' ),
+			);
+		}
+		// Dev fixture (minn-dev-fixtures) for the suite.
+		if ( false !== strpos( $class, 'minn-fixture-hash-no' ) ) {
+			return array(
+				'action' => 'minn_fixture_hash_dismiss',
+				'args'   => array( 'allow' => 'false' ),
+			);
+		}
+		if ( false !== strpos( $class, 'minn-fixture-hash-yes' ) ) {
+			return array(
+				'action' => 'minn_fixture_hash_dismiss',
+				'args'   => array( 'allow' => 'true' ),
+			);
+		}
+		return null;
+	}
+
+	/**
+	 * Whitelisted notice ajax handlers Minn can run on the user's behalf.
+	 * Keys are admin-ajax action names; values describe allowed args.
+	 */
+	public static function ajax_whitelist() {
+		$map = array(
+			'everest_forms_allow_usage_dismiss' => array(
+				'args' => array(
+					'allow_usage_tracking' => array( 'true', 'false' ),
+				),
+				// Mirror the plugin handler: no arbitrary POST keys.
+				'run'  => array( __CLASS__, 'run_everest_allow_usage' ),
+			),
+			'minn_fixture_hash_dismiss'         => array(
+				'args' => array(
+					'allow' => array( 'true', 'false' ),
+				),
+				'run'  => array( __CLASS__, 'run_fixture_hash_dismiss' ),
+			),
+		);
+		/**
+		 * Filter the whitelist of notice admin-ajax actions Minn may run.
+		 *
+		 * @param array $map action => { args, run }.
+		 */
+		return apply_filters( 'minn_admin_notice_ajax_actions', $map );
+	}
+
+	/**
+	 * Run a whitelisted notice ajax action (Everest "No, Thanks" / "Allow").
+	 *
+	 * @param string $action Admin-ajax action name.
+	 * @param array  $args   Sanitized args from the client.
+	 * @return true|WP_Error
+	 */
+	public static function run_ajax( $action, $args = array() ) {
+		$map = self::ajax_whitelist();
+		if ( ! isset( $map[ $action ] ) || ! is_callable( $map[ $action ]['run'] ) ) {
+			return new WP_Error( 'unknown_action', 'That notice action is not supported.', array( 'status' => 400 ) );
+		}
+		$def  = $map[ $action ];
+		$safe = array();
+		foreach ( (array) ( $def['args'] ?? array() ) as $key => $allowed ) {
+			if ( ! isset( $args[ $key ] ) ) {
+				continue;
+			}
+			$val = is_bool( $args[ $key ] ) ? ( $args[ $key ] ? 'true' : 'false' ) : (string) $args[ $key ];
+			if ( is_array( $allowed ) && ! in_array( $val, $allowed, true ) ) {
+				continue;
+			}
+			$safe[ $key ] = $val;
+		}
+		$result = call_user_func( $def['run'], $safe );
+		return is_wp_error( $result ) ? $result : true;
+	}
+
+	/** Everest Forms allow-usage notice — mirrors allow_usage_dismiss without wp_die(). */
+	public static function run_everest_allow_usage( $args ) {
+		if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'manage_everest_forms' ) ) {
+			return new WP_Error( 'forbidden', 'You cannot dismiss this notice.', array( 'status' => 403 ) );
+		}
+		update_option( 'everest_forms_allow_usage_notice_shown', true );
+		if ( isset( $args['allow_usage_tracking'] ) && 'true' === $args['allow_usage_tracking'] ) {
+			update_option( 'everest_forms_allow_usage_tracking', 'yes' );
+		}
+		return true;
+	}
+
+	/** Dev-fixture hash-button dismiss. */
+	public static function run_fixture_hash_dismiss( $args ) {
+		update_option( 'minn_fixture_hash_dismissed', '1' );
+		if ( isset( $args['allow'] ) && 'true' === $args['allow'] ) {
+			update_option( 'minn_fixture_hash_allowed', '1' );
+		}
+		return true;
 	}
 
 	/** Resolve a callback to the component that owns its file. */
@@ -351,10 +511,10 @@ class Minn_Admin_Notices {
 	/* ===== Storage ===== */
 
 	private static function store_key() {
-		// v2: links carry {action} and capture-param stripping. Versioning
-		// the key invalidates old-shape captures so the client re-captures
-		// instead of rendering stale, polluted links (old keys just expire).
-		return 'minn_admin_notices_v2_' . get_current_user_id();
+		// v3: href="#" button CTAs (Allow / No, Thanks) extracted as action
+		// links, with optional ajax descriptors. Versioning invalidates
+		// stale captures so the panel re-fetches the new shape.
+		return 'minn_admin_notices_v3_' . get_current_user_id();
 	}
 
 	private static function store( $items ) {

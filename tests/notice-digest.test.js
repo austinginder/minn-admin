@@ -26,7 +26,11 @@ const { launch, login, reporter } = require( './helpers' );
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
 		credentials: 'same-origin',
-		body: JSON.stringify( { minn_fixture_action_done: '' } ),
+		body: JSON.stringify( {
+			minn_fixture_action_done: '',
+			minn_fixture_hash_dismissed: '',
+			minn_fixture_hash_allowed: '',
+		} ),
 	} ) ).status );
 
 	const fetchNoticeItems = () => page.evaluate( async () => {
@@ -50,7 +54,7 @@ const { launch, login, reporter } = require( './helpers' );
 			return { status: r.status, body: await r.json() };
 		} );
 		t.check( 'Capture responds ok JSON (page chrome swallowed)', cap.status === 200 && cap.body && cap.body.ok === true );
-		t.check( 'Capture found the fixture notices', cap.body.count >= 5, `count=${ cap.body.count }` );
+		t.check( 'Capture found the fixture notices', cap.body.count >= 6, `count=${ cap.body.count }` );
 
 		// --- Notifications endpoint -------------------------------------------
 		const items = await fetchNoticeItems();
@@ -85,6 +89,22 @@ const { launch, login, reporter } = require( './helpers' );
 			aLink && aLink.url
 		);
 
+		// Hash-button CTAs (Everest "No, Thanks" shape): href="#" with .button.
+		const hashItem = byText( 'contribute telemetry' );
+		const hashLinks = ( hashItem && hashItem.links ) || [];
+		const noThanks = hashLinks.find( ( l ) => /No,?\s*Thanks/i.test( l.text || '' ) );
+		const allowBtn = hashLinks.find( ( l ) => /^Allow$/i.test( ( l.text || '' ).trim() ) );
+		t.check( 'Hash-button notice extracted', !! hashItem, hashItem && hashItem.title );
+		t.check( 'No, Thanks is a clickable action button',
+			!! noThanks && noThanks.action && noThanks.button && noThanks.ajax && noThanks.ajax.action === 'minn_fixture_hash_dismiss',
+			JSON.stringify( noThanks ) );
+		t.check( 'Allow is a clickable action button',
+			!! allowBtn && allowBtn.action && allowBtn.button,
+			JSON.stringify( allowBtn ) );
+		t.check( 'Button labels stripped from notice body text',
+			!! hashItem && ! /No,?\s*Thanks/i.test( hashItem.title ) && ! /\bAllow\b/.test( hashItem.title.replace( /^[^:]+:\s*/, '' ) ),
+			hashItem && hashItem.title );
+
 		// --- Panel UI -----------------------------------------------------------
 		await page.click( '#minn-notif-btn' );
 		await page.waitForSelector( '.minn-notif-panel', { timeout: 5000 } );
@@ -93,7 +113,7 @@ const { launch, login, reporter } = require( './helpers' );
 		// suite's capture); wait for the refresh fetch to re-render.
 		const rowsOk = await page.waitForFunction(
 			() => Array.from( document.querySelectorAll( '.minn-notif-row' ) )
-				.filter( ( r ) => r.textContent.includes( 'Minn Fixture' ) ).length >= 5,
+				.filter( ( r ) => r.textContent.includes( 'Minn Fixture' ) ).length >= 6,
 			null, { timeout: 10000 }
 		).then( () => true ).catch( () => false );
 		const rowCount = await page.evaluate( () =>
@@ -153,6 +173,36 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'Actioned notice left the digest', gone );
 		const itemsAfter = await fetchNoticeItems();
 		t.check( 'Fresh capture no longer holds the notice', ! itemsAfter.some( ( n ) => n.title.includes( 'allow anonymous usage tracking' ) ) );
+
+		// --- Hash-button "No, Thanks" (Everest-style ajax dismiss) ------------
+		await page.evaluate( () => {
+			const btn = Array.from( document.querySelectorAll( '.minn-notif-link' ) )
+				.find( ( b ) => /No,?\s*Thanks/i.test( b.textContent || '' ) );
+			if ( btn ) btn.click();
+		} );
+		await page.waitForFunction(
+			() => Array.from( document.querySelectorAll( '.minn-toast' ) )
+				.some( ( x ) => /Done:.*No,?\s*Thanks/i.test( x.textContent || '' ) ),
+			null, { timeout: 20000 }
+		).catch( () => null );
+		t.check( 'No, Thanks action toast', await page.evaluate( () =>
+			Array.from( document.querySelectorAll( '.minn-toast' ) )
+				.some( ( x ) => /Done:.*No,?\s*Thanks/i.test( x.textContent || '' ) )
+		) );
+		const hashGone = await page.waitForFunction(
+			() => ! Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.some( ( r ) => r.textContent.includes( 'contribute telemetry' ) ),
+			null, { timeout: 10000 }
+		).then( () => true ).catch( () => false );
+		t.check( 'No, Thanks removed the hash-button notice', hashGone );
+		const hashOpt = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/settings?_fields=minn_fixture_hash_dismissed', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce },
+			} );
+			const b = await r.json();
+			return b.minn_fixture_hash_dismissed;
+		} );
+		t.check( 'No, Thanks ran the plugin dismiss handler', hashOpt === '1', String( hashOpt ) );
 
 		// --- Hide (Minn-side dismissal) ---------------------------------------
 		// The error fixture has no links — the same shape as notices whose only

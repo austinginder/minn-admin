@@ -268,6 +268,49 @@ class Minn_Admin_REST {
 			);
 		}
 
+		// Whitelisted notice ajax (Everest "No, Thanks" / "Allow" and peers):
+		// href="#" buttons that only work via admin-ajax JS in wp-admin.
+		register_rest_route(
+			self::NS,
+			'/notices/ajax',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'action'    => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+					'args'      => array(
+						'type'    => 'object',
+						'default' => array(),
+					),
+					'notice_id' => array(
+						'type'    => 'string',
+						'default' => '',
+					),
+				),
+				'callback'            => function ( WP_REST_Request $request ) {
+					$result = Minn_Admin_Notices::run_ajax(
+						sanitize_key( $request['action'] ),
+						is_array( $request['args'] ) ? $request['args'] : array()
+					);
+					if ( is_wp_error( $result ) ) {
+						return $result;
+					}
+					// Also hide from Minn's digest so a lagging re-capture
+					// does not bounce the row back before the plugin's option sticks.
+					$id = preg_replace( '/[^a-f0-9]/', '', (string) $request['notice_id'] );
+					if ( strlen( $id ) === 12 ) {
+						Minn_Admin_Notices::hide( $id );
+					}
+					return rest_ensure_response( array( 'ok' => true ) );
+				},
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/plugin-updates',
