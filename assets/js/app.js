@@ -2254,7 +2254,39 @@
 		const cpt = currentCpt();
 		const c = cpt ? state.cache.cptContent[ cpt.restBase ] : state.cache.content;
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading content…</div>';
+			// Cold paint: base type tabs (CPT tabs land when types resolve).
+			const coldTabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ],
+				...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
+				...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
+			view.innerHTML = `
+			<div class="minn-toolbar">
+				<div class="minn-tabs">
+					${ coldTabs.map( ( [ id, label ] ) =>
+						`<button class="minn-tab${ ( state.filter || 'all' ) === id ? ' active' : '' }" data-filter="${ id }">${ esc( label ) }</button>` ).join( '' ) }
+				</div>
+			</div>
+			<div class="minn-loading">Loading content…</div>`;
+			$$( '.minn-tab[data-filter]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const nf = btn.dataset.filter;
+					if ( String( state.filter || 'all' ) === String( nf ) ) return;
+					state.filter = nf;
+					softListReload( {
+						route: 'content',
+						view,
+						clear: () => {
+							state.cache.content = null;
+							state.cache.cptContent = {};
+						},
+						paintChrome: () => {
+							$$( '.minn-tab[data-filter]', view ).forEach( ( b ) =>
+								b.classList.toggle( 'active', b.dataset.filter === nf ) );
+						},
+						load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+						render: renderContent,
+					} );
+				} )
+			);
 			( cpt ? loadCpt() : loadContent() ).then( renderIfCurrent( 'content' ) ).catch( showErr );
 			return;
 		}
@@ -2985,7 +3017,40 @@
 		const view = $( '#minn-view' );
 		const c = state.cache.media;
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading media…</div>';
+			view.innerHTML = `
+			<div class="minn-toolbar">
+				<div class="minn-tabs">
+					${ mediaTypesList().map( ( [ id, label ] ) =>
+						`<button class="minn-tab${ ( state.mediaType || '' ) === id ? ' active' : '' }" data-mtype="${ id }">${ label }</button>` ).join( '' ) }
+				</div>
+				<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
+				<div class="minn-view-tabs" style="margin-left:0;">
+					<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
+					<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
+				</div>
+			</div>
+			<div class="minn-loading">Loading media…</div>`;
+			$$( '[data-mtype]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const next = btn.dataset.mtype || '';
+					if ( ( state.mediaType || '' ) === next ) return;
+					state.mediaType = next || null;
+					softListReload( {
+						route: 'media',
+						view,
+						clear: () => { state.cache.media = null; },
+						paintChrome: () => {
+							$$( '[data-mtype]', view ).forEach( ( b ) =>
+								b.classList.toggle( 'active', ( b.dataset.mtype || '' ) === next ) );
+						},
+						load: () => loadMedia(),
+						render: renderMedia,
+					} );
+				} )
+			);
+			$$( '.minn-view-tab', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => { state.mediaView = btn.dataset.view; } )
+			);
 			loadMedia().then( renderIfCurrent( 'media' ) ).catch( showErr );
 			return;
 		}
@@ -3266,7 +3331,32 @@
 		}
 		const c = state.cache.comments;
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading comments…</div>';
+			view.innerHTML = `
+			<div class="minn-toolbar">
+				<div class="minn-tabs">
+					${ COMMENT_TABS.map( ( [ id, label ] ) =>
+						`<button class="minn-tab${ state.commentTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
+				</div>
+			</div>
+			<div class="minn-loading">Loading comments…</div>`;
+			$$( '[data-ctab]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const tab = btn.dataset.ctab;
+					if ( state.commentTab === tab ) return;
+					state.commentTab = tab;
+					softListReload( {
+						route: 'comments',
+						view,
+						clear: () => { state.cache.comments = null; },
+						paintChrome: () => {
+							$$( '[data-ctab]', view ).forEach( ( b ) =>
+								b.classList.toggle( 'active', b.dataset.ctab === tab ) );
+						},
+						load: () => loadComments(),
+						render: renderComments,
+					} );
+				} )
+			);
 			loadComments().then( renderIfCurrent( 'comments' ) ).catch( showErr );
 			return;
 		}
@@ -4122,7 +4212,33 @@
 		const view = $( '#minn-view' );
 		const c = state.cache.subscriptions;
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading subscriptions…</div>';
+			const subTab = state.subTab || 'any';
+			view.innerHTML = `
+			<div class="minn-toolbar minn-toolbar-views">
+				<div class="minn-tabs">
+					${ SUB_TABS.map( ( [ id, label ] ) =>
+						`<button class="minn-tab${ subTab === id ? ' active' : '' }" data-stab="${ id }">${ label }</button>` ).join( '' ) }
+				</div>
+			</div>
+			<div class="minn-loading">Loading subscriptions…</div>`;
+			$$( '[data-stab]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const tab = btn.dataset.stab;
+					if ( state.subTab === tab ) return;
+					state.subTab = tab;
+					softListReload( {
+						route: 'subscriptions',
+						view,
+						clear: () => { state.cache.subscriptions = null; },
+						paintChrome: () => {
+							$$( '[data-stab]', view ).forEach( ( b ) =>
+								b.classList.toggle( 'active', b.dataset.stab === tab ) );
+						},
+						load: () => loadSubscriptions( 1 ),
+						render: renderSubscriptions,
+					} );
+				} )
+			);
 			loadSubscriptions().then( renderIfCurrent( 'subscriptions' ) ).catch( showErr );
 			return;
 		}
@@ -4422,7 +4538,58 @@
 		const c = state.cache.products;
 		const psel = state.productSel || ( state.productSel = new Set() );
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading products…</div>';
+			view.innerHTML = `
+			<div class="minn-toolbar minn-toolbar-views">
+				<div class="minn-tabs">
+					${ PRODUCT_TABS.map( ( [ id, label ] ) =>
+						`<button class="minn-tab${ state.productTab === id ? ' active' : '' }" data-ptab="${ id }">${ label }</button>` ).join( '' ) }
+				</div>
+			</div>
+			<div class="minn-toolbar">
+				<div class="minn-tabs minn-quiet-tabs">
+					${ PRODUCT_STOCK_TABS.map( ( [ id, label ] ) =>
+						`<button class="minn-tab${ state.productStock === id ? ' active' : '' }" data-pstock="${ id }">${ label }</button>` ).join( '' ) }
+				</div>
+			</div>
+			<div class="minn-loading">Loading products…</div>`;
+			$$( '[data-ptab]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const tab = btn.dataset.ptab;
+					if ( state.productTab === tab ) return;
+					state.productTab = tab;
+					psel.clear();
+					softListReload( {
+						route: 'products',
+						view,
+						clear: () => { state.cache.products = null; },
+						paintChrome: () => {
+							$$( '[data-ptab]', view ).forEach( ( b ) =>
+								b.classList.toggle( 'active', b.dataset.ptab === tab ) );
+						},
+						load: () => loadProducts( 1 ),
+						render: renderProducts,
+					} );
+				} )
+			);
+			$$( '[data-pstock]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const stock = btn.dataset.pstock;
+					if ( state.productStock === stock ) return;
+					state.productStock = stock;
+					psel.clear();
+					softListReload( {
+						route: 'products',
+						view,
+						clear: () => { state.cache.products = null; },
+						paintChrome: () => {
+							$$( '[data-pstock]', view ).forEach( ( b ) =>
+								b.classList.toggle( 'active', b.dataset.pstock === stock ) );
+						},
+						load: () => loadProducts( 1 ),
+						render: renderProducts,
+					} );
+				} )
+			);
 			loadProducts().then( renderIfCurrent( 'products' ) ).catch( showErr );
 			return;
 		}
@@ -4751,7 +4918,32 @@
 		}
 		const c = state.cache.coupons;
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading coupons…</div>';
+			view.innerHTML = `
+			<div class="minn-toolbar minn-toolbar-views">
+				<div class="minn-tabs">
+					${ COUPON_TABS.map( ( [ id, label ] ) =>
+						`<button class="minn-tab${ state.couponTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
+				</div>
+			</div>
+			<div class="minn-loading">Loading coupons…</div>`;
+			$$( '[data-ctab]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const tab = btn.dataset.ctab;
+					if ( state.couponTab === tab ) return;
+					state.couponTab = tab;
+					softListReload( {
+						route: 'coupons',
+						view,
+						clear: () => { state.cache.coupons = null; },
+						paintChrome: () => {
+							$$( '[data-ctab]', view ).forEach( ( b ) =>
+								b.classList.toggle( 'active', b.dataset.ctab === tab ) );
+						},
+						load: () => loadCoupons( 1 ),
+						render: renderCoupons,
+					} );
+				} )
+			);
 			loadCoupons().then( renderIfCurrent( 'coupons' ) ).catch( showErr );
 			return;
 		}
@@ -5127,9 +5319,47 @@
 		if ( 'terms' === active ) renderStructureTerms( view, tabsHtml );
 		else renderStructureTypes( view, tabsHtml, 'taxonomies' === active );
 		// Shared tab switch — in-page, no route change (admins stay on
-		// 'posttypes'; editors have only the Terms tab).
+		// 'posttypes'; editors have only the Terms tab). Soft when the target
+		// tab still needs a fetch so the strip never unmounts.
 		$$( '[data-structtab]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => { state.ptTab = btn.dataset.structtab; renderStructure(); } ) );
+			btn.addEventListener( 'click', () => {
+				const next = btn.dataset.structtab;
+				if ( structureActiveTab() === next ) return;
+				state.ptTab = next;
+				const needsLoad =
+					( next === 'terms' && ! state.cache.terms )
+					|| ( ( next === 'types' || next === 'taxonomies' ) && ! state.cache.postTypes )
+					|| ( next === 'taxonomies' && ! state.cache.taxonomies );
+				if ( ! needsLoad ) {
+					renderStructure();
+					return;
+				}
+				softListReload( {
+					route: state.route === 'terms' ? 'terms' : 'posttypes',
+					view,
+					paintChrome: () => {
+						$$( '[data-structtab]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', b.dataset.structtab === next ) );
+						const tb = view.querySelector( '.minn-toolbar' );
+						Array.from( view.children ).forEach( ( el ) => {
+							if ( el !== tb ) el.remove();
+						} );
+						const loading = document.createElement( 'div' );
+						loading.className = 'minn-loading';
+						loading.textContent = next === 'terms' ? 'Loading terms…' : 'Loading…';
+						view.appendChild( loading );
+					},
+					load: () => {
+						if ( next === 'terms' ) return loadTerms();
+						return Promise.all( [
+							state.cache.postTypes ? null : loadPostTypes(),
+							next === 'taxonomies' && ! state.cache.taxonomies ? loadTaxonomies() : null,
+						] );
+					},
+					render: renderStructure,
+				} );
+			} )
+		);
 	}
 
 	// Route to the Terms tab from anywhere: admins land on the Structure
@@ -5146,7 +5376,8 @@
 		}
 		const c = state.cache.terms;
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading terms…</div>';
+			view.innerHTML = ( tabsHtml ? `<div class="minn-toolbar">${ tabsHtml }</div>` : '' )
+				+ '<div class="minn-loading">Loading terms…</div>';
 			loadTerms().then( () => { if ( onStructure() ) renderStructure(); } ).catch( showErr );
 			return;
 		}
@@ -5538,8 +5769,37 @@
 	function renderUsers() {
 		const view = $( '#minn-view' );
 		const c = state.cache.users;
+		const userSessionEarly = state.userSession || 'all';
 		if ( ! c ) {
-			view.innerHTML = '<div class="minn-loading">Loading users…</div>';
+			view.innerHTML = `
+			<div class="minn-toolbar minn-toolbar-views">
+				<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }" disabled>
+			</div>
+			<div class="minn-toolbar minn-toolbar-filters">
+				<div class="minn-tabs minn-ext-filters" role="tablist" aria-label="Session filter">
+					${ USER_SESSION_TABS.map( ( [ id, label ] ) =>
+						`<button type="button" class="minn-tab${ userSessionEarly === id ? ' active' : '' }" data-usess="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
+				</div>
+			</div>
+			<div class="minn-loading">Loading users…</div>`;
+			$$( '[data-usess]', view ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const next = btn.dataset.usess || 'all';
+					if ( ( state.userSession || 'all' ) === next ) return;
+					state.userSession = next;
+					softListReload( {
+						route: 'users',
+						view,
+						clear: () => { state.cache.users = null; },
+						paintChrome: () => {
+							$$( '[data-usess]', view ).forEach( ( b ) =>
+								b.classList.toggle( 'active', ( b.dataset.usess || 'all' ) === next ) );
+						},
+						load: () => loadUsers(),
+						render: renderUsers,
+					} );
+				} )
+			);
 			loadUsers().then( renderIfCurrent( 'users' ) ).catch( showErr );
 			return;
 		}
@@ -7437,7 +7697,11 @@
 			ms.items = [];
 			return;
 		}
-		const r = await apiPaged( `wp/v2/menu-items?menus=${ ms.sel }&per_page=100&context=edit&_fields=id,title,url,parent,menu_order,type,object,object_id` );
+		// Capture sel at request start — a fast tab switch must not let a
+		// late response for menu A overwrite items while menu B is selected.
+		const forId = ms.sel;
+		const r = await apiPaged( `wp/v2/menu-items?menus=${ forId }&per_page=100&context=edit&_fields=id,title,url,parent,menu_order,type,object,object_id` );
+		if ( ms.sel !== forId ) return;
 		ms.itemsTotal = r.total;
 		ms.items = r.items.map( ( it ) => ( {
 			id: it.id,
@@ -7451,6 +7715,65 @@
 			type: it.type,
 			object: it.object,
 		} ) );
+	}
+
+	/** Toolbar with menu name tabs + New — kept painted while items load. */
+	function menusToolbarHtml( ms, metaHtml ) {
+		return `
+		<div class="minn-toolbar">
+			<div class="minn-tabs">
+				${ ( ms.menus || [] ).map( ( m ) =>
+					`<button class="minn-tab${ ms.sel === m.id ? ' active' : '' }" data-menu="${ m.id }">${ esc( m.name ) }</button>` ).join( '' ) }
+			</div>
+			${ metaHtml || '' }
+			<button class="minn-btn-soft" id="minn-menu-new">${ icon( 'plus' ) } New menu</button>
+		</div>`;
+	}
+
+	function bindMenusTabChrome( view, ms ) {
+		$$( '[data-menu]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const id = parseInt( btn.dataset.menu, 10 );
+				if ( ms.sel === id ) return;
+				ms.sel = id;
+				ms.editing = null;
+				// Soft switch: keep the menu-name tabs, load items, then full paint.
+				softListReload( {
+					route: 'menus',
+					view,
+					clear: () => { ms.items = null; },
+					paintChrome: () => {
+						$$( '[data-menu]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', parseInt( b.dataset.menu, 10 ) === id ) );
+						const tb = view.querySelector( '.minn-toolbar' );
+						Array.from( view.children ).forEach( ( el ) => {
+							if ( el !== tb ) el.remove();
+						} );
+						const loading = document.createElement( 'div' );
+						loading.className = 'minn-loading';
+						loading.textContent = 'Loading menu…';
+						view.appendChild( loading );
+					},
+					load: () => loadMenuItems(),
+					render: renderMenus,
+				} );
+			} )
+		);
+		const newBtn = $( '#minn-menu-new', view );
+		if ( newBtn ) newBtn.addEventListener( 'click', async () => {
+			const name = prompt( 'Name for the new menu:' );
+			if ( ! name || ! name.trim() ) return;
+			try {
+				const m = await api( 'wp/v2/menus', { method: 'POST', body: JSON.stringify( { name: name.trim() } ) } );
+				toast( 'Menu created' );
+				ms.menus = null;
+				ms.sel = m.id;
+				ms.items = null;
+				renderMenus();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		} );
 	}
 
 	// Pages + recent posts for the "add to menu" picker (loaded once per visit).
@@ -7529,12 +7852,23 @@
 		const view = $( '#minn-view' );
 		const ms = menusState();
 		if ( ! ms.menus || ( ms.sel && ! ms.items ) ) {
-			view.innerHTML = '<div class="minn-loading">Loading menus…</div>';
+			// Menus list known (switching tabs) → keep name tabs. Cold open → bare.
+			if ( ms.menus ) {
+				view.innerHTML = menusToolbarHtml( ms ) + '<div class="minn-loading">Loading menu…</div>';
+				bindMenusTabChrome( view, ms );
+			} else {
+				view.innerHTML = '<div class="minn-loading">Loading menus…</div>';
+			}
 			// Single-flight: a re-render while loading must not start another
 			// chain (a resolved-promise .then( render ) here would loop forever).
+			// softListReload for tab switches uses its own load path and skips this.
 			if ( ! ms.loading ) {
 				ms.loading = true;
-				Promise.all( [ loadMenus().then( loadMenuItems ), loadMenuPick().catch( () => {} ) ] )
+				const needMenus = ! ms.menus;
+				Promise.all( [
+					needMenus ? loadMenus().then( loadMenuItems ) : loadMenuItems(),
+					ms.pick ? Promise.resolve() : loadMenuPick().catch( () => {} ),
+				] )
 					.then( () => { ms.loading = false; } )
 					.then( renderIfCurrent( 'menus' ) )
 					.catch( ( e ) => { ms.loading = false; showErr( e ); } );
@@ -7546,14 +7880,7 @@
 		const cur = ( ms.menus || [] ).find( ( m ) => m.id === ms.sel );
 		const typeLabel = ( it ) => it.type === 'custom' ? 'Link' : ( it.type === 'taxonomy' ? ( it.object === 'category' ? 'Category' : it.object ) : ( it.object === 'page' ? 'Page' : it.object === 'post' ? 'Post' : it.object || it.type ) );
 		view.innerHTML = `
-		<div class="minn-toolbar">
-			<div class="minn-tabs">
-				${ ( ms.menus || [] ).map( ( m ) =>
-					`<button class="minn-tab${ ms.sel === m.id ? ' active' : '' }" data-menu="${ m.id }">${ esc( m.name ) }</button>` ).join( '' ) }
-			</div>
-			<div class="minn-toolbar-meta">${ metaLabel( flat.length, 'item' ) }</div>
-			<button class="minn-btn-soft" id="minn-menu-new">${ icon( 'plus' ) } New menu</button>
-		</div>
+		${ menusToolbarHtml( ms, `<div class="minn-toolbar-meta">${ metaLabel( flat.length, 'item' ) }</div>` ) }
 		${ ! ms.menus.length ? '<div class="minn-card minn-empty">No menus yet. Create one to build your site navigation.</div>' : `
 		${ locations.length ? `
 		<div class="minn-card minn-menu-locations">
@@ -7614,28 +7941,7 @@
 			<button class="minn-btn-soft danger" id="minn-menu-delete">${ icon( 'trash' ) } Delete menu</button>
 		</div>` }`;
 
-		$$( '[data-menu]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				ms.sel = parseInt( btn.dataset.menu, 10 );
-				ms.items = null;
-				ms.editing = null;
-				renderMenus();
-			} )
-		);
-		$( '#minn-menu-new' ).addEventListener( 'click', async () => {
-			const name = prompt( 'Name for the new menu:' );
-			if ( ! name || ! name.trim() ) return;
-			try {
-				const m = await api( 'wp/v2/menus', { method: 'POST', body: JSON.stringify( { name: name.trim() } ) } );
-				toast( 'Menu created' );
-				ms.menus = null;
-				ms.sel = m.id;
-				ms.items = null;
-				renderMenus();
-			} catch ( e ) {
-				toast( e.message, true );
-			}
-		} );
+		bindMenusTabChrome( view, ms );
 		if ( ! ms.menus.length ) return;
 
 		$$( '.minn-loc-ac', view ).forEach( ( wrap ) => {
@@ -8420,15 +8726,68 @@
 				${ B.caps.settings ? `<button class="minn-tab${ state.extTab === 'licenses' ? ' active' : '' }" data-xtab="licenses">Licenses</button>` : '' }
 			</div>` : '';
 
+	/** Loading shell that keeps Plugins/Themes/Licenses tabs painted. */
+	function extTabLoadingHtml( tab ) {
+		const msg = tab === 'themes' ? 'Loading themes…'
+			: tab === 'licenses' ? 'Loading licenses…'
+			: 'Loading extensions…';
+		return `<div class="minn-toolbar minn-toolbar-views">${ extTabsHtml() }</div><div class="minn-loading">${ msg }</div>`;
+	}
+
+	/**
+	 * Soft first-visit for an Extensions sub-tab: keep the tab strip, drop the
+	 * previous tab's filters/grid, show Loading…, then full render when cached.
+	 */
+	function paintExtTabLoading( view, tab ) {
+		const tabsEl = view.querySelector( '.minn-tabs' );
+		const tabsBar = tabsEl && tabsEl.closest( '.minn-toolbar' );
+		Array.from( view.children ).forEach( ( el ) => {
+			if ( tabsBar && el === tabsBar ) return;
+			el.remove();
+		} );
+		if ( tabsBar ) {
+			tabsBar.className = 'minn-toolbar minn-toolbar-views';
+			tabsBar.innerHTML = extTabsHtml();
+		} else {
+			view.innerHTML = `<div class="minn-toolbar minn-toolbar-views">${ extTabsHtml() }</div>`;
+		}
+		const msg = tab === 'themes' ? 'Loading themes…'
+			: tab === 'licenses' ? 'Loading licenses…'
+			: 'Loading extensions…';
+		const loading = document.createElement( 'div' );
+		loading.className = 'minn-loading';
+		loading.textContent = msg;
+		view.appendChild( loading );
+		bindExtTabs( view );
+	}
+
 	function bindExtTabs( view ) {
 		$$( '[data-xtab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				if ( state.extTab === btn.dataset.xtab ) return;
-				state.extTab = btn.dataset.xtab;
+				const next = btn.dataset.xtab;
+				state.extTab = next;
 				// Plugins and Themes have different filter sets — reset when switching.
 				state.extFilter = 'all';
 				state.extSearch = '';
-				renderExtensions();
+				const cached = next === 'themes' ? state.cache.themes
+					: next === 'licenses' ? state.cache.licenses
+					: state.cache.plugins;
+				// Cached tab: instant swap. Cold first visit: soft-reload so the
+				// Plugins/Themes/Licenses strip never unmounts (Austin's flash).
+				if ( cached ) {
+					renderExtensions();
+					return;
+				}
+				softListReload( {
+					route: 'extensions',
+					view,
+					paintChrome: () => paintExtTabLoading( view, next ),
+					load: () => ( next === 'themes' ? loadThemes()
+						: next === 'licenses' ? loadLicenses()
+						: loadPlugins() ),
+					render: renderExtensions,
+				} );
 			} )
 		);
 	}
@@ -8492,7 +8851,8 @@
 		const view = $( '#minn-view' );
 		const lic = state.cache.licenses;
 		if ( ! lic ) {
-			view.innerHTML = `<div class="minn-toolbar">${ extTabsHtml() }</div><div class="minn-loading">Loading licenses…</div>`;
+			// Cold paint (direct nav / deep-link): keep tab chrome, same as soft switch.
+			view.innerHTML = extTabLoadingHtml( 'licenses' );
 			bindExtTabs( view );
 			loadLicenses().then( () => {
 				if ( state.route === 'extensions' && state.extTab === 'licenses' ) renderLicenses();
@@ -9140,7 +9500,9 @@
 		const view = $( '#minn-view' );
 		const plugins = state.cache.plugins;
 		if ( ! plugins ) {
-			view.innerHTML = '<div class="minn-loading">Loading extensions…</div>';
+			// Cold paint (first open / hard nav): keep Plugins/Themes/Licenses tabs.
+			view.innerHTML = extTabLoadingHtml( 'plugins' );
+			bindExtTabs( view );
 			loadPlugins().then( renderIfCurrent( 'extensions' ) ).catch( showErr );
 			return;
 		}
@@ -9444,7 +9806,9 @@
 		const view = $( '#minn-view' );
 		const themes = state.cache.themes;
 		if ( ! themes ) {
-			view.innerHTML = '<div class="minn-loading">Loading themes…</div>';
+			// Cold paint (direct nav / deep-link): keep tab chrome, same as soft switch.
+			view.innerHTML = extTabLoadingHtml( 'themes' );
+			bindExtTabs( view );
 			loadThemes().then( renderIfCurrent( 'extensions' ) ).catch( showErr );
 			return;
 		}
@@ -9714,7 +10078,8 @@
 		const c = state.cache.postTypes;
 		const tx = state.cache.taxonomies;
 		if ( ! c || ( taxTab && ! tx ) ) {
-			view.innerHTML = '<div class="minn-loading">Loading…</div>';
+			view.innerHTML = ( tabsHtml ? `<div class="minn-toolbar">${ tabsHtml }</div>` : '' )
+				+ '<div class="minn-loading">Loading…</div>';
 			Promise.all( [ c ? null : loadPostTypes(), taxTab && ! tx ? loadTaxonomies() : null ] )
 				.then( () => { if ( onStructure() ) renderStructure(); } ).catch( showErr );
 			return;
