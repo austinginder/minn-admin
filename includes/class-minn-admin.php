@@ -640,8 +640,8 @@ class Minn_Admin {
 			// Regenerate Thumbnails present + allowed — a per-image button
 			// on the media detail modal (adapters/regenerate-thumbnails.php).
 			'regenThumbs' => function_exists( 'minn_admin_regen_thumbs_available' ) && minn_admin_regen_thumbs_available(),
-			// Safe SVG present — media toolbar SVG filter + "SVG uploads on"
-			// affordance (adapters/safe-svg.php). Sanitization stays Safe SVG's.
+			// Safe SVG present — media toolbar SVG filter tab + detail note
+			// (adapters/safe-svg.php). Sanitization stays Safe SVG's.
 			'safeSvg'    => function_exists( 'minn_admin_safe_svg_active' ) && minn_admin_safe_svg_active(),
 			// PDF Invoices & Packing Slips — download buttons on the order
 			// detail modal (adapters/wcpdf.php). Null without the plugin or

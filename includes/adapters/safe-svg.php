@@ -6,7 +6,7 @@
  * Minn already labels image/svg* as SVG in the media library; this adapter
  * only:
  *   1. Boots a `safeSvg` flag so the media toolbar can show an SVG filter
- *      and a short "SVG uploads on" affordance
+ *      tab (and a detail note that uploads are sanitized)
  *   2. Does NOT reimplement sanitization — Safe SVG's upload_mimes +
  *      sanitizer stay the source of truth
  *

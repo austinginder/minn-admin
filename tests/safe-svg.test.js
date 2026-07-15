@@ -1,5 +1,5 @@
 /**
- * Safe SVG media affordance: boot flag, Media toolbar "SVG on" + SVG tab,
+ * Safe SVG media affordance: boot flag, Media toolbar SVG filter tab,
  * and a real SVG upload that lands in the library.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
@@ -55,11 +55,11 @@ const os = require( 'os' );
 
 		const chrome = await page.evaluate( () => {
 			const tabs = [ ...document.querySelectorAll( '.minn-tab' ) ].map( ( el ) => el.textContent.trim() );
-			const badge = document.querySelector( '.minn-media-svg-on' );
-			return { tabs, hasBadge: !! badge, badgeText: badge ? badge.textContent.trim() : '' };
+			return { tabs, hasBadge: !! document.querySelector( '.minn-media-svg-on' ) };
 		} );
 		t.check( 'SVG tab present', chrome.tabs.includes( 'SVG' ), chrome.tabs.join( ',' ) );
-		t.check( 'SVG on badge present', chrome.hasBadge && /SVG on/i.test( chrome.badgeText ), chrome.badgeText );
+		// Badge removed — the SVG filter tab is enough signal that Safe SVG is active.
+		t.check( 'SVG on badge absent', ! chrome.hasBadge );
 
 		// Upload a tiny SVG via REST (Safe SVG sanitizes + allows).
 		const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="#3d9a6a"/></svg>';

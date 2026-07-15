@@ -2918,7 +2918,7 @@
 					`<button class="minn-tab${ ( state.mediaType || '' ) === id ? ' active' : '' }" data-mtype="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
 			<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
-			<div class="minn-toolbar-meta">${ countLabel }${ B.safeSvg ? ' · <span class="minn-media-svg-on" title="SVG uploads are sanitized and allowed by Safe SVG">SVG on</span>' : '' }</div>
+			<div class="minn-toolbar-meta">${ countLabel }</div>
 			<div class="minn-view-tabs" style="margin-left:0;">
 				<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
 				<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
