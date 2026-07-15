@@ -206,8 +206,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForSelector( '#minn-add-plugin, .minn-plugin-grid', { timeout: 20000 } );
 		if ( await page.$( '#minn-add-plugin' ) ) {
 			await page.click( '#minn-add-plugin' );
-			await page.waitForSelector( '.minn-pi-cat, #minn-pi-dropzone', { timeout: 10000 } );
-			const hasPerf = await page.$$eval( '.minn-pi-cat', ( els ) =>
+			// Catalog cards use .minn-pi-card-title (not .minn-pi-cat).
+			await page.waitForSelector( '.minn-pi-card-title, #minn-pi-dropzone', { timeout: 10000 } );
+			const hasPerf = await page.$$eval( '.minn-pi-card-title', ( els ) =>
 				els.some( ( e ) => /Performance/i.test( e.textContent ) ) );
 			t.check( 'Add plugin has Performance category chip', hasPerf );
 			await page.keyboard.press( 'Escape' ).catch( () => {} );

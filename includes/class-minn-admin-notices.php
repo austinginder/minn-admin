@@ -622,6 +622,12 @@ class Minn_Admin_Notices {
 	}
 
 	public static function unhide( $id ) {
+		// Empty / "all" clears every hide so a previous Hide cannot suppress
+		// fixtures (or a real notice that text-stable-id'd across captures).
+		if ( '' === $id || 'all' === $id || '*' === $id ) {
+			delete_user_meta( get_current_user_id(), 'minn_admin_notice_hidden' );
+			return;
+		}
 		$h = self::hidden();
 		unset( $h[ $id ] );
 		update_user_meta( get_current_user_id(), 'minn_admin_notice_hidden', $h );

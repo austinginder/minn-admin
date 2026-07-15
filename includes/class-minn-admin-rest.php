@@ -254,14 +254,27 @@ class Minn_Admin_REST {
 						return current_user_can( 'edit_posts' );
 					},
 					'args'                => array(
-						'id' => array(
+						'id'    => array(
 							'type'     => 'string',
-							'required' => true,
-							'pattern'  => '^[a-f0-9]{12}$',
+							// Hide requires a 12-char hash; unhide also accepts
+							// "all" / "*" / "" to clear every hide (suite reset).
+							'required' => 'hide' === $op,
+						),
+						'clear' => array(
+							'type'    => 'boolean',
+							'default' => false,
 						),
 					),
 					'callback'            => function ( WP_REST_Request $request ) use ( $op ) {
-						Minn_Admin_Notices::$op( $request['id'] );
+						$id = (string) $request['id'];
+						if ( 'unhide' === $op && ( ! empty( $request['clear'] ) || in_array( $id, array( '', 'all', '*' ), true ) ) ) {
+							Minn_Admin_Notices::unhide( 'all' );
+							return rest_ensure_response( array( 'ok' => true, 'cleared' => true ) );
+						}
+						if ( ! preg_match( '/^[a-f0-9]{12}$/', $id ) ) {
+							return new WP_Error( 'bad_id', 'Invalid notice id.', array( 'status' => 400 ) );
+						}
+						Minn_Admin_Notices::$op( $id );
 						return rest_ensure_response( array( 'ok' => true ) );
 					},
 				)

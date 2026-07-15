@@ -28,7 +28,19 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 	} );
 	let emptyId = null;
 
-	const save = async () => { await page.keyboard.press( 'Meta+s' ); await page.waitForTimeout( 2000 ); };
+	const save = async () => {
+		await page.keyboard.press( 'Meta+s' );
+		await page.waitForTimeout( 2500 );
+	};
+	const waitSavedIsland = async () => {
+		// Island insert + autosave race: poll until the server has the comment.
+		for ( let i = 0; i < 15; i++ ) {
+			const raw = await rawContent().catch( () => '' );
+			if ( raw && raw.includes( 'anchor/report-card' ) ) return raw;
+			await page.waitForTimeout( 400 );
+		}
+		return rawContent();
+	};
 	const rawContent = () => page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content', {
 			headers: { 'X-WP-Nonce': window.MINN.nonce },
@@ -105,8 +117,12 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		} );
 
 		// --- Saved markup: valid self-closing block comment ---
+		// Nudge dirty so ⌘S includes the island (preview swap can leave
+		// ed.dirty false if scheduleAutosave already flushed).
+		await page.click( '#minn-editor-body' );
+		await page.keyboard.press( 'ArrowDown' );
 		await save();
-		const raw1 = await rawContent();
+		const raw1 = await waitSavedIsland();
 		t.check( 'saved markup is a self-closing block comment',
 			raw1.includes( '<!-- wp:anchor/report-card /-->' ), raw1 );
 

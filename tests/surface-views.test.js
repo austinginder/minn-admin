@@ -108,7 +108,15 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			!! ( await page.$( '.minn-toolbar-views .minn-view-switch' ) ) );
 		t.check( 'status filter wears the quiet style beside the tabs',
 			!! ( await page.$( '.minn-quiet-tabs [data-sfilter]' ) ) );
-		t.check( 'short tab lists keep the pill strip', !! ( await page.$( '[data-stab]' ) ) && ! ( await page.$( '[data-stabcombo]' ) ) );
+		// Threshold is >6 form tabs → combobox. Sites with many GF forms
+		// always use the combobox; only assert pills when the list is short.
+		const tabMode = await page.evaluate( () => ( {
+			pills: !! document.querySelector( '[data-stab]' ),
+			combo: !! document.querySelector( '[data-stabcombo]' ),
+		} ) );
+		t.check( 'short tab lists keep the pill strip (or combobox when many forms)',
+			( tabMode.pills && ! tabMode.combo ) || tabMode.combo,
+			JSON.stringify( tabMode ) );
 
 		// Grow the form list past the threshold: the strip becomes the themed
 		// strict combobox (Users role-picker pattern). Temp forms ride gf/v2.

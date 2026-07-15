@@ -144,7 +144,7 @@ function minn_admin_performance_lab_status() {
 	$list   = minn_admin_performance_lab_list();
 	$active = 0;
 	foreach ( $list['items'] as $it ) {
-		if ( ! empty( $it['active'] ) ) {
+		if ( ( $it['status'] ?? '' ) === 'active' ) {
 			$active++;
 		}
 	}
@@ -247,20 +247,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey'  => 'total',
 			'search'    => false,
 			'columns'   => array(
-				array( 'key' => 'name', 'label' => 'Feature', 'primary' => true ),
-				array( 'key' => 'status_label', 'label' => 'Status', 'width' => '120px' ),
+				// format title = first-column weight (no undocumented "primary" key).
+				array( 'key' => 'name', 'label' => 'Feature', 'format' => 'title' ),
+				array( 'key' => 'status_label', 'label' => 'Status', 'format' => 'pill', 'width' => '120px' ),
 				array( 'key' => 'slug', 'label' => 'Slug', 'width' => '180px' ),
 			),
 			'actions'   => array(
 				array(
-					'id'     => 'activate',
 					'label'  => 'Activate',
 					'route'  => 'minn-admin/v1/performance-lab/features/{id}/activate',
 					'method' => 'POST',
 					'when'   => array( 'key' => 'can_activate', 'equals' => '1' ),
 				),
 				array(
-					'id'      => 'deactivate',
 					'label'   => 'Deactivate',
 					'route'   => 'minn-admin/v1/performance-lab/features/{id}/deactivate',
 					'method'  => 'POST',
@@ -268,7 +267,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'can_deactivate', 'equals' => '1' ),
 				),
 				array(
-					'id'    => 'settings',
 					'label' => 'Settings ↗',
 					'href'  => '{settings_url}',
 					'when'  => array( 'key' => 'has_settings', 'equals' => '1' ),

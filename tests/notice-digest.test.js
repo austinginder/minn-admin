@@ -65,6 +65,17 @@ const { launch, login, reporter } = require( './helpers' );
 	try {
 		t.check( 'Action fixture reset', ( await resetAction() ) === 200 );
 
+		// A prior Hide on a fixture (content-stable id) suppresses it across
+		// captures until unhidden — clear every hide so fixtures reappear.
+		await page.evaluate( async () => {
+			await fetch( window.MINN.restUrl + 'minn-admin/v1/notices/unhide', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( { clear: true } ),
+			} );
+		} );
+
 		// --- Capture endpoint -------------------------------------------------
 		const boot = await page.evaluate( () => window.MINN.notices || null );
 		t.check( 'Boot payload carries notices.url + nonce', !! ( boot && boot.url && boot.url.includes( 'minn_notices=1' ) && boot.nonce ) );
