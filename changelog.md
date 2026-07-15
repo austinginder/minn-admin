@@ -10,6 +10,10 @@
 * **Connectors after Install & activate:** installing a provider plugin (e.g. OpenAI) no longer leaves Settings → Connectors on “Connectors couldn’t be loaded” when the PHP worker recycles mid-response. Minn waits for REST, retries the connectors fetch, and offers an in-panel **Retry** if a load still fails. A dropped install reply after a successful package install is treated as success and reloads the list the same way.
 
 ### Improved
+* **Revision heatmap:** the All revisions dialog opens with a GitHub-style activity grid. Click a day to filter the list to that day; click again or **Show all** to clear.
+* **Rank Math social thumbnail:** when Rank Math is the active SEO provider, the SEO panel gains a **Social thumbnail** image field (Facebook OG image; Twitter inherits via Rank Math’s own flag). Set / replace / remove through the media picker; values write `rank_math_facebook_image` + `_id`.
+* **Settings door summary omits Uncategorized:** only real category picks appear on the Settings door one-liner.
+* **Sticky moved to Settings:** “Stick to the top of the blog” leaves the Publish card (still hidden under password visibility) and lives in the Settings modal with discussion.
 * **Editor sidebar doors:** secondary editor meta (Settings, Page attributes, History, Custom fields, SEO, …) is a quiet door row with a one-line summary that opens a large modal. **Publish**, **Featured image**, and **Outline** stay on the rail so the write path stays one glance. Same fields, dirty flags, and autosave as before — no second save button in the modal.
 * **Content list thumbnails:** posts and pages with a featured image show a small thumb in the content list (type icon stays when none is set). Uses core REST `_embed=wp:featuredmedia` with the existing `_fields` allowlist, so lists still never run `the_content`.
 * **Content list type chip:** on the **All** tab, each row shows a quiet Post / Page / CPT chip under the title (same line as the slug and builder chip). Not a full column: single-type tabs already name the type in the filter, and thumbs had hidden the ¶/file glyph.

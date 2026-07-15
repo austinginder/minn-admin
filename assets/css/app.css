@@ -745,7 +745,46 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-history-more:hover { color: var(--accent); }
 
-/* Full revision list dialog */
+/* Full revision list dialog + GitHub-style activity heatmap */
+.minn-rev-heat {
+  padding: 12px 18px 8px; border-bottom: 1px solid var(--border);
+}
+.minn-rev-heat-months {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 12px;
+  gap: 3px; margin: 0 0 4px 0; height: 14px; font-size: 10px; color: var(--text3);
+  overflow: hidden;
+}
+.minn-rev-heat-m { white-space: nowrap; font-weight: 600; letter-spacing: 0.02em; }
+.minn-rev-heat-grid {
+  display: flex; gap: 3px; overflow-x: auto; padding-bottom: 4px;
+}
+.minn-rev-heat-week { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+.minn-rev-heat-cell {
+  width: 11px; height: 11px; border-radius: 2px; border: 0; padding: 0;
+  background: var(--panel2); cursor: pointer; display: block;
+  box-sizing: border-box;
+}
+.minn-rev-heat-cell.future { opacity: 0; pointer-events: none; }
+.minn-rev-heat-cell.l0 { background: var(--panel2); }
+.minn-rev-heat-cell.l1 { background: rgba(70, 184, 129, 0.28); }
+.minn-rev-heat-cell.l2 { background: rgba(70, 184, 129, 0.48); }
+.minn-rev-heat-cell.l3 { background: rgba(70, 184, 129, 0.72); }
+.minn-rev-heat-cell.l4 { background: rgba(70, 184, 129, 0.95); }
+.minn-rev-heat-cell:hover:not(:disabled) { outline: 1px solid var(--text3); outline-offset: 1px; }
+.minn-rev-heat-cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.minn-rev-heat-legend {
+  display: flex; align-items: center; gap: 4px; justify-content: flex-end;
+  margin-top: 8px; font-size: 11px; color: var(--text3);
+}
+.minn-rev-heat-legend .minn-rev-heat-cell { cursor: default; pointer-events: none; }
+.minn-field-image { display: flex; flex-direction: column; gap: 8px; }
+.minn-field-image-thumb {
+  display: block; width: 100%; max-width: 280px; aspect-ratio: 1.91 / 1;
+  border-radius: 9px; background-size: cover; background-position: center;
+  border: 1px solid var(--border); cursor: pointer; padding: 0; background-color: var(--panel2);
+}
+.minn-field-image-thumb:hover { border-color: var(--accent); }
+.minn-field-image-actions { display: flex; gap: 8px; }
 .minn-rev-list {
   max-height: min(70vh, 640px); overflow-y: auto; padding: 4px 0 10px;
 }

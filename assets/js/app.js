@@ -526,6 +526,20 @@
 		if ( t === 'number' ) {
 			return `<input class="${ cls }" type="number" ${ attr }="${ esc( id ) }" data-ftype="number" value="${ esc( String( v ) ) }"${ f.min != null ? ` min="${ esc( String( f.min ) ) }"` : '' }${ f.max != null ? ` max="${ esc( String( f.max ) ) }"` : '' } placeholder="${ esc( f.placeholder || '' ) }">`;
 		}
+		// Image: attachment id + optional preview URL ({ id, url } or bare id).
+		// Used by Rank Math social thumbnail; Set/Replace opens the media picker.
+		if ( t === 'image' ) {
+			const img = ( v && typeof v === 'object' ) ? v : ( v ? { id: v, url: '' } : null );
+			const has = img && img.id;
+			const url = has ? ( img.url || '' ) : '';
+			return `<div class="minn-field-image" ${ attr }="${ esc( id ) }" data-ftype="image" data-img-id="${ has ? esc( String( img.id ) ) : '' }" data-img-url="${ esc( url ) }">
+				${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ esc( url ) }')" title="Replace image"></button>` : '' }
+				<div class="minn-field-image-actions">
+					<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : 'Set image' }</button>
+					${ has ? '<button type="button" class="minn-btn-soft danger" data-img-clear>Remove</button>' : '' }
+				</div>
+			</div>`;
+		}
 		const itype = t === 'email' || t === 'url' ? t : 'text';
 		return `<input class="${ cls }" type="${ itype }" ${ attr }="${ esc( id ) }" data-ftype="${ esc( t ) }" value="${ esc( String( v ) ) }" placeholder="${ esc( f.placeholder || '' ) }">`;
 	}
@@ -536,6 +550,11 @@
 		if ( kind === 'tags' ) return el.value.split( /,\s*/ ).map( ( t ) => t.trim() ).filter( Boolean );
 		if ( kind === 'toggle' ) return el.classList.contains( 'on' );
 		if ( kind === 'checkbox' ) return el.checked;
+		if ( kind === 'image' ) {
+			const id = parseInt( el.dataset.imgId || '0', 10 );
+			if ( ! id ) return null;
+			return { id, url: el.dataset.imgUrl || '' };
+		}
 		if ( kind === 'combobox' ) {
 			const input = el.querySelector( '.minn-ac-input' );
 			return input && input.dataset.acValue !== undefined ? input.dataset.acValue : '';
@@ -12507,6 +12526,7 @@
 			loading: true,
 			rows: null,
 			total: ed.revisionsTotal || 0,
+			dayFilter: null,
 		};
 		renderOverlays();
 		loadAllEditorRevisions( ed )
@@ -13656,6 +13676,9 @@
 					<label class="minn-check-row"><input type="checkbox" id="minn-comment-status"${ ed.commentStatus === 'open' ? ' checked' : '' }> Allow comments</label>
 					<label class="minn-check-row"><input type="checkbox" id="minn-ping-status"${ ed.pingStatus === 'open' ? ' checked' : '' }> Allow pingbacks &amp; trackbacks</label>
 				</div>` : '' }
+				${ ed.supportsSticky && ed.visibility !== 'password' ? `<div>Stickiness
+					<label class="minn-check-row"><input type="checkbox" id="minn-sticky"${ ed.sticky ? ' checked' : '' }> Stick to the top of the blog</label>
+				</div>` : '' }
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>`;
 	}
@@ -13695,7 +13718,10 @@
 	function editorSettingsSummary( ed ) {
 		const bits = [];
 		if ( ed.type === 'posts' && state.cache.categories ) {
-			const names = state.cache.categories.filter( ( c ) => ed.categoryIds.has( c.id ) ).map( ( c ) => c.name );
+			// Omit default "Uncategorized" — only real category picks show.
+			const names = state.cache.categories
+				.filter( ( c ) => ed.categoryIds.has( c.id ) && c.name !== 'Uncategorized' )
+				.map( ( c ) => c.name );
 			if ( names.length ) bits.push( names.slice( 0, 2 ).join( ', ' ) + ( names.length > 2 ? ` +${ names.length - 2 }` : '' ) );
 		}
 		if ( ed.type === 'posts' && ed.tags && ed.tags.length ) {
@@ -13809,6 +13835,50 @@
 					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
 					write( formControlValue( input ) );
 				} );
+			} else if ( input.dataset.ftype === 'image' ) {
+				const [ pid, name ] = ( input.dataset.pf || '' ).split( ':' );
+				const paint = ( img ) => {
+					if ( img && img.id ) {
+						input.dataset.imgId = String( img.id );
+						input.dataset.imgUrl = img.url || '';
+					} else {
+						input.dataset.imgId = '';
+						input.dataset.imgUrl = '';
+					}
+					// Rebuild chrome so thumb/buttons match state.
+					const wrap = input;
+					const has = !!( img && img.id );
+					const url = has ? ( img.url || '' ) : '';
+					wrap.innerHTML = `
+						${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ esc( url ) }')" title="Replace image"></button>` : '' }
+						<div class="minn-field-image-actions">
+							<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : 'Set image' }</button>
+							${ has ? '<button type="button" class="minn-btn-soft danger" data-img-clear>Remove</button>' : '' }
+						</div>`;
+					wire();
+				};
+				const wire = () => {
+					$$( '[data-img-pick]', input ).forEach( ( btn ) =>
+						btn.addEventListener( 'click', ( e ) => {
+							e.preventDefault();
+							e.stopPropagation();
+							openMediaPicker( ( it ) => {
+								const next = { id: it.id, url: it.thumb || it.url || '' };
+								paint( next );
+								write( next );
+							} );
+						} )
+					);
+					$$( '[data-img-clear]', input ).forEach( ( btn ) =>
+						btn.addEventListener( 'click', ( e ) => {
+							e.preventDefault();
+							e.stopPropagation();
+							paint( null );
+							write( null );
+						} )
+					);
+				};
+				wire();
 			} else {
 				input.addEventListener( 'input', () => {
 					let v = formControlValue( input );
@@ -13817,9 +13887,6 @@
 				} );
 			}
 		} );
-		// Adapter selects → themed comboboxes (editor panels keep native selects
-		// for schema enums; panel form dialect is bindFormComboboxes only when
-		// already upgraded — leave native here for suite selectOption).
 	}
 
 	function bindEditorSettingsFields( root, ed ) {
@@ -13855,6 +13922,12 @@
 		if ( pingBox ) pingBox.addEventListener( 'change', () => {
 			ed.pingStatus = pingBox.checked ? 'open' : 'closed';
 			ed.pingDirty = true;
+			if ( ed.id ) scheduleAutosave();
+		} );
+		const stickyBox = $( '#minn-sticky', root );
+		if ( stickyBox ) stickyBox.addEventListener( 'change', () => {
+			ed.sticky = stickyBox.checked;
+			ed.stickyDirty = true;
 			if ( ed.id ) scheduleAutosave();
 		} );
 		$$( '[data-cat]', root ).forEach( ( chip ) =>
@@ -14213,7 +14286,6 @@
 				</div>
 			</div>
 			${ ed.visibility === 'password' ? `<input type="text" class="minn-input minn-vis-extra" id="minn-password-input" placeholder="Enter a password" value="${ esc( ed.password ) }" autocomplete="off">` : '' }
-			${ ed.supportsSticky && ed.visibility !== 'password' ? `<label class="minn-check-row minn-vis-extra"><input type="checkbox" id="minn-sticky"${ ed.sticky ? ' checked' : '' }> Stick to the top of the blog</label>` : '' }
 			<div class="minn-schedule">
 				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? 'Scheduled for' : 'Publish time' }</div>
 				<input type="text" readonly class="minn-input minn-dp-input" id="minn-schedule-input" data-dp="${ esc( dateValue ) }" value="${ esc( dpPretty( dateValue ) ) }" placeholder="Immediately">
@@ -14276,12 +14348,6 @@
 		if ( pwInput ) pwInput.addEventListener( 'input', () => {
 			ed.password = pwInput.value;
 			ed.passwordDirty = true;
-			if ( ed.id ) scheduleAutosave();
-		} );
-		const stickyBox = $( '#minn-sticky', el );
-		if ( stickyBox ) stickyBox.addEventListener( 'change', () => {
-			ed.sticky = stickyBox.checked;
-			ed.stickyDirty = true;
 			if ( ed.id ) scheduleAutosave();
 		} );
 		bindEditorPpp( el, ed );
@@ -22167,6 +22233,26 @@
 					openRevision( ed, revId );
 				} )
 			);
+			// Heatmap: click a day to filter the list; click again (or Clear) shows all.
+			$$( '[data-revday]' ).forEach( ( cell ) =>
+				cell.addEventListener( 'click', () => {
+					if ( ! state.modal || state.modal.type !== 'revisions-list' ) return;
+					const key = cell.dataset.revday;
+					state.modal.dayFilter = state.modal.dayFilter === key ? null : key;
+					renderOverlays();
+				} )
+			);
+			const clearDay = $( '#minn-rev-day-clear' );
+			if ( clearDay ) clearDay.addEventListener( 'click', () => {
+				if ( ! state.modal || state.modal.type !== 'revisions-list' ) return;
+				state.modal.dayFilter = null;
+				renderOverlays();
+			} );
+			// Highlight the active day cell after paint.
+			if ( m.dayFilter ) {
+				const active = $( `.minn-rev-heat-cell[data-revday="${ CSS.escape( m.dayFilter ) }"]` );
+				if ( active ) active.classList.add( 'sel' );
+			}
 		}
 		if ( m.type === 'revision' ) {
 			bindRevisionModal( m );
@@ -23088,23 +23174,136 @@
 			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
 	}
 
+	/** Local YYYY-MM-DD for a revision stamp (for heatmap cells / day filter). */
+	function revisionDayKey( when ) {
+		const d = parseWpDate( when );
+		if ( ! d || Number.isNaN( d.getTime() ) ) return '';
+		const y = d.getFullYear();
+		const mo = String( d.getMonth() + 1 ).padStart( 2, '0' );
+		const day = String( d.getDate() ).padStart( 2, '0' );
+		return `${ y }-${ mo }-${ day }`;
+	}
+
+	function revisionDayLabel( key ) {
+		if ( ! key ) return '';
+		const [ y, mo, d ] = key.split( '-' ).map( Number );
+		const dt = new Date( y, mo - 1, d );
+		return dt.toLocaleDateString( undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' } );
+	}
+
+	/**
+	 * GitHub-style contribution grid for revision activity.
+	 * Weeks as columns, Sun→Sat rows; intensity from count that day.
+	 * Returns { html, counts } — counts is Map dayKey → n.
+	 */
+	function revisionsHeatmap( rows ) {
+		const counts = new Map();
+		( rows || [] ).forEach( ( r ) => {
+			const k = revisionDayKey( r.whenRaw || r.when );
+			if ( ! k ) return;
+			counts.set( k, ( counts.get( k ) || 0 ) + 1 );
+		} );
+		if ( ! counts.size ) return { html: '', counts };
+		// Span: from earliest activity (or 12 months ago) through today.
+		const today = new Date();
+		today.setHours( 12, 0, 0, 0 );
+		let start = new Date( today );
+		start.setDate( start.getDate() - 365 );
+		const keys = [ ...counts.keys() ].sort();
+		const earliest = keys[ 0 ];
+		if ( earliest ) {
+			const [ y, mo, d ] = earliest.split( '-' ).map( Number );
+			const ed = new Date( y, mo - 1, d, 12 );
+			if ( ed < start ) start = ed;
+		}
+		// Align start to Sunday (GitHub grid).
+		start.setDate( start.getDate() - start.getDay() );
+		const end = new Date( today );
+		end.setDate( end.getDate() + ( 6 - end.getDay() ) );
+		const max = Math.max( 1, ...counts.values() );
+		const level = ( n ) => {
+			if ( ! n ) return 0;
+			const r = n / max;
+			if ( r > 0.75 ) return 4;
+			if ( r > 0.5 ) return 3;
+			if ( r > 0.25 ) return 2;
+			return 1;
+		};
+		const weeks = [];
+		const cur = new Date( start );
+		while ( cur <= end ) {
+			const week = [];
+			for ( let i = 0; i < 7; i++ ) {
+				const y = cur.getFullYear();
+				const mo = String( cur.getMonth() + 1 ).padStart( 2, '0' );
+				const day = String( cur.getDate() ).padStart( 2, '0' );
+				const key = `${ y }-${ mo }-${ day }`;
+				const n = counts.get( key ) || 0;
+				const future = cur > today;
+				week.push( { key, n, level: future ? 0 : level( n ), future } );
+				cur.setDate( cur.getDate() + 1 );
+			}
+			weeks.push( week );
+		}
+		// Month labels: first week that contains day 1 of a month.
+		const monthLabels = weeks.map( ( week, wi ) => {
+			const hit = week.find( ( c ) => c.key.endsWith( '-01' ) );
+			if ( ! hit ) return '';
+			const [ y, mo ] = hit.key.split( '-' );
+			const dt = new Date( Number( y ), Number( mo ) - 1, 1 );
+			return `<span class="minn-rev-heat-m" style="grid-column:${ wi + 1 }">${ esc( dt.toLocaleDateString( undefined, { month: 'short' } ) ) }</span>`;
+		} ).filter( Boolean ).join( '' );
+		const cells = weeks.map( ( week ) => `
+			<div class="minn-rev-heat-week">
+				${ week.map( ( c ) => `
+				<button type="button" class="minn-rev-heat-cell l${ c.level }${ c.future ? ' future' : '' }"
+					data-revday="${ esc( c.key ) }"
+					title="${ esc( revisionDayLabel( c.key ) + ( c.n ? `: ${ c.n } revision${ c.n === 1 ? '' : 's' }` : ': no revisions' ) ) }"
+					${ c.future ? ' disabled' : '' }></button>` ).join( '' ) }
+			</div>` ).join( '' );
+		const html = `
+			<div class="minn-rev-heat" id="minn-rev-heat">
+				<div class="minn-rev-heat-months" style="grid-template-columns:repeat(${ weeks.length },12px)">${ monthLabels }</div>
+				<div class="minn-rev-heat-grid">${ cells }</div>
+				<div class="minn-rev-heat-legend">
+					<span>Less</span>
+					<span class="minn-rev-heat-cell l0"></span>
+					<span class="minn-rev-heat-cell l1"></span>
+					<span class="minn-rev-heat-cell l2"></span>
+					<span class="minn-rev-heat-cell l3"></span>
+					<span class="minn-rev-heat-cell l4"></span>
+					<span>More</span>
+				</div>
+			</div>`;
+		return { html, counts };
+	}
+
 	function renderRevisionsListModal( m ) {
-		const rows = m.rows;
+		const allRows = m.rows || [];
 		const loading = !! m.loading;
-		const total = m.total || ( rows && rows.length ) || 0;
+		const day = m.dayFilter || null;
+		const rows = day
+			? allRows.filter( ( r ) => revisionDayKey( r.whenRaw || r.when ) === day )
+			: allRows;
+		const total = m.total || allRows.length || 0;
+		const heat = ! loading && allRows.length ? revisionsHeatmap( allRows ) : { html: '', counts: new Map() };
+		const dayCount = day ? ( heat.counts.get( day ) || rows.length ) : 0;
 		return `
 		<div class="minn-modal-overlay" id="minn-modal-overlay">
 			<div class="minn-modal wide">
 				<div class="minn-modal-head">
 					<div class="minn-modal-title-block">
 						<div class="minn-modal-title">All revisions</div>
-						<div class="minn-modal-sub">${ total ? total + ' version' + ( total === 1 ? '' : 's' ) : 'Revision history' }</div>
+						<div class="minn-modal-sub">${ day
+							? `${ dayCount } on ${ esc( revisionDayLabel( day ) ) } · <button type="button" class="minn-linkish" id="minn-rev-day-clear">Show all ${ total }</button>`
+							: ( total ? total + ' version' + ( total === 1 ? '' : 's' ) : 'Revision history' ) }</div>
 					</div>
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
 				${ loading ? '<div class="minn-loading" style="padding:28px;">Loading revisions…</div>' : `
+				${ heat.html }
 				<div class="minn-rev-list" id="minn-rev-list">
-					${ rows && rows.length ? rows.map( ( r, i ) => `
+					${ rows.length ? rows.map( ( r, i ) => `
 						<button type="button" class="minn-rev-list-row" data-revlist="${ r.id }">
 							<span class="minn-rev-list-idx">${ i + 1 }</span>
 							<span class="minn-rev-list-when">
@@ -23113,7 +23312,7 @@
 							</span>
 							<span class="minn-rev-list-who">${ esc( r.author || '—' ) }</span>
 							<span class="minn-row-arrow">›</span>
-						</button>` ).join( '' ) : '<div class="minn-empty">No revisions yet.</div>' }
+						</button>` ).join( '' ) : `<div class="minn-empty">${ day ? 'No revisions on that day.' : 'No revisions yet.' }</div>` }
 				</div>` }
 			</div>
 		</div>`;

@@ -71,8 +71,11 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.keyboard.press( 'Escape' );
 	await page.waitForTimeout( 200 );
 
-	/* ===== Sticky (public post) ===== */
+	/* ===== Sticky lives in Settings (not Publish) ===== */
+	await openSettings();
 	await page.check( '#minn-sticky' );
+	await page.keyboard.press( 'Escape' );
+	await page.waitForTimeout( 200 );
 	await save();
 	s = await savedWhen( id, ( x ) => x.sticky === true );
 	t.check( 'sticky persists on a public post', s.sticky === true, String( s.sticky ) );
@@ -89,7 +92,11 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	/* ===== Switch to Password — sticky must auto-clear (WP forbids the pair) ===== */
 	await pickVisibility( 'password' );
 	await page.waitForFunction( () => !! document.querySelector( '#minn-password-input' ), null, { timeout: 8000 } );
+	// Sticky is in Settings; under password visibility the control is omitted.
+	await openSettings();
 	t.check( 'sticky control hidden under password visibility', ! ( await page.$( '#minn-sticky' ) ) );
+	await page.keyboard.press( 'Escape' );
+	await page.waitForTimeout( 200 );
 	// Combobox is themed (not a native select).
 	t.check( 'visibility control is a combobox', await page.evaluate( () =>
 		!! document.querySelector( '#minn-visibility.minn-ac' )

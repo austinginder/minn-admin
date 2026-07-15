@@ -10,6 +10,9 @@
  * describes the panel through the standard editor-panels framework. Scores
  * and content analysis stay in wp-admin — that's the plugins' moat.
  *
+ * Rank Math also maps social thumbnail (Facebook OG image, which Twitter
+ * reuses when "use Facebook" is on) as an image field on the same panel.
+ *
  * Yoast, Rank Math and SEOPress store postmeta; AIOSEO v4 keeps its own
  * {prefix}aioseo_posts table, so providers carry read/write callables and
  * AIOSEO's go through its own Post model (never raw SQL into their table).
@@ -112,6 +115,77 @@ function minn_admin_seo_aioseo_provider() {
 }
 
 /**
+ * Rank Math provider: core SEO strings plus social thumbnail
+ * (rank_math_facebook_image / _id). Twitter reuses Facebook when
+ * rank_math_twitter_use_facebook is on — Minn writes that flag on image set.
+ *
+ * @return array
+ */
+function minn_admin_seo_rank_math_provider() {
+	$base = minn_admin_seo_meta_provider(
+		'Rank Math',
+		array(
+			'title'         => 'rank_math_title',
+			'description'   => 'rank_math_description',
+			'focus_keyword' => 'rank_math_focus_keyword',
+		)
+	);
+	$base_read  = $base['read'];
+	$base_write = $base['write'];
+	return array(
+		'name'   => 'Rank Math',
+		// Extra panel groups beyond Search appearance (client uses this).
+		'social' => true,
+		'read'   => function ( $post_id ) use ( $base_read ) {
+			$out = call_user_func( $base_read, $post_id );
+			$id  = (int) get_post_meta( (int) $post_id, 'rank_math_facebook_image_id', true );
+			$url = (string) get_post_meta( (int) $post_id, 'rank_math_facebook_image', true );
+			if ( $id && ! $url ) {
+				$url = (string) wp_get_attachment_image_url( $id, 'medium' );
+			}
+			$out['social_image'] = ( $id || $url )
+				? array(
+					'id'  => $id,
+					'url' => $url,
+				)
+				: null;
+			return $out;
+		},
+		'write'  => function ( $post_id, $field, $clean ) use ( $base_write ) {
+			if ( 'social_image' === $field ) {
+				// $clean is null/'' to clear, or { id, url } / attachment id.
+				$id  = 0;
+				$url = '';
+				if ( is_array( $clean ) ) {
+					$id  = isset( $clean['id'] ) ? (int) $clean['id'] : 0;
+					$url = isset( $clean['url'] ) ? (string) $clean['url'] : '';
+				} elseif ( is_numeric( $clean ) ) {
+					$id = (int) $clean;
+				}
+				if ( $id > 0 ) {
+					if ( ! $url ) {
+						$url = (string) wp_get_attachment_url( $id );
+					}
+					// Prefer full-size source for OG; fall back to medium if missing.
+					if ( ! $url ) {
+						$url = (string) wp_get_attachment_image_url( $id, 'full' );
+					}
+					update_post_meta( $post_id, 'rank_math_facebook_image_id', $id );
+					update_post_meta( $post_id, 'rank_math_facebook_image', $url );
+					// Let Twitter inherit the Facebook image (Rank Math default).
+					update_post_meta( $post_id, 'rank_math_twitter_use_facebook', 'on' );
+				} else {
+					delete_post_meta( $post_id, 'rank_math_facebook_image_id' );
+					delete_post_meta( $post_id, 'rank_math_facebook_image' );
+				}
+				return;
+			}
+			call_user_func( $base_write, $post_id, $field, $clean );
+		},
+	);
+}
+
+/**
  * The active SEO plugin as { name, read, write } — first active wins, in
  * install-base order.
  *
@@ -126,11 +200,7 @@ function minn_admin_seo_plugin() {
 		) );
 	}
 	if ( defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ) ) {
-		return minn_admin_seo_meta_provider( 'Rank Math', array(
-			'title'         => 'rank_math_title',
-			'description'   => 'rank_math_description',
-			'focus_keyword' => 'rank_math_focus_keyword',
-		) );
+		return minn_admin_seo_rank_math_provider();
 	}
 	if ( defined( 'AIOSEO_VERSION' ) && class_exists( '\AIOSEO\Plugin\Common\Models\Post' ) ) {
 		return minn_admin_seo_aioseo_provider();
@@ -180,20 +250,33 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => function () {
 			return current_user_can( 'edit_posts' );
 		},
-		'callback'            => function () {
-			return rest_ensure_response( array(
-				'groups' => array(
-					array(
-						'group'  => 'Search appearance',
-						'fields' => array(
-							array( 'name' => 'title', 'label' => 'SEO title', 'type' => 'text' ),
-							array( 'name' => 'description', 'label' => 'Meta description', 'type' => 'textarea' ),
-							array( 'name' => 'focus_keyword', 'label' => 'Focus keyword', 'type' => 'text' ),
-						),
-						'locked' => 0,
+		'callback'            => function () use ( $plugin ) {
+			$groups = array(
+				array(
+					'group'  => 'Search appearance',
+					'fields' => array(
+						array( 'name' => 'title', 'label' => 'SEO title', 'type' => 'text' ),
+						array( 'name' => 'description', 'label' => 'Meta description', 'type' => 'textarea' ),
+						array( 'name' => 'focus_keyword', 'label' => 'Focus keyword', 'type' => 'text' ),
 					),
+					'locked' => 0,
 				),
-			) );
+			);
+			// Rank Math social thumbnail (Facebook OG; Twitter inherits).
+			if ( ! empty( $plugin['social'] ) ) {
+				$groups[] = array(
+					'group'  => 'Social',
+					'fields' => array(
+						array(
+							'name'  => 'social_image',
+							'label' => 'Social thumbnail',
+							'type'  => 'image',
+						),
+					),
+					'locked' => 0,
+				);
+			}
+			return rest_ensure_response( array( 'groups' => $groups ) );
 		},
 	) );
 
@@ -223,16 +306,41 @@ add_action( 'rest_api_init', function () {
 					: sanitize_text_field( (string) $value[ $field ] );
 				call_user_func( $plugin['write'], $post->ID, $field, $clean );
 			}
+			if ( array_key_exists( 'social_image', $value ) ) {
+				$raw = $value['social_image'];
+				if ( null === $raw || '' === $raw || false === $raw ) {
+					call_user_func( $plugin['write'], $post->ID, 'social_image', null );
+				} elseif ( is_array( $raw ) ) {
+					call_user_func(
+						$plugin['write'],
+						$post->ID,
+						'social_image',
+						array(
+							'id'  => isset( $raw['id'] ) ? (int) $raw['id'] : 0,
+							'url' => isset( $raw['url'] ) ? esc_url_raw( (string) $raw['url'] ) : '',
+						)
+					);
+				} elseif ( is_numeric( $raw ) ) {
+					call_user_func( $plugin['write'], $post->ID, 'social_image', (int) $raw );
+				}
+			}
 			return null;
 		},
 		'schema'          => array(
 			'type'        => 'object',
-			'description' => 'SEO title, meta description and focus keyword (Minn Admin editor panel).',
+			'description' => 'SEO title, meta description, focus keyword, and social image (Minn Admin editor panel).',
 			'context'     => array( 'edit' ),
 			'properties'  => array(
 				'title'         => array( 'type' => 'string' ),
 				'description'   => array( 'type' => 'string' ),
 				'focus_keyword' => array( 'type' => 'string' ),
+				'social_image'  => array(
+					'type'       => array( 'object', 'null' ),
+					'properties' => array(
+						'id'  => array( 'type' => 'integer' ),
+						'url' => array( 'type' => 'string' ),
+					),
+				),
 			),
 		),
 	) );
