@@ -15288,7 +15288,7 @@
 		view.innerHTML = `
 		<div class="minn-editor">
 			<div>
-				<input class="minn-editor-title" id="minn-editor-title" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" value="${ esc( ed.title ) }" aria-label="Title">
+				<textarea class="minn-editor-title" id="minn-editor-title" rows="1" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" aria-label="Title">${ esc( ed.title ) }</textarea>
 				${ ed.builder && ed.builder.edit_url ? `
 				<div class="minn-editor-locked-note minn-builder-note">
 					<span>${ ed.builder.owns_content
@@ -15568,7 +15568,39 @@
 			}
 		} );
 
-		$( '#minn-editor-title', view ).addEventListener( 'input', scheduleAutosave );
+		// Title is a soft-wrapping textarea (long titles used to clip in an
+		// <input>). Auto-grow height; Enter does not insert a hard break —
+		// WP titles are a single line of text that can wrap visually.
+		const titleEl = $( '#minn-editor-title', view );
+		const fitEditorTitle = ( el ) => {
+			if ( ! el ) return;
+			el.style.height = 'auto';
+			el.style.height = Math.max( el.scrollHeight, 1 ) + 'px';
+		};
+		if ( titleEl ) {
+			fitEditorTitle( titleEl );
+			titleEl.addEventListener( 'input', () => {
+				// Strip accidental newlines (paste) so the stored title stays one line.
+				if ( /[\r\n]/.test( titleEl.value ) ) {
+					const pos = titleEl.selectionStart;
+					titleEl.value = titleEl.value.replace( /[\r\n]+/g, ' ' );
+					try { titleEl.setSelectionRange( pos, pos ); } catch ( e ) { /* ignore */ }
+				}
+				fitEditorTitle( titleEl );
+				scheduleAutosave();
+			} );
+			titleEl.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Enter' ) {
+					e.preventDefault();
+					const body = $( '#minn-editor-body', view );
+					if ( body && ed.mode !== 'locked' && body.getAttribute( 'contenteditable' ) !== 'false' ) {
+						body.focus( { preventScroll: true } );
+					}
+				}
+			} );
+			// Fonts can settle after first paint — re-measure once.
+			requestAnimationFrame( () => fitEditorTitle( titleEl ) );
+		}
 		if ( ! locked ) {
 			let hlTimer = null;
 			body.addEventListener( 'input', () => {

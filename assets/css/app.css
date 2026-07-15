@@ -1381,9 +1381,15 @@ select.minn-input {
 /* ===== Editor ===== */
 .minn-editor { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 26px; max-width: 1000px; margin: 0 auto; }
 .minn-editor > div { min-width: 0; }
+/* Soft-wrapping title (textarea, not input) — long titles grow to multiple
+   lines instead of clipping. Enter is intercepted in JS (no hard newlines). */
 .minn-editor-title {
-  width: 100%; background: transparent; border: none; outline: none; color: var(--text);
-  font-size: 34px; font-weight: 800; letter-spacing: -0.8px; margin-bottom: 6px;
+  display: block; width: 100%; box-sizing: border-box;
+  background: transparent; border: none; outline: none; color: var(--text);
+  font: inherit; font-size: 34px; font-weight: 800; letter-spacing: -0.8px;
+  line-height: 1.2; margin: 0 0 6px; padding: 0;
+  resize: none; overflow: hidden; field-sizing: content;
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
 }
 .minn-editor-title::placeholder { color: var(--text3); }
 /* Sticky so the formatting tools stay reachable in long posts; opaque so
