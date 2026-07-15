@@ -2116,11 +2116,18 @@ class Minn_Admin_REST {
 				foreach ( $updates->response as $file => $data ) {
 					$name    = isset( $all_plugins[ $file ]['Name'] ) ? $all_plugins[ $file ]['Name'] : $file;
 					$items[] = array(
-						'id'    => 'plugin-' . $file . '-' . $data->new_version,
-						'kind'  => 'updates',
-						'icon'  => '⬆',
-						'title' => sprintf( '%s %s is available to install', $name, $data->new_version ),
-						'time'  => $checked,
+						'id'     => 'plugin-' . $file . '-' . $data->new_version,
+						'kind'   => 'updates',
+						'icon'   => '⬆',
+						'title'  => sprintf( '%s %s is available to install', $name, $data->new_version ),
+						'time'   => $checked,
+						// Client renders an in-row Update button from this.
+						'update' => array(
+							'type'    => 'plugin',
+							'plugin'  => $file,
+							'version' => $data->new_version,
+							'name'    => $name,
+						),
 					);
 				}
 			}
@@ -2133,12 +2140,19 @@ class Minn_Admin_REST {
 				foreach ( $tupdates->response as $stylesheet => $data ) {
 					$theme   = wp_get_theme( $stylesheet );
 					$ver     = is_array( $data ) ? ( $data['new_version'] ?? '' ) : '';
+					$tname   = $theme->exists() ? $theme->get( 'Name' ) : $stylesheet;
 					$items[] = array(
-						'id'    => 'theme-' . $stylesheet . '-' . $ver,
-						'kind'  => 'updates',
-						'icon'  => '⬆',
-						'title' => sprintf( '%s theme %s is available to install', $theme->exists() ? $theme->get( 'Name' ) : $stylesheet, $ver ),
-						'time'  => $tchecked,
+						'id'     => 'theme-' . $stylesheet . '-' . $ver,
+						'kind'   => 'updates',
+						'icon'   => '⬆',
+						'title'  => sprintf( '%s theme %s is available to install', $tname, $ver ),
+						'time'   => $tchecked,
+						'update' => array(
+							'type'       => 'theme',
+							'stylesheet' => $stylesheet,
+							'version'    => $ver,
+							'name'       => $tname,
+						),
 					);
 				}
 			}
@@ -2148,11 +2162,16 @@ class Minn_Admin_REST {
 			$core = get_site_transient( 'update_core' );
 			if ( $core && ! empty( $core->updates ) && 'upgrade' === $core->updates[0]->response ) {
 				$items[] = array(
-					'id'    => 'core-' . $core->updates[0]->version,
-					'kind'  => 'system',
-					'icon'  => '🛡',
-					'title' => sprintf( 'WordPress %s is available', $core->updates[0]->version ),
-					'time'  => (int) $core->last_checked,
+					'id'     => 'core-' . $core->updates[0]->version,
+					'kind'   => 'system',
+					'icon'   => '🛡',
+					'title'  => sprintf( 'WordPress %s is available', $core->updates[0]->version ),
+					'time'   => (int) $core->last_checked,
+					'update' => array(
+						'type'    => 'core',
+						'version' => $core->updates[0]->version,
+						'name'    => 'WordPress',
+					),
 				);
 			}
 			// When core auto-updated itself (minor releases do, within hours),

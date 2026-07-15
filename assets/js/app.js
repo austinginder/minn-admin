@@ -7484,6 +7484,16 @@
 				allBtn.innerHTML = `${ icon( 'refresh' ) } Updating… (${ n })`;
 			}
 		}
+		// Notification-panel per-row Update buttons (same queue state).
+		if ( state.notifOpen ) {
+			$$( '[data-nupd]' ).forEach( ( b ) => {
+				const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === b.dataset.nupd );
+				if ( ! item || ! item.update || item.update.type !== 'plugin' ) return;
+				const busy = notifUpdateBusy( item );
+				b.disabled = busy;
+				b.textContent = notifUpdateLabel( item );
+			} );
+		}
 	}
 
 	/**
@@ -7633,7 +7643,7 @@
 				state.cache.plugins = null;
 				await loadPluginsResilient();
 				state.cache.notifications = null;
-				loadNotifications().catch( () => {} );
+				await loadNotifications().catch( () => {} );
 			} catch ( e ) {
 				if ( prev ) state.cache.plugins = prev;
 				if ( prevUpd ) state.cache.pluginUpdates = prevUpd;
@@ -7642,6 +7652,7 @@
 			if ( state.route === 'extensions' && state.extTab === 'plugins' ) {
 				renderExtensions();
 			}
+			if ( state.notifOpen ) renderOverlays();
 		} );
 		return pluginUpdateChain;
 	}
@@ -18897,6 +18908,112 @@
 		else toast( `Updated ${ doneBits.join( ', ' ) }. Everything is current.` );
 	}
 
+	// Label for an in-row Update button on a notification (mirrors Extensions
+	// badges so queue state reads the same).
+	function notifUpdateLabel( n ) {
+		const u = n && n.update;
+		if ( ! u ) return 'Update';
+		if ( u.type === 'plugin' ) {
+			const file = String( u.plugin || '' ).replace( /\.php$/, '' );
+			return pluginUpdateBadgeLabel( file, u.version || '' );
+		}
+		if ( u.type === 'theme' ) {
+			return u.version ? `Update → ${ u.version }` : 'Update';
+		}
+		if ( u.type === 'core' ) {
+			return u.version ? `Update to ${ u.version }` : 'Update WordPress';
+		}
+		return 'Update';
+	}
+
+	function notifUpdateBusy( n ) {
+		const u = n && n.update;
+		if ( ! u ) return false;
+		if ( u.type === 'plugin' ) {
+			const file = String( u.plugin || '' ).replace( /\.php$/, '' );
+			return pluginUpdatePending.has( file ) || pluginUpdateCurrent === file;
+		}
+		if ( u.type === 'core' ) return !! state.updatingAll;
+		return false;
+	}
+
+	// One plugin / theme / core from a notification row. Plugins join the
+	// same serial queue as Extensions so badges and toasts stay consistent.
+	async function runNotifUpdate( item, btn ) {
+		const u = item && item.update;
+		if ( ! u ) return;
+		if ( btn ) { btn.disabled = true; btn.textContent = notifUpdateLabel( item ); }
+		try {
+			if ( u.type === 'plugin' ) {
+				if ( ! B.caps.update ) throw new Error( 'You cannot update plugins.' );
+				const file = String( u.plugin || '' ).replace( /\.php$/, '' );
+				if ( ! file ) throw new Error( 'Missing plugin file.' );
+				await queuePluginUpdate( file, u.name || file );
+			} else if ( u.type === 'theme' ) {
+				if ( ! B.caps.updateThemes ) throw new Error( 'You cannot update themes.' );
+				const stylesheet = u.stylesheet;
+				if ( ! stylesheet ) throw new Error( 'Missing theme.' );
+				const name = u.name || stylesheet;
+				toast( `Updating ${ name }…` );
+				if ( btn ) btn.textContent = 'Updating…';
+				await api( 'minn-admin/v1/themes/update', {
+					method: 'POST',
+					body: JSON.stringify( { stylesheet } ),
+				} );
+				if ( state.cache.themeUpdates ) delete state.cache.themeUpdates[ stylesheet ];
+				if ( Array.isArray( state.cache.themes ) ) {
+					const t = state.cache.themes.find( ( x ) => x.stylesheet === stylesheet );
+					if ( t && u.version ) { t.version = u.version; t.update = ''; }
+				}
+				toast( `${ name } updated${ u.version ? ' to v' + u.version : '' }` );
+				state.cache.notifications = null;
+				await loadNotifications();
+			} else if ( u.type === 'core' ) {
+				if ( ! B.caps.core ) throw new Error( 'You cannot update WordPress.' );
+				if ( ! confirm( `Update WordPress to ${ u.version || 'the latest version' }? The site enters maintenance mode for a few seconds.` ) ) {
+					if ( btn ) { btn.disabled = false; btn.textContent = notifUpdateLabel( item ); }
+					return;
+				}
+				state.updatingAll = `Updating WordPress…`;
+				renderOverlays();
+				try {
+					const version = await runCoreUpdate( u.version );
+					toast( `WordPress updated to ${ version }` );
+				} finally {
+					state.updatingAll = null;
+				}
+				state.cache.core = null;
+				state.cache.notifications = null;
+				await Promise.all( [
+					B.caps.core ? loadCoreStatus().catch( () => {} ) : Promise.resolve(),
+					loadNotifications(),
+				] );
+			} else {
+				throw new Error( 'Unknown update type.' );
+			}
+			// Mark the row read so the blue dot clears when the item stays
+			// briefly while the list refreshes.
+			if ( item.unread ) {
+				item.unread = false;
+				api( 'minn-admin/v1/notifications/read', {
+					method: 'POST',
+					body: JSON.stringify( { id: item.id } ),
+				} ).catch( () => {} );
+				updateUnreadDot();
+			}
+			if ( state.notifOpen ) renderOverlays();
+			if ( state.route === 'extensions' ) renderExtensions();
+		} catch ( e ) {
+			toast( e.message || 'Update failed', true );
+			if ( btn && document.body.contains( btn ) ) {
+				btn.disabled = false;
+				btn.textContent = notifUpdateLabel( item );
+			} else if ( state.notifOpen ) {
+				renderOverlays();
+			}
+		}
+	}
+
 	function renderNotifPanel() {
 		const items = state.cache.notifications;
 		const tabs = [
@@ -18910,6 +19027,25 @@
 			if ( ! g ) { g = { label: n.group, items: [] }; groups.push( g ); }
 			g.items.push( n );
 		} );
+
+		const rowActionsHtml = ( n ) => {
+			const bits = [];
+			if ( n.update && (
+				( n.update.type === 'plugin' && B.caps.update )
+				|| ( n.update.type === 'theme' && B.caps.updateThemes )
+				|| ( n.update.type === 'core' && B.caps.core )
+			) ) {
+				const busy = notifUpdateBusy( n );
+				bits.push( `<button class="minn-notif-link minn-notif-update" data-nupd="${ esc( n.id ) }"${ busy ? ' disabled' : '' }>${ esc( notifUpdateLabel( n ) ) }</button>` );
+			}
+			( n.links || [] ).forEach( ( l, i ) => {
+				bits.push( `<button class="minn-notif-link" data-nid="${ esc( n.id ) }" data-li="${ i }">${ esc( l.text ) }${ l.action ? '' : ' ↗' }</button>` );
+			} );
+			if ( n.kind === 'notices' ) {
+				bits.push( `<button class="minn-notif-hide" data-nid="${ esc( n.id ) }" title="Hide this notice from Minn">Hide</button>` );
+			}
+			return bits.length ? `<div class="minn-notif-links">${ bits.join( '' ) }</div>` : '';
+		};
 
 		return `
 		<div class="minn-overlay" id="minn-notif-overlay">
@@ -18939,9 +19075,7 @@
 									<div class="minn-notif-icon">${ esc( n.icon ) }</div>
 									<div class="minn-notif-text">
 										${ esc( n.title ) }
-										${ ( n.links || [] ).length || n.kind === 'notices' ? `<div class="minn-notif-links">${ ( n.links || [] ).map( ( l, i ) =>
-											`<button class="minn-notif-link" data-nid="${ esc( n.id ) }" data-li="${ i }">${ esc( l.text ) }${ l.action ? '' : ' ↗' }</button>` ).join( '' ) }${
-											n.kind === 'notices' ? `<button class="minn-notif-hide" data-nid="${ esc( n.id ) }" title="Hide this notice from Minn">Hide</button>` : '' }</div>` : '' }
+										${ rowActionsHtml( n ) }
 										<div class="minn-notif-time">${ esc( n.ago ) }</div>
 									</div>
 									${ n.unread ? '<div class="minn-notif-unread-dot"></div>' : '' }
@@ -23208,12 +23342,24 @@
 			'.minn-palette': !! $( '.minn-palette', root ),
 			'.minn-modal': !! $( '.minn-modal', root ),
 		};
+		// Mark-as-read rebuilds the panel; keep the list scrolled where the
+		// user was (same restore pattern as renderExtensions).
+		const notifScrollEl = $( '.minn-notif-scroll', root );
+		const keepNotifScroll = notifScrollEl ? notifScrollEl.scrollTop : 0;
 		root.innerHTML = ( state.notifOpen ? renderNotifPanel() : '' ) + ( state.paletteOpen ? renderPalette() : '' ) + renderModal();
 		Object.keys( had ).forEach( ( sel ) => {
 			if ( ! had[ sel ] ) return;
 			const el = $( sel, root );
 			if ( el ) el.classList.add( 'no-anim' );
 		} );
+		if ( state.notifOpen && keepNotifScroll ) {
+			const sc = $( '.minn-notif-scroll', root );
+			if ( sc ) {
+				sc.scrollTop = keepNotifScroll;
+				// Second paint can reset scrollTop after rebinding handlers.
+				requestAnimationFrame( () => { sc.scrollTop = keepNotifScroll; } );
+			}
+		}
 		bindModal();
 
 		if ( state.notifOpen ) {
@@ -23237,7 +23383,14 @@
 			);
 			const updAll = $( '#minn-update-all' );
 			if ( updAll ) updAll.addEventListener( 'click', runUpdateEverything );
-			$$( '.minn-notif-link' ).forEach( ( b ) =>
+			$$( '[data-nupd]' ).forEach( ( b ) =>
+				b.addEventListener( 'click', ( e ) => {
+					e.stopPropagation();
+					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === b.dataset.nupd );
+					if ( item ) runNotifUpdate( item, b );
+				} )
+			);
+			$$( '.minn-notif-link[data-li]' ).forEach( ( b ) =>
 				b.addEventListener( 'click', ( e ) => {
 					e.stopPropagation();
 					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === b.dataset.nid );

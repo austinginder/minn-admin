@@ -169,11 +169,12 @@ class Minn_Admin_Notices {
 		foreach ( $boxes as $box ) {
 			$links = self::links_of( $box );
 			$text  = self::text_of( $box );
-			// Button CTAs (Allow / No, Thanks) also appear as textContent of
-			// the notice — strip their labels so the body is not "Allow No, Thanks"
-			// with no way to click them (Everest Forms allow-usage pattern).
+			// Button CTAs and in-panel action links also appear as textContent
+			// of the notice — strip their labels so the body is not
+			// "Allow No, Thanks" / "No, thanks." with no way to click them
+			// (Everest Forms + ThemeIsle review-nag pattern).
 			foreach ( $links as $l ) {
-				if ( ! empty( $l['button'] ) && ! empty( $l['text'] ) ) {
+				if ( ! empty( $l['text'] ) && ( ! empty( $l['button'] ) || ! empty( $l['action'] ) ) ) {
 					$text = str_replace( $l['text'], '', $text );
 				}
 			}
@@ -292,8 +293,11 @@ class Minn_Admin_Notices {
 			} else {
 				$url = admin_url( $href );
 			}
-			$is_action = false !== strpos( $url, 'minn_notices=' );
-			if ( $is_action ) {
+			// Capture-piggyback links (minn_notices=) OR admin dismiss/opt-out
+			// URLs (ThemeIsle tsdk_dismiss_nonce, nid=, generic dismiss).
+			$is_action = false !== strpos( $url, 'minn_notices=' )
+				|| self::is_admin_dismiss_url( $url, $label );
+			if ( false !== strpos( $url, 'minn_notices=' ) ) {
 				$url = remove_query_arg( array( 'minn_notices', 'minn_nonce' ), $url );
 				// A _wpnonce here is only stripped when it's OURS (legacy
 				// capture URLs) — a plugin's own action nonce must survive.
@@ -316,6 +320,39 @@ class Minn_Admin_Notices {
 			}
 		}
 		return $links;
+	}
+
+	/**
+	 * Admin-page dismiss / opt-out links that must run in-panel, not as
+	 * window.open ↗. ThemeIsle SDK (Otter "No, thanks." → index.php?nid=…
+	 * &tsdk_dismiss_nonce=…), and similar dismiss nonces on wp-admin URLs.
+	 * External review CTAs (wordpress.org) stay non-action.
+	 */
+	private static function is_admin_dismiss_url( $url, $label = '' ) {
+		// Never treat public marketing / directory URLs as dismiss actions.
+		if ( preg_match( '#https?://(?:www\.)?wordpress\.org/#i', $url ) ) {
+			return false;
+		}
+		$admin = wp_parse_url( admin_url(), PHP_URL_PATH );
+		$path  = (string) ( wp_parse_url( $url, PHP_URL_PATH ) ?: '' );
+		$host  = (string) ( wp_parse_url( $url, PHP_URL_HOST ) ?: '' );
+		$site  = (string) ( wp_parse_url( home_url(), PHP_URL_HOST ) ?: '' );
+		// Must be same-site admin (or relative admin path we already absolutized).
+		$is_admin = ( $host && $site && strcasecmp( $host, $site ) === 0 && false !== strpos( $path, '/wp-admin' ) )
+			|| ( $admin && 0 === strpos( $path, $admin ) );
+		if ( ! $is_admin ) {
+			return false;
+		}
+		$query = (string) ( wp_parse_url( $url, PHP_URL_QUERY ) ?: '' );
+		// ThemeIsle SDK + common dismiss flags.
+		if ( preg_match( '/(?:^|&)(?:tsdk_dismiss_nonce|[\w-]*dismiss[\w_]*|nid)=/i', $query ) ) {
+			return true;
+		}
+		// Explicit dismiss labels on any admin link.
+		if ( preg_match( '/^(No,?\s*thanks\.?|Dismiss|Not now|Maybe later|Skip|Remind me later)$/i', trim( $label ) ) ) {
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -511,10 +548,10 @@ class Minn_Admin_Notices {
 	/* ===== Storage ===== */
 
 	private static function store_key() {
-		// v3: href="#" button CTAs (Allow / No, Thanks) extracted as action
-		// links, with optional ajax descriptors. Versioning invalidates
-		// stale captures so the panel re-fetches the new shape.
-		return 'minn_admin_notices_v3_' . get_current_user_id();
+		// v4: ThemeIsle / admin dismiss URLs (nid=, tsdk_dismiss_nonce,
+		// "No, thanks." labels) flagged as in-panel actions, not ↗ tabs.
+		// v3 was href="#" button CTAs. Versioning invalidates stale captures.
+		return 'minn_admin_notices_v4_' . get_current_user_id();
 	}
 
 	private static function store( $items ) {

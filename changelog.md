@@ -11,6 +11,11 @@
 * **Safe SVG media affordance:** when [Safe SVG](https://wordpress.org/plugins/safe-svg/) is active, Media gains an **SVG** filter tab, an **SVG on** badge, and a detail note that uploads are sanitized by Safe SVG. Sanitization stays the plugin's job; Minn only surfaces that SVG uploads are allowed.
 * **WooCommerce Subscriptions:** when the extension is active, Workspace gains **Subscriptions** (status tabs, search, next payment, billing period, detail modal with status save through `wc/v3/subscriptions`, related orders, deep link). Order modals list related subscriptions and open them in place. The `shop_subscription` CPT stays fenced out of Content.
 * **Extensions card menus (plugins and themes):** right-click, long-press, or the **⋯** button on a plugin or theme card for Activate / Deactivate (or Activate theme), Update when an offer is pending, Delete when allowed, plus Links (**Open on WordPress.org** / **Open on GitHub** when the URL is on those hosts, otherwise plugin/theme website and author) and Copy plugin file / stylesheet. Theme cards also link the screenshot and author to the theme hub when known. Verbs share the same handlers as the on-card controls so the menu cannot drift.
+* **Update buttons on update notifications:** each plugin, theme, or WordPress core update row in the Notifications panel has its own **Update → version** button (same serial queue and labels as Extensions), so you can apply one offer without **Update everything**.
+
+### Fixed
+* **Otter / ThemeIsle “No, thanks.” dismisses in-panel:** review nags that link to `wp-admin/index.php?nid=…&tsdk_dismiss_nonce=…` (and similar admin dismiss URLs) run as background actions instead of opening wp-admin in a new tab. External review CTAs (wordpress.org) still open in a new tab.
+* **Notification panel keeps scroll on mark-read:** clicking a notice to clear its unread dot no longer jumps the list back to the top.
 
 ### Improved
 * **Notice “No, Thanks” / “Allow” buttons work:** telemetry and opt-in nags that only use `href="#"` buttons (Everest Forms contribute notice, and the same shape) show as real action buttons in the Notifications panel instead of dead text. **No, Thanks** runs the plugin’s dismiss path (whitelist) so the nag does not bounce back; **Hide** still works for everything else.

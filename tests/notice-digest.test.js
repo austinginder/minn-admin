@@ -22,16 +22,36 @@ const { launch, login, reporter } = require( './helpers' );
 
 	await login( page );
 
-	const resetAction = () => page.evaluate( async () => ( await fetch( window.MINN.restUrl + 'wp/v2/settings', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
-		credentials: 'same-origin',
-		body: JSON.stringify( {
+	// Settings writes can 200 while the next read still sees the old value
+	// (rule 47c heisenbug) — write-then-verify-then-retry.
+	const resetAction = async () => {
+		const body = {
 			minn_fixture_action_done: '',
 			minn_fixture_hash_dismissed: '',
 			minn_fixture_hash_allowed: '',
-		} ),
-	} ) ).status );
+			minn_fixture_admin_dismissed: '',
+		};
+		for ( let i = 0; i < 5; i++ ) {
+			const status = await page.evaluate( async ( b ) => ( await fetch( window.MINN.restUrl + 'wp/v2/settings', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( b ),
+			} ) ).status, body );
+			const clear = await page.evaluate( async () => {
+				const r = await fetch( window.MINN.restUrl + 'wp/v2/settings?_fields=minn_fixture_hash_dismissed,minn_fixture_admin_dismissed,minn_fixture_action_done,minn_fixture_hash_allowed&_=' + Date.now(), {
+					headers: { 'X-WP-Nonce': window.MINN.nonce },
+					credentials: 'same-origin',
+				} );
+				const j = await r.json();
+				return ! j.minn_fixture_hash_dismissed && ! j.minn_fixture_admin_dismissed
+					&& ! j.minn_fixture_action_done && ! j.minn_fixture_hash_allowed;
+			} );
+			if ( status === 200 && clear ) return 200;
+			await page.waitForTimeout( 800 );
+		}
+		return 0;
+	};
 
 	const fetchNoticeItems = () => page.evaluate( async () => {
 		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/notifications', {
@@ -54,7 +74,7 @@ const { launch, login, reporter } = require( './helpers' );
 			return { status: r.status, body: await r.json() };
 		} );
 		t.check( 'Capture responds ok JSON (page chrome swallowed)', cap.status === 200 && cap.body && cap.body.ok === true );
-		t.check( 'Capture found the fixture notices', cap.body.count >= 6, `count=${ cap.body.count }` );
+		t.check( 'Capture found the fixture notices', cap.body.count >= 7, `count=${ cap.body.count }` );
 
 		// --- Notifications endpoint -------------------------------------------
 		const items = await fetchNoticeItems();
@@ -105,6 +125,20 @@ const { launch, login, reporter } = require( './helpers' );
 			!! hashItem && ! /No,?\s*Thanks/i.test( hashItem.title ) && ! /\bAllow\b/.test( hashItem.title.replace( /^[^:]+:\s*/, '' ) ),
 			hashItem && hashItem.title );
 
+		// ThemeIsle / Otter shape: real admin URL with nid + tsdk_dismiss_nonce.
+		const adminDismiss = byText( 'rate us on WordPress.org' );
+		const adminLinks = ( adminDismiss && adminDismiss.links ) || [];
+		const noThanksAdmin = adminLinks.find( ( l ) => /^No,?\s*thanks\.?$/i.test( ( l.text || '' ).trim() ) );
+		const helpLink = adminLinks.find( ( l ) => /gladly help/i.test( l.text || '' ) );
+		t.check( 'Admin-dismiss notice extracted', !! adminDismiss, adminDismiss && adminDismiss.title );
+		t.check( 'No, thanks. is an in-panel action (no ↗)',
+			!! noThanksAdmin && noThanksAdmin.action && /[?&]nid=minn_fixture_review/.test( noThanksAdmin.url )
+				&& /tsdk_dismiss_nonce=/.test( noThanksAdmin.url ),
+			JSON.stringify( noThanksAdmin ) );
+		t.check( 'WordPress.org review CTA stays a non-action link',
+			!! helpLink && ! helpLink.action && /wordpress\.org/i.test( helpLink.url || '' ),
+			JSON.stringify( helpLink ) );
+
 		// --- Panel UI -----------------------------------------------------------
 		await page.click( '#minn-notif-btn' );
 		await page.waitForSelector( '.minn-notif-panel', { timeout: 5000 } );
@@ -113,7 +147,7 @@ const { launch, login, reporter } = require( './helpers' );
 		// suite's capture); wait for the refresh fetch to re-render.
 		const rowsOk = await page.waitForFunction(
 			() => Array.from( document.querySelectorAll( '.minn-notif-row' ) )
-				.filter( ( r ) => r.textContent.includes( 'Minn Fixture' ) ).length >= 6,
+				.filter( ( r ) => r.textContent.includes( 'Minn Fixture' ) ).length >= 7,
 			null, { timeout: 10000 }
 		).then( () => true ).catch( () => false );
 		const rowCount = await page.evaluate( () =>
@@ -121,6 +155,32 @@ const { launch, login, reporter } = require( './helpers' );
 				.filter( ( r ) => r.textContent.includes( 'Minn Fixture' ) ).length
 		);
 		t.check( 'Fixture rows render under the Notices tab', rowsOk, `rows=${ rowCount }` );
+
+		// Mark-as-read rebuilds the panel; scroll position must hold.
+		const scrollBefore = await page.evaluate( () => {
+			const sc = document.querySelector( '.minn-notif-scroll' );
+			if ( ! sc ) return 0;
+			const max = Math.max( 0, sc.scrollHeight - sc.clientHeight );
+			sc.scrollTop = Math.min( 280, max );
+			return sc.scrollTop;
+		} );
+		await page.evaluate( () => {
+			const row = Array.from( document.querySelectorAll( '.minn-notif-row.unread' ) )
+				.find( ( r ) => r.textContent.includes( 'settings were imported' )
+					|| r.textContent.includes( 'integrations catalog' )
+					|| r.textContent.includes( 'nightly backup failed' ) );
+			if ( row ) row.click();
+		} );
+		await page.waitForTimeout( 200 );
+		const scrollAfter = await page.evaluate( () => {
+			const sc = document.querySelector( '.minn-notif-scroll' );
+			return sc ? sc.scrollTop : -1;
+		} );
+		t.check(
+			'Mark-read keeps notification list scroll',
+			scrollBefore > 0 && Math.abs( scrollAfter - scrollBefore ) <= 2,
+			`before=${ scrollBefore } after=${ scrollAfter }`
+		);
 
 		// External link button opens a new tab (stubbed); row click stays put.
 		await page.evaluate( () => {
@@ -175,8 +235,12 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'Fresh capture no longer holds the notice', ! itemsAfter.some( ( n ) => n.title.includes( 'allow anonymous usage tracking' ) ) );
 
 		// --- Hash-button "No, Thanks" (Everest-style ajax dismiss) ------------
+		// Scope to the telemetry row — "No, thanks." on the review nag is a
+		// different fixture (ThemeIsle admin dismiss).
 		await page.evaluate( () => {
-			const btn = Array.from( document.querySelectorAll( '.minn-notif-link' ) )
+			const row = Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.find( ( r ) => r.textContent.includes( 'contribute telemetry' ) );
+			const btn = row && Array.from( row.querySelectorAll( '.minn-notif-link' ) )
 				.find( ( b ) => /No,?\s*Thanks/i.test( b.textContent || '' ) );
 			if ( btn ) btn.click();
 		} );
@@ -203,6 +267,63 @@ const { launch, login, reporter } = require( './helpers' );
 			return b.minn_fixture_hash_dismissed;
 		} );
 		t.check( 'No, Thanks ran the plugin dismiss handler', hashOpt === '1', String( hashOpt ) );
+
+		// --- ThemeIsle-style admin dismiss (Otter "No, thanks.") ---------------
+		// Re-open panel if a prior action closed it; ensure the fixture is visible.
+		const panelOpen = await page.evaluate( () => !! document.querySelector( '.minn-notif-panel' ) );
+		if ( ! panelOpen ) {
+			await page.click( '#minn-notif-btn' );
+			await page.waitForSelector( '.minn-notif-panel', { timeout: 5000 } );
+			await page.click( '.minn-notif-tab[data-tab="notices"]' );
+		}
+		await page.waitForFunction(
+			() => Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.some( ( r ) => r.textContent.includes( 'rate us on WordPress.org' ) ),
+			null, { timeout: 10000 }
+		).catch( () => null );
+		// Button must NOT show ↗ and must NOT call window.open.
+		const adminBtnShape = await page.evaluate( () => {
+			const row = Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.find( ( r ) => r.textContent.includes( 'rate us on WordPress.org' ) );
+			const btn = row && Array.from( row.querySelectorAll( '.minn-notif-link' ) )
+				.find( ( b ) => /No,?\s*thanks/i.test( b.textContent || '' ) );
+			return btn ? { text: btn.textContent, hasArrow: btn.textContent.includes( '↗' ) } : null;
+		} );
+		t.check( 'Admin No, thanks. button has no ↗', !! adminBtnShape && ! adminBtnShape.hasArrow, JSON.stringify( adminBtnShape ) );
+		await page.evaluate( () => {
+			window.__minnOpened = null;
+			window.open = ( u ) => { window.__minnOpened = u; return null; };
+			const row = Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.find( ( r ) => r.textContent.includes( 'rate us on WordPress.org' ) );
+			const btn = row && Array.from( row.querySelectorAll( '.minn-notif-link' ) )
+				.find( ( b ) => /No,?\s*thanks/i.test( b.textContent || '' ) );
+			if ( btn ) btn.click();
+		} );
+		await page.waitForFunction(
+			() => Array.from( document.querySelectorAll( '.minn-toast' ) )
+				.some( ( x ) => /Done:.*No,?\s*thanks/i.test( x.textContent || '' ) ),
+			null, { timeout: 20000 }
+		).catch( () => null );
+		t.check( 'Admin No, thanks. did not open a new tab',
+			( await page.evaluate( () => window.__minnOpened ) ) === null );
+		t.check( 'Admin No, thanks. action toast', await page.evaluate( () =>
+			Array.from( document.querySelectorAll( '.minn-toast' ) )
+				.some( ( x ) => /Done:.*No,?\s*thanks/i.test( x.textContent || '' ) )
+		) );
+		const adminGone = await page.waitForFunction(
+			() => ! Array.from( document.querySelectorAll( '.minn-notif-row' ) )
+				.some( ( r ) => r.textContent.includes( 'rate us on WordPress.org' ) ),
+			null, { timeout: 10000 }
+		).then( () => true ).catch( () => false );
+		t.check( 'Admin No, thanks. removed the notice', adminGone );
+		const adminOpt = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/settings?_fields=minn_fixture_admin_dismissed', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce },
+			} );
+			const b = await r.json();
+			return b.minn_fixture_admin_dismissed;
+		} );
+		t.check( 'Admin dismiss handler ran (option set)', adminOpt === '1', String( adminOpt ) );
 
 		// --- Hide (Minn-side dismissal) ---------------------------------------
 		// The error fixture has no links — the same shape as notices whose only
