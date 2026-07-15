@@ -8,6 +8,7 @@
 
 ### Fixed
 * **Single plugin update cleared every other update notice:** `Plugin_Upgrader` runs `wp_clean_plugins_cache`, which deletes the whole `update_plugins` transient. Updating one plugin (e.g. Jetpack from Notifications) then wiped every remaining plugin offer from the panel and Extensions badges. Minn now snapshots pending offers before the upgrade and restores every file that was not updated.
+* **Single theme update cleared every other theme offer:** same trap for `Theme_Upgrader` / `wp_clean_themes_cache` / `update_themes`. Snapshot and restore the other stylesheets after a single theme upgrade.
 * **Extensions list empty after a notification-panel plugin update:** finishing the last plugin update while the **Updates** filter was active (or left sticky from earlier) hid the Updates pill and left a blank “No updates plugins” page even though All still showed full counts. When no plugin/theme updates remain, Minn snaps back to **All**, keeps the active filter pill visible at zero, and uses clearer empty copy.
 * **Connectors after Install & activate:** installing a provider plugin (e.g. OpenAI) no longer leaves Settings → Connectors on “Connectors couldn’t be loaded” when the PHP worker recycles mid-response. Minn waits for REST, retries the connectors fetch, and offers an in-panel **Retry** if a load still fails. A dropped install reply after a successful package install is treated as success and reloads the list the same way.
 

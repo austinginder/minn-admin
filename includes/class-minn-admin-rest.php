@@ -2720,25 +2720,81 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		return rest_ensure_response( array( 'deleted' => true ) );
 	}
 
+	/**
+	 * Theme_Upgrader hooks upgrader_process_complete → wp_clean_themes_cache,
+	 * which deletes the entire update_themes transient — same trap as plugins.
+	 * Snapshot response[] before the upgrade; restore every stylesheet that
+	 * was not successfully updated (notifications + Themes badges).
+	 *
+	 * @param array $pending_before stylesheet => update data, from before upgrade.
+	 * @param array $updated_styles Stylesheets that upgraded successfully.
+	 */
+	public static function restore_theme_update_offers( array $pending_before, array $updated_styles ) {
+		foreach ( $updated_styles as $s ) {
+			unset( $pending_before[ $s ] );
+		}
+		if ( ! $pending_before && ! $updated_styles ) {
+			return;
+		}
+		$current = get_site_transient( 'update_themes' );
+		if ( ! is_object( $current ) ) {
+			$current = (object) array(
+				'last_checked' => time(),
+				'checked'      => array(),
+				'response'     => array(),
+				'no_update'    => array(),
+			);
+		}
+		$response = ( isset( $current->response ) && is_array( $current->response ) )
+			? $current->response
+			: array();
+		foreach ( $pending_before as $stylesheet => $data ) {
+			if ( ! isset( $response[ $stylesheet ] ) ) {
+				$response[ $stylesheet ] = $data;
+			}
+		}
+		foreach ( $updated_styles as $s ) {
+			unset( $response[ $s ] );
+		}
+		$current->response     = $response;
+		$current->last_checked = time();
+		set_site_transient( 'update_themes', $current );
+	}
+
 	public static function theme_update( WP_REST_Request $request ) {
 		$stylesheet = sanitize_text_field( $request['stylesheet'] );
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		require_once ABSPATH . 'wp-admin/includes/theme.php';
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/update.php';
 
-		wp_update_themes();
+		// Only re-hit the API when this stylesheet is not already known pending
+		// (mirrors update_single_plugin — avoid a full check on every click).
 		$updates = get_site_transient( 'update_themes' );
+		if ( ! $updates || empty( $updates->response[ $stylesheet ] ) ) {
+			wp_update_themes();
+			$updates = get_site_transient( 'update_themes' );
+		}
 		if ( ! $updates || empty( $updates->response[ $stylesheet ] ) ) {
 			return new WP_Error( 'no_update', 'No update available for that theme.', array( 'status' => 400 ) );
 		}
+
+		// Snapshot every pending offer — upgrade() wipes the transient.
+		$pending_before = is_array( $updates->response ) ? $updates->response : array();
+
 		$skin     = new WP_Ajax_Upgrader_Skin();
 		$upgrader = new Theme_Upgrader( $skin );
 		$result   = $upgrader->upgrade( $stylesheet );
 		if ( ! $result || is_wp_error( $result ) ) {
+			self::restore_theme_update_offers( $pending_before, array() );
 			$errors = $skin->get_error_messages();
 			return new WP_Error( 'update_failed', $errors ? implode( ' ', (array) $errors ) : 'Update failed.', array( 'status' => 500 ) );
 		}
+
+		// Put every other pending offer back.
+		self::restore_theme_update_offers( $pending_before, array( $stylesheet ) );
+
 		$theme = wp_get_theme( $stylesheet );
 		return rest_ensure_response( array( 'updated' => true, 'version' => $theme->get( 'Version' ) ) );
 	}
