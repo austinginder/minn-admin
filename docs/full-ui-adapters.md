@@ -43,7 +43,7 @@ whether the adapter approach scales to full coverage.
    has a proven answer: delegate, exactly like page builders ("Edit in Gravity Forms"
    is one click, with no wp-admin chrome needed for the builder-style screens).
 
-## Where the adapter system stands today (re-verified at v0.13.0, 2026-07-12)
+## Where the adapter system stands today (re-verified at v0.16.0 open, 2026-07-15)
 
 The thesis held. Rungs 1–2 are shipped, Rung 3 is mostly shipped, and two
 hard case studies (Gravity Forms + Gravity SMTP) plus a cold third
@@ -67,7 +67,7 @@ still `docs/for-plugin-authors.md` and the validator constants in
   and render Overview-style bars with a hover tip. Gravity SMTP's Email
   status card is the first consumer (14-day sent/failed from its events
   table). Still open beside it: per-item stat tiles, and other chart
-  consumers (GF form results, ecommerce analytics).
+  consumers (GF form results; ecommerce analytics shipped v0.14.0).
 - **Richer `sectionsRoute` row types** — `pill`, `code`, `html-preview`
   (sandboxed iframe; `messageKey` generalized), `kv-table`. Email-log detail
   (headers, audit trail, rendered body) becomes fully expressible.
@@ -260,7 +260,7 @@ Rungs 1–3 it is nearly the whole plugin.
 
 | Surface | Status | Mechanics |
 |---|---|---|
-| Email log + detail + resend | ✅ | custom tables; resend through its models (regex fallback); richer HTML-preview row type still open |
+| Email log + detail + resend + delete | ✅ | custom tables; resend through its models (regex fallback); single/bulk delete via Event_Model (v0.16); richer HTML-preview row type still open |
 | Connector config (21 connectors) | ✅ (v0.12.0) | `settings_fields()` once; sensitive-sentinel preserved |
 | General / test-mode / logging settings | ✅ | through its own data stores + constant-lock awareness |
 | Suppressions | ✅ | manage-slot list + create + reactivate |
@@ -287,12 +287,13 @@ component-tree response shapes.
 Natural next builds inside this ladder (not a ranked product roadmap; see
 `docs/plugin-support.md` for install-weighted adapter waves):
 
-1. More chart consumers (GF form results, ecommerce analytics) on the
-   status-card chart shape.
+1. More chart consumers (GF form results) on the status-card chart shape.
+   ~~Ecommerce analytics~~ ✅ shipped v0.14.0 (Orders Analytics pill).
 2. Richer detail row types (email HTML preview, kv tables).
 3. ~~Surface list row-actions (⋯ menus)~~ ✅ shipped (v0.13.0).
-4. GF add-on/feed settings mapper (the original "one mapper, every add-on" payoff).
-5. Only after dogfooding: reconsider the 80% form editor.
+4. ~~GSMTP bulk log delete~~ ✅ shipped (v0.16.0 open).
+5. GF add-on/feed settings mapper (the original "one mapper, every add-on" payoff).
+6. Only after dogfooding: reconsider the 80% form editor.
 
 ## Risks and open questions
 
