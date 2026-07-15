@@ -8,6 +8,11 @@
  * view_all_aryo_activity_log cap when granted, else its filterable
  * edit_pages default.
  *
+ * Status card (v0.16 Axis A): 24h / 7d / all-time + top action. hist_time
+ * is WP local epoch (current_time('timestamp')), same trap as the list.
+ *
+ * last-sweep: 2026-07-15
+ *
  * @package minn-admin
  */
 
@@ -16,6 +21,78 @@ defined( 'ABSPATH' ) || exit;
 function minn_admin_aryo_can_view() {
 	return current_user_can( 'view_all_aryo_activity_log' )
 		|| current_user_can( apply_filters( 'aal_menu_page_capability', 'edit_pages' ) );
+}
+
+function minn_admin_aryo_admin_url() {
+	return admin_url( 'admin.php?page=activity-log-page' );
+}
+
+/**
+ * Status-card model for Aryo Activity Log.
+ *
+ * @return array{rows:array,actions:array}
+ */
+function minn_admin_aryo_status_model() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'aryo_activity_log';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+		return array(
+			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'Log table not found' ) ),
+			'actions' => array( array( 'label' => 'Open Activity Log ↗', 'href' => minn_admin_aryo_admin_url() ) ),
+		);
+	}
+	// hist_time is site-local epoch — compare against current_time('timestamp').
+	$now     = (int) current_time( 'timestamp' );
+	$since_d = $now - DAY_IN_SECONDS;
+	$since_w = $now - ( 7 * DAY_IN_SECONDS );
+	$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE hist_time >= %d", $since_d ) );
+	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE hist_time >= %d", $since_w ) );
+	$last    = $wpdb->get_var( "SELECT hist_time FROM {$table} ORDER BY histid DESC LIMIT 1" );
+	$top     = $wpdb->get_row( $wpdb->prepare(
+		"SELECT action, COUNT(*) AS c FROM {$table}
+		 WHERE hist_time >= %d AND action != ''
+		 GROUP BY action ORDER BY c DESC LIMIT 1",
+		$since_w
+	) );
+	// phpcs:enable
+
+	$last_label = '—';
+	if ( $last ) {
+		// Display relative to "now" in the same clock the row used (site local).
+		$last_label = human_time_diff( (int) $last, $now ) . ' ago';
+	}
+	$top_label = '—';
+	if ( $top && ! empty( $top->action ) ) {
+		$top_label = ucwords( str_replace( array( '-', '_' ), ' ', (string) $top->action ) )
+			. ' (' . number_format_i18n( (int) $top->c ) . ')';
+	}
+
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Events (24h)',
+				'value' => number_format_i18n( $day ),
+				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
+			),
+			array(
+				'label' => 'Events all-time',
+				'value' => number_format_i18n( $total ),
+			),
+			array(
+				'label' => 'Last event',
+				'value' => $last_label,
+			),
+			array(
+				'label' => 'Top action (7d)',
+				'value' => $top_label,
+			),
+		),
+		'actions' => array(
+			array( 'label' => 'Open Activity Log ↗', 'href' => minn_admin_aryo_admin_url() ),
+		),
+	);
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
@@ -34,6 +111,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Aryo',
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating above + in the shim.
+		'status'     => array( 'route' => 'minn-admin/v1/aryo/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/aryo/events',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -66,6 +144,14 @@ add_action( 'rest_api_init', function () {
 	if ( ! class_exists( 'AAL_Main' ) ) {
 		return;
 	}
+
+	register_rest_route( 'minn-admin/v1', '/aryo/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_aryo_can_view',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_aryo_status_model() );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/aryo/actions', array(
 		'methods'             => 'GET',

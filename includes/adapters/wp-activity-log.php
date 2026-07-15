@@ -9,6 +9,11 @@
  * only — some are serialized blobs and we never unserialize() third-party
  * data (json_decode/regex only, per the adapter ground rules).
  *
+ * Status card (v0.16 Axis A): 24h / 7d / all-time counts + high+ severity
+ * mix, prefix-scoped COUNTs only.
+ *
+ * last-sweep: 2026-07-15
+ *
  * @package minn-admin
  */
 
@@ -27,6 +32,70 @@ function minn_admin_wsal_can_view() {
 	return current_user_can( 'manage_options' );
 }
 
+function minn_admin_wsal_admin_url() {
+	return admin_url( 'admin.php?page=wsal-auditlog' );
+}
+
+/**
+ * Status-card model for WP Activity Log (created_on is a UTC float epoch).
+ *
+ * @return array{rows:array,actions:array}
+ */
+function minn_admin_wsal_status_model() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'wsal_occurrences';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+		return array(
+			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'Log table not found' ) ),
+			'actions' => array( array( 'label' => 'Open WP Activity Log ↗', 'href' => minn_admin_wsal_admin_url() ) ),
+		);
+	}
+	$now     = time();
+	$since_d = $now - DAY_IN_SECONDS;
+	$since_w = $now - ( 7 * DAY_IN_SECONDS );
+	$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f", $since_d ) );
+	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f", $since_w ) );
+	// 500 critical + 400 high in the last week.
+	$hot = (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND severity IN (500, 400)",
+		$since_w
+	) );
+	$last = $wpdb->get_var( "SELECT created_on FROM {$table} ORDER BY id DESC LIMIT 1" );
+	// phpcs:enable
+
+	$last_label = '—';
+	if ( $last ) {
+		$last_label = human_time_diff( (int) floatval( $last ), time() ) . ' ago';
+	}
+
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Events (24h)',
+				'value' => number_format_i18n( $day ),
+				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
+			),
+			array(
+				'label' => 'Events all-time',
+				'value' => number_format_i18n( $total ),
+			),
+			array(
+				'label' => 'Last event',
+				'value' => $last_label,
+			),
+			array(
+				'label' => 'High + critical (7d)',
+				'value' => number_format_i18n( $hot ),
+			),
+		),
+		'actions' => array(
+			array( 'label' => 'Open WP Activity Log ↗', 'href' => minn_admin_wsal_admin_url() ),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! defined( 'WSAL_VERSION' ) ) {
 		return $surfaces;
@@ -41,6 +110,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'WP Activity Log',
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating happens above + in the shim.
+		'status'     => array( 'route' => 'minn-admin/v1/wsal/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/wsal/events',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -197,6 +267,14 @@ add_action( 'rest_api_init', function () {
 				) ),
 				'adminUrl' => admin_url( 'admin.php?page=wsal-auditlog' ),
 			) );
+		},
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/wsal/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_wsal_can_view',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_wsal_status_model() );
 		},
 	) );
 } );

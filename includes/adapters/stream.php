@@ -7,16 +7,110 @@
  * column, so the shim is a read-only, prefix-scoped SELECT. Visibility uses
  * Stream's own view_stream capability.
  *
+ * Status card (v0.16 Axis A): 24h / 7d / all-time + top connector, scoped
+ * to the current blog_id.
+ *
+ * last-sweep: 2026-07-15
+ *
  * @package minn-admin
  */
 
 defined( 'ABSPATH' ) || exit;
 
+function minn_admin_stream_can() {
+	return current_user_can( 'view_stream' ) || current_user_can( 'manage_options' );
+}
+
+function minn_admin_stream_admin_url() {
+	return admin_url( 'admin.php?page=wp_stream' );
+}
+
+/**
+ * Status-card model for Stream (created is GMT datetime).
+ *
+ * @return array{rows:array,actions:array}
+ */
+function minn_admin_stream_status_model() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'stream';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+		return array(
+			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'Stream table not found' ) ),
+			'actions' => array( array( 'label' => 'Open Stream ↗', 'href' => minn_admin_stream_admin_url() ) ),
+		);
+	}
+	$blog      = get_current_blog_id();
+	$since_24h = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+	$since_7d  = gmdate( 'Y-m-d H:i:s', time() - ( 7 * DAY_IN_SECONDS ) );
+	$total     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE blog_id = %d", $blog ) );
+	$day       = (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT COUNT(*) FROM {$table} WHERE blog_id = %d AND created >= %s",
+		$blog,
+		$since_24h
+	) );
+	$week = (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT COUNT(*) FROM {$table} WHERE blog_id = %d AND created >= %s",
+		$blog,
+		$since_7d
+	) );
+	$last = $wpdb->get_var( $wpdb->prepare(
+		"SELECT created FROM {$table} WHERE blog_id = %d ORDER BY ID DESC LIMIT 1",
+		$blog
+	) );
+	$top = $wpdb->get_row( $wpdb->prepare(
+		"SELECT connector, COUNT(*) AS c FROM {$table}
+		 WHERE blog_id = %d AND created >= %s AND connector != ''
+		 GROUP BY connector ORDER BY c DESC LIMIT 1",
+		$blog,
+		$since_7d
+	) );
+	// phpcs:enable
+
+	$last_label = '—';
+	if ( $last ) {
+		$ts = strtotime( $last . ' UTC' );
+		if ( $ts ) {
+			$last_label = human_time_diff( $ts, time() ) . ' ago';
+		}
+	}
+	$top_label = '—';
+	if ( $top && ! empty( $top->connector ) ) {
+		$top_label = ucwords( str_replace( array( '-', '_' ), ' ', (string) $top->connector ) )
+			. ' (' . number_format_i18n( (int) $top->c ) . ')';
+	}
+
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Events (24h)',
+				'value' => number_format_i18n( $day ),
+				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
+			),
+			array(
+				'label' => 'Events all-time',
+				'value' => number_format_i18n( $total ),
+			),
+			array(
+				'label' => 'Last event',
+				'value' => $last_label,
+			),
+			array(
+				'label' => 'Top source (7d)',
+				'value' => $top_label,
+			),
+		),
+		'actions' => array(
+			array( 'label' => 'Open Stream ↗', 'href' => minn_admin_stream_admin_url() ),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! function_exists( 'wp_stream_get_instance' ) ) {
 		return $surfaces;
 	}
-	if ( ! current_user_can( 'view_stream' ) && ! current_user_can( 'manage_options' ) ) {
+	if ( ! minn_admin_stream_can() ) {
 		return $surfaces;
 	}
 
@@ -26,6 +120,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Stream',
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating above + in the shim.
+		'status'     => array( 'route' => 'minn-admin/v1/stream/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/stream/records',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -59,11 +154,17 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
+	register_rest_route( 'minn-admin/v1', '/stream/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_stream_can',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_stream_status_model() );
+		},
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/stream/connectors', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return current_user_can( 'view_stream' ) || current_user_can( 'manage_options' );
-		},
+		'permission_callback' => 'minn_admin_stream_can',
 		'callback'            => function () {
 			global $wpdb;
 			$table = $wpdb->prefix . 'stream';
@@ -85,9 +186,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/stream/records', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return current_user_can( 'view_stream' ) || current_user_can( 'manage_options' );
-		},
+		'permission_callback' => 'minn_admin_stream_can',
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
 			$table    = $wpdb->prefix . 'stream';
