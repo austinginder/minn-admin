@@ -1334,6 +1334,26 @@ select.minn-input {
 .minn-modal-title-block { flex: 1; min-width: 0; }
 .minn-modal-title-block .minn-modal-title { flex: none; }
 .minn-modal-sub { font-size: 12.5px; color: var(--text3); margin-top: 1px; font-variant-numeric: tabular-nums; }
+/* Filtered revision day: quiet chip next to the day label (not a raw UA button). */
+.minn-modal-sub:has(.minn-rev-day-clear) {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.minn-rev-day-clear {
+  display: inline-flex; align-items: center;
+  margin: 0; padding: 2px 9px;
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--text2); background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 999px;
+  cursor: pointer; line-height: 1.4;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.minn-rev-day-clear:hover {
+  color: var(--text); border-color: var(--border2); background: var(--hover);
+}
+.minn-rev-day-clear:focus-visible {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.18);
+}
 .minn-modal-id-tag { font-size: 12.5px; color: var(--text3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .minn-entry { padding: 18px 20px 8px; display: flex; flex-direction: column; gap: 18px; }
 .minn-entry-hero { display: flex; flex-direction: column; gap: 3px; }
