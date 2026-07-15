@@ -23377,7 +23377,7 @@
 					<div class="minn-modal-title-block">
 						<div class="minn-modal-title">All revisions</div>
 						<div class="minn-modal-sub">${ day
-							? `${ dayCount } on ${ esc( revisionDayLabel( day ) ) } · <button type="button" class="minn-linkish" id="minn-rev-day-clear">Show all ${ total }</button>`
+							? `<span>${ dayCount } on ${ esc( revisionDayLabel( day ) ) }</span><button type="button" class="minn-rev-day-clear" id="minn-rev-day-clear">Show all ${ total }</button>`
 							: ( total ? total + ' version' + ( total === 1 ? '' : 's' ) : 'Revision history' ) }</div>
 					</div>
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
