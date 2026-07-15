@@ -574,7 +574,9 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-table-row { padding: 13px 16px; cursor: pointer; }
 .minn-table-row:hover { background: var(--hover); }
 .minn-table-row:last-child { border-bottom: none; }
-.minn-row-icon { width: 28px; height: 28px; border-radius: 7px; background: var(--panel2); display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 14px; flex-shrink: 0; }
+.minn-row-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--panel2); display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 14px; flex-shrink: 0; }
+.minn-row-icon.has-thumb { padding: 0; overflow: hidden; background: var(--panel2); border: 1px solid var(--border); }
+.minn-content-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
 .minn-row-title { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-row-slug { font-size: 12.5px; color: var(--text3); margin-top: 1px; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .minn-row-slug-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -1480,8 +1482,8 @@ a.minn-btn-soft { text-decoration: none; }
 button.minn-chip.sel[data-tagchip] { cursor: pointer; background: var(--accent-soft); border-color: var(--accent); color: var(--accent2); font-family: inherit; }
 button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(--red); }
 /* Content bulk selection. */
-.minn-content-cols { grid-template-columns: 34px 40px 1fr 110px 130px 110px 40px; }
-.minn-content-cols.trash { grid-template-columns: 34px 40px 1fr 110px 130px 110px 158px; }
+.minn-content-cols { grid-template-columns: 34px 44px 1fr 110px 130px 110px 40px; }
+.minn-content-cols.trash { grid-template-columns: 34px 44px 1fr 110px 130px 110px 158px; }
 .minn-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .minn-row-actions .minn-btn-soft { padding: 4px 10px; font-size: 12.5px; }
 .minn-cbcell { display: flex; align-items: center; justify-content: center; }

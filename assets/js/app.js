@@ -1648,6 +1648,18 @@
 
 	/* ===== Content ===== */
 
+	/** Featured-image thumb URL from a posts/pages REST item (_embed=wp:featuredmedia). */
+	function contentFeaturedThumb( p ) {
+		const m = p && p._embedded && p._embedded[ 'wp:featuredmedia' ] && p._embedded[ 'wp:featuredmedia' ][ 0 ];
+		// Failed embeds surface as { code, message } without source_url.
+		if ( ! m || m.code || ! m.source_url ) return '';
+		const sizes = m.media_details && m.media_details.sizes;
+		return ( sizes && sizes.thumbnail && sizes.thumbnail.source_url )
+			|| ( sizes && sizes.medium && sizes.medium.source_url )
+			|| m.source_url
+			|| '';
+	}
+
 	const mapContentItem = ( type ) => ( p ) => ( {
 		id: p.id,
 		type,
@@ -1659,6 +1671,7 @@
 		modified: p.modified,
 		link: p.link || '',
 		builder: p.minn_builder || null,
+		thumb: contentFeaturedThumb( p ),
 	} );
 
 	function contentQuery( page ) {
@@ -1672,8 +1685,11 @@
 			: 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' );
 		// orderby=date puts scheduled posts (future dates) first, then everything
 		// else newest-published first — the list reads as a publishing timeline.
+		// featured_media + _embed=wp:featuredmedia power the list thumbnails;
+		// author embed is unchanged (names without a second users request).
 		let q = `context=edit&status=${ statuses }&per_page=25&orderby=date`
-			+ `&_embed=author&_fields=id,title,slug,status,date,modified,link,author,minn_builder,_links,_embedded&page=${ page }`;
+			+ `&_embed=author,wp:featuredmedia`
+			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
 		// categories/tags are post taxonomies — never send them for a custom post type.
 		if ( ! currentCpt() ) {
@@ -1830,7 +1846,14 @@
 		const tabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ],
 			...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
 			...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
-		const rowIcon = ( p ) => icon( p.type === 'pages' ? 'file' : ( p.type === 'posts' ? 'pilcrow' : 'block' ) );
+		// Featured image replaces the type glyph when set (products do the same
+		// with minn-prod-thumb). No image → post/page/CPT icon as before.
+		const rowIcon = ( p ) => {
+			if ( p.thumb ) {
+				return `<img class="minn-content-thumb" src="${ esc( p.thumb ) }" alt="" loading="lazy" width="36" height="36">`;
+			}
+			return icon( p.type === 'pages' ? 'file' : ( p.type === 'posts' ? 'pilcrow' : 'block' ) );
+		};
 		// Category/tag filters are post taxonomies — show them for the core posts context only.
 		const showTax = ! cpt && state.filter !== 'pages';
 		if ( showTax && ! state.cache.postTerms ) {
@@ -1892,7 +1915,7 @@
 			${ filtered.length ? filtered.map( ( p ) => `
 				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }">
 					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }"${ sel.has( p.id ) ? ' checked' : '' }></div>
-					<div class="minn-row-icon">${ rowIcon( p ) }</div>
+					<div class="minn-row-icon${ p.thumb ? ' has-thumb' : '' }">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
 						<div class="minn-row-title">${ esc( p.title ) }</div>
 						<div class="minn-row-slug">
