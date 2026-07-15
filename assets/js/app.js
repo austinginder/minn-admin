@@ -1683,7 +1683,7 @@
 					<button type="button" class="minn-switch${ defOn ? ' on' : '' }" id="minn-default-admin" role="switch" aria-checked="${ defOn ? 'true' : 'false' }" aria-label="Minn is the default admin"><span class="minn-switch-knob"></span></button>
 					<div class="minn-toggle-info">
 						<div class="minn-toggle-label">Minn is the default admin</div>
-						<div class="minn-toggle-desc">After sign-in, land here. Edit links open the Minn editor. Classic wp-admin stays available via direct URLs.</div>
+						<div class="minn-toggle-desc">After sign-in, land here. The admin bar Edit link opens the Minn editor. Full wp-admin stays available everywhere else.</div>
 					</div>
 				</div>
 			</div>`;

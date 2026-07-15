@@ -20,10 +20,6 @@ class Minn_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
-		// When the user prefers Minn as default admin, "Edit" links open the
-		// Minn editor instead of post.php (classic wp-admin stays reachable
-		// via direct URLs and the sidebar escape).
-		add_filter( 'get_edit_post_link', array( __CLASS__, 'filter_edit_post_link' ), 20, 3 );
 		add_action( 'init', array( __CLASS__, 'register_x_oembed' ) );
 		add_action( 'init', array( __CLASS__, 'register_oembed_refresh' ), 20 );
 	}
@@ -128,21 +124,6 @@ class Minn_Admin {
 			return self::app_url();
 		}
 		return $redirect_to;
-	}
-
-	/**
-	 * When the user prefers Minn as default admin, rewrite Edit links to the
-	 * Minn editor. Direct post.php URLs still open classic for an escape hatch.
-	 */
-	public static function filter_edit_post_link( $link, $post_id, $context ) {
-		if ( ! self::user_wants_default_admin() ) {
-			return $link;
-		}
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			return $link;
-		}
-		$minn = self::editor_url_for_post( $post_id );
-		return $minn ? $minn : $link;
 	}
 
 	public static function register_route() {
@@ -470,14 +451,52 @@ class Minn_Admin {
 			return;
 		}
 
-		// Always a hard link into the Minn app. Post editing uses the core
-		// "Edit Post/Page" admin-bar item (rewritten to Minn when the user
-		// has default-admin on — see filter_edit_post_link).
+		// Always a hard link into the Minn app (never "Edit in Minn Admin").
 		$bar->add_node(
 			array(
 				'id'    => 'minn-admin',
 				'title' => 'Minn Admin',
 				'href'  => self::app_url(),
+			)
+		);
+
+		// Only the admin-bar Edit Post/Page item is retargeted when this user
+		// prefers Minn as default admin. wp-admin list tables and other
+		// get_edit_post_link() consumers stay classic so wp-admin remains usable.
+		if ( ! self::user_wants_default_admin() ) {
+			return;
+		}
+		$edit = $bar->get_node( 'edit' );
+		if ( ! $edit || empty( $edit->href ) ) {
+			return;
+		}
+		// Front-end singular: current post. In wp-admin post.php, the edit node
+		// is the current screen's post.
+		$post_id = 0;
+		if ( ! is_admin() && is_singular() ) {
+			$obj = get_queried_object();
+			if ( $obj instanceof WP_Post ) {
+				$post_id = (int) $obj->ID;
+			}
+		} elseif ( is_admin() ) {
+			$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+			if ( $screen && 'post' === $screen->base && ! empty( $GLOBALS['post'] ) ) {
+				$post_id = (int) $GLOBALS['post']->ID;
+			} elseif ( ! empty( $_GET['post'] ) ) {
+				$post_id = (int) $_GET['post'];
+			}
+		}
+		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+		$minn = self::editor_url_for_post( $post_id );
+		if ( ! $minn ) {
+			return;
+		}
+		$bar->add_node(
+			array(
+				'id'   => 'edit',
+				'href' => $minn,
 			)
 		);
 	}
