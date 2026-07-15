@@ -46,6 +46,36 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.waitForSelector( '.minn-accent-swatch[data-accent="forest"]', { timeout: 15000 } );
 	const hasSwatches = !! ( await page.$( '.minn-accent-swatch[data-accent="forest"]' ) );
 	t.check( 'profile shows accent swatches', hasSwatches );
+	t.check( 'profile shows theme mode switches',
+		!! ( await page.$( '[data-theme-pref="system"]' ) )
+		&& !! ( await page.$( '[data-theme-pref="light"]' ) )
+		&& !! ( await page.$( '[data-theme-pref="dark"]' ) ) );
+
+	// Theme mode flips live (same localStorage as the topbar control).
+	const beforeMode = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
+	await page.click( '[data-theme-pref="light"]' );
+	await page.waitForFunction(
+		() => document.documentElement.getAttribute( 'data-theme' ) === 'light'
+			&& localStorage.getItem( 'minn-theme' ) === 'light',
+		{ timeout: 5000 }
+	);
+	t.check( 'Light switch sets light theme', await page.evaluate( () =>
+		document.documentElement.getAttribute( 'data-theme' ) === 'light'
+		&& document.querySelector( '[data-theme-pref="light"]' )?.classList.contains( 'on' )
+		&& ! document.querySelector( '[data-theme-pref="dark"]' )?.classList.contains( 'on' ) ) );
+	await page.click( '[data-theme-pref="dark"]' );
+	await page.waitForFunction(
+		() => document.documentElement.getAttribute( 'data-theme' ) === 'dark'
+			&& localStorage.getItem( 'minn-theme' ) === 'dark',
+		{ timeout: 5000 }
+	);
+	t.check( 'Dark switch sets dark theme', await page.evaluate( () =>
+		document.documentElement.getAttribute( 'data-theme' ) === 'dark'
+		&& document.querySelector( '[data-theme-pref="dark"]' )?.classList.contains( 'on' ) ) );
+	// Restore prior mode so the suite doesn't leave the account stuck.
+	const restore = beforeMode === 'light' || beforeMode === 'dark' || beforeMode === 'system' ? beforeMode : 'system';
+	await page.click( `[data-theme-pref="${ restore }"]` );
+	await page.waitForTimeout( 200 );
 
 	if ( hasSwatches ) {
 		await page.click( '.minn-accent-swatch[data-accent="forest"]' );

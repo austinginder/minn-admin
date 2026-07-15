@@ -1170,6 +1170,9 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   font-size: 16px; font-weight: 600; color: var(--text2); line-height: 1; pointer-events: none;
 }
 .minn-accent-custom.sel .minn-accent-custom-plus { color: var(--accent-fg); }
+/* Profile theme mode: denser exclusive switches under accent swatches. */
+.minn-theme-mode-toggles { margin-top: 6px; gap: 8px; }
+.minn-theme-mode-toggles .minn-toggle-desc { margin-top: 1px; }
 
 /* ===== Switch ===== */
 .minn-switch {
