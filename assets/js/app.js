@@ -2621,11 +2621,25 @@
 		$$( '.minn-view-tab', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => { state.mediaView = btn.dataset.view; renderMedia(); } )
 		);
+		// Type tabs: keep the toolbar (and active tab) painted while the grid
+		// reloads — nulling the cache + full re-render used to flash
+		// "Loading media…" over the whole view (Austin, 2026-07-15).
+		const mediaReload = async () => {
+			state.cache.media = null;
+			$$( '.minn-media-grid, .minn-media-list, .minn-card.minn-empty, .minn-pager', view )
+				.forEach( ( el ) => el.classList.add( 'minn-busy' ) );
+			await loadMedia().catch( showErr );
+			if ( state.route === 'media' ) renderMedia();
+		};
 		$$( '[data-mtype]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				state.mediaType = btn.dataset.mtype || null;
-				state.cache.media = null;
-				renderMedia();
+			btn.addEventListener( 'click', async () => {
+				const next = btn.dataset.mtype || '';
+				if ( ( state.mediaType || '' ) === next ) return;
+				state.mediaType = next || null;
+				// Flip the active pill immediately so the click feels sticky.
+				$$( '[data-mtype]', view ).forEach( ( b ) =>
+					b.classList.toggle( 'active', ( b.dataset.mtype || '' ) === next ) );
+				await mediaReload();
 			} )
 		);
 		const mediaSearch = $( '#minn-media-search', view );
@@ -2635,12 +2649,8 @@
 				clearTimeout( t );
 				t = setTimeout( async () => {
 					state.mediaSearch = mediaSearch.value.trim();
-					state.cache.media = null;
-					const grid = $( '.minn-media-grid, .minn-media-list', view );
-					if ( grid ) grid.classList.add( 'minn-busy' );
-					await loadMedia().catch( showErr );
+					await mediaReload();
 					if ( state.route === 'media' ) {
-						renderMedia();
 						const again = $( '#minn-media-search' );
 						if ( again ) { again.focus(); again.setSelectionRange( again.value.length, again.value.length ); }
 					}
@@ -4918,22 +4928,43 @@
 	// WP REST users orderby enum: id, name, email, registered_date, slug, url…
 	// Role is not sortable server-side (WP_User_Query has no roles orderby).
 	const USER_SORT_COLS = {
+		id: { orderby: 'id', label: 'ID', defaultOrder: 'asc' },
 		name: { orderby: 'name', label: 'Name', defaultOrder: 'asc' },
 		email: { orderby: 'email', label: 'Email', defaultOrder: 'asc' },
 		registered: { orderby: 'registered_date', label: 'Registered', defaultOrder: 'desc' },
 	};
 
-	const usersCtx = () => [ state.userSearch || '', state.userRole || '_all', state.userOrderby || 'registered_date', state.userOrder || 'desc' ].join( '|' );
+	// Session status from session_tokens meta (server classifies non-expired vs
+	// all-expired vs empty). Core wp/v2/users can't filter this; Minn's
+	// /users endpoint does when session !== all.
+	const USER_SESSION_TABS = [
+		[ 'all', 'All' ],
+		[ 'active', 'Active session' ],
+		[ 'expired', 'Expired session' ],
+		[ 'never', 'Never signed in' ],
+	];
+
+	const usersCtx = () => [ state.userSearch || '', state.userRole || '_all', state.userSession || 'all', state.userOrderby || 'registered_date', state.userOrder || 'desc' ].join( '|' );
 
 	async function loadUsers( page = 1 ) {
 		const ctx = usersCtx();
 		const orderby = state.userOrderby || 'registered_date';
 		const order = state.userOrder === 'asc' ? 'asc' : 'desc';
-		// minn_switch_url only exists while User Switching is active — an
-		// unregistered field in _fields is silently absent (safe).
-		let q = `wp/v2/users?context=edit&per_page=50&orderby=${ encodeURIComponent( orderby ) }&order=${ order }&_fields=id,name,email,roles,registered_date,avatar_urls,minn_switch_url&page=${ page }`;
-		if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
-		if ( state.userRole && state.userRole !== '_all' ) q += '&roles=' + encodeURIComponent( state.userRole );
+		const session = state.userSession || 'all';
+		let q;
+		if ( session === 'all' ) {
+			// Default path: core REST (and User Switching's minn_switch_url field).
+			// minn_switch_url only exists while User Switching is active — an
+			// unregistered field in _fields is silently absent (safe).
+			q = `wp/v2/users?context=edit&per_page=50&orderby=${ encodeURIComponent( orderby ) }&order=${ order }&_fields=id,name,email,roles,registered_date,avatar_urls,minn_switch_url&page=${ page }`;
+			if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
+			if ( state.userRole && state.userRole !== '_all' ) q += '&roles=' + encodeURIComponent( state.userRole );
+		} else {
+			// Session buckets need server-side classification of session_tokens.
+			q = `minn-admin/v1/users?per_page=50&orderby=${ encodeURIComponent( orderby ) }&order=${ order }&session=${ encodeURIComponent( session ) }&page=${ page }`;
+			if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
+			if ( state.userRole && state.userRole !== '_all' ) q += '&roles=' + encodeURIComponent( state.userRole );
+		}
 		const r = await apiPaged( q );
 		if ( ctx !== usersCtx() ) return; // filter/sort changed mid-flight — discard
 		state.cache.users = { items: r.items, page, totalPages: r.totalPages, total: r.total };
@@ -4992,8 +5023,9 @@
 		// Bulk role change is gated on edit-users; lower roles get no checkboxes.
 		const bulkUsers = !! B.caps.editUsers && roles.length > 0;
 		const userSel = state.userSel || ( state.userSel = new Set() );
+		const userSession = state.userSession || 'all';
 		view.innerHTML = `
-		<div class="minn-toolbar">
+		<div class="minn-toolbar minn-toolbar-views">
 			${ roles.length > 1 ? `<div class="minn-ac minn-tax-select" data-rolecombo>
 				<input class="minn-input minn-ac-input" placeholder="All roles" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
@@ -5002,11 +5034,18 @@
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } Add user</button>` : '' }
 		</div>
+		<div class="minn-toolbar minn-toolbar-filters">
+			<div class="minn-tabs minn-ext-filters" role="tablist" aria-label="Session filter">
+				${ USER_SESSION_TABS.map( ( [ id, label ] ) =>
+					`<button type="button" class="minn-tab${ userSession === id ? ' active' : '' }" data-usess="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
+			</div>
+		</div>
 		${ bulkUsers ? '<div id="minn-user-bulk-slot"></div>' : '' }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-user-cols${ bulkUsers ? ' has-cb' : '' }">
 				${ bulkUsers ? `<div><input type="checkbox" class="minn-cb" id="minn-user-selall"></div>` : '' }
 				<div></div>
+				<div>${ userSortHead( 'id' ) }</div>
 				<div>${ userSortHead( 'name' ) }</div>
 				<div>${ userSortHead( 'email' ) }</div>
 				<div title="Role is not sortable via the users API">Role</div>
@@ -5017,6 +5056,7 @@
 				<div class="minn-table-row minn-user-cols${ bulkUsers ? ' has-cb' : '' }${ userSel.has( u.id ) ? ' sel' : '' }" data-user="${ u.id }" data-uname="${ esc( u.name || '' ) }" data-uemail="${ esc( u.email || '' ) }" data-uroles="${ esc( ( u.roles || [] ).join( ',' ) ) }">
 					${ bulkUsers ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-user-cb" data-cbid="${ u.id }"${ userSel.has( u.id ) ? ' checked' : '' }></div>` : '' }
 					<img class="minn-user-row-avatar" src="${ esc( ( u.avatar_urls && ( u.avatar_urls[ '48' ] || Object.values( u.avatar_urls )[ 0 ] ) ) || '' ) }" alt="">
+					<div class="minn-row-meta minn-user-id">#${ esc( String( u.id ) ) }</div>
 					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( u.email || '—' ) }</div>
 					<div class="minn-row-meta">${ esc( ( u.roles || [] ).map( ( r ) => r.charAt( 0 ).toUpperCase() + r.slice( 1 ) ).join( ', ' ) || '—' ) }</div>
@@ -5024,7 +5064,10 @@
 					<div class="minn-row-actions">
 						<button type="button" class="minn-row-more" title="Actions" aria-label="User actions">⋯</button>
 					</div>
-				</div>` ).join( '' ) : '<div class="minn-empty">No users found.</div>' }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ userSession === 'active' ? 'No users with an active session.'
+					: userSession === 'expired' ? 'No users with only expired sessions.'
+					: userSession === 'never' ? 'No users who have never signed in.'
+					: 'No users found.' }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
 
@@ -5039,6 +5082,19 @@
 					state.userOrderby = col.orderby;
 					state.userOrder = col.defaultOrder;
 				}
+				state.cache.users = null;
+				const tbl = $( '.minn-table', view );
+				if ( tbl ) tbl.classList.add( 'minn-busy' );
+				await loadUsers().catch( showErr );
+				if ( state.route === 'users' ) renderUsers();
+			} )
+		);
+
+		$$( '[data-usess]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const next = btn.dataset.usess || 'all';
+				if ( ( state.userSession || 'all' ) === next ) return;
+				state.userSession = next;
 				state.cache.users = null;
 				const tbl = $( '.minn-table', view );
 				if ( tbl ) tbl.classList.add( 'minn-busy' );
@@ -5069,9 +5125,17 @@
 				state.userSearch = search.value.trim();
 				state.cache.users = null;
 				await loadUsers().catch( showErr );
-				if ( state.route === 'users' ) {
+				if ( state.route !== 'users' ) return;
+				// Cache may still be null if a session/role change discarded this
+				// in-flight load — re-render only when we have rows (or an empty
+				// result). Never focus a missing search input.
+				if ( ! state.cache.users ) {
 					renderUsers();
-					const el = $( '#minn-user-search' );
+					return;
+				}
+				renderUsers();
+				const el = $( '#minn-user-search' );
+				if ( el ) {
 					el.focus();
 					el.setSelectionRange( el.value.length, el.value.length );
 				}
@@ -13746,11 +13810,24 @@
 					<textarea class="minn-input minn-excerpt-input" id="minn-editor-excerpt" rows="3" placeholder="Optional summary for archives, feeds and shares…">${ esc( ed.excerpt ) }</textarea>
 				</div>` : '' }
 				${ ed.supportsDiscussion ? `<div>Discussion
-					<label class="minn-check-row"><input type="checkbox" id="minn-comment-status"${ ed.commentStatus === 'open' ? ' checked' : '' }> Allow comments</label>
-					<label class="minn-check-row"><input type="checkbox" id="minn-ping-status"${ ed.pingStatus === 'open' ? ' checked' : '' }> Allow pingbacks &amp; trackbacks</label>
+					<div class="minn-toggle-rows minn-side-toggles">
+						<div class="minn-toggle-row">
+							<button type="button" class="minn-switch${ ed.commentStatus === 'open' ? ' on' : '' }" id="minn-comment-status" role="switch" aria-checked="${ ed.commentStatus === 'open' ? 'true' : 'false' }" aria-label="Allow comments"><span class="minn-switch-knob"></span></button>
+							<div class="minn-toggle-info"><div class="minn-toggle-label">Allow comments</div></div>
+						</div>
+						<div class="minn-toggle-row">
+							<button type="button" class="minn-switch${ ed.pingStatus === 'open' ? ' on' : '' }" id="minn-ping-status" role="switch" aria-checked="${ ed.pingStatus === 'open' ? 'true' : 'false' }" aria-label="Allow pingbacks and trackbacks"><span class="minn-switch-knob"></span></button>
+							<div class="minn-toggle-info"><div class="minn-toggle-label">Allow pingbacks &amp; trackbacks</div></div>
+						</div>
+					</div>
 				</div>` : '' }
 				${ ed.supportsSticky && ed.visibility !== 'password' ? `<div>Stickiness
-					<label class="minn-check-row"><input type="checkbox" id="minn-sticky"${ ed.sticky ? ' checked' : '' }> Stick to the top of the blog</label>
+					<div class="minn-toggle-rows minn-side-toggles">
+						<div class="minn-toggle-row">
+							<button type="button" class="minn-switch${ ed.sticky ? ' on' : '' }" id="minn-sticky" role="switch" aria-checked="${ ed.sticky ? 'true' : 'false' }" aria-label="Stick to the top of the blog"><span class="minn-switch-knob"></span></button>
+							<div class="minn-toggle-info"><div class="minn-toggle-label">Stick to the top of the blog</div></div>
+						</div>
+					</div>
 				</div>` : '' }
 				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
 			</div>`;
@@ -13985,23 +14062,30 @@
 			} );
 			slugInput.addEventListener( 'blur', () => { slugInput.value = ed.slugValue; } );
 		}
-		const commentBox = $( '#minn-comment-status', root );
-		if ( commentBox ) commentBox.addEventListener( 'change', () => {
-			ed.commentStatus = commentBox.checked ? 'open' : 'closed';
+		// Discussion / stickiness use the same switch control as Settings
+		// (not native checkboxes) — click flips class + aria-checked.
+		const bindSideSwitch = ( sel, apply ) => {
+			const btn = $( sel, root );
+			if ( ! btn ) return;
+			btn.addEventListener( 'click', () => {
+				const on = ! btn.classList.contains( 'on' );
+				btn.classList.toggle( 'on', on );
+				btn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				apply( on );
+				if ( ed.id ) scheduleAutosave();
+			} );
+		};
+		bindSideSwitch( '#minn-comment-status', ( on ) => {
+			ed.commentStatus = on ? 'open' : 'closed';
 			ed.commentDirty = true;
-			if ( ed.id ) scheduleAutosave();
 		} );
-		const pingBox = $( '#minn-ping-status', root );
-		if ( pingBox ) pingBox.addEventListener( 'change', () => {
-			ed.pingStatus = pingBox.checked ? 'open' : 'closed';
+		bindSideSwitch( '#minn-ping-status', ( on ) => {
+			ed.pingStatus = on ? 'open' : 'closed';
 			ed.pingDirty = true;
-			if ( ed.id ) scheduleAutosave();
 		} );
-		const stickyBox = $( '#minn-sticky', root );
-		if ( stickyBox ) stickyBox.addEventListener( 'change', () => {
-			ed.sticky = stickyBox.checked;
+		bindSideSwitch( '#minn-sticky', ( on ) => {
+			ed.sticky = on;
 			ed.stickyDirty = true;
-			if ( ed.id ) scheduleAutosave();
 		} );
 		$$( '[data-cat]', root ).forEach( ( chip ) =>
 			chip.addEventListener( 'click', () => {
@@ -14237,7 +14321,12 @@
 		const on = !!( st && st.enabled );
 		const hours = ( st && st.hours ) || 48;
 		return `<div class="minn-ppp" id="minn-ppp">
-			<label class="minn-check-row"><input type="checkbox" id="minn-ppp-on"${ on ? ' checked' : '' }> Public preview link</label>
+			<div class="minn-toggle-rows minn-side-toggles minn-ppp-toggle">
+				<div class="minn-toggle-row">
+					<button type="button" class="minn-switch${ on ? ' on' : '' }" id="minn-ppp-on" role="switch" aria-checked="${ on ? 'true' : 'false' }" aria-label="Public preview link"><span class="minn-switch-knob"></span></button>
+					<div class="minn-toggle-info"><div class="minn-toggle-label">Public preview link</div></div>
+				</div>
+			</div>
 			${ on && st.url ? `
 			<div class="minn-ppp-row">
 				<input type="text" class="minn-input mono minn-ppp-url" id="minn-ppp-url" value="${ esc( st.url ) }" readonly spellcheck="false">
@@ -14251,13 +14340,16 @@
 	function bindEditorPpp( el, ed ) {
 		const box = $( '#minn-ppp-on', el );
 		if ( box ) {
-			box.addEventListener( 'change', async () => {
-				if ( ! ed.id ) return;
+			box.addEventListener( 'click', async () => {
+				if ( ! ed.id || box.disabled ) return;
+				const next = ! box.classList.contains( 'on' );
+				box.classList.toggle( 'on', next );
+				box.setAttribute( 'aria-checked', next ? 'true' : 'false' );
 				box.disabled = true;
 				try {
 					const r = await api( `minn-admin/v1/ppp/${ ed.id }`, {
 						method: 'POST',
-						body: JSON.stringify( { enabled: box.checked } ),
+						body: JSON.stringify( { enabled: next } ),
 					} );
 					if ( state.editor === ed ) {
 						ed.ppp = r;
@@ -14275,7 +14367,8 @@
 					}
 				} catch ( e ) {
 					toast( e.message || 'Could not update public preview', true );
-					box.checked = ! box.checked;
+					box.classList.toggle( 'on', ! next );
+					box.setAttribute( 'aria-checked', next ? 'false' : 'true' );
 					box.disabled = false;
 				}
 			} );
@@ -20636,7 +20729,7 @@
 			const isSelf = ! isNew && m.userId === B.user.id;
 			const roles = Object.entries( B.roles || {} );
 			if ( ! isNew && ! u ) {
-				return `<div class="minn-modal-overlay" id="minn-modal-overlay"><div class="minn-modal"><div class="minn-modal-head"><div class="minn-modal-title">${ isSelf ? 'Your profile' : 'Edit user' }</div><button class="minn-x-btn" id="minn-modal-close">×</button></div><div class="minn-loading">Loading…</div></div></div>`;
+				return `<div class="minn-modal-overlay" id="minn-modal-overlay"><div class="minn-modal"><div class="minn-modal-head"><div class="minn-modal-title">${ isSelf ? 'Your profile' : 'Edit user' }</div><span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span><button class="minn-x-btn" id="minn-modal-close">×</button></div><div class="minn-loading">Loading…</div></div></div>`;
 			}
 			const role = u && u.roles && u.roles[ 0 ] ? u.roles[ 0 ] : 'subscriber';
 			return `
@@ -20644,6 +20737,7 @@
 				<div class="minn-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ isNew ? 'Add user' : ( isSelf ? 'Your profile' : 'Edit ' + esc( u.name ) ) }</div>
+						${ ! isNew ? `<span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span>` : '' }
 						${ isSelf ? `<span class="minn-modal-count">@${ esc( B.user.login ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>

@@ -46,8 +46,13 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.evaluate( () => document.querySelector( '#minn-slug-input' ).blur() ); // normalizes the field
 	const shownSlug = await page.inputValue( '#minn-slug-input' );
 	t.check( 'slug input normalizes on blur', shownSlug === 'a-custom-slug-', shownSlug );
-	await page.uncheck( '#minn-comment-status' );
-	await page.uncheck( '#minn-ping-status' );
+	// Discussion / stickiness are minn-switch toggles (not checkboxes).
+	const setSwitch = async ( sel, on ) => {
+		const isOn = await page.$eval( sel, ( el ) => el.classList.contains( 'on' ) );
+		if ( isOn !== on ) await page.click( sel );
+	};
+	await setSwitch( '#minn-comment-status', false );
+	await setSwitch( '#minn-ping-status', false );
 	await page.keyboard.press( 'Escape' );
 	await page.waitForTimeout( 200 );
 	await save();
@@ -61,8 +66,8 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await openSettings();
 	const ui = await page.evaluate( () => ( {
 		slug: document.querySelector( '#minn-slug-input' ).value,
-		comments: document.querySelector( '#minn-comment-status' ).checked,
-		pings: document.querySelector( '#minn-ping-status' ).checked,
+		comments: document.querySelector( '#minn-comment-status' )?.classList.contains( 'on' ),
+		pings: document.querySelector( '#minn-ping-status' )?.classList.contains( 'on' ),
 		// Visibility stays on the Publish card (themed combobox).
 		visibility: document.querySelector( '#minn-visibility-input' )?.dataset.acValue
 			|| document.querySelector( '#minn-visibility' )?.dataset?.acValue,
@@ -73,7 +78,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	/* ===== Sticky lives in Settings (not Publish) ===== */
 	await openSettings();
-	await page.check( '#minn-sticky' );
+	await setSwitch( '#minn-sticky', true );
 	await page.keyboard.press( 'Escape' );
 	await page.waitForTimeout( 200 );
 	await save();

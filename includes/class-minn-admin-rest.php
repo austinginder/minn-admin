@@ -368,6 +368,58 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Users list with session-status filter (active / expired / never).
+		// Core wp/v2/users can't filter on session_tokens (serialized meta with
+		// nested expiration), so this endpoint classifies tokens in PHP then
+		// paginates via WP_User_Query include/exclude.
+		register_rest_route(
+			self::NS,
+			'/users',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'list_users' ),
+				'permission_callback' => function () {
+					return current_user_can( 'list_users' );
+				},
+				'args'                => array(
+					'page'     => array(
+						'type'    => 'integer',
+						'default' => 1,
+						'minimum' => 1,
+					),
+					'per_page' => array(
+						'type'    => 'integer',
+						'default' => 50,
+						'minimum' => 1,
+						'maximum' => 100,
+					),
+					'search'   => array(
+						'type'    => 'string',
+						'default' => '',
+					),
+					'roles'    => array(
+						'type'    => 'string',
+						'default' => '',
+					),
+					'orderby'  => array(
+						'type'    => 'string',
+						'default' => 'registered_date',
+						'enum'    => array( 'id', 'name', 'email', 'registered_date', 'slug' ),
+					),
+					'order'    => array(
+						'type'    => 'string',
+						'default' => 'desc',
+						'enum'    => array( 'asc', 'desc' ),
+					),
+					'session'  => array(
+						'type'    => 'string',
+						'default' => 'all',
+						'enum'    => array( 'all', 'active', 'expired', 'never' ),
+					),
+				),
+			)
+		);
+
 		// Password-reset email (wp-admin "Send password reset").
 		register_rest_route(
 			self::NS,
@@ -2289,6 +2341,169 @@ class Minn_Admin_REST {
 				'themes'  => $theme_map,
 			)
 		);
+	}
+
+	/**
+	 * Classify raw session_tokens meta: active (any non-expired), expired
+	 * (tokens present but all past expiration), never (empty / absent).
+	 * Matches the filtering in user_sessions() — expiration 0 counts as live.
+	 */
+	public static function classify_session_tokens( $tokens ) {
+		if ( ! is_array( $tokens ) || empty( $tokens ) ) {
+			return 'never';
+		}
+		$now = time();
+		foreach ( $tokens as $session ) {
+			if ( ! is_array( $session ) ) {
+				continue;
+			}
+			$expiration = isset( $session['expiration'] ) ? (int) $session['expiration'] : 0;
+			if ( ! $expiration || $expiration >= $now ) {
+				return 'active';
+			}
+		}
+		return 'expired';
+	}
+
+	/**
+	 * User IDs grouped by session status from the raw session_tokens meta.
+	 * Only users with non-empty tokens appear in active/expired; everyone
+	 * else (no meta, empty array after sign-out) is "never".
+	 *
+	 * @return array{active:int[],expired:int[]}
+	 */
+	public static function session_user_ids() {
+		global $wpdb;
+		$active  = array();
+		$expired = array();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			"SELECT user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'session_tokens'"
+		);
+		if ( ! is_array( $rows ) ) {
+			return array( 'active' => array(), 'expired' => array() );
+		}
+		foreach ( $rows as $row ) {
+			$uid    = (int) $row->user_id;
+			$tokens = maybe_unserialize( $row->meta_value );
+			$class  = self::classify_session_tokens( $tokens );
+			if ( 'active' === $class ) {
+				$active[] = $uid;
+			} elseif ( 'expired' === $class ) {
+				$expired[] = $uid;
+			}
+		}
+		return array(
+			'active'  => $active,
+			'expired' => $expired,
+		);
+	}
+
+	/**
+	 * List users with optional session-status filter. Shape matches the
+	 * fields the Users view loads from wp/v2/users (context=edit).
+	 */
+	public static function list_users( WP_REST_Request $request ) {
+		$page     = max( 1, (int) $request->get_param( 'page' ) );
+		$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ) );
+		$search   = trim( (string) $request->get_param( 'search' ) );
+		$roles    = trim( (string) $request->get_param( 'roles' ) );
+		$orderby  = (string) $request->get_param( 'orderby' );
+		$order    = strtoupper( (string) $request->get_param( 'order' ) ) === 'ASC' ? 'ASC' : 'DESC';
+		$session  = (string) $request->get_param( 'session' );
+		if ( ! in_array( $session, array( 'all', 'active', 'expired', 'never' ), true ) ) {
+			$session = 'all';
+		}
+
+		$orderby_map = array(
+			'id'              => 'ID',
+			'name'            => 'display_name',
+			'email'           => 'user_email',
+			'registered_date' => 'user_registered',
+			'slug'            => 'user_nicename',
+		);
+		$wp_orderby = isset( $orderby_map[ $orderby ] ) ? $orderby_map[ $orderby ] : 'user_registered';
+
+		$args = array(
+			'number'  => $per_page,
+			'paged'   => $page,
+			'orderby' => $wp_orderby,
+			'order'   => $order,
+			'fields'  => 'ID',
+		);
+		if ( $search !== '' ) {
+			$args['search']         = '*' . $search . '*';
+			$args['search_columns'] = array( 'user_login', 'user_nicename', 'user_email', 'display_name' );
+		}
+		if ( $roles !== '' ) {
+			// Core REST accepts a single role or comma list; WP_User_Query takes one role
+			// or role__in for multiple.
+			$role_list = array_values( array_filter( array_map( 'sanitize_key', explode( ',', $roles ) ) ) );
+			if ( count( $role_list ) === 1 ) {
+				$args['role'] = $role_list[0];
+			} elseif ( $role_list ) {
+				$args['role__in'] = $role_list;
+			}
+		}
+
+		if ( 'all' !== $session ) {
+			$buckets = self::session_user_ids();
+			if ( 'active' === $session ) {
+				$ids = $buckets['active'];
+			} elseif ( 'expired' === $session ) {
+				$ids = $buckets['expired'];
+			} else {
+				// never: everyone not currently active or holding only-expired tokens
+				$known = array_values( array_unique( array_merge( $buckets['active'], $buckets['expired'] ) ) );
+				if ( $known ) {
+					$args['exclude'] = $known;
+				}
+				$ids = null;
+			}
+			if ( null !== $ids ) {
+				if ( ! $ids ) {
+					$response = rest_ensure_response( array() );
+					$response->header( 'X-WP-Total', 0 );
+					$response->header( 'X-WP-TotalPages', 0 );
+					return $response;
+				}
+				$args['include'] = $ids;
+			}
+		}
+
+		$query = new WP_User_Query( $args );
+		$total = (int) $query->get_total();
+		$ids   = array_map( 'intval', (array) $query->get_results() );
+		$items = array();
+		foreach ( $ids as $uid ) {
+			$user = get_userdata( $uid );
+			if ( ! $user ) {
+				continue;
+			}
+			$item = array(
+				'id'              => $uid,
+				'name'            => $user->display_name,
+				'email'           => $user->user_email,
+				'roles'           => array_values( $user->roles ),
+				'registered_date' => mysql_to_rfc3339( $user->user_registered ),
+				'avatar_urls'     => rest_get_avatar_urls( $user->user_email ),
+			);
+			// Same shape as the User Switching REST field when the plugin is active.
+			if ( class_exists( 'user_switching' ) && method_exists( 'user_switching', 'maybe_switch_url' ) ) {
+				$url = user_switching::maybe_switch_url( $user );
+				$item['minn_switch_url'] = $url ? str_replace( '&amp;', '&', $url ) : '';
+			}
+			$items[] = $item;
+		}
+
+		$pages    = $per_page > 0 ? (int) ceil( $total / $per_page ) : 0;
+		$response = rest_ensure_response( $items );
+		$response->header( 'X-WP-Total', $total );
+		$response->header( 'X-WP-TotalPages', max( 1, $pages ) );
+		if ( 0 === $total ) {
+			$response->header( 'X-WP-TotalPages', 0 );
+		}
+		return $response;
 	}
 
 	/**
