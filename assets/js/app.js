@@ -1424,60 +1424,118 @@
 		renderThemeBtn();
 	}
 
-	/* ===== Accent appearance (user meta minn_admin_appearance) ===== */
+	/* ===== Color schemes (user meta minn_admin_appearance) =====
+	   Named packages of surfaces + brand. Custom = per-slot hex for dark & light.
+	   Status colors (green/amber/red) stay fixed. Soft/ring derive from accent. */
 
-	const ACCENT_PRESETS = [
-		{ id: 'minn', label: 'Minn', swatch: '#6e62f5' },
-		{ id: 'ocean', label: 'Ocean', swatch: '#3b82f6' },
-		{ id: 'forest', label: 'Forest', swatch: '#34a06c' },
-		{ id: 'amber', label: 'Amber', swatch: '#d4923a' },
-		{ id: 'rose', label: 'Rose', swatch: '#d063b0' },
-		{ id: 'coral', label: 'Coral', swatch: '#e06b5a' },
-		{ id: 'teal', label: 'Teal', swatch: '#2aa8a0' },
-		{ id: 'slate', label: 'Slate', swatch: '#7b8599' },
+	const SCHEME_PRESETS = [
+		{ id: 'minn', label: 'Minn', panel: '#151518', accent: '#6e62f5' },
+		{ id: 'ocean', label: 'Ocean', panel: '#121a28', accent: '#3b82f6' },
+		{ id: 'forest', label: 'Forest', panel: '#131c16', accent: '#34a06c' },
+		{ id: 'amber', label: 'Amber', panel: '#1c1812', accent: '#d4923a' },
+		{ id: 'rose', label: 'Rose', panel: '#1c121a', accent: '#d063b0' },
+		{ id: 'coral', label: 'Coral', panel: '#1e1614', accent: '#e06b5a' },
+		{ id: 'teal', label: 'Teal', panel: '#121c1c', accent: '#2aa8a0' },
+		{ id: 'slate', label: 'Slate', panel: '#16181e', accent: '#7b8599' },
+		{ id: 'dusk', label: 'Dusk', panel: '#1a1522', accent: '#9b7aef' },
 	];
+
+	const SCHEME_SLOT_KEYS = [ 'bg', 'bg2', 'panel', 'panel2', 'hover', 'border', 'border2', 'text', 'text2', 'text3', 'accent', 'accent2', 'accentFg' ];
+	const SCHEME_SLOT_CSS = {
+		bg: '--bg', bg2: '--bg2', panel: '--panel', panel2: '--panel2', hover: '--hover',
+		border: '--border', border2: '--border2', text: '--text', text2: '--text2', text3: '--text3',
+		accent: '--accent', accent2: '--accent2', accentFg: '--accent-fg',
+	};
+	const SCHEME_SLOT_GROUPS = [
+		{ title: 'Surfaces', keys: [ 'bg', 'bg2', 'panel', 'panel2', 'hover' ] },
+		{ title: 'Type', keys: [ 'text', 'text2', 'text3' ] },
+		{ title: 'Lines', keys: [ 'border', 'border2' ] },
+		{ title: 'Brand', keys: [ 'accent', 'accent2', 'accentFg' ] },
+	];
+	const MINN_SCHEME_BASE = {
+		dark: {
+			bg: '#0b0b0d', bg2: '#101013', panel: '#151518', panel2: '#1b1b1f', hover: '#202027',
+			border: '#242429', border2: '#31313a', text: '#ececed', text2: '#9d9da7', text3: '#63636d',
+			accent: '#6e62f5', accent2: '#8a80f8', accentFg: '#ffffff',
+		},
+		light: {
+			bg: '#f6f6f7', bg2: '#ffffff', panel: '#ffffff', panel2: '#f4f4f6', hover: '#eeeef1',
+			border: '#e7e7ea', border2: '#dadade', text: '#1a1a1f', text2: '#5e5e69', text3: '#9696a0',
+			accent: '#6a5ef2', accent2: '#5a4ef0', accentFg: '#ffffff',
+		},
+	};
+
+	function sanitizeHex( hex ) {
+		const m = String( hex || '' ).trim().toLowerCase().match( /^#([0-9a-f]{3}|[0-9a-f]{6})$/ );
+		if ( ! m ) return '';
+		if ( m[ 0 ].length === 4 ) {
+			const h = m[ 1 ];
+			return '#' + h[ 0 ] + h[ 0 ] + h[ 1 ] + h[ 1 ] + h[ 2 ] + h[ 2 ];
+		}
+		return m[ 0 ];
+	}
+
+	function normalizeModeTokens( partial, mode ) {
+		const base = { ...( MINN_SCHEME_BASE[ mode === 'light' ? 'light' : 'dark' ] ) };
+		if ( ! partial || typeof partial !== 'object' ) return base;
+		SCHEME_SLOT_KEYS.forEach( ( k ) => {
+			const hex = sanitizeHex( partial[ k ] );
+			if ( hex ) base[ k ] = hex;
+		} );
+		return base;
+	}
 
 	function appearanceOf( ap ) {
 		const a = ap && typeof ap === 'object' ? ap : {};
-		const accent = a.accent === 'custom' || ACCENT_PRESETS.some( ( p ) => p.id === a.accent )
-			? a.accent
-			: 'minn';
-		let custom = '';
-		if ( accent === 'custom' && a.custom ) {
-			const m = String( a.custom ).trim().toLowerCase().match( /^#([0-9a-f]{3}|[0-9a-f]{6})$/ );
-			if ( m ) {
-				custom = m[ 0 ].length === 4
-					? '#' + m[ 1 ][ 0 ] + m[ 1 ][ 0 ] + m[ 1 ][ 1 ] + m[ 1 ][ 1 ] + m[ 1 ][ 2 ] + m[ 1 ][ 2 ]
-					: m[ 0 ];
+		// Legacy { accent, custom: '#hex' }.
+		if ( ! a.scheme && a.accent ) {
+			if ( a.accent === 'custom' ) {
+				const hex = sanitizeHex( a.custom );
+				const custom = {
+					dark: normalizeModeTokens( hex ? { accent: hex, accent2: hex } : {}, 'dark' ),
+					light: normalizeModeTokens( hex ? { accent: hex, accent2: hex } : {}, 'light' ),
+				};
+				return { scheme: hex ? 'custom' : 'minn', custom };
 			}
+			const id = SCHEME_PRESETS.some( ( p ) => p.id === a.accent ) ? a.accent : 'minn';
+			return {
+				scheme: id,
+				custom: { dark: normalizeModeTokens( {}, 'dark' ), light: normalizeModeTokens( {}, 'light' ) },
+			};
 		}
-		return { accent: accent === 'custom' && ! custom ? 'minn' : accent, custom: accent === 'custom' ? custom : '' };
+		const ids = SCHEME_PRESETS.map( ( p ) => p.id );
+		let scheme = a.scheme === 'custom' || ids.includes( a.scheme ) ? a.scheme : 'minn';
+		const customIn = a.custom && typeof a.custom === 'object' && ! Array.isArray( a.custom ) ? a.custom : {};
+		const custom = {
+			dark: normalizeModeTokens( customIn.dark, 'dark' ),
+			light: normalizeModeTokens( customIn.light, 'light' ),
+		};
+		return { scheme, custom };
 	}
 
-	function customAccentTokens( hex, mode ) {
-		let h = String( hex || '' ).replace( /^#/, '' );
-		if ( h.length === 3 ) h = h[ 0 ] + h[ 0 ] + h[ 1 ] + h[ 1 ] + h[ 2 ] + h[ 2 ];
-		if ( ! /^[0-9a-fA-F]{6}$/.test( h ) ) return null;
-		const r = parseInt( h.slice( 0, 2 ), 16 );
-		const g = parseInt( h.slice( 2, 4 ), 16 );
-		const b = parseInt( h.slice( 4, 6 ), 16 );
-		const clamp = ( n ) => Math.max( 0, Math.min( 255, Math.round( n ) ) );
-		const toHex = ( rr, gg, bb ) => '#' + [ rr, gg, bb ].map( ( n ) => clamp( n ).toString( 16 ).padStart( 2, '0' ) ).join( '' );
-		const mix = ( t ) => {
-			if ( t >= 0 ) return toHex( r + ( 255 - r ) * t, g + ( 255 - g ) * t, b + ( 255 - b ) * t );
-			const k = 1 + t;
-			return toHex( r * k, g * k, b * k );
-		};
-		const base = '#' + h.toLowerCase();
-		const accent2 = mode === 'light' ? mix( -0.12 ) : mix( 0.18 );
+	function clearSchemeInlineVars( root ) {
+		SCHEME_SLOT_KEYS.forEach( ( k ) => {
+			root.style.removeProperty( SCHEME_SLOT_CSS[ k ] );
+		} );
+		root.style.removeProperty( '--accent-soft' );
+		root.style.removeProperty( '--accent-fg' );
+	}
+
+	function applySchemeTokens( tokens, mode ) {
+		const root = document.documentElement;
 		const softA = mode === 'light' ? 0.10 : 0.15;
-		const lum = ( 0.2126 * r + 0.7152 * g + 0.0722 * b ) / 255;
-		return {
-			accent: base,
-			accent2,
-			soft: `rgba(${ r },${ g },${ b },${ softA })`,
-			fg: lum > 0.62 ? '#14141a' : '#ffffff',
-		};
+		SCHEME_SLOT_KEYS.forEach( ( k ) => {
+			if ( tokens[ k ] ) root.style.setProperty( SCHEME_SLOT_CSS[ k ], tokens[ k ] );
+		} );
+		// Soft fill from accent RGB when custom; presets use CSS color-mix.
+		const hex = sanitizeHex( tokens.accent );
+		if ( hex ) {
+			const h = hex.slice( 1 );
+			const r = parseInt( h.slice( 0, 2 ), 16 );
+			const g = parseInt( h.slice( 2, 4 ), 16 );
+			const b = parseInt( h.slice( 4, 6 ), 16 );
+			root.style.setProperty( '--accent-soft', `rgba(${ r },${ g },${ b },${ softA })` );
+		}
 	}
 
 	function applyAppearance( ap ) {
@@ -1485,27 +1543,25 @@
 		if ( B.user ) B.user.appearance = norm;
 		const root = document.documentElement;
 		const mode = root.getAttribute( 'data-theme' ) || 'dark';
-		root.setAttribute( 'data-accent', norm.accent || 'minn' );
-		if ( norm.accent === 'custom' && norm.custom ) {
-			const tok = customAccentTokens( norm.custom, mode );
-			if ( tok ) {
-				root.style.setProperty( '--accent', tok.accent );
-				root.style.setProperty( '--accent2', tok.accent2 );
-				root.style.setProperty( '--accent-soft', tok.soft );
-				root.style.setProperty( '--accent-fg', tok.fg );
-				return;
-			}
+		root.setAttribute( 'data-scheme', norm.scheme || 'minn' );
+		// Drop legacy data-accent if present.
+		root.removeAttribute( 'data-accent' );
+		if ( norm.scheme === 'custom' ) {
+			const tokens = normalizeModeTokens( norm.custom && norm.custom[ mode ], mode );
+			applySchemeTokens( tokens, mode );
+			return;
 		}
-		root.style.removeProperty( '--accent' );
-		root.style.removeProperty( '--accent2' );
-		root.style.removeProperty( '--accent-soft' );
-		root.style.removeProperty( '--accent-fg' );
+		clearSchemeInlineVars( root );
 	}
 
 	async function saveAppearance( next ) {
 		const prev = appearanceOf( B.user && B.user.appearance );
-		const norm = appearanceOf( next );
-		applyAppearance( norm ); // optimistic
+		const merged = {
+			scheme: next.scheme != null ? next.scheme : prev.scheme,
+			custom: next.custom != null ? next.custom : prev.custom,
+		};
+		const norm = appearanceOf( merged );
+		applyAppearance( norm );
 		try {
 			const saved = await api( 'minn-admin/v1/me/appearance', {
 				method: 'POST',
@@ -1519,21 +1575,55 @@
 		}
 	}
 
+	function schemeSlotsMeta() {
+		return ( B.appearanceSlots && B.appearanceSlots.length )
+			? B.appearanceSlots
+			: SCHEME_SLOT_KEYS.map( ( key ) => ( {
+				key,
+				css: SCHEME_SLOT_CSS[ key ],
+				label: key,
+			} ) );
+	}
+
 	function appearanceSwatchesHtml( ap ) {
 		const cur = appearanceOf( ap );
-		const dots = ACCENT_PRESETS.map( ( p ) =>
-			`<button type="button" class="minn-accent-swatch${ cur.accent === p.id ? ' sel' : '' }" data-accent="${ esc( p.id ) }" title="${ esc( p.label ) }" aria-label="${ esc( p.label ) }" aria-pressed="${ cur.accent === p.id ? 'true' : 'false' }" style="--sw:${ esc( p.swatch ) }"></button>`
+		const dots = SCHEME_PRESETS.map( ( p ) =>
+			`<button type="button" class="minn-scheme-swatch${ cur.scheme === p.id ? ' sel' : '' }" data-scheme="${ esc( p.id ) }" title="${ esc( p.label ) }" aria-label="${ esc( p.label ) }" aria-pressed="${ cur.scheme === p.id ? 'true' : 'false' }">
+				<span class="minn-scheme-swatch-face" style="background:${ esc( p.panel ) }"></span>
+				<span class="minn-scheme-swatch-dot" style="background:${ esc( p.accent ) }"></span>
+			</button>`
 		).join( '' );
-		const customOn = cur.accent === 'custom';
+		const customOn = cur.scheme === 'custom';
+		const mode = ( document.documentElement.getAttribute( 'data-theme' ) || 'dark' );
+		const modeTokens = normalizeModeTokens( cur.custom && cur.custom[ mode ], mode );
+		const slotMeta = schemeSlotsMeta();
+		const labelOf = ( key ) => {
+			const hit = slotMeta.find( ( s ) => s.key === key );
+			return hit ? hit.label : key;
+		};
+		const customEditors = customOn ? `
+			<div class="minn-scheme-custom" id="minn-scheme-custom">
+				<div class="minn-toggle-desc" style="margin-bottom:8px;">Editing <strong>${ mode === 'light' ? 'light' : 'dark' }</strong> colors. Flip Theme below to tune the other mode.</div>
+				${ SCHEME_SLOT_GROUPS.map( ( g ) => `
+					<div class="minn-scheme-group">
+						<div class="minn-scheme-group-title">${ esc( g.title ) }</div>
+						${ g.keys.map( ( key ) => `
+						<label class="minn-scheme-slot">
+							<span class="minn-scheme-slot-swatch" style="background:${ esc( modeTokens[ key ] || '#888' ) }"></span>
+							<span class="minn-scheme-slot-label">${ esc( labelOf( key ) ) }</span>
+							<input type="color" data-scheme-slot="${ esc( key ) }" value="${ esc( modeTokens[ key ] || '#888888' ) }" aria-label="${ esc( labelOf( key ) ) }">
+						</label>` ).join( '' ) }
+					</div>` ).join( '' ) }
+			</div>` : '';
 		return `
-			<div class="minn-accent-row" role="group" aria-label="Accent color">
+			<div class="minn-scheme-row" role="group" aria-label="Color scheme">
 				${ dots }
-				<label class="minn-accent-swatch minn-accent-custom${ customOn ? ' sel' : '' }" title="Custom color" aria-label="Custom color">
-					<input type="color" id="minn-accent-custom" value="${ esc( cur.custom || '#6e62f5' ) }" aria-label="Pick a custom accent">
-					<span class="minn-accent-custom-plus">+</span>
-				</label>
+				<button type="button" class="minn-scheme-swatch minn-scheme-custom-btn${ customOn ? ' sel' : '' }" data-scheme="custom" title="Custom" aria-label="Custom scheme" aria-pressed="${ customOn ? 'true' : 'false' }">
+					<span class="minn-scheme-swatch-face minn-scheme-custom-face">+</span>
+				</button>
 			</div>
-			<div class="minn-toggle-desc" style="margin-top:6px;">Accent color for buttons, links and active chrome. Preview against light or dark below.</div>`;
+			<div class="minn-toggle-desc" style="margin-top:6px;">A full palette for panels, type and brand. Status greens/ambers stay the same.</div>
+			${ customEditors }`;
 	}
 
 	function themeModeHtml() {
@@ -1543,8 +1633,6 @@
 			{ id: 'light', label: 'Light', desc: 'Always light' },
 			{ id: 'dark', label: 'Dark', desc: 'Always dark' },
 		];
-		// Exclusive switches (one on at a time) so folks can flip mode while
-		// previewing accent swatches without leaving the profile.
 		return `
 			<div class="minn-toggle-rows minn-side-toggles minn-theme-mode-toggles" role="radiogroup" aria-label="Theme mode">
 				${ opts.map( ( o ) => `
@@ -1560,75 +1648,86 @@
 
 	function bindAppearanceSwatches( root ) {
 		const wrap = root || document;
-		$$( '[data-accent]', wrap ).forEach( ( btn ) => {
-			if ( ! btn.classList.contains( 'minn-accent-swatch' ) ) return;
+		$$( '[data-scheme]', wrap ).forEach( ( btn ) => {
+			if ( ! btn.classList.contains( 'minn-scheme-swatch' ) ) return;
 			btn.addEventListener( 'click', async () => {
-				const id = btn.dataset.accent;
-				if ( ! id || id === 'custom' ) return;
+				const id = btn.dataset.scheme;
+				if ( ! id ) return;
 				try {
-					await saveAppearance( { accent: id, custom: '' } );
-					// Refresh selected state without closing the profile modal.
+					const prev = appearanceOf( B.user && B.user.appearance );
+					const payload = id === 'custom'
+						? { scheme: 'custom', custom: prev.custom }
+						: { scheme: id, custom: prev.custom };
+					await saveAppearance( payload );
 					if ( state.modal && state.modal.type === 'user' ) renderOverlays();
-					else {
-						$$( '.minn-accent-swatch', wrap ).forEach( ( el ) => {
-							const on = el.dataset.accent === id;
-							el.classList.toggle( 'sel', on );
-							el.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
-						} );
-						const customLab = $( '.minn-accent-custom', wrap );
-						if ( customLab ) customLab.classList.remove( 'sel' );
-					}
-					const lab = ( ACCENT_PRESETS.find( ( p ) => p.id === id ) || {} ).label || id;
-					toast( 'Accent: ' + lab );
+					const lab = id === 'custom' ? 'Custom' : ( ( SCHEME_PRESETS.find( ( p ) => p.id === id ) || {} ).label || id );
+					toast( 'Scheme: ' + lab );
 				} catch ( e ) {
-					toast( e.message || 'Could not save accent', true );
+					toast( e.message || 'Could not save scheme', true );
 				}
 			} );
 		} );
-		const picker = $( '#minn-accent-custom', wrap );
-		if ( picker ) {
-			let t = null;
-			const commit = async () => {
-				try {
-					await saveAppearance( { accent: 'custom', custom: picker.value } );
-					if ( state.modal && state.modal.type === 'user' ) renderOverlays();
-					else {
-						$$( '.minn-accent-swatch[data-accent]', wrap ).forEach( ( el ) => {
-							el.classList.remove( 'sel' );
-							el.setAttribute( 'aria-pressed', 'false' );
-						} );
-						const customLab = $( '.minn-accent-custom', wrap );
-						if ( customLab ) customLab.classList.add( 'sel' );
-					}
-					toast( 'Custom accent saved' );
-				} catch ( e ) {
-					toast( e.message || 'Could not save accent', true );
-				}
+		// Per-slot custom editors (current mode only).
+		let slotTimer = null;
+		const commitSlots = async () => {
+			const prev = appearanceOf( B.user && B.user.appearance );
+			const mode = document.documentElement.getAttribute( 'data-theme' ) || 'dark';
+			const nextMode = { ...normalizeModeTokens( prev.custom[ mode ], mode ) };
+			$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
+				const key = input.dataset.schemeSlot;
+				const hex = sanitizeHex( input.value );
+				if ( key && hex ) nextMode[ key ] = hex;
+			} );
+			const custom = {
+				dark: mode === 'dark' ? nextMode : prev.custom.dark,
+				light: mode === 'light' ? nextMode : prev.custom.light,
 			};
-			picker.addEventListener( 'input', () => {
-				// Live preview while dragging; debounce the meta write.
-				applyAppearance( { accent: 'custom', custom: picker.value } );
-				clearTimeout( t );
-				t = setTimeout( commit, 400 );
+			try {
+				await saveAppearance( { scheme: 'custom', custom } );
+			} catch ( e ) {
+				toast( e.message || 'Could not save colors', true );
+			}
+		};
+		$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
+			input.addEventListener( 'input', () => {
+				const prev = appearanceOf( B.user && B.user.appearance );
+				const mode = document.documentElement.getAttribute( 'data-theme' ) || 'dark';
+				const nextMode = { ...normalizeModeTokens( prev.custom[ mode ], mode ) };
+				const key = input.dataset.schemeSlot;
+				const hex = sanitizeHex( input.value );
+				if ( key && hex ) nextMode[ key ] = hex;
+				const sw = input.closest( '.minn-scheme-slot' )?.querySelector( '.minn-scheme-slot-swatch' );
+				if ( sw && hex ) sw.style.background = hex;
+				applyAppearance( {
+					scheme: 'custom',
+					custom: {
+						dark: mode === 'dark' ? nextMode : prev.custom.dark,
+						light: mode === 'light' ? nextMode : prev.custom.light,
+					},
+				} );
+				clearTimeout( slotTimer );
+				slotTimer = setTimeout( commitSlots, 450 );
 			} );
-			picker.addEventListener( 'change', () => {
-				clearTimeout( t );
-				commit();
+			input.addEventListener( 'change', () => {
+				clearTimeout( slotTimer );
+				commitSlots();
 			} );
-		}
-		// Theme mode (System / Light / Dark) — exclusive switches, same store
-		// as the topbar theme button (localStorage minn-theme).
+		} );
+		// Theme mode (System / Light / Dark).
 		$$( '[data-theme-pref]', wrap ).forEach( ( btn ) => {
 			btn.addEventListener( 'click', () => {
 				const next = btn.dataset.themePref;
 				if ( ! next || next === themePref() ) return;
 				setThemePref( next );
-				// Update switch group in place so accent swatches stay put.
-				$$( '[data-theme-pref]', wrap ).forEach( ( el ) => {
-					const on = el.dataset.themePref === next;
-					el.classList.toggle( 'on', on );
-					el.setAttribute( 'aria-checked', on ? 'true' : 'false' );
-				} );
+				// Rebuild profile so custom slot editors reflect the other mode.
+				if ( state.modal && state.modal.type === 'user' ) renderOverlays();
+				else {
+					$$( '[data-theme-pref]', wrap ).forEach( ( el ) => {
+						const on = el.dataset.themePref === next;
+						el.classList.toggle( 'on', on );
+						el.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+					} );
+				}
 				const labels = { system: 'System', light: 'Light', dark: 'Dark' };
 				toast( 'Theme: ' + ( labels[ next ] || next ) );
 			} );
@@ -20993,7 +21092,7 @@
 						</div>
 						${ isSelf ? `
 						<div>
-							<div class="minn-field-label">Accent color</div>
+							<div class="minn-field-label">Color scheme</div>
 							${ appearanceSwatchesHtml( B.user.appearance ) }
 						</div>
 						<div>
