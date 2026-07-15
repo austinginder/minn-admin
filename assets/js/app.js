@@ -19529,6 +19529,7 @@
 	function closeModal() {
 		state.modal = null;
 		if ( typeof hidePluginTip === 'function' ) hidePluginTip();
+		hideRevHeatTip();
 		renderOverlays();
 	}
 
@@ -22233,10 +22234,29 @@
 					openRevision( ed, revId );
 				} )
 			);
-			// Heatmap: click a day to filter the list; click again (or Clear) shows all.
+			// Heatmap: click a day to filter; hover shows a styled tip (not title=).
+			const heat = $( '#minn-rev-heat' );
+			if ( heat ) {
+				heat.addEventListener( 'mouseover', ( e ) => {
+					const cell = e.target.closest( '[data-revday]' );
+					if ( cell && heat.contains( cell ) ) showRevHeatTip( cell );
+				} );
+				heat.addEventListener( 'mouseout', ( e ) => {
+					const to = e.relatedTarget;
+					if ( ! to || ! heat.contains( to ) || ! to.closest || ! to.closest( '[data-revday]' ) ) {
+						hideRevHeatTip();
+					}
+				} );
+				heat.addEventListener( 'focusin', ( e ) => {
+					const cell = e.target.closest( '[data-revday]' );
+					if ( cell ) showRevHeatTip( cell );
+				} );
+				heat.addEventListener( 'focusout', () => hideRevHeatTip() );
+			}
 			$$( '[data-revday]' ).forEach( ( cell ) =>
 				cell.addEventListener( 'click', () => {
 					if ( ! state.modal || state.modal.type !== 'revisions-list' ) return;
+					hideRevHeatTip();
 					const key = cell.dataset.revday;
 					state.modal.dayFilter = state.modal.dayFilter === key ? null : key;
 					renderOverlays();
@@ -22245,6 +22265,7 @@
 			const clearDay = $( '#minn-rev-day-clear' );
 			if ( clearDay ) clearDay.addEventListener( 'click', () => {
 				if ( ! state.modal || state.modal.type !== 'revisions-list' ) return;
+				hideRevHeatTip();
 				state.modal.dayFilter = null;
 				renderOverlays();
 			} );
@@ -23258,26 +23279,32 @@
 			}
 			weeks.push( week );
 		}
-		// Month labels: first week that contains day 1 of a month.
-		const monthLabels = weeks.map( ( week, wi ) => {
+		// One month slot per week column (empty or short name) so labels share
+		// the same flex geometry as the grid — never a separate left-aligned track.
+		const monthLabels = weeks.map( ( week ) => {
 			const hit = week.find( ( c ) => c.key.endsWith( '-01' ) );
-			if ( ! hit ) return '';
+			if ( ! hit ) return '<span class="minn-rev-heat-m" aria-hidden="true"></span>';
 			const [ y, mo ] = hit.key.split( '-' );
 			const dt = new Date( Number( y ), Number( mo ) - 1, 1 );
-			return `<span class="minn-rev-heat-m" style="grid-column:${ wi + 1 }">${ esc( dt.toLocaleDateString( undefined, { month: 'short' } ) ) }</span>`;
-		} ).filter( Boolean ).join( '' );
+			return `<span class="minn-rev-heat-m">${ esc( dt.toLocaleDateString( undefined, { month: 'short' } ) ) }</span>`;
+		} ).join( '' );
 		const cells = weeks.map( ( week ) => `
 			<div class="minn-rev-heat-week">
-				${ week.map( ( c ) => `
+				${ week.map( ( c ) => {
+					const tip = revisionDayLabel( c.key ) + ( c.n ? `: ${ c.n } revision${ c.n === 1 ? '' : 's' }` : ': no revisions' );
+					return `
 				<button type="button" class="minn-rev-heat-cell l${ c.level }${ c.future ? ' future' : '' }"
 					data-revday="${ esc( c.key ) }"
-					title="${ esc( revisionDayLabel( c.key ) + ( c.n ? `: ${ c.n } revision${ c.n === 1 ? '' : 's' }` : ': no revisions' ) ) }"
-					${ c.future ? ' disabled' : '' }></button>` ).join( '' ) }
+					data-revtip="${ esc( tip ) }"
+					${ c.future ? ' disabled' : '' }></button>`;
+				} ).join( '' ) }
 			</div>` ).join( '' );
 		const html = `
 			<div class="minn-rev-heat" id="minn-rev-heat">
-				<div class="minn-rev-heat-months" style="grid-template-columns:repeat(${ weeks.length },15px)">${ monthLabels }</div>
-				<div class="minn-rev-heat-grid">${ cells }</div>
+				<div class="minn-rev-heat-track">
+					<div class="minn-rev-heat-months">${ monthLabels }</div>
+					<div class="minn-rev-heat-grid">${ cells }</div>
+				</div>
 				<div class="minn-rev-heat-legend">
 					<span>Less</span>
 					<span class="minn-rev-heat-cell l0"></span>
@@ -23289,6 +23316,48 @@
 				</div>
 			</div>`;
 		return { html, counts };
+	}
+
+	function hideRevHeatTip() {
+		const el = document.getElementById( 'minn-rev-heat-tip' );
+		if ( el ) el.remove();
+	}
+
+	function showRevHeatTip( cell ) {
+		const text = cell && cell.dataset && cell.dataset.revtip;
+		if ( ! text || cell.disabled ) {
+			hideRevHeatTip();
+			return;
+		}
+		let tip = document.getElementById( 'minn-rev-heat-tip' );
+		if ( ! tip ) {
+			tip = document.createElement( 'div' );
+			tip.id = 'minn-rev-heat-tip';
+			tip.className = 'minn-rev-heat-tip';
+			tip.setAttribute( 'role', 'tooltip' );
+			document.body.appendChild( tip );
+		}
+		tip.textContent = text;
+		// Measure off-screen then pin above (or below) the cell, clamped to viewport.
+		tip.style.visibility = 'hidden';
+		tip.style.left = '0';
+		tip.style.top = '0';
+		const r = cell.getBoundingClientRect();
+		const tw = tip.offsetWidth || 160;
+		const th = tip.offsetHeight || 28;
+		const pad = 8;
+		let left = r.left + ( r.width / 2 ) - ( tw / 2 );
+		left = Math.max( pad, Math.min( left, window.innerWidth - tw - pad ) );
+		let top = r.top - th - 8;
+		let place = 'above';
+		if ( top < pad ) {
+			top = r.bottom + 8;
+			place = 'below';
+		}
+		tip.style.left = Math.round( left ) + 'px';
+		tip.style.top = Math.round( top ) + 'px';
+		tip.dataset.place = place;
+		tip.style.visibility = 'visible';
 	}
 
 	function renderRevisionsListModal( m ) {
