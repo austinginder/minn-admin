@@ -6839,19 +6839,40 @@
 	function bindSurfaceViewSwitch( s, ss, view ) {
 		$$( '[data-sview]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				if ( ss.view === btn.dataset.sview && ! ss.settingsItem ) return;
-				ss.view = btn.dataset.sview;
-				if ( ss.view !== 'settings' ) {
-					// The list views are different collections — nothing
-					// carries over. Entering settings leaves list state alone.
-					ss.cache = null;
-					ss.tabs = null;
-					ss.tab = '_all';
-					ss.q = '';
-					ss.filter = null;
+				const next = btn.dataset.sview;
+				if ( ss.view === next && ! ss.settingsItem ) return;
+				ss.view = next;
+				if ( ss.view === 'settings' ) {
+					// Settings is a different shell — full re-render is fine.
 					ss.settingsItem = null;
+					renderSurface( s );
+					return;
 				}
-				renderSurface( s );
+				// List views: keep Entries/Manage/… tabs painted while the
+				// collection loads (GF Forms/Entries flash — Austin 2026-07-15).
+				ss.settingsItem = null;
+				softListReload( {
+					route: s.id,
+					view,
+					clear: () => {
+						ss.cache = null;
+						ss.tabs = null;
+						ss.tab = '_all';
+						ss.q = '';
+						ss.filter = null;
+						ss.status = null; // refresh status card for the active view
+					},
+					paintChrome: () => {
+						$$( '[data-sview]', view ).forEach( ( b ) =>
+							b.classList.toggle( 'active', b.dataset.sview === next ) );
+					},
+					load: () => Promise.all( [
+						loadSurfaceTabs( s ),
+						loadSurfaceItems( s ),
+						loadSurfaceStatus( s ),
+					] ),
+					render: () => renderSurface( s ),
+				} );
 			} )
 		);
 	}
@@ -6882,6 +6903,20 @@
 		}
 		const coll = surfaceColl( s, ss );
 		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) || ( s.status && ! ss.status ) ) {
+			// Soft path: filter/tab clicks leave the toolbar in place.
+			if ( view.querySelector( '.minn-toolbar, .minn-tabs, .minn-view-switch' ) ) {
+				softListReload( {
+					route: s.id,
+					view,
+					load: () => Promise.all( [
+						loadSurfaceTabs( s ),
+						loadSurfaceItems( s ),
+						loadSurfaceStatus( s ),
+					] ),
+					render: () => renderSurface( s ),
+				} );
+				return;
+			}
 			view.innerHTML = '<div class="minn-loading">Loading…</div>';
 			Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] )
 				.then( renderIfCurrent( s.id ) )
@@ -6957,11 +6992,23 @@
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
 
+		const surfaceListReload = ( paintChrome ) => softListReload( {
+			route: s.id,
+			view,
+			clear: () => { ss.cache = null; },
+			paintChrome,
+			load: () => loadSurfaceItems( s ),
+			render: () => renderSurface( s ),
+		} );
 		$$( '[data-stab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				ss.tab = btn.dataset.stab;
-				ss.cache = null;
-				renderSurface( s );
+				const tab = btn.dataset.stab;
+				if ( String( ss.tab ) === String( tab ) ) return;
+				ss.tab = tab;
+				surfaceListReload( () => {
+					$$( '[data-stab]', view ).forEach( ( b ) =>
+						b.classList.toggle( 'active', String( b.dataset.stab ) === String( tab ) ) );
+				} );
 			} )
 		);
 		const tabCombo = view.querySelector( '[data-stabcombo]' );
@@ -6973,16 +7020,17 @@
 					const next = v === '' ? '_all' : v;
 					if ( String( ss.tab ) === String( next ) ) return;
 					ss.tab = next;
-					ss.cache = null;
-					renderSurface( s );
+					surfaceListReload();
 				},
 			} );
 		$$( '[data-sfilter]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				if ( surfaceFilterValue( coll, ss ) === btn.dataset.sfilter ) return;
 				ss.filter = btn.dataset.sfilter;
-				ss.cache = null;
-				renderSurface( s );
+				surfaceListReload( () => {
+					$$( '[data-sfilter]', view ).forEach( ( b ) =>
+						b.classList.toggle( 'active', b.dataset.sfilter === ss.filter ) );
+				} );
 			} )
 		);
 		bindSurfaceViewSwitch( s, ss, view );
@@ -7092,15 +7140,17 @@
 				clearTimeout( t );
 				t = setTimeout( async () => {
 					ss.q = search.value.trim();
-					ss.cache = null;
-					const tbl = $( '.minn-table', view );
-					if ( tbl ) tbl.classList.add( 'minn-busy' );
-					await loadSurfaceItems( s ).catch( showErr );
-					if ( state.route === s.id ) {
-						renderSurface( s );
-						const again = $( '#minn-surface-search' );
-						if ( again ) { again.focus(); again.setSelectionRange( again.value.length, again.value.length ); }
-					}
+					await softListReload( {
+						route: s.id,
+						view,
+						clear: () => { ss.cache = null; },
+						load: () => loadSurfaceItems( s ),
+						render: () => {
+							renderSurface( s );
+							const again = $( '#minn-surface-search' );
+							if ( again ) { again.focus(); again.setSelectionRange( again.value.length, again.value.length ); }
+						},
+					} );
 				}, 350 );
 			} );
 		}
