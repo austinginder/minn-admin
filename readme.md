@@ -54,7 +54,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   **catalog by category** with install tips, not only free-text search), activate, deactivate,
   delete, per-item and bulk updates with **Queued… / Updating…** feedback that survives worker
   recycles, a Themes tab with screenshots, cards wearing real wp.org icons (linked to the
-  directory) with linked author lines, **right-click / ⋯ menus** on plugin and theme cards
+  directory) with linked author lines, **right-click menus** on plugin and theme cards
   (Activate, Update, Delete, Open on WordPress.org or GitHub, Copy file), and a **Licenses** tab
   (below)
 - **Structure** — post types, taxonomies and terms on one page. See every registered post type

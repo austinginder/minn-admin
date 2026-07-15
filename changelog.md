@@ -9,6 +9,7 @@
 ### Improved
 * **Gravity SMTP bulk log delete:** the Email log (the mail family reference) gains single-row and bulk **Delete**, through Gravity SMTP's own `Event_Model::delete` and gated on its `DELETE_EMAIL_LOG` capability. Permanent, no trash; same shape FluentSMTP and Post SMTP already had.
 * **Activity Log status cards:** Simple History, WP Activity Log, Stream and Aryo each gain a status strip above the list (events in the last 24 hours and 7 days, all-time total, last event, plus a family-specific mix: severity, high+critical, top connector, or top action). Matches the daily-ops depth Solid Security, Limit Login Attempts and Wordfence already had. Open ↗ deep-links to each plugin's own screen.
+* **Extensions cards drop the ⋯ button:** plugin and theme cards open their actions menu only via right-click (or long-press). The on-card ⋯ was the same menu and just cluttered the foot.
 
 ## **v0.15.0** - July 15, 2026
 

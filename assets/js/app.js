@@ -8476,7 +8476,6 @@
 							<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="Toggle ${ esc( name ) }"><span class="minn-switch-knob"></span></button>
 							<span class="minn-state-label${ on ? ' on' : '' }">${ on ? 'Active' : 'Inactive' }</span>
 							${ ! on && B.caps.delete ? `<button class="minn-plugin-delete" data-del="${ esc( p.plugin ) }" title="Delete ${ esc( name ) }">${ icon( 'trash' ) }</button>` : '' }
-							<button type="button" class="minn-row-more minn-ext-more" data-plugin-more="${ esc( p.plugin ) }" title="More actions" aria-label="More actions for ${ esc( name ) }">⋯</button>
 						</div>
 					</div>
 				</div>`;
@@ -8627,22 +8626,9 @@
 			btn.addEventListener( 'click', () => deletePluginByFile( btn.dataset.del ) )
 		);
 
-		// ⋯ button and right-click share the same menu entries.
-		const openPluginMenuAt = ( plugin, x, y ) => {
-			if ( ! plugin ) return;
-			openMinnMenu( x, y, pluginMenuEntries( plugin ) );
-		};
-		$$( '[data-plugin-more]', view ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', ( e ) => {
-				e.preventDefault();
-				e.stopPropagation();
-				const plugin = plugins.find( ( p ) => p.plugin === btn.dataset.pluginMore );
-				const r = btn.getBoundingClientRect();
-				openPluginMenuAt( plugin, r.left, r.bottom + 4 );
-			} );
-		} );
 		// Right-click (or long-press) on a plugin card → same verbs as the
 		// switch / update badge / trash, plus author and vendor links.
+		// No ⋯ button: the menu is only the contextmenu path (redundant UI).
 		$$( '.minn-plugin', view ).forEach( ( card ) => {
 			card.addEventListener( 'contextmenu', ( e ) => {
 				const file = card.dataset.plugin;
@@ -8651,7 +8637,7 @@
 				// Don't steal the browser menu from text inputs if any land here.
 				if ( e.target && ( e.target.closest( 'input, textarea, select' ) ) ) return;
 				e.preventDefault();
-				openPluginMenuAt( plugin, e.clientX, e.clientY );
+				openMinnMenu( e.clientX, e.clientY, pluginMenuEntries( plugin ) );
 			} );
 		} );
 
@@ -8755,7 +8741,6 @@
 							${ ! t.active ? `<button class="minn-btn-soft" data-tact="activate:${ i }">Activate</button>` : '' }
 							${ t.update && B.caps.updateThemes ? `<button class="minn-badge-update as-btn" data-tact="update:${ i }">Update → ${ esc( t.update ) }</button>` : '' }
 							${ ! t.active && B.caps.deleteThemes ? `<button class="minn-plugin-delete" data-tact="delete:${ i }" title="Delete ${ esc( t.name ) }">${ icon( 'trash' ) }</button>` : '' }
-							<button type="button" class="minn-row-more minn-ext-more" data-theme-more="${ i }" title="More actions" aria-label="More actions for ${ esc( t.name ) }">⋯</button>
 						</div>
 					</div>
 				</div>`;
@@ -8853,22 +8838,9 @@
 			return entries;
 		};
 
-		const openThemeMenuAt = ( t, x, y ) => {
-			if ( ! t ) return;
-			const entries = themeMenuEntries( t );
-			if ( entries.length ) openMinnMenu( x, y, entries );
-		};
-		$$( '[data-theme-more]', view ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', ( e ) => {
-				e.preventDefault();
-				e.stopPropagation();
-				const t = themes[ parseInt( btn.dataset.themeMore, 10 ) ];
-				const r = btn.getBoundingClientRect();
-				openThemeMenuAt( t, r.left, r.bottom + 4 );
-			} );
-		} );
-		// Right-click on a theme card — activate / update / delete + links
-		// (Open on WordPress.org / GitHub when the URL is a known hub).
+		// Right-click (or long-press) on a theme card — activate / update /
+		// delete + links (Open on WordPress.org / GitHub when known). No ⋯
+		// button: the menu is only the contextmenu path (redundant UI).
 		$$( '.minn-theme', view ).forEach( ( card ) => {
 			card.addEventListener( 'contextmenu', ( e ) => {
 				const idx = parseInt( card.dataset.theme, 10 );
@@ -8876,7 +8848,8 @@
 				if ( ! t ) return;
 				if ( e.target && e.target.closest( 'input, textarea, select' ) ) return;
 				e.preventDefault();
-				openThemeMenuAt( t, e.clientX, e.clientY );
+				const entries = themeMenuEntries( t );
+				if ( entries.length ) openMinnMenu( e.clientX, e.clientY, entries );
 			} );
 		} );
 	}
