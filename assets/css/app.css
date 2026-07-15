@@ -571,6 +571,21 @@ button.minn-nav-label:hover { color: var(--text2); }
   border-bottom: 1px solid var(--border); align-items: center;
 }
 .minn-table-head { font-size: 12.5px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+/* Sortable column headers (Users list). */
+.minn-th-sort {
+  display: inline-flex; align-items: center; gap: 2px;
+  margin: 0; padding: 0; border: 0; background: none;
+  font: inherit; font-size: inherit; font-weight: inherit;
+  color: inherit; letter-spacing: inherit; text-transform: inherit;
+  cursor: pointer; text-align: left;
+}
+.minn-th-sort:hover { color: var(--text); }
+.minn-th-sort.is-active { color: var(--text2); }
+.minn-th-sort:focus-visible {
+  outline: none; color: var(--accent2);
+  box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.18);
+  border-radius: 4px;
+}
 .minn-table-row { padding: 13px 16px; cursor: pointer; }
 .minn-table-row:hover { background: var(--hover); }
 .minn-table-row:last-child { border-bottom: none; }

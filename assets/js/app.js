@@ -298,6 +298,8 @@
 		couponSearch: '',
 		customerSearch: '',
 		userSearch: '',
+		userOrderby: 'registered_date',
+		userOrder: 'desc',
 		range: 30,
 		modal: null,
 		surface: {},
@@ -4913,18 +4915,38 @@
 
 	/* ===== Users ===== */
 
-	const usersCtx = () => ( state.userSearch || '' ) + '|' + ( state.userRole || '_all' );
+	// WP REST users orderby enum: id, name, email, registered_date, slug, url…
+	// Role is not sortable server-side (WP_User_Query has no roles orderby).
+	const USER_SORT_COLS = {
+		name: { orderby: 'name', label: 'Name', defaultOrder: 'asc' },
+		email: { orderby: 'email', label: 'Email', defaultOrder: 'asc' },
+		registered: { orderby: 'registered_date', label: 'Registered', defaultOrder: 'desc' },
+	};
+
+	const usersCtx = () => [ state.userSearch || '', state.userRole || '_all', state.userOrderby || 'registered_date', state.userOrder || 'desc' ].join( '|' );
 
 	async function loadUsers( page = 1 ) {
 		const ctx = usersCtx();
+		const orderby = state.userOrderby || 'registered_date';
+		const order = state.userOrder === 'asc' ? 'asc' : 'desc';
 		// minn_switch_url only exists while User Switching is active — an
 		// unregistered field in _fields is silently absent (safe).
-		let q = `wp/v2/users?context=edit&per_page=50&orderby=registered_date&order=desc&_fields=id,name,email,roles,registered_date,avatar_urls,minn_switch_url&page=${ page }`;
+		let q = `wp/v2/users?context=edit&per_page=50&orderby=${ encodeURIComponent( orderby ) }&order=${ order }&_fields=id,name,email,roles,registered_date,avatar_urls,minn_switch_url&page=${ page }`;
 		if ( state.userSearch ) q += '&search=' + encodeURIComponent( state.userSearch );
 		if ( state.userRole && state.userRole !== '_all' ) q += '&roles=' + encodeURIComponent( state.userRole );
 		const r = await apiPaged( q );
-		if ( ctx !== usersCtx() ) return; // filter changed mid-flight — discard
+		if ( ctx !== usersCtx() ) return; // filter/sort changed mid-flight — discard
 		state.cache.users = { items: r.items, page, totalPages: r.totalPages, total: r.total };
+	}
+
+	function userSortHead( key ) {
+		const col = USER_SORT_COLS[ key ];
+		if ( ! col ) return '';
+		const active = ( state.userOrderby || 'registered_date' ) === col.orderby;
+		const order = state.userOrder === 'asc' ? 'asc' : 'desc';
+		const aria = active ? ( order === 'asc' ? 'ascending' : 'descending' ) : 'none';
+		const mark = active ? ( order === 'asc' ? ' ↑' : ' ↓' ) : '';
+		return `<button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-usort="${ esc( key ) }" aria-sort="${ aria }" title="Sort by ${ esc( col.label ) }">${ esc( col.label ) }${ mark }</button>`;
 	}
 
 	let userSearchTimer = null;
@@ -4984,7 +5006,12 @@
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-user-cols${ bulkUsers ? ' has-cb' : '' }">
 				${ bulkUsers ? `<div><input type="checkbox" class="minn-cb" id="minn-user-selall"></div>` : '' }
-				<div></div><div>Name</div><div>Email</div><div>Role</div><div>Registered</div><div></div>
+				<div></div>
+				<div>${ userSortHead( 'name' ) }</div>
+				<div>${ userSortHead( 'email' ) }</div>
+				<div title="Role is not sortable via the users API">Role</div>
+				<div>${ userSortHead( 'registered' ) }</div>
+				<div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( u ) => `
 				<div class="minn-table-row minn-user-cols${ bulkUsers ? ' has-cb' : '' }${ userSel.has( u.id ) ? ' sel' : '' }" data-user="${ u.id }" data-uname="${ esc( u.name || '' ) }" data-uemail="${ esc( u.email || '' ) }" data-uroles="${ esc( ( u.roles || [] ).join( ',' ) ) }">
@@ -5000,6 +5027,25 @@
 				</div>` ).join( '' ) : '<div class="minn-empty">No users found.</div>' }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
+
+		// Column sort: same column flips order; new column uses that field's default.
+		$$( '[data-usort]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const col = USER_SORT_COLS[ btn.dataset.usort ];
+				if ( ! col ) return;
+				if ( ( state.userOrderby || 'registered_date' ) === col.orderby ) {
+					state.userOrder = state.userOrder === 'asc' ? 'desc' : 'asc';
+				} else {
+					state.userOrderby = col.orderby;
+					state.userOrder = col.defaultOrder;
+				}
+				state.cache.users = null;
+				const tbl = $( '.minn-table', view );
+				if ( tbl ) tbl.classList.add( 'minn-busy' );
+				await loadUsers().catch( showErr );
+				if ( state.route === 'users' ) renderUsers();
+			} )
+		);
 
 		const roleWrap = view.querySelector( '[data-rolecombo]' );
 		if ( roleWrap ) bindAutocomplete( roleWrap,
