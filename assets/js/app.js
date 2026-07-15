@@ -14473,7 +14473,11 @@
 	// A readonly display input carries the machine value ("YYYY-MM-DDTHH:mm",
 	// same shape datetime-local produced — the save path is untouched) on
 	// input.dataset.dp; the popover writes both and fires onChange.
+	// Days that already have published/scheduled items (same post type) wear
+	// a small mark so scheduling doesn't collide blindly.
 	let dpPop = null;
+	const dpMonthCache = {}; // `${type}:${YYYY-M}` → { 'YYYY-MM-DD': [{title,status},…] }
+	const dpMonthInflight = {};
 
 	function dpPad( n ) { return String( n ).padStart( 2, '0' ); }
 
@@ -14504,6 +14508,69 @@
 		return { h, m: min };
 	}
 
+	function dpIsoLocal( d ) {
+		return `${ d.getFullYear() }-${ dpPad( d.getMonth() + 1 ) }-${ dpPad( d.getDate() ) }T${ dpPad( d.getHours() ) }:${ dpPad( d.getMinutes() ) }:${ dpPad( d.getSeconds() ) }`;
+	}
+
+	/** Other published/scheduled items for the calendar month grid (same type). */
+	function dpLoadMonthMarks( year, month, type ) {
+		const cacheKey = `${ type || 'posts' }:${ year }-${ month }`;
+		if ( dpMonthCache[ cacheKey ] ) return Promise.resolve( dpMonthCache[ cacheKey ] );
+		if ( dpMonthInflight[ cacheKey ] ) return dpMonthInflight[ cacheKey ];
+		// Cover the full 6-week grid (leading/trailing out-of-month days).
+		const first = new Date( year, month, 1 );
+		first.setDate( 1 - first.getDay() );
+		first.setHours( 0, 0, 0, 0 );
+		const last = new Date( first );
+		last.setDate( last.getDate() + 41 );
+		last.setHours( 23, 59, 59, 0 );
+		const rest = type || 'posts';
+		const exclude = state.editor && state.editor.id ? state.editor.id : 0;
+		dpMonthInflight[ cacheKey ] = api(
+			`wp/v2/${ rest }?context=edit&status=publish,future`
+			+ `&after=${ encodeURIComponent( dpIsoLocal( first ) ) }`
+			+ `&before=${ encodeURIComponent( dpIsoLocal( last ) ) }`
+			+ `&per_page=100&orderby=date&order=asc&_fields=id,title,date,status`
+			+ ( exclude ? `&exclude=${ exclude }` : '' )
+		).then( ( items ) => {
+			const byDay = {};
+			( Array.isArray( items ) ? items : [] ).forEach( ( p ) => {
+				const key = String( p.date || '' ).slice( 0, 10 );
+				if ( ! /^\d{4}-\d{2}-\d{2}$/.test( key ) ) return;
+				const title = decodeEntities( stripTags(
+					( p.title && ( p.title.raw || p.title.rendered ) ) || p.title || 'Untitled'
+				) ) || 'Untitled';
+				if ( ! byDay[ key ] ) byDay[ key ] = [];
+				byDay[ key ].push( { title, status: p.status || 'publish' } );
+			} );
+			dpMonthCache[ cacheKey ] = byDay;
+			delete dpMonthInflight[ cacheKey ];
+			return byDay;
+		} ).catch( () => {
+			delete dpMonthInflight[ cacheKey ];
+			return {};
+		} );
+		return dpMonthInflight[ cacheKey ];
+	}
+
+	function dpPaintDayMarks( byDay ) {
+		if ( ! dpPop || ! byDay ) return;
+		$$( '.minn-dp-day', dpPop ).forEach( ( b ) => {
+			const list = byDay[ b.dataset.day ];
+			const n = list ? list.length : 0;
+			b.classList.toggle( 'has-posts', n > 0 );
+			b.classList.toggle( 'has-scheduled', n > 0 && list.some( ( x ) => x.status === 'future' ) );
+			if ( n ) {
+				const lines = list.slice( 0, 6 ).map( ( x ) =>
+					( x.status === 'future' ? 'Scheduled' : 'Published' ) + ': ' + x.title );
+				if ( n > 6 ) lines.push( '…and ' + ( n - 6 ) + ' more' );
+				b.title = lines.join( '\n' );
+			} else {
+				b.removeAttribute( 'title' );
+			}
+		} );
+	}
+
 	function hideDatePicker() {
 		if ( dpPop ) dpPop.remove();
 		dpPop = null;
@@ -14527,6 +14594,7 @@
 			const sel = input.dataset.dp ? new Date( input.dataset.dp ) : null;
 			const seed = sel && ! isNaN( sel ) ? new Date( sel ) : new Date();
 			let view = new Date( seed.getFullYear(), seed.getMonth(), 1 );
+			const restType = ( state.editor && state.editor.type ) || 'posts';
 
 			dpPop = document.createElement( 'div' );
 			dpPop.className = 'minn-dp-pop';
@@ -14537,11 +14605,16 @@
 				const todayKey = dpMachine( new Date() ).slice( 0, 10 );
 				const first = new Date( view );
 				first.setDate( 1 - first.getDay() ); // back to Sunday
+				const y = view.getFullYear();
+				const m = view.getMonth();
+				const cached = dpMonthCache[ `${ restType }:${ y }-${ m }` ] || null;
 				let days = '';
 				const d = new Date( first );
 				for ( let i = 0; i < 42; i++ ) {
 					const key = dpMachine( d ).slice( 0, 10 );
-					days += `<button type="button" class="minn-dp-day${ d.getMonth() !== view.getMonth() ? ' out' : '' }${ key === selKey ? ' sel' : '' }${ key === todayKey ? ' today' : '' }" data-day="${ key }">${ d.getDate() }</button>`;
+					const has = cached && cached[ key ] && cached[ key ].length;
+					const hasFuture = has && cached[ key ].some( ( x ) => x.status === 'future' );
+					days += `<button type="button" class="minn-dp-day${ d.getMonth() !== view.getMonth() ? ' out' : '' }${ key === selKey ? ' sel' : '' }${ key === todayKey ? ' today' : '' }${ has ? ' has-posts' : '' }${ hasFuture ? ' has-scheduled' : '' }" data-day="${ key }"${ has ? ` title="${ esc( cached[ key ].map( ( x ) => ( x.status === 'future' ? 'Scheduled' : 'Published' ) + ': ' + x.title ).join( '\n' ) ) }"` : '' }>${ d.getDate() }</button>`;
 					d.setDate( d.getDate() + 1 );
 				}
 				dpPop.innerHTML = `
@@ -14554,6 +14627,7 @@
 						${ [ 'S', 'M', 'T', 'W', 'T', 'F', 'S' ].map( ( w ) => `<span class="minn-dp-wd">${ w }</span>` ).join( '' ) }
 						${ days }
 					</div>
+					<div class="minn-dp-legend" data-dp-legend hidden>Highlighted days already have other ${ restType === 'pages' ? 'pages' : 'posts' }.</div>
 					<div class="minn-dp-time">
 						<span class="minn-side-key">Time</span>
 						<input type="text" class="minn-input minn-dp-time-input" value="${ esc( seed.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } ) ) }" spellcheck="false" autocomplete="off">
@@ -14567,6 +14641,25 @@
 				const w = dpPop.offsetWidth || 260;
 				dpPop.style.left = Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) + 'px';
 				dpPop.style.top = Math.min( rect.bottom + 6, window.innerHeight - dpPop.offsetHeight - 10 ) + 'px';
+
+				const syncLegend = ( byDay ) => {
+					const leg = $( '[data-dp-legend]', dpPop );
+					if ( ! leg ) return;
+					const n = byDay ? Object.keys( byDay ).length : 0;
+					leg.hidden = n === 0;
+				};
+				if ( cached ) syncLegend( cached );
+
+				// Soft paint when the month's other posts arrive (no full re-render).
+				if ( ! cached ) {
+					const loadY = y;
+					const loadM = m;
+					dpLoadMonthMarks( y, m, restType ).then( ( byDay ) => {
+						if ( ! dpPop || view.getFullYear() !== loadY || view.getMonth() !== loadM ) return;
+						dpPaintDayMarks( byDay );
+						syncLegend( byDay );
+					} );
+				}
 
 				const timeOf = () => dpParseTime( $( '.minn-dp-time-input', dpPop ).value )
 					|| { h: seed.getHours(), m: seed.getMinutes() };

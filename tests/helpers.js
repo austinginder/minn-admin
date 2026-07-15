@@ -59,7 +59,7 @@ async function login( page ) {
 }
 
 // Create a post through the app's own REST credentials. Returns the post ID.
-async function createPost( page, { title, content, status = 'draft' } ) {
+async function createPost( page, { title, content, status = 'draft', ...extra } ) {
 	return page.evaluate( async ( args ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts', {
 			method: 'POST',
@@ -69,7 +69,7 @@ async function createPost( page, { title, content, status = 'draft' } ) {
 		const j = await r.json();
 		if ( ! r.ok ) throw new Error( j.message || 'createPost failed' );
 		return j.id;
-	}, { title, content, status } );
+	}, { title, content, status, ...extra } );
 }
 
 async function deletePost( page, id ) {

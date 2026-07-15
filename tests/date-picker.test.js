@@ -83,7 +83,45 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	const done = await page.$eval( field, ( i ) => ( { dp: i.dataset.dp, popGone: ! document.querySelector( '.minn-dp-pop' ) } ) );
 	t.check( 'Done commits the visible time and closes', /-20T06:15$/.test( done.dp ) && done.popGone, JSON.stringify( done ) );
 
+	/* ===== Calendar marks other published/scheduled posts ===== */
+	// Seed a published post on a past day of the current month, then open a
+	// fresh draft's picker and wait for the async mark paint.
+	const now = new Date();
+	const day = Math.max( 1, Math.min( 28, now.getDate() - 2 ) );
+	const y = now.getFullYear();
+	const mo = String( now.getMonth() + 1 ).padStart( 2, '0' );
+	const dd = String( day ).padStart( 2, '0' );
+	const dayKey = `${ y }-${ mo }-${ dd }`;
+	const marker = await createPost( page, {
+		title: 'Calendar Mark Fixture ZQX',
+		content: '<!-- wp:paragraph --><p>mark</p><!-- /wp:paragraph -->',
+		status: 'publish',
+		date: `${ dayKey }T10:00:00`,
+	} );
+	const id3 = await createPost( page, { title: 'Picker mark probe', content: '<!-- wp:paragraph --><p>z</p><!-- /wp:paragraph -->', status: 'draft' } );
+	await openEditor( page, id3 );
+	await page.click( field );
+	await page.waitForSelector( '.minn-dp-pop', { timeout: 5000 } );
+	await page.waitForFunction( ( key ) => {
+		const btn = document.querySelector( `.minn-dp-day[data-day="${ key }"]` );
+		return btn && btn.classList.contains( 'has-posts' );
+	}, dayKey, { timeout: 12000 } );
+	const mark = await page.evaluate( ( key ) => {
+		const btn = document.querySelector( `.minn-dp-day[data-day="${ key }"]` );
+		const leg = document.querySelector( '[data-dp-legend]' );
+		return btn ? {
+			has: btn.classList.contains( 'has-posts' ),
+			title: btn.title || '',
+			legend: leg && ! leg.hidden ? leg.textContent : '',
+		} : null;
+	}, dayKey );
+	t.check( 'days with other published posts wear a mark', mark && mark.has, JSON.stringify( mark ) );
+	t.check( 'mark tooltip names the other post', mark && /Calendar Mark Fixture ZQX/.test( mark.title ), JSON.stringify( mark ) );
+	t.check( 'legend explains the highlights', mark && /other posts/.test( mark.legend ), JSON.stringify( mark ) );
+
 	await deletePost( page, id );
 	await deletePost( page, id2 );
+	await deletePost( page, id3 );
+	await deletePost( page, marker );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

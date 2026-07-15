@@ -1040,6 +1040,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
 .minn-dp-wd { text-align: center; font-size: 10.5px; font-weight: 700; color: var(--text3); padding: 3px 0 5px; }
 .minn-dp-day {
+  position: relative;
   height: 30px; border: none; border-radius: 8px; background: none; color: var(--text2);
   font: inherit; font-size: 12.5px; cursor: pointer;
 }
@@ -1047,6 +1048,39 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-dp-day.out { color: var(--text3); opacity: 0.45; }
 .minn-dp-day.today { box-shadow: inset 0 0 0 1px var(--border2); }
 .minn-dp-day.sel { background: var(--accent); color: var(--accent-fg); font-weight: 700; opacity: 1; }
+/* Other published/scheduled posts on this day (schedule calendar awareness).
+   Tint + a clear under-dot — a 4px speck was easy to miss on light theme. */
+.minn-dp-day.has-posts:not(.sel) {
+  background: var(--accent-soft, rgba(110, 98, 245, 0.14));
+  color: var(--text);
+  font-weight: 600;
+}
+.minn-dp-day.has-posts::after {
+  content: '';
+  position: absolute;
+  left: 50%; bottom: 2px;
+  width: 5px; height: 5px; margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+}
+/* Amber when any item that day is still scheduled (future). */
+.minn-dp-day.has-posts.has-scheduled:not(.sel) {
+  background: rgba(224, 164, 88, 0.16);
+}
+.minn-dp-day.has-posts.has-scheduled::after { background: var(--amber, #e0a458); }
+.minn-dp-day.sel.has-posts::after { background: var(--accent-fg, #fff); }
+.minn-dp-day.out.has-posts {
+  background: transparent;
+  font-weight: inherit;
+}
+.minn-dp-day.out.has-posts::after { opacity: 0.55; }
+.minn-dp-legend {
+  margin: 8px 2px 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text3);
+}
 .minn-dp-time { display: flex; align-items: center; gap: 10px; margin: 10px 0 0; }
 .minn-dp-time .minn-input { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
 .minn-dp-foot { display: flex; gap: 8px; margin-top: 10px; }
