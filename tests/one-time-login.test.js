@@ -97,20 +97,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'editor cannot mint a link for another user (edit_user gate)', refused === 403, String( refused ) );
 		await ctx2.close();
 
-		// "Minn is the default admin" is honored for one-time logins too: the
-		// plugin hardcodes a wp-admin redirect that bypasses login_redirect,
-		// so the adapter intercepts its post-auth action. Toggle the setting
-		// on, follow a fresh minted link unauthenticated, land in Minn.
-		const setDefault = ( on ) => p.evaluate( async ( v ) => {
-			await fetch( window.MINN.restUrl + 'wp/v2/settings', {
-				method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
-				credentials: 'same-origin', body: JSON.stringify( { minn_admin_default: v } ),
-			} );
-		}, on );
-		const wasDefault = await p.evaluate( async () => {
-			const r = await fetch( window.MINN.restUrl + 'wp/v2/settings', { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
-			return !! ( await r.json() ).minn_admin_default;
-		} );
+		// "Minn is the default admin" is per-user. One-time login honors the
+		// TARGET user's preference (editor), not the minter's.
+		const { execSync } = require( 'child_process' );
+		const wpPath = require( 'path' ).resolve( __dirname, '../../../..' );
+		const setTargetDefault = ( on ) => {
+			const php = `update_user_meta( ${ editor.id }, 'minn_admin_appearance', array_merge( \\Minn_Admin::get_user_appearance( ${ editor.id } ), array( 'defaultAdmin' => ${ on ? 'true' : 'false' } ) ) ); echo 'ok';`;
+			execSync( `wp --path=${ JSON.stringify( wpPath ) } eval ${ JSON.stringify( php ) }`, { encoding: 'utf8' } );
+		};
+		const wasDefault = execSync(
+			`wp --path=${ JSON.stringify( wpPath ) } eval ${ JSON.stringify( `echo \\Minn_Admin::user_wants_default_admin( ${ editor.id } ) ? '1' : '0';` ) }`,
+			{ encoding: 'utf8' }
+		).trim() === '1';
 		const follow = async () => {
 			const url = ( await api( `minn-admin/v1/otl/${ editor.id }`, { method: 'POST', body: '{}' } ) ).body.url;
 			const c = await b.newContext( { ignoreHTTPSErrors: true } );
@@ -122,13 +120,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			return landed;
 		};
 		try {
-			await setDefault( true );
+			setTargetDefault( true );
 			t.check( 'default-admin on: one-time link lands in Minn', /\/minn-admin\/?$/.test( await follow() ) );
-			await setDefault( false );
+			setTargetDefault( false );
 			const landed = await follow();
 			t.check( 'default-admin off: one-time link keeps the plugin wp-admin landing', /\/wp-admin\//.test( landed ), landed );
 		} finally {
-			await setDefault( wasDefault );
+			setTargetDefault( wasDefault );
 		}
 	} finally {
 		// nothing to clean — tokens are single-use and self-expiring

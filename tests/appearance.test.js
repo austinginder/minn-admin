@@ -110,8 +110,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'custom scheme shows slot editors', !! ( await page.$( '[data-scheme-slot="bg"]' ) )
 		&& !! ( await page.$( '[data-scheme-slot="accent"]' ) ) );
 
-	// Reload persists teal (switch back first if still custom from click — wait for save).
+	// Named scheme after custom — wait past the 180ms debounce so meta persists.
 	await page.click( '.minn-scheme-swatch[data-scheme="dusk"]' );
+	await page.waitForTimeout( 400 );
 	await page.waitForFunction( async () => {
 		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/me/appearance', {
 			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',

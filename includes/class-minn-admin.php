@@ -20,6 +20,10 @@ class Minn_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'init', array( __CLASS__, 'register_settings' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
+		// When the user prefers Minn as default admin, "Edit" links open the
+		// Minn editor instead of post.php (classic wp-admin stays reachable
+		// via direct URLs and the sidebar escape).
+		add_filter( 'get_edit_post_link', array( __CLASS__, 'filter_edit_post_link' ), 20, 3 );
 		add_action( 'init', array( __CLASS__, 'register_x_oembed' ) );
 		add_action( 'init', array( __CLASS__, 'register_oembed_refresh' ), 20 );
 	}
@@ -73,13 +77,50 @@ class Minn_Admin {
 	}
 
 	/**
-	 * "Make Minn the default admin": after signing in, land in Minn instead of
-	 * the wp-admin dashboard. Only takes over the DEFAULT landing — an explicit
-	 * redirect_to deep link (a plugin page, a specific post) still wins, and
-	 * users who can't use Minn (no edit_posts) keep core behavior.
+	 * Per-user "Minn is the default admin" (stored on minn_admin_appearance).
+	 * Falls back to the legacy site option until the user saves a profile preference.
+	 */
+	public static function user_wants_default_admin( $user_id = 0 ) {
+		$uid = $user_id ? (int) $user_id : get_current_user_id();
+		if ( $uid <= 0 ) {
+			return false;
+		}
+		$ap = self::get_user_appearance( $uid );
+		return ! empty( $ap['defaultAdmin'] );
+	}
+
+	/**
+	 * Minn editor URL for a post, or '' when the type isn't REST-editable in Minn.
+	 */
+	public static function editor_url_for_post( $post_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return '';
+		}
+		$pto = get_post_type_object( $post->post_type );
+		if ( ! $pto || empty( $pto->show_in_rest ) ) {
+			return '';
+		}
+		$rest_base = ! empty( $pto->rest_base ) ? $pto->rest_base : $post->post_type;
+		$path      = 'editor/' . rawurlencode( $rest_base ) . '/' . (int) $post->ID;
+		if ( get_option( 'permalink_structure' ) ) {
+			return trailingslashit( self::app_url() ) . $path;
+		}
+		// Plain permalinks: app boots via ?minn_admin=1, route rides the hash.
+		return self::app_url() . '#/' . $path;
+	}
+
+	/**
+	 * "Minn is the default admin" (per user): after signing in, land in Minn
+	 * instead of the wp-admin dashboard. Only takes over the DEFAULT landing —
+	 * an explicit redirect_to deep link still wins, and users who can't use
+	 * Minn (no edit_posts) keep core behavior.
 	 */
 	public static function login_redirect( $redirect_to, $requested, $user ) {
-		if ( ! get_option( 'minn_admin_default' ) || ! ( $user instanceof WP_User ) || ! $user->has_cap( 'edit_posts' ) ) {
+		if ( ! ( $user instanceof WP_User ) || ! $user->has_cap( 'edit_posts' ) ) {
+			return $redirect_to;
+		}
+		if ( ! self::user_wants_default_admin( $user->ID ) ) {
 			return $redirect_to;
 		}
 		$default_targets = array( '', admin_url(), admin_url( 'index.php' ) );
@@ -87,6 +128,21 @@ class Minn_Admin {
 			return self::app_url();
 		}
 		return $redirect_to;
+	}
+
+	/**
+	 * When the user prefers Minn as default admin, rewrite Edit links to the
+	 * Minn editor. Direct post.php URLs still open classic for an escape hatch.
+	 */
+	public static function filter_edit_post_link( $link, $post_id, $context ) {
+		if ( ! self::user_wants_default_admin() ) {
+			return $link;
+		}
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return $link;
+		}
+		$minn = self::editor_url_for_post( $post_id );
+		return $minn ? $minn : $link;
 	}
 
 	public static function register_route() {
@@ -122,11 +178,14 @@ class Minn_Admin {
 				'default'      => false,
 			)
 		);
+		// minn_admin_default was a site option; it's now per-user on
+		// minn_admin_appearance.defaultAdmin (profile). Leave the option
+		// registered without REST so old values still migrate on read.
 		register_setting(
 			'minn_admin',
 			'minn_admin_default',
 			array(
-				'show_in_rest' => true,
+				'show_in_rest' => false,
 				'type'         => 'boolean',
 				'default'      => false,
 			)
@@ -258,8 +317,10 @@ class Minn_Admin {
 
 	public static function appearance_defaults() {
 		return array(
-			'scheme' => 'minn',
-			'custom' => self::scheme_base_tokens(),
+			'scheme'       => 'minn',
+			'custom'       => self::scheme_base_tokens(),
+			// Site option was the old global; seed new profiles from it once.
+			'defaultAdmin' => (bool) get_option( 'minn_admin_default' ),
 		);
 	}
 
@@ -336,14 +397,16 @@ class Minn_Admin {
 					}
 				}
 				return array(
-					'scheme' => $hex ? 'custom' : 'minn',
-					'custom' => $custom,
+					'scheme'       => $hex ? 'custom' : 'minn',
+					'custom'       => $custom,
+					'defaultAdmin' => ! empty( $defaults['defaultAdmin'] ),
 				);
 			}
 			if ( in_array( $accent, $ids, true ) ) {
 				return array(
-					'scheme' => $accent,
-					'custom' => $defaults['custom'],
+					'scheme'       => $accent,
+					'custom'       => $defaults['custom'],
+					'defaultAdmin' => ! empty( $defaults['defaultAdmin'] ),
 				);
 			}
 			return $defaults;
@@ -365,9 +428,18 @@ class Minn_Admin {
 			'light' => self::normalize_scheme_tokens( isset( $custom_in['light'] ) ? $custom_in['light'] : array(), 'light' ),
 		);
 
+		// defaultAdmin: explicit key wins; missing key falls back to legacy site option
+		// so existing installs keep behavior until the user saves their profile.
+		if ( array_key_exists( 'defaultAdmin', $raw ) ) {
+			$default_admin = ! empty( $raw['defaultAdmin'] ) && '0' !== (string) $raw['defaultAdmin'] && 'false' !== (string) $raw['defaultAdmin'];
+		} else {
+			$default_admin = (bool) get_option( 'minn_admin_default' );
+		}
+
 		return array(
-			'scheme' => $scheme,
-			'custom' => $custom,
+			'scheme'       => $scheme,
+			'custom'       => $custom,
+			'defaultAdmin' => $default_admin,
 		);
 	}
 
@@ -398,36 +470,14 @@ class Minn_Admin {
 			return;
 		}
 
-		// Default: open the app. On a singular front-end view the current
-		// user can edit, retarget to that item's Minn editor (mirrors WP's
-		// own "Edit Page" / "Edit Post" affordance).
-		$title = 'Minn Admin';
-		$href  = self::app_url();
-
-		if ( ! is_admin() && is_singular() ) {
-			$post = get_queried_object();
-			if ( $post instanceof WP_Post && current_user_can( 'edit_post', $post->ID ) ) {
-				$pto = get_post_type_object( $post->post_type );
-				// Minn's editor is REST-backed — skip types that aren't in REST.
-				if ( $pto && ! empty( $pto->show_in_rest ) ) {
-					$rest_base = ! empty( $pto->rest_base ) ? $pto->rest_base : $post->post_type;
-					$path      = 'editor/' . rawurlencode( $rest_base ) . '/' . (int) $post->ID;
-					$title     = 'Edit in Minn Admin';
-					if ( get_option( 'permalink_structure' ) ) {
-						$href = trailingslashit( self::app_url() ) . $path;
-					} else {
-						// Plain permalinks: app boots via ?minn_admin=1, route rides the hash.
-						$href = self::app_url() . '#/' . $path;
-					}
-				}
-			}
-		}
-
+		// Always a hard link into the Minn app. Post editing uses the core
+		// "Edit Post/Page" admin-bar item (rewritten to Minn when the user
+		// has default-admin on — see filter_edit_post_link).
 		$bar->add_node(
 			array(
 				'id'    => 'minn-admin',
-				'title' => $title,
-				'href'  => $href,
+				'title' => 'Minn Admin',
+				'href'  => self::app_url(),
 			)
 		);
 	}

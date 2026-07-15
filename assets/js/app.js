@@ -1510,7 +1510,8 @@
 			dark: normalizeModeTokens( customIn.dark, 'dark' ),
 			light: normalizeModeTokens( customIn.light, 'light' ),
 		};
-		return { scheme, custom };
+		const defaultAdmin = a.defaultAdmin === true || a.defaultAdmin === 1 || a.defaultAdmin === '1' || a.defaultAdmin === 'true';
+		return { scheme, custom, defaultAdmin };
 	}
 
 	function clearSchemeInlineVars( root ) {
@@ -1587,6 +1588,7 @@
 		const merged = {
 			scheme: next.scheme != null ? next.scheme : prev.scheme,
 			custom: next.custom != null ? next.custom : prev.custom,
+			defaultAdmin: next.defaultAdmin != null ? next.defaultAdmin : prev.defaultAdmin,
 		};
 		const norm = appearanceOf( merged );
 		applyAppearance( norm );
@@ -1663,6 +1665,8 @@
 			{ id: 'light', label: 'Light', desc: 'Always light' },
 			{ id: 'dark', label: 'Dark', desc: 'Always dark' },
 		];
+		const ap = appearanceOf( B.user && B.user.appearance );
+		const defOn = !! ap.defaultAdmin;
 		return `
 			<div class="minn-toggle-rows minn-side-toggles minn-theme-mode-toggles" role="radiogroup" aria-label="Theme mode">
 				${ opts.map( ( o ) => `
@@ -1673,6 +1677,15 @@
 						<div class="minn-toggle-desc">${ esc( o.desc ) }</div>
 					</div>
 				</div>` ).join( '' ) }
+			</div>
+			<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
+				<div class="minn-toggle-row">
+					<button type="button" class="minn-switch${ defOn ? ' on' : '' }" id="minn-default-admin" role="switch" aria-checked="${ defOn ? 'true' : 'false' }" aria-label="Minn is the default admin"><span class="minn-switch-knob"></span></button>
+					<div class="minn-toggle-info">
+						<div class="minn-toggle-label">Minn is the default admin</div>
+						<div class="minn-toggle-desc">After sign-in, land here. Edit links open the Minn editor. Classic wp-admin stays available via direct URLs.</div>
+					</div>
+				</div>
 			</div>`;
 	}
 
@@ -1754,6 +1767,16 @@
 				}
 			} );
 		} );
+		// Per-user "Minn is the default admin" (login landing + Edit link rewrite).
+		const defBtn = $( '#minn-default-admin', wrap );
+		if ( defBtn ) {
+			defBtn.addEventListener( 'click', () => {
+				const on = ! defBtn.classList.contains( 'on' );
+				defBtn.classList.toggle( 'on', on );
+				defBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				commitAppearance( { defaultAdmin: on } );
+			} );
+		}
 	}
 
 	function toggleTheme() {
@@ -10443,9 +10466,8 @@
 					+ text( 'date_format', 'Date format', s.date_format, true )
 					+ text( 'time_format', 'Time format', s.time_format, true )
 					+ combo( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week ),
-				toggles: [
-					{ id: 'minn_admin_default', label: 'Minn is the default admin', desc: 'After signing in, land here instead of wp-admin (deep links still work; classic stays available).', on: !! s.minn_admin_default },
-				].map( toggle ).join( '' ),
+				// "Minn is the default admin" lives on Your profile now (per-user).
+				toggles: '',
 			};
 			case 'Visibility': {
 				// Everything about who can see, index and join the site — the

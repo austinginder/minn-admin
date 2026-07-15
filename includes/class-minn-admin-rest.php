@@ -2403,16 +2403,19 @@ class Minn_Admin_REST {
 			$json = array();
 		}
 		$raw = array(
-			'scheme' => array_key_exists( 'scheme', $json )
+			'scheme'       => array_key_exists( 'scheme', $json )
 				? $json['scheme']
 				: ( $request->has_param( 'scheme' ) ? $request->get_param( 'scheme' ) : $cur['scheme'] ),
-			'custom' => array_key_exists( 'custom', $json )
+			'custom'       => array_key_exists( 'custom', $json )
 				? $json['custom']
 				: ( $request->has_param( 'custom' ) ? $request->get_param( 'custom' ) : $cur['custom'] ),
+			'defaultAdmin' => array_key_exists( 'defaultAdmin', $json )
+				? $json['defaultAdmin']
+				: ( $request->has_param( 'defaultAdmin' ) ? $request->get_param( 'defaultAdmin' ) : $cur['defaultAdmin'] ),
 		);
 		// Legacy accent-only body (no scheme key).
 		if ( ! array_key_exists( 'scheme', $json ) && isset( $json['accent'] ) ) {
-			$raw = $json;
+			$raw = array_merge( array( 'defaultAdmin' => $cur['defaultAdmin'] ), $json );
 		}
 		$norm = Minn_Admin::save_user_appearance( $uid, $raw );
 		return rest_ensure_response( $norm );

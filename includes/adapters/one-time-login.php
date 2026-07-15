@@ -36,7 +36,11 @@ function minn_admin_otl_active() {
  * normal login flow (setting on + the user can actually use Minn).
  */
 add_action( 'one_time_login_after_auth_cookie_set', function ( $user ) {
-	if ( ! get_option( 'minn_admin_default' ) || ! ( $user instanceof WP_User ) || ! $user->has_cap( 'edit_posts' ) ) {
+	if ( ! ( $user instanceof WP_User ) || ! $user->has_cap( 'edit_posts' ) ) {
+		return;
+	}
+	// Per-user preference (was a site option).
+	if ( ! Minn_Admin::user_wants_default_admin( $user->ID ) ) {
 		return;
 	}
 	wp_safe_redirect( Minn_Admin::app_url() );
