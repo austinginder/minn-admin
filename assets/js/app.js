@@ -1554,7 +1554,35 @@
 		clearSchemeInlineVars( root );
 	}
 
-	async function saveAppearance( next ) {
+	// Paint is always local/instant. Meta save is debounced in the background
+	// so flipping schemes never waits on the network (Austin, 2026-07-15).
+	let appearanceSaveTimer = null;
+	let appearanceSaveSeq = 0;
+
+	function queueAppearanceSave( norm ) {
+		if ( B.user ) B.user.appearance = norm;
+		clearTimeout( appearanceSaveTimer );
+		const seq = ++appearanceSaveSeq;
+		const payload = appearanceOf( norm );
+		appearanceSaveTimer = setTimeout( async () => {
+			try {
+				const saved = await api( 'minn-admin/v1/me/appearance', {
+					method: 'POST',
+					body: JSON.stringify( payload ),
+				} );
+				// A newer click superseded this write — don't clobber state.
+				if ( seq !== appearanceSaveSeq ) return;
+				if ( B.user ) B.user.appearance = appearanceOf( saved );
+			} catch ( e ) {
+				if ( seq !== appearanceSaveSeq ) return;
+				// Keep the painted scheme; only warn. Next successful pick re-saves.
+				toast( e.message || 'Could not save scheme to your profile', true );
+			}
+		}, 180 );
+	}
+
+	/** Apply scheme immediately; optionally rebuild profile (custom editors). */
+	function commitAppearance( next, opts = {} ) {
 		const prev = appearanceOf( B.user && B.user.appearance );
 		const merged = {
 			scheme: next.scheme != null ? next.scheme : prev.scheme,
@@ -1562,17 +1590,19 @@
 		};
 		const norm = appearanceOf( merged );
 		applyAppearance( norm );
-		try {
-			const saved = await api( 'minn-admin/v1/me/appearance', {
-				method: 'POST',
-				body: JSON.stringify( norm ),
-			} );
-			applyAppearance( saved );
-			return appearanceOf( saved );
-		} catch ( e ) {
-			applyAppearance( prev );
-			throw e;
+		queueAppearanceSave( norm );
+		if ( opts.rebuild && state.modal && state.modal.type === 'user' ) {
+			renderOverlays();
 		}
+		return norm;
+	}
+
+	function markSchemeSwatchSelected( wrap, id ) {
+		$$( '.minn-scheme-swatch', wrap ).forEach( ( el ) => {
+			const on = el.dataset.scheme === id;
+			el.classList.toggle( 'sel', on );
+			el.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+		} );
 	}
 
 	function schemeSlotsMeta() {
@@ -1650,26 +1680,25 @@
 		const wrap = root || document;
 		$$( '[data-scheme]', wrap ).forEach( ( btn ) => {
 			if ( ! btn.classList.contains( 'minn-scheme-swatch' ) ) return;
-			btn.addEventListener( 'click', async () => {
+			btn.addEventListener( 'click', () => {
 				const id = btn.dataset.scheme;
 				if ( ! id ) return;
-				try {
-					const prev = appearanceOf( B.user && B.user.appearance );
-					const payload = id === 'custom'
-						? { scheme: 'custom', custom: prev.custom }
-						: { scheme: id, custom: prev.custom };
-					await saveAppearance( payload );
-					if ( state.modal && state.modal.type === 'user' ) renderOverlays();
-					const lab = id === 'custom' ? 'Custom' : ( ( SCHEME_PRESETS.find( ( p ) => p.id === id ) || {} ).label || id );
-					toast( 'Scheme: ' + lab );
-				} catch ( e ) {
-					toast( e.message || 'Could not save scheme', true );
-				}
+				const prev = appearanceOf( B.user && B.user.appearance );
+				if ( prev.scheme === id && id !== 'custom' ) return;
+				const wasCustom = prev.scheme === 'custom';
+				const willCustom = id === 'custom';
+				// Paint first; meta save is background. Only rebuild when the
+				// custom slot editors need to appear/disappear.
+				commitAppearance(
+					{ scheme: id, custom: prev.custom },
+					{ rebuild: wasCustom !== willCustom }
+				);
+				if ( wasCustom === willCustom ) markSchemeSwatchSelected( wrap, id );
+				// No toast on every flip — felt laggy with the network wait.
 			} );
 		} );
-		// Per-slot custom editors (current mode only).
-		let slotTimer = null;
-		const commitSlots = async () => {
+		// Per-slot custom editors: live paint on input, debounced background save.
+		const flushSlots = () => {
 			const prev = appearanceOf( B.user && B.user.appearance );
 			const mode = document.documentElement.getAttribute( 'data-theme' ) || 'dark';
 			const nextMode = { ...normalizeModeTokens( prev.custom[ mode ], mode ) };
@@ -1678,15 +1707,13 @@
 				const hex = sanitizeHex( input.value );
 				if ( key && hex ) nextMode[ key ] = hex;
 			} );
-			const custom = {
-				dark: mode === 'dark' ? nextMode : prev.custom.dark,
-				light: mode === 'light' ? nextMode : prev.custom.light,
-			};
-			try {
-				await saveAppearance( { scheme: 'custom', custom } );
-			} catch ( e ) {
-				toast( e.message || 'Could not save colors', true );
-			}
+			commitAppearance( {
+				scheme: 'custom',
+				custom: {
+					dark: mode === 'dark' ? nextMode : prev.custom.dark,
+					light: mode === 'light' ? nextMode : prev.custom.light,
+				},
+			} );
 		};
 		$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
 			input.addEventListener( 'input', () => {
@@ -1698,38 +1725,33 @@
 				if ( key && hex ) nextMode[ key ] = hex;
 				const sw = input.closest( '.minn-scheme-slot' )?.querySelector( '.minn-scheme-slot-swatch' );
 				if ( sw && hex ) sw.style.background = hex;
-				applyAppearance( {
-					scheme: 'custom',
-					custom: {
-						dark: mode === 'dark' ? nextMode : prev.custom.dark,
-						light: mode === 'light' ? nextMode : prev.custom.light,
-					},
-				} );
-				clearTimeout( slotTimer );
-				slotTimer = setTimeout( commitSlots, 450 );
+				// Instant paint only; queueAppearanceSave coalesces rapid drags.
+				const custom = {
+					dark: mode === 'dark' ? nextMode : prev.custom.dark,
+					light: mode === 'light' ? nextMode : prev.custom.light,
+				};
+				applyAppearance( { scheme: 'custom', custom } );
+				queueAppearanceSave( { scheme: 'custom', custom } );
 			} );
-			input.addEventListener( 'change', () => {
-				clearTimeout( slotTimer );
-				commitSlots();
-			} );
+			input.addEventListener( 'change', flushSlots );
 		} );
-		// Theme mode (System / Light / Dark).
+		// Theme mode (System / Light / Dark) — localStorage, instant.
 		$$( '[data-theme-pref]', wrap ).forEach( ( btn ) => {
 			btn.addEventListener( 'click', () => {
 				const next = btn.dataset.themePref;
 				if ( ! next || next === themePref() ) return;
 				setThemePref( next );
-				// Rebuild profile so custom slot editors reflect the other mode.
-				if ( state.modal && state.modal.type === 'user' ) renderOverlays();
-				else {
+				const cur = appearanceOf( B.user && B.user.appearance );
+				// Rebuild only when custom editors need the other mode's values.
+				if ( cur.scheme === 'custom' && state.modal && state.modal.type === 'user' ) {
+					renderOverlays();
+				} else {
 					$$( '[data-theme-pref]', wrap ).forEach( ( el ) => {
 						const on = el.dataset.themePref === next;
 						el.classList.toggle( 'on', on );
 						el.setAttribute( 'aria-checked', on ? 'true' : 'false' );
 					} );
 				}
-				const labels = { system: 'System', light: 'Light', dark: 'Dark' };
-				toast( 'Theme: ' + ( labels[ next ] || next ) );
 			} );
 		} );
 	}
