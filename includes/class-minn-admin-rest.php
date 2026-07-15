@@ -3287,6 +3287,51 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/**
+	 * Plugin_Upgrader hooks upgrader_process_complete → wp_clean_plugins_cache,
+	 * which deletes the entire update_plugins transient. Without restoration,
+	 * updating Jetpack wipes every other pending offer until the next full
+	 * wp_update_plugins() (notifications + Extensions badges all go blank).
+	 *
+	 * Snapshot response[] before the upgrade; put back every file that was
+	 * not successfully updated. Prefer any post-upgrade responses if present.
+	 *
+	 * @param array $pending_before file => update object, from before upgrade.
+	 * @param array $updated_files  Plugin files that upgraded successfully.
+	 */
+	public static function restore_plugin_update_offers( array $pending_before, array $updated_files ) {
+		foreach ( $updated_files as $f ) {
+			unset( $pending_before[ $f ] );
+		}
+		if ( ! $pending_before && ! $updated_files ) {
+			return;
+		}
+		$current = get_site_transient( 'update_plugins' );
+		if ( ! is_object( $current ) ) {
+			$current = (object) array(
+				'last_checked' => time(),
+				'checked'      => array(),
+				'response'     => array(),
+				'no_update'    => array(),
+			);
+		}
+		$response = ( isset( $current->response ) && is_array( $current->response ) )
+			? $current->response
+			: array();
+		// Re-seed offers the clean wiped; keep fresher entries if any exist.
+		foreach ( $pending_before as $file => $data ) {
+			if ( ! isset( $response[ $file ] ) ) {
+				$response[ $file ] = $data;
+			}
+		}
+		foreach ( $updated_files as $f ) {
+			unset( $response[ $f ] );
+		}
+		$current->response     = $response;
+		$current->last_checked = time();
+		set_site_transient( 'update_plugins', $current );
+	}
+
+	/**
 	 * Update one plugin by its plugin file (e.g. "akismet/akismet.php").
 	 */
 	public static function update_single_plugin( WP_REST_Request $request ) {
@@ -3316,6 +3361,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'no_update', 'No update available for that plugin.', array( 'status' => 400 ) );
 		}
 
+		// Snapshot every pending offer — bulk_upgrade wipes the transient.
+		$pending_before = is_array( $updates->response ) ? $updates->response : array();
+
 		$was_active  = is_plugin_active( $file );
 		$was_network = is_plugin_active_for_network( $file );
 
@@ -3328,6 +3376,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$result  = is_array( $results ) && isset( $results[ $file ] ) ? $results[ $file ] : false;
 
 		if ( ! $result || is_wp_error( $result ) ) {
+			// Even on failure the upgrader may have cleaned the cache — put offers back.
+			self::restore_plugin_update_offers( $pending_before, array() );
 			$errors = $skin->get_error_messages();
 			return new WP_Error( 'update_failed', $errors ? implode( ' ', (array) $errors ) : 'Update failed.', array( 'status' => 500 ) );
 		}
@@ -3336,6 +3386,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( $was_active && ! is_plugin_active( $file ) ) {
 			activate_plugin( $file, '', $was_network, true );
 		}
+
+		// Put every other pending offer back (Jetpack update must not clear
+		// the rest of the notification panel).
+		self::restore_plugin_update_offers( $pending_before, array( $file ) );
 
 		$plugins = get_plugins();
 		return rest_ensure_response(
@@ -3609,10 +3663,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return rest_ensure_response( array( 'updated' => array() ) );
 		}
 
-		$files    = array_keys( $updates->response );
-		$skin     = new WP_Ajax_Upgrader_Skin();
-		$upgrader = new Plugin_Upgrader( $skin );
-		$results  = $upgrader->bulk_upgrade( $files );
+		$pending_before = is_array( $updates->response ) ? $updates->response : array();
+		$files          = array_keys( $pending_before );
+		$skin           = new WP_Ajax_Upgrader_Skin();
+		$upgrader       = new Plugin_Upgrader( $skin );
+		$results        = $upgrader->bulk_upgrade( $files );
 
 		$updated = array();
 		$failed  = array();
@@ -3623,6 +3678,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$failed[] = $file;
 			}
 		}
+
+		// Restore offers for anything that failed (or was not in the result set).
+		self::restore_plugin_update_offers( $pending_before, $updated );
 
 		return rest_ensure_response(
 			array(
