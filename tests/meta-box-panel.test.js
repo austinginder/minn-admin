@@ -109,54 +109,37 @@ const { launch, login, reporter, BASE, createPost, deletePost, openEditor } = re
 		t.check( 'priority round-trips', mb.minn_mb_priority === 'high' );
 		t.check( 'featured toggle round-trips', mb.minn_mb_featured === true || mb.minn_mb_featured === 1 || mb.minn_mb_featured === '1' );
 
-		// Open in Minn editor — panel card visible.
+		// Open in Minn editor — panel door visible, fields in modal.
 		await page.goto( `${ BASE }/minn-admin/editor/posts/${ postId }`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-editor-body, .minn-editor', { timeout: 25000 } );
-		// Panels load async after fieldsRoute.
-		await page.waitForFunction( () => {
-			const cards = [ ...document.querySelectorAll( '.minn-side-title' ) ];
-			return cards.some( ( c ) => /Custom fields/i.test( c.textContent ) && /Meta Box/i.test( c.textContent ) );
-		}, { timeout: 20000 } );
-		t.check( 'editor shows Custom fields · Meta Box card', true );
+		await page.waitForSelector( '[data-side-door^="panel:"]', { timeout: 20000 } );
+		const mbDoor = await page.evaluate( () => {
+			const doors = [ ...document.querySelectorAll( '[data-side-door]' ) ];
+			const d = doors.find( ( el ) => /Custom fields/i.test( el.textContent ) && /Meta Box/i.test( el.textContent ) );
+			return d ? d.getAttribute( 'data-side-door' ) : null;
+		} );
+		t.check( 'editor shows Custom fields · Meta Box door', !! mbDoor, String( mbDoor ) );
+		await page.click( `[data-side-door="${ mbDoor }"]` );
+		await page.waitForSelector( '.minn-editor-side-modal .minn-panel-fields', { timeout: 10000 } );
 
 		const ui = await page.evaluate( () => {
-			const cards = [ ...document.querySelectorAll( '.minn-side-card' ) ];
-			const mbCard = cards.find( ( c ) => {
-				const t = c.querySelector( '.minn-side-title' );
-				return t && /Meta Box/i.test( t.textContent );
-			} );
-			const labels = mbCard
-				? [ ...mbCard.querySelectorAll( '.minn-panel-field .minn-field-label' ) ].map( ( e ) => e.textContent.trim() )
+			const modal = document.querySelector( '.minn-editor-side-modal' );
+			const labels = modal
+				? [ ...modal.querySelectorAll( '.minn-panel-field .minn-field-label' ) ].map( ( e ) => e.textContent.trim() )
 				: [];
-			const locked = mbCard
-				? [ ...mbCard.querySelectorAll( '.minn-panel-locked' ) ].map( ( e ) => e.textContent.trim() ).join( '|' )
+			const locked = modal
+				? [ ...modal.querySelectorAll( '.minn-panel-locked' ) ].map( ( e ) => e.textContent.trim() ).join( '|' )
 				: '';
-			const sub = mbCard ? ( mbCard.querySelector( '.minn-panel-sub' ) || {} ).textContent || '' : '';
-			return { labels, locked, sub: String( sub ).trim(), hasCard: !! mbCard };
+			const title = modal ? ( modal.querySelector( '.minn-modal-title' ) || {} ).textContent || '' : '';
+			return { labels, locked, title: String( title ).trim(), hasCard: !! modal };
 		} );
-		t.check( 'panel sub is Meta Box', ui.hasCard && /Meta Box/i.test( ui.sub ), ui.sub );
+		t.check( 'panel sub is Meta Box', ui.hasCard && /Meta Box/i.test( ui.title ), ui.title );
 		t.check( 'subtitle field label visible', ui.labels.some( ( l ) => /Subtitle/i.test( l ) ), ui.labels.join( ',' ) );
 		t.check( 'locked notes mention advanced fields', /advanced field/i.test( ui.locked ) );
 
-		// Edit subtitle in the panel UI and save.
-		const saved = await page.evaluate( async () => {
-			const inputs = [ ...document.querySelectorAll( '[data-pf]' ) ];
-			const sub = inputs.find( ( el ) => ( el.getAttribute( 'data-pf' ) || '' ).includes( 'minn_mb_subtitle' ) );
-			if ( ! sub ) return { ok: false, why: 'no subtitle input' };
-			sub.focus();
-			sub.value = 'Edited in sidebar';
-			sub.dispatchEvent( new Event( 'input', { bubbles: true } ) );
-			// Mark dirty the way the binder does.
-			const pf = sub.getAttribute( 'data-pf' ) || '';
-			const [ pid, name ] = pf.split( ':' );
-			if ( window.state && window.state.editor ) {
-				// state is not global — trigger input handler by input event only.
-			}
-			return { ok: true, pf };
-		} );
 		// Use the page's bind path: type into the field.
 		const subSel = await page.evaluate( () => {
-			const inputs = [ ...document.querySelectorAll( '[data-pf]' ) ];
+			const inputs = [ ...document.querySelectorAll( '.minn-editor-side-modal [data-pf]' ) ];
 			const sub = inputs.find( ( el ) => ( el.getAttribute( 'data-pf' ) || '' ).includes( 'minn_mb_subtitle' ) );
 			return sub ? '[data-pf="' + sub.getAttribute( 'data-pf' ) + '"]' : null;
 		} );
