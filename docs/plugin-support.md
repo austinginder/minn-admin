@@ -19,7 +19,7 @@ shared view; "action" = a ⌘K / menu command.
 |---|---|---|
 | **SEO** | Yoast, Rank Math, AIOSEO, SEOPress, SiteSEO | Editor panel (title, meta description, focus keyword) |
 | **Forms** | Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 (via Flamingo), CFDB7, Ninja Forms, Forminator, Formidable, Everest Forms | **Forms** surface — entries as contact cards. Providers with status workflows (Everest, Fluent, Ninja, Flamingo, Elementor Pro) share Received/Spam-or-Unread/Trash filters with restore and bulk; CFDB7 filters All/Unread/Read. Gravity Forms adds the full entry workflow through its own endpoints: Received/Spam/Trash status views, star/unstar and mark-read (open marks read like GF's own screen), restore and delete-permanently where they apply, bulk actions, entry notes on the card plus add-a-note, and resend notifications. A **Notifications** view (edit-forms capability, via GF's own resolver) lists every notification across forms with type-aware recipients (address / field label / routing rule count), activate-deactivate through GF's own toggle, and daily-field editing (name, send-to, subject, message) through GF's own notifications store; routing rules, conditional logic and events stay in GF's editor, one deep link away. Each form's row opens **Form settings**: the whole form-settings estate (basics, layout, save-and-continue, restrictions, spam detection, options) drawn at request time from GF's own Settings-framework schema and saved through `GFAPI::update_form` with GF's own validation semantics; schedule date-times stay in GF, honestly counted as locked |
-| **Email** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging | **Email** surface (renamed from Email Log once it grew settings) — sent mail, resend. FluentSMTP, Post SMTP and WP Mail Logging all have status cards (14-day charts); FluentSMTP also has test send, subject/from/to search, and single/bulk log delete through its Logger; WPML bulk-deletes log rows. Gravity SMTP goes deeper: a **Settings** view maps its own settings schema into Minn (sending service across all 21 connectors, connector config with masked secrets, general/logging settings through its constant-lock-aware stores), the surface honors its granular `gravitysmtp_*` capabilities, the event detail reads through its own models (from/cc/bcc/source), resend replays its own recipient handling through the configured connector, a **Suppressions** view lists/adds/reactivates blocked addresses through its own model, a **Debug log** view, a **Routing** view of 2.3+ conditional send rules (enable/disable/delete; condition authoring stays in Gravity SMTP), a **Filtered** log tab for partially-sent events, and a status card with active service, test mode, routing counts, a 14-day chart, and **Send a test email** |
+| **Email** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging | **Email** surface (renamed from Email Log once it grew settings) — sent mail, resend, single/bulk log delete. FluentSMTP, Post SMTP and WP Mail Logging all have status cards (14-day charts); FluentSMTP also has test send, subject/from/to search, and single/bulk log delete through its Logger; Post SMTP has search + single/bulk delete; WPML bulk-deletes log rows. Gravity SMTP goes deeper: a **Settings** view maps its own settings schema into Minn (sending service across all 21 connectors, connector config with masked secrets, general/logging settings through its constant-lock-aware stores), the surface honors its granular `gravitysmtp_*` capabilities (including `DELETE_EMAIL_LOG` for log delete through its own `Event_Model`), the event detail reads through its own models (from/cc/bcc/source), resend replays its own recipient handling through the configured connector, a **Suppressions** view lists/adds/reactivates blocked addresses through its own model, a **Debug log** view, a **Routing** view of 2.3+ conditional send rules (enable/disable/delete; condition authoring stays in Gravity SMTP), a **Filtered** log tab for partially-sent events, and a status card with active service, test mode, routing counts, a 14-day chart, and **Send a test email** |
 | **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects, 301 Redirects (WebFactory) | **Redirects** surface — list + in-place edit + bulk delete; Redirection's first-run install runs in place via the setup gate, and its daily options (monitor, log retention, IP logging) live in a Settings view through its own `red_set_options` |
 | **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence**, **Limit Login Attempts Reloaded**, **Solid Security** | **Activity Log** surface — severity/level tabs (Simple History, WSAL), connector tabs (Stream), action tabs (Aryo); Wordfence = login security with a status card (24h failures + firewall/scan); Limit Login Attempts and Solid Security = lockout logs with status cards and one-click Unlock/Release through each plugin's own store |
 | **Security posture** | Wordfence, Really Simple SSL, Solid Security | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
@@ -81,71 +81,57 @@ themselves through the extension filters.
 
 ## Roadmap candidates
 
-Refreshed 2026-07-13 at the open of the **v0.14.0** cycle (v0.13.0 released
-the same day). Prior waves (licenses, lockouts, forms pack, backups pack,
-mail depth, surface primitives, snippets) live in the coverage table above.
-What remains, re-ranked (installs × daily-ops fit × effort, with a deliberate
-Dev tools fill-in for the still-thin row):
+Refreshed 2026-07-15 mid **v0.16.0** (after v0.15.0 library cycle + Smash /
+Yoast license providers + Gravity SMTP bulk log delete). Coverage history
+lives in the table above; living primitive matrix + sweep log is
+`docs/adapter-coverage.md`.
 
-### Wave A — Dev tools (the thin row)
+### Wave A — Dev tools ✅ complete (v0.14.0)
 
-Today Dev tools is only the Query Monitor launcher chip (this-request).
-That shape is correct for QM; what is missing is **historical / inventory**
-diagnostics other plugins already store.
-
-1. ~~**Scrutoscope**~~ ✅ shipped: Diagnostics → Scrutoscope (profiles,
-   detail, status, Cron attribution view, delete).
-2. ~~**WP Crontrol**~~ ✅ shipped: Diagnostics → WP Crontrol (inventory,
-   run-now, pause/resume, delete).
-3. ~~**Transients Manager**~~ ✅ shipped: Diagnostics → Transients
-   (list/search/delete, delete-expired, bulk delete). Values stay opaque
-   for serialized payloads. System's expired-transients count is the
-   doorway; this is the cleanup work.
-4. ~~**Rewrite Rules Inspector**~~ ✅ shipped: Diagnostics → Rewrites
-   (list/search by path or text, Missing/Core/Posts/Pages/Other tabs,
-   flush + test URL via their services, detail).
-5. **IA note (2026-07-13):** Dev tools share family `diagnostics` (one Tools
-   nav item + provider switcher). Do not add a top-level nav entry per
-   diagnostic plugin — Tools was already crowded (Email / logs / snippets /
-   redirects / backups / performance).
-
-**QM stays a panel, not a surface.** Rebuilding its HTML dispatcher inside
-Minn would be a canvas clone. Debug Bar and friends are skip (QM supersedes).
-
-**Native developer surfaces** (no plugin) stay scoped in
-`docs/native-editors.md`: read-only database viewer is still the cheapest
-full item and pairs with Scrutoscope (profiles → tables). File manager
-writes remain a permanent non-goal; read-only file view only if the debug-log
-viewer is not enough.
+Diagnostics family ships Scrutoscope, WP Crontrol, Transients Manager, and
+Rewrite Rules Inspector as one Tools item (provider switcher). **QM stays a
+panel, not a surface.** Native developer surfaces (read-only DB viewer)
+remain scoped in `docs/native-editors.md` (parked).
 
 ### Wave B — leftover providers (existing families)
 
-5. **Email log providers** — GoSMTP (logs free), SureMails, Site Mailer;
+1. **Email log providers** — GoSMTP (logs free), SureMails, Site Mailer;
    Easy WP SMTP's full log is Pro-only (free has debug events, the
    WP Mail SMTP shape).
-6. **Security leftover** — All-In-One Security (activity-log family +
+2. **Security leftover** — All-In-One Security (activity-log family +
    posture row; the LLA-R / Solid Security pattern).
-7. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
+3. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
    believed but not source-verified; verify before promising).
 
 ### Wave C — bigger scoped bets (own cycle or half-cycle)
 
-8. **Ecommerce analytics** — ✅ shipped on Orders as an **Analytics** pill
-   (7/30/90d revenue chart, gross/net/orders/items cards, top products via
-   `wc-analytics`). Customers surface, New order, and Add product also
-   shipped in the same cycle.
-9. **WPForms Pro entries** — Lite stores no entries; needs Pro license +
+4. ~~**Ecommerce analytics**~~ ✅ shipped (v0.14.0) on Orders as an
+   **Analytics** pill; Customers, New order, Add product, Subscriptions
+   also landed in the commerce cycle.
+5. **WPForms Pro entries** — Lite stores no entries; needs Pro license +
    fixtures; biggest uncovered forms name.
-10. ~~**Meta Box** editor panel~~ ✅ shipped (ACF sibling; simple types + locked count for clones/media). **The Events Calendar**
-    editor panel (date/venue meta), **Jetpack Stats** / **Matomo** traffic
-    providers (auth and data-shape study first).
+6. ~~**Meta Box** editor panel~~ ✅ shipped (v0.15.0). **The Events Calendar**
+   editor panel (date/venue meta), **Jetpack Stats** / **Matomo** traffic
+   providers (auth and data-shape study first).
+
+### Licenses fleet (see `docs/license-manager.md`)
+
+~~Smash Balloon~~ and ~~Yoast SEO Premium~~ shipped 2026-07-15. Remaining
+fleet-ranked open work is mostly long-tail Freemius/EDD verification and
+Admin Columns Pro (reader already covers it).
 
 ### Axis A leftovers (adapter depth, not new plugins)
 
-From `docs/adapter-coverage.md` and `docs/full-ui-adapters.md`: richer
-`sectionsRoute` row types (`pill`, `code`, `html-preview`, `kv-table`) for
-email-log detail fidelity; status/chart parity on thinner mail and forms
-adapters when a family sweep is scheduled (`/dev-minn-admin sweep`).
+From `docs/adapter-coverage.md` and `docs/full-ui-adapters.md` (2026-07-15):
+
+- ~~Gravity SMTP bulk log delete~~ ✅ shipped (mail reference parity with
+  FluentSMTP / Post SMTP / WPML).
+- **Activity-log status cards** for Simple History / WSAL / Stream (Solid /
+  LLA-R already have cards).
+- **Richer `sectionsRoute` row types** (`pill`, `code`, `html-preview`,
+  `kv-table`) for email-log detail fidelity.
+- Status/chart parity on thinner adapters when a family sweep is scheduled
+  (`/dev-minn-admin sweep`).
 
 Parked as structural: **multilingual** (WPML / Polylang / TranslatePress)
 needs a language dimension in content lists. Also parked, with scope and
