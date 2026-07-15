@@ -618,16 +618,6 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-ext-filters .minn-tab.active .minn-tab-count { color: var(--accent2); }
 .minn-ext-filters .minn-tab .minn-tab-count { background: none; border: none; padding: 0; margin-left: 3px; }
 .minn-toolbar-meta { margin-left: auto; color: var(--text3); font-size: 14px; white-space: nowrap; flex-shrink: 0; }
-.minn-media-svg-on {
-	display: inline-block;
-	padding: 1px 7px;
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--ok, #3d9a6a) 18%, transparent);
-	color: var(--ok, #3d9a6a);
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: 0.02em;
-}
 .minn-media-svg-note {
 	margin: 8px 0 0;
 	padding: 7px 10px;
