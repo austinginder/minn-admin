@@ -127,10 +127,23 @@ v1.0 ships when all of these are true:
       Status-card links arrive in route responses at runtime, so they get
       the render-time mark but not the static flag. The author guide's
       Integration etiquette section states the guarantee.)*
-- [ ] **G5 — Contract freeze.** The documented descriptor vocabulary is complete
+- [x] **G5 — Contract freeze.** The documented descriptor vocabulary is complete
       (no load-bearing undocumented keys), annotated with since-versions, and
       covered by a contract suite that drives a fixture third-party plugin
-      through every documented key.
+      through every documented key. *(Shipped 2026-07-16, v0.17.0 cycle:
+      tests/contract.test.js, 36 checks. Half one is DOC LOCKSTEP — every
+      key in the validator's vocabulary constants must appear in
+      for-plugin-authors.md, so a new key can't land undocumented. Half two
+      drives the minn_test_contract_surface kitchen-sink fixture (route
+      tabs + allRoute, query/pageQuery, every column format + altKey/utc/
+      width, detail with labels/messageKey/skip/edit + preserve + the full
+      field vocabulary, every action key, when-gated bulk, filter, create
+      with defaults, manage, views[], status rows/chart/command/actions,
+      item-scoped settings via settingsItem) end to end with server-state
+      verification; the same descriptor validating with ZERO problems on
+      the Integrations card is itself a contract check. Setup gates, plain
+      settings views, editor panels and design sources are covered by their
+      own dedicated fixture suites.)*
 - [x] **G6 — One docs entry point.** A single author guide that starts with the
       quickstart, includes the shim tutorial and screenshots, and has no stale
       sibling contradicting it. *(Restructure shipped 2026-07-16: quickstart
