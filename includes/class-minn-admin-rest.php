@@ -410,6 +410,32 @@ class Minn_Admin_REST {
 		// Core wp/v2/users can't filter on session_tokens (serialized meta with
 		// nested expiration), so this endpoint classifies tokens in PHP then
 		// paginates via WP_User_Query include/exclude.
+		// Per-user integration hide/unhide (goal #7). Both answer with the
+		// fresh boot slices so one round trip repaints nav + panels + the
+		// restore list without a reload.
+		foreach ( array( 'hide', 'unhide' ) as $op ) {
+			register_rest_route(
+				self::NS,
+				'/integrations/' . $op,
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'hide' === $op ? 'hide_integration' : 'unhide_integration' ),
+					'permission_callback' => function () {
+						return is_user_logged_in() && current_user_can( 'edit_posts' );
+					},
+					'args'                => array(
+						'id' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'sanitize_callback' => function ( $v ) {
+								return preg_replace( '/[^a-z0-9_:\-]/', '', strtolower( (string) $v ) );
+							},
+						),
+					),
+				)
+			);
+		}
+
 		register_rest_route(
 			self::NS,
 			'/users',
@@ -2394,6 +2420,28 @@ class Minn_Admin_REST {
 	 * Partial custom maps merge onto Minn defaults. Legacy {accent,custom:#hex}
 	 * still migrates via normalize_appearance.
 	 */
+	public static function hide_integration( WP_REST_Request $request ) {
+		$id = (string) $request->get_param( 'id' );
+		if ( ! Minn_Admin_Surfaces::hide_integration( $id ) ) {
+			return new WP_Error( 'minn_unknown_integration', 'That integration is not registered.', array( 'status' => 400 ) );
+		}
+		return rest_ensure_response( self::integration_state() );
+	}
+
+	public static function unhide_integration( WP_REST_Request $request ) {
+		Minn_Admin_Surfaces::unhide_integration( (string) $request->get_param( 'id' ) );
+		return rest_ensure_response( self::integration_state() );
+	}
+
+	private static function integration_state() {
+		return array(
+			'ok'           => true,
+			'surfaces'     => Minn_Admin_Surfaces::for_current_user(),
+			'editorPanels' => Minn_Admin_Surfaces::editor_panels_for_current_user(),
+			'hidden'       => Minn_Admin_Surfaces::hidden_for_current_user(),
+		);
+	}
+
 	public static function update_my_appearance( WP_REST_Request $request ) {
 		$uid = get_current_user_id();
 		$cur = Minn_Admin::get_user_appearance( $uid );

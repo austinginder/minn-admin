@@ -31,10 +31,17 @@ class Minn_Admin_Surfaces {
 	 * @return array
 	 */
 	public static function for_current_user() {
-		$out = array();
+		$hidden = self::hidden_map();
+		$out    = array();
 		foreach ( self::all() as $id => $surface ) {
 			$cap = isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options';
 			if ( ! current_user_can( $cap ) ) {
+				continue;
+			}
+			// Per-user hide (goal #7): a hidden surface leaves the boot
+			// payload entirely — nav, palette and routes never see it. The
+			// registry itself is untouched; Your profile lists it for restore.
+			if ( isset( $hidden[ 'surface:' . sanitize_key( $id ) ] ) ) {
 				continue;
 			}
 			unset( $surface['cap'] );
@@ -43,6 +50,121 @@ class Minn_Admin_Surfaces {
 			$surface       = self::with_settings_state( $surface );
 			$surface       = self::with_views_state( $surface );
 			$out[]         = $surface;
+		}
+		return $out;
+	}
+
+	/* ===== Per-user integration hiding =====
+	 * One user-meta map ( "kind:id" => hidden-at timestamp ) backs hide for
+	 * every integration point. Same interaction contract as notice Hide:
+	 * per user, Undo-able, survives re-registration because the key is the
+	 * registry id, and capped so the meta can never grow unbounded. */
+
+	const HIDDEN_META = 'minn_admin_hidden_integrations';
+
+	public static function hidden_map( $user_id = 0 ) {
+		$uid = $user_id ? (int) $user_id : get_current_user_id();
+		if ( $uid <= 0 ) {
+			return array();
+		}
+		$h = get_user_meta( $uid, self::HIDDEN_META, true );
+		return is_array( $h ) ? $h : array();
+	}
+
+	/**
+	 * True when the id names something actually registered right now (and
+	 * visible to this user's caps) — hide never stores junk ids.
+	 */
+	public static function is_registered_integration( $id ) {
+		if ( ! preg_match( '/^(surface|panel):([a-z0-9_-]+)$/', (string) $id, $m ) ) {
+			return false;
+		}
+		if ( 'surface' === $m[1] ) {
+			$all = self::all();
+			if ( ! isset( $all[ $m[2] ] ) ) {
+				return false;
+			}
+			$cap = isset( $all[ $m[2] ]['cap'] ) ? $all[ $m[2] ]['cap'] : 'manage_options';
+			return current_user_can( $cap );
+		}
+		$panels = apply_filters( 'minn_admin_editor_panels', array() );
+		if ( ! is_array( $panels ) || ! isset( $panels[ $m[2] ] ) ) {
+			return false;
+		}
+		$cap = isset( $panels[ $m[2] ]['cap'] ) ? $panels[ $m[2] ]['cap'] : 'edit_posts';
+		return current_user_can( $cap );
+	}
+
+	public static function hide_integration( $id ) {
+		if ( ! self::is_registered_integration( $id ) ) {
+			return false;
+		}
+		$h        = self::hidden_map();
+		$h[ $id ] = time();
+		// Cap: keep the newest 100 (the notice-hide precedent).
+		if ( count( $h ) > 100 ) {
+			arsort( $h );
+			$h = array_slice( $h, 0, 100, true );
+		}
+		update_user_meta( get_current_user_id(), self::HIDDEN_META, $h );
+		return true;
+	}
+
+	public static function unhide_integration( $id ) {
+		$h = self::hidden_map();
+		unset( $h[ (string) $id ] );
+		if ( $h ) {
+			update_user_meta( get_current_user_id(), self::HIDDEN_META, $h );
+		} else {
+			delete_user_meta( get_current_user_id(), self::HIDDEN_META );
+		}
+		return true;
+	}
+
+	/**
+	 * The restore list for Your profile: label + kind for every hidden id
+	 * that still exists in the registry (a hidden id whose plugin was
+	 * deactivated simply doesn't render; the meta entry stays until the
+	 * cap prunes it, so reactivation keeps the user's choice).
+	 */
+	public static function hidden_for_current_user() {
+		$hidden = self::hidden_map();
+		if ( ! $hidden ) {
+			return array();
+		}
+		$out = array();
+		foreach ( self::all() as $id => $surface ) {
+			$key = 'surface:' . sanitize_key( $id );
+			if ( ! isset( $hidden[ $key ] ) ) {
+				continue;
+			}
+			$cap = isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options';
+			if ( ! current_user_can( $cap ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'    => $key,
+				'kind'  => 'surface',
+				'label' => isset( $surface['label'] ) ? (string) $surface['label'] : $id,
+				'sub'   => isset( $surface['sub'] ) ? (string) $surface['sub'] : '',
+			);
+		}
+		$panels = apply_filters( 'minn_admin_editor_panels', array() );
+		foreach ( ( is_array( $panels ) ? $panels : array() ) as $id => $panel ) {
+			$key = 'panel:' . sanitize_key( $id );
+			if ( ! isset( $hidden[ $key ] ) ) {
+				continue;
+			}
+			$cap = isset( $panel['cap'] ) ? $panel['cap'] : 'edit_posts';
+			if ( ! current_user_can( $cap ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'    => $key,
+				'kind'  => 'panel',
+				'label' => isset( $panel['label'] ) ? (string) $panel['label'] : $id,
+				'sub'   => isset( $panel['sub'] ) ? (string) $panel['sub'] : '',
+			);
 		}
 		return $out;
 	}
@@ -683,11 +805,15 @@ class Minn_Admin_Surfaces {
 	 * @return array
 	 */
 	public static function editor_panels_for_current_user() {
+		$hidden = self::hidden_map();
 		$panels = apply_filters( 'minn_admin_editor_panels', array() );
 		$out    = array();
 		foreach ( ( is_array( $panels ) ? $panels : array() ) as $id => $panel ) {
 			$cap = isset( $panel['cap'] ) ? $panel['cap'] : 'edit_posts';
 			if ( ! current_user_can( $cap ) ) {
+				continue;
+			}
+			if ( isset( $hidden[ 'panel:' . sanitize_key( $id ) ] ) ) {
 				continue;
 			}
 			unset( $panel['cap'] );

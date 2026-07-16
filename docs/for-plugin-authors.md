@@ -62,6 +62,15 @@ contract. The intent is that it changes rarely, and additively:
   change without notice. If you need one, open an issue so it can be documented and
   stabilized here.
 
+## Users can hide your integration
+
+Since v0.17.0, every surface and editor panel can be hidden per user from Minn's own UI
+(right-click the sidebar row or the panel's door → **Hide for you**; restore lives on
+Your profile). Hiding is a per-user choice: it survives reloads and your plugin's
+re-registration, and there is no API to detect or resist it. Design accordingly. An
+integration that earns its place gets kept; anything that grabs attention gets hidden,
+and the descriptor model gives you no way to ask for it back.
+
 ## Quick start
 
 ```php

@@ -94,7 +94,11 @@ v1.0 ships when all of these are true:
       outside tester, not just internally.
 - [ ] **G2 — User sovereignty.** Every registered integration point (surface,
       panel, commands, design source) can be hidden per user from the UI, and
-      the hide survives updates.
+      the hide survives updates. *(Surfaces + editor panels shipped 2026-07-16,
+      v0.17.0 cycle: `minn_admin_hidden_integrations` user meta,
+      `minn-admin/v1/integrations/hide|unhide`, nav/door right-click, restore
+      on Your profile. Remaining: slash-command namespaces and design
+      sources.)*
 - [ ] **G3 — Attention budget.** Placement and count limits are enforced by the
       validator and the client, not by convention. A plugin cannot add more than
       its budget to the nav, palette or default slash menu; overflow degrades

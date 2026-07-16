@@ -1102,7 +1102,63 @@
 			if ( btn._minnNavBound ) return;
 			btn._minnNavBound = true;
 			btn.addEventListener( 'click', () => go( btn.dataset.nav ) );
+			// Per-user hide (goal #7): right-click a plugin surface's nav row.
+			// Core views (Content, Media, …) are not integrations — no menu.
+			btn.addEventListener( 'contextmenu', ( e ) => {
+				const s = surfaceById( btn.dataset.nav );
+				if ( ! s ) return;
+				e.preventDefault();
+				const name = s.sub ? `${ s.label } · ${ s.sub }` : s.label;
+				openMinnMenu( e.clientX, e.clientY, [
+					{ label: `Hide “${ name }” for you`, run: () =>
+						setIntegrationHidden( 'surface:' + s.id, true, name ).catch( ( err ) => toast( err.message, true ) ) },
+				] );
+			} );
 		} );
+	}
+
+	/* ===== Per-user integration hiding (goal #7) =====
+	 * Surfaces and editor panels hide per user, with Undo, managed from
+	 * Your profile. Both endpoints answer with the fresh boot slices so one
+	 * round trip repaints everything — no reload, no stale palette rows. */
+
+	async function setIntegrationHidden( id, hide, label ) {
+		const r = await api( `minn-admin/v1/integrations/${ hide ? 'hide' : 'unhide' }`, {
+			method: 'POST',
+			body: JSON.stringify( { id } ),
+		} );
+		applyIntegrationState( r, id );
+		if ( hide ) {
+			toastAction( `${ label } hidden for you`, 'Undo', () =>
+				setIntegrationHidden( id, false, label ).catch( ( e ) => toast( e.message, true ) ) );
+		} else if ( id.indexOf( 'panel:' ) === 0 && state.route === 'editor' ) {
+			// Live re-add would need the post payload; be honest instead.
+			toast( `${ label || 'Panel' } restored. It returns the next time a post is opened.` );
+		} else {
+			toast( `${ label || 'Integration' } restored` );
+		}
+	}
+
+	function applyIntegrationState( r, changedId ) {
+		if ( ! r || ! r.ok ) return;
+		B.surfaces = r.surfaces || [];
+		B.editorPanels = r.editorPanels || [];
+		B.hidden = r.hidden || [];
+		renderNavWorkspace();
+		// Hiding the surface you're standing on lands you back home.
+		if ( changedId === 'surface:' + state.route && ! surfaceById( state.route ) ) {
+			go( 'overview' );
+		}
+		// Editor open and a panel hidden: drop it from the live sidebar too.
+		const ed = state.editor;
+		if ( ed && ed.panels && changedId && changedId.indexOf( 'panel:' ) === 0 ) {
+			const pid = changedId.slice( 6 );
+			const before = ed.panels.length;
+			ed.panels = ed.panels.filter( ( p ) => p.desc.id !== pid );
+			if ( ed.panels.length !== before && state.route === 'editor' ) renderEditorSide();
+		}
+		// Your profile open → repaint its restore list.
+		if ( state.modal && state.modal.type === 'user' ) renderOverlays();
 	}
 
 	// Collapsible nav groups — the label row toggles its group's items and
@@ -15611,9 +15667,21 @@
 		} );
 		bindEditorPpp( el, ed );
 
-		$$( '[data-side-door]', el ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => openEditorSideDoor( btn.dataset.sideDoor ) )
-		);
+		$$( '[data-side-door]', el ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => openEditorSideDoor( btn.dataset.sideDoor ) );
+			// Plugin editor panels hide per user (goal #7); core doors don't.
+			btn.addEventListener( 'contextmenu', ( e ) => {
+				const id = btn.dataset.sideDoor;
+				if ( id.indexOf( 'panel:' ) !== 0 ) return;
+				e.preventDefault();
+				const p = ( ed.panels || [] ).find( ( x ) => 'panel:' + x.desc.id === id );
+				const name = p ? ( p.desc.sub ? `${ p.desc.label } · ${ p.desc.sub }` : p.desc.label ) : 'Panel';
+				openMinnMenu( e.clientX, e.clientY, [
+					{ label: `Hide “${ name }” for you`, run: () =>
+						setIntegrationHidden( id, true, name ).catch( ( err ) => toast( err.message, true ) ) },
+				] );
+			} );
+		} );
 
 		const trashBtn = $( '#minn-trash-post', el );
 		if ( trashBtn ) {
@@ -21939,7 +22007,19 @@
 						<div>
 							<div class="minn-field-label">Theme</div>
 							${ themeModeHtml() }
-						</div>` : '' }
+						</div>
+						${ ( B.hidden || [] ).length ? `
+						<div>
+							<div class="minn-field-label">Hidden for you</div>
+							${ B.hidden.map( ( h ) => `
+							<div class="minn-session-row">
+								<div class="minn-session-info">
+									<div class="minn-session-ua">${ esc( h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
+									<div class="minn-session-meta">${ h.kind === 'panel' ? 'Editor panel' : 'Sidebar surface' }</div>
+								</div>
+								<button class="minn-comment-action" data-unhide="${ esc( h.id ) }">Restore</button>
+							</div>` ).join( '' ) }
+						</div>` : '' }` : '' }
 					</div>
 					${ ! isNew && m.userId === B.user.id ? `
 					<div class="minn-sessions">
@@ -25005,6 +25085,14 @@
 			const curlBtn = $( '#minn-app-copy-curl' );
 			if ( curlBtn ) curlBtn.addEventListener( 'click', () => copyText(
 				`curl -u '${ B.user.login }:${ m.newAppPassword.password }' '${ B.restUrl }wp/v2/posts?per_page=5'`, 'curl example copied' ) );
+			$$( '[data-unhide]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					btn.disabled = true;
+					const h = ( B.hidden || [] ).find( ( x ) => x.id === btn.dataset.unhide );
+					setIntegrationHidden( btn.dataset.unhide, false, h ? h.label : '' )
+						.catch( ( e ) => { btn.disabled = false; toast( e.message, true ); } );
+				} )
+			);
 			$$( '[data-appdel]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
 					if ( ! confirm( 'Revoke this application password? Anything using it loses access immediately.' ) ) return;

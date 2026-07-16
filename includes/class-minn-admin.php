@@ -677,6 +677,8 @@ class Minn_Admin {
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),
 			'editorPanels' => Minn_Admin_Surfaces::editor_panels_for_current_user(),
+			// Integrations this user hid (Your profile lists them for restore).
+			'hidden'   => Minn_Admin_Surfaces::hidden_for_current_user(),
 			// Admin-notice digest: the client triggers this nonced wp-admin
 			// pageload in the background when stale; Minn extracts other
 			// plugins' notices into structured data for the notification
