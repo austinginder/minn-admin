@@ -1,8 +1,11 @@
 /**
- * Revision diffs: the History card opens a side-by-side diff of a revision
- * against the CURRENT content — block-level alignment, word-level <del>/<ins>
- * marks inside changed pairs, dimmed unchanged rows — instead of the old raw
- * preview. Restore is unchanged and verified against SAVED content.
+ * Revision diffs, v0.16.0 shape: History is a door on the editor rail that
+ * opens the All revisions dialog directly (activity heatmap + list rows);
+ * the old .minn-history-row sidebar card is gone. Picking a row opens the
+ * side-by-side diff against the CURRENT content — block-level alignment,
+ * word-level <del>/<ins> marks inside changed pairs, dimmed unchanged rows.
+ * Restore is verified against SAVED content. Also covers the heatmap day
+ * filter (click a day → filtered list → Show all clears).
  */
 const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
@@ -20,7 +23,7 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 
 	/* ===== Fixture. REST CREATE stores no revision — each UPDATE snapshots
 	   the post state AFTER it. The newest revision always mirrors the live
-	   post; History hides that mirror while the editor is clean, so:
+	   post; historyRowsFor hides that mirror while the editor is clean, so:
 	   create → update(V1) → update(V2) yields one visible row (V1) to diff. ===== */
 	const id = await createPost( page, { title: 'Diff probe', content: '<p>seed</p>', status: 'draft' } );
 	const update = ( content ) => page.evaluate( async ( args ) => {
@@ -34,15 +37,26 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 	await update( V1 );
 	await update( V2 );
 
+	// History door → All revisions dialog (rows are [data-revlist] buttons).
+	const openHistory = async () => {
+		await page.waitForSelector( '[data-side-door="history"]', { timeout: 15000 } );
+		await page.click( '[data-side-door="history"]' );
+		await page.waitForFunction( () => {
+			const m = document.querySelector( '.minn-modal' );
+			return m && /All revisions/.test( m.textContent ) && ! m.textContent.includes( 'Loading revisions' );
+		}, null, { timeout: 20000 } );
+		await page.waitForTimeout( 300 );
+	};
+
 	await openEditor( page, id );
-	await page.waitForSelector( '.minn-history-row', { timeout: 15000 } );
-	// The async author-name lookup re-renders the sidebar shortly after the
-	// rows first appear, detaching any stored handles — settle, then always
-	// query fresh (never keep .minn-history-row handles across awaits).
-	await page.waitForTimeout( 1000 );
-	const revCount = await page.evaluate( () => document.querySelectorAll( '.minn-history-row' ).length );
+	// The rail renders async after the editor body — wait, don't sample.
+	await page.waitForSelector( '[data-side-door="history"]', { timeout: 15000 } );
+	t.check( 'History is a door on the rail', !! ( await page.$( '[data-side-door="history"]' ) ) );
+	await openHistory();
+
+	const revCount = await page.evaluate( () => document.querySelectorAll( '[data-revlist]' ).length );
 	// Clean editor: API has V2 (mirror) + V1; UI shows only V1.
-	t.check( 'history card lists previous revision(s), not the live-post mirror', revCount >= 1, String( revCount ) );
+	t.check( 'revisions dialog lists previous revision(s), not the live-post mirror', revCount >= 1, String( revCount ) );
 
 	const nApi = await page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '/revisions?per_page=6&_fields=id', {
@@ -51,15 +65,16 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 		return ( await r.json() ).length;
 	}, id );
 	t.check( 'UI hides one more revision than the API returns (the mirror)', revCount === nApi - 1, `ui=${ revCount } api=${ nApi }` );
+	t.check( 'activity heatmap renders in the dialog', !! ( await page.$( '#minn-rev-heat' ) ) );
 
 	/* ===== Oldest visible revision (v1) vs current (v2) ===== */
 	await page.evaluate( () => {
-		const rows = document.querySelectorAll( '.minn-history-row' );
+		const rows = document.querySelectorAll( '[data-revlist]' );
 		rows[ rows.length - 1 ].click();
 	} );
 	await page.waitForSelector( '#minn-diff', { timeout: 10000 } );
 	const d = await page.evaluate( () => ( {
-		summary: [ ...document.querySelectorAll( '#minn-modal-overlay .minn-side-row' ) ].map( ( r ) => r.textContent ).join( ' ' ),
+		summary: document.querySelector( '#minn-modal-overlay' ).textContent,
 		same: document.querySelectorAll( '.minn-diff-row.same' ).length,
 		change: document.querySelectorAll( '.minn-diff-row.change' ).length,
 		del: document.querySelectorAll( '.minn-diff-row.del' ).length,
@@ -86,16 +101,15 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 	}, id );
 	t.check( 'restore persists the revision content', saved.includes( 'brown fox' ) && saved.includes( 'deleted entirely' ) && ! saved.includes( 'brand new closing' ), saved.slice( 0, 80 ) );
 
-	/* ===== After restore, top History row is a previous version with a real diff ===== */
+	/* ===== After restore, the newest row is a previous version with a real diff ===== */
 	await openEditor( page, id );
-	await page.waitForSelector( '.minn-history-row', { timeout: 15000 } );
-	await page.waitForTimeout( 1000 ); // the same re-render settle as above
-	await page.evaluate( () => document.querySelector( '.minn-history-row' ).click() );
-	await page.waitForSelector( '#minn-modal-overlay .minn-side-row', { timeout: 10000 } );
+	await openHistory();
+	await page.evaluate( () => document.querySelector( '[data-revlist]' ).click() );
+	await page.waitForSelector( '#minn-diff, #minn-restore-rev', { timeout: 10000 } );
 	await page.waitForTimeout( 400 );
-	const topText = await page.evaluate( () => [ ...document.querySelectorAll( '#minn-modal-overlay .minn-side-row' ) ].map( ( r ) => r.textContent ).join( ' ' ) );
+	const topText = await page.evaluate( () => document.querySelector( '#minn-modal-overlay' ).textContent );
 	t.check(
-		'top History row after restore is not an identical mirror',
+		'newest row after restore is not an identical mirror',
 		! /Identical to the current content/.test( topText ),
 		topText.slice( 0, 140 )
 	);
@@ -126,50 +140,44 @@ const V2 = '<!-- wp:paragraph --><p>The stable opening paragraph.</p><!-- /wp:pa
 	} ) );
 	await page.evaluate( () => document.querySelector( '#minn-modal-close' ).click() );
 
-	/* ===== View all revisions dialog when the post has a long history ===== */
+	/* ===== Long history: many rows + heatmap day filter ===== */
 	for ( let i = 0; i < 8; i++ ) {
 		await update( V2 + `<!-- wp:paragraph --><p>Extra rev ${ i }.</p><!-- /wp:paragraph -->` );
 	}
-	// Re-open so loadEditorRevisions runs against the longer list.
+	// Re-open so the dialog loads the longer list.
 	await openEditor( page, id );
-	await page.waitForSelector( '.minn-history-row', { timeout: 15000 } );
-	await page.waitForTimeout( 800 );
-	const moreUi = await page.evaluate( () => {
-		const more = document.querySelector( '#minn-history-all' );
-		const n = document.querySelectorAll( '.minn-history-row' ).length;
-		return { hasMore: !! more, moreText: more ? more.textContent.trim() : '', sideRows: n };
-	} );
-	t.check( 'History card caps the short list', moreUi.sideRows <= 5, String( moreUi.sideRows ) );
-	t.check( 'View all revisions control appears when there are more', moreUi.hasMore, JSON.stringify( moreUi ) );
+	await openHistory();
+	const longUi = await page.evaluate( () => ( {
+		rows: document.querySelectorAll( '[data-revlist]' ).length,
+		// Every cell carries data-revday; activity level classes l1–l4 mark
+		// days that actually have revisions (l0 = empty).
+		days: document.querySelectorAll( '.minn-rev-heat-cell:not(.l0)' ).length,
+	} ) );
+	t.check( 'dialog lists the long history', longUi.rows > 5, JSON.stringify( longUi ) );
+	t.check( 'heatmap marks the active day(s)', longUi.days >= 1, String( longUi.days ) );
 
-	if ( moreUi.hasMore ) {
-		await page.click( '#minn-history-all' );
-		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal' );
-			return m && ( m.textContent.includes( 'All revisions' ) )
-				&& ! m.textContent.includes( 'Loading revisions' );
-		}, null, { timeout: 20000 } ).catch( () => null );
-		const listUi = await page.evaluate( () => {
-			const rows = document.querySelectorAll( '[data-revlist]' );
-			return {
-				title: !! document.querySelector( '.minn-modal-title' )
-					&& /All revisions/.test( document.querySelector( '.minn-modal-title' ).textContent ),
-				n: rows.length,
-			};
-		} );
-		t.check( 'revisions list dialog shows many rows', listUi.title && listUi.n > 5, JSON.stringify( listUi ) );
-		await page.evaluate( () => {
-			const rows = document.querySelectorAll( '[data-revlist]' );
-			if ( rows.length ) rows[ rows.length - 1 ].click();
-		} );
-		await page.waitForSelector( '#minn-diff, #minn-restore-rev', { timeout: 15000 } );
-		t.check( 'picking a list row opens the revision diff',
-			!!( await page.$( '#minn-diff, #minn-restore-rev' ) ), '' );
-		await page.evaluate( () => {
-			const x = document.querySelector( '#minn-modal-close' );
-			if ( x ) x.click();
-		} );
-	}
+	// Day filter: all fixture revisions are today — clicking the marked day
+	// keeps the rows and offers Show all; clearing restores the full list.
+	await page.evaluate( () => document.querySelector( '.minn-rev-heat-cell:not(.l0):not([disabled])' ).click() );
+	await page.waitForSelector( '#minn-rev-day-clear', { timeout: 10000 } );
+	const filtered = await page.evaluate( () => document.querySelectorAll( '[data-revlist]' ).length );
+	t.check( 'clicking a heatmap day filters the list to that day', filtered >= 1 && filtered <= longUi.rows, String( filtered ) );
+	await page.click( '#minn-rev-day-clear' );
+	await page.waitForFunction( () => ! document.querySelector( '#minn-rev-day-clear' ), { timeout: 10000 } );
+	const unfiltered = await page.evaluate( () => document.querySelectorAll( '[data-revlist]' ).length );
+	t.check( 'Show all clears the day filter', unfiltered === longUi.rows, `${ unfiltered } vs ${ longUi.rows }` );
+
+	/* ===== Picking a list row opens the diff ===== */
+	await page.evaluate( () => {
+		const rows = document.querySelectorAll( '[data-revlist]' );
+		if ( rows.length ) rows[ rows.length - 1 ].click();
+	} );
+	await page.waitForSelector( '#minn-diff, #minn-restore-rev', { timeout: 15000 } );
+	t.check( 'picking a list row opens the revision diff', !! ( await page.$( '#minn-diff, #minn-restore-rev' ) ), '' );
+	await page.evaluate( () => {
+		const x = document.querySelector( '#minn-modal-close' );
+		if ( x ) x.click();
+	} );
 
 	await deletePost( page, id );
 	await t.done( browser, errors );
