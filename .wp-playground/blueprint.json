@@ -62,6 +62,30 @@
       "path": "/wordpress/wp-content/plugins/hello.php"
     },
     {
+      "step": "mkdir",
+      "path": "/wordpress/wp-content/plugins/minn-example-adapter"
+    },
+    {
+      "step": "writeFile",
+      "path": "/wordpress/wp-content/plugins/minn-example-adapter/minn-example-adapter.php",
+      "data": {
+        "resource": "url",
+        "url": "https://raw.githubusercontent.com/austinginder/minn-admin/main/docs/examples/minn-example-adapter/minn-example-adapter.php"
+      }
+    },
+    {
+      "step": "writeFile",
+      "path": "/wordpress/wp-content/plugins/minn-example-adapter/uninstall.php",
+      "data": {
+        "resource": "url",
+        "url": "https://raw.githubusercontent.com/austinginder/minn-admin/main/docs/examples/minn-example-adapter/uninstall.php"
+      }
+    },
+    {
+      "step": "wp-cli",
+      "command": "wp plugin activate minn-example-adapter --user=admin"
+    },
+    {
       "step": "wp-cli",
       "command": "wp post create --post_type=page --post_title='About Minn Admin' --post_status=publish --post_content='A reimagined WordPress admin experience.' --user=admin"
     },

@@ -60,7 +60,9 @@ contact-card entry detail, the Entries/Forms switcher and the `forms` family.
 - **Try it in a disposable WordPress.** Minn's readme has a one-click
   [WordPress Playground](https://playground.wordpress.net/) badge that boots a demo site
   with Minn installed — upload your plugin zip there and your surface is testable without
-  touching a real site.
+  touching a real site. The boot also preactivates the shim tutorial's example plugin
+  (the **Feedback** surface, seeded with demo rows), so a working instance of this API is
+  one click away before you write anything.
 - **Test as a non-admin.** Your descriptor's `cap` hides the surface from users without
   it, but your routes' `permission_callback` is the real boundary — log in as an editor
   or author and confirm both layers agree.
