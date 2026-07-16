@@ -555,7 +555,7 @@ class Minn_Admin {
 		$roles = array_values( $user->roles );
 		$role  = $roles ? wp_roles()->role_names[ $roles[0] ] ?? $roles[0] : '';
 
-		$block_forms = apply_filters( 'minn_admin_block_forms', array() );
+		$block_forms = self::filter_block_forms( apply_filters( 'minn_admin_block_forms', array() ) );
 
 		$boot = array(
 			'restUrl'  => esc_url_raw( rest_url() ),
@@ -818,10 +818,15 @@ class Minn_Admin {
 	 */
 	public static function design_sources() {
 		$sources = apply_filters( 'minn_admin_design_sources', array() );
+		$hidden  = Minn_Admin_Surfaces::hidden_map();
 		$out     = array();
 		foreach ( (array) $sources as $id => $src ) {
 			$id = sanitize_key( $id );
 			if ( '' === $id || ! is_array( $src ) || empty( $src['route'] ) || ! is_string( $src['route'] ) ) {
+				continue;
+			}
+			// Per-user hide (v1.0 gate G2) — hidden sources leave the payload.
+			if ( isset( $hidden[ 'design:' . $id ] ) ) {
 				continue;
 			}
 			$out[] = array(
@@ -851,10 +856,16 @@ class Minn_Admin {
 	 * @return array[]
 	 */
 	public static function editor_commands() {
-		$raw = apply_filters( 'minn_admin_editor_commands', array() );
-		$out = array();
+		$raw       = apply_filters( 'minn_admin_editor_commands', array() );
+		$hidden_ns = Minn_Admin_Surfaces::hidden_slash_map();
+		$out       = array();
 		foreach ( (array) $raw as $cmd ) {
 			if ( ! is_array( $cmd ) || empty( $cmd['id'] ) || empty( $cmd['label'] ) ) {
+				continue;
+			}
+			// Per-user hide (v1.0 gate G2): a hidden slash namespace takes its
+			// commands with it. Namespace-less commands are not hideable.
+			if ( ! empty( $cmd['ns'] ) && is_string( $cmd['ns'] ) && isset( $hidden_ns[ sanitize_key( $cmd['ns'] ) ] ) ) {
 				continue;
 			}
 			$id = preg_replace( '/[^a-z0-9_\-\/]/', '', strtolower( (string) $cmd['id'] ) );
@@ -1014,7 +1025,74 @@ class Minn_Admin {
 		usort( $out, function ( $a, $b ) {
 			return strcasecmp( $a['title'], $b['title'] );
 		} );
-		return apply_filters( 'minn_admin_insert_blocks', $out );
+		$out = apply_filters( 'minn_admin_insert_blocks', $out );
+
+		// Per-user hide (v1.0 gate G2), applied AFTER the shared transient and
+		// the filter so one user's hides never poison the cached probe list.
+		$hidden_ns = Minn_Admin_Surfaces::hidden_slash_map();
+		if ( $hidden_ns ) {
+			$out = array_values( array_filter( (array) $out, function ( $b ) use ( $hidden_ns ) {
+				return ! ( is_array( $b ) && isset( $b['ns'] ) && isset( $hidden_ns[ $b['ns'] ] ) );
+			} ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * Strip the `insert` template from block-form descriptors whose slash
+	 * namespace the current user hid — the hide removes the ADD affordance
+	 * only; the inspector form stays so existing blocks remain editable.
+	 */
+	public static function filter_block_forms( $block_forms ) {
+		$hidden_ns = Minn_Admin_Surfaces::hidden_slash_map();
+		if ( ! $hidden_ns || ! is_array( $block_forms ) ) {
+			return $block_forms;
+		}
+		foreach ( $block_forms as $name => $form ) {
+			if ( is_array( $form ) && isset( $form['insert'] ) && isset( $hidden_ns[ strtok( (string) $name, '/' ) ] ) ) {
+				unset( $block_forms[ $name ]['insert'] );
+			}
+		}
+		return $block_forms;
+	}
+
+	/**
+	 * Every slash namespace alive right now — the registry `slash:<ns>` hide
+	 * ids validate against. Union of registered non-core block namespaces,
+	 * block-form descriptor names, block pattern prefixes, and editor-command
+	 * namespaces (the four sources the slash menu / block picker draw from).
+	 */
+	public static function slash_namespaces() {
+		$ns = array();
+		foreach ( array_keys( WP_Block_Type_Registry::get_instance()->get_all_registered() ) as $name ) {
+			$p = strtok( (string) $name, '/' );
+			if ( 'core' !== $p && '' !== $p ) {
+				$ns[ $p ] = true;
+			}
+		}
+		foreach ( array_keys( (array) apply_filters( 'minn_admin_block_forms', array() ) ) as $name ) {
+			$p = strtok( (string) $name, '/' );
+			if ( 'core' !== $p && '' !== $p ) {
+				$ns[ $p ] = true;
+			}
+		}
+		if ( class_exists( 'WP_Block_Patterns_Registry' ) ) {
+			foreach ( WP_Block_Patterns_Registry::get_instance()->get_all_registered() as $p ) {
+				$prefix = empty( $p['name'] ) ? '' : strtok( (string) $p['name'], '/' );
+				if ( 'core' !== $prefix && '' !== $prefix ) {
+					$ns[ $prefix ] = true;
+				}
+			}
+		}
+		foreach ( (array) apply_filters( 'minn_admin_editor_commands', array() ) as $cmd ) {
+			if ( is_array( $cmd ) && ! empty( $cmd['ns'] ) && is_string( $cmd['ns'] ) ) {
+				$p = sanitize_key( $cmd['ns'] );
+				if ( '' !== $p ) {
+					$ns[ $p ] = true;
+				}
+			}
+		}
+		return array_keys( $ns );
 	}
 
 	/**

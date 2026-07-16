@@ -1154,6 +1154,10 @@
 		} else if ( id.indexOf( 'panel:' ) === 0 && state.route === 'editor' ) {
 			// Live re-add would need the post payload; be honest instead.
 			toast( `${ label || 'Panel' } restored. It returns the next time a post is opened.` );
+		} else if ( ( id.indexOf( 'slash:' ) === 0 || id.indexOf( 'design:' ) === 0 ) && state.route === 'editor' ) {
+			// The block picker reads B.* fresh on every open; the inline
+			// slash menu's items rebuild when the editor next renders.
+			toast( `${ label || 'Integration' } restored. The block picker has it now; the slash menu picks it up the next time the editor opens.` );
 		} else {
 			toast( `${ label || 'Integration' } restored` );
 		}
@@ -1164,6 +1168,16 @@
 		B.surfaces = r.surfaces || [];
 		B.editorPanels = r.editorPanels || [];
 		B.hidden = r.hidden || [];
+		// Editor-menu slices ride the same response (design sources, slash
+		// namespaces) so the picker and slash menu repaint without a reload.
+		if ( Array.isArray( r.designs ) ) B.designs = r.designs;
+		if ( Array.isArray( r.editorCommands ) ) B.editorCommands = r.editorCommands;
+		if ( r.blockForms ) B.blockForms = r.blockForms;
+		if ( Array.isArray( r.insertBlocks ) ) B.insertBlocks = r.insertBlocks;
+		if ( changedId && ( changedId.indexOf( 'slash:' ) === 0 || changedId.indexOf( 'design:' ) === 0 ) ) {
+			bustBlockPatterns();
+			pruneLiveSlashItems( changedId );
+		}
 		renderNavWorkspace();
 		// Hiding the surface you're standing on lands you back home.
 		if ( changedId === 'surface:' + state.route && ! surfaceById( state.route ) ) {
@@ -19738,6 +19752,28 @@
 		}
 		return blockPatternsPromise;
 	}
+	// Hiding a slash namespace filters the patterns route server-side — drop
+	// the cached list so the next open re-fetches.
+	function bustBlockPatterns() {
+		blockPatternsPromise = null;
+	}
+
+	// The inline slash menu builds its items array once per editor render; a
+	// mid-session hide prunes that live array in place so the very next keyup
+	// reflects it (unhides rebuild when the editor next renders).
+	let liveSlashItems = null;
+	function pruneLiveSlashItems( changedId ) {
+		if ( ! liveSlashItems ) return;
+		const kind = changedId.split( ':' )[ 0 ];
+		const key = changedId.slice( kind.length + 1 );
+		for ( let i = liveSlashItems.length - 1; i >= 0; i-- ) {
+			const action = liveSlashItems[ i ][ 2 ] || {};
+			const drop = kind === 'design'
+				? !! action.design && action.src === key
+				: liveSlashItems[ i ][ 4 ] === key && ! action.design;
+			if ( drop ) liveSlashItems.splice( i, 1 );
+		}
+	}
 
 	// Insert a pattern's markup as one island per top-level block. Patterns
 	// are ready-made SAVED markup, so islands are the safe landing: sections
@@ -19924,14 +19960,18 @@
 			items: basicSlashItems( blocksMode ).map( ( [ ic, label, action ] ) => ( { ic, label, meta: '', action } ) ),
 		} ];
 		const byKey = {};
-		const groupFor = ( key, title ) => {
-			if ( ! byKey[ key ] ) { byKey[ key ] = { title, items: [] }; groups.push( byKey[ key ] ); }
+		// `hide` names the per-user hide target for the group's heading menu:
+		// design sources hide individually, everything else hides by slash
+		// namespace (blocks + patterns + commands under one ns go together).
+		const groupFor = ( key, title, hide ) => {
+			if ( ! byKey[ key ] ) { byKey[ key ] = { title, items: [], hide: hide || null }; groups.push( byKey[ key ] ); }
 			return byKey[ key ];
 		};
+		const nsHide = ( ns ) => ( ns ? { id: 'slash:' + ns, label: prettyNs( ns ) } : null );
 		// Plugin commands (minn_admin_editor_commands) — group by ns badge.
 		editorCommandSlashItems().forEach( ( [ ic, label, action, _so, ns, keywords ] ) => {
 			const title = ns ? prettyNs( ns ) + ' · commands' : 'Commands';
-			groupFor( 'c:' + ( ns || '_' ), title ).items.push( {
+			groupFor( 'c:' + ( ns || '_' ), title, nsHide( ns ) ).items.push( {
 				ic, label, meta: '', action, keywords: keywords || [],
 			} );
 		} );
@@ -19940,13 +19980,13 @@
 				const ins = ( B.blockForms[ name ] || {} ).insert;
 				if ( ! ins || ! ins.template ) return;
 				const ns = name.split( '/' )[ 0 ];
-				groupFor( 'b:' + ns, prettyNs( ns ) + ' · blocks' ).items.push( {
+				groupFor( 'b:' + ns, prettyNs( ns ) + ' · blocks', nsHide( ns ) ).items.push( {
 					ic: icon( 'block' ), label: ins.label || name.split( '/' ).pop(), meta: '',
 					action: { block: name, template: String( ins.template ) },
 				} );
 			} );
 			( B.insertBlocks || [] ).forEach( ( b ) => {
-				groupFor( 'b:' + b.ns, prettyNs( b.ns ) + ' · blocks' ).items.push( {
+				groupFor( 'b:' + b.ns, prettyNs( b.ns ) + ' · blocks', nsHide( b.ns ) ).items.push( {
 					ic: icon( 'block' ), label: b.title, meta: '',
 					action: { block: b.name, template: `<!-- wp:${ b.name } /-->` },
 				} );
@@ -19959,8 +19999,9 @@
 			if ( ! pickerEl ) return; // closed while loading
 			designSets.forEach( ( designs, si ) => {
 				const src = sources[ si ];
+				const label = src.label || prettyNs( src.id );
 				designs.forEach( ( d ) => {
-					groupFor( 'd:' + src.id, ( src.label || prettyNs( src.id ) ) + ' · designs' ).items.push( {
+					groupFor( 'd:' + src.id, label + ' · designs', { id: 'design:' + src.id, label } ).items.push( {
 						ic: icon( 'block' ), label: d.label, meta: d.category || '',
 						action: { design: d.id, src: src.id },
 					} );
@@ -19968,7 +20009,7 @@
 			} );
 			pats.forEach( ( pt ) => {
 				if ( pt.postTypes && ed.type && ! pt.postTypes.includes( ed.type ) ) return;
-				groupFor( 'p:' + pt.ns, prettyNs( pt.ns ) + ' · patterns' ).items.push( {
+				groupFor( 'p:' + pt.ns, prettyNs( pt.ns ) + ' · patterns', nsHide( pt.ns ) ).items.push( {
 					ic: icon( 'block' ), label: pt.title, meta: '',
 					action: { pattern: pt.name },
 				} );
@@ -19989,7 +20030,7 @@
 						return Array.isArray( kws ) && kws.some( ( k ) => String( k ).toLowerCase().includes( q ) );
 					} );
 				if ( ! vis.length ) return '';
-				return `<section class="minn-bp-group"><h3>${ esc( g.title ) } <span>${ vis.length }</span></h3>
+				return `<section class="minn-bp-group"><h3 data-bpg="${ gi }"${ g.hide ? ` title="Right-click to hide “${ esc( g.hide.label ) }” for you"` : '' }>${ esc( g.title ) } <span>${ vis.length }</span></h3>
 					<div class="minn-bp-grid">${ vis.map( ( { it, j } ) => `
 						<button type="button" class="minn-bp-item" data-bp="${ gi }:${ j }">
 							<span class="minn-bp-ic">${ it.ic }</span>
@@ -20000,6 +20041,32 @@
 		};
 		renderGroups( '' );
 		searchInput.addEventListener( 'input', () => renderGroups( searchInput.value ) );
+
+		// Per-user hide (v1.0 gate G2): right-click a plugin group's heading.
+		// One slash namespace can span blocks + patterns + commands groups —
+		// hiding it removes every group carrying the same hide id. Basics and
+		// namespace-less commands are core chrome: no menu.
+		bpBody.addEventListener( 'contextmenu', ( e ) => {
+			const h = e.target.closest( '.minn-bp-group h3' );
+			if ( ! h ) return;
+			const g = groups[ Number( h.dataset.bpg ) ];
+			if ( ! g || ! g.hide ) return;
+			e.preventDefault();
+			const { id, label } = g.hide;
+			openMinnMenu( e.clientX, e.clientY, [
+				{ label: `Hide “${ label }” for you`, run: async () => {
+					try {
+						await setIntegrationHidden( id, true, label );
+						for ( let i = groups.length - 1; i >= 0; i-- ) {
+							if ( groups[ i ].hide && groups[ i ].hide.id === id ) groups.splice( i, 1 );
+						}
+						if ( pickerEl ) renderGroups( searchInput.value );
+					} catch ( err ) {
+						toast( err.message, true );
+					}
+				} },
+			] );
+		} );
 
 		bpBody.addEventListener( 'click', ( e ) => {
 			const btn = e.target.closest( '[data-bp]' );
@@ -20242,6 +20309,7 @@
 		let filtered = [];
 		let query = '';
 		const items = basicSlashItems( state.editor && state.editor.mode === 'blocks' );
+		liveSlashItems = items; // per-user hide prunes this array in place
 		// Plugin-declared slash commands (html / template / route). Available
 		// in classic and blocks — template/route-island inserts promote via
 		// ensureBlocksMode inside runSlashAction.
@@ -22054,8 +22122,8 @@
 							${ B.hidden.map( ( h ) => `
 							<div class="minn-session-row">
 								<div class="minn-session-info">
-									<div class="minn-session-ua">${ esc( h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
-									<div class="minn-session-meta">${ h.kind === 'panel' ? 'Editor panel' : 'Sidebar surface' }</div>
+									<div class="minn-session-ua">${ esc( h.kind === 'slash' ? prettyNs( h.label ) : h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
+									<div class="minn-session-meta">${ { panel: 'Editor panel', design: 'Design library', slash: 'Editor blocks and commands' }[ h.kind ] || 'Sidebar surface' }</div>
 								</div>
 								<button class="minn-comment-action" data-unhide="${ esc( h.id ) }">Restore</button>
 							</div>` ).join( '' ) }

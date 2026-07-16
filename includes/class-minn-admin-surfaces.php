@@ -76,7 +76,7 @@ class Minn_Admin_Surfaces {
 	 * visible to this user's caps) — hide never stores junk ids.
 	 */
 	public static function is_registered_integration( $id ) {
-		if ( ! preg_match( '/^(surface|panel):([a-z0-9_-]+)$/', (string) $id, $m ) ) {
+		if ( ! preg_match( '/^(surface|panel|design|slash):([a-z0-9_-]+)$/', (string) $id, $m ) ) {
 			return false;
 		}
 		if ( 'surface' === $m[1] ) {
@@ -87,12 +87,36 @@ class Minn_Admin_Surfaces {
 			$cap = isset( $all[ $m[2] ]['cap'] ) ? $all[ $m[2] ]['cap'] : 'manage_options';
 			return current_user_can( $cap );
 		}
+		if ( 'design' === $m[1] ) {
+			// Validate against the RAW registry (the resolved list already
+			// filters this user's hides, which would wrongly refuse re-hides).
+			$sources = apply_filters( 'minn_admin_design_sources', array() );
+			return is_array( $sources ) && isset( $sources[ $m[2] ] ) && current_user_can( 'edit_posts' );
+		}
+		if ( 'slash' === $m[1] ) {
+			return in_array( $m[2], Minn_Admin::slash_namespaces(), true ) && current_user_can( 'edit_posts' );
+		}
 		$panels = apply_filters( 'minn_admin_editor_panels', array() );
 		if ( ! is_array( $panels ) || ! isset( $panels[ $m[2] ] ) ) {
 			return false;
 		}
 		$cap = isset( $panels[ $m[2] ]['cap'] ) ? $panels[ $m[2] ]['cap'] : 'edit_posts';
 		return current_user_can( $cap );
+	}
+
+	/**
+	 * Slash namespaces the current user hid ( ns => true ) — consumed by the
+	 * editor payload builders (insertable blocks, patterns, commands, block
+	 * form insert templates) so hidden namespaces leave every menu source.
+	 */
+	public static function hidden_slash_map() {
+		$out = array();
+		foreach ( self::hidden_map() as $key => $ts ) {
+			if ( 0 === strpos( (string) $key, 'slash:' ) ) {
+				$out[ substr( $key, 6 ) ] = true;
+			}
+		}
+		return $out;
 	}
 
 	public static function hide_integration( $id ) {
@@ -165,6 +189,43 @@ class Minn_Admin_Surfaces {
 				'label' => isset( $panel['label'] ) ? (string) $panel['label'] : $id,
 				'sub'   => isset( $panel['sub'] ) ? (string) $panel['sub'] : '',
 			);
+		}
+		if ( current_user_can( 'edit_posts' ) ) {
+			// Design libraries and slash namespaces — same still-registered
+			// rule as above (raw registry: the resolved lists already omit
+			// this user's hides).
+			$sources = apply_filters( 'minn_admin_design_sources', array() );
+			foreach ( ( is_array( $sources ) ? $sources : array() ) as $id => $src ) {
+				$key = 'design:' . sanitize_key( $id );
+				if ( ! isset( $hidden[ $key ] ) ) {
+					continue;
+				}
+				$label = is_array( $src ) && ! empty( $src['label'] ) && is_string( $src['label'] )
+					? $src['label']
+					: ucfirst( sanitize_key( $id ) );
+				$out[] = array(
+					'id'    => $key,
+					'kind'  => 'design',
+					'label' => $label,
+					'sub'   => '',
+				);
+			}
+			$live_ns = Minn_Admin::slash_namespaces();
+			foreach ( $hidden as $key => $ts ) {
+				if ( 0 !== strpos( (string) $key, 'slash:' ) ) {
+					continue;
+				}
+				$ns = substr( $key, 6 );
+				if ( ! in_array( $ns, $live_ns, true ) ) {
+					continue;
+				}
+				$out[] = array(
+					'id'    => (string) $key,
+					'kind'  => 'slash',
+					'label' => $ns,
+					'sub'   => '',
+				);
+			}
 		}
 		return $out;
 	}
