@@ -138,16 +138,13 @@ Two tracks, both in service of the gates above.
 - **Screenshots** of every primitive (surface list, detail kinds, status card,
   setup gate, settings view, editor panel, slash entry) captured the same way
   the marketing shots are.
-- **The forms-family companion** (from the 2026-07-16 re-review, which scored
-  the restructured docs 8/10, up from 7.5): a forms plugin specifically still
-  reads bundled adapter source for dynamic field-id columns
-  (`entry-summary`), per-form dynamic tabs, the Entries/Forms `manage` shape,
-  and `family` semantics (when to declare it, what coexistence looks like).
-  A second worked example or a "make your forms plugin a first-class Forms
-  provider" section closes it. Also worth a line each: an export/download
-  pattern (CSV via `href`?), DELETE-method actions, column sortability (not
-  a thing; say so), `WP_Error` handling on `create`, and what an older Minn
-  does with newer descriptor keys.
+- ~~**The forms-family companion**~~ *(shipped 2026-07-16, same day as the
+  re-review that asked for it: the "Make your forms plugin a first-class
+  Forms provider" section — worked descriptor with per-form dynamic tabs,
+  `entry-summary` semantics, the entry-kind hero/body heuristics, `manage`,
+  `family` coexistence, the `href` export pattern — plus the small facts in
+  their natural homes: DELETE actions, column sortability stated, `WP_Error`
+  on create, older-Minn degrade behavior, `detail.labels` response shape.)*
 - **Kill the extension-api.md trap**: historical banner on top pointing at
   for-plugin-authors.md (done in this cycle's audit commit), then fold the
   still-useful rationale into the author guide and delete the file.

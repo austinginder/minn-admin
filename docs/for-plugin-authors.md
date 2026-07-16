@@ -41,6 +41,11 @@ real, working plugin you can copy — [`docs/examples/minn-example-adapter/`](ex
 — and Minn's own test suite drives it end to end, so the example can never drift from the
 contract.
 
+**Building a forms plugin?** After the tutorial, the
+[first-class Forms provider recipe](#make-your-forms-plugin-a-first-class-forms-provider)
+covers the forms-specific machinery: per-form tabs, `entry-summary` columns, the
+contact-card entry detail, the Entries/Forms switcher and the `forms` family.
+
 ## Test your integration
 
 - **The Integrations card is your build-time debugger.** Open Minn's System page
@@ -101,6 +106,9 @@ rarely, and additively:
 - Keys you find in Minn's bundled adapters but not on this page are internal and may
   change without notice. If you need one, open an issue so it can be documented and
   stabilized here.
+- Declaring a key an installed Minn doesn't know yet is safe: the renderer ignores
+  unknown keys (the feature is simply absent on that install) and the Integrations card
+  may flag them as unknown. No version detection needed — degrade is the design.
 
 ## Users can hide your integration
 
@@ -364,20 +372,21 @@ Rules of the road:
 | `itemsKey` / `totalKey` | Where items/total live in the response body. Omit both for standard WP collections (plain array + `X-WP-Total` header) |
 | `tabs` | Either `{ "route": "...", "valueKey": "id", "labelKey": "title" }` to build tabs from a REST call, or `{ "param": "status", "static": [["sent","Sent"],["failed","Failed"]] }` for fixed tabs sent as a query param. `allLabel` names the first tab |
 | `viewLabel` | Names this collection in the view switcher (with `manage`) and in the search placeholder |
-| `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `entry-summary` (for form-entry rows whose answers live under numeric field-id keys: renders the first few answer values as the row's summary — see any bundled forms adapter's list). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`) |
+| `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `entry-summary` (for form-entry rows whose answers live under numeric field-id keys: renders the first few answer values as the row's summary — see any bundled forms adapter's list). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`). Column headers are not sortable — list order is fixed by your route, so declare your sort in `query` (newest-first is the convention) |
 | `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `sectionsRoute` (server-built display model, an alternative to `detailRoute` + `labels`, below), `labels` (resolve numeric field-id keys to human labels — the per-form fields case: `{ "route": "your/v1/forms/{form_id}/fields", "valueKey": "id", "labelKey": "label", "itemsKey": "fields" }`. `{placeholders}` in the route fill from the item, Minn maps `valueKey` → `labelKey` over the response array — or over `itemsKey` inside it — and caches the map per route URL. Fixed-schema items skip `labels` entirely: snake_case response keys already render as words), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
 | `actions` | Buttons in the detail modal **and** the list-row ⋯ / right-click menu: `{ label, method, route, body, confirm, danger, when, href, fields, settingsItem, list }` — each key detailed in [the `actions` section](#collectionactions--verbs-on-rows-and-in-the-detail-modal) below |
 | `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request. For APIs that take search criteria as a JSON string (Gravity Forms), use the object form: `array( 'param' => 'search', 'json' => <criteria array with '{q}' where the term goes> )` — the term is JSON-escaped and the criteria double-URL-encoded to match APIs that `urldecode()` the param themselves |
 | `filter` *(v0.12)* | A second list dimension beside `tabs`, rendered as a segmented control — shapes and the json-merge rule in [the `filter` section](#collectionfilter--a-second-dimension-beside-tabs) below |
 | `bulk` | Bulk actions: the same shape as `actions` minus `href` (a batch always needs a `route`). Declaring any adds a checkbox column (shift-range, Select page) and a selection bar. Each action runs **per selected item** (`{id}` replaced; one failure never aborts the rest), `when` is evaluated per item so a mixed selection skips ineligible rows, a button whose `when` matches nothing on the current page isn't offered at all, and the result toast reports done / skipped / failed |
-| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array), `email`, `url`. Every field is required unless it declares `required: false` |
+| `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array), `email`, `url`. Every field is required unless it declares `required: false`. A failed create (your route returning `WP_Error`) toasts your error message and keeps the form open as typed |
 
 ### `collection.actions` — verbs on rows and in the detail modal
 
 Each action is `{ label, method, route, body, confirm, danger, when, href, fields,
 settingsItem, list }`:
 
-- **`route`** — `{id}` is replaced with the item id; `method` defaults to POST; `body`
+- **`route`** — `{id}` is replaced with the item id; `method` defaults to POST (DELETE is
+  fine — several bundled adapters use it for permanent removal); `body`
   merges into the request. The route may return `{ "message": "…" }` to replace the
   default "⟨label⟩ — done" toast — the honest channel for outcomes the label can't
   promise (the bundled Gravity SMTP send-a-test reports when another active mailer
@@ -465,6 +474,99 @@ usually don't need `kind` at all. A row's `type` hints rendering (`email` and `u
 values become links). `adminUrl` links the item's wp-admin screen and suppresses any
 `href` action that points at the same place. The bundled Gravity Forms adapter
 (entries) and WP Activity Log adapter (events) are the references.
+
+## Make your forms plugin a first-class Forms provider
+
+Forms plugins are the shape this API was built around, and they get extra machinery for
+free. The pieces, with the exact shapes the bundled forms adapters use (Gravity Forms,
+Ninja Forms, Forminator, Formidable, Fluent Forms, CF7 via Flamingo and CFDB7):
+
+```php
+$surfaces['driftwood'] = array(
+    'label'      => 'Forms',
+    'sub'        => 'Driftwood',
+    'icon'       => 'inbox',
+    'cap'        => 'read',            // adapter-side gating: your routes check your own access model
+    'family'     => 'forms',           // join the Forms provider switcher
+    'group'      => 'workspace',       // entries are inbox-shaped
+    'collection' => array(
+        'viewLabel' => 'Entries',
+        // Dynamic per-form tabs: {tab} in the route + an All route.
+        'route'     => 'driftwood/v1/forms/{tab}/entries',
+        'allRoute'  => 'driftwood/v1/entries',
+        'tabs'      => array(
+            'route'    => 'driftwood/v1/forms',   // one tab per form
+            'valueKey' => 'id',
+            'labelKey' => 'title',
+            'allLabel' => 'All forms',
+        ),
+        'itemsKey'  => 'items',
+        'totalKey'  => 'total',
+        'search'    => 'search={q}',
+        'columns'   => array(
+            // Answers live under numeric field-id keys → entry-summary.
+            array( 'key' => 'id', 'label' => 'Entry', 'format' => 'entry-summary' ),
+            array( 'key' => 'form_title', 'label' => 'Form' ),
+            array( 'key' => 'created', 'label' => 'Date', 'format' => 'ago', 'utc' => true ),
+        ),
+        'detail'    => array( 'sectionsRoute' => 'driftwood/v1/entries/{id}/view' ),
+        'actions'   => array(
+            array( 'label' => 'Mark as spam', 'route' => 'driftwood/v1/entries/{id}/spam', 'when' => array( 'key' => 'status', 'equals' => 'active' ) ),
+            array( 'label' => 'Export CSV ↗', 'href' => 'https://example.com/wp-json/driftwood/v1/forms/{form_id}/export?token={export_token}' ),
+            array( 'label' => 'Delete', 'route' => 'driftwood/v1/entries/{id}', 'method' => 'DELETE', 'confirm' => 'Delete permanently?', 'danger' => true ),
+        ),
+    ),
+    'manage'     => array(
+        'viewLabel' => 'Forms',
+        'route'     => 'driftwood/v1/forms',
+        'columns'   => array(
+            array( 'key' => 'title', 'label' => 'Form', 'format' => 'title' ),
+            array( 'key' => 'entry_count', 'label' => 'Entries', 'format' => 'num' ),
+        ),
+    ),
+);
+```
+
+Piece by piece:
+
+- **`family: 'forms'`** — declare it. Same-family surfaces share one sidebar entry with
+  a provider switcher in the topbar badge, and the user's pick is remembered per family.
+  Coexistence with Gravity Forms (or anyone) is exactly that: your plugin becomes one of
+  the providers behind the single **Forms** nav item, never a second sidebar row. The
+  family also switches entry details to the contact-card layout (below) automatically.
+- **Dynamic tabs** pair with `{tab}` in the route: the tabs route returns your forms
+  (array, or any object whose values are the forms), `valueKey` fills `{tab}`,
+  `labelKey` names the tab, and `allRoute` serves the All tab. (Static `param` tabs and
+  dynamic route tabs are the two forms of `tabs` — pick one; a status dimension beside
+  the form tabs is what `filter` is for.)
+- **`entry-summary`** is the list column for per-form field shapes: it collects the
+  item's values under **numeric keys** (`"1"`, `"2.3"` — field ids), sorts them
+  numerically, and shows the first three short ones (≤ 60 chars, single-line) joined
+  with `·`. Long and multi-line answers stay in the detail. If your ids aren't numeric,
+  send a ready-made `summary` string on each item instead — it wins over the heuristic.
+- **The entry detail** should be a `sectionsRoute` returning `kind: "entry"` — the
+  contact-card layout: name and email hero, message body, quiet meta. Minn picks the
+  hero and body rows from your sections: the **answers** are the section titled like
+  "Response" (else the first section), the **meta** is the one titled like "Submission"
+  (else the second). Within the answers, a row's optional `type` is the strongest hint
+  (`name`, `email`, `textarea` or `post_content` for the message body); without types,
+  labels ("Name", "Email", "Message…") and value shape (an email-looking string, a
+  multi-line or 120+ char value) decide. Send `form_name` on the item and the modal is
+  titled with it, subtitled "Entry #id".
+- **`manage`** is the Forms companion view — the Entries/Forms switcher every forms
+  plugin wants. Keep it a list (title, entry count, maybe an activate toggle via a
+  `when`-pair of actions); the form **builder** stays your own UI, linked honestly with
+  an `href` action (`'label' => 'Edit form ↗'`). Minn will not reimplement it.
+- **Export** is an `href` action pointing at your own download endpoint, with
+  `{field}` placeholders filled from the item (put a nonce or signed token in the item
+  so the link is self-authorizing — action `href`s open as plain new-tab links and
+  carry no REST headers). Minn has no streaming-download primitive; the honest link is
+  the pattern.
+
+The [shim tutorial](shim-tutorial.md)'s Campfire example is this recipe minus the
+per-form machinery — start there for the table/shim mechanics, then add the pieces
+above. For a production-grade reference of the full shape, the bundled
+`includes/adapters/gravity-forms.php` is the deepest instance.
 
 ## Hook reference
 
