@@ -1,6 +1,6 @@
 # Changelog
 
-## **v0.16.0** - Unreleased
+## **v0.16.0** - July 16, 2026
 
 The personalization and polish cycle. Minn now looks and behaves per user: named color schemes for light and dark (or a fully custom palette) picked on Your profile, and preferring Minn as the default admin becomes an opt-in per-user choice. Lists calm down across the app: tab, filter, and search changes keep toolbars painted and dim in place instead of flashing a Loading screen, on Content, Media, the commerce views, and plugin surfaces alike. The editor gets quieter and deeper at once: secondary meta tucks behind door rows, revisions open with an activity heatmap, the schedule calendar shows what is already planned, and long titles finally wrap. Licenses keep growing with Yoast SEO Premium and the Smash Balloon family, activity logs gain status cards, and updating a single plugin or theme no longer wipes every other pending offer.
 

@@ -4,7 +4,7 @@ Tags: admin, dashboard, ui, admin theme
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.15.0
+Stable tag: 0.16.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -52,6 +52,12 @@ Try it instantly in WordPress Playground (launch link and blueprint): https://gi
 Pretty permalinks are recommended. Without them the app is served at `/?minn_admin=1`.
 
 == Changelog ==
+
+= 0.16.0 =
+* Per-user appearance: named color schemes for light and dark, or a fully custom palette with per-slot pickers, chosen on Your profile. Preferring Minn as the default admin is now an opt-in per-user choice.
+* Lists stay calm: tab, filter and search changes keep toolbars painted and dim in place across Content, Media, the commerce views and plugin surfaces. Updating a single plugin or theme no longer clears every other pending offer.
+* Editor: secondary meta tucks behind door rows, revisions open with an activity heatmap and day filter, the schedule calendar shows what is already planned, the link popover gains open-in-new-tab, and long titles wrap.
+* Licenses grow with Yoast SEO Premium and the Smash Balloon family. Activity Log status cards (Simple History, WP Activity Log, Stream, Aryo), Gravity SMTP bulk log delete, Rank Math social thumbnail, Users ID column with sorting and a session filter. Full details in changelog.md.
 
 = 0.15.0 =
 * Performance family: Autoptimize, Asset CleanUp and Performance Lab join Perfmatters under one Tools item. Add plugin catalog by category with install tips. Meta Box and Pods editor panels. WooCommerce Subscriptions surface. Traffic day drill-down for Burst and Independent Analytics. Safe SVG media tab.
