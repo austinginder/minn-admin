@@ -10369,7 +10369,8 @@
 		const intg = s.integrations;
 		if ( intg ) {
 			const probs = ( r ) => ( r.problems && r.problems.length ? ` — PROBLEMS: ${ r.problems.join( '; ' ) }` : '' )
-				+ ( r.offsite && r.offsite.length ? ` — OFF-SITE LINKS: ${ r.offsite.join( '; ' ) }` : '' );
+				+ ( r.offsite && r.offsite.length ? ` — OFF-SITE LINKS: ${ r.offsite.join( '; ' ) }` : '' )
+				+ ( r.notes && r.notes.length ? ` — NOTES: ${ r.notes.join( '; ' ) }` : '' );
 			lines.push( '', '## Integrations' );
 			intg.surfaces.forEach( ( r ) => lines.push( `- Surface ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
 			intg.panels.forEach( ( r ) => lines.push( `- Editor panel ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
@@ -10501,6 +10502,7 @@
 				<span class="minn-sys-ext-name">${ esc( r.label || r.id ) } <span class="minn-sys-ext-parent mono">${ esc( r.id ) }</span>${ meta ? ` <span class="minn-sys-ext-parent">${ esc( meta ) }</span>` : '' }
 					${ ( r.problems || [] ).map( ( p ) => `<div class="minn-sys-int-problem">${ icon( 'warn' ) }${ esc( p ) }</div>` ).join( '' ) }
 					${ ( r.offsite || [] ).map( ( p ) => `<div class="minn-sys-int-offsite">${ icon( 'globe' ) }${ esc( p ) }</div>` ).join( '' ) }
+					${ ( r.notes || [] ).map( ( p ) => `<div class="minn-sys-int-note">${ icon( 'grid' ) }${ esc( p ) }</div>` ).join( '' ) }
 				</span>
 				<span class="minn-sys-ext-ver">${ esc( r.owner || '' ) }</span>
 			</div>`;
@@ -20310,10 +20312,27 @@
 		let query = '';
 		const items = basicSlashItems( state.editor && state.editor.mode === 'blocks' );
 		liveSlashItems = items; // per-user hide prunes this array in place
+		// Attention budget (v1.0 gate G3): a namespace holds at most 3 slots
+		// in the DEFAULT slash menu (commands first, insert templates after —
+		// registration order within each). Overflow demotes to search-only:
+		// nothing is dropped, it surfaces on typing like the auto blocks.
+		// Namespace-less commands share one pool so omitting `ns` can't
+		// evade the budget. The block picker (browse-everything) is uncapped.
+		const nsSlots = {};
+		const overBudget = ( ns ) => {
+			const k = ns || '_';
+			nsSlots[ k ] = ( nsSlots[ k ] || 0 ) + 1;
+			return nsSlots[ k ] > 3;
+		};
 		// Plugin-declared slash commands (html / template / route). Available
 		// in classic and blocks — template/route-island inserts promote via
 		// ensureBlocksMode inside runSlashAction.
-		editorCommandSlashItems().forEach( ( it ) => items.push( it ) );
+		editorCommandSlashItems().forEach( ( it ) => {
+			if ( ! it[ 3 ] && overBudget( it[ 4 ] ) ) {
+				it = [ it[ 0 ], it[ 1 ], it[ 2 ], true, it[ 4 ], it[ 5 ] ];
+			}
+			items.push( it );
+		} );
 		// Custom blocks that declared an `insert` template via
 		// minn_admin_block_forms land as configurable islands — blocks mode
 		// only (classic serialization would flatten them to plain HTML).
@@ -20321,7 +20340,8 @@
 			Object.keys( B.blockForms || {} ).forEach( ( name ) => {
 				const ins = ( B.blockForms[ name ] || {} ).insert;
 				if ( ! ins || ! ins.template ) return;
-				items.push( [ ins.icon || '❖', ins.label || name.split( '/' ).pop(), { block: name, template: String( ins.template ) } ] );
+				const ns = name.split( '/' )[ 0 ];
+				items.push( [ ins.icon || '❖', ins.label || name.split( '/' ).pop(), { block: name, template: String( ins.template ) }, overBudget( ns ), ns ] );
 			} );
 			// Every other dynamic third-party block is insertable with no
 			// adapter — a self-closing comment is always valid saved markup

@@ -58,7 +58,10 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	const openPicker = async () => {
 		await page.click( '#minn-editor-body' );
 		await page.keyboard.press( 'Meta+/' );
-		await page.waitForSelector( '.minn-bp-group', { timeout: 20000 } );
+		// The picker awaits EVERY design source before rendering any group —
+		// a cold Kadence/Stackable cloud-cache refresh can take >20s, so this
+		// wait is generous (the suites' one network-dependent spot).
+		await page.waitForSelector( '.minn-bp-group', { timeout: 90000 } );
 		// Design/pattern groups land async — settle until group count is stable.
 		let prev = -1;
 		for ( let i = 0; i < 20; i++ ) {

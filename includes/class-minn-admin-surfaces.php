@@ -32,8 +32,21 @@ class Minn_Admin_Surfaces {
 	 */
 	public static function for_current_user() {
 		$hidden = self::hidden_map();
-		$out    = array();
-		foreach ( self::all() as $id => $surface ) {
+		// contributions() is a single attributing pass over the same filter
+		// stack apply_filters would run — owner names come along at no extra
+		// filter cost, and the owner nav budget below needs them.
+		$reg    = self::contributions( 'minn_admin_surfaces' );
+		$owners = array();
+		$own    = array();
+		foreach ( $reg['owners'] as $raw_id => $name ) {
+			$owners[ sanitize_key( $raw_id ) ] = $name;
+			$own[ sanitize_key( $raw_id ) ]    = ! empty( $reg['own'][ $raw_id ] );
+		}
+		$out = array();
+		foreach ( ( is_array( $reg['value'] ) ? $reg['value'] : array() ) as $id => $surface ) {
+			if ( ! is_array( $surface ) ) {
+				continue;
+			}
 			$cap = isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options';
 			if ( ! current_user_can( $cap ) ) {
 				continue;
@@ -44,6 +57,11 @@ class Minn_Admin_Surfaces {
 			if ( isset( $hidden[ 'surface:' . sanitize_key( $id ) ] ) ) {
 				continue;
 			}
+			// Attention budget (v1.0 gate G3): workspace is for inbox-shaped
+			// surfaces. Anything else claiming it degrades to Tools.
+			if ( isset( $surface['group'] ) && 'workspace' === $surface['group'] && ! self::inbox_shaped( $surface ) ) {
+				$surface['group'] = 'tools';
+			}
 			unset( $surface['cap'] );
 			$surface['id'] = sanitize_key( $id );
 			$surface       = self::with_setup_state( $surface );
@@ -51,7 +69,61 @@ class Minn_Admin_Surfaces {
 			$surface       = self::with_views_state( $surface );
 			$out[]         = $surface;
 		}
-		return $out;
+		return self::collapse_owner_surfaces( $out, $owners, $own );
+	}
+
+	/**
+	 * The workspace nav group is for inbox-shaped surfaces: a time-ordered
+	 * stream of incoming items (form entries, messages). The mechanical test
+	 * is a main collection with at least one `ago` column — settings pages,
+	 * catalogs and manage lists don't qualify and land under Tools instead.
+	 */
+	private static function inbox_shaped( $surface ) {
+		$cols = isset( $surface['collection']['columns'] ) && is_array( $surface['collection']['columns'] )
+			? $surface['collection']['columns']
+			: array();
+		foreach ( $cols as $col ) {
+			if ( is_array( $col ) && isset( $col['format'] ) && 'ago' === $col['format'] ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Attention budget (v1.0 gate G3): one plugin holds at most this many
+	 * nav slots. An owner with more visible surfaces gets its family-less
+	 * ones collapsed into a single synthetic family — the existing switcher
+	 * mechanics render them as one nav item and one palette row, so nothing
+	 * is dropped. Surfaces already in a real family keep it (families are
+	 * already collapsed slots). Minn's own bundled adapters are exempt — by
+	 * registration-file location, never by owner display name (symlinked
+	 * installs break name attribution): each registers only while its
+	 * subject plugin is active, so the one-plugin-many-surfaces vector this
+	 * guards against does not apply to them. 'Unknown' owners are exempt
+	 * too — attribution failures must never collapse strangers together.
+	 */
+	const OWNER_NAV_BUDGET = 3;
+
+	private static function collapse_owner_surfaces( $surfaces, $owners, $own ) {
+		$counts = array();
+		foreach ( $surfaces as $s ) {
+			$owner = isset( $owners[ $s['id'] ] ) ? $owners[ $s['id'] ] : '';
+			if ( '' === $owner || 'Unknown' === $owner || ! empty( $own[ $s['id'] ] ) ) {
+				continue;
+			}
+			$counts[ $owner ] = isset( $counts[ $owner ] ) ? $counts[ $owner ] + 1 : 1;
+		}
+		foreach ( $surfaces as $i => $s ) {
+			$owner = isset( $owners[ $s['id'] ] ) ? $owners[ $s['id'] ] : '';
+			if ( empty( $counts[ $owner ] ) || $counts[ $owner ] <= self::OWNER_NAV_BUDGET || ! empty( $own[ $s['id'] ] ) ) {
+				continue;
+			}
+			if ( empty( $s['family'] ) ) {
+				$surfaces[ $i ]['family'] = 'plugin-' . sanitize_title( $owner );
+			}
+		}
+		return $surfaces;
 	}
 
 	/* ===== Per-user integration hiding =====
@@ -400,12 +472,35 @@ class Minn_Admin_Surfaces {
 	 * @param array  $initial Seed value (what the caller passes to apply_filters).
 	 * @return array { value: final array, owners: entry-key => owner name }
 	 */
+	/**
+	 * The file a hook callback is defined in ('' when unresolvable). Used to
+	 * recognize Minn's OWN registrations by location rather than by owner
+	 * display name — symlinked installs resolve bundled adapter files outside
+	 * WP_PLUGIN_DIR, which breaks name attribution but never this prefix.
+	 */
+	private static function callback_file( $fn ) {
+		try {
+			if ( is_array( $fn ) && isset( $fn[0], $fn[1] ) ) {
+				$ref = new ReflectionMethod( $fn[0], $fn[1] );
+			} elseif ( is_object( $fn ) && ! ( $fn instanceof Closure ) && method_exists( $fn, '__invoke' ) ) {
+				$ref = new ReflectionMethod( $fn, '__invoke' );
+			} else {
+				$ref = new ReflectionFunction( $fn );
+			}
+			return $ref->getFileName() ? wp_normalize_path( $ref->getFileName() ) : '';
+		} catch ( \Throwable $e ) {
+			return '';
+		}
+	}
+
 	private static function contributions( $hook, $initial = array() ) {
 		global $wp_filter;
-		$value  = $initial;
-		$owners = array();
+		$value    = $initial;
+		$owners   = array();
+		$own      = array();
+		$minn_dir = wp_normalize_path( dirname( __DIR__ ) ) . '/';
 		if ( empty( $wp_filter[ $hook ] ) ) {
-			return array( 'value' => $value, 'owners' => $owners );
+			return array( 'value' => $value, 'owners' => $owners, 'own' => $own );
 		}
 		$entry_keys = function ( $arr ) {
 			if ( ! is_array( $arr ) ) {
@@ -429,15 +524,18 @@ class Minn_Admin_Surfaces {
 				if ( ! is_array( $next ) ) {
 					continue;
 				}
-				$owner = class_exists( 'Minn_Admin_Notices' ) ? Minn_Admin_Notices::owner_of( $cb['function'] ) : null;
-				$name  = $owner ? $owner['name'] : 'Unknown';
+				$owner   = class_exists( 'Minn_Admin_Notices' ) ? Minn_Admin_Notices::owner_of( $cb['function'] ) : null;
+				$name    = $owner ? $owner['name'] : 'Unknown';
+				$file    = self::callback_file( $cb['function'] );
+				$is_minn = '' !== $file && 0 === strpos( $file, $minn_dir );
 				foreach ( array_diff( $entry_keys( $next ), $before ) as $added ) {
 					$owners[ $added ] = $name;
+					$own[ $added ]    = $is_minn;
 				}
 				$value = $next;
 			}
 		}
-		return array( 'value' => $value, 'owners' => $owners );
+		return array( 'value' => $value, 'owners' => $owners, 'own' => $own );
 	}
 
 	private static function unknown_keys( $arr, $known ) {
@@ -534,6 +632,9 @@ class Minn_Admin_Surfaces {
 		}
 		foreach ( self::unknown_keys( $surface, self::SURFACE_KEYS ) as $k ) {
 			$problems[] = "unknown key \"$k\" (ignored)";
+		}
+		if ( isset( $surface['group'] ) && 'workspace' === $surface['group'] && ! self::inbox_shaped( $surface ) ) {
+			$problems[] = 'group: workspace is for inbox-shaped surfaces (a collection with an "ago" column); shown under Tools instead';
 		}
 		if ( empty( $surface['collection'] ) || ! is_array( $surface['collection'] ) ) {
 			// Settings-only surfaces are legal: a settings-shaped plugin
@@ -752,9 +853,31 @@ class Minn_Admin_Surfaces {
 				'family'   => is_array( $s ) && isset( $s['family'] ) ? (string) $s['family'] : '',
 				'cap'      => is_array( $s ) && isset( $s['cap'] ) ? (string) $s['cap'] : 'manage_options',
 				'owner'    => isset( $surfaces['owners'][ (string) $id ] ) ? $surfaces['owners'][ (string) $id ] : 'Unknown',
+				'own'      => ! empty( $surfaces['own'][ (string) $id ] ),
 				'problems' => self::surface_problems( $s ),
 				'offsite'  => self::surface_offsite_links( $s ),
 			);
+		}
+		// Attention-budget note (informational, like offsite): an owner past
+		// the nav budget has its family-less surfaces sharing one nav slot.
+		// Minn's own registrations are exempt by FILE location (the `own`
+		// map), matching for_current_user() — never by owner display name,
+		// which symlinked installs mangle.
+		$owner_counts = array();
+		foreach ( $s_rows as $r ) {
+			if ( '' === $r['owner'] || 'Unknown' === $r['owner'] || $r['own'] ) {
+				continue;
+			}
+			$owner_counts[ $r['owner'] ] = isset( $owner_counts[ $r['owner'] ] ) ? $owner_counts[ $r['owner'] ] + 1 : 1;
+		}
+		foreach ( $s_rows as $i => $r ) {
+			$n = $r['own'] ? 0 : ( isset( $owner_counts[ $r['owner'] ] ) ? $owner_counts[ $r['owner'] ] : 0 );
+			unset( $s_rows[ $i ]['own'] );
+			if ( $n > self::OWNER_NAV_BUDGET ) {
+				$s_rows[ $i ]['notes'] = array(
+					sprintf( '%s registers %d surfaces; family-less ones share one nav slot (budget %d)', $r['owner'], $n, self::OWNER_NAV_BUDGET ),
+				);
+			}
 		}
 
 		$panels = self::contributions( 'minn_admin_editor_panels' );
