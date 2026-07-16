@@ -128,6 +128,30 @@ and there is no API to detect or resist it. Design accordingly. An integration t
 earns its place gets kept; anything that grabs attention gets hidden, and the
 descriptor model gives you no way to ask for it back.
 
+## Attention budgets
+
+Since v0.17.0, placement and count limits are enforced by the validator and the
+client, not by convention. Nothing is ever dropped; overflow degrades to a quieter
+form:
+
+- **Workspace placement** requires an inbox-shaped collection (at least one `ago`
+  column). A surface claiming `group: 'workspace'` without one is shown under Tools,
+  and the Integrations card flags it.
+- **Nav slots**: one plugin holds at most **3**. Past that, your family-less surfaces
+  collapse into a single nav item (and a single ⌘K palette row) with the same switcher
+  users already know from provider families. Surfaces that declare a real `family`
+  keep it; a family is already a collapsed slot.
+- **Default slash menu**: one namespace holds at most **3** entries in the unfiltered
+  `/` menu, counted in registration order (editor commands first, then block `insert`
+  templates). Overflow becomes search-only: it still surfaces the moment the user
+  types, exactly like auto-insertable blocks, and the block picker (Browse all) always
+  shows everything.
+
+If your integration needs more room than the budget allows, that is the signal to
+consolidate: one surface with `views`, one command that opens your own screen, one
+well-chosen default insert. The budget is per plugin either way; registering more
+does not buy more attention.
+
 ## External links are always marked
 
 Since v0.17.0, every link your descriptor supplies (action `href`, status-card action,
@@ -163,7 +187,7 @@ arrived in that release; unmarked keys have been stable since the API shipped.
 | `cap` | Capability required. Checked server-side; the surface is absent from the app for users without it. Plugins with their own access model gate inside the shim instead — see [Capability patterns](#capability-patterns) |
 | `collection` | The list definition (below). Optional when the surface declares `settings`: a settings-only surface renders its settings view as the whole page (right for settings-shaped plugins with no list to show; the bundled Perfmatters adapter is the example) |
 | `family` | Group id for surfaces that do the same job (`forms`, `mail`, `redirects`, `activity-log`, `snippets`, `backups`, or your own). Same-family surfaces share one sidebar entry with a provider switcher in the topbar badge; the user's pick is remembered per family |
-| `group` | Sidebar placement. Two values are honored: the default **`"tools"`** (logs, redirects, snippets: site plumbing) and **`"workspace"`** — declare workspace only when the surface is inbox-shaped, something users check daily because new items need a human (form entries are the bundled example). Anything else falls back to Tools |
+| `group` | Sidebar placement. Two values are honored: the default **`"tools"`** (logs, redirects, snippets: site plumbing) and **`"workspace"`** — for inbox-shaped surfaces, something users check daily because new items need a human (form entries are the bundled example). Since v0.17.0 this is enforced, not asked: workspace requires a collection with an `ago` column (a time-ordered stream); anything else is placed under Tools and the Integrations card says so |
 | `manage` | Optional **second** collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Use it when your surface has exactly one natural companion view — the items and the things that produce them (Gravity Forms: Entries / Forms). Need more than two? That's what `views` is for |
 | `views` *(v0.13)* | Optional **further** list views beyond `collection` and `manage`: an **array** of collections (same shape as `collection`), each requiring a `viewLabel` to name its switcher tab. Entries may carry their own `cap` to gate just that view tighter than the surface (the real gate stays your route's `permission_callback`); an entry the user can't see, or one missing `route`/`viewLabel`, is dropped server-side. Views render after `manage` in the switcher and support the full collection vocabulary (tabs, search, filter, detail, actions, bulk, create). The bundled Gravity SMTP adapter uses one for its Debug log |
 | `status` *(v0.10; `chart` v0.13)* | Optional status card above the list: `{ "route": "your/v1/status" }`. The route returns a server-built display model (below), so your adapter formats values server-side and the client stays generic |

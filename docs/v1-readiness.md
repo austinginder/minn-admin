@@ -103,10 +103,20 @@ v1.0 ships when all of these are true:
       right-click a block-picker group heading; hidden entries leave the
       server payloads and the inline slash menu prunes in place. Palette rows
       ride their surface's hide.)*
-- [ ] **G3 — Attention budget.** Placement and count limits are enforced by the
+- [x] **G3 — Attention budget.** Placement and count limits are enforced by the
       validator and the client, not by convention. A plugin cannot add more than
       its budget to the nav, palette or default slash menu; overflow degrades
       gracefully (search-only, collapsed groups) instead of being dropped.
+      *(Shipped 2026-07-16, v0.17.0 cycle. Workspace requires an inbox-shaped
+      collection (an `ago` column) or it degrades to Tools with a validator
+      flag. One owner holds at most 3 nav slots: past that, family-less
+      surfaces collapse into a synthetic family (one nav item, one palette
+      row, existing switcher mechanics; Minn's bundled adapters exempt since
+      each registers only while its subject plugin is active, and Unknown
+      owners exempt so attribution failures never merge strangers). One
+      namespace holds at most 3 default slash entries; overflow demotes to
+      search-only. The Integrations card flags the workspace problem and
+      notes over-budget owners informationally.)*
 - [ ] **G4 — External-link honesty.** Every plugin-supplied link that leaves the
       site renders with the external affordance. No descriptor can make an
       upsell look like an app action. *(Shipped 2026-07-16, v0.17.0 cycle:
