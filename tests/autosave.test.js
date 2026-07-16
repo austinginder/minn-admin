@@ -57,13 +57,22 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	}
 	t.check( 'Cmd+S saves immediately', writes.some( ( u ) => u.includes( `/posts/${ draftId }` ) ), writes.join() );
 
-	// Let the save chain + toast fully settle. A late POST from Cmd+S was
-	// poisoning the next idle window under load (false "autosave within 5s").
-	await page.waitForFunction( () => {
-		const s = document.querySelector( '#minn-saved-state' );
-		return s && /now|ago/i.test( s.textContent || '' );
-	}, null, { timeout: 8000 } ).catch( () => {} );
-	await page.waitForTimeout( 1500 );
+	// Let the save chain FULLY drain before opening the calm window. The
+	// saved-indicator check was not enough: it already reads "just now" from
+	// the Save-draft save, while a congested first load (notices capture,
+	// editor styles) can delay the ⌘S save — and the Control+s fallback's
+	// second queued save — by several seconds. Watch the request traffic
+	// itself: proceed only after 2.5s with no posts/{id} POST starting or
+	// finishing.
+	let lastPostActivity = Date.now();
+	const bumpActivity = ( r ) => {
+		if ( r.method() === 'POST' && r.url().includes( `/posts/${ draftId }` ) ) lastPostActivity = Date.now();
+	};
+	page.on( 'request', bumpActivity );
+	page.on( 'requestfinished', bumpActivity );
+	while ( Date.now() - lastPostActivity < 2500 ) await page.waitForTimeout( 250 );
+	page.off( 'request', bumpActivity );
+	page.off( 'requestfinished', bumpActivity );
 	writes.length = 0;
 	await page.click( '#minn-editor-body p' );
 	await page.keyboard.press( 'End' );
