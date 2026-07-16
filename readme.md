@@ -197,6 +197,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   design libraries, page builders or block-inspector forms; the System page's **Integrations**
   card shows everything registered and flags descriptor problems instead of failing silently.
   The full coverage map lives in [docs/plugin-support.md](docs/plugin-support.md)
+- **Quiet by architecture** — integrations are data, never third-party HTML or scripts, and
+  attention is budgeted: one plugin holds at most three nav slots and three default slash
+  entries (overflow stays one search away), Workspace placement requires an inbox-shaped view,
+  **off-site links always carry the ↗ mark**, and every surface, editor panel, design library
+  and slash namespace can be **hidden per user** from Minn's own UI (restore from Your
+  profile), with no API for a plugin to detect or resist it
 - **Dark, light and System themes** (follows your OS until you choose; right-click for an
   explicit menu) plus **per-user color schemes**: named light/dark presets or a fully custom
   scheme with per-slot color pickers, set on Your profile. Bundled fonts, zero external
@@ -215,9 +221,11 @@ WordPress updates UI via GitHub Releases.
 ## Extending
 
 Any plugin can add a view to Minn with one filter: a declarative descriptor, no JavaScript
-required. Start with [docs/for-plugin-authors.md](docs/for-plugin-authors.md); if your data
-lives in a custom table, [docs/shim-tutorial.md](docs/shim-tutorial.md) walks the whole
-build with a copyable example plugin.
+required. Start with [docs/for-plugin-authors.md](docs/for-plugin-authors.md) — it opens with
+a quick start and carries a screenshot of every primitive. If your data lives in a custom
+table, [docs/shim-tutorial.md](docs/shim-tutorial.md) walks the whole build with a copyable
+example plugin, and the WordPress Playground demo boots that example preactivated so a
+working instance of the API is one click away.
 
 ## Documentation
 
