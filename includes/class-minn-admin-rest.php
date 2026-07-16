@@ -1459,7 +1459,7 @@ class Minn_Admin_REST {
 	 * picker, design libraries).
 	 */
 	public static function editor_blocks() {
-		$block_forms = apply_filters( 'minn_admin_block_forms', array() );
+		$block_forms = Minn_Admin::filter_block_forms( apply_filters( 'minn_admin_block_forms', array() ) );
 		return rest_ensure_response(
 			array(
 				'insertBlocks'    => Minn_Admin::insertable_blocks( $block_forms ),
@@ -1548,7 +1548,8 @@ class Minn_Admin_REST {
 	 * post being edited.
 	 */
 	public static function patterns() {
-		$out = array();
+		$out       = array();
+		$hidden_ns = Minn_Admin_Surfaces::hidden_slash_map();
 		foreach ( WP_Block_Patterns_Registry::get_instance()->get_all_registered() as $p ) {
 			if ( isset( $p['inserter'] ) && false === $p['inserter'] ) {
 				continue;
@@ -1557,6 +1558,11 @@ class Minn_Admin_REST {
 				continue;
 			}
 			if ( ! empty( $p['blockTypes'] ) || ! empty( $p['templateTypes'] ) ) {
+				continue;
+			}
+			// Per-user hide (v1.0 gate G2): a hidden slash namespace takes
+			// its patterns with it.
+			if ( $hidden_ns && isset( $hidden_ns[ strtok( (string) $p['name'], '/' ) ] ) ) {
 				continue;
 			}
 			$item = array(
@@ -2434,11 +2440,18 @@ class Minn_Admin_REST {
 	}
 
 	private static function integration_state() {
+		// The editor-menu slices ride along so hiding a design source or a
+		// slash namespace repaints in the same round trip as surfaces/panels.
+		$block_forms = Minn_Admin::filter_block_forms( apply_filters( 'minn_admin_block_forms', array() ) );
 		return array(
-			'ok'           => true,
-			'surfaces'     => Minn_Admin_Surfaces::for_current_user(),
-			'editorPanels' => Minn_Admin_Surfaces::editor_panels_for_current_user(),
-			'hidden'       => Minn_Admin_Surfaces::hidden_for_current_user(),
+			'ok'             => true,
+			'surfaces'       => Minn_Admin_Surfaces::for_current_user(),
+			'editorPanels'   => Minn_Admin_Surfaces::editor_panels_for_current_user(),
+			'hidden'         => Minn_Admin_Surfaces::hidden_for_current_user(),
+			'designs'        => Minn_Admin::design_sources(),
+			'editorCommands' => Minn_Admin::editor_commands(),
+			'blockForms'     => $block_forms,
+			'insertBlocks'   => Minn_Admin::insertable_blocks( $block_forms ),
 		);
 	}
 

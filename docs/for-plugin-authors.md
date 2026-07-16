@@ -112,12 +112,21 @@ rarely, and additively:
 
 ## Users can hide your integration
 
-Since v0.17.0, every surface and editor panel can be hidden per user from Minn's own UI
-(right-click the sidebar row or the panel's door → **Hide for you**; restore lives on
-Your profile). Hiding is a per-user choice: it survives reloads and your plugin's
-re-registration, and there is no API to detect or resist it. Design accordingly. An
-integration that earns its place gets kept; anything that grabs attention gets hidden,
-and the descriptor model gives you no way to ask for it back.
+Since v0.17.0, every integration point can be hidden per user from Minn's own UI, and
+restore lives on Your profile:
+
+- **Surfaces**: right-click the sidebar row → **Hide for you**.
+- **Editor panels**: right-click the panel's door in the editor sidebar.
+- **Design libraries**: right-click your library's group heading in the block picker.
+- **Slash namespaces**: right-click a namespace's group heading in the block picker.
+  This hides the namespace everywhere it feeds the editor menus: auto-insertable
+  blocks, `insert` templates, block patterns, and namespaced editor commands go
+  together. Inspector forms stay, so existing blocks remain editable.
+
+Hiding is a per-user choice: it survives reloads and your plugin's re-registration,
+and there is no API to detect or resist it. Design accordingly. An integration that
+earns its place gets kept; anything that grabs attention gets hidden, and the
+descriptor model gives you no way to ask for it back.
 
 ## External links are always marked
 

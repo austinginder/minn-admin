@@ -92,13 +92,17 @@ v1.0 ships when all of these are true:
       custom-table plugin into a full surface (list, detail, actions, status
       card) using only the docs, in under half a day. Verified with a real
       outside tester, not just internally.
-- [ ] **G2 — User sovereignty.** Every registered integration point (surface,
+- [x] **G2 — User sovereignty.** Every registered integration point (surface,
       panel, commands, design source) can be hidden per user from the UI, and
       the hide survives updates. *(Surfaces + editor panels shipped 2026-07-16,
       v0.17.0 cycle: `minn_admin_hidden_integrations` user meta,
       `minn-admin/v1/integrations/hide|unhide`, nav/door right-click, restore
-      on Your profile. Remaining: slash-command namespaces and design
-      sources.)*
+      on Your profile. Design sources (`design:<id>`) and slash namespaces
+      (`slash:<ns>`, covering auto blocks + insert templates + patterns +
+      namespaced commands together) completed the gate later the same day:
+      right-click a block-picker group heading; hidden entries leave the
+      server payloads and the inline slash menu prunes in place. Palette rows
+      ride their surface's hide.)*
 - [ ] **G3 — Attention budget.** Placement and count limits are enforced by the
       validator and the client, not by convention. A plugin cannot add more than
       its budget to the nav, palette or default slash menu; overflow degrades
