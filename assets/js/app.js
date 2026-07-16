@@ -258,6 +258,17 @@
 		} );
 	}
 
+	// Routes with a soft reload in flight (route → count). Cold-paint branches
+	// consult this: while a soft reload owns the view, a stray re-render
+	// (types/terms chains, notification refreshes) must NOT swap in the cold
+	// "Loading…" shell — that unmounts the chrome the soft reload kept, blurs
+	// the search box, and kicks a duplicate load whose late render steals
+	// focus back off the field (found by tests/soft-reload.test.js).
+	const softPending = new Map();
+	function softLoadPending( route ) {
+		return ( softPending.get( route || '' ) || 0 ) > 0;
+	}
+
 	/**
 	 * @param {object} opts
 	 * @param {() => void} [opts.clear]  Null caches before load.
@@ -273,7 +284,13 @@
 		if ( typeof opts.paintChrome === 'function' ) opts.paintChrome();
 		const hasChrome = view && view.querySelector( '.minn-toolbar, .minn-tabs' );
 		if ( hasChrome ) markListBusy( view );
-		await opts.load().catch( showErr );
+		const key = opts.route || '';
+		softPending.set( key, ( softPending.get( key ) || 0 ) + 1 );
+		try {
+			await opts.load().catch( showErr );
+		} finally {
+			softPending.set( key, Math.max( 0, ( softPending.get( key ) || 1 ) - 1 ) );
+		}
 		if ( ! opts.route || state.route === opts.route ) opts.render();
 	}
 
@@ -2254,6 +2271,7 @@
 		const cpt = currentCpt();
 		const c = cpt ? state.cache.cptContent[ cpt.restBase ] : state.cache.content;
 		if ( ! c ) {
+			if ( softLoadPending( 'content' ) ) return; // a soft reload owns the view
 			// Cold paint: base type tabs (CPT tabs land when types resolve).
 			const coldTabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ],
 				...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
@@ -3017,6 +3035,7 @@
 		const view = $( '#minn-view' );
 		const c = state.cache.media;
 		if ( ! c ) {
+			if ( softLoadPending( 'media' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
 			<div class="minn-toolbar">
 				<div class="minn-tabs">
@@ -3331,6 +3350,7 @@
 		}
 		const c = state.cache.comments;
 		if ( ! c ) {
+			if ( softLoadPending( 'comments' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
 			<div class="minn-toolbar">
 				<div class="minn-tabs">
@@ -3936,6 +3956,7 @@
 
 		const c = state.cache.orders;
 		if ( ! c ) {
+			if ( softLoadPending( 'orders' ) ) return; // a soft reload owns the view
 			view.innerHTML = viewSwitch + '<div class="minn-loading">Loading orders…</div>';
 			$$( '[data-oview]', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
@@ -4212,6 +4233,7 @@
 		const view = $( '#minn-view' );
 		const c = state.cache.subscriptions;
 		if ( ! c ) {
+			if ( softLoadPending( 'subscriptions' ) ) return; // a soft reload owns the view
 			const subTab = state.subTab || 'any';
 			view.innerHTML = `
 			<div class="minn-toolbar minn-toolbar-views">
@@ -4538,6 +4560,7 @@
 		const c = state.cache.products;
 		const psel = state.productSel || ( state.productSel = new Set() );
 		if ( ! c ) {
+			if ( softLoadPending( 'products' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
 			<div class="minn-toolbar minn-toolbar-views">
 				<div class="minn-tabs">
@@ -4918,6 +4941,7 @@
 		}
 		const c = state.cache.coupons;
 		if ( ! c ) {
+			if ( softLoadPending( 'coupons' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
 			<div class="minn-toolbar minn-toolbar-views">
 				<div class="minn-tabs">
@@ -5132,6 +5156,7 @@
 		const view = $( '#minn-view' );
 		const c = state.cache.customers;
 		if ( ! c ) {
+			if ( softLoadPending( 'customers' ) ) return; // a soft reload owns the view
 			view.innerHTML = '<div class="minn-loading">Loading customers…</div>';
 			loadCustomers().then( renderIfCurrent( 'customers' ) ).catch( showErr );
 			return;
@@ -5771,6 +5796,7 @@
 		const c = state.cache.users;
 		const userSessionEarly = state.userSession || 'all';
 		if ( ! c ) {
+			if ( softLoadPending( 'users' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
 			<div class="minn-toolbar minn-toolbar-views">
 				<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }" disabled>
@@ -7163,6 +7189,7 @@
 		}
 		const coll = surfaceColl( s, ss );
 		if ( ! ss.cache || ( coll.tabs && ! ss.tabs ) || ( s.status && ! ss.status ) ) {
+			if ( softLoadPending( s.id ) ) return; // a soft reload owns the view
 			// Soft path: filter/tab clicks leave the toolbar in place.
 			if ( view.querySelector( '.minn-toolbar, .minn-tabs, .minn-view-switch' ) ) {
 				softListReload( {
@@ -7852,6 +7879,7 @@
 		const view = $( '#minn-view' );
 		const ms = menusState();
 		if ( ! ms.menus || ( ms.sel && ! ms.items ) ) {
+			if ( softLoadPending( 'menus' ) ) return; // a soft reload owns the view
 			// Menus list known (switching tabs) → keep name tabs. Cold open → bare.
 			if ( ms.menus ) {
 				view.innerHTML = menusToolbarHtml( ms ) + '<div class="minn-loading">Loading menu…</div>';
@@ -9500,6 +9528,7 @@
 		const view = $( '#minn-view' );
 		const plugins = state.cache.plugins;
 		if ( ! plugins ) {
+			if ( softLoadPending( 'extensions' ) ) return; // a soft reload owns the view
 			// Cold paint (first open / hard nav): keep Plugins/Themes/Licenses tabs.
 			view.innerHTML = extTabLoadingHtml( 'plugins' );
 			bindExtTabs( view );
@@ -9806,6 +9835,7 @@
 		const view = $( '#minn-view' );
 		const themes = state.cache.themes;
 		if ( ! themes ) {
+			if ( softLoadPending( 'extensions' ) ) return; // a soft reload owns the view
 			// Cold paint (direct nav / deep-link): keep tab chrome, same as soft switch.
 			view.innerHTML = extTabLoadingHtml( 'themes' );
 			bindExtTabs( view );
