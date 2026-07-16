@@ -1,75 +1,10 @@
 # Adding your plugin to Minn Admin
 
 Minn Admin renders third-party plugin data through **surfaces** — declarative descriptors
-registered from PHP. One filter, no JavaScript, no build step. Minn draws your data with the same
-list / tabs / detail-modal / action primitives that power its built-in views.
-
-## Ship the adapter inside your own plugin
-
-Minn's whole extension surface is a small set of public hooks. The main ones:
-
-| Hook | Kind | Purpose |
-|---|---|---|
-| `minn_admin_surfaces` | filter | Sidebar views (lists, tabs, detail modals) |
-| `minn_admin_editor_panels` | filter | Per-post fields in the editor sidebar |
-| `minn_admin_traffic` | filter | Overview chart traffic provider |
-| `minn_admin_traffic_day` | filter | Overview traffic bar drill-down (top pages / referrers for a date window) |
-| `minn_admin_block_forms` | filter | Block inspector labels/controls + slash insert templates |
-| `minn_admin_insert_blocks` | filter | Prune or extend the auto-insert slash list |
-| `minn_admin_page_builders` | filter | Register a full-canvas page builder |
-| `minn_admin_design_sources` | filter | Register a design/template library for the slash menu + block picker |
-| `minn_admin_editor_commands` | filter | Register free-form slash-menu / block-picker commands (boilerplate HTML, island templates, async routes) |
-| `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
-| `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
-| `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
-| `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
-| `minn_admin_cache_purgers` | filter | Join the "Clear site cache" palette command |
-| `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
-| `minn_admin_license_providers` | filter | Report your license state on the System page's Licenses card, optionally with activate / deactivate / re-verify |
-| `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
-| `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
-
-Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
-tooling that wants to render into the page attaches at `minn_admin_template_footer`; the
-bundled Query Monitor adapter is the reference. The standardized way to integrate is to put
-your `add_filter()` / `add_action()` calls in one file inside **your** plugin and require it
-unconditionally:
-
-```
-my-plugin/
-└── includes/minn-admin.php   ← all your minn_admin_* filters live here
-```
-
-No `class_exists( 'Minn_Admin' )` guard is needed: when Minn isn't installed the filters are
-simply never applied, so the integration is a free no-op. Users who install both plugins get
-the integration automatically — nothing to configure, no companion plugin to ship.
-
-Minn bundles adapters (in `includes/adapters/`) only for popular plugins that don't know about
-Minn — Gravity Forms, ACF, Redirection, the analytics providers. If you're the author of the
-plugin being integrated, ship the adapter with it instead; [Anchor Blocks](https://github.com/anchorhost/anchor-blocks)
-does exactly this in `app/MinnAdmin.php`.
-
-## Compatibility
-
-The hooks above, and the descriptor keys documented on this page, are Minn's integration
-contract. The intent is that it changes rarely, and additively:
-
-- New hooks and descriptor keys may appear in any release; documented keys keep their
-  meaning.
-- If a documented hook or key ever has to change, the old form keeps working for a
-  deprecation window and the change is called out in the changelog.
-- Keys you find in Minn's bundled adapters but not on this page are internal and may
-  change without notice. If you need one, open an issue so it can be documented and
-  stabilized here.
-
-## Users can hide your integration
-
-Since v0.17.0, every surface and editor panel can be hidden per user from Minn's own UI
-(right-click the sidebar row or the panel's door → **Hide for you**; restore lives on
-Your profile). Hiding is a per-user choice: it survives reloads and your plugin's
-re-registration, and there is no API to detect or resist it. Design accordingly. An
-integration that earns its place gets kept; anything that grabs attention gets hidden,
-and the descriptor model gives you no way to ask for it back.
+registered from PHP. One filter, no JavaScript, no build step. Most plugin admin screens are
+one of three shapes (a list, a detail view of one item, a few stat numbers), and Minn draws
+all three with the same list / tabs / detail-modal / action primitives that power its
+built-in views.
 
 ## Quick start
 
@@ -99,14 +34,89 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 That's a working, paginated, capability-gated view in the Minn sidebar.
 
-**While you build, watch the Integrations card** on Minn's System page
-(`/minn-admin/system`): it lists every registered surface, editor panel, design source,
-cache purger, page builder and hook listener, attributes each to the plugin that
-registered it, and flags contract problems (unknown keys, missing routes, columns
-without keys). A descriptor the app quietly can't render explains itself there, and the
-page's copy-report carries the section for bug reports.
+**Your data lives in a custom table with no REST route?** That's the majority case, and it
+has its own start-to-finish walkthrough: [the shim tutorial](shim-tutorial.md), which builds
+a small REST shim plus this descriptor for a fictional plugin. The finished code ships as a
+real, working plugin you can copy — [`docs/examples/minn-example-adapter/`](examples/minn-example-adapter/minn-example-adapter.php)
+— and Minn's own test suite drives it end to end, so the example can never drift from the
+contract.
+
+## Test your integration
+
+- **The Integrations card is your build-time debugger.** Open Minn's System page
+  (`/minn-admin/system`) and find **Integrations**: it lists every registered surface,
+  editor panel, design source, cache purger, page builder and hook listener, attributes
+  each to the plugin that registered it, and flags contract problems (unknown keys,
+  missing routes, columns without keys). A descriptor the app quietly can't render
+  explains itself there, and the card's copy-report carries the section for bug reports.
+- **Try it in a disposable WordPress.** Minn's readme has a one-click
+  [WordPress Playground](https://playground.wordpress.net/) badge that boots a demo site
+  with Minn installed — upload your plugin zip there and your surface is testable without
+  touching a real site.
+- **Test as a non-admin.** Your descriptor's `cap` hides the surface from users without
+  it, but your routes' `permission_callback` is the real boundary — log in as an editor
+  or author and confirm both layers agree.
+
+## Ship the adapter inside your own plugin
+
+Put your `add_filter()` / `add_action()` calls in one file inside **your** plugin and
+require it unconditionally:
+
+```
+my-plugin/
+└── includes/minn-admin.php   ← all your minn_admin_* filters live here
+```
+
+No `class_exists( 'Minn_Admin' )` guard is needed: when Minn isn't installed the filters are
+simply never applied, so the integration is a free no-op. Users who install both plugins get
+the integration automatically — nothing to configure, no companion plugin to ship.
+
+Minn bundles adapters (in `includes/adapters/`) only for popular plugins that don't know about
+Minn — Gravity Forms, ACF, Redirection, the analytics providers. If you're the author of the
+plugin being integrated, ship the adapter with it instead; [Anchor Blocks](https://github.com/anchorhost/anchor-blocks)
+does exactly this in `app/MinnAdmin.php`.
+
+Label and description strings in descriptors are yours: run them through `__()` in your own
+text domain if your plugin is translated. Minn renders them verbatim (escaped, never parsed).
+
+## Building with an AI agent
+
+The descriptor contract suits agentic coding unusually well: it is declarative, validated
+live, and verifiable in a browser. If you're wiring your plugin in with an AI coding tool,
+hand it three things — this document, [the shim tutorial](shim-tutorial.md), and the
+[example plugin](examples/minn-example-adapter/minn-example-adapter.php) — and tell it to
+verify against the Integrations card (`/minn-admin/system`) when it thinks it's done. The
+example plugin doubles as a known-good reference the agent can diff its work against.
+
+## Compatibility
+
+The hooks in the [hook reference](#hook-reference) below, and the descriptor keys
+documented on this page, are Minn's integration contract. The intent is that it changes
+rarely, and additively:
+
+- New hooks and descriptor keys may appear in any release; documented keys keep their
+  meaning.
+- If a documented hook or key ever has to change, the old form keeps working for a
+  deprecation window and the change is called out in the changelog.
+- Keys you find in Minn's bundled adapters but not on this page are internal and may
+  change without notice. If you need one, open an issue so it can be documented and
+  stabilized here.
+
+## Users can hide your integration
+
+Since v0.17.0, every surface and editor panel can be hidden per user from Minn's own UI
+(right-click the sidebar row or the panel's door → **Hide for you**; restore lives on
+Your profile). Hiding is a per-user choice: it survives reloads and your plugin's
+re-registration, and there is no API to detect or resist it. Design accordingly. An
+integration that earns its place gets kept; anything that grabs attention gets hidden,
+and the descriptor model gives you no way to ask for it back.
 
 ## Descriptor reference
+
+Only three things are load-bearing: `label`, `collection.route`, and `collection.columns`
+(each column needs `key` and `label`). Everything else on this page is optional and
+additive — start with the quick start's shape and grow it. Keys marked with a version
+arrived in that release; unmarked keys have been stable since the API shipped.
 
 ### Top level
 
@@ -114,16 +124,48 @@ page's copy-report carries the section for bug reports.
 |---|---|
 | `label` | Sidebar label and page title |
 | `sub` | Subtitle badge (usually your plugin name) |
-| `icon` | Icon name from Minn's set: `inbox`, `send`, `doc`, `img`, `chat`, `cart`, `users`, `gear`, `plug`, `grid`, `list` |
-| `cap` | Capability required. Checked server-side; the surface is absent from the app for users without it |
+| `icon` | Icon name from Minn's set — the full list is under [Icons](#icons) below. An unknown name renders an empty icon, so copy from the list |
+| `cap` | Capability required. Checked server-side; the surface is absent from the app for users without it. Plugins with their own access model gate inside the shim instead — see [Capability patterns](#capability-patterns) |
 | `collection` | The list definition (below). Optional when the surface declares `settings`: a settings-only surface renders its settings view as the whole page (right for settings-shaped plugins with no list to show; the bundled Perfmatters adapter is the example) |
 | `family` | Group id for surfaces that do the same job (`forms`, `mail`, `redirects`, `activity-log`, `snippets`, `backups`, or your own). Same-family surfaces share one sidebar entry with a provider switcher in the topbar badge; the user's pick is remembered per family |
-| `group` | Sidebar placement. Surfaces default to the **Tools** group (logs, redirects, snippets: site plumbing). Declare `"workspace"` only when the surface is inbox-shaped, something users check daily because new items need a human (form entries are the bundled example) |
-| `manage` | Optional second collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Gravity Forms uses it for Entries / Forms |
-| `views` | Optional further list views: an **array** of collections (same shape as `collection`), each requiring a `viewLabel` to name its switcher tab. Entries may carry their own `cap` to gate just that view tighter than the surface (the real gate stays your route's `permission_callback`); an entry the user can't see, or one missing `route`/`viewLabel`, is dropped server-side. Views render after `manage` in the switcher and support the full collection vocabulary (tabs, search, filter, detail, actions, bulk, create). The bundled Gravity SMTP adapter uses one for its Debug log |
-| `status` | Optional status card above the list: `{ "route": "your/v1/status" }`. The route returns a server-built display model (below), so your adapter formats values server-side and the client stays generic |
-| `setup` | Optional one-time setup gate (below). While your plugin still needs its own first-run install, the surface renders a setup card instead of the collection, and "Set up now" runs your installer server-side |
-| `settings` | Optional settings view (below): schema-driven tabs served by your own route, rendered by Minn's form engine, saved back through your plugin's own settings APIs. Adds a Settings entry to the view switcher |
+| `group` | Sidebar placement. Two values are honored: the default **`"tools"`** (logs, redirects, snippets: site plumbing) and **`"workspace"`** — declare workspace only when the surface is inbox-shaped, something users check daily because new items need a human (form entries are the bundled example). Anything else falls back to Tools |
+| `manage` | Optional **second** collection (same shape as `collection`). Adds a view switcher above the list; each collection's `viewLabel` names its tab. Use it when your surface has exactly one natural companion view — the items and the things that produce them (Gravity Forms: Entries / Forms). Need more than two? That's what `views` is for |
+| `views` *(v0.13)* | Optional **further** list views beyond `collection` and `manage`: an **array** of collections (same shape as `collection`), each requiring a `viewLabel` to name its switcher tab. Entries may carry their own `cap` to gate just that view tighter than the surface (the real gate stays your route's `permission_callback`); an entry the user can't see, or one missing `route`/`viewLabel`, is dropped server-side. Views render after `manage` in the switcher and support the full collection vocabulary (tabs, search, filter, detail, actions, bulk, create). The bundled Gravity SMTP adapter uses one for its Debug log |
+| `status` *(v0.10; `chart` v0.13)* | Optional status card above the list: `{ "route": "your/v1/status" }`. The route returns a server-built display model (below), so your adapter formats values server-side and the client stays generic |
+| `setup` *(v0.12)* | Optional one-time setup gate (below). While your plugin still needs its own first-run install, the surface renders a setup card instead of the collection, and "Set up now" runs your installer server-side |
+| `settings` *(v0.12)* | Optional settings view (below): schema-driven tabs served by your own route, rendered by Minn's form engine, saved back through your plugin's own settings APIs. Adds a Settings entry to the view switcher |
+
+### Icons
+
+The canonical set (an unknown name renders empty — there is no fallback glyph):
+
+`activity` `arrow-up-right` `bell` `block` `bold` `braces` `bug` `cart` `chat` `check`
+`chev` `clipboard` `clock` `code` `columns` `copy` `cpu` `database` `doc` `eraser` `file`
+`focus` `gallery` `gear` `globe` `grid` `grip` `h2` `h3` `help` `img` `inbox` `italic`
+`key` `link` `list` `logout` `minus` `monitor` `moon` `olist` `php` `pilcrow` `play`
+`plug` `plus` `power` `quote` `refresh` `search` `send` `server` `shield` `shuffle`
+`strike` `sun` `table` `tag` `toc` `trash` `undo` `upload` `users` `warn` `wp` `wrench` `x`
+
+This list mirrors the `icon()` map in `assets/js/app.js`; editor slash commands accept the
+same names (or a literal short glyph string).
+
+### Capability patterns
+
+Two patterns cover every bundled adapter:
+
+1. **Plain capability.** `cap` names a WordPress capability and your routes'
+   `permission_callback` checks the same one (through one shared helper, so they can't
+   drift). Right whenever a core cap genuinely models who may see the data.
+2. **Adapter-side gating.** Some plugins have their own access model that no single
+   capability expresses — Gravity Forms admins hold `gform_full_access` rather than the
+   granular caps, WP Activity Log has "only me / only admins" settings. There, declare a
+   deliberately loose `cap` (`'read'`) so the surface reaches the app, and make your
+   routes' `permission_callback` call the plugin's own resolver
+   (`GFCommon::current_user_can_any( … )`, `Settings_Helper::current_user_can( 'view' )`).
+   The route is the boundary; the descriptor cap is only UI gating.
+
+Never check a raw granular capability that your plugin actually grants through a
+resolver — a user can hold access via the resolver while failing the raw check.
 
 ### `setup` — a one-time setup gate
 
@@ -322,13 +364,54 @@ Rules of the road:
 | `itemsKey` / `totalKey` | Where items/total live in the response body. Omit both for standard WP collections (plain array + `X-WP-Total` header) |
 | `tabs` | Either `{ "route": "...", "valueKey": "id", "labelKey": "title" }` to build tabs from a REST call, or `{ "param": "status", "static": [["sent","Sent"],["failed","Failed"]] }` for fixed tabs sent as a query param. `allLabel` names the first tab |
 | `viewLabel` | Names this collection in the view switcher (with `manage`) and in the search placeholder |
-| `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `entry-summary` (first scalar values of numeric keys — useful for form entries). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`) |
+| `columns` | Array of `{ key, label, format, altKey, width, utc }`. `key` supports dot paths (`initiator_data.user_login`); `altKey` is a fallback key read when the primary is empty. Formats: `title`, `text` (default), `pill`, `ago`, `mono`, `num` (right-aligned numeric), `entry-summary` (for form-entry rows whose answers live under numeric field-id keys: renders the first few answer values as the row's summary — see any bundled forms adapter's list). `width` overrides the column's grid width; defaults are sized by format. For `ago`, bare datetimes parse as site-local: set `utc: true` for UTC-stored timestamps (or use a key ending in `_gmt`, or emit a trailing `Z`) |
 | `detail` | Detail modal config: `detailRoute` (fetch full item by `{id}`), `sectionsRoute` (server-built display model, an alternative to `detailRoute` + `labels`, below), `labels` (resolve field keys to human labels from another route), `messageKey` (render one field as a large text block — HTML messages render in a sandboxed iframe, plain text in a `<pre>`), `skip` (keys to hide), `edit` (inline editing, below) |
-| `actions` | Buttons in the detail modal **and** the list-row ⋯ / right-click menu: `{ label, method, route, body, confirm, danger, when, href, fields, settingsItem, list }`. An action with `settingsItem: true` fires no request: it opens the surface's item-scoped settings view for the row (requires a `settings.route` containing `{id}`, see the settings section). `{id}` in the route is replaced with the item id. `when: { key, equals }` shows the button only when the item's field matches (Activate vs Deactivate). `href` renders the action as a plain link instead of a request; `{field}` placeholders are filled from the item. `fields` makes the action **parameterized**: clicking swaps the button row for an inline form (create-field vocabulary; every field required unless `required: false`) and the typed values merge into `body` (dot paths supported) before the request fires — "Add note" and "send to ⟨address⟩" shapes. Parameterized actions stay **detail-only** (they need the modal form chrome); every other action also appears on the list row menu (Open is always first). Set `list: false` to keep a verb detail-only without fields. Status-card actions accept `fields` the same way. An action route may return `{ "message": "…" }` to replace the default "⟨label⟩ — done" toast — the honest channel for outcomes the label can't promise (the bundled Gravity SMTP send-a-test reports when another active mailer carried the send) |
+| `actions` | Buttons in the detail modal **and** the list-row ⋯ / right-click menu: `{ label, method, route, body, confirm, danger, when, href, fields, settingsItem, list }` — each key detailed in [the `actions` section](#collectionactions--verbs-on-rows-and-in-the-detail-modal) below |
 | `search` | A query-string template with `{q}` (e.g. `filterBy[url]={q}` or `search={q}`). Adds a filter box to the toolbar; the term is debounced and appended to the list request. For APIs that take search criteria as a JSON string (Gravity Forms), use the object form: `array( 'param' => 'search', 'json' => <criteria array with '{q}' where the term goes> )` — the term is JSON-escaped and the criteria double-URL-encoded to match APIs that `urldecode()` the param themselves |
-| `filter` | A second list dimension beside `tabs`, rendered as a segmented control: `{ label, options, query }` or `{ label, options, param, json }`. `options` are `[value, label]` pairs; the FIRST is the default and is always sent. The plain form appends `query` with `{v}` replaced (`status={v}`); the json form merges into the SAME criteria object as an object-form `search` when they share `param` — Gravity Forms takes status and field filters inside one JSON `search` param, and two independent writers would clobber each other. Pair it with `when`-gated actions so each filter view offers the verbs that make sense there (Received: Spam/Trash · Trash: Restore/Delete permanently) |
+| `filter` *(v0.12)* | A second list dimension beside `tabs`, rendered as a segmented control — shapes and the json-merge rule in [the `filter` section](#collectionfilter--a-second-dimension-beside-tabs) below |
 | `bulk` | Bulk actions: the same shape as `actions` minus `href` (a batch always needs a `route`). Declaring any adds a checkbox column (shift-range, Select page) and a selection bar. Each action runs **per selected item** (`{id}` replaced; one failure never aborts the rest), `when` is evaluated per item so a mixed selection skips ineligible rows, a button whose `when` matches nothing on the current page isn't offered at all, and the result toast reports done / skipped / failed |
 | `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array), `email`, `url`. Every field is required unless it declares `required: false` |
+
+### `collection.actions` — verbs on rows and in the detail modal
+
+Each action is `{ label, method, route, body, confirm, danger, when, href, fields,
+settingsItem, list }`:
+
+- **`route`** — `{id}` is replaced with the item id; `method` defaults to POST; `body`
+  merges into the request. The route may return `{ "message": "…" }` to replace the
+  default "⟨label⟩ — done" toast — the honest channel for outcomes the label can't
+  promise (the bundled Gravity SMTP send-a-test reports when another active mailer
+  actually carried the send).
+- **`confirm`** shows a native confirm first; **`danger`** styles the button red.
+- **`when: { key, equals }`** offers the button only while the item's field matches
+  (Activate vs Deactivate, Mark-read only while unread).
+- **`href`** renders a plain link instead of firing a request; `{field}` placeholders
+  fill from the item.
+- **`fields`** *(v0.12)* makes the action **parameterized**: clicking swaps the button
+  row for an inline form (the create-field vocabulary; every field required unless
+  `required: false`) and typed values merge into `body` (dot paths supported) before the
+  request fires — "Add note" and "send to ⟨address⟩" shapes. Parameterized actions stay
+  **detail-only** (they need the modal's form chrome). Status-card actions accept
+  `fields` the same way.
+- **`settingsItem: true`** *(v0.13)* fires no request: it opens the surface's
+  item-scoped settings view for the row (requires a `settings.route` containing `{id}`;
+  see the settings section).
+- Every non-parameterized action also appears on the list row's ⋯ / right-click menu
+  (Open is always first); set **`list: false`** to keep a verb detail-only.
+
+### `collection.filter` — a second dimension beside tabs
+
+Rendered as a segmented control: `{ label, options, query }` or
+`{ label, options, param, json }`. `options` are `[value, label]` pairs and the FIRST is
+the default, always sent.
+
+- The plain form appends `query` with `{v}` replaced (`status={v}`).
+- The json form merges into the SAME criteria object as an object-form `search` when
+  they share `param`. That merge is the point: Gravity Forms takes status and field
+  filters inside one JSON `search` param, and two independent writers would clobber
+  each other.
+- Pair filters with `when`-gated actions so each filter view offers the verbs that make
+  sense there (Received: Spam / Trash · Trash: Restore / Delete permanently).
 
 ### `detail.edit` — inline editing in the detail modal
 
@@ -382,6 +465,36 @@ usually don't need `kind` at all. A row's `type` hints rendering (`email` and `u
 values become links). `adminUrl` links the item's wp-admin screen and suppresses any
 `href` action that points at the same place. The bundled Gravity Forms adapter
 (entries) and WP Activity Log adapter (events) are the references.
+
+## Hook reference
+
+Surfaces are the front door, but Minn's whole extension surface is this set of public
+hooks — each with its own section below or its own contract note:
+
+| Hook | Kind | Purpose |
+|---|---|---|
+| `minn_admin_surfaces` | filter | Sidebar views (lists, tabs, detail modals) — the descriptor reference above |
+| `minn_admin_editor_panels` | filter | Per-post fields in the editor sidebar |
+| `minn_admin_traffic` | filter | Overview chart traffic provider |
+| `minn_admin_traffic_day` | filter | Overview traffic bar drill-down (top pages / referrers for a date window) |
+| `minn_admin_block_forms` | filter | Block inspector labels/controls + slash insert templates |
+| `minn_admin_insert_blocks` | filter | Prune or extend the auto-insert slash list |
+| `minn_admin_page_builders` | filter | Register a full-canvas page builder |
+| `minn_admin_design_sources` | filter | Register a design/template library for the slash menu + block picker |
+| `minn_admin_editor_commands` | filter | Register free-form slash-menu / block-picker commands (boilerplate HTML, island templates, async routes) |
+| `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
+| `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
+| `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
+| `minn_admin_template_footer` | action | End of Minn's app document (no `wp_head`/`wp_footer`) |
+| `minn_admin_cache_purgers` | filter | Join the "Clear site cache" palette command |
+| `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
+| `minn_admin_license_providers` | filter | Report your license state on the Licenses card, optionally with activate / deactivate / re-verify |
+| `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
+| `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
+
+Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
+tooling that wants to render into the page attaches at `minn_admin_template_footer`; the
+bundled Query Monitor adapter is the reference.
 
 ## Block inspector forms — `minn_admin_block_forms`
 

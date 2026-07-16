@@ -215,8 +215,9 @@ WordPress updates UI via GitHub Releases.
 ## Extending
 
 Any plugin can add a view to Minn with one filter: a declarative descriptor, no JavaScript
-required. See [docs/for-plugin-authors.md](docs/for-plugin-authors.md), and
-[docs/extension-api.md](docs/extension-api.md) for the design rationale.
+required. Start with [docs/for-plugin-authors.md](docs/for-plugin-authors.md); if your data
+lives in a custom table, [docs/shim-tutorial.md](docs/shim-tutorial.md) walks the whole
+build with a copyable example plugin.
 
 ## Documentation
 
