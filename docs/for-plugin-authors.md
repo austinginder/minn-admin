@@ -119,6 +119,24 @@ re-registration, and there is no API to detect or resist it. Design accordingly.
 integration that earns its place gets kept; anything that grabs attention gets hidden,
 and the descriptor model gives you no way to ask for it back.
 
+## External links are always marked
+
+Since v0.17.0, every link your descriptor supplies (action `href`, status-card action,
+`setup.href`) opens in a new tab, and any link whose host differs from the site's own
+renders with the ↗ affordance. Minn adds the mark at render time; you cannot opt out,
+and a label that already ends in ↗ is left alone. Same-site links (wp-admin deep links,
+your own REST endpoints) stay unmarked: they are honest app escapes, not exits.
+
+Off-site hrefs carried in the descriptor itself are also listed per surface on the
+System page's Integrations card, attributed to your plugin. That listing is
+informational, not a contract problem: linking out to your own docs or a vendor screen
+is a legitimate pattern. It exists so an off-site link can never hide inside a surface
+unnoticed. Links your routes return at runtime (status-card responses) can't be flagged
+there, but they get the same ↗ treatment when rendered.
+
+The plain statement: labels are for naming, not marketing. A row action that leaves the
+site will always look like one.
+
 ## Descriptor reference
 
 Only three things are load-bearing: `label`, `collection.route`, and `collection.columns`
@@ -395,7 +413,8 @@ settingsItem, list }`:
 - **`when: { key, equals }`** offers the button only while the item's field matches
   (Activate vs Deactivate, Mark-read only while unread).
 - **`href`** renders a plain link instead of firing a request; `{field}` placeholders
-  fill from the item.
+  fill from the item. Links open in a new tab, and an href that leaves the site always
+  renders with the ↗ affordance (see [External links are always marked](#external-links-are-always-marked)).
 - **`fields`** *(v0.12)* makes the action **parameterized**: clicking swaps the button
   row for an inline form (the create-field vocabulary; every field required unless
   `required: false`) and typed values merge into `body` (dot paths supported) before the

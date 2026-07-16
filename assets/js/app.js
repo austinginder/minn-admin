@@ -6408,7 +6408,7 @@
 		const actions = ( st.actions || [] ).length ? `
 			<div class="minn-sstat-actions">
 				${ st.actions.map( ( a, i ) => a.href
-					? `<a class="minn-btn-soft" href="${ esc( a.href ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
+					? `<a class="minn-btn-soft" href="${ esc( a.href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, a.href ) ) }</a>`
 					: `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-sstatact="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 			</div>` : '';
 		if ( ! rows && ! chart && ! cmd && ! actions ) return '';
@@ -6467,6 +6467,24 @@
 	// Fill {field} placeholders on an action href from the item.
 	function surfaceFillHref( href, item ) {
 		return String( href ).replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( item[ k ] ?? '' ) );
+	}
+
+	// External-link honesty: a plugin-supplied href that leaves this site
+	// always renders with the ↗ affordance, so a descriptor can't make an
+	// off-site link look like an app action. Same-host links (wp-admin deep
+	// links, front-end URLs) stay unmarked; every href render site opens in
+	// a new tab either way.
+	function offsiteHref( href ) {
+		try {
+			const u = new URL( String( href || '' ), location.origin );
+			return /^https?:$/.test( u.protocol ) && u.host !== location.host;
+		} catch ( e ) {
+			return false;
+		}
+	}
+	function hrefLabel( label, href ) {
+		const l = String( label == null ? '' : label );
+		return offsiteHref( href ) && ! /↗\s*$/.test( l ) ? l + ' ↗' : l;
 	}
 
 	// when-gate (+ optional adminUrl-dup filter for detail modal hrefs).
@@ -10336,7 +10354,8 @@
 		}
 		const intg = s.integrations;
 		if ( intg ) {
-			const probs = ( r ) => ( r.problems && r.problems.length ? ` — PROBLEMS: ${ r.problems.join( '; ' ) }` : '' );
+			const probs = ( r ) => ( r.problems && r.problems.length ? ` — PROBLEMS: ${ r.problems.join( '; ' ) }` : '' )
+				+ ( r.offsite && r.offsite.length ? ` — OFF-SITE LINKS: ${ r.offsite.join( '; ' ) }` : '' );
 			lines.push( '', '## Integrations' );
 			intg.surfaces.forEach( ( r ) => lines.push( `- Surface ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
 			intg.panels.forEach( ( r ) => lines.push( `- Editor panel ${ r.id } (${ r.label }) — ${ r.owner }${ probs( r ) }` ) );
@@ -10467,6 +10486,7 @@
 			<div class="minn-sys-ext-item">
 				<span class="minn-sys-ext-name">${ esc( r.label || r.id ) } <span class="minn-sys-ext-parent mono">${ esc( r.id ) }</span>${ meta ? ` <span class="minn-sys-ext-parent">${ esc( meta ) }</span>` : '' }
 					${ ( r.problems || [] ).map( ( p ) => `<div class="minn-sys-int-problem">${ icon( 'warn' ) }${ esc( p ) }</div>` ).join( '' ) }
+					${ ( r.offsite || [] ).map( ( p ) => `<div class="minn-sys-int-offsite">${ icon( 'globe' ) }${ esc( p ) }</div>` ).join( '' ) }
 				</span>
 				<span class="minn-sys-ext-ver">${ esc( r.owner || '' ) }</span>
 			</div>`;
@@ -17886,7 +17906,7 @@
 			const cls = [ en.danger && 'danger', en.active && 'is-on' ].filter( Boolean ).join( ' ' );
 			const clsAttr = cls ? ` class="${ cls }"` : '';
 			return en.href
-				? `<a href="${ esc( en.href ) }" target="_blank" rel="noopener"${ clsAttr }>${ esc( en.label ) }</a>`
+				? `<a href="${ esc( en.href ) }" target="_blank" rel="noopener"${ clsAttr }>${ esc( hrefLabel( en.label, en.href ) ) }</a>`
 				: `<button type="button" data-mi="${ i }"${ clsAttr }>${ esc( en.label ) }</button>`;
 		} ).join( '' );
 		document.body.appendChild( minnMenuEl );
@@ -21962,9 +21982,9 @@
 						${ message ? `<button class="minn-btn-soft" id="minn-surface-raw">↗ Open raw</button>` : '' }
 						${ sec && sec.adminUrl && ! isActivity ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'wp-admin' ) } ↗</a>` : '' }
 						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'log' ) } ↗</a>` : '' }
-						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( l.url ) }" target="_blank" rel="noopener">${ esc( l.label ) }</a>` ).join( '' ) }
+						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( l.url ) }" target="_blank" rel="noopener">${ esc( hrefLabel( l.label, l.url ) ) }</a>` ).join( '' ) }
 						${ visibleActions.map( ( { a, i } ) => a.href
-							? `<a class="minn-btn-soft" href="${ esc( surfaceFillHref( a.href, it ) ) }" target="_blank" rel="noopener">${ esc( a.label ) }</a>`
+							? `<a class="minn-btn-soft" href="${ esc( surfaceFillHref( a.href, it ) ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, surfaceFillHref( a.href, it ) ) ) }</a>`
 							: `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 					</div>` : '' }` }
 				</div>

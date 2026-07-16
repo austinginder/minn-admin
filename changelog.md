@@ -4,6 +4,7 @@
 
 ### Added
 * **Hide any integration for you:** right-click a plugin surface's sidebar row or a plugin editor panel's door and choose **Hide for you**. Hidden integrations leave the boot payload entirely (the sidebar, ⌘K palette and routes never see them), survive reloads, and restore from **Your profile → Hidden for you** or the Undo toast. The choice is per user; plugin re-registration does not undo it, and there is no API for a plugin to detect or resist it. Core views and core editor doors are not hideable.
+* **External links are always marked:** every link a plugin's descriptor supplies (row and detail actions, status-card actions, setup links, context-menu entries) opens in a new tab, and any link that leaves the site now renders with the ↗ affordance automatically. Minn adds the mark at render time; a descriptor cannot make an off-site link look like an app action, and same-site wp-admin deep links stay unmarked. Off-site hrefs carried in a descriptor are also listed per surface on the Integrations card, attributed to the plugin that registered them (informational, never a contract problem).
 * **The shim tutorial and a copyable example plugin:** `docs/shim-tutorial.md` walks a custom-table plugin into a full Minn surface (REST shim, descriptor, status card, actions), and `docs/examples/minn-example-adapter/` is the finished code as a real working plugin. Minn's own test suite activates the example and drives it end to end, so the tutorial can never drift from the contract.
 
 ### Improved
