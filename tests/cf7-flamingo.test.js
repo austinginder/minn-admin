@@ -127,9 +127,22 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Unspam restores the message to Received', true );
 
 		// --- Trash ---------------------------------------------------------------
-		await clickRow( 'Minn Fixture Disposable' );
-		await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
-		t.check( 'Trash action offered', await clickModalBtn( 'Trash message' ) );
+		// v0.16 soft reload keeps the pre-switch rows painted while the inbox
+		// collection loads, so waitRow above can match a stale row whose item
+		// still carries bucket:'spam' — its detail then offers Not-spam, not
+		// Trash. Open-and-verify with a retry: the Trash action (gated on
+		// bucket:'inbox') appears once the fresh inbox item is what's mounted.
+		let trashOffered = false;
+		for ( let i = 0; i < 8 && ! trashOffered; i++ ) {
+			await clickRow( 'Minn Fixture Disposable' );
+			await page.waitForSelector( '.minn-entry', { timeout: 8000 } );
+			trashOffered = await clickModalBtn( 'Trash message' );
+			if ( ! trashOffered ) {
+				await page.keyboard.press( 'Escape' );
+				await page.waitForTimeout( 700 );
+			}
+		}
+		t.check( 'Trash action offered', trashOffered );
 		await waitToast( 'Moved to trash' );
 		await waitRow( 'Minn Fixture Disposable', false );
 		t.check( 'Trashed message leaves the Received list', true );

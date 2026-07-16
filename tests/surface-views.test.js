@@ -64,7 +64,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		/* ===== The extra view is a full collection ===== */
 		await page.click( '[data-sview="x0"]' );
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		// v0.16 soft reload keeps the Email log rows AND status card painted
+		// while the debug collection loads — the card leaving is the marker
+		// that the x0 render landed (scrutoscope precedent).
+		await page.waitForFunction( () => ! document.querySelector( '.minn-surface-status' )
+			&& document.querySelectorAll( '.minn-table-row' ).length > 0, null, { timeout: 20000 } );
 		t.check( 'x0 tab activates', await page.$eval( '[data-sview="x0"]', ( el ) => el.classList.contains( 'active' ) ) );
 		t.check( 'status card absent on the extra view', ! ( await page.$( '.minn-surface-status' ) ) );
 		const rowText = await page.$eval( '#minn-view', ( el ) => el.textContent );
@@ -74,7 +78,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const priTabs = await page.$$eval( '[data-stab]', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
 		t.check( 'priority tabs render', JSON.stringify( priTabs ) === JSON.stringify( [ 'All', 'Errors', 'Warnings', 'Info', 'Debug' ] ), priTabs.join( ' · ' ) );
 		await page.click( '[data-stab="error"]' );
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		// Same soft-reload rule for tab clicks: wait for the FILTERED rows.
+		await page.waitForFunction( () => {
+			const p = Array.from( document.querySelectorAll( '.minn-table-row .minn-status' ) ).map( ( e ) => e.textContent.trim() );
+			return p.length >= 1 && p.every( ( x ) => x === 'error' );
+		}, null, { timeout: 20000 } );
 		const pills = await page.$$eval( '.minn-table-row .minn-status', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
 		t.check( 'Errors tab filters to error rows', pills.length >= 1 && pills.every( ( p ) => p === 'error' ), pills.join( ',' ) );
 
