@@ -105,7 +105,14 @@ v1.0 ships when all of these are true:
       gracefully (search-only, collapsed groups) instead of being dropped.
 - [ ] **G4 — External-link honesty.** Every plugin-supplied link that leaves the
       site renders with the external affordance. No descriptor can make an
-      upsell look like an app action.
+      upsell look like an app action. *(Shipped 2026-07-16, v0.17.0 cycle:
+      shared `hrefLabel()` renderer marks off-site hrefs ↗ at every render
+      site (status-card actions, detail-modal actions, row menus, every
+      openMinnMenu link), and the validator lists descriptor-carried
+      off-site hrefs per surface on the Integrations card, informationally.
+      Status-card links arrive in route responses at runtime, so they get
+      the render-time mark but not the static flag. Remaining: state the
+      guarantee in the etiquette section, then close the box.)*
 - [ ] **G5 — Contract freeze.** The documented descriptor vocabulary is complete
       (no load-bearing undocumented keys), annotated with since-versions, and
       covered by a contract suite that drives a fixture third-party plugin

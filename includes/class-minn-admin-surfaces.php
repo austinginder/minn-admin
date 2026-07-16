@@ -414,6 +414,54 @@ class Minn_Admin_Surfaces {
 		return $problems;
 	}
 
+	/**
+	 * External-link honesty: descriptor hrefs that leave this site. These
+	 * are legal (the export / vendor-screen pattern), not contract problems,
+	 * but they are surfaced on the Integrations card so an off-site link can
+	 * never hide inside a surface unnoticed. The client independently
+	 * guarantees the ↗ affordance on every rendered href; this is the
+	 * per-plugin audit trail. Status-card links arrive in route responses at
+	 * runtime, so only descriptor-carried hrefs can be flagged here.
+	 */
+	private static function offsite_href( $href ) {
+		if ( ! is_string( $href ) || ! preg_match( '#^https?://#i', $href ) ) {
+			return false; // Relative URLs can't leave the site.
+		}
+		$host = wp_parse_url( $href, PHP_URL_HOST );
+		$home = wp_parse_url( home_url(), PHP_URL_HOST );
+		return $host && is_string( $home ) && 0 !== strcasecmp( $host, $home );
+	}
+
+	private static function surface_offsite_links( $surface ) {
+		if ( ! is_array( $surface ) ) {
+			return array();
+		}
+		$out = array();
+		if ( isset( $surface['setup']['href'] ) && self::offsite_href( $surface['setup']['href'] ) ) {
+			$out[] = 'setup links off-site (' . wp_parse_url( $surface['setup']['href'], PHP_URL_HOST ) . ')';
+		}
+		$colls = array();
+		foreach ( array( 'collection', 'manage' ) as $ck ) {
+			if ( ! empty( $surface[ $ck ] ) && is_array( $surface[ $ck ] ) ) {
+				$colls[ $ck ] = $surface[ $ck ];
+			}
+		}
+		foreach ( (array) ( $surface['views'] ?? array() ) as $i => $v ) {
+			if ( is_array( $v ) ) {
+				$colls[ "views[$i]" ] = $v;
+			}
+		}
+		foreach ( $colls as $ck => $coll ) {
+			foreach ( (array) ( $coll['actions'] ?? array() ) as $a ) {
+				if ( is_array( $a ) && ! empty( $a['href'] ) && self::offsite_href( $a['href'] ) ) {
+					$label = isset( $a['label'] ) ? (string) $a['label'] : '(unlabeled)';
+					$out[] = "$ck: action \"$label\" links off-site (" . wp_parse_url( $a['href'], PHP_URL_HOST ) . ')';
+				}
+			}
+		}
+		return $out;
+	}
+
 	/** Contract problems for one surface descriptor (documented keys only). */
 	private static function surface_problems( $surface ) {
 		$problems = array();
@@ -644,6 +692,7 @@ class Minn_Admin_Surfaces {
 				'cap'      => is_array( $s ) && isset( $s['cap'] ) ? (string) $s['cap'] : 'manage_options',
 				'owner'    => isset( $surfaces['owners'][ (string) $id ] ) ? $surfaces['owners'][ (string) $id ] : 'Unknown',
 				'problems' => self::surface_problems( $s ),
+				'offsite'  => self::surface_offsite_links( $s ),
 			);
 		}
 
