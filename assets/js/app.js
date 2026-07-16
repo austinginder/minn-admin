@@ -278,6 +278,11 @@
 	 * @param {Element} [opts.view]
 	 * @param {() => void} [opts.paintChrome]  Immediate tab/filter active state.
 	 */
+	function unmarkListBusy( view ) {
+		if ( ! view ) return;
+		$$( '.minn-busy', view ).forEach( ( el ) => el.classList.remove( 'minn-busy' ) );
+	}
+
 	async function softListReload( opts ) {
 		const view = opts.view || $( '#minn-view' );
 		if ( typeof opts.clear === 'function' ) opts.clear();
@@ -286,11 +291,25 @@
 		if ( hasChrome ) markListBusy( view );
 		const key = opts.route || '';
 		softPending.set( key, ( softPending.get( key ) || 0 ) + 1 );
+		let failed = false;
 		try {
-			await opts.load().catch( showErr );
+			await opts.load();
+		} catch ( e ) {
+			failed = true;
+			// A dropped reply (worker recycle, flaky network) must not wipe
+			// the chrome this soft reload kept painted: keep the stale list,
+			// clear the dim, and report — the next tab/filter click retries.
+			// Only a chrome-less view (nothing to preserve) gets the error card.
+			if ( hasChrome ) {
+				unmarkListBusy( view );
+				toast( e && e.message ? e.message : 'Could not load — try again', true );
+			} else {
+				showErr( e );
+			}
 		} finally {
 			softPending.set( key, Math.max( 0, ( softPending.get( key ) || 1 ) - 1 ) );
 		}
+		if ( failed ) return;
 		if ( ! opts.route || state.route === opts.route ) opts.render();
 	}
 
@@ -938,6 +957,7 @@
 			img: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
 			plug: '<path d="M14 7V5a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2H7a1 1 0 0 0-1 1v3h2a2 2 0 0 1 0 4H6v3a1 1 0 0 0 1 1h3v-2a2 2 0 0 1 4 0v2h3a1 1 0 0 0 1-1v-3h-2a2 2 0 0 1 0-4h2V8a1 1 0 0 0-1-1Z"/>',
 			power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
+			shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/>',
 			'arrow-up-right': '<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
 			undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11"/>',
 			gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',

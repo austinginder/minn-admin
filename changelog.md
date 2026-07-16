@@ -4,6 +4,11 @@
 
 ### Added
 * **Hide any integration for you:** right-click a plugin surface's sidebar row or a plugin editor panel's door and choose **Hide for you**. Hidden integrations leave the boot payload entirely (the sidebar, ⌘K palette and routes never see them), survive reloads, and restore from **Your profile → Hidden for you** or the Undo toast. The choice is per user; plugin re-registration does not undo it, and there is no API for a plugin to detect or resist it. Core views and core editor doors are not hideable.
+* **The shim tutorial and a copyable example plugin:** `docs/shim-tutorial.md` walks a custom-table plugin into a full Minn surface (REST shim, descriptor, status card, actions), and `docs/examples/minn-example-adapter/` is the finished code as a real working plugin. Minn's own test suite activates the example and drives it end to end, so the tutorial can never drift from the contract.
+
+### Fixed
+* **A dropped reply no longer wipes a soft-reloading list:** a tab, filter or search request that dies mid-flight (a PHP worker recycle, flaky network) used to replace the whole view with the error card, toolbar included. The chrome now stays painted, the dim clears, and an error toast reports it; the next click simply retries. Chrome-less first paints still show the error card.
+* **The `shield` icon rendered blank:** three bundled adapters (Wordfence, Solid Security, Limit Login Attempts) declared it but the icon map never carried it.
 
 ## **v0.16.0** - July 16, 2026
 
