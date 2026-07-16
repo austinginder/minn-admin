@@ -172,7 +172,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		switcher.includes( 'main:Profiles' ) && switcher.includes( 'x0:Cron' ),
 		switcher.join( ' · ' ) );
 	await page.click( '[data-sview="x0"]' );
-	await page.waitForTimeout( 800 );
+	// v0.16 soft-reload keeps the stale Profiles rows AND status card painted
+	// while the Cron collection loads — a flat wait reads stale UI. The card
+	// disappearing is the marker that the x0 render actually landed.
+	await page.waitForFunction( () => ! document.querySelector( '.minn-surface-status' )
+		&& document.querySelectorAll( '.minn-table-row' ).length > 0, null, { timeout: 20000 } );
 	const cronUi = await page.evaluate( () => {
 		const rows = document.querySelectorAll( '.minn-table-row' );
 		const statusGone = ! document.querySelector( '.minn-surface-status' );

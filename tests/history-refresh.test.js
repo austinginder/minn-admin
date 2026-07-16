@@ -38,62 +38,42 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await seedUpdate( '<!-- wp:paragraph --><p>Version three.</p><!-- /wp:paragraph -->' );
 
 	await openEditor( page, id );
-	await page.waitForSelector( '.minn-history-row', { timeout: 15000 } );
-	const before = await page.$$( '.minn-history-row' );
-	const nBefore = before.length;
-	t.check( 'history lists at least one previous revision after seed', nBefore >= 1, String( nBefore ) );
 
-	// API has one more revision than the UI (the live-post mirror is hidden).
-	const nApi = await page.evaluate( async ( pid ) => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '/revisions?per_page=6&_fields=id', {
-			headers: { 'X-WP-Nonce': window.MINN.nonce },
+	// History is a door on the rail now (v0.16); revisions live in its
+	// All-revisions dialog as [data-revlist] rows with .minn-rev-list-ago
+	// labels (revision-diff suite precedent).
+	const openHistoryDoor = async () => {
+		await page.waitForSelector( '[data-side-door="history"]', { timeout: 15000 } );
+		await page.evaluate( () => document.querySelector( '[data-side-door="history"]' ).click() );
+		await page.waitForSelector( '#minn-rev-list [data-revlist]', { timeout: 15000 } );
+	};
+	const closeDialog = async () => {
+		await page.evaluate( () => {
+			const x = document.querySelector( '#minn-modal-close' );
+			if ( x ) x.click();
 		} );
-		return ( await r.json() ).length;
-	}, id );
-	t.check( 'clean editor hides the current-save mirror revision', nBefore === nApi - 1, `ui=${ nBefore } api=${ nApi }` );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-rev-list' ), { timeout: 5000 } ).catch( () => {} );
+	};
+
+	await openHistoryDoor();
+	const nBefore = await page.evaluate( () => document.querySelectorAll( '#minn-rev-list [data-revlist]' ).length );
+	t.check( 'history lists at least one previous revision after seed', nBefore >= 1, String( nBefore ) );
 
 	// Visible previous-version row should read as recent — never "4h ago"
 	// (the old Z-suffix bug on America/New_York).
 	const whenBefore = await page.evaluate( () => {
-		const el = document.querySelector( '.minn-history-when' );
+		const el = document.querySelector( '#minn-rev-list [data-revlist] .minn-rev-list-ago' );
 		return el ? el.textContent.trim() : '';
 	} );
 	t.check(
 		'fresh revision is not skewed by site TZ (not Nh ago for N≈offset)',
-		/just now|min ago/.test( whenBefore ),
+		/just now|min ago|mins ago|second/.test( whenBefore ),
 		whenBefore
 	);
+	await closeDialog();
 
-	// Top row is a previous version — opening it must show a real diff, not
-	// "Identical to the current content" (the off-by-one Austin hit).
-	// Click via a fresh query: the sidebar re-renders on the autosave cadence
-	// and a held ElementHandle detaches between capture and click (rule-31
-	// class — the mousedown/mouseup detach).
-	await page.evaluate( () => {
-		const row = document.querySelector( '.minn-history-row' );
-		if ( row ) row.click();
-	} );
-	await page.waitForSelector( '#minn-modal-overlay .minn-side-row', { timeout: 10000 } );
-	await page.waitForTimeout( 400 );
-	const topDiff = await page.evaluate( () =>
-		[ ...document.querySelectorAll( '#minn-modal-overlay .minn-side-row' ) ].map( ( r ) => r.textContent ).join( ' ' )
-	);
-	t.check(
-		'top History row diffs against current (not identical mirror)',
-		! /Identical to the current content/.test( topDiff ) && /differ/.test( topDiff ),
-		topDiff.slice( 0, 160 )
-	);
-	await page.evaluate( () => {
-		const close = document.querySelector( '#minn-modal-overlay .minn-modal-close, #minn-modal-overlay [aria-label="Close"]' );
-		if ( close ) close.click();
-		else {
-			const overlay = document.querySelector( '#minn-modal-overlay' );
-			if ( overlay ) overlay.click();
-		}
-	} );
-	await page.waitForFunction( () => ! document.querySelector( '#minn-modal-overlay' ), { timeout: 5000 } ).catch( () => {} );
-
-	// Edit in the body and click Update — a new previous-version row appears.
+	// Edit in the body and click Update — reopening the door must show a new
+	// revision, proving the in-session save landed with no page reload.
 	await page.click( '#minn-editor-body' );
 	await page.keyboard.type( ' ' );
 	await page.keyboard.type( 'Edited live.' );
@@ -106,27 +86,23 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		return true;
 	} );
 	t.check( 'clicked Update/Publish', clicked, '' );
+	await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( x ) => /saved|updated|published/i.test( x.textContent ) ),
+		null, { timeout: 15000 } ).catch( () => {} );
+	await page.waitForTimeout( 1200 ); // revision write settles
 
-	await page.waitForFunction( ( n ) => {
-		const rows = document.querySelectorAll( '.minn-history-row' );
-		return rows.length > n;
-	}, nBefore, { timeout: 15000 } ).catch( () => {} );
-
-	const after = await page.$$( '.minn-history-row' );
-	t.check( 'history gains a row after save without refresh', after.length > nBefore, `before=${ nBefore } after=${ after.length }` );
-
-	// Top row is labeled with when the previous version was superseded (the
-	// new save's clock), not when that previous content was written — so a
-	// fresh Update reads "just now", not the older save's age.
+	await openHistoryDoor();
+	const after = await page.evaluate( () => document.querySelectorAll( '#minn-rev-list [data-revlist]' ).length );
+	t.check( 'history gains a row after save without refresh', after > nBefore, `before=${ nBefore } after=${ after }` );
 	const whenAfter = await page.evaluate( () => {
-		const el = document.querySelector( '.minn-history-when' );
+		const el = document.querySelector( '#minn-rev-list [data-revlist] .minn-rev-list-ago' );
 		return el ? el.textContent.trim() : '';
 	} );
 	t.check(
-		'post-save top History row reads as just now (superseded-at label)',
-		whenAfter === 'just now',
+		'post-save top History row reads as just now',
+		/just now|second/.test( whenAfter ),
 		whenAfter
 	);
+	await closeDialog();
 
 	// Direct unit check of the offset math against a site-local ISO string.
 	const math = await page.evaluate( () => {

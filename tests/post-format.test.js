@@ -31,8 +31,21 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'draft post created', !! postId, String( postId ) );
 		t.check( 'new post defaults to standard format', created.body && created.body.format === 'standard', created.body && created.body.format );
 
+		// v0.16: the format picker moved into the Settings door modal. Open it
+		// to reach #minn-post-format; the door closes with #minn-modal-close.
+		const openSettingsDoor = async () => {
+			await page.waitForSelector( '[data-side-door="settings"]', { timeout: 20000 } );
+			await page.evaluate( () => document.querySelector( '[data-side-door="settings"]' ).click() );
+			await page.waitForSelector( '#minn-post-format', { timeout: 15000 } );
+		};
+		const closeDoor = async () => {
+			await page.evaluate( () => { const x = document.querySelector( '#minn-modal-close' ); if ( x ) x.click(); } );
+			await page.waitForFunction( () => ! document.querySelector( '#minn-post-format' ), { timeout: 5000 } ).catch( () => {} );
+		};
+
 		await page.goto( BASE + `/minn-admin/editor/posts/${ postId }`, { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '#minn-post-format', { timeout: 20000 } );
+		await page.waitForSelector( '#minn-editor-body', { timeout: 20000 } );
+		await openSettingsDoor();
 
 		// Boot payload exposes the theme's supported formats.
 		const bootFormats = await page.evaluate( () => Object.keys( window.MINN.postFormats || {} ) );
@@ -41,8 +54,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const initial = await page.$eval( '#minn-post-format', ( s ) => s.value );
 		t.check( 'picker starts on the post\'s current format', initial === 'standard', initial );
 
-		// Choose Aside and save the draft.
+		// Choose Aside in the door (marks dirty), close it, then save on the rail.
 		await page.selectOption( '#minn-post-format', 'aside' );
+		await closeDoor();
 		await page.click( '#minn-save-draft-btn' );
 
 		// Poll the server for the saved format.
@@ -57,7 +71,8 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		// Reload and confirm the picker reflects the saved value.
 		await page.goto( BASE + `/minn-admin/editor/posts/${ postId }`, { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '#minn-post-format', { timeout: 20000 } );
+		await page.waitForSelector( '#minn-editor-body', { timeout: 20000 } );
+		await openSettingsDoor();
 		const reloaded = await page.$eval( '#minn-post-format', ( s ) => s.value );
 		t.check( 'picker reflects the saved format after reload', reloaded === 'aside', reloaded );
 

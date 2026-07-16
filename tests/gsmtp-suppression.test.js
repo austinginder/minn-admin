@@ -20,6 +20,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.goto( BASE + '/minn-admin/gravity-smtp', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '[data-sview="manage"]', { timeout: 20000 } );
 		await page.click( '[data-sview="manage"]' );
+		// v0.16 soft-reload keeps the Log view's stale rows painted while the
+		// Suppressions collection loads, so .minn-table-row matches instantly
+		// with the WRONG table. The Add button only exists on the manage view
+		// (Log has no create) — it appearing means this view actually painted.
+		await page.waitForSelector( '#minn-surface-add', { timeout: 20000 } );
 		await page.waitForSelector( '.minn-table-row', { timeout: 15000 } );
 	};
 

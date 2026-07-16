@@ -41,7 +41,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			! ( await page.$$eval( '.minn-view-switch [data-sview]', ( els ) => els.some( ( e ) => e.dataset.sview === 'settings' ) ) ) );
 
 		await page.click( '[data-sview="manage"]' );
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		// v0.16 soft reload keeps the Entries rows painted while Forms loads —
+		// wait for the FORM row itself, not just any table row.
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Contact Form' ) ),
+		null, { timeout: 20000 } );
 		await page.evaluate( () => {
 			[ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( 'Contact Form' ) ).click();
 		} );

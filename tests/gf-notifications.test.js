@@ -62,7 +62,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 
 		/* ===== The list: type-aware To column, status pills, form tabs ===== */
 		await page.click( '[data-sview="x0"]' );
-		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
+		// v0.16 soft reload keeps the Entries rows painted while the
+		// Notifications collection loads — wait for notification CONTENT
+		// (the seeded trio's admin notification), not just any table row.
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-table-row' ) ).some( ( r ) => r.textContent.includes( 'Admin Notification' ) ),
+		null, { timeout: 20000 } );
 		const body = await page.$eval( '#minn-view', ( el ) => el.textContent );
 		t.check( 'email-type To shows the address', body.includes( '{admin_email}' ) );
 		t.check( 'field-type To resolves the field label', body.includes( 'Field: Email Address' ) );
