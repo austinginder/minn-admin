@@ -110,6 +110,32 @@ rarely, and additively:
   unknown keys (the feature is simply absent on that install) and the Integrations card
   may flag them as unknown. No version detection needed — degrade is the design.
 
+## Integration etiquette
+
+WordPress admin lost the attention fight: notices became banners, menus became
+billboards, and every plugin learned to shout because shouting worked. Minn's answer is
+architecture, not a policy document you are asked to honor. It is worth knowing the
+whole enforcement story in one place, because it changes what a good integration looks
+like:
+
+- **The validator blocks or degrades placement grabs.** Workspace placement without an
+  inbox-shaped collection lands in Tools. More than 3 nav slots collapse into one. More
+  than 3 default slash entries per namespace become search-only. Every intervention is
+  visible on the Integrations card, attributed to your plugin.
+- **Rendering is Minn's.** Descriptors are data; your HTML, CSS and JS never reach the
+  document. There is no banner to inject, no button to restyle, no notice to pin.
+  Off-site links always render with ↗ and are listed on the Integrations card, so an
+  upsell can never look like an app action.
+- **Users hold the last word.** Every surface, panel, design library and slash
+  namespace can be hidden per user, the hide survives your re-registration, and there
+  is no API to detect or resist it.
+
+The consequence: labels are for naming, not marketing. A surface named for what it
+does, a status card that reports state, and one well-chosen default insert will be
+kept; promotional labels, nag-shaped surfaces and attention sprawl get demoted,
+collapsed, or hidden by the person you were trying to reach. Attention here is earned,
+and the budget is the same for everyone.
+
 ## Users can hide your integration
 
 Since v0.17.0, every integration point can be hidden per user from Minn's own UI, and

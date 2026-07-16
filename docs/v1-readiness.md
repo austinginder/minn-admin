@@ -117,7 +117,7 @@ v1.0 ships when all of these are true:
       namespace holds at most 3 default slash entries; overflow demotes to
       search-only. The Integrations card flags the workspace problem and
       notes over-budget owners informationally.)*
-- [ ] **G4 — External-link honesty.** Every plugin-supplied link that leaves the
+- [x] **G4 — External-link honesty.** Every plugin-supplied link that leaves the
       site renders with the external affordance. No descriptor can make an
       upsell look like an app action. *(Shipped 2026-07-16, v0.17.0 cycle:
       shared `hrefLabel()` renderer marks off-site hrefs ↗ at every render
@@ -125,8 +125,8 @@ v1.0 ships when all of these are true:
       openMinnMenu link), and the validator lists descriptor-carried
       off-site hrefs per surface on the Integrations card, informationally.
       Status-card links arrive in route responses at runtime, so they get
-      the render-time mark but not the static flag. Remaining: state the
-      guarantee in the etiquette section, then close the box.)*
+      the render-time mark but not the static flag. The author guide's
+      Integration etiquette section states the guarantee.)*
 - [ ] **G5 — Contract freeze.** The documented descriptor vocabulary is complete
       (no load-bearing undocumented keys), annotated with since-versions, and
       covered by a contract suite that drives a fixture third-party plugin
@@ -187,9 +187,10 @@ Two tracks, both in service of the gates above.
 - **External-link affordance guarantee** (G4): one shared renderer for every
   descriptor href; off-site links always get ↗ and open in a new tab; the
   validator flags off-site hrefs so the Integrations card shows them.
-- **Integration etiquette section** in the author guide with the enforcement
-  story: what the validator blocks, what degrades, what users can hide, and the
-  plain statement that labels are for naming, not marketing.
+- ~~**Integration etiquette section**~~ *(shipped 2026-07-16: the author guide's
+  "Integration etiquette" section carries the whole enforcement story — what the
+  validator blocks or degrades, that rendering is Minn's, what users can hide —
+  and the plain statement that labels are for naming, not marketing.)*
 
 ### Explicitly out of scope for v0.17.0
 
