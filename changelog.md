@@ -367,6 +367,8 @@ The delight release. Horizon 2 of the [editor roadmap](docs/editor-roadmap.md) l
 
 ## **v0.7.1** - July 5, 2026
 
+A fast follow for managed hosts: the new System page could 500 where wp-admin includes were not preloaded.
+
 ### Fixed
 * **System page 500 on managed hosts:** the System endpoint called `disk_free_space()` / `disk_total_space()` unguarded — hosts like Kinsta remove them from the web PHP via `disable_functions`, which turns the call into a fatal error (`@` doesn't save you, and the CLI on the same box reports nothing disabled). Both are now `function_exists()`-guarded, as is `php_uname()` a few lines below — the next fatal waiting on hardened hosts. Disk usage degrades to "Unknown" where the host hides it.
 
@@ -437,6 +439,8 @@ The editor release. Everything here is aimed at one goal: writing in Minn beats 
 
 ## **v0.5.0** - July 4, 2026
 
+The breadth release. The everyday rooms of wp-admin land in one sweep: taxonomies, Menus, Widgets, Trash, comment replies, media search and filters, excerpts, page attributes, Your profile and real pagination, plus core WordPress updates and the option to make Minn the default admin. The editor learns embeds, galleries, video and audio blocks, and image controls; redirects can be created and searched; Query Monitor gets a chip on every Minn page.
+
 ### Added
 * **Taxonomies manager:** The Post Types view gains a Taxonomies tab — every registered taxonomy with its attachments, term counts and owner, editable through the same storage adapters as post types (**ACF** `acf-taxonomy` definitions via ACF's own API, **Custom Post Type UI**'s option, or **Minn's own store**). Create (hierarchical or flat, choose the backend), re-attach to any post types, or remove — terms always stay in the database, and ACF deletions trash recoverably. Core and code-registered taxonomies are read-only. The Post Types modal's taxonomy checkboxes are now dynamic — every assignable taxonomy, not just Categories/Tags.
 * **Create redirects (and search them):** The Redirects surface gains an **Add redirect** button — a form for source, target and HTTP status that writes through Redirection's own API — plus a **filter box** that searches by source URL server-side. Both come from two new generic surface capabilities (`create` and `search`), so any adapter can opt in.
@@ -477,11 +481,15 @@ The editor release. Everything here is aimed at one goal: writing in Minn beats 
 
 ## **v0.4.1** - July 4, 2026
 
+A fast follow: per-plugin updates could deactivate the plugin they updated.
+
 ### Fixed
 * **Per-plugin updates deactivated active plugins:** The single-plugin update endpoint used `Plugin_Upgrader::upgrade()`, whose core behavior deactivates an active plugin before swapping files and leaves reactivation to the caller — so updating an active plugin from Minn (including Minn itself) stranded it deactivated. Now uses `bulk_upgrade()` for a single file, the same path core's own AJAX updater uses, which preserves active state — plus a reactivation safety net. "Update all" was never affected.
 * **Plugin description punctuation:** dropped the em dash ("Fast, focused and beautiful. Served at /minn-admin/.").
 
 ## **v0.4.0** - July 4, 2026
+
+The block-inspector release. Complex blocks stop being sealed boxes: every island gets a settings form drawn from the block's own registered schema, children can be added, removed and reordered, custom blocks insert from the slash menu, and previews render with real markup. A Post Types manager arrives alongside AnalyticsWP traffic, the site icon, searchable selects and timezone autocomplete.
 
 ### Added
 * **Block inspector:** Complex blocks (islands) are no longer opaque. Every island's chip is now a ⚙ button that opens an inspector popover: the block's attribute schema is fetched from `wp/v2/block-types`, a form is generated from it (strings, numbers, booleans, enums), and edits rewrite the attributes JSON in the block comment — Gutenberg-escaped, spliced back verbatim, byte-safety model unchanged. Works one level deep too: nested self-closing children (e.g. Anchor Blocks conversation messages) each get their own form section. Attributes stored in saved HTML (`source`-backed) are correctly left alone.
@@ -508,6 +516,8 @@ The editor release. Everything here is aimed at one goal: writing in Minn beats 
 
 ## **v0.3.0** - July 4, 2026
 
+The list-polish release. Filters arrive where they were missing (user roles, categories and tags), orders change status in place, media gets alt-text and title editing, content gains bulk actions, redirects become editable, and permalinks join Settings. Toolbars stop jumping, tab strips scroll, and the phone layout firms up.
+
 ### Added
 * **User role filter:** The Users view gains role tabs (All plus every registered role), filtering server-side via `wp/v2/users?roles=`.
 * **HTML email preview:** The Email Log (Gravity SMTP) detail now renders the real HTML message in a sandboxed iframe — the email as it actually looks — in a wider modal, with **Open raw** (opens the message in a new tab) and **Resend** (re-dispatches to the original recipients) actions.
@@ -528,6 +538,8 @@ The editor release. Everything here is aimed at one goal: writing in Minn beats 
 * **Open raw shows source, not a live page:** The Email Log's raw view opens the message as plain text. Opening it as HTML would have run any scripts in the logged email with the app's own origin.
 
 ## **v0.2.0** - July 3, 2026
+
+The first expansion. Theme installs and management, plugin installs, redirect and activity log surfaces, notifications, featured images, and traffic on the Overview. The editor learns tables, verse, citations and syntax-highlighted code languages, and an About dialog explains what Minn is.
 
 ### Added
 * **Code block languages:** A language picker (PHP, JS, HTML, CSS, bash, JSON, Python, SQL) appears in the editor toolbar whenever the caret is inside a code block. The choice is stored as a Prism-style `language-*` class on the `<code>` element — portable and theme-highlighter compatible — and drives language-aware syntax highlighting, including PHP `$variables` and `<?php` tags.
@@ -554,6 +566,8 @@ The editor release. Everything here is aimed at one goal: writing in Minn beats 
 * Elementor's internal post types (templates, floating elements) no longer appear as Content tabs.
 
 ## **v0.1.0** - July 3, 2026
+
+The first release. A standalone admin SPA at `/minn-admin/` with Overview, Content, Media, Orders, Users, Comments, Extensions and Settings, a writing-first editor that preserves complex blocks byte-for-byte as islands, a command palette, plugin surfaces and editor panels for extensions, and a GitHub self-updater. Classic wp-admin stays fully available alongside.
 
 ### Added
 * **Minn Admin app:** A reimagined WordPress admin served at `/minn-admin/` — a standalone single-page app that talks to the WordPress REST API and lives alongside the classic wp-admin.
