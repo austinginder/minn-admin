@@ -2,6 +2,8 @@
 
 ## **v0.16.0** - Unreleased
 
+The personalization and polish cycle. Minn now looks and behaves per user: named color schemes for light and dark (or a fully custom palette) picked on Your profile, and preferring Minn as the default admin becomes an opt-in per-user choice. Lists calm down across the app: tab, filter, and search changes keep toolbars painted and dim in place instead of flashing a Loading screen, on Content, Media, the commerce views, and plugin surfaces alike. The editor gets quieter and deeper at once: secondary meta tucks behind door rows, revisions open with an activity heatmap, the schedule calendar shows what is already planned, and long titles finally wrap. Licenses keep growing with Yoast SEO Premium and the Smash Balloon family, activity logs gain status cards, and updating a single plugin or theme no longer wipes every other pending offer.
+
 ### Added
 * **Yoast SEO Premium license:** Extensions → Licenses gains a **Yoast SEO Premium** row. Subscription state comes from free Yoast SEO's MyYoast site info (`WPSEO_Addon_Manager`); there is no paste-a-key path. **Activate ↗** opens Yoast's Licenses page, and **Verify** refreshes the MyYoast cache.
 * **Smash Balloon licenses:** Extensions → Licenses gains dedicated rows for Instagram Feed Pro, Custom Facebook Feed Pro, YouTube Feed Pro, Custom Twitter Feeds Pro, Social Wall, Reviews Feed Pro, TikTok Feeds Pro and Feed Analytics Pro. Paste-to-activate, deactivate and re-verify go through Smash Balloon's own EDD store (`smashballoon.com`); an **All Plugins** multi-product key activates each product with that product's own download name.
