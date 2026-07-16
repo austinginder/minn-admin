@@ -107,8 +107,12 @@ passwords and reassign-on-delete are better surfaced than classic.
 Grid with type filter/search/pagination, multi-upload, drag-drop, image
 editor (rotate/crop to a new copy), featured-image flows, delete, copy URL,
 caption/description editing and bulk delete (both shipped v0.11.0).
-Missing: unattached and date filters, "attached to" info. Folders:
-long-tail, skip.
+Missing: unattached and date filters, "attached to" info. Folders: not a
+core feature (a Minn-owned tree would be a fifth folder standard invisible
+to wp-admin and builder pickers), but the earlier "long-tail, skip" verdict
+was revised 2026-07-16: FileBird + Real Media Library + Folders total 400k+
+installs, so a browse-first provider contract is Wave D in
+`docs/plugin-support.md`.
 
 ### Comments — complete, single-row and bulk
 Tabs for pending/approved/spam/trash, full per-row moderation, bulk

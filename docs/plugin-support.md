@@ -119,6 +119,41 @@ remain scoped in `docs/native-editors.md` (parked).
    editor panel (date/venue meta), **Jetpack Stats** / **Matomo** traffic
    providers (auth and data-shape study first).
 
+### Wave D — Media management (researched 2026-07-16, wp.org installs live)
+
+Minn's media core is already caught up (caption/description, bulk delete,
+image editor, Regenerate Thumbnails + Safe SVG wired), so this wave is
+adapters plus one new primitive, ranked:
+
+7. **Enable Media Replace** (600k) — the best single pick: a "Replace
+   file…" action on the media detail modal through their own handler, URL
+   preserved. Small, daily-ops, no canvas to rebuild.
+8. **Core media polish** (no plugin) — unattached + date filters and
+   "attached to" info, already ranked in `docs/core-gaps.md`. Serves every
+   install.
+9. **Media folders provider contract, browse-first** — a
+   `minn_admin_media_folders` filter feeding a folder combobox in the
+   existing Media toolbar (folder → attachment-ids shim → `include=` on
+   wp/v2/media), "Move to folder" action later. FileBird first (200k,
+   custom `fbv` tables, clean model class); Real Media Library Lite (100k)
+   and Folders by Premio (90k) join the same contract like the SEO panel's
+   providers. This REVISES core-gaps' "folders: long-tail, skip": 400k+
+   combined installs, and it extends the existing Media view rather than
+   needing a new surface. NEVER a Minn-owned folder tree: a fifth folder
+   standard invisible to wp-admin and page-builder pickers contradicts the
+   thesis (core owns universal primitives, plugins own opinions).
+10. **Parity crumbs** — SVG Support (1M) joins the Safe SVG gate for the
+    SVG filter tab; Force Regenerate Thumbnails (200k) joins the existing
+    ↻ Thumbnails action.
+
+Still skipped, deliberately: the optimizers (Smush / EWWW / Imagify 1M
+each, Converter for Media 500k, ShortPixel 300k, Optimole 200k) are
+background processors with canvas dashboards (at most a one-line
+"optimized by X" note on media detail someday); Media Cleaner (90k) is a
+destructive scan tool that deserves its own full-attention UI; Media
+Library Assistant (70k) and the renamers (50k and down) are power-tool
+long tail.
+
 ### Licenses fleet (see `docs/license-manager.md`)
 
 ~~Smash Balloon~~ and ~~Yoast SEO Premium~~ shipped 2026-07-15. Remaining
