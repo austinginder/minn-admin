@@ -131,13 +131,19 @@ v1.0 ships when all of these are true:
       (no load-bearing undocumented keys), annotated with since-versions, and
       covered by a contract suite that drives a fixture third-party plugin
       through every documented key.
-- [ ] **G6 — One docs entry point.** A single author guide that starts with the
+- [x] **G6 — One docs entry point.** A single author guide that starts with the
       quickstart, includes the shim tutorial and screenshots, and has no stale
       sibling contradicting it. *(Restructure shipped 2026-07-16: quickstart
       first, shim tutorial + suite-enforced example plugin, test-your-adapter
       and AI-agent sections, capability patterns documented, canonical icon
       list, run-on cells split, since-versions, extension-api.md deleted.
-      Remaining: screenshots of each primitive.)*
+      Screenshots landed later the same day: nine dark-theme 2x captures in
+      docs/img covering every primitive (surface list, status card, detail
+      modal, contact-card entry, setup gate, settings view, sidebar doors +
+      opened panel, slash namespace entries), shot from the live app with
+      the Campfire example adapter as the subject so the tutorial and its
+      pictures can't diverge; the marketing site's guide modal renders them
+      via GitHub raw.)*
 
 ## v0.17.0 — the plugin-author cycle (proposed scope)
 

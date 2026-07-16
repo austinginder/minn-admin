@@ -39,7 +39,10 @@ has its own start-to-finish walkthrough: [the shim tutorial](shim-tutorial.md), 
 a small REST shim plus this descriptor for a fictional plugin. The finished code ships as a
 real, working plugin you can copy — [`docs/examples/minn-example-adapter/`](examples/minn-example-adapter/minn-example-adapter.php)
 — and Minn's own test suite drives it end to end, so the example can never drift from the
-contract.
+contract. This is what that tutorial's finished surface looks like, built entirely from
+declarative keys documented on this page:
+
+![The shim tutorial's finished Campfire surface: a status card with chart, tabs, search, pill and time columns](img/surface-list.png)
 
 **Building a forms plugin?** After the tutorial, the
 [first-class Forms provider recipe](#make-your-forms-plugin-a-first-class-forms-provider)
@@ -254,6 +257,8 @@ resolver — a user can hold access via the resolver while failing the raw check
 
 ### `setup` — a one-time setup gate
 
+![A setup gate: icon, title, note, option switches and a Set up now button in place of the list](img/setup-gate.png)
+
 Some plugins need a first-run install before they work at all (Redirection
 creates its tables and default group in its setup wizard; until then every
 write fails). Declaring `setup` keeps the surface honest: while setup is
@@ -293,6 +298,8 @@ Rules:
   the surface comes alive once your setup marks itself done.
 
 ### `status` — a card above the list
+
+![A status card: three stat rows with hints and a 14-day bar chart](img/status-card.png)
 
 For surfaces where the list alone doesn't tell the story (Disembark's Backups
 view is the reference), declare `status.route` and return:
@@ -350,6 +357,8 @@ omit `secondary` and render one accent bar per point. The bundled Gravity
 SMTP adapter is the reference (daily sent/failed from its events table).
 
 ### `settings` — a schema-driven settings view
+
+![A settings view: schema tabs, text/number/select fields with help text, a toggle revealing a dependent field, and a locked count with the wp-admin escape](img/settings-view.png)
 
 Your plugin's settings, rendered by Minn from a schema your route serves at
 runtime. Declare the tabs and one route; Minn draws the forms with the same
@@ -457,6 +466,8 @@ Rules of the road:
 | `bulk` | Bulk actions: the same shape as `actions` minus `href` (a batch always needs a `route`). Declaring any adds a checkbox column (shift-range, Select page) and a selection bar. Each action runs **per selected item** (`{id}` replaced; one failure never aborts the rest), `when` is evaluated per item so a mixed selection skips ineligible rows, a button whose `when` matches nothing on the current page isn't offered at all, and the result toast reports done / skipped / failed |
 | `create` | Adds an "Add" button + form modal. `{ label, route, method, fields, defaults }` — `fields` are `{ key, label, mono, type, value, placeholder, rows, options, required }` (dot-path keys supported, e.g. `action_data.url`); `defaults` are merged under the typed values so fixed fields (group, match type) ride along. Field types: `text` (default), `number`, `textarea` (`rows` sets its height), `select` (`options` as `[value, label]` pairs), `tags` (comma-separated input, submitted as an array), `email`, `url`. Every field is required unless it declares `required: false`. A failed create (your route returning `WP_Error`) toasts your error message and keeps the form open as typed |
 
+![A detail modal from detailRoute: key/value rows, the messageKey block, prev/next stepping and action buttons (the off-site one marked ↗)](img/detail-modal.png)
+
 ### `collection.actions` — verbs on rows and in the detail modal
 
 Each action is `{ label, method, route, body, confirm, danger, when, href, fields,
@@ -558,6 +569,8 @@ values become links). `adminUrl` links the item's wp-admin screen and suppresses
 Forms plugins are the shape this API was built around, and they get extra machinery for
 free. The pieces, with the exact shapes the bundled forms adapters use (Gravity Forms,
 Ninja Forms, Forminator, Formidable, Fluent Forms, CF7 via Flamingo and CFDB7):
+
+![The contact-card entry detail: sender hero, message block, labeled answers, submission meta line and entry actions](img/entry-detail.png)
 
 ```php
 $surfaces['driftwood'] = array(
@@ -985,6 +998,8 @@ a pre-built island template, or markup fetched from your REST API), register a
 slash-menu command. Commands appear in the editor's `/` menu and the block picker (⌘/),
 with no third-party JavaScript in the Minn document:
 
+![The slash menu filtered to one plugin's entries, each carrying its namespace badge](img/slash-menu.png)
+
 ```php
 add_filter( 'minn_admin_editor_commands', function ( $commands ) {
     // 1. Synchronous prose HTML (paragraphs, simple markup the serializers keep).
@@ -1051,6 +1066,12 @@ refresh it without a hard reload).
 
 For plugins whose data lives *inside the post* (custom fields, SEO meta), register an **editor
 panel** instead of a surface. Same philosophy: a declarative descriptor, rendered by Minn.
+Your panel is a quiet door row in the editor sidebar (label, badge, one-line summary) that
+opens a modal with your fields:
+
+![The editor sidebar door stack, ending with a plugin panel door: Custom fields · ACF, 4 fields · 1 advanced](img/editor-side-doors.png)
+
+![The opened panel: text, select, toggle and textarea fields plus the advanced-fields count with its wp-admin escape](img/editor-panel.png)
 
 ```php
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {

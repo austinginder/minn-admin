@@ -166,6 +166,10 @@ the list is empty but the surface renders: hit your list route directly —
 answers 401 and Minn shows an empty list rather than someone else's error
 page.
 
+The finished surface, all of it declared in step 3:
+
+![The finished Campfire Feedback surface: status card with chart, tabs, search, pill and time columns](img/surface-list.png)
+
 ## Where to go from here
 
 Everything else in [for-plugin-authors.md](for-plugin-authors.md) is
