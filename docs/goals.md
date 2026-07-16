@@ -23,6 +23,11 @@ accumulated chrome. These are the principles that decide what gets built and how
 6. **An ecosystem invitation.** Third-party plugins integrate through one declarative filter —
    see `for-plugin-authors.md`. Minn ships adapters for popular plugins; plugin authors can ship
    their own without writing JavaScript.
+7. **The user outranks every integration.** Nothing a plugin registers may grab attention the
+   user did not ask for, and anything a plugin registers can be hidden or muted by the user.
+   WordPress lost this fight in its notification system; Minn enforces it with architecture
+   (descriptors only, extraction not hosting), budgets and per-user controls — never with
+   trust in plugin authors' restraint. See `v1-readiness.md`.
 
 ## Non-goals
 

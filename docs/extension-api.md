@@ -1,4 +1,10 @@
-# Extending Minn Admin to other plugins (proposal)
+# Extending Minn Admin to other plugins (historical proposal)
+
+> **This is the original design proposal, kept for rationale.** The shipped
+> descriptor vocabulary has moved on: keys in the example below (like `stats`
+> and the old `tabs` shape) no longer exist. The ground truth for integrating a
+> plugin is [for-plugin-authors.md](for-plugin-authors.md). Do not copy code
+> from this file.
 
 How does Minn surface Gravity Forms entries, Gravity SMTP logs, or any other plugin's data —
 without hand-building a UI for every plugin in the ecosystem?

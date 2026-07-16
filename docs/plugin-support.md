@@ -86,6 +86,11 @@ Yoast license providers + Gravity SMTP bulk log delete). Coverage history
 lives in the table above; living primitive matrix + sweep log is
 `docs/adapter-coverage.md`.
 
+> **v0.17.0 note (2026-07-16):** adapter waves PAUSE for one cycle. The
+> v0.17.0 charter is the plugin-author cycle (developer experience and abuse
+> resistance on the road to v1.0) — see `docs/v1-readiness.md`. The waves
+> below resume afterwards.
+
 ### Wave A — Dev tools ✅ complete (v0.14.0)
 
 Diagnostics family ships Scrutoscope, WP Crontrol, Transients Manager, and
