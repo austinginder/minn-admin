@@ -40,7 +40,16 @@ make out loud:
 - **The quality bar**: ~150 browser suites, verification on clean and
   production-scale sites, zero-console-error gates.
 
-## What is not working (the honest list)
+## What was not working (the honest list — all eleven fixed 2026-07-16)
+
+This section is the audit as written at v0.16.0, kept for the record. Every
+item below shipped during the v0.17.0 cycle; the gate annotations further
+down carry the details. In short: 1 quickstart-first restructure, 2
+extension-api.md deleted, 3 shim tutorial + suite-enforced example plugin,
+4 capability patterns documented, 5 nine primitive screenshots, 6 canonical
+icon list, 7 all the missing basics plus a test-your-adapter section, 8
+per-user hide for every integration point, 9 attention budgets enforced,
+10 the ↗ guarantee on off-site links, 11 the Integration etiquette section.
 
 ### Author experience
 
