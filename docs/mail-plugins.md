@@ -2,7 +2,7 @@
 
 Source audit (2026-07-09) behind the `family: mail` surfaces. None of these
 plugins ship public REST for their logs, so every adapter is the read-only
-shim pattern from extension-api.md: prefix-scoped prepared SELECTs, `{items,
+shim pattern from shim-tutorial.md: prefix-scoped prepared SELECTs, `{items,
 total}`, serialized blobs mined with regexes and never unserialized.
 
 ## Shipped adapters

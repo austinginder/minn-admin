@@ -155,7 +155,8 @@ supersedes them), Classic Editor/Widgets (Minn's classic mode already
 handles the storage reality), and **Debug Bar** / P3 Profiler (QM and
 Scrutoscope supersede).
 
-See `docs/for-plugin-authors.md` to add coverage from your own plugin, and
-`docs/extension-api.md` for the surface/panel/provider contracts. For the
+See `docs/for-plugin-authors.md` for the surface/panel/provider contracts
+and to add coverage from your own plugin (`docs/shim-tutorial.md` for the
+custom-table walkthrough). For the
 primitive-by-adapter matrix (status cards, views, settings depth) used by
 adapter sweeps, see `docs/adapter-coverage.md`.

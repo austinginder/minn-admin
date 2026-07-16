@@ -112,7 +112,11 @@ v1.0 ships when all of these are true:
       through every documented key.
 - [ ] **G6 — One docs entry point.** A single author guide that starts with the
       quickstart, includes the shim tutorial and screenshots, and has no stale
-      sibling contradicting it.
+      sibling contradicting it. *(Restructure shipped 2026-07-16: quickstart
+      first, shim tutorial + suite-enforced example plugin, test-your-adapter
+      and AI-agent sections, capability patterns documented, canonical icon
+      list, run-on cells split, since-versions, extension-api.md deleted.
+      Remaining: screenshots of each primitive.)*
 
 ## v0.17.0 — the plugin-author cycle (proposed scope)
 
