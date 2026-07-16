@@ -64,9 +64,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const verbs = await page.$$eval( '#minn-comment-bulk-slot [data-cbulk]', ( els ) => els.map( ( e ) => e.dataset.cbulk ) );
 		t.check( 'bar verbs match the Pending tab actions', verbs.includes( 'approved' ) && verbs.includes( 'spam' ) && verbs.includes( 'trash' ), verbs.join( ',' ) );
 
-		// Bulk approve.
+		// Bulk approve. The bar clears when the run finishes (selection reset
+		// + re-render) — wait for that, not a flat timeout: three sequential
+		// POSTs can outlast 1.5s and the verify then reads a comment whose
+		// update hasn't landed yet.
 		await page.click( '#minn-comment-bulk-slot [data-cbulk="approved"]' );
-		await page.waitForTimeout( 1500 );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-comment-bulk-slot .minn-bulkbar' ), null, { timeout: 20000 } );
+		await page.waitForTimeout( 400 );
 
 		// Verify each seeded comment is now approved on the server.
 		let approved = 0;
