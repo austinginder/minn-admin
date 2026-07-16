@@ -198,7 +198,9 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   card shows everything registered and flags descriptor problems instead of failing silently.
   The full coverage map lives in [docs/plugin-support.md](docs/plugin-support.md)
 - **Dark, light and System themes** (follows your OS until you choose; right-click for an
-  explicit menu), bundled fonts, zero external requests from the app, responsive down to phones
+  explicit menu) plus **per-user color schemes**: named light/dark presets or a fully custom
+  scheme with per-slot color pickers, set on Your profile. Bundled fonts, zero external
+  requests from the app, responsive down to phones
 
 ## Install
 
