@@ -2145,6 +2145,9 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* ===== Post types ===== */
 .minn-cpt-cols { grid-template-columns: 1.4fr 1fr 120px 70px 60px 40px; }
 .minn-cpt-checks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 12px; }
+/* Structure-modal toggle rows: whole row is the click target. */
+.minn-cpt-toggle { display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 500; padding: 5px 0; cursor: pointer; user-select: none; }
+.minn-cpt-toggle:has(.minn-switch:disabled) { cursor: default; }
 .minn-user-row-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel2); object-fit: cover; }
 
 /* ===== Editor extras ===== */

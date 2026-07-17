@@ -691,6 +691,29 @@
 		} );
 	}
 
+	// Structure-modal (post type / taxonomy) toggle rows. The switch carries
+	// the data attribute the save handlers collect; locked (core/code)
+	// definitions render disabled switches that never bind.
+	function structureToggleHtml( attr, key, label, on, editable, desc ) {
+		return `<div class="minn-cpt-toggle"${ desc ? ` title="${ esc( desc ) }"` : '' }>
+			<button type="button" class="minn-switch${ on ? ' on' : '' }" ${ attr }="${ esc( key ) }" role="switch" aria-checked="${ !! on }" aria-label="${ esc( label ) }"${ editable ? '' : ' disabled' }><span class="minn-switch-knob"></span></button>
+			<span class="minn-cpt-toggle-label">${ esc( label ) }</span>
+		</div>`;
+	}
+
+	// The whole row is the click target; the switch's own click bubbles up
+	// here, so one handler flips it either way.
+	function bindStructureToggles( scope ) {
+		$$( '.minn-cpt-toggle', scope ).forEach( ( row ) => {
+			const swBtn = $( '.minn-switch', row );
+			if ( ! swBtn || swBtn.disabled ) return;
+			row.addEventListener( 'click', () => {
+				swBtn.classList.toggle( 'on' );
+				swBtn.setAttribute( 'aria-checked', swBtn.classList.contains( 'on' ) );
+			} );
+		} );
+	}
+
 	/* ===== Routing =====
 	 * Path-based ( /minn-admin/content ) when pretty permalinks are on,
 	 * falling back to hash routing ( #/content ) on plain permalinks. */
@@ -22454,10 +22477,8 @@
 			const editable = isNew || t.editable;
 			const supports = new Set( t ? t.supports : [ 'title', 'editor', 'thumbnail' ] );
 			const taxes = new Set( t ? t.taxonomies : [] );
-			const flag = ( key, label, desc, on ) => `
-				<label class="minn-insp-check" title="${ esc( desc ) }">
-					<input type="checkbox" class="minn-cb" data-cptflag="${ key }"${ on ? ' checked' : '' }${ editable ? '' : ' disabled' }> ${ label }
-				</label>`;
+			const sw = ( attr, key, label, on, desc ) => structureToggleHtml( attr, key, label, on, editable, desc );
+			const flag = ( key, label, desc, on ) => sw( 'data-cptflag', key, label, on, desc );
 			const dis = editable ? '' : ' disabled';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
@@ -22478,21 +22499,18 @@
 						<div><div class="minn-field-label">Description (optional)</div>
 						<input class="minn-input" data-cptfield="description" value="${ esc( t ? t.description : '' ) }"${ dis }></div>
 						${ isNew && m.backends.length > 1 ? `<div><div class="minn-field-label">Store definition in</div>
-						<select class="minn-input" id="minn-cpt-backend">
-							${ m.backends.map( ( b ) => `<option value="${ esc( b ) }">${ esc( CPT_SOURCE_LABEL[ b ] || b ) }</option>` ).join( '' ) }
-						</select></div>` : '' }
+						${ formControlHtml( { key: 'backend', type: 'combobox' }, m.backends[ 0 ], 'data-cptbackend' ) }</div>` : '' }
 						<div><div class="minn-field-label">Visibility</div>
+						<div class="minn-cpt-checks">
 						${ flag( 'public', 'Public', 'Visible on the front end with its own URLs', t ? t.public : true ) }
 						${ flag( 'has_archive', 'Archive page', 'A listing page at /slug/', t ? t.has_archive : false ) }
 						${ flag( 'hierarchical', 'Hierarchical', 'Like pages — items can have parents', t ? t.hierarchical : false ) }
-						${ flag( 'show_in_rest', 'Show in REST API', 'Required for Minn (and the block editor) to list and edit content', t ? t.show_in_rest : true ) }</div>
+						${ flag( 'show_in_rest', 'Show in REST API', 'Required for Minn (and the block editor) to list and edit content', t ? t.show_in_rest : true ) }</div></div>
 						<div><div class="minn-field-label">Supports</div>
-						<div class="minn-cpt-checks">${ CPT_SUPPORTS.map( ( [ id, label ] ) => `
-							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cptsupport="${ id }"${ supports.has( id ) ? ' checked' : '' }${ dis }> ${ label }</label>` ).join( '' ) }</div></div>
+						<div class="minn-cpt-checks">${ CPT_SUPPORTS.map( ( [ id, label ] ) => sw( 'data-cptsupport', id, label, supports.has( id ) ) ).join( '' ) }</div></div>
 						<div><div class="minn-field-label">Taxonomies</div>
 						<div class="minn-cpt-checks">
-							${ ( m.catalog && m.catalog.length ? m.catalog : [ { slug: 'category', label: 'Categories' }, { slug: 'post_tag', label: 'Tags' } ] ).map( ( tax ) => `
-							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-cpttax="${ esc( tax.slug ) }"${ taxes.has( tax.slug ) ? ' checked' : '' }${ dis }> ${ esc( tax.label ) }</label>` ).join( '' ) }
+							${ ( m.catalog && m.catalog.length ? m.catalog : [ { slug: 'category', label: 'Categories' }, { slug: 'post_tag', label: 'Tags' } ] ).map( ( tax ) => sw( 'data-cpttax', tax.slug, tax.label, taxes.has( tax.slug ) ) ).join( '' ) }
 						</div></div>
 					</div>
 					<div class="minn-modal-actions">
@@ -22532,10 +22550,8 @@
 			const editable = isNew || t.editable;
 			const attached = new Set( t ? t.object_types : [ 'post' ] );
 			const dis = editable ? '' : ' disabled';
-			const flag = ( key, label, desc, on ) => `
-				<label class="minn-insp-check" title="${ esc( desc ) }">
-					<input type="checkbox" class="minn-cb" data-taxflag="${ key }"${ on ? ' checked' : '' }${ dis }> ${ label }
-				</label>`;
+			const sw = ( attr, key, label, on, desc ) => structureToggleHtml( attr, key, label, on, editable, desc );
+			const flag = ( key, label, desc, on ) => sw( 'data-taxflag', key, label, on, desc );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
@@ -22553,17 +22569,14 @@
 						<div><div class="minn-field-label">Slug</div>
 						<input class="minn-input mono" data-taxfield="slug" value="${ esc( t ? t.slug : '' ) }" placeholder="genre" maxlength="32"${ isNew ? '' : ' disabled' }></div>
 						${ isNew && m.backends.length > 1 ? `<div><div class="minn-field-label">Store definition in</div>
-						<select class="minn-input" id="minn-tax-backend">
-							${ m.backends.map( ( b ) => `<option value="${ esc( b ) }">${ esc( CPT_SOURCE_LABEL[ b ] || b ) }</option>` ).join( '' ) }
-						</select></div>` : '' }
+						${ formControlHtml( { key: 'backend', type: 'combobox' }, m.backends[ 0 ], 'data-taxbackend' ) }</div>` : '' }
 						<div><div class="minn-field-label">Behavior</div>
-						${ flag( 'hierarchical', 'Hierarchical (like categories)', 'Terms can nest under parents; unchecked behaves like tags', t ? t.hierarchical : false ) }
+						${ flag( 'hierarchical', 'Hierarchical (like categories)', 'Terms can nest under parents; off behaves like tags', t ? t.hierarchical : false ) }
 						${ flag( 'public', 'Public', 'Visible on the front end with term archive URLs', t ? t.public : true ) }
 						${ flag( 'show_in_rest', 'Show in REST API', 'Required for Minn and the block editor to assign terms', t ? t.show_in_rest : true ) }</div>
 						<div><div class="minn-field-label">Attach to</div>
 						<div class="minn-cpt-checks">
-							${ ( m.types || [] ).map( ( pt ) => `
-							<label class="minn-insp-check"><input type="checkbox" class="minn-cb" data-taxtype="${ esc( pt.slug ) }"${ attached.has( pt.slug ) ? ' checked' : '' }${ dis }> ${ esc( pt.plural ) }</label>` ).join( '' ) }
+							${ ( m.types || [] ).map( ( pt ) => sw( 'data-taxtype', pt.slug, pt.plural, attached.has( pt.slug ) ) ).join( '' ) }
 						</div></div>
 					</div>
 					<div class="minn-modal-actions">
@@ -23538,17 +23551,21 @@
 		}
 
 		if ( m.type === 'cpt' ) {
+			bindStructureToggles( $( '.minn-modal' ) );
+			if ( ! m.item && m.backends && m.backends.length > 1 ) {
+				bindFormComboboxes( $( '.minn-modal' ), 'data-cptbackend', [ { key: 'backend', type: 'combobox', options: m.backends.map( ( b ) => [ b, CPT_SOURCE_LABEL[ b ] || b ] ) } ] );
+			}
 			const saveBtn = $( '#minn-cpt-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 				// Scope to the modal — the list rows behind it carry data-cpt slugs.
 				const modal = $( '.minn-modal' );
 				const payload = { supports: [], taxonomies: [] };
 				$$( '[data-cptfield]', modal ).forEach( ( i ) => { payload[ i.dataset.cptfield ] = i.value.trim(); } );
-				$$( '[data-cptflag]', modal ).forEach( ( i ) => { payload[ i.dataset.cptflag ] = i.checked ? 1 : 0; } );
-				$$( '[data-cptsupport]', modal ).forEach( ( i ) => { if ( i.checked ) payload.supports.push( i.dataset.cptsupport ); } );
-				$$( '[data-cpttax]', modal ).forEach( ( i ) => { if ( i.checked ) payload.taxonomies.push( i.dataset.cpttax ); } );
-				const backendSel = $( '#minn-cpt-backend' );
-				if ( backendSel ) payload.backend = backendSel.value;
+				$$( '[data-cptflag]', modal ).forEach( ( i ) => { payload[ i.dataset.cptflag ] = i.classList.contains( 'on' ) ? 1 : 0; } );
+				$$( '[data-cptsupport]', modal ).forEach( ( i ) => { if ( i.classList.contains( 'on' ) ) payload.supports.push( i.dataset.cptsupport ); } );
+				$$( '[data-cpttax]', modal ).forEach( ( i ) => { if ( i.classList.contains( 'on' ) ) payload.taxonomies.push( i.dataset.cpttax ); } );
+				const backendEl = $( '[data-cptbackend]', modal );
+				if ( backendEl ) payload.backend = formControlValue( backendEl );
 				saveBtn.disabled = true;
 				saveBtn.textContent = 'Saving…';
 				try {
@@ -23612,15 +23629,19 @@
 		}
 
 		if ( m.type === 'tax' ) {
+			bindStructureToggles( $( '.minn-modal' ) );
+			if ( ! m.item && m.backends && m.backends.length > 1 ) {
+				bindFormComboboxes( $( '.minn-modal' ), 'data-taxbackend', [ { key: 'backend', type: 'combobox', options: m.backends.map( ( b ) => [ b, CPT_SOURCE_LABEL[ b ] || b ] ) } ] );
+			}
 			const saveBtn = $( '#minn-tax-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 				const modal = $( '.minn-modal' );
 				const payload = { object_types: [] };
 				$$( '[data-taxfield]', modal ).forEach( ( i ) => { payload[ i.dataset.taxfield ] = i.value.trim(); } );
-				$$( '[data-taxflag]', modal ).forEach( ( i ) => { payload[ i.dataset.taxflag ] = i.checked ? 1 : 0; } );
-				$$( '[data-taxtype]', modal ).forEach( ( i ) => { if ( i.checked ) payload.object_types.push( i.dataset.taxtype ); } );
-				const backendSel = $( '#minn-tax-backend' );
-				if ( backendSel ) payload.backend = backendSel.value;
+				$$( '[data-taxflag]', modal ).forEach( ( i ) => { payload[ i.dataset.taxflag ] = i.classList.contains( 'on' ) ? 1 : 0; } );
+				$$( '[data-taxtype]', modal ).forEach( ( i ) => { if ( i.classList.contains( 'on' ) ) payload.object_types.push( i.dataset.taxtype ); } );
+				const backendEl = $( '[data-taxbackend]', modal );
+				if ( backendEl ) payload.backend = formControlValue( backendEl );
 				saveBtn.disabled = true;
 				saveBtn.textContent = 'Saving…';
 				try {
