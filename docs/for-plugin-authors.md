@@ -1223,8 +1223,9 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 
 Both callables run server-side as the browsing user (`edit_posts` floor), so
 per-user folder modes work by just reading your own scoped state. The bundled
-FileBird provider in `includes/adapters/media-folders.php` is the reference.
-Since 0.18.0.
+providers in `includes/adapters/media-folders.php` (FileBird, Real Media
+Library, Folders by Premio) are the reference; copy whichever storage shape
+matches yours (custom tables, an API, or a plain taxonomy). Since 0.18.0.
 
 ## Cache purgers — join "Clear site cache"
 
