@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.17.0** - Unreleased
+## **v0.17.0** - July 17, 2026
+
+The boundaries release. Minn's integration story grows teeth: placement and count budgets are enforced rather than requested, every off-site link a plugin supplies wears the mark, the descriptor vocabulary is frozen by a kitchen-sink contract suite, and anything you don't want is one right-click away from hidden, restorable from Your profile. Which is now a real page: account, public profile, appearance, per-user language with automatic pack installs, the front-end toolbar preference, AI access and sessions as calm cards. The command palette searches what you've written, the commerce views and menu items gain right-click menus, the author guide is rebuilt around first contact with a copyable example plugin, and the last native selects and checkboxes in Settings and the structure dialogs became themed controls.
 
 ### Added
 * **⌘K finds your content:** the command palette now searches what you've written, not just what Minn can do. Type anything and your posts, pages and custom post types appear under the command matches (published content plus your drafts and scheduled posts), and Enter drops you straight into the Minn editor. Same arrow-key and click behavior as commands, debounced against core's search API with the usual field allowlist (lists never render content), and commands always stay first.

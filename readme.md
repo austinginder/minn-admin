@@ -41,12 +41,17 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   resend/custom email, pay URL, **New order**, **Analytics** with long-range revenue and top products),
   **Products** (stock filters, bulk, daily fields, **Add product**), **Coupons**, **Customers**, and
   **Subscriptions** when WooCommerce Subscriptions is active (status, next payment, parent order,
-  related orders, customer strip). Invoice / packing-slip downloads when PDF Invoices & Packing Slips
-  is active. Product, coupon and subscription CPTs are fenced out of Content.
+  related orders, customer strip). Orders, products and customers carry **right-click menus** for
+  the common moves (status changes, stock and publish toggles, email, jump to a customer's orders).
+  Invoice / packing-slip downloads when PDF Invoices & Packing Slips is active. Product, coupon and
+  subscription CPTs are fenced out of Content.
 - **Users** — directory with search, a role filter, create/edit users, roles, passwords,
   **bulk role change**, **per-user login sessions with one-click sign-out**, **Switch to
   this user** when the User Switching plugin is active (a switched session shows a **Switch
   back** bar in Minn), and **Copy one-time login link** when One Time Login is active
+- **Your profile** — a full page at `/minn-admin/profile`: account, public profile (first/last
+  name, website, bio, Gravatar), **per-user language** with automatic pack installs, the
+  front-end toolbar preference, appearance, hidden integrations, and login sessions
 - **AI Access** — generate revocable **application passwords** for AI agents plus a site-tailored
   **agent guide** (markdown REST reference) to hand to a coding agent; configuration work stays
   out of Minn by design
@@ -144,7 +149,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   All in One SEO, SEOPress or SiteSEO title, meta description and focus keyword (first active
   SEO plugin wins)
 - **Menus & Widgets** — classic nav menus with drag-to-reorder (children travel with their
-  parent); classic sidebars with **drag grips** to reorder widgets in an area, plus move
+  parent) and right-click menus on every item; classic sidebars with **drag grips** to reorder widgets in an area, plus move
   between areas and in-place edit for block/text/HTML widgets
 - **Surfaces** — Minn's answer to plugin sprawl: one sidebar item per *job*, not per plugin,
   with every capable plugin layered in behind it and a provider switcher when more than one is
