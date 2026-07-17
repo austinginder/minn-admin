@@ -95,8 +95,14 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.waitForSelector( '[data-permakey="category_base"]', { timeout: 8000 } );
 		const before = await rest( 'wp/v2/settings' );
 		origCatBase = ( await rest( 'minn-admin/v1/permalinks' ) ).category_base || '';
+		// The format field is the strict combobox now — pick via panel items.
+		const pickFormat = async ( v ) => {
+			await page.click( '[data-combo="default_post_format"] .minn-ac-input' );
+			await page.waitForSelector( `[data-combo="default_post_format"] .minn-ac-item[data-acv="${ v }"]`, { timeout: 4000 } );
+			await page.click( `[data-combo="default_post_format"] .minn-ac-item[data-acv="${ v }"]` );
+		};
 		// Change a core setting (default post format) AND a permalink (category base).
-		await page.selectOption( '[data-key="default_post_format"]', 'aside' );
+		await pickFormat( 'aside' );
 		await page.fill( '[data-permakey="category_base"]', 'topics' );
 		await page.click( '#minn-save-settings' );
 		await page.waitForTimeout( 1500 );
@@ -105,7 +111,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'the core setting saved (default post format)', afterSettings.default_post_format === 'aside', afterSettings.default_post_format );
 		t.check( 'the permalink saved in the same click', afterPerma.category_base === 'topics', afterPerma.category_base );
 		// Restore both.
-		await page.selectOption( '[data-key="default_post_format"]', String( before.default_post_format || 'standard' ) );
+		await pickFormat( String( before.default_post_format || 'standard' ) );
 		await page.fill( '[data-permakey="category_base"]', origCatBase );
 		await page.click( '#minn-save-settings' );
 		await page.waitForTimeout( 1500 );
