@@ -611,6 +611,11 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-toolbar-views .minn-tabscroll,
 .minn-toolbar-views > .minn-tabs { flex: 1 1 auto; min-width: 0; }
 .minn-toolbar-views .minn-type-select { flex: 0 1 220px; max-width: 260px; }
+/* Aux strip (Content's Trash): pinned to the row's right edge — a stretching
+   flex child floated it mid-row. Icon + a step brighter than the quiet tabs. */
+.minn-toolbar > .minn-tabs.minn-tabs-aux { flex: 0 0 auto; margin-left: auto; }
+.minn-tabs-aux .minn-tab { display: flex; align-items: center; gap: 6px; color: var(--text2); }
+.minn-tabs-aux .minn-tab svg { width: 13px; height: 13px; }
 /* Filters row carries the bottom gap to the table (views row is tighter). */
 .minn-toolbar.minn-toolbar-filters { margin-bottom: 18px; }
 /* Extensions filters: quiet text links, not a second boxed pill strip —
