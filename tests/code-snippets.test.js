@@ -236,6 +236,20 @@ function purgeMinnSnippets() {
 		}, nameCreated );
 		t.check( 'Add snippet creates via REST', !! created && /created in minn/.test( created.code ), JSON.stringify( created ) );
 		t.check( 'new snippets start inactive', created && created.active === false, JSON.stringify( created ) );
+
+		/* ===== Status card (v0.18.0) ===== */
+		const st = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/code-snippets/status?_cb=' + Math.random(), {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+			return { status: r.status, body: await r.json() };
+		} );
+		t.check( 'status endpoint answers with counts', st.status === 200
+			&& ( st.body.rows || [] ).some( ( r ) => r.label === 'Active snippets' ),
+			JSON.stringify( st.body.rows || [] ).slice( 0, 120 ) );
+		await page.goto( `${ BASE }/minn-admin/code-snippets`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-surface-status', { timeout: 30000 } );
+		t.check( 'status card renders above the snippets list', await page.evaluate( () =>
+			/Active snippets/.test( document.querySelector( '.minn-surface-status' ).textContent ) ) );
 	} finally {
 		await cleanup();
 	}

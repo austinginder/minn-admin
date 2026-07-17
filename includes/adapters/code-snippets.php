@@ -64,6 +64,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Code Snippets',
 		'icon'       => 'code',
 		'cap'        => $cap,
+		// Status card (v0.18.0): what's running at a glance. First card in
+		// the snippets family.
+		'status'     => array( 'route' => 'minn-admin/v1/code-snippets/status' ),
 		'collection' => array(
 			'route'     => 'code-snippets/v1/snippets',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -165,4 +168,82 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 	return $surfaces;
+} );
+
+add_action( 'rest_api_init', function () {
+	if ( ! defined( 'CODE_SNIPPETS_VERSION' ) ) {
+		return;
+	}
+	// Status card: counts from their own table ({prefix}snippets; active
+	// 1=active, 0=inactive, -1=trashed per their class-db docblock), the
+	// latest change, and a safe-mode warning row when the constant is armed
+	// (safe mode means NOTHING executes — worth saying out loud).
+	register_rest_route( 'minn-admin/v1', '/code-snippets/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () {
+			$cap = function_exists( 'Code_Snippets\\code_snippets' )
+				? \Code_Snippets\code_snippets()->get_cap_name()
+				: 'manage_options';
+			return current_user_can( $cap );
+		},
+		'callback'            => function () {
+			global $wpdb;
+			$table = $wpdb->prefix . 'snippets';
+			if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+				return rest_ensure_response( array( 'rows' => array() ) );
+			}
+			$counts = $wpdb->get_results( "SELECT active, COUNT(*) AS c FROM {$table} GROUP BY active" ); // phpcs:ignore
+			$active   = 0;
+			$inactive = 0;
+			$trashed  = 0;
+			foreach ( (array) $counts as $r ) {
+				if ( 1 === (int) $r->active ) {
+					$active = (int) $r->c;
+				} elseif ( -1 === (int) $r->active ) {
+					$trashed = (int) $r->c;
+				} else {
+					$inactive = (int) $r->c;
+				}
+			}
+			$hint = array();
+			if ( $inactive ) {
+				$hint[] = $inactive . ' inactive';
+			}
+			if ( $trashed ) {
+				$hint[] = $trashed . ' trashed';
+			}
+			$rows = array(
+				array(
+					'label' => 'Active snippets',
+					'value' => (string) $active,
+					'hint'  => $hint ? implode( ' · ', $hint ) : 'nothing inactive',
+				),
+			);
+			$scopes = $wpdb->get_results( "SELECT scope, COUNT(*) AS c FROM {$table} WHERE active = 1 GROUP BY scope ORDER BY c DESC LIMIT 3" ); // phpcs:ignore
+			if ( $scopes ) {
+				$rows[] = array(
+					'label' => 'Running scopes',
+					'value' => implode( ' · ', array_map( function ( $s ) {
+						return $s->c . ' ' . $s->scope;
+					}, $scopes ) ),
+				);
+			}
+			$last = $wpdb->get_row( "SELECT name, modified FROM {$table} WHERE active >= 0 ORDER BY modified DESC LIMIT 1" ); // phpcs:ignore
+			if ( $last && $last->modified && '0000-00-00 00:00:00' !== $last->modified ) {
+				$rows[] = array(
+					'label' => 'Last change',
+					'value' => (string) $last->name,
+					'hint'  => substr( (string) $last->modified, 0, 10 ),
+				);
+			}
+			if ( defined( 'CODE_SNIPPETS_SAFE_MODE' ) && CODE_SNIPPETS_SAFE_MODE ) {
+				$rows[] = array(
+					'label' => 'Safe mode',
+					'value' => 'On',
+					'hint'  => 'No snippets are executing while safe mode is armed',
+				);
+			}
+			return rest_ensure_response( array( 'rows' => $rows ) );
+		},
+	) );
 } );
