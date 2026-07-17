@@ -436,6 +436,43 @@ class Minn_Admin_REST {
 			);
 		}
 
+		// Language catalog + per-user language. GET mirrors options-general's
+		// Site Language dropdown (installed + downloadable, cached by core's
+		// available_translations transient); POST sets the CURRENT user's
+		// locale, downloading the language pack first when needed — exactly
+		// what saving options-general.php does.
+		register_rest_route(
+			self::NS,
+			'/languages',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'get_languages' ),
+				'permission_callback' => function () {
+					return is_user_logged_in() && current_user_can( 'edit_posts' );
+				},
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/me/language',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'set_my_language' ),
+				'permission_callback' => function () {
+					return is_user_logged_in() && current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'locale' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => function ( $v ) {
+							return preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) $v );
+						},
+					),
+				),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/users',
@@ -2419,6 +2456,85 @@ class Minn_Admin_REST {
 	 */
 	public static function get_my_appearance() {
 		return rest_ensure_response( Minn_Admin::get_user_appearance( get_current_user_id() ) );
+	}
+
+	/**
+	 * GET minn-admin/v1/languages — the language catalog for Your profile:
+	 * installed locales plus (for users who can install languages) the full
+	 * downloadable list from the translations API. The network fetch rides
+	 * core's own available_translations transient (3h), so only the first
+	 * cold open pays it; a failed fetch degrades to installed-only.
+	 * `current` is the user's RAW locale meta ('' = site default) — the
+	 * wp/v2 users field can't say "default", it reports the effective locale.
+	 */
+	public static function get_languages() {
+		$installed = Minn_Admin::available_languages();
+		$available = array();
+		$can       = current_user_can( 'install_languages' ) && wp_is_file_mod_allowed( 'download_language_pack' );
+		if ( $can ) {
+			require_once ABSPATH . 'wp-admin/includes/translation-install.php';
+			$translations = wp_get_available_translations(); // cached by core, 3h
+			$have         = array();
+			foreach ( $installed as $pair ) {
+				$have[ $pair[0] ] = true;
+			}
+			foreach ( (array) $translations as $code => $t ) {
+				if ( ! isset( $have[ $code ] ) ) {
+					$available[] = array( $code, isset( $t['native_name'] ) ? $t['native_name'] : $code );
+				}
+			}
+			usort( $available, function ( $a, $b ) {
+				return strcasecmp( $a[1], $b[1] );
+			} );
+		}
+		$user = get_userdata( get_current_user_id() );
+		return rest_ensure_response(
+			array(
+				'installed'  => $installed,
+				'available'  => $available,
+				'canInstall' => $can,
+				'current'    => $user ? (string) $user->locale : '',
+			)
+		);
+	}
+
+	/**
+	 * POST minn-admin/v1/me/language { locale } — set the CURRENT user's
+	 * language, downloading the pack first when it isn't installed (the
+	 * options-general.php save behavior). '' restores the site default.
+	 */
+	public static function set_my_language( WP_REST_Request $request ) {
+		$locale     = (string) $request->get_param( 'locale' );
+		$downloaded = false;
+		if ( '' !== $locale && 'en_US' !== $locale && ! in_array( $locale, get_available_languages(), true ) ) {
+			if ( ! current_user_can( 'install_languages' ) || ! wp_is_file_mod_allowed( 'download_language_pack' ) ) {
+				return new WP_Error( 'minn_language_install', 'That language is not installed, and you cannot install languages on this site.', array( 'status' => 403 ) );
+			}
+			require_once ABSPATH . 'wp-admin/includes/translation-install.php';
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			$downloaded = wp_download_language_pack( $locale );
+			if ( ! $downloaded ) {
+				return new WP_Error( 'minn_language_install', 'The language pack could not be downloaded. Check the site can reach wordpress.org and try again.', array( 'status' => 500 ) );
+			}
+			$locale = $downloaded; // the API echoes the canonical code
+			$downloaded = true;
+		}
+		$result = wp_update_user(
+			array(
+				'ID'     => get_current_user_id(),
+				'locale' => $locale,
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response(
+			array(
+				'ok'        => true,
+				'locale'    => $locale,
+				'installed' => $downloaded,
+			)
+		);
 	}
 
 	/**

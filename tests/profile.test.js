@@ -15,7 +15,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	await login( page );
 
 	const restSelf = () => page.evaluate( async () => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/users/me?context=edit&_fields=id,name,url,description,first_name,last_name', {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/users/me?context=edit&_fields=id,name,url,description,first_name,last_name,locale,meta', {
 			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
 		return r.json();
 	} );
@@ -44,10 +44,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const probeName = 'Profile Probe ' + ( Date.now() % 100000 );
 		await page.evaluate( ( n ) => { const i = document.getElementById( 'minn-pf-name' ); i.value = n; }, probeName );
 		await page.click( '#minn-pf-save' );
+		// Generous window: plugins can hang slow hooks on profile_update
+		// (SearchWP's synchronous index loopbacks took 6-14s while active).
 		await page.waitForFunction( ( n ) => {
 			const el = document.querySelector( '.minn-user-name' );
 			return el && el.textContent.trim() === n;
-		}, probeName, { timeout: 10000 } );
+		}, probeName, { timeout: 20000 } );
 		t.check( 'save syncs the sidebar name', true );
 		const savedName = ( await restSelf() ).name;
 		t.check( 'display name persists over REST', savedName === probeName, savedName );
@@ -60,6 +62,45 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const pub = await restSelf();
 		t.check( 'website + bio persist over REST', pub.url === 'https://example.com/probe' && pub.description === 'Suite bio probe.',
 			JSON.stringify( { url: pub.url, description: pub.description } ) );
+
+		/* ===== Language picker + toolbar preference ===== */
+		t.check( 'language combobox renders', !! await page.$( '#minn-pf-lang' ) );
+		const langCatalog = () => page.evaluate( async () => ( await ( await fetch(
+			window.MINN.restUrl + 'minn-admin/v1/languages',
+			{ headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } ) ).json() ) );
+		const langsBefore = await langCatalog();
+		t.check( 'language catalog loads (installed + downloadable)',
+			Array.isArray( langsBefore.installed ) && langsBefore.installed.length >= 2
+			&& ( ! langsBefore.canInstall || langsBefore.available.length > 50 ),
+			JSON.stringify( { installed: ( langsBefore.installed || [] ).length, available: ( langsBefore.available || [] ).length, canInstall: langsBefore.canInstall } ) );
+		await page.click( '#minn-pf-lang' );
+		await page.waitForSelector( '#minn-pf-lang-ac .minn-ac-item[data-acv="en_US"]', { timeout: 4000 } );
+		await page.click( '#minn-pf-lang-ac .minn-ac-item[data-acv="en_US"]' );
+		await page.click( '#minn-pf-save' );
+		await page.waitForFunction( async () => {
+			const r = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/languages',
+				{ headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } ) ).json();
+			return r.current === 'en_US';
+		}, null, { timeout: 20000, polling: 800 } );
+		t.check( 'picked language persists as the raw user locale', true );
+		// Restore the raw locale meta through the same endpoint.
+		await page.evaluate( async ( cur ) => {
+			await fetch( window.MINN.restUrl + 'minn-admin/v1/me/language', {
+				method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin', body: JSON.stringify( { locale: cur || '' } ) } );
+		}, langsBefore.current );
+
+		const tbBefore = await page.$eval( '#minn-pf-toolbar', ( b ) => b.classList.contains( 'on' ) );
+		await page.click( '#minn-pf-toolbar' );
+		await page.waitForTimeout( 1200 );
+		const tbMeta = ( await restSelf() ).meta || {};
+		t.check( 'toolbar preference flips in user meta (instant save)',
+			( tbMeta.show_admin_bar_front === 'false' ) === tbBefore, JSON.stringify( tbMeta ) );
+		const feBar = await page.evaluate( async () =>
+			( await ( await fetch( '/', { credentials: 'same-origin' } ) ).text() ).includes( 'id="wpadminbar"' ) );
+		t.check( 'the real front end honors the flipped preference', feBar === ! tbBefore, String( feBar ) );
+		await page.click( '#minn-pf-toolbar' );
+		await page.waitForTimeout( 1000 );
 
 		/* ===== App password create + revoke ===== */
 		await page.fill( '#minn-app-name', 'Profile Suite Probe' );
@@ -122,6 +163,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 					description: orig.description || '',
 					first_name: orig.first_name || '',
 					last_name: orig.last_name || '',
+					meta: { show_admin_bar_front: ( orig.meta && orig.meta.show_admin_bar_front ) || 'true' },
 				} ),
 			} );
 		}, original ).catch( () => {} );
