@@ -1010,6 +1010,9 @@
 			// Theme: System (follows OS). Distinct from sun/moon so a dark OS
 			// doesn't look like an explicit Dark lock.
 			monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+			// Half-filled circle: the auto/system theme glyph (the monitor icon
+			// read as "view the site" — Austin kept clicking it for the front end).
+			contrast: '<circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor" stroke-width="0"/>',
 			plus: '<path d="M12 5v14M5 12h14"/>',
 			refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
 			list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
@@ -1568,7 +1571,7 @@
 		// Icon shows the preference (System = monitor), not only the
 		// effective paint — otherwise System + dark OS looks like locked Dark.
 		const pref = themePref();
-		btn.innerHTML = icon( pref === 'system' ? 'monitor' : ( pref === 'light' ? 'sun' : 'moon' ) );
+		btn.innerHTML = icon( pref === 'system' ? 'contrast' : ( pref === 'light' ? 'sun' : 'moon' ) );
 		const label = pref === 'system' ? 'System' : ( pref === 'light' ? 'Light' : 'Dark' );
 		btn.title = `Theme: ${ label } (click to cycle, right-click for options)`;
 	}
