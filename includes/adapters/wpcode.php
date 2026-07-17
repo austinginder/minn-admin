@@ -90,6 +90,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'WPCode',
 		'icon'       => 'code',
 		'cap'        => 'wpcode_edit_snippets',
+		// Status card (v0.18.0): family parity with Code Snippets.
+		'status'     => array( 'route' => 'minn-admin/v1/wpcode/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/wpcode/snippets',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -385,4 +387,62 @@ add_action( 'rest_api_init', function () {
 			),
 		)
 	);
+} );
+
+add_action( 'rest_api_init', function () {
+	if ( ! minn_admin_wpcode_active() ) {
+		return;
+	}
+	// Status card: WPCode snippets are a CPT — publish = active, everything
+	// else inactive (their model, same rule the list filter uses). Code types
+	// ride the _wpcode_code_type meta on active snippets.
+	register_rest_route( 'minn-admin/v1', '/wpcode/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () {
+			return current_user_can( 'wpcode_edit_snippets' );
+		},
+		'callback'            => function () {
+			global $wpdb;
+			$counts   = wp_count_posts( 'wpcode' );
+			$active   = isset( $counts->publish ) ? (int) $counts->publish : 0;
+			$inactive = 0;
+			foreach ( array( 'draft', 'private', 'pending' ) as $st ) {
+				$inactive += isset( $counts->$st ) ? (int) $counts->$st : 0;
+			}
+			$rows = array(
+				array(
+					'label' => 'Active snippets',
+					'value' => (string) $active,
+					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
+				),
+			);
+			$types = $wpdb->get_results(
+				"SELECT pm.meta_value AS t, COUNT(*) AS c FROM {$wpdb->posts} p
+				 JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_wpcode_code_type'
+				 WHERE p.post_type = 'wpcode' AND p.post_status = 'publish'
+				 GROUP BY pm.meta_value ORDER BY c DESC LIMIT 3"
+			);
+			if ( $types ) {
+				$rows[] = array(
+					'label' => 'Running types',
+					'value' => implode( ' · ', array_map( function ( $t ) {
+						return $t->c . ' ' . $t->t;
+					}, $types ) ),
+				);
+			}
+			$last = $wpdb->get_row(
+				"SELECT post_title, post_modified FROM {$wpdb->posts}
+				 WHERE post_type = 'wpcode' AND post_status IN ( 'publish', 'draft', 'private' )
+				 ORDER BY post_modified DESC LIMIT 1"
+			);
+			if ( $last ) {
+				$rows[] = array(
+					'label' => 'Last change',
+					'value' => (string) $last->post_title,
+					'hint'  => substr( (string) $last->post_modified, 0, 10 ),
+				);
+			}
+			return rest_ensure_response( array( 'rows' => $rows ) );
+		},
+	) );
 } );

@@ -153,6 +153,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Header Footer Code Manager',
 		'icon'       => 'code',
 		'cap'        => 'manage_options',
+		// Status card (v0.18.0): family parity with Code Snippets.
+		'status'     => array( 'route' => 'minn-admin/v1/hfcm/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/hfcm/snippets',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -259,6 +261,47 @@ add_action( 'rest_api_init', function () {
 	$perm = function () {
 		return minn_admin_hfcm_can();
 	};
+
+	// Status card: counts from their own table (status active/inactive,
+	// snippet_type html/css/js/php, last_revision_date).
+	register_rest_route( 'minn-admin/v1', '/hfcm/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			global $wpdb;
+			$table = minn_admin_hfcm_table();
+			if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+				return rest_ensure_response( array( 'rows' => array() ) );
+			}
+			$active   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'active'" ); // phpcs:ignore
+			$inactive = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status <> 'active'" ); // phpcs:ignore
+			$rows     = array(
+				array(
+					'label' => 'Active snippets',
+					'value' => (string) $active,
+					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
+				),
+			);
+			$types = $wpdb->get_results( "SELECT snippet_type AS t, COUNT(*) AS c FROM {$table} WHERE status = 'active' GROUP BY snippet_type ORDER BY c DESC LIMIT 3" ); // phpcs:ignore
+			if ( $types ) {
+				$rows[] = array(
+					'label' => 'Running types',
+					'value' => implode( ' · ', array_map( function ( $t ) {
+						return $t->c . ' ' . strtolower( (string) $t->t );
+					}, $types ) ),
+				);
+			}
+			$last = $wpdb->get_row( "SELECT name, last_revision_date FROM {$table} ORDER BY last_revision_date DESC LIMIT 1" ); // phpcs:ignore
+			if ( $last && $last->last_revision_date ) {
+				$rows[] = array(
+					'label' => 'Last change',
+					'value' => (string) $last->name,
+					'hint'  => substr( (string) $last->last_revision_date, 0, 10 ),
+				);
+			}
+			return rest_ensure_response( array( 'rows' => $rows ) );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/hfcm/snippets', array(
 		array(
