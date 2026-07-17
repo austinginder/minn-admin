@@ -100,11 +100,22 @@ remain scoped in `docs/native-editors.md` (parked).
 
 ### Wave B — leftover providers (existing families)
 
-1. **Email log providers** — GoSMTP (logs free), SureMails, Site Mailer;
-   Easy WP SMTP's full log is Pro-only (free has debug events, the
-   WP Mail SMTP shape).
-2. **Security leftover** — All-In-One Security (activity-log family +
-   posture row; the LLA-R / Solid Security pattern).
+Source-verified 2026-07-17 (installed all four on minnadmin):
+
+1. **Email log providers** — **SureMails** ({prefix}suremails_email_log:
+   email_from/to, subject, body, headers, attachments, status ENUM,
+   response, meta JSON, connection, created_at CURRENT_TIMESTAMP UTC) and
+   **Site Mailer** (site_mail_logs: to, subject, headers, message,
+   activity, source, status, created_at) BOTH store full logs free →
+   mail-family adapters queued (sections detail from day one). **GoSMTP
+   SKIPPED**: its `\GOSMTP\Logger` is Pro-only and the free build stores no
+   logs (the WP Mail SMTP-free pattern). Easy WP SMTP's full log is
+   Pro-only too (free has debug events).
+2. ~~**Security leftover** — All-In-One Security~~ **SHIPPED 2026-07-17**:
+   activity-log audit feed ({base_prefix}aiowps_audit_log; JSON details
+   flattened to Context rows; level tabs + search + status card;
+   installed-inactive per family convention). A failed-login /
+   permanent-block posture row is a future add.
 3. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
    believed but not source-verified; verify before promising).
 
