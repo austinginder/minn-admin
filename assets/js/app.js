@@ -4217,6 +4217,35 @@
 				if ( o ) openOrderModal( o );
 			} )
 		);
+		// Right-click an order: open + the common status moves without the modal.
+		const quickOrderStatus = async ( o, status, label ) => {
+			try {
+				const updated = await api( `wc/v3/orders/${ o.id }`, { method: 'PUT', body: JSON.stringify( { status } ) } );
+				if ( state.cache.orders && state.cache.orders.items ) {
+					const i = state.cache.orders.items.findIndex( ( x ) => x.id === o.id );
+					if ( i >= 0 ) state.cache.orders.items[ i ] = Object.assign( {}, state.cache.orders.items[ i ], { status: updated.status } );
+				}
+				state.cache.orderSummary = null;
+				toast( label );
+				if ( state.route === 'orders' ) renderOrders();
+			} catch ( e ) { toast( e.message, true ); }
+		};
+		$$( '[data-order]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				const o = c.items.find( ( x ) => x.id === parseInt( row.dataset.order, 10 ) );
+				if ( ! o ) return;
+				e.preventDefault();
+				const moves = [
+					[ 'processing', 'Mark processing', 'Order #' + o.number + ' marked processing' ],
+					[ 'completed', 'Mark completed', 'Order #' + o.number + ' completed' ],
+					[ 'on-hold', 'Put on hold', 'Order #' + o.number + ' put on hold' ],
+				].filter( ( [ st ] ) => st !== o.status );
+				openMinnMenu( e.clientX, e.clientY, [
+					{ label: 'Open order', run: () => openOrderModal( o ) },
+					...moves.map( ( [ st, label, done ] ) => ( { label, run: () => quickOrderStatus( o, st, done ) } ) ),
+				] );
+			} )
+		);
 		bindPager( view, c.page, loadOrders, () => { if ( state.route === 'orders' ) renderOrders(); } );
 	}
 
@@ -4957,6 +4986,37 @@
 				if ( p ) openProductModal( p );
 			} )
 		);
+		// Right-click a product: open + the bulk bar's own verbs, one row at a time.
+		const quickProduct = async ( p, body, label ) => {
+			try {
+				const updated = await api( `wc/v3/products/${ p.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
+				const i = c.items.findIndex( ( x ) => x.id === p.id );
+				if ( i >= 0 ) c.items[ i ] = Object.assign( {}, c.items[ i ], { status: updated.status, stock_status: updated.stock_status } );
+				toast( label );
+				if ( state.route === 'products' ) renderProducts();
+			} catch ( e ) { toast( e.message, true ); }
+		};
+		$$( '[data-product]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				const p = c.items.find( ( x ) => x.id === parseInt( row.dataset.product, 10 ) );
+				if ( ! p ) return;
+				e.preventDefault();
+				const out = p.stock_status === 'outofstock';
+				openMinnMenu( e.clientX, e.clientY, [
+					{ label: 'Open product', run: () => openProductModal( p ) },
+					...( p.permalink && p.status === 'publish' ? [ { label: 'View on site ↗', href: p.permalink } ] : [] ),
+					// Managed-stock products derive stock_status from quantity — edit those in the modal.
+					...( B.caps.products && ! p.manage_stock ? [ {
+						label: out ? 'Mark in stock' : 'Mark out of stock',
+						run: () => quickProduct( p, { stock_status: out ? 'instock' : 'outofstock' }, out ? 'Back in stock' : 'Marked out of stock' ),
+					} ] : [] ),
+					...( B.caps.products ? [ {
+						label: p.status === 'publish' ? 'Move to draft' : 'Publish now',
+						run: () => quickProduct( p, { status: p.status === 'publish' ? 'draft' : 'publish' }, p.status === 'publish' ? 'Moved to draft' : 'Product published' ),
+					} ] : [] ),
+				] );
+			} )
+		);
 		bindPager( view, c.page, loadProducts, () => { if ( state.route === 'products' ) renderProducts(); } );
 	}
 
@@ -5358,6 +5418,30 @@
 			row.addEventListener( 'click', () => {
 				const cu = c.items.find( ( x ) => x.id === parseInt( row.dataset.customer, 10 ) );
 				if ( cu ) openCustomerModal( cu );
+			} )
+		);
+		// Right-click a customer: open, reach out, or jump to their orders.
+		$$( '[data-customer]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				const cu = c.items.find( ( x ) => x.id === parseInt( row.dataset.customer, 10 ) );
+				if ( ! cu ) return;
+				e.preventDefault();
+				openMinnMenu( e.clientX, e.clientY, [
+					{ label: 'Open customer', run: () => openCustomerModal( cu ) },
+					...( cu.email ? [
+						{ label: 'Email ' + cu.email, href: 'mailto:' + cu.email },
+						...( B.caps.orders ? [ {
+							label: 'View orders',
+							run: () => {
+								state.orderView = 'list';
+								state.orderSearch = cu.email;
+								state.cache.orders = null;
+								go( 'orders' );
+							},
+						} ] : [] ),
+					] : [] ),
+					...( cu.id && B.caps.users ? [ { label: 'Edit user in wp-admin ↗', href: B.site.adminUrl + 'user-edit.php?user_id=' + cu.id } ] : [] ),
+				] );
 			} )
 		);
 		bindPager( view, c.page, loadCustomers, () => { if ( state.route === 'customers' ) renderCustomers(); } );
@@ -8265,6 +8349,22 @@
 				if ( e.target.closest( 'button' ) ) return;
 				ms.editing = parseInt( row.dataset.mi, 10 );
 				renderMenus();
+			} )
+		);
+		// Right-click a menu row: its own controls as a menu — built FROM the
+		// buttons (comment-row pattern) so it can never drift from their verbs.
+		$$( '.minn-menu-row[data-mi]', view ).forEach( ( row ) =>
+			row.addEventListener( 'contextmenu', ( e ) => {
+				e.preventDefault();
+				const entries = [ {
+					label: 'Edit label…',
+					run: () => { ms.editing = parseInt( row.dataset.mi, 10 ); renderMenus(); },
+				} ];
+				$$( '.minn-menu-ctrls button', row ).forEach( ( b ) => {
+					if ( b.disabled || ! b.title ) return;
+					entries.push( { label: b.title, danger: b.classList.contains( 'danger' ), run: () => b.click() } );
+				} );
+				openMinnMenu( e.clientX, e.clientY, entries );
 			} )
 		);
 		const miCancel = $( '#minn-mi-cancel', view );
