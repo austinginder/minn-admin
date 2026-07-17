@@ -344,6 +344,70 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		);
+
+		// The Feeds view: every add-on integration (Twilio, Mailchimp, Zapier,
+		// webhooks…) across forms, with activate/deactivate and delete through
+		// GF's own model. Feed CONFIG deliberately stays on the add-on's own
+		// screen — schemas lean on add-on credentials and builders, and Minn's
+		// job here is visibility and the on/off switch. The view only appears
+		// when a feed add-on is actually registered.
+		if ( class_exists( 'GFFeedAddOn' ) && array_filter(
+			GFAddOn::get_registered_addons( true ),
+			function ( $a ) {
+				return $a instanceof GFFeedAddOn;
+			}
+		) ) {
+			$surfaces['gravity-forms']['views'][] = array(
+				'viewLabel' => 'Feeds',
+				'route'     => 'minn-admin/v1/gf/forms/{tab}/feeds',
+				'allRoute'  => 'minn-admin/v1/gf/feeds',
+				'pageQuery' => 'per_page=25&page={page}',
+				'itemsKey'  => 'items',
+				'totalKey'  => 'total',
+				'tabs'      => array(
+					'route'    => 'gf/v2/forms',
+					'valueKey' => 'id',
+					'labelKey' => 'title',
+					'allLabel' => 'All feeds',
+				),
+				'columns'   => array(
+					array( 'key' => 'name', 'label' => 'Feed', 'format' => 'title' ),
+					array( 'key' => 'addon', 'label' => 'Add-on' ),
+					array( 'key' => 'form', 'label' => 'Form' ),
+					array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+				),
+				'detail'    => array(
+					'skip' => array( 'form_id', 'slug' ),
+				),
+				'actions'   => array(
+					array(
+						'label'  => 'Deactivate',
+						'method' => 'POST',
+						'route'  => 'minn-admin/v1/gf/feeds/{id}/active',
+						'body'   => array( 'active' => false ),
+						'when'   => array( 'key' => 'status', 'equals' => 'active' ),
+					),
+					array(
+						'label'  => 'Activate',
+						'method' => 'POST',
+						'route'  => 'minn-admin/v1/gf/feeds/{id}/active',
+						'body'   => array( 'active' => true ),
+						'when'   => array( 'key' => 'status', 'equals' => 'inactive' ),
+					),
+					array(
+						'label'   => 'Delete',
+						'method'  => 'DELETE',
+						'route'   => 'minn-admin/v1/gf/feeds/{id}',
+						'confirm' => 'Delete this feed permanently? The add-on stops running for its form.',
+						'danger'  => true,
+					),
+					array(
+						'label' => 'Edit in Gravity Forms ↗',
+						'href'  => admin_url( 'admin.php?page=gf_edit_forms&view=settings&subview={slug}&id={form_id}&fid={id}' ),
+					),
+				),
+			);
+		}
 	}
 
 	return $surfaces;
@@ -708,6 +772,120 @@ add_action( 'rest_api_init', function () {
 			}
 			GFAPI::update_forms_property( array( $id ), 'is_active', $request['active'] ? '1' : '0' );
 			return rest_ensure_response( array( 'id' => $id, 'status' => $request['active'] ? 'active' : 'inactive' ) );
+		},
+	) );
+
+	/* ===== Feeds: every add-on integration across forms =====
+	 * GFAPI::get_feeds defaults to ACTIVE-ONLY ($is_active = true) — pass
+	 * null explicitly or deactivated feeds silently vanish from the list
+	 * (bit during the build). Rows resolve the add-on slug to its short
+	 * title through GF's registered-addons list. Feed CONFIG stays on the
+	 * add-on's own screen (schemas are add-on React/creds territory); the
+	 * view is list, toggle, delete, deep link.
+	 */
+	$feed_addon_titles = function () {
+		$out = array();
+		if ( ! class_exists( 'GFAddOn' ) ) {
+			return $out;
+		}
+		foreach ( GFAddOn::get_registered_addons( true ) as $addon ) {
+			try {
+				if ( is_object( $addon ) && method_exists( $addon, 'get_slug' ) ) {
+					$out[ $addon->get_slug() ] = method_exists( $addon, 'get_short_title' ) ? (string) $addon->get_short_title() : (string) $addon->get_slug();
+				}
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+		}
+		return $out;
+	};
+	$list_feeds = function ( WP_REST_Request $request ) use ( $feed_addon_titles ) {
+		$form_id  = (int) $request['form'];
+		$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
+		$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
+		$feeds    = GFAPI::get_feeds( null, $form_id ? $form_id : null, null, null );
+		if ( is_wp_error( $feeds ) ) {
+			// Their "not_found" just means zero feeds — an empty list, not an error.
+			$feeds = array();
+		}
+		$titles = $feed_addon_titles();
+		$forms  = array();
+		$rows   = array();
+		foreach ( (array) $feeds as $feed ) {
+			$fid = (int) $feed['form_id'];
+			if ( ! isset( $forms[ $fid ] ) ) {
+				$form          = GFAPI::get_form( $fid );
+				$forms[ $fid ] = $form ? (string) $form['title'] : ( '#' . $fid );
+			}
+			$slug = (string) $feed['addon_slug'];
+			$meta = isset( $feed['meta'] ) && is_array( $feed['meta'] ) ? $feed['meta'] : array();
+			$name = '';
+			foreach ( array( 'feedName', 'feed_name', 'name' ) as $nk ) {
+				if ( ! empty( $meta[ $nk ] ) && is_string( $meta[ $nk ] ) ) {
+					$name = $meta[ $nk ];
+					break;
+				}
+			}
+			$rows[] = array(
+				'id'      => (int) $feed['id'],
+				'name'    => '' !== $name ? $name : ( ( isset( $titles[ $slug ] ) ? $titles[ $slug ] : $slug ) . ' feed' ),
+				'addon'   => isset( $titles[ $slug ] ) ? $titles[ $slug ] : $slug,
+				'slug'    => $slug,
+				'form'    => $forms[ $fid ],
+				'form_id' => $fid,
+				'status'  => ! isset( $feed['is_active'] ) || (int) $feed['is_active'] ? 'active' : 'inactive',
+			);
+		}
+		return rest_ensure_response( array(
+			'items' => array_slice( $rows, ( $page - 1 ) * $per_page, $per_page ),
+			'total' => count( $rows ),
+		) );
+	};
+	register_rest_route( 'minn-admin/v1', '/gf/feeds', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can_edit_forms,
+		'callback'            => $list_feeds,
+	) );
+	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<form>\d+)/feeds', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can_edit_forms,
+		'callback'            => $list_feeds,
+	) );
+	register_rest_route( 'minn-admin/v1', '/gf/feeds/(?P<id>\d+)/active', array(
+		'methods'             => 'POST',
+		'permission_callback' => $can_edit_forms,
+		'args'                => array(
+			'active' => array( 'type' => 'boolean', 'required' => true ),
+		),
+		'callback'            => function ( WP_REST_Request $request ) {
+			$id    = (int) $request['id'];
+			$feeds = GFAPI::get_feeds( array( $id ), null, null, null );
+			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
+				return new WP_Error( 'not_found', 'Feed not found.', array( 'status' => 404 ) );
+			}
+			// GF's own property write (their model, their column).
+			$ok = GFFormsModel::update_feed_property( $id, 'is_active', $request['active'] ? 1 : 0 );
+			if ( ! $ok ) {
+				return new WP_Error( 'toggle_failed', 'Gravity Forms refused the change.', array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'id' => $id, 'status' => $request['active'] ? 'active' : 'inactive' ) );
+		},
+	) );
+	register_rest_route( 'minn-admin/v1', '/gf/feeds/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'permission_callback' => $can_edit_forms,
+		'callback'            => function ( WP_REST_Request $request ) {
+			$id    = (int) $request['id'];
+			$feeds = GFAPI::get_feeds( array( $id ), null, null, null );
+			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
+				return new WP_Error( 'not_found', 'Feed not found.', array( 'status' => 404 ) );
+			}
+			$deleted = GFAPI::delete_feed( $id );
+			if ( is_wp_error( $deleted ) ) {
+				$deleted->add_data( array( 'status' => 500 ) );
+				return $deleted;
+			}
+			return rest_ensure_response( array( 'ok' => true ) );
 		},
 	) );
 } );

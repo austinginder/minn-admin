@@ -58,7 +58,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.goto( BASE + '/minn-admin/gravity-forms', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-view-switch', { timeout: 20000 } );
 		const tabs = await page.$$eval( '.minn-view-switch [data-sview]', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
-		t.check( 'switcher shows Entries / Forms / Notifications', JSON.stringify( tabs ) === JSON.stringify( [ 'Entries', 'Forms', 'Notifications' ] ), tabs.join( ' · ' ) );
+		// Feeds joined the switcher in v0.18.0 (only while a feed add-on is
+		// registered) — assert membership + order of the first three, never
+		// the exact list (rule-52 baseline class).
+		t.check( 'switcher shows Entries / Forms / Notifications', JSON.stringify( tabs.slice( 0, 3 ) ) === JSON.stringify( [ 'Entries', 'Forms', 'Notifications' ] ), tabs.join( ' · ' ) );
 
 		/* ===== The list: type-aware To column, status pills, form tabs ===== */
 		await page.click( '[data-sview="x0"]' );
