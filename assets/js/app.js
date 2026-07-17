@@ -25493,7 +25493,7 @@
 		const p = state.profile;
 		const mine = () => state.profile === p;
 		const paint = () => { if ( mine() && state.route === 'profile' ) renderProfile(); };
-		api( `wp/v2/users/${ B.user.id }?context=edit&_fields=id,name,email,roles,username` )
+		api( `wp/v2/users/${ B.user.id }?context=edit&_fields=id,name,email,roles,username,first_name,last_name,url,description,avatar_urls` )
 			.then( ( u ) => { if ( mine() ) { p.user = u; paint(); } } )
 			.catch( ( e ) => { if ( mine() ) { p.error = e.message || 'Could not load your profile.'; paint(); } } );
 		api( 'wp/v2/users/me/application-passwords' )
@@ -25554,7 +25554,35 @@
 								<button class="minn-btn-soft" id="minn-pf-genpass" style="flex-shrink:0;">Generate</button>
 							</div>
 						</div>
-						<div><button class="minn-btn-primary" id="minn-pf-save">Save changes</button></div>
+						<div><button class="minn-btn-primary" id="minn-pf-save" data-pf-save>Save changes</button></div>
+					</div>
+				</div>
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">Public profile <span class="minn-panel-sub">author boxes &amp; archives</span></div>
+					<div class="minn-profile-fields">
+						<div class="minn-pf-cols">
+							<div>
+								<div class="minn-field-label">First name</div>
+								<input class="minn-input" id="minn-pf-first" value="${ esc( u.first_name || '' ) }">
+							</div>
+							<div>
+								<div class="minn-field-label">Last name</div>
+								<input class="minn-input" id="minn-pf-last" value="${ esc( u.last_name || '' ) }">
+							</div>
+						</div>
+						<div>
+							<div class="minn-field-label">Website</div>
+							<input class="minn-input mono" id="minn-pf-url" value="${ esc( u.url || '' ) }" placeholder="https://…">
+						</div>
+						<div>
+							<div class="minn-field-label">Bio</div>
+							<textarea class="minn-input" id="minn-pf-bio" rows="4" placeholder="A couple of sentences about you — themes show this in author boxes.">${ esc( u.description || '' ) }</textarea>
+						</div>
+						<div class="minn-pf-avatar">
+							${ u.avatar_urls && u.avatar_urls[ '48' ] ? `<img class="minn-user-row-avatar" src="${ esc( u.avatar_urls[ '48' ] ) }" alt="">` : '' }
+							<div class="minn-toggle-desc">Your profile picture comes from <a href="https://gravatar.com/" target="_blank" rel="noopener">Gravatar ↗</a>, matched to your email.</div>
+						</div>
+						<div><button class="minn-btn-primary" data-pf-save>Save changes</button></div>
 					</div>
 				</div>
 				<div class="minn-card minn-panel-pad">
@@ -25658,12 +25686,17 @@
 			input.type = 'text';
 		} );
 
-		$( '#minn-pf-save', view ).addEventListener( 'click', async ( e ) => {
-			const btn = e.currentTarget;
+		// Both Save buttons (Account + Public profile) submit the same payload —
+		// every field rides wp/v2/users/me, so a save never half-applies.
+		$$( '[data-pf-save]', view ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {
 			btn.disabled = true;
 			const payload = {
 				name: $( '#minn-pf-name', view ).value.trim(),
 				email: $( '#minn-pf-email', view ).value.trim(),
+				first_name: $( '#minn-pf-first', view ).value.trim(),
+				last_name: $( '#minn-pf-last', view ).value.trim(),
+				url: $( '#minn-pf-url', view ).value.trim(),
+				description: $( '#minn-pf-bio', view ).value,
 			};
 			const roleSel = $( '#minn-pf-role', view );
 			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue ) payload.roles = [ roleSel.dataset.acValue ];
@@ -25680,7 +25713,7 @@
 					return;
 				}
 				toast( 'Profile updated' );
-				p.user = Object.assign( {}, p.user, { name: payload.name, email: payload.email } );
+				p.user = Object.assign( {}, p.user, payload );
 				// Keep the sidebar's name in sync with a display-name edit.
 				if ( payload.name ) {
 					B.user.name = payload.name;
@@ -25693,7 +25726,7 @@
 				toast( err.message, true );
 				btn.disabled = false;
 			}
-		} );
+		} ) );
 
 		const createBtn = $( '#minn-app-create', view );
 		if ( createBtn ) createBtn.addEventListener( 'click', async () => {

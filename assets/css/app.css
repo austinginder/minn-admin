@@ -2155,6 +2155,9 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; max-width: 1060px; }
 .minn-profile-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .minn-profile-fields { display: flex; flex-direction: column; gap: 13px; margin-top: 12px; }
+.minn-pf-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.minn-pf-avatar { display: flex; align-items: center; gap: 12px; }
+.minn-pf-avatar img { width: 38px; height: 38px; }
 .minn-profile-grid .minn-session-row:first-of-type { margin-top: 6px; }
 @media (max-width: 900px) {
   .minn-profile-grid { grid-template-columns: 1fr; }

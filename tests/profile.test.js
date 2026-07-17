@@ -15,7 +15,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	await login( page );
 
 	const restSelf = () => page.evaluate( async () => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/users/me?context=edit&_fields=id,name', {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/users/me?context=edit&_fields=id,name,url,description,first_name,last_name', {
 			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
 		return r.json();
 	} );
@@ -51,6 +51,15 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'save syncs the sidebar name', true );
 		const savedName = ( await restSelf() ).name;
 		t.check( 'display name persists over REST', savedName === probeName, savedName );
+
+		/* ===== Public profile card (bio + website) round-trip ===== */
+		await page.fill( '#minn-pf-url', 'https://example.com/probe' );
+		await page.fill( '#minn-pf-bio', 'Suite bio probe.' );
+		await page.evaluate( () => { [ ...document.querySelectorAll( '[data-pf-save]' ) ].pop().click(); } );
+		await page.waitForTimeout( 1200 );
+		const pub = await restSelf();
+		t.check( 'website + bio persist over REST', pub.url === 'https://example.com/probe' && pub.description === 'Suite bio probe.',
+			JSON.stringify( { url: pub.url, description: pub.description } ) );
 
 		/* ===== App password create + revoke ===== */
 		await page.fill( '#minn-app-name', 'Profile Suite Probe' );
@@ -101,13 +110,19 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			&& ! document.querySelector( '.minn-modal [data-unhide]' ) ) );
 		await page.keyboard.press( 'Escape' );
 	} finally {
-		// Restore the admin's display name whatever happened above.
+		// Restore the admin's identity fields whatever happened above.
 		await page.evaluate( async ( orig ) => {
 			await fetch( window.MINN.restUrl + 'wp/v2/users/' + orig.id, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
 				credentials: 'same-origin',
-				body: JSON.stringify( { name: orig.name } ),
+				body: JSON.stringify( {
+					name: orig.name,
+					url: orig.url || '',
+					description: orig.description || '',
+					first_name: orig.first_name || '',
+					last_name: orig.last_name || '',
+				} ),
 			} );
 		}, original ).catch( () => {} );
 	}
