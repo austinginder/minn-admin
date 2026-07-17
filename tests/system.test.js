@@ -129,14 +129,15 @@ const fs = require( 'fs' );
 	await page.waitForTimeout( 250 ); // the pre-paint listener flips it live
 	const themeDark = await page.evaluate( () => document.documentElement.getAttribute( 'data-theme' ) );
 	t.check( 'System theme follows the OS live on change', themeDark === 'dark', themeDark );
-	// Icon shows preference (monitor), not the effective paint.
+	// Icon shows preference (the half-circle contrast glyph since v0.18.0 —
+	// the monitor read as "view the site"), not the effective paint.
 	const systemIcon = await page.evaluate( () => {
 		const btn = document.getElementById( 'minn-theme-btn' );
 		return btn ? { title: btn.title, html: btn.innerHTML } : null;
 	} );
-	t.check( 'System preference shows monitor icon + System tooltip',
-		!! systemIcon && /Theme: System/.test( systemIcon.title ) && /rect/.test( systemIcon.html ),
-		JSON.stringify( systemIcon && { title: systemIcon.title, hasRect: /rect/.test( systemIcon.html ) } ) );
+	t.check( 'System preference shows the half-circle glyph + System tooltip',
+		!! systemIcon && /Theme: System/.test( systemIcon.title ) && /circle/.test( systemIcon.html ) && /a10 10 0 0 1 0 20z/.test( systemIcon.html ),
+		JSON.stringify( systemIcon && { title: systemIcon.title, hasGlyph: /circle/.test( systemIcon.html ) } ) );
 
 	/* ===== Theme button right-click: System / Light / Dark ===== */
 	await page.click( '#minn-theme-btn', { button: 'right' } );
