@@ -21582,8 +21582,10 @@
 		if ( m.type === 'media' ) {
 			const it = m.item;
 			const ctx = mediaModalContext();
+			// _bust: set after a Replace file — the URL is preserved by design,
+			// so the browser cache must be stepped around for the fresh preview.
 			const preview = it.kind === 'IMG' || it.kind === 'SVG'
-				? `<img src="${ esc( it.url ) }" alt="${ esc( it.alt ) }">`
+				? `<img src="${ esc( it.url ) }${ it._bust ? ( it.url.indexOf( '?' ) === -1 ? '?b=' : '&b=' ) + it._bust : '' }" alt="${ esc( it.alt ) }">`
 				: it.kind === 'VID' ? `<video src="${ esc( it.url ) }" controls></video>`
 				: it.kind === 'AUD' ? `<audio src="${ esc( it.url ) }" controls></audio>`
 				: `<div class="minn-modal-filecard" style="background:${ it.grad }">${ it.kind }</div>`;
@@ -21632,6 +21634,7 @@
 						<button class="minn-btn-soft" id="minn-media-open">↗ Open</button>
 						${ it.kind === 'IMG' ? `<button class="minn-btn-soft" id="minn-media-edit-image" type="button" title="Rotate and crop — saved as a new copy">✎ Edit image</button>` : '' }
 						${ it.kind === 'IMG' && B.regenThumbs ? `<button class="minn-btn-soft" id="minn-media-regen" type="button" title="Rebuild every registered thumbnail size from the original (Regenerate Thumbnails)">↻ Thumbnails</button>` : '' }
+						${ B.mediaReplace ? `<button class="minn-btn-soft" id="minn-media-replace" type="button" title="Upload a new file over this one — same name, same URL, every reference keeps working (Enable Media Replace)">⇅ Replace file</button>` : '' }
 						${ m.from === 'featured' && state.editor ? `
 						<button class="minn-btn-soft" id="minn-media-feat-replace" type="button">Replace featured</button>
 						<button class="minn-btn-soft danger" id="minn-media-feat-remove" type="button">Remove featured</button>` : '' }
@@ -23307,6 +23310,41 @@
 				}
 				regenBtn.disabled = false;
 				regenBtn.textContent = '↻ Thumbnails';
+			} );
+			// Replace file (Enable Media Replace): same name, same URL — EMR's
+			// controller does the pixel work server-side
+			// (adapters/enable-media-replace.php); the modal stays open.
+			const replaceBtn = $( '#minn-media-replace' );
+			if ( replaceBtn ) replaceBtn.addEventListener( 'click', () => {
+				const input = document.createElement( 'input' );
+				input.type = 'file';
+				// In-place replace keeps the extension honest: offer the same
+				// type up front (the server enforces it either way).
+				if ( it.mime ) input.accept = it.mime;
+				input.addEventListener( 'change', async () => {
+					const file = input.files && input.files[ 0 ];
+					if ( ! file ) return;
+					replaceBtn.disabled = true;
+					replaceBtn.textContent = 'Replacing…';
+					try {
+						const fd = new FormData();
+						fd.append( 'file', file );
+						const r = await api( `minn-admin/v1/media/${ it.id }/replace`, { method: 'POST', body: fd } );
+						it.dims = r.width ? `${ r.width }×${ r.height }` : it.dims;
+						it.size = r.filesize ? fmtBytes( r.filesize ) : it.size;
+						it._bust = Date.now();
+						it.thumb = it.url; // old size files may be gone; full URL is the safe thumb now
+						state.cache.media = null;
+						toast( 'File replaced — same URL, new content' );
+						if ( state.route === 'media' ) renderMedia();
+						renderOverlays();
+					} catch ( e ) {
+						toast( e.message, true );
+						replaceBtn.disabled = false;
+						replaceBtn.textContent = '⇅ Replace file';
+					}
+				} );
+				input.click();
 			} );
 			$( '#minn-media-delete' ).addEventListener( 'click', () => deleteMediaItem( it ) );
 		}
