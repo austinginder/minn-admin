@@ -68,9 +68,12 @@ still `docs/for-plugin-authors.md` and the validator constants in
   status card is the first consumer (14-day sent/failed from its events
   table). Still open beside it: per-item stat tiles, and other chart
   consumers (GF form results; ecommerce analytics shipped v0.14.0).
-- **Richer `sectionsRoute` row types** — `pill`, `code`, `html-preview`
-  (sandboxed iframe; `messageKey` generalized), `kv-table`. Email-log detail
-  (headers, audit trail, rendered body) becomes fully expressible.
+- ~~**Richer `sectionsRoute` row types**~~ ✅ shipped (v0.18.0 open,
+  2026-07-17): `pill`, `code`, `html-preview` (fully sandboxed iframe) and
+  `kv-table` rows in the sections renderer, documented in the author guide
+  with the escaping/sandbox guarantees and pinned by the detail-rows suite
+  (hostile payloads proven inert). Gravity SMTP's log detail is the first
+  consumer; Fluent/Post/WPML conversions are natural next slices.
 - ~~**Row actions in surface lists**~~ ✅ shipped (v0.13.0): any collection
   with `actions` grows a content-list-style ⋯ / right-click menu (Open +
   when-gated verbs). Parameterized `fields` actions stay detail-only; opt
@@ -192,10 +195,8 @@ rough priority order:
   2026-07-10) covers stat rows + actions above a list; still missing: a chart row
   type and per-item stat tiles. Unlocks the Gravity SMTP dashboard and GF
   `/forms/{id}/results`.
-- **Richer `sectionsRoute` row types.** Today only `url` is special. Add `pill`,
-  `code`, `html-preview` (sandboxed iframe, the `messageKey` machinery generalized),
-  and `kv-table`. The email-log detail (headers, per-event audit trail, rendered
-  preview) becomes fully expressible.
+- ~~**Richer `sectionsRoute` row types.**~~ ✅ shipped (v0.18.0 open, 2026-07-17);
+  see the Rung-3 entry above.
 - **Row actions in the list** (the content-list `⋯` row menu pattern, generalized) and
   a third navigation level only if a real adapter demands it; tabs plus main/manage
   have covered everything so far.

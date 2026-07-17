@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.18.0** - Unreleased
+
+### Added
+* **Detail row types for plugin surfaces:** a `sectionsRoute` response row can now declare `type: pill` (the shared status vocabulary), `code` (escaped monospace block), `html-preview` (your HTML in a fully sandboxed iframe, no scripts, opaque origin) or `kv-table` (a two-column table from an object map or pair list), alongside the existing `url` and `email` link rows. Values stay escaped everywhere; the sandbox is the one place plugin markup renders. Gravity SMTP's log detail is the first consumer: delivery facts with a status pill, the real HTML email body rendered safely, and the stored headers as a table.
+
 ## **v0.17.0** - July 17, 2026
 
 The boundaries release. Minn's integration story grows teeth: placement and count budgets are enforced rather than requested, every off-site link a plugin supplies wears the mark, the descriptor vocabulary is frozen by a kitchen-sink contract suite, and anything you don't want is one right-click away from hidden, restorable from Your profile. Which is now a real page: account, public profile, appearance, per-user language with automatic pack installs, the front-end toolbar preference, AI access and sessions as calm cards. The command palette searches what you've written, the commerce views and menu items gain right-click menus, the author guide is rebuilt around first contact with a copyable example plugin, and the last native selects and checkboxes in Settings and the structure dialogs became themed controls.
