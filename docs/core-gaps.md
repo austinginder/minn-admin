@@ -99,9 +99,11 @@ add Discussion depth only if comment-heavy sites ask.
 ### Users — at parity or better
 List, search, roles, add/edit, delete with content reassignment, password
 reset, send email, session kill, bulk role change (shipped v0.11.0),
-application passwords ("AI Access" with generated agent guide). Missing:
-the long-tail profile fields (bio, website, per-user locale). Application
-passwords and reassign-on-delete are better surfaced than classic.
+application passwords ("AI Access" with generated agent guide). The
+long-tail profile fields all shipped v0.17.0 on the /minn-admin/profile
+page (first/last name, bio, website, per-user language with automatic
+pack installs, the front-end toolbar preference). Application passwords
+and reassign-on-delete are better surfaced than classic.
 
 ### Media — grid solid, editing caught up
 Grid with type filter/search/pagination, multi-upload, drag-drop, image
