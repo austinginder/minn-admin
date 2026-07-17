@@ -105,20 +105,57 @@ class Minn_Admin_Surfaces {
 	 */
 	const OWNER_NAV_BUDGET = 3;
 
-	private static function collapse_owner_surfaces( $surfaces, $owners, $own ) {
-		$counts = array();
-		foreach ( $surfaces as $s ) {
-			$owner = isset( $owners[ $s['id'] ] ) ? $owners[ $s['id'] ] : '';
-			if ( '' === $owner || 'Unknown' === $owner || ! empty( $own[ $s['id'] ] ) ) {
+	/**
+	 * Nav-slot count per third-party owner. A real `family` renders as ONE
+	 * nav slot no matter how many surfaces share it (a family is already a
+	 * collapsed slot), and each family-less surface is its own slot. Minn's
+	 * own registrations (by file, the `own` flag) and unattributed
+	 * ('' / 'Unknown') owners are exempt from the budget. Shared by the
+	 * collapse pass and the Integrations-card note so the two never disagree
+	 * about which owners exceed the budget.
+	 *
+	 * @param array[] $items Each { owner, own, family }.
+	 * @return array owner => nav-slot count.
+	 */
+	private static function owner_nav_slots( $items ) {
+		$families = array(); // owner => [ family => true ]
+		$loose    = array(); // owner => family-less surface count
+		foreach ( $items as $it ) {
+			$owner = isset( $it['owner'] ) ? $it['owner'] : '';
+			if ( '' === $owner || 'Unknown' === $owner || ! empty( $it['own'] ) ) {
 				continue;
 			}
-			$counts[ $owner ] = isset( $counts[ $owner ] ) ? $counts[ $owner ] + 1 : 1;
+			if ( ! empty( $it['family'] ) ) {
+				$families[ $owner ][ (string) $it['family'] ] = true;
+			} else {
+				$loose[ $owner ] = isset( $loose[ $owner ] ) ? $loose[ $owner ] + 1 : 1;
+			}
 		}
+		$slots = array();
+		foreach ( array_keys( $families + $loose ) as $owner ) {
+			$slots[ $owner ] = ( isset( $families[ $owner ] ) ? count( $families[ $owner ] ) : 0 )
+				+ ( isset( $loose[ $owner ] ) ? $loose[ $owner ] : 0 );
+		}
+		return $slots;
+	}
+
+	private static function collapse_owner_surfaces( $surfaces, $owners, $own ) {
+		$items = array();
+		foreach ( $surfaces as $s ) {
+			$items[] = array(
+				'owner'  => isset( $owners[ $s['id'] ] ) ? $owners[ $s['id'] ] : '',
+				'own'    => ! empty( $own[ $s['id'] ] ),
+				'family' => isset( $s['family'] ) ? $s['family'] : '',
+			);
+		}
+		$slots = self::owner_nav_slots( $items );
 		foreach ( $surfaces as $i => $s ) {
 			$owner = isset( $owners[ $s['id'] ] ) ? $owners[ $s['id'] ] : '';
-			if ( empty( $counts[ $owner ] ) || $counts[ $owner ] <= self::OWNER_NAV_BUDGET || ! empty( $own[ $s['id'] ] ) ) {
+			if ( empty( $slots[ $owner ] ) || $slots[ $owner ] <= self::OWNER_NAV_BUDGET || ! empty( $own[ $s['id'] ] ) ) {
 				continue;
 			}
+			// Merge only the family-less surfaces into one synthetic slot;
+			// surfaces already in a real family keep it.
 			if ( empty( $s['family'] ) ) {
 				$surfaces[ $i ]['family'] = 'plugin-' . sanitize_title( $owner );
 			}
@@ -877,22 +914,18 @@ class Minn_Admin_Surfaces {
 		}
 		// Attention-budget note (informational, like offsite): an owner past
 		// the nav budget has its family-less surfaces sharing one nav slot.
-		// Minn's own registrations are exempt by FILE location (the `own`
-		// map), matching for_current_user() — never by owner display name,
-		// which symlinked installs mangle.
-		$owner_counts = array();
-		foreach ( $s_rows as $r ) {
-			if ( '' === $r['owner'] || 'Unknown' === $r['owner'] || $r['own'] ) {
-				continue;
-			}
-			$owner_counts[ $r['owner'] ] = isset( $owner_counts[ $r['owner'] ] ) ? $owner_counts[ $r['owner'] ] + 1 : 1;
-		}
+		// Uses the SAME nav-slot counting the collapse pass uses (a real
+		// family counts once), so the card never claims a collapse the nav
+		// does not perform. Minn's own registrations are exempt by FILE
+		// location (the `own` flag), matching for_current_user(), never by
+		// owner display name, which symlinked installs mangle.
+		$slots = self::owner_nav_slots( $s_rows );
 		foreach ( $s_rows as $i => $r ) {
-			$n = $r['own'] ? 0 : ( isset( $owner_counts[ $r['owner'] ] ) ? $owner_counts[ $r['owner'] ] : 0 );
+			$n = isset( $slots[ $r['owner'] ] ) ? $slots[ $r['owner'] ] : 0;
 			unset( $s_rows[ $i ]['own'] );
 			if ( $n > self::OWNER_NAV_BUDGET ) {
 				$s_rows[ $i ]['notes'] = array(
-					sprintf( '%s registers %d surfaces; family-less ones share one nav slot (budget %d)', $r['owner'], $n, self::OWNER_NAV_BUDGET ),
+					sprintf( '%s uses %d nav slots (budget %d); its family-less surfaces share one.', $r['owner'], $n, self::OWNER_NAV_BUDGET ),
 				);
 			}
 		}

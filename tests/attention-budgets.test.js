@@ -121,10 +121,32 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		t.check( 'workspace shape flagged as a contract problem',
 			card.problems.some( ( p ) => p.includes( 'workspace is for inbox-shaped surfaces' ) ), card.problems.join( ' | ' ) );
 		t.check( 'owner budget note shown, informationally',
-			card.notes.some( ( p ) => p.includes( 'share one nav slot (budget 3)' ) ), card.notes.join( ' | ' ) );
+			card.notes.some( ( p ) => /uses \d+ nav slots \(budget 3\); its family-less surfaces share one\./.test( p ) ), card.notes.join( ' | ' ) );
+
+		/* ===== Family = one nav slot: 5 surfaces in one family stay within
+		 * budget, no collapse, no note (the code-review family-count fix) ===== */
+		await setOpt( 'minn_test_budget_fixtures', false );
+		if ( ! await setOpt( 'minn_test_family_budget', true ) ) throw new Error( 'could not enable family budget fixture' );
+		await page.goto( `${ BASE }/minn-admin/`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-nav-btn', { timeout: 20000 } );
+		const fam = await page.evaluate( () => {
+			const mine = ( window.MINN.surfaces || [] ).filter( ( s ) => s.id.indexOf( 'minn-fambudget' ) === 0 );
+			return {
+				count: mine.length,
+				allRealFamily: mine.every( ( s ) => s.family === 'minn-fambudget' ),
+				noSynthetic: mine.every( ( s ) => ! /^plugin-/.test( s.family || '' ) ),
+			};
+		} );
+		t.check( 'five family surfaces ride the payload', fam.count === 5, JSON.stringify( fam ) );
+		t.check( 'a shared family is ONE nav slot, kept as-is (not collapsed)', fam.allRealFamily && fam.noSynthetic, JSON.stringify( fam ) );
+		await page.goto( `${ BASE }/minn-admin/system`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-sys-integrations', { timeout: 20000 } );
+		const famNotes = await page.evaluate( () =>
+			[ ...document.querySelectorAll( '.minn-sys-int-note' ) ].map( ( e ) => e.textContent ) );
+		t.check( 'no budget note for a within-budget family owner', famNotes.length === 0, famNotes.join( ' | ' ) );
 
 		/* ===== Cleanup restores a clean registry ===== */
-		await setOpt( 'minn_test_budget_fixtures', false );
+		await setOpt( 'minn_test_family_budget', false );
 		await page.goto( `${ BASE }/minn-admin/system`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-sys-integrations', { timeout: 20000 } );
 		const after = await page.evaluate( () => ( {
@@ -135,6 +157,7 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	} finally {
 		if ( postId ) await deletePost( page, postId ).catch( () => {} );
 		await setOpt( 'minn_test_budget_fixtures', false );
+		await setOpt( 'minn_test_family_budget', false );
 	}
 
 	await t.done( browser, errors );
