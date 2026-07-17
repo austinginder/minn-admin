@@ -1217,6 +1217,14 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
             // and caps at 500 before querying.
             return my_folders_attachment_ids( $folder_id );
         },
+        'move'    => function ( $folder_id, array $attachment_ids ) {
+            // Optional. When present, the media bulk bar gains a folder
+            // picker and a Move button. Put the attachments in the folder
+            // through your own machinery (0 = remove from every folder);
+            // true or WP_Error. Callers hold upload_files; run your own
+            // finer checks here. Omit it and Minn shows no Move control.
+            return my_folders_move( $folder_id, $attachment_ids );
+        },
     );
 } );
 ```

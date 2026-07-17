@@ -104,6 +104,30 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			return r.json();
 		}, fx.folder );
 		t.check( 'ids shim returns the assigned file only', shim.ids.length === 1 && shim.ids[ 0 ] === fx.inFolder && shim.capped === false, JSON.stringify( shim ) );
+
+		// Move to folder from the bulk bar: select the loose file, pick the
+		// suite folder, Move — FileBird's own assign machinery runs.
+		t.check( 'boot offers move', await page.evaluate( () => window.MINN.mediaFolders.move === true ) );
+		await page.click( `.minn-media-cb[data-cbid="${ fx.loose }"]` );
+		await page.waitForSelector( '[data-bulkfoldercombo] .minn-ac-input', { timeout: 8000 } );
+		t.check( 'bulk bar offers the folder picker', true );
+		t.check( 'Move starts disabled', await page.$eval( '#minn-media-bulk-move', ( b ) => b.disabled ) );
+		await page.click( '[data-bulkfoldercombo] .minn-ac-input' );
+		await page.waitForSelector( `[data-bulkfoldercombo] .minn-ac-item[data-acv="${ fx.folder }"]`, { timeout: 8000 } );
+		await page.click( `[data-bulkfoldercombo] .minn-ac-item[data-acv="${ fx.folder }"]` );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-media-bulk-move' ).disabled, null, { timeout: 5000 } );
+		await page.click( '#minn-media-bulk-move' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Moved 1 file/.test( x.textContent ) ),
+		null, { timeout: 20000 } );
+		t.check( 'move toasts', true );
+		const shim2 = await page.evaluate( async ( fid ) => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/media/folders/' + fid + '/ids', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			return r.json();
+		}, fx.folder );
+		t.check( 'folder now holds both files', shim2.ids.length === 2 && shim2.ids.includes( fx.loose ) && shim2.ids.includes( fx.inFolder ), JSON.stringify( shim2 ) );
 	} finally {
 		// Folder cleanup only — the two media fixtures carry into phase 2,
 		// which deletes them in its own finally.
