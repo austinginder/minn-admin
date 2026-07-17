@@ -70,6 +70,7 @@ Reference depth: **Gravity Forms**.
 | forminator | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Tabs + bulk + search present (matrix was stale) |
 | formidable | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Tabs + bulk + search present (matrix was stale) |
 | everest-forms | Y | Y | Y | Y | Y | · | · | · | · | Y | 2026-07-14 | Received/Spam/Trash + bulk; suite `everest-forms` |
+| sureforms | Y | Y | Y | Y | — | Y | · | · | · | Y | 2026-07-17 | Wave B: {prefix}srfm_entries (form_data JSON keyed by label → contact-card entries); per-form tabs; read/unread/trash filter + status actions; search; delete; status card; installed-inactive |
 
 ### backups
 

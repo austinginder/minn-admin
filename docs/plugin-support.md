@@ -117,8 +117,15 @@ Source-verified 2026-07-17 (installed all four on minnadmin):
    flattened to Context rows; level tabs + search + status card;
    installed-inactive per family convention). A failed-login /
    permanent-block posture row is a future add.
-3. **Forms leftovers** — SureForms and MetForm (free-tier entry storage
-   believed but not source-verified; verify before promising).
+3. **Forms leftovers** — **SureForms SHIPPED 2026-07-17** (verified:
+   {prefix}srfm_entries, form_data is clean JSON keyed by field label,
+   read/unread/trash status, sureforms_form CPT for tabs; full
+   forms-family adapter). **MetForm DEFERRED**: it stores entries as a
+   `metform-entry` CPT with per-field post meta, but field labels come
+   from parsing the Elementor form widget (needs Elementor active and
+   widget-tree resolution) — a different effort class than SureForms'
+   flat JSON. Revisit as its own unit when Elementor-dependent adapters
+   are on the table.
 
 ### Wave C — bigger scoped bets (own cycle or half-cycle)
 
