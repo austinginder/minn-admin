@@ -130,6 +130,31 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			/new|read/.test( cells ) && /[a-z]\d[a-z]\d/.test( cells ) && /Answer/.test( cells ) && /@example\.com/.test( cells ), cells.slice( 0, 220 ) );
 		t.check( 'ago column parses the UTC timestamp', /ago|1h|1d/.test( cells ) );
 
+		/* ===== Sortable columns (sort + sortQuery, since v0.18.0) ===== */
+		const sortHeads = await page.$$eval( '[data-ssort]', ( els ) => els.map( ( e ) => e.dataset.ssort ) );
+		t.check( 'columns with sort tokens render sortable headers', sortHeads.includes( 'title' ) && sortHeads.includes( 'count' ), JSON.stringify( sortHeads ) );
+		const sortWait = ( dir ) => page.waitForRequest(
+			( r ) => r.url().includes( 'minn-test/contract/list' ) && r.url().includes( 'orderby=count' ) && r.url().includes( 'direction=' + dir ),
+			{ timeout: 10000 } );
+		let sw = sortWait( 'desc' ); // num format starts descending
+		await page.click( '[data-ssort="count"]' );
+		await sw;
+		await page.waitForFunction( () => {
+			const b = document.querySelector( '[data-ssort="count"]' );
+			return b && b.classList.contains( 'is-active' ) && b.getAttribute( 'aria-sort' ) === 'descending';
+		}, null, { timeout: 15000 } );
+		t.check( 'num column sorts descending first, header marks active', true );
+		sw = sortWait( 'asc' );
+		await page.click( '[data-ssort="count"]' );
+		await sw;
+		await page.waitForFunction( () => {
+			const b = document.querySelector( '[data-ssort="count"]' );
+			return b && b.getAttribute( 'aria-sort' ) === 'ascending';
+		}, null, { timeout: 15000 } );
+		t.check( 'repeat click flips direction (request + aria)', true );
+		// Fresh page load clears the sort so later checks see natural order.
+		await openSurface();
+
 		/* ===== Tab switch narrows; search narrows; filter narrows ===== */
 		await page.click( '[data-stab="read"]' );
 		await page.waitForFunction( () => document.querySelectorAll( '.minn-table-row' ).length === 1, null, { timeout: 15000 } );

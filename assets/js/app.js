@@ -6862,6 +6862,14 @@
 			// Encoded twice: GF urldecodes the already-decoded param again.
 			parts.push( criteriaParam + '=' + encodeURIComponent( encodeURIComponent( JSON.stringify( criteria ) ) ) );
 		}
+		// Column sort (v0.18.0): sortQuery is a {by}/{dir} template, appended
+		// only when the user picked a sortable header — no pick keeps the
+		// route's natural order, exactly as before the primitive existed.
+		if ( col.sortQuery && ss.sortBy ) {
+			parts.push( col.sortQuery
+				.split( '{by}' ).join( encodeURIComponent( ss.sortBy ) )
+				.split( '{dir}' ).join( ss.sortDir === 'desc' ? 'desc' : 'asc' ) );
+		}
 		// {page} is 1-based; {page0} serves APIs that count pages from zero.
 		parts.push( ( col.pageQuery || 'per_page=25&page={page}' ).replace( '{page}', page ).replace( '{page0}', page - 1 ) );
 		return route + ( route.includes( '?' ) ? '&' : '?' ) + parts.join( '&' );
@@ -6886,10 +6894,11 @@
 	async function loadSurfaceItems( s, page = 1 ) {
 		const ss = surfaceState( s.id );
 		const col = surfaceColl( s, ss );
-		const ctx = ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss );
+		const ctxOf = () => ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss ) + '|' + ( ss.sortBy || '' ) + ( ss.sortDir || '' );
+		const ctx = ctxOf();
 		const res = await apiRes( surfaceRoute( s, ss, page ) );
 		const body = await res.json();
-		if ( ctx !== ss.tab + '|' + ( ss.q || '' ) + '|' + surfaceFilterValue( col, ss ) ) return; // context changed mid-flight
+		if ( ctx !== ctxOf() ) return; // context changed mid-flight
 		const items = col.itemsKey
 			? ( body[ col.itemsKey ] || [] )
 			: ( Array.isArray( body ) ? body : Object.values( body ) );
@@ -7441,6 +7450,8 @@
 						ss.tab = '_all';
 						ss.q = '';
 						ss.filter = null;
+						ss.sortBy = null; // sort belongs to the view's own columns
+						ss.sortDir = null;
 						ss.status = null; // refresh status card for the active view
 					},
 					paintChrome: () => {
@@ -7476,6 +7487,8 @@
 			ss.cache = null;
 			ss.tabs = null;
 			ss.tab = '_all';
+			ss.sortBy = null;
+			ss.sortDir = null;
 		}
 		// A settings-only surface (no collection) is its settings view.
 		if ( s.settings && ( ss.view === 'settings' || ! s.collection ) ) {
@@ -7564,7 +7577,19 @@
 		<div class="minn-card minn-table">
 			<div class="minn-table-head" style="grid-template-columns:${ gridCols };">
 				${ hasBulk ? '<div><input type="checkbox" class="minn-cb" id="minn-sbulk-all" title="Select page"></div>' : '' }
-				${ cols.map( ( col ) => `<div${ col.format === 'num' ? ' class="minn-num"' : '' }>${ esc( col.label ) }</div>` ).join( '' ) }<div></div>
+				${ cols.map( ( col ) => {
+					// Sortable header (v0.18.0): a column carrying a `sort`
+					// token on a collection with sortQuery renders the users-
+					// list header button (↑/↓ + aria-sort).
+					if ( col.sort && coll.sortQuery ) {
+						const active = ss.sortBy === col.sort;
+						const dir = ss.sortDir === 'desc' ? 'desc' : 'asc';
+						const aria = active ? ( dir === 'asc' ? 'ascending' : 'descending' ) : 'none';
+						const mark = active ? ( dir === 'asc' ? ' ↑' : ' ↓' ) : '';
+						return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }><button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-ssort="${ esc( col.sort ) }" data-ssort-format="${ esc( col.format || '' ) }" aria-sort="${ aria }" title="Sort by ${ esc( col.label ) }">${ esc( col.label ) }${ mark }</button></div>`;
+					}
+					return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }>${ esc( col.label ) }</div>`;
+				} ).join( '' ) }<div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( item, i ) => `
 				<div class="minn-table-row" style="grid-template-columns:${ gridCols };" data-sitem="${ i }">
@@ -7585,6 +7610,27 @@
 			load: () => loadSurfaceItems( s ),
 			render: () => renderSurface( s ),
 		} );
+		// Sortable headers: first click sorts (num/ago columns default desc —
+		// biggest/newest first, the users-list convention); repeat flips.
+		$$( '[data-ssort]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const by = btn.dataset.ssort;
+				if ( ss.sortBy === by ) {
+					ss.sortDir = ss.sortDir === 'desc' ? 'asc' : 'desc';
+				} else {
+					ss.sortBy = by;
+					ss.sortDir = [ 'num', 'ago' ].includes( btn.dataset.ssortFormat ) ? 'desc' : 'asc';
+				}
+				surfaceListReload( () => {
+					$$( '[data-ssort]', view ).forEach( ( b ) => {
+						const active = b.dataset.ssort === ss.sortBy;
+						b.classList.toggle( 'is-active', active );
+						b.setAttribute( 'aria-sort', active ? ( ss.sortDir === 'asc' ? 'ascending' : 'descending' ) : 'none' );
+						b.textContent = b.textContent.replace( / [↑↓]$/, '' ) + ( active ? ( ss.sortDir === 'asc' ? ' ↑' : ' ↓' ) : '' );
+					} );
+				} );
+			} )
+		);
 		$$( '[data-stab]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				const tab = btn.dataset.stab;

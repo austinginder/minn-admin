@@ -553,10 +553,10 @@ class Minn_Admin_Surfaces {
 	const SURFACE_KEYS    = array( 'label', 'sub', 'icon', 'cap', 'family', 'group', 'collection', 'manage', 'views', 'status', 'setup', 'settings' );
 	const SETUP_KEYS      = array( 'needed', 'title', 'note', 'options', 'run', 'href' );
 	const SETTINGS_KEYS   = array( 'label', 'cap', 'tabs', 'route' );
-	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter' );
+	const COLLECTION_KEYS = array( 'route', 'allRoute', 'query', 'pageQuery', 'itemsKey', 'totalKey', 'tabs', 'columns', 'detail', 'actions', 'search', 'create', 'viewLabel', 'bulk', 'filter', 'sortQuery' );
 	const FILTER_KEYS     = array( 'label', 'options', 'query', 'param', 'json' );
 	const DETAIL_KEYS     = array( 'detailRoute', 'sectionsRoute', 'labels', 'messageKey', 'skip', 'edit' );
-	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc' );
+	const COLUMN_KEYS     = array( 'key', 'label', 'format', 'altKey', 'width', 'utc', 'sort' );
 	const COLUMN_FORMATS  = array( 'title', 'text', 'pill', 'ago', 'mono', 'num', 'entry-summary' );
 	const ACTION_KEYS     = array( 'label', 'method', 'route', 'body', 'confirm', 'danger', 'when', 'href', 'fields', 'settingsItem', 'list' );
 	const CREATE_KEYS     = array( 'label', 'route', 'method', 'fields', 'defaults' );

@@ -61,6 +61,32 @@ const db = ( sql ) => execSync(
 		t.check( 'card renders above the list', /Redirect rules/.test( card.text ) && /404s, 7 days/.test( card.text ) );
 		t.check( 'chart renders 14 columns', card.bars === 14, String( card.bars ) );
 		t.check( 'both series render (stacked bars)', card.dual );
+
+		/* ===== Sortable columns (v0.18.0) against Redirection's own API ===== */
+		await page.waitForSelector( '[data-ssort="source"]', { timeout: 10000 } );
+		// Deterministic: derive the expected first row per direction from the
+		// database, then poll the DOM for it (fixed waits raced the render).
+		const dbAsc  = db( 'SELECT url FROM wp_redirection_items ORDER BY url ASC LIMIT 1' );
+		const dbDesc = db( 'SELECT url FROM wp_redirection_items ORDER BY url DESC LIMIT 1' );
+		t.check( 'fixture rules sort to distinct firsts', dbAsc !== dbDesc, `${ dbAsc } vs ${ dbDesc }` );
+		const sortReq = ( dir ) => page.waitForRequest(
+			( r ) => r.url().includes( 'redirection/v1/redirect' ) && r.url().includes( 'orderby=source' ) && r.url().includes( 'direction=' + dir ),
+			{ timeout: 10000 } );
+		const firstRowIs = ( expect ) => page.waitForFunction( ( e ) => {
+			const el = document.querySelector( '.minn-table-row .minn-row-title' );
+			return el && el.textContent.trim() === e;
+		}, expect, { timeout: 15000, polling: 300 } );
+		let wait = sortReq( 'asc' );
+		await page.click( '[data-ssort="source"]' );
+		await wait;
+		await firstRowIs( dbAsc );
+		t.check( 'first click sorts ascending (request + rendered order)', true );
+		wait = sortReq( 'desc' );
+		await page.click( '[data-ssort="source"]' );
+		await wait;
+		await firstRowIs( dbDesc );
+		t.check( 'repeat click flips to descending', true );
+		t.check( 'active header wears the direction mark', await page.$eval( '[data-ssort="source"]', ( b ) => b.classList.contains( 'is-active' ) && /[↑↓]/.test( b.textContent ) ) );
 	} finally {
 		db( `DELETE FROM wp_redirection_logs WHERE url = '${ MARK }'` );
 	}

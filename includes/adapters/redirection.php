@@ -81,6 +81,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 		'collection' => array(
 			'route'     => 'redirection/v1/redirect',
+			// Their filter route accepts orderby source|last_count|last_access
+			// (plus position/id) with direction asc|desc.
+			'sortQuery' => 'orderby={by}&direction={dir}',
 			'pageQuery' => 'per_page=25&page={page0}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
@@ -104,12 +107,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 			'columns'   => array(
-				array( 'key' => 'url', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'url', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.4fr)', 'sort' => 'source' ),
 				array( 'key' => 'action_data.url', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
 				array( 'key' => 'action_code', 'label' => 'Code', 'format' => 'mono', 'width' => '64px' ),
-				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '72px' ),
+				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '72px', 'sort' => 'last_count' ),
 				// last_access is stored via gmdate (UTC, no zone).
-				array( 'key' => 'last_access', 'label' => 'Last hit', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'last_access', 'label' => 'Last hit', 'format' => 'ago', 'utc' => true, 'sort' => 'last_access' ),
 			),
 			'detail'    => array(
 				'skip' => array( 'match_data', 'match_type', 'match_url', 'position', 'group_id' ),
