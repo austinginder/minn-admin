@@ -162,9 +162,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date', 'label' => 'Date', 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
-				'detailRoute' => 'minn-admin/v1/post-smtp/emails/{id}',
-				'messageKey'  => 'message',
-				'skip'        => array( 'message' ),
+				// v0.18.0: server-built sections (status pill, sandboxed HTML
+				// body, failure code row). Flat route stays for API consumers.
+				'sectionsRoute' => 'minn-admin/v1/post-smtp/emails/{id}/view',
 			),
 			'actions'   => array(
 				array(
@@ -256,6 +256,54 @@ add_action( 'rest_api_init', function () {
 			}, $rows ? $rows : array() );
 
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
+	) );
+
+	// Sections view (v0.18.0 row types): status pill, sandboxed HTML body,
+	// failure text as a code row. Flat /emails/{id} stays for API consumers.
+	register_rest_route( 'minn-admin/v1', '/post-smtp/emails/(?P<id>\d+)/view', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
+			global $wpdb;
+			$row = $wpdb->get_row( $wpdb->prepare(
+				"SELECT id, original_subject, original_to, to_header, from_header, original_message, success, solution, transport_uri, time FROM {$table} WHERE id = %d", // phpcs:ignore
+				(int) $request['id']
+			) );
+			if ( ! $row ) {
+				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+			}
+			$status   = minn_admin_post_smtp_status( $row->success );
+			$delivery = array(
+				array( 'label' => 'Status', 'value' => $status, 'type' => 'pill' ),
+				array( 'label' => 'To', 'value' => minn_admin_post_smtp_recipients( $row->original_to ?: $row->to_header ) ),
+				array( 'label' => 'From', 'value' => minn_admin_post_smtp_recipients( $row->from_header ) ),
+			);
+			if ( '' !== (string) $row->transport_uri ) {
+				$delivery[] = array( 'label' => 'Transport', 'value' => (string) $row->transport_uri );
+			}
+			$delivery[] = array( 'label' => 'Date', 'value' => minn_admin_post_smtp_iso( $row->time ) );
+			$body     = (string) $row->original_message;
+			$sections = array(
+				array( 'title' => 'Delivery', 'rows' => $delivery ),
+				array(
+					'title' => 'Message',
+					'rows'  => array(
+						array( 'label' => 'Subject', 'value' => (string) $row->original_subject ),
+						preg_match( '/<\/?[a-z][^>]*>/i', $body )
+							? array( 'label' => 'Body', 'value' => $body, 'type' => 'html-preview' )
+							: array( 'label' => 'Body', 'value' => $body, 'type' => 'code' ),
+					),
+				),
+			);
+			if ( 'failed' === $status ) {
+				$fail = array( array( 'label' => 'Error', 'value' => (string) $row->success, 'type' => 'code' ) );
+				if ( '' !== (string) $row->solution ) {
+					$fail[] = array( 'label' => 'Suggested fix', 'value' => (string) $row->solution );
+				}
+				$sections[] = array( 'title' => 'Failure', 'rows' => $fail );
+			}
+			return rest_ensure_response( array( 'sections' => $sections ) );
 		},
 	) );
 

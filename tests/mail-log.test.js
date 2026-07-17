@@ -243,8 +243,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	let postSmtpInstalled = false;
 	let postSmtpWasActive = false;
 	try {
-		const list = wp( 'plugin list --field=name' );
-		postSmtpInstalled = list.split( /\r?\n/ ).map( ( s ) => s.trim() ).includes( 'post-smtp' );
+		// Exit-code check, not output parsing: `plugin list` output rides
+		// other plugins' PHP notices and once read as "missing" under load.
+		try {
+			execSync( `wp --path=${ JSON.stringify( wpPath ) } plugin is-installed post-smtp`, {
+				stdio: 'ignore', timeout: 30000,
+			} );
+			postSmtpInstalled = true;
+		} catch ( e ) {
+			postSmtpInstalled = false;
+		}
 		if ( postSmtpInstalled ) {
 			try {
 				execSync( `wp --path=${ JSON.stringify( wpPath ) } plugin is-active post-smtp`, {
@@ -335,6 +343,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 					'$m->set_param( "search", "zzznomatch-postsmtp-minn" );',
 					'$miss = rest_do_request( $m );',
 					'$out["miss_total"] = is_array( $miss->get_data() ) ? (int) ( $miss->get_data()["total"] ?? -1 ) : -1;',
+					'$v = rest_do_request( new WP_REST_Request( "GET", "/minn-admin/v1/post-smtp/emails/' + insertedId + '/view" ) );',
+					'$out["view_status"] = $v->get_status();',
+					'$vd = $v->get_data();',
+					'$out["view_titles"] = array_map( function ( $s ) { return $s["title"]; }, (array) ( $vd["sections"] ?? array() ) );',
+					'$out["view_pill"] = "pill" === (string) ( $vd["sections"][0]["rows"][0]["type"] ?? "" );',
 					'$d = new WP_REST_Request( "DELETE", "/minn-admin/v1/post-smtp/emails/' + insertedId + '" );',
 					'$del = rest_do_request( $d );',
 					'$out["del_status"] = $del->get_status();',
@@ -372,12 +385,43 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				t.check( 'Post SMTP DELETE removes the log entry',
 					rest.del_status === 200 && rest.del_deleted === true && rest.gone_status === 404,
 					JSON.stringify( rest ) );
+				t.check( 'Post SMTP sections view renders Delivery + Message with a status pill',
+					rest.view_status === 200
+					&& ( rest.view_titles || [] ).includes( 'Delivery' )
+					&& ( rest.view_titles || [] ).includes( 'Message' )
+					&& rest.view_pill === true,
+					JSON.stringify( { s: rest.view_status, titles: rest.view_titles, pill: rest.view_pill } ) );
 			}
 		} finally {
 			// Restore mail residents: FluentSMTP active, Post SMTP inactive.
 			if ( ! postSmtpWasActive ) wp( 'plugin deactivate post-smtp' );
 			if ( fluentWasActive ) wp( 'plugin activate fluent-smtp' );
 		}
+	}
+
+	/* ===== Sections views on the active residents (v0.18.0) ===== */
+	{
+		const viewOf = async ( listRoute, idKey, viewBase ) => {
+			const list = await api( listRoute );
+			const first = ( ( list.body && list.body.items ) || [] )[ 0 ];
+			if ( ! first ) return { skipped: true };
+			const v = await api( viewBase.replace( '{id}', first[ idKey ] ) );
+			const sections = ( v.body && v.body.sections ) || [];
+			return {
+				status: v.status,
+				titles: sections.map( ( s ) => s.title ),
+				pill: sections[ 0 ] && sections[ 0 ].rows[ 0 ] && sections[ 0 ].rows[ 0 ].type === 'pill',
+				bodyType: ( () => {
+					const msg = sections.find( ( s ) => s.title === 'Message' );
+					const body = msg && msg.rows.find( ( r ) => r.label === 'Body' );
+					return body ? body.type : '';
+				} )(),
+			};
+		};
+		const fl = await viewOf( 'minn-admin/v1/fluent-smtp/emails?per_page=5&page=1', 'id', 'minn-admin/v1/fluent-smtp/emails/{id}/view' );
+		t.check( 'FluentSMTP sections view: pill + typed body row', fl.skipped || ( fl.status === 200 && fl.titles.includes( 'Delivery' ) && fl.pill && [ 'html-preview', 'code' ].includes( fl.bodyType ) ), JSON.stringify( fl ) );
+		const wl = await viewOf( 'minn-admin/v1/wpml/emails?per_page=5&page=1', 'id', 'minn-admin/v1/wpml/emails/{id}/view' );
+		t.check( 'WP Mail Logging sections view: pill + typed body row', wl.skipped || ( wl.status === 200 && wl.titles.includes( 'Delivery' ) && wl.pill && [ 'html-preview', 'code' ].includes( wl.bodyType ) ), JSON.stringify( wl ) );
 	}
 
 	await t.done( browser, errors );

@@ -48,10 +48,10 @@ Reference depth: **Gravity SMTP**. Family doc: `mail-plugins.md`.
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | gravity-smtp | Y | Y | Y | Y | — | Y | Y | Y | Y | Y | 2026-07-15 | Settings, Suppressions, Debug log, Routing (toggle/delete), Filtered tab; **single + bulk log delete** via Event_Model; condition authoring = **L** |
-| fluent-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + sent/failed tabs; **search** + single/bulk **delete** via Logger |
-| post-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Status + chart + tabs; resend; **search** + single/bulk **delete**; transcript not exposed |
+| fluent-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Status + chart + tabs; search + delete; **sections detail** (pill, sandboxed HTML body, provider-reply peek) |
+| post-smtp | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Status + chart + tabs; resend; search + delete; **sections detail** (pill, HTML body, failure code row); transcript still not exposed |
 | wp-mail-smtp | Y | Y | · | Y | — | · | · | · | · | Y | 2026-07-14 | Free = debug events only; full log is Pro |
-| wp-mail-logging | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-14 | Log-only; bulk delete; status + chart; close to reference for a pure log |
+| wp-mail-logging | Y | Y | Y | Y | — | Y | Y | · | · | Y | 2026-07-17 | Log-only; bulk delete; status + chart; **sections detail** (pill, HTML body, raw headers + error code rows) |
 
 ### forms
 
@@ -154,6 +154,7 @@ Reference depth: **Gravity Forms**.
 | 2026-07-15 | Axis A: gravity-smtp bulk log delete | Single + bulk Delete via Event_Model (DELETE_EMAIL_LOG); mail-log suite extended; matrix fixed for cf7/cfdb7/ninja bulk (were already Y in code) |
 | 2026-07-15 | Axis A: activity-log status cards | Simple History, WSAL, Stream, Aryo status cards (24h/7d/total + family-specific mix); suite `activity-log-status` |
 | 2026-07-17 | Ship top 1: sectionsRoute row types | `pill`/`code`/sandboxed `html-preview`/`kv-table` rows in the sections detail renderer; contract-fixture Log view exercises all four with hostile payloads (suite detail-rows, 19 checks incl. sandbox + escaping proofs); Gravity SMTP log detail converted as the first consumer (status pill, HTML body preview, headers kv-table). Fluent/Post/WPML conversions are the natural next slices |
+| 2026-07-17 | Mail family sections detail (Axis A) | fluent-smtp, post-smtp, wp-mail-logging log detail converted to sectionsRoute with the new row types (GSMTP pattern): status pill, sandboxed html-preview/code body, per-store extras (provider-reply peek, failure + suggested fix, raw headers). Flat routes kept for API consumers; mail-log suite 30 |
 | 2026-07-17 | Ship next: code-snippets status card | Active/inactive/trashed counts, running scopes, last change and a safe-mode warning row from their own table (active -1 = trashed per their class-db docblock); suite code-snippets 26. Sweep-hygiene note: the report's snippets/redirects "family status parity" claims were grep over-matches; these two cards are family FIRSTS and the siblings are the real parity backlog |
 | 2026-07-17 | Sortable surface columns (Austin's ask) | New collection primitive: column `sort` tokens + `sortQuery` template, clickable headers with the users-list direction convention (num/ago start desc); validator + author guide + contract fixture in lockstep (contract 39). Redirection wired first (Source/Hits/Last hit via their orderby vocabulary); suite redirection-status now 14 |
 | 2026-07-17 | Ship top 1 (second slice): redirection status card | Rules/hits/served/404 rows + dual-series 14-day chart from Redirection's own log tables (SHOW TABLES-gated, site-local DATE buckets matching their log view); suite redirection-status (10). First status card in the redirects family |

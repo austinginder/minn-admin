@@ -98,9 +98,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'timestamp', 'label' => 'Date', 'format' => 'ago' ),
 			),
 			'detail'    => array(
-				'detailRoute' => 'minn-admin/v1/wpml/emails/{id}',
-				'messageKey'  => 'message',
-				'skip'        => array( 'message' ),
+				// v0.18.0: server-built sections (status pill, sandboxed HTML
+				// body, raw headers + error as code rows). Flat route stays.
+				'sectionsRoute' => 'minn-admin/v1/wpml/emails/{id}/view',
 			),
 			'actions'   => array(
 				array(
@@ -238,6 +238,66 @@ add_action( 'rest_api_init', function () {
 			}, $rows ? $rows : array() );
 
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
+	) );
+
+	// Sections view (v0.18.0 row types): status pill, sandboxed HTML body,
+	// their raw header blob as a code row (a newline string, not pairs — a
+	// kv-table would imply structure the store doesn't have). Flat
+	// /emails/{id} stays for API consumers.
+	register_rest_route( 'minn-admin/v1', '/wpml/emails/(?P<id>\d+)/view', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_wpml_can',
+		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
+			global $wpdb;
+			$row = $wpdb->get_row( $wpdb->prepare(
+				"SELECT * FROM {$table} WHERE mail_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				(int) $request['id']
+			) );
+			if ( ! $row ) {
+				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+			}
+			$failed   = ! ( null === $row->error || '' === $row->error );
+			$delivery = array(
+				array( 'label' => 'Status', 'value' => $failed ? 'failed' : 'sent', 'type' => 'pill' ),
+				array( 'label' => 'To', 'value' => minn_admin_wpml_receivers( $row->receiver ) ),
+			);
+			$host = '0' === (string) $row->host ? '' : (string) $row->host;
+			if ( '' !== $host ) {
+				$delivery[] = array( 'label' => 'Host', 'value' => $host );
+			}
+			$attachments = trim( (string) $row->attachments, "0 \n" );
+			if ( '' !== $attachments ) {
+				$delivery[] = array( 'label' => 'Attachments', 'value' => $attachments );
+			}
+			$delivery[] = array( 'label' => 'Date', 'value' => (string) $row->timestamp );
+			$body     = (string) $row->message;
+			$sections = array(
+				array( 'title' => 'Delivery', 'rows' => $delivery ),
+				array(
+					'title' => 'Message',
+					'rows'  => array(
+						array( 'label' => 'Subject', 'value' => (string) $row->subject ),
+						preg_match( '/<\/?[a-z][^>]*>/i', $body )
+							? array( 'label' => 'Body', 'value' => $body, 'type' => 'html-preview' )
+							: array( 'label' => 'Body', 'value' => $body, 'type' => 'code' ),
+					),
+				),
+			);
+			$headers = trim( (string) $row->headers );
+			if ( '' !== $headers ) {
+				$sections[] = array(
+					'title' => 'Headers',
+					'rows'  => array( array( 'label' => 'Raw headers', 'value' => $headers, 'type' => 'code' ) ),
+				);
+			}
+			if ( $failed ) {
+				$sections[] = array(
+					'title' => 'Failure',
+					'rows'  => array( array( 'label' => 'Error', 'value' => (string) $row->error, 'type' => 'code' ) ),
+				);
+			}
+			return rest_ensure_response( array( 'sections' => $sections ) );
 		},
 	) );
 
