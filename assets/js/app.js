@@ -441,6 +441,7 @@
 		settings: [ 'Settings', 'Site' ],
 		system: [ 'System', 'Diagnostics' ],
 		editor: [ 'Editor', 'Draft' ],
+		profile: [ 'Your profile', 'Account' ],
 	};
 
 	// Topbar badge for Content: names the active type filter (or Trash), and
@@ -1232,8 +1233,8 @@
 			ed.panels = ed.panels.filter( ( p ) => p.desc.id !== pid );
 			if ( ed.panels.length !== before && state.route === 'editor' ) renderEditorSide();
 		}
-		// Your profile open → repaint its restore list.
-		if ( state.modal && state.modal.type === 'user' ) renderOverlays();
+		// Your profile page open → repaint its restore list.
+		if ( 'profile' === state.route ) renderProfile();
 	}
 
 	// Collapsible nav groups — the label row toggles its group's items and
@@ -1439,7 +1440,7 @@
 		} );
 		$( '#minn-user-area' ).addEventListener( 'click', ( e ) => {
 			if ( e.target.closest( 'a' ) ) return; // logout link
-			openUserModal( B.user.id );
+			go( 'profile' );
 		} );
 		$( '#minn-theme-btn' ).addEventListener( 'click', toggleTheme );
 		// Right-click picks Dark / Light / System (click still quick-toggles).
@@ -1773,8 +1774,9 @@
 		const norm = appearanceOf( merged );
 		applyAppearance( norm );
 		queueAppearanceSave( norm );
-		if ( opts.rebuild && state.modal && state.modal.type === 'user' ) {
-			renderOverlays();
+		// The appearance UI lives on Your profile (a route since 2026-07-17).
+		if ( opts.rebuild && 'profile' === state.route ) {
+			renderProfile();
 		}
 		return norm;
 	}
@@ -1936,8 +1938,8 @@
 				setThemePref( next );
 				const cur = appearanceOf( B.user && B.user.appearance );
 				// Rebuild only when custom editors need the other mode's values.
-				if ( cur.scheme === 'custom' && state.modal && state.modal.type === 'user' ) {
-					renderOverlays();
+				if ( cur.scheme === 'custom' && 'profile' === state.route ) {
+					renderProfile();
 				} else {
 					$$( '[data-theme-pref]', wrap ).forEach( ( el ) => {
 						const on = el.dataset.themePref === next;
@@ -21156,7 +21158,7 @@
 			cmds.push( { label: 'Update all plugins', kind: 'action', icon: '⟳', run: () => updateAllPlugins( null ) } );
 		}
 		cmds.push(
-			{ label: 'Your profile — name, email, password', kind: 'link', icon: '@', run: () => openUserModal( B.user.id ) },
+			{ label: 'Your profile — name, email, password', kind: 'link', icon: '@', run: () => go( 'profile' ) },
 			{ label: 'About Minn — philosophy & help', kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
 			{ label: 'Visit site', kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank' ) },
 			{ label: 'Classic wp-admin', kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank' ) },
@@ -22337,21 +22339,21 @@
 		}
 
 		if ( m.type === 'user' ) {
+			// Add user / edit ANOTHER user. Your own profile is the
+			// /minn-admin/profile route (openUserModal redirects self).
 			const u = m.user;
 			const isNew = ! m.userId;
-			const isSelf = ! isNew && m.userId === B.user.id;
 			const roles = Object.entries( B.roles || {} );
 			if ( ! isNew && ! u ) {
-				return `<div class="minn-modal-overlay" id="minn-modal-overlay"><div class="minn-modal"><div class="minn-modal-head"><div class="minn-modal-title">${ isSelf ? 'Your profile' : 'Edit user' }</div><span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span><button class="minn-x-btn" id="minn-modal-close">×</button></div><div class="minn-loading">Loading…</div></div></div>`;
+				return `<div class="minn-modal-overlay" id="minn-modal-overlay"><div class="minn-modal"><div class="minn-modal-head"><div class="minn-modal-title">Edit user</div><span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span><button class="minn-x-btn" id="minn-modal-close">×</button></div><div class="minn-loading">Loading…</div></div></div>`;
 			}
 			const role = u && u.roles && u.roles[ 0 ] ? u.roles[ 0 ] : 'subscriber';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? 'Add user' : ( isSelf ? 'Your profile' : 'Edit ' + esc( u.name ) ) }</div>
+						<div class="minn-modal-title">${ isNew ? 'Add user' : 'Edit ' + esc( u.name ) }</div>
 						${ ! isNew ? `<span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span>` : '' }
-						${ isSelf ? `<span class="minn-modal-count">@${ esc( B.user.login ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-modal-form">
@@ -22375,7 +22377,7 @@
 								<input class="minn-input minn-ac-input" id="minn-uf-role" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 								<div class="minn-ac-panel" hidden></div>
 							</div>` : `
-							<input class="minn-input" value="${ esc( isSelf ? B.user.role : role ) }" disabled>` }
+							<input class="minn-input" value="${ esc( role ) }" disabled>` }
 						</div>
 						<div>
 							<div class="minn-field-label">${ isNew ? 'Password' : 'New password (leave blank to keep)' }</div>
@@ -22384,60 +22386,7 @@
 								<button class="minn-btn-soft" id="minn-uf-genpass" style="flex-shrink:0;">Generate</button>
 							</div>
 						</div>
-						${ isSelf ? `
-						<div>
-							<div class="minn-field-label">Color scheme</div>
-							${ appearanceSwatchesHtml( B.user.appearance ) }
-						</div>
-						<div>
-							<div class="minn-field-label">Theme</div>
-							${ themeModeHtml() }
-						</div>
-						${ ( B.hidden || [] ).length ? `
-						<div>
-							<div class="minn-field-label">Hidden for you</div>
-							${ B.hidden.map( ( h ) => `
-							<div class="minn-session-row">
-								<div class="minn-session-info">
-									<div class="minn-session-ua">${ esc( h.kind === 'slash' ? prettyNs( h.label ) : h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
-									<div class="minn-session-meta">${ { panel: 'Editor panel', design: 'Design library', slash: 'Editor blocks and commands' }[ h.kind ] || 'Sidebar surface' }</div>
-								</div>
-								<button class="minn-comment-action" data-unhide="${ esc( h.id ) }">Restore</button>
-							</div>` ).join( '' ) }
-						</div>` : '' }` : '' }
 					</div>
-					${ ! isNew && m.userId === B.user.id ? `
-					<div class="minn-sessions">
-						<div class="minn-side-title" style="margin:0 0 4px;">AI Access <span class="minn-panel-sub">application passwords</span></div>
-						<div class="minn-toggle-desc" style="margin-bottom:8px;">Give an AI agent its own revocable credential instead of your login. It authenticates against the REST API with HTTP Basic auth.</div>
-						${ m.newAppPassword ? `
-						<div class="minn-app-reveal">
-							<div class="minn-field-label">“${ esc( m.newAppPassword.name ) }” created — copy it now, it won't be shown again</div>
-							<code id="minn-app-secret">${ esc( m.newAppPassword.password ) }</code>
-							<div style="display:flex; gap:8px; margin-top:9px; flex-wrap:wrap;">
-								<button class="minn-btn-soft" id="minn-app-copy">${ icon( 'copy' ) } Copy password</button>
-								<button class="minn-btn-soft" id="minn-app-copy-curl">${ icon( 'copy' ) } Copy curl example</button>
-							</div>
-						</div>` : '' }
-						${ m.appPasswords == null ? '<div class="minn-session-empty">Loading…</div>'
-							: ! m.appPasswords.length ? '<div class="minn-session-empty">No application passwords yet.</div>'
-							: m.appPasswords.map( ( ap ) => `
-							<div class="minn-session-row">
-								<div class="minn-session-info">
-									<div class="minn-session-ua">${ esc( ap.name ) }</div>
-									<div class="minn-session-meta">created ${ ap.created ? timeAgo( ap.created ) : '—' } · ${ ap.last_used ? 'last used ' + timeAgo( ap.last_used ) : 'never used' }</div>
-								</div>
-								<button class="minn-comment-action danger" data-appdel="${ esc( ap.uuid ) }">Revoke</button>
-							</div>` ).join( '' ) }
-						<div style="display:flex; gap:8px; margin-top:10px;">
-							<input class="minn-input" id="minn-app-name" placeholder="AI Agent" style="font-size:13px;">
-							<button class="minn-btn-soft" id="minn-app-create" style="flex-shrink:0;">${ icon( 'plus' ) } New password</button>
-						</div>
-						<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-							<button class="minn-btn-soft" id="minn-guide-copy">${ icon( 'copy' ) } Copy agent guide</button>
-							<button class="minn-btn-soft" id="minn-guide-download">↓ Download agent-guide.md</button>
-						</div>
-					</div>` : '' }
 					${ ! isNew ? `
 					<div class="minn-sessions" id="minn-uf-sessions">
 						<div class="minn-side-title" style="margin:0 0 4px;">Sessions</div>
@@ -22742,7 +22691,7 @@
 
 						<h4>Configuration belongs to your AI agent</h4>
 						<p>Minn deliberately doesn't rebuild every settings screen. Need to configure ACF,
-						Gravity Forms, or an SEO plugin? Open <b>your account → AI Access</b>, generate an
+						Gravity Forms, or an SEO plugin? Open <b>Your profile → AI Access</b>, generate an
 						application password, and hand your agent the generated guide. The agent does the
 						fiddly work over the REST API using its own revocable credential, never your login,
 						while Minn stays minimal.</p>
@@ -25320,24 +25269,15 @@
 	}
 
 	function openUserModal( userId ) {
-		state.modal = { type: 'user', userId: userId || null, user: null, sessions: null, appPasswords: null, newAppPassword: null };
+		// Your own profile is a full page now — every self entry point
+		// (avatar, palette, your row in Users) lands there instead.
+		if ( userId && userId === B.user.id ) {
+			go( 'profile' );
+			return;
+		}
+		state.modal = { type: 'user', userId: userId || null, user: null, sessions: null };
 		renderOverlays();
 		if ( ! userId ) return;
-		if ( userId === B.user.id ) {
-			api( 'wp/v2/users/me/application-passwords' )
-				.then( ( list ) => {
-					if ( state.modal && state.modal.type === 'user' && state.modal.userId === userId ) {
-						state.modal.appPasswords = list;
-						renderOverlays();
-					}
-				} )
-				.catch( () => {
-					if ( state.modal && state.modal.type === 'user' ) {
-						state.modal.appPasswords = [];
-						renderOverlays();
-					}
-				} );
-		}
 		api( `wp/v2/users/${ userId }?context=edit&_fields=id,name,email,roles,username` )
 			.then( ( u ) => {
 				if ( state.modal && state.modal.type === 'user' && state.modal.userId === userId ) {
@@ -25380,7 +25320,7 @@
 			'## Authentication',
 			'',
 			`HTTP Basic auth with the WordPress username \`${ B.user.login }\` and an application`,
-			'password (create/revoke them in Minn Admin → your account → AI Access).',
+			'password (create/revoke them in Minn Admin → Your profile → AI Access).',
 			'',
 			'```bash',
 			`curl -u '${ B.user.login }:APPLICATION-PASSWORD' '${ B.restUrl }wp/v2/posts?per_page=5'`,
@@ -25434,75 +25374,6 @@
 			} );
 		}
 
-		if ( m.userId === B.user.id ) {
-			bindAppearanceSwatches( document );
-			const copyText = async ( text, label ) => {
-				try {
-					await navigator.clipboard.writeText( text );
-					toast( label );
-				} catch ( e ) {
-					toast( 'Could not copy', true );
-				}
-			};
-			const createBtn = $( '#minn-app-create' );
-			if ( createBtn ) {
-				createBtn.addEventListener( 'click', async () => {
-					createBtn.disabled = true;
-					const name = $( '#minn-app-name' ).value.trim() || 'AI Agent';
-					try {
-						const ap = await api( 'wp/v2/users/me/application-passwords', { method: 'POST', body: JSON.stringify( { name } ) } );
-						m.newAppPassword = { name: ap.name, password: ap.password };
-						m.appPasswords = null;
-						renderOverlays();
-						api( 'wp/v2/users/me/application-passwords' ).then( ( list ) => {
-							if ( state.modal === m ) { m.appPasswords = list; renderOverlays(); }
-						} ).catch( () => {} );
-					} catch ( e ) {
-						toast( e.message, true );
-						createBtn.disabled = false;
-					}
-				} );
-			}
-			const copyBtn = $( '#minn-app-copy' );
-			if ( copyBtn ) copyBtn.addEventListener( 'click', () => copyText( m.newAppPassword.password, 'Password copied' ) );
-			const curlBtn = $( '#minn-app-copy-curl' );
-			if ( curlBtn ) curlBtn.addEventListener( 'click', () => copyText(
-				`curl -u '${ B.user.login }:${ m.newAppPassword.password }' '${ B.restUrl }wp/v2/posts?per_page=5'`, 'curl example copied' ) );
-			$$( '[data-unhide]' ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					btn.disabled = true;
-					const h = ( B.hidden || [] ).find( ( x ) => x.id === btn.dataset.unhide );
-					setIntegrationHidden( btn.dataset.unhide, false, h ? h.label : '' )
-						.catch( ( e ) => { btn.disabled = false; toast( e.message, true ); } );
-				} )
-			);
-			$$( '[data-appdel]' ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', async () => {
-					if ( ! confirm( 'Revoke this application password? Anything using it loses access immediately.' ) ) return;
-					btn.disabled = true;
-					try {
-						await api( 'wp/v2/users/me/application-passwords/' + btn.dataset.appdel, { method: 'DELETE' } );
-						toast( 'Application password revoked' );
-						m.appPasswords = m.appPasswords.filter( ( ap ) => ap.uuid !== btn.dataset.appdel );
-						renderOverlays();
-					} catch ( e ) {
-						toast( e.message, true );
-						btn.disabled = false;
-					}
-				} )
-			);
-			const guideCopy = $( '#minn-guide-copy' );
-			if ( guideCopy ) guideCopy.addEventListener( 'click', () => copyText( buildAgentGuide(), 'Agent guide copied' ) );
-			const guideDl = $( '#minn-guide-download' );
-			if ( guideDl ) guideDl.addEventListener( 'click', () => {
-				const blob = new Blob( [ buildAgentGuide() ], { type: 'text/markdown' } );
-				const a = document.createElement( 'a' );
-				a.href = URL.createObjectURL( blob );
-				a.download = 'agent-guide.md';
-				a.click();
-				URL.revokeObjectURL( a.href );
-			} );
-		}
 		const isNew = ! m.userId;
 		const gen = $( '#minn-uf-genpass' );
 		if ( gen ) {
@@ -25536,21 +25407,7 @@
 					toast( 'User created' );
 				} else {
 					await api( `wp/v2/users/${ m.userId }`, { method: 'POST', body: JSON.stringify( payload ) } );
-					// Changing your own password rotates the session token, which
-					// invalidates the REST nonce baked into this page — reload to
-					// pick up fresh credentials before the next request 403s.
-					if ( password && m.userId === B.user.id ) {
-						toast( 'Password changed — refreshing…' );
-						setTimeout( () => location.reload(), 600 );
-						return;
-					}
-					toast( m.userId === B.user.id ? 'Profile updated' : 'User updated' );
-					// Keep the sidebar's name in sync with a self display-name edit.
-					if ( m.userId === B.user.id && payload.name ) {
-						B.user.name = payload.name;
-						const nameEl = $( '.minn-user-name' );
-						if ( nameEl ) nameEl.textContent = payload.name;
-					}
+					toast( 'User updated' );
 				}
 				closeModal();
 				state.cache.users = null;
@@ -25602,6 +25459,309 @@
 				}
 			} );
 		}
+	}
+
+	/* ===== Your profile ( /minn-admin/profile ) =====
+	 * The self-profile outgrew the user modal (identity, appearance, hidden
+	 * integrations, AI Access, sessions) — it's a route page now. The modal
+	 * above keeps Add user / Edit other users; openUserModal redirects self
+	 * here. applyIntegrationState and the appearance rebuilds repaint this
+	 * route directly. */
+
+	function loadProfile() {
+		const p = state.profile;
+		const mine = () => state.profile === p;
+		const paint = () => { if ( mine() && state.route === 'profile' ) renderProfile(); };
+		api( `wp/v2/users/${ B.user.id }?context=edit&_fields=id,name,email,roles,username` )
+			.then( ( u ) => { if ( mine() ) { p.user = u; paint(); } } )
+			.catch( ( e ) => { if ( mine() ) { p.error = e.message || 'Could not load your profile.'; paint(); } } );
+		api( 'wp/v2/users/me/application-passwords' )
+			.then( ( list ) => { if ( mine() ) { p.appPasswords = list; paint(); } } )
+			.catch( () => { if ( mine() ) { p.appPasswords = []; paint(); } } );
+		api( `minn-admin/v1/users/${ B.user.id }/sessions` )
+			.then( ( r ) => { if ( mine() ) { p.sessions = r.sessions; paint(); } } )
+			.catch( () => { if ( mine() ) { p.sessions = []; paint(); } } );
+	}
+
+	function renderProfile() {
+		const view = $( '#minn-view' );
+		let p = state.profile;
+		if ( ! p ) {
+			p = state.profile = { user: null, sessions: null, appPasswords: null, newAppPassword: null, error: null };
+			loadProfile();
+		}
+		if ( p.error ) {
+			view.innerHTML = `<div class="minn-card minn-empty">${ esc( p.error ) }</div>`;
+			return;
+		}
+		// One paint once everything is here — a late slice re-rendering under
+		// a half-typed name field would wipe it.
+		if ( ! p.user || p.appPasswords == null || p.sessions == null ) {
+			view.innerHTML = '<div class="minn-loading">Loading your profile…</div>';
+			return;
+		}
+		const u = p.user;
+		const roles = Object.entries( B.roles || {} );
+		const hidden = B.hidden || [];
+		view.innerHTML = `
+		<div class="minn-profile-grid">
+			<div class="minn-profile-col">
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">Account <span class="minn-panel-sub">@${ esc( B.user.login ) } · #${ esc( String( u.id ) ) }</span></div>
+					<div class="minn-profile-fields">
+						<div>
+							<div class="minn-field-label">Display name</div>
+							<input class="minn-input" id="minn-pf-name" value="${ esc( u.name ) }">
+						</div>
+						<div>
+							<div class="minn-field-label">Email</div>
+							<input class="minn-input mono" id="minn-pf-email" value="${ esc( u.email ) }">
+						</div>
+						<div>
+							<div class="minn-field-label">Role</div>
+							${ roles.length && B.caps.promoteUsers ? `
+							<div class="minn-ac" id="minn-pf-role-ac">
+								<input class="minn-input minn-ac-input" id="minn-pf-role" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+								<div class="minn-ac-panel" hidden></div>
+							</div>` : `
+							<input class="minn-input" value="${ esc( B.user.role ) }" disabled>` }
+						</div>
+						<div>
+							<div class="minn-field-label">New password (leave blank to keep)</div>
+							<div style="display:flex; gap:8px;">
+								<input class="minn-input mono" id="minn-pf-password" autocomplete="new-password">
+								<button class="minn-btn-soft" id="minn-pf-genpass" style="flex-shrink:0;">Generate</button>
+							</div>
+						</div>
+						<div><button class="minn-btn-primary" id="minn-pf-save">Save changes</button></div>
+					</div>
+				</div>
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">AI Access <span class="minn-panel-sub">application passwords</span></div>
+					<div class="minn-toggle-desc" style="margin:6px 0 8px;">Give an AI agent its own revocable credential instead of your login. It authenticates against the REST API with HTTP Basic auth.</div>
+					${ p.newAppPassword ? `
+					<div class="minn-app-reveal">
+						<div class="minn-field-label">“${ esc( p.newAppPassword.name ) }” created — copy it now, it won't be shown again</div>
+						<code id="minn-app-secret">${ esc( p.newAppPassword.password ) }</code>
+						<div style="display:flex; gap:8px; margin-top:9px; flex-wrap:wrap;">
+							<button class="minn-btn-soft" id="minn-app-copy">${ icon( 'copy' ) } Copy password</button>
+							<button class="minn-btn-soft" id="minn-app-copy-curl">${ icon( 'copy' ) } Copy curl example</button>
+						</div>
+					</div>` : '' }
+					${ ! p.appPasswords.length ? '<div class="minn-session-empty">No application passwords yet.</div>'
+						: p.appPasswords.map( ( ap ) => `
+						<div class="minn-session-row">
+							<div class="minn-session-info">
+								<div class="minn-session-ua">${ esc( ap.name ) }</div>
+								<div class="minn-session-meta">created ${ ap.created ? timeAgo( ap.created ) : '—' } · ${ ap.last_used ? 'last used ' + timeAgo( ap.last_used ) : 'never used' }</div>
+							</div>
+							<button class="minn-comment-action danger" data-appdel="${ esc( ap.uuid ) }">Revoke</button>
+						</div>` ).join( '' ) }
+					<div style="display:flex; gap:8px; margin-top:10px;">
+						<input class="minn-input" id="minn-app-name" placeholder="AI Agent" style="font-size:13px;">
+						<button class="minn-btn-soft" id="minn-app-create" style="flex-shrink:0;">${ icon( 'plus' ) } New password</button>
+					</div>
+					<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+						<button class="minn-btn-soft" id="minn-guide-copy">${ icon( 'copy' ) } Copy agent guide</button>
+						<button class="minn-btn-soft" id="minn-guide-download">↓ Download agent-guide.md</button>
+					</div>
+				</div>
+			</div>
+			<div class="minn-profile-col">
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">Appearance</div>
+					<div class="minn-profile-fields">
+						<div>
+							<div class="minn-field-label">Color scheme</div>
+							${ appearanceSwatchesHtml( B.user.appearance ) }
+						</div>
+						<div>
+							<div class="minn-field-label">Theme</div>
+							${ themeModeHtml() }
+						</div>
+					</div>
+				</div>
+				${ hidden.length ? `
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">Hidden for you</div>
+					${ hidden.map( ( h ) => `
+					<div class="minn-session-row">
+						<div class="minn-session-info">
+							<div class="minn-session-ua">${ esc( h.kind === 'slash' ? prettyNs( h.label ) : h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
+							<div class="minn-session-meta">${ { panel: 'Editor panel', design: 'Design library', slash: 'Editor blocks and commands' }[ h.kind ] || 'Sidebar surface' }</div>
+						</div>
+						<button class="minn-comment-action" data-unhide="${ esc( h.id ) }">Restore</button>
+					</div>` ).join( '' ) }
+				</div>` : '' }
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">Sessions</div>
+					${ ! p.sessions.length ? '<div class="minn-session-empty">No active sessions.</div>'
+						: p.sessions.map( ( sess ) => `
+						<div class="minn-session-row">
+							<div class="minn-session-info">
+								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ' <span class="minn-session-current">this session</span>' : '' }</div>
+								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+							</div>
+							<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">Sign out</button>
+						</div>` ).join( '' ) }
+					${ p.sessions.length ? '<button class="minn-comment-action danger" id="minn-pf-killall" style="margin:10px 0 0;">Sign out everywhere</button>' : '' }
+				</div>
+			</div>
+		</div>`;
+		bindProfile( p, view );
+	}
+
+	function bindProfile( p, view ) {
+		const roleAc = $( '#minn-pf-role-ac', view );
+		if ( roleAc ) {
+			const current = p.user.roles && p.user.roles[ 0 ] ? p.user.roles[ 0 ] : 'subscriber';
+			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: l } ) ), {
+				strict: true,
+				value: current,
+			} );
+		}
+		bindAppearanceSwatches( view );
+		const copyText = async ( text, label ) => {
+			try {
+				await navigator.clipboard.writeText( text );
+				toast( label );
+			} catch ( e ) {
+				toast( 'Could not copy', true );
+			}
+		};
+
+		const gen = $( '#minn-pf-genpass', view );
+		if ( gen ) gen.addEventListener( 'click', () => {
+			const input = $( '#minn-pf-password', view );
+			input.value = generatePassword();
+			input.type = 'text';
+		} );
+
+		$( '#minn-pf-save', view ).addEventListener( 'click', async ( e ) => {
+			const btn = e.currentTarget;
+			btn.disabled = true;
+			const payload = {
+				name: $( '#minn-pf-name', view ).value.trim(),
+				email: $( '#minn-pf-email', view ).value.trim(),
+			};
+			const roleSel = $( '#minn-pf-role', view );
+			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue ) payload.roles = [ roleSel.dataset.acValue ];
+			const password = $( '#minn-pf-password', view ).value;
+			if ( password ) payload.password = password;
+			try {
+				await api( `wp/v2/users/${ B.user.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				// Changing your own password rotates the session token, which
+				// invalidates the REST nonce baked into this page — reload to
+				// pick up fresh credentials before the next request 403s.
+				if ( password ) {
+					toast( 'Password changed — refreshing…' );
+					setTimeout( () => location.reload(), 600 );
+					return;
+				}
+				toast( 'Profile updated' );
+				p.user = Object.assign( {}, p.user, { name: payload.name, email: payload.email } );
+				// Keep the sidebar's name in sync with a display-name edit.
+				if ( payload.name ) {
+					B.user.name = payload.name;
+					const nameEl = $( '.minn-user-name' );
+					if ( nameEl ) nameEl.textContent = payload.name;
+				}
+				state.cache.users = null;
+				btn.disabled = false;
+			} catch ( err ) {
+				toast( err.message, true );
+				btn.disabled = false;
+			}
+		} );
+
+		const createBtn = $( '#minn-app-create', view );
+		if ( createBtn ) createBtn.addEventListener( 'click', async () => {
+			createBtn.disabled = true;
+			const name = $( '#minn-app-name', view ).value.trim() || 'AI Agent';
+			try {
+				const ap = await api( 'wp/v2/users/me/application-passwords', { method: 'POST', body: JSON.stringify( { name } ) } );
+				p.newAppPassword = { name: ap.name, password: ap.password };
+				api( 'wp/v2/users/me/application-passwords' ).then( ( list ) => {
+					if ( state.profile === p ) {
+						p.appPasswords = list;
+						if ( state.route === 'profile' ) renderProfile();
+					}
+				} ).catch( () => {} );
+				if ( state.route === 'profile' ) renderProfile();
+			} catch ( e ) {
+				toast( e.message, true );
+				createBtn.disabled = false;
+			}
+		} );
+		const copyBtn = $( '#minn-app-copy', view );
+		if ( copyBtn ) copyBtn.addEventListener( 'click', () => copyText( p.newAppPassword.password, 'Password copied' ) );
+		const curlBtn = $( '#minn-app-copy-curl', view );
+		if ( curlBtn ) curlBtn.addEventListener( 'click', () => copyText(
+			`curl -u '${ B.user.login }:${ p.newAppPassword.password }' '${ B.restUrl }wp/v2/posts?per_page=5'`, 'curl example copied' ) );
+		$$( '[data-appdel]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				if ( ! confirm( 'Revoke this application password? Anything using it loses access immediately.' ) ) return;
+				btn.disabled = true;
+				try {
+					await api( 'wp/v2/users/me/application-passwords/' + btn.dataset.appdel, { method: 'DELETE' } );
+					toast( 'Application password revoked' );
+					p.appPasswords = p.appPasswords.filter( ( ap ) => ap.uuid !== btn.dataset.appdel );
+					if ( state.route === 'profile' ) renderProfile();
+				} catch ( e ) {
+					toast( e.message, true );
+					btn.disabled = false;
+				}
+			} )
+		);
+		const guideCopy = $( '#minn-guide-copy', view );
+		if ( guideCopy ) guideCopy.addEventListener( 'click', () => copyText( buildAgentGuide(), 'Agent guide copied' ) );
+		const guideDl = $( '#minn-guide-download', view );
+		if ( guideDl ) guideDl.addEventListener( 'click', () => {
+			const blob = new Blob( [ buildAgentGuide() ], { type: 'text/markdown' } );
+			const a = document.createElement( 'a' );
+			a.href = URL.createObjectURL( blob );
+			a.download = 'agent-guide.md';
+			a.click();
+			URL.revokeObjectURL( a.href );
+		} );
+
+		$$( '[data-unhide]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				btn.disabled = true;
+				const h = ( B.hidden || [] ).find( ( x ) => x.id === btn.dataset.unhide );
+				setIntegrationHidden( btn.dataset.unhide, false, h ? h.label : '' )
+					.catch( ( e ) => { btn.disabled = false; toast( e.message, true ); } );
+			} )
+		);
+
+		$$( '[data-kill]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				btn.disabled = true;
+				try {
+					await api( `minn-admin/v1/users/${ B.user.id }/sessions/${ btn.dataset.kill }`, { method: 'DELETE' } );
+					toast( 'Session signed out' );
+					p.sessions = p.sessions.filter( ( sess ) => sess.verifier !== btn.dataset.kill );
+					if ( state.route === 'profile' ) renderProfile();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+				}
+			} )
+		);
+		const killAll = $( '#minn-pf-killall', view );
+		if ( killAll ) killAll.addEventListener( 'click', async () => {
+			if ( ! confirm( 'Sign out of all other sessions?' ) ) return;
+			killAll.disabled = true;
+			try {
+				await api( `minn-admin/v1/users/${ B.user.id }/sessions`, { method: 'DELETE' } );
+				toast( 'Signed out everywhere' );
+				p.sessions = p.sessions.filter( ( sess ) => sess.current );
+				if ( state.route === 'profile' ) renderProfile();
+			} catch ( err ) {
+				toast( err.message, true );
+				killAll.disabled = false;
+			}
+		} );
 	}
 
 	function openMediaPicker( callback, opts = {} ) {
@@ -25846,6 +26006,8 @@
 		removeLockOverlay();
 		const tip = $( '#minn-chart-tip' );
 		if ( tip ) tip.hidden = true;
+		// Profile data is per-visit (the old modal refetched on every open).
+		if ( state.route !== 'profile' ) state.profile = null;
 		switch ( state.route ) {
 			case 'content': return renderContent();
 			case 'media': return renderMedia();
@@ -25864,6 +26026,7 @@
 			case 'settings': return renderSettings();
 			case 'system': return renderSystem();
 			case 'editor': return renderEditor();
+			case 'profile': return renderProfile();
 			default:
 				if ( surfaceById( state.route ) ) return renderSurface( surfaceById( state.route ) );
 				return renderOverview();

@@ -2146,6 +2146,15 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-term-edit-grid { grid-template-columns: 1fr; }
 }
 
+/* ===== Your profile ===== */
+.minn-profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; max-width: 1060px; }
+.minn-profile-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.minn-profile-fields { display: flex; flex-direction: column; gap: 13px; margin-top: 12px; }
+.minn-profile-grid .minn-session-row:first-of-type { margin-top: 6px; }
+@media (max-width: 900px) {
+  .minn-profile-grid { grid-template-columns: 1fr; }
+}
+
 /* ===== Post types ===== */
 .minn-cpt-cols { grid-template-columns: 1.4fr 1fr 120px 70px 60px 40px; }
 .minn-cpt-checks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 12px; }
