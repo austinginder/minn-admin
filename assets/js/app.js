@@ -6928,6 +6928,43 @@
 		return `<span class="minn-status ${ cls }">${ esc( v || '—' ) }</span>`;
 	}
 
+	// One sectionsRoute detail row. `type` picks the rendering: url/email
+	// (links), pill, code (escaped mono block), html-preview (SANDBOXED
+	// iframe — the plugin's HTML never touches Minn's DOM, matching the
+	// messageKey iframe), kv-table (object map, [[k,v],…] or
+	// [{label,value},…] pairs). Everything else is the plain key/value row.
+	function surfaceSectionRow( r ) {
+		const key = `<span class="minn-side-key">${ esc( r.label || '' ) }</span>`;
+		if ( r.type === 'pill' ) {
+			return `<div class="minn-side-row">${ key }${ surfacePill( r.value ) }</div>`;
+		}
+		if ( r.type === 'code' ) {
+			return `<div class="minn-side-row multi block">${ key }<pre class="minn-detail-code">${ esc( String( r.value == null ? '' : r.value ) ) }</pre></div>`;
+		}
+		if ( r.type === 'html-preview' ) {
+			return `<div class="minn-side-row multi block">${ key }<iframe class="minn-email-frame minn-detail-frame" sandbox="" title="${ esc( r.label || 'Preview' ) }" srcdoc="${ esc( String( r.value == null ? '' : r.value ) ) }"></iframe></div>`;
+		}
+		if ( r.type === 'kv-table' ) {
+			const pairs = Array.isArray( r.value )
+				? r.value.map( ( p ) => Array.isArray( p ) ? p : [ p && p.label, p && p.value ] )
+				: Object.entries( r.value && typeof r.value === 'object' ? r.value : {} );
+			return `<div class="minn-side-row multi block">${ key }<table class="minn-detail-kv"><tbody>
+				${ pairs.slice( 0, 60 ).map( ( [ k, v ] ) => `<tr><th>${ esc( String( k == null ? '' : k ) ) }</th><td>${ esc( String( v == null ? '' : v ) ) }</td></tr>` ).join( '' ) }
+			</tbody></table></div>`;
+		}
+		const raw = String( r.value == null ? '' : r.value );
+		const multi = raw.includes( '\n' ) || raw.length > 90;
+		let val;
+		if ( r.type === 'url' && /^https?:\/\//.test( raw ) ) {
+			val = `<a class="minn-surface-val" href="${ esc( raw ) }" target="_blank" rel="noopener">${ esc( raw ) }</a>`;
+		} else if ( r.type === 'email' && raw.includes( '@' ) ) {
+			val = `<a class="minn-surface-val" href="mailto:${ esc( raw ) }">${ esc( raw ) }</a>`;
+		} else {
+			val = `<span class="minn-surface-val${ multi ? ' multi' : '' }">${ esc( raw ) }</span>`;
+		}
+		return `<div class="minn-side-row${ multi ? ' multi' : '' }">${ key }${ val }</div>`;
+	}
+
 	// First few scalar values stored under numeric-ish keys (GF entries store
 	// field values as { "1": "...", "2.3": "..." }). Prefer a short contact
 	// line (name · email · first short field) so the list doesn't look like a
@@ -22279,14 +22316,7 @@
 			const isCard = isEntry || isActivity;
 			const secRows = sec && ! isCard ? ( sec.sections || [] ).map( ( g ) => `
 					<div class="minn-side-title" style="margin:12px 0 8px;">${ esc( g.title || '' ) }</div>
-					${ ( g.rows || [] ).map( ( r ) => {
-						const raw = String( r.value == null ? '' : r.value );
-						const multi = raw.includes( '\n' ) || raw.length > 90;
-						const val = r.type === 'url' && /^https?:\/\//.test( raw )
-							? `<a class="minn-surface-val" href="${ esc( raw ) }" target="_blank" rel="noopener">${ esc( raw ) }</a>`
-							: `<span class="minn-surface-val${ multi ? ' multi' : '' }">${ esc( raw ) }</span>`;
-						return `<div class="minn-side-row${ multi ? ' multi' : '' }"><span class="minn-side-key">${ esc( r.label || '' ) }</span>${ val }</div>`;
-					} ).join( '' ) }` ).join( '' ) : '';
+					${ ( g.rows || [] ).map( ( r ) => surfaceSectionRow( r ) ).join( '' ) }` ).join( '' ) : '';
 			const entryHtml = isEntry && ! m.loading ? renderEntryDetail( sec ) : '';
 			const activityHtml = isActivity && ! m.loading ? renderActivityDetail( it, sec ) : '';
 			// SH action_links (Edit post, Preview, …) — surface as soft buttons.

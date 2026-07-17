@@ -1557,6 +1557,20 @@ select.minn-input {
 /* Sectioned surface detail (e.g. form entries): long/multiline answers stack. */
 .minn-side-row.multi { flex-direction: column; align-items: flex-start; gap: 3px; }
 .minn-surface-val.multi { white-space: pre-wrap; text-align: left; max-height: 200px; overflow-y: auto; }
+/* Block row types (code / html-preview / kv-table): full-width content. */
+.minn-side-row.block > pre, .minn-side-row.block > iframe, .minn-side-row.block > table { width: 100%; }
+.minn-detail-code {
+  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.55;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; margin: 0; max-height: 260px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; color-scheme: dark;
+}
+[data-theme="light"] .minn-detail-code { color-scheme: light; }
+.minn-detail-frame { height: 380px; margin: 0; width: 100%; resize: vertical; overflow: auto; }
+.minn-detail-kv { border-collapse: collapse; font-size: 13px; }
+.minn-detail-kv th, .minn-detail-kv td { text-align: left; padding: 5px 10px; border: 1px solid var(--border); vertical-align: top; }
+.minn-detail-kv th { color: var(--text3); font-weight: 500; white-space: nowrap; width: 1%; }
+.minn-detail-kv td { word-break: break-word; }
 
 /* Form-entry detail — contact card, not a raw key/value dump. */
 .minn-modal.entry { width: 560px; }

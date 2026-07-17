@@ -559,12 +559,26 @@ must return:
 
 `kind` picks the layout: `"entry"` renders the contact-style form-entry view (name and
 email hero, message body, quiet meta), `"activity"` renders the audit-event view (who,
-event message, context chips). Omit it for a plain grouped key/value view. Surfaces in
-the `forms` family default to `entry` and `activity-log` to `activity`, so those
-usually don't need `kind` at all. A row's `type` hints rendering (`email` and `url`
-values become links). `adminUrl` links the item's wp-admin screen and suppresses any
-`href` action that points at the same place. The bundled Gravity Forms adapter
-(entries) and WP Activity Log adapter (events) are the references.
+event message, context chips). Omit it for a plain grouped key/value view. `adminUrl`
+links the item's wp-admin screen and suppresses any `href` action that points at the
+same place. The bundled Gravity Forms adapter (entries) and WP Activity Log adapter
+(events) are the references.
+
+A row's `type` picks how its value renders (plain grouped layout only; the `entry`
+and `activity` cards have their own structure). Since v0.18.0 the vocabulary is:
+
+| `type` | Renders as |
+|---|---|
+| *(omitted)* | Plain value; multiline or long values stack under the label |
+| `url` | A link opening in a new tab (`https?://` values only) |
+| `email` | A `mailto:` link |
+| `pill` | A status pill using Minn's shared status vocabulary (`sent`, `failed`, `active`, `locked`, …) |
+| `code` | An escaped monospace block (headers, raw payloads, stack traces); scrolls past ~14 lines |
+| `html-preview` | Your HTML in a fully sandboxed iframe (no scripts, opaque origin) — the honest way to show an email body or rendered template. The HTML never touches Minn's DOM |
+| `kv-table` | A two-column key/value table. `value` may be an object map, an array of `[key, value]` pairs, or an array of `{ "label", "value" }` objects; capped at 60 rows |
+
+Values are always escaped; `html-preview` is the one place your markup renders, and
+only inside the sandbox.
 
 ## Make your forms plugin a first-class Forms provider
 
