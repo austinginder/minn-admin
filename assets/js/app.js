@@ -22328,9 +22328,12 @@
 			// in the head because there's no preview stage.
 			const sctx = surfaceModalContext();
 			const canStep = sctx && sctx.items.length > 1;
-			// Wide when the detail shows a message body, card layout, or any
-			// textarea edit field (code snippets need room for the code editor).
-			const needsWide = !! message || isCard || editFields.some( ( f ) => f.type === 'textarea' );
+			// Wide when the detail shows a message body, card layout, any
+			// textarea edit field (code snippets need room for the code
+			// editor), or a block-shaped section row (html-preview/code/kv).
+			const hasBlockRow = !! ( sec && ( sec.sections || [] ).some( ( g ) =>
+				( g.rows || [] ).some( ( r ) => [ 'html-preview', 'code', 'kv-table' ].includes( r.type ) ) ) );
+			const needsWide = !! message || isCard || hasBlockRow || editFields.some( ( f ) => f.type === 'textarea' );
 			// Entry title = form name; activity keeps the surface label (message is body).
 			const headTitle = isActivity
 				? ( s.label || 'Activity Log' )

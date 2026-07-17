@@ -340,9 +340,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'date_created', 'label' => 'Date', 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
-				'detailRoute' => 'minn-admin/v1/gravity-smtp/events/{id}',
-				'messageKey'  => 'message',
-				'skip'        => array( 'message', 'can_resend' ),
+				// v0.18.0: server-built sections (status pill, sandboxed
+				// html-preview body, headers kv-table). The flat
+				// /events/{id} route stays for API consumers.
+				'sectionsRoute' => 'minn-admin/v1/gravity-smtp/events/{id}/view',
 			),
 			'actions'   => array(
 				array(
@@ -723,6 +724,87 @@ add_action( 'rest_api_init', function () {
 				) );
 			},
 		),
+	) );
+
+	// Sections view for the log detail (v0.18.0 row types): status pill,
+	// linked addresses, the HTML body in the sandboxed html-preview row and
+	// the stored headers as a kv-table. Reads the same row + models as the
+	// flat detail route above; that route stays for API consumers.
+	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events/(?P<id>\d+)/view', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can( 'VIEW_EMAIL_LOG_DETAILS' ),
+		'callback'            => function ( WP_REST_Request $request ) {
+			global $wpdb;
+			$table = $wpdb->prefix . 'gravitysmtp_events';
+			$row   = $wpdb->get_row( $wpdb->prepare(
+				"SELECT id, date_created, status, service, subject, message, extra FROM {$table} WHERE id = %d", // phpcs:ignore
+				(int) $request['id']
+			) );
+			if ( ! $row ) {
+				return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+			}
+			$delivery = array(
+				array( 'label' => 'Status', 'value' => $row->status, 'type' => 'pill' ),
+				array( 'label' => 'To', 'value' => minn_admin_gravity_smtp_recipients( $row->extra ) ),
+			);
+			// Their models add from/cc/bcc/source; container services only
+			// register on their admin pages, so Throwable-guarded (the plain
+			// columns are the floor — same policy as the flat route).
+			try {
+				$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+				$details   = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::LOG_DETAILS_MODEL );
+				$full      = $details ? $details->full_details( (int) $row->id ) : array();
+				if ( is_array( $full ) ) {
+					foreach ( array( 'from' => 'From', 'cc' => 'Cc', 'bcc' => 'Bcc', 'source' => 'Source' ) as $k => $label ) {
+						if ( ! empty( $full[ $k ] ) && is_string( $full[ $k ] ) ) {
+							$delivery[] = array( 'label' => $label, 'value' => trim( str_replace( array( '<', '>' ), array( '(', ')' ), $full[ $k ] ) ) );
+						}
+					}
+					if ( ! empty( $full['has_attachment'] ) ) {
+						$delivery[] = array( 'label' => 'Attachments', 'value' => (string) (int) $full['has_attachment'] );
+					}
+				}
+			} catch ( \Throwable $e ) { // phpcs:ignore
+				// Plain columns already listed.
+			}
+			$delivery[] = array( 'label' => 'Service', 'value' => (string) $row->service );
+			$delivery[] = array( 'label' => 'Date', 'value' => $row->date_created . ' UTC' );
+
+			$message  = (string) $row->message;
+			$sections = array(
+				array( 'title' => 'Delivery', 'rows' => $delivery ),
+				array(
+					'title' => 'Message',
+					'rows'  => array(
+						array( 'label' => 'Subject', 'value' => (string) $row->subject ),
+						preg_match( '/<\/?[a-z][^>]*>/i', $message )
+							? array( 'label' => 'Body', 'value' => $message, 'type' => 'html-preview' )
+							: array( 'label' => 'Body', 'value' => $message, 'type' => 'code' ),
+					),
+				),
+			);
+
+			// Stored headers ride the serialized `extra` blob. Regex-decode
+			// only (rule: never unserialize third-party blobs); Recipient
+			// objects were flattened by the resend path's logic already, so
+			// here we surface only plain string headers.
+			$headers = array();
+			if ( is_string( $row->extra ) && preg_match( '/"headers";a:\d+:\{(.*)$/s', (string) $row->extra, $m ) ) {
+				if ( preg_match_all( '/s:\d+:"([^"]{1,64})";s:\d+:"([^"]{0,512})";/', $m[1], $pairs, PREG_SET_ORDER ) ) {
+					foreach ( array_slice( $pairs, 0, 30 ) as $p ) {
+						$headers[ $p[1] ] = $p[2];
+					}
+				}
+			}
+			if ( $headers ) {
+				$sections[] = array(
+					'title' => 'Headers',
+					'rows'  => array( array( 'label' => 'Stored headers', 'value' => $headers, 'type' => 'kv-table' ) ),
+				);
+			}
+
+			return rest_ensure_response( array( 'sections' => $sections ) );
+		},
 	) );
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/events/(?P<id>\d+)/resend', array(
