@@ -66,6 +66,72 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		}, mediaId ).catch( () => {} );
 	}
 
+	// Phase 2 — Force Regenerate Thumbnails covers the same button when RT
+	// is off: the click goes to FRT's own admin-ajax handler with FRT's own
+	// nonce (boot payload `frt`). Residents restored in finally.
+	const plug = ( id, status ) => page.evaluate( async ( a ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.id, {
+			method: 'POST', credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			body: JSON.stringify( { status: a.status } ),
+		} );
+		return r.ok;
+	}, { id, status } );
+	let frtMedia = null;
+	try {
+		await plug( 'regenerate-thumbnails/regenerate-thumbnails', 'inactive' );
+		await plug( 'force-regenerate-thumbnails/force-regenerate-thumbnails', 'active' );
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+		t.check( 'boot swaps to the FRT path', await page.evaluate( () =>
+			window.MINN.regenThumbs === false && !! ( window.MINN.frt && window.MINN.frt.nonce ) ) );
+
+		frtMedia = await page.evaluate( async () => {
+			const canvas = document.createElement( 'canvas' );
+			canvas.width = 800;
+			canvas.height = 600;
+			const ctx = canvas.getContext( '2d' );
+			ctx.fillStyle = '#a53a6e';
+			ctx.fillRect( 0, 0, 800, 600 );
+			const blob = await new Promise( ( r ) => canvas.toBlob( r, 'image/png' ) );
+			const fd = new FormData();
+			fd.append( 'file', blob, 'minn-frt-suite.png' );
+			const res = await fetch( window.MINN.restUrl + 'wp/v2/media', {
+				method: 'POST', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin', body: fd,
+			} );
+			return ( await res.json() ).id;
+		} );
+
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `[data-media="${ frtMedia }"]`, { timeout: 20000 } );
+		await page.click( `[data-media="${ frtMedia }"]` );
+		await page.waitForSelector( '#minn-media-regen', { timeout: 8000 } );
+		await page.click( '#minn-media-regen' );
+		await page.waitForFunction( () =>
+			Array.from( document.querySelectorAll( '.minn-toast' ) ).some( ( x ) => /Force Regenerate Thumbnails/.test( x.textContent ) ),
+		null, { timeout: 30000 } );
+		t.check( 'FRT run toasts through its own handler', true );
+
+		const frtSizes = await page.evaluate( async ( id ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/media/' + id + '?_fields=media_details', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			const m = await r.json();
+			return Object.keys( ( m.media_details && m.media_details.sizes ) || {} ).length;
+		}, frtMedia );
+		t.check( 'metadata carries sizes after the FRT rebuild', frtSizes > 0, String( frtSizes ) );
+	} finally {
+		if ( frtMedia ) {
+			await page.evaluate( async ( id ) => {
+				await fetch( window.MINN.restUrl + 'wp/v2/media/' + id + '?force=true', {
+					method: 'DELETE', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+				} ).catch( () => {} );
+			}, frtMedia ).catch( () => {} );
+		}
+		await plug( 'force-regenerate-thumbnails/force-regenerate-thumbnails', 'inactive' ).catch( () => {} );
+		await plug( 'regenerate-thumbnails/regenerate-thumbnails', 'active' ).catch( () => {} );
+	}
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
 	console.error( e );

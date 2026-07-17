@@ -764,15 +764,20 @@ class Minn_Admin {
 			// Regenerate Thumbnails present + allowed — a per-image button
 			// on the media detail modal (adapters/regenerate-thumbnails.php).
 			'regenThumbs' => function_exists( 'minn_admin_regen_thumbs_available' ) && minn_admin_regen_thumbs_available(),
+			// Force Regenerate Thumbnails fallback — { ajax, nonce } for its
+			// own admin-ajax handler; null when RT covers it or FRT is absent.
+			'frt'      => function_exists( 'minn_admin_frt_boot' ) ? minn_admin_frt_boot() : null,
 			// Enable Media Replace present + allowed — a "Replace file" button
 			// on the media detail modal (adapters/enable-media-replace.php).
 			'mediaReplace' => function_exists( 'minn_admin_emr_available' ) && minn_admin_emr_available(),
 			// Media folders provider (adapters/media-folders.php) — { name }
 			// gates the folder combobox on the Media view; null without one.
 			'mediaFolders' => function_exists( 'minn_admin_media_folders_boot' ) ? minn_admin_media_folders_boot() : null,
-			// Safe SVG present — media toolbar SVG filter tab + detail note
-			// (adapters/safe-svg.php). Sanitization stays Safe SVG's.
-			'safeSvg'    => function_exists( 'minn_admin_safe_svg_active' ) && minn_admin_safe_svg_active(),
+			// An SVG-enabling plugin present (Safe SVG or SVG Support) —
+			// media toolbar SVG filter tab + detail note
+			// (adapters/safe-svg.php). Sanitization stays the plugin's.
+			'safeSvg'    => function_exists( 'minn_admin_svg_provider' ) && null !== minn_admin_svg_provider(),
+			'svgProvider' => function_exists( 'minn_admin_svg_provider' ) ? minn_admin_svg_provider() : null,
 			// PDF Invoices & Packing Slips — download buttons on the order
 			// detail modal (adapters/wcpdf.php). Null without the plugin or
 			// order access.

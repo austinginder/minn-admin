@@ -49,6 +49,7 @@ const os = require( 'os' );
 		}
 
 		t.check( 'boot safeSvg is true', await page.evaluate( () => window.MINN.safeSvg === true ) );
+		t.check( 'boot names Safe SVG as the provider', await page.evaluate( () => window.MINN.svgProvider === 'Safe SVG' ) );
 
 		await page.goto( `${ BASE }/minn-admin/media`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-tabs, .minn-media-grid, .minn-empty', { timeout: 15000 } );
@@ -136,6 +137,33 @@ const os = require( 'os' );
 		}
 		if ( prior.status === 'inactive' ) {
 			await pluginPut( 'inactive' ).catch( () => {} );
+		}
+	}
+
+	// Phase 2 — SVG Support joins the same gate: with Safe SVG off and SVG
+	// Support on, the boot flag stays true and the provider name flips (the
+	// detail note claims only "uploads enabled" for it). Restored in finally.
+	const anyPlug = ( id, status ) => page.evaluate( async ( a ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.id, {
+			method: 'POST', credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			body: JSON.stringify( { status: a.status } ),
+		} );
+		return r.ok;
+	}, { id, status } );
+	try {
+		await anyPlug( 'safe-svg/safe-svg', 'inactive' );
+		await anyPlug( 'svg-support/svg-support', 'active' );
+		await page.goto( `${ BASE }/minn-admin/media`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+		t.check( 'SVG Support keeps the gate open', await page.evaluate( () =>
+			window.MINN.safeSvg === true && window.MINN.svgProvider === 'SVG Support' ) );
+		await page.waitForSelector( '.minn-tab[data-mtype="svg"]', { timeout: 15000 } );
+		t.check( 'SVG tab present under SVG Support', true );
+	} finally {
+		await anyPlug( 'svg-support/svg-support', 'inactive' ).catch( () => {} );
+		if ( prior.status !== 'inactive' ) {
+			await anyPlug( 'safe-svg/safe-svg', 'active' ).catch( () => {} );
 		}
 	}
 

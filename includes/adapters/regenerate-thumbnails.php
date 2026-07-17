@@ -21,6 +21,28 @@ function minn_admin_regen_thumbs_available() {
 		&& current_user_can( RegenerateThumbnails()->capability );
 }
 
+/**
+ * Force Regenerate Thumbnails (200k) joins the same ↻ Thumbnails button.
+ * Its regenerate lives only inside its admin-ajax handler (nonce-bound), so
+ * the client calls FRT's own endpoint directly with FRT's own nonce (the
+ * WCPDF admin-ajax precedent) — Minn reimplements nothing, and FRT's
+ * delete-stale-files behavior applies exactly as on its Tools screen.
+ * Regenerate Thumbnails wins when both are active (one button, one path).
+ */
+function minn_admin_frt_boot() {
+	if ( minn_admin_regen_thumbs_available() || ! function_exists( 'force_regenerate_thumbnails' ) ) {
+		return null;
+	}
+	$frt = force_regenerate_thumbnails();
+	if ( ! is_object( $frt ) || empty( $frt->capability ) || ! current_user_can( $frt->capability ) ) {
+		return null;
+	}
+	return array(
+		'ajax'  => admin_url( 'admin-ajax.php' ),
+		'nonce' => wp_create_nonce( 'force-regenerate-attachment' ),
+	);
+}
+
 add_action( 'rest_api_init', function () {
 	if ( ! function_exists( 'RegenerateThumbnails' ) ) {
 		return;

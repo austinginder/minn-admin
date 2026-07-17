@@ -1,14 +1,16 @@
 <?php
 /**
- * Bundled adapter: Safe SVG (wp.org free).
+ * Bundled adapter: Safe SVG (wp.org free) + SVG Support (Benbodhi, 1M).
  *
- * WordPress core blocks SVG uploads. Safe SVG sanitizes and allows them.
- * Minn already labels image/svg* as SVG in the media library; this adapter
- * only:
+ * WordPress core blocks SVG uploads; both plugins allow them. Minn already
+ * labels image/svg* as SVG in the media library; this adapter only:
  *   1. Boots a `safeSvg` flag so the media toolbar can show an SVG filter
- *      tab (and a detail note that uploads are sanitized)
- *   2. Does NOT reimplement sanitization — Safe SVG's upload_mimes +
- *      sanitizer stay the source of truth
+ *      tab, plus `svgProvider` naming which plugin enables it (drives the
+ *      detail note's wording)
+ *   2. Does NOT reimplement sanitization — each plugin's upload_mimes +
+ *      sanitizer stay the source of truth (SVG Support's sanitize-on-upload
+ *      and role restrictions are its own settings, so Minn's note claims
+ *      only "uploads enabled", never "sanitized", for it)
  *
  * @package minn-admin
  */
@@ -27,5 +29,21 @@ function minn_admin_safe_svg_active() {
 		|| function_exists( 'safe_svg_upload_mimes' );
 }
 
-// Boot flag is stamped in Minn_Admin::boot_payload() as `safeSvg`
-// (same pattern as regenThumbs).
+/**
+ * Which SVG-enabling plugin is active: 'Safe SVG', 'SVG Support', or null.
+ * Safe SVG wins when both are active (it always sanitizes).
+ *
+ * @return string|null
+ */
+function minn_admin_svg_provider() {
+	if ( minn_admin_safe_svg_active() ) {
+		return 'Safe SVG';
+	}
+	if ( defined( 'BODHI_SVGS_VERSION' ) ) {
+		return 'SVG Support';
+	}
+	return null;
+}
+
+// Boot flags are stamped in Minn_Admin::boot_payload() as `safeSvg`
+// (boolean, either provider) + `svgProvider` (the name).

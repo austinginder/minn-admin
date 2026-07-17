@@ -21735,8 +21735,10 @@
 						: 'Unattached'
 				}</span></div>`;
 			const canEdit = it.kind === 'IMG' || it.kind === 'SVG';
+			// Safe SVG always sanitizes; SVG Support's sanitize-on-upload is a
+			// setting, so its note claims only what's certain.
 			const svgNote = it.kind === 'SVG' && B.safeSvg
-				? '<div class="minn-media-svg-note">Sanitized by Safe SVG</div>'
+				? `<div class="minn-media-svg-note">${ B.svgProvider === 'Safe SVG' ? 'Sanitized by Safe SVG' : `SVG uploads enabled by ${ esc( B.svgProvider || 'a plugin' ) }` }</div>`
 				: '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
@@ -21773,7 +21775,7 @@
 						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
 						<button class="minn-btn-soft" id="minn-media-open">↗ Open</button>
 						${ it.kind === 'IMG' ? `<button class="minn-btn-soft" id="minn-media-edit-image" type="button" title="Rotate and crop — saved as a new copy">✎ Edit image</button>` : '' }
-						${ it.kind === 'IMG' && B.regenThumbs ? `<button class="minn-btn-soft" id="minn-media-regen" type="button" title="Rebuild every registered thumbnail size from the original (Regenerate Thumbnails)">↻ Thumbnails</button>` : '' }
+						${ it.kind === 'IMG' && ( B.regenThumbs || B.frt ) ? `<button class="minn-btn-soft" id="minn-media-regen" type="button" title="Rebuild every registered thumbnail size from the original (${ B.regenThumbs ? 'Regenerate Thumbnails' : 'Force Regenerate Thumbnails' })">↻ Thumbnails</button>` : '' }
 						${ B.mediaReplace ? `<button class="minn-btn-soft" id="minn-media-replace" type="button" title="Upload a new file over this one — same name, same URL, every reference keeps working (Enable Media Replace)">⇅ Replace file</button>` : '' }
 						${ m.from === 'featured' && state.editor ? `
 						<button class="minn-btn-soft" id="minn-media-feat-replace" type="button">Replace featured</button>
@@ -23438,13 +23440,24 @@
 			} );
 			// Regenerate Thumbnails: the plugin's regenerator runs server-side
 			// (adapters/regenerate-thumbnails.php); the modal stays open.
+			// Without RT, Force Regenerate Thumbnails covers the same button
+			// through ITS OWN admin-ajax handler + nonce (delete-stale-files
+			// semantics included) — the WCPDF admin-ajax precedent.
 			const regenBtn = $( '#minn-media-regen' );
 			if ( regenBtn ) regenBtn.addEventListener( 'click', async () => {
 				regenBtn.disabled = true;
 				regenBtn.textContent = 'Regenerating…';
 				try {
-					const r = await api( `minn-admin/v1/media/${ it.id }/regenerate`, { method: 'POST' } );
-					toast( `Regenerated ${ r.sizes } thumbnail size${ r.sizes === 1 ? '' : 's' }` );
+					if ( B.regenThumbs ) {
+						const r = await api( `minn-admin/v1/media/${ it.id }/regenerate`, { method: 'POST' } );
+						toast( `Regenerated ${ r.sizes } thumbnail size${ r.sizes === 1 ? '' : 's' }` );
+					} else {
+						const body = new URLSearchParams( { action: 'regeneratethumbnail', id: String( it.id ), frt_wpnonce: B.frt.nonce } );
+						const res = await fetch( B.frt.ajax, { method: 'POST', credentials: 'same-origin', body } );
+						const out = await res.json();
+						if ( out && out.error ) throw new Error( out.error.replace( /<[^>]*>/g, '' ).trim() || 'Regenerate failed' );
+						toast( 'Thumbnails rebuilt (Force Regenerate Thumbnails)' );
+					}
 				} catch ( e ) {
 					toast( e.message, true );
 				}

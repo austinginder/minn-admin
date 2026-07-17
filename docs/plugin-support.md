@@ -39,7 +39,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Dev tools** | Query Monitor; **Diagnostics** family (Scrutoscope, WP Crontrol, Transients Manager, Rewrite Rules Inspector) | QM panel on Minn pages (this-request). One Tools item **Diagnostics** with a provider switcher: **Scrutoscope** (performance profiles + attribution Cron view), **WP Crontrol** (event inventory, run-now, pause/resume, delete), **Transients Manager** (list/search/delete, expired purge, never unserializes blobs), **Rewrite Rules Inspector** (registered rules by source, search by path, flush, test URL). Capture settings, PHP/URL cron authoring, deep transient edit, and the full RRI screen stay deep-linked |
 | **Users** | User Switching, One Time Login | "Switch to this user" in the users row menu (the plugin's own nonce URLs), plus a Switch-back bar for a switched session; "Copy one-time login link" mints a single-use login-as link through One Time Login's own token generator (that CLI-only plugin's first UI), gated on `edit_user` for the target |
 | **Public preview** | Public Post Preview | Editor Publish card: **Public preview link** toggle + copy URL; content row **Copy public preview link** (enables if needed). Shareable anonymous draft links use the plugin's own expiring nonces and Reading expiry setting |
-| **Media** | Regenerate Thumbnails, Safe SVG, Enable Media Replace, FileBird, Real Media Library, Folders by Premio | ↻ Thumbnails button on the media detail modal (per-image full rebuild). Safe SVG: **SVG** filter tab when uploads are allowed; detail note; sanitization stays Safe SVG's. Enable Media Replace: **⇅ Replace file** on the detail modal through EMR's own ReplaceController (same name, same URL; same-type enforced; rename-and-move stays on EMR's screen). Folders: FileBird, Real Media Library Lite and Folders by Premio all feed the Media view's folder combobox via the `minn_admin_media_folders` provider contract (browse-first; organizing stays in each plugin's UI) |
+| **Media** | Regenerate Thumbnails, Force Regenerate Thumbnails, Safe SVG, SVG Support, Enable Media Replace, FileBird, Real Media Library, Folders by Premio | ↻ Thumbnails button on the media detail modal (per-image full rebuild; Force Regenerate Thumbnails covers the same button through its own admin-ajax handler when RT is absent). Safe SVG or SVG Support: **SVG** filter tab; detail note names the provider (sanitization claimed only for Safe SVG); sanitization stays the plugin's. Enable Media Replace: **⇅ Replace file** on the detail modal through EMR's own ReplaceController (same name, same URL; same-type enforced; rename-and-move stays on EMR's screen). Folders: FileBird, Real Media Library Lite and Folders by Premio all feed the Media view's folder combobox via the `minn_admin_media_folders` provider contract (browse-first; organizing stays in each plugin's UI) |
 | **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
 
 Beyond the named plugins: any plugin's standalone dynamic blocks and
@@ -165,9 +165,13 @@ adapters plus one new primitive, ranked:
    needing a new surface. NEVER a Minn-owned folder tree: a fifth folder
    standard invisible to wp-admin and page-builder pickers contradicts the
    thesis (core owns universal primitives, plugins own opinions).
-10. **Parity crumbs** — SVG Support (1M) joins the Safe SVG gate for the
-    SVG filter tab; Force Regenerate Thumbnails (200k) joins the existing
-    ↻ Thumbnails action.
+10. **Parity crumbs** — **SHIPPED 2026-07-17**: SVG Support (1M) joins the
+    Safe SVG gate for the SVG filter tab (`svgProvider` boot key names the
+    plugin; the detail note claims sanitization only for Safe SVG); Force
+    Regenerate Thumbnails (200k) joins the ↻ Thumbnails action through its
+    own admin-ajax handler and nonce (boot key `frt`; RT wins when both are
+    active). Wave D is COMPLETE except the optimizer one-liners and the
+    deliberate skips below.
 
 Still skipped, deliberately: the optimizers (Smush / EWWW / Imagify 1M
 each, Converter for Media 500k, ShortPixel 300k, Optimole 200k) are
