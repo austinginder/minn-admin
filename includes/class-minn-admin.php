@@ -764,6 +764,9 @@ class Minn_Admin {
 			// Regenerate Thumbnails present + allowed — a per-image button
 			// on the media detail modal (adapters/regenerate-thumbnails.php).
 			'regenThumbs' => function_exists( 'minn_admin_regen_thumbs_available' ) && minn_admin_regen_thumbs_available(),
+			// Enable Media Replace present + allowed — a "Replace file" button
+			// on the media detail modal (adapters/enable-media-replace.php).
+			'mediaReplace' => function_exists( 'minn_admin_emr_available' ) && minn_admin_emr_available(),
 			// Safe SVG present — media toolbar SVG filter tab + detail note
 			// (adapters/safe-svg.php). Sanitization stays Safe SVG's.
 			'safeSvg'    => function_exists( 'minn_admin_safe_svg_active' ) && minn_admin_safe_svg_active(),
