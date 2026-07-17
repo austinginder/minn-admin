@@ -52,12 +52,24 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 			const x = document.querySelector( '#minn-modal-close' );
 			if ( x ) x.click();
 		} );
-		await page.waitForFunction( () => ! document.querySelector( '#minn-rev-list' ), { timeout: 5000 } ).catch( () => {} );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-modal-overlay' ), { timeout: 5000 } ).catch( () => {} );
 	};
 
 	await openHistoryDoor();
 	const nBefore = await page.evaluate( () => document.querySelectorAll( '#minn-rev-list [data-revlist]' ).length );
 	t.check( 'history lists at least one previous revision after seed', nBefore >= 1, String( nBefore ) );
+
+	// The dialog hides the newest revision (WP's live-post mirror) while the
+	// editor is clean, so it shows one FEWER row than the revisions API: the
+	// off-by-one that once made the top row read "Identical to the current
+	// content" (historyRowsFor's i===0 && !ed.dirty skip).
+	const nApi = await page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '/revisions?per_page=6&_fields=id', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce },
+		} );
+		return ( await r.json() ).length;
+	}, id );
+	t.check( 'clean editor hides the current-save mirror revision', nBefore === nApi - 1, `ui=${ nBefore } api=${ nApi }` );
 
 	// Visible previous-version row should read as recent — never "4h ago"
 	// (the old Z-suffix bug on America/New_York).
@@ -70,9 +82,21 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		/just now|min ago|mins ago|second/.test( whenBefore ),
 		whenBefore
 	);
+
+	// Opening the top row must diff against the current content, not show the
+	// identical mirror (the off-by-one Austin hit).
+	await page.evaluate( () => document.querySelector( '#minn-rev-list [data-revlist]' ).click() );
+	await page.waitForSelector( '#minn-diff, #minn-restore-rev', { timeout: 10000 } );
+	await page.waitForTimeout( 400 );
+	const topDiff = await page.evaluate( () => document.querySelector( '#minn-modal-overlay' ).textContent );
+	t.check(
+		'top History row diffs against current (not identical mirror)',
+		! /Identical to the current content/.test( topDiff ),
+		topDiff.slice( 0, 140 )
+	);
 	await closeDialog();
 
-	// Edit in the body and click Update — reopening the door must show a new
+	// Edit in the body and click Update: reopening the door must show a new
 	// revision, proving the in-session save landed with no page reload.
 	await page.click( '#minn-editor-body' );
 	await page.keyboard.type( ' ' );

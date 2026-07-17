@@ -196,10 +196,17 @@ function campfire_detail( WP_REST_Request $req ) {
 
 function campfire_set_status( WP_REST_Request $req, $status ) {
 	global $wpdb;
+	$id  = (int) $req['id'];
+	$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id FROM ' . campfire_table() . ' WHERE id = %d', $id ) );
+	if ( ! $row ) {
+		return new WP_Error( 'campfire_not_found', 'No such feedback.', array( 'status' => 404 ) );
+	}
+	// $wpdb->update returns 0 (not false) when the row already had this status,
+	// which is a fine no-op; only a real SQL error (false) is a failure.
 	$updated = $wpdb->update(
 		campfire_table(),
 		array( 'status' => $status ),
-		array( 'id' => (int) $req['id'] ),
+		array( 'id' => $id ),
 		array( '%s' ),
 		array( '%d' )
 	);
