@@ -2813,6 +2813,8 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-palette-label { flex: 1; font-size: 14.5px; font-weight: 500; }
 .minn-palette-kind { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
 .minn-palette-empty { padding: 26px; text-align: center; color: var(--text3); font-size: 14px; }
+/* ⌘K content-search section label between commands and content rows */
+.minn-palette-sec { padding: 10px 16px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: var(--text3); border-top: 1px solid var(--border); margin-top: 4px; }
 
 /* ===== Toast ===== */
 .minn-toast {
