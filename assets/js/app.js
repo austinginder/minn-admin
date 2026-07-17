@@ -2919,7 +2919,20 @@
 
 	// Like contentCtx: a load started before the search/type filter changed
 	// must not land its rows into the new context.
-	const mediaCtx = () => ( state.mediaSearch || '' ) + '|' + ( state.mediaType || '' );
+	const mediaCtx = () => ( state.mediaSearch || '' ) + '|' + ( state.mediaType || '' )
+		+ '|' + ( state.mediaUnattached ? '1' : '' ) + '|' + ( state.mediaMonth || '' );
+
+	// Month filter → an inclusive local-time window for REST after/before
+	// (both are exclusive comparisons against site-local post_date).
+	const mediaMonthWindow = ( ym ) => {
+		const [ y, m ] = ym.split( '-' ).map( Number );
+		const pad = ( n ) => String( n ).padStart( 2, '0' );
+		const lastPrev = new Date( y, m - 1, 0 ); // last day of the previous month
+		const after = `${ lastPrev.getFullYear() }-${ pad( lastPrev.getMonth() + 1 ) }-${ pad( lastPrev.getDate() ) }T23:59:59`;
+		const next = new Date( y, m, 1 ); // first day of the next month
+		const before = `${ next.getFullYear() }-${ pad( next.getMonth() + 1 ) }-01T00:00:00`;
+		return { after, before };
+	};
 
 	async function loadMedia( page = 1 ) {
 		const ctx = mediaCtx();
@@ -2927,9 +2940,14 @@
 		// image/svg* only (Safe SVG sites only; the tab is gated on B.safeSvg).
 		const svgOnly = state.mediaType === 'svg';
 		const mediaType = svgOnly ? 'image' : state.mediaType;
-		let q = `wp/v2/media?per_page=${ svgOnly ? 100 : 48 }&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text&page=${ page }`;
+		let q = `wp/v2/media?per_page=${ svgOnly ? 100 : 48 }&orderby=date&order=desc&_fields=id,title,mime_type,source_url,media_details,date,alt_text,minn_attached_to&page=${ page }`;
 		if ( state.mediaSearch ) q += '&search=' + encodeURIComponent( state.mediaSearch );
 		if ( mediaType ) q += '&media_type=' + encodeURIComponent( mediaType );
+		if ( state.mediaUnattached ) q += '&parent=0';
+		if ( state.mediaMonth ) {
+			const w = mediaMonthWindow( state.mediaMonth );
+			q += '&after=' + encodeURIComponent( w.after ) + '&before=' + encodeURIComponent( w.before );
+		}
 		const r = await apiPaged( q );
 		if ( ctx !== mediaCtx() ) return; // filter changed mid-flight — discard
 		let items = r.items;
@@ -3136,6 +3154,9 @@
 		return {
 			id: m.id,
 			name: decodeEntities( m.title.rendered ) || ( m.source_url || '' ).split( '/' ).pop(),
+			// undefined when the fetch didn't ask (media picker); null when
+			// genuinely unattached — the modal row renders only when known.
+			attachedTo: m.minn_attached_to,
 			kind,
 			mime: m.mime_type,
 			url: m.source_url,
@@ -3172,22 +3193,45 @@
 		if ( state.route === 'media' ) renderMedia();
 	}
 
+	// Month key → "July 2026" for the date-filter combobox.
+	const mediaMonthLabel = ( ym ) => {
+		const [ y, m ] = ym.split( '-' ).map( Number );
+		return [ 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December' ][ m - 1 ] + ' ' + y;
+	};
+
 	function renderMedia() {
 		const view = $( '#minn-view' );
 		const c = state.cache.media;
+		// Toolbar chrome shared by the cold and loaded paints (identical
+		// markup so the soft-reload swap never jumps).
+		const mediaTabsHtml = `
+			<div class="minn-tabs">
+				${ mediaTypesList().map( ( [ id, label ] ) =>
+					`<button class="minn-tab${ ( state.mediaType || '' ) === id ? ' active' : '' }" data-mtype="${ id }">${ label }</button>` ).join( '' ) }
+			</div>
+			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
+				<button class="minn-tab${ state.mediaUnattached ? ' active' : '' }" id="minn-media-unattached" title="Files not attached to any post or page">Unattached</button>
+			</div>`;
+		const mediaMonthComboHtml = `
+			<div class="minn-ac minn-tax-select" data-monthcombo title="Filter by upload month">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( state.mediaMonth ? mediaMonthLabel( state.mediaMonth ) : 'All dates' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Filter by upload month">
+				<div class="minn-ac-panel" hidden></div>
+			</div>`;
+		const mediaViewTabsHtml = `
+			<div class="minn-view-tabs" style="margin-left:0;">
+				<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
+				<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
+			</div>`;
 		if ( ! c ) {
 			if ( softLoadPending( 'media' ) ) return; // a soft reload owns the view
 			view.innerHTML = `
-			<div class="minn-toolbar">
-				<div class="minn-tabs">
-					${ mediaTypesList().map( ( [ id, label ] ) =>
-						`<button class="minn-tab${ ( state.mediaType || '' ) === id ? ' active' : '' }" data-mtype="${ id }">${ label }</button>` ).join( '' ) }
-				</div>
+			<div class="minn-toolbar minn-toolbar-views">
+				${ mediaTabsHtml }
+			</div>
+			<div class="minn-toolbar minn-toolbar-filters">
+				${ mediaMonthComboHtml }
 				<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
-				<div class="minn-view-tabs" style="margin-left:0;">
-					<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
-					<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
-				</div>
+				${ mediaViewTabsHtml }
 			</div>
 			<div class="minn-loading">Loading media…</div>`;
 			$$( '[data-mtype]', view ).forEach( ( btn ) =>
@@ -3222,17 +3266,14 @@
 			: `background:${ m.grad }`;
 
 		view.innerHTML = `
-		<div class="minn-toolbar">
-			<div class="minn-tabs">
-				${ mediaTypesList().map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ ( state.mediaType || '' ) === id ? ' active' : '' }" data-mtype="${ id }">${ label }</button>` ).join( '' ) }
-			</div>
+		<div class="minn-toolbar minn-toolbar-views">
+			${ mediaTabsHtml }
+		</div>
+		<div class="minn-toolbar minn-toolbar-filters">
+			${ mediaMonthComboHtml }
 			<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ countLabel }</div>
-			<div class="minn-view-tabs" style="margin-left:0;">
-				<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
-				<button class="minn-view-tab${ state.mediaView === 'list' ? ' active' : '' }" data-view="list" title="List">${ icon( 'list' ) }</button>
-			</div>
+			${ mediaViewTabsHtml }
 			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn">${ icon( 'upload' ) } Upload</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
 		</div>
 		<div id="minn-media-bulk-slot"></div>
@@ -3242,7 +3283,7 @@
 			<div class="minn-dropzone-title">Drag &amp; drop files here</div>
 			<div class="minn-dropzone-sub">or <b>browse your computer</b></div>
 		</div>` : '' }
-		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType ? 'No files match.' : 'The media library is empty. Drop files anywhere to upload.' }</div>` : state.mediaView === 'grid' ? `
+		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType || state.mediaUnattached || state.mediaMonth ? 'No files match.' : 'The media library is empty. Drop files anywhere to upload.' }</div>` : state.mediaView === 'grid' ? `
 		<div class="minn-media-grid">
 			${ mapped.map( ( m ) => `
 				<div class="minn-media-card" data-media="${ m.id }">
@@ -3292,6 +3333,37 @@
 				} );
 			} )
 		);
+		// Unattached: files no post claims — core's parent=0 query.
+		const unattachedBtn = $( '#minn-media-unattached', view );
+		if ( unattachedBtn ) unattachedBtn.addEventListener( 'click', () => {
+			state.mediaUnattached = ! state.mediaUnattached;
+			mediaReload( () => unattachedBtn.classList.toggle( 'active', !! state.mediaUnattached ) );
+		} );
+		// Month filter: options load once per session (months with uploads,
+		// from minn-admin/v1/media/months) and bind as a strict combobox.
+		if ( ! state.cache.mediaMonths && ! state.mediaMonthsLoading ) {
+			state.mediaMonthsLoading = true;
+			api( 'minn-admin/v1/media/months' )
+				.then( ( r ) => { state.cache.mediaMonths = Array.isArray( r ) ? r : []; } )
+				.catch( () => { state.cache.mediaMonths = []; } )
+				.finally( () => {
+					state.mediaMonthsLoading = false;
+					if ( state.route === 'media' ) renderMedia();
+				} );
+		}
+		const monthWrap = view.querySelector( '[data-monthcombo]' );
+		if ( monthWrap && state.cache.mediaMonths ) bindAutocomplete( monthWrap,
+			[ { value: '', label: 'All dates' } ].concat( state.cache.mediaMonths.map( ( m ) => ( {
+				value: m.value, label: `${ mediaMonthLabel( m.value ) } (${ m.count })`,
+			} ) ) ), {
+				strict: true,
+				value: state.mediaMonth || '',
+				onPick: ( v ) => {
+					if ( ( state.mediaMonth || '' ) === v ) return;
+					state.mediaMonth = v || null;
+					mediaReload();
+				},
+			} );
 		const mediaSearch = $( '#minn-media-search', view );
 		if ( mediaSearch ) {
 			let t = null;
@@ -21595,6 +21667,17 @@
 				[ 'Size', it.size ],
 				[ 'Uploaded', it.date ? timeAgo( it.date ) : '—' ],
 			];
+			// "Attached to" renders only when the fetch carried the field
+			// (undefined = media-picker context, which never asks for it).
+			const att = it.attachedTo;
+			const attRow = att === undefined ? '' : `
+				<div class="minn-side-row"><span class="minn-side-key">Attached to</span><span>${
+					att
+						? ( att.editable && att.rest_base
+							? `<button type="button" class="minn-side-link" id="minn-media-attached" title="Open in the editor">${ esc( att.title ) }</button>`
+							: esc( att.title ) )
+						: 'Unattached'
+				}</span></div>`;
 			const canEdit = it.kind === 'IMG' || it.kind === 'SVG';
 			const svgNote = it.kind === 'SVG' && B.safeSvg
 				? '<div class="minn-media-svg-note">Sanitized by Safe SVG</div>'
@@ -21614,6 +21697,7 @@
 					</div>
 					<div class="minn-modal-meta">
 						${ rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ k }</span><span>${ esc( v ) }</span></div>` ).join( '' ) }
+						${ attRow }
 						${ svgNote }
 						<div class="minn-modal-url"><span class="minn-permalink">${ esc( it.url ) }</span></div>
 						${ canEdit ? `
@@ -23310,6 +23394,14 @@
 				}
 				regenBtn.disabled = false;
 				regenBtn.textContent = '↻ Thumbnails';
+			} );
+			// Attached to → jump straight into the parent post's editor.
+			const attBtn = $( '#minn-media-attached' );
+			if ( attBtn ) attBtn.addEventListener( 'click', () => {
+				const att = it.attachedTo;
+				if ( ! att || ! att.rest_base ) return;
+				closeModal();
+				go( 'editor/' + att.rest_base + '/' + att.id );
 			} );
 			// Replace file (Enable Media Replace): same name, same URL — EMR's
 			// controller does the pixel work server-side

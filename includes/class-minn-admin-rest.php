@@ -1146,6 +1146,68 @@ class Minn_Admin_REST {
 				),
 			)
 		);
+
+		// Months that actually hold uploads — feeds the Media view's date
+		// filter combobox (wp-admin's months_dropdown, minus the markup).
+		register_rest_route(
+			self::NS,
+			'/media/months',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'callback'            => function () {
+					global $wpdb;
+					$rows = $wpdb->get_results(
+						"SELECT YEAR(post_date) AS y, MONTH(post_date) AS m, COUNT(1) AS n
+						 FROM {$wpdb->posts}
+						 WHERE post_type = 'attachment' AND post_status != 'auto-draft'
+						 GROUP BY y, m
+						 ORDER BY y DESC, m DESC
+						 LIMIT 120"
+					);
+					return rest_ensure_response( array_map( function ( $r ) {
+						return array(
+							'value' => sprintf( '%04d-%02d', (int) $r->y, (int) $r->m ),
+							'count' => (int) $r->n,
+						);
+					}, (array) $rows ) );
+				},
+			)
+		);
+
+		// "Attached to" on media items: the parent post's identity, plus what
+		// the client needs to offer an editor jump. Lazy — only computed when
+		// a request's _fields asks for it (core skips unlisted fields).
+		register_rest_field(
+			'attachment',
+			'minn_attached_to',
+			array(
+				'get_callback' => function ( $item ) {
+					$parent = ! empty( $item['post'] ) ? (int) $item['post'] : (int) get_post_field( 'post_parent', $item['id'] );
+					if ( ! $parent ) {
+						return null;
+					}
+					$post = get_post( $parent );
+					if ( ! $post || 'attachment' === $post->post_type ) {
+						return null;
+					}
+					$type = get_post_type_object( $post->post_type );
+					return array(
+						'id'        => $post->ID,
+						'title'     => get_the_title( $post ) !== '' ? get_the_title( $post ) : '(no title)',
+						'type'      => $post->post_type,
+						'rest_base' => ( $type && $type->show_in_rest ) ? ( $type->rest_base ?: $post->post_type ) : null,
+						'editable'  => current_user_can( 'edit_post', $post->ID ),
+					);
+				},
+				'schema'       => array(
+					'type'    => array( 'object', 'null' ),
+					'context' => array( 'view', 'edit' ),
+				),
+			)
+		);
 	}
 
 	/**

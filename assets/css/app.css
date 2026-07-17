@@ -1554,6 +1554,12 @@ select.minn-input {
 .minn-side-row { display: flex; justify-content: space-between; }
 .minn-side-key { color: var(--text3); }
 .minn-side-val.amber { color: var(--amber); font-weight: 600; }
+/* Inline jump inside a side row (media "Attached to" → editor). */
+.minn-side-link {
+  background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--accent); text-align: right;
+}
+.minn-side-link:hover { text-decoration: underline; }
 /* Sectioned surface detail (e.g. form entries): long/multiline answers stack. */
 .minn-side-row.multi { flex-direction: column; align-items: flex-start; gap: 3px; }
 .minn-surface-val.multi { white-space: pre-wrap; text-align: left; max-height: 200px; overflow-y: auto; }
