@@ -236,3 +236,103 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 		},
 	);
 } );
+
+/**
+ * Bundled provider: Real Media Library Lite (custom realmedialibrary tables,
+ * public wp_rml_* API). RML's root (id -1, "Unorganized") maps onto the
+ * contract's reserved id 0; everything reads through their API so counts and
+ * ordering match their own screens. Lite has no per-user folders.
+ */
+add_filter( 'minn_admin_media_folders', function ( $provider ) {
+	if ( null !== $provider || ! function_exists( 'wp_rml_objects' ) || ! function_exists( 'wp_rml_get_attachments' ) ) {
+		return $provider;
+	}
+	return array(
+		'name'    => 'Real Media Library',
+		'folders' => function () {
+			// RML calls its no-folder root "Unorganized" — the reserved id 0.
+			$out = array( array( 'id' => 0, 'label' => 'Unorganized', 'parent' => 0, 'count' => null ) );
+			foreach ( (array) wp_rml_objects() as $f ) {
+				if ( ! is_object( $f ) || ! method_exists( $f, 'getId' ) ) {
+					continue;
+				}
+				$parent = (int) $f->getParent();
+				$out[]  = array(
+					'id'     => (int) $f->getId(),
+					'label'  => (string) $f->getName(),
+					'parent' => $parent > 0 ? $parent : 0, // RML root is -1
+					'count'  => method_exists( $f, 'getCnt' ) ? (int) $f->getCnt() : null,
+				);
+			}
+			return $out;
+		},
+		'ids'     => function ( $folder_id ) {
+			// 0 = the contract's Uncategorized = RML's root (-1, Unorganized).
+			$ids = wp_rml_get_attachments( 0 === (int) $folder_id ? -1 : (int) $folder_id );
+			return null === $ids
+				? new WP_Error( 'minn_folder_missing', 'That folder no longer exists.', array( 'status' => 404 ) )
+				: $ids;
+		},
+	);
+} );
+
+/**
+ * Bundled provider: Folders by Premio (plain WordPress taxonomy
+ * `media_folder`, registered only while "attachment" is enabled on their
+ * settings). Terms are the folders; their own admin view includes child
+ * folders when filtering, so the ids query does too.
+ */
+add_filter( 'minn_admin_media_folders', function ( $provider ) {
+	if ( null !== $provider || ! defined( 'WCP_FOLDER_VERSION' ) || ! taxonomy_exists( 'media_folder' ) ) {
+		return $provider;
+	}
+	return array(
+		'name'    => 'Folders',
+		'folders' => function () {
+			$terms = get_terms( array( 'taxonomy' => 'media_folder', 'hide_empty' => false ) );
+			if ( is_wp_error( $terms ) ) {
+				return array();
+			}
+			// Their sidebar's "Unassigned" view (media_folder = -1) = id 0.
+			$out = array( array( 'id' => 0, 'label' => 'Unassigned', 'parent' => 0, 'count' => null ) );
+			foreach ( $terms as $t ) {
+				$out[] = array(
+					'id'     => (int) $t->term_id,
+					'label'  => (string) $t->name,
+					'parent' => (int) $t->parent,
+					'count'  => (int) $t->count,
+				);
+			}
+			return $out;
+		},
+		'ids'     => function ( $folder_id ) {
+			global $wpdb;
+			if ( 0 === (int) $folder_id ) {
+				// Their "Unassigned": attachments carrying no media_folder term.
+				return $wpdb->get_col(
+					"SELECT p.ID FROM {$wpdb->posts} p
+					 WHERE p.post_type = 'attachment' AND p.ID NOT IN (
+						SELECT tr.object_id FROM {$wpdb->term_relationships} tr
+						INNER JOIN {$wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+						WHERE tt.taxonomy = 'media_folder'
+					 )"
+				);
+			}
+			if ( ! term_exists( (int) $folder_id, 'media_folder' ) ) {
+				return new WP_Error( 'minn_folder_missing', 'That folder no longer exists.', array( 'status' => 404 ) );
+			}
+			return get_posts( array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit,private',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'tax_query'      => array( array(
+					'taxonomy'         => 'media_folder',
+					'field'            => 'term_id',
+					'terms'            => (int) $folder_id,
+					'include_children' => true, // matches their admin filter
+				) ),
+			) );
+		},
+	);
+} );

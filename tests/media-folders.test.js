@@ -105,18 +105,83 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		}, fx.folder );
 		t.check( 'ids shim returns the assigned file only', shim.ids.length === 1 && shim.ids[ 0 ] === fx.inFolder && shim.capped === false, JSON.stringify( shim ) );
 	} finally {
+		// Folder cleanup only — the two media fixtures carry into phase 2,
+		// which deletes them in its own finally.
 		await page.evaluate( async ( fx2 ) => {
 			const jhead = { 'X-WP-Nonce': window.MINN.nonce, 'Content-Type': 'application/json' };
 			await fetch( window.MINN.restUrl + 'filebird/v1/delete-folder', {
 				method: 'POST', headers: jhead, credentials: 'same-origin',
 				body: JSON.stringify( { ids: [ fx2.folder ] } ),
 			} ).catch( () => {} );
+		}, fx ).catch( () => {} );
+	}
+
+	// Phase 2 — provider swap: Folders by Premio answers the same contract.
+	// Its media_folder taxonomy is REST-exposed, so seeding rides core REST
+	// (fixture note: option folders_settings must contain "attachment", set
+	// 2026-07-17 on minnadmin). FileBird is restored in finally (resident).
+	const plug = ( id, status ) => page.evaluate( async ( a ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.id, {
+			method: 'POST', credentials: 'same-origin',
+			headers: { 'X-WP-Nonce': window.MINN.nonce, 'Content-Type': 'application/json' },
+			body: JSON.stringify( { status: a.status } ),
+		} );
+		return r.ok;
+	}, { id, status } );
+	let premio = null;
+	try {
+		await plug( 'filebird/filebird', 'inactive' );
+		await plug( 'folders/folders', 'active' );
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+		t.check( 'Premio answers the contract after the swap', await page.evaluate( () =>
+			!! ( window.MINN.mediaFolders && window.MINN.mediaFolders.name === 'Folders' ) ) );
+
+		premio = await page.evaluate( async ( att ) => {
+			const jhead = { 'X-WP-Nonce': window.MINN.nonce, 'Content-Type': 'application/json' };
+			const term = await ( await fetch( window.MINN.restUrl + 'wp/v2/media_folder', {
+				method: 'POST', headers: jhead, credentials: 'same-origin',
+				body: JSON.stringify( { name: 'Minn Premio Folder' } ),
+			} ) ).json();
+			await fetch( window.MINN.restUrl + 'wp/v2/media/' + att, {
+				method: 'POST', headers: jhead, credentials: 'same-origin',
+				body: JSON.stringify( { media_folder: [ term.id ] } ),
+			} );
+			return term.id;
+		}, fx.inFolder );
+		t.check( 'Premio folder seeded over core REST', !! premio, String( premio ) );
+
+		await page.goto( BASE + '/minn-admin/media', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `[data-media="${ fx.inFolder }"]`, { timeout: 20000 } );
+		const openPremio = async ( acv ) => {
+			for ( let i = 0; i < 20; i++ ) {
+				await page.click( '[data-foldercombo] .minn-ac-input' );
+				const hit = await page.waitForSelector( `[data-foldercombo] .minn-ac-item[data-acv="${ acv }"]`, { timeout: 700 } )
+					.then( () => true ).catch( () => false );
+				if ( hit ) return;
+			}
+			throw new Error( 'premio combobox never offered ' + acv );
+		};
+		await openPremio( premio );
+		await page.click( `[data-foldercombo] .minn-ac-item[data-acv="${ premio }"]` );
+		await page.waitForFunction( ( id ) => ! document.querySelector( `[data-media="${ id }"]` ), fx.loose, { timeout: 20000 } );
+		t.check( 'Premio folder filters the library', !! ( await page.$( `[data-media="${ fx.inFolder }"]` ) ) );
+	} finally {
+		await page.evaluate( async ( tid ) => {
+			if ( ! tid ) return;
+			await fetch( window.MINN.restUrl + 'wp/v2/media_folder/' + tid + '?force=true', {
+				method: 'DELETE', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} ).catch( () => {} );
+		}, premio ).catch( () => {} );
+		await page.evaluate( async ( fx2 ) => {
 			for ( const id of [ fx2.inFolder, fx2.loose ] ) {
 				await fetch( window.MINN.restUrl + 'wp/v2/media/' + id + '?force=true', {
 					method: 'DELETE', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
 				} ).catch( () => {} );
 			}
 		}, fx ).catch( () => {} );
+		await plug( 'folders/folders', 'inactive' ).catch( () => {} );
+		await plug( 'filebird/filebird', 'active' ).catch( () => {} );
 	}
 
 	await t.done( browser, errors );
