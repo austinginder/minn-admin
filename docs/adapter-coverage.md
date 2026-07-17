@@ -96,7 +96,7 @@ Reference depth: **Gravity Forms**.
 
 | Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| redirection | Y | · | Y | Y | — | · | — | Y | — | · | | Setup gate + options |
+| redirection | Y | · | Y | Y | — | Y | Y | Y | — | Y | 2026-07-17 | Setup gate + options; **status card** (rules, hits, served/404 7d, dual 14-day chart); suite `redirection-status` |
 | safe-redirect-manager | Y | · | Y | Y | — | · | — | · | — | · | | |
 | simple-301-redirects | Y | · | Y | Y | — | · | — | · | — | · | | |
 | eps-301-redirects | Y | · | Y | Y | — | · | — | · | — | Y | | No leading slash on source |
@@ -154,6 +154,7 @@ Reference depth: **Gravity Forms**.
 | 2026-07-15 | Axis A: gravity-smtp bulk log delete | Single + bulk Delete via Event_Model (DELETE_EMAIL_LOG); mail-log suite extended; matrix fixed for cf7/cfdb7/ninja bulk (were already Y in code) |
 | 2026-07-15 | Axis A: activity-log status cards | Simple History, WSAL, Stream, Aryo status cards (24h/7d/total + family-specific mix); suite `activity-log-status` |
 | 2026-07-17 | Ship top 1: sectionsRoute row types | `pill`/`code`/sandboxed `html-preview`/`kv-table` rows in the sections detail renderer; contract-fixture Log view exercises all four with hostile payloads (suite detail-rows, 19 checks incl. sandbox + escaping proofs); Gravity SMTP log detail converted as the first consumer (status pill, HTML body preview, headers kv-table). Fluent/Post/WPML conversions are the natural next slices |
+| 2026-07-17 | Ship top 1 (second slice): redirection status card | Rules/hits/served/404 rows + dual-series 14-day chart from Redirection's own log tables (SHOW TABLES-gated, site-local DATE buckets matching their log view); suite redirection-status (10). First status card in the redirects family |
 | 2026-07-17 | v0.18.0-open report-only re-sweep (all 73 adapters, primitive grep + fixture states) | Waves resume after the v0.17.0 pause. Mail chart parity confirmed DONE (fluent-smtp, post-smtp, wp-mail-logging all carry `chart`). NEW Axis A finds: **redirection** (active resident) and **code-snippets** (active resident) are the only family surfaces without a `status` card. sectionsRoute row types still unbuilt (`pill` exists only as a column format). Fixture note: SearchWP DEACTIVATED (its profile_update loopbacks slowed every user save; license reads survive inactive). Wave B/D candidates (AIOS, GoSMTP/SureMails/Site Mailer, SureForms/MetForm, FileBird, Enable Media Replace) all uninstalled. **No ship.** |
 
 ### Ranked backlog (2026-07-17, v0.18.0 open)
@@ -161,7 +162,7 @@ Reference depth: **Gravity Forms**.
 | Rank | Adapter | Axis | Gap | Effort | Why now |
 |---|---|---|---|---|---|
 | ~~1~~ | ~~sectionsRoute row types (`pill`, `code`, `html-preview` sandboxed, `kv-table`)~~ | ~~A~~ | ~~Shared detail primitive~~ | ~~M~~ | **Shipped 2026-07-17** (suite detail-rows, 19; GSMTP log detail is the first consumer) |
-| 2 | redirection | A | `status` card (rule counts, 404 hits, top redirects) on the ACTIVE resident; family siblings all have one | S | Family consistency; live daily |
+| ~~2~~ | ~~redirection~~ | ~~A~~ | ~~`status` card~~ | ~~S~~ | **Shipped 2026-07-17** (rows + dual redirects/404s chart; suite redirection-status, 10) |
 | 3 | code-snippets | A | `status` card (active/inactive counts, last error) on the ACTIVE resident; all four snippets siblings have one | S | Family consistency |
 | 4 | All-In-One Security (AIOS) | B | Activity-log + posture (LLA-R/Solid pattern) | M | Wave B leftover; **not installed** — install + source-verify first |
 | 5 | GoSMTP / SureMails / Site Mailer | B | New mail-log providers | M | **Not installed**; source-verify free log storage first |

@@ -3,6 +3,7 @@
 ## **v0.18.0** - Unreleased
 
 ### Added
+* **Redirection status card:** the Redirects surface opens with rule counts, all-time hits, the top redirect, served and 404 counts for the log window, and a stacked 14-day chart of redirects served over 404s, all read from Redirection's own tables.
 * **Detail row types for plugin surfaces:** a `sectionsRoute` response row can now declare `type: pill` (the shared status vocabulary), `code` (escaped monospace block), `html-preview` (your HTML in a fully sandboxed iframe, no scripts, opaque origin) or `kv-table` (a two-column table from an object map or pair list), alongside the existing `url` and `email` link rows. Values stay escaped everywhere; the sandbox is the one place plugin markup renders. Gravity SMTP's log detail is the first consumer: delivery facts with a status pill, the real HTML email body rendered safely, and the stored headers as a table.
 
 ## **v0.17.0** - July 17, 2026
