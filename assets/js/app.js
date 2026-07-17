@@ -11209,6 +11209,19 @@
 			close();
 			if ( opts.onPick ) opts.onPick( v );
 		};
+		// Programmatic set (the permalink preset ↔ custom-structure sync).
+		// Writing input.value/dataset.acValue from outside isn't enough in
+		// strict mode: close() snaps the display back to the INTERNAL
+		// selection, so external writes must go through here.
+		wrap._acSet = ( v ) => {
+			if ( opts.strict ) {
+				selected = String( v );
+				input.dataset.acValue = selected;
+				input.value = labelOf( selected );
+			} else {
+				input.value = String( v );
+			}
+		};
 		// Strict displays are labels, not free text — select on focus so the
 		// first keystroke REPLACES the label (typing into "All roles" must
 		// filter on "e", not on "All rolese").
@@ -11268,13 +11281,6 @@
 				<div class="minn-field-label">${ label }</div>
 				<input class="minn-input${ mono ? ' mono' : '' }" data-key="${ key }" value="${ esc( value == null ? '' : value ) }">
 			</div>`;
-		const select = ( key, label, options, current ) => `
-			<div>
-				<div class="minn-field-label">${ label }</div>
-				<select class="minn-input" data-key="${ key }">
-					${ options.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( current ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-				</select>
-			</div>`;
 		const toggle = ( t ) => `
 			<div class="minn-toggle-row">
 				<div class="minn-toggle-info">
@@ -11291,12 +11297,16 @@
 				<div class="minn-field-label">${ label }</div>
 				<input class="minn-input${ mono ? ' mono' : '' }" data-permakey="${ key }" value="${ esc( value == null ? '' : value ) }">
 			</div>`;
-		const permaSelect = ( key, label, options, current ) => `
+		// Strict combobox variant of the permalink fields — the input carries
+		// data-permakey so the wp/v2/settings sweep never picks it up, and the
+		// bind block (which needs the struct-input sync) reads data-pc-value.
+		const permaCombo = ( key, label, current ) => `
 			<div>
 				<div class="minn-field-label">${ label }</div>
-				<select class="minn-input" data-permakey="${ key }">
-					${ options.map( ( [ v, l ] ) => `<option value="${ esc( v ) }"${ String( v ) === String( current ) ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-				</select>
+				<div class="minn-ac" data-permacombo="${ esc( key ) }" data-pc-value="${ esc( String( current ) ) }">
+					<input class="minn-input minn-ac-input" data-permakey="${ esc( key ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<div class="minn-ac-panel" hidden></div>
+				</div>
 			</div>`;
 		const subhead = ( label ) => `<div class="minn-fields-sub">${ label }</div>`;
 		const pageOptions = [ [ 0, '— Select —' ], ...cache.pages.map( ( p ) => [ p.id, decodeEntities( p.title.rendered ) ] ) ];
@@ -11383,13 +11393,23 @@
 					after: posture,
 				};
 			}
-			case 'Homepage': return {
-				sub: 'What visitors land on, and how much shows.',
-				fields: select( 'show_on_front', 'Your homepage displays', [ [ 'posts', 'Latest posts' ], [ 'page', 'A static page' ] ], s.show_on_front )
-					+ ( s.show_on_front === 'page' ? combo( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + combo( 'page_for_posts', 'Posts page', pageOptions, s.page_for_posts ) : '' )
-					+ text( 'posts_per_page', 'Blog pages show at most', s.posts_per_page ),
-				toggles: '',
-			};
+			case 'Homepage': {
+				const modeField = combo( 'show_on_front', 'Your homepage displays', [ [ 'posts', 'Latest posts' ], [ 'page', 'A static page' ] ], s.show_on_front );
+				// Re-render when the mode flips so the page pickers appear —
+				// a strict combobox pick fires no change event, only onPick.
+				settingsCombos.show_on_front.onPick = ( v ) => {
+					if ( v === cache.values.show_on_front ) return;
+					cache.values.show_on_front = v;
+					renderSettings();
+				};
+				return {
+					sub: 'What visitors land on, and how much shows.',
+					fields: modeField
+						+ ( s.show_on_front === 'page' ? combo( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + combo( 'page_for_posts', 'Posts page', pageOptions, s.page_for_posts ) : '' )
+						+ text( 'posts_per_page', 'Blog pages show at most', s.posts_per_page ),
+					toggles: '',
+				};
+			}
 			case 'Design': {
 				// Core's per-theme custom_css post — the Customizer's
 				// "Additional CSS", the last daily Customizer gap.
@@ -11418,7 +11438,7 @@
 					const isPreset = PERMALINK_PRESETS.some( ( [ v ] ) => v === pl.structure );
 					perma = subhead( 'URLs' )
 						+ `<div class="minn-fields">`
-						+ permaSelect( '_preset', 'Permalink structure', [ ...PERMALINK_PRESETS, [ '_custom', 'Custom structure' ] ], isPreset ? pl.structure : '_custom' )
+						+ permaCombo( '_preset', 'Permalink structure', isPreset ? pl.structure : '_custom' )
 						+ permaText( 'structure', 'Custom structure', pl.structure, true )
 						+ `<div class="minn-toggle-desc">Tags: %year% %monthnum% %day% %postname% %post_id% %category% %author%. With Plain permalinks, Minn itself moves from /minn-admin/ to ?minn_admin=1 and reloads after saving.</div>`
 						+ permaText( 'category_base', 'Category base (optional)', pl.category_base, true )
@@ -11428,7 +11448,7 @@
 				return {
 					sub: 'Defaults for new content, and the URL structure.',
 					fields: combo( 'default_category', 'Default post category', cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
-						+ select( 'default_post_format', 'Default post format', POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
+						+ combo( 'default_post_format', 'Default post format', POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
 					toggles: [ { id: 'use_smilies', label: 'Convert emoticons', desc: 'Turn :-) and :-P into graphics when displayed.', on: !! s.use_smilies } ].map( toggle ).join( '' ),
 					after: perma,
 				};
@@ -11821,15 +11841,6 @@
 			} );
 		}
 
-		// Re-render Reading when the homepage mode flips so page pickers appear.
-		const showOnFront = $( '[data-key="show_on_front"]', view );
-		if ( showOnFront ) {
-			showOnFront.addEventListener( 'change', () => {
-				cache.values.show_on_front = showOnFront.value;
-				renderSettings();
-			} );
-		}
-
 		// Timezone combobox (General section) — free mode, the id is the value.
 		const tzWrap = $( '#minn-tz-ac', view );
 		if ( tzWrap ) {
@@ -11839,21 +11850,29 @@
 			if ( cur && ! zones.includes( cur ) ) zones.unshift( cur );
 			bindAutocomplete( tzWrap, zones.map( ( z ) => ( { value: z, label: z.replace( /_/g, ' ' ) } ) ) );
 		}
-		// Strict comboboxes (role, category, homepage pages) registered by settingsFields.
+		// Strict comboboxes (homepage mode + pages, role, category, format)
+		// registered by settingsFields; onPick rides the registration (the
+		// homepage mode flip re-renders so its page pickers appear).
 		$$( '[data-combo]', view ).forEach( ( wrap ) => {
 			const def = settingsCombos[ wrap.dataset.combo ];
-			if ( def ) bindAutocomplete( wrap, def.options, { strict: true, value: def.value } );
+			if ( def ) bindAutocomplete( wrap, def.options, { strict: true, value: def.value, onPick: def.onPick } );
 		} );
 
-		// Permalinks: keep the preset select and the custom-structure input in sync.
-		const presetSel = $( '[data-permakey="_preset"]', view );
-		if ( presetSel ) {
+		// Permalinks: keep the preset combobox and the custom-structure input
+		// in sync. Typing a structure that matches a preset selects it; the
+		// external write goes through _acSet so strict state stays in step.
+		const presetWrap = $( '[data-permacombo="_preset"]', view );
+		if ( presetWrap ) {
 			const structInput = $( '[data-permakey="structure"]', view );
-			presetSel.addEventListener( 'change', () => {
-				if ( presetSel.value !== '_custom' ) structInput.value = presetSel.value;
-			} );
+			bindAutocomplete( presetWrap,
+				[ ...PERMALINK_PRESETS, [ '_custom', 'Custom structure' ] ].map( ( [ v, l ] ) => ( { value: v, label: l } ) ),
+				{
+					strict: true,
+					value: presetWrap.dataset.pcValue,
+					onPick: ( v ) => { if ( v !== '_custom' ) structInput.value = v; },
+				} );
 			structInput.addEventListener( 'input', () => {
-				presetSel.value = PERMALINK_PRESETS.some( ( [ v ] ) => v === structInput.value ) ? structInput.value : '_custom';
+				presetWrap._acSet( PERMALINK_PRESETS.some( ( [ v ] ) => v === structInput.value ) ? structInput.value : '_custom' );
 			} );
 		}
 
