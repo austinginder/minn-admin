@@ -3467,9 +3467,18 @@
 				if ( ! slot ) return;
 				if ( ! msel.size ) { slot.innerHTML = ''; return; }
 				if ( ! $( '.minn-bulkbar', slot ) ) {
+					// Move to folder: only with a provider that offers move
+					// (boot mediaFolders.move) and the folder list on hand.
+					const canMove = !! ( B.mediaFolders && B.mediaFolders.move && state.cache.mediaFoldersList );
 					slot.innerHTML = `
 						<div class="minn-bulkbar">
 							<span class="minn-bulk-count">${ msel.size } selected</span>
+							${ canMove ? `
+							<div class="minn-ac minn-tax-select" data-bulkfoldercombo title="Move the selection into a ${ esc( B.mediaFolders.name ) } folder">
+								<input class="minn-input minn-ac-input" placeholder="Move to folder…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Move to folder">
+								<div class="minn-ac-panel" hidden></div>
+							</div>
+							<button class="minn-btn-soft" id="minn-media-bulk-move" disabled>Move</button>` : '' }
 							<button class="minn-btn-soft danger" id="minn-media-bulk-delete">${ icon( 'trash' ) } Delete permanently</button>
 							<button class="minn-btn-soft" id="minn-media-bulk-clear" style="margin-left:auto;">Clear</button>
 						</div>`;
@@ -3479,6 +3488,44 @@
 						$$( '.minn-media-cb', view ).forEach( ( c ) => { c.checked = false; c.closest( '[data-media]' ).classList.remove( 'sel' ); } );
 						syncMediaBulk();
 					} );
+					if ( canMove ) {
+						const moveBtn = $( '#minn-media-bulk-move', slot );
+						let moveTarget = null;
+						bindAutocomplete( slot.querySelector( '[data-bulkfoldercombo]' ),
+							state.cache.mediaFoldersList.map( ( f ) => ( {
+								value: String( f.id ),
+								label: ' '.repeat( f.depth || 0 ) + f.label + ( f.count != null ? ` (${ f.count })` : '' ),
+							} ) ), {
+								strict: true,
+								value: '',
+								onPick: ( v ) => {
+									moveTarget = v === '' ? null : v;
+									moveBtn.disabled = moveTarget === null;
+								},
+							} );
+						moveBtn.addEventListener( 'click', async () => {
+							if ( moveTarget === null || ! msel.size ) return;
+							const ids = Array.from( msel );
+							moveBtn.disabled = true;
+							moveBtn.textContent = 'Moving…';
+							try {
+								const r = await api( 'minn-admin/v1/media/folders/move', {
+									method: 'POST',
+									body: JSON.stringify( { folder: parseInt( moveTarget, 10 ), ids } ),
+								} );
+								msel.clear();
+								state.mediaLastIdx = null;
+								state.cache.media = null;
+								state.cache.mediaFoldersList = null; // counts changed
+								toast( `Moved ${ r.moved } file${ r.moved === 1 ? '' : 's' }` );
+								if ( state.route === 'media' ) renderMedia();
+							} catch ( e ) {
+								toast( e.message, true );
+								moveBtn.disabled = false;
+								moveBtn.textContent = 'Move';
+							}
+						} );
+					}
 				} else {
 					$( '.minn-bulk-count', slot ).textContent = msel.size + ' selected';
 				}

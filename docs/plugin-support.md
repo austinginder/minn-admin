@@ -156,8 +156,10 @@ adapters plus one new primitive, ranked:
    on wp/v2/media, newest-500 cap, reserved id 0 = Uncategorized), FileBird
    bundled through its own model (per-user mode honored), Real Media
    Library Lite through its wp_rml_* API, and Folders by Premio through its
-   media_folder taxonomy, suite `media-folders` (15). Still open from this
-   item: the "Move to folder" action. Original ranking: FileBird first (200k,
+   media_folder taxonomy, suite `media-folders` (20). The "Move to folder"
+   action shipped the same day: an optional `move` callable on the contract
+   drives a folder picker + Move on the media bulk bar, wired through each
+   plugin's own assign machinery. Original ranking: FileBird first (200k,
    custom `fbv` tables, clean model class); Real Media Library Lite (100k)
    and Folders by Premio (90k) join the same contract like the SEO panel's
    providers. This REVISES core-gaps' "folders: long-tail, skip": 400k+

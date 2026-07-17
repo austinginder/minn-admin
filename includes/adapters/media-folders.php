@@ -27,6 +27,12 @@
  *               // by date and caps at 500 (newest first) before querying.
  *               return array( 101, 102 );
  *           },
+ *           'move'    => function ( $folder_id, array $attachment_ids ) {
+ *               // OPTIONAL. Put these attachments in the folder through your
+ *               // own machinery (0 = remove from all folders). true or
+ *               // WP_Error. Without it, Minn shows no Move control.
+ *               return my_folders_move( $folder_id, $attachment_ids );
+ *           },
  *       );
  *   } );
  */
@@ -55,7 +61,15 @@ function minn_admin_media_folders_boot() {
 		return null;
 	}
 	$p = minn_admin_media_folders_provider();
-	return $p ? array( 'name' => (string) $p['name'] ) : null;
+	if ( ! $p ) {
+		return null;
+	}
+	return array(
+		'name' => (string) $p['name'],
+		// Move control only when the provider offers it AND the user can
+		// organize the library (matches the folder plugins' own gates).
+		'move' => ! empty( $p['move'] ) && is_callable( $p['move'] ) && current_user_can( 'upload_files' ),
+	);
 }
 
 add_action( 'rest_api_init', function () {
@@ -181,6 +195,46 @@ add_action( 'rest_api_init', function () {
 			},
 		)
 	);
+
+	// Move attachments into a folder (0 = out of every folder) through the
+	// provider's own machinery. Registered only when the provider offers it.
+	$provider = minn_admin_media_folders_provider();
+	if ( empty( $provider['move'] ) || ! is_callable( $provider['move'] ) ) {
+		return;
+	}
+	register_rest_route(
+		'minn-admin/v1',
+		'/media/folders/move',
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => function () {
+				return current_user_can( 'upload_files' );
+			},
+			'args'                => array(
+				'folder' => array( 'type' => 'integer', 'required' => true, 'minimum' => 0 ),
+				'ids'    => array( 'type' => 'array', 'required' => true, 'items' => array( 'type' => 'integer' ) ),
+			),
+			'callback'            => function ( $req ) {
+				$p   = minn_admin_media_folders_provider();
+				$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $req['ids'] ) ) ) );
+				$ids = array_values( array_filter( $ids, function ( $id ) {
+					return 'attachment' === get_post_type( $id );
+				} ) );
+				if ( ! $ids ) {
+					return new WP_Error( 'minn_move_no_ids', 'Nothing to move.', array( 'status' => 400 ) );
+				}
+				try {
+					$result = call_user_func( $p['move'], (int) $req['folder'], $ids );
+				} catch ( \Throwable $e ) {
+					return new WP_Error( 'minn_move_failed', $e->getMessage(), array( 'status' => 500 ) );
+				}
+				if ( is_wp_error( $result ) ) {
+					return $result;
+				}
+				return rest_ensure_response( array( 'ok' => true, 'moved' => count( $ids ) ) );
+			},
+		)
+	);
 } );
 
 /**
@@ -234,6 +288,16 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 			}
 			return \FileBird\Classes\Helpers::getAttachmentIdsByFolderId( (int) $folder_id );
 		},
+		'move'    => function ( $folder_id, array $ids ) {
+			// Mirror FileBird's own assign-folder route: scope check, then
+			// their model (fires their hooks, updates their counters).
+			$per_user = get_option( 'njt_fbv_folder_per_user', '0' ) === '1';
+			if ( ! \FileBird\Model\Folder::verifyAuthor( (int) $folder_id, get_current_user_id(), $per_user ) ) {
+				return new WP_Error( 'minn_folder_denied', 'That folder belongs to another user.', array( 'status' => 403 ) );
+			}
+			\FileBird\Model\Folder::assignFolder( (int) $folder_id, $ids, '' );
+			return true;
+		},
 	);
 } );
 
@@ -272,6 +336,13 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 			return null === $ids
 				? new WP_Error( 'minn_folder_missing', 'That folder no longer exists.', array( 'status' => 404 ) )
 				: $ids;
+		},
+		'move'    => function ( $folder_id, array $ids ) {
+			// Their public API, their validation (supress_validation false).
+			$r = wp_rml_move( 0 === (int) $folder_id ? _wp_rml_root() : (int) $folder_id, $ids );
+			return true === $r
+				? true
+				: new WP_Error( 'minn_move_failed', implode( ' ', array_map( 'strval', (array) $r ) ), array( 'status' => 400 ) );
 		},
 	);
 } );
@@ -333,6 +404,20 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 					'include_children' => true, // matches their admin filter
 				) ),
 			) );
+		},
+		'move'    => function ( $folder_id, array $ids ) {
+			if ( $folder_id && ! term_exists( (int) $folder_id, 'media_folder' ) ) {
+				return new WP_Error( 'minn_folder_missing', 'That folder no longer exists.', array( 'status' => 404 ) );
+			}
+			// Plain taxonomy assignment, exactly what their drag-drop does;
+			// an empty term list is their "Unassigned".
+			foreach ( $ids as $id ) {
+				$r = wp_set_object_terms( $id, $folder_id ? array( (int) $folder_id ) : array(), 'media_folder', false );
+				if ( is_wp_error( $r ) ) {
+					return $r;
+				}
+			}
+			return true;
 		},
 	);
 } );
