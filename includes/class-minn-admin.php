@@ -22,6 +22,55 @@ class Minn_Admin {
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 20, 3 );
 		add_action( 'init', array( __CLASS__, 'register_x_oembed' ) );
 		add_action( 'init', array( __CLASS__, 'register_oembed_refresh' ), 20 );
+		add_action( 'init', array( __CLASS__, 'register_toolbar_meta' ) );
+	}
+
+	/**
+	 * Expose core's per-user "Show Toolbar when viewing site" preference
+	 * (user meta show_admin_bar_front, 'true'/'false' STRINGS — core's own
+	 * storage) over REST so Your profile can flip it. Writes are limited to
+	 * whoever can edit that user, exactly like the wp-admin profile screen.
+	 */
+	public static function register_toolbar_meta() {
+		register_meta(
+			'user',
+			'show_admin_bar_front',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'default'           => 'true',
+				'show_in_rest'      => true,
+				'sanitize_callback' => function ( $value ) {
+					return 'false' === $value ? 'false' : 'true';
+				},
+				'auth_callback'     => function ( $allowed, $meta_key, $object_id ) {
+					return current_user_can( 'edit_user', $object_id );
+				},
+			)
+		);
+	}
+
+	/**
+	 * Installed locales for the per-user Language picker on Your profile:
+	 * [value, label] pairs. '' is the site default and en_US is always
+	 * offered. Labels resolve from core's cached translations list when
+	 * present (the available_translations site transient) — never a
+	 * network call at boot; unknown codes fall back to the code itself.
+	 */
+	public static function available_languages() {
+		$translations = get_site_transient( 'available_translations' );
+		$out          = array( array( '', __( 'Site default', 'minn-admin' ) ) );
+		foreach ( array_unique( array_merge( array( 'en_US' ), get_available_languages() ) ) as $code ) {
+			if ( 'en_US' === $code ) {
+				$label = 'English (United States)';
+			} elseif ( is_array( $translations ) && isset( $translations[ $code ]['native_name'] ) ) {
+				$label = $translations[ $code ]['native_name'];
+			} else {
+				$label = $code;
+			}
+			$out[] = array( $code, $label );
+		}
+		return $out;
 	}
 
 	/**
@@ -620,6 +669,8 @@ class Minn_Admin {
 			// client to parse WP REST site-local dates (no zone suffix) so
 			// timeAgo / tooltips aren't skewed by gmt_offset.
 			'gmtOffset' => (float) get_option( 'gmt_offset' ),
+			// Installed admin languages for Your profile's Language picker.
+			'languages' => self::available_languages(),
 			'caps'     => array(
 				'plugins'      => current_user_can( 'activate_plugins' ),
 				'update'       => current_user_can( 'update_plugins' ),

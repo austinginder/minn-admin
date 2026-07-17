@@ -25493,7 +25493,7 @@
 		const p = state.profile;
 		const mine = () => state.profile === p;
 		const paint = () => { if ( mine() && state.route === 'profile' ) renderProfile(); };
-		api( `wp/v2/users/${ B.user.id }?context=edit&_fields=id,name,email,roles,username,first_name,last_name,url,description,avatar_urls` )
+		api( `wp/v2/users/${ B.user.id }?context=edit&_fields=id,name,email,roles,username,first_name,last_name,url,description,avatar_urls,locale,meta` )
 			.then( ( u ) => { if ( mine() ) { p.user = u; paint(); } } )
 			.catch( ( e ) => { if ( mine() ) { p.error = e.message || 'Could not load your profile.'; paint(); } } );
 		api( 'wp/v2/users/me/application-passwords' )
@@ -25502,13 +25502,18 @@
 		api( `minn-admin/v1/users/${ B.user.id }/sessions` )
 			.then( ( r ) => { if ( mine() ) { p.sessions = r.sessions; paint(); } } )
 			.catch( () => { if ( mine() ) { p.sessions = []; paint(); } } );
+		// Language catalog: installed + (install_languages) the downloadable
+		// list, like core's Site Language dropdown. Degrades to installed-only.
+		api( 'minn-admin/v1/languages' )
+			.then( ( r ) => { if ( mine() ) { p.languages = r; paint(); } } )
+			.catch( () => { if ( mine() ) { p.languages = { installed: B.languages || [], available: [], canInstall: false, current: '' }; paint(); } } );
 	}
 
 	function renderProfile() {
 		const view = $( '#minn-view' );
 		let p = state.profile;
 		if ( ! p ) {
-			p = state.profile = { user: null, sessions: null, appPasswords: null, newAppPassword: null, error: null };
+			p = state.profile = { user: null, sessions: null, appPasswords: null, newAppPassword: null, languages: null, error: null };
 			loadProfile();
 		}
 		if ( p.error ) {
@@ -25517,7 +25522,7 @@
 		}
 		// One paint once everything is here — a late slice re-rendering under
 		// a half-typed name field would wipe it.
-		if ( ! p.user || p.appPasswords == null || p.sessions == null ) {
+		if ( ! p.user || p.appPasswords == null || p.sessions == null || ! p.languages ) {
 			view.innerHTML = '<div class="minn-loading">Loading your profile…</div>';
 			return;
 		}
@@ -25546,6 +25551,14 @@
 								<div class="minn-ac-panel" hidden></div>
 							</div>` : `
 							<input class="minn-input" value="${ esc( B.user.role ) }" disabled>` }
+						</div>
+						<div>
+							<div class="minn-field-label">Language</div>
+							<div class="minn-ac" id="minn-pf-lang-ac">
+								<input class="minn-input minn-ac-input" id="minn-pf-lang" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+								<div class="minn-ac-panel" hidden></div>
+							</div>
+							${ p.languages.canInstall && p.languages.available.length ? '<div class="minn-toggle-desc" style="margin-top:6px;">Any language — ones not yet installed download automatically when you save.</div>' : '' }
 						</div>
 						<div>
 							<div class="minn-field-label">New password (leave blank to keep)</div>
@@ -25627,6 +25640,15 @@
 						<div>
 							<div class="minn-field-label">Theme</div>
 							${ themeModeHtml() }
+							<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
+								<div class="minn-toggle-row">
+									<button type="button" class="minn-switch${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' ? ' on' : '' }" id="minn-pf-toolbar" role="switch" aria-checked="${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' }" aria-label="Show toolbar when viewing the site"><span class="minn-switch-knob"></span></button>
+									<div class="minn-toggle-info">
+										<div class="minn-toggle-label">Show toolbar when viewing the site</div>
+										<div class="minn-toggle-desc">The WordPress admin bar on the front end while you're signed in. Applies only to you.</div>
+									</div>
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -25669,7 +25691,38 @@
 				value: current,
 			} );
 		}
+		const langAc = $( '#minn-pf-lang-ac', view );
+		if ( langAc ) {
+			// Installed first, then the downloadable catalog. Seed from the RAW
+			// locale meta ('' = site default) — the wp/v2 field reports the
+			// EFFECTIVE locale and can't say "default".
+			const langOpts = [ ...( p.languages.installed || [] ), ...( p.languages.available || [] ) ]
+				.map( ( [ v, l ] ) => ( { value: v, label: l } ) );
+			bindAutocomplete( langAc, langOpts, {
+				strict: true,
+				value: p.languages.current || '',
+			} );
+		}
 		bindAppearanceSwatches( view );
+		// "Show toolbar when viewing the site" — instant save like the other
+		// Appearance switches; core's own 'true'/'false' string meta.
+		const tbBtn = $( '#minn-pf-toolbar', view );
+		if ( tbBtn ) tbBtn.addEventListener( 'click', async () => {
+			const on = ! tbBtn.classList.contains( 'on' );
+			tbBtn.classList.toggle( 'on', on );
+			tbBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+			try {
+				await api( `wp/v2/users/${ B.user.id }`, {
+					method: 'POST',
+					body: JSON.stringify( { meta: { show_admin_bar_front: on ? 'true' : 'false' } } ),
+				} );
+				p.user.meta = Object.assign( {}, p.user.meta, { show_admin_bar_front: on ? 'true' : 'false' } );
+			} catch ( e ) {
+				tbBtn.classList.toggle( 'on', ! on );
+				tbBtn.setAttribute( 'aria-checked', ! on ? 'true' : 'false' );
+				toast( e.message, true );
+			}
+		} );
 		const copyText = async ( text, label ) => {
 			try {
 				await navigator.clipboard.writeText( text );
@@ -25702,8 +25755,19 @@
 			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue ) payload.roles = [ roleSel.dataset.acValue ];
 			const password = $( '#minn-pf-password', view ).value;
 			if ( password ) payload.password = password;
+			// Language rides its own endpoint: a not-yet-installed pick needs
+			// the pack downloaded first, which wp/v2's locale enum refuses.
+			const langSel = $( '#minn-pf-lang', view );
+			const langPicked = langSel ? langSel.dataset.acValue : undefined;
+			const langChanged = langPicked !== undefined && langPicked !== ( p.languages.current || '' );
 			try {
 				await api( `wp/v2/users/${ B.user.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				let langNote = '';
+				if ( langChanged ) {
+					const lr = await api( 'minn-admin/v1/me/language', { method: 'POST', body: JSON.stringify( { locale: langPicked } ) } );
+					p.languages.current = lr.locale;
+					if ( lr.installed ) langNote = ' — language pack installed';
+				}
 				// Changing your own password rotates the session token, which
 				// invalidates the REST nonce baked into this page — reload to
 				// pick up fresh credentials before the next request 403s.
@@ -25712,7 +25776,7 @@
 					setTimeout( () => location.reload(), 600 );
 					return;
 				}
-				toast( 'Profile updated' );
+				toast( 'Profile updated' + langNote );
 				p.user = Object.assign( {}, p.user, payload );
 				// Keep the sidebar's name in sync with a display-name edit.
 				if ( payload.name ) {
