@@ -150,6 +150,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => 'manage_options',
 		'family'     => 'mail',
 		'status'     => array( 'route' => 'minn-admin/v1/fluent-smtp/status' ),
+		// v0.18.0: the daily-ops misc settings (connections routing, logging,
+		// simulation) through their Settings model. The connection WIZARD
+		// (per-provider credential forms) stays FluentSMTP's own app.
+		'settings'   => array(
+			'cap'   => 'manage_options',
+			'tabs'  => array( array( 'id' => 'general', 'label' => 'General' ) ),
+			'route' => 'minn-admin/v1/fluent-smtp/settings/{tab}',
+		),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/fluent-smtp/emails',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -233,6 +241,166 @@ function minn_admin_fluent_smtp_delete_ids( array $ids ) {
 	return false !== $deleted && $deleted > 0;
 }
 
+/**
+ * Connection choices for the settings selects: key => "Title · sender".
+ * Reads titles and senders only, never credentials.
+ *
+ * @param bool $with_none Prepend a "None" choice (fallback connection).
+ * @return array[] [ value, label ] pairs.
+ */
+function minn_admin_fluent_smtp_connection_options( $with_none = false ) {
+	$out      = $with_none ? array( array( '', 'None' ) ) : array();
+	$settings = get_option( 'fluentmail-settings', array() );
+	$conns    = ( is_array( $settings ) && ! empty( $settings['connections'] ) && is_array( $settings['connections'] ) )
+		? $settings['connections'] : array();
+	foreach ( $conns as $key => $c ) {
+		$ps       = isset( $c['provider_settings'] ) && is_array( $c['provider_settings'] ) ? $c['provider_settings'] : array();
+		$provider = isset( $ps['provider'] ) ? strtoupper( (string) $ps['provider'] ) : '';
+		$sender   = isset( $ps['sender_email'] ) ? (string) $ps['sender_email'] : '';
+		$title    = ! empty( $c['title'] ) ? (string) $c['title'] : ( $provider ? $provider : (string) $key );
+		$out[]    = array( (string) $key, $sender ? $title . ' · ' . $sender : $title );
+	}
+	return $out;
+}
+
+/** GET shape for the FluentSMTP settings tab: { groups, values, adminUrl }. */
+function minn_admin_fluent_smtp_settings_shape() {
+	$misc = array();
+	if ( class_exists( 'FluentMail\\App\\Models\\Settings' ) ) {
+		try {
+			$misc = (array) ( new \FluentMail\App\Models\Settings() )->getMisc();
+		} catch ( \Throwable $e ) {
+			$misc = array();
+		}
+	}
+	if ( ! $misc ) {
+		$stored = get_option( 'fluentmail-settings', array() );
+		$misc   = isset( $stored['misc'] ) && is_array( $stored['misc'] ) ? $stored['misc'] : array();
+	}
+
+	// Simulation can be forced from wp-config — then it's read-only truth.
+	$sim_locked = defined( 'FLUENTMAIL_SIMULATE_EMAILS' ) && FLUENTMAIL_SIMULATE_EMAILS;
+
+	$days     = isset( $misc['log_saved_interval_days'] ) ? (string) intval( $misc['log_saved_interval_days'] ) : '14';
+	$day_opts = array( '7', '14', '30', '60', '90', '180', '365' );
+	if ( ! in_array( $days, $day_opts, true ) ) {
+		array_unshift( $day_opts, $days ); // keep a nonstandard stored value pickable
+	}
+
+	$groups = array(
+		array(
+			'title'  => 'Connections',
+			'fields' => array(
+				array(
+					'key'     => 'default_connection',
+					'label'   => 'Default connection',
+					'type'    => 'combobox',
+					'options' => minn_admin_fluent_smtp_connection_options(),
+					'help'    => 'Used when no sender mapping claims the From address. Connection credentials stay in FluentSMTP.',
+				),
+				array(
+					'key'     => 'fallback_connection',
+					'label'   => 'Fallback connection',
+					'type'    => 'combobox',
+					'options' => minn_admin_fluent_smtp_connection_options( true ),
+					'help'    => 'Tried when the chosen connection fails to send.',
+				),
+			),
+		),
+		array(
+			'title'  => 'Logging',
+			'fields' => array(
+				array(
+					'key'   => 'log_emails',
+					'label' => 'Log all emails',
+					'type'  => 'toggle',
+					'help'  => 'Keep a copy of every outgoing email in the log.',
+				),
+				array(
+					'key'     => 'log_saved_interval_days',
+					'label'   => 'Delete logs older than',
+					'type'    => 'select',
+					'options' => array_map( function ( $d ) {
+						return array( $d, $d . ' days' );
+					}, $day_opts ),
+					'help'    => 'FluentSMTP prunes older log entries on its daily schedule.',
+				),
+			),
+		),
+		array(
+			'title'  => 'Email simulation',
+			'fields' => $sim_locked ? array() : array(
+				array(
+					'key'   => 'simulate_emails',
+					'label' => 'Simulate outgoing emails',
+					'type'  => 'toggle',
+					'help'  => 'Emails are logged but never actually sent. For staging and test sites.',
+				),
+			),
+			'locked' => $sim_locked ? 1 : 0,
+		),
+	);
+
+	return array(
+		'groups'   => $groups,
+		'values'   => array(
+			'default_connection'      => isset( $misc['default_connection'] ) ? (string) $misc['default_connection'] : '',
+			'fallback_connection'     => isset( $misc['fallback_connection'] ) ? (string) $misc['fallback_connection'] : '',
+			'log_emails'              => ! isset( $misc['log_emails'] ) || 'yes' === $misc['log_emails'],
+			'log_saved_interval_days' => $days,
+			'simulate_emails'         => isset( $misc['simulate_emails'] ) && 'yes' === $misc['simulate_emails'],
+		),
+		'adminUrl' => admin_url( 'options-general.php?page=fluent-mail#/settings' ),
+	);
+}
+
+/** POST: whitelist keys, then their Settings::updateMiscSettings. */
+function minn_admin_fluent_smtp_settings_save( WP_REST_Request $request ) {
+	if ( ! class_exists( 'FluentMail\\App\\Models\\Settings' ) ) {
+		return new WP_Error( 'minn_fsmtp_unavailable', 'FluentSMTP is not fully loaded.', array( 'status' => 500 ) );
+	}
+	$body = $request->get_json_params();
+	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+
+	$model = new \FluentMail\App\Models\Settings();
+	$misc  = (array) $model->getMisc();
+
+	$stored = get_option( 'fluentmail-settings', array() );
+	$conns  = ( is_array( $stored ) && ! empty( $stored['connections'] ) && is_array( $stored['connections'] ) )
+		? $stored['connections'] : array();
+
+	foreach ( array( 'default_connection', 'fallback_connection' ) as $key ) {
+		if ( ! array_key_exists( $key, $vals ) ) {
+			continue;
+		}
+		$pick = (string) $vals[ $key ];
+		if ( '' === $pick && 'fallback_connection' === $key ) {
+			$misc[ $key ] = '';
+			continue;
+		}
+		if ( ! isset( $conns[ $pick ] ) ) {
+			return new WP_Error( 'minn_fsmtp_bad_connection', 'That connection no longer exists.', array( 'status' => 400 ) );
+		}
+		$misc[ $key ] = $pick;
+	}
+	if ( array_key_exists( 'log_emails', $vals ) ) {
+		$misc['log_emails'] = $vals['log_emails'] ? 'yes' : 'no';
+	}
+	if ( array_key_exists( 'simulate_emails', $vals ) && ! ( defined( 'FLUENTMAIL_SIMULATE_EMAILS' ) && FLUENTMAIL_SIMULATE_EMAILS ) ) {
+		$misc['simulate_emails'] = $vals['simulate_emails'] ? 'yes' : 'no';
+	}
+	if ( array_key_exists( 'log_saved_interval_days', $vals ) ) {
+		$misc['log_saved_interval_days'] = (string) max( 1, min( 3650, intval( $vals['log_saved_interval_days'] ) ) );
+	}
+
+	try {
+		$model->updateMiscSettings( $misc ); // their own controller's exact write
+	} catch ( \Throwable $e ) {
+		return new WP_Error( 'minn_fsmtp_save_failed', $e->getMessage(), array( 'status' => 500 ) );
+	}
+	return rest_ensure_response( minn_admin_fluent_smtp_settings_shape() );
+}
+
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_fluent_smtp_active() ) {
 		return;
@@ -242,6 +410,21 @@ add_action( 'rest_api_init', function () {
 		return current_user_can( 'manage_options' );
 	};
 	$table = $GLOBALS['wpdb']->prefix . 'fsmpt_email_logs';
+
+	register_rest_route( 'minn-admin/v1', '/fluent-smtp/settings/(?P<tab>[a-z]+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $perm,
+			'callback'            => function () {
+				return rest_ensure_response( minn_admin_fluent_smtp_settings_shape() );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => $perm,
+			'callback'            => 'minn_admin_fluent_smtp_settings_save',
+		),
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/fluent-smtp/emails', array(
 		'methods'             => 'GET',
