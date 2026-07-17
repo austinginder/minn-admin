@@ -85,6 +85,28 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'browser reports the sandboxed script as blocked', blocked.length >= 1, errors.join( ' | ' ).slice( 0, 120 ) );
 		// Excuse ONLY that expected message from the zero-errors gate.
 		errors.splice( 0, errors.length, ...errors.filter( ( e ) => ! /Blocked script execution/.test( e ) ) );
+
+		/* ===== Real consumer: Gravity SMTP log detail ===== */
+		await page.keyboard.press( 'Escape' );
+		await page.goto( `${ BASE }/minn-admin/gravity-smtp`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-table-row', { timeout: 30000 } );
+		await page.click( '.minn-table-row' );
+		await page.waitForSelector( '.minn-modal .minn-side-title', { timeout: 15000 } );
+		const gs = await page.evaluate( () => {
+			const modal = document.querySelector( '.minn-modal' );
+			const titles = [ ...modal.querySelectorAll( '.minn-side-title' ) ].map( ( e ) => e.textContent.trim() );
+			return {
+				titles,
+				pill: !! modal.querySelector( '.minn-modal-meta .minn-status' ),
+				body: !! ( modal.querySelector( '.minn-detail-frame' ) || modal.querySelector( '.minn-detail-code' ) ),
+				resend: [ ...modal.querySelectorAll( '[data-saction]' ) ].length >= 1,
+			};
+		} );
+		t.check( 'GSMTP detail renders Delivery + Message sections', gs.titles.includes( 'Delivery' ) && gs.titles.includes( 'Message' ), gs.titles.join( ' | ' ) );
+		t.check( 'GSMTP status renders as a pill row', gs.pill );
+		t.check( 'GSMTP body renders as html-preview or code', gs.body );
+		t.check( 'GSMTP detail actions still bind with sections', gs.resend );
+		errors.splice( 0, errors.length, ...errors.filter( ( e ) => ! /Blocked script execution/.test( e ) ) );
 	} finally {
 		await setOpt( false );
 	}
