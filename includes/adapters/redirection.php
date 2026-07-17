@@ -167,6 +167,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		),
+		// Status card (v0.18.0): rule counts, served/404 traffic and a
+		// dual-series 14-day chart from Redirection's own log tables.
+		'status'     => array( 'route' => 'minn-admin/v1/redirection/status' ),
 		// Daily options only (monitor + logging + IP). Schema served at
 		// request time; writes go through red_set_options (their sanitizer).
 		'settings'   => array(
@@ -189,6 +192,109 @@ add_action( 'rest_api_init', function () {
 		$cap = apply_filters( 'redirection_role', 'manage_options' );
 		return current_user_can( $cap );
 	};
+
+	// Status card. Counts from Redirection's own tables (SHOW TABLES-gated:
+	// a pre-setup install has none). Log timestamps are current_time('mysql')
+	// site-local; DATE(created) buckets match Redirection's own log view.
+	// Retention is their log_expiry setting (7 days by default), so the
+	// "served" numbers honestly say what the log still holds.
+	register_rest_route( 'minn-admin/v1', '/redirection/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			global $wpdb;
+			$has = function ( $suffix ) use ( $wpdb ) {
+				$table = $wpdb->prefix . $suffix;
+				return (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+			};
+			$rows = array();
+
+			if ( $has( 'redirection_items' ) ) {
+				$items = $wpdb->get_results( "SELECT status, COUNT(*) AS c, SUM(last_count) AS hits FROM {$wpdb->prefix}redirection_items GROUP BY status" ); // phpcs:ignore
+				$enabled  = 0;
+				$disabled = 0;
+				$hits     = 0;
+				foreach ( (array) $items as $r ) {
+					if ( 'enabled' === $r->status ) {
+						$enabled = (int) $r->c;
+					} else {
+						$disabled += (int) $r->c;
+					}
+					$hits += (int) $r->hits;
+				}
+				$rows[] = array(
+					'label' => 'Redirect rules',
+					'value' => (string) $enabled,
+					'hint'  => $disabled ? $disabled . ' disabled' : 'all enabled',
+				);
+				$rows[] = array( 'label' => 'Hits, all time', 'value' => number_format_i18n( $hits ) );
+				$top = $wpdb->get_row( "SELECT url, last_count FROM {$wpdb->prefix}redirection_items WHERE last_count > 0 ORDER BY last_count DESC LIMIT 1" ); // phpcs:ignore
+				if ( $top ) {
+					$rows[] = array(
+						'label' => 'Top redirect',
+						'value' => $top->url,
+						'hint'  => number_format_i18n( (int) $top->last_count ) . ' hits',
+					);
+				}
+			}
+
+			$since  = gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) ) - 7 * DAY_IN_SECONDS );
+			$served = $has( 'redirection_logs' )
+				? (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}redirection_logs WHERE created >= %s", $since ) ) // phpcs:ignore
+				: null;
+			$missed = $has( 'redirection_404' )
+				? (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}redirection_404 WHERE created >= %s", $since ) ) // phpcs:ignore
+				: null;
+			if ( null !== $served ) {
+				$rows[] = array( 'label' => 'Served, 7 days', 'value' => number_format_i18n( $served ) );
+			}
+			if ( null !== $missed ) {
+				$rows[] = array( 'label' => '404s, 7 days', 'value' => number_format_i18n( $missed ) );
+			}
+
+			$out = array( 'rows' => $rows );
+
+			// Dual-series daily chart: redirects served (primary) over 404s
+			// (secondary), the sent/failed idiom. Only when a log table holds
+			// anything in the window — an all-zero chart collapses client-side
+			// anyway, but skipping keeps the card short on log-less sites.
+			if ( ( $served || $missed ) && ( $has( 'redirection_logs' ) || $has( 'redirection_404' ) ) ) {
+				$days   = 14;
+				$start  = strtotime( gmdate( 'Y-m-d', strtotime( current_time( 'mysql' ) ) ) ) - ( $days - 1 ) * DAY_IN_SECONDS;
+				$startd = gmdate( 'Y-m-d 00:00:00', $start );
+				$bucket = function ( $suffix ) use ( $wpdb, $has, $startd ) {
+					if ( ! $has( $suffix ) ) {
+						return array();
+					}
+					$out  = array();
+					$rows = $wpdb->get_results( $wpdb->prepare( "SELECT DATE(created) AS d, COUNT(*) AS c FROM {$wpdb->prefix}{$suffix} WHERE created >= %s GROUP BY DATE(created)", $startd ) ); // phpcs:ignore
+					foreach ( (array) $rows as $r ) {
+						$out[ (string) $r->d ] = (int) $r->c;
+					}
+					return $out;
+				};
+				$hitmap = $bucket( 'redirection_logs' );
+				$missmap = $bucket( 'redirection_404' );
+				$points = array();
+				for ( $i = 0; $i < $days; $i++ ) {
+					$day = gmdate( 'Y-m-d', $start + $i * DAY_IN_SECONDS );
+					$points[] = array(
+						'label'     => gmdate( 'M j', strtotime( $day ) ),
+						'value'     => isset( $hitmap[ $day ] ) ? $hitmap[ $day ] : 0,
+						'secondary' => isset( $missmap[ $day ] ) ? $missmap[ $day ] : 0,
+					);
+				}
+				$out['chart'] = array(
+					'title'     => 'Last 14 days',
+					'primary'   => 'Redirects',
+					'secondary' => '404s',
+					'points'    => $points,
+				);
+			}
+
+			return rest_ensure_response( $out );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
 		array(
