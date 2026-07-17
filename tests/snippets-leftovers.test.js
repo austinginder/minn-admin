@@ -137,6 +137,16 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-table-row', { timeout: 20000 } );
 		t.check( 'HFCM surface renders rows', true );
 
+		/* ===== Status cards (v0.18.0) while both plugins are active ===== */
+		const ccjSt = await api( 'minn-admin/v1/custom-css-js/status' );
+		t.check( 'CCJ status card answers with counts', ccjSt.status === 200
+			&& ( ( ccjSt.body && ccjSt.body.rows ) || [] ).some( ( r ) => r.label === 'Active codes' ),
+			JSON.stringify( ccjSt.body ).slice( 0, 100 ) );
+		const hfSt = await api( 'minn-admin/v1/hfcm/status' );
+		t.check( 'HFCM status card answers with counts', hfSt.status === 200
+			&& ( ( hfSt.body && hfSt.body.rows ) || [] ).some( ( r ) => r.label === 'Active snippets' ),
+			JSON.stringify( hfSt.body ).slice( 0, 100 ) );
+
 		// Delete both.
 		if ( created.ccj ) {
 			const d = await api( `minn-admin/v1/ccj/snippets/${ created.ccj }`, { method: 'DELETE' } );

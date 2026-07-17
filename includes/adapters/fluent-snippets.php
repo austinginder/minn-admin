@@ -121,6 +121,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'code',
 		// install_plugins is Fluent's own gate; unfiltered_html is needed to write code.
 		'cap'        => 'install_plugins',
+		// Status card (v0.18.0): family parity with Code Snippets.
+		'status'     => array( 'route' => 'minn-admin/v1/fluent-snippets/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/fluent-snippets',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -235,6 +237,40 @@ add_action( 'rest_api_init', function () {
 	$can_read = function () {
 		return current_user_can( 'install_plugins' );
 	};
+
+	// Status card: counts from their own indexed snippet list (file-based
+	// store; the index rebuild mirrors what the list route does).
+	register_rest_route( 'minn-admin/v1', '/fluent-snippets/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $can_read,
+		'callback'            => function () {
+			\FluentSnippets\App\Helpers\Helper::cacheSnippetIndex( '', true );
+			$model = new \FluentSnippets\App\Model\Snippet();
+			$all   = $model->getIndexedSnippets();
+			if ( isset( $all['data'] ) && is_array( $all['data'] ) ) {
+				$all = $all['data'];
+			}
+			$all      = is_array( $all ) ? $all : array();
+			$items    = array_map( 'minn_admin_fluent_item', $all );
+			$active   = count( array_filter( $items, function ( $i ) {
+				return ! empty( $i['active'] );
+			} ) );
+			$inactive = count( $items ) - $active;
+			$rows = array(
+				array(
+					'label' => 'Active snippets',
+					'value' => (string) $active,
+					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
+				),
+				array(
+					'label' => 'Storage',
+					'value' => 'Standalone files',
+					'hint'  => 'FluentSnippets runs snippets from files, not the database',
+				),
+			);
+			return rest_ensure_response( array( 'rows' => $rows ) );
+		},
+	) );
 	$can_write = function () {
 		return current_user_can( 'install_plugins' ) && current_user_can( 'unfiltered_html' );
 	};

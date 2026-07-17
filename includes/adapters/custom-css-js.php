@@ -222,6 +222,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Simple Custom CSS and JS',
 		'icon'       => 'code',
 		'cap'        => 'read',
+		// Status card (v0.18.0): family parity with Code Snippets.
+		'status'     => array( 'route' => 'minn-admin/v1/custom-css-js/status' ),
 		'collection' => array(
 			'route'     => 'minn-admin/v1/ccj/snippets',
 			'pageQuery' => 'per_page=25&page={page}',
@@ -331,6 +333,55 @@ add_action( 'rest_api_init', function () {
 	$perm = function () {
 		return minn_admin_ccj_can();
 	};
+
+	// Status card: counts over their CPT. Active = published without the
+	// '_active' = no meta (their own convention; absent meta means active).
+	// Languages are regex-peeked from the serialized `options` meta — never
+	// unserialized.
+	register_rest_route( 'minn-admin/v1', '/custom-css-js/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			global $wpdb;
+			$rowsdb = $wpdb->get_results(
+				"SELECT p.ID, pm.meta_value AS off, po.meta_value AS opts
+				 FROM {$wpdb->posts} p
+				 LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_active'
+				 LEFT JOIN {$wpdb->postmeta} po ON po.post_id = p.ID AND po.meta_key = 'options'
+				 WHERE p.post_type = 'custom-css-js' AND p.post_status = 'publish'"
+			);
+			$active   = 0;
+			$inactive = 0;
+			$langs    = array();
+			foreach ( (array) $rowsdb as $r ) {
+				if ( 'no' === (string) $r->off ) {
+					$inactive++;
+					continue;
+				}
+				$active++;
+				if ( preg_match( '/"language";s:\d+:"([a-z]+)"/', (string) $r->opts, $m ) ) {
+					$langs[ $m[1] ] = ( $langs[ $m[1] ] ?? 0 ) + 1;
+				}
+			}
+			$rows = array(
+				array(
+					'label' => 'Active codes',
+					'value' => (string) $active,
+					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
+				),
+			);
+			if ( $langs ) {
+				arsort( $langs );
+				$rows[] = array(
+					'label' => 'Running languages',
+					'value' => implode( ' · ', array_map( function ( $c, $l ) {
+						return $c . ' ' . $l;
+					}, $langs, array_keys( $langs ) ) ),
+				);
+			}
+			return rest_ensure_response( array( 'rows' => $rows ) );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/ccj/snippets', array(
 		array(

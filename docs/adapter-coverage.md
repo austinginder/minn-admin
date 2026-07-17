@@ -101,10 +101,10 @@ Reference depth: **Gravity Forms**.
 | simple-301-redirects | Y | · | Y | Y | — | · | — | · | — | · | | |
 | eps-301-redirects | Y | · | Y | Y | — | · | — | · | — | Y | | No leading slash on source |
 | code-snippets | Y | · | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | **Status card** (active/inactive/trashed, running scopes, last change, safe-mode warning); first card in the family |
-| wpcode | Y | Y | Y | Y | — | · | — | · | — | Y | | |
-| fluent-snippets | Y | Y | Y | Y | — | · | — | · | — | Y | | |
-| custom-css-js | Y | Y | Y | Y | — | · | — | · | — | Y | 2026-07-12 | CPT shim; tree rebuild on write |
-| hfcm | Y | Y | Y | Y | — | · | — | · | — | Y | 2026-07-12 | hfcm_scripts; page targeting = **L** |
+| wpcode | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | **Status card** (active/inactive, running types, last change) |
+| fluent-snippets | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | **Status card** (active/inactive + file-storage note) |
+| custom-css-js | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | CPT shim; tree rebuild on write; **status card** (active codes, running languages via regex peek) |
+| hfcm | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | hfcm_scripts; page targeting = **L**; **status card** (active/inactive, running types, last change) |
 
 ### settings-only / other surfaces
 
@@ -154,6 +154,7 @@ Reference depth: **Gravity Forms**.
 | 2026-07-15 | Axis A: gravity-smtp bulk log delete | Single + bulk Delete via Event_Model (DELETE_EMAIL_LOG); mail-log suite extended; matrix fixed for cf7/cfdb7/ninja bulk (were already Y in code) |
 | 2026-07-15 | Axis A: activity-log status cards | Simple History, WSAL, Stream, Aryo status cards (24h/7d/total + family-specific mix); suite `activity-log-status` |
 | 2026-07-17 | Ship top 1: sectionsRoute row types | `pill`/`code`/sandboxed `html-preview`/`kv-table` rows in the sections detail renderer; contract-fixture Log view exercises all four with hostile payloads (suite detail-rows, 19 checks incl. sandbox + escaping proofs); Gravity SMTP log detail converted as the first consumer (status pill, HTML body preview, headers kv-table). Fluent/Post/WPML conversions are the natural next slices |
+| 2026-07-17 | Snippets family status cards (Axis A parity batch) | wpcode (CPT publish=active + type meta), fluent-snippets (indexed file store), custom-css-js (CPT + _active meta; languages regex-peeked from serialized options, never unserialized), hfcm (own table). All match the code-snippets card shape; suites snippets-adapters 19 / snippets-leftovers 15 |
 | 2026-07-17 | Mail family sections detail (Axis A) | fluent-smtp, post-smtp, wp-mail-logging log detail converted to sectionsRoute with the new row types (GSMTP pattern): status pill, sandboxed html-preview/code body, per-store extras (provider-reply peek, failure + suggested fix, raw headers). Flat routes kept for API consumers; mail-log suite 30 |
 | 2026-07-17 | Ship next: code-snippets status card | Active/inactive/trashed counts, running scopes, last change and a safe-mode warning row from their own table (active -1 = trashed per their class-db docblock); suite code-snippets 26. Sweep-hygiene note: the report's snippets/redirects "family status parity" claims were grep over-matches; these two cards are family FIRSTS and the siblings are the real parity backlog |
 | 2026-07-17 | Sortable surface columns (Austin's ask) | New collection primitive: column `sort` tokens + `sortQuery` template, clickable headers with the users-list direction convention (num/ago start desc); validator + author guide + contract fixture in lockstep (contract 39). Redirection wired first (Source/Hits/Last hit via their orderby vocabulary); suite redirection-status now 14 |

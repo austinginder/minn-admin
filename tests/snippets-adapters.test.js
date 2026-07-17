@@ -163,6 +163,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Fluent list includes created item', fl.listed, JSON.stringify( fl ) );
 		t.check( 'Fluent id is a file name', /\.php$/.test( fl.id || '' ), fl.id );
 
+		/* ===== Status cards (v0.18.0) while both stores hold data ===== */
+		const cardOf = async ( route ) => {
+			const r = await page.evaluate( async ( p ) => {
+				const res = await fetch( window.MINN.restUrl + p + '?_cb=' + Math.random(), {
+					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+				return { status: res.status, body: await res.json() };
+			}, route );
+			const rows = ( r.body && r.body.rows ) || [];
+			return { status: r.status, labels: rows.map( ( x ) => x.label ), rows };
+		};
+		const wpSt = await cardOf( 'minn-admin/v1/wpcode/status' );
+		t.check( 'WPCode status card answers with counts', wpSt.status === 200 && wpSt.labels.includes( 'Active snippets' ), JSON.stringify( wpSt.rows ).slice( 0, 100 ) );
+		const flSt = await cardOf( 'minn-admin/v1/fluent-snippets/status' );
+		t.check( 'Fluent status card answers with counts', flSt.status === 200 && flSt.labels.includes( 'Active snippets' ), JSON.stringify( flSt.rows ).slice( 0, 100 ) );
+
 		await page.goto( `${ BASE }/minn-admin/fluent-snippets`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-toolbar, .minn-empty, .minn-table', { timeout: 15000 } );
 		const fui = await page.evaluate( () => ( {

@@ -3,6 +3,7 @@
 ## **v0.18.0** - Unreleased
 
 ### Added
+* **Status cards across the whole snippets family:** WPCode, FluentSnippets, Custom CSS & JS and Header Footer Code Manager each open with the same at-a-glance card as Code Snippets: active and inactive counts plus each store's own facts (running types or languages, the last change, FluentSnippets' file-based storage note).
 * **Code Snippets status card:** the Snippets surface opens with active, inactive and trashed counts, the scopes currently running, the most recent change, and a warning row whenever safe mode is armed (safe mode means nothing executes, which deserves saying out loud).
 * **Sortable columns on plugin surfaces:** a collection can declare `sortQuery` (an `orderby`/`direction` template) and mark columns with the sort token its route understands. Marked headers become clickable: numeric and date columns start descending, everything else ascending, and a repeat click flips. The Redirects surface is the first consumer, sorting by source, hits and last hit through Redirection's own API.
 * **Redirection status card:** the Redirects surface opens with rule counts, all-time hits, the top redirect, served and 404 counts for the log window, and a stacked 14-day chart of redirects served over 404s, all read from Redirection's own tables.
