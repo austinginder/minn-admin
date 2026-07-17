@@ -21002,7 +21002,78 @@
 	function openPalette() {
 		state.paletteOpen = true;
 		state.paletteSel = 0;
+		paletteSearch = { q: '', items: [] };
+		clearTimeout( paletteSearchTimer );
 		renderOverlays();
+	}
+
+	/* ===== ⌘K content search =====
+	 * Below the command matches, the palette searches your own content —
+	 * core wp/v2/search, the link picker's precedent: posts, pages and CPTs
+	 * with a _fields allowlist, never rendered content — and a picked row
+	 * opens the Minn editor. Results become pseudo-commands appended to
+	 * paletteFiltered, so the existing arrow/Enter/click machinery runs
+	 * them unchanged. Subtypes are mapped through the types cache
+	 * (slug → rest_base for the editor route); unknown subtypes drop. */
+	let paletteSearch = { q: '', items: [] };
+	let paletteSearchTimer = 0;
+
+	function paletteContentCommands( q ) {
+		return q && q.length >= 2 && paletteSearch.q === q ? paletteSearch.items : [];
+	}
+
+	function schedulePaletteSearch( q ) {
+		clearTimeout( paletteSearchTimer );
+		if ( ! q || q.length < 2 ) {
+			paletteSearch = { q: '', items: [] };
+			return;
+		}
+		paletteSearchTimer = setTimeout( async () => {
+			try {
+				// wp/v2/search covers PUBLISHED content across every REST
+				// type; unfinished writing is half the point of jumping back
+				// in, so drafts/scheduled posts and pages ride two extra
+				// allowlisted queries (their title is {rendered}, unlike
+				// search's flat string).
+				const soft = ( p ) => api( p ).catch( () => [] );
+				const dq = 'status=draft,pending,future&per_page=3&_fields=id,title,status&search=' + encodeURIComponent( q );
+				const [ types, found, draftPosts, draftPages ] = await Promise.all( [
+					loadTypes(),
+					soft( 'wp/v2/search?per_page=6&_fields=id,title,subtype&search=' + encodeURIComponent( q ) ),
+					soft( 'wp/v2/posts?' + dq ),
+					B.caps.editPages ? soft( 'wp/v2/pages?' + dq ) : [],
+				] );
+				if ( ! state.paletteOpen ) return;
+				const typeFor = ( slug ) => ( types || [] ).find( ( x ) => x.slug === slug );
+				const items = ( Array.isArray( found ) ? found : [] ).map( ( r ) => {
+					const t = typeFor( r.subtype );
+					if ( ! t ) return null;
+					return {
+						label: decodeEntities( String( r.title || '' ) ) || '(no title)',
+						kind: t.name,
+						icon: r.subtype === 'post' ? '¶' : r.subtype === 'page' ? '▭' : '◆',
+						run: () => go( 'editor/' + t.restBase + '/' + r.id ),
+					};
+				} ).filter( Boolean );
+				[ [ draftPosts, 'posts', '¶' ], [ draftPages, 'pages', '▭' ] ].forEach( ( [ rows, base, icon ] ) => {
+					( Array.isArray( rows ) ? rows : [] ).forEach( ( r ) => {
+						items.push( {
+							label: decodeEntities( String( ( r.title && r.title.rendered ) || '' ) ) || '(no title)',
+							kind: r.status === 'future' ? 'scheduled' : r.status,
+							icon,
+							run: () => go( 'editor/' + base + '/' + r.id ),
+						} );
+					} );
+				} );
+				paletteSearch = { q, items: items.slice( 0, 9 ) };
+				const input = $( '#minn-palette-input' );
+				if ( input && input.value.trim().toLowerCase() === q ) {
+					renderPaletteList( input.value );
+				}
+			} catch ( e ) {
+				// Content search is best-effort — commands keep working.
+			}
+		}, 250 );
 	}
 
 	function renderPalette() {
@@ -21023,16 +21094,24 @@
 		const list = $( '#minn-palette-list' );
 		if ( ! list ) return;
 		const q = ( query || '' ).trim().toLowerCase();
-		const filtered = paletteCommands().filter( ( c ) => ! q || c.label.toLowerCase().includes( q ) );
+		const cmds = paletteCommands().filter( ( c ) => ! q || c.label.toLowerCase().includes( q ) );
+		const content = paletteContentCommands( q );
+		const filtered = cmds.concat( content );
 		state.paletteFiltered = filtered;
 		if ( state.paletteSel >= filtered.length ) state.paletteSel = 0;
-		list.innerHTML = filtered.length ? filtered.map( ( c, i ) => `
+		const rows = filtered.map( ( c, i ) => `
 			<div class="minn-palette-item${ i === state.paletteSel ? ' selected' : '' }" data-idx="${ i }">
 				<div class="minn-palette-icon">${ esc( c.icon ) }</div>
 				<div class="minn-palette-label">${ esc( c.label ) }</div>
 				<div class="minn-palette-kind">${ esc( c.kind ) }</div>
-			</div>` ).join( '' )
-			: `<div class="minn-palette-empty">No results for “${ esc( query ) }”</div>`;
+			</div>` );
+		if ( content.length ) {
+			rows.splice( cmds.length, 0, '<div class="minn-palette-sec">Your content</div>' );
+		}
+		list.innerHTML = filtered.length ? rows.join( '' )
+			: q.length >= 2 && paletteSearch.q !== q
+				? '<div class="minn-palette-empty">Searching your content…</div>'
+				: `<div class="minn-palette-empty">No results for “${ esc( query ) }”</div>`;
 
 		$$( '.minn-palette-item', list ).forEach( ( el ) =>
 			el.addEventListener( 'click', () => runPaletteItem( parseInt( el.dataset.idx, 10 ) ) )
@@ -25504,7 +25583,11 @@
 			const input = $( '#minn-palette-input' );
 			renderPaletteList( '' );
 			input.focus();
-			input.addEventListener( 'input', () => { state.paletteSel = 0; renderPaletteList( input.value ); } );
+			input.addEventListener( 'input', () => {
+				state.paletteSel = 0;
+				schedulePaletteSearch( input.value.trim().toLowerCase() );
+				renderPaletteList( input.value );
+			} );
 			input.addEventListener( 'keydown', ( e ) => {
 				const n = ( state.paletteFiltered || [] ).length;
 				if ( e.key === 'ArrowDown' ) { e.preventDefault(); state.paletteSel = ( state.paletteSel + 1 ) % Math.max( 1, n ); renderPaletteList( input.value ); }

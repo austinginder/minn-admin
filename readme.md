@@ -184,11 +184,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   button; the Updates tab also pins **Update everything** (plugins, themes and core in one
   click, poll-verified core). A pending WordPress update also shows as an amber topbar chip and
   Overview banner
-- **Command palette** — ⌘K / Ctrl-K everywhere, with site-care actions built in: **Clear site
-  cache** purges every layer the site runs (Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket,
-  WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor
-  CSS, SpeedyCache, Redis Object Cache, Breeze, Nginx Helper, Cloudflare), each in its own
-  isolated request
+- **Command palette** — ⌘K / Ctrl-K everywhere, and it **finds your content**: type anything to
+  see your posts, pages and CPTs (drafts and scheduled included) under the command matches, and
+  Enter opens the Minn editor. Site-care actions built in: **Clear site cache** purges every
+  layer the site runs (Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket, WP Fastest Cache,
+  SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor CSS, SpeedyCache,
+  Redis Object Cache, Breeze, Nginx Helper, Cloudflare), each in its own isolated request
 - **Extending** — one-filter APIs for any plugin to register views (with status cards and optional
   **charts**, extra **list views**, tabs, status filters, detail layouts, actions with inline
   fields, **bulk actions**, schema-driven **settings views** including **item-scoped settings**,
