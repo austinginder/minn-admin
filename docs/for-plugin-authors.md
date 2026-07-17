@@ -1,6 +1,6 @@
 # Adding your plugin to Minn Admin
 
-Minn Admin renders third-party plugin data through **surfaces** — declarative descriptors
+Minn Admin renders third-party plugin data through **surfaces**: declarative descriptors
 registered from PHP. One filter, no JavaScript, no build step. Most plugin admin screens are
 one of three shapes (a list, a detail view of one item, a few stat numbers), and Minn draws
 all three with the same list / tabs / detail-modal / action primitives that power its
@@ -37,8 +37,8 @@ That's a working, paginated, capability-gated view in the Minn sidebar.
 **Your data lives in a custom table with no REST route?** That's the majority case, and it
 has its own start-to-finish walkthrough: [the shim tutorial](shim-tutorial.md), which builds
 a small REST shim plus this descriptor for a fictional plugin. The finished code ships as a
-real, working plugin you can copy — [`docs/examples/minn-example-adapter/`](examples/minn-example-adapter/minn-example-adapter.php)
-— and Minn's own test suite drives it end to end, so the example can never drift from the
+real, working plugin you can copy ([`docs/examples/minn-example-adapter/`](examples/minn-example-adapter/minn-example-adapter.php)),
+and Minn's own test suite drives it end to end, so the example can never drift from the
 contract. This is what that tutorial's finished surface looks like, built entirely from
 declarative keys documented on this page:
 
@@ -59,12 +59,12 @@ contact-card entry detail, the Entries/Forms switcher and the `forms` family.
   explains itself there, and the card's copy-report carries the section for bug reports.
 - **Try it in a disposable WordPress.** Minn's readme has a one-click
   [WordPress Playground](https://playground.wordpress.net/) badge that boots a demo site
-  with Minn installed — upload your plugin zip there and your surface is testable without
+  with Minn installed: upload your plugin zip there and your surface is testable without
   touching a real site. The boot also preactivates the shim tutorial's example plugin
   (the **Feedback** surface, seeded with demo rows), so a working instance of this API is
   one click away before you write anything.
 - **Test as a non-admin.** Your descriptor's `cap` hides the surface from users without
-  it, but your routes' `permission_callback` is the real boundary — log in as an editor
+  it, but your routes' `permission_callback` is the real boundary: log in as an editor
   or author and confirm both layers agree.
 
 ## Ship the adapter inside your own plugin
@@ -79,10 +79,10 @@ my-plugin/
 
 No `class_exists( 'Minn_Admin' )` guard is needed: when Minn isn't installed the filters are
 simply never applied, so the integration is a free no-op. Users who install both plugins get
-the integration automatically — nothing to configure, no companion plugin to ship.
+the integration automatically: nothing to configure, no companion plugin to ship.
 
 Minn bundles adapters (in `includes/adapters/`) only for popular plugins that don't know about
-Minn — Gravity Forms, ACF, Redirection, the analytics providers. If you're the author of the
+Minn: Gravity Forms, ACF, Redirection, the analytics providers. If you're the author of the
 plugin being integrated, ship the adapter with it instead; [Anchor Blocks](https://github.com/anchorhost/anchor-blocks)
 does exactly this in `app/MinnAdmin.php`.
 
@@ -93,8 +93,8 @@ text domain if your plugin is translated. Minn renders them verbatim (escaped, n
 
 The descriptor contract suits agentic coding unusually well: it is declarative, validated
 live, and verifiable in a browser. If you're wiring your plugin in with an AI coding tool,
-hand it three things — this document, [the shim tutorial](shim-tutorial.md), and the
-[example plugin](examples/minn-example-adapter/minn-example-adapter.php) — and tell it to
+hand it three things (this document, [the shim tutorial](shim-tutorial.md), and the
+[example plugin](examples/minn-example-adapter/minn-example-adapter.php)) and tell it to
 verify against the Integrations card (`/minn-admin/system`) when it thinks it's done. The
 example plugin doubles as a known-good reference the agent can diff its work against.
 
@@ -113,7 +113,7 @@ rarely, and additively:
   stabilized here.
 - Declaring a key an installed Minn doesn't know yet is safe: the renderer ignores
   unknown keys (the feature is simply absent on that install) and the Integrations card
-  may flag them as unknown. No version detection needed — degrade is the design.
+  may flag them as unknown. No version detection needed: degrade is the design.
 
 ## Integration etiquette
 
@@ -205,7 +205,7 @@ site will always look like one.
 
 Only three things are load-bearing: `label`, `collection.route`, and `collection.columns`
 (each column needs `key` and `label`). Everything else on this page is optional and
-additive — start with the quick start's shape and grow it. Keys marked with a version
+additive: start with the quick start's shape and grow it. Keys marked with a version
 arrived in that release; unmarked keys have been stable since the API shipped.
 
 ### Top level
@@ -227,7 +227,7 @@ arrived in that release; unmarked keys have been stable since the API shipped.
 
 ### Icons
 
-The canonical set (an unknown name renders empty — there is no fallback glyph):
+The canonical set (an unknown name renders empty; there is no fallback glyph):
 
 `activity` `arrow-up-right` `bell` `block` `bold` `braces` `bug` `cart` `chat` `check`
 `chev` `clipboard` `clock` `code` `columns` `copy` `cpu` `database` `doc` `eraser` `file`
@@ -247,7 +247,7 @@ Two patterns cover every bundled adapter:
    `permission_callback` checks the same one (through one shared helper, so they can't
    drift). Right whenever a core cap genuinely models who may see the data.
 2. **Adapter-side gating.** Some plugins have their own access model that no single
-   capability expresses — Gravity Forms admins hold `gform_full_access` rather than the
+   capability expresses: Gravity Forms admins hold `gform_full_access` rather than the
    granular caps, WP Activity Log has "only me / only admins" settings. There, declare a
    deliberately loose `cap` (`'read'`) so the surface reaches the app, and make your
    routes' `permission_callback` call the plugin's own resolver
@@ -255,7 +255,7 @@ Two patterns cover every bundled adapter:
    The route is the boundary; the descriptor cap is only UI gating.
 
 Never check a raw granular capability that your plugin actually grants through a
-resolver — a user can hold access via the resolver while failing the raw check.
+resolver: a user can hold access via the resolver while failing the raw check.
 
 ### `setup` — a one-time setup gate
 
@@ -476,9 +476,9 @@ Each action is `{ label, method, route, body, confirm, danger, when, href, field
 settingsItem, list }`:
 
 - **`route`** — `{id}` is replaced with the item id; `method` defaults to POST (DELETE is
-  fine — several bundled adapters use it for permanent removal); `body`
+  fine; several bundled adapters use it for permanent removal); `body`
   merges into the request. The route may return `{ "message": "…" }` to replace the
-  default "⟨label⟩ — done" toast — the honest channel for outcomes the label can't
+  default "⟨label⟩ — done" toast, the honest channel for outcomes the label can't
   promise (the bundled Gravity SMTP send-a-test reports when another active mailer
   actually carried the send).
 - **`confirm`** shows a native confirm first; **`danger`** styles the button red.
@@ -490,7 +490,7 @@ settingsItem, list }`:
 - **`fields`** *(v0.12)* makes the action **parameterized**: clicking swaps the button
   row for an inline form (the create-field vocabulary; every field required unless
   `required: false`) and typed values merge into `body` (dot paths supported) before the
-  request fires — "Add note" and "send to ⟨address⟩" shapes. Parameterized actions stay
+  request fires: "Add note" and "send to ⟨address⟩" shapes. Parameterized actions stay
   **detail-only** (they need the modal's form chrome). Status-card actions accept
   `fields` the same way.
 - **`settingsItem: true`** *(v0.13)* fires no request: it opens the surface's
@@ -533,7 +533,7 @@ Let users edit an item's fields in place and save through your plugin's own upda
 ),
 ```
 
-Each field is `{ key, label, mono, type }` — `key` supports dot paths (`action_data.url`
+Each field is `{ key, label, mono, type }`: `key` supports dot paths (`action_data.url`
 reads and writes `{ "action_data": { "url": … } }`), `mono` renders a monospace input, and
 `type: "number"` sends a numeric value. Edit fields accept the same vocabulary as `create`
 fields (`textarea`, `select` with `options`, `tags`, `rows`, `placeholder`): both render
@@ -630,14 +630,14 @@ Piece by piece:
 - **Dynamic tabs** pair with `{tab}` in the route: the tabs route returns your forms
   (array, or any object whose values are the forms), `valueKey` fills `{tab}`,
   `labelKey` names the tab, and `allRoute` serves the All tab. (Static `param` tabs and
-  dynamic route tabs are the two forms of `tabs` — pick one; a status dimension beside
+  dynamic route tabs are the two forms of `tabs`; pick one. A status dimension beside
   the form tabs is what `filter` is for.)
 - **`entry-summary`** is the list column for per-form field shapes: it collects the
-  item's values under **numeric keys** (`"1"`, `"2.3"` — field ids), sorts them
+  item's values under **numeric keys** (field ids: `"1"`, `"2.3"`), sorts them
   numerically, and shows the first three short ones (≤ 60 chars, single-line) joined
   with `·`. Long and multi-line answers stay in the detail. If your ids aren't numeric,
-  send a ready-made `summary` string on each item instead — it wins over the heuristic.
-- **The entry detail** should be a `sectionsRoute` returning `kind: "entry"` — the
+  send a ready-made `summary` string on each item instead; it wins over the heuristic.
+- **The entry detail** should be a `sectionsRoute` returning `kind: "entry"`, the
   contact-card layout: name and email hero, message body, quiet meta. Minn picks the
   hero and body rows from your sections: the **answers** are the section titled like
   "Response" (else the first section), the **meta** is the one titled like "Submission"
@@ -646,25 +646,25 @@ Piece by piece:
   labels ("Name", "Email", "Message…") and value shape (an email-looking string, a
   multi-line or 120+ char value) decide. Send `form_name` on the item and the modal is
   titled with it, subtitled "Entry #id".
-- **`manage`** is the Forms companion view — the Entries/Forms switcher every forms
+- **`manage`** is the Forms companion view: the Entries/Forms switcher every forms
   plugin wants. Keep it a list (title, entry count, maybe an activate toggle via a
   `when`-pair of actions); the form **builder** stays your own UI, linked honestly with
   an `href` action (`'label' => 'Edit form ↗'`). Minn will not reimplement it.
 - **Export** is an `href` action pointing at your own download endpoint, with
   `{field}` placeholders filled from the item (put a nonce or signed token in the item
-  so the link is self-authorizing — action `href`s open as plain new-tab links and
+  so the link is self-authorizing; action `href`s open as plain new-tab links and
   carry no REST headers). Minn has no streaming-download primitive; the honest link is
   the pattern.
 
 The [shim tutorial](shim-tutorial.md)'s Campfire example is this recipe minus the
-per-form machinery — start there for the table/shim mechanics, then add the pieces
+per-form machinery: start there for the table/shim mechanics, then add the pieces
 above. For a production-grade reference of the full shape, the bundled
 `includes/adapters/gravity-forms.php` is the deepest instance.
 
 ## Hook reference
 
 Surfaces are the front door, but Minn's whole extension surface is this set of public
-hooks — each with its own section below or its own contract note:
+hooks, each with its own section below or its own contract note:
 
 | Hook | Kind | Purpose |
 |---|---|---|
@@ -747,7 +747,7 @@ Insertion drops `<!-- wp:your/block /-->` as an island, renders the real preview
 the schema-driven inspector.
 
 The render probe is the honesty gate. `is_dynamic` alone doesn't mean a bare comment is
-valid — hybrid blocks (a render_callback **plus** a JS `save()` that emits wrapper HTML, or
+valid: hybrid blocks (a render_callback **plus** a JS `save()` that emits wrapper HTML, or
 a render that only processes saved inner blocks) render nothing standalone and would fail
 Gutenberg's block validation if Minn inserted them, so they are excluded. If your block
 renders empty without attributes, give it sensible defaults or ship an `insert.template`.
@@ -774,8 +774,8 @@ block's descriptor. Sites can also prune or extend the whole list via the
 ### `insert` — offer the block in the editor's `/` menu
 
 Declare starting markup and your block appears in Minn's slash menu (an explicit template
-always supersedes the auto entry). It's inserted as a configurable island — real
-server-rendered preview, inspector opened immediately:
+always supersedes the auto entry). It's inserted as a configurable island (real
+server-rendered preview, inspector opened immediately):
 
 ```php
 $forms['my-plugin/testimonial'] = array(
@@ -788,7 +788,7 @@ $forms['my-plugin/testimonial'] = array(
 );
 ```
 
-`template` is full raw block markup — you know your block's canonical shape (wrapper HTML,
+`template` is full raw block markup: you know your block's canonical shape (wrapper HTML,
 starter children, default attrs); Minn inserts it verbatim. Only declare `insert` on blocks
 that make sense at the top level (parents and standalone blocks, not children).
 
@@ -796,7 +796,7 @@ that make sense at the top level (parents and standalone blocks, not children).
 
 Static InnerBlocks parents often bake a heading into their saved wrapper HTML (e.g. a
 conversation block's header). Declare it editable with a regex of **exactly three capture
-groups** — `(prefix)(text)(suffix)`:
+groups**, `(prefix)(text)(suffix)`:
 
 ```php
 $forms['my-plugin/panel'] = array(
@@ -806,14 +806,14 @@ $forms['my-plugin/panel'] = array(
 );
 ```
 
-The text is replaced in place only when it actually changed — an untouched wrapper stays
+The text is replaced in place only when it actually changed; an untouched wrapper stays
 byte-identical. Patterns that don't match simply don't render a field, and a generic
 text-run field never doubles a matched pattern (the labeled field wins). Note that Minn's
 generic text runs already make wrapper text editable with no descriptor; `wrapperText` is
 worth declaring when you want a labeled, single-purpose field instead of a generic "Text"
 run. For a real-world reference of a block plugin shipping its own descriptors,
 [Anchor Blocks](https://github.com/anchorhost/anchor-blocks) registers insert templates
-and semantic labels from its own plugin (`app/MinnAdmin.php`) — the filter is a no-op when
+and semantic labels from its own plugin (`app/MinnAdmin.php`); the filter is a no-op when
 Minn isn't installed, so block plugins can ship it unconditionally.
 
 ## Island previews — free path first, adapter only when stuck
@@ -1092,7 +1092,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 ```
 
 Supported field types: `text`, `textarea`, `number`, `range`, `email`, `url`, `select`, `radio`,
-`true_false`. Report anything else in the `locked` count — Minn shows "N advanced fields — edit
+`true_false`. Report anything else in the `locked` count; Minn shows "N advanced fields — edit
 in wp-admin ↗" rather than rendering something unsafe. Values ride the normal post save
 (autosave included), so your plugin only needs its values readable/writable on the post REST
 response (`register_rest_field` or, for ACF, the field group's "Show in REST API" toggle).
@@ -1125,7 +1125,7 @@ Minn buckets the days to match the selected range (daily up to 45 days, weekly b
 the Traffic chart with your plugin's name as the source badge, and leads the stat cards with
 Visitors and a period-over-period delta. Bundled adapters cover **Koko Analytics** (the
 reference implementation), **WP Statistics**, **Burst Statistics** and **Independent
-Analytics** — the first active provider answers, so a plugin registering its own adapter
+Analytics**. The first active provider answers, so a plugin registering its own adapter
 should return early when `$traffic` is already non-null.
 
 ### Day drill-down — top pages for a chart bar
@@ -1161,7 +1161,7 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 ```
 
 Return `null` (or leave `$data` alone) when you have no page breakdown for the
-window — the modal shows an empty state and still offers `adminUrl` when set.
+window; the modal shows an empty state and still offers `adminUrl` when set.
 Bundled day adapters: **Koko Analytics** (`post_stats` + `paths` + referrer
 tables), **WP Statistics** (`statistics_pages` for hits +
 `statistics_visitor.referred` for referrers; WPS has no per-URI uniques, so
@@ -1349,7 +1349,7 @@ add_filter( 'minn_admin_comments_enabled', function ( $enabled, $types ) {
 When your plugin is hiding the site (a maintenance mode, coming-soon page or whole-site
 password), tell Minn so the owner sees the persistent "Site hidden" chip, the Overview
 banner and the System health check instead of wondering where their traffic went. Only
-register while the mode is actually ACTIVE — the filter runs on every Minn pageload:
+register while the mode is actually ACTIVE (the filter runs on every Minn pageload):
 
 ```php
 add_filter( 'minn_admin_visibility_providers', function ( $providers ) {
@@ -1377,16 +1377,16 @@ Password Protected, WooCommerce coming soon and Elementor maintenance mode.
 
 If your data lives in custom tables, register a small read-only REST collection and point the
 descriptor at it. Minn's bundled Gravity SMTP adapter
-(`includes/adapters/gravity-smtp.php`) is the reference implementation — ~60 lines of SQL-to-REST
+(`includes/adapters/gravity-smtp.php`) is the reference implementation: ~60 lines of SQL-to-REST
 plus a descriptor. Rules of the road: check capabilities in `permission_callback`, use
 `$wpdb->prepare`, and never `unserialize()` stored blobs (extract what you need with regex or
 `json_decode`).
 
 ## Notes
 
-- All requests are same-origin with the logged-in user's cookie + `X-WP-Nonce` — your existing
+- All requests are same-origin with the logged-in user's cookie + `X-WP-Nonce`; your existing
   REST permission checks keep working.
-- Escape nothing yourself — Minn escapes every value it renders.
+- Escape nothing yourself; Minn escapes every value it renders.
 - Bundled adapters live in `includes/adapters/` and are guarded by `class_exists`/`defined`
   checks; PRs adding adapters for widely-used plugins are welcome. Prefer shipping the
   adapter **inside your plugin** when you own the product; Minn bundles only for plugins
