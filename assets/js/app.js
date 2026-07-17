@@ -2920,7 +2920,8 @@
 	// Like contentCtx: a load started before the search/type filter changed
 	// must not land its rows into the new context.
 	const mediaCtx = () => ( state.mediaSearch || '' ) + '|' + ( state.mediaType || '' )
-		+ '|' + ( state.mediaUnattached ? '1' : '' ) + '|' + ( state.mediaMonth || '' );
+		+ '|' + ( state.mediaUnattached ? '1' : '' ) + '|' + ( state.mediaMonth || '' )
+		+ '|' + ( state.mediaFolder == null ? '' : state.mediaFolder );
 
 	// Month filter → an inclusive local-time window for REST after/before
 	// (both are exclusive comparisons against site-local post_date).
@@ -2947,6 +2948,21 @@
 		if ( state.mediaMonth ) {
 			const w = mediaMonthWindow( state.mediaMonth );
 			q += '&after=' + encodeURIComponent( w.after ) + '&before=' + encodeURIComponent( w.before );
+		}
+		// Folder filter: the provider shim answers with the folder's
+		// attachment ids (newest 500) and the normal media query narrows to
+		// them with include= — search/type/pagination keep working. An empty
+		// folder must short-circuit: include= with no ids means "no filter".
+		state.mediaFolderCapped = false;
+		if ( state.mediaFolder != null ) {
+			const fr = await api( `minn-admin/v1/media/folders/${ state.mediaFolder }/ids` );
+			if ( ctx !== mediaCtx() ) return; // filter changed mid-flight
+			if ( ! fr.ids.length ) {
+				state.cache.media = { items: [], page: 1, totalPages: 1, total: 0 };
+				return;
+			}
+			state.mediaFolderCapped = !! fr.capped;
+			q += '&include=' + fr.ids.join( ',' );
 		}
 		const r = await apiPaged( q );
 		if ( ctx !== mediaCtx() ) return; // filter changed mid-flight — discard
@@ -3217,6 +3233,15 @@
 				<input class="minn-input minn-ac-input" placeholder="${ esc( state.mediaMonth ? mediaMonthLabel( state.mediaMonth ) : 'All dates' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Filter by upload month">
 				<div class="minn-ac-panel" hidden></div>
 			</div>`;
+		// Folder combobox only with a provider (FileBird et al) on board.
+		const activeFolder = state.mediaFolder != null && state.cache.mediaFoldersList
+			? state.cache.mediaFoldersList.find( ( f ) => String( f.id ) === String( state.mediaFolder ) )
+			: null;
+		const mediaFolderComboHtml = B.mediaFolders ? `
+			<div class="minn-ac minn-tax-select" data-foldercombo title="Filter by ${ esc( B.mediaFolders.name ) } folder">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( activeFolder ? activeFolder.label : 'All folders' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Filter by folder">
+				<div class="minn-ac-panel" hidden></div>
+			</div>` : '';
 		const mediaViewTabsHtml = `
 			<div class="minn-view-tabs" style="margin-left:0;">
 				<button class="minn-view-tab${ state.mediaView === 'grid' ? ' active' : '' }" data-view="grid" title="Grid">${ icon( 'grid' ) }</button>
@@ -3229,6 +3254,7 @@
 				${ mediaTabsHtml }
 			</div>
 			<div class="minn-toolbar minn-toolbar-filters">
+				${ mediaFolderComboHtml }
 				${ mediaMonthComboHtml }
 				<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
 				${ mediaViewTabsHtml }
@@ -3260,7 +3286,9 @@
 		}
 		const items = c.items;
 		const mapped = items.map( mapMediaItem );
-		const countLabel = metaLabel( c.total, 'file' );
+		// A capped folder honestly says it's a window, not the whole folder.
+		const countLabel = metaLabel( c.total, 'file' )
+			+ ( state.mediaFolder != null && state.mediaFolderCapped ? ' (newest 500 in folder)' : '' );
 		const thumbStyle = ( m ) => m.thumb
 			? `background-image:url('${ esc( m.thumb ) }')`
 			: `background:${ m.grad }`;
@@ -3270,6 +3298,7 @@
 			${ mediaTabsHtml }
 		</div>
 		<div class="minn-toolbar minn-toolbar-filters">
+			${ mediaFolderComboHtml }
 			${ mediaMonthComboHtml }
 			<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ countLabel }</div>
@@ -3283,7 +3312,7 @@
 			<div class="minn-dropzone-title">Drag &amp; drop files here</div>
 			<div class="minn-dropzone-sub">or <b>browse your computer</b></div>
 		</div>` : '' }
-		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType || state.mediaUnattached || state.mediaMonth ? 'No files match.' : 'The media library is empty. Drop files anywhere to upload.' }</div>` : state.mediaView === 'grid' ? `
+		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType || state.mediaUnattached || state.mediaMonth || state.mediaFolder != null ? 'No files match.' : 'The media library is empty. Drop files anywhere to upload.' }</div>` : state.mediaView === 'grid' ? `
 		<div class="minn-media-grid">
 			${ mapped.map( ( m ) => `
 				<div class="minn-media-card" data-media="${ m.id }">
@@ -3351,6 +3380,33 @@
 					if ( state.route === 'media' ) renderMedia();
 				} );
 		}
+		// Folder filter: options load once per session from the provider shim.
+		if ( B.mediaFolders && ! state.cache.mediaFoldersList && ! state.mediaFoldersLoading ) {
+			state.mediaFoldersLoading = true;
+			api( 'minn-admin/v1/media/folders' )
+				.then( ( r ) => { state.cache.mediaFoldersList = ( r && Array.isArray( r.folders ) ) ? r.folders : []; } )
+				.catch( () => { state.cache.mediaFoldersList = []; } )
+				.finally( () => {
+					state.mediaFoldersLoading = false;
+					if ( state.route === 'media' ) renderMedia();
+				} );
+		}
+		const folderWrap = view.querySelector( '[data-foldercombo]' );
+		if ( folderWrap && state.cache.mediaFoldersList ) bindAutocomplete( folderWrap,
+			[ { value: '', label: 'All folders' } ].concat( state.cache.mediaFoldersList.map( ( f ) => ( {
+				value: String( f.id ),
+				// U+2003 em-space indent: a plain space would collapse in the panel HTML.
+				label: ' '.repeat( f.depth || 0 ) + f.label + ( f.count != null ? ` (${ f.count })` : '' ),
+			} ) ) ), {
+				strict: true,
+				value: state.mediaFolder == null ? '' : String( state.mediaFolder ),
+				onPick: ( v ) => {
+					const next = v === '' ? null : v;
+					if ( ( state.mediaFolder == null ? '' : String( state.mediaFolder ) ) === ( next == null ? '' : next ) ) return;
+					state.mediaFolder = next;
+					mediaReload();
+				},
+			} );
 		const monthWrap = view.querySelector( '[data-monthcombo]' );
 		if ( monthWrap && state.cache.mediaMonths ) bindAutocomplete( monthWrap,
 			[ { value: '', label: 'All dates' } ].concat( state.cache.mediaMonths.map( ( m ) => ( {

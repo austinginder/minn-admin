@@ -39,7 +39,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Dev tools** | Query Monitor; **Diagnostics** family (Scrutoscope, WP Crontrol, Transients Manager, Rewrite Rules Inspector) | QM panel on Minn pages (this-request). One Tools item **Diagnostics** with a provider switcher: **Scrutoscope** (performance profiles + attribution Cron view), **WP Crontrol** (event inventory, run-now, pause/resume, delete), **Transients Manager** (list/search/delete, expired purge, never unserializes blobs), **Rewrite Rules Inspector** (registered rules by source, search by path, flush, test URL). Capture settings, PHP/URL cron authoring, deep transient edit, and the full RRI screen stay deep-linked |
 | **Users** | User Switching, One Time Login | "Switch to this user" in the users row menu (the plugin's own nonce URLs), plus a Switch-back bar for a switched session; "Copy one-time login link" mints a single-use login-as link through One Time Login's own token generator (that CLI-only plugin's first UI), gated on `edit_user` for the target |
 | **Public preview** | Public Post Preview | Editor Publish card: **Public preview link** toggle + copy URL; content row **Copy public preview link** (enables if needed). Shareable anonymous draft links use the plugin's own expiring nonces and Reading expiry setting |
-| **Media** | Regenerate Thumbnails, Safe SVG, Enable Media Replace | ↻ Thumbnails button on the media detail modal (per-image full rebuild). Safe SVG: **SVG** filter tab when uploads are allowed; detail note; sanitization stays Safe SVG's. Enable Media Replace: **⇅ Replace file** on the detail modal through EMR's own ReplaceController (same name, same URL; same-type enforced; rename-and-move stays on EMR's screen) |
+| **Media** | Regenerate Thumbnails, Safe SVG, Enable Media Replace, FileBird | ↻ Thumbnails button on the media detail modal (per-image full rebuild). Safe SVG: **SVG** filter tab when uploads are allowed; detail note; sanitization stays Safe SVG's. Enable Media Replace: **⇅ Replace file** on the detail modal through EMR's own ReplaceController (same name, same URL; same-type enforced; rename-and-move stays on EMR's screen). FileBird: folder combobox on the Media view via the `minn_admin_media_folders` provider contract (browse-first; folder management stays FileBird's) |
 | **Order documents** | PDF Invoices & Packing Slips for WooCommerce | Download buttons per enabled document on the order detail modal |
 
 Beyond the named plugins: any plugin's standalone dynamic blocks and
@@ -150,10 +150,14 @@ adapters plus one new primitive, ranked:
 8. **Core media polish** (no plugin) — unattached + date filters and
    "attached to" info, already ranked in `docs/core-gaps.md`. Serves every
    install.
-9. **Media folders provider contract, browse-first** — a
-   `minn_admin_media_folders` filter feeding a folder combobox in the
-   existing Media toolbar (folder → attachment-ids shim → `include=` on
-   wp/v2/media), "Move to folder" action later. FileBird first (200k,
+9. **Media folders provider contract, browse-first** — **SHIPPED 2026-07-17**
+   (v0.18.0 cycle): the `minn_admin_media_folders` filter feeds a folder
+   combobox in the Media toolbar (folder → attachment-ids shim → `include=`
+   on wp/v2/media, newest-500 cap, reserved id 0 = Uncategorized), FileBird
+   bundled as the first provider through its own model (per-user mode
+   honored), suite `media-folders`. Still open from this item: "Move to
+   folder" action, and Real Media Library Lite / Folders by Premio joining
+   the contract. Original ranking: FileBird first (200k,
    custom `fbv` tables, clean model class); Real Media Library Lite (100k)
    and Folders by Premio (90k) join the same contract like the SEO panel's
    providers. This REVISES core-gaps' "folders: long-tail, skip": 400k+

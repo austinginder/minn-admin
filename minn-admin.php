@@ -99,6 +99,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/one-time-login.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/public-post-preview.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/regenerate-thumbnails.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/enable-media-replace.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/media-folders.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wcpdf.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/licenses.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/perfmatters.php';

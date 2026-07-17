@@ -767,6 +767,9 @@ class Minn_Admin {
 			// Enable Media Replace present + allowed — a "Replace file" button
 			// on the media detail modal (adapters/enable-media-replace.php).
 			'mediaReplace' => function_exists( 'minn_admin_emr_available' ) && minn_admin_emr_available(),
+			// Media folders provider (adapters/media-folders.php) — { name }
+			// gates the folder combobox on the Media view; null without one.
+			'mediaFolders' => function_exists( 'minn_admin_media_folders_boot' ) ? minn_admin_media_folders_boot() : null,
 			// Safe SVG present — media toolbar SVG filter tab + detail note
 			// (adapters/safe-svg.php). Sanitization stays Safe SVG's.
 			'safeSvg'    => function_exists( 'minn_admin_safe_svg_active' ) && minn_admin_safe_svg_active(),

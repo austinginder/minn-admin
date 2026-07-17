@@ -701,6 +701,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_license_providers` | filter | Report your license state on the Licenses card, optionally with activate / deactivate / re-verify |
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
 | `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
+| `minn_admin_media_folders` | filter | Feed the Media view's folder filter from your folder plugin (since 0.18.0) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
 tooling that wants to render into the page attaches at `minn_admin_template_footer`; the
@@ -1184,6 +1185,46 @@ both columns report hit totals), **Burst Statistics** (`burst_statistics`
 page_url/page_id + `burst_sessions.referrer`), and **Independent Analytics**
 (views × resources + session referrers). Same first-non-null rule as
 `minn_admin_traffic`.
+
+## Media folders — feed the Media view's folder filter
+
+If your plugin organizes the media library into folders, answer the
+`minn_admin_media_folders` filter and Minn's Media view gains a folder
+combobox fed by your data. Browse-first: Minn narrows its normal media query
+to your folder's attachment ids, so search, the type tabs and pagination all
+keep working, and Minn never grows a folder tree of its own. First non-null
+provider wins (same rule as `minn_admin_traffic`).
+
+```php
+add_filter( 'minn_admin_media_folders', function ( $provider ) {
+    if ( null !== $provider || ! defined( 'MY_FOLDERS_VERSION' ) ) {
+        return $provider; // someone else answered, or we're not active
+    }
+    return array(
+        'name'    => 'My Folders',      // named in the combobox tooltip
+        'folders' => function () {
+            // Flat list; parent 0 = root (Minn indents children for you).
+            // id 0 is reserved: an optional "Uncategorized" row for files in
+            // no folder, never treated as a parent. count is optional.
+            return array(
+                array( 'id' => 12, 'label' => 'Logos', 'parent' => 0, 'count' => 8 ),
+                array( 'id' => 13, 'label' => 'Dark',  'parent' => 12, 'count' => 3 ),
+            );
+        },
+        'ids'     => function ( $folder_id ) {
+            // The folder's attachment ids (any order), or a WP_Error for a
+            // folder this user may not browse. Minn re-orders newest-first
+            // and caps at 500 before querying.
+            return my_folders_attachment_ids( $folder_id );
+        },
+    );
+} );
+```
+
+Both callables run server-side as the browsing user (`edit_posts` floor), so
+per-user folder modes work by just reading your own scoped state. The bundled
+FileBird provider in `includes/adapters/media-folders.php` is the reference.
+Since 0.18.0.
 
 ## Cache purgers — join "Clear site cache"
 
