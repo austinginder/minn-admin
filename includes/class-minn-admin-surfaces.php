@@ -583,12 +583,29 @@ class Minn_Admin_Surfaces {
 	 * runtime, so only descriptor-carried hrefs can be flagged here.
 	 */
 	private static function offsite_href( $href ) {
-		if ( ! is_string( $href ) || ! preg_match( '#^https?://#i', $href ) ) {
-			return false; // Relative URLs can't leave the site.
+		if ( ! is_string( $href ) || '' === $href ) {
+			return false;
 		}
-		$host = wp_parse_url( $href, PHP_URL_HOST );
-		$home = wp_parse_url( home_url(), PHP_URL_HOST );
-		return $host && is_string( $home ) && 0 !== strcasecmp( $host, $home );
+		if ( 0 === strpos( $href, '//' ) ) {
+			// Protocol-relative: the browser resolves it against the page
+			// scheme and it navigates off-site just like an absolute URL, so
+			// the JS offsiteHref (new URL(href, origin)) flags it. Match that.
+			$href = ( is_ssl() ? 'https:' : 'http:' ) . $href;
+		} elseif ( ! preg_match( '#^https?://#i', $href ) ) {
+			return false; // A relative URL resolves to this site.
+		}
+		// Compare host AND port (the client compares u.host, port included), so
+		// a same-host-different-port origin reads off-site on both sides.
+		$hostport = static function ( $url ) {
+			$p = wp_parse_url( $url );
+			if ( empty( $p['host'] ) ) {
+				return '';
+			}
+			return strtolower( $p['host'] ) . ( isset( $p['port'] ) ? ':' . $p['port'] : '' );
+		};
+		$here = $hostport( home_url() );
+		$there = $hostport( $href );
+		return '' !== $there && '' !== $here && $there !== $here;
 	}
 
 	private static function surface_offsite_links( $surface ) {
