@@ -245,7 +245,8 @@ form *building* stays a deep link (Rung 4).
 | Confirmations editing | deliberately unbuilt | Form-build-time; GF screen is the deep link |
 | Plugin settings (reCAPTCHA, currency, logging) | unbuilt | Set-once; license already in the license manager |
 | Forms list trash/duplicate | partial | REST covers trash; `GFAPI::duplicate_form` has no REST route (one-line shim if demand) |
-| Add-on settings + feeds | open | feeds already have full REST CRUD; schema export is the remaining multiplier |
+| Add-on feeds (list, toggle, delete) | ✅ (v0.18.0) | Feeds `views[]` entry: every GFFeedAddOn integration across forms, per-form tabs, activate/deactivate via `GFFormsModel::update_feed_property`, delete via `GFAPI::delete_feed`, deep link to the add-on's feed screen. GOTCHA: `GFAPI::get_feeds` defaults to ACTIVE-ONLY; pass `$is_active = null` or deactivated feeds vanish |
+| Add-on feed CONFIG (the schema mapper) | deferred, with a verdict | The "one mapper, every add-on" build needs (a) a SECOND item-scoped settings slot on a surface (form settings already claims `settings`; a new primitive) and (b) a fixture add-on whose fields are mappable without vendor credentials (Twilio's from/to selects are creds-gated `select_custom`, `feed_condition` is a builder). Revisit when a second real add-on fixture with plain fields exists; the deep link is honest until then |
 | Results/reports | open (needs chart row) | `GET /forms/{id}/results` + status/chart |
 | Import/export | open | form JSON is GET/POST of `/forms`; entry CSV via a shim |
 | Form editor (drag-drop) | Rung 4 forever | "Edit form in Gravity Forms ↗" |
@@ -293,7 +294,9 @@ Natural next builds inside this ladder (not a ranked product roadmap; see
 2. Richer detail row types (email HTML preview, kv tables).
 3. ~~Surface list row-actions (⋯ menus)~~ ✅ shipped (v0.13.0).
 4. ~~GSMTP bulk log delete~~ ✅ shipped (v0.16.0 open).
-5. GF add-on/feed settings mapper (the original "one mapper, every add-on" payoff).
+5. ~~GF add-on/feed settings mapper~~ — resolved 2026-07-17: the Feeds VIEW shipped
+   (list/toggle/delete, v0.18.0); the config mapper carries a written deferral
+   verdict in the coverage table above.
 6. Only after dogfooding: reconsider the 80% form editor.
 
 ## Risks and open questions
