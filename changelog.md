@@ -3,6 +3,7 @@
 ## **v0.18.0** - Unreleased
 
 ### Added
+* **Status cards across the whole redirects family:** Safe Redirect Manager (rules, status-code mix, regex count), Simple 301 Redirects (rule count and the wildcard toggle) and 301 Redirects by WebFactory (rules, lifetime hits, top redirect, 404 log size) join Redirection with an at-a-glance card, each read from the plugin's own storage.
 * **Status cards across the whole snippets family:** WPCode, FluentSnippets, Custom CSS & JS and Header Footer Code Manager each open with the same at-a-glance card as Code Snippets: active and inactive counts plus each store's own facts (running types or languages, the last change, FluentSnippets' file-based storage note).
 * **Code Snippets status card:** the Snippets surface opens with active, inactive and trashed counts, the scopes currently running, the most recent change, and a warning row whenever safe mode is armed (safe mode means nothing executes, which deserves saying out loud).
 * **Sortable columns on plugin surfaces:** a collection can declare `sortQuery` (an `orderby`/`direction` template) and mark columns with the sort token its route understands. Marked headers become clickable: numeric and date columns start descending, everything else ascending, and a repeat click flips. The Redirects surface is the first consumer, sorting by source, hits and last hit through Redirection's own API.

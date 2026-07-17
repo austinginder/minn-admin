@@ -73,6 +73,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Safe Redirect Manager',
 		'icon'       => 'shuffle',
 		'cap'        => 'manage_options',
+		// Status card (v0.18.0): family parity with Redirection.
+		'status'     => array( 'route' => 'minn-admin/v1/srm/status' ),
 		'collection' => array(
 			'route'    => 'minn-admin/v1/srm/redirects',
 			'itemsKey' => 'items',
@@ -137,6 +139,46 @@ add_action( 'rest_api_init', function () {
 	$perm = function () {
 		return current_user_can( 'manage_options' );
 	};
+
+	// Status card: counts over SRM's redirect_rule CPT — status-code mix and
+	// regex-rule count from their own meta keys. SRM stores no hit counts,
+	// so the card honestly stops at rules.
+	register_rest_route( 'minn-admin/v1', '/srm/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			global $wpdb;
+			$total = (int) $wpdb->get_var(
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'redirect_rule' AND post_status = 'publish'"
+			);
+			$rows = array(
+				array( 'label' => 'Redirect rules', 'value' => (string) $total ),
+			);
+			$codes = $wpdb->get_results(
+				"SELECT pm.meta_value AS code, COUNT(*) AS c FROM {$wpdb->posts} p
+				 JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_redirect_rule_status_code'
+				 WHERE p.post_type = 'redirect_rule' AND p.post_status = 'publish'
+				 GROUP BY pm.meta_value ORDER BY c DESC LIMIT 3"
+			);
+			if ( $codes ) {
+				$rows[] = array(
+					'label' => 'Status codes',
+					'value' => implode( ' · ', array_map( function ( $r ) {
+						return $r->c . '×' . $r->code;
+					}, $codes ) ),
+				);
+			}
+			$regex = (int) $wpdb->get_var(
+				"SELECT COUNT(*) FROM {$wpdb->posts} p
+				 JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_redirect_rule_from_regex'
+				 WHERE p.post_type = 'redirect_rule' AND p.post_status = 'publish' AND pm.meta_value = '1'"
+			);
+			if ( $regex ) {
+				$rows[] = array( 'label' => 'Regex rules', 'value' => (string) $regex );
+			}
+			return rest_ensure_response( array( 'rows' => $rows ) );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/srm/redirects', array(
 		array(

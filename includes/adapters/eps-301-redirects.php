@@ -93,6 +93,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => '301 Redirects',
 		'icon'       => 'shuffle',
 		'cap'        => minn_admin_eps301_cap(),
+		// Status card (v0.18.0): family parity with Redirection.
+		'status'     => array( 'route' => 'minn-admin/v1/eps301/status' ),
 		'collection' => array(
 			'route'    => 'minn-admin/v1/eps301/redirects',
 			'itemsKey' => 'items',
@@ -160,6 +162,43 @@ add_action( 'rest_api_init', function () {
 		global $wpdb;
 		return $wpdb->prefix . 'redirects';
 	};
+
+	// Status card: rule counts + lifetime hits from their `count` column.
+	// Rows with status 404 are their 404 LOG, not rules — counted separately,
+	// the same split the list route makes.
+	register_rest_route( 'minn-admin/v1', '/eps301/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () use ( $table ) {
+			global $wpdb;
+			$t = $table();
+			if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) ) {
+				return rest_ensure_response( array( 'rows' => array() ) );
+			}
+			$active   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status IN ('301','302','307')" ); // phpcs:ignore
+			$inactive = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = 'inactive'" ); // phpcs:ignore
+			$hits     = (int) $wpdb->get_var( "SELECT COALESCE(SUM(count),0) FROM {$t} WHERE status IN ('301','302','307','inactive')" ); // phpcs:ignore
+			$misses   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = '404'" ); // phpcs:ignore
+			$rows     = array(
+				array(
+					'label' => 'Redirect rules',
+					'value' => (string) $active,
+					'hint'  => $inactive ? $inactive . ' inactive' : 'all enabled',
+				),
+				array( 'label' => 'Hits, all time', 'value' => number_format_i18n( $hits ) ),
+			);
+			$top = $wpdb->get_row( "SELECT url_from, count FROM {$t} WHERE status IN ('301','302','307') AND count > 0 ORDER BY count DESC LIMIT 1" ); // phpcs:ignore
+			if ( $top ) {
+				$rows[] = array(
+					'label' => 'Top redirect',
+					'value' => '/' . ltrim( (string) $top->url_from, '/' ),
+					'hint'  => number_format_i18n( (int) $top->count ) . ' hits',
+				);
+			}
+			$rows[] = array( 'label' => '404 log', 'value' => number_format_i18n( $misses ) );
+			return rest_ensure_response( array( 'rows' => $rows ) );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/eps301/redirects', array(
 		array(
