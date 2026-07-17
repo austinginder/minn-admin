@@ -2503,10 +2503,12 @@
 				${ tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.filter === id ? ' active' : '' }" data-filter="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>`;
-		// Trash is a quiet text control (one boxed pill strip per row).
+		// Trash is a quiet text control (one boxed pill strip per row),
+		// anchored to the row's right edge with its icon so it reads as a
+		// destination, not a stray word (Austin's floating-link report).
 		const trashHtml = `
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
-				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">Trash</button>
+				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">${ icon( 'trash' ) } Trash</button>
 			</div>`;
 		const filtersHtml = `
 			${ showTax ? taxCombo( 'cat', 'All categories' ) : '' }
