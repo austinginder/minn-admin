@@ -6462,6 +6462,17 @@
 	function surfaceChartHtml( chart ) {
 		if ( ! chart || ! Array.isArray( chart.points ) || ! chart.points.length ) return '';
 		const points = chart.points;
+		// An all-zero window renders invisible bars — 88px of dead card. Say
+		// so in one quiet line instead (Austin's Gravity SMTP test-mode repro:
+		// sandboxed sends never count as sent/failed).
+		if ( ! points.some( ( p ) => ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) > 0 ) ) {
+			const buckets = [ chart.primary, chart.secondary ].filter( Boolean ).map( ( b ) => String( b ).toLowerCase() ).join( ' or ' );
+			return `
+			<div class="minn-sstat-chart">
+				${ chart.title ? `<div class="minn-sstat-label">${ esc( chart.title ) }</div>` : '' }
+				<div class="minn-sstat-hint">${ esc( buckets ? `No ${ buckets } entries in this window yet.` : 'No activity in this window yet.' ) }</div>
+			</div>`;
+		}
 		const dual = !! chart.secondary || points.some( ( p ) => p.secondary != null );
 		const max = Math.max( 1, ...points.map( ( p ) => dual
 			? Math.max( Number( p.value ) || 0, Number( p.secondary ) || 0, ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) )
@@ -6557,11 +6568,15 @@
 					: `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-sstatact="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
 			</div>` : '';
 		if ( ! rows && ! chart && ! cmd && ! actions ) return '';
+		// Rows and actions share the head line — the actions used to sit alone
+		// under the chart, stretching the card (Austin's header-cleanup ask).
 		return `<div class="minn-card minn-surface-status">
-			${ rows ? `<div class="minn-sstat-rows">${ rows }</div>` : '' }
+			${ rows || actions ? `<div class="minn-sstat-head">
+				${ rows ? `<div class="minn-sstat-rows">${ rows }</div>` : '' }
+				${ actions }
+			</div>` : '' }
 			${ chart }
 			${ cmd }
-			${ actions }
 		</div>`;
 	}
 
@@ -7468,12 +7483,16 @@
 		// Users role-picker precedent). Short lists keep the pills.
 		const manyTabs = ss.tabs && ss.tabs.length > 6;
 		const allTab = ss.tabs && ss.tabs.length ? ss.tabs[ 0 ] : null;
+		const switchHtml = surfaceViewSwitchHtml( s, ss );
+		// Below a view switcher the tab strip is the SECOND pill row — it goes
+		// quiet (one boxed strip per screen, the Extensions rule). Without a
+		// switcher it is the row's primary control and keeps the box.
 		const tabsHtml = ss.tabs && ss.tabs.length > 1 ? ( manyTabs ? `
 			<div class="minn-ac minn-tax-select" data-stabcombo>
 				<input class="minn-input minn-ac-input" placeholder="${ esc( allTab ? allTab[ 1 ] : 'All' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>` : `
-			<div class="minn-tabs">
+			<div class="minn-tabs${ switchHtml ? ' minn-quiet-tabs' : '' }">
 				${ ss.tabs.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>` ) : '';
@@ -7489,7 +7508,6 @@
 		const createHtml = coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '';
 		const rowTwo = tabsHtml + filterHtml + searchHtml
 			+ `<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>` + createHtml;
-		const switchHtml = surfaceViewSwitchHtml( s, ss );
 		// With a view switcher AND list controls, the toolbar splits into two
 		// rows (the Extensions pattern): views on top, this view's own
 		// controls underneath. Simple surfaces keep the single row.
@@ -7750,12 +7768,13 @@
 		const tab = ss.settingsTab;
 		const cacheKey = itemScoped ? ss.settingsItem.id + ':' + tab : tab;
 		const data = ss.settingsCache[ cacheKey ];
+		const setSwitch = surfaceViewSwitchHtml( s, ss );
+		// Second pill row under the view switcher goes quiet (list-renderer rule).
 		const setTabsHtml = cfg.tabs.length > 1 ? `
-			<div class="minn-tabs">
+			<div class="minn-tabs${ setSwitch ? ' minn-quiet-tabs' : '' }">
 				${ cfg.tabs.map( ( t ) => `<button class="minn-tab${ tab === t.id ? ' active' : '' }" data-ssettab="${ esc( t.id ) }">${ esc( t.label ) }</button>` ).join( '' ) }
 			</div>` : '';
 		const setMetaHtml = itemScoped ? `<div class="minn-toolbar-meta">${ esc( ss.settingsItem.label || '' ) } · ${ esc( cfg.label || 'Settings' ) }</div>` : '';
-		const setSwitch = surfaceViewSwitchHtml( s, ss );
 		// Same two-row split as the list renderer: views on top, this view's
 		// own tabs (and the item label) underneath.
 		const head = setSwitch && ( setTabsHtml || setMetaHtml )
