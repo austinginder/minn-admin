@@ -555,7 +555,11 @@ class Minn_Admin {
 		$roles = array_values( $user->roles );
 		$role  = $roles ? wp_roles()->role_names[ $roles[0] ] ?? $roles[0] : '';
 
-		$block_forms = self::filter_block_forms( apply_filters( 'minn_admin_block_forms', array() ) );
+		// Raw forms drive insertable_blocks' candidacy (so its shared render
+		// probe caches per SITE, not per user); the per-user-filtered copy is
+		// only the descriptor payload sent to the client. See insertable_blocks.
+		$raw_block_forms = apply_filters( 'minn_admin_block_forms', array() );
+		$block_forms     = self::filter_block_forms( $raw_block_forms );
 
 		$boot = array(
 			'restUrl'  => esc_url_raw( rest_url() ),
@@ -759,7 +763,7 @@ class Minn_Admin {
 			 * Dynamic third-party blocks the editor can insert with no adapter
 			 * (search-only slash-menu entries). See insertable_blocks().
 			 */
-			'insertBlocks' => self::insertable_blocks( $block_forms ),
+			'insertBlocks' => self::insertable_blocks( $raw_block_forms ),
 			/**
 			 * Post formats the active theme supports (drives the editor's
 			 * Format picker). Empty when the theme declares no post-format
@@ -971,6 +975,12 @@ class Minn_Admin {
 	 * @param array $block_forms The applied `minn_admin_block_forms` value.
 	 * @return array[] Sorted list of { name, title, ns }.
 	 */
+	/**
+	 * @param array $block_forms RAW (unfiltered) block-form descriptors. Pass
+	 *   the unfiltered set: candidacy keys the shared render-probe transient,
+	 *   so a per-user slash hide must not change it (the per-user filtering is
+	 *   applied to the OUTPUT below, after the cache).
+	 */
 	public static function insertable_blocks( $block_forms ) {
 		$candidates = array();
 		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $type ) {
@@ -1062,7 +1072,12 @@ class Minn_Admin {
 	 * block-form descriptor names, block pattern prefixes, and editor-command
 	 * namespaces (the four sources the slash menu / block picker draw from).
 	 */
+	private static $slash_ns_cache = null;
+
 	public static function slash_namespaces() {
+		if ( null !== self::$slash_ns_cache ) {
+			return self::$slash_ns_cache;
+		}
 		$ns = array();
 		foreach ( array_keys( WP_Block_Type_Registry::get_instance()->get_all_registered() ) as $name ) {
 			$p = strtok( (string) $name, '/' );
@@ -1092,7 +1107,11 @@ class Minn_Admin {
 				}
 			}
 		}
-		return array_keys( $ns );
+		// Per-request memo: this walks the whole block-type and pattern
+		// registries plus two filters, and a slash hide alone calls it twice
+		// (validation + restore list). The registries are stable per request.
+		self::$slash_ns_cache = array_keys( $ns );
+		return self::$slash_ns_cache;
 	}
 
 	/**

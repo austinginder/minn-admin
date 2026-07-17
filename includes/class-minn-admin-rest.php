@@ -1459,10 +1459,11 @@ class Minn_Admin_REST {
 	 * picker, design libraries).
 	 */
 	public static function editor_blocks() {
-		$block_forms = Minn_Admin::filter_block_forms( apply_filters( 'minn_admin_block_forms', array() ) );
+		$raw_block_forms = apply_filters( 'minn_admin_block_forms', array() );
+		$block_forms     = Minn_Admin::filter_block_forms( $raw_block_forms );
 		return rest_ensure_response(
 			array(
-				'insertBlocks'    => Minn_Admin::insertable_blocks( $block_forms ),
+				'insertBlocks'    => Minn_Admin::insertable_blocks( $raw_block_forms ),
 				'blockForms'      => $block_forms,
 				'designs'         => Minn_Admin::design_sources(),
 				'editorCommands'  => Minn_Admin::editor_commands(),
@@ -2442,7 +2443,8 @@ class Minn_Admin_REST {
 	private static function integration_state() {
 		// The editor-menu slices ride along so hiding a design source or a
 		// slash namespace repaints in the same round trip as surfaces/panels.
-		$block_forms = Minn_Admin::filter_block_forms( apply_filters( 'minn_admin_block_forms', array() ) );
+		$raw_block_forms = apply_filters( 'minn_admin_block_forms', array() );
+		$block_forms     = Minn_Admin::filter_block_forms( $raw_block_forms );
 		return array(
 			'ok'             => true,
 			'surfaces'       => Minn_Admin_Surfaces::for_current_user(),
@@ -2451,7 +2453,7 @@ class Minn_Admin_REST {
 			'designs'        => Minn_Admin::design_sources(),
 			'editorCommands' => Minn_Admin::editor_commands(),
 			'blockForms'     => $block_forms,
-			'insertBlocks'   => Minn_Admin::insertable_blocks( $block_forms ),
+			'insertBlocks'   => Minn_Admin::insertable_blocks( $raw_block_forms ),
 		);
 	}
 

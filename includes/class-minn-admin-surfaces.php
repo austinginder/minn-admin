@@ -20,9 +20,17 @@ class Minn_Admin_Surfaces {
 	 *
 	 * @return array
 	 */
+	// Per-request memo of the surfaces registry. Registries don't change
+	// within a single request, and a hide POST resolves them up to three
+	// times (validation, boot slice, restore list); the boot pageload twice.
+	private static $all_cache = null;
+
 	public static function all() {
-		$surfaces = apply_filters( 'minn_admin_surfaces', array() );
-		return is_array( $surfaces ) ? $surfaces : array();
+		if ( null === self::$all_cache ) {
+			$surfaces        = apply_filters( 'minn_admin_surfaces', array() );
+			self::$all_cache = is_array( $surfaces ) ? $surfaces : array();
+		}
+		return self::$all_cache;
 	}
 
 	/**
@@ -32,9 +40,13 @@ class Minn_Admin_Surfaces {
 	 */
 	public static function for_current_user() {
 		$hidden = self::hidden_map();
-		// contributions() is a single attributing pass over the same filter
-		// stack apply_filters would run — owner names come along at no extra
-		// filter cost, and the owner nav budget below needs them.
+		// The authoritative surface list comes from all() (apply_filters), the
+		// SAME resolution hide validation and the restore list use, so what
+		// surfaces exist never diverges per endpoint. contributions() runs a
+		// second, best-effort attributing pass ONLY for owner names, which
+		// feed the informational nav budget below (a divergence there can at
+		// most misword a budget note, never hide or 400 a surface).
+		$all    = self::all();
 		$reg    = self::contributions( 'minn_admin_surfaces' );
 		$owners = array();
 		$own    = array();
@@ -43,7 +55,7 @@ class Minn_Admin_Surfaces {
 			$own[ sanitize_key( $raw_id ) ]    = ! empty( $reg['own'][ $raw_id ] );
 		}
 		$out = array();
-		foreach ( ( is_array( $reg['value'] ) ? $reg['value'] : array() ) as $id => $surface ) {
+		foreach ( $all as $id => $surface ) {
 			if ( ! is_array( $surface ) ) {
 				continue;
 			}
@@ -171,45 +183,85 @@ class Minn_Admin_Surfaces {
 
 	const HIDDEN_META = 'minn_admin_hidden_integrations';
 
+	// Per-request memo (uid => map). One hide request rebuilds the map across
+	// design_sources, editor_commands, insertable_blocks and the validation
+	// path; invalidated on every write below so a same-request read after a
+	// hide sees the new value.
+	private static $hidden_cache = array();
+
 	public static function hidden_map( $user_id = 0 ) {
 		$uid = $user_id ? (int) $user_id : get_current_user_id();
 		if ( $uid <= 0 ) {
 			return array();
 		}
-		$h = get_user_meta( $uid, self::HIDDEN_META, true );
-		return is_array( $h ) ? $h : array();
+		if ( array_key_exists( $uid, self::$hidden_cache ) ) {
+			return self::$hidden_cache[ $uid ];
+		}
+		$h                          = get_user_meta( $uid, self::HIDDEN_META, true );
+		self::$hidden_cache[ $uid ] = is_array( $h ) ? $h : array();
+		return self::$hidden_cache[ $uid ];
 	}
 
 	/**
 	 * True when the id names something actually registered right now (and
 	 * visible to this user's caps) — hide never stores junk ids.
 	 */
+	/**
+	 * The raw registry key whose sanitize_key() equals the client-facing id,
+	 * or null. Every id the client holds is sanitize_key'd at emit
+	 * (for_current_user / design_sources / editor_panels_for_current_user) and
+	 * the REST route sanitizes the param again, so a registry key that is not
+	 * already sanitize_key-clean (uppercase, dots) would never match a raw
+	 * isset — the Hide affordance would render but the POST would 400.
+	 */
+	private static function raw_key_matching( $registry, $client_id ) {
+		if ( ! is_array( $registry ) ) {
+			return null;
+		}
+		if ( isset( $registry[ $client_id ] ) ) {
+			return $client_id; // already clean (the common case)
+		}
+		foreach ( array_keys( $registry ) as $raw ) {
+			if ( sanitize_key( (string) $raw ) === $client_id ) {
+				return (string) $raw;
+			}
+		}
+		return null;
+	}
+
 	public static function is_registered_integration( $id ) {
 		if ( ! preg_match( '/^(surface|panel|design|slash):([a-z0-9_-]+)$/', (string) $id, $m ) ) {
 			return false;
 		}
 		if ( 'surface' === $m[1] ) {
 			$all = self::all();
-			if ( ! isset( $all[ $m[2] ] ) ) {
+			$raw = self::raw_key_matching( $all, $m[2] );
+			if ( null === $raw ) {
 				return false;
 			}
-			$cap = isset( $all[ $m[2] ]['cap'] ) ? $all[ $m[2] ]['cap'] : 'manage_options';
+			$cap = isset( $all[ $raw ]['cap'] ) ? $all[ $raw ]['cap'] : 'manage_options';
 			return current_user_can( $cap );
 		}
 		if ( 'design' === $m[1] ) {
 			// Validate against the RAW registry (the resolved list already
 			// filters this user's hides, which would wrongly refuse re-hides).
 			$sources = apply_filters( 'minn_admin_design_sources', array() );
-			return is_array( $sources ) && isset( $sources[ $m[2] ] ) && current_user_can( 'edit_posts' );
+			return null !== self::raw_key_matching( $sources, $m[2] ) && current_user_can( 'edit_posts' );
 		}
 		if ( 'slash' === $m[1] ) {
-			return in_array( $m[2], Minn_Admin::slash_namespaces(), true ) && current_user_can( 'edit_posts' );
-		}
-		$panels = apply_filters( 'minn_admin_editor_panels', array() );
-		if ( ! is_array( $panels ) || ! isset( $panels[ $m[2] ] ) ) {
+			foreach ( Minn_Admin::slash_namespaces() as $ns ) {
+				if ( sanitize_key( (string) $ns ) === $m[2] ) {
+					return current_user_can( 'edit_posts' );
+				}
+			}
 			return false;
 		}
-		$cap = isset( $panels[ $m[2] ]['cap'] ) ? $panels[ $m[2] ]['cap'] : 'edit_posts';
+		$panels = apply_filters( 'minn_admin_editor_panels', array() );
+		$raw    = self::raw_key_matching( $panels, $m[2] );
+		if ( null === $raw ) {
+			return false;
+		}
+		$cap = isset( $panels[ $raw ]['cap'] ) ? $panels[ $raw ]['cap'] : 'edit_posts';
 		return current_user_can( $cap );
 	}
 
@@ -239,18 +291,22 @@ class Minn_Admin_Surfaces {
 			arsort( $h );
 			$h = array_slice( $h, 0, 100, true );
 		}
-		update_user_meta( get_current_user_id(), self::HIDDEN_META, $h );
+		$uid = get_current_user_id();
+		update_user_meta( $uid, self::HIDDEN_META, $h );
+		self::$hidden_cache[ $uid ] = $h; // keep the memo in step with the write
 		return true;
 	}
 
 	public static function unhide_integration( $id ) {
 		$h = self::hidden_map();
 		unset( $h[ (string) $id ] );
+		$uid = get_current_user_id();
 		if ( $h ) {
-			update_user_meta( get_current_user_id(), self::HIDDEN_META, $h );
+			update_user_meta( $uid, self::HIDDEN_META, $h );
 		} else {
-			delete_user_meta( get_current_user_id(), self::HIDDEN_META );
+			delete_user_meta( $uid, self::HIDDEN_META );
 		}
+		self::$hidden_cache[ $uid ] = $h;
 		return true;
 	}
 
@@ -265,8 +321,18 @@ class Minn_Admin_Surfaces {
 		if ( ! $hidden ) {
 			return array();
 		}
+		// Which kinds the user actually hid, so we resolve only the registries
+		// we need: a surface-only hider must not pay a panels + designs filter
+		// run plus a block/pattern-registry walk to render a one-row list.
+		$has = array( 'surface' => false, 'panel' => false, 'design' => false, 'slash' => false );
+		foreach ( array_keys( $hidden ) as $k ) {
+			$p = strtok( (string) $k, ':' );
+			if ( isset( $has[ $p ] ) ) {
+				$has[ $p ] = true;
+			}
+		}
 		$out = array();
-		foreach ( self::all() as $id => $surface ) {
+		foreach ( ( $has['surface'] ? self::all() : array() ) as $id => $surface ) {
 			$key = 'surface:' . sanitize_key( $id );
 			if ( ! isset( $hidden[ $key ] ) ) {
 				continue;
@@ -282,7 +348,7 @@ class Minn_Admin_Surfaces {
 				'sub'   => isset( $surface['sub'] ) ? (string) $surface['sub'] : '',
 			);
 		}
-		$panels = apply_filters( 'minn_admin_editor_panels', array() );
+		$panels = $has['panel'] ? apply_filters( 'minn_admin_editor_panels', array() ) : array();
 		foreach ( ( is_array( $panels ) ? $panels : array() ) as $id => $panel ) {
 			$key = 'panel:' . sanitize_key( $id );
 			if ( ! isset( $hidden[ $key ] ) ) {
@@ -299,11 +365,11 @@ class Minn_Admin_Surfaces {
 				'sub'   => isset( $panel['sub'] ) ? (string) $panel['sub'] : '',
 			);
 		}
-		if ( current_user_can( 'edit_posts' ) ) {
-			// Design libraries and slash namespaces — same still-registered
-			// rule as above (raw registry: the resolved lists already omit
-			// this user's hides).
-			$sources = apply_filters( 'minn_admin_design_sources', array() );
+		if ( ( $has['design'] || $has['slash'] ) && current_user_can( 'edit_posts' ) ) {
+			// Design libraries and slash namespaces: same still-registered
+			// rule as above (raw registry; the resolved lists already omit
+			// this user's hides). Each registry resolves only when hidden.
+			$sources = $has['design'] ? apply_filters( 'minn_admin_design_sources', array() ) : array();
 			foreach ( ( is_array( $sources ) ? $sources : array() ) as $id => $src ) {
 				$key = 'design:' . sanitize_key( $id );
 				if ( ! isset( $hidden[ $key ] ) ) {
@@ -319,7 +385,7 @@ class Minn_Admin_Surfaces {
 					'sub'   => '',
 				);
 			}
-			$live_ns = Minn_Admin::slash_namespaces();
+			$live_ns = $has['slash'] ? Minn_Admin::slash_namespaces() : array();
 			foreach ( $hidden as $key => $ts ) {
 				if ( 0 !== strpos( (string) $key, 'slash:' ) ) {
 					continue;
