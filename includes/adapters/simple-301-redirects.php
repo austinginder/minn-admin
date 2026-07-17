@@ -37,6 +37,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Simple 301 Redirects',
 		'icon'       => 'shuffle',
 		'cap'        => 'manage_options',
+		// Status card (v0.18.0): family parity with Redirection.
+		'status'     => array( 'route' => 'minn-admin/v1/s301/status' ),
 		'collection' => array(
 			'route'    => 'minn-admin/v1/s301/redirects',
 			'itemsKey' => 'items',
@@ -96,6 +98,27 @@ add_action( 'rest_api_init', function () {
 	$perm = function () {
 		return current_user_can( 'manage_options' );
 	};
+
+	// Status card: the whole store is one option array (no hits, no log),
+	// so the honest card is rule count + the wildcard toggle.
+	register_rest_route( 'minn-admin/v1', '/s301/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function () {
+			$rules     = (array) get_option( '301_redirects', array() );
+			$wildcards = get_option( '301_redirects_wildcard', false );
+			return rest_ensure_response( array(
+				'rows' => array(
+					array( 'label' => 'Redirect rules', 'value' => (string) count( $rules ) ),
+					array(
+						'label' => 'Wildcards',
+						'value' => $wildcards ? 'On' : 'Off',
+						'hint'  => $wildcards ? '* patterns match in sources' : '',
+					),
+				),
+			) );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/s301/redirects', array(
 		array(
