@@ -283,6 +283,13 @@
 		$$( '.minn-busy', view ).forEach( ( el ) => el.classList.remove( 'minn-busy' ) );
 	}
 
+	// The list container inside a chrome-preserving view (all view types share
+	// these). On a failed soft reload we replace ITS contents with an error +
+	// Retry, leaving the toolbar/tabs in place.
+	function softListBody( view ) {
+		return view && view.querySelector( '.minn-table, .minn-media-grid, .minn-media-list, .minn-plugin-grid' );
+	}
+
 	async function softListReload( opts ) {
 		const view = opts.view || $( '#minn-view' );
 		if ( typeof opts.clear === 'function' ) opts.clear();
@@ -291,26 +298,37 @@
 		if ( hasChrome ) markListBusy( view );
 		const key = opts.route || '';
 		softPending.set( key, ( softPending.get( key ) || 0 ) + 1 );
-		let failed = false;
+		let ok = false;
 		try {
 			await opts.load();
+			ok = true;
 		} catch ( e ) {
-			failed = true;
-			// A dropped reply (worker recycle, flaky network) must not wipe
-			// the chrome this soft reload kept painted: keep the stale list,
-			// clear the dim, and report — the next tab/filter click retries.
-			// Only a chrome-less view (nothing to preserve) gets the error card.
-			if ( hasChrome ) {
-				unmarkListBusy( view );
-				toast( e && e.message ? e.message : 'Could not load — try again', true );
+			// A dropped reply (worker recycle, flaky network) already ran
+			// clear() (cache nulled) and paintChrome() (the NEW tab is active),
+			// so the stale rows now sit under the wrong active tab with click
+			// handlers bound to the old items. Calling render() would recurse
+			// into the cold-load path and storm on a persistent failure, so
+			// replace only the list body with an error + Retry that re-runs
+			// this exact load. A chrome-less view (nothing to preserve) still
+			// gets the full error card.
+			const body = hasChrome ? softListBody( view ) : null;
+			if ( body ) {
+				body.innerHTML = `<div class="minn-empty">Couldn’t load this list. <button type="button" class="minn-link-btn" data-soft-retry>Retry</button></div>`;
+				const btn = body.querySelector( '[data-soft-retry]' );
+				if ( btn ) btn.addEventListener( 'click', () => { softListReload( opts ); } );
+			} else if ( hasChrome ) {
+				toast( e && e.message ? e.message : 'Could not load. Try again.', true );
 			} else {
 				showErr( e );
 			}
 		} finally {
 			softPending.set( key, Math.max( 0, ( softPending.get( key ) || 1 ) - 1 ) );
 		}
-		if ( failed ) return;
-		if ( ! opts.route || state.route === opts.route ) opts.render();
+		// Clear the dim only once no reload on this route is still in flight,
+		// so a concurrent reload (search debounce racing a tab click) keeps its
+		// own dim instead of losing it to whichever finishes first.
+		if ( hasChrome && ! softLoadPending( key ) ) unmarkListBusy( view );
+		if ( ok && ( ! opts.route || state.route === opts.route ) ) opts.render();
 	}
 
 	const PALETTE_COLORS = [ '#46b881', '#5b9be0', '#e0a458', '#d073c0', '#8a80f8', '#e46b6b' ];
@@ -2239,6 +2257,12 @@
 					.filter( ( t ) => t.viewable && t.rest_base && ! HIDDEN_TYPES.includes( t.slug ) )
 					.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: t.name } ) );
 				return state.cache.types;
+			} ).catch( ( e ) => {
+				// Don't cache the rejection: a single failed types fetch (worker
+				// recycle, transient 500) would otherwise poison every later
+				// caller for the session (the ⌘K palette search bricked on this).
+				typesPromise = null;
+				throw e;
 			} );
 		}
 		return typesPromise;
@@ -21044,9 +21068,9 @@
 					B.caps.editPages ? soft( 'wp/v2/pages?' + dq ) : [],
 				] );
 				if ( ! state.paletteOpen ) return;
-				const typeFor = ( slug ) => ( types || [] ).find( ( x ) => x.slug === slug );
+				const bySlug = new Map( ( types || [] ).map( ( t ) => [ t.slug, t ] ) );
 				const items = ( Array.isArray( found ) ? found : [] ).map( ( r ) => {
-					const t = typeFor( r.subtype );
+					const t = bySlug.get( r.subtype );
 					if ( ! t ) return null;
 					return {
 						label: decodeEntities( String( r.title || '' ) ) || '(no title)',
@@ -21071,7 +21095,17 @@
 					renderPaletteList( input.value );
 				}
 			} catch ( e ) {
-				// Content search is best-effort — commands keep working.
+				// Content search is best-effort; commands keep working. Settle
+				// this query to an empty result (not a perpetual "Searching…")
+				// so the list shows an honest state; loadTypes clears its own
+				// cached rejection, so the next keystroke retries cleanly.
+				if ( state.paletteOpen ) {
+					paletteSearch = { q, items: [] };
+					const input = $( '#minn-palette-input' );
+					if ( input && input.value.trim().toLowerCase() === q ) {
+						renderPaletteList( input.value );
+					}
+				}
 			}
 		}, 250 );
 	}
@@ -22150,9 +22184,11 @@
 						${ sec && sec.adminUrl && ! isActivity ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'wp-admin' ) } ↗</a>` : '' }
 						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'log' ) } ↗</a>` : '' }
 						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( l.url ) }" target="_blank" rel="noopener">${ esc( hrefLabel( l.label, l.url ) ) }</a>` ).join( '' ) }
-						${ visibleActions.map( ( { a, i } ) => a.href
-							? `<a class="minn-btn-soft" href="${ esc( surfaceFillHref( a.href, it ) ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, surfaceFillHref( a.href, it ) ) ) }</a>`
-							: `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>` ).join( '' ) }
+						${ visibleActions.map( ( { a, i } ) => {
+							if ( ! a.href ) return `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>`;
+							const href = surfaceFillHref( a.href, it );
+							return `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, href ) ) }</a>`;
+						} ).join( '' ) }
 					</div>` : '' }` }
 				</div>
 			</div>`;

@@ -186,5 +186,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'stale content response never clobbers the Media view', guard.mediaChrome && ! guard.contentTabs, JSON.stringify( guard ) );
 	await page.unroute( '**/wp/v2/posts*' );
 
+	/* ===== Failed reload: no stale rows under the new state; Retry recovers =====
+	 * A dropped reply used to leave the previous rows painted (wrong-item
+	 * detail actions) with the mutated state, and re-click was a no-op. A
+	 * search change (always a fresh query) is the deterministic trigger. */
+	await page.click( '.minn-nav-btn[data-nav="content"]' );
+	await page.waitForSelector( '.minn-table-row', { timeout: 15000 } );
+	let failNextSearch = true;
+	await page.route( '**/wp/v2/**', async ( route ) => {
+		if ( failNextSearch && /[?&]search=zzsoftfail/.test( route.request().url() ) ) {
+			failNextSearch = false;
+			await route.abort();
+		} else {
+			await route.continue().catch( () => {} );
+		}
+	} );
+	await page.fill( '#minn-content-search', 'zzsoftfail' );
+	await page.waitForSelector( '#minn-view [data-soft-retry]', { timeout: 15000 } );
+	const failState = await page.evaluate( () => ( {
+		rows: document.querySelectorAll( '.minn-table-row' ).length,
+		toolbar: !! document.querySelector( '#minn-view .minn-toolbar' ),
+		searchKept: ( document.querySelector( '#minn-content-search' ) || {} ).value === 'zzsoftfail',
+	} ) );
+	t.check( 'failed reload shows Retry, drops stale rows, keeps the toolbar + search',
+		failState.rows === 0 && failState.toolbar && failState.searchKept, JSON.stringify( failState ) );
+	await page.click( '#minn-view [data-soft-retry]' );
+	await page.waitForFunction( () => ( document.querySelector( '.minn-empty' ) || document.querySelector( '.minn-table-row' ) )
+		&& ! document.querySelector( '[data-soft-retry]' ), null, { timeout: 15000 } );
+	t.check( 'Retry re-runs the load and the list recovers', true );
+	await page.unroute( '**/wp/v2/**' );
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
