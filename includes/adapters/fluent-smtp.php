@@ -171,9 +171,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'created_at', 'label' => 'Date', 'format' => 'ago' ),
 			),
 			'detail'    => array(
-				'detailRoute' => 'minn-admin/v1/fluent-smtp/emails/{id}',
-				'messageKey'  => 'message',
-				'skip'        => array( 'message' ),
+				// v0.18.0: server-built sections (status pill, sandboxed HTML
+				// body). The flat /emails/{id} route stays for API consumers.
+				'sectionsRoute' => 'minn-admin/v1/fluent-smtp/emails/{id}/view',
 			),
 			'actions'   => array(
 				array(
@@ -301,6 +301,63 @@ add_action( 'rest_api_init', function () {
 			}, $rows ? $rows : array() );
 
 			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
+	) );
+
+	// Sections view (v0.18.0 row types): status pill + sandboxed HTML body.
+	// The flat /emails/{id} route below stays for API consumers.
+	register_rest_route( 'minn-admin/v1', '/fluent-smtp/emails/(?P<id>\d+)/view', array(
+		'methods'             => 'GET',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
+			global $wpdb;
+			$row = $wpdb->get_row( $wpdb->prepare(
+				"SELECT id, `to`, `from`, subject, body, status, response, source, retries, created_at FROM {$table} WHERE id = %d", // phpcs:ignore
+				(int) $request['id']
+			) );
+			if ( ! $row ) {
+				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+			}
+			$delivery = array(
+				array( 'label' => 'Status', 'value' => $row->status, 'type' => 'pill' ),
+				array( 'label' => 'To', 'value' => minn_admin_fluent_smtp_recipients( $row->to ) ),
+				array( 'label' => 'From', 'value' => (string) $row->from ),
+			);
+			if ( '' !== (string) $row->source ) {
+				$delivery[] = array( 'label' => 'Source', 'value' => (string) $row->source );
+			}
+			if ( (int) $row->retries > 0 ) {
+				$delivery[] = array( 'label' => 'Retries', 'value' => (string) (int) $row->retries );
+			}
+			$delivery[] = array( 'label' => 'Date', 'value' => (string) $row->created_at );
+			$body     = (string) $row->body;
+			$sections = array(
+				array( 'title' => 'Delivery', 'rows' => $delivery ),
+				array(
+					'title' => 'Message',
+					'rows'  => array(
+						array( 'label' => 'Subject', 'value' => (string) $row->subject ),
+						preg_match( '/<\/?[a-z][^>]*>/i', $body )
+							? array( 'label' => 'Body', 'value' => $body, 'type' => 'html-preview' )
+							: array( 'label' => 'Body', 'value' => $body, 'type' => 'code' ),
+					),
+				),
+			);
+			// Provider reply: the same regex peek as the flat route — never
+			// the raw serialized blob.
+			$response = (string) $row->response;
+			if ( preg_match( '/"(?:message|code)";s:\d+:"([^"]*)"/', $response, $m ) ) {
+				$response = $m[1];
+			} elseif ( strlen( $response ) > 200 || preg_match( '/^[aOs]:\d+/', $response ) ) {
+				$response = '';
+			}
+			if ( '' !== $response ) {
+				$sections[] = array(
+					'title' => 'Provider reply',
+					'rows'  => array( array( 'label' => 'Response', 'value' => $response ) ),
+				);
+			}
+			return rest_ensure_response( array( 'sections' => $sections ) );
 		},
 	) );
 
