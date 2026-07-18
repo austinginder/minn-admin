@@ -50,6 +50,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/meta-box.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/pods.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/seriously-simple-podcasting.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/the-events-calendar.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/wp-job-manager.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/safe-svg.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/koko-analytics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-statistics.php';
