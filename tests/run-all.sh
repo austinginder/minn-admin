@@ -43,6 +43,14 @@ echo "Running $total suites sequentially → $OUT" | tee "$OUT/summary.txt"
 
 for f in *.test.js; do
 	i=$((i + 1))
+	# Resume: a suite already recorded as PASS in this output dir is skipped
+	# (FAILs and unrecorded suites run), so an interrupted run picks up
+	# where it stopped when relaunched with the same output dir.
+	if grep -qE "] $f +PASS" "$OUT/summary.txt" 2>/dev/null; then
+		printf '[%3d/%s] %-40s %-12s\n' "$i" "$total" "$f" "SKIP(done)" | tee -a "$OUT/summary.txt"
+		pass=$((pass + 1))
+		continue
+	fi
 	settle
 	start=$(date +%s)
 	status=FAIL
