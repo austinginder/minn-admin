@@ -21,8 +21,9 @@
       "step": "setSiteOptions",
       "options": {
         "blogname": "Minn Admin Playground",
-        "blogdescription": "A disposable WordPress demo for Minn Admin.",
-        "permalink_structure": "/%postname%/"
+        "blogdescription": "Fast, focused and beautiful WordPress admin.",
+        "permalink_structure": "/%postname%/",
+        "timezone_string": "America/Chicago"
       }
     },
     {
@@ -41,6 +42,16 @@
       "step": "installPlugin",
       "pluginData": {
         "resource": "wordpress.org/plugins",
+        "slug": "koko-analytics"
+      },
+      "options": {
+        "activate": true
+      }
+    },
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "wordpress.org/plugins",
         "slug": "simple-history"
       },
       "options": {
@@ -52,6 +63,26 @@
       "pluginData": {
         "resource": "wordpress.org/plugins",
         "slug": "redirection"
+      },
+      "options": {
+        "activate": true
+      }
+    },
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "wordpress.org/plugins",
+        "slug": "code-snippets"
+      },
+      "options": {
+        "activate": true
+      }
+    },
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "wordpress.org/plugins",
+        "slug": "user-switching"
       },
       "options": {
         "activate": true
@@ -114,12 +145,8 @@
       "command": "wp comment create --comment_post_ID=1 --comment_author='Dana Lee' --comment_content='Love the new dashboard!' --comment_approved=0 --user=admin"
     },
     {
-      "step": "wp-cli",
-      "command": "wp option update timezone_string 'America/Chicago' --user=admin"
-    },
-    {
-      "step": "wp-cli",
-      "command": "wp option update blogdescription 'Fast, focused and beautiful WordPress admin.' --user=admin"
+      "step": "runPHP",
+      "code": "<?php require '/wordpress/wp-load.php'; do_action( 'koko_analytics_prune_data' ); global $wpdb; $p = $wpdb->prefix; if ( $wpdb->get_var( \"SHOW TABLES LIKE '{$p}koko_analytics_site_stats'\" ) ) { mt_srand( 7 ); $paths = array( '/', '/meet-the-new-dashboard/', '/one-vanilla-js-file/', '/about-minn-admin/' ); $path_ids = array(); foreach ( $paths as $pa ) { $wpdb->query( $wpdb->prepare( \"INSERT IGNORE INTO {$p}koko_analytics_paths (path) VALUES (%s)\", $pa ) ); $path_ids[ $pa ] = (int) $wpdb->get_var( $wpdb->prepare( \"SELECT id FROM {$p}koko_analytics_paths WHERE path = %s\", $pa ) ); } $refs = array( 'https://news.ycombinator.com/', 'https://www.google.com/', 'https://github.com/', 'https://x.com/', 'https://wordpress.org/' ); $ref_ids = array(); foreach ( $refs as $r ) { $wpdb->query( $wpdb->prepare( \"INSERT IGNORE INTO {$p}koko_analytics_referrer_urls (url) VALUES (%s)\", $r ) ); $ref_ids[] = (int) $wpdb->get_var( $wpdb->prepare( \"SELECT id FROM {$p}koko_analytics_referrer_urls WHERE url = %s\", $r ) ); } $post_map = array(); foreach ( array( 'meet-the-new-dashboard', 'one-vanilla-js-file', 'about-minn-admin' ) as $slug ) { $po = get_page_by_path( $slug, OBJECT, array( 'post', 'page' ) ); $post_map[ '/' . $slug . '/' ] = $po ? (int) $po->ID : 0; } for ( $i = 64; $i >= 0; $i-- ) { $d = wp_date( 'Y-m-d', time() - $i * DAY_IN_SECONDS ); $wave = 1 + 0.35 * sin( $i / 3.1 ); $v = (int) round( ( 210 + mt_rand( 0, 130 ) ) * $wave ); $pv = (int) round( $v * ( 1.9 + mt_rand( 0, 40 ) / 100 ) ); $wpdb->query( $wpdb->prepare( \"REPLACE INTO {$p}koko_analytics_site_stats (date, visitors, pageviews) VALUES (%s,%d,%d)\", $d, $v, $pv ) ); $split = array( 0.42, 0.27, 0.19, 0.12 ); $j = 0; foreach ( $paths as $pa ) { $vv = max( 1, (int) round( $v * $split[ $j ] ) ); $wpdb->query( $wpdb->prepare( \"REPLACE INTO {$p}koko_analytics_post_stats (date, post_id, visitors, pageviews, path_id) VALUES (%s,%d,%d,%d,%d)\", $d, isset( $post_map[ $pa ] ) ? $post_map[ $pa ] : 0, $vv, (int) round( $vv * 1.6 ), $path_ids[ $pa ] ) ); $j++; } foreach ( $ref_ids as $k => $rid ) { $rv = max( 1, (int) round( $v * ( 0.16 - $k * 0.025 ) ) ); $wpdb->query( $wpdb->prepare( \"REPLACE INTO {$p}koko_analytics_referrer_stats (date, id, unique_hits, hits) VALUES (%s,%d,%d,%d)\", $d, $rid, $rv, (int) round( $rv * 1.3 ) ) ); } } } if ( function_exists( 'Code_Snippets\\\\save_snippet' ) ) { $mk = function ( $name, $desc, $code, $active ) { $s = new \\Code_Snippets\\Snippet(); $s->name = $name; $s->desc = $desc; $s->code = $code; $s->scope = 'global'; $s->active = $active; \\Code_Snippets\\save_snippet( $s ); }; $mk( 'Add footer credit', 'Prints a small HTML comment in the footer.', \"add_action( 'wp_footer', function () {\\n\\techo '<!-- Crafted with Minn Admin -->';\\n} );\", true ); $mk( 'Disable emoji scripts', 'Removes the emoji detection script and styles.', \"remove_action( 'wp_head', 'print_emoji_detection_script', 7 );\\nremove_action( 'wp_print_styles', 'print_emoji_styles' );\", true ); $mk( 'Trim dashboard widgets (draft)', 'Example snippet left inactive on purpose.', \"add_action( 'wp_dashboard_setup', function () {\\n\\tremove_meta_box( 'dashboard_primary', 'dashboard', 'side' );\\n} );\", false ); }"
     }
   ]
 }
