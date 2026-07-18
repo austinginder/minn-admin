@@ -9501,6 +9501,11 @@
 		const view = $( '#minn-view' );
 		const lic = state.cache.licenses;
 		if ( ! lic ) {
+			// A soft reload (tab switch into Licenses) owns the view while its
+			// load is in flight — a stray cold paint here would fire a SECOND
+			// loadLicenses whose late render detaches whatever the user opened
+			// (e.g. an in-progress activate paste form). Rule 77 guard.
+			if ( softLoadPending( 'extensions' ) ) return;
 			// Cold paint (direct nav / deep-link): keep tab chrome, same as soft switch.
 			view.innerHTML = extTabLoadingHtml( 'licenses' );
 			bindExtTabs( view );
