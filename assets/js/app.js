@@ -20516,6 +20516,13 @@
 				ic, label, meta: '', action, keywords: keywords || [],
 			} );
 		} );
+		// Async sources (design libraries, patterns) MERGE IN when they
+		// arrive — the picker never blocks Basics/blocks/commands on the
+		// network, and one failed or slow source can only cost its own
+		// group, never the whole picker (a cold boot congests the h1 pool
+		// for tens of seconds; the old all-or-nothing await sat on
+		// "Loading…" the entire time and a rejected CDN killed it outright).
+		const lateFills = [];
 		if ( blocksMode ) {
 			Object.keys( B.blockForms || {} ).forEach( ( name ) => {
 				const ins = ( B.blockForms[ name ] || {} ).insert;
@@ -20532,29 +20539,26 @@
 					action: { block: b.name, template: `<!-- wp:${ b.name } /-->` },
 				} );
 			} );
-			const sources = designSources();
-			const [ designSets, pats ] = await Promise.all( [
-				Promise.all( sources.map( ( src ) => loadDesigns( src ) ) ),
-				loadBlockPatterns(),
-			] );
-			if ( ! pickerEl ) return; // closed while loading
-			designSets.forEach( ( designs, si ) => {
-				const src = sources[ si ];
-				const label = src.label || prettyNs( src.id );
-				designs.forEach( ( d ) => {
-					groupFor( 'd:' + src.id, label + ' · designs', { id: 'design:' + src.id, label } ).items.push( {
-						ic: icon( 'block' ), label: d.label, meta: d.category || '',
-						action: { design: d.id, src: src.id },
+			designSources().forEach( ( src ) => {
+				lateFills.push( loadDesigns( src ).then( ( designs ) => {
+					const label = src.label || prettyNs( src.id );
+					( designs || [] ).forEach( ( d ) => {
+						groupFor( 'd:' + src.id, label + ' · designs', { id: 'design:' + src.id, label } ).items.push( {
+							ic: icon( 'block' ), label: d.label, meta: d.category || '',
+							action: { design: d.id, src: src.id },
+						} );
+					} );
+				} ).catch( () => {} ) );
+			} );
+			lateFills.push( loadBlockPatterns().then( ( pats ) => {
+				( pats || [] ).forEach( ( pt ) => {
+					if ( pt.postTypes && ed.type && ! pt.postTypes.includes( ed.type ) ) return;
+					groupFor( 'p:' + pt.ns, prettyNs( pt.ns ) + ' · patterns', nsHide( pt.ns ) ).items.push( {
+						ic: icon( 'block' ), label: pt.title, meta: '',
+						action: { pattern: pt.name },
 					} );
 				} );
-			} );
-			pats.forEach( ( pt ) => {
-				if ( pt.postTypes && ed.type && ! pt.postTypes.includes( ed.type ) ) return;
-				groupFor( 'p:' + pt.ns, prettyNs( pt.ns ) + ' · patterns', nsHide( pt.ns ) ).items.push( {
-					ic: icon( 'block' ), label: pt.title, meta: '',
-					action: { pattern: pt.name },
-				} );
-			} );
+			} ).catch( () => {} ) );
 		}
 
 		const renderGroups = ( q ) => {
@@ -20582,6 +20586,14 @@
 		};
 		renderGroups( '' );
 		searchInput.addEventListener( 'input', () => renderGroups( searchInput.value ) );
+		// Late sources repaint in place, keeping the typed query and the
+		// scroll position (an arriving group must not yank the list).
+		lateFills.forEach( ( p ) => p.then( () => {
+			if ( ! pickerEl ) return; // closed while loading
+			const keep = bpBody.scrollTop;
+			renderGroups( searchInput.value );
+			bpBody.scrollTop = keep;
+		} ) );
 
 		// Per-user hide (v1.0 gate G2): right-click a plugin group's heading.
 		// One slash namespace can span blocks + patterns + commands groups —
