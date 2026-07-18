@@ -18,8 +18,9 @@ MINN_TEST_PASS=<admin password> node editor-sidebar.test.js # slug, discussion, 
 MINN_TEST_PASS=<admin password> node system.test.js     # diagnostics endpoint + page + copy-report
 MINN_TEST_PASS=<admin password> node undo-toast.test.js # structural-deletion Undo (islands, tables)
 
-# all suites
-for f in *.test.js; do MINN_TEST_PASS=… node "$f" || break; done
+# all suites (release pre-flight / overnight): sequential, settle-guarded,
+# one retry per failed suite, full logs + summary in the output dir
+MINN_TEST_PASS=… ./run-all.sh /tmp/minn-run
 ```
 
 Environment (all optional except the password):
