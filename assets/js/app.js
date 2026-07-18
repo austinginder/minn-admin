@@ -1098,6 +1098,7 @@
 			// Theme: System (follows OS). Distinct from sun/moon so a dark OS
 			// doesn't look like an explicit Dark lock.
 			monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+			eye: '<path d="M2.06 12.35a1 1 0 0 1 0-.7C3.42 8.1 7.35 5 12 5s8.58 3.1 9.94 6.65a1 1 0 0 1 0 .7C20.58 15.9 16.65 19 12 19s-8.58-3.1-9.94-6.65Z"/><circle cx="12" cy="12" r="3"/>',
 			// Half-filled circle: the auto/system theme glyph (the monitor icon
 			// read as "view the site" — Austin kept clicking it for the front end).
 			contrast: '<circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor" stroke-width="0"/>',
@@ -5136,7 +5137,7 @@
 					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( o.status.replace( '-', ' ' ) ) }</span></div>
 					<div class="minn-row-meta">${ ( o.line_items || [] ).reduce( ( n, li ) => n + ( li.quantity || 0 ), 0 ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
-					<div class="minn-row-arrow">›</div>
+					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-qv="${ o.id }" type="button" title="Quick view">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? 'No orders match “' + esc( state.orderSearch ) + '”.' : 'No orders here.' }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'order' ) }`;
@@ -5198,11 +5199,19 @@
 			} );
 		}
 		// Clicking an order is navigation now — the /orders/{id} page is the
-		// primary detail surface; the modal survives as right-click Quick view.
+		// primary detail surface; the modal survives as Quick view (the row's
+		// hover eye button and the right-click menu).
 		$$( '[data-order]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				const id = parseInt( row.dataset.order, 10 );
 				if ( id ) go( 'orders/' + id );
+			} )
+		);
+		$$( '[data-qv]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', ( e ) => {
+				e.stopPropagation(); // the row click would navigate
+				const o = c.items.find( ( x ) => x.id === parseInt( btn.dataset.qv, 10 ) );
+				if ( o ) openOrderModal( o );
 			} )
 		);
 		// Right-click an order: quick view + the common status moves.

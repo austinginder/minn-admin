@@ -220,10 +220,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			await page.keyboard.press( 'Escape' );
 		}
 
-		// Quick view: the modal now lives on the row's right-click menu.
+		// Quick view: the row's hover eye button is the one-click path.
 		await page.click( '#minn-op-back' );
 		await page.waitForSelector( '#minn-order-search', { timeout: 15000 } );
-		await page.waitForSelector( '.minn-table-row[data-order]', { timeout: 15000 } );
+		await page.waitForSelector( '.minn-table-row[data-order] [data-qv]', { timeout: 15000 } );
+		await page.click( '.minn-table-row[data-order] [data-qv]' );
+		await page.waitForSelector( '#minn-modal-overlay .minn-modal.wide', { timeout: 20000 } );
+		const eyeQuick = await page.evaluate( () => ( {
+			modal: !! document.querySelector( '#minn-modal-overlay .minn-modal.wide' ),
+			stillOnList: location.pathname.indexOf( '/orders/' ) === -1 || /orders\/?$/.test( location.pathname ),
+		} ) );
+		t.check( 'row eye button opens Quick view without navigating', eyeQuick.modal && eyeQuick.stillOnList, JSON.stringify( eyeQuick ) );
+		await page.click( '#minn-modal-close' );
+		await page.waitForFunction( () => ! document.querySelector( '#minn-modal-overlay' ), null, { timeout: 8000 } );
+
+		// And it still lives on the right-click menu.
 		await page.click( '.minn-table-row[data-order]', { button: 'right' } );
 		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
 		const menuLabels = await page.$$eval( '.minn-ctx-menu button', ( els ) => els.map( ( e ) => e.textContent.trim() ) );

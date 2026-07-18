@@ -409,6 +409,9 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-table-row:hover .minn-row-more { opacity: 1; }
 .minn-row-more:hover { background: var(--hover); color: var(--text); }
+/* Hover eye = one-click Quick view (orders); same reveal as the ⋯ button. */
+.minn-row-quick { display: inline-flex; align-items: center; justify-content: center; }
+.minn-row-quick svg { width: 14px; height: 14px; }
 .minn-new-menu-label {
   margin: 5px 4px 1px; padding: 4px 7px 2px; border-top: 1px solid var(--border);
   color: var(--text3); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
