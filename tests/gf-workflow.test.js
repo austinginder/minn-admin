@@ -83,13 +83,24 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		e0 = await entry( ids[ 0 ] );
 		t.check( 'star persisted through GF properties PUT', String( e0.is_starred ) === '1', String( e0.is_starred ) );
 
-		// Reopen: the when-gate flips to Unstar.
+		// Reopen: the when-gate flips to Unstar. The action clears the list
+		// cache and reloads, but v0.16 soft-reload keeps the old rows painted
+		// until the fresh fetch lands, so reopening can race a stale row —
+		// retry the reopen until the detail reflects the committed star.
 		await page.waitForSelector( '[data-scheck]', { timeout: 20000 } );
-		await openEntry();
-		t.check( 'when-gate flips to Unstar', await page.evaluate( () => {
-			const labels = [ ...document.querySelectorAll( '[data-saction]' ) ].map( ( b ) => b.textContent.trim() );
-			return labels.includes( 'Unstar' ) && ! labels.includes( 'Star' );
-		} ) );
+		let flipped = false;
+		for ( let i = 0; i < 6 && ! flipped; i++ ) {
+			await openEntry();
+			flipped = await page.evaluate( () => {
+				const labels = [ ...document.querySelectorAll( '[data-saction]' ) ].map( ( b ) => b.textContent.trim() );
+				return labels.includes( 'Unstar' ) && ! labels.includes( 'Star' );
+			} );
+			if ( ! flipped ) {
+				await page.click( '#minn-modal-close' ).catch( () => {} );
+				await page.waitForTimeout( 800 );
+			}
+		}
+		t.check( 'when-gate flips to Unstar', flipped );
 		await page.click( '#minn-modal-close' );
 
 		/* ===== Notes section ===== */

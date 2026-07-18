@@ -59,17 +59,24 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 			( window.MINN.designs || [] ).some( ( s ) => s.id === 'stackable' && !! s.route ) ) );
 		t.check( 'designs endpoint lists free tier', probe.count > 50, probe.count + ' designs' );
 
-		// Search surfaces a design (list loads lazily — poll for it).
+		// Search surfaces a design. The design list loads lazily into the
+		// slash items array; a full zero-match query typed at once closes the
+		// menu before the list arrives (rule 40), so open with "/" first, let
+		// the designs load, THEN narrow — re-triggering the last char each
+		// poll so a late list still filters in.
 		await freshParagraph( page );
-		await page.keyboard.type( '/call to action', { delay: 30 } );
+		await page.keyboard.type( '/', { delay: 30 } );
+		await page.waitForTimeout( 400 );
+		await page.keyboard.type( 'call to action', { delay: 40 } );
 		let found = false;
-		for ( let i = 0; i < 20 && ! found; i++ ) {
-			await page.waitForTimeout( 250 );
+		for ( let i = 0; i < 30 && ! found; i++ ) {
+			await page.waitForTimeout( 300 );
 			found = await page.$$eval( '.minn-slash-item', ( els ) =>
 				els.some( ( e ) => e.textContent.includes( 'Call to Action 1' ) && e.textContent.includes( 'stackable' ) )
 			).catch( () => false );
-			// Re-trigger the query so late-arriving designs get filtered in.
-			if ( ! found && i === 8 ) { await page.keyboard.press( 'Backspace' ); await page.keyboard.type( 'n', { delay: 30 } ); }
+			// Jiggle the last char every few polls so a late-arriving design
+			// list reopens the menu and re-filters.
+			if ( ! found && i % 4 === 3 ) { await page.keyboard.press( 'Backspace' ); await page.keyboard.type( 'n', { delay: 30 } ); }
 		}
 		t.check( 'design entry surfaces with namespace badge', found );
 
