@@ -1108,10 +1108,19 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 ```
 
 Supported field types: `text`, `textarea`, `number`, `range`, `email`, `url`, `select`, `radio`,
-`true_false`. Report anything else in the `locked` count; Minn shows "N advanced fields — edit
-in wp-admin ↗" rather than rendering something unsafe. Values ride the normal post save
-(autosave included), so your plugin only needs its values readable/writable on the post REST
-response (`register_rest_field` or, for ACF, the field group's "Show in REST API" toggle).
+`true_false`, `suggest`. Report anything else in the `locked` count; Minn shows "N advanced
+fields — edit in wp-admin ↗" rather than rendering something unsafe. Values ride the normal
+post save (autosave included), so your plugin only needs its values readable/writable on the
+post REST response (`register_rest_field` or, for ACF, the field group's "Show in REST API"
+toggle).
+
+**`suggest` (since 0.18.0)** is an async-searching picker for linked records whose option
+list is too large or too live for a `select` (venues, organizers, related posts). The field
+declares a `route`; Minn fetches it with `&q=` as the user types and expects a plain array of
+`{ value, label }` rows (Minn prepends its own "— None" clearing row). The field's current
+value in your `valuesKey` payload is `{ value, label }` (or `''` for none), and the same
+shape comes back on save, so read the id from `value`. The bundled Events Calendar adapter's
+venue picker is the reference.
 
 The bundled ACF adapter (`includes/adapters/acf.php`) is the reference implementation.
 

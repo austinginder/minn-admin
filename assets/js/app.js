@@ -599,6 +599,18 @@
 				<div class="minn-ac-panel" hidden></div>
 			</div>`;
 		}
+		if ( t === 'suggest' ) {
+			// Async-searching picker over a REST route (venue/organizer style
+			// linked records — option lists too large or too live for select).
+			// Value is { value, label } (or '' for none); data-sgval carries
+			// the picked value, the input shows the label. The field's `route`
+			// is fetched with &q= as the user types (bindSuggestField).
+			const pick = ( v && typeof v === 'object' ) ? v : null;
+			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="suggest" data-sgval="${ pick ? esc( String( pick.value ) ) : '' }" data-sgroute="${ esc( f.route || '' ) }">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || 'Type to search…' ) }" value="${ pick && pick.label ? esc( String( pick.label ) ) : '' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<div class="minn-ac-panel" hidden></div>
+			</div>`;
+		}
 		if ( t === 'toggle' ) {
 			return `<button type="button" class="minn-switch${ v ? ' on' : '' }" ${ attr }="${ esc( id ) }" data-ftype="toggle" role="switch" aria-checked="${ !! v }"><span class="minn-switch-knob"></span></button>`;
 		}
@@ -648,7 +660,78 @@
 			const input = el.querySelector( '.minn-ac-input' );
 			return input && input.dataset.acValue !== undefined ? input.dataset.acValue : '';
 		}
+		if ( kind === 'suggest' ) {
+			return el.dataset.sgval || '';
+		}
 		return el.value;
+	}
+
+	// Arm one async-suggest picker (data-ftype="suggest"): typing fetches the
+	// field's route with &q=, rows pick on mousedown (selection survival),
+	// blur restores the committed label, an emptied input clears the value.
+	function bindSuggestField( wrap, onPick ) {
+		const input = wrap.querySelector( '.minn-ac-input' );
+		const panel = wrap.querySelector( '.minn-ac-panel' );
+		if ( ! input || ! panel || wrap._minnSgBound ) return;
+		wrap._minnSgBound = true;
+		let committedLabel = input.value;
+		let timer = null;
+		let seq = 0;
+		const close = () => { panel.hidden = true; input.setAttribute( 'aria-expanded', 'false' ); };
+		const open = () => { panel.hidden = false; input.setAttribute( 'aria-expanded', 'true' ); };
+		const renderRows = ( rows ) => {
+			if ( ! rows.length ) { close(); return; }
+			panel.innerHTML = rows.map( ( r ) =>
+				`<button type="button" class="minn-ac-item" data-acv="${ esc( String( r.value ) ) }">${ esc( String( r.label ) ) }</button>` ).join( '' );
+			$$( '.minn-ac-item', panel ).forEach( ( item ) => {
+				// mousedown + preventDefault: the pick must land before blur.
+				item.addEventListener( 'mousedown', ( e ) => {
+					e.preventDefault();
+					const value = item.dataset.acv;
+					const label = value === '' ? '' : item.textContent;
+					wrap.dataset.sgval = value;
+					committedLabel = label;
+					input.value = label;
+					close();
+					if ( onPick ) onPick( value, label );
+				} );
+			} );
+			open();
+		};
+		const search = () => {
+			const q = input.value.trim();
+			const my = ++seq;
+			const route = wrap.dataset.sgroute || '';
+			if ( ! route ) return;
+			api( route + ( route.indexOf( '?' ) === -1 ? '?' : '&' ) + 'q=' + encodeURIComponent( q ) )
+				.then( ( rows ) => {
+					if ( my !== seq || ! Array.isArray( rows ) ) return;
+					// A leading None row keeps clearing one click away.
+					renderRows( [ { value: '', label: '— None' } ].concat( rows ) );
+				} )
+				.catch( () => {} );
+		};
+		input.addEventListener( 'focus', () => { input.select(); search(); } );
+		input.addEventListener( 'input', () => {
+			clearTimeout( timer );
+			// Emptying the field IS the clear gesture.
+			if ( '' === input.value.trim() && wrap.dataset.sgval ) {
+				wrap.dataset.sgval = '';
+				committedLabel = '';
+				if ( onPick ) onPick( '', '' );
+			}
+			timer = setTimeout( search, 250 );
+		} );
+		input.addEventListener( 'blur', () => {
+			setTimeout( () => {
+				close();
+				// Typed-but-not-picked text reverts to the committed pick.
+				input.value = committedLabel;
+			}, 120 );
+		} );
+		input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Escape' ) { close(); input.blur(); }
+		} );
 	}
 
 	// Adapter-form selects render as the strict themed combobox (Austin,
@@ -15639,6 +15722,12 @@
 					input.classList.toggle( 'on' );
 					input.setAttribute( 'aria-checked', input.classList.contains( 'on' ) );
 					write( formControlValue( input ) );
+				} );
+			} else if ( input.dataset.ftype === 'suggest' ) {
+				// Store the same { value, label } shape the server sends, so an
+				// untouched field round-trips byte-identically.
+				bindSuggestField( input, ( value, label ) => {
+					write( value === '' ? '' : { value, label } );
 				} );
 			} else if ( input.dataset.ftype === 'image' ) {
 				const [ pid, name ] = ( input.dataset.pf || '' ).split( ':' );
