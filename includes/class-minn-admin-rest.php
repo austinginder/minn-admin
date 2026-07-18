@@ -1894,9 +1894,23 @@ class Minn_Admin_REST {
 			$tseries = array_fill( 0, $buckets, array( 'v' => 0, 'p' => 0 ) );
 			$visitors  = 0;
 			$pageviews = 0;
+			// Bucket by whole-calendar-day distance from today (both anchored
+			// at midnight UTC), so a provider's day rows land on the same
+			// column their drill window queries. The old noon-UTC "age" fudge
+			// dropped TODAY's data whenever the current UTC time was before
+			// noon (a future anchor → negative age → out-of-range index) and
+			// could shift a bar off its own drill day.
+			$today_mid = strtotime( gmdate( 'Y-m-d' ) . ' 00:00:00 UTC' );
 			foreach ( $traffic['days'] as $date => $row ) {
-				$age = time() - strtotime( $date . ' 12:00:00 UTC' );
-				$idx = $buckets - 1 - (int) floor( $age / ( $bucket_days * DAY_IN_SECONDS ) );
+				$date_mid = strtotime( $date . ' 00:00:00 UTC' );
+				if ( false === $date_mid ) {
+					continue;
+				}
+				$days_ago = (int) round( ( $today_mid - $date_mid ) / DAY_IN_SECONDS );
+				if ( $days_ago < 0 ) {
+					continue; // a future-dated row (clock skew) — ignore
+				}
+				$idx = $buckets - 1 - (int) floor( $days_ago / $bucket_days );
 				if ( $idx < 0 || $idx >= $buckets ) {
 					continue;
 				}
