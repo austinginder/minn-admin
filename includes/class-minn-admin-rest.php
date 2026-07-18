@@ -609,6 +609,15 @@ class Minn_Admin_REST {
 					),
 				)
 			);
+			register_rest_route(
+				self::NS,
+				'/wc/gateways',
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'wc_payment_gateways' ),
+					'permission_callback' => $order_cap,
+				)
+			);
 		}
 
 		register_rest_route(
@@ -3011,6 +3020,35 @@ class Minn_Admin_REST {
 			'ok'    => true,
 			'email' => $to,
 		) );
+	}
+
+	/**
+	 * Payment gateways for the order payment picker.
+	 *
+	 * Mirrors the wp-admin order screen exactly (class-wc-meta-box-order-data):
+	 * every registered gateway, gated by the raw enabled flag, labeled by
+	 * get_title() — the filtered/overridable title wp-admin both renders in
+	 * its dropdown and stores as payment_method_title on save. wc/v3's
+	 * payment_gateways route serves the raw title property instead, which
+	 * diverges on gateways that compute their title (Stripe-style).
+	 */
+	public static function wc_payment_gateways() {
+		$out = array();
+		if ( function_exists( 'WC' ) && WC()->payment_gateways ) {
+			foreach ( WC()->payment_gateways->payment_gateways() as $gateway ) {
+				try {
+					$title = (string) $gateway->get_title();
+				} catch ( \Throwable $e ) {
+					$title = (string) $gateway->title;
+				}
+				$out[] = array(
+					'id'      => $gateway->id,
+					'title'   => '' !== $title ? $title : (string) $gateway->get_method_title(),
+					'enabled' => 'yes' === $gateway->enabled,
+				);
+			}
+		}
+		return array( 'gateways' => $out );
 	}
 
 	/**

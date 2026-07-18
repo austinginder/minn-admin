@@ -173,6 +173,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			const m = document.querySelector( '.minn-modal.wide, .minn-modal' );
 			return m && ! m.textContent.includes( 'Loading order' );
 		}, null, { timeout: 15000 } ).catch( () => null );
+		// The WC-email picker renders only after its own fetch lands — wait for
+		// it like the order body, don't sample mid-flight.
+		await page.waitForFunction( () => !! document.querySelector( '[data-oc="wcemail"]' ), null, { timeout: 10000 } ).catch( () => null );
 		await page.waitForTimeout( 400 );
 
 		const ui = await page.evaluate( () => {
@@ -183,7 +186,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				hasEmail: !! document.querySelector( '#minn-o-email' ),
 				hasSave: !! document.querySelector( '#minn-order-save' ),
 				hasRefund: !! document.querySelector( '#minn-o-refund' ),
-				hasWcMail: !! document.querySelector( '#minn-o-wcemail' ),
+				hasWcMail: !! document.querySelector( '[data-oc="wcemail"]' ),
 				hasPayCopy: !! document.querySelector( '#minn-o-copy-pay, #minn-o-copy-pay2' ),
 				hasWcEdit: /Edit in WooCommerce/.test( text ),
 				hasBilling: !! document.querySelector( '#minn-ob-email' ),

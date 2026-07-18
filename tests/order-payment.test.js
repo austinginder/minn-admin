@@ -73,17 +73,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			await page.waitForFunction( () => ! document.querySelector( '.minn-order-payment .minn-loading' ), null, { timeout: 20000 } );
 		};
 
+		// Comboboxes (rule-70): click the input to open, click the option.
+		const pickCombo = async ( key, value ) => {
+			await page.click( `[data-oc="${ key }"] .minn-ac-input` );
+			await page.waitForSelector( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]`, { timeout: 8000 } );
+			await page.click( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]` );
+		};
+
 		// ---- Order A: unpaid → payment card offers Record payment ----
 		await openOrder( aId );
-		const facts = await page.evaluate( () => {
-			const sel = document.getElementById( 'minn-o-paymethod' );
-			return {
-				options: Array.from( sel.options ).map( ( op ) => op.value ),
-				record: !! document.getElementById( 'minn-o-recordpay' ),
-				txn: !! document.getElementById( 'minn-o-txn' ),
-			};
-		} );
-		t.check( 'payment card renders with N/A + cheque + Other', facts.options.includes( '' ) && facts.options.includes( 'cheque' ) && facts.options.includes( 'other' ), JSON.stringify( facts.options ) );
+		await page.click( '[data-oc="paymethod"] .minn-ac-input' );
+		await page.waitForSelector( '[data-oc="paymethod"] .minn-ac-item', { timeout: 8000 } );
+		const facts = await page.evaluate( () => ( {
+			options: Array.from( document.querySelectorAll( '[data-oc="paymethod"] .minn-ac-item' ) ).map( ( b ) => b.dataset.acv ),
+			record: !! document.getElementById( 'minn-o-recordpay' ),
+			txn: !! document.getElementById( 'minn-o-txn' ),
+		} ) );
+		// Close the panel with a same-value pick (Escape would close the modal).
+		await page.click( '[data-oc="paymethod"] .minn-ac-item[data-acv=""]' );
+		t.check( 'payment picker offers N/A + cheque + Other', facts.options.includes( '' ) && facts.options.includes( 'cheque' ) && facts.options.includes( 'other' ), JSON.stringify( facts.options ) );
 		t.check( 'unpaid order offers Record payment', facts.record && facts.txn, '' );
 
 		// ---- Related orders panel finds B by billing email ----
@@ -97,7 +105,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'View all button carries the email', viewAllLabel.includes( email ), viewAllLabel );
 
 		// ---- Record a check payment on A (pending → set_paid path) ----
-		await page.selectOption( '#minn-o-paymethod', 'cheque' );
+		await pickCombo( 'paymethod', 'cheque' );
 		await page.fill( '#minn-o-txn', 'CHK-' + suffix );
 		await page.click( '#minn-o-recordpay' );
 		await page.waitForFunction( () => {
@@ -133,7 +141,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		// ---- Save-changes path: method edits persist without touching paid state ----
 		const bBefore = await api( `wc/v3/orders/${ bId }?_fields=status,date_paid` );
-		await page.selectOption( '#minn-o-paymethod', 'other' );
+		await pickCombo( 'paymethod', 'other' );
 		await page.waitForFunction( () => {
 			const w = document.getElementById( 'minn-o-paytitle-wrap' );
 			return w && w.style.display !== 'none';

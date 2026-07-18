@@ -4130,24 +4130,44 @@
 
 	const ORDER_RELATED_FIELDS = 'id,number,status,total,currency,currency_symbol,date_created';
 
-	/** Enabled payment gateways for the order payment picker (deduped; cached per session). */
+	/**
+	 * Payment gateways for the order payment picker (deduped; cached per
+	 * session). Served by Minn's own endpoint, which mirrors the wp-admin
+	 * dropdown byte-for-byte (get_title() labels — wc/v3's raw titles can
+	 * diverge on gateways that compute theirs).
+	 */
 	let wcGatewaysPromise = null;
 	function loadWcGateways() {
 		if ( state.cache.wcGateways ) return Promise.resolve( state.cache.wcGateways );
 		if ( ! wcGatewaysPromise ) {
-			wcGatewaysPromise = api( 'wc/v3/payment_gateways?_fields=id,title,enabled' )
-				.then( ( rows ) => {
-					state.cache.wcGateways = Array.isArray( rows ) ? rows : [];
+			wcGatewaysPromise = api( 'minn-admin/v1/wc/gateways' )
+				.then( ( r ) => {
+					state.cache.wcGateways = ( r && Array.isArray( r.gateways ) ) ? r.gateways : [];
 					return state.cache.wcGateways;
 				} )
 				.catch( () => {
-					// Listing gateways needs manage_woocommerce; fall back to the
-					// order's own method + Other so the picker still works.
+					// The picker still works from the order's own method + Other.
 					state.cache.wcGateways = [];
 					return [];
 				} );
 		}
 		return wcGatewaysPromise;
+	}
+
+	/**
+	 * Picker choices: wp-admin's rule (enabled gateways + N/A + Other), kept
+	 * kinder on one point — an order paid through a since-disabled gateway
+	 * keeps its own labeled entry instead of collapsing into Other.
+	 */
+	function orderPayChoices( m, o ) {
+		const cur = o.payment_method || '';
+		const rows = ( m.gateways || [] ).filter( ( g ) => g.enabled || g.id === cur );
+		if ( cur && cur !== 'other' && ! rows.some( ( g ) => g.id === cur ) ) {
+			rows.unshift( { id: cur, title: o.payment_method_title || cur } );
+		}
+		return [ { id: '', title: 'N/A' } ]
+			.concat( rows )
+			.concat( rows.some( ( g ) => g.id === 'other' ) ? [] : [ { id: 'other', title: 'Other' } ] );
 	}
 
 	/** Open the order modal and load the full WC order (list rows are slim). */
@@ -22100,17 +22120,11 @@
 			const canEdit = B.caps.orders;
 			const loading = !! m.loading && ! m.full;
 			const emails = m.emails;
-			// Payment picker: enabled gateways + the order's current method (kept
-			// even when its gateway is disabled/uninstalled) + a free-form Other.
 			const curMethod = o.payment_method || '';
-			const gwRows = ( m.gateways || [] ).filter( ( g ) => g.enabled || g.id === curMethod );
-			if ( curMethod && curMethod !== 'other' && ! gwRows.some( ( g ) => g.id === curMethod ) ) {
-				gwRows.unshift( { id: curMethod, title: o.payment_method_title || curMethod } );
-			}
-			const payChoices = [ { id: '', title: 'N/A' } ]
-				.concat( gwRows )
-				.concat( gwRows.some( ( g ) => g.id === 'other' ) ? [] : [ { id: 'other', title: 'Other' } ] );
 			const payLoading = canEdit && m.gateways == null;
+			// Themed combobox shell; options + seed bind via bindAutocomplete.
+			const orderCombo = ( key, label ) => `
+				<div class="minn-ac" data-oc="${ key }"><input class="minn-input minn-ac-input" placeholder="${ esc( label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }"><div class="minn-ac-panel" hidden></div></div>`;
 			const fmtAddr = ( a ) => {
 				const lines = [
 					[ a.first_name, a.last_name ].filter( Boolean ).join( ' ' ),
@@ -22217,9 +22231,7 @@
 						<div class="minn-media-edit minn-order-status">
 							<div class="minn-field-label">Status</div>
 							<div style="display:flex; gap:8px; flex-wrap:wrap;">
-								<select class="minn-input" id="minn-order-status" style="flex:1; min-width:140px;">
-									${ Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => `<option value="${ st }"${ st === o.status ? ' selected' : '' }>${ esc( st.replace( /-/g, ' ' ) ) }</option>` ).join( '' ) }
-								</select>
+								<div style="flex:1; min-width:140px;">${ orderCombo( 'status', 'Status' ) }</div>
 								<button class="minn-btn-primary" id="minn-order-save" type="button">Save changes</button>
 							</div>
 							<div class="minn-toggle-desc" style="margin-top:8px;">Saves status, payment details, customer details, shipping and the customer note.</div>
@@ -22230,9 +22242,7 @@
 							<div class="minn-order-field-row">
 								<div style="flex:1;">
 									<div class="minn-field-label">Payment method</div>
-									<select class="minn-input" id="minn-o-paymethod">
-										${ payChoices.map( ( g ) => `<option value="${ esc( g.id ) }" data-title="${ esc( g.title ) }"${ g.id === curMethod ? ' selected' : '' }>${ esc( g.title ) }</option>` ).join( '' ) }
-									</select>
+									${ orderCombo( 'paymethod', 'Payment method' ) }
 								</div>
 								<div style="flex:1;">
 									<div class="minn-field-label">Transaction ID</div>
@@ -22270,9 +22280,7 @@
 							<div class="minn-side-title" style="margin:0 0 8px;">WooCommerce email</div>
 							${ emails == null ? '<div class="minn-loading" style="padding:8px;">Loading email types…</div>' : `
 							<div style="display:flex; gap:8px; flex-wrap:wrap;">
-								<select class="minn-input" id="minn-o-wcemail" style="flex:1; min-width:180px;">
-									${ ( emails || [] ).map( ( em ) => `<option value="${ esc( em.id ) }">${ esc( em.title ) }${ em.enabled ? '' : ' (disabled)' } · ${ em.to === 'customer' ? 'customer' : 'admin' }</option>` ).join( '' ) }
-								</select>
+								<div style="flex:1; min-width:180px;">${ orderCombo( 'wcemail', 'Email type' ) }</div>
 								<button class="minn-btn-soft" id="minn-o-wcemail-send" type="button" ${ ( emails || [] ).length ? '' : 'disabled' }>${ icon( 'send' ) } Send</button>
 							</div>
 							<div class="minn-toggle-desc" style="margin-top:8px;">Resends a transactional email through WooCommerce (invoice, processing, completed, …).</div>` }
@@ -23831,6 +23839,26 @@
 
 		if ( m.type === 'order' ) {
 			const o = m.full || m.order;
+			// Pending-edits scratchpad: the modal's async fetches (emails, notes,
+			// related orders, gateways) each re-render the whole overlay, which
+			// used to wipe anything the user had typed or picked in the window
+			// before they landed. Live edits record here (delegated listener +
+			// combobox onPick) and re-apply after every rebuild; a successful
+			// save clears them.
+			if ( ! m.edits ) m.edits = {};
+			const editsOverlay = $( '#minn-modal-overlay' );
+			if ( editsOverlay ) {
+				editsOverlay.addEventListener( 'input', ( e ) => {
+					const t = e.target;
+					if ( t && t.id && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ) && ! t.classList.contains( 'minn-ac-input' ) ) {
+						m.edits[ t.id ] = t.value;
+					}
+				} );
+				editsOverlay.addEventListener( 'focusin', ( e ) => {
+					const t = e.target;
+					if ( t && t.id && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ) ) m.edits.__focus = t.id;
+				} );
+			}
 			const copyPay = async () => {
 				const url = ( m.full && m.full.payment_url ) || o.payment_url || '';
 				if ( ! url ) { toast( 'No payment URL on this order', true ); return; }
@@ -23865,18 +23893,58 @@
 				if ( state.route === 'orders' ) renderOrders();
 				else go( 'orders' );
 			} );
-			// Payment: the free-form method name only applies to Other.
-			const payMethodSel = $( '#minn-o-paymethod' );
-			if ( payMethodSel ) payMethodSel.addEventListener( 'change', () => {
-				const wrap = $( '#minn-o-paytitle-wrap' );
-				if ( wrap ) wrap.style.display = payMethodSel.value === 'other' ? '' : 'none';
+			// Themed comboboxes (status, payment method, email type) — the
+			// order modal's native selects were the last OS-drawn ones here.
+			const ocWrap = ( key ) => $( `[data-oc="${ key }"]` );
+			const ocValue = ( key ) => {
+				const w = ocWrap( key );
+				const inp = w && $( '.minn-ac-input', w );
+				return inp ? ( inp.dataset.acValue != null ? inp.dataset.acValue : inp.value ) : null;
+			};
+			const ocSeed = ( key, fallback ) => ( m.edits[ 'oc:' + key ] != null ? m.edits[ 'oc:' + key ] : fallback );
+			const statusWrap = ocWrap( 'status' );
+			if ( statusWrap ) bindAutocomplete( statusWrap,
+				Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => ( { value: st, label: st.replace( /-/g, ' ' ) } ) ),
+				{ strict: true, value: ocSeed( 'status', o.status || 'pending' ), onPick: ( v ) => { m.edits[ 'oc:status' ] = v; } } );
+			const payChoices = orderPayChoices( m, o );
+			const payWrap = ocWrap( 'paymethod' );
+			if ( payWrap ) bindAutocomplete( payWrap,
+				payChoices.map( ( g ) => ( { value: g.id, label: g.title } ) ),
+				{
+					strict: true,
+					value: ocSeed( 'paymethod', o.payment_method || '' ),
+					// The free-form method name only applies to Other.
+					onPick: ( v ) => {
+						m.edits[ 'oc:paymethod' ] = v;
+						const w = $( '#minn-o-paytitle-wrap' );
+						if ( w ) w.style.display = v === 'other' ? '' : 'none';
+					},
+				} );
+			const mailWrap = ocWrap( 'wcemail' );
+			if ( mailWrap && Array.isArray( m.emails ) && m.emails.length ) bindAutocomplete( mailWrap,
+				m.emails.map( ( em ) => ( { value: em.id, label: `${ em.title }${ em.enabled ? '' : ' (disabled)' } · ${ em.to === 'customer' ? 'customer' : 'admin' }` } ) ),
+				{ strict: true, value: ocSeed( 'wcemail', m.emails[ 0 ].id ), onPick: ( v ) => { m.edits[ 'oc:wcemail' ] = v; } } );
+			// Re-apply pending edits over the fresh markup's seeds, and put
+			// focus back where the rebuild stole it from.
+			Object.keys( m.edits ).forEach( ( k ) => {
+				if ( k.indexOf( '__' ) === 0 || k.indexOf( 'oc:' ) === 0 ) return;
+				const el = document.getElementById( k );
+				if ( el && ( el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ) ) el.value = m.edits[ k ];
 			} );
+			const payWrapVis = $( '#minn-o-paytitle-wrap' );
+			if ( payWrapVis ) payWrapVis.style.display = ocSeed( 'paymethod', o.payment_method || '' ) === 'other' ? '' : 'none';
+			if ( m.edits.__focus && ( ! document.activeElement || document.activeElement === document.body ) ) {
+				const el = document.getElementById( m.edits.__focus );
+				if ( el && el.focus ) {
+					el.focus( { preventScroll: true } );
+					if ( el.setSelectionRange ) { try { el.setSelectionRange( el.value.length, el.value.length ); } catch ( err ) {} }
+				}
+			}
 			const payState = () => {
-				const sel = $( '#minn-o-paymethod' );
-				if ( ! sel ) return null;
-				const opt = sel.options[ sel.selectedIndex ];
-				const method = sel.value;
-				let title = opt ? ( opt.dataset.title || opt.textContent ) : '';
+				const method = ocValue( 'paymethod' );
+				if ( method == null ) return null;
+				const choice = payChoices.find( ( g ) => g.id === method );
+				let title = choice ? choice.title : method;
 				if ( method === 'other' ) title = ( ( $( '#minn-o-paytitle' ) || {} ).value || '' ).trim() || 'Other';
 				if ( ! method ) title = '';
 				return {
@@ -23909,6 +23977,7 @@
 						state.modal.order = Object.assign( {}, state.modal.order, { status: full.status, total: full.total } );
 					}
 					toast( 'Payment recorded' );
+					m.edits = {};
 					state.cache.orders = null;
 					if ( state.route === 'orders' ) renderOrders();
 					renderOverlays();
@@ -23928,7 +23997,7 @@
 
 			const saveBtn = $( '#minn-order-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const status = ( $( '#minn-order-status' ) || {} ).value;
+				const status = ocValue( 'status' ) || o.status;
 				const payload = {
 					status,
 					customer_note: ( $( '#minn-o-note' ) || {} ).value || '',
@@ -23958,9 +24027,22 @@
 					payload.shipping.first_name = payload.billing.first_name;
 					payload.shipping.last_name = payload.billing.last_name;
 				}
-				// Payment method + transaction ID ride the normal save too
-				// (no paid-state change — that's Record payment's job).
-				Object.assign( payload, payState() || {} );
+				// Payment fields ride the normal save with wp-admin's own rule:
+				// method + title write only on a method (or Other-name) change,
+				// so a gateway that later retitles itself never silently
+				// rewrites old orders; transaction ID writes when edited. The
+				// paid state never changes here — that's Record payment's job.
+				const pay = payState();
+				if ( pay ) {
+					if ( pay.payment_method !== ( o.payment_method || '' )
+						|| ( pay.payment_method === 'other' && pay.payment_method_title !== ( o.payment_method_title || '' ) ) ) {
+						payload.payment_method = pay.payment_method;
+						payload.payment_method_title = pay.payment_method_title;
+					}
+					if ( pay.transaction_id !== ( o.transaction_id || '' ) ) {
+						payload.transaction_id = pay.transaction_id;
+					}
+				}
 				saveBtn.disabled = true;
 				saveBtn.textContent = 'Saving…';
 				try {
@@ -23980,6 +24062,7 @@
 						} );
 					}
 					toast( 'Order updated' );
+					m.edits = {};
 					state.cache.orders = null;
 					if ( state.route === 'orders' ) renderOrders();
 					renderOverlays();
@@ -24034,10 +24117,10 @@
 
 			const wcSend = $( '#minn-o-wcemail-send' );
 			if ( wcSend ) wcSend.addEventListener( 'click', async () => {
-				const sel = $( '#minn-o-wcemail' );
-				const emailId = sel && sel.value;
+				const emailId = ocValue( 'wcemail' );
 				if ( ! emailId ) return;
-				const label = sel.options[ sel.selectedIndex ] ? sel.options[ sel.selectedIndex ].textContent : emailId;
+				const mailInput = mailWrap && $( '.minn-ac-input', mailWrap );
+				const label = mailInput ? mailInput.value : emailId;
 				if ( ! confirm( `Send “${ label.split( ' · ' )[ 0 ] }” for order #${ o.number || o.id }?` ) ) return;
 				wcSend.disabled = true;
 				try {
