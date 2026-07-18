@@ -30,10 +30,16 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 			if ( groups >= 4 ) break;
 		}
 		t.check( 'picker opens via ⌘/ with grouped sources', groups >= 4, groups + ' groups' );
+		// Design/pattern groups fill in when their fetches settle (v0.18.0:
+		// the picker renders sync groups instantly instead of blocking on the
+		// network) — WAIT for them, up to a cold boot-congestion window.
+		const lateOk = await page.waitForFunction( () => {
+			const t = [ ...document.querySelectorAll( '.minn-bp-group h3' ) ].map( ( e ) => e.textContent );
+			return t.some( ( x ) => /designs/.test( x ) ) && t.some( ( x ) => /patterns/.test( x ) );
+		}, null, { timeout: 60000 } ).then( () => true ).catch( () => false );
 		const titles = await page.$$eval( '.minn-bp-group h3', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
-		t.check( 'groups labeled by source', titles.some( ( x ) => /Basics/.test( x ) )
-			&& titles.some( ( x ) => /designs/.test( x ) ) && titles.some( ( x ) => /patterns/.test( x ) ),
-			titles.slice( 0, 8 ).join( ' | ' ) );
+		t.check( 'groups labeled by source', lateOk && titles.some( ( x ) => /Basics/.test( x ) ),
+			titles.slice( 0, 10 ).join( ' | ' ) );
 
 		// Search narrows across every source.
 		await page.fill( '#minn-bp-search', 'callout' );
