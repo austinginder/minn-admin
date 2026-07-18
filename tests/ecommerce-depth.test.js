@@ -179,9 +179,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				|| document.querySelector( '.minn-table-row[data-order]' );
 			if ( row ) row.click();
 		}, orderId );
+		// Row click lands on the /orders/{id} page now; the notes UI is the
+		// same shared detail body either way.
 		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal' );
-			return m && ! m.textContent.includes( 'Loading order' );
+			const p = document.querySelector( '.minn-order-page' );
+			return p && ! p.textContent.includes( 'Loading order' );
 		}, null, { timeout: 15000 } ).catch( () => null );
 		await page.waitForFunction( () => !! document.querySelector( '#minn-o-note-add' ), null, { timeout: 10000 } ).catch( () => null );
 
@@ -190,7 +192,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			add: !! document.querySelector( '#minn-o-note-add' ),
 			list: !! document.querySelector( '.minn-order-notes-list' ),
 		} ) );
-		t.check( 'order modal shows notes section', notesUi.section && notesUi.add, JSON.stringify( notesUi ) );
+		t.check( 'order detail shows notes section', notesUi.section && notesUi.add, JSON.stringify( notesUi ) );
 
 		if ( notesUi.add ) {
 			const noteText = 'Suite private note ' + suffix;

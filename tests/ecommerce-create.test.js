@@ -111,19 +111,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				return b && ! b.disabled;
 			}, null, { timeout: 3000 } ).catch( () => null );
 			await page.click( '#minn-on-create' );
+			// Creating an order navigates to its /orders/{id} page now.
 			await page.waitForFunction( () => {
-				const m = document.querySelector( '.minn-modal' );
-				return m && ( document.querySelector( '#minn-order-save' ) || /Order #/.test( m.textContent || '' ) );
-			}, null, { timeout: 15000 } ).catch( () => null );
+				const p = document.querySelector( '.minn-order-page' );
+				return p && /Order #/.test( p.textContent || '' ) && !! document.querySelector( '#minn-order-save' );
+			}, null, { timeout: 20000 } ).catch( () => null );
 			await page.waitForTimeout( 500 );
 			const ui = await page.evaluate( () => {
-				const m = document.querySelector( '.minn-modal' );
-				return m && /Order #/.test( m.textContent || '' );
+				const p = document.querySelector( '.minn-order-page' );
+				return p && /Order #/.test( p.textContent || '' ) && location.pathname.indexOf( '/orders/' ) !== -1;
 			} );
-			t.check( 'order created via UI opens detail', !! ui, '' );
+			t.check( 'order created via UI opens its page', !! ui, '' );
 			if ( ui ) {
 				const oid = await page.evaluate( () => {
-					const t = document.querySelector( '.minn-modal-title' )?.textContent || '';
+					const t = document.querySelector( '.minn-order-page .minn-modal-title' )?.textContent || '';
 					const m = t.match( /#(\d+)/ );
 					return m ? parseInt( m[ 1 ], 10 ) : null;
 				} );

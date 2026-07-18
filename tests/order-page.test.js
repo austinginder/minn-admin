@@ -122,12 +122,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '#minn-order-search', { timeout: 15000 } );
 		t.check( 'back button returns to Orders', true, '' );
 
-		// ---- Modal escape hatch ----
+		// ---- Quick view (right-click) and its escape hatch back to the page ----
 		await page.fill( '#minn-order-search', String( aId ) );
 		await page.keyboard.press( 'Enter' );
 		await page.waitForSelector( `.minn-table-row[data-order="${ aId }"]`, { timeout: 20000 } );
-		await page.click( `.minn-table-row[data-order="${ aId }"]` );
-		await page.waitForSelector( '#minn-o-fullpage', { timeout: 20000 } );
+		await page.click( `.minn-table-row[data-order="${ aId }"]`, { button: 'right' } );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+		await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( b ) => b.textContent.trim() === 'Quick view' ).click() );
+		await page.waitForSelector( '#minn-modal-overlay #minn-o-fullpage', { timeout: 20000 } );
+		t.check( 'right-click Quick view opens the modal', true, '' );
 		await page.click( '#minn-o-fullpage' );
 		await page.waitForFunction( ( oid ) => location.pathname.indexOf( '/orders/' + oid ) !== -1 && !! document.querySelector( '.minn-order-page' ), aId, { timeout: 15000 } );
 		const modalGone = await page.evaluate( () => ! document.querySelector( '.minn-modal-overlay' ) );

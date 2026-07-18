@@ -169,9 +169,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'clicked order row', clicked, '' );
 
 	if ( clicked ) {
+		// A row click is navigation now: the /orders/{id} page is the primary
+		// detail surface (the modal survives as right-click Quick view).
 		await page.waitForFunction( () => {
-			const m = document.querySelector( '.minn-modal.wide, .minn-modal' );
-			return m && ! m.textContent.includes( 'Loading order' );
+			const p = document.querySelector( '.minn-order-page' );
+			return p && ! p.textContent.includes( 'Loading order' );
 		}, null, { timeout: 15000 } ).catch( () => null );
 		// The WC-email picker renders only after its own fetch lands — wait for
 		// it like the order body, don't sample mid-flight.
@@ -179,10 +181,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForTimeout( 400 );
 
 		const ui = await page.evaluate( () => {
-			const modal = document.querySelector( '.minn-modal' );
-			const text = modal ? modal.textContent : '';
+			const host = document.querySelector( '.minn-order-page' );
+			const text = host ? host.textContent : '';
 			return {
-				open: !! modal,
+				open: !! host,
+				onUrl: location.pathname.indexOf( '/orders/' ) !== -1,
 				hasEmail: !! document.querySelector( '#minn-o-email' ),
 				hasSave: !! document.querySelector( '#minn-order-save' ),
 				hasRefund: !! document.querySelector( '#minn-o-refund' ),
@@ -192,10 +195,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				hasBilling: !! document.querySelector( '#minn-ob-email' ),
 			};
 		} );
-		t.check( 'order modal is wide management UI',
-			ui.open && ui.hasSave && ui.hasBilling && ui.hasEmail && ui.hasWcEdit,
+		t.check( 'order row opens the full order page',
+			ui.open && ui.onUrl && ui.hasSave && ui.hasBilling && ui.hasEmail && ui.hasWcEdit,
 			JSON.stringify( ui ) );
-		t.check( 'order modal has refund or zero-total (no refund UI)',
+		t.check( 'order page has refund or zero-total (no refund UI)',
 			ui.hasRefund || true, JSON.stringify( { hasRefund: ui.hasRefund } ) );
 		t.check( 'WC email resend control present', ui.hasWcMail, JSON.stringify( ui ) );
 
@@ -216,6 +219,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				JSON.stringify( compose ) );
 			await page.keyboard.press( 'Escape' );
 		}
+
+		// Quick view: the modal now lives on the row's right-click menu.
+		await page.click( '#minn-op-back' );
+		await page.waitForSelector( '#minn-order-search', { timeout: 15000 } );
+		await page.waitForSelector( '.minn-table-row[data-order]', { timeout: 15000 } );
+		await page.click( '.minn-table-row[data-order]', { button: 'right' } );
+		await page.waitForSelector( '.minn-ctx-menu', { timeout: 5000 } );
+		const menuLabels = await page.$$eval( '.minn-ctx-menu button', ( els ) => els.map( ( e ) => e.textContent.trim() ) );
+		t.check( 'row menu offers Quick view', menuLabels.includes( 'Quick view' ), JSON.stringify( menuLabels ) );
+		await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( b ) => b.textContent.trim() === 'Quick view' ).click() );
+		await page.waitForSelector( '#minn-modal-overlay .minn-order-payment', { timeout: 20000 } );
+		const quick = await page.evaluate( () => ( {
+			modal: !! document.querySelector( '#minn-modal-overlay .minn-modal.wide' ),
+			stillOnList: location.pathname.indexOf( '/orders/' ) === -1 || /orders\/?$/.test( location.pathname ),
+		} ) );
+		t.check( 'Quick view opens the modal over the list', quick.modal && quick.stillOnList, JSON.stringify( quick ) );
+		await page.click( '#minn-modal-close' );
 	}
 
 	await t.done( browser, errors );

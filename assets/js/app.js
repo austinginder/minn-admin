@@ -4482,14 +4482,10 @@
 				row.addEventListener( 'click', () => {
 					const oid = parseInt( row.dataset.relorder, 10 );
 					if ( ! oid ) return;
-					// On the page a sibling order is real navigation (its own
-					// URL); in the modal it swaps in place.
-					if ( m.page ) {
-						go( 'orders/' + oid );
-						return;
-					}
-					closeModal();
-					openOrderModal( { id: oid, number: row.dataset.relnum || String( oid ) } );
+					// Clicking an order reference is always navigation: the
+					// sibling opens on its own page (quick view closes first).
+					closeHost();
+					go( 'orders/' + oid );
 				} )
 			);
 			const viewAllBtn = $( '#minn-o-viewall' );
@@ -5201,13 +5197,15 @@
 				}
 			} );
 		}
+		// Clicking an order is navigation now — the /orders/{id} page is the
+		// primary detail surface; the modal survives as right-click Quick view.
 		$$( '[data-order]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
-				const o = c.items.find( ( x ) => x.id === parseInt( row.dataset.order, 10 ) );
-				if ( o ) openOrderModal( o );
+				const id = parseInt( row.dataset.order, 10 );
+				if ( id ) go( 'orders/' + id );
 			} )
 		);
-		// Right-click an order: open + the common status moves without the modal.
+		// Right-click an order: quick view + the common status moves.
 		const quickOrderStatus = async ( o, status, label ) => {
 			try {
 				const updated = await api( `wc/v3/orders/${ o.id }`, { method: 'PUT', body: JSON.stringify( { status } ) } );
@@ -5231,8 +5229,7 @@
 					[ 'on-hold', 'Put on hold', 'Order #' + o.number + ' put on hold' ],
 				].filter( ( [ st ] ) => st !== o.status );
 				openMinnMenu( e.clientX, e.clientY, [
-					{ label: 'Open order', run: () => openOrderModal( o ) },
-					{ label: 'Open full page', run: () => go( 'orders/' + o.id ) },
+					{ label: 'Quick view', run: () => openOrderModal( o ) },
 					...moves.map( ( [ st, label, done ] ) => ( { label, run: () => quickOrderStatus( o, st, done ) } ) ),
 				] );
 			} )
@@ -23812,9 +23809,9 @@
 			$$( '[data-open-order]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
 					const id = parseInt( btn.dataset.openOrder, 10 );
-					const row = ( m.orders && m.orders.items || [] ).find( ( o ) => o.id === id );
-					if ( row ) openOrderModal( row );
-					else openOrderModal( { id } );
+					if ( ! id ) return;
+					closeModal();
+					go( 'orders/' + id );
 				} )
 			);
 			$$( '[data-open-sub]' ).forEach( ( btn ) =>
@@ -23972,8 +23969,8 @@
 					state.cache.orders = null;
 					state.cache.orderSummary = null;
 					closeModal();
-					if ( state.route === 'orders' ) renderOrders();
-					if ( created && created.id ) openOrderModal( created );
+					if ( created && created.id ) go( 'orders/' + created.id );
+					else if ( state.route === 'orders' ) renderOrders();
 				} catch ( e ) {
 					toast( e.message, true );
 					createBtn.disabled = false;
@@ -24250,7 +24247,7 @@
 					const oid = parseInt( row.dataset.relorder, 10 );
 					if ( ! oid ) return;
 					closeModal();
-					openOrderModal( { id: oid, number: String( oid ) } );
+					go( 'orders/' + oid );
 				} )
 			);
 		}
