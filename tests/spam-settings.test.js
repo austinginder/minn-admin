@@ -29,11 +29,26 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	};
 
 	const spamState = () => page.evaluate( async () => {
-		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/spam', {
+		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/spam?_cb=' + Math.random(), {
 			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
 		} );
 		return r.json();
 	} );
+	// A settings save can flip a REST-exposed option and then have the very
+	// next read still see the old value (rule 48: write-visibility). Poll the
+	// provider state (cache-busted) until the toggle lands or the window
+	// closes, so the assertion sees the committed value, not a mid-flight one.
+	const spamStateUntil = async ( pid, tid, want ) => {
+		let st = null;
+		for ( let i = 0; i < 8; i++ ) {
+			st = await spamState();
+			const p = ( st.providers || [] ).find( ( x ) => x.id === pid );
+			const t = p && p.toggles.find( ( x ) => x.id === tid );
+			if ( t && t.on === want ) return st;
+			await page.waitForTimeout( 700 );
+		}
+		return st;
+	};
 
 	const setPlugin = ( plugin, status ) => page.evaluate( async ( a ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.plugin, {
@@ -78,19 +93,25 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.click( '[data-spamtog="antispam-bee:email_notify"]' );
 		await page.fill( '#minn-spam-keys', 'minn-spam-test-token' );
 		await page.click( '#minn-save-settings' );
-		await page.waitForTimeout( 1200 );
-		let st = await spamState();
+		let st = await spamStateUntil( 'antispam-bee', 'email_notify', true );
 		const asb = st.providers.find( ( p ) => p.id === 'antispam-bee' );
 		t.check( 'toggle persisted through the provider option',
 			asb && asb.toggles.find( ( x ) => x.id === 'email_notify' ).on === true );
 		t.check( 'disallowed_keys blocklist saved', st.disallowed_keys === 'minn-spam-test-token' );
 
-		// Restore both.
+		// Restore both. Re-open the section fresh so the toggle reflects the
+		// committed server state (ON) before we click it off — clicking a
+		// toggle node left over from the first save's render is what made this
+		// flaky.
+		await openSpam();
+		await page.waitForFunction( () =>
+			document.querySelector( '[data-spamtog="antispam-bee:email_notify"]' )
+				&& document.querySelector( '[data-spamtog="antispam-bee:email_notify"]' ).classList.contains( 'on' ),
+		null, { timeout: 8000 } );
 		await page.click( '[data-spamtog="antispam-bee:email_notify"]' );
 		await page.fill( '#minn-spam-keys', '' );
 		await page.click( '#minn-save-settings' );
-		await page.waitForTimeout( 1200 );
-		st = await spamState();
+		st = await spamStateUntil( 'antispam-bee', 'email_notify', false );
 		t.check( 'restore round-trips clean',
 			st.disallowed_keys === ''
 			&& st.providers.find( ( p ) => p.id === 'antispam-bee' ).toggles.find( ( x ) => x.id === 'email_notify' ).on === false );

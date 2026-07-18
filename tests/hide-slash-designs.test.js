@@ -55,14 +55,22 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 
 	const pickerGroups = () => page.$$eval( '.minn-bp-group h3', ( els ) => els.map( ( h ) => h.textContent.trim() ) );
 
-	const openPicker = async () => {
+	const openPicker = async ( expectDesigns = true ) => {
 		await page.click( '#minn-editor-body' );
 		await page.keyboard.press( 'Meta+/' );
-		// The picker awaits EVERY design source before rendering any group —
-		// a cold Kadence/Stackable cloud-cache refresh can take >20s, so this
-		// wait is generous (the suites' one network-dependent spot).
-		await page.waitForSelector( '.minn-bp-group', { timeout: 90000 } );
-		// Design/pattern groups land async — settle until group count is stable.
+		// v0.18.0: the picker renders sync groups instantly and design/
+		// pattern groups FILL IN as their fetches settle — so a stable group
+		// count no longer means "all sources arrived". Wait for the async
+		// kinds explicitly (generous: a cold Kadence/Stackable cloud-cache
+		// refresh can take >20s; the suites' one network-dependent spot).
+		await page.waitForSelector( '.minn-bp-group', { timeout: 30000 } );
+		if ( expectDesigns ) {
+			await page.waitForFunction( () => {
+				const t = [ ...document.querySelectorAll( '.minn-bp-group h3' ) ].map( ( e ) => e.textContent );
+				return t.some( ( x ) => /designs/.test( x ) ) && t.some( ( x ) => /patterns/.test( x ) );
+			}, null, { timeout: 90000 } ).catch( () => {} );
+		}
+		// Then settle until the group count is stable (other stragglers).
 		let prev = -1;
 		for ( let i = 0; i < 20; i++ ) {
 			const n = await page.$$eval( '.minn-bp-group', ( els ) => els.length );

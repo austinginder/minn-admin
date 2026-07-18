@@ -122,6 +122,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const sourceBadge = await page.evaluate( () => ( document.querySelector( '.minn-panel-sub' ) || {} ).textContent || '' );
 		t.check( 'chart badge says WP Statistics', /WP Statistics/i.test( sourceBadge ), sourceBadge );
 
+		// Click the most recent column that has a bar — the seeded day. The
+		// seeder now writes both the UTC and site-local calendar day, so this
+		// bar column's drill has aligned pages even in the UTC/local skew
+		// window (a run past local midnight used to click a bar day whose
+		// drill was empty). Wait for the seed to reach the chart first.
+		await page.waitForFunction( () =>
+			[ ...document.querySelectorAll( '#minn-chart .minn-chart-col div' ) ]
+				.some( ( b ) => ( parseFloat( b.style.height ) || 0 ) > 0 ),
+		null, { timeout: 10000 } );
 		await page.evaluate( () => {
 			const cols = [ ...document.querySelectorAll( '#minn-chart .minn-chart-col' ) ];
 			for ( let i = cols.length - 1; i >= 0; i-- ) {
