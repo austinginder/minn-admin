@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.18.0** - Unreleased
+## **v0.18.0** - July 18, 2026
+
+The depth release. Plugin surfaces stop being flat lists: detail modals gain typed rows (status pills, code blocks, key-value tables and the real HTML email in a fully sandboxed preview), status cards spread across the whole mail, redirects and snippets families, and columns become sortable where a route supports it. The media library grows up in one cycle: folders from your folder plugin, an Unattached filter and month picker, an Attached-to jump, and replace-file in place through Enable Media Replace. The editor sidebar reaches events, job listings and podcast episodes with panels drawn live from each plugin's own schema, Gravity Forms feeds and FluentSMTP settings come inside, and four more providers join the families (SureForms, SureMails, Site Mailer, All-In-One Security). Underneath it all, a sequential full-suite runner drove all 171 suites green before this release and caught four real bugs, fixed below.
 
 ### Added
 * **Event details, editable in Minn:** with The Events Calendar active, events gain an **Event details** panel in the editor sidebar: start and end, all-day, venue, organizer, cost and website. Venue and organizer are live search pickers over your existing TEC records, and every write goes through TEC's own save machinery, so durations, timezones and linked-post bookkeeping behave exactly as on its screens. Events with several organizers keep that field on TEC's screen rather than silently dropping any; recurrence and tickets stay in TEC too.
@@ -26,6 +28,16 @@
 * **Redirection status card:** the Redirects surface opens with rule counts, all-time hits, the top redirect, served and 404 counts for the log window, and a stacked 14-day chart of redirects served over 404s, all read from Redirection's own tables.
 * **The whole mail family opens rich detail:** FluentSMTP, Post SMTP and WP Mail Logging log details moved to the new sections layout alongside Gravity SMTP: a status pill, the real HTML email body in the sandboxed preview (plain-text bodies as a code block), and each store's own extras (FluentSMTP's provider-reply peek, Post SMTP's failure text and suggested fix, WP Mail Logging's raw headers). The flat detail routes stay for API consumers.
 * **Detail row types for plugin surfaces:** a `sectionsRoute` response row can now declare `type: pill` (the shared status vocabulary), `code` (escaped monospace block), `html-preview` (your HTML in a fully sandboxed iframe, no scripts, opaque origin) or `kv-table` (a two-column table from an object map or pair list), alongside the existing `url` and `email` link rows. Values stay escaped everywhere; the sandbox is the one place plugin markup renders. Gravity SMTP's log detail is the first consumer: delivery facts with a status pill, the real HTML email body rendered safely, and the stored headers as a table.
+
+### Improved
+* **The System theme glyph is a half-circle now:** the theme toggle's System state wore a monitor icon, which read as "view the site" rather than "follow the OS". It wears the conventional half-filled circle instead; Light and Dark keep the sun and moon.
+* **A full-suite runner ships with the repo:** `tests/run-all.sh` runs all 171 Playwright suites sequentially with settle guards, a one-retry rule for environment noise, per-suite logs and resume support, so a release pre-flight (or an overnight run) is one command.
+
+### Fixed
+* **The block picker no longer waits on the slowest design library:** it used to hold the whole dialog on every design and pattern source before rendering anything, so one slow or unreachable CDN left it stuck on the loading screen. It opens instantly with the basics now, and each design library and pattern group fills in as its source answers; a dead source just never arrives.
+* **The Overview traffic chart dropped today's visitors before noon UTC:** the chart bucketed provider days against a noon-UTC anchor, so for half of every day the current day computed as "in the future" and vanished from the chart (and a bar's drill-down could land on the wrong day). Days are bucketed by calendar distance now, in the site's timezone.
+* **Gravity SMTP's Resend button vanished from the log detail:** the new sections-based detail no longer feeds the full event back to the modal, and the list route never carried the resend permission its `when`-gate read, so the button silently disappeared. The list route carries it now.
+* **A failed license activation could eat the typed key:** the Licenses tab was the one list still missing the soft-reload guard, so a stray re-render during the tab's refresh window could detach the activation form mid-flight, typed key and all. It keeps the form (and the key) through the refresh now.
 
 ## **v0.17.0** - July 17, 2026
 

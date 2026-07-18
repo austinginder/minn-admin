@@ -32,9 +32,14 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   right-click or hover for quick publish/draft/trash, view, and a block-editor escape
 - **Media** — grid/list library, uploads, drag-and-drop, a preview overlay with arrow-key
   navigation and in-place **title, alt text, caption & description editing**, **bulk select
-  and delete** (shift-range, on the grid and the list), a right-click menu, a built-in
-  **image editor** (rotate and crop, saved as a new copy), and when **Safe SVG** is active an
-  **SVG** filter tab plus badge (sanitization stays Safe SVG's)
+  and delete** (shift-range, on the grid and the list), a right-click menu, and a built-in
+  **image editor** (rotate and crop, saved as a new copy). **Folders** arrive from your folder
+  plugin (FileBird, Real Media Library or Folders by Premio) with a **Move to folder** bulk
+  action through each plugin's own machinery; an **Unattached** filter and a **month picker**
+  cover the daily cleanup questions; every file's detail names the post it is **attached to**,
+  one click from that post's editor; **Replace file** works in place through Enable Media
+  Replace; the **SVG** filter tab appears with Safe SVG or SVG Support active, and
+  **↻ Thumbnails** works through Regenerate Thumbnails or Force Regenerate Thumbnails
 - **Comments** — full moderation (pending / approved / spam / trash) with **bulk moderation**
   (each tab offers its own verbs), inline replies and a right-click menu for the same verbs
 - **Ecommerce** — full WooCommerce day-to-day in Minn: **Orders** (search, status, notes, refunds,
@@ -147,31 +152,40 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Editor field panels** — **ACF**, **Meta Box** and **Pods** simple fields in the sidebar
   (advanced types count as locked with a wp-admin link); **SEO panel** for Yoast SEO, Rank Math,
   All in One SEO, SEOPress or SiteSEO title, meta description and focus keyword (first active
-  SEO plugin wins)
+  SEO plugin wins); **Event details** for The Events Calendar (dates, all-day, venue and
+  organizer as live search pickers, cost, website); **Job listing** for WP Job Manager, drawn
+  live from its own field schema; **Podcast episode** for Seriously Simple Podcasting and
+  PowerPress (media file, duration, the Apple Podcasts fields). Every write goes through the
+  owning plugin's own save machinery
 - **Menus & Widgets** — classic nav menus with drag-to-reorder (children travel with their
   parent) and right-click menus on every item; classic sidebars with **drag grips** to reorder widgets in an area, plus move
   between areas and in-place edit for block/text/HTML widgets
 - **Surfaces** — Minn's answer to plugin sprawl: one sidebar item per *job*, not per plugin,
   with every capable plugin layered in behind it and a provider switcher when more than one is
   active. **Forms** (Gravity Forms, Ninja Forms, Fluent Forms, Forminator, Formidable, Everest
-  Forms, Elementor Pro, Contact Form 7 via Flamingo or CFDB7) shows entries as contact cards
-  with real field labels and ←/→ stepping, with the full **Gravity Forms workflow** inside
-  Minn: star, spam, trash, restore, **bulk actions**, notes and resent notifications across
-  Received / Spam / Trash views (Everest Forms carries the same three status views through
-  its own entry helpers);
-  **Email** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging) shows sent
-  mail with HTML previews, resend, and search plus delete where the logger supports it, plus
-  Gravity SMTP's **full settings** (all 21 connectors, drawn at runtime from its own schema),
-  suppressions and **send a test email**;
-  **Activity Log** (Simple History, WP Activity Log, Aryo, Stream, Wordfence login security,
-  plus **Limit Login Attempts Reloaded** and **Solid Security** lockouts with unlock/release
-  actions) reads like an audit feed; **Redirects** (Redirection, Safe Redirect
-  Manager, Simple 301 Redirects, 301 Redirects) lists, searches, creates and edits; **Snippets** (Code
+  Forms, SureForms, Elementor Pro, Contact Form 7 via Flamingo or CFDB7) shows entries as
+  contact cards with real field labels and ←/→ stepping, with the full **Gravity Forms
+  workflow** inside Minn: star, spam, trash, restore, **bulk actions**, notes and resent
+  notifications across Received / Spam / Trash views, plus a **Feeds** view listing every
+  add-on integration across your forms (Everest Forms carries the same three status views
+  through its own entry helpers);
+  **Email** (Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging, SureMails,
+  Site Mailer) shows sent mail with the real HTML body in a **fully sandboxed preview**,
+  resend, and search plus delete where the logger supports it, plus Gravity SMTP's **full
+  settings** (all 21 connectors, drawn at runtime from its own schema), suppressions,
+  **send a test email**, and a **FluentSMTP Settings view** for the day-to-day choices;
+  **Activity Log** (Simple History, WP Activity Log, Aryo, Stream, All-In-One Security,
+  Wordfence login security, plus **Limit Login Attempts Reloaded** and **Solid Security**
+  lockouts with unlock/release actions) reads like an audit feed; **Redirects** (Redirection,
+  Safe Redirect Manager, Simple 301 Redirects, 301 Redirects) lists, searches, creates and
+  edits, with **sortable columns** on Redirection; **Snippets** (Code
   Snippets, WPCode, FluentSnippets, Simple Custom CSS and JS, Header Footer Code Manager) lists,
   toggles, creates and bulk-edits; **Performance** (Perfmatters, Autoptimize, Asset CleanUp,
   Performance Lab) shares one Tools item with a provider switcher; **Backups**
   (UpdraftPlus, WPvivid, BackWPup, All-in-One WP Migration, Duplicator, Disembark) below.
-  Surface lists open a **⋯ / right-click** menu of that collection's actions. Plugins that need
+  **Status cards** now open the whole mail, redirects and snippets families, and detail modals
+  render **typed rows**: status pills, code blocks, key-value tables and sandboxed HTML
+  previews. Surface lists open a **⋯ / right-click** menu of that collection's actions. Plugins that need
   their own first-run install get a **setup card** that runs their installer in place. The sidebar
   organizes into **Workspace / Tools / Manage** groups so daily inboxes stay separate from site plumbing
 - **Backups** — with **UpdraftPlus** or **WPvivid**: sets listed, status cards, a System health
@@ -196,10 +210,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor CSS, SpeedyCache,
   Redis Object Cache, Breeze, Nginx Helper, Cloudflare), each in its own isolated request
 - **Extending** — one-filter APIs for any plugin to register views (with status cards and optional
-  **charts**, extra **list views**, tabs, status filters, detail layouts, actions with inline
+  **charts**, extra **list views**, tabs, status filters, **sortable columns**, detail layouts
+  with **typed rows** including sandboxed HTML previews, actions with inline
   fields, **bulk actions**, schema-driven **settings views** including **item-scoped settings**,
-  and **setup gates**), editor panels, **editor slash commands**, traffic data (including
-  per-day drill-down), cache purgers, spam providers, license providers, visibility providers,
+  and **setup gates**), editor panels (including async **search-picker** fields), **editor slash
+  commands**, traffic data (including
+  per-day drill-down), **media folder providers**, cache purgers, spam providers, license providers, visibility providers,
   design libraries, page builders or block-inspector forms; the System page's **Integrations**
   card shows everything registered and flags descriptor problems instead of failing silently.
   The full coverage map lives in [docs/plugin-support.md](docs/plugin-support.md)
