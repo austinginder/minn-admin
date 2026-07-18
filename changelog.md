@@ -1,5 +1,11 @@
 # Changelog
 
+## **v0.19.0** - Unreleased
+
+### Added
+* **Receive payments by hand:** the order modal gains a **Payment** card with the payment method (your enabled gateways plus a free-form Other), a transaction ID field, and a **Record payment** button on unpaid orders. A check arrives in the mail: pick Check payments, note the check number, record. Pending orders run through WooCommerce's own `payment_complete` (paid date, status move, stock and email hooks all fire); on-hold check orders, which WooCommerce's REST guard skips, get the paid stamp and processing status set explicitly, exactly as an admin would by hand. Method and transaction edits also ride the normal Save changes without touching the paid state.
+* **More from this customer:** the order modal lists the customer's other orders (status, total, age), found by account for registered customers and by billing email for guests. Click one to jump straight to it, or **View all** to open the Orders list pre-filtered to that customer.
+
 ## **v0.18.0** - July 18, 2026
 
 The depth release. Plugin surfaces stop being flat lists: detail modals gain typed rows (status pills, code blocks, key-value tables and the real HTML email in a fully sandboxed preview), status cards spread across the whole mail, redirects and snippets families, and columns become sortable where a route supports it. The media library grows up in one cycle: folders from your folder plugin, an Unattached filter and month picker, an Attached-to jump, and replace-file in place through Enable Media Replace. The editor sidebar reaches events, job listings and podcast episodes with panels drawn live from each plugin's own schema, Gravity Forms feeds and FluentSMTP settings come inside, and four more providers join the families (SureForms, SureMails, Site Mailer, All-In-One Security). Underneath it all, a sequential full-suite runner drove all 171 suites green before this release and caught four real bugs, fixed below.
