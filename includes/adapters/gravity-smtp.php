@@ -631,7 +631,29 @@ add_action( 'rest_api_init', function () {
 				( $page - 1 ) * $per_page
 			) );
 
-			$items = array_map( function ( $row ) {
+			// Resend eligibility from their own EVENT_MODEL, resolved once for
+			// the page. The Resend action's when-gate reads it off the LIST
+			// row (the detail is a sectionsRoute, which never updates the
+			// modal item), so without this the Resend button never appears.
+			// Their model only registers on their admin screens, so the whole
+			// lookup is Throwable-guarded and defaults to resendable.
+			$resend_map = array();
+			try {
+				$container = Gravity_Forms\Gravity_SMTP\Gravity_SMTP::container();
+				$events    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::EVENT_MODEL );
+				if ( $events ) {
+					foreach ( (array) $rows as $row ) {
+						$event = $events->get( (int) $row->id );
+						if ( is_array( $event ) && array_key_exists( 'can_resend', $event ) ) {
+							$resend_map[ (int) $row->id ] = (bool) $event['can_resend'];
+						}
+					}
+				}
+			} catch ( \Throwable $e ) {
+				$resend_map = array();
+			}
+
+			$items = array_map( function ( $row ) use ( $resend_map ) {
 				return array(
 					'id'           => (int) $row->id,
 					'date_created' => $row->date_created,
@@ -639,6 +661,7 @@ add_action( 'rest_api_init', function () {
 					'service'      => $row->service,
 					'subject'      => $row->subject,
 					'to'           => minn_admin_gravity_smtp_recipients( $row->extra ),
+					'can_resend'   => array_key_exists( (int) $row->id, $resend_map ) ? $resend_map[ (int) $row->id ] : true,
 				);
 			}, $rows ? $rows : array() );
 
