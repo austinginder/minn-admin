@@ -2099,6 +2099,18 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-prod-modal-img { margin: 0 0 12px; }
 .minn-prod-modal-img img { max-width: 100%; max-height: 160px; border-radius: 8px; object-fit: cover; }
 .minn-order-body { max-height: min(70vh, 720px); overflow-y: auto; }
+
+/* The /orders/{id} page hosts the same detail body as the modal, full height:
+   the route's scroller does the scrolling, never an inner box. */
+.minn-order-page { max-width: 860px; }
+.minn-order-page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.minn-order-page-head .minn-modal-title-block { min-width: 0; }
+.minn-order-page-head .minn-status { margin-left: auto; }
+.minn-order-page-card {
+	background: var(--panel); border: 1px solid var(--border2); border-radius: 14px;
+	overflow: hidden;
+}
+.minn-order-page .minn-order-body { max-height: none; overflow-y: visible; }
 .minn-order-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--border); }
 .minn-order-panel { padding: 14px 18px 16px; border-right: 1px solid var(--border); }
 .minn-order-panel:last-child { border-right: none; }

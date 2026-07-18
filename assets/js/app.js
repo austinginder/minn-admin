@@ -428,6 +428,7 @@
 		media: [ 'Media', 'Library' ],
 		comments: [ 'Comments', 'Moderation' ],
 		orders: [ 'Orders', 'WooCommerce' ],
+		order: [ 'Order', 'WooCommerce' ],
 		subscriptions: [ 'Subscriptions', 'WooCommerce' ],
 		products: [ 'Products', 'WooCommerce' ],
 		coupons: [ 'Coupons', 'WooCommerce' ],
@@ -1034,6 +1035,10 @@
 				state.editorId = parts[ 2 ] ? parseInt( parts[ 2 ], 10 ) : null;
 			}
 			state.route = 'editor';
+		} else if ( route === 'orders' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+			// /orders/123 — the order detail page.
+			state.orderPageId = parseInt( parts[ 1 ], 10 );
+			state.route = 'order';
 		} else if ( TITLES[ route ] || surfaceById( route ) ) {
 			state.route = route;
 		} else {
@@ -1643,6 +1648,8 @@
 				// Structure folds Terms in — an admin on the 'terms' route keeps
 				// the 'posttypes' Structure item highlighted.
 				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
+				// The order detail page keeps the Orders item lit.
+				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
 		} );
@@ -4170,25 +4177,636 @@
 			.concat( rows.some( ( g ) => g.id === 'other' ) ? [] : [ { id: 'other', title: 'Other' } ] );
 	}
 
+	/**
+	 * Order detail body + actions — shared verbatim by the order modal and
+	 * the /orders/{id} page. `m` is the detail context (state.modal or
+	 * state.orderPage), distinguished by m.page.
+	 */
+	function orderDetailInnerHtml( m ) {
+		const listO = m.order || {};
+		const o = m.full || listO;
+		const b = o.billing || {};
+		const s = o.shipping || {};
+		const refundable = orderRefundableTotal( o );
+		const payUrl = o.payment_url || '';
+		const canEdit = B.caps.orders;
+		const emails = m.emails;
+		const curMethod = o.payment_method || '';
+		const payLoading = canEdit && m.gateways == null;
+		// Themed combobox shell; options + seed bind via bindAutocomplete.
+		const orderCombo = ( key, label ) => `
+			<div class="minn-ac" data-oc="${ key }"><input class="minn-input minn-ac-input" placeholder="${ esc( label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }"><div class="minn-ac-panel" hidden></div></div>`;
+		const fmtAddr = ( a ) => {
+			const lines = [
+				[ a.first_name, a.last_name ].filter( Boolean ).join( ' ' ),
+				a.company, a.address_1, a.address_2,
+				[ a.city, a.state, a.postcode ].filter( Boolean ).join( ', ' ),
+				a.country, a.phone,
+			].filter( Boolean );
+			return lines.join( '\n' ) || '—';
+		};
+		return `
+					<div class="minn-order-body">
+						<div class="minn-order-grid">
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Customer</div>
+								${ canEdit ? `
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">First name</div><input class="minn-input" id="minn-ob-first" value="${ esc( b.first_name || '' ) }"></div>
+										<div><div class="minn-field-label">Last name</div><input class="minn-input" id="minn-ob-last" value="${ esc( b.last_name || '' ) }"></div>
+									</div>
+									<div><div class="minn-field-label">Email</div><input class="minn-input" id="minn-ob-email" type="email" value="${ esc( b.email || '' ) }"></div>
+									<div><div class="minn-field-label">Phone</div><input class="minn-input" id="minn-ob-phone" value="${ esc( b.phone || '' ) }"></div>
+									<div><div class="minn-field-label">Billing address</div>
+										<textarea class="minn-input" id="minn-ob-addr1" rows="1" placeholder="Address line 1">${ esc( b.address_1 || '' ) }</textarea>
+										<textarea class="minn-input" id="minn-ob-addr2" rows="1" placeholder="Address line 2" style="margin-top:6px;">${ esc( b.address_2 || '' ) }</textarea>
+									</div>
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">City</div><input class="minn-input" id="minn-ob-city" value="${ esc( b.city || '' ) }"></div>
+										<div><div class="minn-field-label">State</div><input class="minn-input" id="minn-ob-state" value="${ esc( b.state || '' ) }"></div>
+										<div><div class="minn-field-label">Postcode</div><input class="minn-input" id="minn-ob-postcode" value="${ esc( b.postcode || '' ) }"></div>
+									</div>
+									<div><div class="minn-field-label">Country</div><input class="minn-input" id="minn-ob-country" value="${ esc( b.country || '' ) }" placeholder="US"></div>
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( customerName( o ) ) }</span></div>
+									${ b.email ? `<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email ) }</span></div>` : '' }
+									<div class="minn-side-row"><span class="minn-side-key">Billing</span><span style="white-space:pre-line;">${ esc( fmtAddr( b ) ) }</span></div>
+								</div>` }
+							</div>
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Shipping &amp; note</div>
+								${ canEdit ? `
+								<div class="minn-order-fields">
+									<div><div class="minn-field-label">Ship to</div>
+										<textarea class="minn-input" id="minn-os-addr1" rows="1" placeholder="Address line 1">${ esc( s.address_1 || '' ) }</textarea>
+										<textarea class="minn-input" id="minn-os-addr2" rows="1" placeholder="Address line 2" style="margin-top:6px;">${ esc( s.address_2 || '' ) }</textarea>
+									</div>
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">City</div><input class="minn-input" id="minn-os-city" value="${ esc( s.city || '' ) }"></div>
+										<div><div class="minn-field-label">State</div><input class="minn-input" id="minn-os-state" value="${ esc( s.state || '' ) }"></div>
+										<div><div class="minn-field-label">Postcode</div><input class="minn-input" id="minn-os-postcode" value="${ esc( s.postcode || '' ) }"></div>
+									</div>
+									<div><div class="minn-field-label">Country</div><input class="minn-input" id="minn-os-country" value="${ esc( s.country || '' ) }"></div>
+									<div><div class="minn-field-label">Customer note</div><textarea class="minn-input" id="minn-o-note" rows="3" placeholder="Note from the customer…">${ esc( o.customer_note || '' ) }</textarea></div>
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Shipping</span><span style="white-space:pre-line;">${ esc( fmtAddr( s ) ) }</span></div>
+									${ o.customer_note ? `<div class="minn-side-row"><span class="minn-side-key">Note</span><span>${ esc( o.customer_note ) }</span></div>` : '' }
+								</div>` }
+								${ payUrl ? `
+								<div style="margin-top:12px;">
+									<div class="minn-field-label">Payment link</div>
+									<div class="minn-modal-url" style="margin:0;">
+										<span class="minn-permalink" id="minn-o-payurl" title="${ esc( payUrl ) }">${ esc( payUrl ) }</span>
+									</div>
+									<button type="button" class="minn-btn-soft" id="minn-o-copy-pay" style="margin-top:8px;">${ icon( 'copy' ) } Copy payment URL</button>
+								</div>` : '' }
+							</div>
+						</div>
+						<div class="minn-order-items">
+							${ ( o.line_items || [] ).map( ( li ) => `
+								<div class="minn-order-item">
+									<span class="minn-order-qty">${ li.quantity }×</span>
+									<span class="minn-cell-clip">${ esc( li.name ) }</span>
+									<span class="minn-order-line-total">${ esc( orderMoney( o, li.total ) ) }</span>
+								</div>` ).join( '' ) }
+							${ o.discount_total && parseFloat( o.discount_total ) > 0 ? `
+								<div class="minn-order-item"><span></span><span>Discount</span><span class="minn-order-line-total">−${ esc( orderMoney( o, o.discount_total ) ) }</span></div>` : '' }
+							${ o.shipping_total && parseFloat( o.shipping_total ) > 0 ? `
+								<div class="minn-order-item"><span></span><span>Shipping</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.shipping_total ) ) }</span></div>` : '' }
+							${ o.total_tax && parseFloat( o.total_tax ) > 0 ? `
+								<div class="minn-order-item"><span></span><span>Tax</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.total_tax ) ) }</span></div>` : '' }
+							${ ( o.refunds || [] ).map( ( r ) => `
+								<div class="minn-order-item"><span></span><span>Refund${ r.reason ? ': ' + esc( r.reason ) : '' }</span><span class="minn-order-line-total">−${ esc( orderMoney( o, Math.abs( parseFloat( r.total ) || 0 ) ) ) }</span></div>` ).join( '' ) }
+							<div class="minn-order-item total">
+								<span></span><span>Total</span>
+								<span class="minn-order-line-total">${ esc( orderMoney( o, o.total ) ) }</span>
+							</div>
+						</div>
+						${ canEdit ? `
+						<div class="minn-media-edit minn-order-status">
+							<div class="minn-field-label">Status</div>
+							<div style="display:flex; gap:8px; flex-wrap:wrap;">
+								<div style="flex:1; min-width:140px;">${ orderCombo( 'status', 'Status' ) }</div>
+								<button class="minn-btn-primary" id="minn-order-save" type="button">Save changes</button>
+							</div>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Saves status, payment details, customer details, shipping and the customer note.</div>
+						</div>
+						<div class="minn-media-edit minn-order-payment">
+							<div class="minn-side-title" style="margin:0 0 8px;">Payment</div>
+							${ payLoading ? '<div class="minn-loading" style="padding:8px;">Loading payment methods…</div>' : `
+							<div class="minn-order-field-row">
+								<div style="flex:1;">
+									<div class="minn-field-label">Payment method</div>
+									${ orderCombo( 'paymethod', 'Payment method' ) }
+								</div>
+								<div style="flex:1;">
+									<div class="minn-field-label">Transaction ID</div>
+									<input class="minn-input" id="minn-o-txn" value="${ esc( o.transaction_id || '' ) }" placeholder="Check number, reference…">
+								</div>
+							</div>
+							<div id="minn-o-paytitle-wrap" style="margin-top:8px;${ curMethod === 'other' ? '' : ' display:none;' }">
+								<div class="minn-field-label">Method name</div>
+								<input class="minn-input" id="minn-o-paytitle" value="${ esc( o.payment_method_title || '' ) }" placeholder="How this method reads on the order">
+							</div>
+							${ o.date_paid ? `
+							<div class="minn-toggle-desc" style="margin-top:8px;">Paid ${ esc( timeAgo( o.date_paid ) ) }${ o.payment_method_title ? ' via ' + esc( o.payment_method_title ) : '' }.</div>` : `
+							<button class="minn-btn-primary" id="minn-o-recordpay" type="button" style="margin-top:10px;">Record payment</button>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Marks the order paid now with the method and transaction ID above. For a check that arrived in the mail, pick the check method, note the check number, and record.</div>` }` }
+						</div>
+						${ refundable > 0.001 ? `
+						<div class="minn-media-edit minn-order-refund">
+							<div class="minn-side-title" style="margin:0 0 8px;">Refund</div>
+							<div class="minn-order-field-row">
+								<div style="flex:1;">
+									<div class="minn-field-label">Amount (max ${ esc( orderMoney( o, refundable ) ) })</div>
+									<input class="minn-input" id="minn-o-refund-amt" type="number" step="0.01" min="0.01" max="${ refundable.toFixed( 2 ) }" value="${ refundable.toFixed( 2 ) }">
+								</div>
+							</div>
+							<div style="margin-top:8px;"><div class="minn-field-label">Reason</div>
+								<input class="minn-input" id="minn-o-refund-reason" placeholder="Optional note on the refund">
+							</div>
+							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
+								<input type="checkbox" id="minn-o-refund-api" checked>
+								<span>Also refund via payment gateway when supported</span>
+							</label>
+							<button class="minn-btn-soft danger" id="minn-o-refund" type="button" style="margin-top:10px;">Issue refund</button>
+						</div>` : '' }
+						<div class="minn-media-edit minn-order-wcmail">
+							<div class="minn-side-title" style="margin:0 0 8px;">WooCommerce email</div>
+							${ emails == null ? '<div class="minn-loading" style="padding:8px;">Loading email types…</div>' : `
+							<div style="display:flex; gap:8px; flex-wrap:wrap;">
+								<div style="flex:1; min-width:180px;">${ orderCombo( 'wcemail', 'Email type' ) }</div>
+								<button class="minn-btn-soft" id="minn-o-wcemail-send" type="button" ${ ( emails || [] ).length ? '' : 'disabled' }>${ icon( 'send' ) } Send</button>
+							</div>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Resends a transactional email through WooCommerce (invoice, processing, completed, …).</div>` }
+						</div>` : '' }
+						<div class="minn-media-edit minn-order-notes">
+							<div class="minn-side-title" style="margin:0 0 8px;">Order notes</div>
+							${ m.notes == null ? '<div class="minn-loading" style="padding:8px;">Loading notes…</div>' : `
+							<div class="minn-order-notes-list">
+								${ ( m.notes || [] ).length ? ( m.notes || [] ).map( ( n ) => `
+									<div class="minn-order-note${ n.customer_note ? ' customer' : '' }">
+										<div class="minn-order-note-meta">
+											<span>${ esc( n.author || 'System' ) }</span>
+											<span>${ esc( timeAgo( n.date_created_gmt || n.date_created ) ) }</span>
+											${ n.customer_note ? '<span class="minn-status future">Customer</span>' : '<span class="minn-status draft">Private</span>' }
+										</div>
+										<div class="minn-order-note-body">${ esc( n.note || '' ) }</div>
+									</div>` ).join( '' ) : '<div class="minn-toggle-desc">No notes yet.</div>' }
+							</div>
+							${ canEdit ? `
+							<div class="minn-order-fields" style="margin-top:12px;">
+								<div><div class="minn-field-label">Add a note</div>
+									<textarea class="minn-input" id="minn-o-new-note" rows="2" placeholder="Internal note for staff…"></textarea>
+								</div>
+								<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px; margin-top:8px;">
+									<input type="checkbox" id="minn-o-note-customer">
+									<span>Visible to the customer</span>
+								</label>
+								<button class="minn-btn-soft" id="minn-o-note-add" type="button" style="margin-top:10px;">Add note</button>
+							</div>` : '' }` }
+						</div>
+						${ B.wcs ? `
+						<div class="minn-media-edit minn-order-subs">
+							<div class="minn-side-title" style="margin:0 0 8px;">Subscriptions</div>
+							${ m.relatedSubs == null ? '<div class="minn-loading" style="padding:8px;">Checking…</div>'
+								: ! m.relatedSubs.length ? '<div class="minn-toggle-desc">No related subscriptions on this order.</div>'
+								: m.relatedSubs.map( ( sub ) => `
+								<button type="button" class="minn-sub-order-row" data-relsub="${ sub.id }">
+									<span>#${ esc( sub.number || sub.id ) }</span>
+									<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
+									<span>${ esc( subMoney( sub, sub.total ) ) }</span>
+								</button>` ).join( '' ) }
+						</div>` : '' }
+						<div class="minn-media-edit minn-order-others">
+							<div class="minn-side-title" style="margin:0 0 8px;">More from this customer</div>
+							${ m.otherOrders == null ? '<div class="minn-loading" style="padding:8px;">Checking…</div>'
+								: ! m.otherOrders.length ? '<div class="minn-toggle-desc">No other orders from this customer.</div>'
+								: m.otherOrders.map( ( oo ) => `
+								<button type="button" class="minn-sub-order-row" data-relorder="${ oo.id }" data-relnum="${ esc( oo.number || oo.id ) }">
+									<span>#${ esc( oo.number || oo.id ) }</span>
+									<span class="minn-status ${ ORDER_STATUS_STYLE[ oo.status ] || 'draft' }">${ esc( ( oo.status || '' ).replace( /-/g, ' ' ) ) }</span>
+									<span>${ esc( orderMoney( oo, oo.total ) ) }</span>
+									<span style="color:var(--text3); font-size:12.5px;">${ esc( timeAgo( oo.date_created ) ) }</span>
+								</button>` ).join( '' ) }
+							${ ( ( o.billing || {} ).email && canEdit && ( m.otherOrders || [] ).length ) ? `
+							<button type="button" class="minn-btn-soft" id="minn-o-viewall" style="margin-top:6px;">View all orders from ${ esc( ( o.billing || {} ).email ) }</button>` : '' }
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						${ canEdit && b.email ? `<button class="minn-btn-soft" id="minn-o-email" type="button">${ icon( 'send' ) } Send email…</button>` : '' }
+						${ payUrl ? `<button class="minn-btn-soft" id="minn-o-copy-pay2" type="button">${ icon( 'copy' ) } Copy payment URL</button>` : '' }
+						${ ( ( B.wcpdf && B.wcpdf.docs ) || [] ).map( ( d ) =>
+							`<a class="minn-btn-soft" href="${ esc( `${ B.wcpdf.ajax }?action=generate_wpo_wcpdf&document_type=${ encodeURIComponent( d.type ) }&order_ids=${ o.id }&access_key=${ encodeURIComponent( B.wcpdf.nonce ) }` ) }" target="_blank" rel="noopener" title="Generated by PDF Invoices &amp; Packing slips">⬇ ${ esc( d.title ) } (PDF)</a>` ).join( '' ) }
+						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ o.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
+						${ m.page ? '' : `<button type="button" class="minn-btn-soft" id="minn-o-fullpage">${ icon( 'columns' ) } Open full page</button>` }
+					</div>`;
+	}
+
+	function orderModalHtml( m ) {
+		const listO = m.order || {};
+		const o = m.full || listO;
+		const loading = !! m.loading && ! m.full;
+		return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">Order #${ esc( o.number || listO.number || o.id ) }</div>
+							<div class="minn-modal-sub">${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }</div>
+						</div>
+						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading order…</div>' : '' }
+					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+					${ ! loading && ! m.loadError ? orderDetailInnerHtml( m ) : '' }
+				</div>
+			</div>`;
+	}
+
+	/**
+	 * Order detail bindings — shared by the modal and the /orders/{id}
+	 * page (m.page distinguishes; rerender/isCur/nav behaviors branch on it).
+	 */
+	function bindOrderDetail( m ) {
+			const o = m.full || m.order;
+			// Modal vs page: the same detail context renders in two hosts.
+			const isCur = () => ( m.page
+				? ( state.orderPage === m && state.route === 'order' )
+				: ( state.modal === m ) );
+			const rerender = () => {
+				if ( ! isCur() ) return;
+				if ( m.page ) renderOrderPage();
+				else renderOverlays();
+			};
+			const closeHost = () => { if ( ! m.page ) closeModal(); };
+			// Pending-edits scratchpad: the detail's async fetches (emails, notes,
+			// related orders, gateways) each re-render the whole host, which
+			// used to wipe anything the user had typed or picked in the window
+			// before they landed. Live edits record here (delegated listener +
+			// combobox onPick) and re-apply after every rebuild; a successful
+			// save clears them.
+			if ( ! m.edits ) m.edits = {};
+			const editsOverlay = m.page ? $( '.minn-order-page' ) : $( '#minn-modal-overlay' );
+			if ( editsOverlay ) {
+				editsOverlay.addEventListener( 'input', ( e ) => {
+					const t = e.target;
+					if ( t && t.id && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ) && ! t.classList.contains( 'minn-ac-input' ) ) {
+						m.edits[ t.id ] = t.value;
+					}
+				} );
+				editsOverlay.addEventListener( 'focusin', ( e ) => {
+					const t = e.target;
+					if ( t && t.id && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ) ) m.edits.__focus = t.id;
+				} );
+			}
+			const copyPay = async () => {
+				const url = ( m.full && m.full.payment_url ) || o.payment_url || '';
+				if ( ! url ) { toast( 'No payment URL on this order', true ); return; }
+				try { await navigator.clipboard.writeText( url ); toast( 'Payment URL copied' ); }
+				catch ( err ) { toast( 'Could not copy', true ); }
+			};
+			$$( '[data-relsub]' ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const sid = parseInt( row.dataset.relsub, 10 );
+					if ( ! sid ) return;
+					closeHost();
+					openSubscriptionModal( { id: sid, number: String( sid ) } );
+				} )
+			);
+			$$( '[data-relorder]' ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					const oid = parseInt( row.dataset.relorder, 10 );
+					if ( ! oid ) return;
+					// On the page a sibling order is real navigation (its own
+					// URL); in the modal it swaps in place.
+					if ( m.page ) {
+						go( 'orders/' + oid );
+						return;
+					}
+					closeModal();
+					openOrderModal( { id: oid, number: row.dataset.relnum || String( oid ) } );
+				} )
+			);
+			const viewAllBtn = $( '#minn-o-viewall' );
+			if ( viewAllBtn ) viewAllBtn.addEventListener( 'click', () => {
+				const email = ( ( ( m.full || m.order ).billing || {} ).email || '' ).trim();
+				if ( ! email ) return;
+				closeHost();
+				state.orderView = 'list';
+				state.orderTab = 'any';
+				state.orderSearch = email;
+				state.cache.orders = null;
+				if ( state.route === 'orders' ) renderOrders();
+				else go( 'orders' );
+			} );
+			// Themed comboboxes (status, payment method, email type) — the
+			// order modal's native selects were the last OS-drawn ones here.
+			const ocWrap = ( key ) => $( `[data-oc="${ key }"]` );
+			const ocValue = ( key ) => {
+				const w = ocWrap( key );
+				const inp = w && $( '.minn-ac-input', w );
+				return inp ? ( inp.dataset.acValue != null ? inp.dataset.acValue : inp.value ) : null;
+			};
+			const ocSeed = ( key, fallback ) => ( m.edits[ 'oc:' + key ] != null ? m.edits[ 'oc:' + key ] : fallback );
+			const statusWrap = ocWrap( 'status' );
+			if ( statusWrap ) bindAutocomplete( statusWrap,
+				Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => ( { value: st, label: st.replace( /-/g, ' ' ) } ) ),
+				{ strict: true, value: ocSeed( 'status', o.status || 'pending' ), onPick: ( v ) => { m.edits[ 'oc:status' ] = v; } } );
+			const payChoices = orderPayChoices( m, o );
+			const payWrap = ocWrap( 'paymethod' );
+			if ( payWrap ) bindAutocomplete( payWrap,
+				payChoices.map( ( g ) => ( { value: g.id, label: g.title } ) ),
+				{
+					strict: true,
+					value: ocSeed( 'paymethod', o.payment_method || '' ),
+					// The free-form method name only applies to Other.
+					onPick: ( v ) => {
+						m.edits[ 'oc:paymethod' ] = v;
+						const w = $( '#minn-o-paytitle-wrap' );
+						if ( w ) w.style.display = v === 'other' ? '' : 'none';
+					},
+				} );
+			const mailWrap = ocWrap( 'wcemail' );
+			if ( mailWrap && Array.isArray( m.emails ) && m.emails.length ) bindAutocomplete( mailWrap,
+				m.emails.map( ( em ) => ( { value: em.id, label: `${ em.title }${ em.enabled ? '' : ' (disabled)' } · ${ em.to === 'customer' ? 'customer' : 'admin' }` } ) ),
+				{ strict: true, value: ocSeed( 'wcemail', m.emails[ 0 ].id ), onPick: ( v ) => { m.edits[ 'oc:wcemail' ] = v; } } );
+			// Re-apply pending edits over the fresh markup's seeds, and put
+			// focus back where the rebuild stole it from.
+			Object.keys( m.edits ).forEach( ( k ) => {
+				if ( k.indexOf( '__' ) === 0 || k.indexOf( 'oc:' ) === 0 ) return;
+				const el = document.getElementById( k );
+				if ( el && ( el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ) ) el.value = m.edits[ k ];
+			} );
+			const payWrapVis = $( '#minn-o-paytitle-wrap' );
+			if ( payWrapVis ) payWrapVis.style.display = ocSeed( 'paymethod', o.payment_method || '' ) === 'other' ? '' : 'none';
+			if ( m.edits.__focus && ( ! document.activeElement || document.activeElement === document.body ) ) {
+				const el = document.getElementById( m.edits.__focus );
+				if ( el && el.focus ) {
+					el.focus( { preventScroll: true } );
+					if ( el.setSelectionRange ) { try { el.setSelectionRange( el.value.length, el.value.length ); } catch ( err ) {} }
+				}
+			}
+			const payState = () => {
+				const method = ocValue( 'paymethod' );
+				if ( method == null ) return null;
+				const choice = payChoices.find( ( g ) => g.id === method );
+				let title = choice ? choice.title : method;
+				if ( method === 'other' ) title = ( ( $( '#minn-o-paytitle' ) || {} ).value || '' ).trim() || 'Other';
+				if ( ! method ) title = '';
+				return {
+					payment_method: method,
+					payment_method_title: title,
+					transaction_id: ( ( $( '#minn-o-txn' ) || {} ).value || '' ).trim(),
+				};
+			};
+			const recordBtn = $( '#minn-o-recordpay' );
+			if ( recordBtn ) recordBtn.addEventListener( 'click', async () => {
+				const body = payState() || {};
+				if ( o.needs_payment ) {
+					// WC's own payment_complete: stamps date_paid, moves the status,
+					// fires the payment hooks (stock, emails).
+					body.set_paid = true;
+				} else {
+					// set_paid only fires for pending/failed orders — an on-hold
+					// check order (the classic cheque flow) needs the stamp done
+					// explicitly, mirroring what wp-admin admins do by hand.
+					body.date_paid_gmt = new Date().toISOString().slice( 0, 19 );
+					body.status = 'processing';
+				}
+				recordBtn.disabled = true;
+				recordBtn.textContent = 'Recording…';
+				try {
+					await api( `wc/v3/orders/${ o.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
+					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
+					m.full = full;
+					m.order = Object.assign( {}, m.order, { status: full.status, total: full.total } );
+					toast( 'Payment recorded' );
+					m.edits = {};
+					state.cache.orders = null;
+					if ( state.route === 'orders' ) renderOrders();
+					rerender();
+				} catch ( e ) {
+					toast( e.message, true );
+					recordBtn.disabled = false;
+					recordBtn.textContent = 'Record payment';
+				}
+			} );
+			const copyBtn = $( '#minn-o-copy-pay' );
+			const copyBtn2 = $( '#minn-o-copy-pay2' );
+			if ( copyBtn ) copyBtn.addEventListener( 'click', copyPay );
+			if ( copyBtn2 ) copyBtn2.addEventListener( 'click', copyPay );
+
+			const emailBtn = $( '#minn-o-email' );
+			if ( emailBtn ) emailBtn.addEventListener( 'click', () => openOrderEmailModal( m.full || m.order ) );
+
+			const saveBtn = $( '#minn-order-save' );
+			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+				const status = ocValue( 'status' ) || o.status;
+				const payload = {
+					status,
+					customer_note: ( $( '#minn-o-note' ) || {} ).value || '',
+					billing: {
+						first_name: ( $( '#minn-ob-first' ) || {} ).value || '',
+						last_name: ( $( '#minn-ob-last' ) || {} ).value || '',
+						email: ( $( '#minn-ob-email' ) || {} ).value || '',
+						phone: ( $( '#minn-ob-phone' ) || {} ).value || '',
+						address_1: ( $( '#minn-ob-addr1' ) || {} ).value || '',
+						address_2: ( $( '#minn-ob-addr2' ) || {} ).value || '',
+						city: ( $( '#minn-ob-city' ) || {} ).value || '',
+						state: ( $( '#minn-ob-state' ) || {} ).value || '',
+						postcode: ( $( '#minn-ob-postcode' ) || {} ).value || '',
+						country: ( $( '#minn-ob-country' ) || {} ).value || '',
+					},
+					shipping: {
+						address_1: ( $( '#minn-os-addr1' ) || {} ).value || '',
+						address_2: ( $( '#minn-os-addr2' ) || {} ).value || '',
+						city: ( $( '#minn-os-city' ) || {} ).value || '',
+						state: ( $( '#minn-os-state' ) || {} ).value || '',
+						postcode: ( $( '#minn-os-postcode' ) || {} ).value || '',
+						country: ( $( '#minn-os-country' ) || {} ).value || '',
+					},
+				};
+				// Preserve shipping names from billing when empty (common fix-up).
+				if ( ! ( m.full && m.full.shipping && m.full.shipping.first_name ) ) {
+					payload.shipping.first_name = payload.billing.first_name;
+					payload.shipping.last_name = payload.billing.last_name;
+				}
+				// Payment fields ride the normal save with wp-admin's own rule:
+				// method + title write only on a method (or Other-name) change,
+				// so a gateway that later retitles itself never silently
+				// rewrites old orders; transaction ID writes when edited. The
+				// paid state never changes here — that's Record payment's job.
+				const pay = payState();
+				if ( pay ) {
+					if ( pay.payment_method !== ( o.payment_method || '' )
+						|| ( pay.payment_method === 'other' && pay.payment_method_title !== ( o.payment_method_title || '' ) ) ) {
+						payload.payment_method = pay.payment_method;
+						payload.payment_method_title = pay.payment_method_title;
+					}
+					if ( pay.transaction_id !== ( o.transaction_id || '' ) ) {
+						payload.transaction_id = pay.transaction_id;
+					}
+				}
+				saveBtn.disabled = true;
+				saveBtn.textContent = 'Saving…';
+				try {
+					const updated = await api( `wc/v3/orders/${ o.id }`, {
+						method: 'PUT',
+						body: JSON.stringify( payload ),
+					} );
+					// Re-fetch full detail so refunds/totals stay accurate.
+					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
+					m.full = full || updated;
+					m.order = Object.assign( {}, m.order, {
+						status: full.status,
+						total: full.total,
+						billing: full.billing,
+						line_items: full.line_items,
+					} );
+					toast( 'Order updated' );
+					m.edits = {};
+					state.cache.orders = null;
+					if ( state.route === 'orders' ) renderOrders();
+					rerender();
+				} catch ( e ) {
+					toast( e.message, true );
+					saveBtn.disabled = false;
+					saveBtn.textContent = 'Save changes';
+				}
+			} );
+
+			const refundBtn = $( '#minn-o-refund' );
+			if ( refundBtn ) refundBtn.addEventListener( 'click', async () => {
+				const max = orderRefundableTotal( o );
+				const amt = parseFloat( ( $( '#minn-o-refund-amt' ) || {} ).value );
+				const reason = ( ( $( '#minn-o-refund-reason' ) || {} ).value || '' ).trim();
+				const apiRefund = !!( $( '#minn-o-refund-api' ) || {} ).checked;
+				if ( ! amt || amt <= 0 || amt > max + 0.001 ) {
+					toast( `Enter an amount between 0.01 and ${ max.toFixed( 2 ) }`, true );
+					return;
+				}
+				if ( ! confirm( `Refund ${ orderMoney( o, amt ) } on order #${ o.number || o.id }?` ) ) return;
+				refundBtn.disabled = true;
+				refundBtn.textContent = 'Refunding…';
+				try {
+					await api( `wc/v3/orders/${ o.id }/refunds`, {
+						method: 'POST',
+						body: JSON.stringify( {
+							amount: amt.toFixed( 2 ),
+							reason: reason || undefined,
+							api_refund: apiRefund,
+						} ),
+					} );
+					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
+					m.full = full;
+					m.order = Object.assign( {}, m.order, {
+						status: full.status,
+						total: full.total,
+					} );
+					toast( `Refunded ${ orderMoney( o, amt ) }` );
+					state.cache.orders = null;
+					state.cache.orderSummary = null;
+					if ( state.route === 'orders' ) renderOrders();
+					rerender();
+				} catch ( e ) {
+					toast( e.message, true );
+					refundBtn.disabled = false;
+					refundBtn.textContent = 'Issue refund';
+				}
+			} );
+
+			const fullPageBtn = $( '#minn-o-fullpage' );
+			if ( fullPageBtn ) fullPageBtn.addEventListener( 'click', () => {
+				closeModal();
+				go( 'orders/' + o.id );
+			} );
+			const wcSend = $( '#minn-o-wcemail-send' );
+			if ( wcSend ) wcSend.addEventListener( 'click', async () => {
+				const emailId = ocValue( 'wcemail' );
+				if ( ! emailId ) return;
+				const mailInput = mailWrap && $( '.minn-ac-input', mailWrap );
+				const label = mailInput ? mailInput.value : emailId;
+				if ( ! confirm( `Send “${ label.split( ' · ' )[ 0 ] }” for order #${ o.number || o.id }?` ) ) return;
+				wcSend.disabled = true;
+				try {
+					const r = await api( `minn-admin/v1/orders/${ o.id }/emails`, {
+						method: 'POST',
+						body: JSON.stringify( { email_id: emailId } ),
+					} );
+					toast( ( r && r.title ? r.title : 'Email' ) + ' sent' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				wcSend.disabled = false;
+			} );
+
+			const noteAdd = $( '#minn-o-note-add' );
+			if ( noteAdd ) noteAdd.addEventListener( 'click', async () => {
+				const ta = $( '#minn-o-new-note' );
+				const note = ( ta && ta.value || '' ).trim();
+				if ( ! note ) { toast( 'Write a note first', true ); return; }
+				const customer = !!( $( '#minn-o-note-customer' ) || {} ).checked;
+				noteAdd.disabled = true;
+				try {
+					await api( `wc/v3/orders/${ o.id }/notes`, {
+						method: 'POST',
+						body: JSON.stringify( { note, customer_note: customer } ),
+					} );
+					const notes = await api( `wc/v3/orders/${ o.id }/notes?per_page=50` );
+					m.notes = Array.isArray( notes ) ? notes : [];
+					toast( customer ? 'Customer note added' : 'Private note added' );
+					rerender();
+				} catch ( e ) {
+					toast( e.message, true );
+					noteAdd.disabled = false;
+				}
+			} );
+	}
+
 	/** Open the order modal and load the full WC order (list rows are slim). */
 	function openOrderModal( listOrder ) {
 		const id = listOrder && listOrder.id;
 		if ( ! id ) return;
 		state.modal = { type: 'order', order: listOrder, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [], gateways: null, otherOrders: null };
 		renderOverlays();
+		loadOrderDetail( state.modal );
+	}
+
+	/**
+	 * Load everything an order detail context needs (full order, gateways,
+	 * related orders, emails, notes, subscriptions). Shared by the modal and
+	 * the /orders/{id} page; each async lander guards on the context still
+	 * being the live one and repaints its host.
+	 */
+	function loadOrderDetail( m ) {
+		const id = m.order.id;
+		const isCur = () => ( m.page ? state.orderPage === m : state.modal === m );
+		const rr = () => {
+			if ( ! isCur() ) return;
+			if ( m.page ) {
+				if ( state.route === 'order' ) renderOrderPage();
+			} else {
+				renderOverlays();
+			}
+		};
 		if ( B.caps.orders ) {
 			loadWcGateways().then( ( g ) => {
-				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-					state.modal.gateways = g;
-					renderOverlays();
+				if ( isCur() ) {
+					m.gateways = g;
+					rr();
 				}
 			} );
 		}
 		api( `wc/v3/orders/${ id }?_fields=${ ORDER_DETAIL_FIELDS }` )
 			.then( ( full ) => {
-				if ( ! state.modal || state.modal.type !== 'order' || state.modal.order.id !== id ) return;
-				state.modal.full = full;
-				state.modal.loading = false;
+				if ( ! isCur() ) return;
+				m.full = full;
+				m.loading = false;
 				// Other orders by the same customer: account id when there is one,
 				// billing-email search for guests (search covers billing fields).
 				const cid = parseInt( full.customer_id, 10 ) || 0;
@@ -4197,19 +4815,19 @@
 				if ( rel ) {
 					api( `wc/v3/orders?${ rel }&exclude=${ id }&per_page=6&orderby=date&order=desc&_fields=${ ORDER_RELATED_FIELDS }` )
 						.then( ( rows ) => {
-							if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-								state.modal.otherOrders = ( Array.isArray( rows ) ? rows : [] ).filter( ( r ) => r.id !== id );
-								renderOverlays();
+							if ( isCur() ) {
+								m.otherOrders = ( Array.isArray( rows ) ? rows : [] ).filter( ( r ) => r.id !== id );
+								rr();
 							}
 						} )
 						.catch( () => {
-							if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-								state.modal.otherOrders = [];
-								renderOverlays();
+							if ( isCur() ) {
+								m.otherOrders = [];
+								rr();
 							}
 						} );
 				} else {
-					state.modal.otherOrders = [];
+					m.otherOrders = [];
 				}
 				// Merge into list cache so the row status stays in sync after edits.
 				if ( state.cache.orders && state.cache.orders.items ) {
@@ -4223,56 +4841,91 @@
 						} );
 					}
 				}
-				renderOverlays();
+				rr();
 			} )
 			.catch( ( e ) => {
-				if ( ! state.modal || state.modal.type !== 'order' ) return;
-				state.modal.loading = false;
-				state.modal.loadError = e.message || 'Could not load order';
-				renderOverlays();
+				if ( ! isCur() ) return;
+				m.loading = false;
+				m.loadError = e.message || 'Could not load order';
+				rr();
 			} );
 		// Prefetch resendable WC emails in the background.
 		api( `minn-admin/v1/orders/${ id }/emails` )
 			.then( ( r ) => {
-				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-					state.modal.emails = ( r && r.emails ) || [];
-					renderOverlays();
+				if ( isCur() ) {
+					m.emails = ( r && r.emails ) || [];
+					rr();
 				}
 			} )
 			.catch( () => {
-				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-					state.modal.emails = [];
+				if ( isCur() ) {
+					m.emails = [];
 				}
 			} );
 		// Order notes timeline (staff + system + customer-visible).
 		api( `wc/v3/orders/${ id }/notes?per_page=50` )
 			.then( ( notes ) => {
-				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-					state.modal.notes = Array.isArray( notes ) ? notes : [];
-					renderOverlays();
+				if ( isCur() ) {
+					m.notes = Array.isArray( notes ) ? notes : [];
+					rr();
 				}
 			} )
 			.catch( () => {
-				if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-					state.modal.notes = [];
+				if ( isCur() ) {
+					m.notes = [];
 				}
 			} );
 		// Related WooCommerce Subscriptions (parent order or renewal).
 		if ( B.wcs ) {
 			api( `wc/v3/orders/${ id }/subscriptions?per_page=10&_fields=id,number,status,total,currency,billing_period,billing_interval` )
 				.then( ( subs ) => {
-					if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-						state.modal.relatedSubs = Array.isArray( subs ) ? subs : [];
-						renderOverlays();
+					if ( isCur() ) {
+						m.relatedSubs = Array.isArray( subs ) ? subs : [];
+						rr();
 					}
 				} )
 				.catch( () => {
-					if ( state.modal && state.modal.type === 'order' && state.modal.order.id === id ) {
-						state.modal.relatedSubs = [];
-						renderOverlays();
+					if ( isCur() ) {
+						m.relatedSubs = [];
+						rr();
 					}
 				} );
 		}
+	}
+
+	/** The /orders/{id} page: the same detail context, hosted as a route. */
+	function renderOrderPage() {
+		const view = $( '#minn-view' );
+		if ( ! B.wc || ! B.caps.orders ) {
+			view.innerHTML = '<div class="minn-empty">You don\'t have access to orders on this site.</div>';
+			return;
+		}
+		let m = state.orderPage;
+		if ( ! m || m.order.id !== state.orderPageId ) {
+			m = state.orderPage = { type: 'order', page: true, order: { id: state.orderPageId, number: String( state.orderPageId ) }, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [], gateways: null, otherOrders: null };
+			loadOrderDetail( m );
+		}
+		const o = m.full || m.order;
+		const loading = !! m.loading && ! m.full;
+		view.innerHTML = `
+		<div class="minn-order-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-op-back">← Orders</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-modal-title">Order #${ esc( o.number || o.id ) }</div>
+					<div class="minn-modal-sub">${ loading ? 'Loading…' : `${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }` }</div>
+				</div>
+				<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+			</div>
+			<div class="minn-order-page-card">
+				${ loading ? '<div class="minn-loading" style="padding:28px;">Loading order…</div>' : '' }
+				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+				${ ! loading && ! m.loadError ? orderDetailInnerHtml( m ) : '' }
+			</div>
+		</div>`;
+		const back = $( '#minn-op-back' );
+		if ( back ) back.addEventListener( 'click', () => go( 'orders' ) );
+		if ( ! loading && ! m.loadError ) bindOrderDetail( m );
 	}
 
 	function orderMoney( o, amount ) {
@@ -4579,6 +5232,7 @@
 				].filter( ( [ st ] ) => st !== o.status );
 				openMinnMenu( e.clientX, e.clientY, [
 					{ label: 'Open order', run: () => openOrderModal( o ) },
+					{ label: 'Open full page', run: () => go( 'orders/' + o.id ) },
 					...moves.map( ( [ st, label, done ] ) => ( { label, run: () => quickOrderStatus( o, st, done ) } ) ),
 				] );
 			} )
@@ -22110,243 +22764,7 @@
 		}
 
 		if ( m.type === 'order' ) {
-			const listO = m.order || {};
-			const o = m.full || listO;
-			const b = o.billing || {};
-			const s = o.shipping || {};
-			const sym = o.currency_symbol || '$';
-			const refundable = orderRefundableTotal( o );
-			const payUrl = o.payment_url || '';
-			const canEdit = B.caps.orders;
-			const loading = !! m.loading && ! m.full;
-			const emails = m.emails;
-			const curMethod = o.payment_method || '';
-			const payLoading = canEdit && m.gateways == null;
-			// Themed combobox shell; options + seed bind via bindAutocomplete.
-			const orderCombo = ( key, label ) => `
-				<div class="minn-ac" data-oc="${ key }"><input class="minn-input minn-ac-input" placeholder="${ esc( label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }"><div class="minn-ac-panel" hidden></div></div>`;
-			const fmtAddr = ( a ) => {
-				const lines = [
-					[ a.first_name, a.last_name ].filter( Boolean ).join( ' ' ),
-					a.company, a.address_1, a.address_2,
-					[ a.city, a.state, a.postcode ].filter( Boolean ).join( ', ' ),
-					a.country, a.phone,
-				].filter( Boolean );
-				return lines.join( '\n' ) || '—';
-			};
-			return `
-			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal wide">
-					<div class="minn-modal-head">
-						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">Order #${ esc( o.number || listO.number || o.id ) }</div>
-							<div class="minn-modal-sub">${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }</div>
-						</div>
-						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
-						<button class="minn-x-btn" id="minn-modal-close">×</button>
-					</div>
-					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading order…</div>' : '' }
-					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
-					${ ! loading && ! m.loadError ? `
-					<div class="minn-order-body">
-						<div class="minn-order-grid">
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">Customer</div>
-								${ canEdit ? `
-								<div class="minn-order-fields">
-									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">First name</div><input class="minn-input" id="minn-ob-first" value="${ esc( b.first_name || '' ) }"></div>
-										<div><div class="minn-field-label">Last name</div><input class="minn-input" id="minn-ob-last" value="${ esc( b.last_name || '' ) }"></div>
-									</div>
-									<div><div class="minn-field-label">Email</div><input class="minn-input" id="minn-ob-email" type="email" value="${ esc( b.email || '' ) }"></div>
-									<div><div class="minn-field-label">Phone</div><input class="minn-input" id="minn-ob-phone" value="${ esc( b.phone || '' ) }"></div>
-									<div><div class="minn-field-label">Billing address</div>
-										<textarea class="minn-input" id="minn-ob-addr1" rows="1" placeholder="Address line 1">${ esc( b.address_1 || '' ) }</textarea>
-										<textarea class="minn-input" id="minn-ob-addr2" rows="1" placeholder="Address line 2" style="margin-top:6px;">${ esc( b.address_2 || '' ) }</textarea>
-									</div>
-									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">City</div><input class="minn-input" id="minn-ob-city" value="${ esc( b.city || '' ) }"></div>
-										<div><div class="minn-field-label">State</div><input class="minn-input" id="minn-ob-state" value="${ esc( b.state || '' ) }"></div>
-										<div><div class="minn-field-label">Postcode</div><input class="minn-input" id="minn-ob-postcode" value="${ esc( b.postcode || '' ) }"></div>
-									</div>
-									<div><div class="minn-field-label">Country</div><input class="minn-input" id="minn-ob-country" value="${ esc( b.country || '' ) }" placeholder="US"></div>
-								</div>` : `
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( customerName( o ) ) }</span></div>
-									${ b.email ? `<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email ) }</span></div>` : '' }
-									<div class="minn-side-row"><span class="minn-side-key">Billing</span><span style="white-space:pre-line;">${ esc( fmtAddr( b ) ) }</span></div>
-								</div>` }
-							</div>
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">Shipping &amp; note</div>
-								${ canEdit ? `
-								<div class="minn-order-fields">
-									<div><div class="minn-field-label">Ship to</div>
-										<textarea class="minn-input" id="minn-os-addr1" rows="1" placeholder="Address line 1">${ esc( s.address_1 || '' ) }</textarea>
-										<textarea class="minn-input" id="minn-os-addr2" rows="1" placeholder="Address line 2" style="margin-top:6px;">${ esc( s.address_2 || '' ) }</textarea>
-									</div>
-									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">City</div><input class="minn-input" id="minn-os-city" value="${ esc( s.city || '' ) }"></div>
-										<div><div class="minn-field-label">State</div><input class="minn-input" id="minn-os-state" value="${ esc( s.state || '' ) }"></div>
-										<div><div class="minn-field-label">Postcode</div><input class="minn-input" id="minn-os-postcode" value="${ esc( s.postcode || '' ) }"></div>
-									</div>
-									<div><div class="minn-field-label">Country</div><input class="minn-input" id="minn-os-country" value="${ esc( s.country || '' ) }"></div>
-									<div><div class="minn-field-label">Customer note</div><textarea class="minn-input" id="minn-o-note" rows="3" placeholder="Note from the customer…">${ esc( o.customer_note || '' ) }</textarea></div>
-								</div>` : `
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">Shipping</span><span style="white-space:pre-line;">${ esc( fmtAddr( s ) ) }</span></div>
-									${ o.customer_note ? `<div class="minn-side-row"><span class="minn-side-key">Note</span><span>${ esc( o.customer_note ) }</span></div>` : '' }
-								</div>` }
-								${ payUrl ? `
-								<div style="margin-top:12px;">
-									<div class="minn-field-label">Payment link</div>
-									<div class="minn-modal-url" style="margin:0;">
-										<span class="minn-permalink" id="minn-o-payurl" title="${ esc( payUrl ) }">${ esc( payUrl ) }</span>
-									</div>
-									<button type="button" class="minn-btn-soft" id="minn-o-copy-pay" style="margin-top:8px;">${ icon( 'copy' ) } Copy payment URL</button>
-								</div>` : '' }
-							</div>
-						</div>
-						<div class="minn-order-items">
-							${ ( o.line_items || [] ).map( ( li ) => `
-								<div class="minn-order-item">
-									<span class="minn-order-qty">${ li.quantity }×</span>
-									<span class="minn-cell-clip">${ esc( li.name ) }</span>
-									<span class="minn-order-line-total">${ esc( orderMoney( o, li.total ) ) }</span>
-								</div>` ).join( '' ) }
-							${ o.discount_total && parseFloat( o.discount_total ) > 0 ? `
-								<div class="minn-order-item"><span></span><span>Discount</span><span class="minn-order-line-total">−${ esc( orderMoney( o, o.discount_total ) ) }</span></div>` : '' }
-							${ o.shipping_total && parseFloat( o.shipping_total ) > 0 ? `
-								<div class="minn-order-item"><span></span><span>Shipping</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.shipping_total ) ) }</span></div>` : '' }
-							${ o.total_tax && parseFloat( o.total_tax ) > 0 ? `
-								<div class="minn-order-item"><span></span><span>Tax</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.total_tax ) ) }</span></div>` : '' }
-							${ ( o.refunds || [] ).map( ( r ) => `
-								<div class="minn-order-item"><span></span><span>Refund${ r.reason ? ': ' + esc( r.reason ) : '' }</span><span class="minn-order-line-total">−${ esc( orderMoney( o, Math.abs( parseFloat( r.total ) || 0 ) ) ) }</span></div>` ).join( '' ) }
-							<div class="minn-order-item total">
-								<span></span><span>Total</span>
-								<span class="minn-order-line-total">${ esc( orderMoney( o, o.total ) ) }</span>
-							</div>
-						</div>
-						${ canEdit ? `
-						<div class="minn-media-edit minn-order-status">
-							<div class="minn-field-label">Status</div>
-							<div style="display:flex; gap:8px; flex-wrap:wrap;">
-								<div style="flex:1; min-width:140px;">${ orderCombo( 'status', 'Status' ) }</div>
-								<button class="minn-btn-primary" id="minn-order-save" type="button">Save changes</button>
-							</div>
-							<div class="minn-toggle-desc" style="margin-top:8px;">Saves status, payment details, customer details, shipping and the customer note.</div>
-						</div>
-						<div class="minn-media-edit minn-order-payment">
-							<div class="minn-side-title" style="margin:0 0 8px;">Payment</div>
-							${ payLoading ? '<div class="minn-loading" style="padding:8px;">Loading payment methods…</div>' : `
-							<div class="minn-order-field-row">
-								<div style="flex:1;">
-									<div class="minn-field-label">Payment method</div>
-									${ orderCombo( 'paymethod', 'Payment method' ) }
-								</div>
-								<div style="flex:1;">
-									<div class="minn-field-label">Transaction ID</div>
-									<input class="minn-input" id="minn-o-txn" value="${ esc( o.transaction_id || '' ) }" placeholder="Check number, reference…">
-								</div>
-							</div>
-							<div id="minn-o-paytitle-wrap" style="margin-top:8px;${ curMethod === 'other' ? '' : ' display:none;' }">
-								<div class="minn-field-label">Method name</div>
-								<input class="minn-input" id="minn-o-paytitle" value="${ esc( o.payment_method_title || '' ) }" placeholder="How this method reads on the order">
-							</div>
-							${ o.date_paid ? `
-							<div class="minn-toggle-desc" style="margin-top:8px;">Paid ${ esc( timeAgo( o.date_paid ) ) }${ o.payment_method_title ? ' via ' + esc( o.payment_method_title ) : '' }.</div>` : `
-							<button class="minn-btn-primary" id="minn-o-recordpay" type="button" style="margin-top:10px;">Record payment</button>
-							<div class="minn-toggle-desc" style="margin-top:8px;">Marks the order paid now with the method and transaction ID above. For a check that arrived in the mail, pick the check method, note the check number, and record.</div>` }` }
-						</div>
-						${ refundable > 0.001 ? `
-						<div class="minn-media-edit minn-order-refund">
-							<div class="minn-side-title" style="margin:0 0 8px;">Refund</div>
-							<div class="minn-order-field-row">
-								<div style="flex:1;">
-									<div class="minn-field-label">Amount (max ${ esc( orderMoney( o, refundable ) ) })</div>
-									<input class="minn-input" id="minn-o-refund-amt" type="number" step="0.01" min="0.01" max="${ refundable.toFixed( 2 ) }" value="${ refundable.toFixed( 2 ) }">
-								</div>
-							</div>
-							<div style="margin-top:8px;"><div class="minn-field-label">Reason</div>
-								<input class="minn-input" id="minn-o-refund-reason" placeholder="Optional note on the refund">
-							</div>
-							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
-								<input type="checkbox" id="minn-o-refund-api" checked>
-								<span>Also refund via payment gateway when supported</span>
-							</label>
-							<button class="minn-btn-soft danger" id="minn-o-refund" type="button" style="margin-top:10px;">Issue refund</button>
-						</div>` : '' }
-						<div class="minn-media-edit minn-order-wcmail">
-							<div class="minn-side-title" style="margin:0 0 8px;">WooCommerce email</div>
-							${ emails == null ? '<div class="minn-loading" style="padding:8px;">Loading email types…</div>' : `
-							<div style="display:flex; gap:8px; flex-wrap:wrap;">
-								<div style="flex:1; min-width:180px;">${ orderCombo( 'wcemail', 'Email type' ) }</div>
-								<button class="minn-btn-soft" id="minn-o-wcemail-send" type="button" ${ ( emails || [] ).length ? '' : 'disabled' }>${ icon( 'send' ) } Send</button>
-							</div>
-							<div class="minn-toggle-desc" style="margin-top:8px;">Resends a transactional email through WooCommerce (invoice, processing, completed, …).</div>` }
-						</div>` : '' }
-						<div class="minn-media-edit minn-order-notes">
-							<div class="minn-side-title" style="margin:0 0 8px;">Order notes</div>
-							${ m.notes == null ? '<div class="minn-loading" style="padding:8px;">Loading notes…</div>' : `
-							<div class="minn-order-notes-list">
-								${ ( m.notes || [] ).length ? ( m.notes || [] ).map( ( n ) => `
-									<div class="minn-order-note${ n.customer_note ? ' customer' : '' }">
-										<div class="minn-order-note-meta">
-											<span>${ esc( n.author || 'System' ) }</span>
-											<span>${ esc( timeAgo( n.date_created_gmt || n.date_created ) ) }</span>
-											${ n.customer_note ? '<span class="minn-status future">Customer</span>' : '<span class="minn-status draft">Private</span>' }
-										</div>
-										<div class="minn-order-note-body">${ esc( n.note || '' ) }</div>
-									</div>` ).join( '' ) : '<div class="minn-toggle-desc">No notes yet.</div>' }
-							</div>
-							${ canEdit ? `
-							<div class="minn-order-fields" style="margin-top:12px;">
-								<div><div class="minn-field-label">Add a note</div>
-									<textarea class="minn-input" id="minn-o-new-note" rows="2" placeholder="Internal note for staff…"></textarea>
-								</div>
-								<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px; margin-top:8px;">
-									<input type="checkbox" id="minn-o-note-customer">
-									<span>Visible to the customer</span>
-								</label>
-								<button class="minn-btn-soft" id="minn-o-note-add" type="button" style="margin-top:10px;">Add note</button>
-							</div>` : '' }` }
-						</div>
-						${ B.wcs ? `
-						<div class="minn-media-edit minn-order-subs">
-							<div class="minn-side-title" style="margin:0 0 8px;">Subscriptions</div>
-							${ m.relatedSubs == null ? '<div class="minn-loading" style="padding:8px;">Checking…</div>'
-								: ! m.relatedSubs.length ? '<div class="minn-toggle-desc">No related subscriptions on this order.</div>'
-								: m.relatedSubs.map( ( sub ) => `
-								<button type="button" class="minn-sub-order-row" data-relsub="${ sub.id }">
-									<span>#${ esc( sub.number || sub.id ) }</span>
-									<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
-									<span>${ esc( subMoney( sub, sub.total ) ) }</span>
-								</button>` ).join( '' ) }
-						</div>` : '' }
-						<div class="minn-media-edit minn-order-others">
-							<div class="minn-side-title" style="margin:0 0 8px;">More from this customer</div>
-							${ m.otherOrders == null ? '<div class="minn-loading" style="padding:8px;">Checking…</div>'
-								: ! m.otherOrders.length ? '<div class="minn-toggle-desc">No other orders from this customer.</div>'
-								: m.otherOrders.map( ( oo ) => `
-								<button type="button" class="minn-sub-order-row" data-relorder="${ oo.id }" data-relnum="${ esc( oo.number || oo.id ) }">
-									<span>#${ esc( oo.number || oo.id ) }</span>
-									<span class="minn-status ${ ORDER_STATUS_STYLE[ oo.status ] || 'draft' }">${ esc( ( oo.status || '' ).replace( /-/g, ' ' ) ) }</span>
-									<span>${ esc( orderMoney( oo, oo.total ) ) }</span>
-									<span style="color:var(--text3); font-size:12.5px;">${ esc( timeAgo( oo.date_created ) ) }</span>
-								</button>` ).join( '' ) }
-							${ ( ( o.billing || {} ).email && canEdit && ( m.otherOrders || [] ).length ) ? `
-							<button type="button" class="minn-btn-soft" id="minn-o-viewall" style="margin-top:6px;">View all orders from ${ esc( ( o.billing || {} ).email ) }</button>` : '' }
-						</div>
-					</div>
-					<div class="minn-modal-actions">
-						${ canEdit && b.email ? `<button class="minn-btn-soft" id="minn-o-email" type="button">${ icon( 'send' ) } Send email…</button>` : '' }
-						${ payUrl ? `<button class="minn-btn-soft" id="minn-o-copy-pay2" type="button">${ icon( 'copy' ) } Copy payment URL</button>` : '' }
-						${ ( ( B.wcpdf && B.wcpdf.docs ) || [] ).map( ( d ) =>
-							`<a class="minn-btn-soft" href="${ esc( `${ B.wcpdf.ajax }?action=generate_wpo_wcpdf&document_type=${ encodeURIComponent( d.type ) }&order_ids=${ o.id }&access_key=${ encodeURIComponent( B.wcpdf.nonce ) }` ) }" target="_blank" rel="noopener" title="Generated by PDF Invoices &amp; Packing slips">⬇ ${ esc( d.title ) } (PDF)</a>` ).join( '' ) }
-						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ o.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
-					</div>` : '' }
-				</div>
-			</div>`;
+			return orderModalHtml( m );
 		}
 
 		if ( m.type === 'product' ) {
@@ -23838,326 +24256,7 @@
 		}
 
 		if ( m.type === 'order' ) {
-			const o = m.full || m.order;
-			// Pending-edits scratchpad: the modal's async fetches (emails, notes,
-			// related orders, gateways) each re-render the whole overlay, which
-			// used to wipe anything the user had typed or picked in the window
-			// before they landed. Live edits record here (delegated listener +
-			// combobox onPick) and re-apply after every rebuild; a successful
-			// save clears them.
-			if ( ! m.edits ) m.edits = {};
-			const editsOverlay = $( '#minn-modal-overlay' );
-			if ( editsOverlay ) {
-				editsOverlay.addEventListener( 'input', ( e ) => {
-					const t = e.target;
-					if ( t && t.id && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ) && ! t.classList.contains( 'minn-ac-input' ) ) {
-						m.edits[ t.id ] = t.value;
-					}
-				} );
-				editsOverlay.addEventListener( 'focusin', ( e ) => {
-					const t = e.target;
-					if ( t && t.id && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ) ) m.edits.__focus = t.id;
-				} );
-			}
-			const copyPay = async () => {
-				const url = ( m.full && m.full.payment_url ) || o.payment_url || '';
-				if ( ! url ) { toast( 'No payment URL on this order', true ); return; }
-				try { await navigator.clipboard.writeText( url ); toast( 'Payment URL copied' ); }
-				catch ( err ) { toast( 'Could not copy', true ); }
-			};
-			$$( '[data-relsub]' ).forEach( ( row ) =>
-				row.addEventListener( 'click', () => {
-					const sid = parseInt( row.dataset.relsub, 10 );
-					if ( ! sid ) return;
-					closeModal();
-					openSubscriptionModal( { id: sid, number: String( sid ) } );
-				} )
-			);
-			$$( '[data-relorder]' ).forEach( ( row ) =>
-				row.addEventListener( 'click', () => {
-					const oid = parseInt( row.dataset.relorder, 10 );
-					if ( ! oid ) return;
-					closeModal();
-					openOrderModal( { id: oid, number: row.dataset.relnum || String( oid ) } );
-				} )
-			);
-			const viewAllBtn = $( '#minn-o-viewall' );
-			if ( viewAllBtn ) viewAllBtn.addEventListener( 'click', () => {
-				const email = ( ( ( m.full || m.order ).billing || {} ).email || '' ).trim();
-				if ( ! email ) return;
-				closeModal();
-				state.orderView = 'list';
-				state.orderTab = 'any';
-				state.orderSearch = email;
-				state.cache.orders = null;
-				if ( state.route === 'orders' ) renderOrders();
-				else go( 'orders' );
-			} );
-			// Themed comboboxes (status, payment method, email type) — the
-			// order modal's native selects were the last OS-drawn ones here.
-			const ocWrap = ( key ) => $( `[data-oc="${ key }"]` );
-			const ocValue = ( key ) => {
-				const w = ocWrap( key );
-				const inp = w && $( '.minn-ac-input', w );
-				return inp ? ( inp.dataset.acValue != null ? inp.dataset.acValue : inp.value ) : null;
-			};
-			const ocSeed = ( key, fallback ) => ( m.edits[ 'oc:' + key ] != null ? m.edits[ 'oc:' + key ] : fallback );
-			const statusWrap = ocWrap( 'status' );
-			if ( statusWrap ) bindAutocomplete( statusWrap,
-				Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => ( { value: st, label: st.replace( /-/g, ' ' ) } ) ),
-				{ strict: true, value: ocSeed( 'status', o.status || 'pending' ), onPick: ( v ) => { m.edits[ 'oc:status' ] = v; } } );
-			const payChoices = orderPayChoices( m, o );
-			const payWrap = ocWrap( 'paymethod' );
-			if ( payWrap ) bindAutocomplete( payWrap,
-				payChoices.map( ( g ) => ( { value: g.id, label: g.title } ) ),
-				{
-					strict: true,
-					value: ocSeed( 'paymethod', o.payment_method || '' ),
-					// The free-form method name only applies to Other.
-					onPick: ( v ) => {
-						m.edits[ 'oc:paymethod' ] = v;
-						const w = $( '#minn-o-paytitle-wrap' );
-						if ( w ) w.style.display = v === 'other' ? '' : 'none';
-					},
-				} );
-			const mailWrap = ocWrap( 'wcemail' );
-			if ( mailWrap && Array.isArray( m.emails ) && m.emails.length ) bindAutocomplete( mailWrap,
-				m.emails.map( ( em ) => ( { value: em.id, label: `${ em.title }${ em.enabled ? '' : ' (disabled)' } · ${ em.to === 'customer' ? 'customer' : 'admin' }` } ) ),
-				{ strict: true, value: ocSeed( 'wcemail', m.emails[ 0 ].id ), onPick: ( v ) => { m.edits[ 'oc:wcemail' ] = v; } } );
-			// Re-apply pending edits over the fresh markup's seeds, and put
-			// focus back where the rebuild stole it from.
-			Object.keys( m.edits ).forEach( ( k ) => {
-				if ( k.indexOf( '__' ) === 0 || k.indexOf( 'oc:' ) === 0 ) return;
-				const el = document.getElementById( k );
-				if ( el && ( el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ) ) el.value = m.edits[ k ];
-			} );
-			const payWrapVis = $( '#minn-o-paytitle-wrap' );
-			if ( payWrapVis ) payWrapVis.style.display = ocSeed( 'paymethod', o.payment_method || '' ) === 'other' ? '' : 'none';
-			if ( m.edits.__focus && ( ! document.activeElement || document.activeElement === document.body ) ) {
-				const el = document.getElementById( m.edits.__focus );
-				if ( el && el.focus ) {
-					el.focus( { preventScroll: true } );
-					if ( el.setSelectionRange ) { try { el.setSelectionRange( el.value.length, el.value.length ); } catch ( err ) {} }
-				}
-			}
-			const payState = () => {
-				const method = ocValue( 'paymethod' );
-				if ( method == null ) return null;
-				const choice = payChoices.find( ( g ) => g.id === method );
-				let title = choice ? choice.title : method;
-				if ( method === 'other' ) title = ( ( $( '#minn-o-paytitle' ) || {} ).value || '' ).trim() || 'Other';
-				if ( ! method ) title = '';
-				return {
-					payment_method: method,
-					payment_method_title: title,
-					transaction_id: ( ( $( '#minn-o-txn' ) || {} ).value || '' ).trim(),
-				};
-			};
-			const recordBtn = $( '#minn-o-recordpay' );
-			if ( recordBtn ) recordBtn.addEventListener( 'click', async () => {
-				const body = payState() || {};
-				if ( o.needs_payment ) {
-					// WC's own payment_complete: stamps date_paid, moves the status,
-					// fires the payment hooks (stock, emails).
-					body.set_paid = true;
-				} else {
-					// set_paid only fires for pending/failed orders — an on-hold
-					// check order (the classic cheque flow) needs the stamp done
-					// explicitly, mirroring what wp-admin admins do by hand.
-					body.date_paid_gmt = new Date().toISOString().slice( 0, 19 );
-					body.status = 'processing';
-				}
-				recordBtn.disabled = true;
-				recordBtn.textContent = 'Recording…';
-				try {
-					await api( `wc/v3/orders/${ o.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
-					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
-					if ( state.modal && state.modal.type === 'order' ) {
-						state.modal.full = full;
-						state.modal.order = Object.assign( {}, state.modal.order, { status: full.status, total: full.total } );
-					}
-					toast( 'Payment recorded' );
-					m.edits = {};
-					state.cache.orders = null;
-					if ( state.route === 'orders' ) renderOrders();
-					renderOverlays();
-				} catch ( e ) {
-					toast( e.message, true );
-					recordBtn.disabled = false;
-					recordBtn.textContent = 'Record payment';
-				}
-			} );
-			const copyBtn = $( '#minn-o-copy-pay' );
-			const copyBtn2 = $( '#minn-o-copy-pay2' );
-			if ( copyBtn ) copyBtn.addEventListener( 'click', copyPay );
-			if ( copyBtn2 ) copyBtn2.addEventListener( 'click', copyPay );
-
-			const emailBtn = $( '#minn-o-email' );
-			if ( emailBtn ) emailBtn.addEventListener( 'click', () => openOrderEmailModal( m.full || m.order ) );
-
-			const saveBtn = $( '#minn-order-save' );
-			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const status = ocValue( 'status' ) || o.status;
-				const payload = {
-					status,
-					customer_note: ( $( '#minn-o-note' ) || {} ).value || '',
-					billing: {
-						first_name: ( $( '#minn-ob-first' ) || {} ).value || '',
-						last_name: ( $( '#minn-ob-last' ) || {} ).value || '',
-						email: ( $( '#minn-ob-email' ) || {} ).value || '',
-						phone: ( $( '#minn-ob-phone' ) || {} ).value || '',
-						address_1: ( $( '#minn-ob-addr1' ) || {} ).value || '',
-						address_2: ( $( '#minn-ob-addr2' ) || {} ).value || '',
-						city: ( $( '#minn-ob-city' ) || {} ).value || '',
-						state: ( $( '#minn-ob-state' ) || {} ).value || '',
-						postcode: ( $( '#minn-ob-postcode' ) || {} ).value || '',
-						country: ( $( '#minn-ob-country' ) || {} ).value || '',
-					},
-					shipping: {
-						address_1: ( $( '#minn-os-addr1' ) || {} ).value || '',
-						address_2: ( $( '#minn-os-addr2' ) || {} ).value || '',
-						city: ( $( '#minn-os-city' ) || {} ).value || '',
-						state: ( $( '#minn-os-state' ) || {} ).value || '',
-						postcode: ( $( '#minn-os-postcode' ) || {} ).value || '',
-						country: ( $( '#minn-os-country' ) || {} ).value || '',
-					},
-				};
-				// Preserve shipping names from billing when empty (common fix-up).
-				if ( ! ( m.full && m.full.shipping && m.full.shipping.first_name ) ) {
-					payload.shipping.first_name = payload.billing.first_name;
-					payload.shipping.last_name = payload.billing.last_name;
-				}
-				// Payment fields ride the normal save with wp-admin's own rule:
-				// method + title write only on a method (or Other-name) change,
-				// so a gateway that later retitles itself never silently
-				// rewrites old orders; transaction ID writes when edited. The
-				// paid state never changes here — that's Record payment's job.
-				const pay = payState();
-				if ( pay ) {
-					if ( pay.payment_method !== ( o.payment_method || '' )
-						|| ( pay.payment_method === 'other' && pay.payment_method_title !== ( o.payment_method_title || '' ) ) ) {
-						payload.payment_method = pay.payment_method;
-						payload.payment_method_title = pay.payment_method_title;
-					}
-					if ( pay.transaction_id !== ( o.transaction_id || '' ) ) {
-						payload.transaction_id = pay.transaction_id;
-					}
-				}
-				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
-				try {
-					const updated = await api( `wc/v3/orders/${ o.id }`, {
-						method: 'PUT',
-						body: JSON.stringify( payload ),
-					} );
-					// Re-fetch full detail so refunds/totals stay accurate.
-					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
-					if ( state.modal && state.modal.type === 'order' ) {
-						state.modal.full = full || updated;
-						state.modal.order = Object.assign( {}, state.modal.order, {
-							status: full.status,
-							total: full.total,
-							billing: full.billing,
-							line_items: full.line_items,
-						} );
-					}
-					toast( 'Order updated' );
-					m.edits = {};
-					state.cache.orders = null;
-					if ( state.route === 'orders' ) renderOrders();
-					renderOverlays();
-				} catch ( e ) {
-					toast( e.message, true );
-					saveBtn.disabled = false;
-					saveBtn.textContent = 'Save changes';
-				}
-			} );
-
-			const refundBtn = $( '#minn-o-refund' );
-			if ( refundBtn ) refundBtn.addEventListener( 'click', async () => {
-				const max = orderRefundableTotal( o );
-				const amt = parseFloat( ( $( '#minn-o-refund-amt' ) || {} ).value );
-				const reason = ( ( $( '#minn-o-refund-reason' ) || {} ).value || '' ).trim();
-				const apiRefund = !!( $( '#minn-o-refund-api' ) || {} ).checked;
-				if ( ! amt || amt <= 0 || amt > max + 0.001 ) {
-					toast( `Enter an amount between 0.01 and ${ max.toFixed( 2 ) }`, true );
-					return;
-				}
-				if ( ! confirm( `Refund ${ orderMoney( o, amt ) } on order #${ o.number || o.id }?` ) ) return;
-				refundBtn.disabled = true;
-				refundBtn.textContent = 'Refunding…';
-				try {
-					await api( `wc/v3/orders/${ o.id }/refunds`, {
-						method: 'POST',
-						body: JSON.stringify( {
-							amount: amt.toFixed( 2 ),
-							reason: reason || undefined,
-							api_refund: apiRefund,
-						} ),
-					} );
-					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
-					if ( state.modal && state.modal.type === 'order' ) {
-						state.modal.full = full;
-						state.modal.order = Object.assign( {}, state.modal.order, {
-							status: full.status,
-							total: full.total,
-						} );
-					}
-					toast( `Refunded ${ orderMoney( o, amt ) }` );
-					state.cache.orders = null;
-					state.cache.orderSummary = null;
-					if ( state.route === 'orders' ) renderOrders();
-					renderOverlays();
-				} catch ( e ) {
-					toast( e.message, true );
-					refundBtn.disabled = false;
-					refundBtn.textContent = 'Issue refund';
-				}
-			} );
-
-			const wcSend = $( '#minn-o-wcemail-send' );
-			if ( wcSend ) wcSend.addEventListener( 'click', async () => {
-				const emailId = ocValue( 'wcemail' );
-				if ( ! emailId ) return;
-				const mailInput = mailWrap && $( '.minn-ac-input', mailWrap );
-				const label = mailInput ? mailInput.value : emailId;
-				if ( ! confirm( `Send “${ label.split( ' · ' )[ 0 ] }” for order #${ o.number || o.id }?` ) ) return;
-				wcSend.disabled = true;
-				try {
-					const r = await api( `minn-admin/v1/orders/${ o.id }/emails`, {
-						method: 'POST',
-						body: JSON.stringify( { email_id: emailId } ),
-					} );
-					toast( ( r && r.title ? r.title : 'Email' ) + ' sent' );
-				} catch ( e ) {
-					toast( e.message, true );
-				}
-				wcSend.disabled = false;
-			} );
-
-			const noteAdd = $( '#minn-o-note-add' );
-			if ( noteAdd ) noteAdd.addEventListener( 'click', async () => {
-				const ta = $( '#minn-o-new-note' );
-				const note = ( ta && ta.value || '' ).trim();
-				if ( ! note ) { toast( 'Write a note first', true ); return; }
-				const customer = !!( $( '#minn-o-note-customer' ) || {} ).checked;
-				noteAdd.disabled = true;
-				try {
-					await api( `wc/v3/orders/${ o.id }/notes`, {
-						method: 'POST',
-						body: JSON.stringify( { note, customer_note: customer } ),
-					} );
-					const notes = await api( `wc/v3/orders/${ o.id }/notes?per_page=50` );
-					if ( state.modal && state.modal.type === 'order' ) {
-						state.modal.notes = Array.isArray( notes ) ? notes : [];
-					}
-					toast( customer ? 'Customer note added' : 'Private note added' );
-					renderOverlays();
-				} catch ( e ) {
-					toast( e.message, true );
-					noteAdd.disabled = false;
-				}
-			} );
+			bindOrderDetail( m );
 		}
 
 		if ( m.type === 'order-email' ) {
@@ -26820,11 +26919,14 @@
 		if ( tip ) tip.hidden = true;
 		// Profile data is per-visit (the old modal refetched on every open).
 		if ( state.route !== 'profile' ) state.profile = null;
+		// Order-page data too — a revisit refetches, like the modal always did.
+		if ( state.route !== 'order' ) state.orderPage = null;
 		switch ( state.route ) {
 			case 'content': return renderContent();
 			case 'media': return renderMedia();
 			case 'comments': return renderComments();
 			case 'orders': return renderOrders();
+			case 'order': return renderOrderPage();
 			case 'subscriptions': return renderSubscriptions();
 			case 'products': return renderProducts();
 			case 'coupons': return renderCoupons();
