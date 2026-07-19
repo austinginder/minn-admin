@@ -14588,6 +14588,10 @@
 				editUrl: B.site.adminUrl + 'post.php?post=' + p.id + '&action=edit',
 				status: p.status,
 				date: p.date || null,
+				// The loaded copy's modified stamp — the takeover-drift check
+				// compares it against the server's to catch saves made by the
+				// other session while this one was locked out.
+				modified: p.modified || null,
 				newDate: null,
 				slug: '/' + ( p.slug || '' ),
 				slugValue: p.slug || '',
@@ -14872,6 +14876,7 @@
 			ed.visibility = p.status === 'private' ? 'private' : ( ed.password ? 'password' : 'public' );
 			ed.link = p.link;
 			if ( p.date ) ed.date = p.date;
+			if ( p.modified ) ed.modified = p.modified;
 			if ( payload.date ) ed.newDate = null;
 			ed.savedAt = Date.now();
 			ed.dirty = false;
@@ -17200,6 +17205,7 @@
 		}
 		if ( r.acquired ) {
 			const wasReadonly = ed.lockState === 'taken' || ed.lockState === 'blocked';
+			const prevHolder = ed.lockHolder;
 			ed.lockState = 'held';
 			ed.lockHolder = null;
 			scheduleLockRefresh( ed );
@@ -17207,6 +17213,7 @@
 				removeLockOverlay();
 				setEditorWritable( true );
 				renderLockNotice();
+				checkTakeoverDrift( ed, prevHolder );
 			}
 		} else if ( ed.lockState === 'held' || ed.lockState === 'taken' ) {
 			lockLost( ed, r.holder );
@@ -17296,6 +17303,92 @@
 				<button class="minn-btn-soft" id="minn-lock-retake" type="button">Take back</button>
 			</div>` );
 		$( '#minn-lock-retake' ).addEventListener( 'click', () => acquireLock( ed, true ) );
+	}
+
+	// A takeover in either direction can leave this session holding a copy
+	// that predates the other session's saves — regaining the lock must not
+	// quietly make the stale copy canonical (the next save would revert their
+	// work). On every readonly→held transition, compare the server's modified
+	// stamp: a clean local copy adopts theirs in place; local unsaved edits
+	// get the amber banner and the choice.
+	async function checkTakeoverDrift( ed, holder ) {
+		if ( ! ed.id || ! ed.modified || ed.mode === 'locked' ) return;
+		let p;
+		try {
+			p = await api( `wp/v2/${ ed.type }/${ ed.id }?context=edit&_fields=modified` );
+		} catch ( e ) {
+			return;
+		}
+		if ( state.editor !== ed || state.route !== 'editor' || ed.lockState !== 'held' ) return;
+		if ( ! p.modified || p.modified <= ed.modified ) return;
+		ed.drift = { modified: p.modified, who: ( holder && holder.name ) || '' };
+		if ( ed.dirty ) {
+			renderDriftNotice();
+		} else {
+			adoptServerCopy( ed, false );
+		}
+	}
+
+	// Replace the editor's copy with the server's current one — the takeover
+	// recovery path. force is the explicit banner click; the quiet path
+	// re-checks dirty after its fetch so a keystroke racing the request
+	// downgrades to the banner instead of eating the edit.
+	async function adoptServerCopy( ed, force ) {
+		let p;
+		try {
+			p = await api( `wp/v2/${ ed.type }/${ ed.id }?context=edit&_fields=title,content.raw,modified,status` );
+		} catch ( e ) {
+			toast( e.message, true );
+			return;
+		}
+		if ( state.editor !== ed || state.route !== 'editor' ) return;
+		if ( ! force && ed.dirty ) {
+			renderDriftNotice();
+			return;
+		}
+		const raw = ( p.content && p.content.raw ) || '';
+		ed.title = decodeEntities( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || ed.title );
+		ed.mode = editorModeFor( raw );
+		ed.islands = [];
+		ed.content = ed.mode === 'blocks' ? buildEditableContent( ed, raw )
+			: ed.mode === 'classic' ? miniAutop( raw )
+			: stripBlockComments( raw );
+		if ( p.status ) ed.status = p.status;
+		if ( p.modified ) ed.modified = p.modified;
+		ed.drift = null;
+		// The adopted content is the truth — without this, the dirty-editor
+		// guard in renderEditor re-adopts the stale DOM (restoreBackup rule).
+		ed.dirty = false;
+		if ( force ) {
+			// Explicitly discarding local edits also drops their crash-net
+			// snapshot — the next open must not offer the clobbering copy back.
+			try { localStorage.removeItem( localNetKey( ed ) ); } catch ( e ) {}
+		}
+		renderEditor();
+		renderEditorSide();
+		toast( 'Loaded the latest saved version' );
+	}
+
+	// Amber banner (backup-notice pattern): their save vs our unsaved edits.
+	function renderDriftNotice() {
+		const ed = state.editor;
+		const existing = $( '#minn-drift-note' );
+		if ( existing ) existing.remove();
+		if ( ! ed || ! ed.drift ) return;
+		const title = $( '#minn-editor-title' );
+		if ( ! title ) return;
+		const who = ed.drift.who || 'Someone else';
+		title.insertAdjacentHTML( 'afterend', `
+			<div class="minn-backup-note minn-drift-note" id="minn-drift-note" role="alert">
+				<span><b>${ esc( who ) }</b> saved a newer version while you were locked out (${ esc( timeAgo( ed.drift.modified ) ) }). Saving your copy would overwrite it.</span>
+				<button class="minn-btn-soft" id="minn-drift-load" type="button">Load theirs</button>
+				<button class="minn-x-btn" id="minn-drift-keep" type="button" title="Keep my copy">×</button>
+			</div>` );
+		$( '#minn-drift-load' ).addEventListener( 'click', () => adoptServerCopy( ed, true ) );
+		$( '#minn-drift-keep' ).addEventListener( 'click', () => {
+			ed.drift = null;
+			renderDriftNotice();
+		} );
 	}
 
 	/* ===== Conflict safety: local crash net (localStorage) ===== */
@@ -17526,6 +17619,7 @@
 		renderBackupNotice();
 		renderLocalNetNotice();
 		renderLockNotice();
+		renderDriftNotice();
 		renderLockOverlay();
 		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) setEditorWritable( false );
 		// Image loads change layout under the fixed chips — reposition then.

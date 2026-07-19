@@ -13,6 +13,7 @@
 * **The order modal's dropdowns are themed comboboxes:** status, payment method and the WooCommerce email picker join the app's searchable combobox style; the last OS-drawn selects in the modal are gone.
 
 ### Fixed
+* **Taking a post lock back no longer risks silently reverting the other person's saves:** when a lock changes hands, the winning session's copy could predate saves the other session made in the meantime, and the next save would quietly restore the stale copy. Regaining the lock now checks the server's modified stamp: a clean local copy adopts the newer saved version in place, and a copy with unsaved edits gets an amber banner naming who saved and offering Load theirs or keep working. Their work stays in revisions either way; choosing Load theirs also discards the local crash-net snapshot so the overwritten copy is never offered back.
 * **The order modal no longer loses in-progress edits:** its background fetches (emails, notes, related orders) re-render the modal as they land, and anything typed or picked in that window used to silently revert to saved values, with the save then persisting the reverted form. Edits now survive those refreshes, and focus returns to the field the rebuild stole it from.
 
 ## **v0.18.0** - July 18, 2026

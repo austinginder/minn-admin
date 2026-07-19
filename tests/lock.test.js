@@ -78,6 +78,58 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	const aEditable2 = await pageA.evaluate( () => document.querySelector( '#minn-editor-body' ).getAttribute( 'contenteditable' ) );
 	t.check( 'take-back re-enables A\'s editor', aEditable2 === 'true', aEditable2 );
 
+	/* ===== Clean take-back silently adopts B's saved version ===== */
+	// A never typed, so A's copy is clean — the drift check must swap in B's
+	// save in place instead of leaving A one ⌘S away from reverting it.
+	await pageA.waitForFunction( () => {
+		const b = document.querySelector( '#minn-editor-body' );
+		return b && /B was here\./.test( b.textContent );
+	}, null, { timeout: 10000 } );
+	t.check( 'clean take-back adopts B\'s saved content', true );
+	t.check( 'no drift banner on a clean take-back', ! ( await pageA.$( '#minn-drift-note' ) ) );
+
+	/* ===== Dirty take-back offers the choice instead of silently reverting ===== */
+	// Published post: A's idle autosave only writes a revision (never clears
+	// dirty, never advances post modified), so the sequence is deterministic.
+	const post3 = await createPost( pageA, {
+		title: 'Lock drift test',
+		content: '<!-- wp:paragraph -->\n<p>Original copy.</p>\n<!-- /wp:paragraph -->',
+		status: 'publish',
+	} );
+	await openEditor( pageA, post3 );
+	await pageA.waitForTimeout( 1000 );
+	await pageA.click( '#minn-editor-body p' );
+	await pageA.keyboard.press( 'End' );
+	await pageA.keyboard.type( ' A unsaved edit.' );
+	await openEditor( pageB, post3 );
+	await pageB.waitForSelector( '#minn-lock-overlay', { timeout: 10000 } );
+	await pageB.click( '#minn-lock-take' );
+	await pageB.waitForFunction( () => ! document.querySelector( '#minn-lock-overlay' ), null, { timeout: 10000 } );
+	await pageB.click( '#minn-editor-body p' );
+	await pageB.keyboard.press( 'End' );
+	await pageB.keyboard.type( ' B2 version.' );
+	await pageB.keyboard.press( 'Meta+s' );
+	await pageB.waitForTimeout( 1500 );
+	const rawPost3 = await pageB.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ pid }?context=edit&_fields=content`, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+		return ( await r.json() ).content.raw;
+	}, post3 );
+	t.check( 'B saved the contested published post', /B2 version\./.test( rawPost3 ), rawPost3 );
+	await pageA.waitForSelector( '#minn-lock-note', { timeout: 40000 } ); // 30s refresh + slack
+	await pageA.click( '#minn-lock-retake' );
+	await pageA.waitForSelector( '#minn-drift-note', { timeout: 10000 } );
+	const driftText = await pageA.textContent( '#minn-drift-note' );
+	t.check( 'dirty take-back shows the drift banner naming B', driftText.includes( editorName ), driftText );
+	const aKept = await pageA.evaluate( () => document.querySelector( '#minn-editor-body' ).textContent );
+	t.check( 'A\'s unsaved edits survive until A chooses', /A unsaved edit\./.test( aKept ), aKept );
+	await pageA.click( '#minn-drift-load' );
+	await pageA.waitForFunction( () => {
+		const b = document.querySelector( '#minn-editor-body' );
+		return b && /B2 version\./.test( b.textContent ) && ! /A unsaved edit\./.test( b.textContent );
+	}, null, { timeout: 10000 } );
+	t.check( 'Load theirs swaps in B\'s saved version', true );
+	t.check( 'drift banner clears after loading theirs', ! ( await pageA.$( '#minn-drift-note' ) ) );
+
 	/* ===== Leaving the editor releases the lock ===== */
 	const post2 = await createPost( pageA, {
 		title: 'Lock release test',
@@ -94,6 +146,7 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 
 	await deletePost( pageA, postId );
 	await deletePost( pageA, post2 );
+	await deletePost( pageA, post3 );
 	await ctxB.close();
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
