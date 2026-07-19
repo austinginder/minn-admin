@@ -11888,10 +11888,10 @@
 			</div>`;
 
 		// Debug tools — wp-config toggles (only when wp-config is writable) and
-		// a debug-log viewer (whenever the log exists). Absent when neither.
+		// the log viewer (whenever any log source exists). Absent when neither.
 		const cfg = s.config;
-		const log = cfg && cfg.log;
-		const showDebug = cfg && ( cfg.editable || ( log && log.exists ) );
+		const logs = s.logs || [];
+		const showDebug = ( cfg && cfg.editable ) || logs.length;
 		const debugCard = showDebug ? `
 			<div class="minn-card minn-sys-debug" id="minn-sys-debug">
 				<div class="minn-sys-card-head">${ icon( 'bug' ) }<span>Debug tools</span>
@@ -11910,12 +11910,18 @@
 		: `<button class="minn-switch${ c.value ? ' on' : '' }" data-const="${ esc( c.name ) }" role="switch" aria-checked="${ c.value }" aria-label="Toggle ${ esc( c.label ) }"><span class="minn-switch-knob"></span></button>` }
 						</div>` ).join( '' ) }
 				</div>` : '' }
-				${ log && log.exists ? `
-				<button class="minn-sys-logrow" id="minn-view-log">
+				${ logs.slice( 0, 5 ).map( ( l ) => `
+				<button class="minn-sys-logrow" data-logsrc="${ esc( l.id ) }"${ l.id === 'debug' ? ' id="minn-view-log"' : '' }>
 					${ icon( 'file' ) }
-					<span class="mono minn-sys-logpath">${ esc( log.path ) }</span>
-					<span class="minn-sys-logsize">${ esc( log.size_human ) }</span>
+					<span class="mono minn-sys-logpath">${ esc( ( l.group && l.group !== 'WordPress' ? l.group + ' · ' : '' ) + l.label ) }</span>
+					<span class="minn-sys-logsize">${ esc( l.size_human ) }</span>
 					<span class="minn-sys-logopen">View log →</span>
+				</button>` ).join( '' ) }
+				${ logs.length > 5 ? `
+				<button class="minn-sys-logrow" data-logsrc="${ esc( logs[ 5 ].id ) }">
+					${ icon( 'file' ) }
+					<span class="minn-sys-logpath">${ logs.length - 5 } more log source${ logs.length - 5 === 1 ? '' : 's' }</span>
+					<span class="minn-sys-logopen">Browse →</span>
 				</button>` : '' }
 			</div>` : '';
 
@@ -12119,8 +12125,8 @@
 			btn.disabled = false;
 		} ) );
 
-		const viewLog = $( '#minn-view-log', view );
-		if ( viewLog ) viewLog.addEventListener( 'click', openDebugLog );
+		$$( '[data-logsrc]', view ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => openLogViewer( row.dataset.logsrc ) ) );
 
 		// Autoload + Cron summary rows open their full-detail modals.
 		$$( '[data-sysdetail]', view ).forEach( ( el ) =>
@@ -12224,19 +12230,45 @@
 		</div>`;
 	}
 
-	// Full-screen debug-log viewer: the tail of the log in a scrollable
-	// monospace pane, with Refresh / Copy / Clear. Fetches on open and reload.
-	function openDebugLog() {
+	// Collapse repeated log lines, digits ignored before grouping (Grafana's
+	// "Numbers" dedup mode) — ten thousand "Undefined index on line N"
+	// repeats read as one row with a count. Order is first-seen.
+	function collapseLogText( raw ) {
+		const seen = new Map();
+		const order = [];
+		raw.split( '\n' ).forEach( ( line ) => {
+			if ( ! line.trim() ) return;
+			const sig = line.replace( /\d+/g, '#' );
+			const e = seen.get( sig );
+			if ( e ) {
+				e.n++;
+			} else {
+				const f = { line, n: 1 };
+				seen.set( sig, f );
+				order.push( f );
+			}
+		} );
+		return order.map( ( e ) => ( e.n > 1 ? '×' + e.n + '  ' : '' ) + e.line ).join( '\n' );
+	}
+
+	// Full-screen log viewer: any registered source's tail in a scrollable
+	// monospace pane, with a source picker, Refresh / Copy / Collapse
+	// repeats / Clear (only where the source allows clearing).
+	function openLogViewer( startId ) {
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-modal-overlay minn-log-overlay';
 		overlay.innerHTML = `
 			<div class="minn-modal minn-log-modal">
 				<div class="minn-modal-head">
-					<span class="minn-modal-title">${ icon( 'file' ) } Debug log <span class="minn-log-meta" id="minn-log-meta"></span></span>
+					<span class="minn-modal-title minn-log-title">${ icon( 'file' ) }
+						<span class="minn-ac minn-log-src" id="minn-log-src"><input class="minn-input minn-ac-input" placeholder="Log" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="Log source"><div class="minn-ac-panel" hidden></div></span>
+						<span class="minn-log-meta" id="minn-log-meta"></span>
+					</span>
 					<div class="minn-log-actions">
 						<button class="minn-btn-soft" id="minn-log-refresh" title="Refresh">${ icon( 'refresh' ) }</button>
 						<button class="minn-btn-soft" id="minn-log-copy" title="Copy all">${ icon( 'clipboard' ) }</button>
-						<button class="minn-btn-soft danger" id="minn-log-clear">Clear</button>
+						<button class="minn-btn-soft" id="minn-log-collapse" title="Collapse repeated lines (digits ignored)" aria-pressed="false">×N</button>
+						<button class="minn-btn-soft danger" id="minn-log-clear" hidden>Clear</button>
 						<button class="minn-x-btn" data-close type="button">×</button>
 					</div>
 				</div>
@@ -12244,6 +12276,8 @@
 			</div>`;
 		document.body.appendChild( overlay );
 		let raw = '';
+		let cur = startId || 'debug';
+		let collapsed = false;
 
 		const close = () => { overlay.remove(); document.removeEventListener( 'keydown', onKey ); };
 		const onKey = ( e ) => { if ( e.key === 'Escape' ) close(); };
@@ -12251,34 +12285,75 @@
 		overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) close(); } );
 		overlay.querySelector( '[data-close]' ).addEventListener( 'click', close );
 
+		const paint = () => {
+			const body = $( '#minn-log-body', overlay );
+			if ( ! raw.trim() ) {
+				body.innerHTML = '<span class="minn-log-loading">The log is empty.</span>';
+				return;
+			}
+			body.textContent = collapsed ? collapseLogText( raw ) : raw;
+			body.scrollTop = body.scrollHeight; // newest at the bottom
+		};
+
 		const load = async () => {
 			const body = $( '#minn-log-body', overlay );
 			const meta = $( '#minn-log-meta', overlay );
+			body.innerHTML = '<span class="minn-log-loading">Reading log…</span>';
 			try {
-				const r = await api( 'minn-admin/v1/system/debug-log' );
+				const r = await api( `minn-admin/v1/system/logs/${ cur }` );
 				raw = r.content || '';
-				meta.textContent = r.exists ? `${ r.path } · ${ r.size_human }${ r.truncated ? ' · showing last 256 KB' : '' }` : r.path + ' · empty';
-				if ( ! raw.trim() ) {
-					body.innerHTML = '<span class="minn-log-loading">The log is empty.</span>';
-				} else {
-					body.textContent = raw;
-					body.scrollTop = body.scrollHeight; // newest at the bottom
-				}
+				const bits = [];
+				if ( r.path ) bits.push( r.path );
+				bits.push( r.exists ? r.size_human : 'empty' );
+				if ( r.truncated ) bits.push( 'showing last 256 KB' );
+				meta.textContent = bits.join( ' · ' );
+				meta.title = r.note || '';
+				$( '#minn-log-clear', overlay ).hidden = ! r.clearable;
+				paint();
 			} catch ( e ) {
+				raw = '';
 				body.innerHTML = `<span class="minn-log-loading">Couldn’t read the log: ${ esc( e.message ) }</span>`;
 			}
 		};
+
+		// Source picker over the full registry; seeded to the opened source.
+		api( 'minn-admin/v1/system/logs' ).then( ( r ) => {
+			const sources = ( r && r.sources ) || [];
+			if ( ! sources.length || ! overlay.isConnected ) return;
+			if ( ! sources.some( ( s ) => s.id === cur ) ) {
+				cur = sources[ 0 ].id;
+				load();
+			}
+			bindAutocomplete( $( '#minn-log-src', overlay ),
+				sources.map( ( s ) => ( { value: s.id, label: ( s.group && s.group !== 'WordPress' ? s.group + ' · ' : '' ) + s.label } ) ),
+				{ strict: true, value: cur, onPick: ( v ) => {
+					if ( v && v !== cur ) {
+						cur = v;
+						collapsed = false;
+						$( '#minn-log-collapse', overlay ).setAttribute( 'aria-pressed', 'false' );
+						$( '#minn-log-collapse', overlay ).classList.remove( 'on' );
+						load();
+					}
+				} } );
+		} ).catch( () => {} );
 
 		$( '#minn-log-refresh', overlay ).addEventListener( 'click', load );
 		$( '#minn-log-copy', overlay ).addEventListener( 'click', async () => {
 			try { await navigator.clipboard.writeText( raw ); toast( 'Log copied' ); } catch ( e ) { toast( 'Copy failed', true ); }
 		} );
+		const collapseBtn = $( '#minn-log-collapse', overlay );
+		collapseBtn.addEventListener( 'click', () => {
+			collapsed = ! collapsed;
+			collapseBtn.setAttribute( 'aria-pressed', String( collapsed ) );
+			collapseBtn.classList.toggle( 'on', collapsed );
+			paint();
+		} );
 		$( '#minn-log-clear', overlay ).addEventListener( 'click', async () => {
-			if ( ! confirm( 'Empty the debug log? This can’t be undone.' ) ) return;
+			if ( ! confirm( 'Empty this log? This can’t be undone.' ) ) return;
 			try {
-				await api( 'minn-admin/v1/system/debug-log', { method: 'DELETE' } );
-				state.cache.system = null; // size changed
-				toast( 'Debug log cleared' );
+				await api( `minn-admin/v1/system/logs/${ cur }`, { method: 'DELETE' } );
+				state.cache.system = null; // sizes changed
+				toast( 'Log cleared' );
 				load();
 			} catch ( e ) {
 				toast( e.message, true );
@@ -22552,6 +22627,7 @@
 		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
 		if ( B.caps.terms ) cmds.push( { label: 'Manage categories & tags', kind: 'nav', icon: '#', run: () => goTerms() } );
 		if ( B.caps.settings ) cmds.push( { label: 'View System diagnostics', kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
+		if ( B.caps.settings ) cmds.push( { label: 'View site logs', kind: 'nav', icon: '📄', run: () => openLogViewer() } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		cmds.push(
 			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
