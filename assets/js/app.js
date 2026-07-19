@@ -2398,6 +2398,7 @@
 		modified: p.modified,
 		link: p.link || '',
 		builder: p.minn_builder || null,
+		unsaved: !! p.minn_modified,
 		thumb: contentFeaturedThumb( p ),
 	} );
 
@@ -2416,8 +2417,11 @@
 		// author embed is unchanged (names without a second users request).
 		let q = `context=edit&status=${ statuses }&per_page=25&orderby=date`
 			+ `&_embed=author,wp:featuredmedia`
-			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,_links,_embedded&page=${ page }`;
+			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,minn_modified,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
+		// The Modified filter: live posts carrying unsaved edits (a newer
+		// autosave than the saved copy). Meaningless in trash mode.
+		if ( state.contentModified && ! state.contentTrash ) q += '&minn_modified=1';
 		// categories/tags are post taxonomies — never send them for a custom post type.
 		if ( ! currentCpt() ) {
 			if ( state.contentCat ) q += '&categories=' + encodeURIComponent( state.contentCat );
@@ -2460,7 +2464,7 @@
 	// into the new context — in trash mode that would put Restore/Delete
 	// buttons on live posts. Same-context loads may land freely (they fetch
 	// identical data), so parallel startup loads can't starve each other.
-	const contentCtx = () => [ state.filter || 'all', state.contentTrash ? 't' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '' ].join( '|' );
+	const contentCtx = () => [ state.filter || 'all', state.contentTrash ? 't' : '', state.contentModified ? 'm' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '' ].join( '|' );
 
 	async function loadCpt( page = 1 ) {
 		const t = currentCpt();
@@ -2668,6 +2672,7 @@
 		// destination, not a stray word (Austin's floating-link report).
 		const trashHtml = `
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
+				${ ! state.contentTrash ? `<button class="minn-tab${ state.contentModified ? ' active' : '' }" id="minn-content-modified" title="Only live content carrying unsaved edits">Modified</button>` : '' }
 				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">${ icon( 'trash' ) } Trash</button>
 			</div>`;
 		const filtersHtml = `
@@ -2701,7 +2706,7 @@
 							${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }
 						</div>
 					</div>
-					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span></div>
+					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.unsaved ? '<span class="minn-status modified" title="Carrying unsaved edits: an autosave is newer than the version being served">Modified</span>' : '' }</div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
 					<div class="minn-row-meta" title="${ esc( parseWpDate( p.date ).toLocaleString() ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
@@ -2894,6 +2899,24 @@
 			} );
 		}
 
+		const modifiedBtn = $( '#minn-content-modified', view );
+		if ( modifiedBtn ) modifiedBtn.addEventListener( 'click', () => {
+			state.contentModified = ! state.contentModified;
+			sel.clear();
+			softListReload( {
+				route: 'content',
+				view,
+				clear: () => {
+					state.cache.content = null;
+					state.cache.cptContent = {};
+				},
+				paintChrome: () => {
+					modifiedBtn.classList.toggle( 'active', !! state.contentModified );
+				},
+				load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+				render: renderContent,
+			} );
+		} );
 		const trashBtn = $( '#minn-content-trash', view );
 		if ( trashBtn ) trashBtn.addEventListener( 'click', () => {
 			state.contentTrash = ! state.contentTrash;

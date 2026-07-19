@@ -2176,6 +2176,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-refund-del { border: 0; background: none; color: var(--text3); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 7px; vertical-align: baseline; }
 .minn-refund-del:hover { color: var(--red); }
 .minn-status.trash-status { color: var(--red); background: rgba(228,107,107,0.12); }
+/* Live post carrying unsaved edits (a newer autosave than the saved copy) */
+.minn-status.modified { color: var(--amber); background: rgba(224,164,88,0.14); margin-left: 5px; }
 
 /* ===== Users ===== */
 .minn-user-cols { grid-template-columns: 40px 52px 1.2fr 1.4fr 130px 110px 40px; }

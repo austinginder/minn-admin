@@ -1210,6 +1210,39 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// The "Modified" state: a live post (publish/future/private) whose
+		// newest autosave revision is newer than the post itself — edits sit
+		// unsaved while the old version keeps serving. The status-aware
+		// autosave rule creates exactly this state; this names it. Field for
+		// list rows; ?minn_modified=1 filters a collection to just those.
+		$modified_types = get_post_types( array( 'show_in_rest' => true ), 'names' );
+		unset( $modified_types['attachment'] );
+		register_rest_field(
+			array_values( $modified_types ),
+			'minn_modified',
+			array(
+				'get_callback' => array( __CLASS__, 'post_modified_unsaved' ),
+				'schema'       => array(
+					'type'        => 'boolean',
+					'description' => 'Whether an autosave newer than the saved post exists (live post carrying unsaved edits).',
+				),
+			)
+		);
+		foreach ( $modified_types as $modified_type ) {
+			add_filter(
+				"rest_{$modified_type}_query",
+				function ( $args, $request ) {
+					if ( ! empty( $request['minn_modified'] ) ) {
+						$args['minn_modified'] = true;
+					}
+					return $args;
+				},
+				10,
+				2
+			);
+		}
+		add_filter( 'posts_where', array( __CLASS__, 'posts_where_modified' ), 10, 2 );
+
 		// Months that actually hold uploads — feeds the Media view's date
 		// filter combobox (wp-admin's months_dropdown, minus the markup).
 		register_rest_route(
@@ -1370,6 +1403,45 @@ class Minn_Admin_REST {
 	 */
 	private static function debug_log_path() {
 		return Minn_Admin_Logs::debug_log_path();
+	}
+
+	/**
+	 * Whether a live post carries unsaved edits: an autosave revision with a
+	 * modified stamp newer than the post's own. Only live statuses qualify —
+	 * drafts and pending autosave in place, so they never diverge this way.
+	 */
+	public static function post_modified_unsaved( $item ) {
+		$post = get_post( isset( $item['id'] ) ? (int) $item['id'] : 0 );
+		if ( ! $post || ! in_array( $post->post_status, array( 'publish', 'future', 'private' ), true ) ) {
+			return false;
+		}
+		global $wpdb;
+		return (bool) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT 1 FROM {$wpdb->posts} WHERE post_parent = %d AND post_type = 'revision' AND post_name LIKE %s AND post_modified_gmt > %s LIMIT 1",
+				$post->ID,
+				$wpdb->esc_like( $post->ID . '-autosave' ) . '%',
+				$post->post_modified_gmt
+			)
+		);
+	}
+
+	/**
+	 * Collection filter for ?minn_modified=1 — live posts with a newer
+	 * autosave, via an EXISTS on the revisions (post_parent is indexed).
+	 */
+	public static function posts_where_modified( $where, $query ) {
+		if ( ! $query->get( 'minn_modified' ) ) {
+			return $where;
+		}
+		global $wpdb;
+		$where .= " AND {$wpdb->posts}.post_status IN ('publish','future','private')"
+			. " AND EXISTS (SELECT 1 FROM {$wpdb->posts} r"
+			. " WHERE r.post_parent = {$wpdb->posts}.ID"
+			. " AND r.post_type = 'revision'"
+			. " AND r.post_name LIKE CONCAT({$wpdb->posts}.ID, '-autosave%')"
+			. " AND r.post_modified_gmt > {$wpdb->posts}.post_modified_gmt)";
+		return $where;
 	}
 
 	/**
