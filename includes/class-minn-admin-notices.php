@@ -175,7 +175,7 @@ class Minn_Admin_Notices {
 			// (Everest Forms + ThemeIsle review-nag pattern).
 			foreach ( $links as $l ) {
 				if ( ! empty( $l['text'] ) && ( ! empty( $l['button'] ) || ! empty( $l['action'] ) ) ) {
-					$text = str_replace( $l['text'], '', $text );
+					$text = self::strip_label( $text, $l['text'] );
 				}
 			}
 			$text = preg_replace( '/\s+/u', ' ', trim( $text ) );
@@ -191,6 +191,17 @@ class Minn_Admin_Notices {
 			);
 		}
 		return $entries;
+	}
+
+	/**
+	 * Remove a surfaced CTA's label from the notice body — LAST occurrence,
+	 * whole word only. Short labels ("Yes", "No") would otherwise eat the
+	 * first matching substring anywhere in the sentence.
+	 */
+	private static function strip_label( $text, $label ) {
+		$q = preg_quote( $label, '/' );
+		$stripped = preg_replace( '/\b' . $q . '\b(?!.*\b' . $q . '\b)/us', '', $text, 1 );
+		return null !== $stripped ? $stripped : $text;
 	}
 
 	private static function is_notice_box( $el ) {
@@ -216,7 +227,20 @@ class Minn_Admin_Notices {
 	}
 
 	private static function text_of( $node ) {
-		$text = preg_replace( '/\s+/u', ' ', trim( (string) $node->textContent ) );
+		// textContent fuses element boundaries into one run ("…enjoying the
+		// plugin?YesNo" — the Smash Balloon step-1 shape), so join text
+		// nodes with spaces instead, then tidy the space a split leaves
+		// before punctuation.
+		$parts = array();
+		$xpath = new DOMXPath( $node->ownerDocument );
+		foreach ( $xpath->query( './/text()', $node ) as $t ) {
+			$chunk = preg_replace( '/\s+/u', ' ', trim( (string) $t->nodeValue ) );
+			if ( '' !== $chunk ) {
+				$parts[] = $chunk;
+			}
+		}
+		$text = implode( ' ', $parts );
+		$text = preg_replace( '/\s+([.,:;!?…)\]])/u', '$1', $text );
 		if ( function_exists( 'mb_substr' ) && mb_strlen( $text ) > 400 ) {
 			$text = mb_substr( $text, 0, 399 ) . '…';
 		} elseif ( strlen( $text ) > 400 ) {
@@ -245,15 +269,55 @@ class Minn_Admin_Notices {
 		$links     = array();
 		$seen      = array();
 		$own_nonce = sanitize_text_field( wp_unslash( $_GET['minn_nonce'] ?? $_GET['_wpnonce'] ?? '' ) );
-		foreach ( $node->getElementsByTagName( 'a' ) as $a ) {
-			$href  = trim( (string) $a->getAttribute( 'href' ) );
+		// Anchors AND <button> elements, in document order — plugins render
+		// JS-only choices both ways (Smash Balloon's "Yes" is a literal
+		// <button>; its "No" is an anchor). Order matters for choice pairs.
+		$xpath = new DOMXPath( $node->ownerDocument );
+		foreach ( $xpath->query( './/a|.//button', $node ) as $a ) {
+			if ( count( $links ) >= 3 ) {
+				break;
+			}
 			$class = (string) $a->getAttribute( 'class' );
+			$id    = (string) $a->getAttribute( 'id' );
 			$label = preg_replace( '/\s+/u', ' ', trim( (string) $a->textContent ) );
 			if ( function_exists( 'mb_substr' ) ) {
 				$label = mb_substr( $label, 0, 80 );
 			} else {
 				$label = substr( $label, 0, 80 );
 			}
+
+			// A button element IS a control (anchors can be decoration), but
+			// only ones Minn can honestly answer are surfaced: a whitelisted
+			// ajax mapping, or a dismiss-shaped label where digest-hide
+			// matches intent.
+			if ( 'button' === strtolower( $a->tagName ) ) {
+				if ( '' === $label ) {
+					continue;
+				}
+				$ajax     = self::ajax_for_button( $class, $label, $id );
+				$dismissy = (bool) preg_match( '/^(No,?\s*thanks|Allow|Dismiss|Not now|Maybe later|Skip|Deny|Opt\s*out)\b/i', $label );
+				if ( ! $ajax && ! $dismissy ) {
+					continue;
+				}
+				$key = 'btn:' . strtolower( $label ) . '|' . $class . '|' . $id;
+				if ( isset( $seen[ $key ] ) ) {
+					continue;
+				}
+				$seen[ $key ] = true;
+				$entry        = array(
+					'text'   => $label,
+					'url'    => '',
+					'action' => true,
+					'button' => true,
+				);
+				if ( $ajax ) {
+					$entry['ajax'] = $ajax;
+				}
+				$links[] = $entry;
+				continue;
+			}
+
+			$href = trim( (string) $a->getAttribute( 'href' ) );
 			$label = $label ?: 'Open';
 
 			// JS-only button CTAs (href="#" / empty / javascript:).
@@ -275,7 +339,7 @@ class Minn_Admin_Notices {
 					'action' => true,
 					'button' => true,
 				);
-				$ajax = self::ajax_for_button( $class, $label );
+				$ajax = self::ajax_for_button( $class, $label, $id );
 				if ( $ajax ) {
 					$entry['ajax'] = $ajax;
 				}
@@ -310,15 +374,25 @@ class Minn_Admin_Notices {
 				continue;
 			}
 			$seen[ $url ] = true;
-			$links[]      = array(
+			$entry        = array(
 				'text'   => $label,
 				'url'    => $url,
 				'action' => $is_action,
 			);
+			// A choice can carry BOTH a real href and a JS handler (Smash
+			// Balloon's "No": feedback URL + consent ajax) — the mapped
+			// ajax is the meaningful action, so it wins over the plain ↗.
+			$ajax = self::ajax_for_button( $class, $label, $id );
+			if ( $ajax ) {
+				$entry['action'] = true;
+				$entry['ajax']   = $ajax;
+			}
+			$links[] = $entry;
 			if ( count( $links ) >= 3 ) {
 				break;
 			}
 		}
+
 		return $links;
 	}
 
@@ -361,7 +435,35 @@ class Minn_Admin_Notices {
 	 *
 	 * @return array{action:string,args:array}|null
 	 */
-	private static function ajax_for_button( $class, $label ) {
+	private static function ajax_for_button( $class, $label, $id = '' ) {
+		// Smash Balloon Instagram Feed review step 1 ("Are you enjoying…"):
+		// Yes is a literal <button>, No is an anchor that ALSO carries a
+		// feedback URL; both fire sbi_review_notice_consent_update.
+		if ( 'sbi_review_consent_yes' === $id ) {
+			return array(
+				'action' => 'sbi_review_notice_consent_update',
+				'args'   => array( 'consent' => 'yes' ),
+			);
+		}
+		if ( 'sbi_review_consent_no' === $id ) {
+			return array(
+				'action' => 'sbi_review_notice_consent_update',
+				'args'   => array( 'consent' => 'no' ),
+			);
+		}
+		// Dev fixture (minn-dev-fixtures) for the <button>-CTA suite path.
+		if ( 'minn_fixture_btn_yes' === $id ) {
+			return array(
+				'action' => 'minn_fixture_btn_answer',
+				'args'   => array( 'answer' => 'yes' ),
+			);
+		}
+		if ( 'minn_fixture_btn_no' === $id ) {
+			return array(
+				'action' => 'minn_fixture_btn_answer',
+				'args'   => array( 'answer' => 'no' ),
+			);
+		}
 		$class = ' ' . $class . ' ';
 		// Everest Forms allow-usage notice (html-notice-allow-usage.php).
 		if ( false !== strpos( $class, 'evf-deny-data-sharing' ) ) {
@@ -410,6 +512,18 @@ class Minn_Admin_Notices {
 					'allow' => array( 'true', 'false' ),
 				),
 				'run'  => array( __CLASS__, 'run_fixture_hash_dismiss' ),
+			),
+			'minn_fixture_btn_answer'           => array(
+				'args' => array(
+					'answer' => array( 'yes', 'no' ),
+				),
+				'run'  => array( __CLASS__, 'run_fixture_btn_answer' ),
+			),
+			'sbi_review_notice_consent_update'  => array(
+				'args' => array(
+					'consent' => array( 'yes', 'no' ),
+				),
+				'run'  => array( __CLASS__, 'run_sbi_review_consent' ),
 			),
 		);
 		/**
@@ -465,6 +579,46 @@ class Minn_Admin_Notices {
 		update_option( 'minn_fixture_hash_dismissed', '1' );
 		if ( isset( $args['allow'] ) && 'true' === $args['allow'] ) {
 			update_option( 'minn_fixture_hash_allowed', '1' );
+		}
+		return true;
+	}
+
+	/** Dev-fixture <button>-CTA answer. */
+	public static function run_fixture_btn_answer( $args ) {
+		update_option( 'minn_fixture_btn_answer', ( isset( $args['answer'] ) && 'yes' === $args['answer'] ) ? 'yes' : 'no' );
+		return true;
+	}
+
+	/**
+	 * Smash Balloon Instagram Feed review consent — mirrors the plugin's own
+	 * wp_ajax_sbi_review_notice_consent_update handler (class-sbi-new-user.php:
+	 * consent option, dismissal stamps on "no", and the notice-registry
+	 * removals so their stored notices stop rendering).
+	 */
+	public static function run_sbi_review_consent( $args ) {
+		$cap = current_user_can( 'manage_instagram_feed_options' ) ? 'manage_instagram_feed_options' : 'manage_options';
+		$cap = apply_filters( 'sbi_settings_pages_capability', $cap );
+		if ( ! current_user_can( $cap ) ) {
+			return new WP_Error( 'forbidden', 'You cannot answer this notice.', array( 'status' => 403 ) );
+		}
+		$consent = ( isset( $args['consent'] ) && 'yes' === $args['consent'] ) ? 'yes' : 'no';
+		update_option( 'sbi_review_consent', $consent );
+		if ( 'no' === $consent ) {
+			update_option( 'sbi_rating_notice', 'dismissed', false );
+			$statuses = get_option( 'sbi_statuses', array() );
+			if ( is_array( $statuses ) ) {
+				$statuses['rating_notice_dismissed'] = function_exists( 'sbi_get_current_time' ) ? sbi_get_current_time() : time();
+				update_option( 'sbi_statuses', $statuses, false );
+			}
+		}
+		global $sbi_notices;
+		if ( $sbi_notices && method_exists( $sbi_notices, 'remove_notice' ) ) {
+			$sbi_notices->remove_notice( 'review_step_1' );
+			$sbi_notices->remove_notice( 'review_step_1_all_pages' );
+			if ( 'no' === $consent ) {
+				$sbi_notices->remove_notice( 'review_step_2' );
+				$sbi_notices->remove_notice( 'review_step_2_all_pages' );
+			}
 		}
 		return true;
 	}

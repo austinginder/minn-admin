@@ -30,6 +30,7 @@ const { launch, login, reporter } = require( './helpers' );
 			minn_fixture_hash_dismissed: '',
 			minn_fixture_hash_allowed: '',
 			minn_fixture_admin_dismissed: '',
+			minn_fixture_btn_answer: '',
 		};
 		for ( let i = 0; i < 5; i++ ) {
 			const status = await page.evaluate( async ( b ) => ( await fetch( window.MINN.restUrl + 'wp/v2/settings', {
@@ -39,13 +40,14 @@ const { launch, login, reporter } = require( './helpers' );
 				body: JSON.stringify( b ),
 			} ) ).status, body );
 			const clear = await page.evaluate( async () => {
-				const r = await fetch( window.MINN.restUrl + 'wp/v2/settings?_fields=minn_fixture_hash_dismissed,minn_fixture_admin_dismissed,minn_fixture_action_done,minn_fixture_hash_allowed&_=' + Date.now(), {
+				const r = await fetch( window.MINN.restUrl + 'wp/v2/settings?_fields=minn_fixture_hash_dismissed,minn_fixture_admin_dismissed,minn_fixture_action_done,minn_fixture_hash_allowed,minn_fixture_btn_answer&_=' + Date.now(), {
 					headers: { 'X-WP-Nonce': window.MINN.nonce },
 					credentials: 'same-origin',
 				} );
 				const j = await r.json();
 				return ! j.minn_fixture_hash_dismissed && ! j.minn_fixture_admin_dismissed
-					&& ! j.minn_fixture_action_done && ! j.minn_fixture_hash_allowed;
+					&& ! j.minn_fixture_action_done && ! j.minn_fixture_hash_allowed
+					&& ! j.minn_fixture_btn_answer;
 			} );
 			if ( status === 200 && clear ) return 200;
 			await page.waitForTimeout( 800 );
@@ -135,6 +137,40 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'Button labels stripped from notice body text',
 			!! hashItem && ! /No,?\s*Thanks/i.test( hashItem.title ) && ! /\bAllow\b/.test( hashItem.title.replace( /^[^:]+:\s*/, '' ) ),
 			hashItem && hashItem.title );
+
+		// <button>-CTA shape (Smash Balloon review step 1): a literal <button>
+		// Yes plus an anchor No that carries BOTH a URL and a mapped action.
+		const btnItem = byText( 'enjoying the button fixture' );
+		const btnLinks = ( btnItem && btnItem.links ) || [];
+		t.check( 'Button-CTA notice extracted', !! btnItem, btnItem && btnItem.title );
+		t.check( 'Text not fused and choice labels stripped',
+			!! btnItem && /button fixture\?$/.test( btnItem.title.trim() ) && ! /fixture\?Yes/.test( btnItem.title ),
+			btnItem && btnItem.title );
+		t.check( 'Yes then No, in document order',
+			btnLinks.length === 2 && btnLinks[ 0 ].text === 'Yes' && btnLinks[ 1 ].text === 'No',
+			JSON.stringify( btnLinks.map( ( l ) => l.text ) ) );
+		t.check( 'Yes is a mapped <button> action',
+			!! btnLinks[ 0 ] && btnLinks[ 0 ].button && btnLinks[ 0 ].ajax && btnLinks[ 0 ].ajax.action === 'minn_fixture_btn_answer' && btnLinks[ 0 ].ajax.args.answer === 'yes',
+			JSON.stringify( btnLinks[ 0 ] ) );
+		t.check( 'No keeps its URL and gains the mapped action',
+			!! btnLinks[ 1 ] && btnLinks[ 1 ].action && btnLinks[ 1 ].ajax && btnLinks[ 1 ].ajax.args.answer === 'no' && /example\.com\/feedback/.test( btnLinks[ 1 ].url || '' ),
+			JSON.stringify( btnLinks[ 1 ] ) );
+		const btnRun = await page.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/notices/ajax', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( { action: 'minn_fixture_btn_answer', args: { answer: 'yes' } } ),
+			} );
+			const opt = await ( await fetch( window.MINN.restUrl + 'wp/v2/settings?_fields=minn_fixture_btn_answer&_=' + Date.now(), {
+				headers: { 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+			} ) ).json();
+			return { status: r.status, answer: opt.minn_fixture_btn_answer };
+		} );
+		t.check( 'Running Yes records the answer server-side',
+			btnRun.status === 200 && btnRun.answer === 'yes',
+			JSON.stringify( btnRun ) );
 
 		// ThemeIsle / Otter shape: real admin URL with nid + tsdk_dismiss_nonce.
 		const adminDismiss = byText( 'rate us on WordPress.org' );
