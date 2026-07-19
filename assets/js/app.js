@@ -312,6 +312,22 @@
 			await opts.load();
 			ok = true;
 		} catch ( e ) {
+			// A reload right after an action that flipped a real plugin
+			// (Performance Lab activate, snippet toggles) can land on a
+			// RECYCLED worker: the kept-alive socket dies instantly with a
+			// TypeError while the server is fine (the cache-purge runner's
+			// lesson). Server-answered failures are plain Errors and never
+			// retried; a dropped socket gets ONE delayed replay before the
+			// error card paints.
+			if ( e instanceof TypeError ) {
+				await new Promise( ( resolve ) => setTimeout( resolve, 1200 ) );
+				try {
+					await opts.load();
+					ok = true;
+				} catch ( e2 ) {
+					e = e2;
+				}
+			}
 			// A dropped reply (worker recycle, flaky network) already ran
 			// clear() (cache nulled) and paintChrome() (the NEW tab is active),
 			// so the stale rows now sit under the wrong active tab with click
@@ -320,15 +336,17 @@
 			// replace only the list body with an error + Retry that re-runs
 			// this exact load. A chrome-less view (nothing to preserve) still
 			// gets the full error card.
-			const body = hasChrome ? softListBody( view ) : null;
-			if ( body ) {
-				body.innerHTML = `<div class="minn-empty">Couldn’t load this list. <button type="button" class="minn-link-btn" data-soft-retry>Retry</button></div>`;
-				const btn = body.querySelector( '[data-soft-retry]' );
-				if ( btn ) btn.addEventListener( 'click', () => { softListReload( opts ); } );
-			} else if ( hasChrome ) {
-				toast( e && e.message ? e.message : 'Could not load. Try again.', true );
-			} else {
-				showErr( e );
+			if ( ! ok ) {
+				const body = hasChrome ? softListBody( view ) : null;
+				if ( body ) {
+					body.innerHTML = `<div class="minn-empty">Couldn’t load this list. <button type="button" class="minn-link-btn" data-soft-retry>Retry</button></div>`;
+					const btn = body.querySelector( '[data-soft-retry]' );
+					if ( btn ) btn.addEventListener( 'click', () => { softListReload( opts ); } );
+				} else if ( hasChrome ) {
+					toast( e && e.message ? e.message : 'Could not load. Try again.', true );
+				} else {
+					showErr( e );
+				}
 			}
 		} finally {
 			softPending.set( key, Math.max( 0, ( softPending.get( key ) || 1 ) - 1 ) );
@@ -7891,10 +7909,23 @@
 			return;
 		}
 		if ( action.confirm && ! confirm( action.confirm ) ) return;
-		const r = await api( action.route.replace( '{id}', item.id ), {
-			method: action.method || 'POST',
-			...( action.body ? { body: JSON.stringify( action.body ) } : {} ),
-		} );
+		let r = null;
+		try {
+			r = await api( action.route.replace( '{id}', item.id ), {
+				method: action.method || 'POST',
+				...( action.body ? { body: JSON.stringify( action.body ) } : {} ),
+			} );
+		} catch ( e ) {
+			// An action that flips a real plugin (Performance Lab activate)
+			// recycles the worker and can kill its OWN reply after the
+			// server did the work — the cache-purge double-drop rule. A
+			// dropped socket proceeds to the reload (which shows the truth);
+			// server-answered errors still throw to the caller.
+			if ( ! ( e instanceof TypeError ) ) {
+				throw e;
+			}
+			await new Promise( ( resolve ) => setTimeout( resolve, 1200 ) );
+		}
 		toast( actionToast( r, action ) );
 		const ss = surfaceState( s.id );
 		ss.cache = null;

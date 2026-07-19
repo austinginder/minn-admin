@@ -192,10 +192,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	 * search change (always a fresh query) is the deterministic trigger. */
 	await page.click( '.minn-nav-btn[data-nav="content"]' );
 	await page.waitForSelector( '.minn-table-row', { timeout: 15000 } );
-	let failNextSearch = true;
+	// A single dropped socket is retried once (the worker-recycle rule), so
+	// the persistent-failure path needs BOTH the attempt and its retry dead.
+	let failsLeft = 2;
 	await page.route( '**/wp/v2/**', async ( route ) => {
-		if ( failNextSearch && /[?&]search=zzsoftfail/.test( route.request().url() ) ) {
-			failNextSearch = false;
+		if ( failsLeft > 0 && /[?&]search=zzsoftfail/.test( route.request().url() ) ) {
+			failsLeft--;
 			await route.abort();
 		} else {
 			await route.continue().catch( () => {} );
@@ -214,6 +216,38 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.waitForFunction( () => ( document.querySelector( '.minn-empty' ) || document.querySelector( '.minn-table-row' ) )
 		&& ! document.querySelector( '[data-soft-retry]' ), null, { timeout: 15000 } );
 	t.check( 'Retry re-runs the load and the list recovers', true );
+	await page.unroute( '**/wp/v2/**' );
+
+	/* ===== Single dropped socket: silent one-shot retry, no error card =====
+	 * A reload right after a plugin-flipping action (Performance Lab
+	 * activate) lands on a recycled worker and dies with a TypeError while
+	 * the server is fine — softListReload replays once before painting the
+	 * error card, so the user never sees "Couldn't load this list". */
+	let dropOnce = true;
+	await page.route( '**/wp/v2/**', async ( route ) => {
+		if ( dropOnce && /[?&]search=zzdroponce/.test( route.request().url() ) ) {
+			dropOnce = false;
+			await route.abort();
+		} else {
+			await route.continue().catch( () => {} );
+		}
+	} );
+	await page.fill( '#minn-content-search', 'zzdroponce' );
+	// Sequence on the actual drop first (the settle condition would match the
+	// PREVIOUS list state before the debounced reload even starts), then let
+	// the 1.2s replay land and the list settle.
+	for ( let i = 0; i < 40 && dropOnce; i++ ) {
+		await page.waitForTimeout( 200 );
+	}
+	t.check( 'the reload attempt was dropped', ! dropOnce, '' );
+	await page.waitForFunction( () => {
+		const busy = document.querySelector( '#minn-view .minn-busy' );
+		const settled = document.querySelector( '.minn-empty' ) || document.querySelector( '.minn-table-row' );
+		const search = document.querySelector( '#minn-content-search' );
+		return ! busy && settled && search && search.value === 'zzdroponce';
+	}, null, { timeout: 20000 } );
+	t.check( 'one dropped reload retries silently (no error card)',
+		! ( await page.$( '#minn-view [data-soft-retry]' ) ), '' );
 	await page.unroute( '**/wp/v2/**' );
 
 	await t.done( browser, errors );
