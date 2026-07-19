@@ -130,6 +130,38 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	t.check( 'Load theirs swaps in B\'s saved version', true );
 	t.check( 'drift banner clears after loading theirs', ! ( await pageA.$( '#minn-drift-note' ) ) );
 
+	/* ===== Blind-window save bounces off the server-side lock guard ===== */
+	// B takes over and A saves right away, long before A's 30s refresh could
+	// notice. The X-Minn-Expect-Lock guard must 409 the write and flip A to
+	// the taken-over UI immediately. (If a refresh happens to land first, the
+	// client-side guard blocks the save instead — both paths satisfy the
+	// checks, no timing flake.)
+	// Published: A's idle autosave writes only a revision, so nothing can
+	// legitimately land in live content before the guarded ⌘S (a draft's
+	// in-place autosave raced B's takeover here and false-failed the check).
+	const post4 = await createPost( pageA, {
+		title: 'Lock guard test',
+		content: '<!-- wp:paragraph -->\n<p>Guarded copy.</p>\n<!-- /wp:paragraph -->',
+		status: 'publish',
+	} );
+	await openEditor( pageA, post4 );
+	await pageA.waitForTimeout( 1000 );
+	await pageA.click( '#minn-editor-body p' );
+	await pageA.keyboard.press( 'End' );
+	await pageA.keyboard.type( ' A blind edit.' );
+	await openEditor( pageB, post4 );
+	await pageB.waitForSelector( '#minn-lock-overlay', { timeout: 10000 } );
+	await pageB.click( '#minn-lock-take' );
+	await pageB.waitForFunction( () => ! document.querySelector( '#minn-lock-overlay' ), null, { timeout: 10000 } );
+	await pageA.keyboard.press( 'Meta+s' ); // A still believes it holds the lock
+	await pageA.waitForSelector( '#minn-lock-note', { timeout: 10000 } );
+	t.check( 'blind-window save flips A to taken-over immediately', true );
+	const rawPost4 = await pageA.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ pid }?context=edit&_fields=content`, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+		return ( await r.json() ).content.raw;
+	}, post4 );
+	t.check( 'the blocked save wrote nothing', ! /A blind edit\./.test( rawPost4 ), rawPost4 );
+
 	/* ===== Leaving the editor releases the lock ===== */
 	const post2 = await createPost( pageA, {
 		title: 'Lock release test',
@@ -147,6 +179,7 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 	await deletePost( pageA, postId );
 	await deletePost( pageA, post2 );
 	await deletePost( pageA, post3 );
+	await deletePost( pageA, post4 );
 	await ctxB.close();
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

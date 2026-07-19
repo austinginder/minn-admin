@@ -33,11 +33,20 @@
 		const res = await fetch( url, { credentials: 'same-origin', ...opts, headers: { ...headers, ...( opts.headers || {} ) } } );
 		if ( ! res.ok ) {
 			let msg = res.status + ' ' + res.statusText;
+			let code = '';
+			let data = null;
 			try {
 				const j = await res.json();
 				if ( j.message ) msg = stripTags( j.message );
+				code = j.code || '';
+				data = j.data || null;
 			} catch ( e ) {}
-			throw new Error( msg );
+			// The WP error code and data ride along so callers can react to
+			// specific failures (the lock guard's minn_locked, for one).
+			const err = new Error( msg );
+			err.code = code;
+			err.data = data;
+			throw err;
 		}
 		return res;
 	}
@@ -14840,7 +14849,10 @@
 		try {
 			let p;
 			if ( ed.id ) {
-				p = await api( `wp/v2/${ ed.type }/${ ed.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				// The lock guard header: the server rejects this save with a
+				// 409 if someone else holds a fresh edit lock — closes the
+				// blind window between a takeover and our next lock refresh.
+				p = await api( `wp/v2/${ ed.type }/${ ed.id }`, { method: 'POST', body: JSON.stringify( payload ), headers: { 'X-Minn-Expect-Lock': String( ed.id ) } } );
 			} else {
 				payload.status = payload.status || 'draft';
 				p = await api( `wp/v2/${ ed.type }`, { method: 'POST', body: JSON.stringify( payload ) } );
@@ -14904,6 +14916,10 @@
 			renderEditorSide();
 			renderTopbar();
 		} catch ( e ) {
+			// A 409 from the lock guard means someone took the lock and this
+			// copy must not save — flip straight to the taken-over UI (the
+			// take-back path's drift check handles recovery from there).
+			if ( e.code === 'minn_locked' ) lockLost( ed, e.data && e.data.holder );
 			toast( e.message, true );
 		}
 		state.saving = false;
