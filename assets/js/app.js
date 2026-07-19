@@ -3774,7 +3774,7 @@
 
 	async function loadComments( page = 1 ) {
 		const tab = state.commentTab;
-		const r = await apiPaged( `wp/v2/comments?context=edit&status=${ tab }&per_page=25&page=${ page }&_fields=id,author_name,author_avatar_urls,content,date,post,link` );
+		const r = await apiPaged( `wp/v2/comments?context=edit&status=${ tab }&per_page=25&page=${ page }&_fields=id,author_name,author_avatar_urls,content,date,post,link,author,author_email,author_ip` );
 		if ( tab !== state.commentTab ) return; // tab changed mid-flight — discard
 		const c = { items: r.items, page, totalPages: r.totalPages, total: r.total, postTitles: commentPostTitles };
 		// Resolve post titles in cheap _fields requests (no content
@@ -3803,6 +3803,30 @@
 				badge.hidden = ! r.total;
 			}
 		} catch ( e ) {}
+	}
+
+	// Block through core's disallowed_keys — future comments from this
+	// address land in the trash. Undo removes exactly what the block added.
+	async function blockCommenter( cm ) {
+		const who = cm.author_email || cm.author_ip;
+		if ( ! confirm( `Block ${ who }? The address joins the disallowed list (Settings → Comments) and future comments from it go straight to the trash.` ) ) return;
+		try {
+			const r = await api( `minn-admin/v1/comments/${ cm.id }/block`, { method: 'POST' } );
+			if ( r.already ) {
+				toast( `${ who } is already on the disallowed list` );
+				return;
+			}
+			toastAction( `Blocked ${ who }`, 'Undo', async () => {
+				try {
+					await api( 'minn-admin/v1/comments/block-undo', { method: 'POST', body: JSON.stringify( { lines: r.added } ) } );
+					toast( 'Unblocked' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+			} );
+		} catch ( e ) {
+			toast( e.message, true );
+		}
 	}
 
 	async function setCommentStatus( id, status, label ) {
@@ -3889,6 +3913,11 @@
 			author: cm.author_name || 'Anonymous',
 			avatar: cm.author_avatar_urls && ( cm.author_avatar_urls[ '48' ] || Object.values( cm.author_avatar_urls )[ 0 ] ),
 			excerpt: stripTags( cm.content && cm.content.rendered ).slice( 0, 160 ),
+			raw: ( cm.content && cm.content.raw ) || '',
+			authorName: cm.author_name || '',
+			email: cm.author_email || '',
+			ip: cm.author_ip || '',
+			userId: cm.author || 0,
 			post: ( c.postTitles[ cm.post ] && c.postTitles[ cm.post ].title ) || '#' + cm.post,
 			postRest: ( c.postTitles[ cm.post ] && c.postTitles[ cm.post ].rest ) || '',
 			postLink: cm.link || '',
@@ -3926,7 +3955,7 @@
 						</div>
 						<div class="minn-comment-text">${ esc( r.excerpt ) }</div>
 						<div class="minn-comment-actions">
-							${ [ 'hold', 'approve' ].includes( state.commentTab ) ? `<button class="minn-comment-action" data-creply="${ r.id }">${ state.commentReply === r.id ? 'Close' : 'Reply' }</button>` : '' }
+							${ [ 'hold', 'approve' ].includes( state.commentTab ) ? `<button class="minn-comment-action" data-creply="${ r.id }">${ state.commentReply === r.id ? 'Close' : 'Reply' }</button><button class="minn-comment-action" data-cmedit="${ r.id }">${ state.commentEdit === r.id ? 'Close' : 'Edit' }</button>` : '' }
 							${ actionsFor().map( ( [ st, label ] ) =>
 								`<button class="minn-comment-action${ st === 'trash' || st === 'delete' ? ' danger' : '' }" data-cid="${ r.id }" data-cstatus="${ st }">${ label }</button>` ).join( '' ) }
 						</div>
@@ -3936,6 +3965,19 @@
 							<div style="display:flex; gap:8px; margin-top:8px;">
 								<button class="minn-btn-primary" id="minn-reply-send" data-post="${ r.postId }" data-parent="${ r.id }">${ state.commentTab === 'hold' ? 'Reply & approve' : 'Reply' }</button>
 								<button class="minn-btn-soft" id="minn-reply-cancel">Cancel</button>
+							</div>
+						</div>` : '' }
+						${ state.commentEdit === r.id ? `
+						<div class="minn-comment-replybox">
+							${ r.userId ? '' : `
+							<div class="minn-comment-edit-meta">
+								<input class="minn-input" id="minn-cedit-name" placeholder="Author name" value="${ esc( r.authorName ) }">
+								<input class="minn-input" id="minn-cedit-email" placeholder="Author email" value="${ esc( r.email ) }">
+							</div>` }
+							<textarea class="minn-input" id="minn-cedit-text" rows="4">${ esc( r.raw ) }</textarea>
+							<div style="display:flex; gap:8px; margin-top:8px;">
+								<button class="minn-btn-primary" id="minn-cedit-save" data-cid="${ r.id }">Save</button>
+								<button class="minn-btn-soft" id="minn-cedit-cancel">Cancel</button>
 							</div>
 						</div>` : '' }
 					</div>
@@ -3981,6 +4023,10 @@
 				const viewLink = $( '.minn-comment-postview', row );
 				if ( postBtn ) entries.push( { label: 'Open post in editor', run: () => postBtn.click() } );
 				if ( viewLink ) entries.push( { label: 'View post', href: viewLink.href } );
+				const cm = ( ( state.cache.comments || {} ).items || [] ).find( ( x ) => x.id === parseInt( row.dataset.crow, 10 ) );
+				if ( B.caps.settings && cm && ( cm.author_email || cm.author_ip ) ) {
+					entries.push( { label: 'Block commenter', danger: true, run: () => blockCommenter( cm ) } );
+				}
 				openMinnMenu( e.clientX, e.clientY, entries.concat( btns.map( ( b ) => ( {
 					label: b.textContent.trim(),
 					danger: b.classList.contains( 'danger' ),
@@ -3996,6 +4042,47 @@
 				setCommentStatus( parseInt( btn.dataset.cid, 10 ), st, labels[ st ] );
 			} )
 		);
+		$$( '[data-cmedit]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const id = parseInt( btn.dataset.cmedit, 10 );
+				state.commentEdit = state.commentEdit === id ? null : id;
+				renderComments();
+				const box = $( '#minn-cedit-text' );
+				if ( box ) box.focus();
+			} )
+		);
+		const ceditSave = $( '#minn-cedit-save', view );
+		if ( ceditSave ) ceditSave.addEventListener( 'click', async () => {
+			const id = parseInt( ceditSave.dataset.cid, 10 );
+			const content = ( ( $( '#minn-cedit-text' ) || {} ).value || '' ).trim();
+			if ( ! content ) {
+				toast( 'A comment needs some text', true );
+				return;
+			}
+			ceditSave.disabled = true;
+			const payload = { content };
+			// Guest comments may fix author name/email too; registered
+			// comments keep their account identity (only the text travels).
+			const nameEl = $( '#minn-cedit-name' );
+			const emailEl = $( '#minn-cedit-email' );
+			if ( nameEl ) payload.author_name = nameEl.value.trim();
+			if ( emailEl ) payload.author_email = emailEl.value.trim();
+			try {
+				await api( `wp/v2/comments/${ id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				toast( 'Comment updated' );
+				state.commentEdit = null;
+				state.cache.comments = null;
+				renderComments();
+			} catch ( e ) {
+				toast( e.message, true );
+				ceditSave.disabled = false;
+			}
+		} );
+		const ceditCancel = $( '#minn-cedit-cancel', view );
+		if ( ceditCancel ) ceditCancel.addEventListener( 'click', () => {
+			state.commentEdit = null;
+			renderComments();
+		} );
 		$$( '[data-creply]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				const id = parseInt( btn.dataset.creply, 10 );
