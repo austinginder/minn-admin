@@ -33,6 +33,20 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	let postId = null;
 	let pageId = null;
 	try {
+		// With Disable Comments active (the resident baseline), the
+		// notifications panel must not offer a Comments tab.
+		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 15000 } );
+		if ( await page.evaluate( () => window.MINN.comments === false ) ) {
+			await page.click( '#minn-notif-btn' );
+			await page.waitForSelector( '.minn-notif-tabs', { timeout: 8000 } );
+			t.check( 'no Comments tab in the panel while comments are disabled',
+				! ( await page.$( '.minn-notif-tab[data-tab="comments"]' ) ), '' );
+			await page.click( '#minn-notif-close' );
+		} else {
+			t.check( 'comments already enabled — hidden-tab check skipped', true, '' );
+		}
+
 		t.check( 'disable-comments deactivates over REST', await setPlugin( 'disable-comments/disable-comments', 'inactive' ) );
 
 		postId = await createPost( page, { title: 'Comment door post', content: '<p>body</p>', status: 'publish', comment_status: 'open' } );
@@ -46,6 +60,12 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 
 		await page.goto( BASE + '/minn-admin/comments', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '[data-ctab="approve"]', { timeout: 20000 } );
+		// Comments enabled again (fresh boot payload) — the tab returns.
+		await page.click( '#minn-notif-btn' );
+		await page.waitForSelector( '.minn-notif-tabs', { timeout: 8000 } );
+		t.check( 'Comments tab returns once comments are enabled',
+			!! ( await page.$( '.minn-notif-tab[data-tab="comments"]' ) ), '' );
+		await page.click( '#minn-notif-close' );
 		await page.click( '[data-ctab="approve"]' );
 		await page.waitForSelector( `.minn-comment-row [data-cedit="posts:${ postId }"]`, { timeout: 20000 } );
 		t.check( 'post comment title is an editor door', true, '' );
