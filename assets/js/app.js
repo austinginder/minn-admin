@@ -22530,9 +22530,12 @@
 
 	function renderNotifPanel() {
 		const items = state.cache.notifications;
+		// Comments follows the same gate as its nav item — a site with
+		// comments disabled never earns the tab (or its items).
 		const tabs = [
 			[ 'all', 'All' ], [ 'comments', 'Comments' ], [ 'updates', 'Updates' ], [ 'notices', 'Notices' ], [ 'system', 'System' ],
-		];
+		].filter( ( [ id ] ) => id !== 'comments' || commentsAvailable() );
+		if ( ! tabs.some( ( [ id ] ) => id === state.notifTab ) ) state.notifTab = 'all';
 		const updParts = state.notifTab === 'updates' ? pendingUpdateParts() : [];
 		const visible = ( items || [] ).filter( ( n ) => state.notifTab === 'all' || n.kind === state.notifTab );
 		const groups = [];

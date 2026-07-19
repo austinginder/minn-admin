@@ -3,6 +3,7 @@
 ## **v0.20.0** - Unreleased
 
 ### Fixed
+* **No Comments tab in notifications when comments are off:** the notification panel offered a Comments tab even on sites where comments are disabled (the same gate that already hides the Comments nav item). The tab now follows that gate, and an active Comments tab falls back to All if the gate closes mid-session.
 * **The notification panel's fifth tab was unreachable:** with Comments, Updates, Notices and a System kind all present, the tab strip clipped at the panel edge with no way to scroll. The strip wraps to a second row now, so every kind stays visible and clickable.
 
 ### Improved
