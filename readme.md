@@ -27,7 +27,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   (Koko, WP Statistics, Burst and Independent Analytics today; others join via
   `minn_admin_traffic_day`), and a recent-activity feed
 - **Content** — posts, pages and custom post types sorted by publish date (scheduled posts
-  lead with their go-out dates), with search, category/tag filters, status pills, **bulk
+  lead with their go-out dates), with search, category/tag filters, status pills (live posts
+  carrying unsaved edits wear a **Modified** chip, with a matching filter), **bulk
   actions** (set status or trash, with shift-click range select), and **row actions**:
   right-click or hover for quick publish/draft/trash, view, and a block-editor escape
 - **Media** — grid/list library, uploads, drag-and-drop, a preview overlay with arrow-key
@@ -42,8 +43,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   **↻ Thumbnails** works through Regenerate Thumbnails or Force Regenerate Thumbnails
 - **Comments** — full moderation (pending / approved / spam / trash) with **bulk moderation**
   (each tab offers its own verbs), inline replies and a right-click menu for the same verbs
-- **Ecommerce** — full WooCommerce day-to-day in Minn: **Orders** (search, status, notes, refunds,
-  resend/custom email, pay URL, **New order**, **Analytics** with long-range revenue and top products),
+- **Ecommerce** — full WooCommerce day-to-day in Minn: **Orders** open as full pages (linkable,
+  refreshable, with a **Quick view** modal from the list) with search, status, notes, a **Payment
+  card** that records hand-received payments through WooCommerce's own machinery, **itemized
+  refunds** with quantity steppers and restocking, resend/custom email, pay URL, **New order**,
+  **Analytics** with long-range revenue and top products, and a Store strip on the Overview naming
+  the orders that need work today,
   **Products** (stock filters, bulk, daily fields, **Add product**), **Coupons**, **Customers**, and
   **Subscriptions** when WooCommerce Subscriptions is active (status, next payment, parent order,
   related orders, customer strip). Orders, products and customers carry **right-click menus** for
@@ -135,7 +140,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   full-detail modals (every option by size, every scheduled event with its next run); the real
   login URL (honoring login-hiders), an **installed extensions manifest**, a **Tools card**
   linking wp-admin's one-shot jobs (Site Health, export/import, GDPR tools), live **debug
-  toggles** that safely rewrite `wp-config.php`, a clickable **debug-log viewer**, and one-click
+  toggles** that safely rewrite `wp-config.php`, a multi-source **log viewer** (debug log, PHP error log and every WooCommerce log channel, with a collapse-repeats mode), and one-click
   **Copy report** as markdown
 - **Licenses** — a license manager on **Extensions → Licenses**, beside the plugins and themes
   it describes: every paid product classified **valid / expired / invalid / missing** from the

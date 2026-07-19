@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.19.0** - Unreleased
+## **v0.19.0** - July 19, 2026
+
+The storefront release. Orders stop being modal glimpses and become real pages with their own URLs, payments arrive by hand (a check in the mail is two clicks), refunds learn the order's own line items, and the Overview says out loud when the store needs you. Around the store: every site log in one viewer with a collapse-repeats mode, live posts carrying unsaved edits get a name (Modified) in the content list, Yes/No notices finally answer properly, and the post-lock story closes its last blind window with a server-side guard.
 
 ### Added
 * **Orders open as a full page:** clicking an order now navigates to `/minn-admin/orders/{id}`, a real URL: linkable, refreshable and back-button friendly. The page hosts the full detail (customer and shipping, items, status, the Payment card with Record payment, refunds, WooCommerce emails, notes, subscriptions, and the customer's other orders) at full height with no inner scrollbox, the header keeps the status pill in view, and the Orders sidebar item stays lit. Every order reference navigates there: related orders on the page, a customer's order history, a subscription's parent and renewal orders, and a newly created order lands on its page too. The old modal survives as **Quick view**: a hover eye button on each row for one click, plus an entry on the row's right-click menu, with an Open full page action in its footer.
