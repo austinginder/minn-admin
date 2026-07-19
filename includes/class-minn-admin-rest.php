@@ -2054,12 +2054,26 @@ class Minn_Admin_REST {
 			$item['time'] = sprintf( '%s ago', human_time_diff( $item['time'] ) );
 		}
 
+		// Store needs-attention counts: the day-to-day order buckets a store
+		// owner actually works (awaiting payment, on hold, to fulfill, failed).
+		// wc_orders_count() is HPOS-safe and rides WooCommerce's own cache.
+		$store = null;
+		if ( class_exists( 'WooCommerce' ) && function_exists( 'wc_orders_count' ) && current_user_can( 'edit_shop_orders' ) ) {
+			$store = array(
+				'pending'    => (int) wc_orders_count( 'pending' ),
+				'onhold'     => (int) wc_orders_count( 'on-hold' ),
+				'processing' => (int) wc_orders_count( 'processing' ),
+				'failed'     => (int) wc_orders_count( 'failed' ),
+			);
+		}
+
 		return rest_ensure_response(
 			array(
 				'stats'    => $stats,
 				'chart'    => $chart,
 				'traffic'  => $traffic_out,
 				'activity' => $activity,
+				'store'    => $store,
 				'greeting' => self::greeting(),
 			)
 		);
