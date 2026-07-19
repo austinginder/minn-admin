@@ -4327,8 +4327,17 @@
 								<div class="minn-order-item"><span></span><span>Shipping</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.shipping_total ) ) }</span></div>` : '' }
 							${ o.total_tax && parseFloat( o.total_tax ) > 0 ? `
 								<div class="minn-order-item"><span></span><span>Tax</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.total_tax ) ) }</span></div>` : '' }
-							${ ( o.refunds || [] ).map( ( r ) => `
-								<div class="minn-order-item"><span></span><span>Refund${ r.reason ? ': ' + esc( r.reason ) : '' }</span><span class="minn-order-line-total">−${ esc( orderMoney( o, Math.abs( parseFloat( r.total ) || 0 ) ) ) }</span></div>` ).join( '' ) }
+							${ ( o.refunds || [] ).map( ( r ) => {
+								// refund-state enriches the row with when and who;
+								// before it lands (or on failure) the plain row stands.
+								const fr = ( ( m.refundState || {} ).refunds || [] ).find( ( x ) => x.id === r.id );
+								const bits = [ 'Refund' ];
+								if ( fr && fr.date ) bits.push( timeAgo( fr.date ) );
+								if ( fr && fr.by ) bits.push( 'by ' + fr.by );
+								if ( r.reason ) bits.push( r.reason );
+								return `
+								<div class="minn-order-item"><span></span><span class="minn-cell-clip" title="${ esc( bits.join( ' · ' ) ) }">${ esc( bits.join( ' · ' ) ) }</span><span class="minn-order-line-total">−${ esc( orderMoney( o, Math.abs( parseFloat( r.total ) || 0 ) ) ) }${ canEdit ? `<button type="button" class="minn-refund-del" data-rdel="${ r.id }" title="Delete this refund record">×</button>` : '' }</span></div>`;
+							} ).join( '' ) }
 							<div class="minn-order-item total">
 								<span></span><span>Total</span>
 								<span class="minn-order-line-total">${ esc( orderMoney( o, o.total ) ) }</span>
@@ -4365,24 +4374,7 @@
 							<button class="minn-btn-primary" id="minn-o-recordpay" type="button" style="margin-top:10px;">Record payment</button>
 							<div class="minn-toggle-desc" style="margin-top:8px;">Marks the order paid now with the method and transaction ID above. For a check that arrived in the mail, pick the check method, note the check number, and record.</div>` }` }
 						</div>
-						${ refundable > 0.001 ? `
-						<div class="minn-media-edit minn-order-refund">
-							<div class="minn-side-title" style="margin:0 0 8px;">Refund</div>
-							<div class="minn-order-field-row">
-								<div style="flex:1;">
-									<div class="minn-field-label">Amount (max ${ esc( orderMoney( o, refundable ) ) })</div>
-									<input class="minn-input" id="minn-o-refund-amt" type="number" step="0.01" min="0.01" max="${ refundable.toFixed( 2 ) }" value="${ refundable.toFixed( 2 ) }">
-								</div>
-							</div>
-							<div style="margin-top:8px;"><div class="minn-field-label">Reason</div>
-								<input class="minn-input" id="minn-o-refund-reason" placeholder="Optional note on the refund">
-							</div>
-							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
-								<input type="checkbox" id="minn-o-refund-api" checked>
-								<span>Also refund via payment gateway when supported</span>
-							</label>
-							<button class="minn-btn-soft danger" id="minn-o-refund" type="button" style="margin-top:10px;">Issue refund</button>
-						</div>` : '' }
+						${ orderRefundCardHtml( m, o, refundable ) }
 						<div class="minn-media-edit minn-order-wcmail">
 							<div class="minn-side-title" style="margin:0 0 8px;">WooCommerce email</div>
 							${ emails == null ? '<div class="minn-loading" style="padding:8px;">Loading email types…</div>' : `
@@ -4725,27 +4717,83 @@
 				}
 			} );
 
+			// Refund accounting refetch shared by issue and delete: the card
+			// shows its loading state until the fresh numbers land.
+			const reloadRefundState = () => {
+				m.refundState = null;
+				api( `minn-admin/v1/wc/orders/${ o.id }/refund-state` )
+					.then( ( rs ) => { m.refundState = rs; rerender(); } )
+					.catch( () => { m.refundState = { refunds: [], lines: {}, gateway: null }; rerender(); } );
+			};
+
+			// Picked quantities auto-compute the amount; clearing them all
+			// restores the full-remaining default. The field stays editable
+			// either way (shipping or goodwill refunds have no line).
+			const refundLineSelections = () => {
+				const sel = [];
+				$$( '.minn-refund-qty' ).forEach( ( q ) => {
+					const n = Math.min( parseInt( q.value, 10 ) || 0, parseInt( q.max, 10 ) || 0 );
+					if ( n <= 0 ) return;
+					const li = ( o.line_items || [] ).find( ( x ) => String( x.id ) === q.dataset.rline );
+					if ( ! li ) return;
+					const qty = Math.max( 1, parseInt( li.quantity, 10 ) || 1 );
+					sel.push( {
+						id: li.id,
+						quantity: n,
+						refund_total: ( ( parseFloat( li.total ) || 0 ) / qty * n ).toFixed( 2 ),
+						refund_tax: ( li.taxes || [] ).filter( ( t ) => parseFloat( t.total ) > 0 ).map( ( t ) => ( {
+							id: t.id,
+							refund_total: ( parseFloat( t.total ) / qty * n ).toFixed( 2 ),
+						} ) ),
+					} );
+				} );
+				return sel;
+			};
+			$$( '.minn-refund-qty' ).forEach( ( inp ) =>
+				inp.addEventListener( 'input', () => {
+					const amtEl = $( '#minn-o-refund-amt' );
+					if ( ! amtEl ) return;
+					const max = orderRefundableTotal( o );
+					let sum = 0;
+					let any = false;
+					$$( '.minn-refund-qty' ).forEach( ( q ) => {
+						const n = Math.min( parseInt( q.value, 10 ) || 0, parseInt( q.max, 10 ) || 0 );
+						if ( n <= 0 ) return;
+						const li = ( o.line_items || [] ).find( ( x ) => String( x.id ) === q.dataset.rline );
+						if ( ! li ) return;
+						any = true;
+						sum += refundLineUnit( li ) * n;
+					} );
+					amtEl.value = ( any ? Math.min( sum, max ) : max ).toFixed( 2 );
+				} )
+			);
+
 			const refundBtn = $( '#minn-o-refund' );
 			if ( refundBtn ) refundBtn.addEventListener( 'click', async () => {
 				const max = orderRefundableTotal( o );
 				const amt = parseFloat( ( $( '#minn-o-refund-amt' ) || {} ).value );
 				const reason = ( ( $( '#minn-o-refund-reason' ) || {} ).value || '' ).trim();
-				const apiRefund = !!( $( '#minn-o-refund-api' ) || {} ).checked;
 				if ( ! amt || amt <= 0 || amt > max + 0.001 ) {
 					toast( `Enter an amount between 0.01 and ${ max.toFixed( 2 ) }`, true );
 					return;
 				}
+				const lineSel = refundLineSelections();
 				if ( ! confirm( `Refund ${ orderMoney( o, amt ) } on order #${ o.number || o.id }?` ) ) return;
 				refundBtn.disabled = true;
 				refundBtn.textContent = 'Refunding…';
 				try {
+					// Explicit booleans: the server defaults BOTH api_refund and
+					// api_restock to true when the key is absent.
+					const payload = {
+						amount: amt.toFixed( 2 ),
+						reason: reason || undefined,
+						api_refund: !! ( $( '#minn-o-refund-api' ) || {} ).checked,
+						api_restock: !! ( $( '#minn-o-refund-restock' ) || {} ).checked,
+					};
+					if ( lineSel.length ) payload.line_items = lineSel;
 					await api( `wc/v3/orders/${ o.id }/refunds`, {
 						method: 'POST',
-						body: JSON.stringify( {
-							amount: amt.toFixed( 2 ),
-							reason: reason || undefined,
-							api_refund: apiRefund,
-						} ),
+						body: JSON.stringify( payload ),
 					} );
 					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
 					m.full = full;
@@ -4757,6 +4805,7 @@
 					state.cache.orders = null;
 					state.cache.orderSummary = null;
 					if ( state.route === 'orders' ) renderOrders();
+					reloadRefundState();
 					rerender();
 				} catch ( e ) {
 					toast( e.message, true );
@@ -4764,6 +4813,33 @@
 					refundBtn.textContent = 'Issue refund';
 				}
 			} );
+
+			// Deleting a refund record restores its amount to the order's
+			// totals; it never pulls back money a gateway already sent.
+			$$( '[data-rdel]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', async () => {
+					if ( ! confirm( 'Delete this refund record and restore its amount to the order? Money already sent back through the gateway is not pulled back.' ) ) return;
+					btn.disabled = true;
+					try {
+						await api( `wc/v3/orders/${ o.id }/refunds/${ btn.dataset.rdel }?force=true`, { method: 'DELETE' } );
+						const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
+						m.full = full;
+						m.order = Object.assign( {}, m.order, {
+							status: full.status,
+							total: full.total,
+						} );
+						toast( 'Refund deleted' );
+						state.cache.orders = null;
+						state.cache.orderSummary = null;
+						if ( state.route === 'orders' ) renderOrders();
+						reloadRefundState();
+						rerender();
+					} catch ( e ) {
+						toast( e.message, true );
+						btn.disabled = false;
+					}
+				} )
+			);
 
 			const fullPageBtn = $( '#minn-o-fullpage' );
 			if ( fullPageBtn ) fullPageBtn.addEventListener( 'click', () => {
@@ -4817,7 +4893,7 @@
 	function openOrderModal( listOrder ) {
 		const id = listOrder && listOrder.id;
 		if ( ! id ) return;
-		state.modal = { type: 'order', order: listOrder, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [], gateways: null, otherOrders: null };
+		state.modal = { type: 'order', order: listOrder, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [], gateways: null, otherOrders: null, refundState: null };
 		renderOverlays();
 		loadOrderDetail( state.modal );
 	}
@@ -4846,6 +4922,22 @@
 					rr();
 				}
 			} );
+			// Refund accounting (history with names, per-line refunded
+			// quantities, gateway refund support) — a failure still renders
+			// the amount-only refund flow.
+			api( `minn-admin/v1/wc/orders/${ id }/refund-state` )
+				.then( ( rs ) => {
+					if ( isCur() ) {
+						m.refundState = rs;
+						rr();
+					}
+				} )
+				.catch( () => {
+					if ( isCur() ) {
+						m.refundState = { refunds: [], lines: {}, gateway: null };
+						rr();
+					}
+				} );
 		}
 		api( `wc/v3/orders/${ id }?_fields=${ ORDER_DETAIL_FIELDS }` )
 			.then( ( full ) => {
@@ -4947,7 +5039,7 @@
 		}
 		let m = state.orderPage;
 		if ( ! m || m.order.id !== state.orderPageId ) {
-			m = state.orderPage = { type: 'order', page: true, order: { id: state.orderPageId, number: String( state.orderPageId ) }, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [], gateways: null, otherOrders: null };
+			m = state.orderPage = { type: 'order', page: true, order: { id: state.orderPageId, number: String( state.orderPageId ) }, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [], gateways: null, otherOrders: null, refundState: null };
 			loadOrderDetail( m );
 		}
 		const o = m.full || m.order;
@@ -4984,6 +5076,71 @@
 		const total = parseFloat( o.total ) || 0;
 		const refunded = ( o.refunds || [] ).reduce( ( s, r ) => s + Math.abs( parseFloat( r.total ) || 0 ), 0 );
 		return Math.max( 0, total - refunded );
+	}
+
+	// Per-unit money on a line (item total + its tax, for one of the quantity).
+	function refundLineUnit( li ) {
+		const qty = Math.max( 1, parseInt( li.quantity, 10 ) || 1 );
+		return ( ( parseFloat( li.total ) || 0 ) + ( parseFloat( li.total_tax ) || 0 ) ) / qty;
+	}
+
+	// The Refund card. Per-line quantity steppers (fed by the refund-state
+	// accounting) auto-compute the amount, which stays hand-editable for
+	// arbitrary partial refunds (shipping, goodwill). Restock rides WC's own
+	// api_restock; the gateway checkbox names the real gateway and only
+	// renders when it can push money back itself (can_refund_order), so a
+	// check or manual order never pretends money moves.
+	function orderRefundCardHtml( m, o, refundable ) {
+		if ( refundable <= 0.001 ) return '';
+		const rs = m.refundState;
+		if ( rs == null ) {
+			return `
+						<div class="minn-media-edit minn-order-refund">
+							<div class="minn-side-title" style="margin:0 0 8px;">Refund</div>
+							<div class="minn-loading" style="padding:8px;">Loading refund details…</div>
+						</div>`;
+		}
+		const lines = ( o.line_items || [] ).map( ( li ) => {
+			const done = ( rs.lines || {} )[ li.id ] || { qty_refunded: 0 };
+			const left = Math.max( 0, ( parseInt( li.quantity, 10 ) || 0 ) - ( done.qty_refunded || 0 ) );
+			return { li, done, left };
+		} ).filter( ( l ) => l.left > 0 );
+		const gw = rs.gateway;
+		return `
+						<div class="minn-media-edit minn-order-refund">
+							<div class="minn-side-title" style="margin:0 0 8px;">Refund</div>
+							${ lines.length ? `
+							<div class="minn-refund-lines">
+								${ lines.map( ( { li, done, left } ) => `
+								<div class="minn-refund-line">
+									<span class="minn-cell-clip">${ esc( li.name ) }</span>
+									<span class="minn-refund-line-meta">${ done.qty_refunded ? esc( done.qty_refunded + ' of ' + li.quantity + ' refunded · ' ) : '' }${ esc( orderMoney( o, refundLineUnit( li ) ) ) } each</span>
+									<input class="minn-input minn-refund-qty" data-rline="${ li.id }" type="number" min="0" max="${ left }" step="1" value="0" aria-label="Quantity of ${ esc( li.name ) } to refund">
+								</div>` ).join( '' ) }
+								<div class="minn-toggle-desc" style="margin-top:6px;">Pick item quantities to refund, or enter an amount directly.</div>
+							</div>` : '' }
+							<div class="minn-order-field-row"${ lines.length ? ' style="margin-top:10px;"' : '' }>
+								<div style="flex:1;">
+									<div class="minn-field-label">Amount (max ${ esc( orderMoney( o, refundable ) ) })</div>
+									<input class="minn-input" id="minn-o-refund-amt" type="number" step="0.01" min="0.01" max="${ refundable.toFixed( 2 ) }" value="${ refundable.toFixed( 2 ) }">
+								</div>
+							</div>
+							<div style="margin-top:8px;"><div class="minn-field-label">Reason</div>
+								<input class="minn-input" id="minn-o-refund-reason" placeholder="Optional note on the refund">
+							</div>
+							${ lines.length ? `
+							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
+								<input type="checkbox" id="minn-o-refund-restock" checked>
+								<span>Restock refunded items</span>
+							</label>` : '' }
+							${ gw && gw.can_refund ? `
+							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
+								<input type="checkbox" id="minn-o-refund-api" checked>
+								<span>Also refund via ${ esc( gw.title ) }</span>
+							</label>` : `
+							<div class="minn-toggle-desc" style="margin-top:10px;">${ gw ? esc( gw.title ) + ' cannot send money back itself: this records the refund, and the money moves back outside the site.' : 'This records the refund; the money moves back outside the site.' }</div>` }
+							<button class="minn-btn-soft danger" id="minn-o-refund" type="button" style="margin-top:10px;">Issue refund</button>
+						</div>`;
 	}
 
 	function openOrderEmailModal( o ) {

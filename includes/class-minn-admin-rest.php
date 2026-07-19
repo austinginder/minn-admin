@@ -625,6 +625,15 @@ class Minn_Admin_REST {
 					'permission_callback' => $order_cap,
 				)
 			);
+			register_rest_route(
+				self::NS,
+				'/wc/orders/(?P<id>\d+)/refund-state',
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'wc_order_refund_state' ),
+					'permission_callback' => $order_cap,
+				)
+			);
 		}
 
 		register_rest_route(
@@ -3112,6 +3121,79 @@ class Minn_Admin_REST {
 			}
 		}
 		return array( 'gateways' => $out );
+	}
+
+	/**
+	 * Refund accounting for one order — what wc/v3 leaves out.
+	 *
+	 * Serves the refund history with dates and refunder names (resolved
+	 * server-side), per-line refunded quantities/totals through the order's
+	 * own accounting (REST refund line items don't expose _refunded_item_id,
+	 * so a client can't reliably match them back to lines), and whether this
+	 * order's gateway can push money back itself.
+	 */
+	public static function wc_order_refund_state( WP_REST_Request $request ) {
+		if ( ! function_exists( 'wc_get_order' ) ) {
+			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+		}
+		$order = wc_get_order( (int) $request['id'] );
+		if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
+			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+		}
+
+		$refunds = array();
+		foreach ( $order->get_refunds() as $refund ) {
+			$by   = (int) $refund->get_refunded_by();
+			$user = $by ? get_userdata( $by ) : false;
+			$date = $refund->get_date_created();
+			$refunds[] = array(
+				'id'     => $refund->get_id(),
+				'date'   => $date ? $date->date( 'c' ) : null,
+				'amount' => (float) $refund->get_amount(),
+				'reason' => (string) $refund->get_reason(),
+				'by'     => $user ? $user->display_name : '',
+			);
+		}
+
+		$lines = array();
+		foreach ( $order->get_items() as $item_id => $item ) {
+			$lines[ $item_id ] = array(
+				// get_qty_refunded_for_item returns a negative count.
+				'qty_refunded'   => abs( (int) $order->get_qty_refunded_for_item( $item_id ) ),
+				'total_refunded' => abs( (float) $order->get_total_refunded_for_item( $item_id ) ),
+			);
+		}
+
+		$gateway_out = null;
+		$gateway     = function_exists( 'wc_get_payment_gateway_by_order' ) ? wc_get_payment_gateway_by_order( $order ) : false;
+		if ( $gateway ) {
+			try {
+				$title = (string) $gateway->get_title();
+			} catch ( \Throwable $e ) {
+				$title = (string) $gateway->title;
+			}
+			$can = false;
+			try {
+				// can_refund_order also checks credentials where the gateway
+				// implements it (Stripe-style); supports() alone over-promises.
+				$can = method_exists( $gateway, 'can_refund_order' )
+					? (bool) $gateway->can_refund_order( $order )
+					: $gateway->supports( 'refunds' );
+			} catch ( \Throwable $e ) {
+				$can = false;
+			}
+			$gateway_out = array(
+				'id'         => $gateway->id,
+				'title'      => '' !== $title ? $title : (string) $gateway->get_method_title(),
+				'can_refund' => $can,
+			);
+		}
+
+		return array(
+			'refunds' => $refunds,
+			'lines'   => $lines,
+			'gateway' => $gateway_out,
+		);
 	}
 
 	/**
