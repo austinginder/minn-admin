@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.20.0** - Unreleased
+
+### Improved
+* **Comment rows open their post:** the "on Post title" in every comment row is a door now. Clicking the title lands in the Minn editor (pages resolve too, not just posts), a quiet ↗ beside it views the post on the site landing right at that comment, and the row's right-click menu leads with Open post in editor and View post. Rows whose post cannot be resolved keep the plain label.
+
 ## **v0.19.0** - July 19, 2026
 
 The storefront release. Orders stop being modal glimpses and become real pages with their own URLs, payments arrive by hand (a check in the mail is two clicks), refunds learn the order's own line items, and the Overview says out loud when the store needs you. Around the store: every site log in one viewer with a collapse-repeats mode, live posts carrying unsaved edits get a name (Modified) in the content list, Yes/No notices finally answer properly, and the post-lock story closes its last blind window with a server-side guard.

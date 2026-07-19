@@ -3774,17 +3774,22 @@
 
 	async function loadComments( page = 1 ) {
 		const tab = state.commentTab;
-		const r = await apiPaged( `wp/v2/comments?context=edit&status=${ tab }&per_page=25&page=${ page }&_fields=id,author_name,author_avatar_urls,content,date,post` );
+		const r = await apiPaged( `wp/v2/comments?context=edit&status=${ tab }&per_page=25&page=${ page }&_fields=id,author_name,author_avatar_urls,content,date,post,link` );
 		if ( tab !== state.commentTab ) return; // tab changed mid-flight — discard
 		const c = { items: r.items, page, totalPages: r.totalPages, total: r.total, postTitles: commentPostTitles };
-		// Resolve post titles in one cheap request (no content rendering).
+		// Resolve post titles in cheap _fields requests (no content
+		// rendering): posts first, pages for the leftovers. The map keeps the
+		// REST base so the title can be a door into the editor.
 		const ids = [ ...new Set( r.items.map( ( cm ) => cm.post ).filter( ( id ) => id && ! commentPostTitles[ id ] ) ) ];
-		if ( ids.length ) {
+		const lookupTitles = async ( rest, list ) => {
+			if ( ! list.length ) return;
 			try {
-				const posts = await api( `wp/v2/posts?include=${ ids.join( ',' ) }&per_page=${ ids.length }&_fields=id,title&status=publish,future,draft,pending,private&context=edit` );
-				posts.forEach( ( p ) => { commentPostTitles[ p.id ] = decodeEntities( p.title.rendered ); } );
+				const found = await api( `wp/v2/${ rest }?include=${ list.join( ',' ) }&per_page=${ list.length }&_fields=id,title&status=publish,future,draft,pending,private&context=edit` );
+				found.forEach( ( p ) => { commentPostTitles[ p.id ] = { title: decodeEntities( p.title.rendered ), rest }; } );
 			} catch ( e ) {}
-		}
+		};
+		await lookupTitles( 'posts', ids );
+		await lookupTitles( 'pages', ids.filter( ( id ) => ! commentPostTitles[ id ] ) );
 		state.cache.comments = c;
 	}
 
@@ -3884,7 +3889,9 @@
 			author: cm.author_name || 'Anonymous',
 			avatar: cm.author_avatar_urls && ( cm.author_avatar_urls[ '48' ] || Object.values( cm.author_avatar_urls )[ 0 ] ),
 			excerpt: stripTags( cm.content && cm.content.rendered ).slice( 0, 160 ),
-			post: c.postTitles[ cm.post ] || '#' + cm.post,
+			post: ( c.postTitles[ cm.post ] && c.postTitles[ cm.post ].title ) || '#' + cm.post,
+			postRest: ( c.postTitles[ cm.post ] && c.postTitles[ cm.post ].rest ) || '',
+			postLink: cm.link || '',
 			postId: cm.post,
 			date: cm.date,
 		} ) );
@@ -3914,7 +3921,7 @@
 					<div class="minn-comment-body">
 						<div class="minn-comment-head">
 							<span class="minn-comment-author">${ esc( r.author ) }</span>
-							<span class="minn-comment-on">on ${ esc( r.post ) }</span>
+							<span class="minn-comment-on">on ${ r.postRest ? `<button type="button" class="minn-comment-postlink" data-cedit="${ esc( r.postRest ) }:${ r.postId }" title="Open in the editor">${ esc( r.post ) }</button>` : esc( r.post ) }${ r.postLink ? ` <a class="minn-comment-postview" href="${ esc( r.postLink ) }" target="_blank" rel="noopener" title="View on the site (lands on this comment)">&#8599;</a>` : '' }</span>
 							<span class="minn-comment-time">${ timeAgo( r.date ) }</span>
 						</div>
 						<div class="minn-comment-text">${ esc( r.excerpt ) }</div>
@@ -3956,16 +3963,29 @@
 		);
 		// Right-click a comment: the row's own action buttons as a menu —
 		// built FROM the buttons, so it can never drift from the tab's verbs.
+		$$( '[data-cedit]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const [ rest, id ] = btn.dataset.cedit.split( ':' );
+				go( `editor/${ rest }/${ id }` );
+			} )
+		);
 		$$( '.minn-comment-row[data-crow]', view ).forEach( ( row ) =>
 			row.addEventListener( 'contextmenu', ( e ) => {
 				const btns = $$( '.minn-comment-action', row );
 				if ( ! btns.length ) return;
 				e.preventDefault();
-				openMinnMenu( e.clientX, e.clientY, btns.map( ( b ) => ( {
+				// The post doors lead; the rest of the menu is built from the
+				// row's own buttons so it can't drift.
+				const entries = [];
+				const postBtn = $( '[data-cedit]', row );
+				const viewLink = $( '.minn-comment-postview', row );
+				if ( postBtn ) entries.push( { label: 'Open post in editor', run: () => postBtn.click() } );
+				if ( viewLink ) entries.push( { label: 'View post', href: viewLink.href } );
+				openMinnMenu( e.clientX, e.clientY, entries.concat( btns.map( ( b ) => ( {
 					label: b.textContent.trim(),
 					danger: b.classList.contains( 'danger' ),
 					run: () => b.click(),
-				} ) ) );
+				} ) ) ) );
 			} )
 		);
 		$$( '[data-cstatus]', view ).forEach( ( btn ) =>
