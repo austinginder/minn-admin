@@ -514,6 +514,22 @@ the default, always sent.
 - Pair filters with `when`-gated actions so each filter view offers the verbs that make
   sense there (Received: Spam / Trash · Trash: Restore / Delete permanently).
 
+### Pages versus modals
+
+Minn's rule for when a record gets a detail modal and when it earns a full page with its
+own URL: a modal is for a glance (read the record, run a quick verb, close); a record
+earns a page when it has sub-resources or workflows of its own, or a URL worth sharing
+with a teammate. WooCommerce orders are the precedent: the order page at `/orders/{id}`
+hosts the full working surface (items, payment, refunds, emails, notes, related orders)
+while Quick view stays a modal for the one-click look from the list. Both presentations
+share one detail body, so neither drifts.
+
+Plugin surfaces get the modal by design. Entries, log rows and packages are
+glance-shaped, and the `sectionsRoute` detail plus row actions cover them; a surface
+whose records genuinely carry sub-resources should link out to its own screen (the
+`href` action) rather than simulate a page inside the modal. If Minn later promotes a
+surface detail to a real page, it will be by this same test, not by popularity.
+
 ### `detail.edit` — inline editing in the detail modal
 
 Let users edit an item's fields in place and save through your plugin's own update endpoint:
