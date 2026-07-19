@@ -702,6 +702,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
 | `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
 | `minn_admin_media_folders` | filter | Feed the Media view's folder filter from your folder plugin (since 0.18.0) |
+| `minn_admin_log_sources` | filter | Add a log to System's log viewer (since 0.19.0) |
 
 Minn deliberately never fires `wp_head`/`wp_footer` (its document stays clean), so developer
 tooling that wants to render into the page attaches at `minn_admin_template_footer`; the
@@ -1268,6 +1269,46 @@ runs server-side on that request; no extra capability check is needed for the co
 case. Bundled providers in `includes/adapters/cache-purge.php` include LiteSpeed,
 WP Rocket, W3 Total Cache, SpeedyCache, Redis Object Cache, Breeze, Nginx Helper,
 Cloudflare, and more; copy any of them.
+
+## Log sources — System's log viewer
+
+The System page's Debug tools card lists site logs (the WordPress debug log, the PHP
+error log when it is a separate file, and one source per WooCommerce log channel), each
+opening a full-screen tail viewer with a source picker. A plugin that keeps its own log,
+or a host mu-plugin that knows where the web server's logs live, can register a source
+via the `minn_admin_log_sources` filter. Since 0.19.0.
+
+```php
+add_filter( 'minn_admin_log_sources', function ( $sources ) {
+    $sources['my-plugin'] = array(
+        'label' => 'My Plugin log',
+        'group' => 'My Plugin',      // shown as "My Plugin · My Plugin log"
+        'stat'  => function () {     // cheap: powers lists, never reads content
+            $path = my_plugin_log_path();
+            return array(
+                'exists'   => file_exists( $path ),
+                'size'     => file_exists( $path ) ? filesize( $path ) : 0,
+                'modified' => file_exists( $path ) ? filemtime( $path ) : 0,
+            );
+        },
+        'read'  => function () {     // the tail payload
+            return Minn_Admin_Logs::tail_file( my_plugin_log_path() );
+        },
+        'clear' => function () {     // optional; omit for read-only sources
+            return my_plugin_truncate_log() ? true
+                : new WP_Error( 'clear_failed', 'Could not clear the log.' );
+        },
+    );
+    return $sources;
+} );
+```
+
+Source ids may use letters, digits, `:`, `_`, `.` and `-`. `Minn_Admin_Logs::tail_file()`
+serves the last 256 KB with the partial first line dropped; a `read` that builds its own
+payload should return the same shape (`exists`, `path`, `size`, `size_human`,
+`truncated`, `content`, optional `note`). The viewer is `manage_options`-only. Minn never
+guesses at web-server log paths: they are host-specific and usually outside
+`open_basedir`, so registering them is deliberately left to whoever controls the host.
 
 ## Spam providers — Settings → Spam
 

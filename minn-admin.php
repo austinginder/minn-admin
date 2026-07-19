@@ -25,6 +25,7 @@ require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-rest.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-surfaces.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-cpt.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-notices.php';
+require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-logs.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-updater.php';
 
 // Bundled adapters for third-party plugins (each guards on its plugin).

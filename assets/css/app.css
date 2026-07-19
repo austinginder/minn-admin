@@ -2733,6 +2733,11 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-sys-logopen { margin-left: auto; color: var(--accent2); font-weight: 600; font-size: 12.5px; }
 .minn-log-modal { width: 920px; max-width: 94vw; height: 80vh; display: flex; flex-direction: column; }
 .minn-log-modal .minn-modal-head { align-items: center; }
+.minn-log-title { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
+.minn-log-src { width: 280px; max-width: 40%; flex-shrink: 0; }
+.minn-log-src .minn-ac-input { height: 31px; font-size: 13px; }
+#minn-log-collapse { font-variant-numeric: tabular-nums; }
+#minn-log-collapse.on { color: var(--accent); border-color: var(--accent); }
 .minn-log-meta { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 400; color: var(--text3); margin-left: 8px; }
 .minn-log-actions { display: flex; align-items: center; gap: 7px; }
 .minn-log-actions .minn-btn-soft { padding: 6px 9px; }

@@ -1172,6 +1172,44 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// The multi-source log viewer: list sources, tail one, clear one.
+		// /system/debug-log above stays as the debug source's legacy alias.
+		$logs_cap = function () {
+			return current_user_can( 'manage_options' );
+		};
+		register_rest_route(
+			self::NS,
+			'/system/logs',
+			array(
+				'methods'             => 'GET',
+				'callback'            => function () {
+					return rest_ensure_response( array( 'sources' => Minn_Admin_Logs::list_payload() ) );
+				},
+				'permission_callback' => $logs_cap,
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/system/logs/(?P<id>[a-zA-Z0-9:_.\-]+)',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => function ( WP_REST_Request $request ) {
+						return rest_ensure_response( Minn_Admin_Logs::read( $request['id'] ) );
+					},
+					'permission_callback' => $logs_cap,
+				),
+				array(
+					'methods'             => 'DELETE',
+					'callback'            => function ( WP_REST_Request $request ) {
+						$result = Minn_Admin_Logs::clear( $request['id'] );
+						return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'cleared' => true ) );
+					},
+					'permission_callback' => $logs_cap,
+				),
+			)
+		);
+
 		// Months that actually hold uploads — feeds the Media view's date
 		// filter combobox (wp-admin's months_dropdown, minus the markup).
 		register_rest_route(
@@ -1331,14 +1369,7 @@ class Minn_Admin_REST {
 	 * error_log if it points at a real file, else the WordPress default.
 	 */
 	private static function debug_log_path() {
-		if ( defined( 'WP_DEBUG_LOG' ) && is_string( WP_DEBUG_LOG ) && '' !== WP_DEBUG_LOG ) {
-			return WP_DEBUG_LOG;
-		}
-		$ini = ini_get( 'error_log' );
-		if ( $ini && 'syslog' !== $ini && ( file_exists( $ini ) || is_dir( dirname( $ini ) ) ) && '/' === substr( $ini, 0, 1 ) ) {
-			return $ini;
-		}
-		return WP_CONTENT_DIR . '/debug.log';
+		return Minn_Admin_Logs::debug_log_path();
 	}
 
 	/**
@@ -4915,6 +4946,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'generated'  => current_time( 'c' ),
 				'checks'     => $checks,
 				'config'     => self::config_state(),
+				'logs'       => Minn_Admin_Logs::list_payload(),
 				'licenses'   => $licenses,
 				'extensions' => self::extensions_manifest(),
 				// Live registry of everything hooked into Minn, with owner
