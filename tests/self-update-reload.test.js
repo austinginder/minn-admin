@@ -87,6 +87,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Update everything sees the stubbed plugin offer', /plugin/i.test( sub ), sub );
 
 		await page.click( '#minn-update-all' );
+		await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 8000 } );
+		await page.click( '.minn-confirm-modal [data-ok]' );
 
 		await page.waitForFunction(
 			() => ( window.__minnReloadScheduled > 0 )
@@ -142,6 +144,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			await page.waitForSelector( '#minn-update-all', { timeout: 15000 } );
 		}
 		await page.click( '#minn-update-all' );
+		await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 8000 } );
+		await page.click( '.minn-confirm-modal [data-ok]' );
 		// "Minn Admin updated" also contains "updated" — match the normal
 		// completion toast specifically ("Updated N plugins. Everything is current.").
 		await page.waitForFunction(

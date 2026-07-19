@@ -563,6 +563,64 @@
 	}
 
 	// True when a structural Undo toast is live — callers intercept ⌘Z.
+
+	// One confirm surface for consequential actions (replacing native
+	// confirm() where the stakes deserve more than a sentence): title, body,
+	// optional scope disclosure (what changes, what is untouched), a danger
+	// style, and typed confirmation for the truly irreversible. Friction
+	// scales with reversibility, not with how alarming the action sounds.
+	// Quick reversible verbs keep native confirm().
+	function minnConfirm( opts ) {
+		return new Promise( ( resolve ) => {
+			const o = opts || {};
+			const overlay = document.createElement( 'div' );
+			overlay.className = 'minn-modal-overlay minn-confirm-overlay';
+			const scope = ( label, items ) => items && items.length ? `
+				<div class="minn-confirm-scope">
+					<div class="minn-confirm-scope-label">${ esc( label ) }</div>
+					<ul>${ items.map( ( it ) => `<li>${ esc( it ) }</li>` ).join( '' ) }</ul>
+				</div>` : '';
+			overlay.innerHTML = `
+			<div class="minn-modal minn-confirm-modal" role="alertdialog" aria-modal="true" aria-label="${ esc( o.title || 'Confirm' ) }">
+				<div class="minn-confirm-title">${ esc( o.title || 'Are you sure?' ) }</div>
+				${ o.body ? `<div class="minn-confirm-body">${ esc( o.body ) }</div>` : '' }
+				${ scope( o.changesLabel || 'What this changes', o.changes ) }
+				${ scope( o.keepsLabel || 'Not touched', o.keeps ) }
+				${ o.typeToConfirm ? `
+				<div class="minn-confirm-type">
+					<div class="minn-confirm-type-label">Type <b>${ esc( o.typeToConfirm ) }</b> to confirm</div>
+					<input class="minn-input" id="minn-confirm-input" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true">
+				</div>` : '' }
+				<div class="minn-confirm-actions">
+					<button class="minn-btn-soft" data-cancel type="button">Cancel</button>
+					<button class="${ o.danger ? 'minn-btn-soft danger' : 'minn-btn-primary' }" data-ok type="button"${ o.typeToConfirm ? ' disabled' : '' }>${ esc( o.confirmLabel || 'Confirm' ) }</button>
+				</div>
+			</div>`;
+			document.body.appendChild( overlay );
+			const done = ( val ) => {
+				overlay.remove();
+				document.removeEventListener( 'keydown', onKey );
+				resolve( val );
+			};
+			const onKey = ( e ) => { if ( e.key === 'Escape' ) done( false ); };
+			document.addEventListener( 'keydown', onKey );
+			overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) done( false ); } );
+			overlay.querySelector( '[data-cancel]' ).addEventListener( 'click', () => done( false ) );
+			const ok = overlay.querySelector( '[data-ok]' );
+			ok.addEventListener( 'click', () => { if ( ! ok.disabled ) done( true ); } );
+			const input = overlay.querySelector( '#minn-confirm-input' );
+			if ( input ) {
+				input.addEventListener( 'input', () => {
+					ok.disabled = input.value.trim().toLowerCase() !== String( o.typeToConfirm ).toLowerCase();
+				} );
+				input.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' && ! ok.disabled ) done( true ); } );
+				setTimeout( () => input.focus(), 30 );
+			} else {
+				setTimeout( () => ok.focus(), 30 );
+			}
+		} );
+	}
+
 	function runPendingToastUndo() {
 		if ( ! pendingToastUndo ) return false;
 		pendingToastUndo.run();
@@ -11229,7 +11287,14 @@
 		if ( ! btn ) return;
 		btn.addEventListener( 'click', async () => {
 			const core = state.cache.core;
-			if ( ! confirm( `Update WordPress to ${ core.update.version }? Visitors see a maintenance notice for a few seconds while files are replaced.` ) ) return;
+			const okCore = await minnConfirm( {
+				title: `Update WordPress to ${ core.update.version }?`,
+				changes: [ `WordPress core files${ B.site && B.site.version ? ` (${ B.site.version } to ${ core.update.version })` : '' }`, 'The database, when this release ships a migration' ],
+				keeps: [ 'Your content, media and users', 'Plugins, themes and their settings' ],
+				body: 'Visitors see a maintenance notice for a few seconds while files are replaced.',
+				confirmLabel: 'Update WordPress',
+			} );
+			if ( ! okCore ) return;
 			btn.disabled = true;
 			btn.textContent = 'Updating WordPress…';
 			try {
@@ -11427,7 +11492,14 @@
 			const plugin = plugins.find( ( p ) => p.plugin === file );
 			if ( ! plugin || plugin.status === 'active' ) return;
 			const name = cleanPluginName( plugin.name );
-			if ( ! confirm( `Delete “${ name }”? This removes its files from the server.` ) ) return;
+			const okDel = await minnConfirm( {
+				title: `Delete ${ name }?`,
+				body: 'Its files are removed from the server, and a plugin may take its stored data with it. There is no trash for this. Deactivating instead keeps everything.',
+				danger: true,
+				typeToConfirm: 'delete',
+				confirmLabel: 'Delete plugin',
+			} );
+			if ( ! okDel ) return;
 			const card = document.querySelector( `.minn-plugin[data-plugin="${ CSS.escape( file ) }"]` );
 			if ( card ) card.classList.add( 'minn-busy' );
 			toast( `Deleting ${ name }…` );
@@ -11664,11 +11736,17 @@
 		}
 		const runThemeAction = async ( action, t, btn ) => {
 			if ( ! t ) return;
-			const confirms = {
-				activate: `Switch the site's theme to “${ t.name }”? This changes how the whole site looks.`,
-				delete: `Delete “${ t.name }”? This removes its files from the server.`,
-			};
-			if ( confirms[ action ] && ! confirm( confirms[ action ] ) ) return;
+			if ( action === 'activate' && ! confirm( `Switch the site's theme to “${ t.name }”? This changes how the whole site looks.` ) ) return;
+			if ( action === 'delete' ) {
+				const okDel = await minnConfirm( {
+					title: `Delete the ${ t.name } theme?`,
+					body: 'Its files are removed from the server. There is no trash for this.',
+					danger: true,
+					typeToConfirm: 'delete',
+					confirmLabel: 'Delete theme',
+				} );
+				if ( ! okDel ) return;
+			}
 			if ( btn ) btn.disabled = true;
 			const card = document.querySelector( `.minn-theme[data-stylesheet="${ CSS.escape( t.stylesheet ) }"]` )
 				|| ( btn && btn.closest( '.minn-theme' ) );
@@ -22435,8 +22513,14 @@
 		const parts = pendingUpdateParts();
 		if ( ! parts.length ) return;
 		const hasCore = parts.some( ( p ) => p.kind === 'core' );
-		const summary = parts.map( ( p ) => p.label ).join( ', ' );
-		if ( ! confirm( `Update ${ summary }?${ hasCore ? ' The site enters maintenance mode for a few seconds while WordPress core updates.' : '' }` ) ) return;
+		const okAll = await minnConfirm( {
+			title: 'Update everything?',
+			changes: parts.map( ( p ) => p.label ),
+			keeps: [ 'Your content, media and users', 'Plugin and theme settings', 'Anything without a pending update' ],
+			body: `Each update runs its author's own upgrade routine. Plugins first, then themes${ hasCore ? ', then WordPress core last (visitors see a maintenance notice for a few seconds)' : '' }.`,
+			confirmLabel: 'Update everything',
+		} );
+		if ( ! okAll ) return;
 		const setPhase = ( label ) => { state.updatingAll = label; renderOverlays(); };
 		const doneBits = [];
 		const failures = [];

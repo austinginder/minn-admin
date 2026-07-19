@@ -2182,6 +2182,20 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-line-total { font-variant-numeric: tabular-nums; color: var(--text2); }
 .minn-order-item.total .minn-order-line-total { color: var(--text); }
 
+/* Shared confirm modal — scope disclosure + typed confirmation */
+.minn-confirm-overlay { z-index: 90; }
+.minn-confirm-modal { width: 440px; max-width: 92vw; padding: 20px 22px; }
+.minn-confirm-title { font-size: 16.5px; font-weight: 700; margin-bottom: 8px; }
+.minn-confirm-body { font-size: 13.5px; color: var(--text2); line-height: 1.55; }
+.minn-confirm-scope { margin-top: 12px; }
+.minn-confirm-scope-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); margin-bottom: 4px; }
+.minn-confirm-scope ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--text2); }
+.minn-confirm-scope li { margin: 2px 0; }
+.minn-confirm-type { margin-top: 14px; }
+.minn-confirm-type-label { font-size: 13px; color: var(--text2); margin-bottom: 6px; }
+.minn-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.minn-confirm-actions .minn-btn-primary { width: auto; }
+
 /* Refund card: per-line quantity steppers + refund-row delete */
 .minn-refund-line { display: flex; gap: 10px; align-items: center; padding: 6px 0; font-size: 13.5px; }
 .minn-refund-line > .minn-cell-clip { flex: 1; }

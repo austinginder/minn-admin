@@ -80,12 +80,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Update everything button pinned on the Updates tab', updAll.label.includes( 'Update everything' ) );
 		t.check( 'Button subtitle names WordPress', updAll.sub.includes( `WordPress ${ current }` ), updAll.sub );
 
-		// Cancelling the confirm leaves everything untouched.
-		let dialogSeen = '';
-		page.once( 'dialog', ( d ) => { dialogSeen = d.message(); d.dismiss(); } );
+		// Cancelling the confirm leaves everything untouched. The confirm is
+		// the shared scope-disclosure modal now, not a native dialog.
 		await page.click( '#minn-update-all' );
-		await page.waitForTimeout( 400 );
-		t.check( 'Confirm lists what will update', dialogSeen.includes( `WordPress ${ current }` ), dialogSeen );
+		await page.waitForSelector( '.minn-confirm-modal', { timeout: 8000 } );
+		const modalText = await page.evaluate( () => document.querySelector( '.minn-confirm-modal' ).textContent );
+		t.check( 'Confirm lists what will update', modalText.includes( `WordPress ${ current }` ), modalText.slice( 0, 120 ) );
+		t.check( 'Confirm discloses what stays untouched', /Not touched/.test( modalText ) && /content, media/.test( modalText ), '' );
+		await page.click( '.minn-confirm-modal [data-cancel]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-confirm-modal' ), null, { timeout: 5000 } );
 		const stillIdle = await page.evaluate( () => ! document.querySelector( '#minn-update-all' ).disabled );
 		t.check( 'Cancel leaves the button idle', stillIdle );
 		await page.keyboard.press( 'Escape' ); // close the panel
