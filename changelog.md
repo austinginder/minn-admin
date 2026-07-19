@@ -3,6 +3,7 @@
 ## **v0.20.0** - Unreleased
 
 ### Improved
+* **The editor sidebar's doors pack two-up:** Settings, Page attributes, History, the custom-field panels and SEO now sit in a two-column grid instead of a full-width stack, roughly halving their vertical footprint on plugin-heavy posts. An odd count lets the last door span the width, summaries ellipsize inside the narrower cells, and the chevron gives its width back to the text. The Publish and Featured image cards keep their full rows.
 * **Comment rows open their post:** the "on Post title" in every comment row is a door now. Clicking the title lands in the Minn editor (pages resolve too, not just posts), a quiet ↗ beside it views the post on the site landing right at that comment, and the row's right-click menu leads with Open post in editor and View post. Rows whose post cannot be resolved keep the plain label.
 
 ## **v0.19.0** - July 19, 2026

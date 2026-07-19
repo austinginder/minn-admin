@@ -17319,12 +17319,14 @@
 			</div>` : ed.featuredMedia ? '<div class="minn-session-empty">Loading…</div>' : `
 			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } Set featured image</button>` }
 		</div>` : '' }
-		${ editorDoorHtml( { id: 'settings', title: 'Settings', summary: editorSettingsSummary( ed ) } ) }
-		${ showAttrs ? editorDoorHtml( { id: 'attrs', title: 'Page attributes', summary: editorAttrsSummary( ed ) } ) : '' }
-		${ historyRows.length || ( ed.revisionsTotal && ed.revisionsTotal > 0 )
-			? editorDoorHtml( { id: 'history', title: 'History', summary: editorHistorySummary( ed ) } )
-			: '' }
-		${ panelDoors }
+		<div class="minn-side-doors">
+			${ editorDoorHtml( { id: 'settings', title: 'Settings', summary: editorSettingsSummary( ed ) } ) }
+			${ showAttrs ? editorDoorHtml( { id: 'attrs', title: 'Page attributes', summary: editorAttrsSummary( ed ) } ) : '' }
+			${ historyRows.length || ( ed.revisionsTotal && ed.revisionsTotal > 0 )
+				? editorDoorHtml( { id: 'history', title: 'History', summary: editorHistorySummary( ed ) } )
+				: '' }
+			${ panelDoors }
+		</div>
 		${ ed.id ? '<button class="minn-trash-link" id="minn-trash-post">Move to trash</button>' : '' }
 		<div class="minn-side-card" id="minn-outline-card" hidden>
 			<div class="minn-side-title">Outline</div>

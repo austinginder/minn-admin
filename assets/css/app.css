@@ -1559,6 +1559,14 @@ select.minn-input {
 .minn-side-door-title { font-weight: 700; font-size: 14px; color: var(--text); }
 .minn-side-door-sum { font-size: 12.5px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-side-door-chev { flex-shrink: 0; color: var(--text3); font-size: 18px; line-height: 1; font-weight: 400; }
+/* Doors pack two-up — a title plus a one-line summary never needed a full
+   row. An odd count lets the last door span the width; the chevron gives
+   its width back to the text (hover carries the affordance). */
+.minn-side-doors { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.minn-side-doors > .minn-side-door { padding: 11px 13px; min-width: 0; }
+.minn-side-doors > .minn-side-door:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.minn-side-doors .minn-side-door-chev { display: none; }
+.minn-side-doors .minn-side-door-title { font-size: 13.5px; }
 .minn-editor-door-body { padding: 4px 18px 20px; }
 .minn-editor-side-modal .minn-panel-fields { gap: 12px; }
 .minn-side-rows { display: flex; flex-direction: column; gap: 9px; font-size: 13.5px; }
