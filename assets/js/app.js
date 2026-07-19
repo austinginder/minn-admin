@@ -2089,6 +2089,28 @@
 		state.cache.overview = await api( `minn-admin/v1/overview?days=${ state.range }` );
 	}
 
+	// "Store needs attention" strip: the day-to-day order buckets, each a
+	// door to the Orders list pre-filtered to that status tab. Renders only
+	// when WooCommerce is active and the user can work orders; an all-clear
+	// store says so plainly instead of vanishing.
+	function storeStripHtml( o ) {
+		if ( ! o.store || ! B.wc || ! B.caps.orders ) return '';
+		const buckets = [
+			[ 'pending', o.store.pending, 'awaiting payment', 'private' ],
+			[ 'on-hold', o.store.onhold, 'on hold', 'private' ],
+			[ 'processing', o.store.processing, 'to fulfill', 'future' ],
+			[ 'failed', o.store.failed, 'failed', 'trash-status' ],
+		].filter( ( [ , n ] ) => n > 0 );
+		return `
+		<div class="minn-card minn-store-strip">
+			<div class="minn-store-label">Store</div>
+			${ buckets.length ? buckets.map( ( [ tab, n, label, style ] ) => `
+				<button class="minn-status ${ style } minn-store-chip" data-sotab="${ tab }">${ n } ${ label }</button>` ).join( '' )
+				: '<span class="minn-store-ok">All caught up. No orders need attention.</span>' }
+			<button class="minn-btn-soft minn-store-view" id="minn-store-view">View orders</button>
+		</div>`;
+	}
+
 	function renderOverview() {
 		const view = $( '#minn-view' );
 		const o = state.cache.overview;
@@ -2135,6 +2157,7 @@
 				</div>`;
 			} ).join( '' ) }
 		</div>
+		${ storeStripHtml( o ) }
 		<div class="minn-dash-grid">
 			<div class="minn-card minn-panel-pad">
 				<div class="minn-chart-head">
@@ -2209,6 +2232,22 @@
 			};
 			card.addEventListener( 'click', open );
 			card.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) open(); } );
+		} );
+		// Store chips land on the Orders list pre-filtered to their bucket
+		// (the customer View-all jump's pattern).
+		$$( '[data-sotab]', view ).forEach( ( chip ) =>
+			chip.addEventListener( 'click', () => {
+				state.orderView = 'list';
+				state.orderTab = chip.dataset.sotab;
+				state.orderSearch = '';
+				state.cache.orders = null;
+				go( 'orders' );
+			} )
+		);
+		const storeView = $( '#minn-store-view', view );
+		if ( storeView ) storeView.addEventListener( 'click', () => {
+			state.orderView = 'list';
+			go( 'orders' );
 		} );
 
 		const swap = $( '#minn-chart-swap', view );

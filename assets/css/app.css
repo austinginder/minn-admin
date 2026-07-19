@@ -538,6 +538,14 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-stat-delta.warn { color: var(--amber); }
 .minn-stat-delta.down { color: var(--red); }
 
+/* Store needs-attention strip (Overview, WooCommerce only) */
+.minn-store-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 17px; margin-bottom: 20px; }
+.minn-store-label { font-size: 13.5px; font-weight: 600; color: var(--text2); margin-right: 4px; }
+.minn-store-chip { border: 0; cursor: pointer; font-family: inherit; transition: filter 0.15s ease; }
+.minn-store-chip:hover, .minn-store-chip:focus-visible { filter: brightness(1.15); }
+.minn-store-ok { color: var(--text3); font-size: 13px; }
+.minn-store-view { margin-left: auto; }
+
 .minn-dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
 .minn-panel-pad { padding: 18px 20px; }
 .minn-panel-title { font-weight: 700; font-size: 16px; }
