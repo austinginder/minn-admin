@@ -16,6 +16,13 @@ class Minn_Admin_REST {
 
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
+		// Minn's in-place content saves carry the post id in an
+		// X-Minn-Expect-Lock header — verified against _edit_lock inside the
+		// save request itself, so a session that lost a lock takeover can't
+		// clobber the taker's work during the up-to-30s window before its
+		// next lock refresh notices. Requests without the header (Gutenberg,
+		// third parties) are untouched.
+		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'guard_locked_save' ), 10, 3 );
 	}
 
 	public static function register_routes() {
@@ -2244,6 +2251,48 @@ class Minn_Admin_REST {
 			array(
 				'restored' => true,
 				'status'   => get_post_status( $id ),
+			)
+		);
+	}
+
+	/**
+	 * Reject a write from a session whose edit lock was taken over — the
+	 * server-side half of conflict safety. The client's 30s lock refresh
+	 * detects a takeover eventually; this closes the blind window in between
+	 * by failing the save itself with a 409 the client turns into the
+	 * taken-over UI. Only fires when the request carries our header.
+	 */
+	public static function guard_locked_save( $response, $handler, $request ) {
+		if ( null !== $response ) {
+			return $response;
+		}
+		$id = (int) $request->get_header( 'X-Minn-Expect-Lock' );
+		if ( ! $id || ! in_array( $request->get_method(), array( 'POST', 'PUT', 'PATCH' ), true ) ) {
+			return $response;
+		}
+		// This filter runs before permission callbacks — gate on edit_post so
+		// lock-holder identities never leak to callers who couldn't open the
+		// editor in the first place (core's own auth still runs after us).
+		if ( ! get_post( $id ) || ! current_user_can( 'edit_post', $id ) ) {
+			return $response;
+		}
+		require_once ABSPATH . 'wp-admin/includes/post.php';
+		$other = wp_check_post_lock( $id );
+		if ( ! $other ) {
+			return $response;
+		}
+		$user = get_userdata( $other );
+		$name = $user ? $user->display_name : 'Someone else';
+		return new WP_Error(
+			'minn_locked',
+			$name . ' took over editing. Your copy was not saved.',
+			array(
+				'status' => 409,
+				'holder' => array(
+					'id'     => $other,
+					'name'   => $name,
+					'avatar' => get_avatar_url( $other, array( 'size' => 96 ) ),
+				),
 			)
 		);
 	}
