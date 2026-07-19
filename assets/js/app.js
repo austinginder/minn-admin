@@ -11496,7 +11496,6 @@
 				title: `Delete ${ name }?`,
 				body: 'Its files are removed from the server, and a plugin may take its stored data with it. There is no trash for this. Deactivating instead keeps everything.',
 				danger: true,
-				typeToConfirm: 'delete',
 				confirmLabel: 'Delete plugin',
 			} );
 			if ( ! okDel ) return;
@@ -11742,7 +11741,6 @@
 					title: `Delete the ${ t.name } theme?`,
 					body: 'Its files are removed from the server. There is no trash for this.',
 					danger: true,
-					typeToConfirm: 'delete',
 					confirmLabel: 'Delete theme',
 				} );
 				if ( ! okDel ) return;
