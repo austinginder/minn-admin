@@ -2,8 +2,9 @@
  * Shared confirm modal — typed confirmation for irreversible deletes.
  *
  * Drives the real plugin-delete flow against a disposable wp.org install
- * (Hello Dolly): Escape cancels harmlessly, the confirm button stays
- * disabled until the exact word is typed, and confirming deletes for real.
+ * (Hello Dolly): Escape cancels harmlessly and confirming deletes for real.
+ * Deletes are one click (no typed gate, by request); the component still
+ * supports typeToConfirm for anything that earns it later.
  * The Update-everything scope disclosure is pinned by
  * core-update-visibility.test.js.
  */
@@ -50,19 +51,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-confirm-modal', { timeout: 8000 } );
 		const modal1 = await page.evaluate( () => document.querySelector( '.minn-confirm-modal' ).textContent );
 		t.check( 'modal names the plugin and the stakes', /Hello Dolly/.test( modal1 ) && /no trash/i.test( modal1 ), modal1.slice( 0, 80 ) );
-		t.check( 'confirm starts disabled (typed confirmation)', await page.evaluate( () => document.querySelector( '.minn-confirm-modal [data-ok]' ).disabled ), '' );
+		t.check( 'confirm is one click (no typed gate on deletes)', await page.evaluate( () => ! document.querySelector( '.minn-confirm-modal [data-ok]' ).disabled && ! document.querySelector( '#minn-confirm-input' ) ), '' );
 		await page.keyboard.press( 'Escape' );
 		await page.waitForFunction( () => ! document.querySelector( '.minn-confirm-modal' ), null, { timeout: 5000 } );
 		const still = await api( `wp/v2/plugins/${ file }` );
 		t.check( 'Escape cancelled — plugin still installed', still.status === 200, String( still.status ) );
 
-		// The typed gate: wrong word keeps it disabled, the right one arms it.
+		// Confirming deletes for real.
 		await page.click( `[data-del="${ file }"]` );
-		await page.waitForSelector( '#minn-confirm-input', { timeout: 8000 } );
-		await page.fill( '#minn-confirm-input', 'nope' );
-		t.check( 'wrong word keeps confirm disabled', await page.evaluate( () => document.querySelector( '.minn-confirm-modal [data-ok]' ).disabled ), '' );
-		await page.fill( '#minn-confirm-input', 'delete' );
-		t.check( 'typing delete arms the button', await page.evaluate( () => ! document.querySelector( '.minn-confirm-modal [data-ok]' ).disabled ), '' );
+		await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 8000 } );
 		await page.click( '.minn-confirm-modal [data-ok]' );
 		await page.waitForFunction( () => ! document.querySelector( '.minn-confirm-modal' ), null, { timeout: 5000 } );
 		let gone = null;
