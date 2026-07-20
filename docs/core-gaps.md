@@ -50,10 +50,13 @@ Settings → Reading (latest posts vs static page, with page pickers); and as of
 the v0.11.0 cycle, **Custom CSS** (`wp_custom_css_post`, the Customizer's
 "Additional CSS") edits in Settings → Design through
 `minn-admin/v1/custom-css` (edit_css cap, per-theme stylesheet, structural
-validation mirroring the Customizer's refusal). Missing: custom logo, site
-language, theme mods, FSE global styles. Judgment: identity + homepage +
-Custom CSS was the daily slice and it's covered; the Customizer proper and
-global styles are correctly long-tail.
+validation mirroring the Customizer's refusal). Custom logo and site
+language shipped in the v0.20.0 cycle (Settings → Site: the logo gated on
+theme custom-logo support via `minn-admin/v1/site-logo`, the language over
+`minn-admin/v1/site/language`, downloading packs on save). Missing: other
+theme mods, FSE global styles. Judgment: identity + homepage + Custom CSS +
+logo + language is the daily slice and it's covered; the Customizer proper
+and global styles are correctly long-tail.
 
 ### Appearance — covered where it counts
 Menus (with drag reorder) and classic widgets are fully built; themes
