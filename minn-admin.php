@@ -3,7 +3,7 @@
  * Plugin Name:       Minn Admin
  * Plugin URI:        https://github.com/austinginder/minn-admin
  * Description:       A reimagined WordPress admin experience. Fast, focused and beautiful. Served at /minn-admin/.
- * Version:           0.19.0
+ * Version:           0.20.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Austin Ginder
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MINN_ADMIN_VERSION', '0.19.0' );
+define( 'MINN_ADMIN_VERSION', '0.20.0' );
 define( 'MINN_ADMIN_FILE', __FILE__ );
 define( 'MINN_ADMIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MINN_ADMIN_URL', plugin_dir_url( __FILE__ ) );

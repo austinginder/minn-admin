@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.20.0** - Unreleased
+## **v0.20.0** - July 20, 2026
+
+The consent release. Every consequential action now says what it touches before it happens: updates enumerate what changes and what stays untouched, permanent deletes wear danger styling with plain-stakes copy, and quick reversible verbs keep their one-click ease. Around that spine, comments learn in-place editing and one-click commenter blocking, the content list says who is editing a post right now, Settings closes two more Customizer-era gaps (site logo and site language), Search & Filter Pro and Admin Columns Pro join the license manager, and plugin activation moves to a real admin context so activation hooks that assume wp-admin stop failing.
 
 ### Fixed
 * **Plugin activation works for plugins that assume wp-admin:** plugin toggles now run through admin-ajax, a real admin context, instead of the REST plugins endpoint. Activation hooks are written for wp-admin, and some plugins only load parts of themselves there (Breeze skips its ecommerce class outside wp-admin and fataled when activated from Minn on a WooCommerce site). Every activate and deactivate door rides the new path: the Extensions switch, right-click menus, license Turn on, connectors, the Add plugin dialog and the deactivate-Minn modal, with REST as the automatic fallback when admin-ajax itself is unreachable.

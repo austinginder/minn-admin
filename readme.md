@@ -28,7 +28,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   `minn_admin_traffic_day`), and a recent-activity feed
 - **Content** — posts, pages and custom post types sorted by publish date (scheduled posts
   lead with their go-out dates), with search, category/tag filters, status pills (live posts
-  carrying unsaved edits wear a **Modified** chip, with a matching filter), **bulk
+  carrying unsaved edits wear a **Modified** chip, with a matching filter; a post someone
+  else has open says who is editing), **bulk
   actions** (set status or trash, with shift-click range select), and **row actions**:
   right-click or hover for quick publish/draft/trash, view, and a block-editor escape
 - **Media** — grid/list library, uploads, drag-and-drop, a preview overlay with arrow-key
@@ -42,7 +43,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   Replace; the **SVG** filter tab appears with Safe SVG or SVG Support active, and
   **↻ Thumbnails** works through Regenerate Thumbnails or Force Regenerate Thumbnails
 - **Comments** — full moderation (pending / approved / spam / trash) with **bulk moderation**
-  (each tab offers its own verbs), inline replies and a right-click menu for the same verbs
+  (each tab offers its own verbs), inline replies, in-place comment editing, **Block
+  commenter** (core's disallowed list, with Undo) and a right-click menu for the same verbs
 - **Ecommerce** — full WooCommerce day-to-day in Minn: **Orders** open as full pages (linkable,
   refreshable, with a **Quick view** modal from the list) with search, status, notes, a **Payment
   card** that records hand-received payments through WooCommerce's own machinery, **itemized
@@ -77,7 +79,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   Minn's own store when neither is active; code-registered ones shown read-only), and a full
   **terms manager**: rename, re-parent, **merge** (posts move to the survivor through core's own
   reassignment) and delete across every taxonomy, with an indented tree for hierarchical ones
-- **Settings** — reorganized by intent: **Site** (identity, locale, admin, with timezone picker),
+- **Settings** — reorganized by intent: **Site** (identity, logo, site language, locale, admin, with timezone picker),
   **Visibility** (search engines, maintenance mode, membership), **Homepage**, **Content**
   (new-content defaults + permalinks with automatic rewrite flushing), **Comments** (discussion +
   spam), **Design** (the Customizer's Additional CSS, validated before saving) and
