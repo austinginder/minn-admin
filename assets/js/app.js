@@ -1237,6 +1237,7 @@
 			if ( state.route === 'editor' && ( prevRoute !== 'editor' || editorTargetChanged ) ) {
 				state.editor = null;
 			}
+			searchFocusArmed = true;
 			renderView();
 		}
 	}
@@ -27764,6 +27765,37 @@
 		} );
 	}
 
+	// Fresh navigations drop the caret into the view's filter/search box so
+	// typing filters immediately (Austin, v0.21.0). Armed per navigation
+	// (boot + onRouteChange), consumed by the first paint that shows an
+	// enabled .minn-toolbar-search. Disarmed without focusing when the user
+	// is already in another field (never steal focus), and skipped entirely
+	// on touch devices where autofocus would pop the software keyboard.
+	let searchFocusArmed = false;
+	function maybeFocusSearch() {
+		if ( ! searchFocusArmed ) return;
+		if ( window.matchMedia( '(pointer: coarse)' ).matches ) {
+			searchFocusArmed = false;
+			return;
+		}
+		const inp = $( '#minn-view .minn-toolbar-search' );
+		// Not painted yet (cold-paint shell) or still disabled while loading:
+		// stay armed for the post-load render.
+		if ( ! inp || inp.disabled ) return;
+		// A focused nav button/link is fine to take focus from (that's how the
+		// navigation happened); a text-entry control means the user is already
+		// typing somewhere (⌘K palette, a modal field) — back off for good.
+		const ae = document.activeElement;
+		const typing = ae && ae !== inp
+			&& ( ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable );
+		if ( typing ) {
+			searchFocusArmed = false;
+			return;
+		}
+		searchFocusArmed = false;
+		inp.focus( { preventScroll: true } );
+	}
+
 	function renderView() {
 		renderTopbar();
 		closeInspector();
@@ -27859,6 +27891,7 @@
 
 		renderShell();
 		parseHash();
+		searchFocusArmed = true;
 		renderView();
 
 		// Mobile Safari (and any browser with a software keyboard): fixed
@@ -27875,10 +27908,14 @@
 			let raf = 0;
 			const obs = new MutationObserver( () => {
 				cancelAnimationFrame( raf );
-				raf = requestAnimationFrame( enhanceTabStrips );
+				raf = requestAnimationFrame( () => {
+					enhanceTabStrips();
+					maybeFocusSearch();
+				} );
 			} );
 			obs.observe( view, { childList: true, subtree: true } );
 			enhanceTabStrips();
+			maybeFocusSearch();
 		}
 
 		window.addEventListener( 'popstate', onRouteChange );
