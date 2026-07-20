@@ -23,6 +23,46 @@ class Minn_Admin {
 		add_action( 'init', array( __CLASS__, 'register_x_oembed' ) );
 		add_action( 'init', array( __CLASS__, 'register_oembed_refresh' ), 20 );
 		add_action( 'init', array( __CLASS__, 'register_toolbar_meta' ) );
+		add_action( 'wp_ajax_minn_plugin_status', array( __CLASS__, 'ajax_plugin_status' ) );
+	}
+
+	/**
+	 * Plugin activate/deactivate over admin-ajax instead of wp/v2/plugins.
+	 * An admin-ajax request bootstraps wp-admin, so is_admin() is genuinely
+	 * true and the admin includes are loaded — the context activation hooks
+	 * were written for. REST is neither admin nor CLI, and plugins that gate
+	 * their loading on is_admin() fatal there (Breeze references its
+	 * ecommerce class during activation on WooCommerce sites; it will not
+	 * be the last with that shape). Accepts the REST-style plugin id
+	 * (basename sans .php) so the client speaks one dialect.
+	 */
+	public static function ajax_plugin_status() {
+		check_ajax_referer( 'minn-plugin-status' );
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Sorry, you are not allowed to manage plugins for this site.' ) ), 403 );
+		}
+		$id     = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+		$status = isset( $_POST['status'] ) ? sanitize_key( wp_unslash( $_POST['status'] ) ) : '';
+		if ( '' === $id || validate_file( $id ) || ! in_array( $status, array( 'active', 'inactive' ), true ) ) {
+			wp_send_json_error( array( 'message' => 'Invalid plugin or status.' ), 400 );
+		}
+		$file = $id . '.php';
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$all = get_plugins();
+		if ( ! isset( $all[ $file ] ) ) {
+			wp_send_json_error( array( 'message' => 'Plugin not found.' ), 404 );
+		}
+		if ( 'active' === $status ) {
+			$result = activate_plugin( $file );
+			if ( is_wp_error( $result ) ) {
+				wp_send_json_error( array( 'message' => wp_strip_all_tags( $result->get_error_message() ) ), 500 );
+			}
+		} else {
+			deactivate_plugins( $file );
+		}
+		wp_send_json_success( array( 'plugin' => $id, 'status' => $status ) );
 	}
 
 	/**
@@ -743,6 +783,13 @@ class Minn_Admin {
 				'nonce' => Minn_Admin_Notices::nonce(),
 				'stale' => Minn_Admin_Notices::is_stale(),
 			),
+			// Plugin toggles ride admin-ajax (a REAL admin context) so
+			// activation hooks gated on is_admin() work — see
+			// ajax_plugin_status(). REST remains the client's fallback.
+			'pluginAjax' => current_user_can( 'activate_plugins' ) ? array(
+				'url'   => admin_url( 'admin-ajax.php' ),
+				'nonce' => wp_create_nonce( 'minn-plugin-status' ),
+			) : null,
 			// Active cache layers — drives the "Clear site cache" palette
 			// command (adapters/cache-purge.php).
 			'cache'    => current_user_can( 'manage_options' ) ? minn_admin_cache_purgers_boot() : array(),

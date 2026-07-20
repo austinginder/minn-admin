@@ -55,6 +55,35 @@
 		return ( await apiRes( path, opts ) ).json();
 	}
 
+	// Plugin activate/deactivate rides admin-ajax, NOT wp/v2/plugins: an
+	// admin-ajax request bootstraps wp-admin, so is_admin() is genuinely
+	// true and activation hooks meet the context they were written for
+	// (Breeze fatals over REST on WooCommerce sites — its ecommerce class
+	// only loads under is_admin()/CLI). A structured refusal from the
+	// endpoint is final; only an unreachable/non-JSON ajax path (blocked
+	// admin-ajax, stale nonce, dropped socket) falls back to REST, which
+	// carries its own nonce.
+	async function setPluginStatus( file, status ) {
+		const aj = B.pluginAjax;
+		if ( aj && aj.url ) {
+			let data = null;
+			try {
+				const res = await fetch( aj.url, {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+					body: new URLSearchParams( { action: 'minn_plugin_status', _wpnonce: aj.nonce, plugin: file, status } ).toString(),
+				} );
+				data = await res.json().catch( () => null );
+			} catch ( e ) { data = null; }
+			if ( data && data.success ) return data.data;
+			if ( data && data.data && data.data.message ) {
+				throw new Error( stripTags( String( data.data.message ) ) );
+			}
+		}
+		return api( 'wp/v2/plugins/' + file, { method: 'PUT', body: JSON.stringify( { status } ) } );
+	}
+
 	// Like api() but also returns the collection pagination headers.
 	async function apiPaged( path, opts = {} ) {
 		const res = await apiRes( path, opts );
@@ -10975,7 +11004,7 @@
 				if ( component.startsWith( 'theme:' ) ) {
 					await api( 'minn-admin/v1/themes/activate', { method: 'POST', body: JSON.stringify( { stylesheet: component.slice( 6 ) } ) } );
 				} else {
-					await api( 'wp/v2/plugins/' + component.replace( /\.php$/, '' ), { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+					await setPluginStatus( component.replace( /\.php$/, '' ), 'active' );
 				}
 				toast( `${ btn.dataset.name } turned on` );
 				await refreshAfterPluginChange();
@@ -11533,10 +11562,7 @@
 			if ( card ) card.classList.add( 'minn-busy' );
 			toast( `${ activating ? 'Activating' : 'Deactivating' } ${ pluginDisplayName( plugin.name ) }…` );
 			try {
-				await api( 'wp/v2/plugins/' + file, {
-					method: 'PUT',
-					body: JSON.stringify( { status: activating ? 'active' : 'inactive' } ),
-				} );
+				await setPluginStatus( file, activating ? 'active' : 'inactive' );
 				plugin.status = activating ? 'active' : 'inactive';
 				toast( pluginDisplayName( plugin.name ) + ( activating ? ' activated' : ' deactivated' ) );
 				if ( file === 'minn-admin/minn-admin' && ! activating ) {
@@ -13496,7 +13522,7 @@
 				btn.disabled = true;
 				try {
 					try {
-						await api( 'wp/v2/plugins/' + btn.dataset.connActivate.replace( /\.php$/, '' ), { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+						await setPluginStatus( btn.dataset.connActivate.replace( /\.php$/, '' ), 'active' );
 					} catch ( e ) {
 						if ( ! isFetchDrop( e ) ) throw e;
 					}
@@ -25667,10 +25693,7 @@
 			$( '#minn-off-confirm' ).addEventListener( 'click', async ( e ) => {
 				e.currentTarget.disabled = true;
 				try {
-					await api( 'wp/v2/plugins/' + m.file, {
-						method: 'PUT',
-						body: JSON.stringify( { status: 'inactive' } ),
-					} );
+					await setPluginStatus( m.file, 'inactive' );
 					m.done = true;
 					renderOverlays();
 					// A beat to read the landing before the classic dashboard.
@@ -26191,7 +26214,7 @@
 				const local = catalogLocal( entry );
 				const file = local ? local.plugin.replace( /\.php$/, '' ) : null;
 				if ( ! file ) throw new Error( 'Could not find the installed plugin file.' );
-				await api( 'wp/v2/plugins/' + file, { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+				await setPluginStatus( file, 'active' );
 				toast( label + ' activated' );
 				await refreshAfterPluginChange();
 			} else if ( entry.github ) {
@@ -26323,7 +26346,7 @@
 					if ( activating ) {
 						const local = ( state.cache.plugins || [] ).find( ( x ) => x.plugin.split( '/' )[ 0 ] === p.slug );
 						const file = local ? local.plugin : ( p.installed ? p.installed.replace( /\.php$/, '' ) : null );
-						await api( 'wp/v2/plugins/' + file, { method: 'PUT', body: JSON.stringify( { status: 'active' } ) } );
+						await setPluginStatus( file, 'active' );
 						toast( p.name + ' activated' );
 						await refreshAfterPluginChange();
 					} else {
