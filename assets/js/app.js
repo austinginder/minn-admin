@@ -151,12 +151,41 @@
 	// "X by Vendor" comes off only when a multi-word name remains, so
 	// "Login by Auth0" survives while "GEO Plugin by Squirrly SEO" trims.
 	// The full name stays available where it matters (title tooltip).
-	function cleanPluginName( name ) {
+	function cleanPluginName( name, segments = 1 ) {
 		const full = decodeEntities( name || '' ).trim();
-		let out = full.split( /\s+[–—|·]\s+|\s+-\s+|[:;.,]\s+|\s*[({]/ )[ 0 ].trim();
+		const parts = full.split( /\s+[–—|·]\s+|\s+-\s+|[:;.,]\s+|\s*[({]/ );
+		let out = parts[ 0 ].trim();
 		const by = out.match( /^(.+?)\s+by\s+\S/i );
 		if ( by && by[ 1 ].trim().includes( ' ' ) ) out = by[ 1 ].trim();
+		if ( segments > 1 ) {
+			const extra = parts.slice( 1, segments ).map( ( s ) => s.trim() ).filter( Boolean );
+			if ( extra.length ) out = [ out ].concat( extra ).join( ' – ' );
+		}
 		return out.length >= 2 ? out : full;
+	}
+
+	// Add-on families ("Admin Columns Pro - Gravity Forms add-on") put the
+	// identity AFTER the separator, so a one-segment cut collapses the whole
+	// family to the brand. A collision inside the installed set is proof the
+	// cut went too far — those names keep a second segment. The map is built
+	// per loadPlugins() and keyed by the raw header name; unknown names fall
+	// through to the plain clean.
+	function buildPluginNameMap( plugins ) {
+		const counts = {};
+		( plugins || [] ).forEach( ( p ) => {
+			const c = cleanPluginName( p.name );
+			counts[ c ] = ( counts[ c ] || 0 ) + 1;
+		} );
+		const map = {};
+		( plugins || [] ).forEach( ( p ) => {
+			const c = cleanPluginName( p.name );
+			map[ p.name ] = counts[ c ] > 1 ? cleanPluginName( p.name, 2 ) : c;
+		} );
+		return map;
+	}
+	function pluginDisplayName( name ) {
+		const map = state.cache.pluginNames;
+		return ( map && map[ name ] ) || cleanPluginName( name );
 	}
 
 	// Extensions context-menu links: name GitHub / WordPress.org when the
@@ -10270,6 +10299,7 @@
 			const [ plugins, upd ] = await Promise.all( jobs );
 			state.cache.pluginMeta = await metaJob;
 			state.cache.plugins = plugins;
+			state.cache.pluginNames = buildPluginNameMap( plugins );
 			state.cache.pluginUpdates = ( upd && upd.updates ) || {};
 			// Pending THEME updates ({stylesheet: new_version}) count toward
 			// the Extensions dot too — per-theme badges only render inside
@@ -11397,7 +11427,7 @@
 			: state.extFilter === 'updates' ? hasUpd( p )
 			: true;
 		const matchesSearch = ( p ) => ! q ||
-			cleanPluginName( p.name ).toLowerCase().includes( q ) ||
+			pluginDisplayName( p.name ).toLowerCase().includes( q ) ||
 			stripTags( p.description && p.description.rendered ).toLowerCase().includes( q );
 		const visible = plugins.filter( ( p ) => matchesFilter( p ) && matchesSearch( p ) );
 
@@ -11435,7 +11465,7 @@
 		${ visible.length ? `
 		<div class="minn-plugin-grid">
 			${ visible.map( ( p ) => {
-				const name = cleanPluginName( p.name );
+				const name = pluginDisplayName( p.name );
 				const offered = updates[ p.plugin + '.php' ] || '';
 				const isUpdating = pluginUpdatePending.has( p.plugin );
 				const isCurrent = pluginUpdateCurrent === p.plugin;
@@ -11501,14 +11531,14 @@
 			const btn = card && card.querySelector( '[data-toggle]' );
 			if ( btn ) btn.disabled = true;
 			if ( card ) card.classList.add( 'minn-busy' );
-			toast( `${ activating ? 'Activating' : 'Deactivating' } ${ cleanPluginName( plugin.name ) }…` );
+			toast( `${ activating ? 'Activating' : 'Deactivating' } ${ pluginDisplayName( plugin.name ) }…` );
 			try {
 				await api( 'wp/v2/plugins/' + file, {
 					method: 'PUT',
 					body: JSON.stringify( { status: activating ? 'active' : 'inactive' } ),
 				} );
 				plugin.status = activating ? 'active' : 'inactive';
-				toast( cleanPluginName( plugin.name ) + ( activating ? ' activated' : ' deactivated' ) );
+				toast( pluginDisplayName( plugin.name ) + ( activating ? ' activated' : ' deactivated' ) );
 				if ( file === 'minn-admin/minn-admin' && ! activating ) {
 					window.location.href = B.site.adminUrl;
 					return;
@@ -11530,7 +11560,7 @@
 		const deletePluginByFile = async ( file ) => {
 			const plugin = plugins.find( ( p ) => p.plugin === file );
 			if ( ! plugin || plugin.status === 'active' ) return;
-			const name = cleanPluginName( plugin.name );
+			const name = pluginDisplayName( plugin.name );
 			const okDel = await minnConfirm( {
 				title: `Delete ${ name }?`,
 				body: 'Its files are removed from the server, and a plugin may take its stored data with it. There is no trash for this. Deactivating instead keeps everything.',
@@ -11558,7 +11588,7 @@
 
 		const pluginMenuEntries = ( p ) => {
 			const file = p.plugin;
-			const name = cleanPluginName( p.name );
+			const name = pluginDisplayName( p.name );
 			const on = p.status === 'active';
 			const meta = ( state.cache.pluginMeta || {} )[ file + '.php' ] || {};
 			const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || '';
@@ -11617,7 +11647,7 @@
 				if ( ! plugin ) return;
 				// Serial queue: concurrent upgrades crash the worker and blank
 				// the page (Austin's "two Update clicks → Failed to fetch").
-				queuePluginUpdate( file, cleanPluginName( plugin.name ) );
+				queuePluginUpdate( file, pluginDisplayName( plugin.name ) );
 			} )
 		);
 
@@ -11903,7 +11933,7 @@
 		const plugins = state.cache.plugins || [];
 		// One toast for the batch; per-plugin toasts stay quiet until each finishes.
 		toast( files.length === 1
-			? `Updating ${ cleanPluginName( ( plugins.find( ( p ) => p.plugin === files[ 0 ] ) || {} ).name || files[ 0 ] ) }…`
+			? `Updating ${ pluginDisplayName( ( plugins.find( ( p ) => p.plugin === files[ 0 ] ) || {} ).name || files[ 0 ] ) }…`
 			: `Updating ${ files.length } plugins — one at a time…` );
 		if ( btn ) {
 			btn.disabled = true;
@@ -11913,7 +11943,7 @@
 		// shows Queued… then Updating… (bulk REST had no per-card progress).
 		for ( const file of files ) {
 			const plugin = plugins.find( ( p ) => p.plugin === file );
-			const name = plugin ? cleanPluginName( plugin.name ) : file;
+			const name = plugin ? pluginDisplayName( plugin.name ) : file;
 			queuePluginUpdate( file, name, { quiet: true } );
 		}
 		// Paint all cards immediately (queue marks them pending).
