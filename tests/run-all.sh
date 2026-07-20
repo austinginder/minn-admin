@@ -39,7 +39,14 @@ failed=()
 total=$(ls ./*.test.js | wc -l | tr -d ' ')
 i=0
 overall_start=$(date +%s)
-echo "Running $total suites sequentially → $OUT" | tee "$OUT/summary.txt"
+# Resuming into an existing record must APPEND — a bare tee here wiped the
+# summary on relaunch, so the resume-skip below never saw prior PASSes and
+# every "resume" silently restarted from suite 1.
+if [ -s "$OUT/summary.txt" ]; then
+	echo "Resuming $total suites → $OUT" | tee -a "$OUT/summary.txt"
+else
+	echo "Running $total suites sequentially → $OUT" | tee "$OUT/summary.txt"
+fi
 
 for f in *.test.js; do
 	i=$((i + 1))
@@ -54,6 +61,9 @@ for f in *.test.js; do
 	settle
 	start=$(date +%s)
 	status=FAIL
+	# Clear stale logs from a prior attempt: the count-grep below reads both
+	# files, and a leftover retry.log misreports a fresh pass's numbers.
+	rm -f "$OUT/$f.log" "$OUT/$f.retry.log"
 	if node "$f" >"$OUT/$f.log" 2>&1; then
 		status=PASS
 	else
