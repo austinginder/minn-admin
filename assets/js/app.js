@@ -10681,6 +10681,9 @@
 				// Plugins and Themes have different filter sets — reset when switching.
 				state.extFilter = 'all';
 				state.extSearch = '';
+				// A tab switch lands on a different list — re-arm the filter-box
+				// autofocus like a navigation (Austin: Themes tab didn't focus).
+				searchFocusArmed = true;
 				const cached = next === 'themes' ? state.cache.themes
 					: next === 'licenses' ? state.cache.licenses
 					: state.cache.plugins;
