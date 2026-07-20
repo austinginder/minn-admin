@@ -41,11 +41,19 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	t.check( 'publish button flips to Schedule', ( await page.$eval( '#minn-publish-btn', ( b ) => b.textContent.trim() ) ) === 'Schedule', '' );
 
 	/* ===== Real scheduling round-trip ===== */
+	// Poll, never a flat wait: a first browser save can take several
+	// seconds under fresh-session boot congestion (the shortcuts-suite
+	// lesson) — a fixed window reads 'draft' mid-save on a working flow.
 	await page.keyboard.press( 'Escape' );
 	await page.click( '#minn-publish-btn' );
-	await page.waitForTimeout( 1800 );
 	const saved = await page.evaluate( async ( pid ) => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=status,date', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+		for ( let i = 0; i < 25; i++ ) {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=status,date&_cb=' + i, { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+			const j = await r.json();
+			if ( j.status === 'future' ) return j;
+			await new Promise( ( res ) => setTimeout( res, 800 ) );
+		}
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=status,date', { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
 		return await r.json();
 	}, id );
 	t.check( 'post schedules with the picked datetime', saved.status === 'future' && saved.date.startsWith( picked.dp ), JSON.stringify( saved ) );
