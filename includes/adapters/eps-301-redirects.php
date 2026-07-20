@@ -104,7 +104,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'from', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.3fr)' ),
 				array( 'key' => 'target', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.3fr)' ),
 				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '110px' ),
-				array( 'key' => 'hits', 'label' => 'Hits', 'num' => true, 'width' => '70px' ),
+				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '70px' ),
 			),
 			'create'   => array(
 				'label'  => 'Add redirect',
