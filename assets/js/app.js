@@ -2482,6 +2482,7 @@
 		link: p.link || '',
 		builder: p.minn_builder || null,
 		unsaved: !! p.minn_modified,
+		lockedBy: ( p.minn_lock && p.minn_lock.name ) || null,
 		thumb: contentFeaturedThumb( p ),
 	} );
 
@@ -2500,7 +2501,7 @@
 		// author embed is unchanged (names without a second users request).
 		let q = `context=edit&status=${ statuses }&per_page=25&orderby=date`
 			+ `&_embed=author,wp:featuredmedia`
-			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,minn_modified,_links,_embedded&page=${ page }`;
+			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,minn_modified,minn_lock,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
 		// The Modified filter: live posts carrying unsaved edits (a newer
 		// autosave than the saved copy). Meaningless in trash mode.
@@ -2789,7 +2790,7 @@
 							${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }
 						</div>
 					</div>
-					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.unsaved ? '<span class="minn-status modified" title="Carrying unsaved edits: an autosave is newer than the version being served">Modified</span>' : '' }</div>
+					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.unsaved ? '<span class="minn-status modified" title="Carrying unsaved edits: an autosave is newer than the version being served">Modified</span>' : '' }${ p.lockedBy ? `<span class="minn-status editing" title="${ esc( p.lockedBy ) } has this open in an editor right now">${ esc( p.lockedBy ) } is editing</span>` : '' }</div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
 					<div class="minn-row-meta" title="${ esc( parseWpDate( p.date ).toLocaleString() ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
