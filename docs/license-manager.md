@@ -397,6 +397,7 @@ license data on a lab site.
 | Beaver Builder, Brizy Pro, Etch, Bricks, Divi | per-vendor (see Phase 1) | bogus key / lab | 2026-07-10 | Divi proven on a disposable lab |
 | WP All Export Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | lifetime, unlimited activations; deactivate is local (no seats exist) |
 | WP All Import Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | same; stored keys are salt-wrapped, decode before any request |
+| Search & Filter Pro | activate / deactivate / verify | real key, full loop | 2026-07-19 | EDD (item 526297) via their own REST controller callables; state in the free base's `{prefix}search_filter_options` table, JSON row `license-data`; needs base + Pro active for actions; snapshot-restore keeps a rejected key from clobbering a valid activation (their own connect() would) |
 | WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium, LayerSlider | activate paths | bogus key | 2026-07-10 | readers proven against seeded real shapes |
 | Rank Math Pro, Envato, WPBakery | Activate ↗ link | read | 2026-07-10 | portal- or admin-context-bound activation |
 | Yoast SEO Premium | Activate ↗ + verify | read (missing until MyYoast) | 2026-07-15 | free Yoast `WPSEO_Addon_Manager`; page `wpseo_licenses`; no paste-a-key |

@@ -99,6 +99,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			'TikTok Feeds Pro',
 			'Feed Analytics Pro',
 			'Yoast SEO Premium',
+			'Search & Filter Pro',
 		];
 		for ( const name of FAMILY ) {
 			const info = await page.evaluate( ( n ) => {

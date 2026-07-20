@@ -1100,6 +1100,42 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Search & Filter Pro (v3): EDD protocol against license.searchandfilter.com
+	// (item 526297), but state lives in the FREE base plugin's OWN options
+	// table {prefix}search_filter_options as a JSON row named license-data
+	// {status, expires, license, error, errorMessage} — not a wp_options row,
+	// so the read is a prefix-scoped SELECT + json_decode. A fresh install
+	// stores status "invalid" with an EMPTY license; empty key = missing.
+	$providers['search-filter-pro'] = array(
+		'name'      => 'Search & Filter Pro',
+		'component' => 'search-filter-pro/search-filter-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'search-filter-pro/search-filter-pro.php' );
+		},
+		'read'      => function () use ( $item, $edd_state ) {
+			global $wpdb;
+			$table = $wpdb->prefix . 'search_filter_options';
+			if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+				return array( $item( array( 'name' => 'Search & Filter Pro', 'state' => 'missing', 'note' => 'no license store yet; the plugin has not run' ) ) );
+			}
+			$raw = $wpdb->get_var( $wpdb->prepare( "SELECT value FROM {$table} WHERE name = %s", 'license-data' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-scoped table name.
+			$lic = $raw ? json_decode( $raw, true ) : null;
+			$key = is_array( $lic ) && ! empty( $lic['license'] ) ? (string) $lic['license'] : '';
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => 'Search & Filter Pro', 'state' => 'missing' ) ) );
+			}
+			list( $state, $note ) = $edd_state( isset( $lic['status'] ) ? $lic['status'] : '' );
+			$expires              = minn_admin_license_expiry( isset( $lic['expires'] ) ? $lic['expires'] : '' );
+			if ( 'valid' === $state && minn_admin_license_expired( $expires ) ) {
+				$state = 'expired';
+			}
+			if ( 'invalid' === $state && ! empty( $lic['error'] ) ) {
+				$note = str_replace( '_', ' ', (string) $lic['error'] );
+			}
+			return array( $item( array( 'name' => 'Search & Filter Pro', 'state' => $state, 'key' => true, 'expires' => $expires, 'note' => $note ) ) );
+		},
+	);
+
 	// Gravity Perks: key in the gwp_settings SITE option (GPERKS_LICENSE_KEY
 	// constant overrides); validity cached in a VERSION-SUFFIXED 12-hour
 	// site transient gwp_license_data_{version}, so the version comes from
@@ -2245,6 +2281,69 @@ function minn_admin_license_default_providers() {
 			$lic = get_option( 'searchwp_license' );
 			$ok  = is_array( $lic ) && isset( $lic['status'] ) && 'valid' === $lic['status'];
 			return array( 'ok' => $ok, 'code' => $ok ? '' : 'invalid', 'message' => $ok ? '' : 'SearchWP did not confirm the license' );
+		};
+	}
+
+	// Search & Filter Pro: their REST controller's connect()/disconnect()
+	// are public static and run the COMPLETE flow (EDD call + persistence
+	// through the base plugin's Options store), so the actions call them
+	// with a constructed request. Needs BOTH plugins active: Pro ships the
+	// license classes, the free base ships the store they write through.
+	// Their connect() persists a REJECTED key over a working one (their own
+	// UI behavior); Minn snapshot-restores the prior valid data instead.
+	if ( class_exists( '\Search_Filter_Pro\License\Rest_API' ) && class_exists( '\Search_Filter\Options' ) ) {
+		$sfp_classify = function ( $data ) {
+			$data   = is_array( $data ) ? $data : array();
+			$status = strtolower( (string) ( $data['status'] ?? '' ) );
+			$error  = strtolower( (string) ( $data['error'] ?? '' ) );
+			$msg    = (string) ( $data['errorMessage'] ?? '' );
+			if ( 'valid' === $status ) {
+				return array( 'ok' => true, 'code' => '', 'message' => '' );
+			}
+			if ( 'no_activations_left' === $error ) {
+				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'This license has reached its activation limit. Free a seat on searchandfilter.com first.' );
+			}
+			if ( 'expired' === $status || 'expired' === $error ) {
+				return array( 'ok' => false, 'code' => 'expired', 'message' => 'This Search & Filter license has expired.' );
+			}
+			if ( $msg ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => wp_strip_all_tags( $msg ) );
+			}
+			if ( in_array( $error, array( 'missing', 'key_mismatch', 'item_name_mismatch' ), true ) ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'searchandfilter.com does not recognize that key.' );
+			}
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => $error ? str_replace( '_', ' ', $error ) : 'searchandfilter.com did not accept that key.' );
+		};
+		$providers['search-filter-pro']['secret_label'] = 'Search & Filter license key';
+		$providers['search-filter-pro']['activate']     = function ( $secret ) use ( $sfp_classify ) {
+			$prior = \Search_Filter_Pro\Core\License_Server::get_license_data();
+			$req   = new \WP_REST_Request( 'GET', '/search-filter-pro/v1/license/connect' );
+			$req->set_param( 'license', trim( (string) $secret ) );
+			$res = \Search_Filter_Pro\License\Rest_API::connect( $req );
+			$out = $sfp_classify( $res instanceof \WP_REST_Response ? $res->get_data() : null );
+			if ( empty( $out['ok'] ) && 'valid' === ( $prior['status'] ?? '' ) && ! empty( $prior['license'] ) ) {
+				\Search_Filter\Options::update( 'license-data', $prior );
+			}
+			return $out;
+		};
+		$providers['search-filter-pro']['deactivate']   = function () {
+			$res  = \Search_Filter_Pro\License\Rest_API::disconnect();
+			$data = $res instanceof \WP_REST_Response ? $res->get_data() : array();
+			if ( is_array( $data ) && 'disconnected' === ( $data['status'] ?? '' ) ) {
+				return array( 'ok' => true, 'code' => '', 'message' => 'The license was disconnected and the seat freed.' );
+			}
+			$msg = is_array( $data ) && ! empty( $data['errorMessage'] ) ? (string) $data['errorMessage'] : 'Search & Filter could not disconnect the license.';
+			return array( 'ok' => false, 'code' => 'error', 'message' => wp_strip_all_tags( $msg ) );
+		};
+		$providers['search-filter-pro']['verify']       = function () use ( $sfp_classify ) {
+			$stored = \Search_Filter_Pro\Core\License_Server::get_license_data();
+			if ( empty( $stored['license'] ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'No license key is stored.' );
+			}
+			// Their own revalidation pass: re-checks the stored key against
+			// the license server and updates status + expiry in place.
+			\Search_Filter_Pro\Core\License_Server::refresh_health();
+			return $sfp_classify( \Search_Filter_Pro\Core\License_Server::get_license_data() );
 		};
 	}
 
