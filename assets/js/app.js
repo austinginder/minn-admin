@@ -12678,7 +12678,7 @@
 	];
 
 	async function loadSettings() {
-		const [ values, categories, pages, permalinks, spam, customCss, connectors ] = await Promise.all( [
+		const [ values, categories, pages, permalinks, spam, customCss, connectors, languages ] = await Promise.all( [
 			api( 'wp/v2/settings' ),
 			api( 'wp/v2/categories?per_page=100&_fields=id,name' ).catch( () => [] ),
 			api( 'wp/v2/pages?per_page=100&status=publish&orderby=title&order=asc&_fields=id,title' ).catch( () => [] ),
@@ -12686,13 +12686,14 @@
 			api( 'minn-admin/v1/spam' ).catch( () => null ),
 			B.caps.editCss ? api( 'minn-admin/v1/custom-css' ).catch( () => null ) : Promise.resolve( null ),
 			B.connectors ? loadConnectorsResilient().catch( () => null ) : Promise.resolve( null ),
+			api( 'minn-admin/v1/languages' ).catch( () => null ),
 		] );
 		const siteIcon = values.site_icon
 			? await api( `wp/v2/media/${ values.site_icon }?_fields=id,source_url,media_details` )
 				.then( ( m ) => ( { url: ( m.media_details && m.media_details.sizes && m.media_details.sizes.thumbnail && m.media_details.sizes.thumbnail.source_url ) || m.source_url } ) )
 				.catch( () => null )
 			: null;
-		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss, connectors };
+		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss, connectors, languages };
 	}
 
 	/**
@@ -13018,7 +13019,18 @@
 					</div>`
 					+ text( 'date_format', 'Date format', s.date_format, true )
 					+ text( 'time_format', 'Time format', s.time_format, true )
-					+ combo( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week ),
+					+ combo( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week )
+					// Site default language (options-general's Site Language).
+					// Saved through minn-admin/v1/site/language — never the
+					// wp/v2/settings sweep — so an uninstalled pick can
+					// download its pack on save. Per-user language lives on
+					// Your profile.
+					+ ( cache.languages ? combo(
+						'minn_language',
+						'Site language',
+						[ [ '', 'English (United States)' ], ...( cache.languages.installed || [] ).filter( ( p ) => p[ 0 ] !== 'en_US' ), ...( cache.languages.canInstall ? cache.languages.available || [] : [] ) ],
+						cache.languages.site || ''
+					) : '' ),
 				// "Minn is the default admin" lives on Your profile now (per-user).
 				toggles: '',
 			};
@@ -13555,6 +13567,20 @@
 					if ( NUMERIC.includes( key ) ) value = parseInt( value, 10 ) || 0;
 					payload[ key ] = value;
 				} );
+				// Site language never rides wp/v2/settings — its own route
+				// downloads an uninstalled pack first. Saved only when it
+				// actually changed (the download is not free).
+				if ( 'minn_language' in payload ) {
+					const langPick = payload.minn_language;
+					delete payload.minn_language;
+					if ( cache.languages && langPick !== ( cache.languages.site || '' ) ) {
+						try {
+							const lr = await api( 'minn-admin/v1/site/language', { method: 'POST', body: JSON.stringify( { locale: langPick } ) } );
+							cache.languages.site = lr.locale;
+							if ( lr.installed ) toast( 'Language pack installed' );
+						} catch ( err ) { toast( err.message, true ); okAll = false; }
+					}
+				}
 				if ( 'timezone' in payload ) {
 					payload.timezone = payload.timezone.trim();
 					let zones = [ 'UTC', s.timezone ];
