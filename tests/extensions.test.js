@@ -18,6 +18,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const entries = Object.values( meta.body || {} );
 	t.check( 'plugin-meta serves icons + urls from the transient', meta.status === 200 && entries.length > 5 && entries.every( ( e ) => e.slug && e.url ), String( entries.length ) );
 
+	/* ===== Baseline: the inactive toggle fixture. The confirm-modal suite
+	 * uses hello-dolly as ITS disposable delete fixture, so seed it here
+	 * instead of assuming it survived (suites seed their baseline). ===== */
+	await page.evaluate( async () => {
+		const h = { headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' };
+		const probe = await fetch( window.MINN.restUrl + 'wp/v2/plugins/hello-dolly/hello', h );
+		if ( probe.status === 200 ) return;
+		await fetch( window.MINN.restUrl + 'wp/v2/plugins', Object.assign( { method: 'POST', body: JSON.stringify( { slug: 'hello-dolly' } ) }, h ) ).catch( () => null );
+	} );
+	// The install can recycle the worker — poll until the plugin answers.
+	await page.waitForFunction( async () => {
+		try {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/hello-dolly/hello', { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+			return r.status === 200;
+		} catch ( e ) { return false; }
+	}, null, { timeout: 30000 } );
+
 	/* ===== Cards ===== */
 	await page.goto( `${ BASE }/minn-admin/extensions`, { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '.minn-plugin', { timeout: 15000 } );
@@ -214,6 +231,65 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		};
 	} );
 	t.check( 'themes API includes author_uri, theme_uri, on_wporg', themesApi.status === 200 && themesApi.n > 0 && themesApi.hasKeys, JSON.stringify( themesApi ) );
+
+	/* ===== Deleting a theme removes its card in place (no cold repaint) ===== */
+	const themeApi = ( path, body ) => page.evaluate( async ( a ) => {
+		const r = await fetch( window.MINN.restUrl + a.path, {
+			method: a.body ? 'POST' : 'GET',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+			credentials: 'same-origin',
+			...( a.body ? { body: JSON.stringify( a.body ) } : {} ),
+		} );
+		let out = null;
+		try { out = await r.json(); } catch ( e ) { out = null; }
+		return { status: r.status, body: out };
+	}, { path, body } );
+	const SLUG = 'twentytwelve';
+	let installed = false;
+	try {
+		// Disposable wp.org fixture; the delete is the test. Install swaps
+		// files and can recycle the worker — attempt, then poll the list.
+		const pre = await themeApi( 'minn-admin/v1/themes' );
+		const already = ( ( pre.body || {} ).themes || [] ).some( ( x ) => x.stylesheet === SLUG );
+		if ( ! already ) await themeApi( 'minn-admin/v1/themes/install', { slug: SLUG } ).catch( () => {} );
+		for ( let i = 0; i < 12 && ! installed; i++ ) {
+			const list = await themeApi( 'minn-admin/v1/themes' ).catch( () => null );
+			installed = !! ( list && ( ( list.body || {} ).themes || [] ).some( ( x ) => x.stylesheet === SLUG ) );
+			if ( ! installed ) await page.waitForTimeout( 1000 );
+		}
+		t.check( 'disposable theme installed', installed, SLUG );
+
+		await page.goto( `${ BASE }/minn-admin/extensions`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-plugin', { timeout: 30000 } );
+		await page.click( '[data-xtab="themes"]' );
+		await page.waitForSelector( `.minn-theme[data-stylesheet="${ SLUG }"] [data-tact^="delete"]`, { timeout: 15000 } );
+		// Expando on a sibling card: if the tab re-rendered, the node (and
+		// the probe) would be replaced — the rule-77 identity trick.
+		await page.evaluate( ( slug ) => {
+			document.querySelector( `.minn-theme:not([data-stylesheet="${ slug }"])` )._minnProbe = 1;
+		}, SLUG );
+		await page.click( `.minn-theme[data-stylesheet="${ SLUG }"] [data-tact^="delete"]` );
+		await page.waitForSelector( '.minn-confirm-modal [data-ok]', { timeout: 8000 } );
+		await page.click( '.minn-confirm-modal [data-ok]' );
+		await page.waitForFunction( ( slug ) => ! document.querySelector( `.minn-theme[data-stylesheet="${ slug }"]` ), SLUG, { timeout: 15000 } );
+		t.check( 'deleted theme card is removed in place', true );
+		const soft = await page.evaluate( ( slug ) => ( {
+			probe: ( document.querySelector( `.minn-theme:not([data-stylesheet="${ slug }"])` ) || {} )._minnProbe === 1,
+			loading: !! document.querySelector( '#minn-view .minn-loading' ),
+		} ), SLUG );
+		t.check( 'sibling cards were not re-rendered (no cold repaint)', soft.probe && ! soft.loading, JSON.stringify( soft ) );
+		let goneList = null;
+		for ( let i = 0; i < 8; i++ ) {
+			goneList = await themeApi( 'minn-admin/v1/themes' ).catch( () => null );
+			if ( goneList && ! ( ( goneList.body || {} ).themes || [] ).some( ( x ) => x.stylesheet === SLUG ) ) break;
+			await page.waitForTimeout( 800 );
+		}
+		const gone = !! ( goneList && ! ( ( goneList.body || {} ).themes || [] ).some( ( x ) => x.stylesheet === SLUG ) );
+		t.check( 'theme really deleted server-side', gone, '' );
+		if ( gone ) installed = false;
+	} finally {
+		if ( installed ) await themeApi( 'minn-admin/v1/themes/delete', { stylesheet: SLUG } ).catch( () => {} );
+	}
 
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

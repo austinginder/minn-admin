@@ -11800,6 +11800,21 @@
 				// remove a builder. Theme patterns + block styles also
 				// change with the active theme.
 				if ( 'activate' === action ) await refreshAfterPluginChange();
+				if ( 'delete' === action ) {
+					// Soft removal: drop the card in place instead of a cold
+					// repaint of the whole tab (the loading shell read as a
+					// full page reload — Austin, 2026-07-19). The cache is
+					// filtered so later renders agree with the DOM.
+					if ( Array.isArray( state.cache.themes ) ) state.cache.themes = state.cache.themes.filter( ( x ) => x.stylesheet !== t.stylesheet );
+					if ( state.cache.themeUpdates ) delete state.cache.themeUpdates[ t.stylesheet ];
+					state.cache.notifications = null;
+					if ( card && card.isConnected ) {
+						card.classList.remove( 'minn-busy' );
+						card.classList.add( 'minn-theme-out' );
+						setTimeout( () => card.remove(), 200 );
+					}
+					return;
+				}
 			} catch ( e ) {
 				toast( e.message, true );
 			}
@@ -25590,6 +25605,29 @@
 			}, 400 );
 		} );
 
+		// A theme install swaps files and can recycle the PHP worker — the
+		// request drops with "Failed to fetch" even though the server
+		// finished the work, and a rapid second install lands on the dying
+		// socket (Austin's install-a-bunch-fast repro). On a drop: wait for
+		// REST to come back, ask the themes list for the truth, and retry
+		// once before calling it a failure (the cache-purge double-drop rule).
+		const themeActionWithRecovery = async ( route, payload, check ) => {
+			const truth = async () => {
+				try { return check( ( await api( 'minn-admin/v1/themes' ) ).themes || [] ); }
+				catch ( e ) { return false; }
+			};
+			for ( let attempt = 0; ; attempt++ ) {
+				try {
+					await api( route, { method: 'POST', body: JSON.stringify( payload ) } );
+					return;
+				} catch ( e ) {
+					if ( ! isFetchDrop( e ) ) throw e;
+					await waitForRestAlive();
+					if ( await truth() ) return;
+					if ( attempt >= 1 ) throw new Error( 'The server kept dropping the request. Give it a few seconds and try again.' );
+				}
+			}
+		};
 		$$( '[data-ti]' ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const t = m.results[ parseInt( btn.dataset.ti, 10 ) ];
@@ -25600,11 +25638,11 @@
 				btn.textContent = activating ? 'Activating…' : 'Installing…';
 				try {
 					if ( activating ) {
-						await api( 'minn-admin/v1/themes/activate', { method: 'POST', body: JSON.stringify( { stylesheet: t.slug } ) } );
+						await themeActionWithRecovery( 'minn-admin/v1/themes/activate', { stylesheet: t.slug }, ( list ) => list.some( ( x ) => x.stylesheet === t.slug && x.active ) );
 						toast( `${ t.name } is now the active theme` );
 						t.active = true;
 					} else {
-						await api( 'minn-admin/v1/themes/install', { method: 'POST', body: JSON.stringify( { slug: t.slug } ) } );
+						await themeActionWithRecovery( 'minn-admin/v1/themes/install', { slug: t.slug }, ( list ) => list.some( ( x ) => x.stylesheet === t.slug ) );
 						toast( `${ t.name } installed` );
 						t.installed = true;
 					}
