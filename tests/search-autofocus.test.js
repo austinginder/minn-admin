@@ -44,6 +44,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	await page.waitForTimeout( 500 );
 	t.check( 'Filter-pill re-render does not re-steal focus', ( await focusedId() ) !== 'minn-ext-search' );
 
+	// 3b. Switching Extensions tabs is a navigation too: the Themes tab must
+	// hand focus to the themes filter box (Austin's follow-up report).
+	await page.click( '[data-xtab="themes"]' );
+	await page.waitForSelector( '#minn-ext-search', { timeout: 15000 } );
+	await page.waitForTimeout( 600 );
+	t.check( 'Themes tab switch focuses the filter box', ( await focusedId() ) === 'minn-ext-search' );
+	await page.click( '[data-xtab="plugins"]' );
+	await page.waitForSelector( '#minn-ext-search', { timeout: 15000 } );
+	await page.waitForTimeout( 600 );
+	t.check( 'Back to Plugins tab focuses the filter box again', ( await focusedId() ) === 'minn-ext-search' );
+
 	// 4. SPA navigation: click the Content nav button. Focus sits on the
 	// button at render time and must still hand off to the content search.
 	await page.click( '.minn-nav-btn[data-nav="content"]' );
