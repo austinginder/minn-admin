@@ -459,6 +459,35 @@ class Minn_Admin_REST {
 				},
 			)
 		);
+		// The theme's custom logo (a theme_mod, not a wp/v2 setting) — the
+		// last Site Identity piece. Gated on the active theme declaring
+		// custom-logo support, exactly like the Customizer control.
+		register_rest_route(
+			self::NS,
+			'/site-logo',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'get_site_logo' ),
+					'permission_callback' => function () {
+						return current_user_can( 'edit_theme_options' );
+					},
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'set_site_logo' ),
+					'permission_callback' => function () {
+						return current_user_can( 'edit_theme_options' );
+					},
+					'args'                => array(
+						'id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+					),
+				),
+			)
+		);
 		register_rest_route(
 			self::NS,
 			'/site/language',
@@ -2894,6 +2923,42 @@ class Minn_Admin_REST {
 				'site'       => (string) get_option( 'WPLANG', '' ),
 			)
 		);
+	}
+
+	/**
+	 * GET minn-admin/v1/site-logo — { supported, id, url }.
+	 */
+	public static function get_site_logo() {
+		$supported = current_theme_supports( 'custom-logo' );
+		$id        = $supported ? (int) get_theme_mod( 'custom_logo' ) : 0;
+		return rest_ensure_response(
+			array(
+				'supported' => (bool) $supported,
+				'id'        => $id,
+				'url'       => $id ? (string) wp_get_attachment_image_url( $id, 'medium' ) : '',
+			)
+		);
+	}
+
+	/**
+	 * POST minn-admin/v1/site-logo { id } — set (or clear with 0) the
+	 * active theme's custom logo through the same theme_mod the Customizer
+	 * writes. Refused when the theme declares no custom-logo support.
+	 */
+	public static function set_site_logo( WP_REST_Request $request ) {
+		if ( ! current_theme_supports( 'custom-logo' ) ) {
+			return new WP_Error( 'minn_no_logo_support', 'The active theme does not support a custom logo.', array( 'status' => 400 ) );
+		}
+		$id = (int) $request->get_param( 'id' );
+		if ( $id > 0 ) {
+			if ( ! wp_attachment_is_image( $id ) ) {
+				return new WP_Error( 'minn_bad_logo', 'That attachment is not an image.', array( 'status' => 400 ) );
+			}
+			set_theme_mod( 'custom_logo', $id );
+		} else {
+			remove_theme_mod( 'custom_logo' );
+		}
+		return self::get_site_logo();
 	}
 
 	/**

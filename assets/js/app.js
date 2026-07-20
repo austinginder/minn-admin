@@ -12688,12 +12688,13 @@
 			B.connectors ? loadConnectorsResilient().catch( () => null ) : Promise.resolve( null ),
 			api( 'minn-admin/v1/languages' ).catch( () => null ),
 		] );
+		const siteLogo = B.caps.themeOptions ? await api( 'minn-admin/v1/site-logo' ).catch( () => null ) : null;
 		const siteIcon = values.site_icon
 			? await api( `wp/v2/media/${ values.site_icon }?_fields=id,source_url,media_details` )
 				.then( ( m ) => ( { url: ( m.media_details && m.media_details.sizes && m.media_details.sizes.thumbnail && m.media_details.sizes.thumbnail.source_url ) || m.source_url } ) )
 				.catch( () => null )
 			: null;
-		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss, connectors, languages };
+		state.cache.settings = { values, categories, pages, permalinks, spam, siteIcon, customCss, connectors, languages, siteLogo };
 	}
 
 	/**
@@ -12995,6 +12996,25 @@
 					</div>
 				</div>
 			</div>`;
+		// Custom logo: only when the ACTIVE THEME declares support — the
+		// same gate as the Customizer control. A theme_mod, so it saves
+		// through minn-admin/v1/site-logo, not the settings sweep.
+		const logoUrl = cache.siteLogo && cache.siteLogo.supported && cache.siteLogo.url;
+		const siteLogoField = cache.siteLogo && cache.siteLogo.supported ? `
+			<div>
+				<div class="minn-field-label">Site logo</div>
+				<div class="minn-icon-drop" id="minn-logo-drop">
+					<img class="minn-icon-preview" id="minn-logo-img" alt="Site logo" src="${ esc( logoUrl || '' ) }"${ logoUrl ? '' : ' hidden' }>
+					<div class="minn-icon-empty" id="minn-logo-empty"${ logoUrl ? ' hidden' : '' }>✦</div>
+					<div class="minn-icon-info">
+						<div class="minn-toggle-desc">Shown by the theme where its design places a logo. Drag &amp; drop an image here, or</div>
+						<div class="minn-icon-btns">
+							<button class="minn-btn-soft" id="minn-logo-pick" type="button">Choose image</button>
+							<button class="minn-btn-soft danger" id="minn-logo-remove" type="button"${ logoUrl ? '' : ' hidden' }>Remove</button>
+						</div>
+					</div>
+				</div>
+			</div>` : '';
 		const roleOptions = Object.entries( B.roles || {} );
 
 		switch ( section ) {
@@ -13003,6 +13023,7 @@
 				fields: text( 'title', 'Site title', s.title )
 					+ text( 'description', 'Tagline', s.description )
 					+ siteIconField
+					+ siteLogoField
 					+ text( 'url', 'Site address', s.url, true )
 					+ text( 'email', 'Administration email', s.email, true )
 					// Custom autocomplete, not a select or datalist — 400+ zones need
@@ -13509,6 +13530,49 @@
 			} );
 		}
 
+		// Site logo: the icon's flows exactly, but the pick is a theme_mod —
+		// it rides the save as pending.minn_site_logo and the handler routes
+		// it through minn-admin/v1/site-logo (never wp/v2/settings).
+		const logoDrop = $( '#minn-logo-drop', view );
+		if ( logoDrop ) {
+			const setLogo = ( id, url ) => {
+				pending.minn_site_logo = id;
+				const img = $( '#minn-logo-img', view );
+				const empty = $( '#minn-logo-empty', view );
+				const rm = $( '#minn-logo-remove', view );
+				if ( url ) { img.src = url; }
+				img.hidden = ! url;
+				empty.hidden = !! url;
+				rm.hidden = ! url;
+			};
+			$( '#minn-logo-pick', view ).addEventListener( 'click', () => openMediaPicker( ( it ) => setLogo( it.id, it.thumb || it.url ) ) );
+			$( '#minn-logo-remove', view ).addEventListener( 'click', () => setLogo( 0, null ) );
+			const uploadLogo = async ( file ) => {
+				if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( 'Drop an image file', true ); return; }
+				logoDrop.classList.add( 'minn-busy' );
+				try {
+					const fd = new FormData();
+					fd.append( 'file', file );
+					const m = await api( 'wp/v2/media', { method: 'POST', body: fd } );
+					const sizes = m.media_details && m.media_details.sizes;
+					setLogo( m.id, ( sizes && sizes.thumbnail && sizes.thumbnail.source_url ) || m.source_url );
+					toast( 'Logo uploaded — save to apply' );
+				} catch ( e ) {
+					toast( e.message, true );
+				}
+				logoDrop.classList.remove( 'minn-busy' );
+			};
+			logoDrop.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); logoDrop.classList.add( 'over' ); } );
+			logoDrop.addEventListener( 'dragleave', () => logoDrop.classList.remove( 'over' ) );
+			logoDrop.addEventListener( 'drop', ( e ) => {
+				e.preventDefault();
+				e.stopPropagation();
+				logoDrop.classList.remove( 'over' );
+				document.body.classList.remove( 'minn-dragging' );
+				uploadLogo( e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[ 0 ] );
+			} );
+		}
+
 		// Timezone combobox (General section) — free mode, the id is the value.
 		const tzWrap = $( '#minn-tz-ac', view );
 		if ( tzWrap ) {
@@ -13567,6 +13631,15 @@
 					if ( NUMERIC.includes( key ) ) value = parseInt( value, 10 ) || 0;
 					payload[ key ] = value;
 				} );
+				// Custom logo is a theme_mod — its own route, gated on theme
+				// support server-side.
+				if ( 'minn_site_logo' in payload ) {
+					const logoId = payload.minn_site_logo;
+					delete payload.minn_site_logo;
+					try {
+						cache.siteLogo = await api( 'minn-admin/v1/site-logo', { method: 'POST', body: JSON.stringify( { id: logoId } ) } );
+					} catch ( err ) { toast( err.message, true ); okAll = false; }
+				}
 				// Site language never rides wp/v2/settings — its own route
 				// downloads an uninstalled pack first. Saved only when it
 				// actually changed (the download is not free).
