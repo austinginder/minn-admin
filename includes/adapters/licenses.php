@@ -483,6 +483,55 @@ function minn_admin_smash_clear_store( $sp, $remote = array() ) {
 }
 
 /**
+ * Admin Columns Pro's DI container, for the license actions. Their main
+ * file bails outside wp-admin (a hard is_admin() gate), so under REST the
+ * plugin never loads and its ac/init container never exists. Replicate
+ * their bootstrap instead (the Slider Revolution manual-load precedent):
+ * both bundled autoloaders + api.php files, then the SAME six definition
+ * files their main file merges — but skip the Loader step, which only
+ * wires admin screens Minn does not need. Built once per request.
+ *
+ * @return object|null The AC\DI\Container, or null when unavailable.
+ */
+function minn_admin_acp_container() {
+	static $container = null;
+	if ( null !== $container ) {
+		return $container ? $container : null;
+	}
+	$container = false;
+	$dir       = WP_PLUGIN_DIR . '/admin-columns-pro';
+	if ( ! file_exists( $dir . '/vendor/autoload.php' ) || ! file_exists( $dir . '/admin-columns/vendor/autoload.php' ) ) {
+		return null;
+	}
+	try {
+		require_once $dir . '/admin-columns/vendor/autoload.php';
+		require_once $dir . '/admin-columns/api.php';
+		require_once $dir . '/vendor/autoload.php';
+		require_once $dir . '/api.php';
+		if ( ! defined( 'ACP_FILE' ) ) {
+			define( 'ACP_FILE', $dir . '/admin-columns-pro.php' );
+		}
+		if ( ! defined( 'ACP_VERSION' ) ) {
+			$data = get_file_data( $dir . '/admin-columns-pro.php', array( 'Version' => 'Version' ) );
+			define( 'ACP_VERSION', ! empty( $data['Version'] ) ? $data['Version'] : '0' );
+		}
+		$definitions = array_merge(
+			require $dir . '/admin-columns/settings/container-definitions.php',
+			require $dir . '/settings/container-definitions.php',
+			require $dir . '/addons/acf/settings/container-definitions.php',
+			require $dir . '/addons/data-sources/settings/container-definitions.php',
+			require $dir . '/addons/gravityforms/settings/container-definitions.php',
+			require $dir . '/addons/woocommerce/settings/container-definitions.php'
+		);
+		$container = new \AC\DI\Container( ( new \AC\Vendor\DI\ContainerBuilder() )->addDefinitions( $definitions )->build() );
+	} catch ( \Throwable $e ) {
+		$container = false;
+		return null;
+	}
+	return $container;
+}
+
+/**
  * Map an EDD license response to Minn's {ok,code,message} result shape.
  *
  * @param array $remote EDD response array.
@@ -1133,6 +1182,58 @@ function minn_admin_license_default_providers() {
 				$note = str_replace( '_', ' ', (string) $lic['error'] );
 			}
 			return array( $item( array( 'name' => 'Search & Filter Pro', 'state' => $state, 'key' => true, 'expires' => $expires, 'note' => $note ) ) );
+		},
+	);
+
+	// Admin Columns Pro (v7): their own API on admincolumns.com. KEY FACT:
+	// a successful activation DELETES the pasted subscription key and keeps
+	// an activation TOKEN instead ("old key is no longer needed since 5.7"):
+	// acp_activation_key (token) + acp_subscription_details {status:
+	// active|cancelled|expired, renewal_method, expiry_date: unix ts, null =
+	// lifetime} + acp_subscription_details_key (the token the details belong
+	// to). acp_subscription_key only exists pre-activation; ACP_LICENCE
+	// constant overrides. Network installs use site options (checked second).
+	$providers['admin-columns-pro'] = array(
+		'name'      => 'Admin Columns Pro',
+		'component' => 'admin-columns-pro/admin-columns-pro.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'admin-columns-pro/admin-columns-pro.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$get = function ( $k ) {
+				$v = get_option( $k );
+				return false === $v ? get_site_option( $k ) : $v;
+			};
+			$act_key = (string) $get( 'acp_activation_key' );
+			$sub_key = ( defined( 'ACP_LICENCE' ) && ACP_LICENCE ) ? (string) ACP_LICENCE : (string) $get( 'acp_subscription_key' );
+			$token   = '' !== $act_key ? $act_key : $sub_key;
+			if ( '' === $token ) {
+				return array( $item( array( 'name' => 'Admin Columns Pro', 'state' => 'missing' ) ) );
+			}
+			$details     = $get( 'acp_subscription_details' );
+			$details_key = (string) $get( 'acp_subscription_details_key' );
+			if ( ! is_array( $details ) || $details_key !== $token || empty( $details['status'] ) ) {
+				return array( $item( array( 'name' => 'Admin Columns Pro', 'state' => 'unknown', 'key' => true, 'stale' => true, 'note' => 'key stored; no subscription details recorded yet' ) ) );
+			}
+			$status  = strtolower( (string) $details['status'] );
+			$ts      = isset( $details['expiry_date'] ) ? $details['expiry_date'] : null;
+			$expires = ( null === $ts || '' === $ts ) ? 'lifetime' : minn_admin_license_expiry( gmdate( 'Y-m-d', (int) $ts ) );
+			$lapsed  = minn_admin_license_expired( $expires );
+			if ( 'active' === $status ) {
+				$state = $lapsed ? 'expired' : 'valid';
+				$note  = '';
+			} elseif ( 'cancelled' === $status ) {
+				// Cancelled = no renewal; access runs until the expiry date.
+				$state = $lapsed ? 'expired' : 'valid';
+				$note  = 'cancelled; does not renew';
+			} elseif ( 'expired' === $status ) {
+				$state = 'expired';
+				$note  = '';
+			} else {
+				$state = 'invalid';
+				$note  = $status;
+			}
+			return array( $item( array( 'name' => 'Admin Columns Pro', 'state' => $state, 'key' => true, 'expires' => $expires, 'note' => $note ) ) );
 		},
 	);
 
@@ -2344,6 +2445,102 @@ function minn_admin_license_default_providers() {
 			// the license server and updates status + expiry in place.
 			\Search_Filter_Pro\Core\License_Server::refresh_health();
 			return $sfp_classify( \Search_Filter_Pro\Core\License_Server::get_license_data() );
+		};
+	}
+
+	// Admin Columns Pro: every service their nonce-bound ajax handlers
+	// orchestrate resolves from the DI container (bootstrapped headless by
+	// minn_admin_acp_container — their main file is is_admin()-gated), so
+	// the actions run the handlers' EXACT sequences minus the nonce.
+	// Their LicenseKey constructor THROWS on malformed keys (needs length
+	// over 12 and a dash) — caught and mapped to a clean invalid.
+	if ( ! function_exists( 'is_plugin_active' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+	if ( is_plugin_active( 'admin-columns-pro/admin-columns-pro.php' ) && minn_admin_acp_container() ) {
+		$acp           = minn_admin_acp_container();
+		$acp_classify_error = function ( $error ) {
+			$msg   = wp_strip_all_tags( (string) $error->get_error_message() );
+			$codes = implode( ' ', $error->get_error_codes() );
+			if ( preg_match( '/limit|maximum|max[_ ]sites|no_activations/i', $codes . ' ' . $msg ) ) {
+				return array( 'ok' => false, 'code' => 'site_limit', 'message' => $msg ? $msg : 'This license has reached its activation limit.' );
+			}
+			if ( preg_match( '/expired/i', $codes . ' ' . $msg ) ) {
+				return array( 'ok' => false, 'code' => 'expired', 'message' => $msg ? $msg : 'This Admin Columns license has expired.' );
+			}
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => $msg ? $msg : 'admincolumns.com did not accept that key.' );
+		};
+		$providers['admin-columns-pro']['secret_label'] = 'Admin Columns Pro license key';
+		$providers['admin-columns-pro']['activate']     = function ( $secret ) use ( $acp, $acp_classify_error ) {
+			try {
+				$license_key = new \ACP\Type\LicenseKey( trim( (string) $secret ) );
+			} catch ( \Throwable $e ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'That does not look like an Admin Columns key (they are long and contain a dash).' );
+			}
+			$response = $acp->get( \ACP\ApiFactory::class )->create()->dispatch(
+				new \ACP\API\Request\Activate( $license_key, $acp->get( \ACP\Type\SiteUrl::class ) )
+			);
+			// Permissions ride the API response in their handler; keep that.
+			$acp->get( \ACP\Access\PermissionCheckerFactory::class )->create()
+				->add_rule( new \ACP\Access\Rule\ApiPermissionResponse( $response ) )
+				->add_rule( new \ACP\Access\Rule\ApiErrorResponse( $response ) )
+				->apply();
+			if ( $response->has_error() ) {
+				return $acp_classify_error( $response->get_error() );
+			}
+			try {
+				$activation_key = new \ACP\Type\Activation\Key( (string) $response->get( 'activation_key' ) );
+			} catch ( \Throwable $e ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'admincolumns.com accepted the key but returned an invalid activation token.' );
+			}
+			$acp->get( \ACP\Access\ActivationKeyStorage::class )->save( $activation_key );
+			$acp->get( \ACP\Access\ActivationUpdater::class )->update( $activation_key );
+			$acp->get( \ACP\Updates\PluginDataUpdater::class )->update( $activation_key );
+			wp_clean_plugins_cache();
+			wp_update_plugins();
+			$msg = wp_strip_all_tags( (string) $response->get( 'message' ) );
+			return array( 'ok' => true, 'code' => '', 'message' => $msg );
+		};
+		$providers['admin-columns-pro']['deactivate']   = function () use ( $acp, $acp_classify_error ) {
+			// Their handler's order: resolve the token, clear local state,
+			// then tell the API (local removal succeeds even offline).
+			$token = $acp->get( \ACP\ActivationTokenFactory::class )->create();
+			$acp->get( \ACP\LicenseKeyRepository::class )->delete();
+			$acp->get( \ACP\Access\ActivationKeyStorage::class )->delete();
+			$acp->get( \ACP\Access\ActivationStorage::class )->delete();
+			$acp->get( \ACP\Access\PermissionCheckerFactory::class )->create()->apply();
+			if ( ! $token ) {
+				return array( 'ok' => true, 'code' => '', 'message' => 'No activation was stored; local license state cleared.' );
+			}
+			$response = $acp->get( \ACP\ApiFactory::class )->create()->dispatch(
+				new \ACP\API\Request\Deactivate( $token, $acp->get( \ACP\Type\SiteUrl::class ) )
+			);
+			$acp->get( \ACP\Access\PermissionCheckerFactory::class )->create()
+				->add_rule( new \ACP\Access\Rule\ApiErrorResponse( $response ) )
+				->add_rule( new \ACP\Access\Rule\ApiPermissionResponse( $response ) )
+				->apply();
+			if ( $response->has_error() ) {
+				$out            = $acp_classify_error( $response->get_error() );
+				$out['message'] = 'Local license state was cleared, but admincolumns.com reported: ' . $out['message'];
+				return $out;
+			}
+			$acp->get( \ACP\Updates\PluginDataUpdater::class )->update( $token );
+			wp_clean_plugins_cache();
+			wp_update_plugins();
+			return array( 'ok' => true, 'code' => '', 'message' => 'The license was deactivated and the seat freed.' );
+		};
+		$providers['admin-columns-pro']['verify']       = function () use ( $acp, $acp_classify_error ) {
+			$token = $acp->get( \ACP\ActivationTokenFactory::class )->create();
+			if ( ! $token ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'No license key is stored.' );
+			}
+			// Their own refresh: re-fetches subscription details and stores
+			// status + expiry (also self-cleans a revoked activation).
+			$response = $acp->get( \ACP\Access\ActivationUpdater::class )->update( $token );
+			if ( $response->has_error() ) {
+				return $acp_classify_error( $response->get_error() );
+			}
+			return array( 'ok' => true, 'code' => '', 'message' => '' );
 		};
 	}
 
