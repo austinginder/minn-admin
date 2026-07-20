@@ -116,6 +116,21 @@ async function freshParagraph( page ) {
 	} );
 }
 
+// Auto-accepts Minn confirm dialogs (the minnConfirm modal) the way
+// page.on('dialog', d => d.accept()) auto-accepts native ones. Runs now and
+// survives navigations. Suites asserting confirm behavior (copy, Cancel)
+// must NOT call this — interact with .minn-confirm-overlay explicitly.
+async function autoConfirm( page ) {
+	const arm = () => {
+		setInterval( () => {
+			const ok = document.querySelector( '.minn-confirm-overlay [data-ok]:not([disabled])' );
+			if ( ok ) ok.click();
+		}, 120 );
+	};
+	await page.addInitScript( arm );
+	await page.evaluate( arm ).catch( () => {} );
+}
+
 // Minimal reporter: PASS/FAIL lines, non-zero exit when anything failed.
 function reporter( name ) {
 	const results = [];
@@ -136,4 +151,4 @@ function reporter( name ) {
 	};
 }
 
-module.exports = { BASE, launch, login, createPost, deletePost, openEditor, freshParagraph, reporter };
+module.exports = { BASE, launch, login, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter };

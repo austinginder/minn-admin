@@ -9,12 +9,13 @@
  * Comments route; the suite deactivates it at start and restores it (plus
  * deletes the seeded comments) in the finally.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'comment-bulk' );
 	const { browser, page, errors } = await launch();
 	await login( page );
+	await autoConfirm( page );
 	page.on( 'dialog', ( d ) => d.accept() );
 
 	const rest = ( path, opts ) => page.evaluate( async ( [ p, o ] ) => {

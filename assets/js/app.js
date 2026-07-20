@@ -602,7 +602,11 @@
 				document.removeEventListener( 'keydown', onKey );
 				resolve( val );
 			};
-			const onKey = ( e ) => { if ( e.key === 'Escape' ) done( false ); };
+			// stopPropagation: a confirm can sit over a modal or overlay whose
+			// own Escape handlers (the boot window handler, the log viewer's
+			// document handler) would otherwise close the layer underneath
+			// from the same keypress. Escape peels exactly one layer.
+			const onKey = ( e ) => { if ( e.key === 'Escape' ) { e.stopPropagation(); done( false ); } };
 			document.addEventListener( 'keydown', onKey );
 			overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) done( false ); } );
 			overlay.querySelector( '[data-cancel]' ).addEventListener( 'click', () => done( false ) );
@@ -625,6 +629,27 @@
 		if ( ! pendingToastUndo ) return false;
 		pendingToastUndo.run();
 		return true;
+	}
+
+	// The two consequential actions with more than one entry point share one
+	// dialog each, so the copy can never drift between doors.
+	function confirmThemeActivate( name ) {
+		return minnConfirm( {
+			title: `Switch the site's theme to ${ name }?`,
+			changes: [ 'How the whole site looks to visitors, right away' ],
+			keeps: [ 'The current theme stays installed; switch back anytime', 'Your content, media and settings' ],
+			confirmLabel: 'Activate theme',
+		} );
+	}
+
+	function confirmCoreUpdate( version ) {
+		return minnConfirm( {
+			title: `Update WordPress to ${ version }?`,
+			changes: [ `WordPress core files${ B.site && B.site.version ? ` (${ B.site.version } to ${ version })` : '' }`, 'The database, when this release ships a migration' ],
+			keeps: [ 'Your content, media and users', 'Plugins, themes and their settings' ],
+			body: 'Visitors see a maintenance notice for a few seconds while files are replaced.',
+			confirmLabel: 'Update WordPress',
+		} );
 	}
 
 	/* ===== Form engine =====
@@ -3027,7 +3052,7 @@
 			btn.addEventListener( 'click', async ( e ) => {
 				e.stopPropagation();
 				const row = btn.closest( '.minn-table-row' );
-				if ( ! confirm( 'Delete this item permanently? This cannot be undone.' ) ) return;
+				if ( ! await minnConfirm( { title: 'Delete this item permanently?', body: 'It is removed for good. There is no undo for this.', danger: true, confirmLabel: 'Delete permanently' } ) ) return;
 				btn.disabled = true;
 				btn.textContent = '…';
 				try {
@@ -3074,9 +3099,11 @@
 					runBulk( sel, e.currentTarget, restoreOne, 'Restored' );
 				} );
 				const bulkDelete = $( '#minn-bulk-delete', slot );
-				if ( bulkDelete ) bulkDelete.addEventListener( 'click', ( e ) => {
-					if ( ! confirm( `Permanently delete ${ sel.size } item${ sel.size === 1 ? '' : 's' }? This cannot be undone.` ) ) return;
-					runBulk( sel, e.currentTarget, deleteOne, 'Deleted permanently' );
+				if ( bulkDelete ) bulkDelete.addEventListener( 'click', async ( e ) => {
+					const n = sel.size;
+					const bulkBtn = e.currentTarget;
+					if ( ! await minnConfirm( { title: `Delete ${ n } item${ n === 1 ? '' : 's' } permanently?`, body: 'They are removed for good. There is no undo for this.', danger: true, confirmLabel: 'Delete permanently' } ) ) return;
+					runBulk( sel, bulkBtn, deleteOne, 'Deleted permanently' );
 				} );
 				// Themed combobox (users bulk role pattern) — native <select>
 				// was the last OS-drawn control on this bar.
@@ -3366,7 +3393,7 @@
 	async function bulkDeleteMedia( btn ) {
 		const ids = Array.from( state.mediaSel || [] );
 		if ( ! ids.length ) return;
-		if ( ! confirm( `Delete ${ ids.length } file${ ids.length === 1 ? '' : 's' } permanently? This cannot be undone.` ) ) return;
+		if ( ! await minnConfirm( { title: `Delete ${ ids.length } file${ ids.length === 1 ? '' : 's' } permanently?`, body: 'The files and their thumbnails are removed from the server. Posts that use them keep broken references.', danger: true, confirmLabel: 'Delete permanently' } ) ) return;
 		btn.disabled = true;
 		btn.textContent = 'Deleting…';
 		let ok = 0, fail = 0;
@@ -3383,7 +3410,7 @@
 
 	// Shared by the preview modal's Delete and the grid context menu.
 	async function deleteMediaItem( it ) {
-		if ( ! confirm( `Delete “${ it.name }” permanently?` ) ) return;
+		if ( ! await minnConfirm( { title: `Delete “${ it.name }” permanently?`, body: 'The file and its thumbnails are removed from the server. Posts that use it keep broken references.', danger: true, confirmLabel: 'Delete file' } ) ) return;
 		try {
 			await api( `wp/v2/media/${ it.id }?force=true`, { method: 'DELETE' } );
 			toast( 'File deleted' );
@@ -3909,7 +3936,7 @@
 	async function runCommentBulk( status, label, btn ) {
 		const ids = Array.from( state.commentSel || [] );
 		if ( ! ids.length ) return;
-		if ( 'delete' === status && ! confirm( `Delete ${ ids.length } comment${ ids.length === 1 ? '' : 's' } permanently?` ) ) return;
+		if ( 'delete' === status && ! await minnConfirm( { title: `Delete ${ ids.length } comment${ ids.length === 1 ? '' : 's' } permanently?`, body: 'They are removed for good. There is no undo for this.', danger: true, confirmLabel: 'Delete permanently' } ) ) return;
 		btn.disabled = true;
 		btn.textContent = 'Working…';
 		let ok = 0, fail = 0;
@@ -4093,9 +4120,9 @@
 			} )
 		);
 		$$( '[data-cstatus]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
+			btn.addEventListener( 'click', async () => {
 				const st = btn.dataset.cstatus;
-				if ( st === 'delete' && ! confirm( 'Delete this comment permanently?' ) ) return;
+				if ( st === 'delete' && ! await minnConfirm( { title: 'Delete this comment permanently?', body: 'It is removed for good. There is no undo for this.', danger: true, confirmLabel: 'Delete comment' } ) ) return;
 				const labels = { approved: 'Comment approved', hold: state.commentTab === 'hold' ? 'Comment held' : 'Comment restored', spam: 'Marked as spam', trash: 'Moved to trash', delete: 'Comment deleted' };
 				setCommentStatus( parseInt( btn.dataset.cid, 10 ), st, labels[ st ] );
 			} )
@@ -4984,7 +5011,14 @@
 					return;
 				}
 				const lineSel = refundLineSelections();
-				if ( ! confirm( `Refund ${ orderMoney( o, amt ) } on order #${ o.number || o.id }?` ) ) return;
+				const viaGateway = !! ( $( '#minn-o-refund-api' ) || {} ).checked;
+				if ( ! await minnConfirm( {
+					title: `Refund ${ orderMoney( o, amt ) } on order #${ o.number || o.id }?`,
+					body: viaGateway
+						? 'The gateway is asked to send the money back to the customer. A refund already sent cannot be recalled.'
+						: 'This records the refund on the order; the money itself moves outside the site.',
+					confirmLabel: 'Refund',
+				} ) ) return;
 				refundBtn.disabled = true;
 				refundBtn.textContent = 'Refunding…';
 				try {
@@ -5024,7 +5058,7 @@
 			// totals; it never pulls back money a gateway already sent.
 			$$( '[data-rdel]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
-					if ( ! confirm( 'Delete this refund record and restore its amount to the order? Money already sent back through the gateway is not pulled back.' ) ) return;
+					if ( ! await minnConfirm( { title: 'Delete this refund record?', body: 'Its amount is restored to the order totals. Money already sent back through the gateway is not pulled back.', danger: true, confirmLabel: 'Delete refund' } ) ) return;
 					btn.disabled = true;
 					try {
 						await api( `wc/v3/orders/${ o.id }/refunds/${ btn.dataset.rdel }?force=true`, { method: 'DELETE' } );
@@ -5058,7 +5092,7 @@
 				if ( ! emailId ) return;
 				const mailInput = mailWrap && $( '.minn-ac-input', mailWrap );
 				const label = mailInput ? mailInput.value : emailId;
-				if ( ! confirm( `Send “${ label.split( ' · ' )[ 0 ] }” for order #${ o.number || o.id }?` ) ) return;
+				if ( ! await minnConfirm( { title: `Send “${ label.split( ' · ' )[ 0 ] }”?`, body: `WooCommerce sends it for order #${ o.number || o.id } right away.`, confirmLabel: 'Send email' } ) ) return;
 				wcSend.disabled = true;
 				try {
 					const r = await api( `minn-admin/v1/orders/${ o.id }/emails`, {
@@ -7243,10 +7277,14 @@
 	async function deleteTerm( t ) {
 		const tax = currentTermTax();
 		if ( ! tax ) return;
-		const msg = tax.hierarchical
-			? `Delete “${ t.name }”? Any children move up a level, and posts keep their other ${ tax.label.toLowerCase() }.`
-			: `Delete “${ t.name }”? It will be removed from ${ t.count } post${ t.count === 1 ? '' : 's' }.`;
-		if ( ! confirm( msg ) ) return;
+		if ( ! await minnConfirm( {
+			title: `Delete “${ t.name }”?`,
+			body: tax.hierarchical
+				? `Any children move up a level, and posts keep their other ${ tax.label.toLowerCase() }.`
+				: `It is removed from ${ t.count } post${ t.count === 1 ? '' : 's' }.`,
+			danger: true,
+			confirmLabel: 'Delete ' + ( tax.item || 'term' ),
+		} ) ) return;
 		try {
 			await api( `wp/v2/${ tax.rest }/${ t.id }?force=true`, { method: 'DELETE' } );
 			toast( `Deleted “${ t.name }”` );
@@ -7312,7 +7350,13 @@
 		} );
 		mergeBtn.addEventListener( 'click', async () => {
 			if ( ! target ) return;
-			if ( ! confirm( `Move everything in “${ t.name }” into “${ target.name }”, then delete “${ t.name }”? This cannot be undone.` ) ) return;
+			if ( ! await minnConfirm( {
+				title: `Merge “${ t.name }” into “${ target.name }”?`,
+				changes: [ `Everything in “${ t.name }” moves to “${ target.name }”`, `“${ t.name }” is deleted` ],
+				body: 'There is no undo for this.',
+				danger: true,
+				confirmLabel: 'Merge',
+			} ) ) return;
 			mergeBtn.disabled = true;
 			mergeBtn.textContent = 'Merging…';
 			try {
@@ -9957,7 +10001,7 @@
 			}
 		} );
 		$( '#minn-menu-delete' ).addEventListener( 'click', async () => {
-			if ( ! confirm( `Delete the menu “${ cur ? cur.name : '' }” and all its items? This cannot be undone.` ) ) return;
+			if ( ! await minnConfirm( { title: `Delete the menu “${ cur ? cur.name : '' }”?`, body: 'Every item in it is deleted too. There is no undo for this.', danger: true, confirmLabel: 'Delete menu' } ) ) return;
 			try {
 				await api( `wp/v2/menus/${ ms.sel }?force=true`, { method: 'DELETE' } );
 				toast( 'Menu deleted' );
@@ -10098,7 +10142,7 @@
 		);
 		$$( '[data-wdel]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
-				if ( ! confirm( 'Delete this widget? Its settings are lost.' ) ) return;
+				if ( ! await minnConfirm( { title: 'Delete this widget?', body: 'Its settings are lost. There is no undo for this.', danger: true, confirmLabel: 'Delete widget' } ) ) return;
 				btn.disabled = true;
 				try {
 					await api( `wp/v2/widgets/${ btn.dataset.wdel }?force=true`, { method: 'DELETE' } );
@@ -10911,12 +10955,12 @@
 				btn.innerHTML = orig;
 			}
 		};
-		$$( '[data-lic]', view ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
+		$$( '[data-lic]', view ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {
 			const action = btn.dataset.lic;
 			const provider = btn.dataset.provider;
 			if ( 'turnon' === action ) {
 				if ( btn.dataset.component.startsWith( 'theme:' )
-					&& ! confirm( `Activate the ${ btn.dataset.name } theme? It becomes the site's active theme and the current theme turns off.` ) ) return;
+					&& ! await confirmThemeActivate( btn.dataset.name ) ) return;
 				licTurnOn( btn );
 				return;
 			}
@@ -10925,7 +10969,7 @@
 				return;
 			}
 			if ( 'deactivate' === action ) {
-				if ( ! confirm( `Deactivate the ${ btn.dataset.name } license on this site? The seat frees up, and the plugin may stop receiving updates until a license is activated again.` ) ) return;
+				if ( ! await minnConfirm( { title: `Deactivate the ${ btn.dataset.name } license on this site?`, body: 'The seat frees up for another site, and the plugin may stop receiving updates until a license is activated again.', confirmLabel: 'Deactivate license' } ) ) return;
 				licRun( provider, 'deactivate', null, btn );
 				return;
 			}
@@ -11287,13 +11331,7 @@
 		if ( ! btn ) return;
 		btn.addEventListener( 'click', async () => {
 			const core = state.cache.core;
-			const okCore = await minnConfirm( {
-				title: `Update WordPress to ${ core.update.version }?`,
-				changes: [ `WordPress core files${ B.site && B.site.version ? ` (${ B.site.version } to ${ core.update.version })` : '' }`, 'The database, when this release ships a migration' ],
-				keeps: [ 'Your content, media and users', 'Plugins, themes and their settings' ],
-				body: 'Visitors see a maintenance notice for a few seconds while files are replaced.',
-				confirmLabel: 'Update WordPress',
-			} );
+			const okCore = await confirmCoreUpdate( core.update.version );
 			if ( ! okCore ) return;
 			btn.disabled = true;
 			btn.textContent = 'Updating WordPress…';
@@ -11735,7 +11773,7 @@
 		}
 		const runThemeAction = async ( action, t, btn ) => {
 			if ( ! t ) return;
-			if ( action === 'activate' && ! confirm( `Switch the site's theme to “${ t.name }”? This changes how the whole site looks.` ) ) return;
+			if ( action === 'activate' && ! await confirmThemeActivate( t.name ) ) return;
 			if ( action === 'delete' ) {
 				const okDel = await minnConfirm( {
 					title: `Delete the ${ t.name } theme?`,
@@ -12517,7 +12555,9 @@
 		let collapsed = false;
 
 		const close = () => { overlay.remove(); document.removeEventListener( 'keydown', onKey ); };
-		const onKey = ( e ) => { if ( e.key === 'Escape' ) close(); };
+		// Registered before a confirm's own listener, so the DOM guard (not
+		// ordering) keeps Escape from closing the viewer under an open confirm.
+		const onKey = ( e ) => { if ( e.key === 'Escape' && ! $( '.minn-confirm-overlay' ) ) close(); };
 		document.addEventListener( 'keydown', onKey );
 		overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) close(); } );
 		overlay.querySelector( '[data-close]' ).addEventListener( 'click', close );
@@ -12586,7 +12626,7 @@
 			paint();
 		} );
 		$( '#minn-log-clear', overlay ).addEventListener( 'click', async () => {
-			if ( ! confirm( 'Empty this log? This can’t be undone.' ) ) return;
+			if ( ! await minnConfirm( { title: 'Empty this log?', body: 'Its entries are deleted from the server. There is no undo for this.', danger: true, confirmLabel: 'Empty log' } ) ) return;
 			try {
 				await api( `minn-admin/v1/system/logs/${ cur }`, { method: 'DELETE' } );
 				state.cache.system = null; // sizes changed
@@ -22653,7 +22693,7 @@
 				await loadNotifications();
 			} else if ( u.type === 'core' ) {
 				if ( ! B.caps.core ) throw new Error( 'You cannot update WordPress.' );
-				if ( ! confirm( `Update WordPress to ${ u.version || 'the latest version' }? The site enters maintenance mode for a few seconds.` ) ) {
+				if ( ! await confirmCoreUpdate( u.version || 'the latest version' ) ) {
 					if ( btn ) { btn.disabled = false; btn.textContent = notifUpdateLabel( item ); }
 					return;
 				}
@@ -24984,7 +25024,7 @@
 			const delBtn = $( '#minn-coupon-delete' );
 			if ( delBtn ) delBtn.addEventListener( 'click', async () => {
 				if ( ! c.id ) return;
-				if ( ! confirm( `Delete coupon “${ c.code || c.id }”? This cannot be undone.` ) ) return;
+				if ( ! await minnConfirm( { title: `Delete coupon “${ c.code || c.id }”?`, body: 'It is removed for good; orders that already used it keep their totals.', danger: true, confirmLabel: 'Delete coupon' } ) ) return;
 				delBtn.disabled = true;
 				try {
 					await api( `wc/v3/coupons/${ c.id }?force=true`, { method: 'DELETE' } );
@@ -25407,7 +25447,7 @@
 					toast( 'Pick a user to reassign content to', true );
 					return;
 				}
-				if ( ! confirm( `Permanently delete ${ m.user.name || 'this user' }? This cannot be undone.` ) ) return;
+				if ( ! await minnConfirm( { title: `Permanently delete ${ m.user.name || 'this user' }?`, body: 'The account is removed for good, and their content moves to the user you picked. There is no undo for this.', danger: true, confirmLabel: 'Delete user' } ) ) return;
 				confirmBtn.disabled = true;
 				try {
 					await api( `wp/v2/users/${ m.user.id }?force=true&reassign=${ encodeURIComponent( reassign ) }`, { method: 'DELETE' } );
@@ -25555,7 +25595,7 @@
 				const t = m.results[ parseInt( btn.dataset.ti, 10 ) ];
 				if ( ! t ) return;
 				const activating = btn.textContent.trim() === 'Activate';
-				if ( activating && ! confirm( `Switch the site's theme to “${ t.name }”? This changes how the whole site looks.` ) ) return;
+				if ( activating && ! await confirmThemeActivate( t.name ) ) return;
 				btn.disabled = true;
 				btn.textContent = activating ? 'Activating…' : 'Installing…';
 				try {
@@ -27785,7 +27825,11 @@
 			// ←/→ steps through media or surface-detail items (GF entries,
 			// activity events, etc.). Skip when typing in a field so arrow
 			// keys keep moving the caret.
-			if ( state.modal && ( e.key === 'ArrowLeft' || e.key === 'ArrowRight' ) ) {
+			// A confirm dialog stacked over a modal owns the keyboard: its own
+			// listeners close it on Escape; the modal underneath must not
+			// also close (or arrow-navigate) from the same keypress.
+			const confirmUp = !! $( '.minn-confirm-overlay' );
+			if ( state.modal && ! confirmUp && ( e.key === 'ArrowLeft' || e.key === 'ArrowRight' ) ) {
 				const t = e.target;
 				const typing = t && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable );
 				if ( ! typing ) {
@@ -27798,7 +27842,7 @@
 			if ( e.key === 'Escape' && $( '#minn-stats-goal-pop' ) ) {
 				e.preventDefault();
 				closeWritingGoalPop();
-			} else if ( e.key === 'Escape' && ( state.paletteOpen || state.notifOpen || state.modal ) ) {
+			} else if ( e.key === 'Escape' && ! confirmUp && ( state.paletteOpen || state.notifOpen || state.modal ) ) {
 				state.paletteOpen = false;
 				state.notifOpen = false;
 				state.modal = null;

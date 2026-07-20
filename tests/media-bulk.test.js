@@ -7,12 +7,13 @@
  * Everything created here is deleted whether or not the bulk delete runs, so
  * a crash can't leave orphan fixtures.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'media-bulk' );
 	const { browser, page, errors } = await launch();
 	await login( page );
+	await autoConfirm( page );
 	// Accept the native confirm() the bulk delete raises.
 	page.on( 'dialog', ( d ) => d.accept() );
 

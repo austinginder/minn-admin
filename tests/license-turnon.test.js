@@ -75,14 +75,17 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			return btn ? { component: btn.dataset.component, title: btn.title } : null;
 		} );
 		t.check( 'theme row offers Turn on with switch-the-theme copy', !! avadaBtn && avadaBtn.component === 'theme:Avada' && /theme/i.test( avadaBtn.title ), JSON.stringify( avadaBtn ) );
-		page.once( 'dialog', ( d ) => d.dismiss() );
 		await page.evaluate( () => {
 			const row = Array.from( document.querySelectorAll( '.minn-lic-item' ) )
 				.find( ( r ) => r.textContent.includes( 'Avada' ) );
 			row.querySelector( '[data-lic="turnon"]' ).click();
 		} );
+		await page.waitForSelector( '.minn-confirm-overlay', { timeout: 10000 } );
+		const themeConfirm = await page.evaluate( () => document.querySelector( '.minn-confirm-modal' ).textContent );
+		t.check( 'theme turn-on asks with switch-the-theme copy', /theme/i.test( themeConfirm ) && /stays installed/i.test( themeConfirm ), themeConfirm );
+		await page.click( '.minn-confirm-overlay [data-cancel]' );
 		await new Promise( ( r ) => setTimeout( r, 800 ) );
-		t.check( 'dismissing the theme confirm leaves the site theme alone', ( await activeTheme() ) === before, before );
+		t.check( 'cancelling the theme confirm leaves the site theme alone', ( await activeTheme() ) === before, before );
 
 		/* ===== Plugin path: turn on, controls appear on the fresh render ===== */
 		await page.evaluate( () => {

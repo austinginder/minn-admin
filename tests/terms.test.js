@@ -6,12 +6,13 @@
  * state over REST, not just the DOM. Fixtures are suite-created and
  * suite-deleted; the standing demo terms (Projects tree) are untouched.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, reporter, BASE, autoConfirm } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'terms' );
 	const { browser, page, errors } = await launch();
 	await login( page );
+	await autoConfirm( page );
 
 	const rest = ( path, opts = {} ) => page.evaluate( async ( a ) => {
 		const r = await fetch( window.MINN.restUrl + a.path, {

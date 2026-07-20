@@ -7,7 +7,7 @@
  * deleted on the way out. Check payments cannot push money back, so the
  * suite also pins the no-gateway-checkbox honest-copy path.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, autoConfirm } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -15,6 +15,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	page.on( 'dialog', ( d ) => d.accept().catch( () => {} ) );
 	await login( page );
+	await autoConfirm( page );
 
 	const hasWc = await page.evaluate( () => !!( window.MINN && window.MINN.wc && window.MINN.caps && window.MINN.caps.orders ) );
 	if ( ! hasWc ) {

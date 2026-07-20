@@ -223,11 +223,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await cardReady();
 
 		/* ===== Deactivate asks first, then frees the row ===== */
-		let dialogText = '';
-		page.once( 'dialog', ( d ) => { dialogText = d.message(); d.accept(); } );
 		await openLicMenu( 'Deactivate' );
+		await page.waitForSelector( '.minn-confirm-overlay', { timeout: 10000 } );
+		const dialogText = await page.evaluate( () => document.querySelector( '.minn-confirm-modal' ).textContent );
+		await page.click( '.minn-confirm-overlay [data-ok]' );
 		await waitToast( 'License deactivated' );
-		t.check( 'deactivate confirmed first', /frees the seat|seat frees/i.test( dialogText ), dialogText );
+		t.check( 'deactivate confirmed first (Minn dialog)', /frees the seat|seat frees/i.test( dialogText ), dialogText );
 		await page.waitForFunction( () => {
 			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
 				.find( ( r ) => r.textContent.includes( 'Fixture Activatable Pro' ) );
