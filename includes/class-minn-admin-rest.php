@@ -1243,6 +1243,23 @@ class Minn_Admin_REST {
 		}
 		add_filter( 'posts_where', array( __CLASS__, 'posts_where_modified' ), 10, 2 );
 
+		// "Being edited": core's own edit lock, surfaced on list rows. The
+		// value is the OTHER user holding a live _edit_lock — an own lock is
+		// not news, matching wp-admin's list table. Core's window rules
+		// apply (wp_check_post_lock: 150s, wp_check_post_lock_window
+		// filterable), so a crashed session's stale lock ages out on its own.
+		register_rest_field(
+			array_values( $modified_types ),
+			'minn_lock',
+			array(
+				'get_callback' => array( __CLASS__, 'post_lock_holder' ),
+				'schema'       => array(
+					'type'        => array( 'object', 'null' ),
+					'description' => 'The other user currently editing this post (core edit lock), or null.',
+				),
+			)
+		);
+
 		// Block a commenter: their email (or IP when the comment carries no
 		// email) joins core's disallowed_keys, so future comments land in
 		// the trash — core's own mechanism, no new storage. Undo removes
@@ -1499,6 +1516,33 @@ class Minn_Admin_REST {
 				$wpdb->esc_like( $post->ID . '-autosave' ) . '%',
 				$post->post_modified_gmt
 			)
+		);
+	}
+
+	/**
+	 * The minn_lock list field: the other user holding a live edit lock on
+	 * this post, or null. Runs core's own wp_check_post_lock (150s window,
+	 * returns false for the requesting user's own lock). The list query's
+	 * meta cache already holds _edit_lock, so this is cache reads plus one
+	 * get_userdata on the rare locked row.
+	 *
+	 * @param array $item Prepared REST item.
+	 * @return array|null
+	 */
+	public static function post_lock_holder( $item ) {
+		$id = isset( $item['id'] ) ? (int) $item['id'] : 0;
+		if ( ! $id ) {
+			return null;
+		}
+		require_once ABSPATH . 'wp-admin/includes/post.php';
+		$other = wp_check_post_lock( $id );
+		if ( ! $other ) {
+			return null;
+		}
+		$user = get_userdata( $other );
+		return array(
+			'user' => (int) $other,
+			'name' => $user ? $user->display_name : 'Someone',
 		);
 	}
 
