@@ -1235,6 +1235,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 /* ===== Themes ===== */
 .minn-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .minn-theme { overflow: hidden; }
+.minn-theme.minn-theme-out { opacity: 0; transform: scale(0.96); transition: opacity 0.18s ease, transform 0.18s ease; pointer-events: none; }
 .minn-theme.is-active { border-color: var(--accent); }
 .minn-theme-shot {
   aspect-ratio: 4 / 3; background: var(--panel2); background-size: cover; background-position: top center;
