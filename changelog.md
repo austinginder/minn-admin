@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.21.0** - Unreleased
+
+### Improved
+* **List pages are ready to search the moment they open:** navigating to Extensions (plugins or themes), Content, Media, Users, Orders, Terms and every other list view drops the caret straight into the view's filter box, so typing filters immediately with no click first. It happens once per navigation and politely: a re-render never yanks focus back, an already-focused text field (the palette, a modal input) is never robbed, and touch devices skip it so the software keyboard stays down.
+
 ## **v0.20.0** - July 20, 2026
 
 The consent release. Every consequential action now says what it touches before it happens: updates enumerate what changes and what stays untouched, permanent deletes wear danger styling with plain-stakes copy, and quick reversible verbs keep their one-click ease. Around that spine, comments learn in-place editing and one-click commenter blocking, the content list says who is editing a post right now, Settings closes two more Customizer-era gaps (site logo and site language), Search & Filter Pro and Admin Columns Pro join the license manager, and plugin activation moves to a real admin context so activation hooks that assume wp-admin stop failing.
