@@ -461,6 +461,23 @@ class Minn_Admin_REST {
 		);
 		register_rest_route(
 			self::NS,
+			'/site/language',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'set_site_language' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+				'args'                => array(
+					'locale' => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NS,
 			'/me/language',
 			array(
 				'methods'             => 'POST',
@@ -2874,6 +2891,42 @@ class Minn_Admin_REST {
 				'available'  => $available,
 				'canInstall' => $can,
 				'current'    => $user ? (string) $user->locale : '',
+				'site'       => (string) get_option( 'WPLANG', '' ),
+			)
+		);
+	}
+
+	/**
+	 * POST minn-admin/v1/site/language { locale } — the SITE default
+	 * (options-general's Site Language), downloading the pack first when it
+	 * is not installed. '' is English (United States). One route for every
+	 * case so the client save path never branches.
+	 */
+	public static function set_site_language( WP_REST_Request $request ) {
+		$locale = (string) $request->get_param( 'locale' );
+		$downloaded = false;
+		if ( '' !== $locale && 'en_US' !== $locale && ! in_array( $locale, get_available_languages(), true ) ) {
+			if ( ! current_user_can( 'install_languages' ) || ! wp_is_file_mod_allowed( 'download_language_pack' ) ) {
+				return new WP_Error( 'minn_language_install', 'That language is not installed, and you cannot install languages on this site.', array( 'status' => 403 ) );
+			}
+			require_once ABSPATH . 'wp-admin/includes/translation-install.php';
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			$result = wp_download_language_pack( $locale );
+			if ( ! $result ) {
+				return new WP_Error( 'minn_language_install', 'The language pack could not be downloaded. Check the site can reach wordpress.org and try again.', array( 'status' => 500 ) );
+			}
+			$locale     = $result; // the API echoes the canonical code
+			$downloaded = true;
+		}
+		if ( 'en_US' === $locale ) {
+			$locale = '';
+		}
+		update_option( 'WPLANG', $locale );
+		return rest_ensure_response(
+			array(
+				'ok'        => true,
+				'locale'    => $locale,
+				'installed' => $downloaded,
 			)
 		);
 	}
