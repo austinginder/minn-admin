@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-23T08:03:59+00:00\n"
+"POT-Creation-Date: 2026-07-23T17:29:28+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 
@@ -20,7 +20,7 @@ msgstr ""
 
 #. Plugin URI of the plugin
 #: minn-admin.php
-msgid "https://github.com/austinginder/minn-admin"
+msgid "https://minnadmin.com"
 msgstr ""
 
 #. Description of the plugin
@@ -396,7 +396,7 @@ msgid "Open the user guide"
 msgstr ""
 
 #: assets/js/app.js:24461
-#: assets/js/app.js:24638
+#: assets/js/app.js:24628
 msgid "User guide"
 msgstr ""
 
@@ -404,6 +404,62 @@ msgstr ""
 msgid "Loading the guide…"
 msgstr ""
 
-#: assets/js/app.js:26853
+#: assets/js/app.js:24596
+msgid "Minn is a reimagined WordPress admin."
+msgstr ""
+
+#: assets/js/app.js:24596
+msgid "A calm, fast surface for the work you do every day: writing, moderating, uploading, and keeping an eye on the site. Classic wp-admin stays fully available, one click away."
+msgstr ""
+
+#: assets/js/app.js:24598
+msgid "Getting around"
+msgstr ""
+
+#: assets/js/app.js:24599
+msgid "The sidebar has three groups: Workspace (the daily material), Tools (what your plugins add) and Manage (the site itself). The fastest way anywhere is the command palette:"
+msgstr ""
+
+#: assets/js/app.js:24599
+msgid ", then start typing a view, a post or a command."
+msgstr ""
+
+#: assets/js/app.js:24601
+msgid "Right-click almost anything"
+msgstr ""
+
+#: assets/js/app.js:24602
+msgid "The least discoverable thing in Minn, so here it is in writing: rows in Content and Media, comments, the theme button, plugin entries in the sidebar and group headings in the block library all have right-click menus. When in doubt, try a right-click."
+msgstr ""
+
+#: assets/js/app.js:24604
+msgid "Make it yours"
+msgstr ""
+
+#: assets/js/app.js:24605
+msgid "Anything a plugin adds here can be hidden for you alone: right-click its sidebar entry or block-library heading and choose Hide. Everything hidden is listed on Your profile, where one click restores it."
+msgstr ""
+
+#: assets/js/app.js:24623
+msgid "Deliberately minimal"
+msgstr ""
+
+#: assets/js/app.js:24624
+msgid "Minn surfaces the settings people change day to day; the long tail stays in wp-admin on purpose. For plugin configuration Minn doesn't rebuild, open"
+msgstr ""
+
+#: assets/js/app.js:24624
+msgid "Your profile → AI Access"
+msgstr ""
+
+#: assets/js/app.js:24624
+msgid " and hand your AI agent a revocable credential to do the fiddly work over the REST API."
+msgstr ""
+
+#: assets/js/app.js:24625
+msgid "Everything Minn writes is native WordPress: real block markup, core options, core users. Deactivate the plugin and nothing is lost. Plugins extend Minn with one PHP filter, as plain data, which is why nothing here can nag you."
+msgstr ""
+
+#: assets/js/app.js:26843
 msgid "No guide found."
 msgstr ""
