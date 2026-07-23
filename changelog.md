@@ -7,6 +7,7 @@
 * **A tab left open overnight recovers on its own:** REST nonces expire after a day, and an expired one used to dead-end the app (every request failed with a raw error toast until a manual reload). Minn now notices the expired nonce, mints a fresh one in the background through WordPress core's own nonce endpoint, and retries the request; a whole page of parallel requests shares one refresh. If the login session itself is gone, Minn says so and reloads into the login flow instead of leaving dead buttons.
 
 ### Added
+* **Boot rides one request instead of nine:** the startup burst (notifications, plugin and update caches, core status, the pending-comment badge, post types and the order summary) now arrives in a single consolidated request. Each section is produced by the same route the standalone fetch used, so nothing changes shape, and a section the server cannot provide falls back to its old standalone fetch automatically. On shared hosting, where a handful of PHP workers had to serialize nine parallel requests, the app's panels stop trickling in one by one.
 * **Updates are checksum-verified before they install:** the release manifest now publishes the sha256 of each release zip, and the self-updater downloads the package, checks it against that hash, and refuses to install on any mismatch. The manifest travels from the GitHub repository while the zip comes from the release CDN; pinning the hash ties the two together, so a tampered or truncated download can never reach your plugins directory.
 
 ### Improved

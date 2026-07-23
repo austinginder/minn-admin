@@ -2625,14 +2625,19 @@
 	let typesPromise = null;
 	function loadTypes() {
 		if ( ! typesPromise ) {
-			// No _fields here: the types response is an associative object, and the
-			// server-level _fields filter would strip it to {} over HTTP.
-			typesPromise = api( 'wp/v2/types?context=edit' ).then( ( types ) => {
+			typesPromise = ( async () => {
+				if ( bootSeed ) {
+					await bootSeed;
+					if ( state.cache.types ) return state.cache.types;
+				}
+				// No _fields here: the types response is an associative object, and the
+				// server-level _fields filter would strip it to {} over HTTP.
+				const types = await api( 'wp/v2/types?context=edit' );
 				state.cache.types = Object.values( types )
 					.filter( ( t ) => t.viewable && t.rest_base && ! HIDDEN_TYPES.includes( t.slug ) )
 					.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: t.name } ) );
 				return state.cache.types;
-			} ).catch( ( e ) => {
+			} )().catch( ( e ) => {
 				// Don't cache the rejection: a single failed types fetch (worker
 				// recycle, transient 500) would otherwise poison every later
 				// caller for the session (the ⌘K palette search bricked on this).
@@ -3983,6 +3988,10 @@
 
 	async function refreshCommentBadge() {
 		if ( ! commentsAvailable() ) return;
+		if ( bootSeed ) {
+			const d = await bootSeed;
+			if ( d && d.pendingComments != null ) return; // the seed set the badge
+		}
 		try {
 			const r = await apiPaged( 'wp/v2/comments?status=hold&per_page=1' );
 			const badge = $( '#minn-comments-count' );
@@ -4433,6 +4442,10 @@
 	}
 
 	async function loadOrderSummary() {
+		if ( bootSeed ) {
+			const d = await bootSeed;
+			if ( d && d.orders ) return; // the seed landed the cache and badge
+		}
 		const summary = { month: null, processing: null };
 		await Promise.all( [
 			api( 'wc/v3/reports/sales?period=month' )
@@ -10360,6 +10373,10 @@
 	function loadPlugins() {
 		if ( pluginsPromise ) return pluginsPromise;
 		pluginsPromise = ( async () => {
+			if ( bootSeed ) {
+				await bootSeed;
+				if ( state.cache.plugins ) return;
+			}
 			const jobs = [ api( 'wp/v2/plugins' ) ];
 			if ( B.caps.update ) {
 				jobs.push( api( 'minn-admin/v1/plugin-updates' ).catch( () => ( {} ) ) );
@@ -11168,6 +11185,10 @@
 	// the persistent topbar chip.
 	async function loadCoreStatus() {
 		if ( ! B.caps.core || state.cache.core ) return;
+		if ( bootSeed ) {
+			await bootSeed;
+			if ( state.cache.core ) return;
+		}
 		state.cache.core = await api( 'minn-admin/v1/core' ).catch( () => null );
 		updateCoreChip();
 	}
@@ -22676,6 +22697,12 @@
 	/* ===== Notifications ===== */
 
 	async function loadNotifications() {
+		if ( bootSeed ) {
+			const d = await bootSeed;
+			// A capture-chain refresh nulls the cache first, so it falls
+			// through to a real fetch even inside the boot window.
+			if ( d && d.notifications && state.cache.notifications ) return updateUnreadDot();
+		}
 		try {
 			state.cache.notifications = ( await api( 'minn-admin/v1/notifications' ) ).items;
 		} catch ( e ) {
@@ -27925,7 +27952,71 @@
 		window.addEventListener( 'focusout', () => setTimeout( syncVisualViewport, 50 ) );
 	}
 
+	// In-flight consolidated boot request (see boot()). Loaders await it and
+	// short-circuit when their section landed; null outside the boot window,
+	// so every later call behaves exactly as before.
+	let bootSeed = null;
+
+	// Seed caches and badges from a /boot-status response — each section is
+	// produced server-side by the same route the standalone load would have
+	// hit, so this is shape-identical to the fetches it replaces.
+	function seedFromBootStatus( d ) {
+		if ( ! d ) return;
+		if ( d.notifications ) {
+			state.cache.notifications = d.notifications.items || [];
+			updateUnreadDot();
+		}
+		if ( Array.isArray( d.plugins ) ) {
+			state.cache.plugins = d.plugins;
+			state.cache.pluginNames = buildPluginNameMap( d.plugins );
+			state.cache.pluginUpdates = ( d.pluginUpdates && d.pluginUpdates.updates ) || {};
+			state.cache.themeUpdates = ( d.pluginUpdates && d.pluginUpdates.themes ) || {};
+			if ( d.pluginMeta ) state.cache.pluginMeta = d.pluginMeta;
+			const dot = $( '#minn-plugin-dot' );
+			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! Object.keys( state.cache.themeUpdates ).length;
+		}
+		if ( B.caps.core && d.core ) {
+			state.cache.core = d.core;
+			updateCoreChip();
+		}
+		if ( d.pendingComments != null ) {
+			const badge = $( '#minn-comments-count' );
+			if ( badge ) {
+				badge.textContent = d.pendingComments;
+				badge.hidden = ! d.pendingComments;
+			}
+		}
+		if ( Array.isArray( d.types ) ) {
+			state.cache.types = d.types
+				.filter( ( t ) => t.viewable && t.rest_base && ! HIDDEN_TYPES.includes( t.slug ) )
+				.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: t.name } ) );
+		}
+		if ( B.wc && B.caps.orders && d.orders ) {
+			state.cache.orderSummary = { month: d.orders.month || null, processing: d.orders.processing != null ? d.orders.processing : null };
+			const badge = $( '#minn-orders-count' );
+			if ( badge && d.orders.processing != null ) {
+				badge.textContent = d.orders.processing;
+				badge.hidden = ! d.orders.processing;
+			}
+		}
+	}
+
 	function boot() {
+		// Fire the consolidated boot request FIRST: every startup loader
+		// (including the ones the initial view render triggers) awaits this
+		// in-flight seed and short-circuits when its section landed, so the
+		// old ~9-request burst collapses to one. Absent sections (capability,
+		// provider error, older server without the route) fall through to the
+		// standalone fetches — a degraded boot equals the old behavior.
+		bootSeed = ( async () => {
+			let d = null;
+			try {
+				d = await api( 'minn-admin/v1/boot-status' );
+			} catch ( e ) {}
+			seedFromBootStatus( d );
+			return d;
+		} )().finally( () => { bootSeed = null; } );
+
 		// Migrate legacy #/route links onto path routing.
 		if ( PATH_MODE ) {
 			if ( location.hash.startsWith( '#/' ) ) {
@@ -28127,8 +28218,19 @@
 			}
 		} );
 
-		// Background: unread indicator, plugin update dot, pending comment count.
+		// Background: unread indicator, plugin update dot, pending comment
+		// count, core chip, types and order summary. All of these (and the
+		// same loads fired by the initial view render) dedup against the
+		// bootSeed request created at the top of boot(); only sections it
+		// could not provide actually fetch here.
 		loadNotifications();
+		if ( B.caps.plugins ) {
+			loadPlugins().catch( () => {} );
+		}
+		if ( B.caps.core ) loadCoreStatus().catch( () => {} );
+		refreshCommentBadge();
+		loadTypes().catch( () => {} );
+		if ( B.wc && B.caps.orders ) loadOrderSummary().catch( () => {} );
 		// Admin-notice digest: when the last capture is stale, trigger a
 		// hidden wp-admin pageload that Minn short-circuits into structured
 		// notice data (never third-party HTML), then refresh notifications.
@@ -28142,15 +28244,6 @@
 				} )
 				.catch( () => {} );
 		}
-		if ( B.caps.plugins ) {
-			loadPlugins().catch( () => {} );
-		}
-		// Core-update chip in the topbar — visible on every route while an
-		// update pends. wp_version_check self-throttles, so this is cheap.
-		if ( B.caps.core ) loadCoreStatus().catch( () => {} );
-		refreshCommentBadge();
-		loadTypes().catch( () => {} );
-		if ( B.wc && B.caps.orders ) loadOrderSummary().catch( () => {} );
 		// Warm the content cache so the sidebar count appears.
 		if ( state.route !== 'content' ) loadContent().catch( () => {} );
 
