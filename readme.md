@@ -258,6 +258,7 @@ working instance of the API is one click away.
 
 ## Documentation
 
+- [Using Minn Admin](docs/user-guide.md) (the site-owner guide: getting around, writing, staying in control, safety)
 - [Project goals](docs/goals.md)
 - [Editor direction](docs/editor-direction.md)
 - [Editor roadmap](docs/editor-roadmap.md)
