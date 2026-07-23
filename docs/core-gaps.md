@@ -2,8 +2,10 @@
 
 Audited 2026-07-10 against v0.10.0; stale-checked 2026-07-12 during the
 v0.13.0 cycle (WP 7.0.1); re-checked 2026-07-13 at v0.14.0 open; light
-re-check 2026-07-15 at v0.16.0 open: every ranked priority remains shipped,
-no new daily-work gaps in core areas. Dev tools Wave A is complete
+re-check 2026-07-15 at v0.16.0 open; re-checked 2026-07-23 at v0.21.0 open
+(comment editing + commenter blocking, site logo and site language all
+shipped in the v0.20.0 cycle; sections below updated): every ranked
+priority remains shipped, no new daily-work gaps in core areas. Dev tools Wave A is complete
 (Diagnostics family); further inventory work is adapter depth or parked
 native surfaces (`plugin-support.md`, `native-editors.md`). Minn's
 positioning grades these: daily work belongs in Minn, the long tail stays
@@ -92,8 +94,9 @@ moderation, registration required, avatars on/off), Permalinks (structure +
 bases), Spam (provider cards + disallowed keys), Connectors (WP 7.0's
 connector registry: provider keys with core-side masking and validation,
 key-source honesty for wp-config/env keys, companion-plugin install in
-place). Missing: the entire Media
-settings screen (thumbnail sizes, month/year folders), site language,
+place), plus site logo and site language on the Site tab since the v0.20.0
+cycle. Missing: the entire Media
+settings screen (thumbnail sizes, month/year folders),
 `posts_per_rss` / feed excerpt, and most of the Discussion matrix (threading
 depth, per-page, previously-approved shortcut, close-after-days, notification
 emails, avatar rating/default). Judgment: what's missing is set-once config;
@@ -125,8 +128,10 @@ installs, so a browse-first provider contract is Wave D in
 ### Comments — complete, single-row and bulk
 Tabs for pending/approved/spam/trash, full per-row moderation, bulk
 moderation with per-tab verbs (shipped v0.11.0), inline reply
-(auto-approves like core), context menu. Missing: editing a comment's
-text/author, per-commenter block.
+(auto-approves like core), context menu. The last two gaps closed in the
+v0.20.0 cycle: inline comment editing (text always; author name/email for
+guest comments) and Block commenter (adds the author's email or IP to
+core's disallowed list, visible under Settings → Comments, with Undo).
 
 ### Multisite — non-goal, degrades sanely
 Defensive gating exists (`manage_network_users`, super-admin file-mod

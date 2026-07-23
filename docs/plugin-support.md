@@ -21,17 +21,17 @@ shared view; "action" = a ⌘K / menu command.
 | **Events** | The Events Calendar | Events are a REST CPT, so the Content list and Minn editor already carry them; the **Event details** editor panel covers start/end, all-day, venue and organizer (async-search pickers over TEC's own records), cost and website, all written through TEC's own saveEventMeta (duration, UTC mirrors and linked-post bookkeeping stay TEC's). Multiple organizers, recurrence, tickets, timezone and venue/organizer creation stay in TEC |
 | **Jobs** | WP Job Manager | Listings are a REST CPT, so the Content list and Minn editor already carry them; the **Job listing** editor panel adds the details estate (location, company fields, application email or URL, salary, remote/filled/featured flags, expiry) read live from WPJM's own field schema, with WPJM's own per-field sanitizers ruling every write |
 | **Podcasting** | Seriously Simple Podcasting, PowerPress | SSP: episodes are a REST CPT, so the Content list and Minn editor already carry them; the **Podcast episode** editor panel adds the whole episode-detail estate (file URL, audio/video type, duration, file size, date recorded, explicit and block flags, the iTunes fields) read live from SSP's own schema and stored in its own conventions (cover image and Castos hosting sync stay SSP's). PowerPress: the same panel on plain posts for the default channel (media URL, size, duration, subtitle, Apple episode fields), rebuilding its enclosure blob diff-based so hosting, chapters and artwork keys survive untouched; custom channels, artwork, explicit and chapters stay on its metabox |
-| **Forms** | Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 (via Flamingo), CFDB7, Ninja Forms, Forminator, Formidable, Everest Forms | **Forms** surface — entries as contact cards. Providers with status workflows (Everest, Fluent, Ninja, Flamingo, Elementor Pro) share Received/Spam-or-Unread/Trash filters with restore and bulk; CFDB7 filters All/Unread/Read. Gravity Forms adds the full entry workflow through its own endpoints: Received/Spam/Trash status views, star/unstar and mark-read (open marks read like GF's own screen), restore and delete-permanently where they apply, bulk actions, entry notes on the card plus add-a-note, and resend notifications. A **Notifications** view (edit-forms capability, via GF's own resolver) lists every notification across forms with type-aware recipients (address / field label / routing rule count), activate-deactivate through GF's own toggle, and daily-field editing (name, send-to, subject, message) through GF's own notifications store; routing rules, conditional logic and events stay in GF's editor, one deep link away. Each form's row opens **Form settings**: the whole form-settings estate (basics, layout, save-and-continue, restrictions, spam detection, options) drawn at request time from GF's own Settings-framework schema and saved through `GFAPI::update_form` with GF's own validation semantics; schedule date-times stay in GF, honestly counted as locked. A **Feeds** view (shown while a feed add-on is registered) lists every add-on integration across forms with activate, deactivate and delete through GF's own model; feed configuration deep-links to the add-on's screen |
-| **Email** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging | **Email** surface (renamed from Email Log once it grew settings) — sent mail, resend, single/bulk log delete. FluentSMTP, Post SMTP and WP Mail Logging all have status cards (14-day charts); FluentSMTP also has test send, subject/from/to search, single/bulk log delete through its Logger, and a **Settings** view (default and fallback connection, logging, retention, email simulation through its own Settings model; the connection wizard stays FluentSMTP's); Post SMTP has search + single/bulk delete; WPML bulk-deletes log rows. Gravity SMTP goes deeper: a **Settings** view maps its own settings schema into Minn (sending service across all 21 connectors, connector config with masked secrets, general/logging settings through its constant-lock-aware stores), the surface honors its granular `gravitysmtp_*` capabilities (including `DELETE_EMAIL_LOG` for log delete through its own `Event_Model`), the event detail reads through its own models (from/cc/bcc/source), resend replays its own recipient handling through the configured connector, a **Suppressions** view lists/adds/reactivates blocked addresses through its own model, a **Debug log** view, a **Routing** view of 2.3+ conditional send rules (enable/disable/delete; condition authoring stays in Gravity SMTP), a **Filtered** log tab for partially-sent events, and a status card with active service, test mode, routing counts, a 14-day chart, and **Send a test email** |
+| **Forms** | Gravity Forms, Fluent Forms, Elementor Pro, Contact Form 7 (via Flamingo), CFDB7, Ninja Forms, Forminator, Formidable, Everest Forms, SureForms | **Forms** surface — entries as contact cards. Providers with status workflows (Everest, Fluent, Ninja, Flamingo, Elementor Pro) share Received/Spam-or-Unread/Trash filters with restore and bulk; CFDB7 filters All/Unread/Read. Gravity Forms adds the full entry workflow through its own endpoints: Received/Spam/Trash status views, star/unstar and mark-read (open marks read like GF's own screen), restore and delete-permanently where they apply, bulk actions, entry notes on the card plus add-a-note, and resend notifications. A **Notifications** view (edit-forms capability, via GF's own resolver) lists every notification across forms with type-aware recipients (address / field label / routing rule count), activate-deactivate through GF's own toggle, and daily-field editing (name, send-to, subject, message) through GF's own notifications store; routing rules, conditional logic and events stay in GF's editor, one deep link away. Each form's row opens **Form settings**: the whole form-settings estate (basics, layout, save-and-continue, restrictions, spam detection, options) drawn at request time from GF's own Settings-framework schema and saved through `GFAPI::update_form` with GF's own validation semantics; schedule date-times stay in GF, honestly counted as locked. A **Feeds** view (shown while a feed add-on is registered) lists every add-on integration across forms with activate, deactivate and delete through GF's own model; feed configuration deep-links to the add-on's screen. SureForms entries ride its clean JSON table with per-form tabs, read/unread/trash status actions, search, delete and a status card |
+| **Email** | Gravity SMTP, FluentSMTP, WP Mail SMTP, Post SMTP, WP Mail Logging, SureMails, Site Mailer | **Email** surface (renamed from Email Log once it grew settings) — sent mail, resend, single/bulk log delete. FluentSMTP, Post SMTP and WP Mail Logging all have status cards (14-day charts); FluentSMTP also has test send, subject/from/to search, single/bulk log delete through its Logger, and a **Settings** view (default and fallback connection, logging, retention, email simulation through its own Settings model; the connection wizard stays FluentSMTP's); Post SMTP has search + single/bulk delete; WPML bulk-deletes log rows. Gravity SMTP goes deeper: a **Settings** view maps its own settings schema into Minn (sending service across all 21 connectors, connector config with masked secrets, general/logging settings through its constant-lock-aware stores), the surface honors its granular `gravitysmtp_*` capabilities (including `DELETE_EMAIL_LOG` for log delete through its own `Event_Model`), the event detail reads through its own models (from/cc/bcc/source), resend replays its own recipient handling through the configured connector, a **Suppressions** view lists/adds/reactivates blocked addresses through its own model, a **Debug log** view, a **Routing** view of 2.3+ conditional send rules (enable/disable/delete; condition authoring stays in Gravity SMTP), a **Filtered** log tab for partially-sent events, and a status card with active service, test mode, routing counts, a 14-day chart, and **Send a test email**. SureMails and Site Mailer get the full log treatment over their free log tables (tabs, search, delete, status card + chart, sandboxed HTML detail; Site Mailer is a cloud sender, so no local resend) |
 | **Redirects** | Redirection, Safe Redirect Manager, Simple 301 Redirects, 301 Redirects (WebFactory) | **Redirects** surface — list + in-place edit + bulk delete; Redirection's first-run install runs in place via the setup gate, its daily options (monitor, log retention, IP logging) live in a Settings view through its own `red_set_options`, and a status card leads the surface (rules, hits, served/404 counts and a stacked 14-day chart from its log tables) |
-| **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence**, **Limit Login Attempts Reloaded**, **Solid Security** | **Activity Log** surface — severity/level tabs (Simple History, WSAL), connector tabs (Stream), action tabs (Aryo); every provider has a **status card** (audit logs: 24h / 7d / all-time + last event and a family-specific mix; Wordfence: 24h logins + firewall/scan posture; Limit Login Attempts and Solid Security: lockouts now + policy/protection, with one-click Unlock/Release through each plugin's own store) |
+| **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence**, **Limit Login Attempts Reloaded**, **Solid Security**, **All-In-One Security** | **Activity Log** surface — severity/level tabs (Simple History, WSAL, AIOS), connector tabs (Stream), action tabs (Aryo); every provider has a **status card** (audit logs: 24h / 7d / all-time + last event and a family-specific mix; Wordfence: 24h logins + firewall/scan posture; Limit Login Attempts and Solid Security: lockouts now + policy/protection, with one-click Unlock/Release through each plugin's own store). AIOS reads its audit-log table with JSON details flattened to context rows |
 | **Security posture** | Wordfence, Really Simple SSL, Solid Security | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
 | **Snippets** | Code Snippets, WPCode, FluentSnippets, Simple Custom CSS and JS, Header Footer Code Manager | **Snippets** surface — list, toggle, edit, create, bulk (provider switcher when more than one is active) |
 | **Analytics** | Koko, WP Statistics, Burst, Independent Analytics, AnalyticsWP, **Site Kit** | Overview **Traffic** chart (daily visitors/pageviews). Day-click drill-down (top pages + referrers via `minn_admin_traffic_day`): **Koko**, **WP Statistics** (hits only per URI), **Burst** (`page_url` + session referrers), **Independent Analytics** (views × resources + session referrers) |
 | **Backups** | UpdraftPlus, Disembark, Duplicator, WPvivid, BackWPup, All-in-One WP Migration | **Backups** surface; health check + "Back up now" (UpdraftPlus, else WPvivid); status card, CLI command, sessions + cleanup (Disembark); package list with disk sizes, status card and delete-through-its-own-cleanup (Duplicator, no freshness claims: manual builds); backup list + status card + schedule + backup-now + delete-through-its-own-cleanup (WPvivid); local FOLDER archives + run-job-now + delete through their destination (BackWPup); local .wpress export list + delete through their Backups model, no freshness claims (All-in-One WP Migration; export/import stay deep links) |
 | **Caching** | Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket, WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor CSS, SpeedyCache, Redis Object Cache, Breeze, Nginx Helper, Cloudflare | **Clear site cache** action (⌘K). Redis Object Cache also adds a System health row for drop-in + connection posture |
 | **Custom fields** | ACF (+ Pro), Meta Box, Pods | Editor panel (text, textarea, number, select, radio, checkbox/switch/boolean). ACF needs "Show in REST API" on the field group; Meta Box values ride a `minn_meta_box` REST field (`rwmb_set_meta`); Pods values ride `minn_pods` (`pods()->save()` on extended post types). Advanced types (clones, file, relationships, multi-pick…) count as locked with a wp-admin link |
-| **Ecommerce** | WooCommerce, **WooCommerce Subscriptions** | **Orders** (list, search, status, refunds, pay URL, resend/custom email, order notes, **New order**, **Analytics** view with revenue chart + top products via `wc-analytics`) + **Products** (list, search, stock tabs incl. Low stock, bulk, daily fields, **Add product**) + **Coupons** (list/create/edit) + **Customers** (list/search, profile + billing, recent orders; **Subscriptions** strip when WCS is active) + Overview stats. **Subscriptions** (when WCS is active): status tabs, search, next payment, period label, status save through `wc/v3/subscriptions`, parent order + related orders, View customer, and a reverse link from the order modal. Product, coupon and subscription CPTs are fenced out of Content |
+| **Ecommerce** | WooCommerce, **WooCommerce Subscriptions** | **Orders** (full-page order view with its own URL plus a quick-view modal; list, search, status, **Record payment** by hand through `payment_complete`, line-item refunds with restock and gateway-honest copy, pay URL, resend/custom email, order notes, the customer's other orders, **New order**, an Overview **Store strip** of orders needing attention, **Analytics** view with revenue chart + top products via `wc-analytics`; WooCommerce log channels also feed the System log viewer through its own log controller) + **Products** (list, search, stock tabs incl. Low stock, bulk, daily fields, **Add product**) + **Coupons** (list/create/edit) + **Customers** (list/search, profile + billing, recent orders; **Subscriptions** strip when WCS is active) + Overview stats. **Subscriptions** (when WCS is active): status tabs, search, next payment, period label, status save through `wc/v3/subscriptions`, parent order + related orders, View customer, and a reverse link from the order modal. Product, coupon and subscription CPTs are fenced out of Content |
 | **Spam filtering** | Akismet, Antispam Bee, CleanTalk, WP Armour | Settings → Spam provider cards; open via `minn_admin_spam_providers` |
 | **Licenses** | Elementor Pro, ACF PRO, WP Rocket, Gravity Forms, Gravity SMTP, AnalyticsWP, Bricks, Divi, Beaver Builder, WPBakery, Brizy, Etch, Astra/Brainstorm family, WPMU DEV (Dashboard + Smush Pro), SearchWP, Gravity Perks, Rank Math Pro, Perfmatters, GP Premium, WP All Import/Export Pro, Slider Revolution, LayerSlider, Avada, Envato Market, The Events Calendar family (Pro, Event Tickets Plus, Filter Bar, Community, each a dedicated provider) + any other StellarWP Uplink or PUE product generically, Kadence Blocks Pro, Smash Balloon (Instagram / Facebook / YouTube / Twitter / Social Wall / Reviews / TikTok / Feed Analytics Pro, including All Plugins multi-product keys), Yoast SEO Premium (MyYoast portal), Search & Filter Pro, Admin Columns Pro, plus any Freemius, EDD Software Licensing or SureCart plugin generically | Extensions → **Licenses** tab (grouped by state, inactive components collapsed, actions in a per-row menu; the System health check is the clickable doorway): valid / expired / invalid / missing per paid component; paste-to-activate for Elementor Pro, ACF PRO, Gravity Forms, Gravity SMTP, Beaver Builder, Brizy Pro, Etch, Bricks and Divi (active theme; Divi takes username + API key), WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium, WP All Export Pro, LayerSlider, all four The Events Calendar products, Kadence Blocks Pro, Search & Filter Pro and Admin Columns Pro, deactivate and re-verify where each vendor's code allows, and an "Activate ↗" link for portal- or admin-context-bound vendors (WPBakery, Rank Math, Envato, WP All Import, Slider Revolution), all through each vendor's own code; open via `minn_admin_license_providers` |
 | **Site visibility** | WP Maintenance Mode, SeedProd, Under Construction, Password Protected, WooCommerce coming soon (incl. the store-pages-only partial shape), Elementor maintenance mode, plus Minn's own maintenance mode and the `blog_public` "discourage search engines" setting | Overview banner + persistent amber topbar chip (on every route) + System health check when the site is hidden, partly hidden, password-gated or unindexed; Settings → Visibility lists active third-party limiters; open via `minn_admin_visibility_providers` |
@@ -84,15 +84,17 @@ themselves through the extension filters.
 
 ## Roadmap candidates
 
-Refreshed 2026-07-15 mid **v0.16.0** (after v0.15.0 library cycle + Smash /
-Yoast license providers + Gravity SMTP bulk log delete). Coverage history
-lives in the table above; living primitive matrix + sweep log is
-`docs/adapter-coverage.md`.
+Refreshed 2026-07-23 at **v0.21.0** open (after the v0.18.0 depth cycle
+shipped Waves B and D, v0.19.0 spent the cycle on WooCommerce depth,
+v0.20.0 on consent + two license vendors, and the unreleased v0.21.0 work
+is polish: i18n, accessibility, boot consolidation, updater hash, user
+guide). Coverage history lives in the table above; living primitive matrix
++ sweep log is `docs/adapter-coverage.md`.
 
-> **v0.17.0 note (2026-07-16):** adapter waves PAUSE for one cycle. The
-> v0.17.0 charter is the plugin-author cycle (developer experience and abuse
+> **v0.17.0 note (2026-07-16):** adapter waves PAUSED for one cycle. The
+> v0.17.0 charter was the plugin-author cycle (developer experience and abuse
 > resistance on the road to v1.0) — see `docs/v1-readiness.md`. The waves
-> below resume afterwards.
+> resumed 2026-07-17 in the v0.18.0 cycle, which closed Wave B and Wave D.
 
 ### Wave A — Dev tools ✅ complete (v0.14.0)
 
@@ -137,9 +139,10 @@ Source-verified 2026-07-17 (installed all four on minnadmin):
    also landed in the commerce cycle.
 5. **WPForms Pro entries** — Lite stores no entries; needs Pro license +
    fixtures; biggest uncovered forms name.
-6. ~~**Meta Box** editor panel~~ ✅ shipped (v0.15.0). **The Events Calendar**
-   editor panel (date/venue meta), **Jetpack Stats** / **Matomo** traffic
-   providers (auth and data-shape study first).
+6. ~~**Meta Box** editor panel~~ ✅ shipped (v0.15.0). ~~**The Events Calendar**
+   editor panel~~ ✅ shipped 2026-07-17 (v0.18.0: Event details panel +
+   the async `suggest` field primitive). Still open: **Jetpack Stats** /
+   **Matomo** traffic providers (auth and data-shape study first).
 
 ### Wave D — Media management (researched 2026-07-16, wp.org installs live)
 
@@ -147,12 +150,13 @@ Minn's media core is already caught up (caption/description, bulk delete,
 image editor, Regenerate Thumbnails + Safe SVG wired), so this wave is
 adapters plus one new primitive, ranked:
 
-7. **Enable Media Replace** (600k) — the best single pick: a "Replace
-   file…" action on the media detail modal through their own handler, URL
-   preserved. Small, daily-ops, no canvas to rebuild.
-8. **Core media polish** (no plugin) — unattached + date filters and
-   "attached to" info, already ranked in `docs/core-gaps.md`. Serves every
-   install.
+7. ~~**Enable Media Replace** (600k)~~ **SHIPPED 2026-07-17** (v0.18.0):
+   ⇅ Replace file on the media detail modal through EMR's own
+   ReplaceController, URL preserved, same-type enforced; rename-and-move
+   stays on EMR's screen.
+8. ~~**Core media polish** (no plugin)~~ **SHIPPED 2026-07-17** (v0.18.0):
+   Unattached filter, month combobox, and the detail modal's "Attached to"
+   row with an editor jump (see `docs/core-gaps.md`).
 9. **Media folders provider contract, browse-first** — **SHIPPED 2026-07-17**
    (v0.18.0 cycle): the `minn_admin_media_folders` filter feeds a folder
    combobox in the Media toolbar (folder → attachment-ids shim → `include=`
@@ -188,9 +192,10 @@ long tail.
 
 ### Licenses fleet (see `docs/license-manager.md`)
 
-~~Smash Balloon~~ and ~~Yoast SEO Premium~~ shipped 2026-07-15. Remaining
-fleet-ranked open work is mostly long-tail Freemius/EDD verification and
-Admin Columns Pro (reader already covers it).
+~~Smash Balloon~~ and ~~Yoast SEO Premium~~ shipped 2026-07-15;
+~~Search & Filter Pro~~ and ~~Admin Columns Pro~~ shipped 2026-07-19
+(v0.20.0, full activation loops with real keys). Remaining fleet-ranked
+open work is the long-tail Freemius/EDD verification list.
 
 ### Axis A leftovers (adapter depth, not new plugins)
 
@@ -200,8 +205,9 @@ From `docs/adapter-coverage.md` and `docs/full-ui-adapters.md` (2026-07-15):
   FluentSMTP / Post SMTP / WPML).
 - ~~Activity-log status cards~~ ✅ shipped (Simple History, WSAL, Stream,
   Aryo; Solid / LLA-R / Wordfence already had them).
-- **Richer `sectionsRoute` row types** (`pill`, `code`, `html-preview`,
-  `kv-table`) for email-log detail fidelity.
+- ~~Richer `sectionsRoute` row types~~ ✅ shipped 2026-07-17 (v0.18.0:
+  `pill`, `code`, sandboxed `html-preview`, `kv-table`; the whole mail
+  family's log detail converted).
 - Status/chart parity on thinner adapters when a family sweep is scheduled
   (`/dev-minn-admin sweep`).
 

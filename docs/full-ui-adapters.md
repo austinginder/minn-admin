@@ -43,9 +43,9 @@ whether the adapter approach scales to full coverage.
    has a proven answer: delegate, exactly like page builders ("Edit in Gravity Forms"
    is one click, with no wp-admin chrome needed for the builder-style screens).
 
-## Where the adapter system stands today (re-verified at v0.16.0 open, 2026-07-15)
+## Where the adapter system stands today (re-verified at v0.16.0 open, 2026-07-15; stale-checked 2026-07-23 at v0.21.0 open)
 
-The thesis held. Rungs 1–2 are shipped, Rung 3 is mostly shipped, and two
+The thesis held. Rungs 1–2 are shipped, Rung 3 is essentially shipped, and two
 hard case studies (Gravity Forms + Gravity SMTP) plus a cold third
 (Perfmatters) proved the multiplier. Ground truth for the vocabulary is
 still `docs/for-plugin-authors.md` and the validator constants in
@@ -57,7 +57,7 @@ still `docs/for-plugin-authors.md` and the validator constants in
 |---|---|---|
 | **1 — form engine** | ✅ shipped (v0.12.0) | One vocabulary renders surface create/edit, editor panels and inspector controls (`required` / `default` / `help` / `placeholder` / `showWhen`, toggles, selects as themed comboboxes in adapter dialects). |
 | **2 — settings surfaces + mappers** | ✅ shipped (v0.12.0–v0.13.0) | Surface `settings` key (tabs + one GET/POST route per tab); **settings-only** surfaces (no `collection`); **item-scoped** settings (`route` with `{id}`, entered via `settingsItem` actions). Four schema frameworks covered: Gravity SMTP component trees, Minn's form vocabulary, core WP Settings API (Perfmatters), GF Settings framework (form settings). |
-| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards (incl. chart series, v0.13.0), `views[]` extra list views, manage-slot second collections, **list-row ⋯ menus** from `actions` (v0.13.0). Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. Remaining: richer `sectionsRoute` row types. |
+| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards (incl. chart series, v0.13.0), `views[]` extra list views, manage-slot second collections, **list-row ⋯ menus** from `actions` (v0.13.0). Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. Richer `sectionsRoute` row types (`pill`/`code`/`html-preview`/`kv-table`) shipped v0.18.0; **sortable columns** (`sort` tokens + `sortQuery`) shipped 2026-07-17. Remaining: per-item stat tiles, more chart consumers. |
 | **4 — bespoke** | policy holding | Deep-link everywhere a screen is a canvas. The "80% form editor" over clean documents is scoped in `docs/native-editors.md` (parked, prerequisite plumbing now live). |
 
 ### Still open from the Rung-3 list
@@ -262,7 +262,7 @@ Rungs 1–3 it is nearly the whole plugin.
 
 | Surface | Status | Mechanics |
 |---|---|---|
-| Email log + detail + resend + delete | ✅ | custom tables; resend through its models (regex fallback); single/bulk delete via Event_Model (v0.16); richer HTML-preview row type still open |
+| Email log + detail + resend + delete | ✅ | custom tables; resend through its models (regex fallback); single/bulk delete via Event_Model (v0.16); sections detail with status pill, sandboxed HTML preview and headers kv-table (v0.18.0, the first row-types consumer) |
 | Connector config (21 connectors) | ✅ (v0.12.0) | `settings_fields()` once; sensitive-sentinel preserved |
 | General / test-mode / logging settings | ✅ | through its own data stores + constant-lock awareness |
 | Suppressions | ✅ | manage-slot list + create + reactivate |
@@ -283,7 +283,7 @@ component-tree response shapes.
 |---|---|---|
 | **1 — keystone** | Unified form engine; port panels; upgrade create/edit | ✅ shipped v0.12.0 |
 | **2 — multiplier** | `settings` surface + Gravity SMTP mapper, then GF form settings + notifications | ✅ shipped v0.12.0–v0.13.0 (confirmations + GF plugin settings deliberately skipped) |
-| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards + chart, list row-actions | mostly ✅; remaining: richer sectionsRoute rows, more chart consumers |
+| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards + chart, list row-actions | ✅ (sectionsRoute row types + sortable columns landed v0.18.0); remaining polish: per-item stat tiles, more chart consumers |
 | **4 — declare victory** | Document mapper pattern for third parties; GF form editor stays deep link | docs live in `for-plugin-authors.md`; 80% editor parked in `native-editors.md` |
 
 Natural next builds inside this ladder (not a ranked product roadmap; see
@@ -291,7 +291,8 @@ Natural next builds inside this ladder (not a ranked product roadmap; see
 
 1. More chart consumers (GF form results) on the status-card chart shape.
    ~~Ecommerce analytics~~ ✅ shipped v0.14.0 (Orders Analytics pill).
-2. Richer detail row types (email HTML preview, kv tables).
+2. ~~Richer detail row types (email HTML preview, kv tables)~~ ✅ shipped
+   (v0.18.0, whole mail family converted).
 3. ~~Surface list row-actions (⋯ menus)~~ ✅ shipped (v0.13.0).
 4. ~~GSMTP bulk log delete~~ ✅ shipped (v0.16.0 open).
 5. ~~GF add-on/feed settings mapper~~ — resolved 2026-07-17: the Feeds VIEW shipped

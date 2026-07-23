@@ -300,7 +300,11 @@ Revolution was DEMOTED to an "Activate ↗" link: its
 `activate_plugin()` is welded to admin-only classes (RevSliderTracking,
 the load balancer that only registers in RevSliderGlobals during admin
 init) that do not load in a REST request, and reproducing that boot order
-is the vendor-internals guessing the guardrails forbid.
+is the vendor-internals guessing the guardrails forbid. (Reversed
+2026-07-11: two `include_once` calls from `RS_PLUGIN_PATH` load exactly
+those classes under REST with no boot-order guessing, so the full
+activate / deactivate / verify loop shipped and passed with a real key;
+see the tested table below.)
 The generic EDD/Freemius verification pass is now moot for the tail: the
 audit found the filename-only EDD fingerprint MISSES the renamed-updater
 plugins (SearchWP, Soflyy) and the option-pair sweep MISSES GP Premium's
@@ -335,13 +339,16 @@ Gravity Forms 2,543 sites, Gravity SMTP 1,440, Elementor Pro 1,191, ACF PRO
    product with its own EDD item_name; real-key pass 2026-07-15), ~~**Yoast
    Premium**~~ SHIPPED (2026-07-15: MyYoast portal reader + Activate ↗ to
    `wpseo_licenses` + verify that refreshes site_information; no paste-a-key,
-   Rank Math shape; free wordpress-seo required), **Admin Columns Pro** (140,
-   reader already covers it).
+   Rank Math shape; free wordpress-seo required), ~~**Admin Columns Pro**~~
+   SHIPPED (2026-07-19, v0.20.0: full loop with a real key; headless
+   container bootstrap, key-for-token swap handled; 140 sites).
 6. **Cheap wins**: ~~Perfmatters~~ (142) and ~~GP Premium~~ both got
    dedicated readers this wave (the generic sweep does NOT cover them:
-   renamed and nonstandard option names). Still open with no vendor code:
-   Search & Filter Pro, Unlimited Elements, Stackable Premium, Permalink
-   Manager Pro (verify the Freemius/EDD sweeps light these up).
+   renamed and nonstandard option names). ~~Search & Filter Pro~~ SHIPPED
+   (2026-07-19, v0.20.0: full loop with a real key via their own REST
+   controller callables). Still open with no vendor code: Unlimited
+   Elements, Stackable Premium, Permalink Manager Pro (verify the
+   Freemius/EDD sweeps light these up).
 
 Remaining fleet-ranked open work: the long-tail Freemius/EDD verification
 list above.
@@ -426,6 +433,7 @@ Builder, Brizy Pro, Etch, Bricks, Divi, and the fleet-ranked tail (WPMU DEV,
 Smush Pro, SearchWP, Gravity Perks, Rank Math Pro, Perfmatters, GP Premium,
 WP All Import/Export Pro, Slider Revolution, LayerSlider, Avada, Envato
 Market, The Events Calendar family + StellarWP Uplink, Smash Balloon family,
-Yoast SEO Premium MyYoast). Remaining: a real-key / portal activation pass by
-the owner for anything still untested, then the long-tail Freemius/EDD
-verification list.
+Yoast SEO Premium MyYoast). Search & Filter Pro and Admin Columns Pro joined
+2026-07-19 (v0.20.0), both real-key full loops. Remaining: a real-key /
+portal activation pass by the owner for anything still untested, then the
+long-tail Freemius/EDD verification list.

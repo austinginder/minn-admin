@@ -190,7 +190,13 @@ point were the last items).
 ## Horizon 3 — the editor as platform (1.0+)
 
 - **Presence** (who else has this post open), building on core's locks rather than
-  inventing collaboration infrastructure.
+  inventing collaboration infrastructure. First slices shipped: the v0.19.0 cycle
+  closed the lock story's last blind windows (saves carry an `X-Minn-Expect-Lock`
+  header verified server-side, so an ousted session can never silently overwrite;
+  regaining a lock checks the server's modified stamp and offers "Load theirs"),
+  and the v0.20.0 content list shows a "{name} is editing" chip read from core's
+  own edit lock. Live cursors / multi-presence beyond the lock model remain the
+  open 1.0+ question.
 - **Offline-tolerant drafting** if the localStorage net from Horizon 1 proves itself.
 - **The marketing turn.** minnadmin.com leads with the editor: the hero is the writing
   surface, the admin is "and it comes with a better admin around it." The readme and
@@ -218,9 +224,10 @@ good.
 
 - **No build step stays.** One file, sections clearly banded. If the editor doubles the
   file, it doubles the file — greppability beats architecture astronautics at this scale.
-- **The test suites become repo citizens.** The Playwright suites that verified v0.5.x
-  (markdown rules, autosave semantics, island guards, table ops, embed pipeline) should
-  live in `tests/` and run before releases, not be rebuilt in scratchpads.
+- **The test suites are repo citizens** (done since 2026-07-05). The Playwright suites
+  live in `tests/` with shared helpers and conventions in `tests/README.md`; a
+  sequential full-suite runner drove all 171 suites green before v0.18.0 and is part
+  of the release rhythm. Editor bug fixes still ship with a ported suite.
 - **Safety model is frozen.** `editorModeFor` → classic/blocks/locked, byte-identity
   islands, attribute allowlists that must be DOM-reproducible. New capabilities extend
   the allowlists one proven attribute at a time (see editor-direction.md); they never
