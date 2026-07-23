@@ -236,6 +236,23 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// One round trip for the boot burst: notifications, plugin caches,
+		// core status, pending-comment badge, types and the order summary.
+		// Each section internally rides the SAME route the standalone fetch
+		// used, so shapes and permission checks stay identical by
+		// construction. The standalone routes all remain (refreshes use them).
+		register_rest_route(
+			self::NS,
+			'/boot-status',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'boot_status' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/notifications/read',
@@ -2682,6 +2699,121 @@ class Minn_Admin_REST {
 	/**
 	 * Notification feed: pending comments, recent comments, plugin/core updates.
 	 */
+	/**
+	 * Consolidated boot payload — the app's startup burst was ~9 parallel
+	 * REST requests, each paying a full WordPress bootstrap (on shared
+	 * hosting with a few FPM workers they serialize into seconds of
+	 * trickling panels). This aggregates them into one request by
+	 * dispatching each section through its existing route internally.
+	 *
+	 * A section the user cannot read (or whose provider errors) is simply
+	 * ABSENT from the response — the client falls back to its per-section
+	 * capability gates and standalone loads, so a transient failure here
+	 * degrades to exactly the old behavior.
+	 *
+	 * @return array Sections keyed for the client's cache seeding.
+	 */
+	public static function boot_status() {
+		$sub = function ( $path, $params = array() ) {
+			$req = new WP_REST_Request( 'GET', $path );
+			foreach ( $params as $k => $v ) {
+				$req->set_param( $k, $v );
+			}
+			$res = rest_do_request( $req );
+			return ( $res instanceof WP_REST_Response && ! $res->is_error() ) ? $res : null;
+		};
+		$total = function ( $res ) {
+			$h = $res ? $res->get_headers() : array();
+			return isset( $h['X-WP-Total'] ) ? (int) $h['X-WP-Total'] : null;
+		};
+
+		$out = array();
+
+		$res = $sub( '/' . self::NS . '/notifications' );
+		if ( $res ) {
+			$out['notifications'] = $res->get_data();
+		}
+
+		$res = $sub( '/' . self::NS . '/core' );
+		if ( $res ) {
+			$out['core'] = $res->get_data();
+		}
+
+		if ( current_user_can( 'activate_plugins' ) ) {
+			$res = $sub( '/wp/v2/plugins' );
+			if ( $res ) {
+				$out['plugins'] = $res->get_data();
+			}
+			$res = $sub( '/' . self::NS . '/plugin-updates' );
+			if ( $res ) {
+				$out['pluginUpdates'] = $res->get_data();
+			}
+			$res = $sub( '/' . self::NS . '/plugin-meta' );
+			if ( $res ) {
+				$out['pluginMeta'] = $res->get_data();
+			}
+		}
+
+		// Slimmed to what the client's type map keeps; context=edit drops
+		// types the user cannot edit, same as the standalone fetch. (The
+		// rule-of-the-house "_fields breaks wp/v2/types over HTTP" doesn't
+		// bite here: no _fields, and the slimming is plain PHP.)
+		$res = $sub( '/wp/v2/types', array( 'context' => 'edit' ) );
+		if ( $res ) {
+			$types = array();
+			foreach ( (array) $res->get_data() as $t ) {
+				$t       = (array) $t;
+				$types[] = array(
+					'slug'      => $t['slug'] ?? '',
+					'rest_base' => $t['rest_base'] ?? '',
+					'name'      => $t['name'] ?? '',
+					'viewable'  => ! empty( $t['viewable'] ),
+				);
+			}
+			$out['types'] = $types;
+		}
+
+		if ( Minn_Admin::comments_enabled() ) {
+			$res = $sub(
+				'/wp/v2/comments',
+				array(
+					'status'   => 'hold',
+					'per_page' => 1,
+					'_fields'  => 'id',
+				)
+			);
+			$pending = $total( $res );
+			if ( null !== $pending ) {
+				$out['pendingComments'] = $pending;
+			}
+		}
+
+		if ( class_exists( 'WooCommerce' ) && current_user_can( 'edit_shop_orders' ) ) {
+			$orders = array(
+				'month'      => null,
+				'processing' => null,
+			);
+			$res = $sub( '/wc/v3/reports/sales', array( 'period' => 'month' ) );
+			if ( $res ) {
+				$d               = $res->get_data();
+				$orders['month'] = ( is_array( $d ) && isset( $d[0] ) ) ? $d[0] : null;
+			}
+			$orders['processing'] = $total(
+				$sub(
+					'/wc/v3/orders',
+					array(
+						'status'   => 'processing',
+						'per_page' => 1,
+						'_fields'  => 'id',
+					)
+				)
+			);
+			$out['orders'] = $orders;
+		}
+
+		return $out;
+	}
+
 	public static function notifications() {
 		$read_at = (int) get_user_meta( get_current_user_id(), 'minn_admin_notif_read_at', true );
 		$items   = array();
