@@ -7,6 +7,40 @@
 
 	const B = window.MINN;
 
+	/* ===== i18n =====
+	 * Translations ride the boot payload (B.i18n), built server-side from
+	 * standard JED files in languages/ (Minn_Admin::js_translations). English
+	 * is the source vocabulary: a missing catalog or entry falls through to
+	 * the literal, so development needs no tooling and `wp i18n make-pot`
+	 * extracts these calls with the stock WordPress toolchain.
+	 * CONVENTION (CLAUDE.md "Internationalization"): every NEW user-facing
+	 * string is written as __( '…' ) / _n() / sprintf(); existing literals
+	 * convert opportunistically, view by view. */
+
+	const I18N = B.i18n || {};
+
+	const __ = ( text ) => {
+		const t = I18N[ text ];
+		return typeof t === 'string' ? t : ( Array.isArray( t ) ? t[ 0 ] : text );
+	};
+
+	// JED plural entries are [singular, plural, …]. Until a locale that needs
+	// a real Plural-Forms evaluator ships a catalog, the n !== 1 rule covers
+	// the Germanic/Romance languages likely to translate first.
+	const _n = ( single, plural, n ) => {
+		const t = I18N[ single ];
+		if ( Array.isArray( t ) && t.length > 1 ) return 1 === n ? t[ 0 ] : t[ 1 ];
+		return 1 === n ? __( single ) : plural;
+	};
+
+	// printf-lite for translatable strings: %s, %d and positional %1$s forms
+	// (translations reorder words; concatenation can't).
+	const sprintf = ( fmt, ...args ) => {
+		let i = 0;
+		return String( fmt ).replace( /%(\d+\$)?[sd]/g, ( m, pos ) =>
+			String( args[ pos ? parseInt( pos, 10 ) - 1 : i++ ] ) );
+	};
+
 	/* ===== Utilities ===== */
 
 	const $  = ( sel, ctx ) => ( ctx || document ).querySelector( sel );
@@ -550,27 +584,27 @@
 	};
 
 	const TITLES = {
-		overview: [ 'Overview', 'Dashboard' ],
+		overview: [ __( 'Overview' ), __( 'Dashboard' ) ],
 		// Sub is dynamic — contentTopbarSub() names the active filter / type set.
-		content: [ 'Content', '' ],
-		media: [ 'Media', 'Library' ],
-		comments: [ 'Comments', 'Moderation' ],
-		orders: [ 'Orders', 'WooCommerce' ],
-		order: [ 'Order', 'WooCommerce' ],
-		subscriptions: [ 'Subscriptions', 'WooCommerce' ],
-		products: [ 'Products', 'WooCommerce' ],
-		coupons: [ 'Coupons', 'WooCommerce' ],
-		customers: [ 'Customers', 'WooCommerce' ],
-		users: [ 'Users', 'People' ],
-		terms: [ 'Terms', 'Categories & Tags' ],
-		menus: [ 'Menus', 'Navigation' ],
-		widgets: [ 'Widgets', 'Sidebars & footers' ],
-		extensions: [ 'Extensions', 'Installed' ],
-		posttypes: [ 'Structure', 'Post types, taxonomies & terms' ],
-		settings: [ 'Settings', 'Site' ],
-		system: [ 'System', 'Diagnostics' ],
-		editor: [ 'Editor', 'Draft' ],
-		profile: [ 'Your profile', 'Account' ],
+		content: [ __( 'Content' ), '' ],
+		media: [ __( 'Media' ), __( 'Library' ) ],
+		comments: [ __( 'Comments' ), __( 'Moderation' ) ],
+		orders: [ __( 'Orders' ), 'WooCommerce' ],
+		order: [ __( 'Order' ), 'WooCommerce' ],
+		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
+		products: [ __( 'Products' ), 'WooCommerce' ],
+		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
+		customers: [ __( 'Customers' ), 'WooCommerce' ],
+		users: [ __( 'Users' ), __( 'People' ) ],
+		terms: [ __( 'Terms' ), __( 'Categories & Tags' ) ],
+		menus: [ __( 'Menus' ), __( 'Navigation' ) ],
+		widgets: [ __( 'Widgets' ), __( 'Sidebars & footers' ) ],
+		extensions: [ __( 'Extensions' ), __( 'Installed' ) ],
+		posttypes: [ __( 'Structure' ), __( 'Post types, taxonomies & terms' ) ],
+		settings: [ __( 'Settings' ), __( 'Site' ) ],
+		system: [ __( 'System' ), __( 'Diagnostics' ) ],
+		editor: [ __( 'Editor' ), __( 'Draft' ) ],
+		profile: [ __( 'Your profile' ), __( 'Account' ) ],
 	};
 
 	// Topbar badge for Content: names the active type filter (or Trash), and
@@ -578,19 +612,22 @@
 	// CPTs) instead of the hard-coded "Posts & Pages" that lied once
 	// Products / Venues / Organizers joined the list.
 	function contentTopbarSub() {
-		if ( state.contentTrash ) return 'Trash';
+		if ( state.contentTrash ) return __( 'Trash' );
 		const filter = state.filter || 'all';
-		if ( filter === 'posts' ) return 'Posts';
-		if ( filter === 'pages' ) return 'Pages';
+		if ( filter === 'posts' ) return __( 'Posts' );
+		if ( filter === 'pages' ) return __( 'Pages' );
 		if ( filter !== 'all' ) {
 			const t = ( state.cache.types || [] ).find( ( x ) => x.restBase === filter );
 			return t ? t.name : filter;
 		}
 		const types = state.cache.types || [];
-		const bits = [ 'Posts' ];
-		if ( B.caps.editPages ) bits.push( 'pages' );
+		const bits = [ __( 'Posts' ) ];
+		if ( B.caps.editPages ) bits.push( __( 'pages' ) );
 		if ( types.length === 1 ) bits.push( types[ 0 ].name );
-		else if ( types.length > 1 ) bits.push( types.length + ' types' );
+		else if ( types.length > 1 ) {
+			/* translators: %d: number of custom post types in the Content list. */
+			bits.push( sprintf( _n( '%d type', '%d types', types.length ), types.length ) );
+		}
 		if ( bits.length === 1 ) return bits[ 0 ];
 		if ( bits.length === 2 ) return bits[ 0 ] + ' & ' + bits[ 1 ];
 		return bits[ 0 ] + ', ' + bits.slice( 1, -1 ).join( ', ' ) + ' & ' + bits[ bits.length - 1 ];
@@ -1395,27 +1432,27 @@
 	// sidebar entries.
 	function workspaceNavItems() {
 		const navItems = [
-			{ id: 'overview', label: 'Overview', icon: 'grid' },
-			{ id: 'content', label: 'Content', icon: 'doc', count: true },
-			{ id: 'media', label: 'Media', icon: 'img' },
+			{ id: 'overview', label: __( 'Overview' ), icon: 'grid' },
+			{ id: 'content', label: __( 'Content' ), icon: 'doc', count: true },
+			{ id: 'media', label: __( 'Media' ), icon: 'img' },
 		];
 		if ( commentsAvailable() ) {
-			navItems.push( { id: 'comments', label: 'Comments', icon: 'chat', commentCount: true } );
+			navItems.push( { id: 'comments', label: __( 'Comments' ), icon: 'chat', commentCount: true } );
 		}
 		if ( B.wc && B.caps.orders ) {
-			navItems.push( { id: 'orders', label: 'Orders', icon: 'cart', orderCount: true } );
+			navItems.push( { id: 'orders', label: __( 'Orders' ), icon: 'cart', orderCount: true } );
 		}
 		if ( B.wcs && B.caps.subscriptions ) {
-			navItems.push( { id: 'subscriptions', label: 'Subscriptions', icon: 'refresh' } );
+			navItems.push( { id: 'subscriptions', label: __( 'Subscriptions' ), icon: 'refresh' } );
 		}
 		if ( B.wc && B.caps.products ) {
-			navItems.push( { id: 'products', label: 'Products', icon: 'tag' } );
+			navItems.push( { id: 'products', label: __( 'Products' ), icon: 'tag' } );
 		}
 		if ( B.wc && B.caps.coupons ) {
-			navItems.push( { id: 'coupons', label: 'Coupons', icon: 'key' } );
+			navItems.push( { id: 'coupons', label: __( 'Coupons' ), icon: 'key' } );
 		}
 		if ( B.wc && B.caps.customers ) {
-			navItems.push( { id: 'customers', label: 'Customers', icon: 'users' } );
+			navItems.push( { id: 'customers', label: __( 'Customers' ), icon: 'users' } );
 		}
 		surfaceNavItems().filter( ( s ) => s.group === 'workspace' ).forEach( ( s ) =>
 			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
@@ -1433,17 +1470,17 @@
 	function manageNavItems() {
 		const manageItems = [];
 		if ( B.caps.plugins ) {
-			manageItems.push( { id: 'extensions', label: 'Extensions', icon: 'plug', dot: true } );
+			manageItems.push( { id: 'extensions', label: __( 'Extensions' ), icon: 'plug', dot: true } );
 		}
 		if ( B.caps.users ) {
-			manageItems.push( { id: 'users', label: 'Users', icon: 'users' } );
+			manageItems.push( { id: 'users', label: __( 'Users' ), icon: 'users' } );
 		}
 		// Classic themes only — block themes manage navigation and widget areas
 		// in the site editor, and wp-admin hides these screens the same way.
 		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
-			manageItems.push( { id: 'menus', label: 'Menus', icon: 'list' } );
+			manageItems.push( { id: 'menus', label: __( 'Menus' ), icon: 'list' } );
 			if ( B.site.hasSidebars ) {
-				manageItems.push( { id: 'widgets', label: 'Widgets', icon: 'columns' } );
+				manageItems.push( { id: 'widgets', label: __( 'Widgets' ), icon: 'columns' } );
 			}
 		}
 		// One "Structure" item covers Post Types, Taxonomies and Terms as tabs.
@@ -1452,13 +1489,13 @@
 		// just the Terms tab. Different route id per role so the nav highlight
 		// and route gating stay correct.
 		if ( B.caps.settings ) {
-			manageItems.push( { id: 'posttypes', label: 'Structure', icon: 'grid' } );
+			manageItems.push( { id: 'posttypes', label: __( 'Structure' ), icon: 'grid' } );
 		} else if ( B.caps.terms ) {
-			manageItems.push( { id: 'terms', label: 'Terms', icon: 'tag' } );
+			manageItems.push( { id: 'terms', label: __( 'Terms' ), icon: 'tag' } );
 		}
 		if ( B.caps.settings ) {
-			manageItems.push( { id: 'system', label: 'System', icon: 'activity' } );
-			manageItems.push( { id: 'settings', label: 'Settings', icon: 'gear' } );
+			manageItems.push( { id: 'system', label: __( 'System' ), icon: 'activity' } );
+			manageItems.push( { id: 'settings', label: __( 'Settings' ), icon: 'gear' } );
 		}
 		return manageItems;
 	}
@@ -1668,35 +1705,36 @@
 		<div class="minn-shell">
 			<aside class="minn-sidebar">
 				<div class="minn-logo">
-					<button class="minn-logo-home" id="minn-logo-home" title="Overview">
+					<button class="minn-logo-home" id="minn-logo-home" title="${ esc( __( 'Overview' ) ) }">
 						${ B.site.icon
 							? `<span class="minn-logo-mark minn-logo-mark-icon" style="background-image:url('${ esc( B.site.icon ) }')"></span>`
 							: '<span class="minn-logo-mark">m</span>' }
 						<span class="minn-logo-name">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</span>
 					</button>
-					<button class="minn-logo-ver" id="minn-ver-btn" title="What's new — full changelog">v${ esc( B.version ) }</button>
+					<button class="minn-logo-ver" id="minn-ver-btn" title="${ esc( __( "What's new — full changelog" ) ) }">v${ esc( B.version ) }</button>
 				</div>
 				<button class="minn-search-btn" id="minn-open-palette">
-					${ icon( 'search' ) }<span>Search…</span><span class="minn-kbd">⌘K</span>
+					${ icon( 'search' ) }<span>${ esc( __( 'Search…' ) ) }</span><span class="minn-kbd">⌘K</span>
 				</button>
 				<div class="minn-nav-scroll">
-					${ navGroupHtml( 'workspace', 'Workspace', workspaceNavItems() ) }
-					${ navGroupHtml( 'tools', 'Tools', toolsNavItems(), true ) }
-					${ navGroupHtml( 'manage', 'Manage', manageItems, true ) }
+					${ navGroupHtml( 'workspace', __( 'Workspace' ), workspaceNavItems() ) }
+					${ navGroupHtml( 'tools', __( 'Tools' ), toolsNavItems(), true ) }
+					${ navGroupHtml( 'manage', __( 'Manage' ), manageItems, true ) }
 				</div>
 				${ B.switchBack ? `
-			<a class="minn-switchback" href="${ esc( B.switchBack.url ) }" title="End this switched session">
-				${ icon( 'undo' ) } Switch back to ${ esc( B.switchBack.name ) }
+			<a class="minn-switchback" href="${ esc( B.switchBack.url ) }" title="${ esc( __( 'End this switched session' ) ) }">
+				${ icon( 'undo' ) } ${ /* translators: %s: display name of the user to switch back to. */
+					esc( sprintf( __( 'Switch back to %s' ), B.switchBack.name ) ) }
 			</a>` : '' }
-			<div class="minn-user" id="minn-user-area" title="Your account">
+			<div class="minn-user" id="minn-user-area" title="${ esc( __( 'Your account' ) ) }">
 					<img class="minn-user-avatar" src="${ esc( B.user.avatar ) }" alt="">
 					<div style="min-width:0;">
 						<div class="minn-user-name">${ esc( B.user.name ) }</div>
 						<div class="minn-user-role">${ esc( B.user.role ) }</div>
 					</div>
 					<div class="minn-user-acts">
-						<a class="minn-user-logout" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="WordPress admin (opens in a new tab)">${ icon( 'wp' ) }</a>
-						<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="Log out">${ icon( 'logout' ) }</a>
+						<a class="minn-user-logout" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>
+						<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="${ esc( __( 'Log out' ) ) }">${ icon( 'logout' ) }</a>
 					</div>
 				</div>
 			</aside>
@@ -1705,15 +1743,15 @@
 					<div class="minn-topbar-title" id="minn-title"></div>
 					<div class="minn-topbar-sub" id="minn-sub"></div>
 					<div class="minn-topbar-actions">
-						<button class="minn-vis-chip" id="minn-vis-chip" hidden title="Your site is not fully public">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
-						<button class="minn-core-chip" id="minn-core-chip" hidden title="A WordPress update is available">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
-						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="View site">${ icon( 'globe' ) }</a>
-						<button class="minn-icon-btn" id="minn-help-btn" title="About Minn">${ icon( 'help' ) }</button>
-						<button class="minn-icon-btn" id="minn-theme-btn" title="Theme: System (click to cycle, right-click for options)"></button>
-						<button class="minn-icon-btn" id="minn-notif-btn" title="Notifications">
+						<button class="minn-vis-chip" id="minn-vis-chip" hidden title="${ esc( __( 'Your site is not fully public' ) ) }">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
+						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( __( 'A WordPress update is available' ) ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
+						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="${ esc( __( 'View site' ) ) }">${ icon( 'globe' ) }</a>
+						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
+						<button class="minn-icon-btn" id="minn-theme-btn" title="${ esc( __( 'Theme: System (click to cycle, right-click for options)' ) ) }"></button>
+						<button class="minn-icon-btn" id="minn-notif-btn" title="${ esc( __( 'Notifications' ) ) }">
 							${ icon( 'bell' ) }<span class="minn-unread-dot" id="minn-unread-dot" hidden></span>
 						</button>
-						<button class="minn-btn-primary" id="minn-new-btn" aria-label="New post">${ icon( 'plus' ) } New</button>
+						<button class="minn-btn-primary" id="minn-new-btn" aria-label="${ esc( __( 'New post' ) ) }">${ icon( 'plus' ) } ${ esc( __( 'New' ) ) }</button>
 					</div>
 				</header>
 				<div class="minn-scroll"><div class="minn-page" id="minn-view"></div></div>

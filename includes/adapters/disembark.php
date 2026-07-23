@@ -134,6 +134,7 @@ function minn_admin_disembark_status_model() {
 			'label' => 'Working files',
 			'value' => $bytes ? size_format( $bytes ) : 'None',
 			'hint'  => $bytes
+				/* translators: %s: number of Disembark scan sessions. */
 				? sprintf( _n( '%s scan session on disk', '%s scan sessions on disk', count( $sessions ), 'minn-admin' ), number_format_i18n( count( $sessions ) ) )
 				: 'Nothing left behind',
 		),
