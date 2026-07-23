@@ -12,6 +12,7 @@ class Minn_Admin {
 	const QUERY_VAR = 'minn_admin';
 
 	public static function init() {
+		add_action( 'init', array( __CLASS__, 'load_textdomain' ) );
 		add_action( 'init', array( __CLASS__, 'register_route' ) );
 		add_filter( 'query_vars', array( __CLASS__, 'query_vars' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_render_app' ), 0 );
@@ -709,6 +710,9 @@ class Minn_Admin {
 			// client to parse WP REST site-local dates (no zone suffix) so
 			// timeAgo / tooltips aren't skewed by gmt_offset.
 			'gmtOffset' => (float) get_option( 'gmt_offset' ),
+			// SPA translation map for the client's __()/_n() (empty for
+			// English; object cast so an empty map serializes as {}).
+			'i18n'     => (object) self::js_translations(),
 			// Installed admin languages for Your profile's Language picker.
 			'languages' => self::available_languages(),
 			'caps'     => array(
@@ -1246,6 +1250,45 @@ class Minn_Admin {
 	 *
 	 * @return bool
 	 */
+	public static function load_textdomain() {
+		load_plugin_textdomain( 'minn-admin', false, dirname( plugin_basename( MINN_ADMIN_FILE ) ) . '/languages' );
+	}
+
+	/**
+	 * Translation map for the SPA's __()/_n() helpers, keyed by SOURCE
+	 * string (English is the source vocabulary — a missing catalog or entry
+	 * falls through to the literal, so the app runs with zero tooling).
+	 *
+	 * Files are the standard JED JSON that `wp i18n make-json` emits into
+	 * languages/ from a translated .po (one file per locale; the suffix is
+	 * the md5 of the script path). Values are a string, or an array of
+	 * plural forms for _n() entries. The filter lets sites and fixtures
+	 * inject or override entries without shipping files.
+	 */
+	public static function js_translations() {
+		$locale = get_user_locale();
+		$map    = array();
+		if ( 0 !== strpos( $locale, 'en' ) ) {
+			foreach ( glob( MINN_ADMIN_DIR . 'languages/minn-admin-' . $locale . '-*.json' ) ?: array() as $file ) {
+				$jed     = json_decode( (string) file_get_contents( $file ), true );
+				$entries = $jed['locale_data']['messages'] ?? array();
+				foreach ( (array) $entries as $key => $forms ) {
+					if ( '' === $key || ! is_array( $forms ) || '' === (string) ( $forms[0] ?? '' ) ) {
+						continue;
+					}
+					$map[ $key ] = count( $forms ) > 1 ? array_values( $forms ) : (string) $forms[0];
+				}
+			}
+		}
+		/**
+		 * Filter the SPA translation map.
+		 *
+		 * @param array  $map    source string => translation (or plural-forms array).
+		 * @param string $locale The user locale being served.
+		 */
+		return apply_filters( 'minn_admin_js_translations', $map, $locale );
+	}
+
 	public static function comments_enabled() {
 		// 0. Explicit constant kill-switch (many mu-plugins / host configs).
 		if ( defined( 'DISABLE_COMMENTS' ) && DISABLE_COMMENTS ) {

@@ -72,3 +72,31 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
 - Match the file's comment voice: comments state constraints the code can't show —
   especially the hard-won browser facts. Delete nothing labeled "hard-won" without
   re-proving it in a browser.
+
+## Internationalization
+
+English is the source vocabulary; a missing catalog or entry falls through to the
+literal, so the app runs with zero tooling. The convention:
+
+- **Every NEW user-facing string is wrapped.** PHP: core `__()`/`_n()` with the
+  `minn-admin` domain. JS (app.js): the module's own `__()`, `_n()` and `sprintf()`
+  helpers (top of the file). Existing literals convert opportunistically, view by
+  view — do not block a feature on a sweep.
+- **Interpolation goes through `sprintf`** (`%s`, `%d`, positional `%1$s`), never
+  string concatenation or bare template literals inside a translatable string
+  (translations reorder words). Counts use `_n( single, plural, n )`. Strings with
+  placeholders get a `/* translators: … */` comment on the line above the call.
+- Translated values placed in HTML attributes go through `esc()` like any other
+  dynamic value.
+- **Plumbing:** `Minn_Admin::js_translations()` reads standard JED files from
+  `languages/` for `get_user_locale()` and ships the map in the boot payload as
+  `B.i18n` (filter `minn_admin_js_translations`; the dev-fixtures option
+  `minn_test_i18n` arms a German test catalog for `tests/i18n.test.js`).
+- **Toolchain** (translation time only, never needed for development):
+  `wp i18n make-pot . languages/minn-admin.pot --ignore-domain
+  --exclude=tests,docs,.wp-playground,.github` regenerates the catalog (the stock
+  extractor understands the JS helpers because they share core's names); translated
+  `.po` files compile with `wp i18n make-mo` (PHP) and `wp i18n make-json` (JS JED
+  files, into `languages/`).
+- Plugin-supplied labels (surface descriptors, adapter data) are the PLUGIN's to
+  translate; never wrap third-party data in Minn's catalog.
