@@ -53,6 +53,44 @@ Try it instantly in WordPress Playground (launch link and blueprint): https://gi
 
 Pretty permalinks are recommended. Without them the app is served at `/?minn_admin=1`.
 
+== Frequently Asked Questions ==
+
+= Does Minn replace wp-admin? =
+
+No. Minn is a second front door at /minn-admin/. Classic wp-admin stays fully available, and Minn links you there whenever a job is better done in it. You can use both side by side forever.
+
+= What happens if I deactivate or delete it? =
+
+Nothing is lost. Minn writes native WordPress data only: real block markup, core options, core users. Deactivate the plugin and your site is exactly as it was, with nothing to migrate and nothing to unwind.
+
+= Will it work with my plugins? =
+
+More than one hundred plugins have adapters that show up automatically with zero setup. Plugins without an adapter keep working normally; their screens stay one click away in wp-admin. See docs/plugin-support.md for exactly what each integration covers.
+
+= What about page builders? =
+
+Safe by design. Posts built with Elementor, Bricks, Divi and friends open read-only in Minn with an edit button that hands you to the builder, because the builder owns that content. Minn never writes to a builder's data.
+
+= How do updates arrive? =
+
+On the normal WordPress updates screen, served from the project's GitHub releases. Every download is verified against a checksum published with the release before it is allowed to install.
+
+= My security plugin restricts the REST API. Will Minn break? =
+
+Almost never. Minn uses the same authenticated, same-origin REST calls the block editor uses, so hardening that blocks anonymous REST traffic leaves it intact. If something does interfere, the System page's health checks name the problem.
+
+= Who can open /minn-admin/? =
+
+Only logged-in users your site already trusts to edit content, and each role sees only what wp-admin would allow it. Every action is re-checked on the server through WordPress core's own permissions.
+
+= Why can't I find a particular setting? =
+
+On purpose. Minn surfaces the settings people change day to day; the long tail deliberately stays in wp-admin, one click away. If a screen you reach for often is missing, open an issue on GitHub.
+
+= What does it cost? =
+
+Nothing. Minn Admin is free and MIT licensed, with no Pro tier, no upsells and no nags.
+
 == Changelog ==
 
 = 0.20.0 =
