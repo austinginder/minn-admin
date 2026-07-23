@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-23T03:00:50+00:00\n"
+"POT-Creation-Date: 2026-07-23T08:03:59+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 
@@ -56,18 +56,18 @@ msgstr ""
 msgid "Untitled"
 msgstr ""
 
-#: includes/class-minn-admin-rest.php:1998
+#: includes/class-minn-admin-rest.php:2018
 msgid "Pattern not found."
 msgstr ""
 
 #. translators: 1: admin name, 2: subject
-#: includes/class-minn-admin-rest.php:3557
+#: includes/class-minn-admin-rest.php:3577
 #, php-format
 msgid "Minn Admin email sent by %1$s: %2$s"
 msgstr ""
 
 #. translators: 1: email title, 2: admin name
-#: includes/class-minn-admin-rest.php:3766
+#: includes/class-minn-admin-rest.php:3786
 #, php-format
 msgid "“%1$s” email resent via Minn Admin by %2$s."
 msgstr ""
@@ -389,4 +389,21 @@ msgstr ""
 
 #: assets/js/app.js:9235
 msgid "Select row"
+msgstr ""
+
+#: assets/js/app.js:23261
+msgid "Open the user guide"
+msgstr ""
+
+#: assets/js/app.js:24461
+#: assets/js/app.js:24638
+msgid "User guide"
+msgstr ""
+
+#: assets/js/app.js:24464
+msgid "Loading the guide…"
+msgstr ""
+
+#: assets/js/app.js:26853
+msgid "No guide found."
 msgstr ""
