@@ -5,6 +5,9 @@
 ### Fixed
 * **A tab left open overnight recovers on its own:** REST nonces expire after a day, and an expired one used to dead-end the app (every request failed with a raw error toast until a manual reload). Minn now notices the expired nonce, mints a fresh one in the background through WordPress core's own nonce endpoint, and retries the request; a whole page of parallel requests shares one refresh. If the login session itself is gone, Minn says so and reloads into the login flow instead of leaving dead buttons.
 
+### Added
+* **Updates are checksum-verified before they install:** the release manifest now publishes the sha256 of each release zip, and the self-updater downloads the package, checks it against that hash, and refuses to install on any mismatch. The manifest travels from the GitHub repository while the zip comes from the release CDN; pinning the hash ties the two together, so a tampered or truncated download can never reach your plugins directory.
+
 ### Improved
 * **List pages are ready to search the moment they open:** navigating to Extensions (plugins or themes), Content, Media, Users, Orders, Terms and every other list view drops the caret straight into the view's filter box, so typing filters immediately with no click first. It happens once per navigation and politely: a re-render never yanks focus back, an already-focused text field (the palette, a modal input) is never robbed, and touch devices skip it so the software keyboard stays down.
 

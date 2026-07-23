@@ -31,6 +31,47 @@ class Minn_Admin_Updater {
 		add_filter( 'plugins_api', array( $this, 'info' ), 30, 3 );
 		add_filter( 'site_transient_update_plugins', array( $this, 'update' ) );
 		add_action( 'upgrader_process_complete', array( $this, 'purge' ), 10, 2 );
+		add_filter( 'upgrader_pre_download', array( $this, 'verify_package' ), 10, 4 );
+	}
+
+	/**
+	 * Verify the update zip against the manifest's sha256 before install.
+	 *
+	 * Only intercepts our own package URL, and only when the manifest carries
+	 * a sha256 (older manifests without one install unverified, as before).
+	 * The manifest travels over TLS from the repo while the zip comes from
+	 * GitHub's release CDN; the pinned hash ties the two together.
+	 *
+	 * @param bool|string|WP_Error $reply      Filter chain value.
+	 * @param string               $package    Package URL being downloaded.
+	 * @param WP_Upgrader          $upgrader   Upgrader instance.
+	 * @param array                $hook_extra Extra install context.
+	 * @return bool|string|WP_Error Local file path on verified download.
+	 */
+	public function verify_package( $reply, $package, $upgrader, $hook_extra = array() ) {
+		if ( false !== $reply || ! is_string( $package ) ) {
+			return $reply;
+		}
+		$remote = $this->request();
+		if ( empty( $remote->download_url ) || empty( $remote->sha256 ) || $package !== $remote->download_url ) {
+			return $reply;
+		}
+		if ( ! function_exists( 'download_url' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		$file = download_url( $package, 300 );
+		if ( is_wp_error( $file ) ) {
+			return $file;
+		}
+		$hash = (string) hash_file( 'sha256', $file );
+		if ( ! hash_equals( strtolower( (string) $remote->sha256 ), $hash ) ) {
+			wp_delete_file( $file );
+			return new WP_Error(
+				'minn_admin_bad_package_hash',
+				'Minn Admin update rejected: the downloaded package does not match the sha256 published in the release manifest.'
+			);
+		}
+		return $file;
 	}
 
 	public function request() {
