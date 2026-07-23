@@ -23258,6 +23258,7 @@
 		}
 		cmds.push(
 			{ label: 'Your profile — name, email, password', kind: 'link', icon: '@', run: () => go( 'profile' ) },
+			{ label: __( 'Open the user guide' ), kind: 'link', icon: '📖', run: openGuide },
 			{ label: 'About Minn — philosophy & help', kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
 			{ label: 'Visit site', kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank' ) },
 			{ label: 'Classic wp-admin', kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank' ) },
@@ -24452,6 +24453,20 @@
 			</div>`;
 		}
 
+		if ( m.type === 'guide' ) {
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal wide">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title">${ esc( __( 'User guide' ) ) } · v${ esc( B.version ) }</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					${ m.md === null ? `<div class="minn-loading">${ esc( __( 'Loading the guide…' ) ) }</div>`
+						: `<div class="minn-changelog minn-guide">${ guideHtml( m.md ) }</div>` }
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'cpt' ) {
 			const t = m.item;
 			const isNew = ! t;
@@ -24620,6 +24635,7 @@
 						build step. Gravity Forms, Gravity SMTP and ACF adapters ship built in.</p>
 					</div>
 					<div class="minn-modal-actions">
+						<button class="minn-btn-primary" id="minn-help-guide">${ esc( __( 'User guide' ) ) }</button>
 						<a class="minn-btn-soft" href="https://github.com/austinginder/minn-admin" target="_blank" rel="noopener">↗ GitHub</a>
 						<a class="minn-btn-soft" href="https://github.com/austinginder/minn-admin/blob/main/docs/goals.md" target="_blank" rel="noopener">↗ Project goals</a>
 						<a class="minn-btn-soft" href="https://github.com/austinginder/minn-admin/blob/main/docs/for-plugin-authors.md" target="_blank" rel="noopener">↗ For plugin authors</a>
@@ -25826,6 +25842,11 @@
 			bindRevisionModal( m );
 		}
 
+		if ( m.type === 'help' ) {
+			const g = $( '#minn-help-guide' );
+			if ( g ) g.addEventListener( 'click', openGuide );
+		}
+
 		if ( m.type === 'minn-off' && ! m.done ) {
 			$( '#minn-off-cancel' ).addEventListener( 'click', closeModal );
 			$( '#minn-off-confirm' ).addEventListener( 'click', async ( e ) => {
@@ -26755,6 +26776,89 @@
 		api( 'minn-admin/v1/changelog' )
 			.then( ( r ) => {
 				if ( state.modal && state.modal.type === 'changelog' ) {
+					state.modal.md = r.markdown || '';
+					renderOverlays();
+				}
+			} )
+			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
+	}
+
+	/* ===== User guide modal ===== */
+	// Renders the BUNDLED docs/user-guide.md (minn-admin/v1/guide), so the
+	// guide a user reads always matches the version they run. Same
+	// escape-first discipline as the changelog renderer, extended for the
+	// guide's vocabulary: wrapped paragraphs, ordered lists with
+	// continuation lines, italics and the shortcuts table.
+	function guideInline( s ) {
+		return esc( s )
+			.replace( /\*\*([^*]+)\*\*/g, '<b>$1</b>' )
+			.replace( /(^|[\s(])\*([^*]+)\*(?=[\s).,;:]|$)/g, '$1<i>$2</i>' )
+			.replace( /`([^`]+)`/g, '<code>$1</code>' )
+			.replace( /\[([^\]]+)\]\(([^)\s]+)\)/g, ( m0, t, u ) => {
+				// Relative links are repo paths; point them at GitHub.
+				const href = /^https?:/.test( u ) ? u : 'https://github.com/austinginder/minn-admin/blob/main/docs/' + u;
+				return `<a href="${ href }" target="_blank" rel="noopener">${ t }</a>`;
+			} );
+	}
+
+	function guideHtml( md ) {
+		const out = [];
+		let para = [];
+		let list = null;
+		let listTag = 'ul';
+		let table = null;
+		const flushPara = () => { if ( para.length ) { out.push( `<p>${ guideInline( para.join( ' ' ) ) }</p>` ); para = []; } };
+		const flushList = () => {
+			if ( ! list ) return;
+			out.push( `<${ listTag }>` + list.map( ( item ) => `<li>${ guideInline( item.join( ' ' ) ) }</li>` ).join( '' ) + `</${ listTag }>` );
+			list = null;
+		};
+		const flushTable = () => {
+			if ( ! table || ! table.length ) { table = null; return; }
+			const [ head, ...rows ] = table;
+			out.push( '<table><thead><tr>' + head.map( ( c ) => `<th>${ guideInline( c ) }</th>` ).join( '' )
+				+ '</tr></thead><tbody>'
+				+ rows.map( ( r ) => '<tr>' + r.map( ( c ) => `<td>${ guideInline( c ) }</td>` ).join( '' ) + '</tr>' ).join( '' )
+				+ '</tbody></table>' );
+			table = null;
+		};
+		const flushAll = () => { flushPara(); flushList(); flushTable(); };
+		String( md ).split( /\r?\n/ ).forEach( ( line ) => {
+			const l = line.trim();
+			if ( /^# [^#]/.test( l ) ) { flushAll(); return; } // the file's own title — the modal has one
+			if ( /^## /.test( l ) ) { flushAll(); out.push( `<h3>${ guideInline( l.slice( 3 ) ) }</h3>` ); return; }
+			if ( /^\|/.test( l ) ) {
+				flushPara(); flushList();
+				if ( /^\|[\s:|-]+\|$/.test( l ) ) return; // the |---| separator row
+				( table = table || [] ).push( l.replace( /^\|/, '' ).replace( /\|$/, '' ).split( '|' ).map( ( c ) => c.trim() ) );
+				return;
+			}
+			const item = l.match( /^([-*]|\d+\.) (.*)$/ );
+			if ( item ) {
+				flushPara(); flushTable();
+				const tag = /^\d/.test( item[ 1 ] ) ? 'ol' : 'ul';
+				if ( list && tag !== listTag ) flushList();
+				listTag = tag;
+				( list = list || [] ).push( [ item[ 2 ] ] );
+				return;
+			}
+			if ( ! l ) { flushAll(); return; }
+			// Hard-wrapped source: an indented line continues the open list
+			// item; anything else joins the current paragraph.
+			if ( list && /^\s/.test( line ) ) { list[ list.length - 1 ].push( l ); return; }
+			flushList(); flushTable();
+			para.push( l );
+		} );
+		flushAll();
+		return out.join( '' ) || `<div class="minn-empty">${ esc( __( 'No guide found.' ) ) }</div>`;
+	}
+
+	function openGuide() {
+		state.modal = { type: 'guide', md: null };
+		renderOverlays();
+		api( 'minn-admin/v1/guide' )
+			.then( ( r ) => {
+				if ( state.modal && state.modal.type === 'guide' ) {
 					state.modal.md = r.markdown || '';
 					renderOverlays();
 				}

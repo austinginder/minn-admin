@@ -95,6 +95,26 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/guide',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'callback'            => function () {
+					// The bundled site-owner guide — served locally so the copy
+					// always matches the installed version (its whole premise).
+					$file = MINN_ADMIN_DIR . 'docs/user-guide.md';
+					return rest_ensure_response( array(
+						'version'  => MINN_ADMIN_VERSION,
+						'markdown' => is_readable( $file ) ? (string) file_get_contents( $file ) : '',
+					) );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/overview',
 			array(
 				'methods'             => 'GET',
