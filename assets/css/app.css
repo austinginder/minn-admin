@@ -215,6 +215,14 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-changelog { padding: 4px 18px 18px; max-height: 64vh; overflow-y: auto; font-size: 13.5px; line-height: 1.65; color: var(--text2); }
 .minn-changelog h3 { font-size: 15px; color: var(--text); margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
 .minn-changelog h3:first-child { margin-top: 6px; padding-top: 0; border-top: 0; }
+/* The user-guide modal shares the changelog reader shell, plus the guide's
+   richer vocabulary: ordered lists, italics and the shortcuts table. */
+.minn-guide ol, .minn-guide ul { margin: 8px 0 12px; padding-left: 22px; }
+.minn-guide li { margin: 4px 0; }
+.minn-guide i { color: var(--text2); }
+.minn-guide table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; }
+.minn-guide th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); border-bottom: 1px solid var(--border2); padding: 4px 10px 4px 0; }
+.minn-guide td { border-bottom: 1px solid var(--border); padding: 6px 10px 6px 0; vertical-align: top; }
 .minn-changelog h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin: 14px 0 4px; }
 .minn-changelog ul { margin: 4px 0 10px; padding-left: 20px; }
 .minn-changelog li { margin: 4px 0; }
