@@ -14,6 +14,7 @@
 * **Updates are checksum-verified before they install:** the release manifest now publishes the sha256 of each release zip, and the self-updater downloads the package, checks it against that hash, and refuses to install on any mismatch. The manifest travels from the GitHub repository while the zip comes from the release CDN; pinning the hash ties the two together, so a tampered or truncated download can never reach your plugins directory.
 
 ### Improved
+* **The plugin and its website finally point at each other:** the plugin's listed website is minnadmin.com now (it was the GitHub repository), and the About dialog links to the site and its new shareable docs pages at minnadmin.com/docs. The bundled in-app user guide is unchanged; the web pages are the linkable copies.
 * **List pages are ready to search the moment they open:** navigating to Extensions (plugins or themes), Content, Media, Users, Orders, Terms and every other list view drops the caret straight into the view's filter box, so typing filters immediately with no click first. It happens once per navigation and politely: a re-render never yanks focus back, an already-focused text field (the palette, a modal input) is never robbed, and touch devices skip it so the software keyboard stays down.
 
 ## **v0.20.0** - July 20, 2026
