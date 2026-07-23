@@ -12,7 +12,7 @@
     "requires_php": "7.4",
     "added": "2026-07-03 16:00:00",
     "last_updated": "2026-07-20 10:30:00",
-    "homepage": "https://github.com/austinginder/minn-admin",
+    "homepage": "https://minnadmin.com",
     "sections": {
         "description": "A reimagined WordPress admin experience. Fast, focused and beautiful. Served at /minn-admin/."
     }

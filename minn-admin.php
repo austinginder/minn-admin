@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Minn Admin
- * Plugin URI:        https://github.com/austinginder/minn-admin
+ * Plugin URI:        https://minnadmin.com
  * Description:       A reimagined WordPress admin experience. Fast, focused and beautiful. Served at /minn-admin/.
  * Version:           0.20.0
  * Requires at least: 6.0

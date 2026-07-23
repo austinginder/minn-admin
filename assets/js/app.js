@@ -24636,9 +24636,9 @@
 					</div>
 					<div class="minn-modal-actions">
 						<button class="minn-btn-primary" id="minn-help-guide">${ esc( __( 'User guide' ) ) }</button>
+						<a class="minn-btn-soft" href="https://minnadmin.com" target="_blank" rel="noopener">↗ minnadmin.com</a>
 						<a class="minn-btn-soft" href="https://github.com/austinginder/minn-admin" target="_blank" rel="noopener">↗ GitHub</a>
-						<a class="minn-btn-soft" href="https://github.com/austinginder/minn-admin/blob/main/docs/goals.md" target="_blank" rel="noopener">↗ Project goals</a>
-						<a class="minn-btn-soft" href="https://github.com/austinginder/minn-admin/blob/main/docs/for-plugin-authors.md" target="_blank" rel="noopener">↗ For plugin authors</a>
+						<a class="minn-btn-soft" href="https://minnadmin.com/docs/author-guide/" target="_blank" rel="noopener">↗ For plugin authors</a>
 					</div>
 				</div>
 			</div>`;
