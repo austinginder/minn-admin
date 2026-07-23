@@ -436,6 +436,22 @@ class Minn_Admin_Notices {
 	 * @return array{action:string,args:array}|null
 	 */
 	private static function ajax_for_button( $class, $label, $id = '' ) {
+		/**
+		 * Map a JS-dismiss notice button to a whitelisted ajax action before
+		 * the built-in matches run. Return array{action:string,args:array} to
+		 * claim the button; the action must also exist in the
+		 * `minn_admin_notice_ajax_actions` whitelist or run_ajax() refuses it.
+		 * (The dev-fixtures mu-plugin registers its suite buttons here.)
+		 *
+		 * @param array|null $mapped null to fall through to built-ins.
+		 * @param string     $class  Button class attribute.
+		 * @param string     $label  Button text.
+		 * @param string     $id     Button id attribute.
+		 */
+		$mapped = apply_filters( 'minn_admin_notice_button_ajax', null, $class, $label, $id );
+		if ( is_array( $mapped ) && ! empty( $mapped['action'] ) ) {
+			return $mapped;
+		}
 		// Smash Balloon Instagram Feed review step 1 ("Are you enjoying…"):
 		// Yes is a literal <button>, No is an anchor that ALSO carries a
 		// feedback URL; both fire sbi_review_notice_consent_update.
@@ -451,19 +467,6 @@ class Minn_Admin_Notices {
 				'args'   => array( 'consent' => 'no' ),
 			);
 		}
-		// Dev fixture (minn-dev-fixtures) for the <button>-CTA suite path.
-		if ( 'minn_fixture_btn_yes' === $id ) {
-			return array(
-				'action' => 'minn_fixture_btn_answer',
-				'args'   => array( 'answer' => 'yes' ),
-			);
-		}
-		if ( 'minn_fixture_btn_no' === $id ) {
-			return array(
-				'action' => 'minn_fixture_btn_answer',
-				'args'   => array( 'answer' => 'no' ),
-			);
-		}
 		$class = ' ' . $class . ' ';
 		// Everest Forms allow-usage notice (html-notice-allow-usage.php).
 		if ( false !== strpos( $class, 'evf-deny-data-sharing' ) ) {
@@ -476,19 +479,6 @@ class Minn_Admin_Notices {
 			return array(
 				'action' => 'everest_forms_allow_usage_dismiss',
 				'args'   => array( 'allow_usage_tracking' => 'true' ),
-			);
-		}
-		// Dev fixture (minn-dev-fixtures) for the suite.
-		if ( false !== strpos( $class, 'minn-fixture-hash-no' ) ) {
-			return array(
-				'action' => 'minn_fixture_hash_dismiss',
-				'args'   => array( 'allow' => 'false' ),
-			);
-		}
-		if ( false !== strpos( $class, 'minn-fixture-hash-yes' ) ) {
-			return array(
-				'action' => 'minn_fixture_hash_dismiss',
-				'args'   => array( 'allow' => 'true' ),
 			);
 		}
 		return null;
@@ -506,18 +496,6 @@ class Minn_Admin_Notices {
 				),
 				// Mirror the plugin handler: no arbitrary POST keys.
 				'run'  => array( __CLASS__, 'run_everest_allow_usage' ),
-			),
-			'minn_fixture_hash_dismiss'         => array(
-				'args' => array(
-					'allow' => array( 'true', 'false' ),
-				),
-				'run'  => array( __CLASS__, 'run_fixture_hash_dismiss' ),
-			),
-			'minn_fixture_btn_answer'           => array(
-				'args' => array(
-					'answer' => array( 'yes', 'no' ),
-				),
-				'run'  => array( __CLASS__, 'run_fixture_btn_answer' ),
 			),
 			'sbi_review_notice_consent_update'  => array(
 				'args' => array(
@@ -571,21 +549,6 @@ class Minn_Admin_Notices {
 		if ( isset( $args['allow_usage_tracking'] ) && 'true' === $args['allow_usage_tracking'] ) {
 			update_option( 'everest_forms_allow_usage_tracking', 'yes' );
 		}
-		return true;
-	}
-
-	/** Dev-fixture hash-button dismiss. */
-	public static function run_fixture_hash_dismiss( $args ) {
-		update_option( 'minn_fixture_hash_dismissed', '1' );
-		if ( isset( $args['allow'] ) && 'true' === $args['allow'] ) {
-			update_option( 'minn_fixture_hash_allowed', '1' );
-		}
-		return true;
-	}
-
-	/** Dev-fixture <button>-CTA answer. */
-	public static function run_fixture_btn_answer( $args ) {
-		update_option( 'minn_fixture_btn_answer', ( isset( $args['answer'] ) && 'yes' === $args['answer'] ) ? 'yes' : 'no' );
 		return true;
 	}
 
