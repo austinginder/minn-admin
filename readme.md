@@ -265,6 +265,7 @@ working instance of the API is one click away.
 - [Block inspector](docs/block-inspector.md)
 - [Block-suite lab notes](docs/block-suites.md)
 - [For plugin authors](docs/for-plugin-authors.md)
+- [Security policy](SECURITY.md)
 - [Changelog](changelog.md)
 
 ## Development
