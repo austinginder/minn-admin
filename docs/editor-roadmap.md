@@ -193,7 +193,7 @@ point were the last items).
   inventing collaboration infrastructure.
 - **Offline-tolerant drafting** if the localStorage net from Horizon 1 proves itself.
 - **The marketing turn.** minnadmin.com leads with the editor: the hero is the writing
-  surface, the admin is "and it comes with a better admin around it." readme.txt and
+  surface, the admin is "and it comes with a better admin around it." The readme and
   screenshots follow.
 
 ## What we will never build (unchanged, load-bearing)

@@ -64,8 +64,11 @@ architectural bet, not an omission.** Read `docs/goals.md` before proposing stru
   changelog entries, UI strings). Rewrite with a period, colon, semicolon or
   parentheses. The one sanctioned use is the list-item label separator
   (`**Feature** — description`).
-- Version lives in four places at release time: `minn-admin.php` (×2), `readme.txt`
-  Stable tag, `manifest.json` (version + download_url). Don't touch them mid-cycle.
+- Version lives in three places at release time: `minn-admin.php` (×2) and
+  `manifest.json` (version + download_url). Don't touch them mid-cycle. There is
+  deliberately no readme.txt: GitHub is the distribution channel, so readme.md and
+  minnadmin.com are the listing surfaces (a wp.org readme gets recreated from them
+  if a directory listing ever happens).
 - A release ends at the published GitHub release + verified manifest. **Never update a
   live site as part of releasing** — the owner updates through Minn's own Extensions UI,
   which doubles as the release-candidate test of the self-updater.
