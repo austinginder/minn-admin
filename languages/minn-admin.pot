@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-23T02:16:02+00:00\n"
+"POT-Creation-Date: 2026-07-23T03:00:50+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 
@@ -84,251 +84,309 @@ msgstr ""
 msgid "Sorry, you are not allowed to access Minn Admin."
 msgstr ""
 
-#: assets/js/app.js:587
-#: assets/js/app.js:1435
-#: assets/js/app.js:1708
+#: assets/js/app.js:592
+#: assets/js/app.js:1442
+#: assets/js/app.js:1717
 msgid "Overview"
 msgstr ""
 
-#: assets/js/app.js:587
+#: assets/js/app.js:592
 msgid "Dashboard"
 msgstr ""
 
-#: assets/js/app.js:589
-#: assets/js/app.js:1436
+#: assets/js/app.js:594
+#: assets/js/app.js:1443
 msgid "Content"
 msgstr ""
 
-#: assets/js/app.js:590
-#: assets/js/app.js:1437
+#: assets/js/app.js:595
+#: assets/js/app.js:1444
 msgid "Media"
 msgstr ""
 
-#: assets/js/app.js:590
+#: assets/js/app.js:595
 msgid "Library"
 msgstr ""
 
-#: assets/js/app.js:591
-#: assets/js/app.js:1440
+#: assets/js/app.js:596
+#: assets/js/app.js:1447
 msgid "Comments"
 msgstr ""
 
-#: assets/js/app.js:591
+#: assets/js/app.js:596
 msgid "Moderation"
 msgstr ""
 
-#: assets/js/app.js:592
-#: assets/js/app.js:1443
+#: assets/js/app.js:597
+#: assets/js/app.js:1450
 msgid "Orders"
 msgstr ""
 
-#: assets/js/app.js:593
+#: assets/js/app.js:598
 msgid "Order"
 msgstr ""
 
-#: assets/js/app.js:594
-#: assets/js/app.js:1446
+#: assets/js/app.js:599
+#: assets/js/app.js:1453
 msgid "Subscriptions"
 msgstr ""
 
-#: assets/js/app.js:595
-#: assets/js/app.js:1449
+#: assets/js/app.js:600
+#: assets/js/app.js:1456
 msgid "Products"
 msgstr ""
 
-#: assets/js/app.js:596
-#: assets/js/app.js:1452
+#: assets/js/app.js:601
+#: assets/js/app.js:1459
 msgid "Coupons"
 msgstr ""
 
-#: assets/js/app.js:597
-#: assets/js/app.js:1455
+#: assets/js/app.js:602
+#: assets/js/app.js:1462
 msgid "Customers"
 msgstr ""
 
-#: assets/js/app.js:598
-#: assets/js/app.js:1476
+#: assets/js/app.js:603
+#: assets/js/app.js:1483
 msgid "Users"
 msgstr ""
 
-#: assets/js/app.js:598
+#: assets/js/app.js:603
 msgid "People"
 msgstr ""
 
-#: assets/js/app.js:599
-#: assets/js/app.js:1494
+#: assets/js/app.js:604
+#: assets/js/app.js:1501
 msgid "Terms"
 msgstr ""
 
-#: assets/js/app.js:599
+#: assets/js/app.js:604
 msgid "Categories & Tags"
 msgstr ""
 
-#: assets/js/app.js:600
-#: assets/js/app.js:1481
+#: assets/js/app.js:605
+#: assets/js/app.js:1488
 msgid "Menus"
 msgstr ""
 
-#: assets/js/app.js:600
+#: assets/js/app.js:605
 msgid "Navigation"
 msgstr ""
 
-#: assets/js/app.js:601
-#: assets/js/app.js:1483
+#: assets/js/app.js:606
+#: assets/js/app.js:1490
 msgid "Widgets"
 msgstr ""
 
-#: assets/js/app.js:601
+#: assets/js/app.js:606
 msgid "Sidebars & footers"
 msgstr ""
 
-#: assets/js/app.js:602
-#: assets/js/app.js:1473
+#: assets/js/app.js:607
+#: assets/js/app.js:1480
 msgid "Extensions"
 msgstr ""
 
-#: assets/js/app.js:602
+#: assets/js/app.js:607
 msgid "Installed"
 msgstr ""
 
-#: assets/js/app.js:603
-#: assets/js/app.js:1492
+#: assets/js/app.js:608
+#: assets/js/app.js:1499
 msgid "Structure"
 msgstr ""
 
-#: assets/js/app.js:603
+#: assets/js/app.js:608
 msgid "Post types, taxonomies & terms"
 msgstr ""
 
-#: assets/js/app.js:604
-#: assets/js/app.js:1498
+#: assets/js/app.js:609
+#: assets/js/app.js:1505
 msgid "Settings"
 msgstr ""
 
-#: assets/js/app.js:604
+#: assets/js/app.js:609
 msgid "Site"
 msgstr ""
 
-#: assets/js/app.js:605
-#: assets/js/app.js:1497
+#: assets/js/app.js:610
+#: assets/js/app.js:1504
 msgid "System"
 msgstr ""
 
-#: assets/js/app.js:605
+#: assets/js/app.js:610
 msgid "Diagnostics"
 msgstr ""
 
-#: assets/js/app.js:606
+#: assets/js/app.js:611
 msgid "Editor"
 msgstr ""
 
-#: assets/js/app.js:606
+#: assets/js/app.js:611
 msgid "Draft"
 msgstr ""
 
-#: assets/js/app.js:607
+#: assets/js/app.js:612
 msgid "Your profile"
 msgstr ""
 
-#: assets/js/app.js:607
+#: assets/js/app.js:612
 msgid "Account"
 msgstr ""
 
-#: assets/js/app.js:615
+#: assets/js/app.js:620
 msgid "Trash"
 msgstr ""
 
-#: assets/js/app.js:617
-#: assets/js/app.js:624
+#: assets/js/app.js:622
+#: assets/js/app.js:629
 msgid "Posts"
 msgstr ""
 
-#: assets/js/app.js:618
+#: assets/js/app.js:623
 msgid "Pages"
 msgstr ""
 
-#: assets/js/app.js:625
+#: assets/js/app.js:630
 msgid "pages"
 msgstr ""
 
 #. translators: %d: number of custom post types in the Content list.
-#: assets/js/app.js:629
+#: assets/js/app.js:634
 #, js-format
 msgid "%d type"
 msgid_plural "%d types"
 msgstr[0] ""
 msgstr[1] ""
 
-#: assets/js/app.js:1714
+#: assets/js/app.js:1723
 msgid "What's new — full changelog"
 msgstr ""
 
-#: assets/js/app.js:1717
+#: assets/js/app.js:1726
 msgid "Search…"
 msgstr ""
 
-#: assets/js/app.js:1720
+#: assets/js/app.js:1728
+msgid "Main navigation"
+msgstr ""
+
+#: assets/js/app.js:1729
 msgid "Workspace"
 msgstr ""
 
-#: assets/js/app.js:1721
+#: assets/js/app.js:1730
 msgid "Tools"
 msgstr ""
 
-#: assets/js/app.js:1722
+#: assets/js/app.js:1731
 msgid "Manage"
 msgstr ""
 
-#: assets/js/app.js:1725
+#: assets/js/app.js:1734
 msgid "End this switched session"
 msgstr ""
 
 #. translators: %s: display name of the user to switch back to.
-#: assets/js/app.js:1727
+#: assets/js/app.js:1736
 #, js-format
 msgid "Switch back to %s"
 msgstr ""
 
-#: assets/js/app.js:1729
+#: assets/js/app.js:1738
 msgid "Your account"
 msgstr ""
 
-#: assets/js/app.js:1736
+#: assets/js/app.js:1745
 msgid "WordPress admin (opens in a new tab)"
 msgstr ""
 
-#: assets/js/app.js:1737
+#: assets/js/app.js:1746
 msgid "Log out"
 msgstr ""
 
-#: assets/js/app.js:1746
+#: assets/js/app.js:1755
 msgid "Your site is not fully public"
 msgstr ""
 
-#: assets/js/app.js:1747
+#: assets/js/app.js:1756
 msgid "A WordPress update is available"
 msgstr ""
 
-#: assets/js/app.js:1748
+#: assets/js/app.js:1757
 msgid "View site"
 msgstr ""
 
-#: assets/js/app.js:1749
+#: assets/js/app.js:1757
+msgid "View site (opens in a new tab)"
+msgstr ""
+
+#: assets/js/app.js:1758
 msgid "About Minn"
 msgstr ""
 
-#: assets/js/app.js:1750
+#: assets/js/app.js:1759
 msgid "Theme: System (click to cycle, right-click for options)"
 msgstr ""
 
-#: assets/js/app.js:1751
+#: assets/js/app.js:1759
+msgid "Color theme"
+msgstr ""
+
+#: assets/js/app.js:1760
 msgid "Notifications"
 msgstr ""
 
-#: assets/js/app.js:1754
+#: assets/js/app.js:1763
 msgid "New post"
 msgstr ""
 
-#: assets/js/app.js:1754
+#: assets/js/app.js:1763
 msgid "New"
+msgstr ""
+
+#: assets/js/app.js:2935
+msgid "Select all items"
+msgstr ""
+
+#: assets/js/app.js:2940
+#: assets/js/app.js:6418
+#: assets/js/app.js:7720
+#, js-format
+msgid "Select %s"
+msgstr ""
+
+#: assets/js/app.js:6413
+msgid "Select all products"
+msgstr ""
+
+#. translators: %s: column name.
+#: assets/js/app.js:7599
+#, js-format
+msgid "Sort by %s"
+msgstr ""
+
+#: assets/js/app.js:7601
+msgid "sorted ascending"
+msgstr ""
+
+#: assets/js/app.js:7601
+msgid "sorted descending"
+msgstr ""
+
+#: assets/js/app.js:7656
+#: assets/js/app.js:7701
+msgid "Session filter"
+msgstr ""
+
+#: assets/js/app.js:7709
+msgid "Select all users"
+msgstr ""
+
+#: assets/js/app.js:9218
+msgid "Select page"
+msgstr ""
+
+#: assets/js/app.js:9235
+msgid "Select row"
 msgstr ""

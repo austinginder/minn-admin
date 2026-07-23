@@ -33,6 +33,11 @@
 		return 1 === n ? __( single ) : plural;
 	};
 
+	// JS-initiated smooth scrolls ignore the CSS scroll-behavior override, so
+	// reduced-motion users need the behavior picked at call time. Live query:
+	// the OS setting can change mid-session.
+	const scrollMotion = () => ( window.matchMedia && matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' );
+
 	// printf-lite for translatable strings: %s, %d and positional %1$s forms
 	// (translations reorder words; concatenation can't).
 	const sprintf = ( fmt, ...args ) => {
@@ -1412,7 +1417,9 @@
 			bug: '<path d="M8 2l1.5 1.5M16 2l-1.5 1.5"/><path d="M9 7h6a3 3 0 0 1 3 3v3a6 6 0 0 1-12 0v-3a3 3 0 0 1 3-3Z"/><path d="M3 13h3M18 13h3M4 8l2.5 1.5M20 8l-2.5 1.5M4 18l2.5-1.5M20 18l-2.5-1.5M12 19v3"/>',
 			alignRight: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="7" y2="18"/>',
 		};
-		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${ icons[ name ] || '' }</svg>`;
+		// Icons are always decorative: the accessible name lives on the
+		// control (text, aria-label or title), never on the glyph.
+		return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false">${ icons[ name ] || '' }</svg>`;
 	}
 
 	function navBtnHtml( n ) {
@@ -1695,6 +1702,8 @@
 				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
 				|| ( surface && surface.family && btn.dataset.family === surface.family );
 			btn.classList.toggle( 'active', on );
+			if ( on ) btn.setAttribute( 'aria-current', 'page' );
+			else btn.removeAttribute( 'aria-current' );
 		} );
 	}
 
@@ -1716,11 +1725,11 @@
 				<button class="minn-search-btn" id="minn-open-palette">
 					${ icon( 'search' ) }<span>${ esc( __( 'Search…' ) ) }</span><span class="minn-kbd">⌘K</span>
 				</button>
-				<div class="minn-nav-scroll">
+				<nav class="minn-nav-scroll" aria-label="${ esc( __( 'Main navigation' ) ) }">
 					${ navGroupHtml( 'workspace', __( 'Workspace' ), workspaceNavItems() ) }
 					${ navGroupHtml( 'tools', __( 'Tools' ), toolsNavItems(), true ) }
 					${ navGroupHtml( 'manage', __( 'Manage' ), manageItems, true ) }
-				</div>
+				</nav>
 				${ B.switchBack ? `
 			<a class="minn-switchback" href="${ esc( B.switchBack.url ) }" title="${ esc( __( 'End this switched session' ) ) }">
 				${ icon( 'undo' ) } ${ /* translators: %s: display name of the user to switch back to. */
@@ -1733,31 +1742,32 @@
 						<div class="minn-user-role">${ esc( B.user.role ) }</div>
 					</div>
 					<div class="minn-user-acts">
-						<a class="minn-user-logout" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>
-						<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="${ esc( __( 'Log out' ) ) }">${ icon( 'logout' ) }</a>
+						<a class="minn-user-logout" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }" aria-label="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>
+						<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="${ esc( __( 'Log out' ) ) }" aria-label="${ esc( __( 'Log out' ) ) }">${ icon( 'logout' ) }</a>
 					</div>
 				</div>
 			</aside>
 			<main class="minn-main">
 				<header class="minn-topbar">
-					<div class="minn-topbar-title" id="minn-title"></div>
+					<h1 class="minn-topbar-title" id="minn-title"></h1>
 					<div class="minn-topbar-sub" id="minn-sub"></div>
 					<div class="minn-topbar-actions">
 						<button class="minn-vis-chip" id="minn-vis-chip" hidden title="${ esc( __( 'Your site is not fully public' ) ) }">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( __( 'A WordPress update is available' ) ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
-						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="${ esc( __( 'View site' ) ) }">${ icon( 'globe' ) }</a>
-						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
-						<button class="minn-icon-btn" id="minn-theme-btn" title="${ esc( __( 'Theme: System (click to cycle, right-click for options)' ) ) }"></button>
-						<button class="minn-icon-btn" id="minn-notif-btn" title="${ esc( __( 'Notifications' ) ) }">
-							${ icon( 'bell' ) }<span class="minn-unread-dot" id="minn-unread-dot" hidden></span>
+						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="${ esc( __( 'View site' ) ) }" aria-label="${ esc( __( 'View site (opens in a new tab)' ) ) }">${ icon( 'globe' ) }</a>
+						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }" aria-label="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
+						<button class="minn-icon-btn" id="minn-theme-btn" title="${ esc( __( 'Theme: System (click to cycle, right-click for options)' ) ) }" aria-label="${ esc( __( 'Color theme' ) ) }"></button>
+						<button class="minn-icon-btn" id="minn-notif-btn" title="${ esc( __( 'Notifications' ) ) }" aria-label="${ esc( __( 'Notifications' ) ) }">
+							${ icon( 'bell' ) }<span class="minn-unread-dot" id="minn-unread-dot" hidden aria-hidden="true"></span>
 						</button>
 						<button class="minn-btn-primary" id="minn-new-btn" aria-label="${ esc( __( 'New post' ) ) }">${ icon( 'plus' ) } ${ esc( __( 'New' ) ) }</button>
 					</div>
 				</header>
-				<div class="minn-scroll"><div class="minn-page" id="minn-view"></div></div>
+				<div class="minn-scroll"><div class="minn-page" id="minn-view" tabindex="-1"></div></div>
 			</main>
 		</div>
-		<div id="minn-overlays"></div>`;
+		<div id="minn-overlays"></div>
+		<div id="minn-route-announcer" class="minn-sr-only" aria-live="polite"></div>`;
 
 		bindNavClicks();
 		bindNavGroupToggles();
@@ -1903,6 +1913,8 @@
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
+			if ( on ) btn.setAttribute( 'aria-current', 'page' );
+			else btn.removeAttribute( 'aria-current' );
 		} );
 	}
 
@@ -2920,12 +2932,12 @@
 		<div id="minn-bulk-slot"></div>
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-content-cols${ state.contentTrash ? ' trash' : '' }">
-				<div><input type="checkbox" class="minn-cb" id="minn-sel-all"${ filtered.length && filtered.every( ( p ) => sel.has( p.id ) ) ? ' checked' : '' }></div>
+				<div><input type="checkbox" class="minn-cb" id="minn-sel-all" aria-label="${ esc( __( 'Select all items' ) ) }"${ filtered.length && filtered.every( ( p ) => sel.has( p.id ) ) ? ' checked' : '' }></div>
 				<div></div><div>Title</div><div>Status</div><div>Author</div><div>Date</div><div></div>
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
 				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }">
-					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }"${ sel.has( p.id ) ? ' checked' : '' }></div>
+					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }" aria-label="${ esc( sprintf( __( 'Select %s' ), p.title ) ) }"${ sel.has( p.id ) ? ' checked' : '' }></div>
 					<div class="minn-row-icon${ p.thumb ? ' has-thumb' : '' }">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
 						<div class="minn-row-title">${ esc( p.title ) }</div>
@@ -6398,12 +6410,12 @@
 		<div id="minn-prod-bulk-slot"></div>
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-product-cols${ canBulk ? ' with-cb' : '' }">
-				${ canBulk ? `<div><input type="checkbox" class="minn-cb" id="minn-prod-sel-all"${ c.items.length && c.items.every( ( p ) => psel.has( p.id ) ) ? ' checked' : '' }></div>` : '' }
+				${ canBulk ? `<div><input type="checkbox" class="minn-cb" id="minn-prod-sel-all" aria-label="${ esc( __( 'Select all products' ) ) }"${ c.items.length && c.items.every( ( p ) => psel.has( p.id ) ) ? ' checked' : '' }></div>` : '' }
 				<div>Product</div><div>SKU</div><div>Stock</div><div>Price</div><div>Status</div><div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( p ) => `
 				<div class="minn-table-row minn-product-cols${ canBulk ? ' with-cb' : '' }" data-product="${ p.id }">
-					${ canBulk ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb" data-psel="${ p.id }"${ psel.has( p.id ) ? ' checked' : '' }></div>` : '' }
+					${ canBulk ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb" data-psel="${ p.id }" aria-label="${ esc( sprintf( __( 'Select %s' ), p.name ) ) }"${ psel.has( p.id ) ? ' checked' : '' }></div>` : '' }
 					<div class="minn-cell-clip minn-prod-name">
 						${ productThumb( p ) }
 						<div>
@@ -7579,14 +7591,26 @@
 		state.cache.users = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
+	// Accessible name for a grid-header sort button: names the column and,
+	// when active, the current direction (shared by the users list and
+	// surface collections).
+	function sortButtonLabel( colLabel, active, dir ) {
+		/* translators: %s: column name. */
+		const base = sprintf( __( 'Sort by %s' ), colLabel );
+		if ( ! active ) return base;
+		return base + ', ' + ( 'asc' === dir ? __( 'sorted ascending' ) : __( 'sorted descending' ) );
+	}
+
 	function userSortHead( key ) {
 		const col = USER_SORT_COLS[ key ];
 		if ( ! col ) return '';
 		const active = ( state.userOrderby || 'registered_date' ) === col.orderby;
 		const order = state.userOrder === 'asc' ? 'asc' : 'desc';
-		const aria = active ? ( order === 'asc' ? 'ascending' : 'descending' ) : 'none';
 		const mark = active ? ( order === 'asc' ? ' ↑' : ' ↓' ) : '';
-		return `<button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-usort="${ esc( key ) }" aria-sort="${ aria }" title="Sort by ${ esc( col.label ) }">${ esc( col.label ) }${ mark }</button>`;
+		// aria-sort only belongs on real columnheaders; these grid headers
+		// carry the sort state in the button's accessible name instead.
+		const label = sortButtonLabel( col.label, active, order );
+		return `<button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-usort="${ esc( key ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ esc( col.label ) }${ mark }</button>`;
 	}
 
 	let userSearchTimer = null;
@@ -7629,7 +7653,7 @@
 				<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }" disabled>
 			</div>
 			<div class="minn-toolbar minn-toolbar-filters">
-				<div class="minn-tabs minn-ext-filters" role="tablist" aria-label="Session filter">
+				<div class="minn-tabs minn-ext-filters" role="group" aria-label="${ esc( __( 'Session filter' ) ) }">
 					${ USER_SESSION_TABS.map( ( [ id, label ] ) =>
 						`<button type="button" class="minn-tab${ userSessionEarly === id ? ' active' : '' }" data-usess="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 				</div>
@@ -7674,7 +7698,7 @@
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } Add user</button>` : '' }
 		</div>
 		<div class="minn-toolbar minn-toolbar-filters">
-			<div class="minn-tabs minn-ext-filters" role="tablist" aria-label="Session filter">
+			<div class="minn-tabs minn-ext-filters" role="group" aria-label="${ esc( __( 'Session filter' ) ) }">
 				${ USER_SESSION_TABS.map( ( [ id, label ] ) =>
 					`<button type="button" class="minn-tab${ userSession === id ? ' active' : '' }" data-usess="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>
@@ -7682,7 +7706,7 @@
 		${ bulkUsers ? '<div id="minn-user-bulk-slot"></div>' : '' }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-user-cols${ bulkUsers ? ' has-cb' : '' }">
-				${ bulkUsers ? `<div><input type="checkbox" class="minn-cb" id="minn-user-selall"></div>` : '' }
+				${ bulkUsers ? `<div><input type="checkbox" class="minn-cb" id="minn-user-selall" aria-label="${ esc( __( 'Select all users' ) ) }"></div>` : '' }
 				<div></div>
 				<div>${ userSortHead( 'id' ) }</div>
 				<div>${ userSortHead( 'name' ) }</div>
@@ -7693,7 +7717,7 @@
 			</div>
 			${ c.items.length ? c.items.map( ( u ) => `
 				<div class="minn-table-row minn-user-cols${ bulkUsers ? ' has-cb' : '' }${ userSel.has( u.id ) ? ' sel' : '' }" data-user="${ u.id }" data-uname="${ esc( u.name || '' ) }" data-uemail="${ esc( u.email || '' ) }" data-uroles="${ esc( ( u.roles || [] ).join( ',' ) ) }">
-					${ bulkUsers ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-user-cb" data-cbid="${ u.id }"${ userSel.has( u.id ) ? ' checked' : '' }></div>` : '' }
+					${ bulkUsers ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-user-cb" data-cbid="${ u.id }" aria-label="${ esc( sprintf( __( 'Select %s' ), u.name ) ) }"${ userSel.has( u.id ) ? ' checked' : '' }></div>` : '' }
 					<img class="minn-user-row-avatar" src="${ esc( ( u.avatar_urls && ( u.avatar_urls[ '48' ] || Object.values( u.avatar_urls )[ 0 ] ) ) || '' ) }" alt="">
 					<div class="minn-row-meta minn-user-id">#${ esc( String( u.id ) ) }</div>
 					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
@@ -9191,7 +9215,7 @@
 		${ hasBulk ? '<div id="minn-sbulk-slot"></div>' : '' }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head" style="grid-template-columns:${ gridCols };">
-				${ hasBulk ? '<div><input type="checkbox" class="minn-cb" id="minn-sbulk-all" title="Select page"></div>' : '' }
+				${ hasBulk ? `<div><input type="checkbox" class="minn-cb" id="minn-sbulk-all" title="${ esc( __( 'Select page' ) ) }" aria-label="${ esc( __( 'Select page' ) ) }"></div>` : '' }
 				${ cols.map( ( col ) => {
 					// Sortable header (v0.18.0): a column carrying a `sort`
 					// token on a collection with sortQuery renders the users-
@@ -9199,16 +9223,16 @@
 					if ( col.sort && coll.sortQuery ) {
 						const active = ss.sortBy === col.sort;
 						const dir = ss.sortDir === 'desc' ? 'desc' : 'asc';
-						const aria = active ? ( dir === 'asc' ? 'ascending' : 'descending' ) : 'none';
 						const mark = active ? ( dir === 'asc' ? ' ↑' : ' ↓' ) : '';
-						return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }><button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-ssort="${ esc( col.sort ) }" data-ssort-format="${ esc( col.format || '' ) }" aria-sort="${ aria }" title="Sort by ${ esc( col.label ) }">${ esc( col.label ) }${ mark }</button></div>`;
+						const label = sortButtonLabel( col.label, active, dir );
+						return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }><button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-ssort="${ esc( col.sort ) }" data-ssort-format="${ esc( col.format || '' ) }" data-ssort-label="${ esc( col.label ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ esc( col.label ) }${ mark }</button></div>`;
 					}
 					return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }>${ esc( col.label ) }</div>`;
 				} ).join( '' ) }<div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( item, i ) => `
 				<div class="minn-table-row" style="grid-template-columns:${ gridCols };" data-sitem="${ i }">
-					${ hasBulk ? `<div><input type="checkbox" class="minn-cb" data-scheck="${ i }"${ ss.sel.has( item.id ) ? ' checked' : '' }></div>` : '' }
+					${ hasBulk ? `<div><input type="checkbox" class="minn-cb" data-scheck="${ i }" aria-label="${ esc( __( 'Select row' ) ) }"${ ss.sel.has( item.id ) ? ' checked' : '' }></div>` : '' }
 					${ cols.map( ( col ) => surfaceCell( item, col ) ).join( '' ) }
 					${ hasRowMenu
 						? `<div class="minn-row-end"><button type="button" class="minn-row-more" title="Actions" aria-label="Actions">⋯</button></div>`
@@ -9240,7 +9264,9 @@
 					$$( '[data-ssort]', view ).forEach( ( b ) => {
 						const active = b.dataset.ssort === ss.sortBy;
 						b.classList.toggle( 'is-active', active );
-						b.setAttribute( 'aria-sort', active ? ( ss.sortDir === 'asc' ? 'ascending' : 'descending' ) : 'none' );
+						const label = sortButtonLabel( b.dataset.ssortLabel || b.textContent.replace( / [↑↓]$/, '' ), active, ss.sortDir );
+						b.setAttribute( 'aria-label', label );
+						b.title = label;
 						b.textContent = b.textContent.replace( / [↑↓]$/, '' ) + ( active ? ( ss.sortDir === 'asc' ? ' ↑' : ' ↓' ) : '' );
 					} );
 				} );
@@ -12538,7 +12564,7 @@
 			const jumpBtns = $$( '[data-jump]', jumpBar );
 			jumpBtns.forEach( ( b ) => b.addEventListener( 'click', () => {
 				const el = document.getElementById( b.dataset.jump );
-				if ( el ) jumpScroller.scrollTo( { top: Math.max( 0, el.offsetTop - jumpBar.offsetHeight - 34 ), behavior: 'smooth' } );
+				if ( el ) jumpScroller.scrollTo( { top: Math.max( 0, el.offsetTop - jumpBar.offsetHeight - 34 ), behavior: scrollMotion() } );
 			} ) );
 			let spyRaf = 0;
 			const spy = () => {
@@ -12602,7 +12628,7 @@
 				} else if ( 'debug' === k ) {
 					const t = document.getElementById( 'minn-sys-debug' );
 					const sc = $( '.minn-scroll' );
-					if ( t && sc ) sc.scrollTo( { top: t.offsetTop - 14, behavior: 'smooth' } );
+					if ( t && sc ) sc.scrollTo( { top: t.offsetTop - 14, behavior: scrollMotion() } );
 				}
 			} ) );
 		// Adapter checks with an href open the plugin's own screen.
@@ -17040,7 +17066,7 @@
 			const heads = outlineHeads( body );
 			const h = heads[ Math.min( +row.dataset.oi, heads.length - 1 ) ];
 			if ( ! h ) return;
-			h.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+			h.scrollIntoView( { behavior: scrollMotion(), block: 'center' } );
 			// Flash via an overlay — NEVER a class or style on the heading
 			// itself: the typing surface serializes, chrome must not. The ping
 			// lives INSIDE the scroller at absolute content coordinates, so it
@@ -27859,8 +27885,8 @@
 				next.classList.toggle( 'show', max > 2 && tabs.scrollLeft < max - 2 );
 			};
 			const step = () => Math.max( 120, Math.round( tabs.clientWidth * 0.7 ) );
-			prev.addEventListener( 'click', () => tabs.scrollBy( { left: -step(), behavior: 'smooth' } ) );
-			next.addEventListener( 'click', () => tabs.scrollBy( { left: step(), behavior: 'smooth' } ) );
+			prev.addEventListener( 'click', () => tabs.scrollBy( { left: -step(), behavior: scrollMotion() } ) );
+			next.addEventListener( 'click', () => tabs.scrollBy( { left: step(), behavior: scrollMotion() } ) );
 			tabs.addEventListener( 'scroll', update, { passive: true } );
 			if ( 'ResizeObserver' in window ) new ResizeObserver( update ).observe( tabs );
 			// Active tab may be off-screen on first paint — reveal it by moving
@@ -27907,8 +27933,30 @@
 		inp.focus( { preventScroll: true } );
 	}
 
+	// SPA navigations are silent to screen readers by default: announce the
+	// new view's title politely, and when the DOM swap dropped focus on
+	// <body> (the focused element left with the old view) reseat it on the
+	// view container so keyboard users aren't stranded at the document top.
+	// Same-route re-renders (cache refreshes, badge updates) announce nothing
+	// and never move focus.
+	let announcedRoute = null;
+
+	function announceRoute() {
+		if ( state.route === announcedRoute ) return;
+		announcedRoute = state.route;
+		const live = $( '#minn-route-announcer' );
+		const title = $( '#minn-title' );
+		if ( live ) live.textContent = title ? title.textContent.trim() : '';
+		const ae = document.activeElement;
+		if ( ! ae || ae === document.body ) {
+			const view = $( '#minn-view' );
+			if ( view ) view.focus( { preventScroll: true } );
+		}
+	}
+
 	function renderView() {
 		renderTopbar();
+		announceRoute();
 		closeInspector();
 		closeBlockPicker();
 		hideCodePop();

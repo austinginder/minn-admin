@@ -34,16 +34,22 @@ body {
  */
 :root, [data-theme="dark"] {
   --bg:#0b0b0d; --bg2:#101013; --panel:#151518; --panel2:#1b1b1f; --hover:#202027;
-  --border:#242429; --border2:#31313a; --text:#ececed; --text2:#9d9da7; --text3:#63636d;
-  --accent:#6e62f5; --accent2:#8a80f8; --accent-fg:#fff;
+  --border:#242429; --border2:#31313a; --text:#ececed; --text2:#9d9da7; --text3:#8a8a94;
+  --accent:#6459f0; --accent2:#8a80f8; --accent-fg:#fff;
   --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
   --accent-ring: color-mix(in srgb, var(--accent) 35%, transparent);
   --green:#46b881; --amber:#e0a458; --red:#e46b6b; --blue:#5b9be0; --pink:#d073c0;
+  /* TEXT-role variants of the status colors (a11y pass): identical to the
+     semantic tokens in dark, darkened in light where the pastel originals
+     sit below 4.5:1 on white. Pills/dots/borders keep the semantic tokens. */
+  --green-text: var(--green); --amber-text: var(--amber);
+  --red-text: var(--red); --blue-text: var(--blue);
   --shadow:0 12px 40px rgba(0,0,0,0.5); --shadow-sm:0 4px 16px rgba(0,0,0,0.35);
 }
 [data-theme="light"] {
   --bg:#f6f6f7; --bg2:#ffffff; --panel:#ffffff; --panel2:#f4f4f6; --hover:#eeeef1;
-  --border:#e7e7ea; --border2:#dadade; --text:#1a1a1f; --text2:#5e5e69; --text3:#9696a0;
+  --border:#e7e7ea; --border2:#dadade; --text:#1a1a1f; --text2:#5e5e69; --text3:#696973;
+  --green-text:#1d6f47; --amber-text:#89651d; --red-text:#ad4141; --blue-text:#2b68af;
   --accent:#6a5ef2; --accent2:#5a4ef0; --accent-fg:#fff;
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
   --accent-ring: color-mix(in srgb, var(--accent) 28%, transparent);
@@ -147,6 +153,10 @@ body {
    animates in un-centered and snaps left at the end (reads as a sideways flash). */
 @keyframes minnToastIn { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
 @keyframes minnPulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+/* Text pulse that never leaves AA territory: breathe between the two
+   passing text tiers instead of dropping opacity (loading indicators are
+   still text; axe samples mid-animation). */
+@keyframes minnTextPulse { 0%,100% { color: var(--text3); } 50% { color: var(--text2); } }
 @keyframes minnSpin { to { transform: rotate(360deg); } }
 
 /* Re-renders of an already-open surface must not replay entrance animations. */
@@ -349,7 +359,9 @@ button.minn-nav-label:hover { color: var(--text2); }
   height: 56px; flex-shrink: 0; border-bottom: 1px solid var(--border); display: flex; align-items: center;
   padding: 0 20px; gap: 12px; background: var(--bg);
 }
-.minn-topbar-title { font-weight: 700; font-size: 16px; letter-spacing: -0.2px; }
+/* An h1 since the a11y pass (every page needs one; the topbar title IS the
+   page title) — margin reset kills the UA heading margins. */
+.minn-topbar-title { font-weight: 700; font-size: 16px; letter-spacing: -0.2px; margin: 0; }
 .minn-topbar-sub { font-size: 13px; color: var(--text3); background: var(--panel); border: 1px solid var(--border); padding: 3px 9px; border-radius: 20px; }
 /* Family provider switcher — sits where the static sub badge was; opens a
    combobox of installed adapters (Code Snippets / WPCode / Fluent…). */
@@ -521,7 +533,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 /* ===== Cards / panels ===== */
 .minn-card { background: var(--panel); border: 1px solid var(--border); border-radius: 13px; }
 .minn-empty { padding: 40px; text-align: center; color: var(--text3); font-size: 14px; }
-.minn-loading { padding: 60px; text-align: center; color: var(--text3); font-size: 14px; animation: minnPulse 1.4s ease infinite; }
+.minn-loading { padding: 60px; text-align: center; color: var(--text3); font-size: 14px; animation: minnTextPulse 1.4s ease infinite; }
 
 /* ===== Dashboard ===== */
 .minn-dash-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; }
@@ -534,9 +546,9 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-stat-label { color: var(--text2); font-size: 13.5px; font-weight: 500; }
 .minn-stat-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; margin-top: 8px; }
 .minn-stat-delta { font-size: 13px; font-weight: 600; margin-top: 6px; color: var(--text3); }
-.minn-stat-delta.up { color: var(--green); }
+.minn-stat-delta.up { color: var(--green-text); }
 .minn-stat-delta.warn { color: var(--amber); }
-.minn-stat-delta.down { color: var(--red); }
+.minn-stat-delta.down { color: var(--red-text); }
 
 /* Store needs-attention strip (Overview, WooCommerce only) */
 .minn-store-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 17px; margin-bottom: 20px; }
@@ -709,10 +721,10 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-cell-clip { min-width: 0; }
 
 .minn-status { font-size: 12.5px; font-weight: 600; padding: 3px 9px; border-radius: 6px; display: inline-block; }
-.minn-status.publish { color: var(--green); background: rgba(70,184,129,0.13); }
+.minn-status.publish { color: var(--green-text); background: rgba(70,184,129,0.13); }
 .minn-status.draft, .minn-status.pending { color: var(--text3); background: var(--panel2); }
-.minn-status.future { color: var(--blue); background: rgba(91,155,224,0.14); }
-.minn-status.private { color: var(--amber); background: rgba(224,164,88,0.14); }
+.minn-status.future { color: var(--blue-text); background: rgba(91,155,224,0.14); }
+.minn-status.private { color: var(--amber-text); background: rgba(224,164,88,0.14); }
 
 /* ===== Media ===== */
 .minn-view-tabs { margin-left: auto; display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
@@ -2206,8 +2218,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-refund-del:hover { color: var(--red); }
 .minn-status.trash-status { color: var(--red); background: rgba(228,107,107,0.12); }
 /* Live post carrying unsaved edits (a newer autosave than the saved copy) */
-.minn-status.modified { color: var(--amber); background: rgba(224,164,88,0.14); margin-left: 5px; }
-.minn-status.editing { color: var(--blue); background: rgba(91,155,224,0.14); margin-left: 5px; }
+.minn-status.modified { color: var(--amber-text); background: rgba(224,164,88,0.14); margin-left: 5px; }
+.minn-status.editing { color: var(--blue-text); background: rgba(91,155,224,0.14); margin-left: 5px; }
 
 /* ===== Users ===== */
 .minn-user-cols { grid-template-columns: 40px 52px 1.2fr 1.4fr 130px 110px 40px; }
@@ -2700,9 +2712,9 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-sys-summary { display: flex; gap: 8px; flex-wrap: wrap; }
 .minn-sys-topbar #minn-sys-copy { margin-left: auto; }
 .minn-sys-pill { font-size: 12.5px; font-weight: 600; padding: 4px 12px; border-radius: 999px; border: 1px solid; }
-.minn-sys-pill.pass { color: var(--green); background: rgba(70,184,129,0.1); border-color: rgba(70,184,129,0.25); }
-.minn-sys-pill.warn { color: var(--amber); background: rgba(224,164,88,0.1); border-color: rgba(224,164,88,0.25); }
-.minn-sys-pill.fail { color: var(--red); background: rgba(228,107,107,0.12); border-color: rgba(228,107,107,0.3); }
+.minn-sys-pill.pass { color: var(--green-text); background: rgba(70,184,129,0.1); border-color: rgba(70,184,129,0.25); }
+.minn-sys-pill.warn { color: var(--amber-text); background: rgba(224,164,88,0.1); border-color: rgba(224,164,88,0.25); }
+.minn-sys-pill.fail { color: var(--red-text); background: rgba(228,107,107,0.12); border-color: rgba(228,107,107,0.3); }
 
 /* Sticky section jump bar. flex-wrap, never overflow-x: a sticky element
    with overflow falls off the compositor fast path and lags scroll by a
@@ -3083,3 +3095,28 @@ button.minn-ac-item:hover { background: var(--hover); }
    pill still tracks --minn-kb-inset above the keyboard. */
 body.minn-kb-open .minn-editor-body { padding-bottom: 96px; }
 body.minn-kb-open .minn-editor-stats .minn-stats-session { display: none; }
+
+/* ===== Accessibility (chrome pass) ===== */
+
+/* Visually hidden, still announced — the route-change live region. */
+.minn-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Programmatic focus target after a route swap drops focus; the container
+   itself never needs a visible ring (real controls keep theirs). */
+#minn-view:focus { outline: none; }
+
+/* Reduced motion: collapse animations and transitions to near-zero (0.01ms,
+   not 0 or none — transitionend listeners must still fire) and neutralize
+   CSS smooth scrolling. JS-initiated scrolls pick their behavior at call
+   time via scrollMotion(). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

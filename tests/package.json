@@ -4,5 +4,8 @@
 	"description": "Browser test harness for Minn Admin — see README.md",
 	"dependencies": {
 		"playwright-core": "^1.45.0"
+	},
+	"devDependencies": {
+		"axe-core": "^4.12.1"
 	}
 }
