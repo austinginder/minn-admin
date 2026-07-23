@@ -23259,7 +23259,7 @@
 		cmds.push(
 			{ label: 'Your profile — name, email, password', kind: 'link', icon: '@', run: () => go( 'profile' ) },
 			{ label: __( 'Open the user guide' ), kind: 'link', icon: '📖', run: openGuide },
-			{ label: 'About Minn — philosophy & help', kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
+			{ label: 'About Minn — help & shortcuts', kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
 			{ label: 'Visit site', kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank' ) },
 			{ label: 'Classic wp-admin', kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank' ) },
 			{ label: 'Log out', kind: 'link', icon: '⎋', run: () => { window.location.href = B.site.logout; } },
@@ -24593,9 +24593,16 @@
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-help-body">
-						<p><b>Minn is a reimagined WordPress admin.</b> It is a calm, fast surface for the
-						work you actually do every day: writing, moderating, uploading, and keeping an eye
-						on the site. The classic wp-admin stays fully available. Minn is additive, never a cage.</p>
+						<p><b>${ esc( __( 'Minn is a reimagined WordPress admin.' ) ) }</b> ${ esc( __( 'A calm, fast surface for the work you do every day: writing, moderating, uploading, and keeping an eye on the site. Classic wp-admin stays fully available, one click away.' ) ) }</p>
+
+						<h4>${ esc( __( 'Getting around' ) ) }</h4>
+						<p>${ esc( __( 'The sidebar has three groups: Workspace (the daily material), Tools (what your plugins add) and Manage (the site itself). The fastest way anywhere is the command palette:' ) ) } <span class="minn-kbd">⌘K</span>${ esc( __( ', then start typing a view, a post or a command.' ) ) }</p>
+
+						<h4>${ esc( __( 'Right-click almost anything' ) ) }</h4>
+						<p>${ esc( __( 'The least discoverable thing in Minn, so here it is in writing: rows in Content and Media, comments, the theme button, plugin entries in the sidebar and group headings in the block library all have right-click menus. When in doubt, try a right-click.' ) ) }</p>
+
+						<h4>${ esc( __( 'Make it yours' ) ) }</h4>
+						<p>${ esc( __( 'Anything a plugin adds here can be hidden for you alone: right-click its sidebar entry or block-library heading and choose Hide. Everything hidden is listed on Your profile, where one click restores it.' ) ) }</p>
 
 						<h4>Keyboard shortcuts</h4>
 						<div class="minn-help-keys">
@@ -24613,26 +24620,9 @@
 						<p class="minn-help-keys-note">The word-count pill (bottom-right in the editor) shows total words, reading time, and words written this session. Click it to set or clear a word goal.</p>
 						<p class="minn-help-keys-note">On Windows and Linux, use <span class="minn-kbd">Ctrl</span> in place of <span class="minn-kbd">⌘</span>.</p>
 
-						<h4>Get out of the way</h4>
-						<p>No boxes within boxes, no meta panels fighting for attention. The daily loop is one
-						click away and visually quiet. Press <span class="minn-kbd">⌘K</span> anywhere.</p>
-
-						<h4>Configuration belongs to your AI agent</h4>
-						<p>Minn deliberately doesn't rebuild every settings screen. Need to configure ACF,
-						Gravity Forms, or an SEO plugin? Open <b>Your profile → AI Access</b>, generate an
-						application password, and hand your agent the generated guide. The agent does the
-						fiddly work over the REST API using its own revocable credential, never your login,
-						while Minn stays minimal.</p>
-
-						<h4>Nothing is ever locked in</h4>
-						<p>Everything Minn writes is native WordPress: real Gutenberg block markup, core
-						options, core REST calls. Complex block layouts are preserved byte for byte as
-						read-only islands while you edit the text around them. Deactivate the plugin and
-						nothing is lost.</p>
-
-						<h4>Extensible by description, not code</h4>
-						<p>Plugins add views and editor panels with a single PHP filter. No JavaScript, no
-						build step. Gravity Forms, Gravity SMTP and ACF adapters ship built in.</p>
+						<h4>${ esc( __( 'Deliberately minimal' ) ) }</h4>
+						<p>${ esc( __( 'Minn surfaces the settings people change day to day; the long tail stays in wp-admin on purpose. For plugin configuration Minn doesn\'t rebuild, open' ) ) } <b>${ esc( __( 'Your profile → AI Access' ) ) }</b>${ esc( __( ' and hand your AI agent a revocable credential to do the fiddly work over the REST API.' ) ) }</p>
+						<p>${ esc( __( 'Everything Minn writes is native WordPress: real block markup, core options, core users. Deactivate the plugin and nothing is lost. Plugins extend Minn with one PHP filter, as plain data, which is why nothing here can nag you.' ) ) }</p>
 					</div>
 					<div class="minn-modal-actions">
 						<button class="minn-btn-primary" id="minn-help-guide">${ esc( __( 'User guide' ) ) }</button>
