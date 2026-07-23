@@ -783,6 +783,10 @@ class Minn_Admin {
 				'nonce' => Minn_Admin_Notices::nonce(),
 				'stale' => Minn_Admin_Notices::is_stale(),
 			),
+			// Ungated admin-ajax URL: core's `rest-nonce` action lives there,
+			// and the client uses it to mint a fresh REST nonce in place when
+			// the boot nonce expires (a tab left open past nonce lifetime).
+			'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
 			// Plugin toggles ride admin-ajax (a REAL admin context) so
 			// activation hooks gated on is_admin() work — see
 			// ajax_plugin_status(). REST remains the client's fallback.

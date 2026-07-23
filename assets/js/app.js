@@ -24,6 +24,36 @@
 
 	const decodeEntities = stripTags;
 
+	// REST nonces outlive most sessions but not an overnight tab. When a
+	// request fails with rest_cookie_invalid_nonce, mint a fresh nonce via
+	// core's admin-ajax `rest-nonce` action (cookie-authenticated, needs no
+	// nonce itself) and retry the request once. Concurrent failures share one
+	// refresh; if the cookies themselves are gone the refresh fails and we
+	// reload into the login flow instead of leaving every write a dead toast.
+	let nonceRefresh = null;
+
+	function refreshRestNonce() {
+		if ( nonceRefresh ) return nonceRefresh;
+		nonceRefresh = ( async () => {
+			const res = await fetch( B.ajaxUrl + '?action=rest-nonce', { credentials: 'same-origin' } );
+			const fresh = ( await res.text() ).trim();
+			// admin-ajax answers unauthenticated/unknown actions with "0"/"-1".
+			if ( ! res.ok || ! /^[a-f0-9]{8,12}$/i.test( fresh ) ) {
+				throw new Error( 'not signed in' );
+			}
+			B.nonce = fresh;
+		} )();
+		// Settle before clearing so a burst of parallel 403s (a whole view's
+		// loads landing on a stale nonce) rides one admin-ajax round trip.
+		nonceRefresh.finally( () => { nonceRefresh = null; } ).catch( () => {} );
+		return nonceRefresh;
+	}
+
+	function sessionExpiredReload() {
+		toast( 'Your session expired. Reloading…', true );
+		setTimeout( () => location.reload(), 1400 );
+	}
+
 	async function apiRes( path, opts = {} ) {
 		const url = /^https?:/.test( path ) ? path : B.restUrl + path.replace( /^\//, '' );
 		const headers = { 'X-WP-Nonce': B.nonce };
@@ -41,6 +71,19 @@
 				code = j.code || '';
 				data = j.data || null;
 			} catch ( e ) {}
+			if ( 'rest_cookie_invalid_nonce' === code && ! opts._nonceRetry && B.ajaxUrl ) {
+				try {
+					await refreshRestNonce();
+				} catch ( e ) {
+					sessionExpiredReload();
+					const dead = new Error( 'Your session expired.' );
+					dead.code = code;
+					throw dead;
+				}
+				// Caller headers are re-spread over the fresh B.nonce, so a
+				// caller-supplied X-WP-Nonce override still wins on the retry.
+				return apiRes( path, { ...opts, _nonceRetry: true } );
+			}
 			// The WP error code and data ride along so callers can react to
 			// specific failures (the lock guard's minn_locked, for one).
 			const err = new Error( msg );
