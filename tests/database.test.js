@@ -15,10 +15,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const { browser, page, errors } = await launch();
 	await login( page );
 
+	// --- Entry points -----------------------------------------------------
+	// Deliberately NOT a nav item: the System page's Database card and the
+	// ⌘K command are the doors (plus the URL itself).
+	await page.goto( BASE + '/minn-admin/system', { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '[data-sysdb]', { timeout: 30000 } );
+	t.check( 'No top-level nav item', await page.$( '.minn-nav-btn[data-nav="database"]' ) === null );
+	const topTable = await page.$eval( '[data-sysdb]:not([data-sysdb=""]) .minn-sys-tname', ( el ) => el.textContent );
+	await page.click( '[data-sysdb]:not([data-sysdb=""])' );
+	await page.waitForSelector( '.minn-db-tname', { timeout: 20000 } );
+	t.check( 'System card table row drills into that table', ( await page.textContent( '.minn-db-tname' ) ) === topTable );
+	await page.goto( BASE + '/minn-admin/system', { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '[data-sysdb=""]', { timeout: 30000 } );
+	await page.click( '[data-sysdb=""]' );
+	await page.waitForSelector( '[data-dbtable]', { timeout: 20000 } );
+	t.check( 'System card "browse all" opens the table list', await page.$( '[data-dbtable="wp_options"]' ) !== null );
+
 	// --- Table list -------------------------------------------------------
 	await page.goto( BASE + '/minn-admin/database', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '[data-dbtable]', { timeout: 20000 } );
-	t.check( 'Nav shows Database under Manage', await page.$( '.minn-nav-btn[data-nav="database"]' ) !== null );
 	t.check( 'Read-only claim in the toolbar', ( await page.textContent( '.minn-toolbar' ) ).includes( 'Read-only by design' ) );
 	t.check( 'wp_options is listed', await page.$( '[data-dbtable="wp_options"]' ) !== null );
 
