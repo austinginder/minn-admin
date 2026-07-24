@@ -227,8 +227,10 @@ enumerable, and conditional logic is a trivial rule JSON. A Minn-built form edit
 therefore *possible* without touching GF's JS. It would be a product decision on the
 scale of "Minn builds a second editor", not an adapter feature, and nothing in rungs
 1-3 forecloses it. That option (the "80% editor"), plus the developer-surface
-siblings (read-only database viewer, file browsing), is now scoped with its
-boundaries drawn in `docs/native-editors.md` — parked, not scheduled.
+siblings, is scoped with its boundaries drawn in `docs/native-editors.md`.
+Of the siblings, the read-only database viewer shipped in the v0.22.0 cycle;
+file browsing stays parked, and the 80% editor remains a deliberate bet not
+yet made.
 
 ## Case study: Gravity Forms coverage map
 

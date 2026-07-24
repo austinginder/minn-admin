@@ -100,8 +100,9 @@ guide). Coverage history lives in the table above; living primitive matrix
 
 Diagnostics family ships Scrutoscope, WP Crontrol, Transients Manager, and
 Rewrite Rules Inspector as one Tools item (provider switcher). **QM stays a
-panel, not a surface.** Native developer surfaces (read-only DB viewer)
-remain scoped in `docs/native-editors.md` (parked).
+panel, not a surface.** The first native developer surface, the read-only
+database viewer, shipped in the v0.22.0 cycle (`/minn-admin/database`,
+scoped in `docs/native-editors.md`); the file browser stays parked there.
 
 ### Wave B — leftover providers (existing families)
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.22.0** - Unreleased
+
+### Added
+* **A read-only database viewer at /minn-admin/database:** administrators get a calm window into the site's actual storage. The table list shows every table with estimated row counts, sizes and engines (scoped to this install's prefix by default, with a one-click toggle for other-prefix tables); clicking a table opens its rows with live columns from the schema, a primary-key badge, column sorting, a per-column contains-filter and pagination; clicking a row opens a detail view with full values, column types and a copy control per value. Read-only is the product, not a limitation: a database editor would bypass every plugin's invariants, so writes are a permanent non-goal and the interface says so. Serialized values render as raw text (never reconstructed), binary values show a hex preview, and queries stay polite on huge tables: counts come from index metadata, filtered counts stop at ten thousand, and browsing is bounded to the first ten thousand rows of an ordering, with filters as the honest way to reach the rest.
+
 ## **v0.21.0** - July 24, 2026
 
 The trust release. This cycle is for everyone who is not the person who built the app: the interface gains real translation plumbing so it can meet users in their own language, the app chrome passes a genuine accessibility audit with a suite that keeps it honest, and a plain-words user guide ships inside the plugin, one click from help. The same spirit runs underneath: updates verify themselves against a published checksum before they install, a security policy opens a private door for researchers, a tab left open overnight recovers on its own, and boot rides one request instead of nine so shared hosting stops watching panels trickle in.
