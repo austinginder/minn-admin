@@ -122,6 +122,14 @@ opt in with mappers, exactly like the settings-surface multiplier.
 
 ## Case study 2: a database viewer (developer surface)
 
+**✅ Shipped (v0.22.0 cycle, 2026-07-24)** — `/minn-admin/database`, built to
+the scope below: `includes/class-minn-admin-db.php` (three GET routes under
+`manage_options`, identifier whitelisting against information_schema, LIMIT
+discipline with a 10k paging window and capped filtered counts, per-cell
+byte caps with a roomier row-detail refetch) plus the bespoke client view
+(table list → paged rows → row detail modal). Suite: `tests/database.test.js`.
+The boundaries held: no writes, no SQL console, serialized blobs render raw.
+
 ### Why it passes the test
 
 The "document" is the database itself: enumerable (information_schema),
@@ -201,9 +209,12 @@ The weakest of the three cases, recorded mostly to draw its boundary.
    complements Query Monitor's this-request panel without Minn inventing
    a profiler. WP Crontrol / Transients Manager fill inventory gaps the
    System page only counts. Ranked in `docs/plugin-support.md` Wave A.
-3. Database viewer is still the cheapest **native** full item and the best
+3. ~~Database viewer is still the cheapest **native** full item and the best
    trial balloon for "developer surfaces": one cycle fragment, no plugin
-   dependency. Pairs naturally with Scrutoscope (profile → table drill).
+   dependency. Pairs naturally with Scrutoscope (profile → table drill).~~
+   ✅ shipped (v0.22.0 cycle, 2026-07-24) — and it was indeed one cycle
+   fragment. The trial balloon holds: developer surfaces in Minn's idiom
+   work when the boundary (read-only) is drawn before the build starts.
 4. The GF 80% editor is a full cycle and should be a deliberate product bet,
    made when form management in Minn (entries + settings + notifications,
    all live as of v0.13.0) has proven that users stay in Minn for form
