@@ -1,8 +1,12 @@
 # Native editors and developer surfaces — the rungs above the adapter ladder
 
-**Status: parked, deliberately.** Nothing here is scheduled. This doc exists so
-that when one of these pulls hard enough to build, the scope argument is already
-made and the boundaries are already drawn. It extends `full-ui-adapters.md`,
+**Status: one shipped, two parked (updated 2026-07-24).** The read-only
+database viewer (case study 2) shipped in the v0.22.0 cycle, built exactly to
+the scope drawn here; the Gravity Forms 80% editor and the file browser stay
+parked and unscheduled. The original premise held: this doc exists so that
+when one of these pulls hard enough to build, the scope argument is already
+made and the boundaries are already drawn. The viewer proved that pattern
+works. It extends `full-ui-adapters.md`,
 whose four-rung ladder ends at "delegate the bespoke screens"; this is the map
 of what could sit above that, and the test for deciding whether something
 belongs there.
