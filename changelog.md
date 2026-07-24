@@ -3,6 +3,7 @@
 ## **v0.21.0** - Unreleased
 
 ### Fixed
+* **Pending comments stay in the moderation queue:** the Overview's Recent activity feed included comments awaiting moderation (author names and all) for every user who could see the dashboard, even though the Comments view, the notification panel and the pending row's own click-through are all reserved for moderators. The feed now applies the same rule everywhere: users who can moderate see pending rows, everyone else sees approved comments only.
 * **Test scaffolding no longer ships in the notice pipeline:** the two dev-fixture ajax handlers used by Minn's own browser suites lived in the shipped whitelist, reachable (though harmless) on any site. The notice button mapping is now filter-open like the whitelist itself, and the fixture handlers moved to the dev site's fixtures plugin where they belong. Production installs carry no fixture code paths.
 * **A tab left open overnight recovers on its own:** REST nonces expire after a day, and an expired one used to dead-end the app (every request failed with a raw error toast until a manual reload). Minn now notices the expired nonce, mints a fresh one in the background through WordPress core's own nonce endpoint, and retries the request; a whole page of parallel requests shares one refresh. If the login session itself is gone, Minn says so and reloads into the login flow instead of leaving dead buttons.
 

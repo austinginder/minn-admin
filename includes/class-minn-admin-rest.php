@@ -2342,7 +2342,16 @@ class Minn_Admin_REST {
 			);
 		}
 
-		$recent_comments = get_comments( array( 'number' => 3, 'status' => 'all' ) );
+		// Pending comments are moderation-queue data (author names included);
+		// they only appear for users who can act on them — the same
+		// moderate_comments gate the notifications feed applies, and the
+		// pending row's goto lands on a view non-moderators can't open.
+		$recent_comments = get_comments(
+			array(
+				'number' => 3,
+				'status' => current_user_can( 'moderate_comments' ) ? 'all' : 'approve',
+			)
+		);
 		foreach ( $recent_comments as $c ) {
 			$pending = '0' === $c->comment_approved;
 			$activity[] = array(
