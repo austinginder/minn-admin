@@ -6,7 +6,7 @@
     "donate_link": "https://github.com/sponsors/austinginder",
     "version": "0.21.0",
     "download_url": "https://github.com/austinginder/minn-admin/releases/download/v0.21.0/minn-admin.zip",
-    "sha256": "924b5228b692b67c452298b3f459e0f136b78d248ec9d68e58493e267069ed39",
+    "sha256": "28b67077b3fd88ea2c69c8672046609e4d66e8533ff7ad70da01efa4d152d9c0",
     "requires": "6.0",
     "tested": "7.0",
     "requires_php": "7.4",
