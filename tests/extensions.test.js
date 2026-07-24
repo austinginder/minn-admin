@@ -120,18 +120,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			.map( ( el ) => el.textContent.trim() );
 		const hasAct = labels.some( ( l ) => /^(Activate|Deactivate)$/.test( l ) );
 		const hasCopy = labels.some( ( l ) => /Copy plugin file/.test( l ) );
-		// Minn Admin's Plugin URI is GitHub — menu should name the hub.
-		const hasGithub = labels.some( ( l ) => /Open on GitHub/.test( l ) );
+		// Minn Admin's Plugin URI is minnadmin.com (it was the GitHub repo
+		// until v0.21.0), so the menu takes the generic website label and
+		// links there — the host-aware "Open on GitHub" naming is proven by
+		// the author link and the wp.org card below.
+		const site = [ ...menu.querySelectorAll( 'a' ) ]
+			.find( ( a ) => /Plugin website/.test( a.textContent ) );
+		const hasSite = !! site && /minnadmin\.com/.test( site.getAttribute( 'href' ) || '' );
+		const hasGithub = labels.some( ( l ) => /GitHub/.test( l ) );
 		const hasLink = labels.some( ( l ) => /↗|WordPress\.org|GitHub|Plugin website|Author/.test( l ) )
 			|| labels.includes( 'Links' );
 		// Dismiss without running anything.
 		document.body.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
-		return { ok: true, labels, hasAct, hasCopy, hasLink, hasGithub, n: labels.length };
+		return { ok: true, labels, hasAct, hasCopy, hasLink, hasGithub, hasSite, siteHref: site ? site.getAttribute( 'href' ) : null, n: labels.length };
 	} );
 	t.check( 'plugin right-click opens a context menu', pluginMenu.ok, JSON.stringify( pluginMenu ) );
 	t.check( 'plugin menu has activate/deactivate + copy file', pluginMenu.hasAct && pluginMenu.hasCopy, JSON.stringify( pluginMenu ) );
 	t.check( 'plugin menu offers at least one link or Links section', pluginMenu.hasLink || pluginMenu.n >= 2, JSON.stringify( pluginMenu ) );
-	t.check( 'Minn Admin menu says Open on GitHub (Plugin URI)', pluginMenu.hasGithub, JSON.stringify( pluginMenu ) );
+	t.check( 'Minn Admin menu links its Plugin URI (minnadmin.com)', pluginMenu.hasSite, JSON.stringify( pluginMenu ) );
 
 	// A wp.org plugin should offer Open on WordPress.org (meta.url and/or Plugin URI).
 	const orgMenu = await page.evaluate( () => {
