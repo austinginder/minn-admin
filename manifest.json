@@ -4,14 +4,14 @@
     "author": "<a href=\"https://austinginder.com\">Austin Ginder</a>",
     "author_profile": "https://profiles.wordpress.org/austinginder",
     "donate_link": "https://github.com/sponsors/austinginder",
-    "version": "0.20.0",
-    "download_url": "https://github.com/austinginder/minn-admin/releases/download/v0.20.0/minn-admin.zip",
+    "version": "0.21.0",
+    "download_url": "https://github.com/austinginder/minn-admin/releases/download/v0.21.0/minn-admin.zip",
     "sha256": "924b5228b692b67c452298b3f459e0f136b78d248ec9d68e58493e267069ed39",
     "requires": "6.0",
     "tested": "7.0",
     "requires_php": "7.4",
     "added": "2026-07-03 16:00:00",
-    "last_updated": "2026-07-20 10:30:00",
+    "last_updated": "2026-07-24 12:00:00",
     "homepage": "https://minnadmin.com",
     "sections": {
         "description": "A reimagined WordPress admin experience. Fast, focused and beautiful. Served at /minn-admin/."
