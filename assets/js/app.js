@@ -1504,7 +1504,6 @@
 		}
 		if ( B.caps.settings ) {
 			manageItems.push( { id: 'system', label: __( 'System' ), icon: 'activity' } );
-			manageItems.push( { id: 'database', label: __( 'Database' ), icon: 'database' } );
 			manageItems.push( { id: 'settings', label: __( 'Settings' ), icon: 'gear' } );
 		}
 		return manageItems;
@@ -12368,12 +12367,12 @@
 				</div>
 				${ g.tables && g.tables.length ? `
 				<div class="minn-sys-tables">
-					<div class="minn-sys-tables-head">Largest tables</div>
+					<div class="minn-sys-tables-head minn-sys-link" data-sysdb="" role="button" tabindex="0" title="${ esc( __( 'Browse every table in the read-only database viewer' ) ) }">Largest tables <span class="minn-sys-more">${ esc( __( 'browse all' ) ) } ›</span></div>
 					${ g.tables.map( ( t ) => `
-						<div class="minn-sys-trow">
+						<div class="minn-sys-trow minn-sys-link" data-sysdb="${ esc( t.name ) }" role="button" tabindex="0" title="${ esc( __( 'Open this table in the read-only database viewer' ) ) }">
 							<span class="minn-sys-tname mono">${ esc( t.name ) }</span>
 							<span class="minn-sys-tsize mono">${ esc( t.size ) }</span>
-							<span class="minn-sys-trows">${ esc( t.rows ) } rows</span>
+							<span class="minn-sys-trows">${ esc( t.rows ) } rows <span class="minn-sys-more">›</span></span>
 						</div>` ).join( '' ) }
 				</div>` : '' }
 				${ g.autoload ? `
@@ -12631,6 +12630,10 @@
 		// Autoload + Cron summary rows open their full-detail modals.
 		$$( '[data-sysdetail]', view ).forEach( ( el ) =>
 			el.addEventListener( 'click', () => openSysDetail( el.dataset.sysdetail ) ) );
+
+		// Database card → the read-only viewer (its main doorway; no nav item).
+		$$( '[data-sysdb]', view ).forEach( ( el ) =>
+			el.addEventListener( 'click', () => goDbTable( el.dataset.sysdb ) ) );
 
 		// Health cards that go somewhere (the checks map above says where).
 		$$( '[data-sysgoto]', view ).forEach( ( el ) =>
@@ -12919,6 +12922,21 @@
 		const view = $( '#minn-view' );
 		markListBusy( view );
 		loadDbRows( dbState().page ).then( renderIfCurrent( 'database' ) ).catch( showErr );
+	}
+
+	// Deep entry into the viewer. Deliberately not a nav item: the database
+	// is a diagnostic, so its doors are the System page's Database card and
+	// the ⌘K command (plus the /minn-admin/database URL itself).
+	function goDbTable( name ) {
+		const ds = dbState();
+		ds.table = name || null;
+		ds.data = null;
+		ds.page = 1;
+		ds.orderby = '';
+		ds.order = '';
+		ds.fcol = '';
+		ds.fq = '';
+		go( 'database' );
 	}
 
 	function renderDatabase() {
