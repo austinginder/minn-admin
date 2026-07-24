@@ -3682,7 +3682,7 @@
 			<div class="minn-toolbar minn-toolbar-filters">
 				${ mediaFolderComboHtml }
 				${ mediaMonthComboHtml }
-				<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }">
+				<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="Search files…" value="${ esc( state.mediaSearch || '' ) }" disabled>
 				${ mediaViewTabsHtml }
 			</div>
 			<div class="minn-loading">Loading media…</div>`;
