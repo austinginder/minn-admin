@@ -1,0 +1,145 @@
+/**
+ * Database viewer ( /minn-admin/database ) — read-only by design.
+ *
+ * Covers: nav gating (admin sees it, Author does not + REST 403), table list
+ * with search, drill into wp_options, per-column contains-filter, column
+ * sort, pagination, the row-detail modal (including the full-value refetch
+ * past the list cap), and the read-only claim in the chrome.
+ *
+ * Run: MINN_TEST_PASS=… node database.test.js
+ */
+const { BASE, launch, login, reporter } = require( './helpers' );
+
+( async () => {
+	const t = reporter( 'database' );
+	const { browser, page, errors } = await launch();
+	await login( page );
+
+	// --- Table list -------------------------------------------------------
+	await page.goto( BASE + '/minn-admin/database', { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '[data-dbtable]', { timeout: 20000 } );
+	t.check( 'Nav shows Database under Manage', await page.$( '.minn-nav-btn[data-nav="database"]' ) !== null );
+	t.check( 'Read-only claim in the toolbar', ( await page.textContent( '.minn-toolbar' ) ).includes( 'Read-only by design' ) );
+	t.check( 'wp_options is listed', await page.$( '[data-dbtable="wp_options"]' ) !== null );
+
+	await page.fill( '#minn-db-search', 'wp_options' );
+	await page.waitForTimeout( 200 );
+	const shown = await page.$$eval( '[data-dbtable]', ( rows ) => rows.map( ( r ) => r.dataset.dbtable ) );
+	t.check( 'Search filters the table list', shown.includes( 'wp_options' ) && ! shown.includes( 'wp_posts' ) );
+
+	// --- Rows view --------------------------------------------------------
+	await page.click( '[data-dbtable="wp_options"]' );
+	await page.waitForSelector( '.minn-db-grid tbody tr[data-dbrow]', { timeout: 20000 } );
+	const headText = await page.textContent( '.minn-db-grid thead' );
+	t.check( 'Columns render from the live schema', headText.includes( 'option_name' ) && headText.includes( 'option_value' ) );
+	t.check( 'Primary key is badged', headText.includes( 'PK' ) );
+	t.check( 'Row meta names the table', ( await page.textContent( '.minn-db-tname' ) ) === 'wp_options' );
+	t.check( 'Pager renders for a >50-row table', await page.$( '.minn-pager' ) !== null );
+
+	// Pagination: page 2 shows different rows.
+	const firstCell = () => page.$eval( 'tr[data-dbrow] td', ( td ) => td.textContent );
+	const p1First = await firstCell();
+	await page.click( '.minn-pager-btn[data-pg="2"]' );
+	await page.waitForFunction( ( prev ) => {
+		const td = document.querySelector( 'tr[data-dbrow] td' );
+		return td && td.textContent !== prev;
+	}, p1First, { timeout: 15000 } );
+	t.check( 'Page 2 loads different rows', ( await firstCell() ) !== p1First );
+
+	// Column sort: option_name ascending should put an a-ish name first.
+	await page.click( 'th[data-dbcol="option_name"]' ); // desc
+	await page.waitForTimeout( 600 );
+	await page.click( 'th[data-dbcol="option_name"]' ); // asc
+	await page.waitForFunction( () => {
+		const th = document.querySelector( 'th[data-dbcol="option_name"]' );
+		return th && th.textContent.includes( '▴' );
+	}, null, { timeout: 15000 } );
+	t.check( 'Header click sorts (asc marker shown)', true );
+
+	// Per-column contains-filter → exactly the siteurl row.
+	await page.selectOption( '#minn-db-fcol', 'option_name' );
+	await page.fill( '#minn-db-fq', 'siteurl' );
+	await page.press( '#minn-db-fq', 'Enter' );
+	await page.waitForFunction( () => {
+		const rows = document.querySelectorAll( 'tr[data-dbrow]' );
+		return rows.length > 0 && rows.length < 10
+			&& document.querySelector( '.minn-db-grid tbody' ).textContent.includes( 'siteurl' );
+	}, null, { timeout: 15000 } );
+	t.check( 'Contains-filter narrows to matching rows', true );
+	t.check( 'Clear-filter control appears', await page.$( '#minn-db-fclear' ) !== null );
+
+	// --- Row detail modal -------------------------------------------------
+	// The cron blob is bigger than the 2 KB list cap, so the modal proves the
+	// full-value refetch: its value block must outgrow what the grid carried.
+	await page.fill( '#minn-db-fq', 'cron' );
+	await page.press( '#minn-db-fq', 'Enter' );
+	// Click the row whose option_name is exactly "cron" (the big blob), not
+	// whichever cron-ish option happens to sort first.
+	await page.waitForFunction( () => {
+		const rows = [ ...document.querySelectorAll( 'tr[data-dbrow]' ) ];
+		return rows.some( ( r ) => [ ...r.children ].some( ( td ) => td.textContent === 'cron' ) );
+	}, null, { timeout: 15000 } );
+	await page.evaluate( () => {
+		const rows = [ ...document.querySelectorAll( 'tr[data-dbrow]' ) ];
+		rows.find( ( r ) => [ ...r.children ].some( ( td ) => td.textContent === 'cron' ) ).click();
+	} );
+	await page.waitForSelector( '.minn-dbd', { timeout: 15000 } );
+	t.check( 'Detail modal titles the table', ( await page.textContent( '.minn-modal-title' ) ) === 'wp_options' );
+	t.check( 'Detail lists every column', ( await page.$$eval( '.minn-dbd-row', ( r ) => r.length ) ) >= 4 );
+	await page.waitForFunction( () => {
+		const vals = [ ...document.querySelectorAll( '.minn-dbd-val' ) ];
+		return vals.some( ( v ) => v.textContent.length > 2048 );
+	}, null, { timeout: 15000 } ).catch( () => {} );
+	const maxLen = await page.$$eval( '.minn-dbd-val', ( vals ) => Math.max( ...vals.map( ( v ) => v.textContent.length ) ) );
+	t.check( 'Full value refetched past the 2 KB list cap', maxLen > 2048, 'longest value ' + maxLen + ' chars' );
+	// Serialized blob stays raw text (never unserialized into structure).
+	const cronVal = await page.$$eval( '.minn-dbd-val', ( vals ) =>
+		vals.map( ( v ) => v.textContent ).find( ( x ) => x.length > 2048 ) || '' );
+	t.check( 'Serialized value renders raw', /^a:\d+:{/.test( cronVal ) );
+	t.check( 'Copy control offered on values', await page.$( '[data-dbcopy]' ) !== null );
+	await page.click( '#minn-modal-close' );
+
+	// --- Back to the table list ------------------------------------------
+	await page.click( '#minn-db-back' );
+	await page.waitForSelector( '[data-dbtable]', { timeout: 15000 } );
+	t.check( 'Back returns to the table list', await page.$( '[data-dbtable="wp_options"]' ) !== null );
+
+	// --- ⌘K palette entry -------------------------------------------------
+	await page.keyboard.press( 'Meta+k' );
+	await page.waitForSelector( '.minn-palette input', { timeout: 10000 } );
+	await page.type( '.minn-palette input', 'browse database' );
+	await page.waitForTimeout( 400 );
+	t.check( 'Palette offers Browse database', ( await page.textContent( '.minn-palette' ) ).includes( 'Browse database' ) );
+	await page.keyboard.press( 'Escape' );
+
+	// --- Author gating ----------------------------------------------------
+	const actx = await browser.newContext( { ignoreHTTPSErrors: true } );
+	const apage = await actx.newPage();
+	await apage.goto( BASE + '/wp-login.php', { waitUntil: 'domcontentloaded' } );
+	await apage.fill( '#user_login', 'minn-author' );
+	await apage.fill( '#user_pass', 'minn-author-pass-1' );
+	await Promise.all( [
+		apage.waitForNavigation( { waitUntil: 'domcontentloaded' } ),
+		apage.click( '#wp-submit' ),
+	] );
+	await apage.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+	await apage.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 15000 } );
+	t.check( 'Author sees no Database nav item', await apage.$( '.minn-nav-btn[data-nav="database"]' ) === null );
+	const status = await apage.evaluate( async () => {
+		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/db/tables', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce },
+		} );
+		return r.status;
+	} );
+	t.check( 'REST refuses an Author (403)', status === 403, 'got ' + status );
+	await apage.goto( BASE + '/minn-admin/database', { waitUntil: 'domcontentloaded' } );
+	await apage.waitForSelector( '#minn-view .minn-empty, #minn-view .minn-card', { timeout: 15000 } );
+	const authorView = await apage.textContent( '#minn-view' );
+	t.check( 'Author route shows the permission message', authorView.includes( 'administrator permissions' ) );
+	await actx.close();
+
+	await t.done( browser, errors );
+} )().catch( ( e ) => {
+	console.error( e );
+	process.exit( 1 );
+} );

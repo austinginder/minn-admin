@@ -608,6 +608,7 @@
 		posttypes: [ __( 'Structure' ), __( 'Post types, taxonomies & terms' ) ],
 		settings: [ __( 'Settings' ), __( 'Site' ) ],
 		system: [ __( 'System' ), __( 'Diagnostics' ) ],
+		database: [ __( 'Database' ), __( 'Read-only viewer' ) ],
 		editor: [ __( 'Editor' ), __( 'Draft' ) ],
 		profile: [ __( 'Your profile' ), __( 'Account' ) ],
 	};
@@ -1401,6 +1402,7 @@
 			activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
 			cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
 			database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
+			lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 			server: '<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/>',
 			// wp + php are the real brand marks (Simple Icons, CC0) — filled paths,
 			// not strokes, hence the per-element overrides on the stroke-based frame.
@@ -1502,6 +1504,7 @@
 		}
 		if ( B.caps.settings ) {
 			manageItems.push( { id: 'system', label: __( 'System' ), icon: 'activity' } );
+			manageItems.push( { id: 'database', label: __( 'Database' ), icon: 'database' } );
 			manageItems.push( { id: 'settings', label: __( 'Settings' ), icon: 'gear' } );
 		}
 		return manageItems;
@@ -12861,6 +12864,311 @@
 		load();
 	}
 
+	/* ===== Database viewer ( /minn-admin/database ) =====
+		Read-only by design (docs/native-editors.md case study 2): a database
+		editor bypasses every plugin's invariants, so writes are a permanent
+		non-goal here, not a missing feature. Table list → paged rows → row
+		detail; serialized blobs render RAW, never unserialized. */
+
+	function dbState() {
+		if ( ! state.db ) {
+			state.db = { q: '', all: false, sortBy: 'name', sortDir: 'asc', table: null, data: null, page: 1 };
+		}
+		return state.db;
+	}
+
+	async function loadDbTables() {
+		state.cache.dbTables = await api( 'minn-admin/v1/db/tables' + ( dbState().all ? '?all=1' : '' ) );
+	}
+
+	async function loadDbRows( page ) {
+		const ds = dbState();
+		const table = ds.table;
+		const parts = [
+			'table=' + encodeURIComponent( table ),
+			'page=' + ( page || 1 ),
+			'per_page=50',
+		];
+		if ( ds.orderby ) parts.push( 'orderby=' + encodeURIComponent( ds.orderby ), 'order=' + ( ds.order === 'asc' ? 'asc' : 'desc' ) );
+		if ( ds.fcol && ds.fq ) parts.push( 'fcol=' + encodeURIComponent( ds.fcol ), 'fq=' + encodeURIComponent( ds.fq ) );
+		const data = await api( 'minn-admin/v1/db/rows?' + parts.join( '&' ) );
+		if ( dbState().table !== table ) return; // navigated away mid-flight
+		ds.data = data;
+		ds.page = data.page;
+	}
+
+	// One cell → display text + style class. Cells arrive as null, a plain
+	// string, { v, cut } (truncated, cut = total bytes) or { hex, bin }.
+	function dbCellInfo( cell ) {
+		if ( cell === null ) return { text: 'NULL', cls: 'null' };
+		if ( typeof cell === 'string' ) return { text: cell, cls: '' };
+		if ( cell.hex ) {
+			/* translators: %s: human-readable byte size of a binary database value. */
+			return { text: '0x' + cell.hex.slice( 0, 24 ) + '… ' + sprintf( __( '(%s binary)' ), dbBytes( cell.bin ) ), cls: 'bin' };
+		}
+		return { text: cell.v, cls: '', cut: cell.cut };
+	}
+
+	function dbBytes( n ) {
+		if ( n >= 1048576 ) return ( n / 1048576 ).toFixed( 1 ) + ' MB';
+		if ( n >= 1024 ) return ( n / 1024 ).toFixed( 1 ) + ' KB';
+		return n + ' B';
+	}
+
+	function dbReload() {
+		const view = $( '#minn-view' );
+		markListBusy( view );
+		loadDbRows( dbState().page ).then( renderIfCurrent( 'database' ) ).catch( showErr );
+	}
+
+	function renderDatabase() {
+		const view = $( '#minn-view' );
+		if ( ! B.caps.settings ) {
+			view.innerHTML = `<div class="minn-card minn-empty">${ esc( __( 'You need administrator permissions to view the database.' ) ) }</div>`;
+			return;
+		}
+		const ds = dbState();
+		if ( ds.table ) return renderDbRows( view, ds );
+		const c = state.cache.dbTables;
+		if ( ! c ) {
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading tables…' ) ) }</div>`;
+			loadDbTables().then( renderIfCurrent( 'database' ) ).catch( showErr );
+			return;
+		}
+		view.innerHTML = `
+		<div class="minn-toolbar">
+			<input class="minn-input minn-toolbar-search" id="minn-db-search" placeholder="${ esc( __( 'Search tables…' ) ) }" value="${ esc( ds.q || '' ) }">
+			<div class="minn-toolbar-meta">${ esc( sprintf(
+				/* translators: 1: number of database tables, 2: total size (e.g. "97.8 MB"). */
+				__( '%1$s tables · %2$s' ), String( c.tables.length ), c.total_size_human ) ) }</div>
+			${ c.foreign > 0 ? `<button class="minn-btn-soft${ ds.all ? ' active' : '' }" id="minn-db-all">${ esc( ds.all
+				/* translators: %d: number of tables outside this install's prefix. */
+				? sprintf( __( 'Hide %d other-prefix tables' ), c.foreign )
+				: sprintf( __( 'Show %d other-prefix tables' ), c.foreign ) ) }</button>` : '' }
+			<span class="minn-db-ro">${ icon( 'lock' ) } ${ esc( __( 'Read-only by design' ) ) }</span>
+		</div>
+		<div id="minn-db-list"></div>`;
+		const paintList = () => {
+			const q = ( ds.q || '' ).toLowerCase();
+			const dir = ds.sortDir === 'desc' ? -1 : 1;
+			const key = ds.sortBy;
+			const tables = c.tables
+				.filter( ( t ) => ! q || t.name.toLowerCase().includes( q ) )
+				.sort( ( a, b ) => ( key === 'name'
+					? a.name.localeCompare( b.name )
+					: ( a[ key ] || 0 ) - ( b[ key ] || 0 ) ) * dir );
+			const arrow = ( k ) => ( key === k ? ( ds.sortDir === 'desc' ? ' ▾' : ' ▴' ) : '' );
+			$( '#minn-db-list' ).innerHTML = tables.length ? `
+			<div class="minn-card minn-table">
+				<div class="minn-table-head minn-db-cols">
+					<span class="minn-db-sort" data-dbsort="name">${ esc( __( 'Table' ) ) }${ arrow( 'name' ) }</span>
+					<span class="minn-db-sort num" data-dbsort="rows">${ esc( __( 'Rows (est.)' ) ) }${ arrow( 'rows' ) }</span>
+					<span class="minn-db-sort num" data-dbsort="size">${ esc( __( 'Size' ) ) }${ arrow( 'size' ) }</span>
+					<span>${ esc( __( 'Engine' ) ) }</span>
+				</div>
+				${ tables.map( ( t ) => `
+				<div class="minn-table-row minn-db-cols" data-dbtable="${ esc( t.name ) }">
+					<span class="mono minn-cell-clip">${ esc( t.name ) }</span>
+					<span class="num">${ esc( Number( t.rows ).toLocaleString() ) }</span>
+					<span class="num">${ esc( t.size_human ) }</span>
+					<span class="minn-db-dim">${ esc( t.engine ) }</span>
+				</div>` ).join( '' ) }
+			</div>` : `<div class="minn-card minn-empty">${ esc( __( 'No tables match.' ) ) }</div>`;
+			$$( '[data-dbtable]', view ).forEach( ( row ) =>
+				row.addEventListener( 'click', () => {
+					ds.table = row.dataset.dbtable;
+					ds.data = null;
+					ds.page = 1;
+					ds.orderby = '';
+					ds.order = '';
+					ds.fcol = '';
+					ds.fq = '';
+					renderTopbar();
+					renderDatabase();
+				} ) );
+			$$( '[data-dbsort]', view ).forEach( ( h ) =>
+				h.addEventListener( 'click', () => {
+					const k = h.dataset.dbsort;
+					if ( ds.sortBy === k ) {
+						ds.sortDir = ds.sortDir === 'asc' ? 'desc' : 'asc';
+					} else {
+						ds.sortBy = k;
+						ds.sortDir = k === 'name' ? 'asc' : 'desc';
+					}
+					paintList();
+				} ) );
+		};
+		paintList();
+		$( '#minn-db-search' ).addEventListener( 'input', ( e ) => {
+			ds.q = e.target.value;
+			paintList();
+		} );
+		const allBtn = $( '#minn-db-all' );
+		if ( allBtn ) {
+			allBtn.addEventListener( 'click', () => {
+				ds.all = ! ds.all;
+				state.cache.dbTables = null;
+				renderDatabase();
+			} );
+		}
+	}
+
+	function renderDbRows( view, ds ) {
+		const d = ds.data;
+		const backBtn = `<button class="minn-btn-soft" id="minn-db-back">‹ ${ esc( __( 'Tables' ) ) }</button>`;
+		if ( ! d ) {
+			view.innerHTML = `
+			<div class="minn-toolbar">${ backBtn }
+				<span class="mono minn-db-tname">${ esc( ds.table ) }</span>
+			</div>
+			<div class="minn-loading">${ esc( __( 'Loading rows…' ) ) }</div>`;
+			$( '#minn-db-back' ).addEventListener( 'click', dbBackToTables );
+			loadDbRows( ds.page ).then( renderIfCurrent( 'database' ) ).catch( showErr );
+			return;
+		}
+		const totalLabel = ( d.approx ? '~' : '' ) + Number( d.total ).toLocaleString();
+		const window_ = Math.min( d.total, d.window );
+		const totalPages = Math.max( 1, Math.ceil( window_ / d.per_page ) );
+		const arrow = ( name ) => ( d.orderby === name && ! d.sorted_default ? ( d.order === 'asc' ? ' ▴' : ' ▾' ) : '' );
+		view.innerHTML = `
+		<div class="minn-toolbar">${ backBtn }
+			<span class="mono minn-db-tname">${ esc( d.table ) }</span>
+			<div class="minn-toolbar-meta">${ esc( sprintf(
+				/* translators: 1: row count, 2: table size, 3: storage engine. */
+				__( '%1$s rows · %2$s · %3$s' ), totalLabel, d.size_human, d.engine ) ) }</div>
+			<span class="minn-db-ro">${ icon( 'lock' ) } ${ esc( __( 'Read-only by design' ) ) }</span>
+		</div>
+		<div class="minn-toolbar minn-toolbar-filters">
+			<select class="minn-input minn-db-fcol" id="minn-db-fcol" aria-label="${ esc( __( 'Filter column' ) ) }">
+				${ d.columns.map( ( c ) => `<option value="${ esc( c.name ) }"${ c.name === ( ds.fcol || d.fcol ) ? ' selected' : '' }>${ esc( c.name ) }</option>` ).join( '' ) }
+			</select>
+			<input class="minn-input minn-toolbar-search" id="minn-db-fq" placeholder="${ esc( __( 'Contains…' ) ) }" value="${ esc( ds.fq || '' ) }">
+			${ d.fq ? `<button class="minn-btn-soft" id="minn-db-fclear">${ esc( __( 'Clear filter' ) ) }</button>` : '' }
+			${ d.total >= d.window ? `<div class="minn-toolbar-meta minn-db-window">${ esc( sprintf(
+				/* translators: %s: number of rows browsable per ordering (e.g. "10,000"). */
+				__( 'Browsing the first %s rows of this order; filter to reach the rest.' ), Number( d.window ).toLocaleString() ) ) }</div>` : '' }
+		</div>
+		<div class="minn-card minn-db-card">
+			<div class="minn-db-scroll">
+				<table class="minn-db-grid">
+					<thead><tr>${ d.columns.map( ( c ) => `
+						<th data-dbcol="${ esc( c.name ) }" title="${ esc( c.type ) }">${ esc( c.name ) }${ arrow( c.name ) }${ c.key === 'PRI' ? ' <span class="minn-db-key">PK</span>' : '' }</th>` ).join( '' ) }
+					</tr></thead>
+					<tbody>
+						${ d.rows.length ? d.rows.map( ( r, i ) => `
+						<tr data-dbrow="${ i }">${ r.map( ( cell ) => {
+							const c = dbCellInfo( cell );
+							return `<td class="${ c.cls }">${ esc( c.text ) }</td>`;
+						} ).join( '' ) }</tr>` ).join( '' ) : `
+						<tr><td class="minn-db-empty" colspan="${ d.columns.length }">${ esc( d.fq ? __( 'No rows match this filter.' ) : __( 'This table is empty.' ) ) }</td></tr>` }
+					</tbody>
+				</table>
+			</div>
+		</div>
+		${ pagerHtml( d.page, totalPages ) }`;
+		$( '#minn-db-back' ).addEventListener( 'click', dbBackToTables );
+		const applyFilter = () => {
+			ds.fcol = $( '#minn-db-fcol' ).value;
+			ds.fq = $( '#minn-db-fq' ).value;
+			ds.page = 1;
+			dbReload();
+		};
+		$( '#minn-db-fq' ).addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' ) applyFilter();
+		} );
+		$( '#minn-db-fcol' ).addEventListener( 'change', () => {
+			if ( $( '#minn-db-fq' ).value ) applyFilter();
+		} );
+		const fclear = $( '#minn-db-fclear' );
+		if ( fclear ) {
+			fclear.addEventListener( 'click', () => {
+				ds.fcol = '';
+				ds.fq = '';
+				ds.page = 1;
+				dbReload();
+			} );
+		}
+		$$( 'th[data-dbcol]', view ).forEach( ( h ) =>
+			h.addEventListener( 'click', () => {
+				const col = h.dataset.dbcol;
+				const active = d.orderby === col && ! d.sorted_default;
+				ds.orderby = col;
+				ds.order = active ? ( d.order === 'asc' ? 'desc' : 'asc' ) : 'desc';
+				ds.page = 1;
+				dbReload();
+			} ) );
+		$$( 'tr[data-dbrow]', view ).forEach( ( tr ) =>
+			tr.addEventListener( 'click', () => openDbRow( parseInt( tr.dataset.dbrow, 10 ) ) ) );
+		bindPager( view, d.page, ( p ) => { ds.page = p; return loadDbRows( p ); }, renderDatabase );
+	}
+
+	function dbBackToTables() {
+		const ds = dbState();
+		ds.table = null;
+		ds.data = null;
+		renderTopbar();
+		renderDatabase();
+	}
+
+	// Row detail: opens from the already-fetched page instantly, then (when
+	// the table has a usable primary key of plain values) refetches the row
+	// with the roomy per-cell cap so long values read in full.
+	function openDbRow( idx ) {
+		const ds = dbState();
+		const d = ds.data;
+		if ( ! d || ! d.rows[ idx ] ) return;
+		const cells = d.rows[ idx ];
+		state.modal = { type: 'db-row', table: d.table, columns: d.columns, primary: d.primary, cells, full: false };
+		renderOverlays();
+		if ( ! d.primary.length ) return;
+		const pk = {};
+		for ( const col of d.primary ) {
+			const i = d.columns.findIndex( ( c ) => c.name === col );
+			if ( i < 0 || typeof cells[ i ] !== 'string' ) return; // truncated/binary key — keep list cells
+			pk[ col ] = cells[ i ];
+		}
+		const m = state.modal;
+		api( 'minn-admin/v1/db/row?table=' + encodeURIComponent( d.table ) + '&pk=' + encodeURIComponent( JSON.stringify( pk ) ) )
+			.then( ( r ) => {
+				if ( state.modal !== m ) return;
+				m.cells = r.cells;
+				m.full = true;
+				renderOverlays();
+			} )
+			.catch( () => {} ); // list cells remain — never block the modal on the refetch
+	}
+
+	function renderDbRowModal( m ) {
+		return `
+		<div class="minn-modal-overlay" id="minn-modal-overlay">
+			<div class="minn-modal wide">
+				<div class="minn-modal-head">
+					<div class="minn-modal-title mono">${ esc( m.table ) }</div>
+					<button class="minn-x-btn" id="minn-modal-close">×</button>
+				</div>
+				<div class="minn-dbd">
+					${ m.columns.map( ( c, i ) => {
+						const cell = m.cells[ i ];
+						const info = dbCellInfo( cell );
+						const copyable = typeof cell === 'string' || ( cell && cell.v );
+						return `
+					<div class="minn-dbd-row">
+						<div class="minn-dbd-col">
+							<span class="mono">${ esc( c.name ) }</span>
+							<span class="minn-dbd-type">${ esc( c.type ) }${ c.key === 'PRI' ? ' · PK' : '' }</span>
+							${ copyable ? `<button class="minn-btn-soft minn-dbd-copy" data-dbcopy="${ i }">${ esc( __( 'Copy' ) ) }</button>` : '' }
+						</div>
+						<div class="minn-dbd-val ${ info.cls }">${ esc( info.text ) }</div>
+						${ info.cut ? `<div class="minn-dbd-note">${ esc( sprintf(
+							/* translators: 1: shown byte size, 2: total byte size of the value. */
+							__( 'Showing the first %1$s of %2$s.' ), dbBytes( ( cell.v || '' ).length ), dbBytes( info.cut ) ) ) }</div>` : '' }
+					</div>`;
+					} ).join( '' ) }
+				</div>
+			</div>
+		</div>`;
+	}
+
 	/* ===== Settings ===== */
 
 	// Grouped by the job you're doing, not WordPress's historical tabs:
@@ -23242,6 +23550,7 @@
 		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
 		if ( B.caps.terms ) cmds.push( { label: 'Manage categories & tags', kind: 'nav', icon: '#', run: () => goTerms() } );
 		if ( B.caps.settings ) cmds.push( { label: 'View System diagnostics', kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
+		if ( B.caps.settings ) cmds.push( { label: __( 'Browse database (read-only)' ), kind: 'nav', icon: '⛁', run: () => go( 'database' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'View site logs', kind: 'nav', icon: '📄', run: () => openLogViewer() } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		cmds.push(
@@ -24434,6 +24743,10 @@
 			return renderSysDetailModal( m );
 		}
 
+		if ( m.type === 'db-row' ) {
+			return renderDbRowModal( m );
+		}
+
 		if ( m.type === 'minn-off' ) {
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
@@ -24815,6 +25128,21 @@
 			const meta = editorSideDoorMeta( m.id );
 			const body = $( '.minn-editor-door-body' );
 			if ( meta && meta.bind && body && state.editor ) meta.bind( body );
+		}
+
+		if ( m.type === 'db-row' ) {
+			$$( '[data-dbcopy]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', async () => {
+					const cell = m.cells[ parseInt( btn.dataset.dbcopy, 10 ) ];
+					const value = typeof cell === 'string' ? cell : ( cell && cell.v ) || '';
+					try {
+						await navigator.clipboard.writeText( value );
+						toast( ( cell && cell.cut ) ? __( 'Copied (truncated value)' ) : __( 'Value copied' ) );
+					} catch ( e ) {
+						toast( __( 'Copy failed' ), true );
+					}
+				} )
+			);
 		}
 
 		if ( m.type === 'customer' ) {
@@ -28109,6 +28437,7 @@
 			case 'posttypes': return renderStructure();
 			case 'settings': return renderSettings();
 			case 'system': return renderSystem();
+			case 'database': return renderDatabase();
 			case 'editor': return renderEditor();
 			case 'profile': return renderProfile();
 			default:
