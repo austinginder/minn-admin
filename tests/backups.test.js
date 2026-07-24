@@ -3,6 +3,12 @@
  * health check, palette command, and a REAL database backup triggered
  * through UpdraftPlus's own cron machinery (retention prunes old sets, so
  * repeated runs don't accumulate).
+ *
+ * Seeds its own baseline: UpdraftPlus registers the /updraft routes only
+ * while it is active, so a site where it drifted inactive answered every
+ * check with rest_no_route (a fixture failure that reads exactly like a
+ * product regression). The suite activates it when needed and restores the
+ * state it found in finally (rule-52 pattern, solid-security precedent).
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
@@ -22,6 +28,42 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return await r.json();
 	}, { path: opts.method ? path : path, method: opts.method, body: opts.body } );
 
+	const PLUGIN = 'updraftplus/updraftplus';
+	const setPlugin = ( status ) => page.evaluate( async ( a ) => {
+		try {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.id, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+				body: JSON.stringify( { status: a.status } ),
+			} );
+			return ( await r.json() ).status;
+		} catch ( e ) {
+			return 'dropped'; // a plugin toggle can recycle the worker
+		}
+	}, { id: PLUGIN, status } );
+
+	const wasActive = await page.evaluate( async ( id ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + id + '?_fields=status', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+		} );
+		return ( await r.json() ).status === 'active';
+	}, PLUGIN );
+	if ( ! wasActive ) {
+		await setPlugin( 'active' );
+		await page.waitForTimeout( 2000 );
+		// Reload so the boot payload carries the now-registered surface.
+		await page.reload( { waitUntil: 'domcontentloaded' } );
+		await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 15000 } );
+	}
+	t.check( 'UpdraftPlus is active for the run', ( await page.evaluate( async ( id ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + id + '?_fields=status', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+		} );
+		return ( await r.json() ).status;
+	}, PLUGIN ) ) === 'active' );
+
+	try {
 	// --- Status + history ---------------------------------------------------
 	const status = await api( 'minn-admin/v1/updraft/status' );
 	t.check( 'Status endpoint reports last/running/history', status && 'last' in status && 'running' in status && status.history >= 1, JSON.stringify( status ) );
@@ -78,6 +120,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		if ( s.last && s.last.time > baselineTime && ! s.running ) { after = s.last.time; break; }
 	}
 	t.check( 'A new backup set completed', after > baselineTime, `baseline=${ baselineTime } after=${ after }` );
+	} finally {
+		// Leave the site as found: only this suite's activation is undone.
+		if ( ! wasActive ) await setPlugin( 'inactive' ).catch( () => {} );
+	}
 
 	await t.done( browser, errors );
 } )().catch( ( e ) => {

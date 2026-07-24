@@ -23,6 +23,19 @@ MINN_TEST_PASS=<admin password> node undo-toast.test.js # structural-deletion Un
 MINN_TEST_PASS=… ./run-all.sh /tmp/minn-run
 ```
 
+Relaunching `run-all.sh` with the same output dir **resumes**: suites already
+recorded PASS are skipped, failures and unrun suites run again. Two things worth
+knowing before you believe a full-run failure:
+
+- **The first suite alphabetically pays the cold-start tax.** It runs against a
+  cold site (empty caches, the full boot burst) and can miss timing windows that
+  pass everywhere else. On 2026-07-23 `a11y-chrome` failed twice cold, on a focus
+  check with an 800ms window, then passed 26/26 warm with no code change. Re-run a
+  first-position failure warm before treating it as a regression.
+- **A long run outlives a terminal.** For an overnight run, detach it
+  (`nohup ./run-all.sh <dir> &`) so it survives the shell that started it; stop it
+  with `pkill -f run-all.sh`.
+
 Environment (all optional except the password):
 
 | Var | Default |
@@ -43,6 +56,14 @@ Environment (all optional except the password):
   page logged any error other than resource 404s. Never weaken this.
 - **Self-contained fixtures.** Create posts in the test, delete them at the end — even on
   the local dev site. Never depend on existing content or hardcoded post IDs.
+- **Seed the plugin state you depend on, and restore it.** A bundled adapter registers its
+  routes and its surface only while its plugin is active, so a suite that assumes a plugin
+  is active fails with `rest_no_route` the moment that plugin drifts inactive, which reads
+  exactly like a product regression. Read the plugin's status first, activate it if needed,
+  and restore what you found in `finally` (`solid-security.test.js` and `backups.test.js`
+  are the pattern; `comment-postlink.test.js` does the same for deactivating a resident).
+  This is not hypothetical: the family conventions keep one provider per family active, and
+  plugins get toggled by hand while chasing bugs.
 - **Expect flakes, retry loads.** Editor loads intermittently fail right after server
   churn (a wp-cli run, a PHP edit). `openEditor()` retries; if a whole run fails at load,
   run it again before debugging.
