@@ -56,7 +56,7 @@ try {
 		document.documentElement.setAttribute( 'data-theme', stored );
 	}
 } catch ( e ) {}
-window.MINN = <?php echo wp_json_encode( $boot ); ?>;
+window.MINN = <?php echo wp_json_encode( $boot, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ); ?>;
 // Color scheme from user meta (boot.user.appearance) — apply before paint.
 (function () {
 	try {
