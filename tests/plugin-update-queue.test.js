@@ -18,51 +18,41 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const started = [];
 	const finished = [];
 
-	// Stable plugins list with two pending updates (no real upgrades).
+	// Stable plugins list with two pending updates (no real upgrades). Boot
+	// folds the plugin list + updates into the consolidated /boot-status
+	// request (v0.21.0), whose sections come from server-side sub-dispatches
+	// page.route can't intercept — so the fixtures must be injected into the
+	// real /boot-status response, or the acme cards never render at boot. The
+	// standalone stubs stay for the post-boot refreshes (loadPlugins, the
+	// Extensions re-render after each queued update).
+	const fakePlugins = [
+		{ plugin: 'acme-one/acme-one', status: 'active', name: 'Acme One', version: '1.0.0', description: { rendered: 'Fixture one' }, author: 'Minn' },
+		{ plugin: 'acme-two/acme-two', status: 'active', name: 'Acme Two', version: '2.0.0', description: { rendered: 'Fixture two' }, author: 'Minn' },
+		{ plugin: 'minn-admin/minn-admin', status: 'active', name: 'Minn Admin', version: '0.12.0', description: { rendered: 'Admin' }, author: 'Austin' },
+	];
+	const fakeUpdates = { updates: { 'acme-one/acme-one.php': '1.1.0', 'acme-two/acme-two.php': '2.1.0' }, themes: {} };
+	await page.route( '**/minn-admin/v1/boot-status**', async ( route ) => {
+		if ( route.request().method() !== 'GET' ) return route.continue();
+		const resp = await route.fetch();
+		let data;
+		try { data = await resp.json(); } catch ( e ) { return route.fulfill( { response: resp } ); }
+		data.plugins = fakePlugins;
+		data.pluginUpdates = fakeUpdates;
+		await route.fulfill( { response: resp, json: data } );
+	} );
 	await page.route( '**/wp/v2/plugins**', async ( route ) => {
 		if ( route.request().method() !== 'GET' ) return route.continue();
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify( [
-				{
-					plugin: 'acme-one/acme-one',
-					status: 'active',
-					name: 'Acme One',
-					version: '1.0.0',
-					description: { rendered: 'Fixture one' },
-					author: 'Minn',
-				},
-				{
-					plugin: 'acme-two/acme-two',
-					status: 'active',
-					name: 'Acme Two',
-					version: '2.0.0',
-					description: { rendered: 'Fixture two' },
-					author: 'Minn',
-				},
-				{
-					plugin: 'minn-admin/minn-admin',
-					status: 'active',
-					name: 'Minn Admin',
-					version: '0.12.0',
-					description: { rendered: 'Admin' },
-					author: 'Austin',
-				},
-			] ),
+			body: JSON.stringify( fakePlugins ),
 		} );
 	} );
 	await page.route( '**/minn-admin/v1/plugin-updates**', async ( route ) => {
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify( {
-				updates: {
-					'acme-one/acme-one.php': '1.1.0',
-					'acme-two/acme-two.php': '2.1.0',
-				},
-				themes: {},
-			} ),
+			body: JSON.stringify( fakeUpdates ),
 		} );
 	} );
 	await page.route( '**/minn-admin/v1/plugins/update**', async ( route ) => {

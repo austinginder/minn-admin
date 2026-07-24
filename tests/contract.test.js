@@ -139,9 +139,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		let sw = sortWait( 'desc' ); // num format starts descending
 		await page.click( '[data-ssort="count"]' );
 		await sw;
+		// Grid sort headers announce direction through aria-label + the ↓/↑
+		// glyph, not aria-sort: the a11y pass (v0.21.0) dropped aria-sort here
+		// because it is only valid on real columnheaders, not grid buttons.
 		await page.waitForFunction( () => {
 			const b = document.querySelector( '[data-ssort="count"]' );
-			return b && b.classList.contains( 'is-active' ) && b.getAttribute( 'aria-sort' ) === 'descending';
+			return b && b.classList.contains( 'is-active' )
+				&& / descending$/.test( ( b.getAttribute( 'aria-label' ) || '' ) )
+				&& / ↓$/.test( b.textContent );
 		}, null, { timeout: 15000 } );
 		t.check( 'num column sorts descending first, header marks active', true );
 		sw = sortWait( 'asc' );
@@ -149,7 +154,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await sw;
 		await page.waitForFunction( () => {
 			const b = document.querySelector( '[data-ssort="count"]' );
-			return b && b.getAttribute( 'aria-sort' ) === 'ascending';
+			return b && b.classList.contains( 'is-active' )
+				&& / ascending$/.test( ( b.getAttribute( 'aria-label' ) || '' ) )
+				&& / ↑$/.test( b.textContent );
 		}, null, { timeout: 15000 } );
 		t.check( 'repeat click flips direction (request + aria)', true );
 		// Fresh page load clears the sort so later checks see natural order.
