@@ -10885,9 +10885,27 @@
 		</div>`;
 	}
 
+	// Set while an intentional render must replace an open paste form (a
+	// post-action refresh, Cancel, or the inactive-components toggle) so it
+	// bypasses the stray-rebuild guard below.
+	let licForceRender = false;
+	function renderLicensesForced() {
+		licForceRender = true;
+		try { renderLicenses(); } finally { licForceRender = false; }
+	}
 	function renderLicenses() {
 		const view = $( '#minn-view' );
 		const lic = state.cache.licenses;
+		// A background loader resolving late (loadPlugins awaiting a slow
+		// boot-status) fires renderIfCurrent -> renderExtensions -> here while
+		// the user is mid-activation, discarding an open paste form and the key
+		// they were typing (the field can even be wiped before the activation
+		// request returns). Skip a stray rebuild while a paste form is open;
+		// the intentional renders that dismiss or replace it (post-action
+		// refresh, Cancel, the inactive-components toggle) pass licForceRender.
+		// Same spirit as renderEditorSide's focus guard: don't yank the DOM out
+		// from under a user who is working in it.
+		if ( ! licForceRender && $( '.minn-lic-key', view ) ) return;
 		if ( ! lic ) {
 			// A soft reload (tab switch into Licenses) owns the view while its
 			// load is in flight — a stray cold paint here would fire a SECOND
@@ -10938,7 +10956,7 @@
 		const offToggle = $( '#minn-lic-off-toggle', view );
 		if ( offToggle ) offToggle.addEventListener( 'click', () => {
 			state.licOffOpen = ! state.licOffOpen;
-			renderLicenses();
+			renderLicensesForced();
 		} );
 		// ⋯ menu per row, built from the row's own hidden buttons.
 		// openMinnMenu calls entry.run (same key as every other context menu
@@ -10960,7 +10978,7 @@
 			state.cache.system = null; // the health check row is server-derived
 			await loadLicenses();
 			if ( state.route !== 'extensions' || state.extTab !== 'licenses' ) return;
-			renderLicenses();
+			renderLicensesForced();
 			const sc = $( '.minn-scroll' );
 			if ( sc ) sc.scrollTop = keepTop;
 		} );
@@ -11206,7 +11224,7 @@
 			inputs.forEach( ( i ) => i.addEventListener( 'keydown', ( e ) => {
 				if ( 'Enter' === e.key ) $( '[data-lic-go]', wrap ).click();
 			} ) );
-			$( '[data-lic-cancel]', wrap ).addEventListener( 'click', () => renderLicenses() );
+			$( '[data-lic-cancel]', wrap ).addEventListener( 'click', () => renderLicensesForced() );
 		} ) );
 	}
 
