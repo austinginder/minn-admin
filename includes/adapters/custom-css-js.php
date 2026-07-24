@@ -43,7 +43,7 @@ function minn_admin_ccj_get_options( $post_id ) {
 		return array_merge( minn_admin_ccj_default_options( $raw['language'] ), $raw );
 	}
 	if ( is_string( $raw ) && $raw ) {
-		$decoded = @unserialize( $raw ); // phpcs:ignore — their own storage
+		$decoded = @unserialize( $raw, array( 'allowed_classes' => false ) ); // phpcs:ignore — their own storage; array-only, no objects
 		if ( is_array( $decoded ) && isset( $decoded['language'] ) ) {
 			return array_merge( minn_admin_ccj_default_options( $decoded['language'] ), $decoded );
 		}

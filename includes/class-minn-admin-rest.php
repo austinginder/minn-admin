@@ -1339,6 +1339,9 @@ class Minn_Admin_REST {
 				'schema'       => array(
 					'type'        => array( 'object', 'null' ),
 					'description' => 'The other user currently editing this post (core edit lock), or null.',
+					// Edit-context only — the lock holder's id + display name is
+					// list-view data for editors, not for public wp/v2 reads.
+					'context'     => array( 'edit' ),
 				),
 			)
 		);
