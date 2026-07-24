@@ -14,16 +14,28 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const t = reporter( 'self-update-reload' );
 	const { browser, page, errors } = await launch();
 
-	// Routes before any SPA boot that fetches plugin-updates.
+	// Routes before any SPA boot that fetches plugin-updates. Boot now folds
+	// plugin-updates into the consolidated /boot-status request (v0.21.0), and
+	// that section is produced by a server-side sub-dispatch page.route can't
+	// intercept — so the offer must be injected into the real /boot-status
+	// response, or state.cache.pluginUpdates lands empty and the reload toast
+	// loses the version. The standalone stub stays for the fallback path and
+	// any later Updates-tab re-fetch.
+	const minnOffer = { updates: { 'minn-admin/minn-admin.php': '9.9.9' }, themes: {} };
+	await page.route( '**/minn-admin/v1/boot-status**', async ( route ) => {
+		if ( route.request().method() !== 'GET' ) return route.continue();
+		const resp = await route.fetch();
+		let data;
+		try { data = await resp.json(); } catch ( e ) { return route.fulfill( { response: resp } ); }
+		data.pluginUpdates = minnOffer;
+		await route.fulfill( { response: resp, json: data } );
+	} );
 	await page.route( '**/minn-admin/v1/plugin-updates**', async ( route ) => {
 		if ( route.request().method() !== 'GET' ) return route.continue();
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify( {
-				updates: { 'minn-admin/minn-admin.php': '9.9.9' },
-				themes: {},
-			} ),
+			body: JSON.stringify( minnOffer ),
 		} );
 	} );
 	await page.route( '**/minn-admin/v1/plugins/update-all**', async ( route ) => {
