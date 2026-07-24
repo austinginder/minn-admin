@@ -84,12 +84,21 @@ themselves through the extension filters.
 
 ## Roadmap candidates
 
-Refreshed 2026-07-23 at **v0.21.0** open (after the v0.18.0 depth cycle
-shipped Waves B and D, v0.19.0 spent the cycle on WooCommerce depth,
-v0.20.0 on consent + two license vendors, and the unreleased v0.21.0 work
-is polish: i18n, accessibility, boot consolidation, updater hash, user
-guide). Coverage history lives in the table above; living primitive matrix
-+ sweep log is `docs/adapter-coverage.md`.
+Refreshed 2026-07-24 at **v0.22.0** open (v0.21.0, the trust release,
+shipped 2026-07-24: i18n, accessibility, boot consolidation, updater hash
+verification, user guide. The v0.22.0 cycle opened the same day with the
+read-only database viewer, a native developer surface rather than an
+adapter, entered from the System page's Database card and ⌘K). Coverage
+history lives in the table above; living primitive matrix + sweep log is
+`docs/adapter-coverage.md`.
+
+The open adapter threads, ranked: **WPForms Pro entries** (blocked on a Pro
+license for fixtures), **Jetpack Stats / Matomo** traffic providers (auth
+and data-shape study first), **MetForm** (deferred until Elementor-dependent
+adapters are on the table), status/chart parity on thinner family siblings
+via `/dev-minn-admin sweep`, and the license long tail. The largest
+non-adapter thread is v1 gate **G1**, the outside-tester afternoon test
+(`docs/v1-readiness.md`).
 
 > **v0.17.0 note (2026-07-16):** adapter waves PAUSED for one cycle. The
 > v0.17.0 charter was the plugin-author cycle (developer experience and abuse

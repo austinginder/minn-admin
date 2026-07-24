@@ -4,8 +4,11 @@ Audited 2026-07-10 against v0.10.0; stale-checked 2026-07-12 during the
 v0.13.0 cycle (WP 7.0.1); re-checked 2026-07-13 at v0.14.0 open; light
 re-check 2026-07-15 at v0.16.0 open; re-checked 2026-07-23 at v0.21.0 open
 (comment editing + commenter blocking, site logo and site language all
-shipped in the v0.20.0 cycle; sections below updated): every ranked
-priority remains shipped, no new daily-work gaps in core areas. Dev tools Wave A is complete
+shipped in the v0.20.0 cycle; sections below updated); re-checked
+2026-07-24 at v0.22.0 open (the read-only database viewer shipped as a
+native developer surface, covered under Tools below; no new daily-work
+gaps): every
+ranked priority remains shipped, no new daily-work gaps in core areas. Dev tools Wave A is complete
 (Diagnostics family); further inventory work is adapter depth or parked
 native surfaces (`plugin-support.md`, `native-editors.md`). Minn's
 positioning grades these: daily work belongs in Minn, the long tail stays
@@ -83,7 +86,11 @@ extensions manifest, copy-as-markdown report). Loopback and REST self-check
 health rows shipped 2026-07-10 (core's own Site Health tests, cached 15
 minutes), and a Tools card deep-links the one-shot jobs (Site Health,
 export/import, GDPR export/erase): episodic surgery stays in wp-admin, one
-click away, by design.
+click away, by design. As of the v0.22.0 cycle the Database card is also a
+doorway: its largest-table rows and a "browse all" link open the read-only
+database viewer (`/minn-admin/database`, also in ⌘K; deliberately not a nav
+item). Writes and a SQL console stay permanent non-goals there
+(`native-editors.md`).
 
 ### Settings — daily options covered, two screens thin
 Writable today: General (title, tagline, icon, URL, admin email, timezone,

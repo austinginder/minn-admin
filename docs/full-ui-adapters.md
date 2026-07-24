@@ -43,7 +43,7 @@ whether the adapter approach scales to full coverage.
    has a proven answer: delegate, exactly like page builders ("Edit in Gravity Forms"
    is one click, with no wp-admin chrome needed for the builder-style screens).
 
-## Where the adapter system stands today (re-verified at v0.16.0 open, 2026-07-15; stale-checked 2026-07-23 at v0.21.0 open)
+## Where the adapter system stands today (re-verified at v0.16.0 open, 2026-07-15; stale-checked 2026-07-23 at v0.21.0 open and 2026-07-24 at v0.22.0 open: no ladder change; the database viewer shipped as a native surface outside the adapter system)
 
 The thesis held. Rungs 1–2 are shipped, Rung 3 is essentially shipped, and two
 hard case studies (Gravity Forms + Gravity SMTP) plus a cold third

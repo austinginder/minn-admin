@@ -95,6 +95,12 @@ per-user hide for every integration point, 9 attention budgets enforced,
 
 ## v1.0 gates
 
+*Status check 2026-07-24 (v0.22.0 open): G2 through G6 remain shipped and
+suite-covered. G1, the afternoon test with a real outside tester, is the
+only open gate. With the adapter families healthy and core gaps closed, it
+is now the single largest thread on the road to v1.0, and finding that
+tester is scheduling work, not engineering work.*
+
 v1.0 ships when all of these are true:
 
 - [ ] **G1 — Afternoon test.** A developer who has never seen Minn wires a
