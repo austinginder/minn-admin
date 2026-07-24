@@ -26,6 +26,7 @@ require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-surfaces.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-cpt.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-notices.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-logs.php';
+require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-db.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-updater.php';
 
 // Bundled adapters for third-party plugins (each guards on its plugin).
@@ -114,6 +115,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/performance-lab.php';
 
 Minn_Admin::init();
 Minn_Admin_REST::init();
+Minn_Admin_DB::init();
 Minn_Admin_Notices::init();
 Minn_Admin_CPT::init();
 new Minn_Admin_Updater();
