@@ -50,6 +50,15 @@ class Minn_Admin_DB {
 		);
 		register_rest_route(
 			self::NS,
+			'/db/structure',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'structure' ),
+				'permission_callback' => $manage,
+			)
+		);
+		register_rest_route(
+			self::NS,
 			'/db/rows',
 			array(
 				'methods'             => 'GET',
@@ -78,7 +87,8 @@ class Minn_Admin_DB {
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				'SELECT table_name AS name, engine, table_rows AS rows_est,
-					( data_length + index_length ) AS size, table_collation AS collation
+					( data_length + index_length ) AS size, data_free,
+					auto_increment, table_collation AS collation
 				 FROM information_schema.TABLES
 				 WHERE table_schema = %s AND table_type = %s
 				 ORDER BY table_name ASC',
@@ -111,7 +121,8 @@ class Minn_Admin_DB {
 
 	/**
 	 * Column metadata for a resolved table. Returns array of
-	 * { name, type, nullable, key, extra } plus the primary-key column list.
+	 * { name, type, nullable, key, extra, default, collation, comment } plus
+	 * the primary-key column list.
 	 */
 	private static function columns_of( $table ) {
 		global $wpdb;
@@ -121,17 +132,55 @@ class Minn_Admin_DB {
 		$primary = array();
 		foreach ( (array) $raw as $c ) {
 			$columns[] = array(
-				'name'     => $c->Field,
-				'type'     => $c->Type,
-				'nullable' => 'YES' === $c->Null,
-				'key'      => $c->Key,
-				'extra'    => $c->Extra,
+				'name'      => $c->Field,
+				'type'      => $c->Type,
+				'nullable'  => 'YES' === $c->Null,
+				'key'       => $c->Key,
+				'extra'     => $c->Extra,
+				'default'   => $c->Default,
+				'collation' => $c->Collation,
+				'comment'   => (string) $c->Comment,
 			);
 			if ( 'PRI' === $c->Key ) {
 				$primary[] = $c->Field;
 			}
 		}
 		return array( $columns, $primary );
+	}
+
+	/**
+	 * Index metadata for a resolved table, grouped by index name and ordered
+	 * PRIMARY first. Cardinality is the optimizer's ESTIMATE (same caveat as
+	 * table_rows). Metadata only: never reads the table itself.
+	 */
+	private static function indexes_of( $table ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifier from the information_schema whitelist, backtick-quoted.
+		$raw     = $wpdb->get_results( 'SHOW INDEX FROM ' . self::quote_ident( $table ) );
+		$indexes = array();
+		foreach ( (array) $raw as $i ) {
+			$name = (string) $i->Key_name;
+			if ( ! isset( $indexes[ $name ] ) ) {
+				$indexes[ $name ] = array(
+					'name'        => $name,
+					'unique'      => '0' === (string) $i->Non_unique,
+					'type'        => (string) $i->Index_type,
+					'cardinality' => (int) $i->Cardinality,
+					'columns'     => array(),
+				);
+			}
+			// Sub_part is the prefix length on a partial index (meta_key(191)).
+			$indexes[ $name ]['columns'][ (int) $i->Seq_in_index ] = $i->Column_name
+				. ( null === $i->Sub_part ? '' : '(' . (int) $i->Sub_part . ')' );
+		}
+		foreach ( $indexes as &$index ) {
+			ksort( $index['columns'] );
+			$index['columns'] = array_values( $index['columns'] );
+		}
+		unset( $index );
+		$primary = isset( $indexes['PRIMARY'] ) ? array( $indexes['PRIMARY'] ) : array();
+		unset( $indexes['PRIMARY'] );
+		return array_merge( $primary, array_values( $indexes ) );
 	}
 
 	/**
@@ -207,6 +256,36 @@ class Minn_Admin_DB {
 				'foreign'          => $foreign,
 				'total_size'       => $total,
 				'total_size_human' => size_format( $total, 1 ),
+			)
+		);
+	}
+
+	/**
+	 * GET /db/structure — columns and indexes for one table. Metadata only:
+	 * information_schema plus SHOW, so it stays free on tables of any size.
+	 */
+	public static function structure( $request ) {
+		$meta = self::resolve_table( $request->get_param( 'table' ) );
+		if ( ! $meta ) {
+			return new WP_Error( 'minn_db_no_table', __( 'Unknown table.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		list( $columns, $primary ) = self::columns_of( $meta->name );
+		if ( ! $columns ) {
+			return new WP_Error( 'minn_db_no_columns', __( 'Could not read the table structure.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return rest_ensure_response(
+			array(
+				'table'          => $meta->name,
+				'engine'         => (string) $meta->engine,
+				'collation'      => (string) $meta->collation,
+				'rows'           => (int) $meta->rows_est,
+				'size'           => (int) $meta->size,
+				'size_human'     => size_format( (int) $meta->size, 1 ),
+				'data_free'      => (int) $meta->data_free,
+				'auto_increment' => null === $meta->auto_increment ? null : (int) $meta->auto_increment,
+				'columns'        => $columns,
+				'primary'        => $primary,
+				'indexes'        => self::indexes_of( $meta->name ),
 			)
 		);
 	}

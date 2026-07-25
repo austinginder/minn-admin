@@ -12875,13 +12875,21 @@
 
 	function dbState() {
 		if ( ! state.db ) {
-			state.db = { q: '', all: false, sortBy: 'name', sortDir: 'asc', table: null, data: null, page: 1 };
+			state.db = { q: '', all: false, sortBy: 'name', sortDir: 'asc', table: null, data: null, page: 1, tab: 'rows', structure: null };
 		}
 		return state.db;
 	}
 
 	async function loadDbTables() {
 		state.cache.dbTables = await api( 'minn-admin/v1/db/tables' + ( dbState().all ? '?all=1' : '' ) );
+	}
+
+	async function loadDbStructure() {
+		const ds = dbState();
+		const table = ds.table;
+		const data = await api( 'minn-admin/v1/db/structure?table=' + encodeURIComponent( table ) );
+		if ( dbState().table !== table ) return; // navigated away mid-flight
+		ds.structure = data;
 	}
 
 	async function loadDbRows( page ) {
@@ -12936,7 +12944,28 @@
 		ds.order = '';
 		ds.fcol = '';
 		ds.fq = '';
+		ds.tab = 'rows';
+		ds.structure = null;
 		go( 'database' );
+	}
+
+	// Rows | Structure tab strip, shared by both table views.
+	function dbTabsHtml( ds ) {
+		const tab = ds.tab === 'structure' ? 'structure' : 'rows';
+		return `<div class="minn-tabs minn-db-tabs">
+			<button class="minn-tab${ tab === 'rows' ? ' active' : '' }" data-dbtab="rows">${ esc( __( 'Rows' ) ) }</button>
+			<button class="minn-tab${ tab === 'structure' ? ' active' : '' }" data-dbtab="structure">${ esc( __( 'Structure' ) ) }</button>
+		</div>`;
+	}
+
+	function bindDbTabs( view, ds ) {
+		$$( '[data-dbtab]', view ).forEach( ( b ) =>
+			b.addEventListener( 'click', () => {
+				const tab = b.dataset.dbtab;
+				if ( ( ds.tab === 'structure' ? 'structure' : 'rows' ) === tab ) return;
+				ds.tab = tab;
+				renderDatabase();
+			} ) );
 	}
 
 	function renderDatabase() {
@@ -12946,7 +12975,9 @@
 			return;
 		}
 		const ds = dbState();
-		if ( ds.table ) return renderDbRows( view, ds );
+		if ( ds.table ) {
+			return ds.tab === 'structure' ? renderDbStructure( view, ds ) : renderDbRows( view, ds );
+		}
 		const c = state.cache.dbTables;
 		if ( ! c ) {
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading tables…' ) ) }</div>`;
@@ -13001,6 +13032,8 @@
 					ds.order = '';
 					ds.fcol = '';
 					ds.fq = '';
+					ds.tab = 'rows';
+					ds.structure = null;
 					renderTopbar();
 					renderDatabase();
 				} ) );
@@ -13038,9 +13071,11 @@
 			view.innerHTML = `
 			<div class="minn-toolbar">${ backBtn }
 				<span class="mono minn-db-tname">${ esc( ds.table ) }</span>
+				${ dbTabsHtml( ds ) }
 			</div>
 			<div class="minn-loading">${ esc( __( 'Loading rows…' ) ) }</div>`;
 			$( '#minn-db-back' ).addEventListener( 'click', dbBackToTables );
+			bindDbTabs( view, ds );
 			loadDbRows( ds.page ).then( renderIfCurrent( 'database' ) ).catch( showErr );
 			return;
 		}
@@ -13051,6 +13086,7 @@
 		view.innerHTML = `
 		<div class="minn-toolbar">${ backBtn }
 			<span class="mono minn-db-tname">${ esc( d.table ) }</span>
+			${ dbTabsHtml( ds ) }
 			<div class="minn-toolbar-meta">${ esc( sprintf(
 				/* translators: 1: row count, 2: table size, 3: storage engine. */
 				__( '%1$s rows · %2$s · %3$s' ), totalLabel, d.size_human, d.engine ) ) }</div>
@@ -13085,6 +13121,7 @@
 		</div>
 		${ pagerHtml( d.page, totalPages ) }`;
 		$( '#minn-db-back' ).addEventListener( 'click', dbBackToTables );
+		bindDbTabs( view, ds );
 		const applyFilter = () => {
 			ds.fcol = $( '#minn-db-fcol' ).value;
 			ds.fq = $( '#minn-db-fq' ).value;
@@ -13120,10 +13157,93 @@
 		bindPager( view, d.page, ( p ) => { ds.page = p; return loadDbRows( p ); }, renderDatabase );
 	}
 
+	// Structure tab: columns and indexes, metadata only (information_schema
+	// plus SHOW). Free on a table of any size, which is why this tab opens
+	// unbounded while the Rows tab has to stay windowed.
+	function renderDbStructure( view, ds ) {
+		const backBtn = `<button class="minn-btn-soft" id="minn-db-back">‹ ${ esc( __( 'Tables' ) ) }</button>`;
+		const s = ds.structure;
+		if ( ! s || s.table !== ds.table ) {
+			view.innerHTML = `
+			<div class="minn-toolbar">${ backBtn }
+				<span class="mono minn-db-tname">${ esc( ds.table ) }</span>
+				${ dbTabsHtml( ds ) }
+			</div>
+			<div class="minn-loading">${ esc( __( 'Loading structure…' ) ) }</div>`;
+			$( '#minn-db-back' ).addEventListener( 'click', dbBackToTables );
+			bindDbTabs( view, ds );
+			loadDbStructure().then( renderIfCurrent( 'database' ) ).catch( showErr );
+			return;
+		}
+		/* translators: %s: estimated row count. */
+		const rowsLabel = sprintf( __( '~%s rows' ), Number( s.rows ).toLocaleString() );
+		const meta = [ rowsLabel, s.size_human, s.engine ];
+		if ( s.collation ) meta.push( s.collation );
+		if ( s.data_free > 0 ) {
+			/* translators: %s: reclaimable space inside the table file (e.g. "2.4 MB"). */
+			meta.push( sprintf( __( '%s free' ), dbBytes( s.data_free ) ) );
+		}
+		if ( s.auto_increment !== null ) {
+			/* translators: %s: the next AUTO_INCREMENT value for this table. */
+			meta.push( sprintf( __( 'next id %s' ), Number( s.auto_increment ).toLocaleString() ) );
+		}
+		view.innerHTML = `
+		<div class="minn-toolbar">${ backBtn }
+			<span class="mono minn-db-tname">${ esc( s.table ) }</span>
+			${ dbTabsHtml( ds ) }
+			<div class="minn-toolbar-meta">${ esc( meta.join( ' · ' ) ) }</div>
+			<span class="minn-db-ro">${ icon( 'lock' ) } ${ esc( __( 'Read-only by design' ) ) }</span>
+		</div>
+		<div class="minn-db-sect">${ esc( __( 'Columns' ) ) }</div>
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-db-struct-cols">
+				<span>${ esc( __( 'Column' ) ) }</span>
+				<span>${ esc( __( 'Type' ) ) }</span>
+				<span>${ esc( __( 'Null' ) ) }</span>
+				<span>${ esc( __( 'Default' ) ) }</span>
+				<span>${ esc( __( 'Extra' ) ) }</span>
+			</div>
+			${ s.columns.map( ( c ) => `
+			<div class="minn-table-row minn-db-struct-cols">
+				<span class="mono minn-cell-clip">${ esc( c.name ) }${ c.key === 'PRI'
+					? ` <span class="minn-db-key">PK</span>`
+					: ( c.key ? ` <span class="minn-db-dim">${ esc( c.key ) }</span>` : '' ) }${ c.comment
+					? ` <span class="minn-db-dim">${ esc( c.comment ) }</span>` : '' }</span>
+				<span class="mono minn-cell-clip minn-db-dim">${ esc( c.type ) }</span>
+				<span>${ esc( c.nullable ? __( 'Yes' ) : __( 'No' ) ) }</span>
+				<span class="mono minn-cell-clip${ c.default === null ? ' minn-db-dim' : '' }">${ esc( c.default === null ? 'NULL' : String( c.default ) ) }</span>
+				<span class="minn-db-dim minn-cell-clip">${ esc( c.extra || '' ) }</span>
+			</div>` ).join( '' ) }
+		</div>
+		<div class="minn-db-sect">${ esc( __( 'Indexes' ) ) }</div>
+		${ s.indexes.length ? `
+		<div class="minn-card minn-table">
+			<div class="minn-table-head minn-db-idx-cols">
+				<span>${ esc( __( 'Index' ) ) }</span>
+				<span>${ esc( __( 'Columns' ) ) }</span>
+				<span>${ esc( __( 'Unique' ) ) }</span>
+				<span>${ esc( __( 'Type' ) ) }</span>
+				<span class="num">${ esc( __( 'Cardinality' ) ) }</span>
+			</div>
+			${ s.indexes.map( ( i ) => `
+			<div class="minn-table-row minn-db-idx-cols">
+				<span class="mono minn-cell-clip">${ esc( i.name ) }</span>
+				<span class="mono minn-cell-clip minn-db-dim">${ esc( i.columns.join( ', ' ) ) }</span>
+				<span>${ esc( i.unique ? __( 'Yes' ) : __( 'No' ) ) }</span>
+				<span class="minn-db-dim">${ esc( i.type ) }</span>
+				<span class="num minn-db-dim">${ esc( Number( i.cardinality ).toLocaleString() ) }</span>
+			</div>` ).join( '' ) }
+		</div>` : `<div class="minn-card minn-empty">${ esc( __( 'This table has no indexes.' ) ) }</div>` }`;
+		$( '#minn-db-back' ).addEventListener( 'click', dbBackToTables );
+		bindDbTabs( view, ds );
+	}
+
 	function dbBackToTables() {
 		const ds = dbState();
 		ds.table = null;
 		ds.data = null;
+		ds.tab = 'rows';
+		ds.structure = null;
 		renderTopbar();
 		renderDatabase();
 	}
