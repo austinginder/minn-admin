@@ -170,6 +170,28 @@ more of them.
   technical asks you to turn on logging.
 - **Structure** — post types, taxonomies and terms: rename, merge and
   re-parent categories and tags safely.
+- **Database** — a window into where your site actually stores things.
+  Most sites never need it, so it is not in the sidebar: you reach it from
+  the System page's Database card, the command palette ("Browse database"),
+  or the /minn-admin/database address. It has three parts. **Tables** lists
+  every table with its size and rough row count, and opening one shows its
+  rows, with sorting, a per-column filter and a detail view for any single
+  row. **Structure** (a tab on any open table) shows that table's columns
+  and indexes, which is what someone technical will ask for when a page is
+  slow. **Health** runs a set of storage checks: leftover rows pointing at
+  posts or users that no longer exist, missing indexes, tables using an
+  old storage engine, space that could be reclaimed, and backlogs like
+  expired shop sessions.
+
+  Two things are true of all of it. It is **read-only**: Minn will never
+  change or delete anything in the database, because doing so behind a
+  plugin's back is how sites break in ways nobody can trace. And where a
+  Health check finds something worth cleaning up, Minn gives you the exact
+  command to run rather than a button that runs it: copy it, back up, and
+  run it yourself or hand it to whoever looks after the site. If you need
+  to genuinely edit the database, that is a job for your host's tools or
+  the WP-CLI command line, and Minn says so plainly rather than pretending
+  otherwise.
 
 ## Your profile
 

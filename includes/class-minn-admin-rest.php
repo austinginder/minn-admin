@@ -5368,6 +5368,15 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 
+		// Database hygiene — one summary row for the viewer's Health view
+		// (class-minn-admin-db.php). Cached there, so this costs nothing.
+		if ( class_exists( 'Minn_Admin_DB' ) ) {
+			$db_check = Minn_Admin_DB::system_check();
+			if ( $db_check ) {
+				$checks[] = $db_check;
+			}
+		}
+
 		// Security posture — Wordfence firewall + scan rows (adapters/
 		// wordfence.php). Appended (not spliced high) since they're informative
 		// rather than the loudest thing on the page.

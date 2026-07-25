@@ -12529,7 +12529,10 @@
 					// trains people to stop clicking the live ones. Adapter
 					// checks may carry `href` (Wordfence, Solid Security):
 					// those open the plugin's own wp-admin screen.
-					const goto = c.label === 'Licenses' ? 'licenses'
+					// Server-provided goto wins (label matching below is legacy
+					// and breaks under translation).
+					const goto = c.goto ? c.goto
+						: c.label === 'Licenses' ? 'licenses'
 						: ( c.label === 'Debug mode' && showDebug ) ? 'debug'
 						: c.label === 'Backups' ? 'backups'
 						: c.label === 'Site visibility' ? 'visibility'
@@ -12642,6 +12645,11 @@
 				if ( 'licenses' === k ) {
 					state.extTab = 'licenses';
 					go( 'extensions' );
+				} else if ( 'dbhealth' === k ) {
+					const ds = dbState();
+					ds.table = null;
+					ds.view = 'health';
+					go( 'database' );
 				} else if ( 'core' === k ) {
 					go( 'extensions' ); // the core-update banner + Update all
 				} else if ( 'backups' === k ) {
@@ -12875,13 +12883,36 @@
 
 	function dbState() {
 		if ( ! state.db ) {
-			state.db = { q: '', all: false, sortBy: 'name', sortDir: 'asc', table: null, data: null, page: 1, tab: 'rows', structure: null };
+			state.db = { q: '', all: false, sortBy: 'name', sortDir: 'asc', table: null, data: null, page: 1, tab: 'rows', structure: null, view: 'tables' };
 		}
 		return state.db;
 	}
 
 	async function loadDbTables() {
 		state.cache.dbTables = await api( 'minn-admin/v1/db/tables' + ( dbState().all ? '?all=1' : '' ) );
+	}
+
+	async function loadDbHealth() {
+		state.cache.dbHealth = await api( 'minn-admin/v1/db/health' );
+	}
+
+	// Tables | Health switch on the list view.
+	function dbViewsHtml( ds ) {
+		const v = ds.view === 'health' ? 'health' : 'tables';
+		return `<div class="minn-tabs minn-db-tabs">
+			<button class="minn-tab${ v === 'tables' ? ' active' : '' }" data-dbview="tables">${ esc( __( 'Tables' ) ) }</button>
+			<button class="minn-tab${ v === 'health' ? ' active' : '' }" data-dbview="health">${ esc( __( 'Health' ) ) }</button>
+		</div>`;
+	}
+
+	function bindDbViews( view, ds ) {
+		$$( '[data-dbview]', view ).forEach( ( b ) =>
+			b.addEventListener( 'click', () => {
+				const v = b.dataset.dbview;
+				if ( ( ds.view === 'health' ? 'health' : 'tables' ) === v ) return;
+				ds.view = v;
+				renderDatabase();
+			} ) );
 	}
 
 	async function loadDbStructure() {
@@ -12946,6 +12977,7 @@
 		ds.fq = '';
 		ds.tab = 'rows';
 		ds.structure = null;
+		ds.view = 'tables';
 		go( 'database' );
 	}
 
@@ -12978,6 +13010,7 @@
 		if ( ds.table ) {
 			return ds.tab === 'structure' ? renderDbStructure( view, ds ) : renderDbRows( view, ds );
 		}
+		if ( ds.view === 'health' ) return renderDbHealth( view, ds );
 		const c = state.cache.dbTables;
 		if ( ! c ) {
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading tables…' ) ) }</div>`;
@@ -12986,6 +13019,7 @@
 		}
 		view.innerHTML = `
 		<div class="minn-toolbar">
+			${ dbViewsHtml( ds ) }
 			<input class="minn-input minn-toolbar-search" id="minn-db-search" placeholder="${ esc( __( 'Search tables…' ) ) }" value="${ esc( ds.q || '' ) }">
 			<div class="minn-toolbar-meta">${ esc( sprintf(
 				/* translators: 1: number of database tables, 2: total size (e.g. "97.8 MB"). */
@@ -13050,6 +13084,7 @@
 				} ) );
 		};
 		paintList();
+		bindDbViews( view, ds );
 		$( '#minn-db-search' ).addEventListener( 'input', ( e ) => {
 			ds.q = e.target.value;
 			paintList();
@@ -13062,6 +13097,81 @@
 				renderDatabase();
 			} );
 		}
+	}
+
+	// Health view: fixed read-only checks over this install's storage. The
+	// only remedy offered is a WP-CLI command to copy — Minn never writes
+	// (docs/native-editors.md case study 2).
+	function renderDbHealth( view, ds ) {
+		const h = state.cache.dbHealth;
+		let summary = '';
+		if ( h ) {
+			/* translators: %s: number of database health checks needing attention. */
+			summary = h.warnings
+				? sprintf( _n( '%s check needs attention', '%s checks need attention', h.warnings ), Number( h.warnings ).toLocaleString() )
+				: __( 'Everything looks healthy' );
+		}
+		const head = `
+		<div class="minn-toolbar">
+			${ dbViewsHtml( ds ) }
+			${ summary ? `<div class="minn-toolbar-meta">${ esc( summary ) }</div>` : '' }
+			${ h ? `<button class="minn-btn-soft" id="minn-db-hrefresh">${ esc( __( 'Refresh' ) ) }</button>` : '' }
+			<span class="minn-db-ro">${ icon( 'lock' ) } ${ esc( __( 'Read-only by design' ) ) }</span>
+		</div>`;
+		if ( ! h ) {
+			view.innerHTML = head + `<div class="minn-loading">${ esc( __( 'Running checks…' ) ) }</div>`;
+			bindDbViews( view, ds );
+			loadDbHealth().then( renderIfCurrent( 'database' ) ).catch( showErr );
+			return;
+		}
+		const sevIcon = ( s ) => ( s === 'warn' ? 'warn' : ( s === 'ok' ? 'check' : 'activity' ) );
+		view.innerHTML = head + `
+		<div class="minn-card minn-table">
+			${ h.checks.map( ( c ) => `
+			<div class="minn-table-row minn-db-hc">
+				<span class="minn-db-hc-sev ${ esc( c.severity ) }">${ icon( sevIcon( c.severity ) ) }</span>
+				<div class="minn-db-hc-main">
+					<div class="minn-db-hc-top">
+						<span class="minn-db-hc-label">${ esc( c.label ) }</span>
+						<span class="minn-db-hc-value">${ esc( c.value ) }</span>
+						${ c.table ? `<button class="minn-db-hc-table mono" data-dbgo="${ esc( c.table ) }">${ esc( c.table ) }</button>` : '' }
+					</div>
+					<div class="minn-db-hc-detail">${ esc( c.detail ) }</div>
+					${ c.command ? `
+					<div class="minn-db-hc-cmd">
+						<code>${ esc( c.command.text ) }</code>
+						<button class="minn-btn-soft" data-dbcmd="${ esc( c.command.text ) }">${ esc( c.command.label ) }</button>
+					</div>
+					<div class="minn-db-hc-hint">${ esc( c.command.hint ) }</div>` : '' }
+				</div>
+			</div>` ).join( '' ) }
+		</div>`;
+		bindDbViews( view, ds );
+		const refresh = $( '#minn-db-hrefresh' );
+		if ( refresh ) {
+			refresh.addEventListener( 'click', async () => {
+				refresh.disabled = true;
+				try {
+					state.cache.dbHealth = await api( 'minn-admin/v1/db/health?refresh=1' );
+					state.cache.system = null; // the System row shares this cache
+					renderDatabase();
+				} catch ( e ) {
+					toast( e.message, true );
+					refresh.disabled = false;
+				}
+			} );
+		}
+		$$( '[data-dbgo]', view ).forEach( ( b ) =>
+			b.addEventListener( 'click', () => goDbTable( b.dataset.dbgo ) ) );
+		$$( '[data-dbcmd]', view ).forEach( ( b ) =>
+			b.addEventListener( 'click', async () => {
+				try {
+					await navigator.clipboard.writeText( b.dataset.dbcmd );
+					toast( __( 'Command copied' ) );
+				} catch ( e ) {
+					toast( __( 'Copy failed' ), true );
+				}
+			} ) );
 	}
 
 	function renderDbRows( view, ds ) {

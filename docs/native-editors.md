@@ -134,6 +134,43 @@ byte caps with a roomier row-detail refetch) plus the bespoke client view
 (table list → paged rows → row detail modal). Suite: `tests/database.test.js`.
 The boundaries held: no writes, no SQL console, serialized blobs render raw.
 
+**Extended in the same cycle (2026-07-24)** with the two additions that stay
+inside the original envelope, after an explicit pros-and-cons pass on going
+further (the phpMyAdmin question, answered no):
+
+- **Structure tab** (`GET /db/structure`) — columns plus `indexes_of()` from
+  `SHOW INDEX`. Metadata only, so it is free on a table of any size, which is
+  why this tab is unbounded while Rows stays windowed.
+- **Health view** (`GET /db/health`) — a fixed check registry (orphan scans,
+  index and engine hygiene, fragmentation, auto-increment headroom, revision
+  and queue backlogs), cached 10 minutes and summarised as one System health
+  row. Suite: `tests/db-health.test.js`.
+
+Three properties make these additions free rather than new surface, and any
+future check MUST hold all three: **the SQL is authored** (no request
+parameter reaches it, so there is no new identifier or injection surface over
+what the viewer already had); **scans are bounded** by the same `COUNT_CAP`
+subquery idiom as `rows()` and skipped entirely above `SCAN_MAX_ROWS`, so the
+diagnostic cannot hurt the large sites that need it most; and **the only
+remedy is a WP-CLI command to copy**. That last one is the load-bearing one.
+A "clean up" button is the exact step that turns this viewer into an editor,
+and the reasoning against it below has not changed. Copying a command hands
+the write to the admin's own shell, where it belongs, and keeps Minn's claim
+literally true.
+
+The deliberate non-goal that came up while scoping this and was rejected: a
+**database dump**. Read-only does not mean harmless when the read is total. A
+dump changes the blast radius of any auth bug from "an admin reads capped
+rows one page at a time" to "one request yields every password hash, customer
+address, stored SMTP password and license key", and the recurring real-world
+CVE in this space is an export plugin leaving a `.sql` in a web-served
+directory. Minn already has a backups family (UpdraftPlus, Duplicator,
+Disembark, WPvivid) that owns that threat model and its recovery story; that
+surface, or WP-CLI, is the honest answer. If it is ever revisited, the only
+defensible shape is streamed (never written to disk), minted by a POST and
+consumed by a single-use short-TTL token, structure-only by default, with
+credential-bearing columns redacted unless explicitly opted in, and logged.
+
 ### Why it passes the test
 
 The "document" is the database itself: enumerable (information_schema),
