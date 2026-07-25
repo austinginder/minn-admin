@@ -2203,6 +2203,23 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-db-cols.minn-table-row { cursor: pointer; }
 .minn-db-dim { color: var(--text3); }
 .minn-db-tabs { flex-shrink: 0; overflow: visible; }
+.minn-db-hc { display: flex; gap: 12px; align-items: flex-start; }
+.minn-db-hc-sev { flex-shrink: 0; display: flex; margin-top: 1px; }
+.minn-db-hc-sev svg { width: 17px; height: 17px; }
+.minn-db-hc-sev.warn { color: var(--amber); }
+.minn-db-hc-sev.ok { color: var(--green); }
+.minn-db-hc-sev.info { color: var(--text3); }
+.minn-db-hc-main { flex: 1; min-width: 0; }
+.minn-db-hc-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.minn-db-hc-label { font-weight: 600; }
+.minn-db-hc-value { color: var(--text2); font-variant-numeric: tabular-nums; }
+.minn-db-hc-table { background: none; border: none; padding: 0; color: var(--accent2); cursor: pointer; font-size: 12.5px; }
+.minn-db-hc-table:hover { text-decoration: underline; }
+.minn-db-hc-detail { color: var(--text3); font-size: 13px; margin-top: 3px; }
+.minn-db-hc-cmd { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.minn-db-hc-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text2); }
+.minn-db-hc-cmd .minn-btn-soft { padding: 6px 11px; font-size: 12.5px; }
+.minn-db-hc-hint { color: var(--text3); font-size: 12px; margin-top: 5px; }
 .minn-db-sect { margin: 18px 0 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); }
 .minn-db-sect:first-of-type { margin-top: 4px; }
 .minn-db-struct-cols { grid-template-columns: minmax(0,1.2fr) minmax(0,1.3fr) 62px minmax(0,1fr) 130px; }

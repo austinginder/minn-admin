@@ -30,6 +30,15 @@ class Minn_Admin_DB {
 	// Per-cell byte caps: grid payloads stay light, the row detail is roomy.
 	const CELL_CAP_LIST   = 2048;
 	const CELL_CAP_DETAIL = 131072;
+	// Health checks: a table estimated bigger than this is not scanned at all
+	// (the check reports "too large to check cheaply" instead of running).
+	const SCAN_MAX_ROWS = 2000000;
+	// Fragmentation warns only when free space is both a large SHARE and a
+	// large ABSOLUTE amount — either alone is noise.
+	const FRAG_SHARE = 0.25;
+	const FRAG_MIN   = 52428800;
+	// Health results are cached this long so the System page row is free.
+	const HEALTH_TTL = 600;
 
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
@@ -45,6 +54,15 @@ class Minn_Admin_DB {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'tables' ),
+				'permission_callback' => $manage,
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/db/health',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'health' ),
 				'permission_callback' => $manage,
 			)
 		);
@@ -432,6 +450,457 @@ class Minn_Admin_DB {
 				'primary' => $primary,
 				'cells'   => $cells,
 			)
+		);
+	}
+
+	/*
+	 * ===== Health checks =====
+	 *
+	 * Every statement below is AUTHORED: no request parameter reaches any of
+	 * this SQL, so the checks add no identifier or injection surface over the
+	 * viewer's existing envelope. Scans are bounded by the same COUNT_CAP
+	 * subquery idiom as rows(), and skipped entirely on tables estimated over
+	 * SCAN_MAX_ROWS, so this stays polite on the sites that need it most.
+	 *
+	 * The only remedy a check ever offers is a WP-CLI command to COPY. Minn
+	 * runs no cleanup itself: read-only is the product (docs/native-editors.md).
+	 */
+
+	/** Bounded COUNT(*) over an authored FROM clause. Returns [ count, capped ]. */
+	private static function bounded_count( $from_sql ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- authored SQL; no request input reaches this.
+		$n = (int) $wpdb->get_var( "SELECT COUNT(*) FROM (SELECT 1 FROM {$from_sql} LIMIT " . ( self::COUNT_CAP + 1 ) . ') x' );
+		return array( min( $n, self::COUNT_CAP ), $n > self::COUNT_CAP );
+	}
+
+	/** Estimated rows for a table, or -1 when it does not exist. */
+	private static function rows_est( $name ) {
+		$t = self::resolve_table( $name );
+		return $t ? (int) $t->rows_est : -1;
+	}
+
+	/**
+	 * Shape one scan-backed check. Skips the scan (severity info) when the
+	 * table is missing or estimated too large to count cheaply.
+	 */
+	private static function scan_check( $args ) {
+		$est = self::rows_est( $args['table'] );
+		if ( $est < 0 ) {
+			return null; // table absent: the check simply does not apply here.
+		}
+		$check = array(
+			'label'   => $args['label'],
+			'table'   => $args['table'],
+			'command' => isset( $args['command'] ) ? $args['command'] : null,
+		);
+		if ( $est > self::SCAN_MAX_ROWS ) {
+			$check['severity'] = 'info';
+			$check['value']    = __( 'Not checked', 'minn-admin' );
+			$check['detail']   = __( 'This table is too large to count cheaply, so Minn does not scan it. Run the command below to check it yourself.', 'minn-admin' );
+			return $check;
+		}
+		list( $count, $capped ) = self::bounded_count( $args['from'] );
+		$check['severity']      = $count > 0 ? $args['when_found'] : 'ok';
+		$check['value']         = $capped
+			? number_format_i18n( $count ) . '+'
+			: number_format_i18n( $count );
+		$check['detail']        = $count > 0 ? $args['detail'] : $args['clear'];
+		if ( 0 === $count ) {
+			$check['command'] = null;
+		}
+		return $check;
+	}
+
+	/**
+	 * GET /db/health — fixed read-only checks over this install's storage.
+	 * Cached briefly so the System page's summary row costs nothing; ?refresh=1
+	 * recomputes (a recompute is only ever more reads).
+	 */
+	public static function health( $request = null ) {
+		$fresh = $request ? rest_sanitize_boolean( $request->get_param( 'refresh' ) ) : false;
+		return rest_ensure_response( self::health_data( $fresh ) );
+	}
+
+	/** Cached check run. Shared by the route and the System page row. */
+	public static function health_data( $fresh = false ) {
+		if ( ! $fresh ) {
+			$cached = get_transient( 'minn_admin_db_health' );
+			if ( is_array( $cached ) && isset( $cached['checks'] ) ) {
+				return $cached;
+			}
+		}
+		$out = self::run_checks();
+		set_transient( 'minn_admin_db_health', $out, self::HEALTH_TTL );
+		return $out;
+	}
+
+	/**
+	 * The System page's one-line summary of this surface, or null when the
+	 * checks cannot be read. Shape matches the other system checks.
+	 */
+	public static function system_check() {
+		try {
+			$data = self::health_data();
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		$warn = (int) $data['warnings'];
+		return array(
+			'label'  => __( 'Database hygiene', 'minn-admin' ),
+			'status' => $warn > 0 ? 'warn' : 'pass',
+			'goto'   => 'dbhealth',
+			'detail' => $warn > 0
+				? sprintf(
+					/* translators: %s: number of database checks needing attention. */
+					_n(
+						'%s storage check needs attention',
+						'%s storage checks need attention',
+						$warn,
+						'minn-admin'
+					),
+					number_format_i18n( $warn )
+				)
+				: __( 'Orphaned rows, indexes and engines all look healthy', 'minn-admin' ),
+		);
+	}
+
+	private static function run_checks() {
+		$checks = array();
+		foreach ( self::check_list() as $id => $fn ) {
+			try {
+				$c = call_user_func( $fn );
+			} catch ( \Throwable $e ) {
+				continue; // one odd schema can never break the page
+			}
+			if ( is_array( $c ) ) {
+				$c['id']  = $id;
+				$checks[] = $c;
+			}
+		}
+		$rank = array(
+			'warn' => 0,
+			'info' => 1,
+			'ok'   => 2,
+		);
+		usort(
+			$checks,
+			function ( $a, $b ) use ( $rank ) {
+				$ra = isset( $rank[ $a['severity'] ] ) ? $rank[ $a['severity'] ] : 3;
+				$rb = isset( $rank[ $b['severity'] ] ) ? $rank[ $b['severity'] ] : 3;
+				return $ra === $rb ? strcmp( $a['label'], $b['label'] ) : $ra - $rb;
+			}
+		);
+		$warn = 0;
+		foreach ( $checks as $c ) {
+			if ( 'warn' === $c['severity'] ) {
+				$warn++;
+			}
+		}
+		return array(
+			'checks'   => $checks,
+			'warnings' => $warn,
+			'scan_max' => self::SCAN_MAX_ROWS,
+		);
+	}
+
+	/** The registry. Each entry returns a check array, or null to skip. */
+	private static function check_list() {
+		global $wpdb;
+		return array(
+
+			'no_primary_key' => function () use ( $wpdb ) {
+				$rows = $wpdb->get_col(
+					$wpdb->prepare(
+						'SELECT t.table_name FROM information_schema.TABLES t
+						 LEFT JOIN information_schema.STATISTICS s
+						   ON s.table_schema = t.table_schema AND s.table_name = t.table_name
+						   AND s.index_name = %s
+						 WHERE t.table_schema = %s AND t.table_type = %s AND s.index_name IS NULL
+						 ORDER BY t.table_name ASC',
+						'PRIMARY',
+						DB_NAME,
+						'BASE TABLE'
+					)
+				);
+				$rows = is_array( $rows ) ? $rows : array();
+				return array(
+					'label'    => __( 'Tables without a primary key', 'minn-admin' ),
+					'severity' => $rows ? 'warn' : 'ok',
+					'value'    => number_format_i18n( count( $rows ) ),
+					'detail'   => $rows
+						? sprintf(
+							/* translators: %s: comma-separated list of database table names. */
+							__( 'These tables have no primary key, which breaks row-level replication and confuses backup and migration tools: %s', 'minn-admin' ),
+							implode( ', ', array_slice( $rows, 0, 8 ) )
+						)
+						: __( 'Every table has a primary key.', 'minn-admin' ),
+				);
+			},
+
+			'storage_engine' => function () {
+				$old = array();
+				foreach ( self::table_index() as $t ) {
+					if ( $t->engine && 0 !== strcasecmp( (string) $t->engine, 'InnoDB' ) ) {
+						$old[] = $t->name . ' (' . $t->engine . ')';
+					}
+				}
+				return array(
+					'label'    => __( 'Storage engine', 'minn-admin' ),
+					'severity' => $old ? 'warn' : 'ok',
+					'value'    => $old ? number_format_i18n( count( $old ) ) : 'InnoDB',
+					'detail'   => $old
+						? sprintf(
+							/* translators: %s: comma-separated list of tables and their storage engines. */
+							__( 'These tables do not use InnoDB, so they miss row-level locking and crash recovery: %s', 'minn-admin' ),
+							implode( ', ', array_slice( $old, 0, 8 ) )
+						)
+						: __( 'Every table uses InnoDB.', 'minn-admin' ),
+					'command'  => $old ? array(
+						'label' => __( 'Convert a table', 'minn-admin' ),
+						'text'  => 'wp db query "ALTER TABLE ' . preg_replace( '/ .*/', '', $old[0] ) . ' ENGINE=InnoDB"',
+						'hint'  => __( 'Back up first. Converting locks the table while it runs.', 'minn-admin' ),
+					) : null,
+				);
+			},
+
+			'fragmentation' => function () {
+				$worst = null;
+				$total = 0;
+				foreach ( self::table_index() as $t ) {
+					$free   = (int) $t->data_free;
+					$size   = (int) $t->size;
+					$total += $free;
+					if ( $free > self::FRAG_MIN && $size > 0 && ( $free / $size ) > self::FRAG_SHARE ) {
+						if ( ! $worst || $free > (int) $worst->data_free ) {
+							$worst = $t;
+						}
+					}
+				}
+				return array(
+					'label'    => __( 'Reclaimable space', 'minn-admin' ),
+					'severity' => $worst ? 'warn' : 'ok',
+					'value'    => size_format( $total, 1 ),
+					'table'    => $worst ? $worst->name : null,
+					'detail'   => $worst
+						? sprintf(
+							/* translators: 1: table name, 2: reclaimable size (e.g. "82.0 MB"). */
+							__( '%1$s alone is holding %2$s of free space inside its own file. Optimising rewrites the table and returns it to the disk.', 'minn-admin' ),
+							$worst->name,
+							size_format( (int) $worst->data_free, 1 )
+						)
+						: __( 'No table is holding a significant amount of reclaimable space.', 'minn-admin' ),
+					'command'  => $worst ? array(
+						'label' => __( 'Optimise tables', 'minn-admin' ),
+						'text'  => 'wp db optimize',
+						'hint'  => __( 'Back up first. Optimising locks each table while it runs.', 'minn-admin' ),
+					) : null,
+				);
+			},
+
+			'postmeta_index' => function () use ( $wpdb ) {
+				$meta = self::resolve_table( $wpdb->postmeta );
+				if ( ! $meta ) {
+					return null;
+				}
+				$composite = false;
+				foreach ( self::indexes_of( $meta->name ) as $i ) {
+					$cols = $i['columns'];
+					if ( count( $cols ) >= 2 && 0 === stripos( $cols[0], 'post_id' ) && 0 === stripos( $cols[1], 'meta_key' ) ) {
+						$composite = true;
+					}
+				}
+				return array(
+					'label'    => __( 'Post meta lookup index', 'minn-admin' ),
+					'table'    => $meta->name,
+					'severity' => $composite ? 'ok' : 'warn',
+					'value'    => $composite ? __( 'Present', 'minn-admin' ) : __( 'Missing', 'minn-admin' ),
+					'detail'   => $composite
+						? __( 'A combined post_id and meta_key index is present, so meta lookups stay fast.', 'minn-admin' )
+						: __( 'Lookups by post and meta key fall back to two separate indexes. On sites with heavy meta use (WooCommerce, event and booking plugins) a combined index is a large, low-risk speed win.', 'minn-admin' ),
+					'command'  => $composite ? null : array(
+						'label' => __( 'Add the index', 'minn-admin' ),
+						'text'  => 'wp db query "ALTER TABLE ' . $meta->name . ' ADD INDEX post_id_meta_key (post_id, meta_key(191))"',
+						'hint'  => __( 'Back up first. Adding an index locks the table briefly.', 'minn-admin' ),
+					),
+				);
+			},
+
+			'autoincrement_headroom' => function () use ( $wpdb ) {
+				$rows = $wpdb->get_results(
+					$wpdb->prepare(
+						'SELECT t.table_name AS name, t.auto_increment AS next_id, c.column_type AS col_type
+						 FROM information_schema.TABLES t
+						 JOIN information_schema.COLUMNS c
+						   ON c.table_schema = t.table_schema AND c.table_name = t.table_name
+						   AND c.extra LIKE %s
+						 WHERE t.table_schema = %s AND t.auto_increment IS NOT NULL',
+						'%auto_increment%',
+						DB_NAME
+					)
+				);
+				$limits = array(
+					'tinyint'   => array( 127, 255 ),
+					'smallint'  => array( 32767, 65535 ),
+					'mediumint' => array( 8388607, 16777215 ),
+					'int'       => array( 2147483647, 4294967295 ),
+					'bigint'    => array( 9223372036854775807, 18446744073709551615 ),
+				);
+				$tight = array();
+				foreach ( (array) $rows as $r ) {
+					$type = strtolower( (string) $r->col_type );
+					$base = preg_replace( '/\(.*/', '', $type );
+					$base = trim( preg_replace( '/\s.*/', '', $base ) );
+					if ( ! isset( $limits[ $base ] ) ) {
+						continue;
+					}
+					$max = false !== strpos( $type, 'unsigned' ) ? $limits[ $base ][1] : $limits[ $base ][0];
+					if ( $max > 0 && ( (float) $r->next_id / (float) $max ) > 0.8 ) {
+						$tight[] = $r->name;
+					}
+				}
+				return array(
+					'label'    => __( 'Auto-increment headroom', 'minn-admin' ),
+					'severity' => $tight ? 'warn' : 'ok',
+					'value'    => $tight ? number_format_i18n( count( $tight ) ) : __( 'Healthy', 'minn-admin' ),
+					'table'    => $tight ? $tight[0] : null,
+					'detail'   => $tight
+						? sprintf(
+							/* translators: %s: comma-separated list of database table names. */
+							__( 'These tables are within 20 percent of the largest id their column type can store. Once the ceiling is reached, new rows stop being written: %s', 'minn-admin' ),
+							implode( ', ', array_slice( $tight, 0, 8 ) )
+						)
+						: __( 'No table is close to exhausting its id column.', 'minn-admin' ),
+				);
+			},
+
+			'orphan_postmeta' => function () use ( $wpdb ) {
+				return self::scan_check(
+					array(
+						'table'      => $wpdb->postmeta,
+						'label'      => __( 'Orphaned post meta', 'minn-admin' ),
+						'from'       => "{$wpdb->postmeta} pm LEFT JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE p.ID IS NULL",
+						'when_found' => 'warn',
+						'detail'     => __( 'These meta rows belong to posts that no longer exist. They are dead weight in every query that touches post meta.', 'minn-admin' ),
+						'clear'      => __( 'Every meta row belongs to a post that still exists.', 'minn-admin' ),
+						'command'    => array(
+							'label' => __( 'Delete them', 'minn-admin' ),
+							'text'  => 'wp db query "DELETE pm FROM ' . $wpdb->postmeta . ' pm LEFT JOIN ' . $wpdb->posts . ' p ON p.ID = pm.post_id WHERE p.ID IS NULL"',
+							'hint'  => __( 'Back up first. This permanently deletes rows.', 'minn-admin' ),
+						),
+					)
+				);
+			},
+
+			'orphan_usermeta' => function () use ( $wpdb ) {
+				return self::scan_check(
+					array(
+						'table'      => $wpdb->usermeta,
+						'label'      => __( 'Orphaned user meta', 'minn-admin' ),
+						'from'       => "{$wpdb->usermeta} um LEFT JOIN {$wpdb->users} u ON u.ID = um.user_id WHERE u.ID IS NULL",
+						'when_found' => 'warn',
+						'detail'     => __( 'These meta rows belong to users who no longer exist, usually left behind by a plugin that removed accounts directly.', 'minn-admin' ),
+						'clear'      => __( 'Every meta row belongs to a user who still exists.', 'minn-admin' ),
+						'command'    => array(
+							'label' => __( 'Delete them', 'minn-admin' ),
+							'text'  => 'wp db query "DELETE um FROM ' . $wpdb->usermeta . ' um LEFT JOIN ' . $wpdb->users . ' u ON u.ID = um.user_id WHERE u.ID IS NULL"',
+							'hint'  => __( 'Back up first. This permanently deletes rows.', 'minn-admin' ),
+						),
+					)
+				);
+			},
+
+			'orphan_term_relationships' => function () use ( $wpdb ) {
+				return self::scan_check(
+					array(
+						'table'      => $wpdb->term_relationships,
+						'label'      => __( 'Orphaned term relationships', 'minn-admin' ),
+						'from'       => "{$wpdb->term_relationships} tr LEFT JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tt.term_taxonomy_id IS NULL",
+						'when_found' => 'warn',
+						'detail'     => __( 'These rows link content to categories or tags that no longer exist.', 'minn-admin' ),
+						'clear'      => __( 'Every relationship points at a term that still exists.', 'minn-admin' ),
+						'command'    => array(
+							'label' => __( 'Delete them', 'minn-admin' ),
+							'text'  => 'wp db query "DELETE tr FROM ' . $wpdb->term_relationships . ' tr LEFT JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tt.term_taxonomy_id IS NULL"',
+							'hint'  => __( 'Back up first. This permanently deletes rows.', 'minn-admin' ),
+						),
+					)
+				);
+			},
+
+			'revisions' => function () use ( $wpdb ) {
+				return self::scan_check(
+					array(
+						'table'      => $wpdb->posts,
+						'label'      => __( 'Stored revisions', 'minn-admin' ),
+						'from'       => $wpdb->prepare( "{$wpdb->posts} WHERE post_type = %s", 'revision' ),
+						'when_found' => 'info',
+						'detail'     => __( 'Revisions are the editor safety net, so a large number is normal and not a fault. Trimming them is only worthwhile if the posts table has grown unwieldy.', 'minn-admin' ),
+						'clear'      => __( 'No revisions are stored.', 'minn-admin' ),
+						'command'    => array(
+							'label' => __( 'Delete all revisions', 'minn-admin' ),
+							'text'  => 'wp post delete $(wp post list --post_type=revision --format=ids) --force',
+							'hint'  => __( 'Back up first. This removes every saved revision permanently.', 'minn-admin' ),
+						),
+					)
+				);
+			},
+
+			'spam_comments' => function () use ( $wpdb ) {
+				return self::scan_check(
+					array(
+						'table'      => $wpdb->comments,
+						'label'      => __( 'Spam and trashed comments', 'minn-admin' ),
+						'from'       => $wpdb->prepare( "{$wpdb->comments} WHERE comment_approved IN ( %s, %s )", 'spam', 'trash' ),
+						'when_found' => 'info',
+						'detail'     => __( 'Spam and trashed comments stay in the database until they are emptied. WordPress clears them on its own after a while.', 'minn-admin' ),
+						'clear'      => __( 'No spam or trashed comments are waiting.', 'minn-admin' ),
+						'command'    => array(
+							'label' => __( 'Delete spam', 'minn-admin' ),
+							'text'  => 'wp comment delete $(wp comment list --status=spam --format=ids) --force',
+							'hint'  => __( 'Back up first. This permanently deletes the comments.', 'minn-admin' ),
+						),
+					)
+				);
+			},
+
+			'wc_sessions' => function () use ( $wpdb ) {
+				$table = $wpdb->prefix . 'woocommerce_sessions';
+				return self::scan_check(
+					array(
+						'table'      => $table,
+						'label'      => __( 'Expired WooCommerce sessions', 'minn-admin' ),
+						'from'       => "{$table} WHERE session_expiry < UNIX_TIMESTAMP()",
+						'when_found' => 'warn',
+						'detail'     => __( 'Expired cart sessions should be cleared by a scheduled WooCommerce job. A large backlog usually means that job has stopped running.', 'minn-admin' ),
+						'clear'      => __( 'No expired sessions are left behind.', 'minn-admin' ),
+						'command'    => array(
+							'label' => __( 'Delete expired sessions', 'minn-admin' ),
+							'text'  => 'wp db query "DELETE FROM ' . $table . ' WHERE session_expiry < UNIX_TIMESTAMP()"',
+							'hint'  => __( 'Back up first. Shoppers with an expired cart lose it, which has already happened by definition.', 'minn-admin' ),
+						),
+					)
+				);
+			},
+
+			'action_scheduler' => function () use ( $wpdb ) {
+				$table = $wpdb->prefix . 'actionscheduler_actions';
+				return self::scan_check(
+					array(
+						'table'      => $table,
+						'label'      => __( 'Action Scheduler backlog', 'minn-admin' ),
+						'from'       => $wpdb->prepare( "{$table} WHERE status IN ( %s, %s )", 'pending', 'failed' ),
+						'when_found' => 'info',
+						'detail'     => __( 'Pending and failed background jobs. A steady backlog is normal on a busy store; a very large one suggests the queue is not draining.', 'minn-admin' ),
+						'clear'      => __( 'No pending or failed background jobs.', 'minn-admin' ),
+						'command'    => array(
+							'label' => __( 'Clean the queue', 'minn-admin' ),
+							'text'  => 'wp action-scheduler clean',
+							'hint'  => __( 'Removes finished actions. Pending work is left alone.', 'minn-admin' ),
+						),
+					)
+				);
+			},
 		);
 	}
 }
