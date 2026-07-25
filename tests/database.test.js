@@ -119,6 +119,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.waitForSelector( '[data-dbtable]', { timeout: 15000 } );
 	t.check( 'Back returns to the table list', await page.$( '[data-dbtable="wp_options"]' ) !== null );
 
+	// --- Structure tab ----------------------------------------------------
+	// wp_postmeta is the interesting case: a partial index (meta_key(191))
+	// and no composite, which is exactly what the tab exists to make visible.
+	// The list still carries the earlier search, so clear it first.
+	await page.fill( '#minn-db-search', '' );
+	await page.waitForSelector( '[data-dbtable="wp_postmeta"]', { timeout: 15000 } );
+	await page.click( '[data-dbtable="wp_postmeta"]' );
+	await page.waitForSelector( '.minn-db-grid tbody tr[data-dbrow]', { timeout: 20000 } );
+	t.check( 'Table view offers a Structure tab', await page.$( '[data-dbtab="structure"]' ) !== null );
+	await page.click( '[data-dbtab="structure"]' );
+	await page.waitForSelector( '.minn-db-idx-cols', { timeout: 20000 } );
+
+	const structText = await page.$$eval( '.minn-db-struct-cols', ( r ) => r.map( ( x ) => x.textContent ).join( '\n' ) );
+	t.check( 'Structure lists columns with types', structText.includes( 'meta_key' ) && structText.includes( 'bigint' ) );
+	t.check( 'Structure badges the primary key', structText.includes( 'PK' ) );
+	t.check( 'Structure shows the auto_increment extra', structText.includes( 'auto_increment' ) );
+
+	const idxText = await page.$$eval( '.minn-db-idx-cols', ( r ) => r.map( ( x ) => x.textContent ).join( '\n' ) );
+	t.check( 'Indexes card lists PRIMARY', idxText.includes( 'PRIMARY' ) );
+	t.check( 'Partial index shows its prefix length', idxText.includes( 'meta_key(191)' ), idxText.replace( /\s+/g, ' ' ).slice( 0, 160 ) );
+	t.check( 'Structure reads no rows (metadata only)', await page.$( '.minn-db-grid' ) === null );
+	t.check( 'Structure keeps the read-only claim', ( await page.textContent( '.minn-toolbar' ) ).includes( 'Read-only by design' ) );
+
+	await page.click( '[data-dbtab="rows"]' );
+	await page.waitForSelector( '.minn-db-grid tbody tr[data-dbrow]', { timeout: 20000 } );
+	t.check( 'Rows tab returns to the grid', await page.$( '.minn-db-grid' ) !== null );
+	await page.click( '#minn-db-back' );
+	await page.waitForSelector( '[data-dbtable]', { timeout: 15000 } );
+
 	// --- ⌘K palette entry -------------------------------------------------
 	await page.keyboard.press( 'Meta+k' );
 	await page.waitForSelector( '.minn-palette input', { timeout: 10000 } );
@@ -147,6 +176,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return r.status;
 	} );
 	t.check( 'REST refuses an Author (403)', status === 403, 'got ' + status );
+	const sstatus = await apage.evaluate( async () => {
+		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/db/structure?table=wp_options', {
+			headers: { 'X-WP-Nonce': window.MINN.nonce },
+		} );
+		return r.status;
+	} );
+	t.check( 'REST refuses an Author on structure (403)', sstatus === 403, 'got ' + sstatus );
 	await apage.goto( BASE + '/minn-admin/database', { waitUntil: 'domcontentloaded' } );
 	await apage.waitForSelector( '#minn-view .minn-empty, #minn-view .minn-card', { timeout: 15000 } );
 	const authorView = await apage.textContent( '#minn-view' );
