@@ -9,9 +9,12 @@
  * the backup profile (last scan, database size, working files on disk), the
  * exact CLI command to run a backup from any terminal, the scan sessions
  * Disembark left behind, and cleanup for the whole-site archives those
- * sessions can hold in uploads/disembark/. Everything reads the plugin's own
- * options and file layout server-side under manage_options; Disembark's
- * token-authenticated HTTP routes are never called.
+ * sessions can hold in uploads/disembark/. On Disembark 2.8+ the status card
+ * also deep-links Restore a backup (dashboard restore / pull-from-site) —
+ * restore is surgery, so Minn never builds it; Tools → Disembark is the
+ * honest door. Everything reads the plugin's own options and file layout
+ * server-side under manage_options; Disembark's token-authenticated HTTP
+ * routes are never called.
  *
  * @package minn-admin
  */
@@ -159,6 +162,16 @@ function minn_admin_disembark_status_model() {
 		'method'  => 'POST',
 		'confirm' => 'Regenerate the site token? The current CLI command and any saved connections stop working.',
 	);
+	// Disembark 2.8+ dashboard restore (upload zip or pull from a live site).
+	// Same Tools page as Open Disembark — the Restore button is the first
+	// thing on that screen. No restore UI in Minn (docs/native-editors.md).
+	if ( class_exists( '\\Disembark\\Import' ) ) {
+		$actions[] = array(
+			// ↗ is in the label (same-host Tools link — hrefLabel only marks off-site).
+			'label' => 'Restore a backup ↗',
+			'href'  => admin_url( 'tools.php?page=disembark' ),
+		);
+	}
 	$actions[] = array(
 		'label' => 'Open Disembark ↗',
 		'href'  => admin_url( 'tools.php?page=disembark' ),
