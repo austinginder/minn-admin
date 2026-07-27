@@ -1,10 +1,11 @@
 /**
  * Scrutoscope profiler adapter — profiles list, detail sections, status card,
- * Cron view, and delete-through-Storage.
+ * Cron view, on-demand Profile this hook (1.4+), and delete-through-Storage.
  *
  * Fixture: minn_test_seed_scrutoscope inserts two profiles via their
- * Storage::save_profile (session home + background slow). Scrutoscope must
- * be active (GitHub install on minnadmin).
+ * Storage::save_profile (session home + background slow) and schedules
+ * minn_scruto_profile_noop for the profile action. Scrutoscope must be active
+ * (GitHub install on minnadmin).
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
 
@@ -111,13 +112,47 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		JSON.stringify( st.body.rows ) );
 
 	// Cron view.
-	const cron = await api( 'minn-admin/v1/scrutoscope/cron?per_page=50' );
+	const cron = await api( 'minn-admin/v1/scrutoscope/cron?per_page=100' );
 	t.check( 'cron inventory returns events',
 		cron.status === 200 && cron.body.total > 0 && ( cron.body.items || [] ).length > 0,
 		JSON.stringify( cron.body && { total: cron.body.total } ) );
 	t.check( 'cron rows have hook + schedule + status',
 		( cron.body.items || [] ).every( ( r ) => r.hook && r.schedule && r.status ),
 		JSON.stringify( ( cron.body.items || [] )[ 0 ] ) );
+	t.check( 'cron rows offer can_profile when Scrutoscope 1.4+',
+		( cron.body.items || [] ).every( ( r ) => r.can_profile === true ),
+		JSON.stringify( ( cron.body.items || [] )[ 0 ] ) );
+
+	// On-demand profile of the fixture no-op hook (side-effect free).
+	// Search across pages — the fixture is ~24h out so not overdue-sorted first.
+	let noop = ( cron.body.items || [] ).find( ( r ) => r.hook === 'minn_scruto_profile_noop' );
+	if ( ! noop && cron.body.total > ( cron.body.items || [] ).length ) {
+		const all = await api( 'minn-admin/v1/scrutoscope/cron?search=minn_scruto_profile_noop&per_page=10' );
+		noop = ( all.body.items || [] ).find( ( r ) => r.hook === 'minn_scruto_profile_noop' );
+	}
+	t.check( 'fixture no-op cron hook is scheduled', !! noop && !! noop.id,
+		JSON.stringify( { total: cron.body.total, sample: ( cron.body.items || [] ).slice( 0, 3 ).map( ( r ) => r.hook ) } ) );
+	let profiled = null;
+	if ( noop ) {
+		profiled = await api( 'minn-admin/v1/scrutoscope/cron/' + noop.id + '/profile', { method: 'POST' } );
+		t.check( 'profile this hook returns profile_id',
+			profiled.status === 200 && profiled.body && profiled.body.ok && profiled.body.profile_id > 0,
+			JSON.stringify( profiled ) );
+		t.check( 'profile message names the hook',
+			!! profiled.body && /minn_scruto_profile_noop/.test( profiled.body.message || '' ),
+			JSON.stringify( profiled.body ) );
+		if ( profiled.body && profiled.body.profile_id ) {
+			const pd = await api( 'minn-admin/v1/scrutoscope/profiles/' + profiled.body.profile_id );
+			t.check( 'new profile has detail sections',
+				pd.status === 200 && Array.isArray( pd.body.sections ) && pd.body.sections.length >= 1,
+				JSON.stringify( { status: pd.status, titles: ( pd.body.sections || [] ).map( ( s ) => s.title ) } ) );
+			// Clean up the on-demand profile so fixture totals stay stable.
+			await api( 'minn-admin/v1/scrutoscope/profiles/' + profiled.body.profile_id, { method: 'DELETE' } );
+		}
+		// Bad id → 404.
+		const bad = await api( 'minn-admin/v1/scrutoscope/cron/ffffffffffffffffffffffffffffffff/profile', { method: 'POST' } );
+		t.check( 'unknown cron id profiles 404', bad.status === 404, JSON.stringify( bad ) );
+	}
 
 	// UI: open surface, status card, row open, Cron tab.
 	await page.goto( BASE + '/minn-admin/scrutoscope', { waitUntil: 'domcontentloaded' } );
@@ -184,6 +219,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	} );
 	t.check( 'Cron view lists events (status card hidden)',
 		cronUi.n > 0 && cronUi.statusGone, JSON.stringify( cronUi ) );
+
+	// Row menu offers Profile this hook (right-click ⋯ pattern).
+	const menuOk = await page.evaluate( () => {
+		const row = document.querySelector( '.minn-table-row' );
+		if ( ! row ) return { ok: false, why: 'no row' };
+		const more = row.querySelector( '.minn-row-more' );
+		if ( ! more ) return { ok: false, why: 'no more button' };
+		more.click();
+		const items = Array.from( document.querySelectorAll( '.minn-new-menu button, .minn-ctx-menu button' ) )
+			.map( ( b ) => ( b.textContent || '' ).trim() );
+		// Close menu (Escape).
+		document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
+		return { ok: items.some( ( t ) => /Profile this hook/i.test( t ) ), items };
+	} );
+	t.check( 'Cron row menu offers Profile this hook', menuOk.ok, JSON.stringify( menuOk ) );
 
 	// Delete the slow fixture through the shim (Storage::delete_profile).
 	const del = await api( 'minn-admin/v1/scrutoscope/profiles/' + slow.id, { method: 'DELETE' } );
