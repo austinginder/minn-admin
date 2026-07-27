@@ -26,9 +26,16 @@ async function launch() {
 	}
 	// --disable-http2 matters: Chrome intermittently fails against local dev
 	// servers with ERR_INCOMPLETE_CHUNKED_ENCODING over HTTP/2.
+	// --disable-features=MacAppCodeSignClone: each launch otherwise leaves a
+	// ~1.4GB clone under /var/folders/.../X/com.google.Chrome.code_sign_clone/
+	// that often is never cleaned up (agent Playwright runs can pile up 100s of GB).
 	const browser = await chromium.launch( {
 		executablePath: CHROME,
-		args: [ '--ignore-certificate-errors', '--disable-http2' ],
+		args: [
+			'--ignore-certificate-errors',
+			'--disable-http2',
+			'--disable-features=MacAppCodeSignClone',
+		],
 	} );
 	const ctx = await browser.newContext( { ignoreHTTPSErrors: true } );
 	const page = await ctx.newPage();
