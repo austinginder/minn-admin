@@ -23365,6 +23365,27 @@
 		if ( state.notifOpen ) loadNotifications().then( () => state.notifOpen && renderOverlays() );
 	}
 
+	// Notice links that should land inside Minn instead of wp-admin. When a
+	// bundled surface already covers the destination (Redirection setup lives
+	// on /minn-admin/redirection), open that route in-app and drop the ↗.
+	// Match on absolute same-origin admin URLs only; extend carefully.
+	function noticeMinnRoute( url ) {
+		if ( ! url ) return null;
+		try {
+			const u = new URL( url, location.origin );
+			if ( u.origin !== location.origin ) return null;
+			const path = u.pathname.replace( /\/+$/, '' );
+			const page = u.searchParams.get( 'page' ) || '';
+			// Redirection tools screen / setup → Redirects surface (has setup gate).
+			if ( /\/wp-admin\/tools\.php$/.test( path ) && page === 'redirection.php' ) {
+				return 'redirection';
+			}
+			return null;
+		} catch ( e ) {
+			return null;
+		}
+	}
+
 	// Run a notice's own action (allow / dismiss / opt-in) in the background.
 	// Three shapes: (1) real admin URL with capture piggyback, (2) whitelisted
 	// ajax for href="#" buttons (Everest "No, Thanks"), (3) plain button → hide.
@@ -23648,7 +23669,10 @@
 				bits.push( `<button class="minn-notif-link minn-notif-update" data-nupd="${ esc( n.id ) }"${ busy ? ' disabled' : '' }>${ esc( notifUpdateLabel( n ) ) }</button>` );
 			}
 			( n.links || [] ).forEach( ( l, i ) => {
-				bits.push( `<button class="minn-notif-link" data-nid="${ esc( n.id ) }" data-li="${ i }">${ esc( l.text ) }${ l.action ? '' : ' ↗' }</button>` );
+				// Minn-native destinations (noticeMinnRoute) keep no ↗ — they
+				// navigate in-app, not to wp-admin in a new tab.
+				const external = ! l.action && ! noticeMinnRoute( l.url );
+				bits.push( `<button class="minn-notif-link" data-nid="${ esc( n.id ) }" data-li="${ i }">${ esc( l.text ) }${ external ? ' ↗' : '' }</button>` );
 			} );
 			if ( n.kind === 'notices' ) {
 				bits.push( `<button class="minn-notif-hide" data-nid="${ esc( n.id ) }" title="Hide this notice from Minn">Hide</button>` );
@@ -28463,8 +28487,27 @@
 					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === b.dataset.nid );
 					const link = item && ( item.links || [] )[ parseInt( b.dataset.li, 10 ) ];
 					if ( ! link ) return;
-					if ( link.action ) runNoticeAction( link, b );
-					else window.open( link.url, '_blank' );
+					if ( link.action ) {
+						runNoticeAction( link, b );
+						return;
+					}
+					const route = noticeMinnRoute( link.url );
+					if ( route ) {
+						// In-app: close the panel, mark the row read, land on the surface.
+						state.notifOpen = false;
+						if ( item.unread ) {
+							item.unread = false;
+							api( 'minn-admin/v1/notifications/read', {
+								method: 'POST',
+								body: JSON.stringify( { id: item.id } ),
+							} ).catch( () => {} );
+							updateUnreadDot();
+						}
+						renderOverlays(); // unmount the panel before the view swap
+						go( route );
+						return;
+					}
+					window.open( link.url, '_blank' );
 				} )
 			);
 			// Hide clears the notice from Minn's OWN digest — for nags whose
