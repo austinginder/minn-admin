@@ -188,6 +188,20 @@ Reference depth: **Gravity Forms**.
 | 2026-07-17 | v0.18.0-open report-only re-sweep (all 73 adapters, primitive grep + fixture states) | Waves resume after the v0.17.0 pause. Mail chart parity confirmed DONE (fluent-smtp, post-smtp, wp-mail-logging all carry `chart`). NEW Axis A finds: **redirection** (active resident) and **code-snippets** (active resident) are the only family surfaces without a `status` card. sectionsRoute row types still unbuilt (`pill` exists only as a column format). Fixture note: SearchWP DEACTIVATED (its profile_update loopbacks slowed every user save; license reads survive inactive). Wave B/D candidates (AIOS, GoSMTP/SureMails/Site Mailer, SureForms/MetForm, FileBird, Enable Media Replace) all uninstalled. **No ship.** |
 | 2026-07-23 | Roadmap-doc stale check at v0.21.0 open | No adapter work in the v0.19.0 (WooCommerce depth), v0.20.0 (consent + Search & Filter Pro / Admin Columns Pro licenses) or unreleased v0.21.0 (polish: i18n, a11y, boot consolidation, updater hash) cycles, so the matrix stands. Ranked-backlog rows 4-5 struck (shipped 2026-07-17 later the same day the backlog was written). Open backlog is now rank 7 only: WPForms Pro entries (needs a Pro license for fixtures) |
 | 2026-07-24 | Roadmap refresh at v0.22.0 open (v0.21.0 released same day) | The v0.22.0 cycle opened with the read-only database viewer, a NATIVE surface (`class-minn-admin-db.php` + bespoke view, `native-editors.md` case study 2) rather than an adapter, so the matrix is untouched. No adapter work yet this cycle. Open backlog unchanged: WPForms Pro entries (license-blocked), plus the deliberate long tail (family status-card siblings when a sweep schedules them) |
+| 2026-07-27 | v0.22.0 adapter sweep (report-only): update-all first, then inventory | **Plugins:** 21/22 updated on minnadmin (see list below). **Elementor Pro 4.1.2→4.2.0 failed** (license gate); free Elementor is on 4.2.0 so free/Pro are skewed. Axis A matrix cells still match code (mail chart parity, status cards across mail/redirects/snippets/activity-log, forms manage where applicable). Axis B from changelogs: **Scrutoscope 1.4** on-demand cron profiling is the one real ship candidate (admin-ajax + `Profiler::profile_cron_hook`; Cron view is inventory-only today). Disembark 2.8 restore is deliberate **L** (surgery). Stream 4.3 / WSAL 5.6.5 / IA 2.15 / SVG Support 2.6 / Updraft 1.26.6 / Yoast 28.1: no adapter-visible daily-ops delta. Smoke: elementor submissions, scrutoscope profiles+cron, disembark status all 200. **No ship.** |
+
+### Ranked backlog (2026-07-27, v0.22.0 sweep)
+
+| Rank | Adapter | Axis | Gap | Effort | Why now |
+|---|---|---|---|---|---|
+| 1 | **scrutoscope** | B | Cron view: "Profile this hook" via `Profiler::profile_cron_hook` (1.4) | S | Only meaningful daily-ops feature from this update batch; Cron inventory already exists; confirm + side-effect copy required |
+| 2 | **disembark** | B | Status-card deep-link "Restore a backup ↗" (2.8 dashboard restore) | S | Free Axis B; restore stays **L** (not built in Minn); points at Tools → Disembark |
+| 3 | **all-in-one-security** | B | Failed-login / permanent-block posture row | S–M | Parked since Wave B ship; LLA-R/Solid already model it |
+| 4 | **forms status cards** (fluent / ninja / forminator / flamingo) | A | Status card parity with SureForms | S each | Optional polish; GF deliberately skips chart/status; only ship if dogfooding wants at-a-glance inbox counts |
+| 5 | **WPForms Pro entries** | B | Forms family | M–L | Still needs Pro license + fixtures; biggest uncovered forms name |
+| — | elementor-pro update | ops | License-blocked 4.2.0 | — | Free Elementor is 4.2.0; Pro stuck on 4.1.2 until license updates; forms adapter still 200 |
+
+Superseded open items from 2026-07-17 (struck above) remain shipped. Matrix cells: no Axis A drift found this pass.
 
 ### Ranked backlog (2026-07-17, v0.18.0 open)
 
