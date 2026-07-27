@@ -6,8 +6,12 @@
  * API under scrutoscope/v1 (manage_options). Minn surfaces recent profiles as
  * a Tools list: open a row for top sources, queries and HTTP calls built from
  * their own /profile/{id} response (via rest_do_request so their sanitizer
- * stays in the path). Capture settings, pin UI, share, and the full timeline
- * stay on Scrutoscope's Tools screen — one deep link away.
+ * stays in the path). The Cron view inventories scheduled hooks (via their
+ * Diagnostics\Cron) and, on Scrutoscope 1.4+, offers Profile this hook —
+ * which calls Profiler::profile_cron_hook so the hook's real side effects
+ * fire under the profiler and a new on_demand profile is saved. Capture
+ * settings, pin UI, share, and the full timeline stay on Scrutoscope's Tools
+ * screen — one deep link away.
  *
  * Complements the Query Monitor panel: QM is this-request; Scrutoscope is
  * sampled history across routes.
@@ -313,6 +317,107 @@ function minn_admin_scrutoscope_status_model() {
 }
 
 /**
+ * Stable row id for a Scrutoscope Diagnostics\Cron event.
+ * Must stay in lockstep between the list and the profile action lookup.
+ *
+ * @param array $ev Event from Cron::collect().
+ * @param int   $i  Fallback index when args_hash is absent.
+ */
+function minn_admin_scrutoscope_cron_id( $ev, $i = 0 ) {
+	$hook = (string) ( $ev['hook'] ?? '' );
+	return md5( $hook . '|' . ( $ev['args_hash'] ?? $i ) . '|' . ( $ev['timestamp'] ?? 0 ) );
+}
+
+/**
+ * Whether Scrutoscope 1.4+ on-demand cron profiling is available.
+ * Gated on the public method so a downgrade hides the action cleanly.
+ */
+function minn_admin_scrutoscope_can_profile_cron() {
+	if ( ! minn_admin_scrutoscope_active() ) {
+		return false;
+	}
+	if ( ! class_exists( '\\Scrutoscope\\Profiler\\Profiler' ) ) {
+		return false;
+	}
+	$profiler = \Scrutoscope\Profiler\Profiler::instance();
+	return is_object( $profiler ) && method_exists( $profiler, 'profile_cron_hook' );
+}
+
+/**
+ * Resolve a cron-row id back to its live event (hook + scheduled args).
+ *
+ * @return array{hook: string, args: array}|null
+ */
+function minn_admin_scrutoscope_cron_resolve( $id ) {
+	if ( ! class_exists( '\\Scrutoscope\\Diagnostics\\Cron' ) ) {
+		return null;
+	}
+	$id      = (string) $id;
+	$collect = \Scrutoscope\Diagnostics\Cron::collect();
+	$events  = isset( $collect['events'] ) && is_array( $collect['events'] ) ? $collect['events'] : array();
+	foreach ( $events as $i => $ev ) {
+		if ( ! is_array( $ev ) ) {
+			continue;
+		}
+		if ( minn_admin_scrutoscope_cron_id( $ev, $i ) !== $id ) {
+			continue;
+		}
+		$hook = (string) ( $ev['hook'] ?? '' );
+		if ( '' === $hook ) {
+			return null;
+		}
+		$args = isset( $ev['args'] ) && is_array( $ev['args'] ) ? $ev['args'] : array();
+		return array(
+			'hook' => $hook,
+			'args' => $args,
+		);
+	}
+	return null;
+}
+
+/**
+ * Profile one cron hook on demand via Scrutoscope's own Profiler API
+ * (1.4+: profile_cron_hook). Fires the hook with its scheduled args in this
+ * request — side effects are real. Returns the new profile id.
+ *
+ * @param string $id Cron row id from the inventory.
+ * @return array|WP_Error
+ */
+function minn_admin_scrutoscope_profile_cron( $id ) {
+	if ( ! minn_admin_scrutoscope_can_profile_cron() ) {
+		return new WP_Error(
+			'unavailable',
+			__( 'This version of Scrutoscope cannot profile cron hooks on demand.', 'minn-admin' ),
+			array( 'status' => 400 )
+		);
+	}
+	$ev = minn_admin_scrutoscope_cron_resolve( $id );
+	if ( ! $ev ) {
+		// Match Scrutoscope's ajax fallback: allow a bare hook that still has
+		// callbacks even if it fell off the schedule between list and click.
+		return new WP_Error(
+			'not_found',
+			__( 'Cron event not found. It may have already run.', 'minn-admin' ),
+			array( 'status' => 404 )
+		);
+	}
+
+	$profiler   = \Scrutoscope\Profiler\Profiler::instance();
+	$profile_id = $profiler->profile_cron_hook( $ev['hook'], $ev['args'] );
+	if ( is_wp_error( $profile_id ) ) {
+		return $profile_id;
+	}
+
+	return array(
+		'ok'         => true,
+		'profile_id' => (int) $profile_id,
+		'hook'       => $ev['hook'],
+		/* translators: %s: cron hook name. */
+		'message'    => sprintf( __( 'Profiled “%s”. Open Profiles to inspect it.', 'minn-admin' ), $ev['hook'] ),
+	);
+}
+
+/**
  * Cron inventory rows via Scrutoscope's Diagnostics\Cron when present.
  *
  * @return array{items: array, total: int}
@@ -332,7 +437,7 @@ function minn_admin_scrutoscope_cron_list( WP_REST_Request $request ) {
 		$attr = isset( $ev['attribution'] ) && is_array( $ev['attribution'] ) ? $ev['attribution'] : array();
 		$src  = (string) ( $attr['name'] ?? $attr['slug'] ?? $attr['source'] ?? '—' );
 		$items[] = array(
-			'id'       => md5( $hook . '|' . ( $ev['args_hash'] ?? $i ) . '|' . ( $ev['timestamp'] ?? 0 ) ),
+			'id'       => minn_admin_scrutoscope_cron_id( $ev, $i ),
 			'hook'     => $hook,
 			'schedule' => (string) ( $ev['schedule'] ?? 'once' ),
 			'source'   => $src,
@@ -341,6 +446,8 @@ function minn_admin_scrutoscope_cron_list( WP_REST_Request $request ) {
 			'date'     => ! empty( $ev['timestamp'] )
 				? gmdate( 'Y-m-d\TH:i:s\Z', (int) $ev['timestamp'] )
 				: '',
+			// Gates the Profile action; always true while the method exists.
+			'can_profile' => minn_admin_scrutoscope_can_profile_cron(),
 		);
 	}
 
@@ -455,8 +562,29 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
 					array( 'key' => 'date', 'label' => 'Next run', 'format' => 'ago', 'utc' => true ),
 				),
-				// No detail modal for cron rows — inventory only.
+				// No detail modal for cron rows — inventory + row actions only.
 				'detail'    => array(),
+				// Profile this hook (Scrutoscope 1.4+): fires the hook with its
+				// scheduled args under the profiler. Side effects are real —
+				// the confirm says so. Hidden cleanly when the method is absent.
+				'actions'   => minn_admin_scrutoscope_can_profile_cron() ? array(
+					array(
+						'label'   => 'Profile this hook',
+						'method'  => 'POST',
+						'route'   => 'minn-admin/v1/scrutoscope/cron/{id}/profile',
+						'confirm' => 'Run this cron hook now while profiling it? The hook’s normal side effects will happen (emails, updates, cleanup, queue work). A profile is saved under Profiles afterward.',
+						'when'    => array( 'key' => 'can_profile', 'equals' => true ),
+					),
+					array(
+						'label' => 'Open Scrutoscope ↗',
+						'href'  => minn_admin_scrutoscope_admin_url(),
+					),
+				) : array(
+					array(
+						'label' => 'Open Scrutoscope ↗',
+						'href'  => minn_admin_scrutoscope_admin_url(),
+					),
+				),
 			),
 		),
 	);
@@ -518,6 +646,17 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) {
 			return rest_ensure_response( minn_admin_scrutoscope_cron_list( $request ) );
+		},
+	) );
+
+	// On-demand cron profiling (Scrutoscope 1.4+). Id is the inventory row
+	// md5; the handler re-resolves hook + scheduled args from live cron.
+	register_rest_route( 'minn-admin/v1', '/scrutoscope/cron/(?P<id>[a-f0-9]{32})/profile', array(
+		'methods'             => 'POST',
+		'permission_callback' => $perm,
+		'callback'            => function ( WP_REST_Request $request ) {
+			$out = minn_admin_scrutoscope_profile_cron( (string) $request['id'] );
+			return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
 		},
 	) );
 } );
