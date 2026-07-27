@@ -9,9 +9,12 @@
  * in a JSON `details` column: json_decode only, never unserialize; the detail
  * view renders the decoded top level as a kv-table (v0.18.0 row type).
  *
- * Status card: 24h / 7d / all-time counts + a warnings-in-7d row.
+ * Status card: audit event counts (24h / 7d / all-time / warnings) plus the
+ * login-protection posture rows (active lockdowns, permanent blocks, failed
+ * logins in 24h). System page gets one AIOS health row via
+ * minn_admin_aios_checks() (Solid / Wordfence precedent).
  *
- * last-sweep: 2026-07-17
+ * last-sweep: 2026-07-27
  *
  * @package minn-admin
  */
@@ -40,8 +43,120 @@ function minn_admin_aios_table() {
 	return $wpdb->base_prefix . 'aiowps_audit_log';
 }
 
+/** Temporary lockouts live on the blog prefix (not base_prefix). */
+function minn_admin_aios_lockdown_table() {
+	if ( defined( 'AIOWPSEC_TBL_LOGIN_LOCKOUT' ) ) {
+		return AIOWPSEC_TBL_LOGIN_LOCKOUT;
+	}
+	global $wpdb;
+	return $wpdb->prefix . 'aiowps_login_lockdown';
+}
+
+/** Permanent blocks table (blog prefix). Unblock = DELETE the row. */
+function minn_admin_aios_perm_block_table() {
+	if ( defined( 'AIOWPSEC_TBL_PERM_BLOCK' ) ) {
+		return AIOWPSEC_TBL_PERM_BLOCK;
+	}
+	global $wpdb;
+	return $wpdb->prefix . 'aiowps_permanent_block';
+}
+
 function minn_admin_aios_admin_url() {
-	return admin_url( 'admin.php?page=aiowpsec_audit' );
+	// Dashboard audit tab is the honest home for the log surface.
+	return admin_url( 'admin.php?page=aiowpsec&tab=audit-logs' );
+}
+
+function minn_admin_aios_lockout_url() {
+	return admin_url( 'admin.php?page=aiowpsec&tab=locked-ip' );
+}
+
+function minn_admin_aios_perm_block_url() {
+	return admin_url( 'admin.php?page=aiowpsec&tab=permanent-block' );
+}
+
+/**
+ * Login-protection counts from AIOS's own tables (their active-lockout
+ * predicate is `released > UNIX_TIMESTAMP()`; permanent blocks are every
+ * remaining row; failed logins are audit_log event_type=failed_login).
+ * Tables missing = zeros (never fatals).
+ *
+ * @return array{locked:int,blocks:int,failed_24h:int}
+ */
+function minn_admin_aios_login_posture() {
+	global $wpdb;
+	$out = array(
+		'locked'     => 0,
+		'blocks'     => 0,
+		'failed_24h' => 0,
+	);
+
+	$lock = minn_admin_aios_lockdown_table();
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table from constant/prefix.
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $lock ) ) === $lock ) {
+		// Match AIOWPSecurity_Utility::get_locked_ips(): still locked while released is in the future.
+		$out['locked'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$lock} WHERE released > UNIX_TIMESTAMP()" );
+	}
+
+	$perm = minn_admin_aios_perm_block_table();
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $perm ) ) === $perm ) {
+		// Unblock deletes the row; every remaining row is blocked.
+		$out['blocks'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$perm}" );
+	}
+
+	$audit = minn_admin_aios_table();
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $audit ) ) === $audit ) {
+		$out['failed_24h'] = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$audit} WHERE event_type = %s AND created >= %d",
+			'failed_login',
+			time() - DAY_IN_SECONDS
+		) );
+	}
+	// phpcs:enable
+
+	return $out;
+}
+
+/**
+ * System-page security posture (Wordfence / Solid shape). One row summarizing
+ * failed logins, active lockdowns and permanent blocks. Empty when AIOS is
+ * not loaded.
+ *
+ * @return array[] of { label, status, detail, href? }
+ */
+function minn_admin_aios_checks() {
+	if ( ! minn_admin_aios_active() ) {
+		return array();
+	}
+	$p = minn_admin_aios_login_posture();
+	// Active lockdowns deserve attention; permanent blocks are expected protection.
+	$status = $p['locked'] > 0 ? 'warn' : 'pass';
+	$bits   = array(
+		sprintf(
+			/* translators: %s: number of failed logins. */
+			_n( '%s failed login in 24h', '%s failed logins in 24h', $p['failed_24h'], 'minn-admin' ),
+			number_format_i18n( $p['failed_24h'] )
+		),
+		$p['locked']
+			? sprintf(
+				/* translators: %s: number of locked IPs. */
+				_n( '%s locked out now', '%s locked out now', $p['locked'], 'minn-admin' ),
+				number_format_i18n( $p['locked'] )
+			)
+			: __( 'nobody locked out', 'minn-admin' ),
+		sprintf(
+			/* translators: %s: number of permanent blocks. */
+			_n( '%s permanent block', '%s permanent blocks', $p['blocks'], 'minn-admin' ),
+			number_format_i18n( $p['blocks'] )
+		),
+	);
+	return array(
+		array(
+			'label'  => 'All-In-One Security',
+			'status' => $status,
+			'detail' => implode( ' · ', $bits ),
+			'href'   => $p['locked'] > 0 ? minn_admin_aios_lockout_url() : minn_admin_aios_admin_url(),
+		),
+	);
 }
 
 /** event_type is a snake_case slug; render it as a sentence. */
@@ -243,25 +358,51 @@ add_action( 'rest_api_init', function () {
 			$warn  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created >= %d AND level IN ('warning','error','fatal')", $now - 7 * DAY_IN_SECONDS ) );
 			$last  = $wpdb->get_var( "SELECT created FROM {$table} ORDER BY id DESC LIMIT 1" );
 			// phpcs:enable
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => 'Events (24h)',
-						'value' => number_format_i18n( $day ),
-						'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
-					),
-					array( 'label' => 'Events all-time', 'value' => number_format_i18n( $total ) ),
-					array(
-						'label' => 'Warnings (7d)',
-						'value' => number_format_i18n( $warn ),
-						'hint'  => $warn ? 'warning, error or fatal' : 'all clear',
-					),
-					array(
-						'label' => 'Last event',
-						'value' => $last ? human_time_diff( (int) $last, time() ) . ' ago' : '—',
-					),
+			$posture = minn_admin_aios_login_posture();
+			$rows    = array(
+				array(
+					'label' => 'Events (24h)',
+					'value' => number_format_i18n( $day ),
+					'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
 				),
-				'actions' => array( array( 'label' => 'Open All-In-One Security ↗', 'href' => minn_admin_aios_admin_url() ) ),
+				array( 'label' => 'Events all-time', 'value' => number_format_i18n( $total ) ),
+				array(
+					'label' => 'Warnings (7d)',
+					'value' => number_format_i18n( $warn ),
+					'hint'  => $warn ? 'warning, error or fatal' : 'all clear',
+				),
+				array(
+					'label' => 'Failed logins (24h)',
+					'value' => number_format_i18n( $posture['failed_24h'] ),
+					'hint'  => 'from the audit log',
+				),
+				array(
+					'label' => 'Locked out now',
+					'value' => $posture['locked'] ? number_format_i18n( $posture['locked'] ) : 'Nobody',
+					'hint'  => $posture['locked'] ? 'temporary login lockdowns' : 'no active lockdowns',
+				),
+				array(
+					'label' => 'Permanent blocks',
+					'value' => number_format_i18n( $posture['blocks'] ),
+					'hint'  => $posture['blocks'] ? 'blocked IPs' : 'none',
+				),
+				array(
+					'label' => 'Last event',
+					'value' => $last ? human_time_diff( (int) $last, time() ) . ' ago' : '—',
+				),
+			);
+			$actions = array(
+				array( 'label' => 'Open All-In-One Security ↗', 'href' => minn_admin_aios_admin_url() ),
+			);
+			if ( $posture['locked'] > 0 ) {
+				$actions[] = array( 'label' => 'View locked IPs ↗', 'href' => minn_admin_aios_lockout_url() );
+			}
+			if ( $posture['blocks'] > 0 ) {
+				$actions[] = array( 'label' => 'View permanent blocks ↗', 'href' => minn_admin_aios_perm_block_url() );
+			}
+			return rest_ensure_response( array(
+				'rows'    => $rows,
+				'actions' => $actions,
 			) );
 		},
 	) );
