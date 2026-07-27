@@ -5393,6 +5393,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 
+		// All-In-One Security posture (adapters/all-in-one-security.php):
+		// failed logins, active lockdowns, permanent blocks.
+		if ( function_exists( 'minn_admin_aios_checks' ) ) {
+			foreach ( minn_admin_aios_checks() as $aios_check ) {
+				$checks[] = $aios_check;
+			}
+		}
+
 		// Redis Object Cache drop-in + connection (adapters/cache-purge.php).
 		// Only renders when the plugin is loaded; complements the generic
 		// "Persistent object cache" row with vendor-specific status.

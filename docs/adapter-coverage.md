@@ -191,6 +191,7 @@ Reference depth: **Gravity Forms**.
 | 2026-07-27 | v0.22.0 adapter sweep (report-only): update-all first, then inventory | **Plugins:** 21/22 updated on minnadmin (see list below). **Elementor Pro 4.1.2→4.2.0 failed** (license gate); free Elementor is on 4.2.0 so free/Pro are skewed. Axis A matrix cells still match code (mail chart parity, status cards across mail/redirects/snippets/activity-log, forms manage where applicable). Axis B from changelogs: **Scrutoscope 1.4** on-demand cron profiling is the one real ship candidate (admin-ajax + `Profiler::profile_cron_hook`; Cron view is inventory-only today). Disembark 2.8 restore is deliberate **L** (surgery). Stream 4.3 / WSAL 5.6.5 / IA 2.15 / SVG Support 2.6 / Updraft 1.26.6 / Yoast 28.1: no adapter-visible daily-ops delta. Smoke: elementor submissions, scrutoscope profiles+cron, disembark status all 200. **No ship.** |
 | 2026-07-27 | Ship top 1: scrutoscope Profile this hook | Axis B: Cron view row action POSTs `minn-admin/v1/scrutoscope/cron/{id}/profile` → `Profiler::profile_cron_hook` with the row's scheduled args; confirm names side effects; action hidden when the method is absent. Fixture no-op hook `minn_scruto_profile_noop` scheduled by the existing seeder. Suite scrutoscope extended. |
 | 2026-07-27 | Ship next top 1: disembark Restore deep-link | Axis B: status-card `Restore a backup` href → `tools.php?page=disembark` when `\Disembark\Import` exists (2.8+); restore UI stays **L**. Suite disembark extended. |
+| 2026-07-27 | Ship next: AIOS failed-login / permanent-block posture | Axis B: status card gains Failed logins (24h) / Locked out now / Permanent blocks from `aiowps_login_lockdown`, `aiowps_permanent_block`, audit_log `failed_login`; System `minn_admin_aios_checks()` health row; deep-links to AIOS locked-ip / permanent-block tabs. Suite aios-log extended. |
 
 ### Ranked backlog (2026-07-27, v0.22.0 sweep)
 
@@ -198,9 +199,9 @@ Reference depth: **Gravity Forms**.
 |---|---|---|---|---|---|
 | ~~1~~ | ~~**scrutoscope**~~ | ~~B~~ | ~~Cron view: "Profile this hook"~~ | ~~S~~ | **Shipped 2026-07-27** (suite scrutoscope; Scrutoscope 1.4+ only) |
 | ~~2~~ | ~~**disembark**~~ | ~~B~~ | ~~Status-card deep-link "Restore a backup ↗"~~ | ~~S~~ | **Shipped 2026-07-27** (suite disembark; Disembark 2.8+ only) |
-| 1 | **all-in-one-security** | B | Failed-login / permanent-block posture row | S–M | Parked since Wave B ship; LLA-R/Solid already model it |
-| 2 | **forms status cards** (fluent / ninja / forminator / flamingo) | A | Status card parity with SureForms | S each | Optional polish; GF deliberately skips chart/status; only ship if dogfooding wants at-a-glance inbox counts |
-| 3 | **WPForms Pro entries** | B | Forms family | M–L | Still needs Pro license + fixtures; biggest uncovered forms name |
+| ~~3~~ | ~~**all-in-one-security**~~ | ~~B~~ | ~~Failed-login / permanent-block posture~~ | ~~S–M~~ | **Shipped 2026-07-27** (status card + System health row; suite aios-log) |
+| 1 | **forms status cards** (fluent / ninja / forminator / flamingo) | A | Status card parity with SureForms | S each | Optional polish; GF deliberately skips chart/status; only ship if dogfooding wants at-a-glance inbox counts |
+| 2 | **WPForms Pro entries** | B | Forms family | M–L | Still needs Pro license + fixtures; biggest uncovered forms name |
 | — | elementor-pro update | ops | License-blocked 4.2.0 | — | Free Elementor is 4.2.0; Pro stuck on 4.1.2 until license updates; forms adapter still 200 |
 
 Superseded open items from 2026-07-17 (struck above) remain shipped. Matrix cells: no Axis A drift found this pass.

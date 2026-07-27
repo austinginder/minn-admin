@@ -65,6 +65,73 @@ const wp = ( args ) => execSync(
 		t.check( 'status card carries 24h/all-time/warnings/last rows', st.status === 200
 			&& rows.some( ( r ) => /24h/.test( r.label ) ) && rows.some( ( r ) => /all-time/.test( r.label ) ) && rows.some( ( r ) => /Warnings/.test( r.label ) ),
 			JSON.stringify( rows.map( ( r ) => r.label ) ) );
+		t.check( 'status card carries login-posture rows',
+			rows.some( ( r ) => r.label === 'Failed logins (24h)' )
+			&& rows.some( ( r ) => r.label === 'Locked out now' )
+			&& rows.some( ( r ) => r.label === 'Permanent blocks' ),
+			JSON.stringify( rows.map( ( r ) => r.label ) ) );
+
+		// Seed a temporary lockdown + permanent block (doc-range IPs only)
+		// through AIOS tables so posture counts are non-zero and deep-links appear.
+		// eval-file avoids shell-quoting hell on multi-statement PHP.
+		const seedPhp = path.join( __dirname, '.aios-posture-seed.php' );
+		const fs = require( 'fs' );
+		fs.writeFileSync( seedPhp, `<?php
+global $wpdb;
+$lock = defined( 'AIOWPSEC_TBL_LOGIN_LOCKOUT' ) ? AIOWPSEC_TBL_LOGIN_LOCKOUT : $wpdb->prefix . 'aiowps_login_lockdown';
+$perm = defined( 'AIOWPSEC_TBL_PERM_BLOCK' ) ? AIOWPSEC_TBL_PERM_BLOCK : $wpdb->prefix . 'aiowps_permanent_block';
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$lock} WHERE failed_login_ip = %s", '203.0.113.50' ) );
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$perm} WHERE blocked_ip = %s", '198.51.100.50' ) );
+$wpdb->insert( $lock, array(
+	'user_id' => 0, 'user_login' => 'minn-suite',
+	'lockdown_date' => current_time( 'mysql' ), 'created' => time(),
+	'release_date' => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ),
+	'released' => time() + HOUR_IN_SECONDS,
+	'failed_login_ip' => '203.0.113.50', 'lock_reason' => 'minn-suite',
+	'is_lockout_email_sent' => 0, 'backtrace_log' => '', 'ip_lookup_result' => '',
+) );
+$wpdb->insert( $perm, array(
+	'blocked_ip' => '198.51.100.50', 'block_reason' => 'minn-suite',
+	'country_origin' => '', 'blocked_date' => current_time( 'mysql' ),
+	'created' => time(), 'unblock' => 0,
+) );
+do_action( 'aiowps_record_event', 'failed_login', array( 'failed_login' => array( 'username' => 'minn-suite-fail', 'known' => false ) ), 'warning', 'minn-suite-fail' );
+` );
+		try {
+			wp( `eval-file ${ JSON.stringify( seedPhp ) }` );
+		} finally {
+			try { fs.unlinkSync( seedPhp ); } catch ( e ) { /* ignore */ }
+		}
+
+		const st2 = await api( 'minn-admin/v1/aios/status' );
+		const rows2 = ( st2.body && st2.body.rows ) || [];
+		const locked = rows2.find( ( r ) => r.label === 'Locked out now' );
+		const blocks = rows2.find( ( r ) => r.label === 'Permanent blocks' );
+		const fails = rows2.find( ( r ) => r.label === 'Failed logins (24h)' );
+		t.check( 'locked out now counts the seeded lockdown',
+			!! locked && parseInt( String( locked.value ).replace( /\D/g, '' ), 10 ) >= 1,
+			JSON.stringify( locked ) );
+		t.check( 'permanent blocks counts the seeded block',
+			!! blocks && parseInt( String( blocks.value ).replace( /\D/g, '' ), 10 ) >= 1,
+			JSON.stringify( blocks ) );
+		t.check( 'failed logins 24h is non-zero after seed',
+			!! fails && parseInt( String( fails.value ).replace( /\D/g, '' ), 10 ) >= 1,
+			JSON.stringify( fails ) );
+		const acts = ( st2.body && st2.body.actions ) || [];
+		t.check( 'status offers locked-IP and permanent-block deep-links',
+			acts.some( ( a ) => /locked IP/i.test( a.label ) && /tab=locked-ip/.test( a.href || '' ) )
+			&& acts.some( ( a ) => /permanent block/i.test( a.label ) && /tab=permanent-block/.test( a.href || '' ) ),
+			JSON.stringify( acts ) );
+
+		// System health strip gains the AIOS posture row while the plugin is active.
+		const sys = await api( 'minn-admin/v1/system' );
+		const checks = ( sys.body && sys.body.checks ) || [];
+		const aiosCheck = checks.find( ( c ) => c.label === 'All-In-One Security' );
+		t.check( 'System health includes AIOS posture row',
+			!! aiosCheck && ( aiosCheck.status === 'pass' || aiosCheck.status === 'warn' )
+			&& /failed login/i.test( aiosCheck.detail || '' )
+			&& /permanent block/i.test( aiosCheck.detail || '' ),
+			JSON.stringify( aiosCheck ) );
 
 		// Browser: the surface renders under the activity-log family.
 		await page.goto( `${ BASE }/minn-admin/all-in-one-security`, { waitUntil: 'domcontentloaded' } );
@@ -79,7 +146,30 @@ const wp = ( args ) => execSync(
 		t.check( 'detail modal renders the activity card with the event', await page.evaluate( () =>
 			!! document.querySelector( '.minn-modal.entry .minn-entry-message' ) ) );
 		await page.keyboard.press( 'Escape' );
+
+		// Card should name the new posture labels in the UI too.
+		t.check( 'surface card shows locked-out / permanent-blocks rows', await page.evaluate( () => {
+			const t = document.querySelector( '.minn-surface-status' );
+			return t && /Locked out now/.test( t.textContent ) && /Permanent blocks/.test( t.textContent );
+		} ) );
 	} finally {
+		// Drop suite-only lockdown / block rows (doc-range IPs).
+		try {
+			const cleanPhp = path.join( __dirname, '.aios-posture-clean.php' );
+			const fs2 = require( 'fs' );
+			fs2.writeFileSync( cleanPhp, `<?php
+global $wpdb;
+$lock = defined( 'AIOWPSEC_TBL_LOGIN_LOCKOUT' ) ? AIOWPSEC_TBL_LOGIN_LOCKOUT : $wpdb->prefix . 'aiowps_login_lockdown';
+$perm = defined( 'AIOWPSEC_TBL_PERM_BLOCK' ) ? AIOWPSEC_TBL_PERM_BLOCK : $wpdb->prefix . 'aiowps_permanent_block';
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$lock} WHERE failed_login_ip = %s", '203.0.113.50' ) );
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$perm} WHERE blocked_ip = %s", '198.51.100.50' ) );
+` );
+			try {
+				wp( `eval-file ${ JSON.stringify( cleanPhp ) }` );
+			} finally {
+				try { fs2.unlinkSync( cleanPhp ); } catch ( e2 ) { /* ignore */ }
+			}
+		} catch ( e ) { /* best-effort */ }
 		if ( ! wasActive ) wp( 'plugin deactivate all-in-one-wp-security-and-firewall' );
 	}
 
