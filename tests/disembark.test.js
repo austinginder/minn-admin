@@ -115,6 +115,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Working files show the seeded workspace', /(KB|MB|B)/.test( st.rows['Working files'] || '' ), st.rows['Working files'] );
 		t.check( 'Connect command carries site + token', !! st.cmd && st.cmd.startsWith( 'disembark connect ' + 'https://minnadmin.localhost ' ) && st.cmd.trim().split( ' ' ).length === 4, st.cmd );
 
+		// Disembark 2.8+ restore is a deep-link only (surgery stays on their screen).
+		const restoreLink = await page.evaluate( () => {
+			const a = Array.from( document.querySelectorAll( '.minn-sstat-actions a' ) )
+				.find( ( el ) => /Restore a backup/.test( el.textContent ) );
+			if ( ! a ) return null;
+			return { href: a.getAttribute( 'href' ) || '', target: a.getAttribute( 'target' ) || '', text: a.textContent.trim() };
+		} );
+		t.check( 'Restore a backup deep-link is offered', !! restoreLink, JSON.stringify( restoreLink ) );
+		t.check( 'Restore link points at Tools → Disembark',
+			!! restoreLink && /tools\.php\?page=disembark/.test( restoreLink.href ),
+			JSON.stringify( restoreLink ) );
+		t.check( 'Restore link opens in a new tab with ↗',
+			!! restoreLink && restoreLink.target === '_blank' && /↗/.test( restoreLink.text ),
+			JSON.stringify( restoreLink ) );
+
 		// Copy — stub the clipboard, click the box.
 		await page.evaluate( () => {
 			window.__minnCopied = null;
