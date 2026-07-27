@@ -10,6 +10,9 @@
 * **Restore a backup, one click from Disembark:** with Disembark 2.8 or newer, the Backups status card gains a Restore a backup link that opens their Tools screen (where upload-a-zip and pull-from-a-live-site live). Restore stays on Disembark by design: it rewrites the whole site, and Minn does not pretend to own that risk. Older Disembark builds simply do not show the link.
 * **All-In-One Security login posture:** the Activity Log status card for AIOS now reports failed logins in the last day, who is locked out right now, and how many permanent IP blocks are in place, with deep-links into AIOS's own locked-IP and permanent-block screens when those counts are non-zero. The System page gains a matching health row (same Solid Security / Wordfence shape), so a site running AIOS surfaces its login protection without opening their menus.
 
+### Fixed
+* **Redirection's setup notice stays in Minn:** the notification panel's "Redirection setup" button used to open wp-admin's Tools screen in a new tab, even though Minn already has the one-time setup gate on Redirects. It now lands on `/minn-admin/redirection` in the same tab (no off-site ↗), and the same rewrite is ready for any future notice that points at a surface Minn already covers.
+
 ## **v0.21.0** - July 24, 2026
 
 The trust release. This cycle is for everyone who is not the person who built the app: the interface gains real translation plumbing so it can meet users in their own language, the app chrome passes a genuine accessibility audit with a suite that keeps it honest, and a plain-words user guide ships inside the plugin, one click from help. The same spirit runs underneath: updates verify themselves against a published checksum before they install, a security policy opens a private door for researchers, a tab left open overnight recovers on its own, and boot rides one request instead of nine so shared hosting stops watching panels trickle in.

@@ -243,6 +243,35 @@ const { launch, login, reporter } = require( './helpers' );
 		t.check( 'External button opens its link', ( await page.evaluate( () => window.__minnOpened ) ) === 'https://example.com/renew' );
 		t.check( 'Panel stays open', await page.evaluate( () => !! document.querySelector( '.minn-notif-panel' ) ) );
 
+		// Redirection-shaped tools.php?page=redirection.php link → Minn surface
+		// (no ↗, no window.open; panel closes and the SPA lands on /redirection).
+		const redirBtn = await page.evaluate( () => {
+			const btn = Array.from( document.querySelectorAll( '.minn-notif-link' ) )
+				.find( ( b ) => /Redirection setup/i.test( b.textContent ) );
+			if ( ! btn ) return null;
+			return { text: btn.textContent.trim(), hasArrow: /↗/.test( btn.textContent ) };
+		} );
+		t.check( 'Redirection setup notice button is present', !! redirBtn, JSON.stringify( redirBtn ) );
+		t.check( 'Redirection setup button has no off-site ↗', !! redirBtn && ! redirBtn.hasArrow, JSON.stringify( redirBtn ) );
+		await page.evaluate( () => {
+			window.__minnOpened = null;
+			const btn = Array.from( document.querySelectorAll( '.minn-notif-link' ) )
+				.find( ( b ) => /Redirection setup/i.test( b.textContent ) );
+			if ( btn ) btn.click();
+		} );
+		await page.waitForFunction( () => /\/minn-admin\/redirection\/?$/.test( location.pathname ), null, { timeout: 10000 } );
+		const redirNav = await page.evaluate( () => ( {
+			path: location.pathname,
+			opened: window.__minnOpened,
+			panel: !! document.querySelector( '.minn-notif-panel' ),
+		} ) );
+		t.check( 'Redirection setup lands on Minn Redirects surface',
+			/\/minn-admin\/redirection\/?$/.test( redirNav.path ) && redirNav.opened === null && ! redirNav.panel,
+			JSON.stringify( redirNav ) );
+		// Re-open the panel for the remaining checks.
+		await page.click( '#minn-notif-btn' );
+		await page.waitForSelector( '.minn-notif-panel', { timeout: 5000 } );
+
 		await page.evaluate( () => {
 			window.__minnOpened = null;
 			const row = Array.from( document.querySelectorAll( '.minn-notif-row' ) )
