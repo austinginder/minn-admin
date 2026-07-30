@@ -2519,7 +2519,7 @@
 				const c = chartData[ parseInt( col.dataset.ci, 10 ) ];
 				if ( ! c || ! c.from ) return;
 				if ( isTraffic ) {
-					if ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) openChartTraffic( c );
+					if ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) openChartTraffic( c, chartData );
 				} else if ( c.value > 0 ) {
 					openChartActivity( c );
 				}
@@ -2542,8 +2542,26 @@
 		}
 	}
 
-	async function openChartTraffic( bucket ) {
-		state.modal = { type: 'chart-traffic', bucket, data: null };
+	// Step the open traffic drill-down to the previous/next bucket WITH data
+	// (←/→ and the header chevrons). Empty days have nothing to show, so they
+	// are skipped rather than dead-ending the walk on a quiet day.
+	function chartTrafficNav( dir ) {
+		const m = state.modal;
+		if ( ! m || m.type !== 'chart-traffic' || ! m.buckets ) return;
+		let i = m.index + dir;
+		while ( i >= 0 && i < m.buckets.length && ( Number( m.buckets[ i ].value ) || 0 ) + ( Number( m.buckets[ i ].views ) || 0 ) <= 0 ) {
+			i += dir;
+		}
+		if ( i < 0 || i >= m.buckets.length ) return;
+		openChartTraffic( m.buckets[ i ], m.buckets );
+	}
+
+	async function openChartTraffic( bucket, buckets ) {
+		state.modal = {
+			type: 'chart-traffic', bucket, data: null,
+			buckets: buckets || null,
+			index: buckets ? buckets.indexOf( bucket ) : -1,
+		};
 		renderOverlays();
 		try {
 			const r = await api( `minn-admin/v1/overview/traffic-day?from=${ encodeURIComponent( bucket.from ) }&to=${ encodeURIComponent( bucket.to ) }` );
@@ -24072,12 +24090,18 @@
 				: `${ views.toLocaleString() } pageview${ views === 1 ? '' : 's' }`;
 			const pages = d && d.pages ? d.pages : null;
 			const refs = d && d.referrers ? d.referrers : [];
+			const hasData = ( b ) => ( Number( b.value ) || 0 ) + ( Number( b.views ) || 0 ) > 0;
+			const hasPrev = !! ( m.buckets && m.buckets.slice( 0, Math.max( 0, m.index ) ).some( hasData ) );
+			const hasNext = !! ( m.buckets && m.buckets.slice( m.index + 1 ).some( hasData ) );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( m.bucket.label ) }${ d && d.source ? ` <span class="minn-panel-sub">${ esc( d.source ) }</span>` : '' }</div>
 						<span class="minn-modal-count">${ esc( countLabel ) }</span>
+						${ m.buckets ? `
+						<button class="minn-icon-btn sm" id="minn-traf-prev" title="Previous (←)"${ hasPrev ? '' : ' disabled' }>‹</button>
+						<button class="minn-icon-btn sm" id="minn-traf-next" title="Next (→)"${ hasNext ? '' : ' disabled' }>›</button>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ d == null ? '<div class="minn-loading">Loading top pages…</div>'
@@ -25631,6 +25655,10 @@
 					if ( it && it.url ) window.open( it.url, '_blank' );
 				} )
 			);
+			const tprev = $( '#minn-traf-prev' );
+			const tnext = $( '#minn-traf-next' );
+			if ( tprev ) tprev.addEventListener( 'click', () => chartTrafficNav( -1 ) );
+			if ( tnext ) tnext.addEventListener( 'click', () => chartTrafficNav( 1 ) );
 		}
 
 		if ( m.type === 'media' && m.editing ) {
@@ -29020,6 +29048,7 @@
 					if ( state.modal.type === 'media' ) { e.preventDefault(); mediaModalNav( dir ); }
 					else if ( state.modal.type === 'surface' ) { e.preventDefault(); surfaceModalNav( dir ); }
 					else if ( state.modal.type === 'revision' ) { e.preventDefault(); revisionModalNav( dir ); }
+					else if ( state.modal.type === 'chart-traffic' ) { e.preventDefault(); chartTrafficNav( dir ); }
 				}
 			}
 			if ( e.key === 'Escape' && $( '#minn-stats-goal-pop' ) ) {

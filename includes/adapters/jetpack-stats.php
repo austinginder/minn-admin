@@ -164,15 +164,25 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 				if ( ! is_array( $group ) ) {
 					continue;
 				}
-				$label = (string) ( $group['name'] ?? $group['group'] ?? '' );
-				$total = (int) ( $group['total'] ?? 0 );
-				if ( '' === $label || $total < 1 ) {
-					continue;
+				// WPCOM groups referrers ("Search Engines") with the useful
+				// names nested in results ("Google Search") — surface the
+				// specific rows like their own UI does, the group otherwise.
+				$rows = array();
+				foreach ( (array) ( $group['results'] ?? array() ) as $result ) {
+					if ( is_array( $result ) && ! empty( $result['name'] ) && (int) ( $result['views'] ?? 0 ) > 0 ) {
+						$rows[] = array( 'label' => (string) $result['name'], 'pageviews' => (int) $result['views'] );
+					}
 				}
-				$referrers[] = array(
-					'label'     => $label,
-					'pageviews' => $total,
-				);
+				if ( ! $rows ) {
+					$label = (string) ( $group['name'] ?? $group['group'] ?? '' );
+					$total = (int) ( $group['total'] ?? 0 );
+					if ( '' !== $label && $total > 0 ) {
+						$rows[] = array( 'label' => $label, 'pageviews' => $total );
+					}
+				}
+				foreach ( $rows as $row ) {
+					$referrers[] = $row;
+				}
 			}
 		}
 
