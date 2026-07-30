@@ -6,7 +6,7 @@
 * **Re-click the sidebar to refresh:** clicking the sidebar item for the page you are already on now re-fetches the list in place. Content, Media, Comments, Users, the shop views, Extensions and every plugin surface all take part; the toolbar, tabs, search and filters stay put while the rows dim and reload, so a tab left open all day can pull in what teammates just published without a full page reload. On a grouped item with several providers (Email, Forms, Backups) the refresh stays on the provider you are viewing, and the lit item's tooltip says what a second click does.
 
 ### Improved
-* **A wider email preview:** an HTML email body in a log detail now opens in an extra-wide dialog (1080 pixels on large screens, with a taller reading pane) instead of the 720 pixel one, so real message layouts render without clipping.
+* **A wider email preview:** an HTML email body in a log detail now opens in a wider dialog (900 pixels on large screens, with a taller reading pane) instead of the 720 pixel one, so real message layouts render without clipping.
 
 ## **v0.22.0** - July 30, 2026
 
