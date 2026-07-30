@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.23.0** - Unreleased
+
+### Improved
+* **A wider email preview:** an HTML email body in a log detail now opens in an extra-wide dialog (1080 pixels on large screens, with a taller reading pane) instead of the 720 pixel one, so real message layouts render without clipping.
+
 ## **v0.22.0** - July 30, 2026
 
 The under-the-hood release. Minn opens a calm window into the machinery it has always sat on top of: a read-only database viewer with a structure tab and a set of storage health checks that hand you the exact cleanup command instead of a scary button, on-demand cron profiling through Scrutoscope, and login posture from All-In-One Security. The traffic story widens too: Matomo and Jetpack Stats join the Overview chart through their own APIs (Jetpack verified on a live connected site), and the day drill-down learns to step through days with the arrow keys. Everything new holds the same line: Minn reads, explains, and links out; it never edits what it cannot promise to leave consistent.
