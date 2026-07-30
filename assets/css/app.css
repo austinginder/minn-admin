@@ -1825,6 +1825,10 @@ body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert her
 .minn-modal.wide { width: 720px; }
 /* Side-by-side prose needs real width — the 94vw cap still governs laptops. */
 .minn-modal.xl { width: 1280px; }
+/* HTML email preview: real messages lay out at 600–1000px; give the frame
+   room (the 94vw cap still governs laptops) and a taller default viewport. */
+.minn-modal.mail { width: 1080px; }
+.minn-modal.mail .minn-detail-frame { height: 56vh; }
 .minn-modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .minn-modal-title { font-weight: 700; font-size: 16px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-modal-preview { background: var(--bg); display: flex; align-items: center; justify-content: center; min-height: 180px; max-height: 46vh; overflow: hidden; }

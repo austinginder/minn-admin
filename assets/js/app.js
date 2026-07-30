@@ -24817,6 +24817,11 @@
 			const hasBlockRow = !! ( sec && ( sec.sections || [] ).some( ( g ) =>
 				( g.rows || [] ).some( ( r ) => [ 'html-preview', 'code', 'kv-table' ].includes( r.type ) ) ) );
 			const needsWide = !! message || isCard || hasBlockRow || editFields.some( ( f ) => f.type === 'textarea' );
+			// An HTML email preview (mail-family body frame, either shape) gets
+			// the extra-wide modal: real messages lay out at 600–1000px and the
+			// 720px dialog clipped them (Austin's Gravity SMTP report).
+			const hasMailPreview = ! isCard && ( ( !! message && isHtml ) || !! ( sec && ( sec.sections || [] ).some( ( g ) =>
+				( g.rows || [] ).some( ( r ) => r.type === 'html-preview' ) ) ) );
 			// Entry title = form name; activity keeps the surface label (message is body).
 			const headTitle = isActivity
 				? ( s.label || 'Activity Log' )
@@ -24828,7 +24833,7 @@
 			const activityAdmin = ( sec && sec.adminUrl ) || it.permalink || it.link || '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal${ needsWide ? ' wide' : '' }${ isCard ? ' entry' : '' }">
+				<div class="minn-modal${ needsWide ? ' wide' : '' }${ hasMailPreview ? ' mail' : '' }${ isCard ? ' entry' : '' }">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">${ esc( headTitle ) }</div>
