@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.21.0. This file ships inside the plugin, so the copy you
+*Current as of v0.22.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -127,6 +127,12 @@ updates itself the same way: each release is fetched from the project's
 GitHub releases and checked against a published checksum before it is
 allowed to install.
 
+**Traffic**: with a supported analytics plugin active (Koko Analytics,
+Matomo, Independent Analytics, Jetpack Stats, Site Kit and others), the
+Overview chart shows daily visitors and pageviews from that plugin's own
+numbers. Click a day for its top pages and referrers, and step through
+days with the arrow keys without closing the dialog.
+
 **Cache and backups**: if a caching plugin or host cache is active, ⌘K
 "Clear site cache" purges all of them at once. If a backup plugin is
 installed, "Back up site now" is there too, and the System page reports
@@ -213,7 +219,7 @@ API, created and revoked per tool.
 | **⌘⇧D** | Focus mode |
 | **⌘⇧O** | Outline mode |
 | **⌘.** | Show or hide the navigation |
-| **← →** | Previous / next item in a media or entry dialog |
+| **← →** | Previous / next item in a media or entry dialog; previous / next day in the traffic dialog |
 | **Esc** | Close menus and dialogs |
 
 On Windows and Linux, use Ctrl wherever ⌘ appears.
