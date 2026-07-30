@@ -97,8 +97,7 @@ license for fixtures), **MetForm** (deferred until Elementor-dependent
 adapters are on the table), status/chart parity on thinner family siblings
 via `/dev-minn-admin sweep`, and the license long tail. ~~Jetpack Stats /
 Matomo traffic providers~~ ✅ shipped 2026-07-29 (v0.22.0 cycle; Jetpack
-verified against the mu-fixture WPCOM mock — a real connected-site pass is
-still worth one manual look). The largest
+verified end to end on a live connected site the same day). The largest
 non-adapter thread is v1 gate **G1**, the outside-tester afternoon test
 (`docs/v1-readiness.md`).
 
