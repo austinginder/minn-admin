@@ -100,10 +100,27 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			};
 		} );
 		t.check( 'Drill-down lists WPCOM top posts', day.text.includes( 'Hello world!' ) && day.text.includes( 'Sample Page' ) );
-		t.check( 'Referrers listed', day.text.includes( 'Search Engines' ) );
+		t.check( 'Referrers flattened to specific names', day.text.includes( 'Google Search' ) && day.text.includes( 'twitter.com' ) );
 		t.check( 'Page rows show views', day.pageHasViews );
 		t.check( 'No fabricated 0-visitor number', ! day.pageFakesVisitors );
 		t.check( 'Open Jetpack Stats escape hatch offered', day.text.includes( 'Open Jetpack Stats' ) );
+
+		// ←/→ step the drill-down through adjacent days (fixture data is
+		// dense, so the previous day always has stats).
+		const title1 = await page.evaluate( () => document.querySelector( '.minn-modal-title' ).textContent.trim() );
+		await page.keyboard.press( 'ArrowLeft' );
+		const stepped = await page.waitForFunction( ( t ) => {
+			const el = document.querySelector( '.minn-modal-title' );
+			return !! ( el && el.textContent.trim() !== t && document.querySelector( '.minn-traf-day' ) );
+		}, title1, { timeout: 20000 } ).then( () => true ).catch( () => false );
+		t.check( 'ArrowLeft steps to the previous day', stepped );
+		await page.keyboard.press( 'ArrowRight' );
+		const steppedBack = await page.waitForFunction( ( t ) => {
+			const el = document.querySelector( '.minn-modal-title' );
+			return !! ( el && el.textContent.trim() === t && document.querySelector( '.minn-traf-day' ) );
+		}, title1, { timeout: 20000 } ).then( () => true ).catch( () => false );
+		t.check( 'ArrowRight steps back', steppedBack );
+		t.check( 'Header nav chevrons render', await page.evaluate( () => !! document.querySelector( '#minn-traf-prev' ) && !! document.querySelector( '#minn-traf-next' ) ) );
 		await page.keyboard.press( 'Escape' );
 
 		t.check( 'Fixture off (write verified)', await setOpt( '' ) );
