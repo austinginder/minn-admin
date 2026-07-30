@@ -24095,8 +24095,8 @@
 									${ p.path && p.path !== p.title ? `<div class="minn-traf-path">${ esc( p.path ) }</div>` : '' }
 								</div>
 								<div class="minn-traf-nums">
-									<span title="Visitors">${ Number( p.visitors ).toLocaleString() } <em>vis</em></span>
-									<span title="Pageviews">${ Number( p.pageviews ).toLocaleString() } <em>views</em></span>
+									${ p.visitors || ! p.pageviews ? `<span title="Visitors">${ Number( p.visitors ).toLocaleString() } <em>vis</em></span>` : '' }
+									${ p.pageviews ? `<span title="Pageviews">${ Number( p.pageviews ).toLocaleString() } <em>views</em></span>` : '' }
 								</div>
 							</div>`;
 						} ).join( '' ) }` : '' }
@@ -24108,8 +24108,8 @@
 									<div class="minn-traf-title">${ esc( r.label ) }</div>
 								</div>
 								<div class="minn-traf-nums">
-									<span title="Visitors">${ Number( r.visitors ).toLocaleString() } <em>vis</em></span>
-									<span title="Pageviews">${ Number( r.pageviews ).toLocaleString() } <em>views</em></span>
+									${ r.visitors || ! r.pageviews ? `<span title="Visitors">${ Number( r.visitors ).toLocaleString() } <em>vis</em></span>` : '' }
+									${ r.pageviews ? `<span title="Pageviews">${ Number( r.pageviews ).toLocaleString() } <em>views</em></span>` : '' }
 								</div>
 							</div>` ).join( '' ) }` : '' }
 						${ d.adminUrl ? `<div class="minn-traf-foot"><a class="minn-link-btn" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a></div>` : '' }
