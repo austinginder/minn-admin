@@ -27,7 +27,7 @@ shared view; "action" = a ⌘K / menu command.
 | **Activity log** | Simple History, WP Activity Log, Aryo, Stream, **Wordfence**, **Limit Login Attempts Reloaded**, **Solid Security**, **All-In-One Security** | **Activity Log** surface — severity/level tabs (Simple History, WSAL, AIOS), connector tabs (Stream), action tabs (Aryo); every provider has a **status card** (audit logs: 24h / 7d / all-time + last event and a family-specific mix; Wordfence: 24h logins + firewall/scan posture; Limit Login Attempts and Solid Security: lockouts now + policy/protection, with one-click Unlock/Release through each plugin's own store). AIOS reads its audit-log table with JSON details flattened to context rows, and reports **failed logins (24h)**, **locked out now**, and **permanent blocks** (System health row too; deep-links into AIOS for management) |
 | **Security posture** | Wordfence, Really Simple SSL, Solid Security | System health rows: Wordfence firewall mode (enabled / learning / off) + last scan and unresolved-issue count; Really Simple SSL enforcement status (both read through each plugin's own public APIs). The System page's **Login URL** row uses `wp_login_url()`, so it honors login-hiders (WPS Hide Login and friends) rather than assuming wp-login.php |
 | **Snippets** | Code Snippets, WPCode, FluentSnippets, Simple Custom CSS and JS, Header Footer Code Manager | **Snippets** surface — list, toggle, edit, create, bulk (provider switcher when more than one is active) |
-| **Analytics** | Koko, WP Statistics, Burst, Independent Analytics, AnalyticsWP, **Site Kit** | Overview **Traffic** chart (daily visitors/pageviews). Day-click drill-down (top pages + referrers via `minn_admin_traffic_day`): **Koko**, **WP Statistics** (hits only per URI), **Burst** (`page_url` + session referrers), **Independent Analytics** (views × resources + session referrers) |
+| **Analytics** | Koko, WP Statistics, Burst, Independent Analytics, AnalyticsWP, **Matomo**, **Site Kit**, **Jetpack Stats** | Overview **Traffic** chart (daily visitors/pageviews). Day-click drill-down (top pages + referrers via `minn_admin_traffic_day`): **Koko**, **WP Statistics** (hits only per URI), **Burst** (`page_url` + session referrers), **Independent Analytics** (views × resources + session referrers), **Matomo** (their own reporting API — Bootstrap + `doAsSuperUser`, gated on `view_matomo`; numbers match their UI including its hourly archiving cadence), **Jetpack Stats** (WPCOM_Stats blog-token client, gated on connection + stats module + `view_stats`; per-page counts are views-only by WPCOM design) |
 | **Backups** | UpdraftPlus, Disembark, Duplicator, WPvivid, BackWPup, All-in-One WP Migration | **Backups** surface; health check + "Back up now" (UpdraftPlus, else WPvivid); status card, CLI command, sessions + cleanup, and on Disembark 2.8+ a **Restore a backup** deep-link (Disembark); package list with disk sizes, status card and delete-through-its-own-cleanup (Duplicator, no freshness claims: manual builds); backup list + status card + schedule + backup-now + delete-through-its-own-cleanup (WPvivid); local FOLDER archives + run-job-now + delete through their destination (BackWPup); local .wpress export list + delete through their Backups model, no freshness claims (All-in-One WP Migration; export/import stay deep links) |
 | **Caching** | Kinsta, LiteSpeed, WP Super Cache, W3TC, WP Rocket, WP Fastest Cache, SiteGround, Autoptimize, WP-Optimize, Cache Enabler, Hummingbird, Elementor CSS, SpeedyCache, Redis Object Cache, Breeze, Nginx Helper, Cloudflare | **Clear site cache** action (⌘K). Redis Object Cache also adds a System health row for drop-in + connection posture |
 | **Custom fields** | ACF (+ Pro), Meta Box, Pods | Editor panel (text, textarea, number, select, radio, checkbox/switch/boolean). ACF needs "Show in REST API" on the field group; Meta Box values ride a `minn_meta_box` REST field (`rwmb_set_meta`); Pods values ride `minn_pods` (`pods()->save()` on extended post types). Advanced types (clones, file, relationships, multi-pick…) count as locked with a wp-admin link |
@@ -93,10 +93,12 @@ history lives in the table above; living primitive matrix + sweep log is
 `docs/adapter-coverage.md`.
 
 The open adapter threads, ranked: **WPForms Pro entries** (blocked on a Pro
-license for fixtures), **Jetpack Stats / Matomo** traffic providers (auth
-and data-shape study first), **MetForm** (deferred until Elementor-dependent
+license for fixtures), **MetForm** (deferred until Elementor-dependent
 adapters are on the table), status/chart parity on thinner family siblings
-via `/dev-minn-admin sweep`, and the license long tail. The largest
+via `/dev-minn-admin sweep`, and the license long tail. ~~Jetpack Stats /
+Matomo traffic providers~~ ✅ shipped 2026-07-29 (v0.22.0 cycle; Jetpack
+verified against the mu-fixture WPCOM mock — a real connected-site pass is
+still worth one manual look). The largest
 non-adapter thread is v1 gate **G1**, the outside-tester afternoon test
 (`docs/v1-readiness.md`).
 
@@ -151,8 +153,8 @@ Source-verified 2026-07-17 (installed all four on minnadmin):
    fixtures; biggest uncovered forms name.
 6. ~~**Meta Box** editor panel~~ ✅ shipped (v0.15.0). ~~**The Events Calendar**
    editor panel~~ ✅ shipped 2026-07-17 (v0.18.0: Event details panel +
-   the async `suggest` field primitive). Still open: **Jetpack Stats** /
-   **Matomo** traffic providers (auth and data-shape study first).
+   the async `suggest` field primitive). ~~**Jetpack Stats** / **Matomo**
+   traffic providers~~ ✅ shipped 2026-07-29 (v0.22.0 cycle).
 
 ### Wave D — Media management (researched 2026-07-16, wp.org installs live)
 
