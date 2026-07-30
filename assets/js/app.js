@@ -498,6 +498,92 @@
 		if ( ok && ( ! opts.route || state.route === opts.route ) ) opts.render();
 	}
 
+	/* ===== Nav re-click refresh =====
+	 * Clicking the sidebar item for the route you're ALREADY on re-fetches
+	 * the list in place (chrome kept, rows dimmed) instead of doing nothing:
+	 * the long-open-tab story — someone else publishes a post, you click
+	 * Content, the list is fresh. Each entry mirrors the view's own
+	 * soft-reload shape (cache keys, page-1 loads, selection clears). */
+	function navRefreshDef( route ) {
+		const defs = {
+			content: {
+				clear: () => {
+					if ( state.contentSel ) state.contentSel.clear();
+					state.cache.content = null;
+					state.cache.cptContent = {};
+				},
+				load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+				render: renderContent,
+			},
+			media: {
+				clear: () => { if ( state.mediaSel ) state.mediaSel.clear(); state.cache.media = null; },
+				load: () => loadMedia(),
+				render: renderMedia,
+			},
+			comments: {
+				clear: () => { if ( state.commentSel ) state.commentSel.clear(); state.cache.comments = null; },
+				load: () => loadComments(),
+				render: renderComments,
+			},
+			orders: { clear: () => { state.cache.orders = null; }, load: () => loadOrders( 1 ), render: renderOrders },
+			subscriptions: { clear: () => { state.cache.subscriptions = null; }, load: () => loadSubscriptions( 1 ), render: renderSubscriptions },
+			products: {
+				clear: () => { if ( state.productSel ) state.productSel.clear(); state.cache.products = null; },
+				load: () => loadProducts( 1 ),
+				render: renderProducts,
+			},
+			coupons: { clear: () => { state.cache.coupons = null; }, load: () => loadCoupons( 1 ), render: renderCoupons },
+			customers: { clear: () => { state.cache.customers = null; }, load: () => loadCustomers( 1 ), render: renderCustomers },
+			users: {
+				clear: () => { if ( state.userSel ) state.userSel.clear(); state.cache.users = null; },
+				load: () => loadUsers( 1 ),
+				render: renderUsers,
+			},
+			extensions: {
+				// Refreshing mid-license-activation would detach the paste form.
+				skip: () => !! $( '.minn-lic-key' ),
+				clear: () => {
+					if ( state.extTab === 'themes' ) state.cache.themes = null;
+					else if ( state.extTab === 'licenses' ) state.cache.licenses = null;
+					else state.cache.plugins = null;
+				},
+				load: () => ( state.extTab === 'themes' ? loadThemes()
+					: state.extTab === 'licenses' ? loadLicenses() : loadPlugins() ),
+				render: renderExtensions,
+			},
+		};
+		if ( defs[ route ] ) return defs[ route ];
+		const s = surfaceById( route );
+		if ( ! s || ! s.collection ) return null;
+		const ss = surfaceState( s.id );
+		// Settings views hold form edits — refreshing would discard them.
+		if ( ss.view === 'settings' || ss.settingsItem ) return null;
+		return {
+			clear: () => { ss.cache = null; ss.tabs = null; ss.status = null; },
+			load: () => Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] ),
+			render: () => renderSurface( s ),
+		};
+	}
+
+	function navRefresh( route ) {
+		const def = navRefreshDef( route );
+		if ( ! def || ( def.skip && def.skip() ) ) return false;
+		if ( softLoadPending( route ) ) return true; // one at a time; the click is already honored
+		softListReload( { route, view: $( '#minn-view' ), clear: def.clear, load: def.load, render: def.render } );
+		return true;
+	}
+
+	// Does clicking this nav button mean "the page I'm on"? Direct match, or
+	// the lit family item while on any of that family's surfaces (its data-nav
+	// points at the PREFERRED provider, which may not be the current route —
+	// without this, re-click on the Email item mid-FluentSMTP jumped to
+	// Gravity SMTP instead of refreshing).
+	function navBtnIsCurrent( btn ) {
+		if ( btn.dataset.nav === state.route ) return true;
+		const s = surfaceById( state.route );
+		return !! ( s && s.family && btn.dataset.family === s.family );
+	}
+
 	const PALETTE_COLORS = [ '#46b881', '#5b9be0', '#e0a458', '#d073c0', '#8a80f8', '#e46b6b' ];
 	const colorFor = ( s ) => {
 		let h = 0;
@@ -1513,7 +1599,11 @@
 		$$( '.minn-nav-btn', root || document ).forEach( ( btn ) => {
 			if ( btn._minnNavBound ) return;
 			btn._minnNavBound = true;
-			btn.addEventListener( 'click', () => go( btn.dataset.nav ) );
+			btn.addEventListener( 'click', () => {
+				// Re-clicking the item for the current route refreshes in place.
+				if ( navBtnIsCurrent( btn ) && navRefresh( state.route ) ) return;
+				go( btn.dataset.nav );
+			} );
 			// Per-user hide (goal #7): right-click a plugin surface's nav row.
 			// Core views (Content, Media, …) are not integrations — no menu.
 			btn.addEventListener( 'contextmenu', ( e ) => {
@@ -1696,6 +1786,7 @@
 		const dot = $( '#minn-plugin-dot' );
 		if ( dot && prev.dotHidden === false ) dot.hidden = false;
 		// Active highlight for the current route.
+		const refreshHint = navRefreshDef( state.route ) ? __( 'Click again to refresh' ) : '';
 		$$( '.minn-nav-btn' ).forEach( ( btn ) => {
 			const surface = surfaceById( state.route );
 			const on = btn.dataset.nav === state.route
@@ -1704,6 +1795,7 @@
 				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
 				|| ( surface && surface.family && btn.dataset.family === surface.family );
 			btn.classList.toggle( 'active', on );
+			btn.title = on && navBtnIsCurrent( btn ) ? refreshHint : '';
 			if ( on ) btn.setAttribute( 'aria-current', 'page' );
 			else btn.removeAttribute( 'aria-current' );
 		} );
@@ -1906,6 +1998,7 @@
 		}
 		// Family members all light the same sidebar item.
 		const activeFamily = surface && surface.family ? surface.family : '';
+		const refreshHint = navRefreshDef( state.route ) ? __( 'Click again to refresh' ) : '';
 		$$( '.minn-nav-btn' ).forEach( ( btn ) => {
 			const on = btn.dataset.nav === state.route
 				// Structure folds Terms in — an admin on the 'terms' route keeps
@@ -1915,6 +2008,7 @@
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
+			btn.title = on && navBtnIsCurrent( btn ) ? refreshHint : '';
 			if ( on ) btn.setAttribute( 'aria-current', 'page' );
 			else btn.removeAttribute( 'aria-current' );
 		} );
