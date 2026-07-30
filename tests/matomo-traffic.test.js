@@ -35,15 +35,35 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return false;
 	};
 
-	const setStatus = ( id, status ) => page.evaluate( async ( a ) => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.id, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
-			credentials: 'same-origin',
-			body: JSON.stringify( { status: a.status } ),
-		} );
-		return ( await r.json() ).status;
-	}, { id, status } );
+	// Toggling Matomo swaps a very large plugin in and out, which can recycle
+	// the PHP worker mid-response — the toggle's reply dies even though the
+	// work finished (the theme-install precedent). On a dropped fetch, wait,
+	// then ask the plugin itself for the truth and retry only if it's wrong.
+	const setStatus = async ( id, status ) => {
+		for ( let attempt = 1; attempt <= 3; attempt++ ) {
+			try {
+				return await page.evaluate( async ( a ) => {
+					const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + a.id, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+						credentials: 'same-origin',
+						body: JSON.stringify( { status: a.status } ),
+					} );
+					return ( await r.json() ).status;
+				}, { id, status } );
+			} catch ( e ) {
+				await page.waitForTimeout( 5000 );
+				const now = await page.evaluate( async ( pid ) => {
+					const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/' + pid + '?_fields=status&_cb=' + Math.random(), {
+						headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+					} );
+					return r.ok ? ( await r.json() ).status : null;
+				}, id ).catch( () => null );
+				if ( now === status ) return now;
+			}
+		}
+		throw new Error( `plugin toggle failed: ${ id } -> ${ status }` );
+	};
 
 	const chartState = async () => {
 		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
