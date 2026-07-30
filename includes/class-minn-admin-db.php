@@ -101,6 +101,12 @@ class Minn_Admin_DB {
 	 * ESTIMATE — InnoDB is routinely off by 2×, which is fine for a browser.
 	 */
 	private static function table_index() {
+		// Memoized per request: resolve_table() runs once per route call, but
+		// a health run resolves many tables back to back.
+		static $memo = null;
+		if ( null !== $memo ) {
+			return $memo;
+		}
 		global $wpdb;
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
@@ -114,7 +120,8 @@ class Minn_Admin_DB {
 				'BASE TABLE'
 			)
 		);
-		return is_array( $rows ) ? $rows : array();
+		$memo = is_array( $rows ) ? $rows : array();
+		return $memo;
 	}
 
 	/**
@@ -426,7 +433,8 @@ class Minn_Admin_DB {
 		}
 		list( $columns, $primary ) = self::columns_of( $meta->name );
 		$pk = json_decode( (string) $request->get_param( 'pk' ), true );
-		if ( ! $primary || ! is_array( $pk ) || array_diff( array_keys( $pk ), $primary ) || count( $pk ) !== count( $primary ) ) {
+		if ( ! $primary || ! is_array( $pk ) || array_diff( array_keys( $pk ), $primary ) || count( $pk ) !== count( $primary )
+			|| count( array_filter( $pk, 'is_scalar' ) ) !== count( $pk ) ) {
 			return new WP_Error( 'minn_db_bad_pk', __( 'This table has no usable primary key.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$where = array();
