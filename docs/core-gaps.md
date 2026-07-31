@@ -8,7 +8,12 @@ shipped in the v0.20.0 cycle; sections below updated); re-checked
 2026-07-24 at v0.22.0 open (the read-only database viewer shipped as a
 native developer surface, covered under Tools below; no new daily-work
 gaps): every
-ranked priority remains shipped, no new daily-work gaps in core areas. Dev tools Wave A is complete
+ranked priority remains shipped, no new daily-work gaps in core areas.
+Re-audited 2026-07-30 at v0.23.0 open with a theme-integration focus (see
+the new section below): the remaining wp-admin territory is theme-shaped
+(block-theme Site Editor artifacts, builder theme templates) plus four
+smaller operational gaps (per-extension auto-update toggles, theme live
+preview, bulk category/author edit, synced-pattern visibility). Dev tools Wave A is complete
 (Diagnostics family); further inventory work is adapter depth or parked
 native surfaces (`plugin-support.md`, `native-editors.md`). Minn's
 positioning grades these: daily work belongs in Minn, the long tail stays
@@ -67,6 +72,49 @@ and global styles are correctly long-tail.
 Menus (with drag reorder) and classic widgets are fully built; themes
 install/activate/update/delete under Extensions. Template/FSE editing,
 background and header images: out of scope by design.
+
+### Theme integration — the audited frontier (2026-07-30)
+On a CLASSIC theme, the daily slice is covered: Menus, Widgets, logo, icon,
+Custom CSS, homepage. The gaps cluster on block themes and theme builders,
+verified empirically at v0.23.0:
+
+1. **Block themes lose ground with no replacement (L, needs design).**
+   Minn correctly hides Menus and Widgets when `wp_is_block_theme()`
+   (`B.site.blockTheme`), but nothing steps in: no navigation editing
+   (`wp_navigation` posts have REST parity with what the Menus manager
+   already does for classic menus), no template/template-part LISTING with
+   Site Editor deep links, no global-styles summary. A block-theme site
+   demotes Minn from "the admin" to "the content admin". Scoped build,
+   ranked inside this item: navigation first (real daily work, existing
+   Menus UX transfers), then a read-only Design card (active theme, its
+   templates/parts as "Edit in Site Editor ↗" rows, current palette). The
+   Site Editor canvas itself is a permanent link-out (same reasoning as
+   form builders).
+2. **Builder theme templates are invisible (M).** `elementor_library` IS
+   REST-exposed but not `viewable`, so the content switcher (rightly)
+   skips it — meaning a site whose header/footer live in Elementor Theme
+   Builder has no Minn surface listing those templates. Same story for
+   Bricks/Divi template areas. Fits the existing page-builders adapter
+   thesis: list, badge the type (header/footer/popup/archive), show
+   display conditions read-only, deep-link into the builder canvas.
+3. **Per-extension auto-update toggles (S).** wp-admin's plugins/themes
+   screens toggle `auto_update_plugins` / `auto_update_themes`; Minn has
+   no trace of them (verified by grep). Extensions cards should show and
+   flip these — pure option writes, high maintenance-audience fit.
+4. **Theme live preview (S).** Inactive theme cards offer Activate only;
+   wp-admin offers a Customizer live preview first
+   (`customize.php?theme=`). One link on classic-theme cards.
+5. **Bulk edit beyond status (M).** The content bulk bar does status /
+   trash / restore / delete but not wp-admin bulk-edit's "add these
+   categories / set author across selected posts".
+6. **Synced patterns (S-M).** `wp_block` is REST-exposed, not viewable, so
+   reusable/synced patterns have no Minn surface (create/rename/delete/
+   edit). Their content is plain block markup — Minn's editor could open
+   them natively; the slash menu could offer them for insertion.
+7. **Classic Customizer theme options — stays a link-out.** Arbitrary
+   theme mods (colors, header/background images, per-theme sections) are
+   a per-theme treadmill with no schema; the Customizer deep link is the
+   honest answer, same verdict as before.
 
 ### Taxonomies — covered
 The Terms manager shipped 2026-07-10 (see priority #1). The only server
