@@ -5,8 +5,13 @@
 ### Added
 * **Re-click the sidebar to refresh:** clicking the sidebar item for the page you are already on now re-fetches the list in place. Content, Media, Comments, Users, the shop views, Extensions and every plugin surface all take part; the toolbar, tabs, search and filters stay put while the rows dim and reload, so a tab left open all day can pull in what teammates just published without a full page reload. On a grouped item with several providers (Email, Forms, Backups) the refresh stays on the provider you are viewing, and the lit item's tooltip says what a second click does.
 
+* **Three more coming-soon plugins on the visibility radar:** Maintenance (WebFactory), CMP Coming Soon & Maintenance (NiteoThemes) and Minimal Coming Soon now register on the site visibility system while their mode is on, covering the most installed plugins in the category. The Overview banner, the topbar chip, the System health check and Settings → Visibility all name the plugin and link to its screen, so "I forgot the coming-soon page was on" gets caught the moment you open Minn.
+
 ### Improved
 * **A wider email preview:** an HTML email body in a log detail now opens in a wider dialog (900 pixels on large screens, with a taller reading pane) instead of the 720 pixel one, so real message layouts render without clipping.
+
+### Fixed
+* **SeedProd detection actually works again:** SeedProd stores its settings as a JSON string in current builds, and the old detector expected an array with different keys, so an enabled SeedProd coming-soon or maintenance page went unreported. The detector now reads the real storage shape, distinguishes the two modes, and keeps ignoring the login and 404 page modes that do not hide the site.
 
 ## **v0.22.0** - July 30, 2026
 

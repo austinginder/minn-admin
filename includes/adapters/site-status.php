@@ -42,33 +42,79 @@ function minn_admin_site_visibility() {
 		);
 	}
 
-	// WP Maintenance Mode (designmodo, 700k+): wpmm_settings.general.status.
+	// LightStart, formerly WP Maintenance Mode (Themeisle, 400k+):
+	// wpmm_settings.general.status.
 	if ( class_exists( 'WP_Maintenance_Mode' ) ) {
 		$s = get_option( 'wpmm_settings' );
 		if ( is_array( $s ) && ! empty( $s['general']['status'] ) ) {
 			$providers[] = array(
-				'name' => 'WP Maintenance Mode',
+				'name' => 'LightStart (WP Maintenance Mode)',
 				'kind' => 'maintenance',
 				'url'  => admin_url( 'admin.php?page=wp-maintenance-mode' ),
 			);
 		}
 	}
 
-	// SeedProd coming-soon / maintenance (1M+). Lite stores the enabled mode in
-	// seedprod_settings; guard on the option shape so a miss just no-ops.
+	// SeedProd coming-soon / maintenance (700k+). Since v5 seedprod_settings is
+	// a JSON STRING ({"enable_coming_soon_mode":bool,"enable_maintenance_mode":
+	// bool,...} — their render-csp-mm.php json_decodes it); tolerate an array
+	// from older builds. Login/404 modes don't hide the site, so skip them.
 	if ( defined( 'SEEDPROD_VERSION' ) || defined( 'SEEDPROD_PRO_VERSION' ) ) {
 		$s = get_option( 'seedprod_settings' );
-		$mode = is_array( $s ) ? ( isset( $s['coming_soon'] ) ? (int) $s['coming_soon'] : ( isset( $s['maintenance_mode'] ) ? (int) $s['maintenance_mode'] : 0 ) ) : 0;
-		if ( $mode ) {
+		if ( is_string( $s ) ) {
+			$s = json_decode( $s, true );
+		}
+		if ( is_array( $s ) && ( ! empty( $s['enable_coming_soon_mode'] ) || ! empty( $s['enable_maintenance_mode'] ) ) ) {
 			$providers[] = array(
 				'name' => 'SeedProd',
-				'kind' => isset( $s['maintenance_mode'] ) && $s['maintenance_mode'] ? 'maintenance' : 'coming-soon',
-				'url'  => admin_url( 'admin.php?page=seedprod_lite' ),
+				'kind' => ! empty( $s['enable_maintenance_mode'] ) ? 'maintenance' : 'coming-soon',
+				'url'  => admin_url( 'admin.php?page=seedprod_' . ( defined( 'SEEDPROD_BUILD' ) ? SEEDPROD_BUILD : 'lite' ) ),
 			);
 		}
 	}
 
-	// Under Construction (WebFactory, 200k+): option 'ucp' with ['status'].
+	// Maintenance (WebFactory, 1M+): option 'mtnc-options', the live flag is
+	// ['options']['status'] ('1'/'0' strings — their frontend gate at
+	// maintenance.php reads exactly this).
+	if ( class_exists( 'MTNC' ) ) {
+		$s = get_option( 'mtnc-options' );
+		if ( is_array( $s ) && isset( $s['options'] ) && is_array( $s['options'] ) && ! empty( $s['options']['status'] ) && '0' !== (string) $s['options']['status'] ) {
+			$providers[] = array(
+				'name' => 'Maintenance',
+				'kind' => 'maintenance',
+				'url'  => admin_url( 'admin.php?page=maintenance' ),
+			);
+		}
+	}
+
+	// CMP — Coming Soon & Maintenance (NiteoThemes, 200k+): niteoCS_status is
+	// the on switch ('0' off, anything else on — mirrors their cmp_active());
+	// niteoCS_activation picks the mode ('1' = maintenance/503, else the
+	// coming-soon page; default '2').
+	if ( class_exists( 'CMP_Coming_Soon_and_Maintenance' ) ) {
+		if ( '0' !== (string) get_option( 'niteoCS_status', '0' ) ) {
+			$providers[] = array(
+				'name' => 'CMP Coming Soon & Maintenance',
+				'kind' => '1' === (string) get_option( 'niteoCS_activation', '2' ) ? 'maintenance' : 'coming-soon',
+				'url'  => admin_url( 'admin.php?page=cmp-settings' ),
+			);
+		}
+	}
+
+	// Minimal Coming Soon (WebFactory, 100k+): signals_csmm_options['status']
+	// is '1' when enabled ('2' is their disabled default — not a boolean).
+	if ( function_exists( 'csmm_get_options' ) ) {
+		$s = get_option( 'signals_csmm_options' );
+		if ( is_array( $s ) && isset( $s['status'] ) && '1' === (string) $s['status'] ) {
+			$providers[] = array(
+				'name' => 'Minimal Coming Soon',
+				'kind' => 'coming-soon',
+				'url'  => admin_url( 'options-general.php?page=maintenance_mode_options' ),
+			);
+		}
+	}
+
+	// Under Construction (WebFactory, 600k+): option 'ucp' with ['status'].
 	$ucp = get_option( 'ucp' );
 	if ( is_array( $ucp ) && ! empty( $ucp['status'] ) ) {
 		$providers[] = array(
