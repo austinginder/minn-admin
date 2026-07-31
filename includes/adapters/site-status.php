@@ -9,15 +9,153 @@
  * and the System health strip.
  *
  * Third parties add detectors via `minn_admin_visibility_providers`: return an
- * array of providers, each { name, kind, note?, url?, partial? } where kind is
- * 'maintenance' | 'coming-soon' | 'password'. Set partial when only SOME pages
- * are covered (WooCommerce's store-pages-only coming soon) — the warning then
- * says "part of the site" instead of claiming the whole site is dark. Only
- * register a provider while its mode is actually ACTIVE (this runs on every
- * admin pageload).
+ * array of providers, each { name, kind, note?, url?, partial?, id? } where
+ * kind is 'maintenance' | 'coming-soon' | 'password'. Set partial when only
+ * SOME pages are covered (WooCommerce's store-pages-only coming soon) — the
+ * warning then says "part of the site" instead of claiming the whole site is
+ * dark. Only register a provider while its mode is actually ACTIVE (this runs
+ * on every admin pageload).
+ *
+ * Providers with a matching writer in `minn_admin_visibility_toggles` can be
+ * turned off (and back on, for Undo) from Minn's banner, chip popover and
+ * Settings → Visibility; the rest stay honest link-outs.
  */
 
 defined( 'ABSPATH' ) || exit;
+
+/**
+ * Read an option's stored row directly, bypassing pre_option filters. Only
+ * for detectors whose plugin masks its own option per request context
+ * (Password Protected's allow_administrators / allow_users).
+ *
+ * @param string $name Option name.
+ * @return string|null Raw option_value, null when the row is absent.
+ */
+function minn_admin_raw_option( $name ) {
+	global $wpdb;
+	return $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", $name ) );
+}
+
+/**
+ * Toggle writers — which visibility providers Minn can turn off (and back on,
+ * for Undo). Detected at CALL TIME for loaded plugins regardless of the mode's
+ * current state: an Undo must re-arm a provider that no longer appears in the
+ * active list. Each writer goes through the plugin's own storage shape, never
+ * a reimplementation of its logic.
+ *
+ * Contract (documented in for-plugin-authors.md): id => { set: callable }
+ * where set( bool $on, array $ctx ) flips the mode; $ctx['kind'] carries the
+ * mode that was active before Minn turned it off, so writers with more than
+ * one mode (SeedProd, Elementor) restore exactly what was on. Third parties
+ * join via the `minn_admin_visibility_toggles` filter and put the matching
+ * `id` on their provider row.
+ *
+ * @return array id => array( 'set' => callable( bool $on, array $ctx ) )
+ */
+function minn_admin_visibility_toggles() {
+	$t = array();
+
+	if ( class_exists( 'WP_Maintenance_Mode' ) ) {
+		$t['wpmm'] = array( 'set' => function ( $on ) {
+			$s = get_option( 'wpmm_settings' );
+			if ( ! is_array( $s ) ) {
+				$s = array();
+			}
+			if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) {
+				$s['general'] = array();
+			}
+			$s['general']['status'] = $on ? 1 : 0;
+			update_option( 'wpmm_settings', $s );
+		} );
+	}
+
+	if ( defined( 'SEEDPROD_VERSION' ) || defined( 'SEEDPROD_PRO_VERSION' ) ) {
+		$t['seedprod'] = array( 'set' => function ( $on, $ctx = array() ) {
+			$s = get_option( 'seedprod_settings' );
+			if ( is_string( $s ) ) {
+				$s = json_decode( $s, true );
+			}
+			if ( ! is_array( $s ) ) {
+				$s = array();
+			}
+			$maint = isset( $ctx['kind'] ) && 'maintenance' === $ctx['kind'];
+			$s['enable_coming_soon_mode']  = $on && ! $maint;
+			$s['enable_maintenance_mode']  = $on && $maint;
+			// Their v5+ save path stores the blob as a JSON string.
+			update_option( 'seedprod_settings', wp_json_encode( $s ) );
+		} );
+	}
+
+	if ( class_exists( 'MTNC' ) ) {
+		$t['maintenance'] = array( 'set' => function ( $on ) {
+			$s = get_option( 'mtnc-options' );
+			if ( ! is_array( $s ) ) {
+				$s = array();
+			}
+			if ( ! isset( $s['options'] ) || ! is_array( $s['options'] ) ) {
+				$s['options'] = array();
+			}
+			$s['options']['status'] = $on ? '1' : '0';
+			update_option( 'mtnc-options', $s );
+		} );
+	}
+
+	if ( class_exists( 'CMP_Coming_Soon_and_Maintenance' ) ) {
+		// niteoCS_activation (which mode) persists independently of the on
+		// switch, so off/on round-trips the mode without touching it.
+		$t['cmp'] = array( 'set' => function ( $on ) {
+			update_option( 'niteoCS_status', $on ? '1' : '0' );
+		} );
+	}
+
+	if ( function_exists( 'csmm_get_options' ) ) {
+		$t['csmm'] = array( 'set' => function ( $on ) {
+			// '2' is their stored disabled value, not '0' or false.
+			update_option( 'signals_csmm_options', array_merge( (array) get_option( 'signals_csmm_options', array() ), array( 'status' => $on ? '1' : '2' ) ) );
+		} );
+	}
+
+	if ( class_exists( 'UCP' ) ) {
+		$t['ucp'] = array( 'set' => function ( $on ) {
+			update_option( 'ucp', array_merge( (array) get_option( 'ucp', array() ), array( 'status' => $on ? '1' : '0' ) ) );
+		} );
+	}
+
+	if ( class_exists( 'WooCommerce' ) ) {
+		// woocommerce_store_pages_only is left alone, so a partial coming
+		// soon undoes back to partial.
+		$t['wc'] = array( 'set' => function ( $on ) {
+			update_option( 'woocommerce_coming_soon', $on ? 'yes' : 'no' );
+		} );
+	}
+
+	if ( defined( 'ELEMENTOR_VERSION' ) ) {
+		$t['elementor'] = array( 'set' => function ( $on, $ctx = array() ) {
+			$mode = isset( $ctx['kind'] ) && 'maintenance' === $ctx['kind'] ? 'maintenance' : 'coming_soon';
+			update_option( 'elementor_maintenance_mode_mode', $on ? $mode : '' );
+		} );
+	}
+
+	if ( class_exists( 'Password_Protected' ) ) {
+		$t['password-protected'] = array( 'set' => function ( $on ) {
+			update_option( 'password_protected_status', $on ? 1 : 0 );
+		} );
+	}
+
+	/**
+	 * Register a writer for a provider your plugin reports via
+	 * `minn_admin_visibility_providers`. See docs/for-plugin-authors.md.
+	 */
+	$t = apply_filters( 'minn_admin_visibility_toggles', $t );
+
+	$clean = array();
+	foreach ( (array) $t as $id => $w ) {
+		if ( is_array( $w ) && isset( $w['set'] ) && is_callable( $w['set'] ) ) {
+			$clean[ sanitize_key( (string) $id ) ] = $w;
+		}
+	}
+	return $clean;
+}
 
 /**
  * Assemble the current visibility state.
@@ -49,6 +187,7 @@ function minn_admin_site_visibility() {
 		if ( is_array( $s ) && ! empty( $s['general']['status'] ) ) {
 			$providers[] = array(
 				'name' => 'LightStart (WP Maintenance Mode)',
+				'id'   => 'wpmm',
 				'kind' => 'maintenance',
 				'url'  => admin_url( 'admin.php?page=wp-maintenance-mode' ),
 			);
@@ -67,6 +206,7 @@ function minn_admin_site_visibility() {
 		if ( is_array( $s ) && ( ! empty( $s['enable_coming_soon_mode'] ) || ! empty( $s['enable_maintenance_mode'] ) ) ) {
 			$providers[] = array(
 				'name' => 'SeedProd',
+				'id'   => 'seedprod',
 				'kind' => ! empty( $s['enable_maintenance_mode'] ) ? 'maintenance' : 'coming-soon',
 				'url'  => admin_url( 'admin.php?page=seedprod_' . ( defined( 'SEEDPROD_BUILD' ) ? SEEDPROD_BUILD : 'lite' ) ),
 			);
@@ -81,6 +221,7 @@ function minn_admin_site_visibility() {
 		if ( is_array( $s ) && isset( $s['options'] ) && is_array( $s['options'] ) && ! empty( $s['options']['status'] ) && '0' !== (string) $s['options']['status'] ) {
 			$providers[] = array(
 				'name' => 'Maintenance',
+				'id'   => 'maintenance',
 				'kind' => 'maintenance',
 				'url'  => admin_url( 'admin.php?page=maintenance' ),
 			);
@@ -95,6 +236,7 @@ function minn_admin_site_visibility() {
 		if ( '0' !== (string) get_option( 'niteoCS_status', '0' ) ) {
 			$providers[] = array(
 				'name' => 'CMP Coming Soon & Maintenance',
+				'id'   => 'cmp',
 				'kind' => '1' === (string) get_option( 'niteoCS_activation', '2' ) ? 'maintenance' : 'coming-soon',
 				'url'  => admin_url( 'admin.php?page=cmp-settings' ),
 			);
@@ -108,17 +250,21 @@ function minn_admin_site_visibility() {
 		if ( is_array( $s ) && isset( $s['status'] ) && '1' === (string) $s['status'] ) {
 			$providers[] = array(
 				'name' => 'Minimal Coming Soon',
+				'id'   => 'csmm',
 				'kind' => 'coming-soon',
 				'url'  => admin_url( 'options-general.php?page=maintenance_mode_options' ),
 			);
 		}
 	}
 
-	// Under Construction (WebFactory, 600k+): option 'ucp' with ['status'].
-	$ucp = get_option( 'ucp' );
+	// Under Construction (WebFactory, 600k+): option 'ucp' with ['status']
+	// ('1'/'0' strings). Class-gated: a deactivated UCP with a stale status
+	// row isn't hiding anything.
+	$ucp = class_exists( 'UCP' ) ? get_option( 'ucp' ) : null;
 	if ( is_array( $ucp ) && ! empty( $ucp['status'] ) ) {
 		$providers[] = array(
 			'name' => 'Under Construction',
+			'id'   => 'ucp',
 			'kind' => 'coming-soon',
 			'url'  => admin_url( 'admin.php?page=under-construction-page' ),
 		);
@@ -131,6 +277,7 @@ function minn_admin_site_visibility() {
 		$store_only  = 'yes' === get_option( 'woocommerce_store_pages_only' );
 		$providers[] = array(
 			'name'    => 'WooCommerce coming soon',
+			'id'      => 'wc',
 			'kind'    => 'coming-soon',
 			'note'    => $store_only ? 'Only store pages are hidden; the rest of the site is public' : 'Visitors see the coming-soon page instead of the site',
 			'url'     => admin_url( 'admin.php?page=wc-settings&tab=site-visibility' ),
@@ -145,6 +292,7 @@ function minn_admin_site_visibility() {
 		if ( 'maintenance' === $el_mode || 'coming_soon' === $el_mode ) {
 			$providers[] = array(
 				'name' => 'Elementor maintenance mode',
+				'id'   => 'elementor',
 				'kind' => 'maintenance' === $el_mode ? 'maintenance' : 'coming-soon',
 				'url'  => admin_url( 'admin.php?page=elementor-tools#tab-maintenance_mode' ),
 			);
@@ -152,9 +300,14 @@ function minn_admin_site_visibility() {
 	}
 
 	// Password Protected (Ben Huson, 300k+): whole site behind a password.
-	if ( class_exists( 'Password_Protected' ) && get_option( 'password_protected_status' ) ) {
+	// Read the RAW row, not get_option: their pre_option filters zero the
+	// value for logged-in admins outside wp-admin (allow_administrators /
+	// allow_users), and REST requests are ! is_admin() — a plain get_option
+	// here reports "public" while visitors are still gated.
+	if ( class_exists( 'Password_Protected' ) && minn_admin_raw_option( 'password_protected_status' ) ) {
 		$providers[] = array(
 			'name' => 'Password Protected',
+			'id'   => 'password-protected',
 			'kind' => 'password',
 			'note' => 'The whole site is behind a password',
 			'url'  => admin_url( 'options-reading.php' ),
@@ -167,20 +320,27 @@ function minn_admin_site_visibility() {
 	 */
 	$providers = apply_filters( 'minn_admin_visibility_providers', $providers );
 
-	// Normalize + keep only well-formed, currently-active entries.
-	$clean = array();
+	// Normalize + keep only well-formed, currently-active entries. `can` marks
+	// rows a registered writer can turn off from Minn (manage_options only —
+	// the visibility endpoint carries the same gate).
+	$toggles = minn_admin_visibility_toggles();
+	$can_fix = current_user_can( 'manage_options' );
+	$clean   = array();
 	foreach ( (array) $providers as $p ) {
 		if ( ! is_array( $p ) || empty( $p['name'] ) || empty( $p['kind'] ) ) {
 			continue;
 		}
 		$kind = in_array( $p['kind'], array( 'maintenance', 'coming-soon', 'password' ), true ) ? $p['kind'] : 'maintenance';
+		$id   = isset( $p['id'] ) ? sanitize_key( (string) $p['id'] ) : '';
 		$clean[] = array(
 			'name'    => (string) $p['name'],
+			'id'      => $id,
 			'kind'    => $kind,
 			'note'    => isset( $p['note'] ) ? (string) $p['note'] : '',
 			'url'     => isset( $p['url'] ) ? esc_url_raw( (string) $p['url'] ) : '',
 			'minn'    => ! empty( $p['minn'] ),
 			'partial' => ! empty( $p['partial'] ),
+			'can'     => $can_fix && '' !== $id && isset( $toggles[ $id ] ) && is_callable( $toggles[ $id ]['set'] ),
 		);
 	}
 
@@ -304,6 +464,52 @@ add_action( 'rest_api_init', function () {
 				return current_user_can( 'manage_options' );
 			},
 			'callback'            => function () {
+				return rest_ensure_response( minn_admin_site_visibility() );
+			},
+		)
+	);
+
+	// Turn a provider's mode off (or back on, for Undo) through its registered
+	// writer. Turning off remembers which mode was on (option map, capped) so
+	// an Undo restores exactly it; the response is the fresh visibility state
+	// so the client repaints in one round trip (license-action precedent).
+	register_rest_route(
+		'minn-admin/v1',
+		'/visibility/toggle',
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => function () {
+				return current_user_can( 'manage_options' );
+			},
+			'callback'            => function ( $request ) {
+				$id      = sanitize_key( (string) $request['id'] );
+				$on      = ! empty( $request['on'] );
+				$toggles = minn_admin_visibility_toggles();
+				if ( '' === $id || ! isset( $toggles[ $id ] ) ) {
+					return new WP_Error( 'minn_no_toggle', 'No visibility toggle is registered for that provider.', array( 'status' => 404 ) );
+				}
+				$mem = get_option( 'minn_admin_vis_restore', array() );
+				if ( ! is_array( $mem ) ) {
+					$mem = array();
+				}
+				$ctx = array();
+				if ( $on ) {
+					$ctx['kind'] = isset( $mem[ $id ] ) ? (string) $mem[ $id ] : '';
+				} else {
+					foreach ( minn_admin_site_visibility()['providers'] as $p ) {
+						if ( $p['id'] === $id ) {
+							$mem[ $id ] = $p['kind'];
+							$mem        = array_slice( $mem, -20, null, true );
+							update_option( 'minn_admin_vis_restore', $mem, false );
+							break;
+						}
+					}
+				}
+				try {
+					call_user_func( $toggles[ $id ]['set'], $on, $ctx );
+				} catch ( \Throwable $e ) {
+					return new WP_Error( 'minn_toggle_failed', $e->getMessage(), array( 'status' => 500 ) );
+				}
 				return rest_ensure_response( minn_admin_site_visibility() );
 			},
 		)

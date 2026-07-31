@@ -11402,8 +11402,11 @@
 	// maintenance/search toggle so the banner and chip update WITHOUT a page
 	// reload (Austin's report: they were stale until refresh).
 	const visState = () => state.visibility || B.visibility;
-	async function refreshVisibility() {
-		try { state.visibility = await api( 'minn-admin/v1/visibility' ); } catch ( e ) { /* keep the last state */ }
+	// Pass `fresh` when a write already returned the new state (the toggle
+	// endpoint does) to skip the extra GET.
+	async function refreshVisibility( fresh ) {
+		if ( fresh ) state.visibility = fresh;
+		else try { state.visibility = await api( 'minn-admin/v1/visibility' ); } catch ( e ) { /* keep the last state */ }
 		updateVisChip();
 		// The System page's "Site visibility" health check is server-derived
 		// from the same posture — bust it so the row appears/disappears with
@@ -11449,13 +11452,17 @@
 	// The controls that actually FIX the current visibility state, shared by
 	// the banner and the chip popover. Minn-owned settings (its own maintenance
 	// mode, the search-engine toggle) get an inline switch; third-party
-	// maintenance/coming-soon/password plugins can only be linked out to.
+	// providers with a registered writer (minn_admin_visibility_toggles) get
+	// one too, turned off through their own storage with an Undo; the rest
+	// stay link-outs.
 	function visibilityFixControls() {
 		const v = visState();
 		const out = [];
 		( v.providers || [] ).forEach( ( p ) => {
 			if ( p.minn ) {
 				out.push( { type: 'toggle', label: 'Maintenance mode', setting: 'minn_admin_maintenance', on: true } );
+			} else if ( p.can ) {
+				out.push( { type: 'toggle', label: p.name, provider: p, on: true } );
 			} else {
 				out.push( { type: 'link', label: p.name, url: p.url } );
 			}
@@ -11474,8 +11481,31 @@
 		}
 		return `<a class="minn-btn-soft" href="${ esc( c.url || B.site.adminUrl ) }" target="_blank" rel="noopener">${ esc( c.label ) } ↗</a>`;
 	}
+	// Turn a third-party visibility mode off through its registered writer.
+	// The endpoint remembers which mode was on, so Undo restores exactly it
+	// (SeedProd's and Elementor's two modes both round-trip).
+	async function runVisProviderToggle( p, btn, on = false ) {
+		if ( btn ) btn.disabled = true;
+		try {
+			const fresh = await api( 'minn-admin/v1/visibility/toggle', { method: 'POST', body: JSON.stringify( { id: p.id, on } ) } );
+			await refreshVisibility( fresh );
+			if ( on ) {
+				/* translators: %s: plugin name */
+				toast( sprintf( __( '%s turned back on' ), p.name ) );
+			} else {
+				/* translators: %s: plugin name */
+				toastAction( sprintf( __( '%s turned off' ), p.name ), __( 'Undo' ), () => runVisProviderToggle( p, null, true ) );
+			}
+			if ( visState().public ) closeVisPopover();
+			else refreshVisPopover();
+		} catch ( e ) {
+			toast( e.message, true );
+			if ( btn ) btn.disabled = false;
+		}
+	}
 	// Flip a Minn-owned visibility setting and refresh live.
 	async function runVisToggle( c, btn ) {
+		if ( c.provider ) return runVisProviderToggle( c.provider, btn );
 		if ( btn ) btn.disabled = true;
 		const next = ! c.on;
 		const val = 'blog_public' === c.setting ? ( next ? 1 : 0 ) : next;
@@ -13943,6 +13973,7 @@
 							<div class="minn-toggle-label">${ esc( p.name ) }</div>
 							<div class="minn-toggle-desc">${ esc( p.note || ( 'password' === p.kind ? 'The site is behind a password.' : 'Visitors see a maintenance or coming-soon page.' ) ) }</div>
 						</div>
+						${ p.can ? `<button class="minn-btn-soft" data-visoff="${ esc( p.id ) }">${ esc( __( 'Turn off' ) ) }</button>` : '' }
 						${ p.url ? `<a class="minn-btn-soft" href="${ esc( p.url ) }" target="_blank" rel="noopener">Open ↗</a>` : '' }
 					</div>` ).join( '' ) : '';
 				return {
@@ -14202,6 +14233,17 @@
 				const id = btn.dataset.setting;
 				pending[ id ] = OPEN_CLOSED.includes( id ) ? ( on ? 'open' : 'closed' )
 					: ( INT_TOGGLES.includes( id ) ? ( on ? 1 : 0 ) : on );
+			} )
+		);
+
+		// Visibility section: turn a plugin's maintenance/coming-soon mode off
+		// in place (refreshVisibility re-renders this route, so the row goes
+		// away and the Undo toast is the way back).
+		$$( '[data-visoff]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const v = visState();
+				const p = ( ( v && v.providers ) || [] ).find( ( x ) => x.id === btn.dataset.visoff );
+				if ( p ) runVisProviderToggle( p, btn );
 			} )
 		);
 
