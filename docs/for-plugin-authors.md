@@ -1487,6 +1487,7 @@ add_filter( 'minn_admin_visibility_providers', function ( $providers ) {
     if ( my_plugin_maintenance_is_on() ) {
         $providers[] = array(
             'name'    => 'My Maintenance Mode',
+            'id'      => 'my-plugin',   // optional: pairs the row with a toggle writer (below)
             'kind'    => 'maintenance', // or 'coming-soon' | 'password'
             'note'    => 'Visitors see the holding page',          // optional
             'url'     => admin_url( 'admin.php?page=my-settings' ), // where to turn it off
@@ -1500,9 +1501,32 @@ add_filter( 'minn_admin_visibility_providers', function ( $providers ) {
 } );
 ```
 
-Minn links out to `url` to fix third-party modes; it never toggles another plugin's
-option. Bundled detectors cover WP Maintenance Mode, SeedProd, Under Construction,
-Password Protected, WooCommerce coming soon and Elementor maintenance mode.
+Want the owner to be able to turn your mode off (and back on, via Undo) right from
+Minn's banner, chip popover and Settings → Visibility? Register a toggle writer under
+the same `id`. Minn only ever flips a mode through a writer the plugin registers;
+providers without one stay honest link-outs to `url`.
+
+```php
+add_filter( 'minn_admin_visibility_toggles', function ( $toggles ) {
+    // Register whenever your plugin is loaded (not only while the mode is on):
+    // an Undo must be able to re-arm a mode that is currently off.
+    $toggles['my-plugin'] = array(
+        'set' => function ( $on, $ctx ) {
+            // $ctx['kind'] is the mode that was on before Minn turned it off
+            // ('maintenance' | 'coming-soon' | 'password') — use it to restore
+            // the right mode if your plugin has more than one.
+            my_plugin_set_maintenance( $on );
+        },
+    );
+    return $toggles;
+} );
+```
+
+The toggle endpoint (`POST minn-admin/v1/visibility/toggle`) requires `manage_options`.
+Bundled detectors cover Maintenance (WebFactory), SeedProd, Under Construction,
+LightStart (WP Maintenance Mode), CMP Coming Soon & Maintenance, Minimal Coming Soon,
+Password Protected, WooCommerce coming soon and Elementor maintenance mode — all with
+toggle writers through each plugin's own storage.
 
 ## No REST API? Ship a shim
 

@@ -55,8 +55,12 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.click( '#minn-vis-chip' );
 		await page.waitForSelector( '#minn-vis-pop', { timeout: 5000 } );
 		t.check( 'popover title softens to partial copy', await page.$eval( '.minn-vis-pop-title', ( e ) => /Part of the site is hidden/.test( e.textContent ) ) );
-		t.check( 'popover links out to the provider', await page.evaluate( () =>
-			Array.from( document.querySelectorAll( '#minn-vis-pop a' ) ).some( ( a ) => /Minn Visibility Fixture/.test( a.textContent ) ) ) );
+		// Since the toggle writers landed the fixture provider renders as a
+		// turn-off switch here, not a link-out (visibility-toggle.test.js
+		// drives the switch itself).
+		t.check( 'popover offers a control for the provider', await page.evaluate( () =>
+			!! document.querySelector( '#minn-vis-pop .minn-switch[aria-label="Minn Visibility Fixture"]' )
+			|| Array.from( document.querySelectorAll( '#minn-vis-pop a' ) ).some( ( a ) => /Minn Visibility Fixture/.test( a.textContent ) ) ) );
 
 		// Settings → Visibility lists third-party limiters with a link.
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );
