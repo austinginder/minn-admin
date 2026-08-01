@@ -2422,10 +2422,14 @@ button.minn-ac-item:hover { background: var(--hover); }
 }
 
 /* ===== Block islands (complex blocks preserved verbatim) ===== */
+/* Islands are selectable so a drag or ⌘A highlights them like prose (the
+   copy handler turns that selection into real block markup). The CHIP stays
+   unselectable — it's editor chrome, not content. */
 .minn-block-island {
   position: relative; border: 1px dashed var(--border2); border-radius: 11px;
-  padding: 14px 16px 12px; margin: 0 0 18px; cursor: default; user-select: none;
+  padding: 14px 16px 12px; margin: 0 0 18px; cursor: default;
 }
+.minn-block-island.minn-island-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .minn-block-island:hover { border-color: var(--accent); }
 .minn-block-island.minn-island-armed { border-color: var(--red); }
 .minn-block-island.minn-island-armed .minn-island-chip { color: var(--red); border-color: var(--red); }
@@ -2442,7 +2446,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   position: absolute; top: -10px; right: 12px; font-size: 10.5px; font-weight: 600;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
-  touch-action: manipulation;
+  touch-action: manipulation; user-select: none;
 }
 .minn-island-chip:hover, .minn-block-island:hover .minn-island-chip { color: var(--accent2); border-color: var(--accent); }
 /* No max-height: a hard cap (was 420px) clipped multi-card grids and tall

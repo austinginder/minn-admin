@@ -1,6 +1,8 @@
 /**
  * Island-aware clipboard: Select All / multi-block copy must include the
- * text inside contenteditable=false islands (browser default drops them).
+ * text inside contenteditable=false islands (browser default drops them),
+ * highlight them while selected, and — pasted back into Minn — restore them
+ * as real islands instead of flattening them into loose prose.
  */
 const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
@@ -26,7 +28,10 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.waitForSelector( '.minn-block-island', { timeout: 15000 } );
 
 	// Select all and copy via the real shortcut so our copy handler runs.
-	await page.click( '#minn-editor-body' );
+	// Click INSIDE a paragraph: clicking the container leaves focus outside
+	// the contenteditable, so Chrome's Select All spans the whole DOCUMENT
+	// (page chrome included) and the editor copy handler correctly bails.
+	await page.click( '#minn-editor-body p' );
 	await page.keyboard.press( 'Meta+a' );
 	await page.keyboard.press( 'Meta+c' );
 	await page.waitForTimeout( 300 );
@@ -92,6 +97,73 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		! /Island Title Alpha/.test( proseOnly ),
 		proseOnly
 	);
+
+	// ---- Selection highlight: the island card tints while it's in range ----
+	await page.click( '#minn-editor-body p' );
+	await page.keyboard.press( 'Meta+a' );
+	await page.waitForTimeout( 300 );
+	t.check( 'island card is tinted while selected', await page.evaluate( () =>
+		document.querySelector( '#minn-editor-body .minn-block-island' ).classList.contains( 'minn-island-selected' ) ) );
+	t.check( 'island text is selectable (no user-select:none)', await page.evaluate( () =>
+		getComputedStyle( document.querySelector( '#minn-editor-body .minn-block-island' ) ).userSelect !== 'none' ) );
+	await page.evaluate( () => {
+		const p = document.querySelector( '#minn-editor-body p' );
+		const r = document.createRange();
+		r.selectNodeContents( p );
+		r.collapse( true );
+		const s = getSelection();
+		s.removeAllRanges();
+		s.addRange( r );
+	} );
+	await page.waitForTimeout( 300 );
+	t.check( 'tint clears when the selection collapses', await page.evaluate( () =>
+		! document.querySelector( '#minn-editor-body .minn-block-island' ).classList.contains( 'minn-island-selected' ) ) );
+
+	// ---- Round trip: copy everything, paste at the end ----
+	await page.click( '#minn-editor-body p' );
+	await page.keyboard.press( 'Meta+a' );
+	await page.keyboard.press( 'Meta+c' );
+	await page.waitForTimeout( 400 );
+	await page.evaluate( () => {
+		const body = document.querySelector( '#minn-editor-body' );
+		const r = document.createRange();
+		r.selectNodeContents( body.lastElementChild );
+		r.collapse( false );
+		const s = getSelection();
+		s.removeAllRanges();
+		s.addRange( r );
+		body.focus( { preventScroll: true } );
+	} );
+	await page.keyboard.press( 'Meta+v' );
+	await page.waitForTimeout( 2000 );
+	t.check( 'paste restores the island as an island, not flattened prose',
+		await page.evaluate( () => document.querySelectorAll( '#minn-editor-body .minn-block-island' ).length ) === 2 );
+	t.check( 'pasted prose came along too', await page.evaluate( () =>
+		( document.querySelector( '#minn-editor-body' ).innerText.match( /Prose before the island/g ) || [] ).length === 2 ) );
+
+	// ⌘Z reverts the whole paste in one step (single execCommand entry).
+	await page.keyboard.press( 'Meta+z' );
+	await page.waitForTimeout( 800 );
+	t.check( 'undo reverts the pasted island',
+		await page.evaluate( () => document.querySelectorAll( '#minn-editor-body .minn-block-island' ).length ) === 1 );
+
+	// Redo, save, and confirm the STORED markup carries two real blocks.
+	await page.keyboard.press( 'Meta+Shift+z' );
+	await page.waitForTimeout( 600 );
+	await page.keyboard.down( 'Meta' );
+	await page.keyboard.press( 's' );
+	await page.keyboard.up( 'Meta' );
+	await page.waitForTimeout( 3500 );
+	const saved = await page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_cb=' + Math.random(),
+			{ headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } );
+		return ( await r.json() ).content.raw;
+	}, id );
+	t.check( 'saved markup carries both feature-box blocks',
+		( saved.match( /<!-- wp:minn-test\/feature-box/g ) || [] ).length === 2,
+		( saved.match( /<!-- wp:minn-test\/feature-box/g ) || [] ).length );
+	t.check( 'saved island markup is byte-faithful (no preview HTML leaked)',
+		! /minn-island-preview|minn-island-chip|minn-island-selected/.test( saved ) );
 
 	await deletePost( page, id );
 	await t.done( browser, errors );
