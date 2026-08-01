@@ -14760,8 +14760,16 @@
 	// Build the contenteditable HTML: simple blocks stripped of comments,
 	// complex blocks as atomic islands whose raw markup is stored verbatim.
 	function buildEditableContent( ed, raw ) {
-		const segments = tokenizeBlocks( raw ) || [];
 		ed.islands = [];
+		return appendEditableContent( ed, raw );
+	}
+
+	// Same mapping, APPENDING to ed.islands instead of resetting it — used by
+	// paste so block markup from the clipboard rebuilds with the same
+	// editable-vs-island split the load pipeline uses.
+	function appendEditableContent( ed, raw ) {
+		const segments = tokenizeBlocks( raw ) || [];
+		if ( ! ed.islands ) ed.islands = [];
 		return segments.map( ( seg ) => {
 			if ( seg.type === 'html' ) return seg.raw;
 			if ( segmentEditable( seg ) ) {
@@ -14938,7 +14946,10 @@
 			const clone = preview.cloneNode( true );
 			$$( 'script, style, .minn-island-chip', clone ).forEach( ( n ) => n.remove() );
 			const html = clone.innerHTML.trim() || ( rawStr ? stripBlockComments( rawStr ).trim() : '' );
-			const text = ( clone.innerText || clone.textContent || '' ).replace( /\u00a0/g, ' ' ).trim()
+			// innerText off the LIVE node, not the clone: a detached clone has
+			// no layout, so Chrome runs block children together
+			// ("HeadingBody text") instead of breaking lines.
+			const text = ( preview.innerText || preview.textContent || '' ).replace( /\u00a0/g, ' ' ).trim()
 				|| ( html ? stripTags( html ).replace( /\s+/g, ' ' ).trim() : '' );
 			return { html: html || `<p>${ esc( text ) }</p>`, text, raw: rawStr };
 		}
@@ -14984,6 +14995,35 @@
 		};
 	}
 
+	// The selection as real Gutenberg markup. Clones the covered top-level
+	// blocks into a detached holder (partial first/last prose keeps only the
+	// intersected slice) and runs the SAME serializer a save uses, so islands
+	// emit their stored raw byte-for-byte and prose emits proper block
+	// comments. Cloned islands keep their data-island index, which is what
+	// lets serializeToBlocks look the raw up.
+	function selectionBlockMarkup( range, blocks, islands ) {
+		try {
+			const holder = document.createElement( 'div' );
+			blocks.forEach( ( el ) => {
+				const isIsland = el.classList && el.classList.contains( 'minn-block-island' );
+				if ( isIsland || rangeFullyCoversNode( range, el ) ) {
+					holder.appendChild( el.cloneNode( true ) );
+					return;
+				}
+				const slice = rangeSliceBlock( range, el );
+				if ( ! slice.html || ! slice.html.trim() ) return;
+				// Keep the block's own element (a partial <h2> stays a heading).
+				const shell = el.cloneNode( false );
+				shell.innerHTML = slice.html;
+				holder.appendChild( shell );
+			} );
+			if ( ! holder.childNodes.length ) return '';
+			return serializeToBlocks( holder, islands ).trim();
+		} catch ( err ) {
+			return '';
+		}
+	}
+
 	// When the selection spans islands, rebuild the clipboard. Returns true
 	// when the event was handled (caller should not fall through).
 	function onEditorCopyCut( e, body, isCut ) {
@@ -15011,13 +15051,11 @@
 
 		const htmlParts = [];
 		const textParts = [];
-		const rawParts = [];
 		blocks.forEach( ( el ) => {
 			if ( el.classList && el.classList.contains( 'minn-block-island' ) ) {
 				const p = islandClipboardParts( el, ed2.islands );
 				if ( p.html ) htmlParts.push( p.html );
 				if ( p.text ) textParts.push( p.text );
-				if ( p.raw ) rawParts.push( p.raw );
 				return;
 			}
 			const slice = rangeSliceBlock( range, el );
@@ -15028,13 +15066,16 @@
 		const plain = textParts.join( '\n\n' ).replace( /\n{3,}/g, '\n\n' ).trim();
 		const html = htmlParts.join( '' );
 		// text/html + text/plain carry the visible island content (preview /
-		// live fields). text/x-minn-blocks carries Gutenberg raw for the
-		// islands so a block-aware paste target can restore structure.
-		if ( ! plain && ! html ) return;
+		// live fields) for OTHER apps. text/x-minn-blocks carries the whole
+		// selection as real Gutenberg markup — prose AND islands — so a paste
+		// back into Minn restores structure instead of flattening islands into
+		// loose prose.
+		const blockMarkup = selectionBlockMarkup( range, blocks, ed2.islands );
+		if ( ! plain && ! html && ! blockMarkup ) return;
 		e.preventDefault();
 		if ( plain ) cd.setData( 'text/plain', plain );
 		if ( html ) cd.setData( 'text/html', html );
-		if ( rawParts.length ) cd.setData( 'text/x-minn-blocks', rawParts.join( '\n\n' ) );
+		if ( blockMarkup ) cd.setData( 'text/x-minn-blocks', blockMarkup );
 
 		if ( ! isCut ) return;
 
@@ -17113,6 +17154,36 @@
 	document.addEventListener( 'selectionchange', () => queueFocusDim( false ) );
 	document.addEventListener( 'scroll', () => queueFocusDim( true ), true );
 	window.addEventListener( 'resize', () => queueFocusDim( true ) );
+
+	/* ===== Island selection highlight =====
+	 * An island's own text highlights natively now, but the card is the unit
+	 * the writer thinks in — so a selection that covers one tints the whole
+	 * card (the Gutenberg "block is selected" affordance). Class-only, rAF
+	 * throttled, and never serialized: syncIslandSelection is the only writer
+	 * and the serializers ignore classes on the island wrapper. */
+	let islandSelRaf = 0;
+	function syncIslandSelection() {
+		islandSelRaf = 0;
+		const body = $( '#minn-editor-body' );
+		if ( ! body ) return;
+		const islands = $$( '.minn-block-island', body );
+		if ( ! islands.length ) return;
+		const sel = window.getSelection();
+		const live = sel && sel.rangeCount && ! sel.isCollapsed ? sel.getRangeAt( 0 ) : null;
+		const inBody = live && ( body.contains( live.commonAncestorContainer ) || live.commonAncestorContainer === body );
+		// Same helper the copy path uses, so the tint is an honest preview of
+		// what ⌘C will actually take (an island inside the range is copied
+		// whole, even when the selection only clips its edge).
+		const covered = inBody ? new Set( editorSelectionBlocks( body, live ) ) : null;
+		islands.forEach( ( el ) => {
+			el.classList.toggle( 'minn-island-selected', !! ( covered && covered.has( el ) ) );
+		} );
+	}
+	const queueIslandSelection = () => {
+		if ( islandSelRaf ) return;
+		islandSelRaf = requestAnimationFrame( syncIslandSelection );
+	};
+	document.addEventListener( 'selectionchange', queueIslandSelection );
 
 	/* ===== Outline mode ===== */
 	// Focus mode's structural sibling: hide the nav and every sidebar card
@@ -19684,6 +19755,26 @@
 				const anchor = sel.rangeCount ? sel.anchorNode : null;
 				if ( ! anchor || ! body.contains( anchor ) ) return;
 				const anchorEl = anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentNode;
+				// Minn's own block markup (a copy from this editor): rebuild
+				// islands and prose through the load pipeline's split instead
+				// of letting the HTML flavor flatten islands into loose prose.
+				// Constrained containers (list item, heading, table cell) can't
+				// take a block splice — fall through to the HTML path there.
+				const minnBlocks = cd.getData( 'text/x-minn-blocks' );
+				if ( minnBlocks && ed2.mode !== 'locked'
+					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' )
+					&& tokenizeBlocks( minnBlocks.trim() ) ) {
+					e.preventDefault();
+					ensureBlocksMode();
+					const built = appendEditableContent( ed2, minnBlocks.trim() );
+					if ( built.trim() ) {
+						pasteBlocksInsert( body, built );
+						renderIslandPreviews( body, ed2 );
+						updateEditorStats();
+					}
+					scheduleAutosave();
+					return;
+				}
 				const html = cd.getData( 'text/html' );
 				if ( anchorEl.closest( 'pre' ) || closestInlineCode( anchor ) ) {
 					if ( ! text ) return;
