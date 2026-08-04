@@ -97,13 +97,16 @@ verified empirically at v0.23.0:
    Bricks/Divi template areas. Fits the existing page-builders adapter
    thesis: list, badge the type (header/footer/popup/archive), show
    display conditions read-only, deep-link into the builder canvas.
-3. **Per-extension auto-update toggles (S).** wp-admin's plugins/themes
-   screens toggle `auto_update_plugins` / `auto_update_themes`; Minn has
-   no trace of them (verified by grep). Extensions cards should show and
-   flip these — pure option writes, high maintenance-audience fit.
-4. **Theme live preview (S).** Inactive theme cards offer Activate only;
-   wp-admin offers a Customizer live preview first
-   (`customize.php?theme=`). One link on classic-theme cards.
+3. ~~**Per-extension auto-update toggles (S).**~~ **SHIPPED 2026-08-04**
+   (v0.23.0 cycle): Auto pills on plugin AND theme cards through
+   `minn-admin/v1/auto-updates` (the same option writes as
+   `wp_ajax_toggle_auto_updates`, stale entries pruned; gated on
+   `wp_is_auto_update_enabled_for_type` server- and client-side). Suite
+   `tests/auto-updates.test.js`.
+4. ~~**Theme live preview (S).**~~ **SHIPPED 2026-08-04** (v0.23.0
+   cycle): Live preview link on inactive theme cards — Customizer for
+   classic themes, `site-editor.php?wp_theme_preview=` for block themes
+   (the `block` flag now rides `minn-admin/v1/themes`).
 5. **Bulk edit beyond status (M).** The content bulk bar does status /
    trash / restore / delete but not wp-admin bulk-edit's "add these
    categories / set author across selected posts".
