@@ -815,6 +815,17 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-plugin-desc { font-size: 13.5px; color: var(--text2); margin-top: 4px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .minn-plugin-foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .minn-plugin-ver { font-size: 12.5px; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+/* Auto-update pill: quiet at rest, accent-lit when on. */
+.minn-auto-toggle {
+  display: flex; align-items: center; gap: 4px; background: transparent; border: 1px solid var(--border2);
+  color: var(--text3); padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; flex-shrink: 0;
+}
+.minn-auto-toggle svg { width: 12px; height: 12px; }
+.minn-auto-toggle:hover { color: var(--text2); }
+.minn-auto-toggle.on { color: var(--accent2); background: var(--accent-soft); border-color: var(--accent-soft); }
+.minn-auto-toggle:disabled { opacity: 0.5; cursor: default; }
+.minn-theme-preview { text-decoration: none; }
 .minn-state-label { font-size: 13px; font-weight: 600; color: var(--text3); }
 .minn-state-label.on { color: var(--green); }
 .minn-plugin-delete {
@@ -1264,7 +1275,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-theme-badge { position: absolute; top: 9px; left: 9px; }
 .minn-theme-badge-u { position: absolute; top: 9px; right: 9px; }
 .minn-theme-info { padding: 12px 14px 13px; }
-.minn-theme-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; min-height: 28px; }
+.minn-theme-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; min-height: 28px; }
 /* Extensions cards: ⋯ is always visible (cards have no row-hover affordance). */
 .minn-ext-more { opacity: 1; margin-left: auto; flex-shrink: 0; }
 .minn-theme-shot-link { display: block; text-decoration: none; color: inherit; cursor: pointer; }
