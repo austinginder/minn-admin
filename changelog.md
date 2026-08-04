@@ -13,6 +13,7 @@
 * **A wider email preview:** an HTML email body in a log detail now opens in a wider dialog (900 pixels on large screens, with a taller reading pane) instead of the 720 pixel one, so real message layouts render without clipping.
 
 ### Fixed
+* **Preview stops multiplying tabs:** clicking Preview draft (or View on site) in the editor sidebar, and the same link in a content row menu, now reuses one browser tab per post; a second click refreshes that tab instead of opening another. Minn adopts the same named preview window classic wp-admin and the block editor use, so all three even share the tab.
 * **Password Protected no longer hides from its own warning:** with its "Allow Administrators" or "Allow Logged In Users" setting on, the plugin masks its status option for logged-in reads outside wp-admin, which is exactly how Minn asks. The detector now reads the stored value directly, so a password gate that still blocks visitors shows up even when it waves the admin through. A stale Under Construction status left behind by a deactivated plugin also no longer registers.
 * **SeedProd detection actually works again:** SeedProd stores its settings as a JSON string in current builds, and the old detector expected an array with different keys, so an enabled SeedProd coming-soon or maintenance page went unreported. The detector now reads the real storage shape, distinguishes the two modes, and keeps ignoring the login and 404 page modes that do not hide the site.
 
