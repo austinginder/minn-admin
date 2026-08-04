@@ -110,10 +110,17 @@ verified empirically at v0.23.0:
 5. **Bulk edit beyond status (M).** The content bulk bar does status /
    trash / restore / delete but not wp-admin bulk-edit's "add these
    categories / set author across selected posts".
-6. **Synced patterns (S-M).** `wp_block` is REST-exposed, not viewable, so
-   reusable/synced patterns have no Minn surface (create/rename/delete/
-   edit). Their content is plain block markup — Minn's editor could open
-   them natively; the slash menu could offer them for insertion.
+6. ~~**Synced patterns (S-M).**~~ **SHIPPED 2026-08-04** (v0.23.0 cycle):
+   wp_block allowlisted past the viewable gate (`slimContentTypes`) → a
+   Patterns entry in the Content switcher with the standard row machinery
+   (front-end view/preview suppressed — not publicly queryable); slash
+   menu + ⌘/ picker "Your patterns" (synced → `wp:block {"ref":N}`
+   reference island, quiet insert; unsynced → detached copy via
+   `insertPatternIslands`); editor opens `/editor/blocks/{id}` natively
+   with a synced-edit note and self-slimmed sidebar; + New → Pattern.
+   GOTCHA: `wp_pattern_sync_status` is top-level READ-only in REST —
+   writes ride `meta.wp_pattern_sync_status`. Suite
+   `tests/user-patterns.test.js`.
 7. **Classic Customizer theme options — stays a link-out.** Arbitrary
    theme mods (colors, header/background images, per-theme sections) are
    a per-theme treadmill with no schema; the Customizer deep link is the
