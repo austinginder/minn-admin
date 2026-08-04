@@ -380,6 +380,33 @@ class Minn_Admin_REST {
 			)
 		);
 
+		register_rest_route(
+			self::NS,
+			'/auto-updates',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'toggle_auto_updates' ),
+				'permission_callback' => function ( WP_REST_Request $request ) {
+					return current_user_can( 'theme' === $request['type'] ? 'update_themes' : 'update_plugins' );
+				},
+				'args'                => array(
+					'type'    => array(
+						'type'     => 'string',
+						'required' => true,
+						'enum'     => array( 'plugin', 'theme' ),
+					),
+					'asset'   => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+					'enabled' => array(
+						'type'     => 'boolean',
+						'required' => true,
+					),
+				),
+			)
+		);
+
 		$sessions_perm = function ( WP_REST_Request $request ) {
 			$uid = (int) $request['id'];
 			return get_current_user_id() === $uid || current_user_can( 'edit_users' );
@@ -3035,10 +3062,78 @@ class Minn_Admin_REST {
 		}
 		return rest_ensure_response(
 			array(
-				'updates' => $map,
-				'themes'  => $theme_map,
+				'updates'     => $map,
+				'themes'      => $theme_map,
+				'auto'        => array_values( array_intersect(
+					(array) get_site_option( 'auto_update_plugins', array() ),
+					array_keys( self::all_plugins() )
+				) ),
+				'autoAllowed' => self::auto_updates_allowed( 'plugin' ),
 			)
 		);
+	}
+
+	/**
+	 * get_plugins() lives in wp-admin/includes/plugin.php, which REST
+	 * requests never load on their own.
+	 */
+	private static function all_plugins() {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		return get_plugins();
+	}
+
+	/**
+	 * Core's own gate for whether per-item auto-update toggles apply at all
+	 * (AUTOMATIC_UPDATER_DISABLED, VCS checkout, the *_auto_update_enabled
+	 * filters). Lives in wp-admin/includes/update.php — same REST caveat.
+	 */
+	private static function auto_updates_allowed( $type ) {
+		if ( ! function_exists( 'wp_is_auto_update_enabled_for_type' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/update.php';
+		}
+		return (bool) wp_is_auto_update_enabled_for_type( $type );
+	}
+
+	/**
+	 * Flip one plugin/theme in auto_update_plugins / auto_update_themes —
+	 * the same option writes as core's wp_ajax_toggle_auto_updates,
+	 * including pruning entries for assets no longer installed.
+	 */
+	public static function toggle_auto_updates( WP_REST_Request $request ) {
+		$type    = $request['type'];
+		$asset   = wp_unslash( (string) $request['asset'] );
+		$enabled = (bool) $request['enabled'];
+
+		if ( ! self::auto_updates_allowed( $type ) ) {
+			return new WP_Error(
+				'minn_auto_updates_disabled',
+				__( 'Automatic updates are turned off for this site.', 'minn-admin' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$all = 'plugin' === $type ? array_keys( self::all_plugins() ) : array_keys( wp_get_themes() );
+		if ( ! in_array( $asset, $all, true ) ) {
+			return new WP_Error(
+				'minn_auto_updates_unknown',
+				'plugin' === $type ? __( 'Unknown plugin.', 'minn-admin' ) : __( 'Unknown theme.', 'minn-admin' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$option = "auto_update_{$type}s";
+		$list   = (array) get_site_option( $option, array() );
+		if ( $enabled ) {
+			$list[] = $asset;
+		} else {
+			$list = array_diff( $list, array( $asset ) );
+		}
+		$list = array_values( array_intersect( array_unique( $list ), $all ) );
+		update_site_option( $option, $list );
+
+		return rest_ensure_response( array( 'auto' => $list ) );
 	}
 
 	/**
@@ -3892,6 +3987,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	public static function list_themes() {
 		$updates    = get_site_transient( 'update_themes' );
 		$active     = get_stylesheet();
+		$auto       = (array) get_site_option( 'auto_update_themes', array() );
 		$items      = array();
 		foreach ( wp_get_themes() as $stylesheet => $theme ) {
 			// update_themes lists only themes WordPress.org (or a licensed
@@ -3915,12 +4011,19 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'on_wporg'   => (bool) $on_wporg,
 				'update'     => $updates && isset( $updates->response[ $stylesheet ]['new_version'] )
 					? $updates->response[ $stylesheet ]['new_version'] : null,
+				// Block themes live-preview through the Site Editor, classic
+				// themes through the Customizer.
+				'block'      => $theme->is_block_theme(),
+				'auto_update' => in_array( $stylesheet, $auto, true ),
 			);
 		}
 		usort( $items, function ( $a, $b ) {
 			return $b['active'] <=> $a['active'] ?: strcasecmp( $a['name'], $b['name'] );
 		} );
-		return rest_ensure_response( array( 'themes' => $items ) );
+		return rest_ensure_response( array(
+			'themes'       => $items,
+			'auto_updates' => current_user_can( 'update_themes' ) && self::auto_updates_allowed( 'theme' ),
+		) );
 	}
 
 	private static function get_valid_theme( $stylesheet ) {

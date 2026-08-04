@@ -10573,6 +10573,8 @@
 			// the Extensions dot too — per-theme badges only render inside
 			// the Themes tab. The map also feeds Update everything.
 			state.cache.themeUpdates = ( upd && upd.themes ) || {};
+			state.cache.autoPlugins = ( upd && upd.auto ) || [];
+			state.cache.autoAllowed = !! ( upd && upd.autoAllowed );
 			const dot = $( '#minn-plugin-dot' );
 			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! Object.keys( state.cache.themeUpdates ).length;
 		} )().finally( () => { pluginsPromise = null; } );
@@ -11819,6 +11821,7 @@
 							: esc( decodeEntities( stripTags( p.author ) ) ) }</div>` : '' }
 						<div class="minn-plugin-foot">
 							<div class="minn-plugin-ver">v${ esc( p.version || '?' ) }</div>
+							${ B.caps.update && state.cache.autoAllowed ? autoToggleHtml( 'plugin', p.plugin + '.php', ( state.cache.autoPlugins || [] ).includes( p.plugin + '.php' ), name ) : '' }
 							<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="Toggle ${ esc( name ) }"><span class="minn-switch-knob"></span></button>
 							<span class="minn-state-label${ on ? ' on' : '' }">${ on ? 'Active' : 'Inactive' }</span>
 							${ ! on && B.caps.delete ? `<button class="minn-plugin-delete" data-del="${ esc( p.plugin ) }" title="Delete ${ esc( name ) }">${ icon( 'trash' ) }</button>` : '' }
@@ -11831,6 +11834,7 @@
 		if ( scroller ) scroller.scrollTop = keepScrollTop;
 		bindCoreBanner( view );
 		bindExtFilterBar( view );
+		bindAutoToggles( view );
 		// Broken icon URLs fall back to the letter tile underneath.
 		$$( '.minn-plugin-icon img', view ).forEach( ( img ) =>
 			img.addEventListener( 'error', () => img.remove() )
@@ -12013,7 +12017,55 @@
 	/* ===== Themes ===== */
 
 	async function loadThemes() {
-		state.cache.themes = ( await api( 'minn-admin/v1/themes' ) ).themes;
+		const r = await api( 'minn-admin/v1/themes' );
+		state.cache.themes = r.themes;
+		state.cache.themesAutoAllowed = !! r.auto_updates;
+	}
+
+	// Shared auto-update pill for plugin and theme cards. Renders only when
+	// core says per-item auto-updates apply (constant/filter gates) and the
+	// user can update that asset type; the server enforces both again.
+	function themePreviewTitle( name ) {
+		/* translators: %s: theme name. */
+		return sprintf( __( 'Preview the site in %s without switching' ), name );
+	}
+
+	function autoToggleHtml( type, asset, on, name ) {
+		/* translators: %s: plugin or theme name. */
+		const onTitle = sprintf( __( 'Automatic updates are on for %s. Click to turn them off.' ), name );
+		/* translators: %s: plugin or theme name. */
+		const offTitle = sprintf( __( 'Turn on automatic updates for %s.' ), name );
+		return `<button class="minn-auto-toggle${ on ? ' on' : '' }" data-autotype="${ type }" data-autoasset="${ esc( asset ) }" role="switch" aria-checked="${ on ? 'true' : 'false' }" title="${ esc( on ? onTitle : offTitle ) }">${ icon( 'refresh' ) }<span>${ __( 'Auto' ) }</span></button>`;
+	}
+
+	function bindAutoToggles( view ) {
+		$$( '[data-autoasset]', view ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {
+			const type = btn.dataset.autotype;
+			const asset = btn.dataset.autoasset;
+			const turnOn = ! btn.classList.contains( 'on' );
+			btn.disabled = true;
+			try {
+				const r = await api( 'minn-admin/v1/auto-updates', {
+					method: 'POST',
+					body: JSON.stringify( { type, asset, enabled: turnOn } ),
+				} );
+				const list = r.auto || [];
+				if ( type === 'plugin' ) {
+					state.cache.autoPlugins = list;
+				} else if ( Array.isArray( state.cache.themes ) ) {
+					state.cache.themes.forEach( ( t ) => { if ( t.stylesheet === asset ) t.auto_update = list.includes( asset ); } );
+				}
+				// Flip in place — a whole-view repaint for one bit would
+				// clamp the grid scroll (renderExtensions rule).
+				const on = list.includes( asset );
+				btn.classList.toggle( 'on', on );
+				btn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				toast( on ? __( 'Automatic updates on' ) : __( 'Automatic updates off' ) );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			btn.disabled = false;
+		} ) );
 	}
 
 	function renderThemes() {
@@ -12095,7 +12147,9 @@
 							: '' }${ t.parent ? ' · child of ' + esc( t.parent ) : '' }</div>
 						<div class="minn-theme-actions">
 							${ ! t.active ? `<button class="minn-btn-soft" data-tact="activate:${ i }">Activate</button>` : '' }
+							${ ! t.active ? `<a class="minn-btn-soft minn-theme-preview" href="${ esc( B.site.adminUrl + ( t.block ? 'site-editor.php?wp_theme_preview=' : 'customize.php?theme=' ) + encodeURIComponent( t.stylesheet ) ) }" target="_blank" rel="noopener" title="${ esc( themePreviewTitle( t.name ) ) }">${ __( 'Live preview' ) } ↗</a>` : '' }
 							${ t.update && B.caps.updateThemes ? `<button class="minn-badge-update as-btn" data-tact="update:${ i }">Update → ${ esc( t.update ) }</button>` : '' }
+							${ B.caps.updateThemes && state.cache.themesAutoAllowed ? autoToggleHtml( 'theme', t.stylesheet, !! t.auto_update, t.name ) : '' }
 							${ ! t.active && B.caps.deleteThemes ? `<button class="minn-plugin-delete" data-tact="delete:${ i }" title="Delete ${ esc( t.name ) }">${ icon( 'trash' ) }</button>` : '' }
 						</div>
 					</div>
@@ -12111,6 +12165,7 @@
 
 		bindExtTabs( view );
 		bindExtFilterBar( view );
+		bindAutoToggles( view );
 		const checkThemesUpd = $( '#minn-check-updates', view );
 		if ( checkThemesUpd ) {
 			checkThemesUpd.addEventListener( 'click', () => checkForUpdates( checkThemesUpd ) );
@@ -29049,6 +29104,8 @@
 			state.cache.pluginNames = buildPluginNameMap( d.plugins );
 			state.cache.pluginUpdates = ( d.pluginUpdates && d.pluginUpdates.updates ) || {};
 			state.cache.themeUpdates = ( d.pluginUpdates && d.pluginUpdates.themes ) || {};
+			state.cache.autoPlugins = ( d.pluginUpdates && d.pluginUpdates.auto ) || [];
+			state.cache.autoAllowed = !! ( d.pluginUpdates && d.pluginUpdates.autoAllowed );
 			if ( d.pluginMeta ) state.cache.pluginMeta = d.pluginMeta;
 			const dot = $( '#minn-plugin-dot' );
 			if ( dot ) dot.hidden = ! Object.keys( state.cache.pluginUpdates ).length && ! Object.keys( state.cache.themeUpdates ).length;
