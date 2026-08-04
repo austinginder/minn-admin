@@ -75,7 +75,10 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   **catalog by category** with install tips, not only free-text search), activate, deactivate,
   delete, per-item and bulk updates with **Queued… / Updating…** feedback that survives worker
   recycles, a Themes tab with screenshots, cards wearing real wp.org icons (linked to the
-  directory) with linked author lines, **right-click menus** on plugin and theme cards
+  directory) with linked author lines, **per-item auto-update toggles** on every plugin and
+  theme card (core's own `auto_update_*` lists, so Minn and wp-admin always agree), **Live
+  preview** on inactive themes (Customizer for classic themes, Site Editor preview for block
+  themes), **right-click menus** on plugin and theme cards
   (Activate, Update, Delete, Open on WordPress.org or GitHub, Copy file), and a **Licenses** tab
   (below)
 - **Structure** — post types, taxonomies and terms on one page. See every registered post type
@@ -94,7 +97,9 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   CleanTalk, WP Armour) with safe toggles and blocked counts. **Site-visibility warnings**: an
   Overview banner and a persistent topbar chip appear whenever a maintenance plugin, password
   gate or "discourage search engines" is hiding the site, with inline fix controls where Minn
-  can safely flip the setting (third parties register via `minn_admin_visibility_providers`)
+  can safely flip the setting, including **turn-off switches with Undo** for detected
+  coming-soon and maintenance plugins that write through each plugin's own storage (third
+  parties register via `minn_admin_visibility_providers` and `minn_admin_visibility_toggles`)
 - **Editor** — a calm, block-aware writing surface that stores **native Gutenberg markup**
   (zero lock-in: open any post in the block editor, any time). Markdown typing conventions
   (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), with wraps
@@ -108,7 +113,9 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   route). **Dynamic third-party blocks** that render standalone auto-appear in search (no
   adapter); **Stackable**, **Kadence**, and **GenerateBlocks** free design/pattern libraries
   insert as valid Gutenberg markup with images sideloaded; **block patterns** from core, the
-  theme, and plugins join the same search. Island content is editable: **text runs** and an
+  theme, and plugins join the same search, and so do **your own saved patterns**: synced ones
+  insert as live `wp:block` references that follow later edits, unsynced ones as detached
+  copies, with a Patterns entry in Content to manage them. Island content is editable: **text runs** and an
   **Images** section rewrite only what you change; block settings scale (used fields first,
   the rest behind **More settings**); every island links out to the block editor for layout
   controls. Previews pick up lazy CSS and **auto-warm** browser-compiled styles when needed.

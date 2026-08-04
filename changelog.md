@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.23.0** - Unreleased
+## **v0.23.0** - August 4, 2026
+
+The switches release. Minn has flagged a forgotten coming-soon page since the visibility system arrived; now the warning carries the fix, a switch that turns the mode off through the plugin's own storage, with an Undo that restores exactly the mode that was on. The same hands-on-the-controls spirit runs through the whole cycle: automatic updates gain per-plugin and per-theme pills, inactive themes gain a live preview, and the patterns you create in WordPress become first-class citizens in Minn, insertable from the slash menu as live references and managed from the Content list. A second click on the sidebar refreshes the list you are looking at, and a run of small honesty fixes (Select All that really selects everything, one preview tab per post, detectors that see through Password Protected and SeedProd) keeps the everyday feel trustworthy.
 
 ### Added
 * **Re-click the sidebar to refresh:** clicking the sidebar item for the page you are already on now re-fetches the list in place. Content, Media, Comments, Users, the shop views, Extensions and every plugin surface all take part; the toolbar, tabs, search and filters stay put while the rows dim and reload, so a tab left open all day can pull in what teammates just published without a full page reload. On a grouped item with several providers (Email, Forms, Backups) the refresh stays on the provider you are viewing, and the lit item's tooltip says what a second click does.
