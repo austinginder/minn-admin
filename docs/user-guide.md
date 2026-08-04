@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.22.0. This file ships inside the plugin, so the copy you
+*Current as of v0.23.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -41,6 +41,9 @@ Three things to know before anything else:
 
 Group headings collapse when clicked, and the sidebar remembers your
 arrangement. Counts on Content, Comments and Orders show pending work.
+Clicking the sidebar item for the view you are already on refreshes its
+list in place, so a tab left open all day stays current without a page
+reload.
 
 **The command palette** is the fastest way anywhere. Press **⌘K**
 (Ctrl+K on Windows and Linux), start typing, and jump to any view, any
@@ -78,6 +81,12 @@ for drafting, not for page design:
   drop in.
 - **Paste from anywhere.** Word, Google Docs and web pages paste in clean.
   A pasted image or a lone URL to a tweet or video becomes the real thing.
+- **Your patterns come along.** Patterns you save in WordPress (synced or
+  not) appear in the slash menu and the block library, and a Patterns
+  entry in the Content list manages them. A synced pattern inserts as a
+  live reference: edit the pattern once and every post using it follows,
+  and Minn reminds you of that reach before you save one. An unsynced
+  pattern drops in as a detached copy you can edit freely.
 - **Complex blocks are kept safe, untouched.** If a post contains a block
   Minn's editor doesn't natively edit (a plugin's fancy block, a Gutenberg
   layout), it appears as a framed island rendered with your site's real
@@ -158,7 +167,10 @@ more of them.
 
 - **Extensions** — three tabs: Plugins, Themes, Licenses. Install by
   search, upload, or dropping a zip on the dialog. Toggle, update and
-  delete with plain confirmations. The Licenses tab gathers your paid
+  delete with plain confirmations. Every plugin and theme card carries an
+  Auto pill for WordPress automatic updates, the same setting wp-admin
+  manages, and inactive themes offer a Live preview so you can walk the
+  site in a candidate theme before switching. The Licenses tab gathers your paid
   plugins' license keys in one place: see what is active, expired or
   missing, and activate or deactivate without hunting through each
   plugin's own settings screen.
@@ -167,7 +179,9 @@ more of them.
   account to see what they see.
 - **Settings** — the settings people actually change: identity and logo,
   reading and discussion, permalinks, visibility (search engines,
-  maintenance mode), site language, spam protection, custom CSS. The long
+  maintenance mode, and a switch that turns a detected coming-soon or
+  maintenance plugin's mode off in place, with Undo), site language, spam
+  protection, custom CSS. The long
   tail of rarely-touched options deliberately stays in wp-admin, one
   click away. If you look for a setting and don't find it, that is the
   reason, not a bug.
