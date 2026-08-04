@@ -1322,6 +1322,7 @@
 		menu.innerHTML = `
 			<button data-newtype="posts"><span class="minn-row-icon">${ icon( 'pilcrow' ) }</span> Post</button>
 			<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> Page</button>
+			<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ __( 'Pattern' ) }</button>
 			${ builderRows }`;
 		const r = btn.getBoundingClientRect();
 		menu.style.top = ( r.bottom + 6 ) + 'px';
@@ -2786,6 +2787,18 @@
 	// promo codes and subscriptions live on their own surfaces (wc/v3), not
 	// the writing editor.
 	const HIDDEN_TYPES = [ 'post', 'page', 'attachment', 'product', 'product_variation', 'shop_coupon', 'shop_subscription', 'elementor_library', 'e-floating-buttons', 'e-landing-page' ];
+	// The content-manageable type map: viewable public types minus the curated
+	// hidden set, PLUS wp_block — synced patterns are deliberately allowlisted
+	// past the viewable gate (not publicly queryable, but daily-manageable
+	// content; their markup opens natively in the editor).
+	function slimContentTypes( list ) {
+		const kept = list
+			.filter( ( t ) => t.viewable && t.rest_base && ! HIDDEN_TYPES.includes( t.slug ) )
+			.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: t.name } ) );
+		const wpb = list.find( ( t ) => t.slug === 'wp_block' && t.rest_base );
+		if ( wpb ) kept.push( { slug: 'wp_block', restBase: wpb.rest_base, name: wpb.name || __( 'Patterns' ) } );
+		return kept;
+	}
 	let typesPromise = null;
 	function loadTypes() {
 		if ( ! typesPromise ) {
@@ -2797,9 +2810,7 @@
 				// No _fields here: the types response is an associative object, and the
 				// server-level _fields filter would strip it to {} over HTTP.
 				const types = await api( 'wp/v2/types?context=edit' );
-				state.cache.types = Object.values( types )
-					.filter( ( t ) => t.viewable && t.rest_base && ! HIDDEN_TYPES.includes( t.slug ) )
-					.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: t.name } ) );
+				state.cache.types = slimContentTypes( Object.values( types ) );
 				return state.cache.types;
 			} )().catch( ( e ) => {
 				// Don't cache the rejection: a single failed types fetch (worker
@@ -3178,6 +3189,7 @@
 				sel.clear();
 				state.cache.content = null;
 				state.cache.cptContent = {};
+				if ( p.type === 'blocks' ) bustUserPatterns();
 				await ( currentCpt() ? loadCpt() : loadContent() ).catch( showErr );
 				if ( state.route === 'content' ) renderContent();
 			} catch ( e ) {
@@ -3186,7 +3198,9 @@
 		};
 		const openRowMenu = ( x, y, p ) => {
 			hideRowMenu();
-			const viewUrl = p.link ? ( p.status === 'publish' ? p.link : p.link + ( p.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) : '';
+			// Patterns (wp_block) carry a link field but are not publicly
+			// queryable — a front-end view/preview would just 404.
+			const viewUrl = p.link && state.filter !== 'blocks' ? ( p.status === 'publish' ? p.link : p.link + ( p.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) : '';
 			rowMenu = document.createElement( 'div' );
 			rowMenu.className = 'minn-new-menu minn-row-menu';
 			rowMenu.innerHTML = `
@@ -16253,7 +16267,11 @@
 			// content.raw only — asking for content.rendered would run the_content,
 			// which can be slow or fatal if another plugin misbehaves.
 			const extraKeys = panelValueKeys().map( ( k ) => ',' + k ).join( '' );
-			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ extraKeys }` );
+			// Patterns only: wp_pattern_sync_status is computed FROM the
+			// prepared meta field, so `meta` must ride the _fields list or it
+			// silently reads '' (meta is too heavy to fetch for other types).
+			const syncKeys = state.editorType === 'blocks' ? ',meta,wp_pattern_sync_status' : '';
+			const p = await api( `wp/v2/${ state.editorType }/${ state.editorId }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ syncKeys }${ extraKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			// A builder that OWNS the canvas (Elementor/Beaver/Brizy/Divi-4:
 			// canonical content lives outside post_content) forces locked mode —
@@ -16317,6 +16335,9 @@
 				format: p.format || 'standard',
 				formatDirty: false,
 				supportsFormat: ( 'format' in p ) && !! ( B.postFormats && Object.keys( B.postFormats ).length ),
+				// Synced pattern (wp_block without the 'unsynced' status meta):
+				// edits here change every post that references it.
+				syncedPattern: 'wp_pattern_sync_status' in p && p.wp_pattern_sync_status !== 'unsynced',
 			};
 			if ( state.editorType === 'posts' && ( p.tags || [] ).length ) {
 				api( `wp/v2/tags?include=${ p.tags.join( ',' ) }&per_page=100&_fields=id,name` )
@@ -16391,18 +16412,26 @@
 			}
 		} else {
 			// New content — pages when the New menu (or /editor/pages) asked for
-			// them and the user can edit pages; everything else starts as a post.
-			const newType = state.editorType === 'pages' && B.caps.editPages ? 'pages' : 'posts';
+			// them and the user can edit pages, patterns for /editor/blocks;
+			// everything else starts as a post.
+			const newType = state.editorType === 'pages' && B.caps.editPages ? 'pages'
+				: state.editorType === 'blocks' ? 'blocks'
+				: 'posts';
+			// wp_block supports only title/editor/revisions — no thumb,
+			// discussion, excerpt or page attributes. New patterns are synced
+			// (the default: no 'unsynced' status meta is written on create).
+			const isPattern = newType === 'blocks';
 			state.editor = {
 				id: null, type: newType, title: '', content: '', status: 'draft', mode: 'blocks',
 				date: null, newDate: null, slug: '', slugValue: '', link: '', savedAt: null, categoryIds: new Set(),
 				tagIds: new Set(), tags: [],
 				revisions: null, panels: null,
 				commentStatus: 'open', pingStatus: 'open', password: '', visibility: 'public',
-				sticky: false, serverSticky: false, supportsSticky: newType === 'posts', supportsDiscussion: true,
-				supportsThumb: true, featuredMedia: 0, featuredThumb: null,
+				sticky: false, serverSticky: false, supportsSticky: newType === 'posts', supportsDiscussion: ! isPattern,
+				supportsThumb: ! isPattern, featuredMedia: 0, featuredThumb: null,
 				parent: 0, menuOrder: 0, template: '', supportsParent: newType === 'pages', supportsOrder: newType === 'pages', templates: null, parentPick: null,
 				excerpt: '', supportsExcerpt: newType === 'posts',
+				syncedPattern: isPattern,
 			};
 			// Crash net for never-saved drafts — anything under the new-post
 			// key is by definition work that never reached the server.
@@ -16567,6 +16596,8 @@
 			if ( payload.date ) ed.newDate = null;
 			ed.savedAt = Date.now();
 			ed.dirty = false;
+			// A saved pattern changes what the slash menu / picker offer.
+			if ( ed.type === 'blocks' ) bustUserPatterns();
 			localNetClear( ed, capturedAt );
 			ed.panelDirty = {};
 			ed.featuredDirty = false;
@@ -18665,7 +18696,7 @@
 			</div>
 			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
 			${ LIVE_STATUSES.includes( ed.status ) ? '' : '<button class="minn-btn-soft minn-save-draft" id="minn-save-draft-btn">Save draft</button>' }
-			${ ed.id && ed.link ? `<a class="minn-side-viewlink" href="${ esc( ed.status === 'publish' ? ed.link : ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) }" target="wp-preview-${ ed.id }">${ ed.status === 'publish' ? 'View on site ↗' : 'Preview draft ↗' }</a>` : '' }
+			${ ed.id && ed.link && ed.type !== 'blocks' ? `<a class="minn-side-viewlink" href="${ esc( ed.status === 'publish' ? ed.link : ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) }" target="wp-preview-${ ed.id }">${ ed.status === 'publish' ? 'View on site ↗' : 'Preview draft ↗' }</a>` : '' }
 			${ editorPppHtml( ed ) }
 		</div>
 		${ ed.supportsThumb ? `
@@ -19257,6 +19288,10 @@
 		<div class="minn-editor">
 			<div>
 				<textarea class="minn-editor-title" id="minn-editor-title" rows="1" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" aria-label="Title">${ esc( ed.title ) }</textarea>
+				${ ed.type === 'blocks' && ed.id && ed.syncedPattern ? `
+				<div class="minn-editor-locked-note minn-pattern-note">
+					${ __( 'This is a synced pattern — saving changes here updates every post and page that uses it.' ) }
+				</div>` : '' }
 				${ ed.builder && ed.builder.edit_url ? `
 				<div class="minn-editor-locked-note minn-builder-note">
 					<span>${ ed.builder.owns_content
@@ -22873,6 +22908,36 @@
 		blockPatternsPromise = null;
 	}
 
+	// User-created (synced + unsynced) patterns — wp_block posts. The pattern
+	// REGISTRY never includes these (Gutenberg merges them client-side), so
+	// they need their own feed. List stays slim: content is fetched per
+	// insert, like the registry pattern flow.
+	let userPatternsPromise = null;
+	function loadUserPatterns() {
+		if ( ! userPatternsPromise ) {
+			// GOTCHA: wp_pattern_sync_status is COMPUTED from the prepared
+			// meta field — a _fields list without `meta` silently reads ''
+			// for every block (the wp/v2/types _fields trap's little sibling).
+			userPatternsPromise = api( 'wp/v2/blocks?context=edit&status=publish&per_page=100&_fields=id,title,meta,wp_pattern_sync_status' )
+				.then( ( list ) => ( Array.isArray( list ) ? list : [] ).map( ( b ) => ( {
+					id: b.id,
+					title: decodeEntities( ( b.title && ( b.title.raw != null ? b.title.raw : b.title.rendered ) ) || '' ) || __( '(untitled pattern)' ),
+					synced: b.wp_pattern_sync_status !== 'unsynced',
+				} ) ) )
+				.catch( () => {
+					// Never cache a failed fetch (worker recycle) — it would
+					// pin an empty list for the whole session (loadTypes rule).
+					userPatternsPromise = null;
+					return [];
+				} );
+		}
+		return userPatternsPromise;
+	}
+	// Saving or creating a wp_block changes the list — refetch next open.
+	function bustUserPatterns() {
+		userPatternsPromise = null;
+	}
+
 	// The inline slash menu builds its items array once per editor render; a
 	// mid-session hide prunes that live array in place so the very next keyup
 	// reflects it (unhides rebuild when the editor next renders).
@@ -23133,6 +23198,18 @@
 					} );
 				} );
 			} ).catch( () => {} ) );
+			// User-created patterns get their own group. Not offered while
+			// editing a pattern (a synced self-reference would recurse).
+			if ( ed.type !== 'blocks' ) {
+				lateFills.push( loadUserPatterns().then( ( pats ) => {
+					( pats || [] ).forEach( ( pt ) => {
+						groupFor( 'p:user', __( 'Your patterns' ), null ).items.push( {
+							ic: icon( 'block' ), label: pt.title, meta: pt.synced ? __( 'Synced' ) : '',
+							action: { userPattern: pt.id, synced: pt.synced },
+						} );
+					} );
+				} ).catch( () => {} ) );
+			}
 		}
 
 		const renderGroups = ( q ) => {
@@ -23299,6 +23376,36 @@
 				.catch( ( e ) => toast( 'Design insert failed: ' + e.message, true ) );
 			return;
 		}
+		if ( action && action.userPattern ) {
+			if ( ! ensureBlocksMode() ) return;
+			if ( action.synced ) {
+				// Synced patterns insert as a REFERENCE — <!-- wp:block {"ref":N} /-->
+				// renders server-side (real preview via render-blocks) and stays
+				// live when the pattern is edited later. quiet: the inspector has
+				// nothing useful to offer on a bare ref.
+				runSlashAction( { block: 'core/block', template: `<!-- wp:block {"ref":${ Number( action.userPattern ) }} /-->`, quiet: true }, target, body, insertImage );
+				return;
+			}
+			// Unsynced: a detached copy — fetch the markup and land it as
+			// islands, exactly like a registry pattern.
+			const p = document.createElement( 'p' );
+			p.appendChild( document.createElement( 'br' ) );
+			target.replaceWith( p );
+			const range = document.createRange();
+			range.selectNodeContents( p );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+			api( `wp/v2/blocks/${ Number( action.userPattern ) }?context=edit&_fields=content.raw` )
+				.then( ( r ) => {
+					const md = r && r.content && r.content.raw;
+					if ( ! md ) throw new Error( __( 'Pattern unavailable' ) );
+					insertPatternIslands( p, md );
+				} )
+				.catch( ( e ) => toast( __( 'Pattern insert failed: ' ) + e.message, true ) );
+			return;
+		}
 		if ( action && action.pattern ) {
 			// Registered block pattern: same async placeholder dance.
 			if ( ! ensureBlocksMode() ) return;
@@ -23349,8 +23456,10 @@
 				} )
 				.catch( () => {} );
 			// Live-field islands focus an in-card field instead of opening the
-			// inspector. Other custom blocks still open the inspector.
-			if ( islandEl ) {
+			// inspector. Other custom blocks still open the inspector; quiet
+			// inserts (synced pattern refs) skip it — a bare ref has nothing
+			// to configure.
+			if ( islandEl && ! action.quiet ) {
 				const bn = action.block || '';
 				if ( /(?:^|\/)details$/.test( bn ) ) focusDetailsIsland( islandEl );
 				else if ( /(?:^|\/)buttons$/.test( bn ) ) {
@@ -23496,6 +23605,15 @@
 					items.push( [ icon( 'block' ), pt.title, { pattern: pt.name }, true, pt.ns ] );
 				} );
 			} );
+			// User-created patterns (wp_block) — search-only. Never offered
+			// while EDITING a pattern: a synced ref to itself would recurse.
+			if ( state.editor && state.editor.type !== 'blocks' ) {
+				loadUserPatterns().then( ( pats ) => {
+					pats.forEach( ( pt ) => {
+						items.push( [ icon( 'block' ), pt.title, { userPattern: pt.id, synced: pt.synced }, true, 'yours' ] );
+					} );
+				} );
+			}
 		}
 
 		const close = () => {
@@ -29122,9 +29240,7 @@
 			}
 		}
 		if ( Array.isArray( d.types ) ) {
-			state.cache.types = d.types
-				.filter( ( t ) => t.viewable && t.rest_base && ! HIDDEN_TYPES.includes( t.slug ) )
-				.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: t.name } ) );
+			state.cache.types = slimContentTypes( d.types );
 		}
 		if ( B.wc && B.caps.orders && d.orders ) {
 			state.cache.orderSummary = { month: d.orders.month || null, processing: d.orders.processing != null ? d.orders.processing : null };
