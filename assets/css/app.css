@@ -1382,6 +1382,9 @@ button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer
 .minn-spam-provider .minn-toggle-rows { margin-top: 12px; }
 /* Settings → Connectors: key row inside a provider card */
 .minn-conn-row { display: flex; align-items: center; gap: 9px; margin-top: 11px; }
+/* The explicit display above would defeat [hidden] (the core-chip gotcha) —
+   the spam card's key row hides until Change key… is clicked. */
+.minn-conn-row[hidden] { display: none; }
 .minn-conn-row .minn-input { flex: 1; min-width: 0; }
 .minn-conn-row .minn-toggle-desc { flex: 1; }
 .minn-conn-row button { white-space: nowrap; }
