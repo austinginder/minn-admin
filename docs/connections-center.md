@@ -60,7 +60,16 @@ paste/change-key affordance posting to the same `licenses/action`
 endpoint. Suite: spam-settings + license-vendors extensions, bogus-key
 against their live API.
 
-**Brick 2 — the reframe (M).** Provider contract gains
+**Brick 2 — the reframe (M). SHIPPED 2026-08-06.** Implementation notes:
+the classification field is `category` (`kind` was already taken by the
+item shape's plugin/theme axis); grouping stayed STATE-FIRST for triage
+(Needs attention → Valid → Not set up) with per-row chips carrying the
+category, rather than kind-first groups; core connectors list only when
+configured or their companion plugin is active (the uninstalled catalog
+stays out), are excluded from the health summary by design, and the card
+footer is the doorway to Settings → Connectors. The health check row is
+now labeled "Licenses & connections" and carries a server-side `goto`.
+As originally scoped: Provider contract gains
 `kind: license | key | connection`; the tab renames (working name
 "Licenses & connections"); rows group by kind; the existing
 connection-shaped rows (Envato, WPMU DEV, MyYoast) reclassify. Marketing

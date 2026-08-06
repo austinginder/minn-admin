@@ -5535,12 +5535,17 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 					$bits[] = $sum[ $k ] . ' ' . $k;
 				}
 			}
-			$checks[] = array(
-				'label'  => 'Licenses',
+			// Denominator = summary total, NOT count(items): read-only core
+			// connector rows ride in items but stay out of the summary by
+			// design (an AI provider with no key must not tip this check).
+			$lic_total = array_sum( $sum );
+			$checks[]  = array(
+				'label'  => 'Licenses & connections',
+				'goto'   => 'licenses',
 				'status' => $bad ? 'fail' : ( $soft ? 'warn' : 'pass' ),
 				'detail' => $bits
-					? implode( ', ', $bits ) . ' of ' . count( $licenses['items'] ) . ' paid components — see the Licenses card'
-					: 'All ' . count( $licenses['items'] ) . ' paid components hold a valid license',
+					? implode( ', ', $bits ) . ' of ' . $lic_total . ' licensed components — see Licenses & connections'
+					: 'All ' . $lic_total . ' licensed components hold a valid license',
 			);
 		}
 

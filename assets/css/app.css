@@ -1379,6 +1379,14 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 /* Change key… renders as a link but is a button (spam-card keyProvider). */
 button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent2); font-family: inherit; }
 .minn-spam-keyerr { color: var(--red); margin-top: 7px; }
+
+/* Connections-center chips: non-license rows say what they are. */
+.minn-lic-cat {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text3); background: var(--panel2); border: 1px solid var(--border);
+  padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px;
+}
+.minn-lic-connlink { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent2); font: inherit; }
 .minn-spam-provider .minn-toggle-rows { margin-top: 12px; }
 /* Settings → Connectors: key row inside a provider card */
 .minn-conn-row { display: flex; align-items: center; gap: 9px; margin-top: 11px; }

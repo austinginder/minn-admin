@@ -1383,11 +1383,14 @@ same provider.
 
 ## License state — `minn_admin_license_providers`
 
-The System page carries a read-only **Licenses** card: every paid component on the
-site with its license state (valid / expired / invalid / missing / unknown), read
-from stored options only. Minn never calls a licensing API and never activates
-anything; if your plugin is commercial, a provider makes your license state visible
-where the site owner already looks for site health:
+Extensions carries a **Licenses & connections** card: every paid component and
+connected service on the site with its state (valid / expired / invalid /
+missing / unknown), read from stored options only. Reads never call a licensing
+API; if your plugin is commercial (or holds a service key or account
+connection), a provider makes that state visible where the site owner already
+looks. An optional `category` key on the provider (`license` — the default —
+`key`, or `connection`) sets the small chip on the row; use `key` for service
+credentials like Akismet's and `connection` for account or site links:
 
 ```php
 add_filter( 'minn_admin_license_providers', function ( $providers ) {
