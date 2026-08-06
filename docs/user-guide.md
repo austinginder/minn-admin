@@ -168,15 +168,20 @@ more of them.
 
 ## Managing the site
 
-- **Extensions** — three tabs: Plugins, Themes, Licenses. Install by
+- **Extensions** — three tabs: Plugins, Themes, and Licenses & connections.
+  Install by
   search, upload, or dropping a zip on the dialog. Toggle, update and
   delete with plain confirmations. Every plugin and theme card carries an
   Auto pill for WordPress automatic updates, the same setting wp-admin
   manages, and inactive themes offer a Live preview so you can walk the
-  site in a candidate theme before switching. The Licenses tab gathers your paid
-  plugins' license keys in one place: see what is active, expired or
-  missing, and activate or deactivate without hunting through each
-  plugin's own settings screen.
+  site in a candidate theme before switching. Licenses & connections
+  gathers every external service relationship in one place: paid plugins'
+  license keys (activate, verify or deactivate without hunting through
+  each plugin's settings screen), service keys like Akismet's, account
+  connections like Envato Market and WPMU DEV, and the AI connector keys
+  WordPress itself manages, which link out to Settings → Connectors for
+  editing. Small chips mark which rows are service keys or connections
+  rather than licenses.
 - **Users** — create, edit, change roles in bulk, reset passwords, sign
   out sessions, and (with the User Switching plugin) switch into an
   account to see what they see.

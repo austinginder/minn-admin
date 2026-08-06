@@ -1070,6 +1070,7 @@ function minn_admin_license_default_providers() {
 	// and a NUMERIC membership is a single-project license id.
 	$providers['wpmudev'] = array(
 		'name'      => 'WPMU DEV',
+		'category'  => 'connection',
 		'component' => 'wpmudev-updates/update-notifications.php',
 		'detect'    => function () use ( $has ) {
 			return $has( 'wpmudev-updates/update-notifications.php' );
@@ -1244,6 +1245,7 @@ function minn_admin_license_default_providers() {
 	// API reported a key/account problem, message in akismet_alert_msg).
 	$providers['akismet'] = array(
 		'name'      => 'Akismet',
+		'category'  => 'key',
 		'component' => 'akismet/akismet.php',
 		'detect'    => function () use ( $has ) {
 			return $has( 'akismet/akismet.php' );
@@ -1590,6 +1592,7 @@ function minn_admin_license_default_providers() {
 	// the plugin's own hourly site transients when warm.
 	$providers['envato-market'] = array(
 		'name'      => 'Envato Market',
+		'category'  => 'connection',
 		'component' => 'envato-market/envato-market.php',
 		'detect'    => function () use ( $has ) {
 			return $has( 'envato-market/envato-market.php' );
@@ -3453,6 +3456,10 @@ function minn_admin_licenses() {
 			}
 			$row['id']     = sanitize_key( $id . '-' . $row['name'] );
 			$row['source'] = (string) $id;
+			// Connections-center classification (docs/connections-center.md):
+			// license (default, paid seats/updates), key (service credential),
+			// connection (account/site link). Drives grouping chips only.
+			$row['category'] = in_array( $p['category'] ?? '', array( 'key', 'connection' ), true ) ? $p['category'] : 'license';
 			// Upgrade an "unknown" row from Minn's own last check of this
 			// provider, honestly timestamped. Never overrides a state the
 			// vendor's stored data produced.
@@ -3534,6 +3541,57 @@ function minn_admin_licenses() {
 	foreach ( $items as $it ) {
 		if ( isset( $summary[ $it['state'] ] ) ) {
 			$summary[ $it['state'] ]++;
+		}
+	}
+
+	// Core connectors (WP 7.0 wp_get_connectors) join as READ-ONLY
+	// connection rows AFTER the summary, so an AI provider with no key never
+	// tips the System health check — editing stays in Settings → Connectors
+	// (the client renders a doorway). Only real relationships list: a
+	// connector appears when its key resolves (env/constant/database, core's
+	// own precedence) or its companion plugin is active; the uninstalled
+	// catalog stays out of the inventory.
+	if ( function_exists( 'wp_get_connectors' ) ) {
+		foreach ( wp_get_connectors() as $cid => $c ) {
+			try {
+				$auth    = isset( $c['authentication'] ) && is_array( $c['authentication'] ) ? $c['authentication'] : array();
+				$env     = isset( $auth['env_var_name'] ) ? (string) $auth['env_var_name'] : '';
+				$const   = isset( $auth['constant_name'] ) ? (string) $auth['constant_name'] : '';
+				$setting = isset( $auth['setting_name'] ) ? (string) $auth['setting_name'] : '';
+				$source  = 'none';
+				if ( '' !== $env && false !== getenv( $env ) && '' !== getenv( $env ) ) {
+					$source = 'env';
+				} elseif ( '' !== $const && defined( $const ) && is_string( constant( $const ) ) && '' !== constant( $const ) ) {
+					$source = 'constant';
+				} elseif ( '' !== $setting && '' !== (string) get_option( $setting, '' ) ) {
+					$source = 'database';
+				}
+				$plugin_active = false;
+				if ( ! empty( $c['plugin']['file'] ) && is_string( $c['plugin']['file'] ) ) {
+					if ( isset( $c['plugin']['is_active'] ) && is_callable( $c['plugin']['is_active'] ) ) {
+						$plugin_active = (bool) call_user_func( $c['plugin']['is_active'] );
+					} else {
+						$plugin_active = is_plugin_active( $c['plugin']['file'] );
+					}
+				}
+				if ( 'none' === $source && ! $plugin_active ) {
+					continue;
+				}
+				$items[] = array(
+					'name'     => isset( $c['name'] ) ? (string) $c['name'] : (string) $cid,
+					'kind'     => 'plugin',
+					'state'    => 'none' !== $source ? 'valid' : 'missing',
+					'key'      => 'none' !== $source,
+					'expires'  => '',
+					'note'     => 'core connector' . ( 'database' === $source || 'none' === $source ? '' : '; key from ' . ( 'env' === $source ? 'the server environment' : 'a constant' ) ),
+					'stale'    => false,
+					'id'       => sanitize_key( 'core-connector-' . $cid ),
+					'source'   => 'core-connectors',
+					'category' => 'connection',
+				);
+			} catch ( \Throwable $e ) {
+				continue; // one broken connector never breaks the inventory.
+			}
 		}
 	}
 
