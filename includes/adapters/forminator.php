@@ -138,6 +138,36 @@ function minn_admin_forminator_answers( $entry_id ) {
 	return $out;
 }
 
+/**
+ * Server-built model for the surface status card (SureForms parity).
+ * Counts mirror the entries list's scope exactly: custom-form entries,
+ * received = active and not spam, spam = the is_spam bucket. Drafts and
+ * abandoned entries stay on Forminator's own screen, so they are not
+ * counted here either.
+ */
+function minn_admin_forminator_status_model() {
+	global $wpdb;
+	$entry = $wpdb->prefix . 'frmt_form_entry';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$received = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$entry} e WHERE e.entry_type = 'custom-forms' AND e.status = 'active' AND e.is_spam = 0" );
+	$spam     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$entry} e WHERE e.entry_type = 'custom-forms' AND e.status IN ('active','spam') AND e.is_spam = 1" );
+	// phpcs:enable
+	$forms = count( minn_admin_forminator_titles() );
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Entries',
+				'value' => number_format_i18n( $received ),
+				'hint'  => $spam ? number_format_i18n( $spam ) . ' spam' : 'All received entries',
+			),
+			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
+		),
+		'actions' => array(
+			array( 'label' => 'Open Forminator ↗', 'href' => admin_url( 'admin.php?page=forminator-entries' ) ),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_forminator_active() || ! minn_admin_forminator_can() ) {
 		return $surfaces;
@@ -149,6 +179,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Forminator',
 		'icon'       => 'inbox',
+		'status'     => array( 'route' => 'minn-admin/v1/forminator/status' ),
 		'cap'        => 'read', // real gate is the filter above (their permission model)
 		'collection' => array(
 			'viewLabel' => 'Entries',
@@ -247,6 +278,14 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_forminator_active() ) {
 		return;
 	}
+
+	register_rest_route( 'minn-admin/v1', '/forminator/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_forminator_can',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_forminator_status_model() );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/forminator/forms', array(
 		'methods'             => 'GET',

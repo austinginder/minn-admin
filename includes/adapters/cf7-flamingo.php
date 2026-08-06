@@ -64,6 +64,40 @@ function minn_admin_flamingo_status( $msg ) {
 	return $map[ $s ] ?? ( $s ? $s : 'inbound' );
 }
 
+/**
+ * Server-built model for the surface status card (SureForms parity).
+ * Counts via core's wp_count_posts on Flamingo's CPT — publish is the
+ * inbox, flamingo-spam is its exclude_from_search spam status, trash is
+ * trash. No model query needed, and the numbers match their list table.
+ */
+function minn_admin_flamingo_status_model() {
+	$counts = wp_count_posts( Flamingo_Inbound_Message::post_type );
+	$inbox  = (int) ( $counts->publish ?? 0 );
+	$spam   = (int) ( $counts->{'flamingo-spam'} ?? 0 );
+	$trash  = (int) ( $counts->trash ?? 0 );
+	$forms  = count( minn_admin_flamingo_channels() );
+	$bits   = array();
+	if ( $spam ) {
+		$bits[] = number_format_i18n( $spam ) . ' spam';
+	}
+	if ( $trash ) {
+		$bits[] = number_format_i18n( $trash ) . ' in trash';
+	}
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Inbox messages',
+				'value' => number_format_i18n( $inbox ),
+				'hint'  => $bits ? implode( ', ', $bits ) : 'All stored messages',
+			),
+			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
+		),
+		'actions' => array(
+			array( 'label' => 'Open Flamingo ↗', 'href' => admin_url( 'admin.php?page=flamingo_inbound' ) ),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_flamingo_ready() || ! minn_admin_flamingo_can_view() ) {
 		return $surfaces;
@@ -75,6 +109,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => $cf7 ? 'Contact Form 7' : 'Flamingo',
+		'status'     => array( 'route' => 'minn-admin/v1/cf7/status' ),
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'collection' => array(
@@ -220,6 +255,14 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_flamingo_ready() ) {
 		return;
 	}
+
+	register_rest_route( 'minn-admin/v1', '/cf7/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_flamingo_can_view',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_flamingo_status_model() );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/cf7/channels', array(
 		'methods'             => 'GET',

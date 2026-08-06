@@ -126,6 +126,32 @@ function minn_admin_ninja_forms_answers( $post_id ) {
 	return $out;
 }
 
+/**
+ * Server-built model for the surface status card (SureForms parity).
+ * Ninja Forms tracks no read state, so the headline is the live
+ * submission count (nf_sub publish — the same live count the manage
+ * view uses, not nf3_forms.subs which survives deletes).
+ */
+function minn_admin_ninja_forms_status_model() {
+	global $wpdb;
+	$subs  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'nf_sub' AND post_status = 'publish'" );
+	$trash = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'nf_sub' AND post_status = 'trash'" );
+	$forms = count( minn_admin_ninja_forms_titles() );
+	return array(
+		'rows'    => array(
+			array(
+				'label' => 'Submissions',
+				'value' => number_format_i18n( $subs ),
+				'hint'  => $trash ? number_format_i18n( $trash ) . ' in trash' : 'All stored submissions',
+			),
+			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
+		),
+		'actions' => array(
+			array( 'label' => 'Open Ninja Forms ↗', 'href' => admin_url( 'admin.php?page=nf-submissions' ) ),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_ninja_forms_active() || ! minn_admin_ninja_forms_can() ) {
 		return $surfaces;
@@ -137,6 +163,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Ninja Forms',
 		'icon'       => 'inbox',
+		'status'     => array( 'route' => 'minn-admin/v1/ninja-forms/status' ),
 		'cap'        => 'read', // real gate is the filter above (their cap filter)
 		'collection' => array(
 			'viewLabel' => 'Entries',
@@ -243,6 +270,14 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_ninja_forms_active() ) {
 		return;
 	}
+
+	register_rest_route( 'minn-admin/v1', '/ninja-forms/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_ninja_forms_can',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_ninja_forms_status_model() );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/ninja-forms/forms', array(
 		'methods'             => 'GET',

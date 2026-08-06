@@ -118,6 +118,32 @@ function minn_admin_fluent_forms_summary( $map ) {
 	return $parts ? implode( ' · ', $parts ) : '(empty entry)';
 }
 
+/** Server-built model for the surface status card (SureForms parity). */
+function minn_admin_fluent_forms_status_model() {
+	global $wpdb;
+	$subs  = $wpdb->prefix . 'fluentform_submissions';
+	$forms = $wpdb->prefix . 'fluentform_forms';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$unread = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$subs} WHERE status = 'unread'" );
+	$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$subs} WHERE status <> 'trashed'" );
+	$spam   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$subs} WHERE status = 'spam'" );
+	$nforms = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$forms}" );
+	// phpcs:enable
+	$hint = number_format_i18n( $total ) . ' total';
+	if ( $spam ) {
+		$hint .= ', ' . number_format_i18n( $spam ) . ' spam';
+	}
+	return array(
+		'rows'    => array(
+			array( 'label' => 'Unread entries', 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
+			array( 'label' => 'Forms', 'value' => number_format_i18n( $nforms ) ),
+		),
+		'actions' => array(
+			array( 'label' => 'Open Fluent Forms ↗', 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_fluent_forms_ready() ) {
 		return $surfaces;
@@ -129,6 +155,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['fluent-forms'] = array(
 		'label'      => 'Forms',
 		'family'     => 'forms',
+		'status'     => array( 'route' => 'minn-admin/v1/fluent-forms/status' ),
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Fluent Forms',
 		'icon'       => 'inbox',
@@ -289,6 +316,14 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_fluent_forms_ready() ) {
 		return;
 	}
+
+	register_rest_route( 'minn-admin/v1', '/fluent-forms/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => 'minn_admin_fluent_forms_can_view',
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_fluent_forms_status_model() );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/fluent-forms/forms', array(
 		'methods'             => 'GET',

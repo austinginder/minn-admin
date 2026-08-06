@@ -281,6 +281,32 @@ function minn_admin_everest_set_status( $entry_id, $op, $form_id = 0 ) {
 	return true;
 }
 
+/** Server-built model for the surface status card (SureForms parity). */
+function minn_admin_everest_status_model() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'evf_entries';
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$viewed   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'publish' AND viewed = 1" );
+	$received = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'publish'" );
+	$spam     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'spam'" );
+	// phpcs:enable
+	$forms  = count( minn_admin_everest_titles() );
+	$unread = max( 0, $received - $viewed );
+	$hint   = number_format_i18n( $received ) . ' total';
+	if ( $spam ) {
+		$hint .= ', ' . number_format_i18n( $spam ) . ' spam';
+	}
+	return array(
+		'rows'    => array(
+			array( 'label' => 'Unread entries', 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
+			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
+		),
+		'actions' => array(
+			array( 'label' => 'Open Everest Forms ↗', 'href' => admin_url( 'admin.php?page=evf-entries' ) ),
+		),
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_everest_active() || ! minn_admin_everest_can() ) {
 		return $surfaces;
@@ -293,6 +319,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'sub'        => 'Everest Forms',
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gate is the filter above (their cap model)
+		'status'     => array( 'route' => 'minn-admin/v1/everest/status' ),
 		'collection' => array(
 			'viewLabel' => 'Entries',
 			'route'     => 'minn-admin/v1/everest/entries',
@@ -430,6 +457,16 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_everest_active() ) {
 		return;
 	}
+
+	register_rest_route( 'minn-admin/v1', '/everest/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () {
+			return minn_admin_everest_can();
+		},
+		'callback'            => function () {
+			return rest_ensure_response( minn_admin_everest_status_model() );
+		},
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/everest/forms', array(
 		'methods'             => 'GET',
