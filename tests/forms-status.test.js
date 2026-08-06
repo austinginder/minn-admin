@@ -27,6 +27,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		{ slug: 'forminator', first: 'Entries', open: /forminator-entries/ },
 		{ slug: 'cf7', first: 'Inbox messages', open: /flamingo_inbound/ },
 		{ slug: 'everest', first: 'Unread entries', open: /evf-entries/ },
+		{ slug: 'wpforms', first: 'Unread entries', open: /wpforms-entries/ },
 	];
 
 	for ( const c of CARDS ) {
