@@ -43,7 +43,7 @@ whether the adapter approach scales to full coverage.
    has a proven answer: delegate, exactly like page builders ("Edit in Gravity Forms"
    is one click, with no wp-admin chrome needed for the builder-style screens).
 
-## Where the adapter system stands today (re-verified at v0.16.0 open, 2026-07-15; stale-checked 2026-07-23 at v0.21.0 open and 2026-07-24 at v0.22.0 open: no ladder change; the database viewer shipped as a native surface outside the adapter system)
+## Where the adapter system stands today (re-verified at v0.24.0 open, 2026-08-06; prior checks 2026-07-15 at v0.16.0 open and 2026-07-23/24 at v0.21.0/v0.22.0 open. No new rungs since; the cycles through v0.24.0 added consumers, not primitives (WPForms entries, forms-family status cards, FluentSMTP "Resend to…"), and the database viewer shipped as a native surface outside the adapter system)
 
 The thesis held. Rungs 1–2 are shipped, Rung 3 is essentially shipped, and two
 hard case studies (Gravity Forms + Gravity SMTP) plus a cold third
@@ -57,7 +57,7 @@ still `docs/for-plugin-authors.md` and the validator constants in
 |---|---|---|
 | **1 — form engine** | ✅ shipped (v0.12.0) | One vocabulary renders surface create/edit, editor panels and inspector controls (`required` / `default` / `help` / `placeholder` / `showWhen`, toggles, selects as themed comboboxes in adapter dialects). |
 | **2 — settings surfaces + mappers** | ✅ shipped (v0.12.0–v0.13.0) | Surface `settings` key (tabs + one GET/POST route per tab); **settings-only** surfaces (no `collection`); **item-scoped** settings (`route` with `{id}`, entered via `settingsItem` actions). Four schema frameworks covered: Gravity SMTP component trees, Minn's form vocabulary, core WP Settings API (Perfmatters), GF Settings framework (form settings). |
-| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards (incl. chart series, v0.13.0), `views[]` extra list views, manage-slot second collections, **list-row ⋯ menus** from `actions` (v0.13.0). Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. Richer `sectionsRoute` row types (`pill`/`code`/`html-preview`/`kv-table`) shipped v0.18.0; **sortable columns** (`sort` tokens + `sortQuery`) shipped 2026-07-17. Remaining: per-item stat tiles, more chart consumers. |
+| **3 — richer primitives** | mostly ✅ | Parameterized actions (`fields` + honest `{ message }` toasts), bulk selection, status/filter dimension, `status` cards (incl. chart series, v0.13.0), `views[]` extra list views, manage-slot second collections, **list-row ⋯ menus** from `actions` (v0.13.0). Surface toolbars calmed (two-row switcher + quiet filters + long tab lists → combobox) in the v0.13.0 cycle. Richer `sectionsRoute` row types (`pill`/`code`/`html-preview`/`kv-table`) shipped v0.18.0; **sortable columns** (`sort` tokens + `sortQuery`) shipped 2026-07-17. The chart shape now has seven adapter consumers (whole mail family + Redirection). Remaining: per-item stat tiles, and the GF form-results chart consumer. |
 | **4 — bespoke** | policy holding | Deep-link everywhere a screen is a canvas. The "80% form editor" over clean documents is scoped in `docs/native-editors.md` (parked, prerequisite plumbing now live). |
 
 ### Still open from the Rung-3 list
@@ -65,9 +65,12 @@ still `docs/for-plugin-authors.md` and the validator constants in
 - ~~**Chart row type**~~ ✅ shipped (v0.13.0): status cards accept optional
   `chart: { title, primary, secondary, points:[{label,value,secondary?}] }`
   and render Overview-style bars with a hover tip. Gravity SMTP's Email
-  status card is the first consumer (14-day sent/failed from its events
-  table). Still open beside it: per-item stat tiles, and other chart
-  consumers (GF form results; ecommerce analytics shipped v0.14.0).
+  status card was the first consumer (14-day sent/failed from its events
+  table); the shape now has seven: FluentSMTP, Post SMTP and WP Mail
+  Logging joined in v0.13.0, then SureMails, Site Mailer and Redirection
+  in v0.18.0 (ecommerce analytics shipped separately, v0.14.0). Still
+  open beside it: per-item stat tiles (no code, no suite, doc-only), and
+  the GF form-results consumer.
 - ~~**Richer `sectionsRoute` row types**~~ ✅ shipped (v0.18.0 open,
   2026-07-17): `pill`, `code`, `html-preview` (fully sandboxed iframe) and
   `kv-table` rows in the sections renderer, documented in the author guide
@@ -186,20 +189,21 @@ plugins' settings estates, which is most of their admin surface by screen count.
 Grow the existing vocabulary along lines the research showed are actually needed, in
 rough priority order:
 
-- **Parameterized actions.** `fields` on an action (rendered by the form engine in a
-  small modal) and `{item.key}` substitution in bodies. Unlocks Gravity SMTP "send
-  test", "resend to different address", GF "resend notifications" with a picker.
-- **Bulk selection.** Checkbox column plus a bulk-action bar reusing the same action
-  descriptors. Unlocks GF entries bulk star/read/spam/trash and log cleanups.
+- ~~**Parameterized actions.**~~ ✅ shipped (v0.13.0): `fields` on an action and
+  `{item.key}` substitution in bodies. Delivered Gravity SMTP "send test",
+  FluentSMTP "Resend to…" (v0.24.0 cycle), GF entry resend.
+- ~~**Bulk selection.**~~ ✅ shipped (v0.13.0): checkbox column plus a bulk-action
+  bar reusing the same action descriptors (`bulk` on a collection). GF entries bulk
+  star/read/spam/trash and the mail-log cleanups all ride it.
 - **Surface stat cards and a chart row type.** The `status` card (shipped
-  2026-07-10) covers stat rows + actions above a list; still missing: a chart row
-  type and per-item stat tiles. Unlocks the Gravity SMTP dashboard and GF
-  `/forms/{id}/results`.
+  2026-07-10) covers stat rows + actions above a list; the chart row shipped
+  v0.13.0 (see above). Still missing: per-item stat tiles, and the GF
+  `/forms/{id}/results` consumer. The Gravity SMTP dashboard is covered.
 - ~~**Richer `sectionsRoute` row types.**~~ ✅ shipped (v0.18.0 open, 2026-07-17);
   see the Rung-3 entry above.
-- **Row actions in the list** (the content-list `⋯` row menu pattern, generalized) and
-  a third navigation level only if a real adapter demands it; tabs plus main/manage
-  have covered everything so far.
+- ~~**Row actions in the list**~~ ✅ shipped (v0.13.0), the content-list `⋯` row
+  menu pattern generalized. A third navigation level still waits for a real adapter
+  to demand it; tabs plus main/manage/views have covered everything so far.
 
 ### Rung 4 — the bespoke rung (decide it, don't drift into it)
 
@@ -249,7 +253,7 @@ form *building* stays a deep link (Rung 4).
 | Forms list trash/duplicate | partial | REST covers trash; `GFAPI::duplicate_form` has no REST route (one-line shim if demand) |
 | Add-on feeds (list, toggle, delete) | ✅ (v0.18.0) | Feeds `views[]` entry: every GFFeedAddOn integration across forms, per-form tabs, activate/deactivate via `GFFormsModel::update_feed_property`, delete via `GFAPI::delete_feed`, deep link to the add-on's feed screen. GOTCHA: `GFAPI::get_feeds` defaults to ACTIVE-ONLY; pass `$is_active = null` or deactivated feeds vanish |
 | Add-on feed CONFIG (the schema mapper) | deferred, with a verdict | The "one mapper, every add-on" build needs (a) a SECOND item-scoped settings slot on a surface (form settings already claims `settings`; a new primitive) and (b) a fixture add-on whose fields are mappable without vendor credentials (Twilio's from/to selects are creds-gated `select_custom`, `feed_condition` is a builder). Revisit when a second real add-on fixture with plain fields exists; the deep link is honest until then |
-| Results/reports | open (needs chart row) | `GET /forms/{id}/results` + status/chart |
+| Results/reports | open | The chart row it needs shipped v0.13.0; the `GET /forms/{id}/results` consumer is still unbuilt |
 | Import/export | open | form JSON is GET/POST of `/forms`; entry CSV via a shim |
 | Form editor (drag-drop) | Rung 4 forever | "Edit form in Gravity Forms ↗" |
 
@@ -285,14 +289,16 @@ component-tree response shapes.
 |---|---|---|
 | **1 — keystone** | Unified form engine; port panels; upgrade create/edit | ✅ shipped v0.12.0 |
 | **2 — multiplier** | `settings` surface + Gravity SMTP mapper, then GF form settings + notifications | ✅ shipped v0.12.0–v0.13.0 (confirmations + GF plugin settings deliberately skipped) |
-| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards + chart, list row-actions | ✅ (sectionsRoute row types + sortable columns landed v0.18.0); remaining polish: per-item stat tiles, more chart consumers |
+| **3 — daily-work depth** | Parameterized actions, bulk, status filters, views, status cards + chart, list row-actions | ✅ (sectionsRoute row types + sortable columns landed v0.18.0; charts on seven adapters through v0.18.0); remaining polish: per-item stat tiles, the GF form-results chart consumer |
 | **4 — declare victory** | Document mapper pattern for third parties; GF form editor stays deep link | docs live in `for-plugin-authors.md`; 80% editor parked in `native-editors.md` |
 
 Natural next builds inside this ladder (not a ranked product roadmap; see
 `docs/plugin-support.md` for install-weighted adapter waves):
 
-1. More chart consumers (GF form results) on the status-card chart shape.
-   ~~Ecommerce analytics~~ ✅ shipped v0.14.0 (Orders Analytics pill).
+1. The GF form-results chart consumer on the status-card chart shape (the
+   last named consumer still open; the mail family and Redirection all
+   ship charts as of v0.18.0). ~~Ecommerce analytics~~ ✅ shipped v0.14.0
+   (Orders Analytics pill).
 2. ~~Richer detail row types (email HTML preview, kv tables)~~ ✅ shipped
    (v0.18.0, whole mail family converted).
 3. ~~Surface list row-actions (⋯ menus)~~ ✅ shipped (v0.13.0).

@@ -1,6 +1,7 @@
 # Native editors and developer surfaces — the rungs above the adapter ladder
 
-**Status: one shipped, two parked (updated 2026-07-24).** The read-only
+**Status: one shipped, two parked (updated 2026-08-06 at v0.24.0 in
+tree).** The read-only
 database viewer (case study 2) shipped in the v0.22.0 cycle, built exactly to
 the scope drawn here; the Gravity Forms 80% editor and the file browser stay
 parked and unscheduled. The original premise held: this doc exists so that
@@ -111,9 +112,17 @@ settings mapper covers. The deep link is one click and GF's editor is good.
 This is "Minn builds a second editor" scale: think the block-inspector effort,
 not an adapter. Ballpark a full cycle for field-list + basics + suites. The
 prerequisite plumbing (item-scoped settings, the Settings-framework mapper,
-notifications write path) shipped in the v0.13.0 cycle; what remains before
-committing is dogfooding that form-management depth on a real site with
-active Gravity Forms use, so the bet is earned, not assumed.
+notifications write path) shipped in the v0.13.0 cycle, and the management
+ring around the parked editor has kept growing since: the entry workflow
+(star, spam, bulk, resend) in v0.12.0 and a Feeds view in v0.18.0 that
+lists every add-on feed with on/off and delete through GF's own model
+while configuration stays deep-linked, so the "no add-on feed UIs"
+boundary held even as feeds became visible. As of v0.24.0 no field-editing
+code exists in the tree (`includes/adapters/gravity-forms.php` writes only
+form settings and notifications through `GFAPI::update_form`); what
+remains before committing is unchanged: dogfooding that form-management
+depth on a real site with active Gravity Forms use, so the bet is earned,
+not assumed.
 
 ### The generalization
 
@@ -217,7 +226,13 @@ The weakest of the three cases, recorded mostly to draw its boundary.
 
 - **Read-only listing + file viewer** (browse wp-content, view a log or a
   config with the debug-log overlay pattern) is defensible and cheap; the
-  System debug tools already read files by path.
+  System debug tools already read files by path. The v0.19.0 log viewer
+  strengthened this case's "already covered" half: one viewer over every
+  log the site has (the debug log, a separate PHP error log, WooCommerce
+  channels, plus host and plugin sources through the
+  `minn_admin_log_sources` filter in `includes/class-minn-admin-logs.php`),
+  which covers the diagnostic reads that actually come up. No general
+  file browser exists at v0.24.0 and none is scheduled.
 - **A file MANAGER (write, upload, chmod, edit PHP) is a non-goal.** It is
   the single most abused surface in WordPress security, it exists in
   wp-admin-adjacent plugins for those who accept the risk, and nothing about
@@ -229,6 +244,10 @@ The weakest of the three cases, recorded mostly to draw its boundary.
   `permission_callback` (token checks live elsewhere), which is already
   flagged as an upstream fix. Server-side shim access under Minn's own cap
   gate would be the pattern regardless (the rest_do_request precedent).
+  The shipped Backups adapter (v0.12.0, `includes/adapters/disembark.php`)
+  holds exactly that line: it reads Disembark's options and file layout
+  server-side under `manage_options` and never calls the token-guarded
+  HTTP routes; the v0.22.0 restore addition is a deep link, not a call.
 
 ## What we will never build (this doc's additions to the standing list)
 
@@ -245,11 +264,20 @@ The weakest of the three cases, recorded mostly to draw its boundary.
    2026-07-12) — the prerequisite plumbing for the 80% editor now exists:
    item-scoped settings views, the Settings-framework mapper, and the
    notifications write path through `save_form_notifications`.
-2. **Plugin Dev tools adapters first when the cycle wants diagnostics**
+2. ~~**Plugin Dev tools adapters first when the cycle wants diagnostics**
    (v0.14.0 open, 2026-07-13): Scrutoscope (REST-first profiler history)
    complements Query Monitor's this-request panel without Minn inventing
    a profiler. WP Crontrol / Transients Manager fill inventory gaps the
-   System page only counts. Ranked in `docs/plugin-support.md` Wave A.
+   System page only counts. Ranked in `docs/plugin-support.md` Wave A.~~
+   ✅ shipped (v0.14.0, 2026-07-14) as the Diagnostics family: one Tools
+   nav item with a provider switcher over Scrutoscope, WP Crontrol,
+   Transients Manager and Rewrite Rules Inspector
+   (`includes/adapters/scrutoscope.php`, `wp-crontrol.php`,
+   `transients-manager.php`, `rewrite-rules-inspector.php`; suites
+   `scrutoscope`, `wp-crontrol`, `transients-manager`, `rewrite-rules`).
+   Deepened since: on-demand cron profiling in the v0.22.0 cycle, and
+   the v0.24.0 cycle reads profiles through Scrutoscope 1.5's own list
+   API instead of its table.
 3. ~~Database viewer is still the cheapest **native** full item and the best
    trial balloon for "developer surfaces": one cycle fragment, no plugin
    dependency. Pairs naturally with Scrutoscope (profile → table drill).~~
@@ -257,9 +285,11 @@ The weakest of the three cases, recorded mostly to draw its boundary.
    fragment. The trial balloon holds: developer surfaces in Minn's idiom
    work when the boundary (read-only) is drawn before the build starts.
 4. The GF 80% editor is a full cycle and should be a deliberate product bet,
-   made when form management in Minn (entries + settings + notifications,
-   all live as of v0.13.0) has proven that users stay in Minn for form
-   work. Dogfooding on a real site with active Gravity Forms traffic is the
-   honest test before committing.
+   made when form management in Minn (entries + settings + notifications
+   live as of v0.13.0, the entry workflow as of v0.12.0, feeds as of
+   v0.18.0) has proven that users stay in Minn for form work. Dogfooding
+   on a real site with active Gravity Forms traffic is the honest test
+   before committing. Still parked and unscheduled at v0.24.0.
 5. File browsing only ever ships as read-only, and only if a real diagnostic
-   need surfaces that the debug-log viewer doesn't already cover.
+   need surfaces that the log viewer (multi-source since v0.19.0) doesn't
+   already cover. None has at v0.24.0.
