@@ -15,7 +15,15 @@ the new section below): the remaining wp-admin territory is theme-shaped
 smaller operational gaps (per-extension auto-update toggles, theme live
 preview, bulk category/author edit, synced-pattern visibility). Dev tools Wave A is complete
 (Diagnostics family); further inventory work is adapter depth or parked
-native surfaces (`plugin-support.md`, `native-editors.md`). Minn's
+native surfaces (`plugin-support.md`, `native-editors.md`). Re-checked
+2026-08-06 at v0.24.0 open (unreleased): three of those four smaller gaps
+shipped in the v0.23.0 cycle (auto-update toggles, theme live preview,
+synced patterns; marked below), and the Media section's folders verdict
+was stale: the browse-first provider contract (Wave D) had already
+shipped in the v0.18.0 cycle, corrected below. The v0.24.0 cycle so far
+is adapter depth (WPForms entries, forms status cards, FluentSMTP) and
+changes no core-gap status. Still open: block-theme surfaces, builder
+theme templates, bulk category/author edit. Minn's
 positioning grades these: daily work belongs in Minn, the long tail stays
 one click away in wp-admin. Each area below gets a status and a judgment on
 whether the gap blocks daily work.
@@ -92,7 +100,7 @@ verified empirically at v0.23.0:
    form builders).
 2. **Builder theme templates are invisible (M).** `elementor_library` IS
    REST-exposed but not `viewable`, so the content switcher (rightly)
-   skips it — meaning a site whose header/footer live in Elementor Theme
+   skips it, meaning a site whose header/footer live in Elementor Theme
    Builder has no Minn surface listing those templates. Same story for
    Bricks/Divi template areas. Fits the existing page-builders adapter
    thesis: list, badge the type (header/footer/popup/archive), show
@@ -104,7 +112,7 @@ verified empirically at v0.23.0:
    `wp_is_auto_update_enabled_for_type` server- and client-side). Suite
    `tests/auto-updates.test.js`.
 4. ~~**Theme live preview (S).**~~ **SHIPPED 2026-08-04** (v0.23.0
-   cycle): Live preview link on inactive theme cards — Customizer for
+   cycle): Live preview link on inactive theme cards: Customizer for
    classic themes, `site-editor.php?wp_theme_preview=` for block themes
    (the `block` flag now rides `minn-admin/v1/themes`).
 5. **Bulk edit beyond status (M).** The content bulk bar does status /
@@ -113,12 +121,12 @@ verified empirically at v0.23.0:
 6. ~~**Synced patterns (S-M).**~~ **SHIPPED 2026-08-04** (v0.23.0 cycle):
    wp_block allowlisted past the viewable gate (`slimContentTypes`) → a
    Patterns entry in the Content switcher with the standard row machinery
-   (front-end view/preview suppressed — not publicly queryable); slash
+   (front-end view/preview suppressed, not publicly queryable); slash
    menu + ⌘/ picker "Your patterns" (synced → `wp:block {"ref":N}`
    reference island, quiet insert; unsynced → detached copy via
    `insertPatternIslands`); editor opens `/editor/blocks/{id}` natively
    with a synced-edit note and self-slimmed sidebar; + New → Pattern.
-   GOTCHA: `wp_pattern_sync_status` is top-level READ-only in REST —
+   GOTCHA: `wp_pattern_sync_status` is top-level READ-only in REST;
    writes ride `meta.wp_pattern_sync_status`. Suite
    `tests/user-patterns.test.js`.
 7. **Classic Customizer theme options — stays a link-out.** Arbitrary
@@ -187,8 +195,16 @@ media-polish). Folders: not a
 core feature (a Minn-owned tree would be a fifth folder standard invisible
 to wp-admin and builder pickers), but the earlier "long-tail, skip" verdict
 was revised 2026-07-16: FileBird + Real Media Library + Folders total 400k+
-installs, so a browse-first provider contract is Wave D in
-`docs/plugin-support.md`.
+installs, so a browse-first provider contract became Wave D in
+`docs/plugin-support.md`. Wave D shipped 2026-07-17 (v0.18.0 cycle): the
+`minn_admin_media_folders` provider filter
+(`includes/adapters/media-folders.php`) with bundled FileBird, Real Media
+Library and Folders by Premio providers; a folder picker on the Media view
+filters the normal wp/v2/media query (search, type tabs, Unattached and
+pagination keep working, newest 500 per folder), and a Move-to-folder bulk
+action rides each provider's optional `move` callable. Suite
+`tests/media-folders.test.js`. Moving stays browse-first: Minn never owns
+a folder tree of its own.
 
 ### Comments — complete, single-row and bulk
 Tabs for pending/approved/spam/trash, full per-row moderation, bulk

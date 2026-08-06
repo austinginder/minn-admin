@@ -126,6 +126,10 @@ Graduate to a dedicated surface when Phase 1 adds actions. The notice digest
 already captures the vendors' own nag banners; rows here should link to the
 same activation deep-links the digest extracts.
 
+That graduation happened: since v0.12.0 (2026-07-12) the manager lives as
+the third Extensions tab (Plugins / Themes / Licenses), beside the
+components it describes. The System page keeps the licenses health check.
+
 ## Phase 1 — activation (wave 1 SHIPPED 2026-07-10)
 
 Shipped as paste-to-activate on the Licenses card, with the locker question
@@ -178,9 +182,15 @@ credentials. Divi has no per-site seats, so deactivate simply clears the
 stored credentials.
 
 Rows for INACTIVE components keep their read-only license state (stored
-options need no vendor code) but render dimmed with "not active; activate
-the theme/plugin to manage its license" in place of controls, so the
-active-theme gating reads as intended behavior instead of a missing button.
+options need no vendor code) but render dimmed, so the active-theme gating
+reads as intended behavior instead of a missing button. Since 2026-07-10
+(v0.11.0) a dimmed row also carries a **Turn on** control: when the
+component's file really exists and the user holds `activate_plugins` /
+`switch_themes`, the row offers "Turn plugin on" / "Turn theme on" (behind
+a confirm), the vendor code loads, and the license controls appear in
+place. Since v0.20.0 that activation rides admin-ajax (a real admin
+context) so vendor activation hooks that assume wp-admin work. Proven by
+tests/license-turnon.test.js.
 
 **Wave 4 (shipped 2026-07-10): the Gravity family.** Gravity Forms reads
 validity + expiry from `gform_version_info` and activates through
@@ -231,9 +241,15 @@ CaptainCore quicksave archive and installed inactive on the primary test site:
   `wp-all-export`): everything inside the serialized `PMXI_Plugin_Options`
   (class-keyed `licenses`/`statuses` maps) / `PMXE_Plugin_Options` (flat
   `license`/`license_status`); keys are salt-wrapped. Export activates
-  through their `LicenseActivator` (stores the key their way first);
-  Import's only paste path is a nonce-gated admin controller, so it gets a
-  verify (their public static `check_license`) plus an "Activate ↗" link.
+  through their `LicenseActivator` (stores the key their way first).
+  Import's controllers expose no public callable at all, so its full loop
+  (activate / deactivate / verify, upgraded 2026-07-11 from the original
+  verify-plus-link plan) mirrors their `$_POST`-driven EDD requests byte
+  for byte against the plugin's own stored endpoint; verify decodes the
+  salt-wrapped stored key first (their own static `check_license` sends it
+  still wrapped and always answers invalid). Soflyy licenses have no
+  per-site seats (proven live 2026-07-11), so deactivate on both plugins
+  is honest local key removal.
 - **Slider Revolution** (`revslider`): flat `revslider-code` +
   `revslider-valid` (the string `'true'`/`'false'`); activate/deactivate
   through `RevSliderLicense` (`'exist'` = the site-limit result).
@@ -357,25 +373,38 @@ Test builds source from the CaptainCore quicksave repos
 (`captaincore quicksave archive` extracts a plugin/theme zip from a
 snapshot without touching state).
 
-The guardrails, unchanged and load-bearing:
+The guardrails, load-bearing, with one honest amendment:
 
-- **Never reimplement a vendor's activation HTTP call.** Route through the
-  plugin's own method. No callable path (form-POST-only vendors) means
-  deep-link only, no adapter.
+- **Never reinvent a vendor's activation HTTP call.** Route through the
+  plugin's own method. Two measured exceptions exist where the vendor
+  exposes no callable at all: WP All Import and the Smash Balloon family,
+  whose EDD requests are mirrored byte for byte from the vendor's own
+  controller code (`minn_admin_soflyy_edd`, `minn_admin_smash_edd`; params
+  read from their source, never invented). A vendor with neither a
+  callable nor a mirrorable protocol means deep-link only, no adapter.
 - **"Site limit reached" is a first-class result.** Never auto-retry a failed
   activation; retries can burn paid seats.
 - **Paste-to-activate, never retain.** No locker shipped, none planned unless
   a real need appears; if one ever lands it is opt-in and encrypted at rest.
 - **manage_options only.**
 
-## Phase 2 — freshness on demand (partially delivered with Phase 1)
+## Phase 2 — freshness on demand (largely delivered with Phase 1)
 
 The `verify` callable in the Phase-1 contract IS this: a per-row "Re-verify"
-that triggers the vendor's own revalidation. Shipped for WP Rocket
-(`rocket_check_key()`) and Elementor Pro (`get_license_data( true )`); the
-remaining work is adding `verify` to more providers as their safe
-revalidation paths are identified (Bricks, Beaver Builder and Divi are the
-transient-based vendors that would benefit most).
+that triggers the vendor's own revalidation. It shipped far wider than
+first planned: nearly every callable provider carries one, including the
+transient-based vendors named as most in need (Bricks, Beaver Builder and
+Divi all re-verify through their own revalidation paths), plus Elementor
+Pro, WP Rocket, Gravity Forms, Gravity SMTP, WPMU DEV, SearchWP, Search &
+Filter Pro, Admin Columns Pro, Gravity Perks, Perfmatters, GP Premium,
+WP All Import/Export, Slider Revolution, LayerSlider, Kadence Blocks Pro,
+the TEC family, the Smash Balloon family, and Yoast SEO Premium's MyYoast
+refresh. Still without a verify: ACF PRO, Brizy Pro and Etch (activate and
+deactivate are wired, but no safe standalone revalidation callable has
+been identified), plus the portal link-out and read-only rows. Minn also
+remembers its OWN per-provider check outcomes (status word + timestamp,
+never a key) and uses them to upgrade "unknown" rows for vendors that
+store no local validity, with "as of" honesty.
 
 ## Tested and known working
 
@@ -398,7 +427,7 @@ license data on a lab site.
 | Kadence Blocks Pro | activate / deactivate / verify | real key | 2026-07-11 | key ships embedded in the build; deactivate mirrors their Clear |
 | Gravity SMTP | activate / deactivate / verify | real key (owner-run on a live site) | 2026-07-10 | check-memory upgrades the unknown state |
 | Elementor Pro | activate / deactivate / verify | bogus key | 2026-07-10 | reader also proven against a real license |
-| ACF PRO | activate / deactivate / verify | bogus key | 2026-07-10 | reader proven against a real lifetime license |
+| ACF PRO | activate / deactivate | bogus key | 2026-07-10 | reader proven against a real lifetime license; no safe verify path wired |
 | WP Rocket | verify only | real license (cache lab) | 2026-07-10 | creds ship in the vendor zip; no paste by design |
 | Gravity Forms | activate / deactivate / verify | bogus key | 2026-07-10 | save_key self-reverts on rejection |
 | Beaver Builder, Brizy Pro, Etch, Bricks, Divi | per-vendor (see Phase 1) | bogus key / lab | 2026-07-10 | Divi proven on a disposable lab |
@@ -406,7 +435,8 @@ license data on a lab site.
 | WP All Import Pro | activate / deactivate / verify | real key, full loop | 2026-07-11 | same; stored keys are salt-wrapped, decode before any request |
 | Search & Filter Pro | activate / deactivate / verify | real key, full loop | 2026-07-19 | EDD (item 526297) via their own REST controller callables; state in the free base's `{prefix}search_filter_options` table, JSON row `license-data`; needs base + Pro active for actions; snapshot-restore keeps a rejected key from clobbering a valid activation (their own connect() would) |
 | Admin Columns Pro | activate / deactivate / verify | real key, full loop | 2026-07-19 | own API on admincolumns.com via DI-container services; main file is is_admin()-gated so Minn bootstraps the container headless (autoloaders + api.php + their six definition files, no Loader); activation DELETES the pasted key and stores an activation token (`acp_activation_key`) + `acp_subscription_details` {status active/cancelled/expired, expiry_date ts, null = lifetime}; permissions rules applied exactly as their handlers do |
-| WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium, LayerSlider | activate paths | bogus key | 2026-07-10 | readers proven against seeded real shapes |
+| WPMU DEV, SearchWP, Gravity Perks, Perfmatters, GP Premium | activate / deactivate / verify | bogus key | 2026-07-10 | readers proven against seeded real shapes |
+| LayerSlider | activate / verify | bogus key | 2026-07-10 | no deactivate: their handler die()s mid-request, seat release stays on their screen |
 | Rank Math Pro, Envato, WPBakery | Activate ↗ link | read | 2026-07-10 | portal- or admin-context-bound activation |
 | Yoast SEO Premium | Activate ↗ + verify | read (missing until MyYoast) | 2026-07-15 | free Yoast `WPSEO_Addon_Manager`; page `wpseo_licenses`; no paste-a-key |
 | Smash Balloon family (8 products) | activate / deactivate / verify | real All Plugins key | 2026-07-15 | EDD on smashballoon.com; multi-product key per item_name |
@@ -434,6 +464,15 @@ Smush Pro, SearchWP, Gravity Perks, Rank Math Pro, Perfmatters, GP Premium,
 WP All Import/Export Pro, Slider Revolution, LayerSlider, Avada, Envato
 Market, The Events Calendar family + StellarWP Uplink, Smash Balloon family,
 Yoast SEO Premium MyYoast). Search & Filter Pro and Admin Columns Pro joined
-2026-07-19 (v0.20.0), both real-key full loops. Remaining: a real-key /
-portal activation pass by the owner for anything still untested, then the
-long-tail Freemius/EDD verification list.
+2026-07-19 (v0.20.0), both real-key full loops.
+
+Current as of v0.24.0, 2026-08-06: no new vendors have landed since
+v0.20.0. The manager lives at Extensions → Licenses (moved off the System
+card in v0.12.0; System keeps the health check), dimmed inactive-component
+rows carry the Turn on control, and v0.21.0 hardened the card so a
+background rebuild can no longer eat a key mid-paste. Remaining: a
+real-key / portal activation pass by the owner for anything still at
+bogus-key level, a verify path for ACF PRO / Brizy Pro / Etch if their
+code ever exposes a safe one, the three no-vendor-code candidates
+(Unlimited Elements, Stackable Premium, Permalink Manager Pro) awaiting a
+generic-sweep check, then the long-tail Freemius/EDD verification list.

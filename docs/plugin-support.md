@@ -84,26 +84,32 @@ themselves through the extension filters.
 
 ## Roadmap candidates
 
-Refreshed 2026-07-24 at **v0.22.0** open (v0.21.0, the trust release,
-shipped 2026-07-24: i18n, accessibility, boot consolidation, updater hash
-verification, user guide. The v0.22.0 cycle opened the same day with the
-read-only database viewer, a native developer surface rather than an
-adapter, entered from the System page's Database card and ⌘K). Coverage
-history lives in the table above; living primitive matrix + sweep log is
-`docs/adapter-coverage.md`.
+Refreshed 2026-08-06 at **v0.24.0** open. Two releases have shipped since
+the last refresh: v0.22.0 (2026-07-30) brought the read-only database
+viewer, a native developer surface rather than an adapter, plus the Matomo
+and Jetpack Stats traffic providers; v0.23.0 (2026-08-04), the switches
+release, brought visibility toggles, per-extension auto-update pills, theme
+live preview and synced patterns. Coverage history lives in the table
+above; living primitive matrix + sweep log is `docs/adapter-coverage.md`.
 
-The open adapter threads, ranked: **WPForms Pro entries** (blocked on a Pro
-license for fixtures), **MetForm** (deferred until Elementor-dependent
-adapters are on the table), status/chart parity on thinner family siblings
-via `/dev-minn-admin sweep`, and the license long tail. ~~Jetpack Stats /
-Matomo traffic providers~~ ✅ shipped 2026-07-29 (v0.22.0 cycle; Jetpack
-verified end to end on a live connected site the same day). The largest
-non-adapter thread is v1 gate **G1**, the outside-tester afternoon test
-(`docs/v1-readiness.md`).
+Recently closed threads: ~~**WPForms Pro entries**~~ ✅ shipped 2026-08-06
+(v0.24.0 cycle; the last big uncovered forms name, unblocked once a Pro zip
+made fixtures possible), ~~forms-family status cards~~ ✅ shipped 2026-08-06
+(Fluent, Ninja, Forminator, Flamingo, Everest), ~~Jetpack Stats / Matomo
+traffic providers~~ ✅ shipped 2026-07-29 (v0.22.0 cycle; Jetpack verified
+end to end on a live connected site the same day).
+
+The open adapter threads, ranked: **MetForm** (deferred until
+Elementor-dependent adapters are on the table), status/chart parity on the
+remaining thin family siblings outside forms via `/dev-minn-admin sweep`,
+deeper Really Simple SSL 9.7 posture rows (its enforcement row is already
+wired), and the license long tail. The
+largest non-adapter thread is v1 gate **G1**, the outside-tester afternoon
+test (`docs/v1-readiness.md`).
 
 > **v0.17.0 note (2026-07-16):** adapter waves PAUSED for one cycle. The
 > v0.17.0 charter was the plugin-author cycle (developer experience and abuse
-> resistance on the road to v1.0) — see `docs/v1-readiness.md`. The waves
+> resistance on the road to v1.0). See `docs/v1-readiness.md`. The waves
 > resumed 2026-07-17 in the v0.18.0 cycle, which closed Wave B and Wave D.
 
 ### Wave A — Dev tools ✅ complete (v0.14.0)
@@ -131,8 +137,11 @@ Source-verified 2026-07-17 (installed all four on minnadmin):
 2. ~~**Security leftover** — All-In-One Security~~ **SHIPPED 2026-07-17**:
    activity-log audit feed ({base_prefix}aiowps_audit_log; JSON details
    flattened to Context rows; level tabs + search + status card;
-   installed-inactive per family convention). A failed-login /
-   permanent-block posture row is a future add.
+   installed-inactive per family convention). The failed-login and
+   permanent-block posture row **SHIPPED 2026-07-27**: failed logins (24h),
+   locked out now and permanent blocks on the status card, a System health
+   row via `minn_admin_aios_checks()`, and deep links into the AIOS
+   locked-ip and permanent-block tabs.
 3. **Forms leftovers** — **SureForms SHIPPED 2026-07-17** (verified:
    {prefix}srfm_entries, form_data is clean JSON keyed by field label,
    read/unread/trash status, sureforms_form CPT for tabs; full
@@ -148,8 +157,15 @@ Source-verified 2026-07-17 (installed all four on minnadmin):
 4. ~~**Ecommerce analytics**~~ ✅ shipped (v0.14.0) on Orders as an
    **Analytics** pill; Customers, New order, Add product, Subscriptions
    also landed in the commerce cycle.
-5. **WPForms Pro entries** — Lite stores no entries; needs Pro license +
-   fixtures; biggest uncovered forms name.
+5. ~~**WPForms Pro entries**~~ ✅ **SHIPPED 2026-08-06** (v0.24.0 cycle):
+   the full forms-family treatment over `{prefix}wpforms_entries` with
+   per-form tabs, unread/read/starred/spam/trash filters, star and read
+   state, spam and trash flows with restore, permanent delete through
+   WPForms' own entry handler, open-marks-viewed, and their
+   `wpforms_current_user_can()` capability model. Lite registers nothing
+   (entries are a Pro feature, so there is no store to read). The blocker
+   was always fixtures rather than code: entries turned out to store fine
+   unlicensed, since the license gates updates and addons, not storage.
 6. ~~**Meta Box** editor panel~~ ✅ shipped (v0.15.0). ~~**The Events Calendar**
    editor panel~~ ✅ shipped 2026-07-17 (v0.18.0: Event details panel +
    the async `suggest` field primitive). ~~**Jetpack Stats** / **Matomo**
@@ -219,8 +235,12 @@ From `docs/adapter-coverage.md` and `docs/full-ui-adapters.md` (2026-07-15):
 - ~~Richer `sectionsRoute` row types~~ ✅ shipped 2026-07-17 (v0.18.0:
   `pill`, `code`, sandboxed `html-preview`, `kv-table`; the whole mail
   family's log detail converted).
-- Status/chart parity on thinner adapters when a family sweep is scheduled
-  (`/dev-minn-admin sweep`).
+- ~~Forms-family status cards~~ ✅ shipped 2026-08-06 (Fluent Forms, Ninja
+  Forms, Forminator, Flamingo and Everest Forms all match the SureForms
+  shape; every number comes from the plugin's own storage). Gravity Forms
+  deliberately skips the card: its depth lives in the entry workflow.
+- Status/chart parity on the remaining thin adapters outside the forms
+  family, when a family sweep is scheduled (`/dev-minn-admin sweep`).
 
 Parked as structural: **multilingual** (WPML / Polylang / TranslatePress)
 needs a language dimension in content lists. Also parked, with scope and

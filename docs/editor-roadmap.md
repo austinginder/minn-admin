@@ -1,5 +1,7 @@
 # Editor roadmap — the long-term plan
 
+*Statuses last verified against the code at v0.24.0 (unreleased), 2026-08-06.*
+
 **Thesis: the editor is the selling feature.** Minn Admin started as "a calmer admin," but
 the editor is where the product wins or loses. The rest of the admin is supporting cast —
 excellent supporting cast, but nobody switches admins for a nicer plugins screen. People
@@ -65,7 +67,10 @@ distrust the surface.
   "Paste cleanup" section in app.js and `tests/paste.test.js`). Word mso-lists rebuild as
   real nested lists; Docs style-spans map to strong/em/s/code; js: hrefs, handlers and
   vendor styling never pass; single ⌘Z reverts a whole paste. Clipboard *images* (files,
-  not URLs) remain with the "inline media flow" item below.
+  not URLs) landed with the "inline media flow" item below. The mirror half arrived in
+  v0.23.0: a selection spanning islands copies their real block markup
+  (`text/x-minn-blocks`), and pasting back into Minn (this post or another) rebuilds the
+  blocks with settings intact; suite `tests/island-copy.test.js`.
 - **Undo completeness.** Island operations (insert, remove, table ops) sit outside the
   browser undo stack today.
   🔍 *Investigated 2026-07-05* (empirical, `scratchpad/undo-probe*.js`). The map:
@@ -91,9 +96,10 @@ distrust the surface.
   right). That's a large, fragile core rewrite for a polish feature — against the "no build
   step / greppable / islands keep the editor good" ethos. Instead:
   1. **Toast-Undo for island deletions** (embed/gallery/custom block remove): a Gmail-style
-     "Deleted — Undo" toast (~6s) that re-inserts the removed node + its islands[] entry.
+     "Deleted — Undo" toast (~7s) that re-inserts the removed node + its islands[] entry.
      ✅ *Shipped 2026-07-05* — `toastAction()` + `removeIslandWithUndo()`; suite
-     `tests/undo-toast.test.js`.
+     `tests/undo-toast.test.js`. Since 2026-07-09, ⌘Z while the toast is live also runs
+     the restore (capture-phase `pendingToastUndo`), so keyboard undo matches the button.
   2. **Table ops on the real undo stack** (2026-07-09): row/col add/delete, header toggle,
      and table delete mutate a detached clone then swap via `commandOnBlock` /
      `applyTableMutation`. Figures use `selectNodeContents` + insertHTML of the inner
@@ -102,8 +108,10 @@ distrust the surface.
      idea as image remove. Destructive ops toast a "⌘Z restores it" hint. Suite:
      `tests/undo-toast.test.js` + `tests/table-menu.test.js`.
   3. **Document the boundary:** ⌘Z covers writing + table structure + image remove;
-     island deletions offer the Undo toast. Remaining direct-DOM ops (inspector attr
-     regen, island insert) are still safe no-ops under ⌘Z.
+     island deletions offer the Undo toast (and ⌘Z while it shows). Remaining direct-DOM
+     ops (inspector attr regen, island insert) are still safe no-ops under ⌘Z.
+     Re-verified at v0.24.0: pattern and island insertion (`insertPatternIslands()`) and
+     inspector attribute regen remain direct-DOM, and remain safe no-ops.
 - **Conflict safety.** Post locking / "someone else is editing" (core's heartbeat locks),
   and a localStorage safety net for drafts so a crashed browser loses nothing even before
   the first autosave.
@@ -184,8 +192,12 @@ point were the last items).
 - **Slash-command extension point.** Shipped: `minn_admin_editor_commands` filter so
   plugins add free-form slash items (boilerplate `html`, island `template`, or async
   `route` returning either). Pure descriptors, no third-party JS. Documented in
-  `docs/for-plugin-authors.md`; suite `tests/editor-commands.test.js`. Auto-insert
-  blocks, design libraries and patterns still cover the plugin-content half.
+  `docs/for-plugin-authors.md`; suite `tests/editor-commands.test.js`. The plugin-content
+  half shipped in v0.9.0: auto-insert blocks, design libraries, every registered pattern
+  in the slash menu (`insertPatternIslands()`; suite `tests/patterns.test.js`), and the
+  Browse-all block picker on ⌘/ (`openBlockPicker()`; suite `tests/block-picker.test.js`).
+  v0.23.0 added the user's own synced and unsynced patterns to the slash menu and picker,
+  with a Patterns entry in the Content switcher (suite `tests/user-patterns.test.js`).
 
 ## Horizon 3 — the editor as platform (1.0+)
 
@@ -195,12 +207,22 @@ point were the last items).
   header verified server-side, so an ousted session can never silently overwrite;
   regaining a lock checks the server's modified stamp and offers "Load theirs"),
   and the v0.20.0 content list shows a "{name} is editing" chip read from core's
-  own edit lock. Live cursors / multi-presence beyond the lock model remain the
-  open 1.0+ question.
+  own edit lock. v0.21.0 hardened the seam: a public REST read no longer reveals
+  the lock holder's name (the editing signal is for the dashboard, not the world).
+  Live cursors / multi-presence beyond the lock model remain the open 1.0+
+  question; nothing beyond the lock model exists in code at v0.24.0.
 - **Offline-tolerant drafting** if the localStorage net from Horizon 1 proves itself.
+  Still open at v0.24.0: no offline-specific work has landed (app.js carries no
+  connectivity awareness). The net keeps proving itself, though: the crash net is
+  suite-covered (`tests/localnet.test.js`), and v0.21.0's expired-nonce recovery
+  means a tab left open overnight saves again without a reload.
 - **The marketing turn.** minnadmin.com leads with the editor: the hero is the writing
   surface, the admin is "and it comes with a better admin around it." The readme and
-  screenshots follow.
+  screenshots follow. Landed so far (v0.21.0): minnadmin.com is the plugin's listed
+  website with shareable docs pages, and readme.txt is gone (readme.md and the site
+  are the listing surfaces). Remaining: the editor-led hero itself; readme.md still
+  opens on "a reimagined WordPress admin experience" with an Overview screenshot,
+  not the writing surface.
 
 ## What we will never build (unchanged, load-bearing)
 
@@ -227,7 +249,8 @@ good.
 - **The test suites are repo citizens** (done since 2026-07-05). The Playwright suites
   live in `tests/` with shared helpers and conventions in `tests/README.md`; a
   sequential full-suite runner drove all 171 suites green before v0.18.0 and is part
-  of the release rhythm. Editor bug fixes still ship with a ported suite.
+  of the release rhythm; the suite count stands at 206 at v0.24.0. Editor bug fixes
+  still ship with a ported suite.
 - **Safety model is frozen.** `editorModeFor` → classic/blocks/locked, byte-identity
   islands, attribute allowlists that must be DOM-reproducible. New capabilities extend
   the allowlists one proven attribute at a time (see editor-direction.md); they never
