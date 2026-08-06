@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.23.0. This file ships inside the plugin, so the copy you
+*Current as of v0.24.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -62,7 +62,8 @@ form plugins, two backup plugins), Minn shows one sidebar entry with a
 switcher inside, instead of three lookalike menus. The view stays the same;
 the provider changes.
 
-**The topbar** carries the page title, a View site link, the theme toggle
+**The topbar** carries the page title, a button that shows or hides the
+sidebar (⌘. does the same), a View site link, the theme toggle
 (system, light, dark), notifications, and the New button. Amber chips
 appear here only when something needs you: a pending WordPress update, or
 a site that is not fully public.
@@ -188,7 +189,8 @@ more of them.
   reading and discussion, permalinks, visibility (search engines,
   maintenance mode, and a switch that turns a detected coming-soon or
   maintenance plugin's mode off in place, with Undo), site language, spam
-  protection, custom CSS. The long
+  protection (with Akismet, paste or change your key right on its card),
+  custom CSS. The long
   tail of rarely-touched options deliberately stays in wp-admin, one
   click away. If you look for a setting and don't find it, that is the
   reason, not a bug.
