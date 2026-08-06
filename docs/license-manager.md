@@ -369,6 +369,32 @@ Gravity Forms 2,543 sites, Gravity SMTP 1,440, Elementor Pro 1,191, ACF PRO
 Remaining fleet-ranked open work: the long-tail Freemius/EDD verification
 list above.
 
+### Vendor-family inventory (2026-08-06, unmeasured)
+
+A per-category inventory of paid plugins with no license coverage yet,
+grouped by vendor family because the machinery is shared: the first
+product in a family carries the protocol study, the rest are cheap
+follow-ons (the TEC / Smash Balloon pattern). Install and fleet counts
+have NOT been measured for these; re-run the 2026-07-10 Manager DB
+inventory against this list before committing an order.
+
+| Family | Products | Notes |
+|---|---|---|
+| **Awesome Motive** | WPForms Pro, AIOSEO Pro, MonsterInsights Pro, WP Mail SMTP Pro, Duplicator Pro, SeedProd Pro, OptinMonster, PushEngage | Highest priority. One shared license pattern covers 8+ products; WPForms Pro is already an active fixture on minnadmin with no license row. WP Mail SMTP Pro doubles the win: its license unlocks the real `wpmailsmtp_emails_log` table, upgrading that adapter from debug events to a true mail log. Smash Balloon and SearchWP (both AM) are already shipped, so the protocol territory is familiar. |
+| **WooCommerce.com helper** | All official Woo extensions (WC Subscriptions is a fixture) | `WC_Helper` connect state + subscription list, read-only + Activate ↗. Probably the single most valuable license row for agency and store sites. |
+| **SolidWP / iThemes updater** | Solid Security Pro, Solid Backups, Solid Central | The legacy `ithemes-updater` package is a distinct protocol no generic sweep covers; the free Solid Security surface adapter already exists. |
+| **StellarWP beyond TEC** | LearnDash, GiveWP Pro, Restrict Content Pro, IconicWP | Uplink-based; the Uplink catch-all reader may already half-cover them. Verification pass first (GiveWP Pro zips exist in quicksave). |
+| **WPManageNinja** | Fluent Forms Pro, FluentCRM Pro, FluentBooking, Fluent Support | FluentSMTP and Fluent Forms free are residents; one shared vendor scheme. |
+| **Delicious Brains / WP Engine** | WP Migrate, WP Offload Media, WP Offload SES | Three products, one vendor. WP Offload SES also has an email log that would slot into the mail family. |
+| **Crocoblock** | JetEngine + the Jet* pack | One license for ~20 Elementor-ecosystem plugins. |
+| **OTGS / multilingual** | WPML, Polylang Pro, TranslatePress | Surfaces are parked structurally (language dimension), but license rows need none of that. WPML runs on a large share of client sites. |
+| **Elementor addon packs** | Essential Addons Pro, Premium Addons Pro, ElementsKit, The Plus | Surfaces deliberately fenced; licenses still readable. Unlimited Elements, Stackable Premium and Permalink Manager Pro are already on the open list above. |
+| **Odds and ends** | MemberPress, Meta Box AIO, WCPDF Pro (WP Overnight), WP Grid Builder, Smart Slider 3 Pro, WP Staging Pro, Barn2, YITH | Meta Box and WCPDF already have surface adapters, so their license rows are cheap completions. YITH is its own multi-product scheme like Crocoblock. |
+
+The category-level surface gaps found in the same inventory (traffic
+providers, builder detection, posture providers, new categories) live in
+`docs/plugin-support.md` Waves E and F.
+
 Test builds source from the CaptainCore quicksave repos
 (`captaincore quicksave archive` extracts a plugin/theme zip from a
 snapshot without touching state).
