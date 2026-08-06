@@ -1,5 +1,13 @@
 # Changelog
 
+## **v0.24.0** - Unreleased
+
+### Improved
+* **Scrutoscope profiles read through Scrutoscope:** the profiler's author shipped a list endpoint in Scrutoscope 1.5 so integrations no longer have to read his database table, and Minn now uses it. This is a safety improvement rather than housekeeping: Scrutoscope reduces stored SQL to a verb and table name, and outbound request URLs to a bare hostname, then re-applies both on the way out so that captures written by older versions get cleaned too. Reading the table directly was the one path that skipped that step. The profile list, and the totals on the status card, now come from Scrutoscope's own code on 1.5 and newer, with the previous reader kept for older versions.
+* **Profiles you captured from Minn are easier to find:** using "Profile this hook" on the Cron view saves an on-demand profile, but the list only offered Pinned, Session and Background tabs, so your own capture appeared under All profiles and nowhere else. There is now an On demand tab for exactly those.
+* **A Context column on the profile list:** every capture now shows whether it came from the front end, the admin, a REST call, Ajax, cron or the command line, which is the quickest way to tell an admin-only slowdown from one your visitors feel.
+* **More on the profiler status card:** it now reports how many distinct routes have been captured and how far back the stored history reaches, alongside the profile count, so you can see at a glance whether a profiling session covered enough of the site to be worth reading.
+
 ## **v0.23.0** - August 4, 2026
 
 The switches release. Minn has flagged a forgotten coming-soon page since the visibility system arrived; now the warning carries the fix, a switch that turns the mode off through the plugin's own storage, with an Undo that restores exactly the mode that was on. The same hands-on-the-controls spirit runs through the whole cycle: automatic updates gain per-plugin and per-theme pills, inactive themes gain a live preview, and the patterns you create in WordPress become first-class citizens in Minn, insertable from the slash menu as live references and managed from the Content list. A second click on the sidebar refreshes the list you are looking at, and a run of small honesty fixes (Select All that really selects everything, one preview tab per post, detectors that see through Password Protected and SeedProd) keeps the everyday feel trustworthy.
