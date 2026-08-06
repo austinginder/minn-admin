@@ -130,11 +130,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'Resend action offered', actions.resend, JSON.stringify( actions ) );
 	t.check( 'Detail offers Delete action', actions.del, JSON.stringify( actions ) );
 
+	// The 2.3.0 recipient picker rides a parameterized second action.
+	t.check( 'Resend to… action offered',
+		actions.labels.some( ( l ) => /Resend to/i.test( l ) ),
+		JSON.stringify( actions.labels ) );
+
 	if ( actions.resend ) {
 		const before = ( await api( 'minn-admin/v1/fluent-smtp/emails?per_page=1' ) ).body.total;
 		await page.evaluate( () => {
+			// Exact match: "Resend to…" also contains "Resend".
 			const b = Array.from( document.querySelectorAll( '.minn-modal [data-saction]' ) )
-				.find( ( x ) => /Resend/i.test( x.textContent || '' ) );
+				.find( ( x ) => ( x.textContent || '' ).trim() === 'Resend' );
 			if ( b ) b.click();
 		} );
 		await page.waitForFunction(
@@ -142,8 +148,60 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				.some( ( x ) => /Resend — done|resent|done/i.test( x.textContent ) ),
 			null, { timeout: 20000 }
 		).catch( () => null );
+		// On 2.3.0+ the resend records ON the existing row (no duplicate log
+		// entry — their FLUENTMAIL_LOG_OFF); older builds may add one.
 		const after = ( await api( 'minn-admin/v1/fluent-smtp/emails?per_page=1' ) ).body.total;
-		t.check( 'Resend logged a new sent email', after >= before, `before=${ before } after=${ after }` );
+		t.check( 'Resend leaves the log consistent', after >= before, `before=${ before } after=${ after }` );
+	}
+
+	/* ===== FluentSMTP 2.3.0 catch-up: trail, override, health ============ */
+	{
+		// Status card renders the Connection health row in every state once
+		// a connection is configured (All passing / N failing / Not checked yet).
+		const healthRow = await page.evaluate( () =>
+			/Connection health/i.test( document.body.textContent || '' ) );
+		t.check( 'Status card shows Connection health', healthRow, '' );
+
+		// REST-level resend on a known-sent row: the trail must appear in the
+		// detail sections (their resent_count + extra.resends via Logger::find).
+		const sentRow = ( await api( 'minn-admin/v1/fluent-smtp/emails?status=sent&per_page=1' ) ).body.items[ 0 ];
+		if ( sentRow ) {
+			const r = await api( 'minn-admin/v1/fluent-smtp/emails/' + sentRow.id + '/resend', {
+				method: 'POST', body: JSON.stringify( {} ),
+			} );
+			t.check( 'REST resend delivers', r.status === 200 && r.body && r.body.resent, JSON.stringify( r.body ) );
+			const view = await api( 'minn-admin/v1/fluent-smtp/emails/' + sentRow.id + '/view' );
+			const trail = ( ( view.body && view.body.sections ) || [] ).find( ( s ) => s.title === 'Resends' );
+			t.check( 'Detail sections carry the resend trail',
+				!! trail && trail.rows.length >= 2 && /delivered|failed/.test( trail.rows[ 1 ].value || '' ),
+				JSON.stringify( trail && trail.rows.slice( 0, 2 ) ) );
+
+			// Invalid override is refused before anything sends.
+			const bad = await api( 'minn-admin/v1/fluent-smtp/emails/' + sentRow.id + '/resend', {
+				method: 'POST', body: JSON.stringify( { to: 'not-an-email' } ),
+			} );
+			t.check( 'Invalid resend override refused (400)', bad.status === 400, String( bad.status ) );
+		} else {
+			t.check( 'REST resend delivers', false, 'no sent row available' );
+		}
+
+		// System page: their daily check feeds a health row. Arm it via
+		// their own service (real SMTP connect to the Mailpit fixture).
+		try {
+			const { execSync } = require( 'child_process' );
+			const path = require( 'path' );
+			const wpPath = path.resolve( __dirname, '../../../../' );
+			execSync( `wp --path=${ JSON.stringify( wpPath ) } eval 'call_user_func(function(){ ( new FluentMail\\App\\Services\\ConnectionHealth() )->checkAll(); });'`, {
+				stdio: 'ignore', timeout: 60000,
+			} );
+			const sys = await api( 'minn-admin/v1/system' );
+			const check = ( ( sys.body && sys.body.checks ) || [] ).find( ( c ) => /FluentSMTP connections/.test( c.label || '' ) );
+			t.check( 'System health carries FluentSMTP connections',
+				!! check && [ 'pass', 'warn', 'fail' ].includes( check.status ),
+				JSON.stringify( check ) );
+		} catch ( e ) {
+			t.check( 'System health carries FluentSMTP connections', false, e.message );
+		}
 	}
 
 	/* ===== Gravity SMTP: single + bulk delete (active mail reference) =====

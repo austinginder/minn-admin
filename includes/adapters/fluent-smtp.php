@@ -15,7 +15,17 @@
  * when that class loads (their own whereIn path); otherwise a prefix-scoped
  * DELETE by id. Bulk reuses the single-delete route (WPML pattern).
  *
- * last-sweep: 2026-07-14
+ * FluentSMTP 2.3.0 catch-up: resend rides their
+ * Logger::resendEmailFromLog( $id, 'resend', $recipients ) when the
+ * `resent_count` column exists (it bumps the count, records the trail in
+ * extra['resends'], and defines FLUENTMAIL_LOG_OFF so no duplicate row);
+ * older builds keep the wp_mail fallback. The detail view surfaces that
+ * trail via Logger::find() (their unserialize: allowed_classes false,
+ * object blobs returned raw — never our own unserialize). Status card
+ * reads their ConnectionHealth daily report; caps resolve through their
+ * fluent_mail/manage_capability filter.
+ *
+ * last-sweep: 2026-08-06
  *
  * @package minn-admin
  */
@@ -24,6 +34,39 @@ defined( 'ABSPATH' ) || exit;
 
 function minn_admin_fluent_smtp_active() {
 	return defined( 'FLUENT_MAIL_DB_PREFIX' ) || defined( 'FLUENTMAIL' );
+}
+
+/**
+ * The capability FluentSMTP itself requires, via their 2.3.0 filter.
+ *
+ * Their helper carries the same default, so pre-2.3.0 builds resolve to
+ * manage_options unless a site already registers the filter.
+ */
+function minn_admin_fluent_smtp_cap() {
+	if ( function_exists( 'fluentMailManageCapability' ) ) {
+		return (string) fluentMailManageCapability();
+	}
+	return (string) apply_filters( 'fluent_mail/manage_capability', 'manage_options' );
+}
+
+/**
+ * Whether this FluentSMTP build tracks resends (2.3.0+: `resent_count`
+ * column + extra['resends'] trail). Gates the model-resend path so an old
+ * build can never half-send through an update that fails on the missing
+ * column.
+ */
+function minn_admin_fluent_smtp_has_resend_tracking() {
+	static $has = null;
+	if ( null !== $has ) {
+		return $has;
+	}
+	global $wpdb;
+	$table = $wpdb->prefix . 'fsmpt_email_logs';
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefix-fixed.
+	$has = (bool) $wpdb->get_var( "SHOW COLUMNS FROM {$table} LIKE 'resent_count'" )
+		&& class_exists( 'FluentMail\\App\\Models\\Logger' )
+		&& method_exists( 'FluentMail\\App\\Models\\Logger', 'resendEmailFromLog' );
+	return $has;
 }
 
 /** Recipient addresses from the serialized `to` column, never unserialized. */
@@ -47,6 +90,121 @@ function minn_admin_fluent_smtp_recipients( $to, $all = false ) {
 		$out .= ' +' . ( count( $emails ) - 2 );
 	}
 	return $out;
+}
+
+/**
+ * Connection-health status row from FluentSMTP's own daily check (2.3.0+).
+ *
+ * @return array|null Status-card row, or null when the service is absent
+ *                    or no connection is configured (nothing to check).
+ */
+function minn_admin_fluent_smtp_health() {
+	if ( ! class_exists( 'FluentMail\\App\\Services\\ConnectionHealth' ) || ! function_exists( 'fluentMailGetSettings' ) ) {
+		return null;
+	}
+	try {
+		$svc    = new \FluentMail\App\Services\ConnectionHealth();
+		$report = (array) $svc->getReport();
+		if ( ! $report ) {
+			// Class present but the first daily run hasn't happened (or no
+			// connections). Only say so when there is something to check.
+			$conns = get_option( 'fluentmail-settings', array() );
+			$n     = ( is_array( $conns ) && ! empty( $conns['connections'] ) && is_array( $conns['connections'] ) ) ? count( $conns['connections'] ) : 0;
+			if ( ! $n ) {
+				return null;
+			}
+			return array(
+				'label' => 'Connection health',
+				'value' => 'Not checked yet',
+				'hint'  => 'FluentSMTP runs its first daily check within 24 hours',
+			);
+		}
+		$failing = (array) $svc->getFailing();
+		if ( $failing ) {
+			$first = reset( $failing );
+			$who   = '';
+			if ( is_array( $first ) ) {
+				$who = ! empty( $first['sender_email'] ) ? (string) $first['sender_email'] : strtoupper( (string) ( $first['provider'] ?? '' ) );
+			}
+			$msg = ( is_array( $first ) && ! empty( $first['message'] ) ) ? (string) $first['message'] : '';
+			return array(
+				'label' => 'Connection health',
+				'value' => number_format_i18n( count( $failing ) ) . ' failing',
+				'hint'  => trim( $who . ( $msg ? ': ' . ( strlen( $msg ) > 120 ? substr( $msg, 0, 117 ) . '…' : $msg ) : '' ) ),
+			);
+		}
+		// checked_at is gmdate — UTC.
+		$first = reset( $report );
+		$ago   = '';
+		if ( is_array( $first ) && ! empty( $first['checked_at'] ) ) {
+			$ts = strtotime( $first['checked_at'] . ' UTC' );
+			if ( $ts ) {
+				$ago = ', checked ' . human_time_diff( $ts, time() ) . ' ago';
+			}
+		}
+		return array(
+			'label' => 'Connection health',
+			'value' => 'All passing',
+			'hint'  => 'Daily check by FluentSMTP' . $ago,
+		);
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+}
+
+/**
+ * System-page health row: silent mail breakage is exactly what their daily
+ * check exists for. Renders only when a report exists — a site that has
+ * never been checked gets no row (no noise), and "not checked yet" already
+ * shows on the surface status card.
+ *
+ * @return array[] of { label, status, detail, href? }
+ */
+function minn_admin_fluent_smtp_checks() {
+	if ( ! minn_admin_fluent_smtp_active() || ! class_exists( 'FluentMail\\App\\Services\\ConnectionHealth' ) || ! function_exists( 'fluentMailGetSettings' ) ) {
+		return array();
+	}
+	try {
+		$svc    = new \FluentMail\App\Services\ConnectionHealth();
+		$report = (array) $svc->getReport();
+		if ( ! $report ) {
+			return array();
+		}
+		$failing = (array) $svc->getFailing();
+		$total   = count( $report );
+		if ( ! $failing ) {
+			return array( array(
+				'label'  => 'FluentSMTP connections',
+				'status' => 'pass',
+				'detail' => sprintf(
+					/* translators: %s: number of email connections. */
+					_n( '%s connection passing its daily health check', 'All %s connections passing their daily health check', $total, 'minn-admin' ),
+					number_format_i18n( $total )
+				),
+			) );
+		}
+		$names = array();
+		foreach ( $failing as $f ) {
+			if ( is_array( $f ) ) {
+				$names[] = ! empty( $f['sender_email'] ) ? (string) $f['sender_email'] : strtoupper( (string) ( $f['provider'] ?? '' ) );
+			}
+		}
+		return array( array(
+			'label'  => 'FluentSMTP connections',
+			// Every connection failing means outgoing email is down, not degraded.
+			'status' => count( $failing ) >= $total ? 'fail' : 'warn',
+			'detail' => sprintf(
+				/* translators: 1: failing count, 2: total count, 3: sender list. */
+				__( '%1$s of %2$s connections failing the daily health check (%3$s)', 'minn-admin' ),
+				number_format_i18n( count( $failing ) ),
+				number_format_i18n( $total ),
+				implode( ', ', array_filter( $names ) )
+			),
+			'href'   => admin_url( 'options-general.php?page=fluent-mail#/connections' ),
+		) );
+	} catch ( \Throwable $e ) {
+		return array();
+	}
 }
 
 /** Server-built model for the surface status card. */
@@ -97,19 +255,29 @@ function minn_admin_fluent_smtp_status_model() {
 		$connections = count( $settings['connections'] );
 	}
 
-	return array(
-		'rows'    => array(
-			array(
-				'label' => 'Logged emails',
-				'value' => number_format_i18n( $total ),
-				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
-			),
-			array(
-				'label' => 'Connections',
-				'value' => (string) $connections,
-				'hint'  => $connections ? 'Configured in FluentSMTP' : 'No mailer connected yet',
-			),
+	$rows = array(
+		array(
+			'label' => 'Logged emails',
+			'value' => number_format_i18n( $total ),
+			'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
 		),
+		array(
+			'label' => 'Connections',
+			'value' => (string) $connections,
+			'hint'  => $connections ? 'Configured in FluentSMTP' : 'No mailer connected yet',
+		),
+	);
+
+	// Connection health (FluentSMTP 2.3.0+): their daily cron stores the
+	// report in an option; getReport() already reconciles deleted
+	// connections, so this is a zero-network read of their own verdict.
+	$health = minn_admin_fluent_smtp_health();
+	if ( null !== $health ) {
+		$rows[] = $health;
+	}
+
+	return array(
+		'rows'    => $rows,
 		'chart'   => array(
 			'title'     => 'Last 14 days',
 			'primary'   => 'Sent',
@@ -147,14 +315,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'label'      => 'Email',
 		'sub'        => 'FluentSMTP',
 		'icon'       => 'send',
-		'cap'        => 'manage_options',
+		'cap'        => minn_admin_fluent_smtp_cap(),
 		'family'     => 'mail',
 		'status'     => array( 'route' => 'minn-admin/v1/fluent-smtp/status' ),
 		// v0.18.0: the daily-ops misc settings (connections routing, logging,
 		// simulation) through their Settings model. The connection WIZARD
 		// (per-provider credential forms) stays FluentSMTP's own app.
 		'settings'   => array(
-			'cap'   => 'manage_options',
+			'cap'   => minn_admin_fluent_smtp_cap(),
 			'tabs'  => array( array( 'id' => 'general', 'label' => 'General' ) ),
 			'route' => 'minn-admin/v1/fluent-smtp/settings/{tab}',
 		),
@@ -189,6 +357,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}/resend',
 					'method'  => 'POST',
 					'confirm' => 'Resend this email to the original recipients?',
+				),
+				// Their 2.3.0 Recipient Picker equivalent: a parameterized
+				// action lives in the detail modal (field-less actions are
+				// the only ones list rows render — by design).
+				array(
+					'label'  => 'Resend to…',
+					'route'  => 'minn-admin/v1/fluent-smtp/emails/{id}/resend',
+					'method' => 'POST',
+					'fields' => array(
+						array(
+							'key'         => 'to',
+							'label'       => 'Send to',
+							'placeholder' => 'address@example.com, second@example.com',
+							'required'    => true,
+						),
+					),
 				),
 				array(
 					'label'   => 'Delete',
@@ -407,7 +591,7 @@ add_action( 'rest_api_init', function () {
 	}
 
 	$perm  = function () {
-		return current_user_can( 'manage_options' );
+		return current_user_can( minn_admin_fluent_smtp_cap() );
 	};
 	$table = $GLOBALS['wpdb']->prefix . 'fsmpt_email_logs';
 
@@ -540,6 +724,43 @@ add_action( 'rest_api_init', function () {
 					'rows'  => array( array( 'label' => 'Response', 'value' => $response ) ),
 				);
 			}
+			// Resend trail (FluentSMTP 2.3.0+): read through their
+			// Logger::find — its unserialize refuses objects, so the blob
+			// never passes through our own hands raw.
+			if ( minn_admin_fluent_smtp_has_resend_tracking() ) {
+				try {
+					$full    = ( new \FluentMail\App\Models\Logger() )->find( (int) $request['id'] );
+					$count   = isset( $full['resent_count'] ) ? (int) $full['resent_count'] : 0;
+					$resends = ( ! empty( $full['extra']['resends'] ) && is_array( $full['extra']['resends'] ) )
+						? $full['extra']['resends'] : array();
+					if ( $count > 0 || $resends ) {
+						$rrows   = array();
+						$rrows[] = array(
+							'label' => 'Resent',
+							'value' => sprintf( _n( '%s time', '%s times', max( $count, count( $resends ) ), 'minn-admin' ), number_format_i18n( max( $count, count( $resends ) ) ) ),
+						);
+						// Newest first, last five; `at` is site-local
+						// current_time — emitted as stored, like created_at.
+						foreach ( array_slice( array_reverse( $resends ), 0, 5 ) as $r ) {
+							if ( ! is_array( $r ) ) {
+								continue;
+							}
+							$bits   = array( 'To ' . implode( ', ', array_map( 'strval', (array) ( $r['to'] ?? array() ) ) ) );
+							$bits[] = empty( $r['sent'] ) ? 'failed' : 'delivered';
+							if ( ! empty( $r['by'] ) ) {
+								$bits[] = 'by ' . (string) $r['by'];
+							}
+							$rrows[] = array(
+								'label' => (string) ( $r['at'] ?? '' ),
+								'value' => implode( ' — ', $bits ),
+							);
+						}
+						$sections[] = array( 'title' => 'Resends', 'rows' => $rrows );
+					}
+				} catch ( \Throwable $e ) {
+					// The trail is a bonus; the detail renders without it.
+				}
+			}
 			return rest_ensure_response( array( 'sections' => $sections ) );
 		},
 	) );
@@ -612,17 +833,65 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $perm,
 		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
 			global $wpdb;
+			$id  = (int) $request['id'];
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT id, `to`, subject, body FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) $request['id']
+				$id
 			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
 			}
-			$to = array_filter( minn_admin_fluent_smtp_recipients( $row->to, true ), 'is_email' );
-			if ( ! $to ) {
+
+			// Optional recipient override ("Resend to…"): comma-separated
+			// addresses; every one must be valid or nothing sends.
+			$override = array();
+			$body_in  = (array) $request->get_json_params();
+			$raw_to   = isset( $body_in['to'] ) ? (string) $body_in['to'] : (string) $request->get_param( 'to' );
+			if ( '' !== trim( $raw_to ) ) {
+				foreach ( array_map( 'trim', explode( ',', $raw_to ) ) as $addr ) {
+					if ( '' === $addr ) {
+						continue;
+					}
+					if ( ! is_email( $addr ) ) {
+						return new WP_Error( 'bad_email', '"' . $addr . '" is not a valid email address.', array( 'status' => 400 ) );
+					}
+					$override[] = $addr;
+				}
+			}
+
+			$original = array_filter( minn_admin_fluent_smtp_recipients( $row->to, true ), 'is_email' );
+			if ( ! $override && ! $original ) {
 				return new WP_Error( 'no_recipients', 'No recipient address on record for this email.', array( 'status' => 422 ) );
 			}
+
+			// FluentSMTP 2.3.0+: their own resend flow — bumps resent_count,
+			// records the trail in extra['resends'] (who, where, when, sent),
+			// restores headers/attachments, drops cc/bcc on redirects, and
+			// defines FLUENTMAIL_LOG_OFF so no duplicate log row appears.
+			if ( minn_admin_fluent_smtp_has_resend_tracking() ) {
+				try {
+					$logger = new \FluentMail\App\Models\Logger();
+					$email  = $logger->resendEmailFromLog( $id, 'resend', $override );
+				} catch ( \Throwable $e ) {
+					return new WP_Error( 'send_failed', $e->getMessage(), array( 'status' => 500 ) );
+				}
+				$rec = array();
+				if ( is_array( $email ) && ! empty( $email['extra']['resends'] ) && is_array( $email['extra']['resends'] ) ) {
+					$rec = (array) end( $email['extra']['resends'] );
+				}
+				$to_str = ! empty( $rec['to'] ) ? implode( ', ', (array) $rec['to'] ) : implode( ', ', $override ? $override : $original );
+				if ( $rec && empty( $rec['sent'] ) ) {
+					return new WP_Error( 'send_failed', 'The mailer reported the resend to ' . $to_str . ' could not be delivered (the attempt is recorded on the log entry).', array( 'status' => 500 ) );
+				}
+				return rest_ensure_response( array(
+					'resent'  => true,
+					'to'      => $to_str,
+					'message' => 'Resent to ' . $to_str,
+				) );
+			}
+
+			// Pre-2.3.0 fallback: plain wp_mail (no trail is recorded).
+			$to      = $override ? $override : $original;
 			$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $row->body );
 			$headers = $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array();
 			$sent    = wp_mail( $to, (string) $row->subject, (string) $row->body, $headers );
