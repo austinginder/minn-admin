@@ -37,6 +37,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/forminator.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/formidable.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/everest-forms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/sureforms.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/wpforms.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cf7-flamingo.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cfdb7.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/elementor-forms.php';
