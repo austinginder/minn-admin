@@ -168,13 +168,12 @@ more of them.
 
 ## Managing the site
 
-- **Extensions** — three tabs: Plugins, Themes, and Licenses & connections.
-  Install by
+- **Extensions** — three tabs: Plugins, Themes, and Licenses. Install by
   search, upload, or dropping a zip on the dialog. Toggle, update and
   delete with plain confirmations. Every plugin and theme card carries an
   Auto pill for WordPress automatic updates, the same setting wp-admin
   manages, and inactive themes offer a Live preview so you can walk the
-  site in a candidate theme before switching. Licenses & connections
+  site in a candidate theme before switching. The Licenses tab
   gathers every external service relationship in one place: paid plugins'
   license keys (activate, verify or deactivate without hunting through
   each plugin's settings screen), service keys like Akismet's, account

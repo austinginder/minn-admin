@@ -5540,12 +5540,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			// design (an AI provider with no key must not tip this check).
 			$lic_total = array_sum( $sum );
 			$checks[]  = array(
-				'label'  => 'Licenses & connections',
+				'label'  => 'Licenses',
 				'goto'   => 'licenses',
 				'status' => $bad ? 'fail' : ( $soft ? 'warn' : 'pass' ),
 				'detail' => $bits
-					? implode( ', ', $bits ) . ' of ' . $lic_total . ' licensed components — see Licenses & connections'
-					: 'All ' . $lic_total . ' licensed components hold a valid license',
+					? implode( ', ', $bits ) . ' of ' . $lic_total . ' components; see the Licenses tab'
+					: 'All ' . $lic_total . ' components are licensed or connected',
 			);
 		}
 

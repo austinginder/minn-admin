@@ -67,8 +67,17 @@ item shape's plugin/theme axis); grouping stayed STATE-FIRST for triage
 category, rather than kind-first groups; core connectors list only when
 configured or their companion plugin is active (the uninstalled catalog
 stays out), are excluded from the health summary by design, and the card
-footer is the doorway to Settings → Connectors. The health check row is
-now labeled "Licenses & connections" and carries a server-side `goto`.
+footer is the doorway to Settings → Connectors. The health check row
+carries a server-side `goto`.
+NAMING DECISION (Austin, 2026-08-06, same day): the tab stays plain
+**"Licenses"** — the compound "Licenses & connections" was reverted. It
+broke the one-word rhythm of the Plugins/Themes tab row, made the count
+line read awkwardly, buried the flagship license manager's muscle-memory
+word, and collided with core's own "Connectors" vocabulary one footer
+away. The reframe itself stands: chips, the "Not set up" group, and
+category-aware pill labels (a connection reads "Connected" / "Not
+connected", a key "No key") carry the classification inside the card.
+Do not re-propose the rename.
 As originally scoped: Provider contract gains
 `kind: license | key | connection`; the tab renames (working name
 "Licenses & connections"); rows group by kind; the existing

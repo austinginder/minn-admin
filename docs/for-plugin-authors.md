@@ -1383,7 +1383,7 @@ same provider.
 
 ## License state — `minn_admin_license_providers`
 
-Extensions carries a **Licenses & connections** card: every paid component and
+Extensions carries a **Licenses** card: every paid component and
 connected service on the site with its state (valid / expired / invalid /
 missing / unknown), read from stored options only. Reads never call a licensing
 API; if your plugin is commercial (or holds a service key or account

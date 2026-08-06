@@ -150,6 +150,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			if ( ! row ) return null;
 			return {
 				state: ( row.querySelector( '.minn-lic-pill' ) || { className: '' } ).className.replace( /.*minn-lic-pill\s*/, '' ).trim(),
+				pill: ( row.querySelector( '.minn-lic-pill' ) || { textContent: '' } ).textContent.trim(),
 				off: row.classList.contains( 'off' ),
 				chip: ( row.querySelector( '.minn-lic-cat' ) || { textContent: '' } ).textContent,
 				buttons: [ ...row.querySelectorAll( '[data-lic]' ) ].map( ( b ) => ( { k: b.dataset.lic, t: b.textContent.trim() } ) ),
@@ -160,7 +161,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			const sane = c && [ 'valid', 'missing', 'unknown' ].includes( c.state ) && c.chip === 'connection';
 			const readOnly = c && ! c.buttons.some( ( b ) => [ 'activate', 'deactivate', 'verify' ].includes( b.k ) );
 			const connect = ! c || c.off || c.state === 'valid' || c.buttons.some( ( b ) => b.k === 'href' && /Connect/.test( b.t ) );
-			t.check( `${ name } connection row is read-only + honest`, sane && readOnly && connect, JSON.stringify( c ) );
+			// Category-aware pill: a connection never borrows license
+			// language ("No license"); it reads Connected / Not connected.
+			const pillOk = c && ( c.state === 'valid' ? c.pill === 'Connected' : ( c.state === 'missing' ? c.pill === 'Not connected' : c.pill === 'Unknown' ) );
+			t.check( `${ name } connection row is read-only + honest`, sane && readOnly && connect && pillOk, JSON.stringify( c ) );
 		}
 
 		// Perfmatters is fingerprinted as EDD (its build ships the SL
