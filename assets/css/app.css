@@ -1046,21 +1046,10 @@ body.minn-outline-mode .minn-sidebar { width: 0; min-width: 0; padding-left: 0; 
 /* Outline mode — nav gone, every sidebar card gone except the Outline. */
 body.minn-outline-mode .minn-editor-side > :not(#minn-outline-card) { display: none !important; }
 
-/* Nav show/hide edge tab — lives outside the sidebar it hides; z-25 keeps it
-   under the focus dim (30) so zen stays calm. */
-#minn-nav-tab {
-  position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 25;
-  width: 14px; height: 52px; border: 1px solid var(--border); border-left: 0;
-  border-radius: 0 8px 8px 0; background: var(--bg2); cursor: pointer; padding: 0;
-  opacity: 0.45; transition: opacity 0.15s ease;
-}
-#minn-nav-tab:hover { opacity: 1; }
-#minn-nav-tab::after {
-  content: ''; position: absolute; inset: 0; margin: auto; width: 6px; height: 6px;
-  border-left: 1.6px solid var(--text3); border-bottom: 1.6px solid var(--text3);
-  transform: rotate(45deg) translate(1px, -1px);
-}
-body.minn-nav-hidden #minn-nav-tab::after { transform: rotate(-135deg) translate(1px, -1px); }
+/* Nav show/hide — a topbar .minn-icon-btn now (was a left-edge tab). While
+   the nav is hidden the icon dims less so the way back stays discoverable. */
+#minn-nav-tab { flex-shrink: 0; margin-left: -6px; }
+body.minn-nav-hidden #minn-nav-tab { color: var(--text); }
 .minn-editor { transition: grid-template-columns 0.25s ease, gap 0.25s ease; }
 body.minn-focus-zen .minn-editor { grid-template-columns: minmax(0, 1fr) 0px; gap: 0; }
 .minn-editor-side { transition: opacity 0.2s ease; }
