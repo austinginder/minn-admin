@@ -1185,6 +1185,56 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// WPForms Pro: option wpforms_license {key, type, is_expired, is_disabled,
+	// is_invalid, is_limit_reached, is_flagged}. Their deactivate resets the
+	// option to '' (a STRING, not an array). WPFORMS_LICENSE_KEY constant wins
+	// over the option (their wpforms_get_license_key precedence). No expiry
+	// date is stored locally; type is the plan level. Flags are only written
+	// by their validation, so key + type + no flags reads valid. Lite ships
+	// under the wpforms-lite directory, so wpforms/ is the Pro build.
+	$providers['wpforms'] = array(
+		'name'      => 'WPForms Pro',
+		'component' => 'wpforms/wpforms.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'wpforms/wpforms.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$lic      = get_option( 'wpforms_license' );
+			$lic      = is_array( $lic ) ? $lic : array();
+			$constant = defined( 'WPFORMS_LICENSE_KEY' ) && WPFORMS_LICENSE_KEY;
+			$key      = $constant ? (string) WPFORMS_LICENSE_KEY : (string) ( $lic['key'] ?? '' );
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => 'WPForms Pro', 'state' => 'missing' ) ) );
+			}
+			$type  = (string) ( $lic['type'] ?? '' );
+			$state = 'unknown';
+			$note  = 'key stored; not yet validated';
+			if ( ! empty( $lic['is_invalid'] ) ) {
+				$state = 'invalid';
+				$note  = 'key rejected at the last check';
+			} elseif ( ! empty( $lic['is_disabled'] ) ) {
+				$state = 'invalid';
+				$note  = 'key disabled by the vendor';
+			} elseif ( ! empty( $lic['is_limit_reached'] ) ) {
+				$state = 'invalid';
+				$note  = 'site limit reached';
+			} elseif ( ! empty( $lic['is_expired'] ) ) {
+				$state = 'expired';
+				$note  = '';
+			} elseif ( '' !== $type ) {
+				$state = 'valid';
+				$note  = 'plan: ' . $type;
+				if ( ! empty( $lic['is_flagged'] ) ) {
+					$note .= '; flagged by the vendor (activation soft cap)';
+				}
+			}
+			if ( $constant ) {
+				$note = trim( ( $note ? $note . '; ' : '' ) . 'key in wp-config (WPFORMS_LICENSE_KEY)' );
+			}
+			return array( $item( array( 'name' => 'WPForms Pro', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
 	// Admin Columns Pro (v7): their own API on admincolumns.com. KEY FACT:
 	// a successful activation DELETES the pasted subscription key and keeps
 	// an activation TOKEN instead ("old key is no longer needed since 5.7"):
@@ -2382,6 +2432,63 @@ function minn_admin_license_default_providers() {
 			$lic = get_option( 'searchwp_license' );
 			$ok  = is_array( $lic ) && isset( $lic['status'] ) && 'valid' === $lic['status'];
 			return array( 'ok' => $ok, 'code' => $ok ? '' : 'invalid', 'message' => $ok ? '' : 'SearchWP did not confirm the license' );
+		};
+	}
+
+	// WPForms Pro: WPForms_License is the complete flow — verify_key (their
+	// activation) writes the option and resets flags, deactivate_key frees
+	// the seat remotely and empties the option, validate_key persists status
+	// flags. The class file only loads under is_admin()/cron/CLI, so REST
+	// actions require it manually (the Settings-API/Slider-Revolution class
+	// of gate). Constructing it runs their own periodic background check,
+	// which is exactly what every wp-admin pageload does. Non-ajax calls
+	// never wp_send_json; errors land in ->errors.
+	if ( function_exists( 'wpforms' ) && defined( 'WPFORMS_PLUGIN_DIR' ) && file_exists( WPFORMS_PLUGIN_DIR . 'pro/includes/admin/class-license.php' ) ) {
+		$wpf_license = function () {
+			if ( ! class_exists( 'WPForms_License' ) ) {
+				require_once WPFORMS_PLUGIN_DIR . 'pro/includes/admin/class-license.php';
+			}
+			$lic = method_exists( wpforms(), 'obj' ) ? wpforms()->obj( 'license' ) : null;
+			return ( $lic instanceof WPForms_License ) ? $lic : new WPForms_License();
+		};
+
+		$providers['wpforms']['secret_label'] = 'WPForms license key';
+		$providers['wpforms']['activate']     = function ( $secret ) use ( $wpf_license ) {
+			$lic = $wpf_license();
+			if ( $lic->verify_key( $secret, false ) ) {
+				return array( 'ok' => true );
+			}
+			$msg  = ! empty( $lic->errors ) ? wp_strip_all_tags( implode( ' ', $lic->errors ) ) : 'WPForms did not accept that key';
+			$code = ( false !== stripos( $msg, 'limit' ) ) ? 'site_limit' : ( false !== stripos( $msg, 'expired' ) ? 'expired' : 'invalid' );
+			return array( 'ok' => false, 'code' => $code, 'message' => $msg );
+		};
+		$providers['wpforms']['deactivate'] = function () use ( $wpf_license ) {
+			if ( defined( 'WPFORMS_LICENSE_KEY' ) && WPFORMS_LICENSE_KEY ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'The key is defined in wp-config (WPFORMS_LICENSE_KEY); remove the constant to deactivate.' );
+			}
+			$lic = $wpf_license();
+			if ( '' === $lic->get() ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'No key stored' );
+			}
+			$lic->deactivate_key( false );
+			if ( ! empty( $lic->errors ) ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => wp_strip_all_tags( implode( ' ', $lic->errors ) ) );
+			}
+			return array( 'ok' => true );
+		};
+		$providers['wpforms']['verify'] = function () use ( $wpf_license ) {
+			$lic = $wpf_license();
+			$key = $lic->get();
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+			}
+			$status = $lic->validate_key( $key, false, false, true );
+			if ( false === $status ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach the WPForms license API' );
+			}
+			$ok   = in_array( $status, array( 'valid', 'flagged' ), true );
+			$code = $ok ? '' : ( 'expired' === $status ? 'expired' : ( 'limit_reached' === $status ? 'site_limit' : 'invalid' ) );
+			return array( 'ok' => $ok, 'code' => $code, 'message' => $ok ? '' : 'License check returned: ' . str_replace( '_', ' ', (string) $status ) );
 		};
 	}
 

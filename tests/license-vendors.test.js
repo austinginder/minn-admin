@@ -101,6 +101,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			'Yoast SEO Premium',
 			'Search & Filter Pro',
 			'Admin Columns Pro',
+			// WPForms Pro (active fixture, unlicensed: reads missing until a
+			// real key lands; activate/deactivate/verify attach via the
+			// manual class require, so controls must be on offer).
+			'WPForms Pro',
 		];
 		for ( const name of FAMILY ) {
 			const info = await page.evaluate( ( n ) => {

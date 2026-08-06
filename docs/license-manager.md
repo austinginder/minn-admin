@@ -380,7 +380,7 @@ inventory against this list before committing an order.
 
 | Family | Products | Notes |
 |---|---|---|
-| **Awesome Motive** | WPForms Pro, AIOSEO Pro, MonsterInsights Pro, WP Mail SMTP Pro, Duplicator Pro, SeedProd Pro, OptinMonster, PushEngage | Highest priority. One shared license pattern covers 8+ products; WPForms Pro is already an active fixture on minnadmin with no license row. WP Mail SMTP Pro doubles the win: its license unlocks the real `wpmailsmtp_emails_log` table, upgrading that adapter from debug events to a true mail log. Smash Balloon and SearchWP (both AM) are already shipped, so the protocol territory is familiar. |
+| **Awesome Motive** | ~~WPForms Pro~~ (SHIPPED 2026-08-06, bogus-key verified; see the tested table), AIOSEO Pro, MonsterInsights Pro, WP Mail SMTP Pro, Duplicator Pro, SeedProd Pro, OptinMonster, PushEngage | Highest priority. WPForms Pro proved the family protocol: the tgm-updater verify-key/deactivate-key/validate-key trio against the vendor API, key in one option with status flags. The siblings should follow the same shape (verify per product; option names differ). WP Mail SMTP Pro doubles the win: its license unlocks the real `wpmailsmtp_emails_log` table, upgrading that adapter from debug events to a true mail log. Smash Balloon and SearchWP (both AM) were already shipped. |
 | **WooCommerce.com helper** | All official Woo extensions (WC Subscriptions is a fixture) | `WC_Helper` connect state + subscription list, read-only + Activate ↗. Probably the single most valuable license row for agency and store sites. |
 | **SolidWP / iThemes updater** | Solid Security Pro, Solid Backups, Solid Central | The legacy `ithemes-updater` package is a distinct protocol no generic sweep covers; the free Solid Security surface adapter already exists. |
 | **StellarWP beyond TEC** | LearnDash, GiveWP Pro, Restrict Content Pro, IconicWP | Uplink-based; the Uplink catch-all reader may already half-cover them. Verification pass first (GiveWP Pro zips exist in quicksave). |
@@ -466,6 +466,7 @@ license data on a lab site.
 | Rank Math Pro, Envato, WPBakery | Activate ↗ link | read | 2026-07-10 | portal- or admin-context-bound activation |
 | Yoast SEO Premium | Activate ↗ + verify | read (missing until MyYoast) | 2026-07-15 | free Yoast `WPSEO_Addon_Manager`; page `wpseo_licenses`; no paste-a-key |
 | Smash Balloon family (8 products) | activate / deactivate / verify | real All Plugins key | 2026-07-15 | EDD on smashballoon.com; multi-product key per item_name |
+| WPForms Pro | activate / deactivate / verify | bogus key (live wpforms.com refusal, nothing written, secret never echoed) | 2026-08-06 | option `wpforms_license` {key, type, is_* flags}; their deactivate resets it to '' (a string); WPFORMS_LICENSE_KEY constant wins and blocks Minn deactivate; class-license.php is admin/cron/CLI-gated so actions require it manually; first Awesome Motive family provider |
 | Freemius / EDD / SureCart generics, Avada, Smush Pro, AnalyticsWP, BSF family | read | real stored data on labs | 2026-07-10 | see the verification map above |
 | StellarWP Uplink / PUE catch-all | read | real stored data (TEC six-pack) | 2026-07-11 | registry reader; skips slugs claimed by dedicated providers |
 
@@ -492,8 +493,9 @@ Market, The Events Calendar family + StellarWP Uplink, Smash Balloon family,
 Yoast SEO Premium MyYoast). Search & Filter Pro and Admin Columns Pro joined
 2026-07-19 (v0.20.0), both real-key full loops.
 
-Current as of v0.24.0, 2026-08-06: no new vendors have landed since
-v0.20.0. The manager lives at Extensions → Licenses (moved off the System
+Current as of v0.24.0, 2026-08-06: WPForms Pro landed 2026-08-06 (the
+first Awesome Motive family provider; bogus-key verified, real-key pass is
+the owner's step). Before that, no new vendors since v0.20.0. The manager lives at Extensions → Licenses (moved off the System
 card in v0.12.0; System keeps the health check), dimmed inactive-component
 rows carry the Turn on control, and v0.21.0 hardened the card so a
 background rebuild can no longer eat a key mid-paste. Remaining: a
