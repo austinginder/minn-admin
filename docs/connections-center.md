@@ -44,7 +44,10 @@ top item in the license vendor-family inventory).
 
 ## Staged plan
 
-**Brick 1 — Akismet (S).** Akismet joins `licenses.php` as a provider:
+**Brick 1 — Akismet (S). SHIPPED 2026-08-06** (same day as this doc;
+bogus-key verified against live akismet.com through both doorways; spam
+provider contract gained the optional `keyProvider` status key, documented
+in for-plugin-authors.md). As scoped: Akismet joins `licenses.php` as a provider:
 read from `wordpress_api_key` + `akismet_alert_code`/`akismet_alert_msg`
 (their alert system is the local validity signal), honor
 `Akismet::predefined_api_key()` (WPCOM_API_KEY constant and the

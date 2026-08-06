@@ -1235,6 +1235,53 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Akismet: a SERVICE KEY, not a purchase license (free tier exists) —
+	// the first connections-center row (docs/connections-center.md). Key in
+	// option wordpress_api_key; WPCOM_API_KEY constant or the
+	// akismet_get_api_key filter (Jetpack) can supply it instead, which
+	// their predefined_api_key() reports when the plugin is active. Local
+	// validity signal: their alert system (akismet_alert_code > 0 means the
+	// API reported a key/account problem, message in akismet_alert_msg).
+	$providers['akismet'] = array(
+		'name'      => 'Akismet',
+		'component' => 'akismet/akismet.php',
+		'detect'    => function () use ( $has ) {
+			return $has( 'akismet/akismet.php' );
+		},
+		'read'      => function () use ( $item ) {
+			$predefined = false;
+			$key        = '';
+			if ( class_exists( 'Akismet' ) ) {
+				try {
+					$key        = (string) Akismet::get_api_key();
+					$predefined = (bool) Akismet::predefined_api_key();
+				} catch ( \Throwable $e ) { /* fall through to raw reads */ }
+			}
+			if ( '' === $key ) {
+				$key        = ( defined( 'WPCOM_API_KEY' ) && WPCOM_API_KEY ) ? (string) WPCOM_API_KEY : (string) get_option( 'wordpress_api_key', '' );
+				$predefined = $predefined || ( defined( 'WPCOM_API_KEY' ) && WPCOM_API_KEY );
+			}
+			if ( '' === $key ) {
+				return array( $item( array( 'name' => 'Akismet', 'state' => 'missing', 'note' => 'service key (free tier exists)' ) ) );
+			}
+			$alert = (int) get_option( 'akismet_alert_code', 0 );
+			$state = $alert > 0 ? 'invalid' : 'valid';
+			$note  = $alert > 0
+				? trim( wp_strip_all_tags( (string) get_option( 'akismet_alert_msg', '' ) ) )
+				: 'service key';
+			if ( $alert > 0 && '' === $note ) {
+				$note = 'Akismet reported a problem with this key (alert ' . $alert . ')';
+			}
+			if ( strlen( $note ) > 140 ) {
+				$note = substr( $note, 0, 140 ) . '…';
+			}
+			if ( $predefined ) {
+				$note .= '; key supplied in code (constant or filter)';
+			}
+			return array( $item( array( 'name' => 'Akismet', 'state' => $state, 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
 	// Admin Columns Pro (v7): their own API on admincolumns.com. KEY FACT:
 	// a successful activation DELETES the pasted subscription key and keeps
 	// an activation TOKEN instead ("old key is no longer needed since 5.7"):
@@ -2489,6 +2536,81 @@ function minn_admin_license_default_providers() {
 			$ok   = in_array( $status, array( 'valid', 'flagged' ), true );
 			$code = $ok ? '' : ( 'expired' === $status ? 'expired' : ( 'limit_reached' === $status ? 'site_limit' : 'invalid' ) );
 			return array( 'ok' => $ok, 'code' => $code, 'message' => $ok ? '' : 'License check returned: ' . str_replace( '_', ' ', (string) $status ) );
+		};
+	}
+
+	// Akismet: their own machinery end to end. Akismet_Admin::save_key() is
+	// the COMPLETE activation flow (verify_key → subscription check via
+	// get_akismet_user → stores only when the account is active); the admin
+	// class is is_admin()/WP_CLI-gated so REST actions require it manually
+	// (the WPForms pattern). Success test = the key actually stored; on
+	// failure verify_key() distinguishes a bad key from an inactive
+	// subscription from an unreachable API. deactivate_key() is their real
+	// remote deregistration (their own full-deactivate precedent), followed
+	// by the option cleanup their disconnect performs. Keys sanitize with
+	// THEIR rule (12 hex chars).
+	if ( class_exists( 'Akismet' ) && defined( 'AKISMET__PLUGIN_DIR' ) ) {
+		$akismet_admin = function () {
+			if ( ! class_exists( 'Akismet_Admin' ) && file_exists( AKISMET__PLUGIN_DIR . 'class.akismet-admin.php' ) ) {
+				require_once AKISMET__PLUGIN_DIR . 'class.akismet-admin.php';
+			}
+			return class_exists( 'Akismet_Admin' );
+		};
+
+		$providers['akismet']['secret_label'] = 'Akismet API key';
+		$providers['akismet']['activate']     = function ( $secret ) use ( $akismet_admin ) {
+			if ( Akismet::predefined_api_key() ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'The key is supplied in code (WPCOM_API_KEY or a filter); it cannot be changed here.' );
+			}
+			$key = preg_replace( '/[^a-f0-9]/i', '', (string) $secret );
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'That does not look like an Akismet key (12 characters, letters a-f and digits).' );
+			}
+			if ( ! $akismet_admin() ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'Akismet admin machinery unavailable.' );
+			}
+			Akismet_Admin::save_key( $key );
+			if ( Akismet::get_api_key() === $key ) {
+				return array( 'ok' => true );
+			}
+			$v = Akismet::verify_key( $key );
+			if ( 'valid' === $v ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'The key is real but its Akismet plan is not active (missing, cancelled or suspended subscription).' );
+			}
+			if ( 'invalid' === $v ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Akismet did not recognize that key.' );
+			}
+			return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach the Akismet API. Please try again.' );
+		};
+		$providers['akismet']['deactivate'] = function () {
+			if ( Akismet::predefined_api_key() ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'The key is supplied in code (WPCOM_API_KEY or a filter); remove it there.' );
+			}
+			$key = (string) Akismet::get_api_key();
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'error', 'message' => 'No key stored' );
+			}
+			try {
+				Akismet::deactivate_key( $key );
+			} catch ( \Throwable $e ) { /* remote deregistration is best-effort; local removal below is the point */ }
+			delete_option( 'wordpress_api_key' );
+			delete_option( 'akismet_alert_code' );
+			delete_option( 'akismet_alert_msg' );
+			return array( 'ok' => true, 'message' => 'Key removed from this site.' );
+		};
+		$providers['akismet']['verify'] = function () {
+			$key = (string) Akismet::get_api_key();
+			if ( '' === $key ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+			}
+			$v = Akismet::verify_key( $key );
+			if ( 'valid' === $v ) {
+				return array( 'ok' => true );
+			}
+			if ( 'invalid' === $v ) {
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Akismet reports this key as invalid.' );
+			}
+			return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach the Akismet API.' );
 		};
 	}
 

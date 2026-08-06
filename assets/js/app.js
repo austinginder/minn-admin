@@ -14166,9 +14166,16 @@
 								<span class="minn-spam-name">${ esc( p.name ) }</span>
 								<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : 'Needs setup' }</span>
 								${ p.blocked ? `<span class="minn-spam-blocked">${ esc( String( p.blocked ) ) } blocked all-time</span>` : '' }
-								${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( p.adminUrl ) }" target="_blank" rel="noopener">Full settings ↗</a>` : '' }
+								${ p.keyProvider && p.configured ? `<button class="minn-spam-link" type="button" data-spamkeychange="${ esc( p.id ) }">Change key…</button>` : '' }
+								${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( p.adminUrl ) }" target="_blank" rel="noopener"${ p.keyProvider && p.configured ? ' style="margin-left:0"' : '' }>Full settings ↗</a>` : '' }
 							</div>
 							<div class="minn-toggle-desc">${ esc( p.note ) }</div>
+							${ p.keyProvider ? `
+							<div class="minn-conn-row" data-spamkeyrow="${ esc( p.id ) }"${ p.configured ? ' hidden' : '' }>
+								<input class="minn-input mono" data-1p-ignore data-lpignore="true" data-bwignore placeholder="${ p.configured ? 'Paste the replacement key' : 'Paste your API key' }">
+								<button class="minn-btn-soft" data-spamkeysave="${ esc( p.keyProvider ) }" data-spamkeycard="${ esc( p.id ) }">Save key</button>
+							</div>
+							<div class="minn-toggle-desc minn-spam-keyerr" data-spamkeyerr="${ esc( p.id ) }" hidden></div>` : '' }
 							${ p.toggles.length ? `<div class="minn-toggle-rows">${ p.toggles.map( ( t ) => `
 								<div class="minn-toggle-row">
 									<div class="minn-toggle-info">
@@ -14349,6 +14356,60 @@
 			btn.addEventListener( 'click', () => {
 				btn.classList.toggle( 'on' );
 				btn.setAttribute( 'aria-checked', btn.classList.contains( 'on' ) );
+			} )
+		);
+		// Paste-a-key on a spam card (keyProvider contract): drives the same
+		// minn-admin/v1/licenses/action endpoint as the Licenses card, so
+		// the guardrails hold — the secret rides one request and is never
+		// stored by Minn. A failure keeps the form open with the typed key
+		// selected for a retype (the license-manager keepForm rule); success
+		// re-fetches settings so the card repaints from server truth.
+		$$( '[data-spamkeychange]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const row = $( `[data-spamkeyrow="${ btn.dataset.spamkeychange }"]`, view );
+				if ( ! row ) return;
+				row.hidden = ! row.hidden;
+				if ( ! row.hidden ) $( 'input', row ).focus( { preventScroll: true } );
+			} )
+		);
+		$$( '[data-spamkeysave]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const row   = btn.closest( '.minn-conn-row' );
+				const input = $( 'input', row );
+				const err   = $( `[data-spamkeyerr="${ btn.dataset.spamkeycard }"]`, view );
+				const key   = input.value.trim();
+				if ( ! key ) {
+					input.focus( { preventScroll: true } );
+					return;
+				}
+				btn.disabled = true;
+				if ( err ) err.hidden = true;
+				try {
+					const res = await api( 'minn-admin/v1/licenses/action', {
+						method: 'POST',
+						body: JSON.stringify( { provider: btn.dataset.spamkeysave, action: 'activate', secret: key } ),
+					} );
+					if ( res.ok ) {
+						toast( __( 'Key saved and verified' ) );
+						state.cache.settings = null;
+						state.cache.licenses = null;
+						renderSettings();
+						return;
+					}
+					if ( err ) {
+						err.textContent = res.message || __( 'The key was not accepted.' );
+						err.hidden = false;
+					}
+					btn.disabled = false;
+					input.focus( { preventScroll: true } );
+					input.select();
+				} catch ( e ) {
+					if ( err ) {
+						err.textContent = __( 'Could not reach the server. Please try again.' );
+						err.hidden = false;
+					}
+					btn.disabled = false;
+				}
 			} )
 		);
 		const spamQueueBtn = $( '#minn-spam-queue', view );

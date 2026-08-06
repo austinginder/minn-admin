@@ -173,6 +173,30 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const akCard = await page.$$eval( '.minn-spam-provider', ( els ) =>
 			( els.find( ( el ) => el.textContent.includes( 'Akismet' ) ) || { textContent: '' } ).textContent );
 		t.check( 'keyless Akismet shows Needs setup', /Needs setup/.test( akCard ) && /API key/.test( akCard ) );
+
+		/* ===== Paste-a-key on the card (keyProvider contract) =====
+		   Drives the LIVE Akismet API with a bogus 12-hex key: their real
+		   refusal must land inline, the form must stay open, and nothing
+		   may be stored (the card stays Needs setup). */
+		await page.waitForSelector( '[data-spamkeyrow="akismet"]:not([hidden]) input', { timeout: 10000 } );
+		await page.click( '[data-spamkeyrow="akismet"] input' );
+		await page.keyboard.type( 'deadbeefcafe' );
+		await page.click( '[data-spamkeysave="akismet"]' );
+		await page.waitForFunction( () => {
+			const e = document.querySelector( '[data-spamkeyerr="akismet"]' );
+			return e && ! e.hidden && e.textContent.length > 0;
+		}, null, { timeout: 30000 } );
+		const keyErr = await page.$eval( '[data-spamkeyerr="akismet"]', ( e ) => e.textContent );
+		t.check( 'bogus key refused inline with Akismet\'s own message', /did not recognize|not valid|invalid/i.test( keyErr ), keyErr );
+		const afterRefusal = await spamState();
+		const akAfter = ( afterRefusal.providers || [] ).find( ( p ) => p.id === 'akismet' );
+		t.check( 'refused key stores nothing (card still unconfigured)', akAfter && ! akAfter.configured && akAfter.keyProvider === 'akismet', JSON.stringify( akAfter ) );
+		const formOpen = await page.evaluate( () => {
+			const row = document.querySelector( '[data-spamkeyrow="akismet"]' );
+			const btn = document.querySelector( '[data-spamkeysave="akismet"]' );
+			return row && ! row.hidden && btn && ! btn.disabled;
+		} );
+		t.check( 'failure keeps the form open for a retype', formOpen );
 	} finally {
 		await setPlugin( 'akismet/akismet', 'inactive' ).catch( () => {} );
 		await setPlugin( 'disable-comments/disable-comments', 'active' ).catch( () => {} );

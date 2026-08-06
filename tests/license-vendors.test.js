@@ -105,6 +105,10 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 			// real key lands; activate/deactivate/verify attach via the
 			// manual class require, so controls must be on offer).
 			'WPForms Pro',
+			// Akismet (first connections-center row, a service key not a
+			// purchase license; installed-inactive resident so the row is
+			// off with Turn on only — actions need their code loaded).
+			'Akismet',
 		];
 		for ( const name of FAMILY ) {
 			const info = await page.evaluate( ( n ) => {

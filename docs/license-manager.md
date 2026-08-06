@@ -467,6 +467,7 @@ license data on a lab site.
 | Yoast SEO Premium | Activate ↗ + verify | read (missing until MyYoast) | 2026-07-15 | free Yoast `WPSEO_Addon_Manager`; page `wpseo_licenses`; no paste-a-key |
 | Smash Balloon family (8 products) | activate / deactivate / verify | real All Plugins key | 2026-07-15 | EDD on smashballoon.com; multi-product key per item_name |
 | WPForms Pro | activate / deactivate / verify | bogus key (live wpforms.com refusal, nothing written, secret never echoed) | 2026-08-06 | option `wpforms_license` {key, type, is_* flags}; their deactivate resets it to '' (a string); WPFORMS_LICENSE_KEY constant wins and blocks Minn deactivate; class-license.php is admin/cron/CLI-gated so actions require it manually; first Awesome Motive family provider |
+| Akismet | activate / deactivate / verify | bogus key (live akismet.com refusal, nothing written; also driven through the spam-card paste field) | 2026-08-06 | SERVICE KEY, first connections-center row; `Akismet_Admin::save_key()` is the complete activate (verify + subscription check + store), admin class require'd manually under REST; alert options are the local validity signal; predefined_api_key (constant/filter) renders read-only |
 | Freemius / EDD / SureCart generics, Avada, Smush Pro, AnalyticsWP, BSF family | read | real stored data on labs | 2026-07-10 | see the verification map above |
 | StellarWP Uplink / PUE catch-all | read | real stored data (TEC six-pack) | 2026-07-11 | registry reader; skips slugs claimed by dedicated providers |
 
