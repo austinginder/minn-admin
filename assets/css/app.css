@@ -331,6 +331,19 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-core-chip:hover { border-color: var(--amber); }
 .minn-core-chip svg { width: 14px; height: 14px; }
+/* Bulk-update progress chip — accent sibling of the core/vis pills, visible
+   on every route while "Update everything" (or a core update) runs; the
+   spinning icon is the ambient signal once the notification panel closes. */
+.minn-upd-chip[hidden] { display: none; }
+.minn-upd-chip:not([hidden]) {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600;
+  color: var(--accent2); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  padding: 6px 12px; border-radius: 9px; cursor: pointer; white-space: nowrap; max-width: 280px;
+}
+.minn-upd-chip:hover { border-color: var(--accent); }
+.minn-upd-chip span { overflow: hidden; text-overflow: ellipsis; }
+.minn-upd-chip svg { width: 14px; height: 14px; flex: none; animation: minn-upd-rot 1.1s linear infinite; }
+@keyframes minn-upd-rot { to { transform: rotate(360deg); } }
 /* Site-visibility chip — same amber pill as the core-update chip, on every
    route until the site is fully public again. */
 .minn-vis-chip[hidden] { display: none; }
@@ -3085,7 +3098,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   /* Topbar: title + theme + notifications + New (icon only). */
   .minn-topbar { padding: 0 12px; gap: 8px; }
   .minn-topbar-sub, #minn-view-site, #minn-help-btn { display: none; }
-  .minn-core-chip span, .minn-vis-chip span { display: none; } /* icon-only pill */
+  .minn-core-chip span, .minn-vis-chip span, .minn-upd-chip span { display: none; } /* icon-only pill */
   .minn-topbar-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .minn-topbar .minn-btn-primary { font-size: 0; gap: 0; padding: 8px 10px; }
 

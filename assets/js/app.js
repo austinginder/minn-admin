@@ -1847,7 +1847,8 @@
 					<h1 class="minn-topbar-title" id="minn-title"></h1>
 					<div class="minn-topbar-sub" id="minn-sub"></div>
 					<div class="minn-topbar-actions">
-						<button class="minn-vis-chip" id="minn-vis-chip" hidden title="${ esc( __( 'Your site is not fully public' ) ) }">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
+						<button class="minn-upd-chip" id="minn-upd-chip" hidden title="${ esc( __( 'Updates are running — click for details' ) ) }">${ icon( 'refresh' ) }<span id="minn-upd-chip-text"></span></button>
+					<button class="minn-vis-chip" id="minn-vis-chip" hidden title="${ esc( __( 'Your site is not fully public' ) ) }">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( __( 'A WordPress update is available' ) ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
 						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="${ esc( __( 'View site' ) ) }" aria-label="${ esc( __( 'View site (opens in a new tab)' ) ) }">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }" aria-label="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
@@ -1917,6 +1918,16 @@
 		// Core updates outrank everything else — the chip is visible on every
 		// route while one pends and lands on the Overview banner's button.
 		$( '#minn-core-chip' ).addEventListener( 'click', () => go( 'overview' ) );
+		// Bulk-update progress chip → the notification panel's Updates tab,
+		// where the full phase label and the results land.
+		$( '#minn-upd-chip' ).addEventListener( 'click', () => {
+			state.notifTab = 'updates';
+			if ( ! state.notifOpen ) {
+				toggleNotif();
+			} else {
+				renderOverlays();
+			}
+		} );
 		$( '#minn-vis-chip' ).addEventListener( 'click', ( e ) => openVisibilityPopover( e.currentTarget ) );
 		$( '#minn-new-btn' ).addEventListener( 'click', ( e ) => {
 			e.stopPropagation();
@@ -11411,6 +11422,21 @@
 		const u = state.cache.core && state.cache.core.update;
 		chip.hidden = ! u;
 		if ( u ) $( '#minn-core-chip-text' ).textContent = `WordPress ${ u.version }`;
+	}
+
+	// Bulk-update progress chip: the ambient "updates are running" signal once
+	// the notification panel closes (Austin's report — the run was invisible).
+	// Text mirrors state.updatingAll's phase label; the spinning icon carries
+	// the motion. Lives in the static topbar, so like the core chip it updates
+	// by explicit call, never via renderOverlays.
+	function updateUpdChip() {
+		const chip = $( '#minn-upd-chip' );
+		if ( ! chip ) return;
+		const label = state.updatingAll || '';
+		chip.hidden = ! label;
+		if ( label ) {
+			$( '#minn-upd-chip-text' ).textContent = label.replace( /…\s*$/, '' );
+		}
 	}
 
 	// The live visibility state (state.visibility) falls back to the boot
@@ -23881,7 +23907,7 @@
 			confirmLabel: 'Update everything',
 		} );
 		if ( ! okAll ) return;
-		const setPhase = ( label ) => { state.updatingAll = label; renderOverlays(); };
+		const setPhase = ( label ) => { state.updatingAll = label; renderOverlays(); updateUpdChip(); };
 		const doneBits = [];
 		const failures = [];
 		// Offered version before the bulk runs (map is plugin_file => new_version).
@@ -23890,7 +23916,11 @@
 		const minnOfferVersion = minnOfferKey ? state.cache.pluginUpdates[ minnOfferKey ] : '';
 		let minnSelfUpdated = false;
 		if ( parts.some( ( p ) => p.kind === 'plugins' ) ) {
-			setPhase( 'Updating plugins…' );
+			// One bulk request by design (fastest path — Austin: never slow
+			// updates down for per-item progress); the chip shows the count.
+			const np = ( parts.find( ( p ) => p.kind === 'plugins' ) || {} ).n || 0;
+			/* translators: %s: number of plugins. */
+			setPhase( sprintf( _n( 'Updating %s plugin…', 'Updating %s plugins…', np ), np ) );
 			try {
 				const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
 				const updated = r.updated || [];
@@ -23907,9 +23937,12 @@
 		const themeMap = state.cache.themeUpdates || {};
 		if ( parts.some( ( p ) => p.kind === 'themes' ) ) {
 			let ok = 0;
-			for ( const stylesheet of Object.keys( themeMap ) ) {
+			const sheets = Object.keys( themeMap );
+			for ( const stylesheet of sheets ) {
 				const t = ( state.cache.themes || [] ).find( ( x ) => x.stylesheet === stylesheet );
-				setPhase( `Updating ${ t ? t.name : stylesheet }…` );
+				const nth = sheets.indexOf( stylesheet ) + 1;
+				const counter = sheets.length > 1 ? ` (${ nth }/${ sheets.length })` : '';
+				setPhase( `Updating ${ t ? t.name : stylesheet }…${ counter }` );
 				try {
 					await api( 'minn-admin/v1/themes/update', { method: 'POST', body: JSON.stringify( { stylesheet } ) } );
 					ok++;
@@ -23929,6 +23962,7 @@
 			}
 		}
 		state.updatingAll = null;
+		updateUpdChip();
 		// Minn self-update: skip the soft cache refresh and hard-reload so
 		// the new version's assets and boot payload replace this SPA.
 		if ( minnSelfUpdated ) {
@@ -24021,11 +24055,13 @@
 				}
 				state.updatingAll = `Updating WordPress…`;
 				renderOverlays();
+				updateUpdChip();
 				try {
 					const version = await runCoreUpdate( u.version );
 					toast( `WordPress updated to ${ version }` );
 				} finally {
 					state.updatingAll = null;
+					updateUpdChip();
 				}
 				state.cache.core = null;
 				state.cache.notifications = null;

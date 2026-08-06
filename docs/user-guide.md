@@ -131,10 +131,13 @@ Minn's interface.
 
 **Updates**: the Updates tab shows everything pending, and **Update
 everything** runs plugins, then themes, then WordPress core, telling you
-exactly what will change and what is untouched before it starts. Minn
-updates itself the same way: each release is fetched from the project's
-GitHub releases and checked against a published checksum before it is
-allowed to install.
+exactly what will change and what is untouched before it starts. While a
+run is going, a progress pill in the top bar names the current phase and
+stays visible on every screen, so you can close the panel or move around
+Minn and still see that updates are working; click it to come back to the
+panel. Minn updates itself the same way: each release is fetched from the
+project's GitHub releases and checked against a published checksum before
+it is allowed to install.
 
 **Traffic**: with a supported analytics plugin active (Koko Analytics,
 Matomo, Independent Analytics, Jetpack Stats, Site Kit and others), the
