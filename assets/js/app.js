@@ -10900,7 +10900,7 @@
 			<div class="minn-tabs">
 				<button class="minn-tab${ state.extTab === 'plugins' ? ' active' : '' }" data-xtab="plugins">Plugins</button>
 				${ B.caps.themes ? `<button class="minn-tab${ state.extTab === 'themes' ? ' active' : '' }" data-xtab="themes">Themes</button>` : '' }
-				${ B.caps.settings ? `<button class="minn-tab${ state.extTab === 'licenses' ? ' active' : '' }" data-xtab="licenses">Licenses &amp; connections</button>` : '' }
+				${ B.caps.settings ? `<button class="minn-tab${ state.extTab === 'licenses' ? ' active' : '' }" data-xtab="licenses">Licenses</button>` : '' }
 			</div>` : '';
 
 	/** Loading shell that keeps Plugins/Themes/Licenses tabs painted. */
@@ -10988,7 +10988,17 @@
 		return state.cache.licenses;
 	}
 
-	const LIC_LABEL = { valid: 'Valid', expired: 'Expired', invalid: 'Invalid', missing: 'No license', unknown: 'Unknown' };
+	// Pill labels are category-aware: a connection row reads "Connected" /
+	// "Not connected" and a service-key row "No key" — a chip saying
+	// "connection" next to a pill saying "No license" would contradict the
+	// classification the chips exist to carry.
+	const licPillLabel = ( it ) => ( {
+		valid: it.category === 'connection' ? __( 'Connected' ) : __( 'Valid' ),
+		expired: __( 'Expired' ),
+		invalid: __( 'Invalid' ),
+		missing: it.category === 'connection' ? __( 'Not connected' ) : ( it.category === 'key' ? __( 'No key' ) : __( 'No license' ) ),
+		unknown: __( 'Unknown' ),
+	}[ it.state ] || esc( it.state ) );
 
 	function licenseRowHtml( it ) {
 		const meta = [
@@ -11011,7 +11021,7 @@
 			// No link-out on off rows: the vendor's screen does not exist
 			// while its plugin is inactive (Turn on is the affordance).
 			! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid' && ! it.off
-				? `<button data-lic="href" data-href="${ esc( it.activateUrl ) }">${ it.category === 'connection' ? 'Connect ↗' : 'Activate ↗' }</button>` : '',
+				? `<button data-lic="href" data-href="${ esc( it.activateUrl ) }">${ it.category === 'connection' ? __( 'Connect ↗' ) : __( 'Activate ↗' ) }</button>` : '',
 			can.includes( 'deactivate' ) && it.state === 'valid'
 				? `<button class="lic-menu lic-danger" data-lic="deactivate" data-provider="${ esc( it.source ) }" data-name="${ esc( it.name ) }">Deactivate</button>` : '',
 			can.includes( 'verify' ) && it.key
@@ -11020,11 +11030,11 @@
 		const hasMenu = controls.includes( 'lic-menu' );
 		return `
 		<div class="minn-sys-ext-item minn-lic-item minn-lic-row${ it.off ? ' off' : '' }">
-			<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.kind === 'theme' ? ' <span class="minn-sys-ext-parent">theme</span>' : '' }${ it.category === 'key' ? ' <span class="minn-lic-cat">service key</span>' : it.category === 'connection' ? ' <span class="minn-lic-cat">connection</span>' : '' }
+			<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.kind === 'theme' ? ' <span class="minn-sys-ext-parent">theme</span>' : '' }${ it.category === 'key' ? ` <span class="minn-lic-cat">${ __( 'service key' ) }</span>` : it.category === 'connection' ? ` <span class="minn-lic-cat">${ __( 'connection' ) }</span>` : '' }
 				${ meta ? `<div class="minn-sys-lic-meta">${ esc( meta ) }</div>` : '' }
 				${ controls ? `<div class="minn-lic-actions">${ controls }</div>` : '' }
 			</span>
-			<span class="minn-lic-pill ${ esc( it.state ) }">${ LIC_LABEL[ it.state ] || esc( it.state ) }</span>
+			<span class="minn-lic-pill ${ esc( it.state ) }">${ licPillLabel( it ) }</span>
 			${ hasMenu ? `<button class="minn-lic-more" data-licmore title="More actions">⋯</button>` : '<span class="minn-lic-more-gap"></span>' }
 		</div>`;
 	}
@@ -11068,17 +11078,23 @@
 		const keepScrollTop = scroller ? scroller.scrollTop : 0;
 		const items = lic.items || [];
 		const groups = [
-			{ key: 'attention', label: 'Needs attention', rows: items.filter( ( i ) => ! i.off && ( i.state === 'expired' || i.state === 'invalid' ) ) },
-			{ key: 'valid', label: 'Valid', rows: items.filter( ( i ) => ! i.off && i.state === 'valid' ) },
-			{ key: 'none', label: 'Not set up', rows: items.filter( ( i ) => ! i.off && ( i.state === 'missing' || i.state === 'unknown' ) ) },
+			{ key: 'attention', label: __( 'Needs attention' ), rows: items.filter( ( i ) => ! i.off && ( i.state === 'expired' || i.state === 'invalid' ) ) },
+			{ key: 'valid', label: __( 'Valid' ), rows: items.filter( ( i ) => ! i.off && i.state === 'valid' ) },
+			{ key: 'none', label: __( 'Not set up' ), rows: items.filter( ( i ) => ! i.off && ( i.state === 'missing' || i.state === 'unknown' ) ) },
 		];
 		const off = items.filter( ( i ) => i.off );
 		const bad = groups[ 0 ].rows.length;
 		const hasCoreConnectors = items.some( ( i ) => i.source === 'core-connectors' );
+		/* translators: %s: number of rows on the Licenses tab. */
+		let licMeta = sprintf( _n( '%s component', '%s components', items.length ), items.length );
+		/* translators: %s: how many rows need attention. */
+		if ( bad ) licMeta += ' · ' + sprintf( _n( '%s needs attention', '%s need attention', bad ), bad );
+		/* translators: %s: a button reading "Settings → Connectors". */
+		const connFoot = hasCoreConnectors ? ' ' + sprintf( __( 'Core connector keys (AI providers) are managed in %s.' ), `<button class="minn-lic-connlink" id="minn-lic-connectors">${ __( 'Settings → Connectors' ) }</button>` ) : '';
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			${ extTabsHtml() }
-			<div class="minn-toolbar-meta">${ items.length } licenses &amp; connections${ bad ? ` · ${ bad } need${ bad === 1 ? 's' : '' } attention` : '' }</div>
+			<div class="minn-toolbar-meta">${ licMeta }</div>
 		</div>
 		<div class="minn-card minn-sys-ext" id="minn-sys-licenses">
 			${ items.length ? `
@@ -11094,8 +11110,8 @@
 				</button>
 				${ state.licOffOpen ? `<div class="minn-lic-list">${ off.map( licenseRowHtml ).join( '' ) }</div>` : '' }
 			</div>` : '' }
-			<div class="minn-sys-lic-foot">Each state is the vendor's own last-recorded check, not a live lookup. Activate and deactivate run through the vendor's own code; a pasted key is used once and never stored.${ hasCoreConnectors ? ' Core connector keys (AI providers) are managed in <button class="minn-lic-connlink" id="minn-lic-connectors">Settings → Connectors</button>.' : '' }</div>
-			` : '<div class="minn-empty">No licenses or connected services detected.</div>' }
+			<div class="minn-sys-lic-foot">${ __( "Each state is the vendor's own last-recorded check, not a live lookup. Activate and deactivate run through the vendor's own code; a pasted key is used once and never stored." ) }${ connFoot }</div>
+			` : `<div class="minn-empty">${ __( 'No licenses or connected services detected.' ) }</div>` }
 		</div>`;
 		bindExtTabs( view );
 		const connLink = $( '#minn-lic-connectors', view );
