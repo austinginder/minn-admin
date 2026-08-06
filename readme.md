@@ -161,9 +161,13 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   state with inactive components collapsed, with **paste-to-activate, deactivate and
   re-verify** wired through each
   vendor's own code for more than twenty vendors (Elementor Pro, ACF PRO, WP Rocket, Gravity
-  Forms & SMTP, Divi, Beaver Builder, Brizy, Etch, Bricks, The Events Calendar family, Kadence
+  Forms & SMTP, WPForms Pro, Divi, Beaver Builder, Brizy, Etch, Bricks, The Events Calendar family, Kadence
   Blocks Pro, WPMU DEV, SearchWP, Gravity Perks, GP Premium, Perfmatters, WP All Import/Export,
   Slider Revolution, LayerSlider), plus generic Freemius / EDD / SureCart / StellarWP detection.
+  Service keys and account connections ride the same card with a chip saying which they are:
+  Akismet's key (also editable in place on the spam card), the **WooCommerce.com, Site Kit and
+  Jetpack connections** as read-only rows with a Connect link when absent, and the AI connector
+  keys WordPress core manages, one doorway from Settings → Connectors.
   A pasted key rides one request and is never stored or logged; failures never auto-retry;
   inactive components can be turned back on in place. Third parties register via
   `minn_admin_license_providers`
@@ -180,7 +184,7 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   between areas and in-place edit for block/text/HTML widgets
 - **Surfaces** — Minn's answer to plugin sprawl: one sidebar item per *job*, not per plugin,
   with every capable plugin layered in behind it and a provider switcher when more than one is
-  active. **Forms** (Gravity Forms, Ninja Forms, Fluent Forms, Forminator, Formidable, Everest
+  active. **Forms** (Gravity Forms, WPForms, Ninja Forms, Fluent Forms, Forminator, Formidable, Everest
   Forms, SureForms, Elementor Pro, Contact Form 7 via Flamingo or CFDB7) shows entries as
   contact cards with real field labels and ←/→ stepping, with the full **Gravity Forms
   workflow** inside Minn: star, spam, trash, restore, **bulk actions**, notes and resent
@@ -191,7 +195,10 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   Site Mailer) shows sent mail with the real HTML body in a **fully sandboxed preview**,
   resend, and search plus delete where the logger supports it, plus Gravity SMTP's **full
   settings** (all 21 connectors, drawn at runtime from its own schema), suppressions,
-  **send a test email**, and a **FluentSMTP Settings view** for the day-to-day choices;
+  **send a test email**, and a **FluentSMTP Settings view** for the day-to-day choices
+  (on FluentSMTP 2.3+ resends ride its own machinery with a logged trail, **Resend to…**
+  retargets a message, and its daily connection check surfaces on the status card and
+  System health);
   **Activity Log** (Simple History, WP Activity Log, Aryo, Stream, All-In-One Security,
   Wordfence login security, plus **Limit Login Attempts Reloaded** and **Solid Security**
   lockouts with unlock/release actions) reads like an audit feed; **Redirects** (Redirection,
