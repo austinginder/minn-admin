@@ -4,9 +4,10 @@
  *
  * Scrutoscope is a read-only WordPress performance profiler with a real REST
  * API under scrutoscope/v1 (manage_options). Minn surfaces recent profiles as
- * a Tools list: open a row for top sources, queries and HTTP calls built from
- * their own /profile/{id} response (via rest_do_request so their sanitizer
- * stays in the path). The Cron view inventories scheduled hooks (via their
+ * a Tools list built from their own routes via rest_do_request, so their
+ * output sanitizer stays in the path: /profiles for the list (1.5+, with a
+ * column-read fallback for older builds) and /profile/{id} for top sources,
+ * queries and HTTP calls. The Cron view inventories scheduled hooks (via their
  * Diagnostics\Cron) and, on Scrutoscope 1.4+, offers Profile this hook —
  * which calls Profiler::profile_cron_hook so the hook's real side effects
  * fire under the profiler and a new on_demand profile is saved. Capture
@@ -43,15 +44,116 @@ function minn_admin_scrutoscope_table() {
 }
 
 /**
+ * Whether Scrutoscope 1.5+ serves the per-capture list over REST.
+ *
+ * Gated on the shaper their contract names (not a version string) so a
+ * downgrade falls back cleanly. Preferred over the table read because their
+ * output Sanitizer runs on that path: reduced SQL and host-only HTTP URLs are
+ * re-applied at read time as defense-in-depth for rows written by older
+ * builds, and a direct SELECT is exactly what skips it.
+ */
+function minn_admin_scrutoscope_has_list_api() {
+	return method_exists( '\\Scrutoscope\\Api\\RestApi', 'shape_profile_list_item' );
+}
+
+/** Whether Storage exposes the aggregate stats helper (1.5+). */
+function minn_admin_scrutoscope_has_table_stats() {
+	return method_exists( '\\Scrutoscope\\Profiler\\Storage', 'get_table_stats' );
+}
+
+/** Human label for a route_class value; unknown classes pass through. */
+function minn_admin_scrutoscope_route_class_label( $class ) {
+	$map = array(
+		'front'   => __( 'Front end', 'minn-admin' ),
+		'admin'   => __( 'Admin', 'minn-admin' ),
+		'ajax'    => __( 'Ajax', 'minn-admin' ),
+		'rest'    => __( 'REST', 'minn-admin' ),
+		'wp-cron' => __( 'Cron', 'minn-admin' ),
+		'cli'     => __( 'CLI', 'minn-admin' ),
+	);
+	$class = (string) $class;
+	if ( isset( $map[ $class ] ) ) {
+		return $map[ $class ];
+	}
+	return '' !== $class ? $class : '—';
+}
+
+/**
+ * Map one item in Scrutoscope's list shape (RestApi::shape_profile_list_item)
+ * to a Minn collection row. The legacy table path converts its rows into the
+ * same shape first, so both paths render identically.
+ *
+ * @param array $r Item in their list shape.
+ */
+function minn_admin_scrutoscope_shape_row( array $r ) {
+	$ms    = isset( $r['duration_ms'] )
+		? (float) $r['duration_ms']
+		: round( ( (float) ( $r['duration_ns'] ?? 0 ) ) / 1e6, 1 );
+	$route = (string) ( $r['route'] ?? '' );
+	$type  = (string) ( $r['profile_type'] ?? '' );
+	$type  = '' !== $type ? $type : 'session';
+
+	return array(
+		'id'          => (int) ( $r['id'] ?? 0 ),
+		'route'       => '' !== $route
+			? $route
+			: trim( (string) ( $r['request_method'] ?? '' ) . ' ' . (string) ( $r['request_url'] ?? '' ) ),
+		'context'     => minn_admin_scrutoscope_route_class_label( $r['route_class'] ?? '' ),
+		'duration'    => $ms . ' ms',
+		'duration_ms' => $ms,
+		'type'        => $type,
+		'role'        => (string) ( $r['user_role'] ?? '' ) ?: '—',
+		'status'      => ! empty( $r['is_pinned'] ) ? 'pinned' : $type,
+		'pinned'      => ! empty( $r['is_pinned'] ),
+		// captured_at is current_time('mysql') = site-local; emit raw.
+		'date'        => (string) ( $r['captured_at'] ?? '' ),
+		'http'        => ! empty( $r['response_status'] ) ? (string) (int) $r['response_status'] : '—',
+	);
+}
+
+/**
  * List rows for the collection, newest first.
  *
- * Scrutoscope's public REST groups by route; Minn lists individual captures
- * for open-and-inspect daily work. Columns only — heavy profile_data blobs
- * stay out of the list path.
+ * Scrutoscope 1.5+ serves individual captures at GET /scrutoscope/v1/profiles
+ * (their route-grouped endpoint never listed them), so Minn reads through
+ * rest_do_request and their sanitizer stays in the path. Older builds fall
+ * back to the column read below. Columns only either way — heavy profile_data
+ * blobs stay out of the list path.
  *
  * @return array{items: array, total: int}
  */
 function minn_admin_scrutoscope_list( WP_REST_Request $request ) {
+	if ( minn_admin_scrutoscope_has_list_api() ) {
+		$req = new WP_REST_Request( 'GET', '/scrutoscope/v1/profiles' );
+		foreach ( array( 'kind', 'search', 'page', 'per_page' ) as $param ) {
+			$value = $request->get_param( $param );
+			if ( null !== $value && '' !== $value ) {
+				$req->set_param( $param, $value );
+			}
+		}
+		$res = rest_do_request( $req );
+		if ( ! $res->is_error() ) {
+			$data  = $res->get_data();
+			$items = array();
+			foreach ( (array) ( $data['items'] ?? array() ) as $r ) {
+				if ( is_array( $r ) ) {
+					$items[] = minn_admin_scrutoscope_shape_row( $r );
+				}
+			}
+			return array( 'items' => $items, 'total' => (int) ( $data['total'] ?? 0 ) );
+		}
+		// Fall through to the column read if their route answered an error.
+	}
+
+	return minn_admin_scrutoscope_list_legacy( $request );
+}
+
+/**
+ * Pre-1.5 fallback: read the profiles table columns directly.
+ *
+ * @return array{items: array, total: int}
+ */
+function minn_admin_scrutoscope_list_legacy( WP_REST_Request $request ) {
 	global $wpdb;
 
 	$table = minn_admin_scrutoscope_table();
@@ -67,12 +169,9 @@ function minn_admin_scrutoscope_list( WP_REST_Request $request ) {
 	$kind = (string) $request->get_param( 'kind' );
 	if ( 'pinned' === $kind ) {
 		$where[] = 'is_pinned = 1';
-	} elseif ( 'session' === $kind ) {
+	} elseif ( in_array( $kind, array( 'session', 'background', 'on_demand' ), true ) ) {
 		$where[] = 'profile_type = %s';
-		$args[]  = 'session';
-	} elseif ( 'background' === $kind ) {
-		$where[] = 'profile_type = %s';
-		$args[]  = 'background';
+		$args[]  = $kind;
 	}
 
 	$search = (string) $request->get_param( 'search' );
@@ -91,14 +190,14 @@ function minn_admin_scrutoscope_list( WP_REST_Request $request ) {
 	if ( $args ) {
 		$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", $args ) );
 		$rows  = $wpdb->get_results( $wpdb->prepare(
-			"SELECT id, route_key, request_method, request_url, profile_type, duration_ns, user_role, captured_at, is_pinned, note, tags, response_status
+			"SELECT id, route_key, route_class, request_method, request_url, profile_type, duration_ns, user_role, captured_at, is_pinned, note, tags, response_status
 			 FROM {$table} WHERE {$where_sql} ORDER BY captured_at DESC, id DESC LIMIT %d OFFSET %d",
 			array_merge( $args, array( $per_page, $offset ) )
 		), ARRAY_A );
 	} else {
 		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}" );
 		$rows  = $wpdb->get_results( $wpdb->prepare(
-			"SELECT id, route_key, request_method, request_url, profile_type, duration_ns, user_role, captured_at, is_pinned, note, tags, response_status
+			"SELECT id, route_key, route_class, request_method, request_url, profile_type, duration_ns, user_role, captured_at, is_pinned, note, tags, response_status
 			 FROM {$table} WHERE {$where_sql} ORDER BY captured_at DESC, id DESC LIMIT %d OFFSET %d",
 			$per_page,
 			$offset
@@ -108,21 +207,9 @@ function minn_admin_scrutoscope_list( WP_REST_Request $request ) {
 
 	$items = array();
 	foreach ( (array) $rows as $r ) {
-		$ms     = round( ( (float) $r['duration_ns'] ) / 1e6, 1 );
-		$route  = (string) $r['route_key'];
-		$items[] = array(
-			'id'       => (int) $r['id'],
-			'route'    => $route ? $route : ( (string) $r['request_method'] . ' ' . (string) $r['request_url'] ),
-			'duration' => $ms . ' ms',
-			'duration_ms' => $ms,
-			'type'     => (string) $r['profile_type'] ?: 'session',
-			'role'     => (string) $r['user_role'] ?: '—',
-			'status'   => ! empty( $r['is_pinned'] ) ? 'pinned' : ( (string) $r['profile_type'] ?: 'session' ),
-			'pinned'   => ! empty( $r['is_pinned'] ),
-			// captured_at is current_time('mysql') = site-local; emit raw.
-			'date'     => (string) $r['captured_at'],
-			'http'     => $r['response_status'] ? (string) (int) $r['response_status'] : '—',
-		);
+		// Normalize the column read into their list shape, then share the mapper.
+		$r['route'] = (string) ( $r['route_key'] ?? '' );
+		$items[]    = minn_admin_scrutoscope_shape_row( $r );
 	}
 
 	return array( 'items' => $items, 'total' => $total );
@@ -253,21 +340,58 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 	);
 }
 
-/** Status card model (capture posture + counts). */
-function minn_admin_scrutoscope_status_model() {
-	global $wpdb;
+/**
+ * Storage totals for the status card.
+ *
+ * Scrutoscope 1.5+ answers this from Storage::get_table_stats() (and the
+ * newest capture comes off their list route), so the adapter runs no SQL of
+ * its own. Older builds fall back to the column read.
+ *
+ * @return array{total: int, last: string, routes: int, pinned: int, oldest: string, bytes: int}
+ */
+function minn_admin_scrutoscope_storage_stats() {
+	$out = array( 'total' => 0, 'last' => '', 'routes' => 0, 'pinned' => 0, 'oldest' => '', 'bytes' => 0 );
 
+	if ( minn_admin_scrutoscope_has_table_stats() ) {
+		$stats         = (array) \Scrutoscope\Profiler\Storage::get_table_stats();
+		$out['total']  = (int) ( $stats['rows'] ?? 0 );
+		$out['routes'] = (int) ( $stats['route_count'] ?? 0 );
+		$out['pinned'] = (int) ( $stats['pinned_count'] ?? 0 );
+		$out['oldest'] = (string) ( $stats['oldest'] ?? '' );
+		$out['bytes']  = (int) ( $stats['size_bytes'] ?? 0 );
+
+		// get_table_stats() reports the oldest capture; the newest rides the
+		// list route (already sorted newest first).
+		if ( $out['total'] > 0 && minn_admin_scrutoscope_has_list_api() ) {
+			$req = new WP_REST_Request( 'GET', '/scrutoscope/v1/profiles' );
+			$req->set_param( 'per_page', 1 );
+			$res = rest_do_request( $req );
+			if ( ! $res->is_error() ) {
+				$first        = (array) ( $res->get_data()['items'][0] ?? array() );
+				$out['last'] = (string) ( $first['captured_at'] ?? '' );
+			}
+		}
+		return $out;
+	}
+
+	global $wpdb;
 	$table = minn_admin_scrutoscope_table();
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	$total = 0;
-	$last  = '';
 	if ( $found && 0 === strcasecmp( (string) $found, $table ) ) {
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+		$out['total'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$last = (string) $wpdb->get_var( "SELECT captured_at FROM {$table} ORDER BY captured_at DESC, id DESC LIMIT 1" );
+		$out['last'] = (string) $wpdb->get_var( "SELECT captured_at FROM {$table} ORDER BY captured_at DESC, id DESC LIMIT 1" );
 	}
+	return $out;
+}
+
+/** Status card model (capture posture + counts). */
+function minn_admin_scrutoscope_status_model() {
+	$stats = minn_admin_scrutoscope_storage_stats();
+	$total = $stats['total'];
+	$last  = $stats['last'];
 
 	$bg    = (bool) get_option( 'scrutoscope_background_profiling', false );
 	$rate  = (float) get_option( 'scrutoscope_sample_rate', 10 );
@@ -285,7 +409,16 @@ function minn_admin_scrutoscope_status_model() {
 		array(
 			'label' => 'Profiles stored',
 			'value' => number_format_i18n( $total ),
-			'hint'  => $last ? ( 'Latest ' . $last ) : 'None yet',
+			'hint'  => $last
+				? trim(
+					/* translators: %s: date and time of the most recent capture. */
+					sprintf( __( 'Latest %s', 'minn-admin' ), $last )
+					. ( $stats['pinned'] > 0
+						/* translators: %s: number of pinned profiles. */
+						? ' · ' . sprintf( __( '%s pinned', 'minn-admin' ), number_format_i18n( $stats['pinned'] ) )
+						: '' )
+				)
+				: 'None yet',
 		),
 		array(
 			'label' => 'Query profiling',
@@ -304,6 +437,25 @@ function minn_admin_scrutoscope_status_model() {
 			'value' => defined( 'SCRUTOSCOPE_VERSION' ) ? (string) SCRUTOSCOPE_VERSION : '—',
 		),
 	);
+
+	// Coverage breadth + retention window (Scrutoscope 1.5+ stats only).
+	if ( $stats['routes'] > 0 ) {
+		array_splice(
+			$rows,
+			2,
+			0,
+			array(
+				array(
+					'label' => __( 'Routes covered', 'minn-admin' ),
+					'value' => number_format_i18n( $stats['routes'] ),
+					'hint'  => $stats['oldest']
+						/* translators: %s: date and time of the oldest stored capture. */
+						? sprintf( __( 'History since %s', 'minn-admin' ), $stats['oldest'] )
+						: '',
+				),
+			)
+		);
+	}
 
 	return array(
 		'rows'    => $rows,
@@ -511,11 +663,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'pinned', 'Pinned' ),
 					array( 'session', 'Session' ),
 					array( 'background', 'Background' ),
+					// Profile this hook (below) writes profile_type=on_demand —
+					// without this tab Minn's own captures land under All only.
+					array( 'on_demand', 'On demand' ),
 				),
 				'allLabel' => 'All profiles',
 			),
 			'columns'   => array(
 				array( 'key' => 'route', 'label' => 'Route', 'format' => 'title' ),
+				array( 'key' => 'context', 'label' => 'Context', 'format' => 'text' ),
 				array( 'key' => 'duration', 'label' => 'Duration', 'format' => 'text' ),
 				array( 'key' => 'type', 'label' => 'Type', 'format' => 'text' ),
 				array( 'key' => 'role', 'label' => 'Role', 'format' => 'text' ),

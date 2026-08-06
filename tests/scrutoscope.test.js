@@ -83,6 +83,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'home row has duration and session type',
 		!! home && home.type === 'session' && /ms/.test( home.duration ) && home.id > 0,
 		JSON.stringify( home ) );
+	// route_class rides every row (front/admin/rest/wp-cron), humanized.
+	t.check( 'rows carry a humanized route context',
+		!! home && !! slow && 'Front end' === home.context && 'Front end' === slow.context,
+		JSON.stringify( { home: home && home.context, slow: slow && slow.context } ) );
 	t.check( 'slow row is background type',
 		!! slow && slow.type === 'background' && slow.role === 'anonymous',
 		JSON.stringify( slow ) );
@@ -110,6 +114,13 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	t.check( 'status reports profiles stored',
 		( st.body.rows || [] ).some( ( r ) => r.label === 'Profiles stored' && parseInt( String( r.value ).replace( /\D/g, '' ), 10 ) >= 2 ),
 		JSON.stringify( st.body.rows ) );
+	// Storage::get_table_stats() (Scrutoscope 1.5+) — coverage breadth without
+	// the adapter running its own SQL. Absent on older builds, so gate on it.
+	const hasStats = ( st.body.rows || [] ).some( ( r ) => r.label === 'Routes covered' );
+	t.check( 'status reports routes covered on Scrutoscope 1.5+',
+		! hasStats || ( st.body.rows || [] ).some(
+			( r ) => r.label === 'Routes covered' && parseInt( String( r.value ).replace( /\D/g, '' ), 10 ) >= 1 ),
+		JSON.stringify( ( st.body.rows || [] ).filter( ( r ) => r.label === 'Routes covered' ) ) );
 
 	// Cron view.
 	const cron = await api( 'minn-admin/v1/scrutoscope/cron?per_page=100' );
@@ -146,6 +157,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			t.check( 'new profile has detail sections',
 				pd.status === 200 && Array.isArray( pd.body.sections ) && pd.body.sections.length >= 1,
 				JSON.stringify( { status: pd.status, titles: ( pd.body.sections || [] ).map( ( s ) => s.title ) } ) );
+
+			// Profile this hook writes profile_type=on_demand — the On demand
+			// tab is what makes Minn's own capture findable (it used to land
+			// under All profiles only).
+			const od = await api( 'minn-admin/v1/scrutoscope/profiles?kind=on_demand' );
+			t.check( 'on-demand tab finds the profile Minn just captured',
+				od.status === 200
+				&& ( od.body.items || [] ).some( ( r ) => r.id === profiled.body.profile_id ),
+				JSON.stringify( od.body && { total: od.body.total, ids: ( od.body.items || [] ).map( ( r ) => r.id ) } ) );
+			t.check( 'on-demand tab returns only on_demand rows',
+				( od.body.items || [] ).length > 0
+				&& ( od.body.items || [] ).every( ( r ) => r.type === 'on_demand' ),
+				JSON.stringify( ( od.body.items || [] ).map( ( r ) => r.type ) ) );
+			t.check( 'cron capture carries its route context',
+				( od.body.items || [] ).some( ( r ) => r.id === profiled.body.profile_id && /cron/i.test( String( r.context ) ) ),
+				JSON.stringify( ( od.body.items || [] ).map( ( r ) => ( { id: r.id, context: r.context } ) ) ) );
+
 			// Clean up the on-demand profile so fixture totals stay stable.
 			await api( 'minn-admin/v1/scrutoscope/profiles/' + profiled.body.profile_id, { method: 'DELETE' } );
 		}
