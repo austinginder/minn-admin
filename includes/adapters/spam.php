@@ -13,11 +13,17 @@
  *   id       string
  *   name     string
  *   status   callable(): array {
- *              configured bool     key/setup state
- *              note       string   one-line status ("API key set (a1b2…)")
- *              blocked    int      all-time blocked count
- *              toggles    array[]  { id, label, desc, on }
- *              adminUrl   string   the provider's wp-admin screen
+ *              configured  bool     key/setup state
+ *              note        string   one-line status ("API key set (a1b2…)")
+ *              blocked     int      all-time blocked count
+ *              toggles     array[]  { id, label, desc, on }
+ *              adminUrl    string   the provider's wp-admin screen
+ *              keyProvider string   OPTIONAL license/connection provider id —
+ *                                   when present the card renders a paste-a-key
+ *                                   field driving minn-admin/v1/licenses/action
+ *                                   (same guardrails: secret rides one request,
+ *                                   never stored by Minn). Omit when the key is
+ *                                   supplied in code or managed cloud-side.
  *            }
  *   set      callable( $toggle_id, $on ) apply one toggle
  *
@@ -39,11 +45,18 @@ function minn_admin_spam_providers() {
 				try {
 					$key = (string) Akismet::get_api_key();
 				} catch ( \Throwable $e ) { /* stay unconfigured */ }
+				$predefined = false;
+				try {
+					$predefined = (bool) Akismet::predefined_api_key();
+				} catch ( \Throwable $e ) { /* treat as editable */ }
 				return array(
 					'configured' => '' !== $key,
 					'note'       => '' !== $key
 						? 'API key set (' . substr( $key, 0, 4 ) . '…)'
-						: 'Needs an API key: connect it on the Akismet screen',
+						: 'Needs an API key from akismet.com (free for personal sites)',
+					// Paste-a-key in place via the akismet connections
+					// provider — hidden when the key is supplied in code.
+					'keyProvider' => $predefined ? '' : 'akismet',
 					'blocked'    => (int) get_option( 'akismet_spam_count', 0 ),
 					'toggles'    => array(
 						array(
@@ -181,6 +194,9 @@ function minn_admin_spam_state() {
 			'blocked'    => isset( $st['blocked'] ) ? (int) $st['blocked'] : 0,
 			'toggles'    => isset( $st['toggles'] ) && is_array( $st['toggles'] ) ? array_values( $st['toggles'] ) : array(),
 			'adminUrl'   => isset( $st['adminUrl'] ) ? (string) $st['adminUrl'] : '',
+			// License/connection provider id for paste-a-key in place; the
+			// licenses/action endpoint re-validates it server-side.
+			'keyProvider' => isset( $st['keyProvider'] ) ? (string) $st['keyProvider'] : '',
 		);
 	}
 	$counts = wp_count_comments();

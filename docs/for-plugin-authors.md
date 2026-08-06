@@ -1372,6 +1372,15 @@ switches a site owner actually flips; deep configuration belongs on your own scr
 which the card links to. Bundled providers (Akismet, Antispam Bee, CleanTalk) live in
 `includes/adapters/spam.php` and are the references.
 
+**Paste-a-key in place (optional).** If your filter needs an API key and you also
+register a license provider (next section) with an `activate` callable, return its
+provider id from `status()` as `keyProvider`. The card then renders a key field that
+posts to `minn-admin/v1/licenses/action`, so the same guardrails hold: the key rides
+one request, is verified and stored by YOUR code, and is never retained by Minn.
+Omit `keyProvider` when the key is supplied in code (a constant or filter) or managed
+cloud-side. Akismet is the reference: its card field and its Licenses row drive the
+same provider.
+
 ## License state — `minn_admin_license_providers`
 
 The System page carries a read-only **Licenses** card: every paid component on the
