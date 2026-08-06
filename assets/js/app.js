@@ -1446,6 +1446,8 @@
 			contrast: '<circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor" stroke-width="0"/>',
 			plus: '<path d="M12 5v14M5 12h14"/>',
 			refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
+			// Panel-left: the nav show/hide toggle in the topbar.
+			panel: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
 			list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
 			columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
 			chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
@@ -1844,6 +1846,7 @@
 			</aside>
 			<main class="minn-main">
 				<header class="minn-topbar">
+					<button class="minn-icon-btn" id="minn-nav-tab" title="${ esc( __( 'Show / hide navigation' ) ) }" aria-label="${ esc( __( 'Show or hide the navigation sidebar' ) ) }">${ icon( 'panel' ) }</button>
 					<h1 class="minn-topbar-title" id="minn-title"></h1>
 					<div class="minn-topbar-sub" id="minn-sub"></div>
 					<div class="minn-topbar-actions">
@@ -1871,19 +1874,17 @@
 		$( '#minn-logo-home' ).addEventListener( 'click', () => go( 'overview' ) );
 		$( '#minn-ver-btn' ).addEventListener( 'click', openChangelog );
 
-		// Global nav show/hide — a slim tab pinned to the left edge (it must
-		// live OUTSIDE the sidebar it hides). Persists; sits under the focus
-		// dim so zen keeps its calm.
-		const navTab = document.createElement( 'button' );
-		navTab.id = 'minn-nav-tab';
-		navTab.type = 'button';
-		navTab.title = 'Show / hide navigation';
-		document.body.appendChild( navTab );
+		// Global nav show/hide — a topbar icon button (panel-left glyph, the
+		// anchor-theme icon-button pattern; was a slim left-edge tab). It
+		// lives OUTSIDE the sidebar it hides, and ⌘. routes through its click.
+		const navTab = $( '#minn-nav-tab' );
 		try {
 			if ( localStorage.getItem( 'minn-nav-hidden' ) ) document.body.classList.add( 'minn-nav-hidden' );
 		} catch ( e ) { /* private mode */ }
+		navTab.setAttribute( 'aria-pressed', document.body.classList.contains( 'minn-nav-hidden' ) ? 'true' : 'false' );
 		navTab.addEventListener( 'click', () => {
 			const hidden = document.body.classList.toggle( 'minn-nav-hidden' );
+			navTab.setAttribute( 'aria-pressed', hidden ? 'true' : 'false' );
 			try { localStorage.setItem( 'minn-nav-hidden', hidden ? '1' : '' ); } catch ( e ) { /* private mode */ }
 		} );
 		$( '#minn-user-area' ).addEventListener( 'click', ( e ) => {
