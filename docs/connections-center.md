@@ -79,11 +79,20 @@ into Settings → Connectors; the section itself stays in Settings for now
 (it just shipped against the WP 7.0 registry; folding it in is a separate
 decision).
 
-**Brick 3 — site connections (M–L).** WooCommerce.com helper connect
-state ("connected as X, N subscriptions", read-only + Activate ↗) as the
-first pure-connection provider, then Site Kit / Jetpack connection rows
-(read-only, disconnect stays on their screens). Health: worst connection
-state joins the existing Licenses health check on System.
+**Brick 3 — site connections (M–L). SHIPPED 2026-08-06.** WooCommerce.com
+helper connect state ("connected as X, N subscriptions" from
+`woocommerce_helper_data` auth + the `_woocommerce_helper_subscriptions`
+transient, their own `is_site_connected()` rule), Site Kit
+(`googlesitekit_credentials` presence, never decoded, +
+`googlesitekit_has_connected_admins`; half-connected reads `unknown`) and
+Jetpack (`jetpack_private_options` blog_token + `jetpack_options`
+id/master_user, presence only) as read-only connection providers. An
+unconnected ACTIVE row offers **Connect ↗** into the vendor's own screen
+(the href label is category-aware); off rows offer only Turn on, since a
+deactivated plugin's connect screen does not exist. Health: these rows
+ride the normal summary, so a half-connected Site Kit warns like any
+unknown license. OAuth ceremonies and disconnects stay on the vendors'
+screens, as scoped.
 
 ## Non-goals
 

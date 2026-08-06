@@ -1284,6 +1284,100 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// Site connections (connections-center brick 3): three read-only
+	// CONNECTION rows. Reads are pure option presence checks; the OAuth
+	// ceremonies and disconnects stay on each plugin's own screen (the
+	// activate_url renders as Connect ↗ while unconnected).
+
+	// WooCommerce.com: the marketplace/updates connection official Woo
+	// extensions ride. Auth in option woocommerce_helper_data ('auth' with
+	// access_token = connected, their is_site_connected() rule;
+	// 'auth_user_data' carries the email); the subscription list is cached
+	// in transient _woocommerce_helper_subscriptions.
+	$providers['woocommerce-com'] = array(
+		'name'         => 'WooCommerce.com',
+		'category'     => 'connection',
+		'component'    => 'woocommerce/woocommerce.php',
+		'detect'       => function () use ( $has ) {
+			return $has( 'woocommerce/woocommerce.php' );
+		},
+		'activate_url' => function () {
+			return admin_url( 'admin.php?page=wc-admin&tab=my-subscriptions&path=' . rawurlencode( '/extensions' ) );
+		},
+		'read'         => function () use ( $item ) {
+			$data = get_option( 'woocommerce_helper_data', array() );
+			$data = is_array( $data ) ? $data : array();
+			$auth = isset( $data['auth'] ) && is_array( $data['auth'] ) ? $data['auth'] : array();
+			if ( empty( $auth['access_token'] ) ) {
+				return array( $item( array( 'name' => 'WooCommerce.com', 'state' => 'missing', 'note' => 'not connected; official extension subscriptions and updates ride this link' ) ) );
+			}
+			$email = isset( $data['auth_user_data']['email'] ) ? (string) $data['auth_user_data']['email'] : '';
+			$subs  = get_transient( '_woocommerce_helper_subscriptions' );
+			$note  = 'connected' . ( $email ? ' as ' . $email : '' );
+			if ( is_array( $subs ) && count( $subs ) ) {
+				$note .= '; ' . count( $subs ) . ' extension subscription' . ( 1 === count( $subs ) ? '' : 's' );
+			}
+			return array( $item( array( 'name' => 'WooCommerce.com', 'state' => 'valid', 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
+	// Site Kit: Google connection state. Site credentials live ENCRYPTED in
+	// googlesitekit_credentials (presence only, never decoded);
+	// googlesitekit_has_connected_admins is their own connected-admins flag.
+	$providers['site-kit'] = array(
+		'name'         => 'Site Kit by Google',
+		'category'     => 'connection',
+		'component'    => 'google-site-kit/google-site-kit.php',
+		'detect'       => function () use ( $has ) {
+			return $has( 'google-site-kit/google-site-kit.php' );
+		},
+		'activate_url' => function () {
+			return admin_url( 'admin.php?page=googlesitekit-splash' );
+		},
+		'read'         => function () use ( $item ) {
+			$creds = get_option( 'googlesitekit_credentials' );
+			if ( empty( $creds ) ) {
+				return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'missing', 'note' => 'not set up; connect on the Site Kit screen' ) ) );
+			}
+			if ( ! get_option( 'googlesitekit_has_connected_admins' ) ) {
+				return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'unknown', 'key' => true, 'note' => 'site credentials stored; no admin has finished connecting a Google account' ) ) );
+			}
+			return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'valid', 'key' => true, 'note' => 'Google account connected' ) ) );
+		},
+	);
+
+	// Jetpack: the WordPress.com connection (blog token + master user).
+	// PRESENCE only from jetpack_options / jetpack_private_options; the
+	// tokens themselves are never read out.
+	$providers['jetpack'] = array(
+		'name'         => 'Jetpack',
+		'category'     => 'connection',
+		'component'    => 'jetpack/jetpack.php',
+		'detect'       => function () use ( $has ) {
+			return $has( 'jetpack/jetpack.php' );
+		},
+		'activate_url' => function () {
+			return admin_url( 'admin.php?page=jetpack' );
+		},
+		'read'         => function () use ( $item ) {
+			$opts    = get_option( 'jetpack_options' );
+			$opts    = is_array( $opts ) ? $opts : array();
+			$private = get_option( 'jetpack_private_options' );
+			$private = is_array( $private ) ? $private : array();
+			if ( empty( $private['blog_token'] ) || empty( $opts['id'] ) ) {
+				return array( $item( array( 'name' => 'Jetpack', 'state' => 'missing', 'note' => 'not connected to WordPress.com' ) ) );
+			}
+			$note = 'connected to WordPress.com (site ID ' . (int) $opts['id'] . ')';
+			if ( ! empty( $opts['master_user'] ) ) {
+				$u = get_userdata( (int) $opts['master_user'] );
+				if ( $u ) {
+					$note = 'connected to WordPress.com as ' . $u->user_login;
+				}
+			}
+			return array( $item( array( 'name' => 'Jetpack', 'state' => 'valid', 'key' => true, 'note' => $note ) ) );
+		},
+	);
+
 	// Admin Columns Pro (v7): their own API on admincolumns.com. KEY FACT:
 	// a successful activation DELETES the pasted subscription key and keeps
 	// an activation TOKEN instead ("old key is no longer needed since 5.7"):
