@@ -92,7 +92,11 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				.find( ( r ) => r.textContent.includes( 'Elementor Pro' ) );
 			return el ? [ ...el.querySelectorAll( '[data-lic]' ) ].map( ( b ) => b.dataset.lic ) : null;
 		} );
-		t.check( 'real Elementor Pro row advertises Activate (vendor code loaded)', epRow && epRow.includes( 'activate' ), JSON.stringify( epRow ) );
+		// Live-robust: the point is that vendor actions ATTACH while its code
+		// is loaded. Unlicensed offers activate; a really-licensed Elementor
+		// Pro (the dev site holds a real seat since 2026-08-06) offers
+		// deactivate + verify instead. Either proves the wiring.
+		t.check( 'real Elementor Pro row advertises vendor actions (code loaded)', epRow && ( epRow.includes( 'activate' ) || ( epRow.includes( 'deactivate' ) && epRow.includes( 'verify' ) ) ), JSON.stringify( epRow ) );
 		const staticRow = await page.evaluate( () => {
 			const el = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
 				.find( ( r ) => r.textContent.includes( 'Fixture Missing Pro' ) );
