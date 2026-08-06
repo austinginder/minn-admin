@@ -5504,6 +5504,15 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 
+		// FluentSMTP connection health (adapters/fluent-smtp.php): their
+		// daily check's verdict — a failing mailer connection is silent
+		// breakage until the first lost email.
+		if ( function_exists( 'minn_admin_fluent_smtp_checks' ) ) {
+			foreach ( minn_admin_fluent_smtp_checks() as $fsmtp_check ) {
+				$checks[] = $fsmtp_check;
+			}
+		}
+
 		// Redis Object Cache drop-in + connection (adapters/cache-purge.php).
 		// Only renders when the plugin is loaded; complements the generic
 		// "Persistent object cache" row with vendor-specific status.

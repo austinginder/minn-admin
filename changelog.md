@@ -2,7 +2,13 @@
 
 ## **v0.24.0** - Unreleased
 
+### Added
+* **Resend an email to somebody else:** every FluentSMTP log entry now offers "Resend to…" alongside the plain Resend, so a receipt that went to a dead address can be pointed at the right one without leaving the log. Addresses are checked before anything sends; one bad address stops the whole resend.
+* **FluentSMTP's daily connection check, surfaced:** FluentSMTP 2.3 quietly tests every mailer connection once a day, because the failure that matters is the silent one (an expired token months after setup). Minn now shows that verdict on the Email status card and, when a connection is failing, as a System health warning that links to the connection screen. A site whose outgoing email is broken says so the moment you open Minn.
+
 ### Improved
+* **Resends now leave a trail:** resending from the FluentSMTP log rides FluentSMTP's own resend machinery on 2.3 and newer, so the original headers and attachments come along, the log entry records each resend (who sent it, where it went, and whether it delivered), and no duplicate row appears. The email's detail view shows that history. Older FluentSMTP versions keep the previous behavior.
+* **FluentSMTP permissions are honored:** sites that grant FluentSMTP access to a custom capability through its new filter get the same access rules in Minn's Email surface, instead of a hardcoded administrators-only gate.
 * **Scrutoscope profiles read through Scrutoscope:** the profiler's author shipped a list endpoint in Scrutoscope 1.5 so integrations no longer have to read his database table, and Minn now uses it. This is a safety improvement rather than housekeeping: Scrutoscope reduces stored SQL to a verb and table name, and outbound request URLs to a bare hostname, then re-applies both on the way out so that captures written by older versions get cleaned too. Reading the table directly was the one path that skipped that step. The profile list, and the totals on the status card, now come from Scrutoscope's own code on 1.5 and newer, with the previous reader kept for older versions.
 * **Profiles you captured from Minn are easier to find:** using "Profile this hook" on the Cron view saves an on-demand profile, but the list only offered Pinned, Session and Background tabs, so your own capture appeared under All profiles and nowhere else. There is now an On demand tab for exactly those.
 * **A Context column on the profile list:** every capture now shows whether it came from the front end, the admin, a REST call, Ajax, cron or the command line, which is the quickest way to tell an admin-only slowdown from one your visitors feel.
