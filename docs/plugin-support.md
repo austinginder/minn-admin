@@ -107,6 +107,18 @@ wired), and the license long tail. The
 largest non-adapter thread is v1 gate **G1**, the outside-tester afternoon
 test (`docs/v1-readiness.md`).
 
+A full per-category inventory of untried popular plugins landed 2026-08-06:
+Wave E (surface and provider gaps) and Wave F (categories Minn does not
+have at all) below, plus the license vendor-family inventory in
+`docs/license-manager.md`. Headline picks from that pass: the Awesome
+Motive Pro license family first (WPForms Pro is already an active fixture
+with no license row, and WP Mail SMTP Pro's license also unlocks its real
+email log table), the WooCommerce.com helper read-only license row second,
+the MonsterInsights traffic provider third, then the SiteOrigin / Oxygen /
+Breakdance builder-detection pass. Fleet counts have NOT been re-measured
+since 2026-07-10; re-run the Manager DB inventory against these candidates
+before committing a wave.
+
 > **v0.17.0 note (2026-07-16):** adapter waves PAUSED for one cycle. The
 > v0.17.0 charter was the plugin-author cycle (developer experience and abuse
 > resistance on the road to v1.0). See `docs/v1-readiness.md`. The waves
@@ -217,12 +229,70 @@ destructive scan tool that deserves its own full-attention UI; Media
 Library Assistant (70k) and the renamers (50k and down) are power-tool
 long tail.
 
+### Wave E — untried popular plugins, per category (inventoried 2026-08-06)
+
+A per-category pass over the marketing page's library categories against
+the adapters actually on disk. The surface families are essentially
+complete for their categories; these are the largest remaining names,
+ranked by install base and daily-ops fit. Install counts are approximate
+wp.org figures, not fleet counts; re-rank against the Manager DB before
+shipping.
+
+1. **MonsterInsights (~3M) + ExactMetrics (~1M) traffic providers** — the
+   largest uncovered free plugins anywhere in this inventory. Both proxy
+   GA reports like Site Kit, so they slot into the existing
+   `minn_admin_traffic` provider tier (Site Kit precedent: their own
+   report machinery, their auth, a short Minn-side transient).
+2. **SiteOrigin Page Builder (~1M) detection** — meta storage
+   (`panels_data`), which is the silent-stale-copy class the builder
+   fencing exists for. **Oxygen** and **Breakdance** (both meta storage)
+   join the same detector pass; Breakdance is Soflyy, already a known
+   vendor from the license work.
+3. **Security posture providers** — SiteGround Security (~1M), Loginizer
+   (~1M; lockout log in the LLA-R shape), WPS Hide Login (~1M; one
+   posture row, the login URL), Sucuri (~800k; audit log for the
+   activity-log family), Jetpack Protect.
+4. **SEO panel providers** — The SEO Framework (~100k) and Slim SEO
+   (~100k). The provider contract is mature; S each.
+5. **Easy Digital Downloads** — the only other real store platform, now
+   Awesome Motive-owned (pairs with the AM license family in
+   `docs/license-manager.md`). Orders and customers in the Woo mold.
+6. **Redirects family joiners** — Rank Math's built-in redirections
+   module and Yoast Premium's redirect manager; both join the existing
+   family rather than adding a plugin.
+7. **Spam cards** — hCaptcha and Simple Cloudflare Turnstile.
+8. **Broken Link Checker (~600k)** — real table, inbox-shaped daily ops;
+   would seed a content-health category.
+9. **WS Form** — real entry storage, forms family.
+
+Deliberate skips stay skipped (optimizers, email marketing, popups,
+migration tools, remote-management agents; see the list at the end of this
+file). MetForm stays deferred as documented in Wave B.
+
+### Wave F — categories Minn does not have at all (inventoried 2026-08-06)
+
+Own-cycle scoped bets in the Wave C mold, not sweep items. Rank by fleet
+before starting any of them.
+
+1. **LMS** — LearnDash (paid, StellarWP), Tutor LMS (~100k), LifterLMS.
+   Enrollments and quiz attempts are inbox-shaped, exactly the workspace
+   thesis.
+2. **Bookings** — Amelia, Bookly, FluentBooking, Simply Schedule
+   Appointments. Appointments are the most inbox-shaped data there is.
+3. **Membership / community** — Ultimate Member (~200k), Paid Memberships
+   Pro, MemberPress, BuddyPress. Member lists extend the Users surface
+   naturally.
+
 ### Licenses fleet (see `docs/license-manager.md`)
 
 ~~Smash Balloon~~ and ~~Yoast SEO Premium~~ shipped 2026-07-15;
 ~~Search & Filter Pro~~ and ~~Admin Columns Pro~~ shipped 2026-07-19
 (v0.20.0, full activation loops with real keys). Remaining fleet-ranked
-open work is the long-tail Freemius/EDD verification list.
+open work is the long-tail Freemius/EDD verification list, plus the
+vendor-family inventory added 2026-08-06 (Awesome Motive family,
+WooCommerce.com helper, SolidWP, StellarWP beyond TEC, WPManageNinja,
+Delicious Brains, Crocoblock, OTGS, Elementor addon packs, and the odds
+and ends); see "Vendor-family inventory" in `docs/license-manager.md`.
 
 ### Axis A leftovers (adapter depth, not new plugins)
 
