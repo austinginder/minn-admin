@@ -11008,8 +11008,10 @@
 				? `<button class="lic-menu" data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ it.turnOn.startsWith( 'theme:' ) ? 'Switch the site to this theme' : 'Activate this plugin' }">Turn ${ it.turnOn.startsWith( 'theme:' ) ? 'theme' : 'plugin' } on</button>` : '',
 			can.includes( 'activate' ) && it.state !== 'valid'
 				? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || 'License key' ) }"${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>Activate…</button>` : '',
-			! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid'
-				? `<button data-lic="href" data-href="${ esc( it.activateUrl ) }">Activate ↗</button>` : '',
+			// No link-out on off rows: the vendor's screen does not exist
+			// while its plugin is inactive (Turn on is the affordance).
+			! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid' && ! it.off
+				? `<button data-lic="href" data-href="${ esc( it.activateUrl ) }">${ it.category === 'connection' ? 'Connect ↗' : 'Activate ↗' }</button>` : '',
 			can.includes( 'deactivate' ) && it.state === 'valid'
 				? `<button class="lic-menu lic-danger" data-lic="deactivate" data-provider="${ esc( it.source ) }" data-name="${ esc( it.name ) }">Deactivate</button>` : '',
 			can.includes( 'verify' ) && it.key

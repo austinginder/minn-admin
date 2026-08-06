@@ -141,6 +141,28 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const envItem = await rowState( 'Fixture Salient' );
 		t.check( 'Envato failed item token is invalid', envItem && envItem.state === 'invalid', envItem ? envItem.state : 'no row' );
 
+		// Brick-3 site connections (WooCommerce.com / Site Kit / Jetpack):
+		// read-only rows with the connection chip, never vendor-action
+		// controls; an unconnected active row offers Connect ↗ instead.
+		const connRow = ( n ) => page.evaluate( ( name ) => {
+			const row = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]
+				.find( ( el ) => el.querySelector( '.minn-sys-ext-name' ).textContent.trim().startsWith( name ) );
+			if ( ! row ) return null;
+			return {
+				state: ( row.querySelector( '.minn-lic-pill' ) || { className: '' } ).className.replace( /.*minn-lic-pill\s*/, '' ).trim(),
+				off: row.classList.contains( 'off' ),
+				chip: ( row.querySelector( '.minn-lic-cat' ) || { textContent: '' } ).textContent,
+				buttons: [ ...row.querySelectorAll( '[data-lic]' ) ].map( ( b ) => ( { k: b.dataset.lic, t: b.textContent.trim() } ) ),
+			};
+		}, n );
+		for ( const name of [ 'WooCommerce.com', 'Site Kit by Google', 'Jetpack' ] ) {
+			const c = await connRow( name );
+			const sane = c && [ 'valid', 'missing', 'unknown' ].includes( c.state ) && c.chip === 'connection';
+			const readOnly = c && ! c.buttons.some( ( b ) => [ 'activate', 'deactivate', 'verify' ].includes( b.k ) );
+			const connect = ! c || c.off || c.state === 'valid' || c.buttons.some( ( b ) => b.k === 'href' && /Connect/.test( b.t ) );
+			t.check( `${ name } connection row is read-only + honest`, sane && readOnly && connect, JSON.stringify( c ) );
+		}
+
 		// Perfmatters is fingerprinted as EDD (its build ships the SL
 		// updater) yet must appear exactly once — the dedicated reader
 		// claims the component so the generic sweep yields.
