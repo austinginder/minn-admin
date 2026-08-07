@@ -25602,7 +25602,8 @@
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ m.md === null ? '<div class="minn-loading">Loading changelog…</div>'
-						: `<div class="minn-changelog">${ changelogHtml( m.md ) }</div>` }
+						: `<div class="minn-changelog">${ changelogHtml( m.md ) }</div>
+					<div class="minn-changelog-foot"><a href="https://minnadmin.com/docs/changelog/" target="_blank" rel="noopener">${ esc( __( 'View the full changelog with screenshots on minnadmin.com' ) ) } ↗</a></div>` }
 				</div>
 			</div>`;
 		}
@@ -27925,6 +27926,9 @@
 			if ( /^## /.test( l ) ) { flushList(); out.push( `<h3>${ changelogInline( l.slice( 3 ) ) }</h3>` ); return; }
 			if ( /^### /.test( l ) ) { flushList(); out.push( `<h4>${ changelogInline( l.slice( 4 ) ) }</h4>` ); return; }
 			if ( /^[*-] /.test( l ) ) { ( list = list || [] ).push( `<li>${ changelogInline( l.slice( 2 ) ) }</li>` ); return; }
+			// Screenshot lines render only on minnadmin.com's changelog — the
+			// app never loads remote images, so drop them here.
+			if ( /^!\[[^\]]*\]\([^)\s]+\)$/.test( l ) ) { flushList(); return; }
 			if ( ! l ) { flushList(); return; }
 			flushList();
 			out.push( `<p>${ changelogInline( l ) }</p>` );

@@ -228,6 +228,9 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-changelog li { margin: 4px 0; }
 .minn-changelog code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .minn-changelog a { color: var(--accent2); }
+.minn-changelog-foot { padding: 10px 18px 14px; border-top: 1px solid var(--border); font-size: 12.5px; }
+.minn-changelog-foot a { color: var(--accent2); text-decoration: none; }
+.minn-changelog-foot a:hover { text-decoration: underline; }
 
 .minn-search-btn {
   display: flex; align-items: center; gap: 9px; width: 100%; background: var(--panel); border: 1px solid var(--border);
