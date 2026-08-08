@@ -208,8 +208,11 @@ a { color: var(--accent2); text-decoration: none; }
 /* The wordmark is the SITE NAME now (falls back to "minn") — truncate so a
    long site title can't push the version pill off or wrap the logo row. */
 .minn-logo-name { font-weight: 700; font-size: 17px; letter-spacing: -0.3px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.minn-logo-ver { margin-left: auto; font-size: 12px; color: var(--text3); background: var(--panel); border: 1px solid var(--border); padding: 2px 7px; border-radius: 6px; font-family: inherit; cursor: pointer; }
-.minn-logo-ver:hover { color: var(--text); border-color: var(--accent); }
+/* Version + changelog live in the topbar actions (GH #5: a badge beside the
+   logo truncated longer site names; Austin moved it up by the view-site
+   button). Sized to sit flush with the .minn-icon-btn row. */
+.minn-topbar-ver { height: 34px; padding: 0 11px; display: flex; align-items: center; font-size: 12px; font-family: inherit; color: var(--text3); background: transparent; border: 1px solid var(--border); border-radius: 9px; cursor: pointer; white-space: nowrap; }
+.minn-topbar-ver:hover { color: var(--text); border-color: var(--accent); }
 
 /* Changelog modal — the mini markdown renderer's vocabulary. */
 .minn-changelog { padding: 4px 18px 18px; max-height: 64vh; overflow-y: auto; font-size: 13.5px; line-height: 1.65; color: var(--text2); }
@@ -3108,7 +3111,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* ===== Responsive ===== */
 @media (max-width: 900px) {
   .minn-sidebar { width: 64px; padding: 14px 8px; }
-  .minn-sidebar .minn-logo-name, .minn-sidebar .minn-logo-ver, .minn-sidebar .minn-nav-label,
+  .minn-sidebar .minn-logo-name, .minn-sidebar .minn-nav-label,
   .minn-sidebar .minn-nav-btn span, .minn-sidebar .minn-nav-count, .minn-sidebar .minn-search-btn span,
   .minn-sidebar .minn-kbd, .minn-user > div:not(:first-child),
   .minn-user-logout { display: none; }
@@ -3130,7 +3133,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 
   /* Topbar: title + theme + notifications + New (icon only). */
   .minn-topbar { padding: 0 12px; gap: 8px; }
-  .minn-topbar-sub, #minn-view-site, #minn-help-btn { display: none; }
+  .minn-topbar-sub, #minn-view-site, #minn-help-btn, .minn-topbar-ver { display: none; }
   .minn-core-chip span, .minn-vis-chip span, .minn-upd-chip span { display: none; } /* icon-only pill */
   .minn-topbar-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .minn-topbar .minn-btn-primary { font-size: 0; gap: 0; padding: 8px 10px; }
