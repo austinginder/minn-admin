@@ -462,6 +462,47 @@ class Minn_Admin_REST {
 				),
 			)
 		);
+		// The target user's hidden-items restore list + admin restore (GH #7):
+		// the user edit page shows what they hid and lets an admin bring it
+		// back. Restore only — hiding remains each user's own choice.
+		register_rest_route(
+			self::NS,
+			'/users/(?P<id>\d+)/hidden',
+			array(
+				'methods'             => 'GET',
+				'callback'            => function ( WP_REST_Request $request ) {
+					return rest_ensure_response( array(
+						'hidden' => Minn_Admin_Surfaces::hidden_for_user( (int) $request['id'] ),
+					) );
+				},
+				'permission_callback' => $edit_user_gate,
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/users/(?P<id>\d+)/integrations/unhide',
+			array(
+				'methods'             => 'POST',
+				'callback'            => function ( WP_REST_Request $request ) {
+					$uid = (int) $request['id'];
+					Minn_Admin_Surfaces::unhide_integration( (string) $request['integration'], $uid );
+					return rest_ensure_response( array(
+						'ok'     => true,
+						'hidden' => Minn_Admin_Surfaces::hidden_for_user( $uid ),
+					) );
+				},
+				'permission_callback' => $edit_user_gate,
+				'args'                => array(
+					'integration' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => function ( $v ) {
+							return preg_replace( '/[^a-z0-9:_-]/', '', strtolower( (string) $v ) );
+						},
+					),
+				),
+			)
+		);
 		register_rest_route(
 			self::NS,
 			'/users/(?P<id>\d+)/language',

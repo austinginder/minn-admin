@@ -1560,7 +1560,7 @@
 		surfaceNavItems().filter( ( s ) => s.group === 'workspace' ).forEach( ( s ) =>
 			navItems.push( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } )
 		);
-		return navItems;
+		return filterHiddenNavItems( navItems );
 	}
 
 	// Tools nav items: site plumbing (logs, redirects, snippets, backups) —
@@ -1571,7 +1571,7 @@
 	}
 
 	function manageNavItems() {
-		const manageItems = [];
+		let manageItems = [];
 		if ( B.caps.plugins ) {
 			manageItems.push( { id: 'extensions', label: __( 'Extensions' ), icon: 'plug', dot: true } );
 		}
@@ -1600,8 +1600,21 @@
 			manageItems.push( { id: 'system', label: __( 'System' ), icon: 'activity' } );
 			manageItems.push( { id: 'settings', label: __( 'Settings' ), icon: 'gear' } );
 		}
-		return manageItems;
+		return filterHiddenNavItems( manageItems );
 	}
+
+	// Core views that accept the per-user hide (GH #7). Overview, the editor
+	// and the detail pages stay put — they're destinations, not menu noise.
+	// Hiding is cosmetic (routes stay reachable by URL and ⌘K); restore
+	// lives on Your profile, and admins can restore for others from the
+	// user edit page.
+	const CORE_HIDEABLE_NAV = [ 'content', 'media', 'comments', 'orders', 'subscriptions', 'products', 'coupons', 'customers', 'users', 'terms', 'menus', 'widgets', 'posttypes', 'extensions', 'database', 'system', 'settings' ];
+	const isCoreHidden = ( id ) => ( B.hidden || [] ).some( ( h ) => h.id === 'core:' + id );
+	// Applied inside the item BUILDERS (not the group renderer): renderShell
+	// goes through navGroupHtml but renderNavWorkspace maps items straight to
+	// buttons — filtering at the source covers both render paths.
+	const filterHiddenNavItems = ( items ) =>
+		items.filter( ( it ) => ! ( CORE_HIDEABLE_NAV.includes( it.id ) && isCoreHidden( it.id ) ) );
 
 	function bindNavClicks( root ) {
 		$$( '.minn-nav-btn', root || document ).forEach( ( btn ) => {
@@ -1612,16 +1625,25 @@
 				if ( navBtnIsCurrent( btn ) && navRefresh( state.route ) ) return;
 				go( btn.dataset.nav );
 			} );
-			// Per-user hide (goal #7): right-click a plugin surface's nav row.
-			// Core views (Content, Media, …) are not integrations — no menu.
+			// Per-user hide (goal #7): right-click a nav row — plugin surfaces
+			// and (GH #7) the hideable core views.
 			btn.addEventListener( 'contextmenu', ( e ) => {
 				const s = surfaceById( btn.dataset.nav );
-				if ( ! s ) return;
+				if ( s ) {
+					e.preventDefault();
+					const name = s.sub ? `${ s.label } · ${ s.sub }` : s.label;
+					openMinnMenu( e.clientX, e.clientY, [
+						{ label: `Hide “${ name }” for you`, run: () =>
+							setIntegrationHidden( 'surface:' + s.id, true, name ).catch( ( err ) => toast( err.message, true ) ) },
+					] );
+					return;
+				}
+				if ( ! CORE_HIDEABLE_NAV.includes( btn.dataset.nav ) ) return;
 				e.preventDefault();
-				const name = s.sub ? `${ s.label } · ${ s.sub }` : s.label;
+				const name = ( btn.textContent || btn.dataset.nav ).trim().replace( /\d+$/, '' ).trim();
 				openMinnMenu( e.clientX, e.clientY, [
 					{ label: `Hide “${ name }” for you`, run: () =>
-						setIntegrationHidden( 'surface:' + s.id, true, name ).catch( ( err ) => toast( err.message, true ) ) },
+						setIntegrationHidden( 'core:' + btn.dataset.nav, true, name ).catch( ( err ) => toast( err.message, true ) ) },
 				] );
 			} );
 		} );
@@ -1671,6 +1693,11 @@
 		renderNavWorkspace();
 		// Hiding the surface you're standing on lands you back home.
 		if ( changedId === 'surface:' + state.route && ! surfaceById( state.route ) ) {
+			go( 'overview' );
+		}
+		// Same for a hidden core view (its route stays reachable by URL —
+		// hiding is cosmetic — but don't leave the user standing on it).
+		if ( changedId === 'core:' + state.route && isCoreHidden( state.route ) ) {
 			go( 'overview' );
 		}
 		// Editor open and a panel hidden: drop it from the live sidebar too.
@@ -28703,6 +28730,9 @@
 		api( `minn-admin/v1/users/${ ue.id }/sessions` )
 			.then( ( r ) => { if ( mine() ) { ue.sessions = r.sessions; paint(); } } )
 			.catch( () => { if ( mine() ) { ue.sessions = []; paint(); } } );
+		api( `minn-admin/v1/users/${ ue.id }/hidden` )
+			.then( ( r ) => { if ( mine() ) { ue.hidden = r.hidden || []; paint(); } } )
+			.catch( () => { if ( mine() ) { ue.hidden = []; paint(); } } );
 		api( `minn-admin/v1/languages?user=${ ue.id }` )
 			.then( ( r ) => { if ( mine() ) { ue.languages = r; paint(); } } )
 			.catch( () => { if ( mine() ) { ue.languages = { installed: B.languages || [], available: [], canInstall: false, current: '' }; paint(); } } );
@@ -28712,14 +28742,14 @@
 		const view = $( '#minn-view' );
 		let ue = state.userEdit;
 		if ( ! ue || ue.id !== state.userEditId ) {
-			ue = state.userEdit = { id: state.userEditId, user: null, appearance: null, sessions: null, languages: null, error: null };
+			ue = state.userEdit = { id: state.userEditId, user: null, appearance: null, sessions: null, languages: null, hidden: null, error: null };
 			loadUserEdit();
 		}
 		if ( ue.error ) {
 			view.innerHTML = `<div class="minn-card minn-empty">${ esc( ue.error ) }</div>`;
 			return;
 		}
-		if ( ! ue.user || ue.appearance == null || ue.sessions == null || ! ue.languages ) {
+		if ( ! ue.user || ue.appearance == null || ue.sessions == null || ! ue.languages || ue.hidden == null ) {
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading user…' ) ) }</div>`;
 			return;
 		}
@@ -28827,6 +28857,19 @@
 						</div>
 					</div>
 				</div>
+				${ ue.hidden.length ? `
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">${ esc( __( 'Hidden for them' ) ) }</div>
+					<div class="minn-toggle-desc" style="margin:6px 0 8px;">${ esc( __( 'Items this user chose to hide from their own Minn. Restoring brings one back for them.' ) ) }</div>
+					${ ue.hidden.map( ( h ) => `
+					<div class="minn-session-row">
+						<div class="minn-session-info">
+							<div class="minn-session-ua">${ esc( h.kind === 'slash' ? prettyNs( h.label ) : h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
+							<div class="minn-session-meta">${ { panel: 'Editor panel', design: 'Design library', slash: 'Editor blocks and commands', core: 'Menu item' }[ h.kind ] || 'Sidebar surface' }</div>
+						</div>
+						<button class="minn-comment-action" data-ue-unhide="${ esc( h.id ) }">${ esc( __( 'Restore' ) ) }</button>
+					</div>` ).join( '' ) }
+				</div>` : '' }
 				<div class="minn-card minn-panel-pad">
 					<div class="minn-panel-title">${ esc( __( 'Sessions' ) ) }</div>
 					${ ! ue.sessions.length ? `<div class="minn-session-empty">${ esc( __( 'No active sessions.' ) ) }</div>`
@@ -28959,6 +29002,26 @@
 				killAll.disabled = false;
 			}
 		} );
+
+		$$( '[data-ue-unhide]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				btn.disabled = true;
+				const h = ( ue.hidden || [] ).find( ( x ) => x.id === btn.dataset.ueUnhide );
+				try {
+					const r = await api( `minn-admin/v1/users/${ u.id }/integrations/unhide`, {
+						method: 'POST',
+						body: JSON.stringify( { integration: btn.dataset.ueUnhide } ),
+					} );
+					ue.hidden = r.hidden || [];
+					/* translators: %s: name of the restored item. */
+					toast( sprintf( __( '%s restored for them' ), h ? h.label : __( 'Item' ) ) );
+					if ( state.route === 'useredit' ) renderUserEdit();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+				}
+			} )
+		);
 
 		const del = $( '#minn-ue-delete', view );
 		if ( del ) del.addEventListener( 'click', () => openUserDeleteModal( u ) );
@@ -29203,7 +29266,7 @@
 					<div class="minn-session-row">
 						<div class="minn-session-info">
 							<div class="minn-session-ua">${ esc( h.kind === 'slash' ? prettyNs( h.label ) : h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
-							<div class="minn-session-meta">${ { panel: 'Editor panel', design: 'Design library', slash: 'Editor blocks and commands' }[ h.kind ] || 'Sidebar surface' }</div>
+							<div class="minn-session-meta">${ { panel: 'Editor panel', design: 'Design library', slash: 'Editor blocks and commands', core: 'Menu item' }[ h.kind ] || 'Sidebar surface' }</div>
 						</div>
 						<button class="minn-comment-action" data-unhide="${ esc( h.id ) }">Restore</button>
 					</div>` ).join( '' ) }
