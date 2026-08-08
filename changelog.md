@@ -9,6 +9,7 @@
 * **Locked blocks explain themselves:** hovering a locked block card in the editor now reveals a short hint saying why it is locked and where edits live. A core text block that locked because of custom styling reads "Styled block: edit text via ⚙"; every other protected block points at the ⚙ chip and the block editor escape hatch.
 
 ### Fixed
+* **The version badge no longer crowds the site name:** the changelog badge moved from beside the logo up to the top bar, next to the view-site button, so longer site names get the sidebar's full width. Clicking it opens the changelog as before.
 * **New posts honor the site's discussion defaults:** the editor's comments and pingbacks switches started every new post as on, even when Settings → Comments had them off sitewide. They now start from the site defaults, matching what wp-admin does and what WordPress actually stores.
 
 ## **v0.24.0** - August 6, 2026

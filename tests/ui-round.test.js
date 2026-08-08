@@ -51,14 +51,17 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 			name: document.querySelector( '.minn-logo-name' ).textContent,
 			bootName: window.MINN.site.name,
 			bootIcon: window.MINN.site.icon,
-			verShown: !! document.querySelector( '.minn-logo-ver' ) && document.querySelector( '.minn-logo-ver' ).offsetWidth > 0,
+			// GH #5: the badge moved to the topbar actions so it can't truncate
+			// the site name; assert it left the logo row AND renders up top.
+			verInLogo: !! document.querySelector( '.minn-logo #minn-ver-btn, .minn-logo-ver' ),
+			verShown: !! document.querySelector( '.minn-topbar-ver' ) && document.querySelector( '.minn-topbar-ver' ).offsetWidth > 0,
 		};
 	} );
 	const markOk = brand.bootIcon
 		? ( brand.isIcon && brand.bg.includes( 'url(' ) )     // site-icon variant
 		: brand.markText === 'm';                              // gradient m fallback
-	t.check( 'header shows the site-icon-or-m mark + site name + version',
-		markOk && brand.name === ( brand.bootName || 'minn' ) && brand.verShown, JSON.stringify( brand ) );
+	t.check( 'header shows the site-icon-or-m mark + site name; version in the topbar',
+		markOk && brand.name === ( brand.bootName || 'minn' ) && brand.verShown && ! brand.verInLogo, JSON.stringify( brand ) );
 
 	/* ===== Version badge → changelog modal ===== */
 	await page.click( '#minn-ver-btn' );

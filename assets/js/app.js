@@ -1817,7 +1817,6 @@
 							: '<span class="minn-logo-mark">m</span>' }
 						<span class="minn-logo-name">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</span>
 					</button>
-					<button class="minn-logo-ver" id="minn-ver-btn" title="${ esc( __( "What's new — full changelog" ) ) }">v${ esc( B.version ) }</button>
 				</div>
 				<button class="minn-search-btn" id="minn-open-palette">
 					${ icon( 'search' ) }<span>${ esc( __( 'Search…' ) ) }</span><span class="minn-kbd">⌘K</span>
@@ -1853,6 +1852,7 @@
 						<button class="minn-upd-chip" id="minn-upd-chip" hidden title="${ esc( __( 'Updates are running — click for details' ) ) }">${ icon( 'refresh' ) }<span id="minn-upd-chip-text"></span></button>
 					<button class="minn-vis-chip" id="minn-vis-chip" hidden title="${ esc( __( 'Your site is not fully public' ) ) }">${ icon( 'warn' ) }<span id="minn-vis-chip-text"></span></button>
 						<button class="minn-core-chip" id="minn-core-chip" hidden title="${ esc( __( 'A WordPress update is available' ) ) }">${ icon( 'refresh' ) }<span id="minn-core-chip-text"></span></button>
+						<button class="minn-topbar-ver" id="minn-ver-btn" title="${ esc( __( "What's new — full changelog" ) ) }">v${ esc( B.version ) }</button>
 						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="${ esc( __( 'View site' ) ) }" aria-label="${ esc( __( 'View site (opens in a new tab)' ) ) }">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }" aria-label="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
 						<button class="minn-icon-btn" id="minn-theme-btn" title="${ esc( __( 'Theme: System (click to cycle, right-click for options)' ) ) }" aria-label="${ esc( __( 'Color theme' ) ) }"></button>
