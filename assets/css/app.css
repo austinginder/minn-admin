@@ -216,6 +216,25 @@ a { color: var(--accent2); text-decoration: none; }
 
 /* Changelog modal — the mini markdown renderer's vocabulary. */
 .minn-changelog { padding: 4px 18px 18px; max-height: 64vh; overflow-y: auto; font-size: 13.5px; line-height: 1.65; color: var(--text2); }
+/* Sectioned changelog modal (the minnadmin.com pattern in-app): version rail
+   beside one release at a time; the rail becomes a horizontal chip strip on
+   small screens, scrolling in its OWN overflow so the modal never widens. */
+.minn-cl-layout { display: grid; grid-template-columns: 172px minmax(0, 1fr); min-height: 0; }
+.minn-cl-rail { border-right: 1px solid var(--border); max-height: 64vh; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.minn-cl-ver { text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 7px 10px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+.minn-cl-ver-v { display: block; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text); }
+.minn-cl-ver-d { display: block; font-size: 11.5px; color: var(--text3); margin-top: 1px; }
+.minn-cl-ver:hover { background: var(--hover); }
+.minn-cl-ver.sel { background: var(--accent-soft, rgba(110,98,245,0.14)); border-color: var(--accent); }
+.minn-cl-ver.sel .minn-cl-ver-v { color: var(--accent2); }
+@media (max-width: 640px) {
+  .minn-cl-layout { display: flex; flex-direction: column; }
+  .minn-cl-rail { flex-direction: row; overflow-x: auto; overflow-y: hidden; max-height: none; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; gap: 6px; }
+  .minn-cl-ver { padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; }
+  .minn-cl-ver.sel { border-color: var(--accent); }
+  .minn-cl-ver-d { display: none; }
+  .minn-changelog { max-height: 56vh; }
+}
 .minn-changelog h3 { font-size: 15px; color: var(--text); margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
 .minn-changelog h3:first-child { margin-top: 6px; padding-top: 0; border-top: 0; }
 /* The user-guide modal shares the changelog reader shell, plus the guide's

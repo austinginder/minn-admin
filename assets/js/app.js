@@ -25745,15 +25745,28 @@
 		}
 
 		if ( m.type === 'changelog' ) {
+			// One release at a time with a clickable version rail (chips on
+			// small screens) — the minnadmin.com sectioned-changelog pattern.
+			const secs = m.sections || [];
+			const cur = secs[ m.sec ] || null;
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
-				<div class="minn-modal wide">
+				<div class="minn-modal wide minn-cl-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">What's new · v${ esc( B.version ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ m.md === null ? '<div class="minn-loading">Loading changelog…</div>'
-						: `<div class="minn-changelog">${ changelogHtml( m.md ) }</div>
+						: `<div class="minn-cl-layout">
+						<nav class="minn-cl-rail" id="minn-cl-rail" aria-label="${ esc( __( 'Versions' ) ) }">
+							${ secs.map( ( s, i ) => `
+							<button type="button" class="minn-cl-ver${ i === m.sec ? ' sel' : '' }" data-clver="${ i }" aria-current="${ i === m.sec ? 'true' : 'false' }">
+								<span class="minn-cl-ver-v">${ esc( s.version ) }</span>
+								${ s.date ? `<span class="minn-cl-ver-d">${ esc( s.date ) }</span>` : '' }
+							</button>` ).join( '' ) }
+						</nav>
+						<div class="minn-changelog" id="minn-cl-body">${ cur ? changelogHtml( cur.md ) : changelogHtml( m.md ) }</div>
+					</div>
 					<div class="minn-changelog-foot"><a href="https://minnadmin.com/docs/changelog/" target="_blank" rel="noopener">${ esc( __( 'View the full changelog with screenshots on minnadmin.com' ) ) } ↗</a></div>` }
 				</div>
 			</div>`;
@@ -26103,6 +26116,31 @@
 			const meta = editorSideDoorMeta( m.id );
 			const body = $( '.minn-editor-door-body' );
 			if ( meta && meta.bind && body && state.editor ) meta.bind( body );
+		}
+
+		if ( m.type === 'changelog' && m.sections ) {
+			$$( '[data-clver]' ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const i = parseInt( btn.dataset.clver, 10 );
+					if ( i === m.sec ) return;
+					m.sec = i;
+					renderOverlays();
+				} )
+			);
+			// Keep the selected version visible in the rail — scrollLeft /
+			// scrollTop math only, never scrollIntoView (it propagates to
+			// scroll ancestors and yanks the page behind the modal).
+			const rail = $( '#minn-cl-rail' );
+			const sel = rail && rail.querySelector( '.minn-cl-ver.sel' );
+			if ( rail && sel ) {
+				if ( rail.scrollWidth > rail.clientWidth + 4 ) {
+					const t = sel.offsetLeft - ( rail.clientWidth - sel.offsetWidth ) / 2;
+					rail.scrollLeft = Math.max( 0, Math.min( t, rail.scrollWidth - rail.clientWidth ) );
+				} else if ( rail.scrollHeight > rail.clientHeight + 4 ) {
+					const t = sel.offsetTop - ( rail.clientHeight - sel.offsetHeight ) / 2;
+					rail.scrollTop = Math.max( 0, Math.min( t, rail.scrollHeight - rail.clientHeight ) );
+				}
+			}
 		}
 
 		if ( m.type === 'db-row' ) {
@@ -28088,13 +28126,39 @@
 		return out.join( '' ) || '<div class="minn-empty">No changelog found.</div>';
 	}
 
+	// Split the raw changelog into releases for the modal's version rail
+	// (the minnadmin.com sectioned-changelog pattern, in-app). Each `## `
+	// heading opens a release; the heading itself stays in the section's
+	// markdown so changelogHtml renders it as the body's h3.
+	function changelogSections( md ) {
+		const sections = [];
+		let cur = null;
+		String( md ).split( /\r?\n/ ).forEach( ( line ) => {
+			const m = line.match( /^## (.*)$/ );
+			if ( m ) {
+				const head = m[ 1 ].match( /^\*\*(v[\d.]+)\*\*\s*-\s*(.+)$/ );
+				cur = {
+					version: head ? head[ 1 ] : m[ 1 ].replace( /\*/g, '' ).trim(),
+					date: head ? head[ 2 ].trim() : '',
+					lines: [ line ],
+				};
+				sections.push( cur );
+				return;
+			}
+			if ( cur ) cur.lines.push( line );
+		} );
+		return sections.map( ( s ) => ( { version: s.version, date: s.date, md: s.lines.join( '\n' ) } ) );
+	}
+
 	function openChangelog() {
-		state.modal = { type: 'changelog', md: null };
+		state.modal = { type: 'changelog', md: null, sections: null, sec: 0 };
 		renderOverlays();
 		api( 'minn-admin/v1/changelog' )
 			.then( ( r ) => {
 				if ( state.modal && state.modal.type === 'changelog' ) {
 					state.modal.md = r.markdown || '';
+					state.modal.sections = changelogSections( state.modal.md );
+					state.modal.sec = 0;
 					renderOverlays();
 				}
 			} )

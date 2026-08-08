@@ -1,5 +1,10 @@
 # Changelog
 
+## **v0.26.0** - Unreleased
+
+### Improved
+* **The What's-new popup reads one release at a time:** a clickable version list sits beside the notes (the same layout as the changelog on minnadmin.com), so finding what changed in any release is one click instead of a long scroll. On phones the list becomes a compact row of version chips that scrolls on its own.
+
 ## **v0.25.0** - August 8, 2026
 
 The people release. A full-page user editor lets admins set another user's entire Minn experience, color scheme included, before their first sign-in. Any menu item can now be hidden just for you, core views included, and restored from your profile or by an admin. New posts honor the site's discussion defaults, the version badge stopped crowding the site name, locked editor blocks explain themselves on hover, and plugin authors gain status panels: post-scoped status and actions in the editor sidebar, declared entirely server-side.
