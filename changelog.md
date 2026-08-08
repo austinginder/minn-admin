@@ -1,5 +1,13 @@
 # Changelog
 
+## **v0.25.0** - Unreleased
+
+### Added
+* **Status panels in the editor sidebar:** plugins can now add a post-scoped status card to the editor's door stack. The door shows a live one-line summary from the plugin (with a green, amber or red tint when it declares one), and opening it reveals status rows plus the plugin's own action buttons: plain verbs, dangerous verbs behind Minn's themed confirm, and verbs that collect a value first (an email address, for example). Everything is server-declared through the `minn_admin_editor_panels` filter's new `statusRoute` shape, so a newsletter plugin can say "Not sent · 57 subscribers" on the door and offer its send buttons without shipping a line of JavaScript.
+
+### Improved
+* **Locked blocks explain themselves:** hovering a locked block card in the editor now reveals a short hint saying why it is locked and where edits live. A core text block that locked because of custom styling reads "Styled block: edit text via ⚙"; every other protected block points at the ⚙ chip and the block editor escape hatch.
+
 ## **v0.24.0** - August 6, 2026
 
 The connections release. Minn has managed license keys for a while; this cycle it starts telling the whole truth about the external services a site talks to. The Licenses tab now inventories service keys and account connections alongside purchase licenses, with WooCommerce.com, Site Kit and Jetpack as read-only rows and the AI connector keys WordPress core manages one doorway away. Akismet's key gets a paste-in-place field on the spam card, WPForms Pro joins both the license manager and the Forms surface with the full entries treatment, and FluentSMTP's quiet daily connection test surfaces the failure that matters most: outgoing email that silently stopped working months after setup. A topbar progress pill while updates run and the sidebar toggle moving up into the topbar keep the everyday feel visible and honest.

@@ -16268,6 +16268,18 @@
 		ed.panelValues = {};
 		ed.panelDirty = {};
 		await Promise.all( ( B.editorPanels || [] ).map( async ( desc ) => {
+			if ( desc.statusRoute ) {
+				// Status/action panels report on a persisted post — a new post
+				// has nothing to report on yet.
+				if ( ! ed.id ) return;
+				try {
+					const st = await api( desc.statusRoute.replace( '{id}', ed.id ).replace( '{type}', ed.type ) );
+					if ( st && ( st.summary || ( st.rows || [] ).length || ( st.actions || [] ).length ) ) {
+						ed.panels.push( { desc, status: st } );
+					}
+				} catch ( e ) { /* panel just doesn't render */ }
+				return;
+			}
 			if ( ! desc.fieldsRoute ) return;
 			try {
 				const route = desc.fieldsRoute.replace( '{id}', ed.id || 0 ).replace( '{type}', ed.type );
@@ -18132,6 +18144,77 @@
 			</div>`;
 	}
 
+	/** Status/action panel body (statusRoute panels): status rows + verbs.
+	 * Rows reuse the surface status-card stat styles; every action is a
+	 * server-declared verb with optional hint / confirm / danger / fields. */
+	function editorStatusPanelHtml( p ) {
+		const st = p.status || {};
+		const rows = ( st.rows || [] ).map( ( r ) => `
+			<div class="minn-sstat">
+				<div class="minn-sstat-label">${ esc( r.label ) }</div>
+				<div class="minn-sstat-value${ r.tone ? ' ' + esc( r.tone ) : '' }">${ esc( r.value ) }</div>
+				${ r.hint ? `<div class="minn-sstat-hint">${ esc( r.hint ) }</div>` : '' }
+			</div>` ).join( '' );
+		const actions = ( st.actions || [] ).map( ( a, i ) => `
+			<div class="minn-status-act">
+				${ a.href
+					? `<a class="minn-btn-soft" href="${ esc( a.href ) }" target="_blank" rel="noopener">${ esc( hrefLabel( a.label, a.href ) ) }</a>`
+					: `<button type="button" class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-panelact="${ i }">${ esc( a.label ) }</button>` }
+				${ a.hint ? `<div class="minn-sstat-hint">${ esc( a.hint ) }</div>` : '' }
+			</div>` ).join( '' );
+		return `
+			<div class="minn-status-panel">
+				${ st.note ? `<p class="minn-status-note">${ esc( st.note ) }</p>` : '' }
+				${ rows ? `<div class="minn-sstat-rows">${ rows }</div>` : '' }
+				${ actions ? `<div class="minn-status-acts">${ actions }</div>` : '' }
+			</div>`;
+	}
+
+	function bindEditorStatusPanel( root, ed, p ) {
+		$$( '[data-panelact]', root ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				const a = ( ( p.status && p.status.actions ) || [] )[ parseInt( btn.dataset.panelact, 10 ) ];
+				if ( ! a ) return;
+				// Action responses may carry the fresh status ({ message, status });
+				// otherwise re-poll the panel's own route — either way the modal
+				// body and the door summary repaint from server truth.
+				const refresh = async ( r ) => {
+					toast( actionToast( r, a ) );
+					if ( r && r.status ) {
+						p.status = r.status;
+					} else {
+						try {
+							p.status = await api( p.desc.statusRoute.replace( '{id}', ed.id ).replace( '{type}', ed.type ) );
+						} catch ( e ) { /* keep the stale card */ }
+					}
+					renderOverlays();
+					renderEditorSide();
+				};
+				if ( a.fields && a.fields.length ) {
+					armActionFields( btn, a, () => renderOverlays(), async ( body ) => {
+						const r = await api( a.route, { method: a.method || 'POST', body: JSON.stringify( body ) } );
+						await refresh( r );
+					} );
+					return;
+				}
+				if ( a.confirm ) {
+					// Panel verbs are typically sends and other irreversibles —
+					// the themed confirm, not native (friction ∝ irreversibility).
+					const ok = await minnConfirm( { title: a.label, body: a.confirm, danger: !! a.danger, confirmLabel: a.label } );
+					if ( ! ok ) return;
+				}
+				btn.disabled = true;
+				try {
+					const r = await api( a.route, { method: a.method || 'POST', body: JSON.stringify( a.body || {} ) } );
+					await refresh( r );
+				} catch ( e ) {
+					toast( e.message, true );
+					btn.disabled = false;
+				}
+			} )
+		);
+	}
+
 	function editorSettingsFieldsHtml( ed ) {
 		const cats = state.cache.categories;
 		return `
@@ -18212,7 +18295,7 @@
 		<button type="button" class="minn-side-door" data-side-door="${ esc( door.id ) }" title="${ esc( door.title ) }">
 			<span class="minn-side-door-text">
 				<span class="minn-side-door-title">${ esc( door.title ) }${ door.sub ? ` <span class="minn-panel-sub">${ esc( door.sub ) }</span>` : '' }</span>
-				${ door.summary ? `<span class="minn-side-door-sum">${ esc( door.summary ) }</span>` : '' }
+				${ door.summary ? `<span class="minn-side-door-sum${ door.tone ? ' ' + esc( door.tone ) : '' }">${ esc( door.summary ) }</span>` : '' }
 			</span>
 			<span class="minn-side-door-chev" aria-hidden="true">›</span>
 		</button>`;
@@ -18260,6 +18343,11 @@
 	}
 
 	function editorPanelSummary( ed, p ) {
+		if ( p.status ) {
+			return p.status.summary
+				|| ( p.status.rows || [] ).slice( 0, 2 ).map( ( r ) => r.value ).join( ' · ' )
+				|| __( 'Status' );
+		}
 		const values = ed.panelValues[ p.desc.id ] || {};
 		const fields = [];
 		p.groups.forEach( ( g ) => ( g.fields || [] ).forEach( ( f ) => fields.push( f ) ) );
@@ -18314,6 +18402,14 @@
 			const pid = doorId.slice( 6 );
 			const p = ( ed.panels || [] ).find( ( x ) => x.desc.id === pid );
 			if ( ! p ) return null;
+			if ( p.status ) {
+				return {
+					title: p.desc.label,
+					sub: p.desc.sub || '',
+					body: editorStatusPanelHtml( p ),
+					bind: ( root ) => bindEditorStatusPanel( root, ed, p ),
+				};
+			}
 			return {
 				title: p.desc.label,
 				sub: p.desc.sub || '',
@@ -18796,6 +18892,7 @@
 			title: p.desc.label,
 			sub: p.desc.sub || '',
 			summary: editorPanelSummary( ed, p ),
+			tone: p.status && p.status.tone,
 		} ) ).join( '' );
 		el.innerHTML = `
 		<div class="minn-side-card">

@@ -563,7 +563,7 @@ class Minn_Admin_Surfaces {
 	const EDIT_KEYS       = array( 'route', 'method', 'preserve', 'fields' );
 	const FIELD_KEYS      = array( 'key', 'label', 'type', 'options', 'value', 'placeholder', 'rows', 'mono', 'required' );
 	const FIELD_TYPES     = array( 'text', 'number', 'textarea', 'select', 'tags', 'email', 'url' );
-	const PANEL_KEYS      = array( 'label', 'sub', 'cap', 'fieldsRoute', 'valuesKey', 'writeKey' );
+	const PANEL_KEYS      = array( 'label', 'sub', 'cap', 'fieldsRoute', 'valuesKey', 'writeKey', 'statusRoute' );
 
 	/**
 	 * Replay a registry filter callback-by-callback, attributing each added
@@ -943,9 +943,16 @@ class Minn_Admin_Surfaces {
 		if ( ! is_array( $panel ) ) {
 			return array( 'descriptor is not an array' );
 		}
-		foreach ( array( 'label', 'fieldsRoute', 'valuesKey', 'writeKey' ) as $req ) {
-			if ( empty( $panel[ $req ] ) ) {
-				$problems[] = "missing $req";
+		if ( empty( $panel['label'] ) ) {
+			$problems[] = 'missing label';
+		}
+		// A panel is EITHER a status/action panel (statusRoute) or a fields
+		// panel (fieldsRoute + valuesKey + writeKey riding the post save).
+		if ( empty( $panel['statusRoute'] ) ) {
+			foreach ( array( 'fieldsRoute', 'valuesKey', 'writeKey' ) as $req ) {
+				if ( empty( $panel[ $req ] ) ) {
+					$problems[] = "missing $req";
+				}
 			}
 		}
 		foreach ( self::unknown_keys( $panel, self::PANEL_KEYS ) as $k ) {

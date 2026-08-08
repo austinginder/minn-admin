@@ -301,6 +301,16 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-sstat-label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text3); margin-bottom: 3px; }
 .minn-sstat-value { font-size: 17px; font-weight: 650; color: var(--text); }
 .minn-sstat-hint { font-size: 12px; color: var(--text3); margin-top: 2px; }
+/* Status/action editor panels (statusRoute) — the door modal's body. Rows
+   reuse the surface stat styles above; actions stack full-width with
+   per-verb hints (the wp-admin metabox shape, themed). */
+.minn-status-panel { display: flex; flex-direction: column; gap: 18px; }
+.minn-status-note { margin: 0; font-size: 13.5px; color: var(--text2); }
+.minn-sstat-value.green { color: var(--green-text); }
+.minn-sstat-value.amber { color: var(--amber-text); }
+.minn-sstat-value.red { color: var(--red-text); }
+.minn-status-acts { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--border); padding-top: 16px; }
+.minn-status-act .minn-btn-soft { width: 100%; text-align: center; }
 /* Status-card chart: compact Overview bars. Tip reuses #minn-chart-tip.
    Specificity must beat the standalone .minn-chart { height: 150px }. */
 .minn-sstat-chart { min-width: 0; }
@@ -1609,6 +1619,10 @@ select.minn-input {
 .minn-side-door-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .minn-side-door-title { font-weight: 700; font-size: 14px; color: var(--text); }
 .minn-side-door-sum { font-size: 12.5px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Status-panel doors tint their summary by server-declared tone. */
+.minn-side-door-sum.green { color: var(--green-text); }
+.minn-side-door-sum.amber { color: var(--amber-text); }
+.minn-side-door-sum.red { color: var(--red-text); }
 .minn-side-door-chev { flex-shrink: 0; color: var(--text3); font-size: 18px; line-height: 1; font-weight: 400; }
 /* Doors pack two-up — a title plus a one-line summary never needed a full
    row. An odd count lets the last door span the width; the chevron gives
