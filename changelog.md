@@ -3,6 +3,7 @@
 ## **v0.26.0** - Unreleased
 
 ### Improved
+* **Plugin views read like cards on phones:** every plugin-contributed list (snippets, redirects, activity logs, email logs, form entries, diagnostics and the rest) now stacks each row as a small card at phone widths: the item's name gets the full line and can wrap, the details sit quietly underneath, and nothing scrolls sideways or truncates to a few letters. Status cards tidy up too, with stats flowing two-up and charts taking the full width. Desktop keeps the familiar table.
 * **The What's-new popup reads one release at a time:** a clickable version list sits beside the notes (the same layout as the changelog on minnadmin.com), so finding what changed in any release is one click instead of a long scroll. On phones the list becomes a compact row of version chips that scrolls on its own.
 
 ## **v0.25.0** - August 8, 2026
