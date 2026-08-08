@@ -1141,6 +1141,58 @@ venue picker is the reference.
 
 The bundled ACF adapter (`includes/adapters/acf.php`) is the reference implementation.
 
+### Status panels — post-scoped status and actions (since 0.25.0)
+
+Some per-post features are not fields at all: they report state and offer verbs (send this
+post as a newsletter, purge this page from a CDN, share to social). For those, register the
+panel with a `statusRoute` instead of the field keys. The door shows your summary line and
+opening it renders your status rows plus action buttons; Minn supplies all the UI.
+
+```php
+add_filter( 'minn_admin_editor_panels', function ( $panels ) {
+    $panels['newsletter'] = array(
+        'label'       => 'Newsletter',
+        'sub'         => 'My Plugin',
+        'cap'         => 'manage_options',
+        // GET; {id} = post ID, {type} = REST base. Only fetched for saved posts.
+        'statusRoute' => 'my-plugin/v1/newsletter/{id}',
+    );
+    return $panels;
+} );
+```
+
+The status route returns everything the panel shows:
+
+```json
+{
+    "summary": "Not sent · 57 subscribers",
+    "tone":    "amber",
+    "note":    "Optional paragraph shown above the rows.",
+    "rows":    [ { "label": "Status", "value": "Not sent", "tone": "amber", "hint": "…" } ],
+    "actions": [
+        { "label": "Send preview to me", "route": "my-plugin/v1/newsletter/123/send",
+          "body": { "send_to": "preview" }, "hint": "Sends to you@example.com" },
+        { "label": "Send to all subscribers (57)", "route": "…", "body": { "send_to": "all" },
+          "confirm": "This sends immediately to all subscribers.", "danger": true },
+        { "label": "Send to email", "route": "…", "body": { "send_to": "custom" },
+          "fields": [ { "key": "email", "label": "Email address", "type": "email" } ] },
+        { "label": "Open in wp-admin", "href": "…" }
+    ]
+}
+```
+
+`summary` is the door's one-line state; `tone` (`green` / `amber` / `red`) tints it. Action
+routes are strings you build server-side (embed the post ID yourself), POSTed with the
+action's `body`. An action with `confirm` goes through Minn's themed confirm dialog
+(`danger` styles it red); an action with `fields` swaps its button for an inline form and
+merges the collected values into the body (the same field vocabulary as create forms).
+`href` actions render as links instead. The action response may carry
+`{ "message": "…", "status": { … } }`: `message` replaces the default toast and a returned
+`status` repaints the panel and the door in the same round trip (otherwise Minn re-fetches
+your status route). Panels never render for unsaved posts, since there is no post to report
+on yet. A panel is either a fields panel or a status panel; `statusRoute` makes the three
+field keys optional.
+
 ## Traffic providers — power the Overview chart
 
 Analytics plugins can replace the Overview "Activity" chart with real traffic by answering the
