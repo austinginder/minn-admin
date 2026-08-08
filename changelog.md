@@ -1,6 +1,8 @@
 # Changelog
 
-## **v0.25.0** - Unreleased
+## **v0.25.0** - August 8, 2026
+
+The feedback release. Days after Minn's first outside user opened five GitHub issues, this release closes four of them. Editing a user is a full page now, and admins can set someone else's color scheme, default admin and toolbar so a client's Minn looks right before their first sign-in. The per-user hide grows to cover the core menu, with admins able to restore anything a user hid from their own Minn. New posts honor the site's discussion defaults, the version badge stops crowding the site name, and locked blocks explain themselves on hover. Under the hood, plugins gain status panels in the editor sidebar: post-scoped status and actions declared entirely server-side, with a newsletter panel as the first real consumer. The fifth issue, editing inside grouped core blocks, now has a written plan of record in the editor direction doc.
 
 ### Added
 * **Hide any menu item, just for you:** the right-click "Hide for you" that plugin surfaces have had now works on the core menu too. Comments turned off sitewide? Hide the Comments entry. Never touch Widgets? Gone. Hiding is per-user and purely cosmetic (every screen stays reachable by URL and the command palette), items disappear immediately with an Undo toast, and everything you hid lists on Your profile for one-click restore. Overview and the editor stay put; they are destinations, not menu noise.
