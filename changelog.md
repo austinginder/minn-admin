@@ -8,6 +8,9 @@
 ### Improved
 * **Locked blocks explain themselves:** hovering a locked block card in the editor now reveals a short hint saying why it is locked and where edits live. A core text block that locked because of custom styling reads "Styled block: edit text via ⚙"; every other protected block points at the ⚙ chip and the block editor escape hatch.
 
+### Fixed
+* **New posts honor the site's discussion defaults:** the editor's comments and pingbacks switches started every new post as on, even when Settings → Comments had them off sitewide. They now start from the site defaults, matching what wp-admin does and what WordPress actually stores.
+
 ## **v0.24.0** - August 6, 2026
 
 The connections release. Minn has managed license keys for a while; this cycle it starts telling the whole truth about the external services a site talks to. The Licenses tab now inventories service keys and account connections alongside purchase licenses, with WooCommerce.com, Site Kit and Jetpack as read-only rows and the AI connector keys WordPress core manages one doorway away. Akismet's key gets a paste-in-place field on the spam card, WPForms Pro joins both the license manager and the Forms surface with the full entries treatment, and FluentSMTP's quiet daily connection test surfaces the failure that matters most: outgoing email that silently stopped working months after setup. A topbar progress pill while updates run and the sidebar toggle moving up into the topbar keep the everyday feel visible and honest.

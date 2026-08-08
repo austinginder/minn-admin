@@ -773,6 +773,13 @@ class Minn_Admin {
 			// Comments nav/palette/badge hide even if the user can moderate.
 			'comments'  => self::comments_enabled(),
 			'pretty'   => (bool) get_option( 'permalink_structure' ),
+			// Site discussion defaults — new-post editor state starts from
+			// these so the sidebar switches match what WP will actually store
+			// (GH #6: they were hardcoded open).
+			'discussion' => array(
+				'comments' => get_option( 'default_comment_status', 'open' ),
+				'pings'    => get_option( 'default_ping_status', 'open' ),
+			),
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),
 			'editorPanels' => Minn_Admin_Surfaces::editor_panels_for_current_user(),
