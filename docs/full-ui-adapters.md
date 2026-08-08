@@ -43,7 +43,7 @@ whether the adapter approach scales to full coverage.
    has a proven answer: delegate, exactly like page builders ("Edit in Gravity Forms"
    is one click, with no wp-admin chrome needed for the builder-style screens).
 
-## Where the adapter system stands today (re-verified at v0.24.0 open, 2026-08-06; prior checks 2026-07-15 at v0.16.0 open and 2026-07-23/24 at v0.21.0/v0.22.0 open. No new rungs since; the cycles through v0.24.0 added consumers, not primitives (WPForms entries, forms-family status cards, FluentSMTP "Resend to…"), and the database viewer shipped as a native surface outside the adapter system)
+## Where the adapter system stands today (re-verified at v0.24.0 open, 2026-08-06; prior checks 2026-07-15 at v0.16.0 open and 2026-07-23/24 at v0.21.0/v0.22.0 open. The cycles through v0.24.0 added consumers, not primitives (WPForms entries, forms-family status cards, FluentSMTP "Resend to…"), and the database viewer shipped as a native surface outside the adapter system. The v0.25.0 cycle added one primitive: editor status panels — see Rung 3)
 
 The thesis held. Rungs 1–2 are shipped, Rung 3 is essentially shipped, and two
 hard case studies (Gravity Forms + Gravity SMTP) plus a cold third
@@ -195,6 +195,14 @@ rough priority order:
 - ~~**Bulk selection.**~~ ✅ shipped (v0.13.0): checkbox column plus a bulk-action
   bar reusing the same action descriptors (`bulk` on a collection). GF entries bulk
   star/read/spam/trash and the mail-log cleanups all ride it.
+- **Editor status panels.** ✅ shipped (v0.25.0 cycle, 2026-08-08): the status-card
+  shape ported to the editor sidebar as a `statusRoute` panel kind on
+  `minn_admin_editor_panels` — door with server summary + tone, modal with stat
+  rows and declarative actions (confirm/danger through the themed confirm,
+  `fields` verbs, `href` links), action responses repainting door + modal in one
+  round trip. First consumer is CaptainCore Manager's newsletter panel, which
+  registers entirely from its own repo (the ship-your-own-adapter proof for
+  post-scoped verbs: send-newsletter, purge-this-page, share-to-social all fit).
 - **Surface stat cards and a chart row type.** The `status` card (shipped
   2026-07-10) covers stat rows + actions above a list; the chart row shipped
   v0.13.0 (see above). Still missing: per-item stat tiles, and the GF
