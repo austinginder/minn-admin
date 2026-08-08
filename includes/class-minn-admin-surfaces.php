@@ -229,9 +229,41 @@ class Minn_Admin_Surfaces {
 		return null;
 	}
 
+	/**
+	 * Core Minn views the per-user hide accepts (GH #7): route id => label +
+	 * the capability that gates the view in the nav. Overview, the editor
+	 * and detail pages are destinations, not menu noise — never hideable.
+	 * Hiding is cosmetic: the route stays reachable by URL and palette.
+	 */
+	public static function core_hideable() {
+		return array(
+			'content'       => array( 'label' => __( 'Content', 'minn-admin' ), 'cap' => 'edit_posts' ),
+			'media'         => array( 'label' => __( 'Media', 'minn-admin' ), 'cap' => 'upload_files' ),
+			'comments'      => array( 'label' => __( 'Comments', 'minn-admin' ), 'cap' => 'moderate_comments' ),
+			'orders'        => array( 'label' => __( 'Orders', 'minn-admin' ), 'cap' => 'edit_shop_orders' ),
+			'subscriptions' => array( 'label' => __( 'Subscriptions', 'minn-admin' ), 'cap' => 'edit_shop_orders' ),
+			'products'      => array( 'label' => __( 'Products', 'minn-admin' ), 'cap' => 'edit_products' ),
+			'coupons'       => array( 'label' => __( 'Coupons', 'minn-admin' ), 'cap' => 'edit_shop_coupons' ),
+			'customers'     => array( 'label' => __( 'Customers', 'minn-admin' ), 'cap' => 'list_users' ),
+			'users'         => array( 'label' => __( 'Users', 'minn-admin' ), 'cap' => 'list_users' ),
+			'terms'         => array( 'label' => __( 'Terms', 'minn-admin' ), 'cap' => 'manage_categories' ),
+			'menus'         => array( 'label' => __( 'Menus', 'minn-admin' ), 'cap' => 'edit_theme_options' ),
+			'widgets'       => array( 'label' => __( 'Widgets', 'minn-admin' ), 'cap' => 'edit_theme_options' ),
+			'posttypes'     => array( 'label' => __( 'Structure', 'minn-admin' ), 'cap' => 'manage_options' ),
+			'extensions'    => array( 'label' => __( 'Extensions', 'minn-admin' ), 'cap' => 'activate_plugins' ),
+			'database'      => array( 'label' => __( 'Database', 'minn-admin' ), 'cap' => 'manage_options' ),
+			'system'        => array( 'label' => __( 'System', 'minn-admin' ), 'cap' => 'manage_options' ),
+			'settings'      => array( 'label' => __( 'Settings', 'minn-admin' ), 'cap' => 'manage_options' ),
+		);
+	}
+
 	public static function is_registered_integration( $id ) {
-		if ( ! preg_match( '/^(surface|panel|design|slash):([a-z0-9_-]+)$/', (string) $id, $m ) ) {
+		if ( ! preg_match( '/^(surface|panel|design|slash|core):([a-z0-9_-]+)$/', (string) $id, $m ) ) {
 			return false;
+		}
+		if ( 'core' === $m[1] ) {
+			$map = self::core_hideable();
+			return isset( $map[ $m[2] ] ) && current_user_can( $map[ $m[2] ]['cap'] );
 		}
 		if ( 'surface' === $m[1] ) {
 			$all = self::all();
@@ -297,10 +329,18 @@ class Minn_Admin_Surfaces {
 		return true;
 	}
 
-	public static function unhide_integration( $id ) {
-		$h = self::hidden_map();
+	/**
+	 * Unhide for the current user, or (GH #7) for another user when an admin
+	 * restores from the user edit page — restoring only removes a stored
+	 * preference, so unlike hide it needs no registration re-validation.
+	 *
+	 * @param string $id      Hidden-map key.
+	 * @param int    $user_id Target user; 0 = current.
+	 */
+	public static function unhide_integration( $id, $user_id = 0 ) {
+		$uid = $user_id ? (int) $user_id : get_current_user_id();
+		$h   = self::hidden_map( $uid );
 		unset( $h[ (string) $id ] );
-		$uid = get_current_user_id();
 		if ( $h ) {
 			update_user_meta( $uid, self::HIDDEN_META, $h );
 		} else {
@@ -317,14 +357,26 @@ class Minn_Admin_Surfaces {
 	 * cap prunes it, so reactivation keeps the user's choice).
 	 */
 	public static function hidden_for_current_user() {
-		$hidden = self::hidden_map();
+		return self::hidden_for_user( 0 );
+	}
+
+	/**
+	 * Same restore list for an arbitrary user (GH #7): the user edit page
+	 * shows an admin what the TARGET user hid. Cap checks run against the
+	 * target (user_can), so the list is what that user could actually see.
+	 *
+	 * @param int $user_id Target user; 0 = current.
+	 */
+	public static function hidden_for_user( $user_id = 0 ) {
+		$uid    = $user_id ? (int) $user_id : get_current_user_id();
+		$hidden = self::hidden_map( $uid );
 		if ( ! $hidden ) {
 			return array();
 		}
 		// Which kinds the user actually hid, so we resolve only the registries
 		// we need: a surface-only hider must not pay a panels + designs filter
 		// run plus a block/pattern-registry walk to render a one-row list.
-		$has = array( 'surface' => false, 'panel' => false, 'design' => false, 'slash' => false );
+		$has = array( 'surface' => false, 'panel' => false, 'design' => false, 'slash' => false, 'core' => false );
 		foreach ( array_keys( $hidden ) as $k ) {
 			$p = strtok( (string) $k, ':' );
 			if ( isset( $has[ $p ] ) ) {
@@ -332,13 +384,25 @@ class Minn_Admin_Surfaces {
 			}
 		}
 		$out = array();
+		foreach ( ( $has['core'] ? self::core_hideable() : array() ) as $id => $core ) {
+			$key = 'core:' . $id;
+			if ( ! isset( $hidden[ $key ] ) || ! user_can( $uid, $core['cap'] ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'    => $key,
+				'kind'  => 'core',
+				'label' => $core['label'],
+				'sub'   => '',
+			);
+		}
 		foreach ( ( $has['surface'] ? self::all() : array() ) as $id => $surface ) {
 			$key = 'surface:' . sanitize_key( $id );
 			if ( ! isset( $hidden[ $key ] ) ) {
 				continue;
 			}
 			$cap = isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options';
-			if ( ! current_user_can( $cap ) ) {
+			if ( ! user_can( $uid, $cap ) ) {
 				continue;
 			}
 			$out[] = array(
@@ -355,7 +419,7 @@ class Minn_Admin_Surfaces {
 				continue;
 			}
 			$cap = isset( $panel['cap'] ) ? $panel['cap'] : 'edit_posts';
-			if ( ! current_user_can( $cap ) ) {
+			if ( ! user_can( $uid, $cap ) ) {
 				continue;
 			}
 			$out[] = array(
@@ -365,7 +429,7 @@ class Minn_Admin_Surfaces {
 				'sub'   => isset( $panel['sub'] ) ? (string) $panel['sub'] : '',
 			);
 		}
-		if ( ( $has['design'] || $has['slash'] ) && current_user_can( 'edit_posts' ) ) {
+		if ( ( $has['design'] || $has['slash'] ) && user_can( $uid, 'edit_posts' ) ) {
 			// Design libraries and slash namespaces: same still-registered
 			// rule as above (raw registry; the resolved lists already omit
 			// this user's hides). Each registry resolves only when hidden.
