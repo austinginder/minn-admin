@@ -140,16 +140,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'clicking your own Users row opens the profile route', await page.evaluate( () =>
 			location.pathname.endsWith( '/minn-admin/profile' ) && ! document.querySelector( '.minn-modal' ) ) );
 
+		// Another user opens the FULL edit page now (GH #8), not the modal —
+		// tests/user-edit-page.test.js covers that page in depth.
 		await page.goto( BASE + '/minn-admin/users', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-user-cols.minn-table-row', { timeout: 20000 } );
 		await page.locator( '.minn-user-cols.minn-table-row', { hasText: 'minn-editor' } ).first().click();
-		await page.waitForSelector( '#minn-uf-save', { timeout: 10000 } );
-		t.check( 'another user still opens the Edit-user modal', await page.evaluate( () => !! document.querySelector( '.minn-modal' ) ) );
-		t.check( 'the modal carries no self-only sections', await page.evaluate( () =>
-			! document.querySelector( '.minn-modal .minn-scheme-swatch' )
-			&& ! document.querySelector( '.minn-modal #minn-app-create' )
-			&& ! document.querySelector( '.minn-modal [data-unhide]' ) ) );
-		await page.keyboard.press( 'Escape' );
+		await page.waitForSelector( '#minn-ue-name', { timeout: 10000 } );
+		t.check( 'another user opens the Edit-user page', await page.evaluate( () =>
+			/\/minn-admin\/users\/\d+$/.test( location.pathname ) && ! document.querySelector( '.minn-modal' ) ) );
+		t.check( 'the page carries no self-only sections', await page.evaluate( () =>
+			! document.querySelector( '#minn-app-create' )
+			&& ! document.querySelector( '[data-unhide]' )
+			&& ! document.querySelector( '[data-theme-pref]' ) ) );
 	} finally {
 		// Restore the admin's identity fields whatever happened above.
 		await page.evaluate( async ( orig ) => {

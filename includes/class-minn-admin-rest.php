@@ -439,6 +439,48 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Another user's Minn appearance + language — the /minn-admin/users/{id}
+		// page (GH #8): admins pre-configure a user's Minn experience before
+		// their first sign-in. Same callbacks as the /me routes; the {id}
+		// param retargets them, gated on edit_user like wp-admin's profile.
+		$edit_user_gate = function ( $request ) {
+			return is_user_logged_in() && current_user_can( 'edit_user', (int) $request['id'] );
+		};
+		register_rest_route(
+			self::NS,
+			'/users/(?P<id>\d+)/appearance',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'get_my_appearance' ),
+					'permission_callback' => $edit_user_gate,
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'update_my_appearance' ),
+					'permission_callback' => $edit_user_gate,
+				),
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/users/(?P<id>\d+)/language',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'set_my_language' ),
+				'permission_callback' => $edit_user_gate,
+				'args'                => array(
+					'locale' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => function ( $v ) {
+							return preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) $v );
+						},
+					),
+				),
+			)
+		);
+
 		// Current user's Minn UI appearance (color scheme). Self only.
 		register_rest_route(
 			self::NS,
@@ -3139,8 +3181,9 @@ class Minn_Admin_REST {
 	/**
 	 * GET minn-admin/v1/me/appearance — current user's color scheme preference.
 	 */
-	public static function get_my_appearance() {
-		return rest_ensure_response( Minn_Admin::get_user_appearance( get_current_user_id() ) );
+	public static function get_my_appearance( WP_REST_Request $request ) {
+		$uid = $request['id'] ? (int) $request['id'] : get_current_user_id();
+		return rest_ensure_response( Minn_Admin::get_user_appearance( $uid ) );
 	}
 
 	/**
@@ -3152,7 +3195,13 @@ class Minn_Admin_REST {
 	 * `current` is the user's RAW locale meta ('' = site default) — the
 	 * wp/v2 users field can't say "default", it reports the effective locale.
 	 */
-	public static function get_languages() {
+	public static function get_languages( WP_REST_Request $request ) {
+		// ?user={id} reports THAT user's raw locale as `current` (the
+		// user-edit page); requires edit_user for the target.
+		$for = absint( $request->get_param( 'user' ) );
+		if ( $for && ( $for === get_current_user_id() || ! current_user_can( 'edit_user', $for ) ) ) {
+			$for = 0;
+		}
 		$installed = Minn_Admin::available_languages();
 		$available = array();
 		$can       = current_user_can( 'install_languages' ) && wp_is_file_mod_allowed( 'download_language_pack' );
@@ -3172,7 +3221,7 @@ class Minn_Admin_REST {
 				return strcasecmp( $a[1], $b[1] );
 			} );
 		}
-		$user = get_userdata( get_current_user_id() );
+		$user = get_userdata( $for ? $for : get_current_user_id() );
 		return rest_ensure_response(
 			array(
 				'installed'  => $installed,
@@ -3278,7 +3327,7 @@ class Minn_Admin_REST {
 		}
 		$result = wp_update_user(
 			array(
-				'ID'     => get_current_user_id(),
+				'ID'     => $request['id'] ? (int) $request['id'] : get_current_user_id(),
 				'locale' => $locale,
 			)
 		);
@@ -3331,7 +3380,9 @@ class Minn_Admin_REST {
 	}
 
 	public static function update_my_appearance( WP_REST_Request $request ) {
-		$uid = get_current_user_id();
+		// {id} present = the admin user-edit page targeting another user
+		// (permission_callback gated on edit_user); absent = self.
+		$uid = $request['id'] ? (int) $request['id'] : get_current_user_id();
 		$cur = Minn_Admin::get_user_appearance( $uid );
 		// JSON body may put nested custom under get_json_params.
 		$json = $request->get_json_params();

@@ -687,6 +687,7 @@
 		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
 		customers: [ __( 'Customers' ), 'WooCommerce' ],
 		users: [ __( 'Users' ), __( 'People' ) ],
+		useredit: [ __( 'Edit user' ), __( 'People' ) ],
 		terms: [ __( 'Terms' ), __( 'Categories & Tags' ) ],
 		menus: [ __( 'Menus' ), __( 'Navigation' ) ],
 		widgets: [ __( 'Widgets' ), __( 'Sidebars & footers' ) ],
@@ -1380,6 +1381,10 @@
 			// /orders/123 — the order detail page.
 			state.orderPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'order';
+		} else if ( route === 'users' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+			// /users/123 — the full-page user editor (GH #8).
+			state.userEditId = parseInt( parts[ 1 ], 10 );
+			state.route = 'useredit';
 		} else if ( TITLES[ route ] || surfaceById( route ) ) {
 			state.route = route;
 		} else {
@@ -2264,7 +2269,7 @@
 			} ) );
 	}
 
-	function appearanceSwatchesHtml( ap ) {
+	function appearanceSwatchesHtml( ap, opts = {} ) {
 		const cur = appearanceOf( ap );
 		const dots = SCHEME_PRESETS.map( ( p ) =>
 			`<button type="button" class="minn-scheme-swatch${ cur.scheme === p.id ? ' sel' : '' }" data-scheme="${ esc( p.id ) }" title="${ esc( p.label ) }" aria-label="${ esc( p.label ) }" aria-pressed="${ cur.scheme === p.id ? 'true' : 'false' }">
@@ -2274,26 +2279,35 @@
 		).join( '' );
 		const customOn = cur.scheme === 'custom';
 		const mode = ( document.documentElement.getAttribute( 'data-theme' ) || 'dark' );
-		const modeTokens = normalizeModeTokens( cur.custom && cur.custom[ mode ], mode );
 		const slotMeta = schemeSlotsMeta();
 		const labelOf = ( key ) => {
 			const hit = slotMeta.find( ( s ) => s.key === key );
 			return hit ? hit.label : key;
 		};
-		const customEditors = customOn ? `
-			<div class="minn-scheme-custom" id="minn-scheme-custom">
-				<div class="minn-toggle-desc" style="margin-bottom:8px;">Editing <strong>${ mode === 'light' ? 'light' : 'dark' }</strong> colors. Flip Theme below to tune the other mode.</div>
-				${ SCHEME_SLOT_GROUPS.map( ( g ) => `
+		// Self mode edits the mode you're LOOKING at (live paint); the
+		// user-edit page passes opts.modes to edit both palettes blind
+		// (no live paint there — it's someone else's UI).
+		const modes = opts.modes || [ mode ];
+		const modeGroups = ( m ) => {
+			const modeTokens = normalizeModeTokens( cur.custom && cur.custom[ m ], m );
+			return SCHEME_SLOT_GROUPS.map( ( g ) => `
 					<div class="minn-scheme-group">
 						<div class="minn-scheme-group-title">${ esc( g.title ) }</div>
 						${ g.keys.map( ( key ) => `
 						<label class="minn-scheme-slot">
 							<span class="minn-scheme-slot-swatch" style="background:${ esc( modeTokens[ key ] || '#888' ) }"></span>
 							<span class="minn-scheme-slot-label">${ esc( labelOf( key ) ) }</span>
-							<input type="color" data-scheme-slot="${ esc( key ) }" value="${ esc( modeTokens[ key ] || '#888888' ) }" aria-label="${ esc( labelOf( key ) ) }">
+							<input type="color" data-scheme-slot="${ esc( key ) }"${ opts.modes ? ` data-mode="${ esc( m ) }"` : '' } value="${ esc( modeTokens[ key ] || '#888888' ) }" aria-label="${ esc( labelOf( key ) ) }">
 						</label>` ).join( '' ) }
-					</div>` ).join( '' ) }
-			</div>` : '';
+					</div>` ).join( '' );
+		};
+		const customEditors = customOn ? modes.map( ( m ) => `
+			<div class="minn-scheme-custom"${ opts.modes ? '' : ' id="minn-scheme-custom"' } data-scheme-mode="${ esc( m ) }">
+				${ opts.modes
+					? `<div class="minn-scheme-group-title" style="margin-bottom:8px;">${ m === 'light' ? esc( __( 'Light colors' ) ) : esc( __( 'Dark colors' ) ) }</div>`
+					: `<div class="minn-toggle-desc" style="margin-bottom:8px;">Editing <strong>${ mode === 'light' ? 'light' : 'dark' }</strong> colors. Flip Theme below to tune the other mode.</div>` }
+				${ modeGroups( m ) }
+			</div>` ).join( '' ) : '';
 		return `
 			<div class="minn-scheme-row" role="group" aria-label="Color scheme">
 				${ dots }
@@ -28475,6 +28489,12 @@
 			go( 'profile' );
 			return;
 		}
+		// Editing another user is a full page too (GH #8) — deep-linkable at
+		// /minn-admin/users/{id}. The modal below remains the Add-user flow.
+		if ( userId ) {
+			go( 'users/' + userId );
+			return;
+		}
 		state.modal = { type: 'user', userId: userId || null, user: null, sessions: null };
 		renderOverlays();
 		if ( ! userId ) return;
@@ -28659,6 +28679,351 @@
 				}
 			} );
 		}
+	}
+
+	/* ===== Edit user ( /minn-admin/users/{id} ) — GH #8 =====
+	 * Editing another user is a full page like Your profile: identity,
+	 * public profile, appearance, sessions, delete. Appearance is settable
+	 * by admins so a client's Minn looks right before their first sign-in
+	 * (the white-label ask). Two deliberate absences: the dark/light THEME
+	 * choice lives in each person's browser (localStorage) and cannot be
+	 * set remotely, and AI Access stays personal. Appearance edits here
+	 * save to the TARGET user's meta and never repaint this session. */
+
+	function loadUserEdit() {
+		const ue = state.userEdit;
+		const mine = () => state.userEdit === ue;
+		const paint = () => { if ( mine() && state.route === 'useredit' ) renderUserEdit(); };
+		api( `wp/v2/users/${ ue.id }?context=edit&_fields=id,name,email,roles,username,first_name,last_name,url,description,avatar_urls,locale,meta` )
+			.then( ( u ) => { if ( mine() ) { ue.user = u; paint(); } } )
+			.catch( ( e ) => { if ( mine() ) { ue.error = e.message || __( 'Could not load this user.' ); paint(); } } );
+		api( `minn-admin/v1/users/${ ue.id }/appearance` )
+			.then( ( ap ) => { if ( mine() ) { ue.appearance = appearanceOf( ap ); paint(); } } )
+			.catch( () => { if ( mine() ) { ue.appearance = appearanceOf( null ); ue.noAppearance = true; paint(); } } );
+		api( `minn-admin/v1/users/${ ue.id }/sessions` )
+			.then( ( r ) => { if ( mine() ) { ue.sessions = r.sessions; paint(); } } )
+			.catch( () => { if ( mine() ) { ue.sessions = []; paint(); } } );
+		api( `minn-admin/v1/languages?user=${ ue.id }` )
+			.then( ( r ) => { if ( mine() ) { ue.languages = r; paint(); } } )
+			.catch( () => { if ( mine() ) { ue.languages = { installed: B.languages || [], available: [], canInstall: false, current: '' }; paint(); } } );
+	}
+
+	function renderUserEdit() {
+		const view = $( '#minn-view' );
+		let ue = state.userEdit;
+		if ( ! ue || ue.id !== state.userEditId ) {
+			ue = state.userEdit = { id: state.userEditId, user: null, appearance: null, sessions: null, languages: null, error: null };
+			loadUserEdit();
+		}
+		if ( ue.error ) {
+			view.innerHTML = `<div class="minn-card minn-empty">${ esc( ue.error ) }</div>`;
+			return;
+		}
+		if ( ! ue.user || ue.appearance == null || ue.sessions == null || ! ue.languages ) {
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading user…' ) ) }</div>`;
+			return;
+		}
+		const u = ue.user;
+		const roles = Object.entries( B.roles || {} );
+		const isSelf = u.id === B.user.id;
+		view.innerHTML = `
+		<div class="minn-ue-head">
+			<button type="button" class="minn-btn-soft" id="minn-ue-back">← ${ esc( __( 'Users' ) ) }</button>
+			<div class="minn-modal-title-block">
+				<div class="minn-modal-title">${ esc( u.name || u.username || '' ) }</div>
+				<div class="minn-modal-sub">@${ esc( u.username || '' ) } · ${ esc( ( u.roles || [] ).map( ( r ) => ( B.roles || {} )[ r ] || r ).join( ', ' ) ) }</div>
+			</div>
+		</div>
+		<div class="minn-profile-grid">
+			<div class="minn-profile-col">
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">${ esc( __( 'Account' ) ) } <span class="minn-panel-sub">@${ esc( u.username || '' ) } · #${ esc( String( u.id ) ) }</span></div>
+					<div class="minn-profile-fields">
+						<div>
+							<div class="minn-field-label">${ esc( __( 'Display name' ) ) }</div>
+							<input class="minn-input" id="minn-ue-name" value="${ esc( u.name ) }">
+						</div>
+						<div>
+							<div class="minn-field-label">${ esc( __( 'Email' ) ) }</div>
+							<input class="minn-input mono" id="minn-ue-email" value="${ esc( u.email ) }">
+						</div>
+						<div>
+							<div class="minn-field-label">${ esc( __( 'Role' ) ) }</div>
+							${ roles.length && B.caps.promoteUsers ? `
+							<div class="minn-ac" id="minn-ue-role-ac">
+								<input class="minn-input minn-ac-input" id="minn-ue-role" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+								<div class="minn-ac-panel" hidden></div>
+							</div>` : `
+							<input class="minn-input" value="${ esc( ( u.roles || [] ).join( ', ' ) ) }" disabled>` }
+						</div>
+						<div>
+							<div class="minn-field-label">${ esc( __( 'Language' ) ) }</div>
+							<div class="minn-ac" id="minn-ue-lang-ac">
+								<input class="minn-input minn-ac-input" id="minn-ue-lang" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+								<div class="minn-ac-panel" hidden></div>
+							</div>
+						</div>
+						<div>
+							<div class="minn-field-label">${ esc( __( 'New password (leave blank to keep)' ) ) }</div>
+							<div style="display:flex; gap:8px;">
+								<input class="minn-input mono" id="minn-ue-password" autocomplete="new-password" data-1p-ignore data-lpignore="true">
+								<button class="minn-btn-soft" id="minn-ue-genpass" style="flex-shrink:0;">${ esc( __( 'Generate' ) ) }</button>
+							</div>
+						</div>
+						<div><button class="minn-btn-primary" data-ue-save>${ esc( __( 'Save changes' ) ) }</button></div>
+					</div>
+				</div>
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">${ esc( __( 'Public profile' ) ) } <span class="minn-panel-sub">${ esc( __( 'author boxes & archives' ) ) }</span></div>
+					<div class="minn-profile-fields">
+						<div class="minn-pf-cols">
+							<div>
+								<div class="minn-field-label">${ esc( __( 'First name' ) ) }</div>
+								<input class="minn-input" id="minn-ue-first" value="${ esc( u.first_name || '' ) }">
+							</div>
+							<div>
+								<div class="minn-field-label">${ esc( __( 'Last name' ) ) }</div>
+								<input class="minn-input" id="minn-ue-last" value="${ esc( u.last_name || '' ) }">
+							</div>
+						</div>
+						<div>
+							<div class="minn-field-label">${ esc( __( 'Website' ) ) }</div>
+							<input class="minn-input mono" id="minn-ue-url" value="${ esc( u.url || '' ) }" placeholder="https://…">
+						</div>
+						<div>
+							<div class="minn-field-label">${ esc( __( 'Bio' ) ) }</div>
+							<textarea class="minn-input" id="minn-ue-bio" rows="4">${ esc( u.description || '' ) }</textarea>
+						</div>
+						<div><button class="minn-btn-primary" data-ue-save>${ esc( __( 'Save changes' ) ) }</button></div>
+					</div>
+				</div>
+			</div>
+			<div class="minn-profile-col">
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">${ esc( __( 'Appearance' ) ) } <span class="minn-panel-sub">${ esc( __( 'what this user sees' ) ) }</span></div>
+					<div class="minn-toggle-desc" style="margin:6px 0 10px;">${ esc( __( 'Set their Minn palette now so it looks right before their first sign-in. Light or dark mode stays a device preference each person controls themselves.' ) ) }</div>
+					<div class="minn-profile-fields">
+						<div id="minn-ue-appearance">
+							<div class="minn-field-label">${ esc( __( 'Color scheme' ) ) }</div>
+							${ appearanceSwatchesHtml( ue.appearance, { modes: [ 'dark', 'light' ] } ) }
+						</div>
+						<div>
+							<div class="minn-toggle-rows minn-side-toggles">
+								<div class="minn-toggle-row">
+									<button type="button" class="minn-switch${ ue.appearance.defaultAdmin ? ' on' : '' }" id="minn-ue-default-admin" role="switch" aria-checked="${ ue.appearance.defaultAdmin ? 'true' : 'false' }" aria-label="${ esc( __( 'Minn is their default admin' ) ) }"><span class="minn-switch-knob"></span></button>
+									<div class="minn-toggle-info">
+										<div class="minn-toggle-label">${ esc( __( 'Minn is their default admin' ) ) }</div>
+										<div class="minn-toggle-desc">${ esc( __( 'After sign-in they land in Minn. Full wp-admin stays available.' ) ) }</div>
+									</div>
+								</div>
+								<div class="minn-toggle-row">
+									<button type="button" class="minn-switch${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' ? ' on' : '' }" id="minn-ue-toolbar" role="switch" aria-checked="${ ( u.meta && u.meta.show_admin_bar_front ) !== 'false' }" aria-label="${ esc( __( 'Show toolbar when viewing the site' ) ) }"><span class="minn-switch-knob"></span></button>
+									<div class="minn-toggle-info">
+										<div class="minn-toggle-label">${ esc( __( 'Show toolbar when viewing the site' ) ) }</div>
+										<div class="minn-toggle-desc">${ esc( __( 'The WordPress admin bar on the front end while they are signed in.' ) ) }</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">${ esc( __( 'Sessions' ) ) }</div>
+					${ ! ue.sessions.length ? `<div class="minn-session-empty">${ esc( __( 'No active sessions.' ) ) }</div>`
+						: ue.sessions.map( ( sess ) => `
+						<div class="minn-session-row">
+							<div class="minn-session-info">
+								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }</div>
+								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+							</div>
+							<button class="minn-comment-action danger" data-ue-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
+						</div>` ).join( '' ) }
+					${ ue.sessions.length ? `<button class="minn-comment-action danger" id="minn-ue-killall" style="margin:10px 0 0;">${ esc( __( 'Sign out everywhere' ) ) }</button>` : '' }
+				</div>
+				${ ! isSelf && B.caps.deleteUsers ? `
+				<div class="minn-card minn-panel-pad">
+					<div class="minn-panel-title">${ esc( __( 'Danger zone' ) ) }</div>
+					<div class="minn-toggle-desc" style="margin:6px 0 10px;">${ esc( __( 'Deleting a user asks what happens to their content first.' ) ) }</div>
+					<button class="minn-btn-soft danger" id="minn-ue-delete">${ esc( __( 'Delete user' ) ) }</button>
+				</div>` : '' }
+			</div>
+		</div>`;
+		bindUserEdit( ue, view );
+	}
+
+	function bindUserEdit( ue, view ) {
+		const u = ue.user;
+		const back = $( '#minn-ue-back', view );
+		if ( back ) back.addEventListener( 'click', () => go( 'users' ) );
+		const roleAc = $( '#minn-ue-role-ac', view );
+		if ( roleAc ) {
+			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: l } ) ), {
+				strict: true,
+				value: u.roles && u.roles[ 0 ] ? u.roles[ 0 ] : 'subscriber',
+			} );
+		}
+		const langAc = $( '#minn-ue-lang-ac', view );
+		if ( langAc ) {
+			const langOpts = [ ...( ue.languages.installed || [] ), ...( ue.languages.available || [] ) ]
+				.map( ( [ v, l ] ) => ( { value: v, label: l } ) );
+			bindAutocomplete( langAc, langOpts, { strict: true, value: ue.languages.current || '' } );
+		}
+		const gen = $( '#minn-ue-genpass', view );
+		if ( gen ) gen.addEventListener( 'click', () => {
+			const input = $( '#minn-ue-password', view );
+			input.value = generatePassword();
+			input.type = 'text';
+		} );
+
+		// Both Save buttons submit the same combined payload (profile rule).
+		$$( '[data-ue-save]', view ).forEach( ( btn ) => btn.addEventListener( 'click', async () => {
+			btn.disabled = true;
+			const payload = {
+				name: $( '#minn-ue-name', view ).value.trim(),
+				email: $( '#minn-ue-email', view ).value.trim(),
+				first_name: $( '#minn-ue-first', view ).value.trim(),
+				last_name: $( '#minn-ue-last', view ).value.trim(),
+				url: $( '#minn-ue-url', view ).value.trim(),
+				description: $( '#minn-ue-bio', view ).value,
+			};
+			const roleSel = $( '#minn-ue-role', view );
+			if ( B.caps.promoteUsers && roleSel && roleSel.dataset.acValue ) payload.roles = [ roleSel.dataset.acValue ];
+			const password = $( '#minn-ue-password', view ).value;
+			if ( password ) payload.password = password;
+			const langSel = $( '#minn-ue-lang', view );
+			const langPicked = langSel ? langSel.dataset.acValue : undefined;
+			const langChanged = langPicked !== undefined && langPicked !== ( ue.languages.current || '' );
+			try {
+				await api( `wp/v2/users/${ u.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
+				let langNote = '';
+				if ( langChanged ) {
+					const lr = await api( `minn-admin/v1/users/${ u.id }/language`, { method: 'POST', body: JSON.stringify( { locale: langPicked } ) } );
+					ue.languages.current = lr.locale;
+					if ( lr.installed ) langNote = ' — ' + __( 'language pack installed' );
+				}
+				toast( __( 'User updated' ) + langNote );
+				ue.user = Object.assign( {}, ue.user, payload );
+				state.cache.users = null;
+				btn.disabled = false;
+			} catch ( err ) {
+				toast( err.message, true );
+				btn.disabled = false;
+			}
+		} ) );
+
+		bindUserEditAppearance( ue, view );
+
+		const tbBtn = $( '#minn-ue-toolbar', view );
+		if ( tbBtn ) tbBtn.addEventListener( 'click', async () => {
+			const on = ! tbBtn.classList.contains( 'on' );
+			tbBtn.classList.toggle( 'on', on );
+			tbBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+			try {
+				await api( `wp/v2/users/${ u.id }`, {
+					method: 'POST',
+					body: JSON.stringify( { meta: { show_admin_bar_front: on ? 'true' : 'false' } } ),
+				} );
+				ue.user.meta = Object.assign( {}, ue.user.meta, { show_admin_bar_front: on ? 'true' : 'false' } );
+			} catch ( e ) {
+				tbBtn.classList.toggle( 'on', ! on );
+				tbBtn.setAttribute( 'aria-checked', ! on ? 'true' : 'false' );
+				toast( e.message, true );
+			}
+		} );
+
+		$$( '[data-ue-kill]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', async () => {
+				btn.disabled = true;
+				try {
+					await api( `minn-admin/v1/users/${ u.id }/sessions/${ btn.dataset.ueKill }`, { method: 'DELETE' } );
+					toast( __( 'Session signed out' ) );
+					ue.sessions = ue.sessions.filter( ( sess ) => sess.verifier !== btn.dataset.ueKill );
+					if ( state.route === 'useredit' ) renderUserEdit();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+				}
+			} )
+		);
+		const killAll = $( '#minn-ue-killall', view );
+		if ( killAll ) killAll.addEventListener( 'click', async () => {
+			if ( ! confirm( __( 'Sign this user out of all sessions?' ) ) ) return;
+			killAll.disabled = true;
+			try {
+				await api( `minn-admin/v1/users/${ u.id }/sessions`, { method: 'DELETE' } );
+				toast( __( 'Signed out everywhere' ) );
+				ue.sessions = [];
+				if ( state.route === 'useredit' ) renderUserEdit();
+			} catch ( err ) {
+				toast( err.message, true );
+				killAll.disabled = false;
+			}
+		} );
+
+		const del = $( '#minn-ue-delete', view );
+		if ( del ) del.addEventListener( 'click', () => openUserDeleteModal( u ) );
+	}
+
+	// Appearance edits for ANOTHER user: update the target's meta over the
+	// admin route, repaint swatch state only — never applyAppearance (that
+	// would restyle THIS admin's session with the client's palette).
+	let ueAppearanceSaveTimer = null;
+	function bindUserEditAppearance( ue, view ) {
+		const wrap = $( '#minn-ue-appearance', view );
+		if ( ! wrap ) return;
+		const save = async ( next, rebuild ) => {
+			try {
+				const saved = await api( `minn-admin/v1/users/${ ue.id }/appearance`, {
+					method: 'POST',
+					body: JSON.stringify( appearanceOf( next ) ),
+				} );
+				ue.appearance = appearanceOf( saved );
+				if ( rebuild && state.route === 'useredit' ) renderUserEdit();
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+		};
+		$$( '.minn-scheme-swatch', wrap ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => {
+				const id = btn.dataset.scheme;
+				if ( ! id ) return;
+				const prev = appearanceOf( ue.appearance );
+				if ( prev.scheme === id && id !== 'custom' ) return;
+				const flips = ( prev.scheme === 'custom' ) !== ( id === 'custom' );
+				ue.appearance = appearanceOf( { ...prev, scheme: id } );
+				if ( ! flips ) markSchemeSwatchSelected( wrap, id );
+				save( ue.appearance, flips );
+			} );
+		} );
+		$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
+			input.addEventListener( 'input', () => {
+				const prev = appearanceOf( ue.appearance );
+				const m = input.dataset.mode === 'light' ? 'light' : 'dark';
+				const nextMode = { ...normalizeModeTokens( prev.custom[ m ], m ) };
+				const hex = sanitizeHex( input.value );
+				if ( input.dataset.schemeSlot && hex ) nextMode[ input.dataset.schemeSlot ] = hex;
+				const sw = input.closest( '.minn-scheme-slot' )?.querySelector( '.minn-scheme-slot-swatch' );
+				if ( sw && hex ) sw.style.background = hex;
+				ue.appearance = appearanceOf( {
+					scheme: 'custom',
+					custom: {
+						dark: m === 'dark' ? nextMode : prev.custom.dark,
+						light: m === 'light' ? nextMode : prev.custom.light,
+					},
+					defaultAdmin: prev.defaultAdmin,
+				} );
+				clearTimeout( ueAppearanceSaveTimer );
+				ueAppearanceSaveTimer = setTimeout( () => save( ue.appearance, false ), 250 );
+			} );
+		} );
+		const defBtn = $( '#minn-ue-default-admin', view );
+		if ( defBtn ) defBtn.addEventListener( 'click', () => {
+			const on = ! defBtn.classList.contains( 'on' );
+			defBtn.classList.toggle( 'on', on );
+			defBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+			ue.appearance = appearanceOf( { ...appearanceOf( ue.appearance ), defaultAdmin: on } );
+			save( ue.appearance, false );
+		} );
 	}
 
 	/* ===== Your profile ( /minn-admin/profile ) =====
@@ -29379,6 +29744,8 @@
 		if ( state.route !== 'profile' ) state.profile = null;
 		// Order-page data too — a revisit refetches, like the modal always did.
 		if ( state.route !== 'order' ) state.orderPage = null;
+		// User-edit page data too (same per-visit contract).
+		if ( state.route !== 'useredit' ) state.userEdit = null;
 		switch ( state.route ) {
 			case 'content': return renderContent();
 			case 'media': return renderMedia();
@@ -29390,6 +29757,7 @@
 			case 'coupons': return renderCoupons();
 			case 'customers': return renderCustomers();
 			case 'users': return renderUsers();
+			case 'useredit': return renderUserEdit();
 			case 'terms': return renderStructure();
 			case 'menus': return renderMenus();
 			case 'widgets': return renderWidgets();
