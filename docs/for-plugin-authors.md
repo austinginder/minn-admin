@@ -700,7 +700,7 @@ hooks, each with its own section below or its own contract note:
 | Hook | Kind | Purpose |
 |---|---|---|
 | `minn_admin_surfaces` | filter | Sidebar views (lists, tabs, detail modals) — the descriptor reference above |
-| `minn_admin_editor_panels` | filter | Per-post fields in the editor sidebar |
+| `minn_admin_editor_panels` | filter | Per-post fields or status/action panels in the editor sidebar |
 | `minn_admin_traffic` | filter | Overview chart traffic provider |
 | `minn_admin_traffic_day` | filter | Overview traffic bar drill-down (top pages / referrers for a date window) |
 | `minn_admin_block_forms` | filter | Block inspector labels/controls + slash insert templates |
@@ -1192,6 +1192,12 @@ merges the collected values into the body (the same field vocabulary as create f
 your status route). Panels never render for unsaved posts, since there is no post to report
 on yet. A panel is either a fields panel or a status panel; `statusRoute` makes the three
 field keys optional.
+
+For a complete real-world implementation (status builder, action endpoint, publish gating
+on the dangerous verb), see the newsletter panel in
+[CaptainCore Manager](https://github.com/CaptainCore/captaincore-manager/blob/master/captaincore.php)
+(search for `captaincore_newsletter_panel_status`). The whole integration lives in that
+plugin; Minn ships nothing about it.
 
 ## Traffic providers — power the Overview chart
 
