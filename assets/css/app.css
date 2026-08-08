@@ -2479,6 +2479,19 @@ button.minn-ac-item:hover { background: var(--hover); }
   touch-action: manipulation; user-select: none;
 }
 .minn-island-chip:hover, .minn-block-island:hover .minn-island-chip { color: var(--accent2); border-color: var(--accent); }
+/* Hover hint (top-left, mirroring the chip): why the block is locked and where
+   edits live. Revealed on hover/selection only; pointer-events none so it never
+   competes with the chip; hidden while armed for delete (red state is louder). */
+.minn-island-hint {
+  position: absolute; top: -10px; left: 12px; font-size: 10.5px; font-weight: 500;
+  font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
+  border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; line-height: 1.4;
+  pointer-events: none; user-select: none; opacity: 0; transition: opacity 0.15s;
+  max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.minn-block-island:hover .minn-island-hint,
+.minn-block-island.minn-island-selected .minn-island-hint { opacity: 1; }
+.minn-block-island.minn-island-armed .minn-island-hint { opacity: 0; }
 /* No max-height: a hard cap (was 420px) clipped multi-card grids and tall
    design-library inserts mid-block while the front end looked fine. overflow
    stays hidden so child border-radii don't paint outside the island.
