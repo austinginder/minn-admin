@@ -16559,7 +16559,11 @@
 				date: null, newDate: null, slug: '', slugValue: '', link: '', savedAt: null, categoryIds: new Set(),
 				tagIds: new Set(), tags: [],
 				revisions: null, panels: null,
-				commentStatus: 'open', pingStatus: 'open', password: '', visibility: 'public',
+				// Discussion switches start from the SITE defaults, matching what
+				// WP stores when the create payload omits them (GH #6).
+				commentStatus: ( B.discussion && B.discussion.comments ) || 'open',
+				pingStatus: ( B.discussion && B.discussion.pings ) || 'open',
+				password: '', visibility: 'public',
 				sticky: false, serverSticky: false, supportsSticky: newType === 'posts', supportsDiscussion: ! isPattern,
 				supportsThumb: ! isPattern, featuredMedia: 0, featuredThumb: null,
 				parent: 0, menuOrder: 0, template: '', supportsParent: newType === 'pages', supportsOrder: newType === 'pages', templates: null, parentPick: null,
