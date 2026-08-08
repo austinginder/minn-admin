@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.24.0. This file ships inside the plugin, so the copy you
+*Current as of v0.25.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -53,9 +53,9 @@ post, or run a command directly: "Clear site cache", "Back up site now",
 **Right-click is real in Minn.** This is the least discoverable thing in
 the app, so here it is in plain terms: rows in Content and Media have
 right-click menus (open, duplicate, publish, trash), comments have them,
-the theme toggle has one, plugin-contributed sidebar entries have one
-(that's how you hide them), and group headings in the editor's block
-library have one too. When in doubt, try a right-click.
+the theme toggle has one, sidebar entries have one whether a plugin added
+them or Minn did (that's how you hide them), and group headings in the
+editor's block library have one too. When in doubt, try a right-click.
 
 **One view, many plugins.** Where several plugins do the same job (three
 form plugins, two backup plugins), Minn shows one sidebar entry with a
@@ -63,10 +63,10 @@ switcher inside, instead of three lookalike menus. The view stays the same;
 the provider changes.
 
 **The topbar** carries the page title, a button that shows or hides the
-sidebar (⌘. does the same), a View site link, the theme toggle
-(system, light, dark), notifications, and the New button. Amber chips
-appear here only when something needs you: a pending WordPress update, or
-a site that is not fully public.
+sidebar (⌘. does the same), the version badge (click it for what's new),
+a View site link, the theme toggle (system, light, dark), notifications,
+and the New button. Amber chips appear here only when something needs
+you: a pending WordPress update, or a site that is not fully public.
 
 ## Writing
 
@@ -91,7 +91,9 @@ for drafting, not for page design:
 - **Complex blocks are kept safe, untouched.** If a post contains a block
   Minn's editor doesn't natively edit (a plugin's fancy block, a Gutenberg
   layout), it appears as a framed island rendered with your site's real
-  styling. Its text and images are usually editable in place via the ⚙
+  styling. Hovering an island shows a short note saying why it is
+  protected and where edits live. Its text and images are usually
+  editable in place via the ⚙
   chip; its structure is preserved byte for byte. One click on "Block
   editor ↗" opens the same post in Gutenberg whenever you want the full
   toolkit. Posts built with page builders (Elementor, Bricks, Divi and
@@ -153,16 +155,22 @@ how fresh your last backup is.
 
 ## You are in control of the interface
 
-Anything a plugin adds to Minn can be hidden, per user, without touching
-the plugin itself:
+Anything in Minn's menus can be hidden, per user, without touching the
+site itself:
 
-- Right-click a plugin's sidebar entry and choose **Hide for you**.
+- Right-click any sidebar entry, whether a plugin added it or it is one
+  of Minn's own views (Comments on a site that never uses them, Widgets
+  you never touch), and choose **Hide for you**. Hiding is cosmetic:
+  every screen stays reachable from the command palette and by its
+  address.
 - Right-click a group heading in the block library to hide that plugin's
   blocks or designs from your menus.
 - Hide any notice from the Notices tab.
 
 Everything hidden is listed under **Your profile**, where one click
-restores it. Hiding is personal: your co-editors see their own layout.
+restores it, and an administrator can restore items for you from your
+entry on the Users page. Hiding is personal: your co-editors see their
+own layout.
 Plugins also have hard budgets for how much space they may claim in the
 sidebar, palette and menus, so the interface stays calm as you install
 more of them.
@@ -184,7 +192,13 @@ more of them.
   rather than licenses.
 - **Users** — create, edit, change roles in bulk, reset passwords, sign
   out sessions, and (with the User Switching plugin) switch into an
-  account to see what they see.
+  account to see what they see. Opening a user is a full page: identity,
+  public profile, language, password and sessions, plus their Minn
+  appearance. An administrator can set another user's color scheme and
+  defaults there, so a client's Minn looks right before their first
+  sign-in, and restore anything that user hid from their own menus.
+  Light or dark mode is the one thing that stays personal to each
+  person's device.
 - **Settings** — the settings people actually change: identity and logo,
   reading and discussion, permalinks, visibility (search engines,
   maintenance mode, and a switch that turns a detected coming-soon or

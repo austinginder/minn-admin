@@ -64,7 +64,11 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Users** — directory with search, a role filter, create/edit users, roles, passwords,
   **bulk role change**, **per-user login sessions with one-click sign-out**, **Switch to
   this user** when the User Switching plugin is active (a switched session shows a **Switch
-  back** bar in Minn), and **Copy one-time login link** when One Time Login is active
+  back** bar in Minn), and **Copy one-time login link** when One Time Login is active.
+  Editing a user is a **full page at `/minn-admin/users/{id}`**: identity, public profile,
+  language, sessions, plus the user's **Minn appearance set by an admin** (color scheme
+  including custom palettes, default admin, toolbar) so a client's Minn looks right before
+  their first sign-in, and a **Hidden for them** card restoring anything they hid
 - **Your profile** — a full page at `/minn-admin/profile`: account, public profile (first/last
   name, website, bio, Gravatar), **per-user language** with automatic pack installs, the
   front-end toolbar preference, appearance, hidden integrations, and login sessions
@@ -247,9 +251,10 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Quiet by architecture** — integrations are data, never third-party HTML or scripts, and
   attention is budgeted: one plugin holds at most three nav slots and three default slash
   entries (overflow stays one search away), Workspace placement requires an inbox-shaped view,
-  **off-site links always carry the ↗ mark**, and every surface, editor panel, design library
-  and slash namespace can be **hidden per user** from Minn's own UI (restore from Your
-  profile), with no API for a plugin to detect or resist it
+  **off-site links always carry the ↗ mark**, and every surface, editor panel, design library,
+  slash namespace **and core menu item** can be **hidden per user** from Minn's own UI
+  (restore from Your profile, or an admin restores for you from the Users page), with no API
+  for a plugin to detect or resist it
 - **Dark, light and System themes** (follows your OS until you choose; right-click for an
   explicit menu) plus **per-user color schemes**: named light/dark presets or a fully custom
   scheme with per-slot color pickers, set on Your profile. Bundled fonts, zero external
