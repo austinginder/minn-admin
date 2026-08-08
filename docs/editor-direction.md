@@ -91,8 +91,11 @@ inspector** (docs/block-inspector.md) makes islands configurable without making 
 and **attribute passthrough** (`PASSTHROUGH_BLOCKS`) lets attribute-carrying instances of
 non-text-flow simple blocks — images with `{"id":…}`, styled tables/quotes/separators — stay
 editable by parking the comment JSON on the element (`data-minn-attrs`) and re-emitting it
-byte-faithfully on save. Text-flow blocks (paragraphs, headings, lists) are deliberately
-excluded: contenteditable splits clone element attributes, which would duplicate the marker. Islands make the cost of *not* supporting a block small — it still
+byte-faithfully on save. Text-flow blocks (paragraphs, headings, lists) have been deliberately
+excluded so far: contenteditable splits clone element attributes, which would duplicate the
+marker. The nested-content plan below revisits that exclusion, since Gutenberg's own split
+copies attributes to both halves, making the duplication correct semantics rather than
+corruption. Islands make the cost of *not* supporting a block small — it still
 displays and survives — so there is no pressure to chase parity. If a site's content is mostly
 complex layouts, Gutenberg is simply the right tool and Minn should be great at everything
 *around* the editor.
@@ -100,3 +103,53 @@ complex layouts, Gutenberg is simply the right tool and Minn should be great at 
 Authors who want first-class Minn editing should build **content blocks** (dynamic, schema-
 first, words in attributes), not layout kits. The contract and Anchor Blocks reference are in
 [content-blocks.md](content-blocks.md).
+
+## The nested-content plan (plan of record, 2026-08-08)
+
+Written in response to [GH #4](https://github.com/austinginder/minn-admin/issues/4): on a
+fully FSE, core-blocks-only site, grouped content locks. The gap is now measured, not
+anecdotal. A classification probe over the Twenty Twenty-Four/Five pattern corpus (the
+closest stand-in for content an average user builds in FSE) found that effectively **100% of
+top-level segments island**, dominated by `group` wrappers, and that **63% of core text
+blocks anywhere in that markup would island on attributes alone** even if containers
+recursed. The offenders rank: `fontSize` (165), `style` (121), `className` (38), `textColor`
+(22), `fontFamily` (16). Two conclusions follow. For FSE sites the container is the primary
+problem, not the attributes, and attribute support must be verbatim *carry*, not a longer
+whitelist, because `style` is an arbitrary JSON blob no serializer can reproduce from the DOM.
+
+The load-bearing precedent already ships: the **details island** renders a
+`contenteditable="false"` shell with a `contenteditable="true"` body inside it, commits edits
+into `ed.islands[idx]`, and Blink respects the boundary, so typing in the editable interior
+can never merge into or destroy the preserved shell. Container support generalizes that
+pattern instead of rebuilding the editor.
+
+Three phases, each shippable alone, in order:
+
+1. **Attribute carry for text-flow blocks** (medium). Extend the `data-minn-attrs`
+   passthrough to paragraphs, headings and lists carrying attributes outside
+   `EDITABLE_ATTRS`: park the comment JSON on the element verbatim, keep the element's saved
+   classes and inline styles in the DOM as they already are, and re-emit the stored JSON at
+   serialize. Enter-splitting duplicates the marker to both halves, which matches Gutenberg's
+   own split behavior. Gate the build on a one-script Blink probe of split/merge/undo around
+   the marker. This alone unlocks the 63%.
+2. **Editable text inside island previews** (medium, highest daily leverage). The text-runs
+   machinery (`textRunsOf` / `spliceTextRuns`) already edits island text through inspector
+   textareas by byte-offset splice. Move that editing in place: the preview's text runs
+   become directly editable, and each edit splices back into the stored raw markup, which
+   otherwise stays verbatim. Serialization fidelity is free by construction, and it works
+   for every island, core containers and third-party blocks alike. Accepted constraint,
+   stated in the UI: text and inline edits only, no Enter-splitting into new blocks.
+3. **Container slots** (large). `group` / `columns` / `column` / `cover` / `media-text`
+   render their real wrapper markup as a preserved shell (the details-island pattern),
+   their inner markup tokenizes into child segments, simple children become editable slots,
+   and complex children stay nested mini-islands. Serialize splices each slot's output back
+   between the container's verbatim byte ranges, the segment-level version of what text runs
+   do today. The first save may normalize whitespace inside a touched container, which is
+   the established fixed-point convention. Feature parity inside slots (markdown rules,
+   toolbar, slash) arrives incrementally per feature, never as a precondition. Depth can
+   stay limited to what real content needs; measure the corpus before recursing deeper.
+
+The never-build list is unchanged by this plan. Slots edit **content** inside layouts;
+layout itself (spacing, variations, query loops, the block inserter's full catalog) remains
+Gutenberg's job, one click away. Byte-identity for everything untouched stays the
+non-negotiable invariant at every phase.
