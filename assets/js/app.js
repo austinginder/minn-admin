@@ -9132,7 +9132,14 @@
 		return formControlValue( el );
 	}
 
-	function surfaceCell( item, colDef ) {
+	// `primary` marks the first data column — the mobile stacked-card CSS
+	// promotes it to the full-width title line (data-primary hook).
+	function surfaceCell( item, colDef, primary ) {
+		const html = surfaceCellRender( item, colDef );
+		return primary ? html.replace( '<div', '<div data-primary=""' ) : html;
+	}
+
+	function surfaceCellRender( item, colDef ) {
 		let v = surfaceValue( item, colDef.key );
 		if ( ( v == null || v === '' ) && colDef.altKey ) v = surfaceValue( item, colDef.altKey );
 		// Booleans (Code Snippets' `active`) and string arrays (tags) need a
@@ -9414,7 +9421,7 @@
 			${ c.items.length ? c.items.map( ( item, i ) => `
 				<div class="minn-table-row" style="grid-template-columns:${ gridCols };" data-sitem="${ i }">
 					${ hasBulk ? `<div><input type="checkbox" class="minn-cb" data-scheck="${ i }" aria-label="${ esc( __( 'Select row' ) ) }"${ ss.sel.has( item.id ) ? ' checked' : '' }></div>` : '' }
-					${ cols.map( ( col ) => surfaceCell( item, col ) ).join( '' ) }
+					${ cols.map( ( col, ci ) => surfaceCell( item, col, ci === 0 ) ).join( '' ) }
 					${ hasRowMenu
 						? `<div class="minn-row-end"><button type="button" class="minn-row-more" title="Actions" aria-label="Actions">⋯</button></div>`
 						: `<div class="minn-row-arrow">›</div>` }

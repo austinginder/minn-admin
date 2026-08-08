@@ -3210,9 +3210,38 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-cpt-cols { grid-template-columns: 1fr 100px; }
   .minn-cpt-cols > :nth-child(2), .minn-cpt-cols > :nth-child(4),
   .minn-cpt-cols > :nth-child(5), .minn-cpt-cols > :nth-child(6) { display: none; }
-  /* Surface tables set their columns inline (unknown shape) — scroll those instead. */
+  /* Surface tables set their columns inline (unknown shape). A squeezed
+     grid garbles headers and ellipses every cell to nothing (the 2026-08-08
+     mobile round), so rows become stacked cards instead: header hidden
+     (cards self-describe), the primary cell is the full-width title line
+     with the checkbox and the ⋯/› pinned beside it, and the remaining
+     cells wrap below as a quiet meta row. */
   .minn-table { overflow-x: auto; }
-  .minn-table-head[style], .minn-table-row[style] { min-width: 520px; }
+  .minn-table-head[style] { display: none !important; }
+  .minn-table-row[style] {
+    display: flex !important; flex-wrap: wrap; align-items: center;
+    gap: 3px 12px; min-width: 0; padding: 12px 14px;
+  }
+  .minn-table-row[style] > div { min-width: 0; width: auto; }
+  .minn-table-row[style] > div:has(.minn-cb) { order: -3; flex: none; }
+  /* Basis 60%, not 0: with basis 0 the wrap algorithm packs meta cells onto
+     the title line first and the title ellipses to a few characters. A big
+     basis claims the line (checkbox + ⋯ still fit beside it) and pushes
+     every meta cell to the next line. Titles may wrap to two lines here —
+     cards read better than ellipses on a phone. */
+  .minn-table-row[style] > [data-primary] { order: -2; flex: 1 1 60%; font-size: 14.5px; white-space: normal; overflow: visible; }
+  .minn-table-row[style] > .minn-row-end,
+  .minn-table-row[style] > .minn-row-arrow { order: -1; flex: none; }
+  .minn-table-row[style] .minn-row-more { opacity: 1; }
+  .minn-table-row[style] > .minn-row-meta { font-size: 12.5px; color: var(--text3); max-width: 100%; }
+  .minn-table-row[style] > .minn-row-meta.minn-num { text-align: left; padding-right: 0; }
+  /* A primary cell that is itself a pill/meta column keeps its own look. */
+  .minn-table-row[style] > [data-primary].minn-row-meta { color: var(--text); font-weight: 600; }
+  /* Status cards: stats go 2-up instead of one tall column, and the chart
+     takes the full card width instead of hugging the right edge. */
+  .minn-sstat-rows { gap: 10px 20px; }
+  .minn-sstat { min-width: 96px; }
+  .minn-sstat-chart { flex: 1 1 100%; }
 
   /* Dashboard, editor, modals. */
   .minn-dash-head { flex-wrap: wrap; gap: 10px; }
