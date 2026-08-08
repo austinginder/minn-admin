@@ -15028,8 +15028,17 @@
 		}
 		const inner = stripBlockComments( raw ).trim();
 		const chipLabel = short || name || 'block';
+		// Hover hint: says WHY the block is locked and where edits live. A core
+		// text block that islanded did so because of styling attrs the serializer
+		// can't reproduce; everything else is protected markup. Reveal rides
+		// island hover/selection in CSS; the span is chrome, so it joins the
+		// island-chip exclusion lists (copy, word count).
+		const hint = SIMPLE_BLOCKS.includes( short )
+			? __( 'Styled block: edit text via ⚙' )
+			: __( 'Edit via ⚙ or the block editor' );
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
+			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 		</div>`;
 	}
@@ -15103,7 +15112,7 @@
 			const wrap = document.createElement( 'div' );
 			wrap.appendChild( frag );
 			// Drop editor chrome if any leaked in.
-			$$( '.minn-island-chip, .minn-table-chip', wrap ).forEach( ( c ) => c.remove() );
+			$$( '.minn-island-chip, .minn-island-hint, .minn-table-chip', wrap ).forEach( ( c ) => c.remove() );
 			return {
 				html: wrap.innerHTML,
 				text: ( wrap.innerText || wrap.textContent || '' ).replace( /\u00a0/g, ' ' ),
@@ -17037,7 +17046,7 @@
 	// started typing this open. Goal is a global localStorage target.
 	function countEditorWords( body ) {
 		const walker = document.createTreeWalker( body, NodeFilter.SHOW_TEXT, {
-			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-empty, .minn-shortcode-label, .minn-shortcode-input' )
+			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-hint, .minn-island-empty, .minn-shortcode-label, .minn-shortcode-input' )
 				? NodeFilter.FILTER_REJECT
 				: NodeFilter.FILTER_ACCEPT,
 		} );
