@@ -19,7 +19,17 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		content: '<!-- wp:paragraph -->\n<p>Patterns.</p>\n<!-- /wp:paragraph -->',
 	} );
 
-	const save = async () => { await page.keyboard.press( 'Meta+s' ); await page.waitForTimeout( 2000 ); };
+	// Poll the stored raw for the expected content — a flat post-⌘S wait
+	// races the first save's boot congestion (the rule-77 class).
+	const save = async ( expectFn ) => {
+		await page.keyboard.press( 'Meta+s' );
+		for ( let i = 0; i < 15; i++ ) {
+			await page.waitForTimeout( 900 );
+			const raw = await rawContent();
+			if ( ! expectFn || expectFn( raw ) ) return raw;
+		}
+		return rawContent();
+	};
 	const rawContent = () => page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content', {
 			headers: { 'X-WP-Nonce': window.MINN.nonce },
@@ -58,15 +68,17 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		const islands = await page.$$eval( '.minn-block-island', ( els ) => els.map( ( e ) => e.dataset.block ) );
 		t.check( 'multi-root pattern lands as sibling islands',
 			islands.includes( 'core/group' ) && islands.includes( 'core/paragraph' ), islands.join( ', ' ) );
+		// Since the nesting endgame the pattern's group inserts as an
+		// EDITABLE slot island — live content, not a preview.
 		const preview = await page.waitForFunction( () => {
-			const p = document.querySelector( '.minn-block-island[data-block="core/group"] .minn-island-preview' );
-			return p && p.textContent.includes( 'Feature box' );
+			const isl = document.querySelector( '.minn-block-island[data-block="core/group"]' );
+			return isl && isl.classList.contains( 'minn-slot-island' )
+				&& isl.querySelector( '.minn-slot' ) && isl.querySelector( '.minn-slot' ).textContent.includes( 'Feature box' );
 		}, null, { timeout: 15000 } ).then( () => true ).catch( () => false );
-		t.check( 'island preview renders the pattern content', preview );
+		t.check( 'pattern group inserts as an editable slot island', preview );
 
 		// Saved markup is the pattern's own, verbatim.
-		await save();
-		const raw1 = await rawContent();
+		const raw1 = await save( ( r ) => r.includes( 'Feature box footnote.' ) );
 		t.check( 'saved markup contains pattern blocks',
 			raw1.includes( '<!-- wp:group' ) && raw1.includes( 'Feature box footnote.' ), raw1.slice( 0, 200 ) );
 
@@ -83,12 +95,12 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 			reloaded.islands >= 1 && reloaded.prose, JSON.stringify( reloaded ) );
 		await freshParagraph( page );
 		await page.keyboard.type( 'After the pattern.', { delay: 20 } );
-		await save();
-		const raw2 = await rawContent();
+		const raw2 = await save( ( r ) => r.includes( 'After the pattern.' ) );
 		const g1 = raw1.match( /<!-- wp:group[\s\S]*?\/wp:group -->/ );
 		const g2 = raw2.match( /<!-- wp:group[\s\S]*?\/wp:group -->/ );
 		t.check( 'pattern round-trips byte-identical',
-			!! g1 && !! g2 && g1[ 0 ] === g2[ 0 ] && raw2.includes( 'After the pattern.' ) );
+			!! g1 && !! g2 && g1[ 0 ] === g2[ 0 ] && raw2.includes( 'After the pattern.' ),
+			! g1 || ! g2 ? 'missing group' : ( g1[ 0 ] === g2[ 0 ] ? 'group ok; edit missing' : JSON.stringify( { g1: g1[ 0 ], g2: g2[ 0 ] } ) ) );
 	} finally {
 		await deletePost( page, id );
 	}

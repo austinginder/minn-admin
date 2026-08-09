@@ -222,7 +222,8 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	await caretEnd( slotB + ' > p' );
 	await page.keyboard.press( 'Enter' );
 
-	// 8. Slash menu opens inside the slot, offering prose basics only.
+	// 8. Slash menu opens inside the slot with the FULL set (nested islands
+	// made island inserts slot-legal; Browse all included).
 	await page.keyboard.type( '/' );
 	await page.waitForTimeout( 400 );
 	const menuShape = await page.evaluate( () => {
@@ -234,10 +235,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		};
 	} );
 	t.check( 'slash menu opens inside slot', menuShape.open, JSON.stringify( menuShape ) );
-	t.check( 'slot menu is prose basics only',
+	t.check( 'slot menu offers the full set incl. islands + Browse all',
 		menuShape.labels.some( ( l ) => /Heading 2/.test( l ) )
-		&& ! menuShape.labels.some( ( l ) => /Image|Embed|Table|Gallery|Buttons|Details/.test( l ) )
-		&& ! menuShape.browse,
+		&& menuShape.labels.some( ( l ) => /Image/.test( l ) )
+		&& menuShape.labels.some( ( l ) => /Table/.test( l ) )
+		&& menuShape.browse,
 		JSON.stringify( menuShape.labels ) );
 
 	// 9. Run Heading 2 from the menu; type into the new heading.
@@ -496,8 +498,9 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'multi-line text paste lands as paragraphs in the group',
 		grpOf( raw2 ).includes( 'Alpha line.' ) && grpOf( raw2 ).includes( 'Beta line.' ), grpOf( raw2 ) );
 
-	// Island-class Minn payload: refused in slots (falls through; the lone
-	// URL text flavor stays native, so nothing splices and no island lands).
+	// Island-class Minn payload: splices into the slot as a NESTED island
+	// now (the insert-flows slice) — the embed lands as a protected card
+	// inside the group and saves between the wrapper bytes.
 	await caretEnd( '.minn-slot > p' );
 	const islPrevented = await pasteInSlot( {
 		'text/x-minn-blocks': '<!-- wp:embed {"url":"https://www.youtube.com/watch?v=x","type":"video"} -->\n<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">\nhttps://www.youtube.com/watch?v=x\n</div></figure>\n<!-- /wp:embed -->',
@@ -505,10 +508,10 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	} );
 	await page.waitForTimeout( 400 );
 	const islShape = await page.evaluate( () => ( {
-		islandInSlot: !! document.querySelector( '.minn-slot .minn-block-island' ),
+		islandInSlot: !! document.querySelector( '.minn-slot > .minn-block-island[data-block="core/embed"], .minn-slot > .minn-block-island[data-block="embed"]' ),
 	} ) );
-	raw2 = await rawOf2();
-	t.check( 'island payload refused inside the slot', ! islPrevented && ! islShape.islandInSlot && ! grpOf( raw2 ).includes( 'wp:embed' ), JSON.stringify( islShape ) );
+	raw2 = await save2( ( r ) => grpOf( r ).includes( 'wp:embed' ) );
+	t.check( 'island payload splices into the slot as a nested island', islPrevented && islShape.islandInSlot && grpOf( raw2 ).includes( 'wp:embed' ), JSON.stringify( islShape ) );
 
 	await deletePost( page, id2 );
 

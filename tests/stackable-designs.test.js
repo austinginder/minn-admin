@@ -44,7 +44,18 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		content: '<!-- wp:paragraph -->\n<p>Design test.</p>\n<!-- /wp:paragraph -->',
 	} );
 
-	const save = async () => { await page.keyboard.press( 'Meta+s' ); await page.waitForTimeout( 2000 ); };
+	// Poll the stored raw for the expected content — a flat post-⌘S wait
+	// races save latency after reloads/heavy ops (the rule-77 class; bit
+	// this suite as a phantom "regression" twice).
+	const save = async ( expectFn ) => {
+		await page.keyboard.press( 'Meta+s' );
+		for ( let i = 0; i < 15; i++ ) {
+			await page.waitForTimeout( 900 );
+			const raw = await rawContent();
+			if ( ! expectFn || expectFn( raw ) ) return raw;
+		}
+		return rawContent();
+	};
 	const rawContent = () => page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content', {
 			headers: { 'X-WP-Nonce': window.MINN.nonce },
@@ -135,8 +146,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		await page.waitForTimeout( 1500 );
 
 		// Saved markup: real template, images localized.
-		await save();
-		const raw1 = await rawContent();
+		const raw1 = await save( ( r ) => r.includes( 'Launch week' ) );
 		t.check( 'saved markup contains the design template', /<!-- wp:stackable\/[a-z-]+ {"uniqueId"/.test( raw1 ) );
 		t.check( 'CDN image URLs localized', ! raw1.includes( 'stackable-files.pages.dev' ), raw1.slice( 0, 300 ) );
 		t.check( 'text edit persisted, splice byte-exact',
@@ -153,8 +163,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		const islandBefore = raw1.match( /<!-- wp:stackable\/[\s\S]*\/wp:stackable\/[a-z-]+ -->/ );
 		await freshParagraph( page );
 		await page.keyboard.type( 'After the section.', { delay: 20 } );
-		await save();
-		const raw2 = await rawContent();
+		const raw2 = await save( ( r ) => r.includes( 'After the section.' ) );
 		const islandAfter = raw2.match( /<!-- wp:stackable\/[\s\S]*\/wp:stackable\/[a-z-]+ -->/ );
 		t.check( 'design round-trips byte-identical through a second save',
 			!! islandBefore && !! islandAfter && islandBefore[ 0 ] === islandAfter[ 0 ] && raw2.includes( 'After the section.' ) );
@@ -169,8 +178,7 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		await page.click( '#minn-insp-add' );
 		await page.click( '#minn-insp-apply' );
 		await page.waitForTimeout( 1500 );
-		await save();
-		const raw3 = await rawContent();
+		const raw3 = await save( ( r ) => ( r.match( /<!-- wp:stackable\/column [\{]/g ) || [] ).length === 2 );
 		const colOpens = ( raw3.match( /<!-- wp:stackable\/column [\{]/g ) || [] ).length;
 		t.check( 'add clones the static column, no empty self-closing',
 			colOpens === 2 && ! raw3.includes( '<!-- wp:stackable/column /-->' ), colOpens + ' columns' );
