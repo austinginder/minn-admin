@@ -591,6 +591,15 @@
 		return PALETTE_COLORS[ h % PALETTE_COLORS.length ];
 	};
 
+	// Letter tile with the avatar covering it (plugin-icon pattern). The REST
+	// avatar_urls field is absent entirely when Show Avatars is off, and
+	// privacy plugins can empty the URL — either way the tile is what shows.
+	const avatarTileHtml = ( name, url ) => {
+		const letter = ( name || '?' ).replace( /[^A-Za-z0-9]/g, '' ).charAt( 0 ).toUpperCase() || '?';
+		return `<div class="minn-user-row-avatar" style="background:${ colorFor( name || '?' ) }">${ esc( letter ) }${
+			url ? `<img src="${ esc( url ) }" alt="" loading="lazy">` : '' }</div>`;
+	};
+
 	const GRADS = {
 		VID: 'linear-gradient(135deg,#1b1b1f,#5b9be0)',
 		AUD: 'linear-gradient(135deg,#e46b6b,#e0a458)',
@@ -1869,7 +1878,8 @@
 					esc( sprintf( __( 'Switch back to %s' ), B.switchBack.name ) ) }
 			</a>` : '' }
 			<div class="minn-user" id="minn-user-area" title="${ esc( __( 'Your account' ) ) }">
-					<img class="minn-user-avatar" src="${ esc( B.user.avatar ) }" alt="">
+					${ B.user.avatar ? `<img class="minn-user-avatar" src="${ esc( B.user.avatar ) }" alt="">`
+						: `<div class="minn-user-avatar">${ esc( ( B.user.name || '?' ).charAt( 0 ).toUpperCase() ) }</div>` }
 					<div style="min-width:0;">
 						<div class="minn-user-name">${ esc( B.user.name ) }</div>
 						<div class="minn-user-role">${ esc( B.user.role ) }</div>
@@ -7904,7 +7914,7 @@
 			${ c.items.length ? c.items.map( ( u ) => `
 				<div class="minn-table-row minn-user-cols${ bulkUsers ? ' has-cb' : '' }${ userSel.has( u.id ) ? ' sel' : '' }" data-user="${ u.id }" data-uname="${ esc( u.name || '' ) }" data-uemail="${ esc( u.email || '' ) }" data-uroles="${ esc( ( u.roles || [] ).join( ',' ) ) }">
 					${ bulkUsers ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-user-cb" data-cbid="${ u.id }" aria-label="${ esc( sprintf( __( 'Select %s' ), u.name ) ) }"${ userSel.has( u.id ) ? ' checked' : '' }></div>` : '' }
-					<img class="minn-user-row-avatar" src="${ esc( ( u.avatar_urls && ( u.avatar_urls[ '48' ] || Object.values( u.avatar_urls )[ 0 ] ) ) || '' ) }" alt="">
+					${ avatarTileHtml( u.name, u.avatar_urls && ( u.avatar_urls[ '48' ] || Object.values( u.avatar_urls )[ 0 ] ) ) }
 					<div class="minn-row-meta minn-user-id">#${ esc( String( u.id ) ) }</div>
 					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( u.email || '—' ) }</div>
@@ -7919,6 +7929,11 @@
 					: 'No users found.' }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
+
+		// Broken avatar URLs fall back to the letter tile underneath.
+		$$( '.minn-user-row-avatar img', view ).forEach( ( img ) =>
+			img.addEventListener( 'error', () => img.remove() )
+		);
 
 		// Column sort: same column flips order; new column uses that field's default.
 		$$( '[data-usort]', view ).forEach( ( btn ) =>
@@ -29895,7 +29910,7 @@
 							<textarea class="minn-input" id="minn-pf-bio" rows="4" placeholder="A couple of sentences about you — themes show this in author boxes.">${ esc( u.description || '' ) }</textarea>
 						</div>
 						<div class="minn-pf-avatar">
-							${ u.avatar_urls && u.avatar_urls[ '48' ] ? `<img class="minn-user-row-avatar" src="${ esc( u.avatar_urls[ '48' ] ) }" alt="">` : '' }
+							${ avatarTileHtml( u.name, u.avatar_urls && u.avatar_urls[ '48' ] ) }
 							<div class="minn-toggle-desc">Your profile picture comes from <a href="https://gravatar.com/" target="_blank" rel="noopener">Gravatar ↗</a>, matched to your email.</div>
 						</div>
 						<div><button class="minn-btn-primary" data-pf-save>Save changes</button></div>
