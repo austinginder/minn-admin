@@ -4,7 +4,15 @@
  * stores those defaults, matching wp-admin. Previously the editor hardcoded
  * both switches to open.
  */
+const path = require( 'path' );
+const { execSync } = require( 'child_process' );
 const { BASE, launch, login, deletePost, reporter } = require( './helpers' );
+
+const WP_PATH = path.resolve( __dirname, '../../../..' );
+const wpEval = ( code ) => execSync(
+	`wp --path=${ JSON.stringify( WP_PATH ) } eval ${ JSON.stringify( code ) } 2>/dev/null`,
+	{ encoding: 'utf8', timeout: 60000 }
+).trim();
 
 ( async () => {
 	const t = reporter( 'discussion-defaults' );
@@ -93,6 +101,45 @@ const { BASE, launch, login, deletePost, reporter } = require( './helpers' );
 		}, id );
 		t.check( 'stored post has comments closed', post.comment_status === 'closed', post.comment_status );
 		t.check( 'stored post has pings closed', post.ping_status === 'closed', post.ping_status );
+
+		// wp-admin's unchecked Discussion checkbox stores '' (options.php
+		// writes null, which bypasses sanitize_option's ''→'closed' map).
+		// The REST writes above store a literal 'closed', so this replays
+		// the real storage path the original report came from (GH #6).
+		wpEval( 'update_option( "default_comment_status", null ); update_option( "default_ping_status", null );' );
+		const raw = wpEval( 'echo var_export( get_option( "default_comment_status" ), true );' );
+		t.check( 'null write stored empty string', raw.indexOf( "''" ) !== -1, raw );
+
+		await page.goto( BASE + '/minn-admin/editor/posts', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-editor-body', { timeout: 15000 } );
+		await page.waitForTimeout( 600 );
+		const boot2 = await page.evaluate( () => window.MINN.discussion );
+		t.check( 'boot normalizes empty option to closed', boot2 && boot2.comments === 'closed' && boot2.pings === 'closed', JSON.stringify( boot2 ) );
+		await page.click( '[data-side-door="settings"]' );
+		await page.waitForSelector( '#minn-comment-status', { timeout: 8000 } );
+		const sw2 = await page.evaluate( () => ( {
+			comments: document.querySelector( '#minn-comment-status' ).classList.contains( 'on' ),
+			pings: document.querySelector( '#minn-ping-status' ).classList.contains( 'on' ),
+		} ) );
+		t.check( 'comment switch off with empty-string option', sw2.comments === false );
+		t.check( 'ping switch off with empty-string option', sw2.pings === false );
+		await page.keyboard.press( 'Escape' );
+
+		// Core hardcodes new pages to closed regardless of the option: set
+		// the site defaults open and confirm a new page still starts closed.
+		t.check( 'defaults set to open', await setDefaults( 'open', 'open' ) );
+		await page.goto( BASE + '/minn-admin/editor/pages', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-editor-body', { timeout: 15000 } );
+		await page.waitForTimeout( 600 );
+		await page.click( '[data-side-door="settings"]' );
+		await page.waitForSelector( '#minn-comment-status', { timeout: 8000 } );
+		const pg = await page.evaluate( () => ( {
+			comments: document.querySelector( '#minn-comment-status' ).classList.contains( 'on' ),
+			pings: document.querySelector( '#minn-ping-status' ).classList.contains( 'on' ),
+		} ) );
+		t.check( 'new page comment switch starts off', pg.comments === false );
+		t.check( 'new page ping switch starts off', pg.pings === false );
+		await page.keyboard.press( 'Escape' );
 	} finally {
 		await deletePost( page, id );
 		await setDefaults( orig.comments, orig.pings );
