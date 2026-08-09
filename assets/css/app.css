@@ -2567,6 +2567,13 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-slot { outline: none; cursor: text; min-height: 1.5em; caret-color: var(--accent); }
 .minn-slot > :first-child { margin-top: 0; }
 .minn-slot > :last-child { margin-bottom: 0; }
+/* Columns slots: the typing surface keeps Minn typography, but the columns
+   SHAPE is the point of the block — basic flex mirrors core's front-end
+   layout, and a column's own flex-basis (inline style, preserved bytes)
+   still applies. A faint divider marks each column's editable region. */
+.minn-cols-island .wp-block-columns { display: flex; gap: 22px; align-items: flex-start; }
+.minn-cols-island .wp-block-column { flex: 1; min-width: 0; }
+.minn-cols-island .wp-block-column + .wp-block-column { border-left: 1px dashed var(--line); padding-left: 22px; }
 /* Shortcode island — type the shortcode in place (no browser prompt). */
 .minn-shortcode-island {
   user-select: text;
