@@ -389,6 +389,19 @@ one. Read the writing-context contract above before touching any of it.
    like upstream CDN design drift — re-pin at the next design-suite sweep, don't
    chase it as a nesting regression.
 
+   ✅ *Comment-tolerant slotting shipped 2026-08-09 (Austin's line-return report).*
+   AI-generated markup labels sections with plain HTML comments
+   (`<!-- Testimonial 1 -->`); those freeform chunks used to sink the container to a
+   phase-2 runs island — where Enter is blocked BY DESIGN, which read as "I can't
+   make line returns." Comment-only freeform (`slotIgnorableHtml`) now passes the
+   slot gate: it rides into the slot as DOM comment nodes, `serializeToBlocks`
+   re-emits COMMENT_NODEs (plain comments only — never `wp:`), and the columns
+   flush re-emits inter-column comment segs from the stored raw. The fix for
+   "Enter doesn't work in runs" is always MORE SLOTTING, never Enter-in-runs —
+   runs splice text by byte offset and a structural key would corrupt. Suite:
+   nested-islands 30 (comment-labeled group slots; Enter beside the comment;
+   dirty flush re-emits it).
+
    ✅ *Raw-markup paste shipped 2026-08-09 (Austin's ask).* Plain text that IS block
    markup (starts with a block comment, tokenizes cleanly) rebuilds as real blocks on
    paste — the editable-vs-island split, same as the `text/x-minn-blocks` flavor. Code
