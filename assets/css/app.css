@@ -2549,6 +2549,31 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-block-island:hover .minn-island-hint,
 .minn-block-island.minn-island-selected .minn-island-hint { opacity: 1; }
 .minn-block-island.minn-island-armed .minn-island-hint { opacity: 0; }
+
+/* ===== Nesting quiets down (the chip-density pass) =====
+   Nested cards multiplied the chrome: every level wore a resident chip,
+   hovering an outer group lit the whole ancestry purple, and every card
+   offered its own hint. The model now is DEEPEST WINS: chips and the
+   hover highlight follow the innermost container under the pointer (or
+   holding the caret); ancestors stay at rest. Top-level chips remain
+   resident — one per block is the established look, the multiplication
+   was the noise. Armed (red) and selected states stay loud at any depth. */
+.minn-slot .minn-block-island:not(.minn-island-armed):not(.minn-island-selected) {
+  border-color: color-mix( in srgb, var(--border2) 55%, transparent );
+}
+.minn-slot .minn-block-island > .minn-island-chip { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
+.minn-slot .minn-block-island:is(:hover, :focus-within, .minn-island-armed, .minn-island-selected) > .minn-island-chip { opacity: 1; pointer-events: auto; }
+/* Deepest wins: a container holding the hovered/focused island keeps its
+   own chip hidden and its border resting. */
+.minn-block-island:has(.minn-block-island:is(:hover, :focus-within)) > .minn-island-chip { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
+.minn-block-island:hover:has(.minn-block-island:hover):not(.minn-island-armed):not(.minn-island-selected) { border-color: var(--border2); }
+.minn-slot .minn-block-island:hover:has(.minn-block-island:hover):not(.minn-island-armed):not(.minn-island-selected) {
+  border-color: color-mix( in srgb, var(--border2) 55%, transparent );
+}
+/* Hints teach the concept once: top-level containers only, and never
+   while the writer is down inside a nested card. */
+.minn-slot .minn-block-island .minn-island-hint { display: none; }
+.minn-block-island:has(.minn-block-island:hover) > .minn-island-hint { opacity: 0; }
 /* No max-height: a hard cap (was 420px) clipped multi-card grids and tall
    design-library inserts mid-block while the front end looked fine. overflow
    stays hidden so child border-radii don't paint outside the island.
