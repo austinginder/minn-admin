@@ -307,6 +307,53 @@ function minn_admin_everest_status_model() {
 	);
 }
 
+/**
+ * Per-ENTRY capability, through Everest's own object-aware mapping.
+ *
+ * Everest authorizes entries with meta capabilities that take the ENTRY id —
+ * everest_forms_view_entry / edit_entry / delete_entry. EVF_Install's
+ * filter_map_meta_cap resolves the entry to its form, compares the form's
+ * post_author with the current user, and maps to the *_entries (own) or
+ * *_others_entries (someone else's) primitive. Checking only the own-forms
+ * primitives with no id collapses that split, so a user granted entries for
+ * their own forms reads and deletes every author's submissions.
+ */
+function minn_admin_everest_can_entry( $entry_id, $context = 'view' ) {
+	$entry_id = (int) $entry_id;
+	if ( $entry_id <= 0 ) {
+		return false;
+	}
+	if ( current_user_can( 'manage_everest_forms' ) || current_user_can( 'manage_options' ) ) {
+		return true;
+	}
+	$map = array(
+		'view'   => 'everest_forms_view_entry',
+		'edit'   => 'everest_forms_edit_entry',
+		'delete' => 'everest_forms_delete_entry',
+	);
+	$cap = isset( $map[ $context ] ) ? $map[ $context ] : $map['view'];
+	return current_user_can( $cap, $entry_id );
+}
+
+/**
+ * 403 unless the caller may act on this entry.
+ */
+function minn_admin_everest_guard_entry( $entry_id, $context = 'view' ) {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$exists = (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT entry_id FROM {$wpdb->prefix}evf_entries WHERE entry_id = %d",
+		(int) $entry_id
+	) );
+	if ( ! $exists ) {
+		return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+	}
+	if ( ! minn_admin_everest_can_entry( $entry_id, $context ) ) {
+		return new WP_Error( 'forbidden', 'You cannot access that entry.', array( 'status' => 403 ) );
+	}
+	return true;
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_everest_active() || ! minn_admin_everest_can() ) {
 		return $surfaces;
@@ -577,6 +624,10 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
+				$guard = minn_admin_everest_guard_entry( (int) $request['id'], 'view' );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
+				}
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT entry_id, form_id, status, date_created, user_ip_address, viewed FROM {$wpdb->prefix}evf_entries WHERE entry_id = %d", // phpcs:ignore
 					(int) $request['id']
@@ -642,7 +693,11 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$id  = (int) $request['id'];
+				$id    = (int) $request['id'];
+				$guard = minn_admin_everest_guard_entry( $id, 'delete' );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
+				}
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT entry_id, form_id, status FROM {$wpdb->prefix}evf_entries WHERE entry_id = %d", // phpcs:ignore
 					$id
@@ -683,7 +738,11 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) use ( $op, $slug ) {
 				global $wpdb;
-				$id  = (int) $request['id'];
+				$id    = (int) $request['id'];
+				$guard = minn_admin_everest_guard_entry( $id, 'delete' );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
+				}
 				$row = $wpdb->get_row( $wpdb->prepare(
 					"SELECT entry_id, form_id, status FROM {$wpdb->prefix}evf_entries WHERE entry_id = %d", // phpcs:ignore
 					$id

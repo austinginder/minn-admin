@@ -33,6 +33,70 @@ function minn_admin_wpforms_can( $cap = 'view_entries' ) {
 	return function_exists( 'wpforms_current_user_can' ) && wpforms_current_user_can( $cap );
 }
 
+/**
+ * Per-FORM entry capability.
+ *
+ * WPForms' Access Controls split entry access into own-forms and others-forms
+ * and enforce that split through meta capabilities that must be passed the form
+ * id — `view_entries_form_single`, `edit_entries_form_single`,
+ * `delete_entries_form_single` (src/Pro/Access/Capabilities.php). The plugin
+ * itself always calls them with an id (Views.php, ListTable.php, Analytics.php,
+ * Preview.php). The bare `view_entries` is only the menu-level "can they see
+ * the Entries item at all" check, so using it per row lets a user provisioned
+ * for their OWN forms read and delete every other form's entries.
+ *
+ * On Lite the graded caps map down to the flat one, so this is a no-op there.
+ */
+function minn_admin_wpforms_can_form( $form_id, $cap = 'view_entries_form_single' ) {
+	$form_id = (int) $form_id;
+	if ( $form_id <= 0 || ! function_exists( 'wpforms_current_user_can' ) ) {
+		return false;
+	}
+	return (bool) wpforms_current_user_can( $cap, $form_id );
+}
+
+/**
+ * The form ids whose entries this user may read. Null means "no restriction".
+ */
+function minn_admin_wpforms_allowed_form_ids() {
+	$titles = minn_admin_wpforms_form_titles();
+	if ( ! is_array( $titles ) || ! $titles ) {
+		return array();
+	}
+	$allowed = array();
+	foreach ( array_keys( $titles ) as $fid ) {
+		if ( minn_admin_wpforms_can_form( $fid ) ) {
+			$allowed[] = (int) $fid;
+		}
+	}
+	// Everything visible → no need to constrain the query.
+	return count( $allowed ) === count( $titles ) ? null : $allowed;
+}
+
+/**
+ * The form an entry belongs to (0 when the row is gone).
+ */
+function minn_admin_wpforms_entry_form_id( $entry_id ) {
+	global $wpdb;
+	$table = minn_admin_wpforms_table();
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	return (int) $wpdb->get_var( $wpdb->prepare( "SELECT form_id FROM {$table} WHERE entry_id = %d", (int) $entry_id ) );
+}
+
+/**
+ * 403 unless the caller may act on the form behind this entry.
+ */
+function minn_admin_wpforms_guard_entry( $entry_id, $cap = 'view_entries_form_single' ) {
+	$form_id = minn_admin_wpforms_entry_form_id( $entry_id );
+	if ( ! $form_id ) {
+		return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+	}
+	if ( ! minn_admin_wpforms_can_form( $form_id, $cap ) ) {
+		return new WP_Error( 'forbidden', 'You cannot access entries for that form.', array( 'status' => 403 ) );
+	}
+	return $form_id;
+}
+
 function minn_admin_wpforms_table() {
 	global $wpdb;
 	return $wpdb->prefix . 'wpforms_entries';
@@ -323,8 +387,23 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 			if ( $form_id ) {
+				if ( ! minn_admin_wpforms_can_form( $form_id ) ) {
+					return new WP_Error( 'forbidden', 'You cannot access entries for that form.', array( 'status' => 403 ) );
+				}
 				$where[]  = 'form_id = %d';
 				$params[] = $form_id;
+			}
+
+			// MANDATORY scope: without it an unfiltered list scans the whole
+			// entries table, returning other forms' submitter names and emails
+			// to a user provisioned only for their own forms.
+			$allowed = minn_admin_wpforms_allowed_form_ids();
+			if ( null !== $allowed ) {
+				if ( ! $allowed ) {
+					return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
+				}
+				$where[] = 'form_id IN (' . implode( ',', array_fill( 0, count( $allowed ), '%d' ) ) . ')';
+				$params  = array_merge( $params, $allowed );
 			}
 			if ( '' !== $search ) {
 				$where[]  = 'fields LIKE %s';
@@ -359,6 +438,10 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $view,
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
+				$guard = minn_admin_wpforms_guard_entry( (int) $request['id'] );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
+				}
 				$table = minn_admin_wpforms_table();
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE entry_id = %d", (int) $request['id'] ) );
@@ -411,6 +494,10 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
 				$id    = (int) $request['id'];
+				$guard = minn_admin_wpforms_guard_entry( $id, 'delete_entries_form_single' );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
+				}
 				$table = minn_admin_wpforms_table();
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT entry_id FROM {$table} WHERE entry_id = %d", $id ) );
@@ -435,6 +522,10 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $edit,
 		'callback'            => function ( WP_REST_Request $request ) {
+			$guard = minn_admin_wpforms_guard_entry( (int) $request['id'], 'edit_entries_form_single' );
+			if ( is_wp_error( $guard ) ) {
+				return $guard;
+			}
 			$op = sanitize_key( (string) $request->get_param( 'status' ) );
 			if ( ! in_array( $op, array( 'read', 'unread', 'spam', 'trash', 'restore' ), true ) ) {
 				return new WP_Error( 'bad_status', 'Unknown status', array( 'status' => 400 ) );
@@ -470,6 +561,10 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'permission_callback' => $edit,
 		'callback'            => function ( WP_REST_Request $request ) {
+			$guard = minn_admin_wpforms_guard_entry( (int) $request['id'], 'edit_entries_form_single' );
+			if ( is_wp_error( $guard ) ) {
+				return $guard;
+			}
 			$on = (int) (bool) $request->get_param( 'on' );
 			try {
 				wpforms()->obj( 'entry' )->update( (int) $request['id'], array( 'starred' => $on ) );

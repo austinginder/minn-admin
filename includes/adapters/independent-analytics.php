@@ -11,8 +11,35 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Independent Analytics is loaded AND this user may read its reports.
+ *
+ * IAWP requires the administrator role or one of its own grants
+ * (IAWP/Capability_Manager.php). It also ships an authored-posts-only tier;
+ * this adapter reports site-wide totals, so anything short of full view
+ * access is refused rather than silently collapsing that tier.
+ */
+function minn_admin_iawp_ready() {
+	if ( ! defined( 'IAWP_VERSION' ) && ! class_exists( '\\IAWP\\Capability_Manager' ) ) {
+		return false;
+	}
+	if ( class_exists( '\\IAWP\\Capability_Manager' ) ) {
+		if ( method_exists( '\\IAWP\\Capability_Manager', 'can_only_view_authored_analytics' )
+			&& \IAWP\Capability_Manager::can_only_view_authored_analytics() ) {
+			return false;
+		}
+		if ( method_exists( '\\IAWP\\Capability_Manager', 'can_view' ) ) {
+			return (bool) \IAWP\Capability_Manager::can_view();
+		}
+	}
+	return current_user_can( 'manage_options' );
+}
+
 add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic || ! defined( 'IAWP_VERSION' ) ) {
+		return $traffic;
+	}
+	if ( ! minn_admin_iawp_ready() ) {
 		return $traffic;
 	}
 
@@ -74,6 +101,9 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 		return $data;
 	}
 	if ( ! defined( 'IAWP_VERSION' ) ) {
+		return $data;
+	}
+	if ( ! minn_admin_iawp_ready() ) {
 		return $data;
 	}
 

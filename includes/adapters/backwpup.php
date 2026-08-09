@@ -153,8 +153,10 @@ function minn_admin_backwpup_status_model() {
 	}
 
 	$actions = array();
-	// Offer run-now for the first FOLDER job (the install default "First backup").
-	if ( $jobs ) {
+	// Offer run-now for the first FOLDER job (the install default "First
+	// backup"), and only to users who hold BackWPup's own start capability —
+	// otherwise the card advertises a button the route will refuse.
+	if ( $jobs && ( current_user_can( 'backwpup_jobs_start' ) || current_user_can( 'manage_options' ) ) ) {
 		$actions[] = array(
 			'label'   => 'Run first job now',
 			'route'   => 'minn-admin/v1/backwpup/run',
@@ -253,6 +255,15 @@ add_action( 'rest_api_init', function () {
 	$perm_delete = function () {
 		return current_user_can( 'backwpup_backups_delete' ) || current_user_can( 'manage_options' );
 	};
+	// STARTING a job is a different capability from viewing the list.
+	// BackWPup ships a real non-admin role, backwpup_check ("jobs checker"),
+	// with backwpup_backups => true but backwpup_jobs_start => false
+	// (inc/class-install.php), and gates Run-now on the latter
+	// (inc/class-page-jobs.php). Using $perm here let that role kick full
+	// backup runs on demand.
+	$perm_run = function () {
+		return current_user_can( 'backwpup_jobs_start' ) || current_user_can( 'manage_options' );
+	};
 
 	register_rest_route( 'minn-admin/v1', '/backwpup/backups', array(
 		'methods'             => 'GET',
@@ -317,7 +328,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/backwpup/run', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
+		'permission_callback' => $perm_run,
 		'callback'            => function ( WP_REST_Request $request ) {
 			$jobid = (int) ( $request->get_param( 'jobid' ) ?: 0 );
 			$jobs  = minn_admin_backwpup_folder_job_ids();

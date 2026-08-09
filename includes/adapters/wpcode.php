@@ -12,6 +12,45 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * WPCode's own per-code-type capability for a submitted type.
+ *
+ * WPCode Pro grades snippet authoring by what the code can DO —
+ * wpcode_edit_text_snippets (text/blocks), wpcode_edit_html_snippets
+ * (HTML/JS/CSS), wpcode_edit_php_snippets (PHP and everything else) — and its
+ * own save listener resolves the required capability FROM THE SUBMITTED
+ * code_type before allowing the write (class-wpcode-admin-page-snippet-manager).
+ * Checking only the flat wpcode_edit_snippets lets a user provisioned for
+ * markup submit code_type=php and author executable PHP.
+ *
+ * On Lite the graded caps map down to wpcode_edit_snippets, so this is a no-op.
+ */
+function minn_admin_wpcode_can_type( $code_type ) {
+	$required = '';
+	if ( class_exists( 'WPCode_Access' ) && method_exists( 'WPCode_Access', 'capability_for_code_type' ) ) {
+		$required = (string) WPCode_Access::capability_for_code_type( $code_type );
+	}
+	return current_user_can( $required ?: 'wpcode_edit_snippets' );
+}
+
+/**
+ * 403 unless the caller may author this code type (and, on an update, edit
+ * this specific snippet — WPCode requires edit_post on the target too).
+ */
+function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0 ) {
+	if ( ! minn_admin_wpcode_can_type( $code_type ) ) {
+		return new WP_Error(
+			'forbidden',
+			'You cannot create snippets of that type on this site.',
+			array( 'status' => 403 )
+		);
+	}
+	if ( $snippet_id && ! current_user_can( 'edit_post', (int) $snippet_id ) ) {
+		return new WP_Error( 'forbidden', 'You cannot edit that snippet.', array( 'status' => 403 ) );
+	}
+	return true;
+}
+
 function minn_admin_wpcode_active() {
 	return class_exists( 'WPCode_Snippet' ) || defined( 'WPCODE_VERSION' ) || defined( 'WPCODE_PLUGIN_VERSION' );
 }
@@ -252,6 +291,10 @@ add_action( 'rest_api_init', function () {
 				'methods'             => 'POST',
 				'permission_callback' => $can_edit,
 				'callback'            => function ( WP_REST_Request $request ) {
+					$guard = minn_admin_wpcode_guard_type( sanitize_key( (string) ( $request['code_type'] ?? 'php' ) ) );
+					if ( is_wp_error( $guard ) ) {
+						return $guard;
+					}
 					// load_from_array (via the array constructor) can set private
 					// fields like priority/note that are not assignable from outside.
 					$snippet = new WPCode_Snippet(
@@ -299,6 +342,21 @@ add_action( 'rest_api_init', function () {
 					$snippet = new WPCode_Snippet( (int) $request['id'] );
 					if ( ! $snippet->get_id() ) {
 						return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+					}
+					// The STORED type gates the edit, and when the payload
+					// carries a new code_type that type must be allowed too —
+					// otherwise a markup-only user retypes an HTML snippet to
+					// php and authors executable code.
+					$guard = minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $request['id'] );
+					if ( is_wp_error( $guard ) ) {
+						return $guard;
+					}
+					$json = (array) $request->get_json_params();
+					if ( array_key_exists( 'code_type', $json ) ) {
+						$guard_new = minn_admin_wpcode_guard_type( sanitize_key( (string) $request['code_type'] ), (int) $request['id'] );
+						if ( is_wp_error( $guard_new ) ) {
+							return $guard_new;
+						}
 					}
 					// Hydrate getters so load_from_array merges onto real state.
 					$snippet->get_title();

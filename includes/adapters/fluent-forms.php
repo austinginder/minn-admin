@@ -32,6 +32,71 @@ function minn_admin_fluent_forms_can_view() {
 }
 
 /**
+ * The set of form ids this user may touch, or false when unscoped.
+ *
+ * Fluent's Settings -> Managers lets an admin scope a manager to specific
+ * forms (user meta _fluent_forms_has_specific_forms_permission /
+ * _fluent_forms_allowed_forms). Their own screens honour it because every
+ * Acl::hasPermission() call passes a form id; a bare current_user_can() does
+ * not, which is how a scoped manager could read and delete EVERY form's
+ * submissions through this adapter.
+ *
+ * Returns false (no restriction) or an array of ints (possibly empty, which
+ * means "assigned to nothing" and must yield no rows, not all rows).
+ */
+function minn_admin_fluent_forms_scope() {
+	if ( ! class_exists( '\FluentForm\App\Services\Manager\FormManagerService' ) ) {
+		return false;
+	}
+	$scope = \FluentForm\App\Services\Manager\FormManagerService::getUserAllowedFormsScope();
+	return false === $scope ? false : array_map( 'intval', (array) $scope );
+}
+
+/**
+ * Whether this user may act on ONE form, through Fluent's own object-aware ACL.
+ */
+function minn_admin_fluent_forms_can_form( $form_id, $permission = 'fluentform_entries_viewer' ) {
+	$form_id = (int) $form_id;
+	if ( $form_id <= 0 ) {
+		return false;
+	}
+	if ( class_exists( '\FluentForm\App\Modules\Acl\Acl' ) ) {
+		return (bool) \FluentForm\App\Modules\Acl\Acl::hasPermission( $permission, $form_id );
+	}
+	// No ACL class to ask — fall back to the scope list plus the flat cap.
+	$scope = minn_admin_fluent_forms_scope();
+	if ( false !== $scope && ! in_array( $form_id, $scope, true ) ) {
+		return false;
+	}
+	return minn_admin_fluent_forms_can_view();
+}
+
+/**
+ * The form id a submission belongs to (0 when the row is gone).
+ */
+function minn_admin_fluent_forms_entry_form_id( $entry_id ) {
+	global $wpdb;
+	return (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT form_id FROM `{$wpdb->prefix}fluentform_submissions` WHERE id = %d",
+		(int) $entry_id
+	) );
+}
+
+/**
+ * 403 unless the caller may act on the form behind this submission.
+ */
+function minn_admin_fluent_forms_guard_entry( $entry_id, $permission = 'fluentform_entries_viewer' ) {
+	$form_id = minn_admin_fluent_forms_entry_form_id( $entry_id );
+	if ( ! $form_id ) {
+		return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+	}
+	if ( ! minn_admin_fluent_forms_can_form( $form_id, $permission ) ) {
+		return new WP_Error( 'forbidden', 'You cannot access entries for that form.', array( 'status' => 403 ) );
+	}
+	return $form_id;
+}
+
+/**
  * Field labels for a form id, keyed by input name.
  *
  * @param int $form_id Form ID.
@@ -386,8 +451,25 @@ add_action( 'rest_api_init', function () {
 				$where[] = "s.status = 'trashed'";
 			}
 			if ( $request['form_id'] ) {
+				$form_id = (int) $request['form_id'];
+				if ( ! minn_admin_fluent_forms_can_form( $form_id ) ) {
+					return new WP_Error( 'forbidden', 'You cannot access entries for that form.', array( 'status' => 403 ) );
+				}
 				$where[] = 's.form_id = %d';
-				$args[]  = (int) $request['form_id'];
+				$args[]  = $form_id;
+			}
+
+			// MANDATORY scope for managers assigned to specific forms. Without
+			// it an unfiltered list returns every form's submissions — names,
+			// emails, phone numbers and message bodies for forms this user was
+			// never granted. An empty scope means "assigned to nothing".
+			$scope = minn_admin_fluent_forms_scope();
+			if ( false !== $scope ) {
+				if ( ! $scope ) {
+					return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
+				}
+				$where[] = 's.form_id IN (' . implode( ',', array_fill( 0, count( $scope ), '%d' ) ) . ')';
+				$args    = array_merge( $args, $scope );
 			}
 			if ( $request['search'] ) {
 				$like    = '%' . $wpdb->esc_like( $request['search'] ) . '%';
@@ -441,6 +523,10 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => 'minn_admin_fluent_forms_can_view',
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
+				$guard = minn_admin_fluent_forms_guard_entry( (int) $request['id'] );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
+				}
 				$subs_table = $wpdb->prefix . 'fluentform_submissions';
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$row = $wpdb->get_row( $wpdb->prepare(
@@ -533,7 +619,11 @@ add_action( 'rest_api_init', function () {
 			},
 			'callback'            => function ( WP_REST_Request $request ) {
 				global $wpdb;
-				$id         = (int) $request['id'];
+				$id    = (int) $request['id'];
+				$guard = minn_admin_fluent_forms_guard_entry( $id, 'fluentform_manage_entries' );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
+				}
 				$subs_table = $wpdb->prefix . 'fluentform_submissions';
 				$det_table  = $wpdb->prefix . 'fluentform_entry_details';
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -566,7 +656,11 @@ add_action( 'rest_api_init', function () {
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
-			$id         = (int) $request['id'];
+			$id    = (int) $request['id'];
+			$guard = minn_admin_fluent_forms_guard_entry( $id, 'fluentform_manage_entries' );
+			if ( is_wp_error( $guard ) ) {
+				return $guard;
+			}
 			$status     = sanitize_key( (string) ( $request['status'] ?? '' ) );
 			$allowed    = array( 'unread', 'read', 'spam', 'trashed' );
 			$subs_table = $wpdb->prefix . 'fluentform_submissions';
