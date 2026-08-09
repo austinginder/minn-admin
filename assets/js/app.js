@@ -20215,14 +20215,14 @@
 					${ __( 'This is a synced pattern — saving changes here updates every post and page that uses it.' ) }
 				</div>` : '' }
 				${ ed.builder && ed.builder.edit_url ? `
-				<div class="minn-editor-locked-note minn-builder-note">
+				<a class="minn-editor-locked-note minn-builder-note" href="${ esc( ed.builder.edit_url ) }" aria-label="Edit in ${ esc( ed.builder.name ) }">
 					<span>${ ed.builder.owns_content
 		? `This ${ ed.type === 'pages' ? 'page' : 'post' }'s canvas is managed by <b>${ esc( ed.builder.name ) }</b> —
 						its content lives in the builder, so the body below is a read-only preview.
 						Title, status, URL and the side panel still save from here.`
 		: `Built with <b>${ esc( ed.builder.name ) }</b> — its blocks are preserved exactly; the text around them is editable here.` }</span>
-					<a class="minn-btn-primary minn-builder-open" href="${ esc( ed.builder.edit_url ) }">Edit in ${ esc( ed.builder.name ) }</a>
-				</div>` : '' }
+					<span class="minn-btn-primary minn-builder-open">Edit in ${ esc( ed.builder.name ) } ↗</span>
+				</a>` : '' }
 				${ locked && ! ( ed.builder && ed.builder.owns_content ) ? `
 				<div class="minn-editor-locked-note">
 					Minn couldn't safely parse this ${ ed.type === 'pages' ? 'page' : 'post' }'s block structure,
