@@ -16522,6 +16522,13 @@
 		setTimeout( poll, 3500 );
 	}
 	async function injectPreviewStyles( styles ) {
+		await addPreviewStyles( styles ).catch( () => {} );
+		// Styles and preview HTML from the same response land in this tick;
+		// the reveal pass must see both, so it rides behind this promise.
+		schedulePreviewReveal();
+	}
+
+	async function addPreviewStyles( styles ) {
 		if ( ! styles ) return;
 		if ( styles.warm ) warmPreviewStyles( styles.warm );
 		const urls = ( styles.urls || [] ).filter( ( u ) => ! injectedPreviewCss.has( u ) );
@@ -16545,6 +16552,49 @@
 			el.textContent = scoped;
 			document.head.appendChild( el );
 		} catch ( e ) { /* previews simply stay unstyled */ }
+	}
+
+	/* Some blocks hide their markup until a view script finishes booting —
+	 * Jetpack slideshow keeps its whole container at opacity:0 until Swiper
+	 * adds wp-swiper-initialized. Previews never run third-party JS, so such
+	 * a block renders as a correctly-sized but invisible box. When a preview
+	 * has size and NOTHING visible in it, un-hide the opacity-0 (then
+	 * visibility:hidden) wrappers. Preview DOM only: saves splice the stored
+	 * raw, so inline styles set here can never reach serialized content. */
+	let previewRevealRaf = 0;
+	function schedulePreviewReveal() {
+		if ( previewRevealRaf ) return;
+		previewRevealRaf = requestAnimationFrame( () => {
+			previewRevealRaf = 0;
+			$$( '.minn-island-preview' ).forEach( revealJsGatedPreview );
+		} );
+	}
+
+	function previewHasVisibleContent( el ) {
+		const nodes = $$( 'img, video, iframe, svg, p, h1, h2, h3, h4, h5, h6, li, td, blockquote, figcaption, span, a, button', el );
+		for ( const n of nodes ) {
+			const media = /^(img|video|iframe|svg)$/i.test( n.tagName );
+			if ( ! media && ! ( n.textContent || '' ).trim() ) continue;
+			try {
+				// No checkVisibility (older engines): claim visible so the
+				// reveal pass stays a no-op rather than firing blind.
+				if ( ! n.checkVisibility || n.checkVisibility( { opacityProperty: true, visibilityProperty: true } ) ) return true;
+			} catch ( e ) { return true; }
+		}
+		return false;
+	}
+
+	function revealJsGatedPreview( el ) {
+		if ( ! el || ! el.isConnected || el.offsetHeight < 24 ) return;
+		if ( previewHasVisibleContent( el ) ) return;
+		$$( '*', el ).forEach( ( n ) => {
+			try { if ( getComputedStyle( n ).opacity === '0' ) n.style.opacity = '1'; } catch ( e ) {}
+		} );
+		if ( ! previewHasVisibleContent( el ) ) {
+			$$( '*', el ).forEach( ( n ) => {
+				try { if ( getComputedStyle( n ).visibility === 'hidden' ) n.style.visibility = 'visible'; } catch ( e ) {}
+			} );
+		}
 	}
 
 	// Relative url(...) references break once CSS moves into an inline <style>
