@@ -2,6 +2,8 @@
 
 Minn Admin exists because the WordPress admin buries everyday work under twenty years of
 accumulated chrome. These are the principles that decide what gets built and how.
+The measurable outcomes these principles serve — and the numbers that judge them —
+live in [roadmap.md](roadmap.md).
 
 ## Goals
 
