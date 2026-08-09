@@ -172,7 +172,9 @@ function minn_admin_aios_level( $level ) {
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_aios_active() ) {
+	// Enforce what the 'cap' => 'read' comment claims, the way
+	// solid-security.php and limit-login-attempts.php already do.
+	if ( ! minn_admin_aios_active() || ! minn_admin_aios_can() ) {
 		return $surfaces;
 	}
 

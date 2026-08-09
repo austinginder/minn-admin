@@ -536,7 +536,15 @@ function minn_admin_gsmtp_map_connector( $connector ) {
 					if ( '' === $name ) {
 						break;
 					}
-					$is_secret = in_array( $name, $sensitive, true );
+					// Fail CLOSED. get_sensitive_fields() is optional, so a connector that
+		// does not implement it yielded an empty list and every value — SMTP
+		// password, SendGrid/Mailgun/SES/Postmark api_key — was echoed
+		// verbatim. Treat password-typed and secret-looking names as sensitive
+		// regardless. Over-masking is round-trip safe: the save path already
+		// skips the sentinel.
+		$is_secret = in_array( $name, $sensitive, true )
+			|| ( isset( $props['type'] ) && 'password' === $props['type'] )
+			|| preg_match( '/(pass|secret|api[_-]?key|token|credential)/i', (string) $name );
 					$fields[]  = array_filter( array(
 						'key'   => $name,
 						'label' => $label,
@@ -1107,7 +1115,10 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/gravity-smtp/send-test', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can( 'VIEW_TOOLS_SENDATEST' ),
+		// Sending real mail to a caller-chosen address is a WRITE. A VIEW_*
+		// capability gating it let a read-only operator drive unlimited
+		// authenticated mail out of the site's ESP.
+		'permission_callback' => $can( 'EDIT_GENERAL_SETTINGS' ),
 		'callback'            => function ( WP_REST_Request $request ) {
 			$body  = $request->get_json_params();
 			$email = sanitize_email( (string) ( isset( $body['email'] ) ? $body['email'] : '' ) );

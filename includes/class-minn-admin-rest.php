@@ -1277,8 +1277,12 @@ class Minn_Admin_REST {
 		// Custom CSS — core's per-theme custom_css post (what the Customizer's
 		// "Additional CSS" edits), surfaced in Settings → Design. Cap is core's
 		// own edit_css (unfiltered_html-mapped; super-admin-only on multisite).
+		// Core's only UI for the custom_css post is the Customizer, which needs
+		// `customize` (edit_theme_options) on top of edit_css. edit_css alone
+		// resolves to unfiltered_html, which editors hold — so this route was a
+		// lower door to a stylesheet that renders on every front-end page.
 		$css_perm = function () {
-			return current_user_can( 'edit_css' );
+			return current_user_can( 'edit_css' ) && current_user_can( 'edit_theme_options' );
 		};
 		register_rest_route(
 			self::NS,
@@ -1438,6 +1442,12 @@ class Minn_Admin_REST {
 				'get_callback' => array( __CLASS__, 'post_modified_unsaved' ),
 				'schema'       => array(
 					'type'        => 'boolean',
+					// Editor-list data, like minn_lock below. Without this the
+					// field defaults into `view` context, so an anonymous
+					// wp/v2/posts read computes it — one extra revision query
+					// per item, and it tells the public which posts carry
+					// unsaved edits.
+					'context'     => array( 'edit' ),
 					'description' => 'Whether an autosave newer than the saved post exists (live post carrying unsaved edits).',
 				),
 			)
@@ -4016,16 +4026,21 @@ class Minn_Admin_REST {
 	/**
 	 * List WooCommerce emails that can be re-triggered for an order.
 	 */
-	public static function order_list_emails( WP_REST_Request $request ) {
-		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
-			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
-		}
-		$order = wc_get_order( (int) $request['id'] );
-		if ( ! $order ) {
-			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
-		}
-		// Order-scoped transactional emails only (not account/reset).
-		$allow = array(
+	/**
+	 * Order-scoped transactional emails only — never account/reset.
+	 *
+	 * The listing filtered on this while the trigger walked the whole
+	 * WC()->mailer() registry, so a shop_manager could fire
+	 * customer_new_account or customer_reset_password (or any third-party
+	 * WC_Email) with the order-email signature. WC_Email_Customer_New_Account
+	 * reads trigger( $order_id, $order ) as trigger( $user_id, $user_pass ) and
+	 * mails whichever user holds that numeric id a set-password link they never
+	 * asked for. Both handlers use this list now.
+	 *
+	 * @return string[]
+	 */
+	private static function order_email_allowlist() {
+		return array(
 			'new_order',
 			'cancelled_order',
 			'failed_order',
@@ -4038,6 +4053,17 @@ class Minn_Admin_REST {
 			'customer_failed_order',
 			'customer_cancelled_order',
 		);
+	}
+
+	public static function order_list_emails( WP_REST_Request $request ) {
+		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
+			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+		}
+		$order = wc_get_order( (int) $request['id'] );
+		if ( ! $order ) {
+			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+		}
+		$allow = self::order_email_allowlist();
 		$out = array();
 		foreach ( WC()->mailer()->get_emails() as $email ) {
 			if ( ! is_object( $email ) || empty( $email->id ) || ! in_array( $email->id, $allow, true ) ) {
@@ -4074,6 +4100,9 @@ class Minn_Admin_REST {
 			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
 		}
 		$email_id = (string) $request['email_id'];
+		if ( ! in_array( $email_id, self::order_email_allowlist(), true ) ) {
+			return new WP_Error( 'unknown_email', 'That email type is not available.', array( 'status' => 400 ) );
+		}
 		$found    = null;
 		foreach ( WC()->mailer()->get_emails() as $email ) {
 			if ( is_object( $email ) && ! empty( $email->id ) && $email->id === $email_id ) {

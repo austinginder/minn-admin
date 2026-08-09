@@ -288,7 +288,15 @@ add_action( 'rest_api_init', function () {
 	}
 	register_rest_field( $types, 'minn_seo', array(
 		'get_callback'    => function ( $post_arr ) use ( $plugin ) {
-			return call_user_func( $plugin['read'], (int) $post_arr['id'] );
+			// Object-level gate, like the pods/meta-box adapters. Core's
+			// collection check for context=edit is the blanket post-type
+			// edit_posts cap, so without this a Contributor reading
+			// wp/v2/posts?context=edit gets everyone's focus keywords.
+			$id = (int) $post_arr['id'];
+			if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
+				return new stdClass();
+			}
+			return call_user_func( $plugin['read'], $id );
 		},
 		'update_callback' => function ( $value, $post ) use ( $plugin ) {
 			if ( ! is_array( $value ) ) {

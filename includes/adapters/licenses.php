@@ -132,6 +132,15 @@ function minn_admin_soflyy_edd( $edd_action, $license, $item_name, $api_url ) {
 	if ( '' === $license || '' === $api_url ) {
 		return null;
 	}
+	// The endpoint comes from WP All Import's own stored option, so a tampered
+	// or restored database (or a hostile value pushed down by their API) would
+	// send the customer's paid license key to whatever host it names. Pin it.
+	$host = strtolower( (string) ( wp_parse_url( $api_url, PHP_URL_HOST ) ?: '' ) );
+	$ok   = 'https' === strtolower( (string) ( wp_parse_url( $api_url, PHP_URL_SCHEME ) ?: '' ) )
+		&& ( 'wpallimport.com' === $host || substr( $host, -16 ) === '.wpallimport.com' );
+	if ( ! $ok ) {
+		return null;
+	}
 	$response = wp_remote_get( esc_url_raw( add_query_arg( array(
 		'edd_action' => $edd_action,
 		'license'    => $license,
@@ -515,14 +524,42 @@ function minn_admin_acp_container() {
 			$data = get_file_data( $dir . '/admin-columns-pro.php', array( 'Version' => 'Version' ) );
 			define( 'ACP_VERSION', ! empty( $data['Version'] ) ? $data['Version'] : '0' );
 		}
-		$definitions = array_merge(
-			require $dir . '/admin-columns/settings/container-definitions.php',
-			require $dir . '/settings/container-definitions.php',
-			require $dir . '/addons/acf/settings/container-definitions.php',
-			require $dir . '/addons/data-sources/settings/container-definitions.php',
-			require $dir . '/addons/gravityforms/settings/container-definitions.php',
-			require $dir . '/addons/woocommerce/settings/container-definitions.php'
+		// A failed require raises E_COMPILE_ERROR, which is NOT a Throwable and
+		// cannot be caught — so an Admin Columns Pro build whose addon layout
+		// differs (older version, partial install, an addon dir removed by a
+		// scanner) took the whole request down with an uncatchable fatal. This
+		// runs eagerly from the provider registry, so it bricked the Licenses
+		// tab AND the System page: exactly the screens used to diagnose it.
+		$mandatory = array(
+			$dir . '/admin-columns/settings/container-definitions.php',
+			$dir . '/settings/container-definitions.php',
 		);
+		foreach ( $mandatory as $file ) {
+			if ( ! file_exists( $file ) ) {
+				$container = false;
+				return null;
+			}
+		}
+		$optional = array(
+			$dir . '/addons/acf/settings/container-definitions.php',
+			$dir . '/addons/data-sources/settings/container-definitions.php',
+			$dir . '/addons/gravityforms/settings/container-definitions.php',
+			$dir . '/addons/woocommerce/settings/container-definitions.php',
+		);
+		$defs = array();
+		foreach ( array_merge( $mandatory, $optional ) as $file ) {
+			if ( file_exists( $file ) ) {
+				$loaded = require $file;
+				if ( is_array( $loaded ) ) {
+					$defs[] = $loaded;
+				}
+			}
+		}
+		if ( ! $defs ) {
+			$container = false;
+			return null;
+		}
+		$definitions = array_merge( ...$defs );
 		$container = new \AC\DI\Container( ( new \AC\Vendor\DI\ContainerBuilder() )->addDefinitions( $definitions )->build() );
 	} catch ( \Throwable $e ) {
 		$container = false;

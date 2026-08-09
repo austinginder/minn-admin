@@ -217,9 +217,19 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( $req ) {
 				$p   = minn_admin_media_folders_provider();
 				$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $req['ids'] ) ) ) );
-				$ids = array_values( array_filter( $ids, function ( $id ) {
-					return 'attachment' === get_post_type( $id );
+				$submitted = count( $ids );
+				$ids       = array_values( array_filter( $ids, function ( $id ) {
+					// upload_files alone lets an Author reorganise the whole
+					// library, including attachments they do not own.
+					return 'attachment' === get_post_type( $id ) && current_user_can( 'edit_post', $id );
 				} ) );
+				if ( count( $ids ) !== $submitted ) {
+					return new WP_Error(
+						'forbidden',
+						'You cannot move one or more of those items.',
+						array( 'status' => 403 )
+					);
+				}
 				if ( ! $ids ) {
 					return new WP_Error( 'minn_move_no_ids', 'Nothing to move.', array( 'status' => 400 ) );
 				}

@@ -17,6 +17,44 @@ defined( 'ABSPATH' ) || exit;
  *                              localize; defaults to any remote image URL.
  * @return array { template: string, attachments: int[] }
  */
+/**
+ * Refuse to fetch a design-library image from a private or loopback address.
+ *
+ * The default URL pattern matches ANY host, and Kadence/GenerateBlocks call
+ * the helper without a pinned regex, so the set of hosts the server will fetch
+ * is whatever the remote pattern payload contains. That is blind SSRF reach to
+ * cloud metadata (169.254.169.254) and localhost services. Exploitation needs
+ * the vendor library or an admin-added connection to misbehave, so this is
+ * defence in depth rather than a live hole — but it costs one check.
+ *
+ * @param string $url Candidate image URL.
+ * @return bool
+ */
+function minn_admin_localize_host_ok( $url ) {
+	$parts = wp_parse_url( $url );
+	if ( empty( $parts['host'] ) || empty( $parts['scheme'] ) ) {
+		return false;
+	}
+	if ( ! in_array( strtolower( $parts['scheme'] ), array( 'http', 'https' ), true ) ) {
+		return false;
+	}
+	$host = strtolower( $parts['host'] );
+	if ( in_array( $host, array( 'localhost', '127.0.0.1', '::1', '0.0.0.0' ), true ) ) {
+		return false;
+	}
+	// Only judge literal IPs here; a hostname is left to WordPress' own
+	// safe-request layer rather than resolved (a DNS lookup per image would be
+	// its own problem, and re-resolution makes the check racy anyway).
+	if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+		return (bool) filter_var(
+			$host,
+			FILTER_VALIDATE_IP,
+			FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+		);
+	}
+	return true;
+}
+
 function minn_admin_localize_images( $template, $url_re = null ) {
 	$attachments = array();
 	if ( null === $url_re ) {
@@ -68,6 +106,9 @@ function minn_admin_localize_images( $template, $url_re = null ) {
 			if ( $existing ) {
 				$media_id = $existing[0];
 			} else {
+				if ( ! minn_admin_localize_host_ok( $url ) ) {
+					continue;
+				}
 				$tmp = download_url( $url );
 				if ( is_wp_error( $tmp ) ) {
 					continue;

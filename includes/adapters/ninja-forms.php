@@ -111,7 +111,13 @@ function minn_admin_ninja_forms_answers( $post_id ) {
 		if ( ! preg_match( '/^_field_(\d+)$/', (string) $key, $m ) ) {
 			continue;
 		}
-		$v = maybe_unserialize( $values[0] ); // core postmeta, not a foreign blob
+		// Submitter-authored: a visitor can type a serialized payload into a
+		// text field and Ninja Forms stores the string verbatim. Decode without
+		// class instantiation — arrays and scalars (all NF stores) round-trip.
+		$raw = $values[0];
+		$v   = is_serialized( $raw )
+			? @unserialize( $raw, array( 'allowed_classes' => false ) ) // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+			: $raw;
 		if ( is_array( $v ) ) {
 			$flat = array();
 			array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {

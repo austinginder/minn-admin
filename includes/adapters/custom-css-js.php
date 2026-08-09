@@ -37,15 +37,38 @@ function minn_admin_ccj_default_options( $language = 'css' ) {
 	);
 }
 
+/**
+ * Force `language` back into the allowlist.
+ *
+ * minn_admin_ccj_get_options() merges stored meta OVER the validated defaults,
+ * so the raw value wins on the very next key — and rebuild_tree() uses it
+ * directly as a FILE EXTENSION:
+ * @file_put_contents( CCJ_UPLOAD_DIR . '/' . $post->ID . '.' . $language, … ).
+ * A stored 'php' would write executable code into uploads; a '../' would climb
+ * out of it. Minn's own writes validate, but the loop runs over every published
+ * custom-css-js post on every write, so one polluted row from a migration or
+ * another component is enough.
+ *
+ * @param array $opts Merged options.
+ * @return array
+ */
+function minn_admin_ccj_guard_options( $opts ) {
+	$allowed = array( 'css', 'js', 'html' );
+	if ( ! isset( $opts['language'] ) || ! in_array( $opts['language'], $allowed, true ) ) {
+		$opts['language'] = 'css';
+	}
+	return $opts;
+}
+
 function minn_admin_ccj_get_options( $post_id ) {
 	$raw = get_post_meta( $post_id, 'options', true );
 	if ( is_array( $raw ) && isset( $raw['language'] ) ) {
-		return array_merge( minn_admin_ccj_default_options( $raw['language'] ), $raw );
+		return minn_admin_ccj_guard_options( array_merge( minn_admin_ccj_default_options( $raw['language'] ), $raw ) );
 	}
 	if ( is_string( $raw ) && $raw ) {
 		$decoded = @unserialize( $raw, array( 'allowed_classes' => false ) ); // phpcs:ignore — their own storage; array-only, no objects
 		if ( is_array( $decoded ) && isset( $decoded['language'] ) ) {
-			return array_merge( minn_admin_ccj_default_options( $decoded['language'] ), $decoded );
+			return minn_admin_ccj_guard_options( array_merge( minn_admin_ccj_default_options( $decoded['language'] ), $decoded ) );
 		}
 	}
 	return minn_admin_ccj_default_options();
