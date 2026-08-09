@@ -1,6 +1,7 @@
 # Editor roadmap — the long-term plan
 
-*Statuses last verified against the code at v0.24.0 (unreleased), 2026-08-06.*
+*Statuses last verified against the code at v0.24.0 (unreleased), 2026-08-06 — except
+the nested-content work, verified 2026-08-08 (see below).*
 
 **Thesis: the editor is the selling feature.** Minn Admin started as "a calmer admin," but
 the editor is where the product wins or loses. The rest of the admin is supporting cast —
@@ -236,6 +237,11 @@ block creation inside slots, and multi-slot `columns`; cover/media-text, nesting
 multi-block paste into slots remain). Slots edit
 content inside layouts; layout itself stays Gutenberg's job. The never-build list below
 is unchanged by that plan.
+
+**Picking this up fresh:** the scoped remaining work — five items with effort estimates,
+a recommended order, watch items, and a measure-first gate on the largest one — is the
+"What remains (handoff)" section of [editor-direction.md](editor-direction.md). Start
+there, and read the writing-context contract above it before touching slot code.
 
 ## What we will never build (unchanged, load-bearing)
 
