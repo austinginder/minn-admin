@@ -22577,10 +22577,13 @@
 				<button class="minn-x-btn" data-close type="button">×</button>
 			</div>
 			<div class="minn-insp-body">
-				<div class="minn-field-label">Syntax highlighting</div>
+				<div class="minn-field-label">${ esc( __( 'Syntax highlighting' ) ) }</div>
 				<select class="minn-input" data-lang>
 					${ CODE_LANGS.map( ( l ) => `<option value="${ l }"${ l === codeLangOf( pre ) ? ' selected' : '' }>${ l === 'auto' ? 'Auto detect' : l }</option>` ).join( '' ) }
 				</select>
+			</div>
+			<div class="minn-insp-actions">
+				<button class="minn-btn-soft danger" data-code-remove type="button" title="${ esc( __( 'Remove this code block' ) ) }">${ icon( 'trash' ) } ${ esc( __( 'Remove' ) ) }</button>
 			</div>`;
 		document.body.appendChild( codePop );
 		positionBlockPop( codePop, pre );
@@ -22589,6 +22592,16 @@
 		codePop.querySelector( '[data-lang]' ).addEventListener( 'change', ( e ) => {
 			setCodeLang( pre, e.target.value );
 			syncTableChips(); // refresh the chip's language label
+		} );
+		// The island removal pattern, not a command-stack swap: insertHTML
+		// over a selected <pre> empties it but leaves the shell behind (the
+		// figure-husk Blink family), so the honest path is direct removal
+		// with the Undo toast — ⌘Z runs the restore while the toast is live,
+		// and ancestor slots stamp for a code block inside a group.
+		codePop.querySelector( '[data-code-remove]' ).addEventListener( 'click', () => {
+			hideCodePop();
+			removeAtomicBlockWithUndo( pre );
+			syncTableChips();
 		} );
 		document.addEventListener( 'mousedown', codePopAway, true );
 	}
