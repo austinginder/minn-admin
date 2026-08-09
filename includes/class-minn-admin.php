@@ -794,6 +794,10 @@ class Minn_Admin {
 				'nonce' => Minn_Admin_Notices::nonce(),
 				'stale' => Minn_Admin_Notices::is_stale(),
 			),
+			// Admin-menu items a developer hid with remove_menu_page(),
+			// mirrored into Minn's nav (last capture's view; a fresh capture
+			// updates it in-session). Cosmetic, like the wp-admin original.
+			'menuRemoved' => Minn_Admin_Notices::menu_removed(),
 			// Ungated admin-ajax URL: core's `rest-nonce` action lives there,
 			// and the client uses it to mint a fresh REST nonce in place when
 			// the boot nonce expires (a tab left open past nonce lifetime).

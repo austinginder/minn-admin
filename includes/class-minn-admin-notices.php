@@ -56,15 +56,73 @@ class Minn_Admin_Notices {
 		while ( ob_get_level() ) {
 			ob_end_clean();
 		}
-		$items = self::capture();
-		self::store( $items );
+		$items        = self::capture();
+		$menu_removed = self::capture_removed_menus();
+		self::store( $items, $menu_removed );
 		wp_send_json(
 			array(
-				'ok'       => true,
-				'count'    => count( $items ),
-				'captured' => time(),
+				'ok'           => true,
+				'count'        => count( $items ),
+				'captured'     => time(),
+				'menu_removed' => $menu_removed,
 			)
 		);
+	}
+
+	/**
+	 * Admin menu items a developer hid with remove_menu_page(), mapped to the
+	 * Minn nav ids they correspond to. This runs inside the SAME hidden
+	 * dashboard pageload as the notice capture — in_admin_header, after every
+	 * admin_menu/admin_head callback has run like a real visit — so whatever
+	 * the site's code removed from wp-admin's menu is genuinely absent from
+	 * $GLOBALS['menu'] here. Cap-guarded per slug: a menu absent because THIS
+	 * USER lacks the capability is normal gating, not a removal (Minn's own
+	 * caps already hide those), so it is never reported.
+	 */
+	const WATCHED_MENUS = array(
+		// admin slug => [ minn nav id, capability that would normally show it ]
+		'edit-comments.php'   => array( 'comments', 'edit_posts' ),
+		'upload.php'          => array( 'media', 'upload_files' ),
+		'users.php'           => array( 'users', 'list_users' ),
+		'plugins.php'         => array( 'extensions', 'activate_plugins' ),
+		'options-general.php' => array( 'settings', 'manage_options' ),
+	);
+
+	public static function capture_removed_menus() {
+		/**
+		 * Filter whether Minn's nav mirrors admin-menu removals at all.
+		 * Default true: a site that hides Comments from wp-admin gets the
+		 * same courtesy in Minn (cosmetic, like remove_menu_page itself —
+		 * routes stay reachable by URL and the command palette).
+		 */
+		if ( ! apply_filters( 'minn_admin_respect_removed_menus', true ) ) {
+			return array();
+		}
+		$menu    = isset( $GLOBALS['menu'] ) && is_array( $GLOBALS['menu'] ) ? $GLOBALS['menu'] : array();
+		$present = array();
+		foreach ( $menu as $item ) {
+			if ( isset( $item[2] ) ) {
+				$present[ (string) $item[2] ] = true;
+			}
+		}
+		$removed = array();
+		/** Filter the watched slug => [minn id, cap] map. */
+		$watched = apply_filters( 'minn_admin_watched_admin_menus', self::WATCHED_MENUS );
+		foreach ( $watched as $slug => $def ) {
+			if ( empty( $def[0] ) || empty( $def[1] ) ) {
+				continue;
+			}
+			if ( ! isset( $present[ $slug ] ) && current_user_can( $def[1] ) ) {
+				$removed[] = (string) $def[0];
+			}
+		}
+		return $removed;
+	}
+
+	/** Stored admin-menu removals for the boot payload (last capture's view). */
+	public static function menu_removed() {
+		$stored = self::stored();
+		return isset( $stored['menu_removed'] ) && is_array( $stored['menu_removed'] ) ? $stored['menu_removed'] : array();
 	}
 
 	/**
@@ -665,18 +723,21 @@ class Minn_Admin_Notices {
 	/* ===== Storage ===== */
 
 	private static function store_key() {
-		// v4: ThemeIsle / admin dismiss URLs (nid=, tsdk_dismiss_nonce,
-		// "No, thanks." labels) flagged as in-panel actions, not ↗ tabs.
-		// v3 was href="#" button CTAs. Versioning invalidates stale captures.
-		return 'minn_admin_notices_v4_' . get_current_user_id();
+		// v5: menu_removed joins the stored shape (admin-menu removals mirror
+		// into Minn's nav). v4: ThemeIsle / admin dismiss URLs (nid=,
+		// tsdk_dismiss_nonce, "No, thanks." labels) flagged as in-panel
+		// actions, not ↗ tabs. v3 was href="#" button CTAs. Versioning
+		// invalidates stale captures.
+		return 'minn_admin_notices_v5_' . get_current_user_id();
 	}
 
-	private static function store( $items ) {
+	private static function store( $items, $menu_removed = array() ) {
 		set_transient(
 			self::store_key(),
 			array(
-				'captured' => time(),
-				'items'    => $items,
+				'captured'     => time(),
+				'items'        => $items,
+				'menu_removed' => $menu_removed,
 			),
 			DAY_IN_SECONDS
 		);

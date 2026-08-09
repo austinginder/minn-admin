@@ -1610,11 +1610,16 @@
 	// user edit page.
 	const CORE_HIDEABLE_NAV = [ 'content', 'media', 'comments', 'orders', 'subscriptions', 'products', 'coupons', 'customers', 'users', 'terms', 'menus', 'widgets', 'posttypes', 'extensions', 'database', 'system', 'settings' ];
 	const isCoreHidden = ( id ) => ( B.hidden || [] ).some( ( h ) => h.id === 'core:' + id );
+	// Sites commonly hide wp-admin menus for clients (remove_menu_page on
+	// admin_menu — Comments is the classic). The notices capture pageload
+	// sees the final admin menu and reports removals; Minn's nav mirrors
+	// them. Cosmetic like the original: routes stay reachable by URL + ⌘K.
+	const isMenuRemoved = ( id ) => ( B.menuRemoved || [] ).includes( id );
 	// Applied inside the item BUILDERS (not the group renderer): renderShell
 	// goes through navGroupHtml but renderNavWorkspace maps items straight to
 	// buttons — filtering at the source covers both render paths.
 	const filterHiddenNavItems = ( items ) =>
-		items.filter( ( it ) => ! ( CORE_HIDEABLE_NAV.includes( it.id ) && isCoreHidden( it.id ) ) );
+		items.filter( ( it ) => ! ( CORE_HIDEABLE_NAV.includes( it.id ) && isCoreHidden( it.id ) ) && ! isMenuRemoved( it.id ) );
 
 	function bindNavClicks( root ) {
 		$$( '.minn-nav-btn', root || document ).forEach( ( btn ) => {
@@ -30556,6 +30561,14 @@
 					if ( ! d || ! d.ok ) return;
 					state.cache.notifications = null;
 					loadNotifications().then( () => state.notifOpen && renderOverlays() );
+					// The capture also reports admin-menu removals — apply a
+					// changed set to the nav right away rather than waiting
+					// for the next boot.
+					if ( Array.isArray( d.menu_removed )
+						&& JSON.stringify( d.menu_removed ) !== JSON.stringify( B.menuRemoved || [] ) ) {
+						B.menuRemoved = d.menu_removed;
+						renderNavWorkspace();
+					}
 				} )
 				.catch( () => {} );
 		}

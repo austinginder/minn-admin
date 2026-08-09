@@ -716,6 +716,8 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_spam_providers` | filter | Add a provider card to Settings → Spam |
 | `minn_admin_license_providers` | filter | Report your license state on the Licenses card, optionally with activate / deactivate / re-verify |
 | `minn_admin_comments_enabled` | filter | Override comments detection (nav, palette, badge) |
+| `minn_admin_respect_removed_menus` | filter | Return false to stop Minn's nav mirroring `remove_menu_page()` removals (since 0.26.0) |
+| `minn_admin_watched_admin_menus` | filter | Adjust which admin-menu slugs map to which Minn nav items for removal mirroring (since 0.26.0) |
 | `minn_admin_visibility_providers` | filter | Report an active maintenance / coming-soon / password mode (Overview banner, topbar chip, System check) |
 | `minn_admin_media_folders` | filter | Feed the Media view's folder filter from your folder plugin (since 0.18.0) |
 | `minn_admin_log_sources` | filter | Add a log to System's log viewer (since 0.19.0) |
