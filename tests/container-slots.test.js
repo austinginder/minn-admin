@@ -192,7 +192,9 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	} );
 	t.check( 'select-all clamped to slot', selShape.inSlot && ! selShape.hasCloser, JSON.stringify( selShape ) );
 
-	// 6. Plain-text paste inside slot.
+	// 6. Inline rich paste inside slot rides the sanitize pipeline now
+	// (handoff item 2): formatting normalizes to the serializer vocabulary
+	// (<b> → <strong>) instead of flattening to plain text.
 	await caretEnd( '.minn-slot-island .minn-slot > p' );
 	await page.evaluate( () => {
 		const el = document.querySelector( '.minn-slot-island .minn-slot > p' );
@@ -202,11 +204,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		el.dispatchEvent( new ClipboardEvent( 'paste', { clipboardData: dt, bubbles: true, cancelable: true } ) );
 	} );
 	const pAfterPaste = await page.$eval( '.minn-slot-island .minn-slot > p', ( el ) => el.innerHTML );
-	t.check( 'paste lands plain in slot', pAfterPaste.includes( 'RICH slot paste' ) && ! /<b>/.test( pAfterPaste ), pAfterPaste.slice( -60 ) );
+	t.check( 'rich inline paste keeps formatting in slot', pAfterPaste.includes( '<strong>RICH</strong>' ) && pAfterPaste.includes( 'slot paste' ), pAfterPaste.slice( -60 ) );
 
 	// 7. Undo works for slot typing.
-	raw = await save( 'RICH slot paste' );
-	t.check( 'paste saved inside group', raw.indexOf( 'RICH slot paste' ) > -1 && raw.indexOf( 'RICH slot paste' ) < raw.indexOf( '<!-- /wp:group -->' ), '' );
+	raw = await save( 'slot paste' );
+	t.check( 'paste saved inside group', raw.indexOf( 'slot paste' ) > -1 && raw.indexOf( 'slot paste' ) < raw.indexOf( '<!-- /wp:group -->' ), '' );
 
 	// ---- Block creation inside slots (phase 3 follow-up slice) ----
 	// Work in the SECOND group (its untouched byte-identity was already
@@ -434,6 +436,62 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	raw2 = await save2( ( r ) => ! grpOf( r ).includes( '<table' ) );
 	const grp2 = grpOf( raw2 );
 	t.check( 'table removed from group, siblings intact', ! grp2.includes( '<table' ) && grp2.includes( 'Chip fixture paragraph.' ) && grp2.includes( 'language-js' ), grp2 );
+
+	/* ===== Multi-block rich paste into slots (handoff item 2): the rich
+	 * pipeline runs root-aware inside slots — a Docs/Word-style multi-block
+	 * payload lands as separate real blocks in the group; island-class
+	 * Minn payloads are refused (no nested islands yet). ===== */
+	const pasteInSlot = ( flavors ) => page.evaluate( ( f ) => {
+		const body = document.querySelector( '#minn-editor-body' );
+		const dt = new DataTransfer();
+		for ( const [ k, v ] of Object.entries( f ) ) dt.setData( k, v );
+		const ev = new ClipboardEvent( 'paste', { bubbles: true, cancelable: true, clipboardData: dt } );
+		body.dispatchEvent( ev );
+		return ev.defaultPrevented;
+	}, flavors );
+
+	await caretEnd( '.minn-slot > p' );
+	const richPrevented = await pasteInSlot( {
+		'text/html': '<meta charset="utf-8"><p>Pasted one.</p><h2>Pasted head</h2><p>Pasted two.</p>',
+		'text/plain': 'Pasted one.\n\nPasted head\n\nPasted two.',
+	} );
+	await page.waitForTimeout( 400 );
+	const slotDom = await page.evaluate( () => {
+		const slot = document.querySelector( '.minn-slot' );
+		return {
+			kids: [ ...slot.children ].map( ( c ) => c.tagName ).join( ',' ),
+			h2: slot.querySelector( ':scope > h2' )?.textContent || '',
+		};
+	} );
+	t.check( 'rich paste is handled (not native)', richPrevented, '' );
+	t.check( 'pasted blocks are separate slot children', slotDom.h2 === 'Pasted head' && /H2/.test( slotDom.kids ), JSON.stringify( slotDom ) );
+	raw2 = await save2( ( r ) => grpOf( r ).includes( 'Pasted two.' ) );
+	const grp3 = grpOf( raw2 );
+	t.check( 'pasted blocks saved INSIDE the group as real blocks',
+		/<!-- wp:heading[^>]*-->/.test( grp3 ) && grp3.includes( 'Pasted head' )
+		&& grp3.includes( 'Pasted one.' ) && grp3.includes( 'Pasted two.' ), grp3 );
+
+	// Plain multi-line text → separate paragraphs in the slot.
+	await caretEnd( '.minn-slot > h2' );
+	await pasteInSlot( { 'text/plain': 'Alpha line.\n\nBeta line.' } );
+	await page.waitForTimeout( 400 );
+	raw2 = await save2( ( r ) => grpOf( r ).includes( 'Beta line.' ) );
+	t.check( 'multi-line text paste lands as paragraphs in the group',
+		grpOf( raw2 ).includes( 'Alpha line.' ) && grpOf( raw2 ).includes( 'Beta line.' ), grpOf( raw2 ) );
+
+	// Island-class Minn payload: refused in slots (falls through; the lone
+	// URL text flavor stays native, so nothing splices and no island lands).
+	await caretEnd( '.minn-slot > p' );
+	const islPrevented = await pasteInSlot( {
+		'text/x-minn-blocks': '<!-- wp:embed {"url":"https://www.youtube.com/watch?v=x","type":"video"} -->\n<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">\nhttps://www.youtube.com/watch?v=x\n</div></figure>\n<!-- /wp:embed -->',
+		'text/plain': 'https://www.youtube.com/watch?v=x',
+	} );
+	await page.waitForTimeout( 400 );
+	const islShape = await page.evaluate( () => ( {
+		islandInSlot: !! document.querySelector( '.minn-slot .minn-block-island' ),
+	} ) );
+	raw2 = await rawOf2();
+	t.check( 'island payload refused inside the slot', ! islPrevented && ! islShape.islandInSlot && ! grpOf( raw2 ).includes( 'wp:embed' ), JSON.stringify( islShape ) );
 
 	await deletePost( page, id2 );
 
