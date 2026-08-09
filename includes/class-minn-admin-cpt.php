@@ -258,8 +258,10 @@ class Minn_Admin_CPT {
 			$source = self::source_of( $pt->name );
 			$out[]  = array(
 				'slug'         => $pt->name,
-				'plural'       => $pt->labels->name,
-				'singular'     => $pt->labels->singular_name,
+				// Registered labels may carry entities (translations do this
+				// routinely) — decode for Minn's text rendering.
+				'plural'       => Minn_Admin::plain_text( $pt->labels->name ),
+				'singular'     => Minn_Admin::plain_text( $pt->labels->singular_name ),
 				'description'  => $pt->description,
 				'public'       => (bool) $pt->public,
 				'hierarchical' => (bool) $pt->hierarchical,
@@ -281,7 +283,7 @@ class Minn_Admin_CPT {
 			}
 			$catalog[] = array(
 				'slug'  => $tax->name,
-				'label' => $tax->labels->name,
+				'label' => Minn_Admin::plain_text( $tax->labels->name ),
 			);
 		}
 		return rest_ensure_response(
@@ -435,8 +437,8 @@ class Minn_Admin_CPT {
 			$count  = wp_count_terms( array( 'taxonomy' => $tax->name, 'hide_empty' => false ) );
 			$out[]  = array(
 				'slug'         => $tax->name,
-				'plural'       => $tax->labels->name,
-				'singular'     => $tax->labels->singular_name,
+				'plural'       => Minn_Admin::plain_text( $tax->labels->name ),
+				'singular'     => Minn_Admin::plain_text( $tax->labels->singular_name ),
 				'public'       => (bool) $tax->public,
 				'hierarchical' => (bool) $tax->hierarchical,
 				'show_in_rest' => (bool) $tax->show_in_rest,
