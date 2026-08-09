@@ -192,11 +192,20 @@ Three phases, each shippable alone, in order:
    carry. Guarded: island-guard bail (Backspace inside a slot otherwise armed and
    DELETED the container — the run-bail class), ⌘A clamped to the slot, plain-text
    paste (the rich pipeline's block splicing is top-level-tuned), per-slot trailing
-   affordance, inspector flushes a dirty slot before modeling. Deliberately NOT in
-   slice 1: markdown block prefixes / toolbar block ops in slots (their block detection
-   is top-level-anchored; they no-op harmlessly), multi-block paste, columns/cover, and
-   nesting. Suite: `tests/container-slots.test.js` (19 checks incl. untouched-group
-   byte-identity).
+   affordance, inspector flushes a dirty slot before modeling. Same day, the follow-up
+   slice shipped BLOCK CREATION inside slots: markdown block prefixes (`#`…, `-`, `1.`,
+   `>`, `---`), the toolbar's block/list buttons, and the slash menu all treat the
+   nearest `.minn-slot` as their block root (`mdRootOf`/`topBlockOf`, the toolbar
+   walks, `liftNestedLists` per root). The slash menu inside a slot offers ONLY the
+   prose-safe basics — actions stamped `minnSlotSafe` (headings, quote, pullquote,
+   code, lists, divider); island inserts, media flows, tables and Browse-all stay
+   top-level. Root-cause fix that fell out: Minn never set
+   `defaultParagraphSeparator`, so Blink created `<div>`s on list-exit/insertParagraph
+   (the serializer papered over them; the prefix handlers refused them) — now set to
+   `p` document-wide at editor bind. Still NOT in slots: multi-block paste, table/code
+   chips (top-level chrome), columns/cover, nesting. Suite:
+   `tests/container-slots.test.js` (27 checks incl. untouched-group byte-identity and
+   slot slash-menu contents).
 
 The never-build list is unchanged by this plan. Slots edit **content** inside layouts;
 layout itself (spacing, variations, query loops, the block inserter's full catalog) remains
