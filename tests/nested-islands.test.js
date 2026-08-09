@@ -207,6 +207,67 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'nested island removal saved (buttons gone, spacer kept)',
 		! groupA( raw ).includes( 'wp:buttons' ) && groupA( raw ).includes( 'wp:spacer' ), groupA( raw ) );
 
+	/* ===== Insert flows inside slots (the follow-up slice): the slash
+	 * menu's island/table inserts and the embed-URL paste land INSIDE the
+	 * slot and splice on save. ===== */
+	const caretEndIn = ( sel ) => page.evaluate( ( s ) => {
+		const el = document.querySelector( s );
+		el.closest( '.minn-slot' ).focus( { preventScroll: true } );
+		const r = document.createRange();
+		r.selectNodeContents( el );
+		r.collapse( false );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+	}, sel );
+
+	// Table via the slash menu (the action.html path).
+	await page.click( '.minn-slot-island .minn-slot > p' );
+	await caretEndIn( '.minn-slot-island .minn-slot > p' );
+	await page.keyboard.press( 'Enter' );
+	await page.keyboard.type( '/tab' );
+	await page.waitForSelector( '.minn-slash-menu', { timeout: 8000 } );
+	await page.evaluate( () => {
+		const item = [ ...document.querySelectorAll( '.minn-slash-item' ) ].find( ( el ) => /^Table/.test( el.textContent.trim() ) );
+		item.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+	} );
+	await page.waitForTimeout( 400 );
+	const tableInSlot = await page.evaluate( () => !! document.querySelector( '.minn-slot > figure.wp-block-table' ) );
+	t.check( 'slash table insert lands inside the slot', tableInSlot, '' );
+	raw = await save( ( r ) => groupA( r ).includes( 'wp:table' ) );
+	t.check( 'slot table saved inside the group', groupA( raw ).includes( '<!-- wp:table' ), groupA( raw ).slice( 0, 200 ) );
+
+	// Embed URL paste into an empty slot paragraph → nested embed island.
+	await page.evaluate( () => {
+		const slot = document.querySelector( '.minn-slot-island .minn-slot' );
+		const empty = [ ...slot.querySelectorAll( ':scope > p' ) ].find( ( p ) => ! p.textContent.trim() );
+		const landing = empty || ( () => {
+			const p = document.createElement( 'p' );
+			p.appendChild( document.createElement( 'br' ) );
+			slot.appendChild( p );
+			return p;
+		} )();
+		slot.focus( { preventScroll: true } );
+		const r = document.createRange();
+		r.selectNodeContents( landing );
+		r.collapse( true );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+		const dt = new DataTransfer();
+		dt.setData( 'text/plain', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' );
+		document.querySelector( '#minn-editor-body' ).dispatchEvent(
+			new ClipboardEvent( 'paste', { clipboardData: dt, bubbles: true, cancelable: true } ) );
+	} );
+	await page.waitForTimeout( 500 );
+	const embedInSlot = await page.evaluate( () => {
+		const isl = document.querySelector( '.minn-slot > .minn-block-island[data-block="core/embed"], .minn-slot > .minn-block-island[data-block="embed"]' );
+		return !! isl;
+	} );
+	t.check( 'embed URL paste islands inside the slot', embedInSlot, '' );
+	raw = await save( ( r ) => groupA( r ).includes( 'wp:embed' ) );
+	t.check( 'slot embed saved inside the group', groupA( raw ).includes( 'wp:embed' ) && groupA( raw ).includes( 'dQw4w9WgXcQ' ), groupA( raw ).slice( -400 ) );
+
 	await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

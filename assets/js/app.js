@@ -16221,16 +16221,20 @@
 		if ( ! anchor || ! anchor.isConnected ) {
 			const sel = window.getSelection();
 			let node = sel && sel.anchorNode;
-			// body-root by design: islands only insert at the top level.
-			while ( node && node.parentNode !== body ) node = node.parentNode;
-			anchor = node && node.parentNode === body ? node : null;
+			// Root-aware since nested islands: a caret inside a container
+			// slot inserts within THAT slot, not the top level.
+			const root = blockRootOf( node, body );
+			while ( node && node.parentNode !== root ) node = node.parentNode;
+			anchor = node && node.parentNode === root ? node : null;
 		}
 		if ( ! ed.islands ) ed.islands = [];
 		const idx = ed.islands.push( template ) - 1;
-		const html = islandHtml( idx, blockName, template );
+		const html = islandHtml( idx, blockName, template, ed );
 		if ( anchor ) anchor.insertAdjacentHTML( 'beforebegin', html );
 		else body.insertAdjacentHTML( 'beforeend', html );
 		const islandEl = body.querySelector( `.minn-block-island[data-island="${ idx }"]` );
+		// insertAdjacentHTML fires no input — a slot ancestor must re-splice.
+		stampSlotDirtyFor( islandEl || anchor );
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
@@ -20746,13 +20750,14 @@
 						}
 					}
 				}
-				if ( ed2.mode === 'blocks' && ! selSlot && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
+				if ( ed2.mode === 'blocks' && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
 					const sel = window.getSelection();
 					let node = sel && sel.anchorNode;
-					// body-root by design: embeds are islands — top level only
-					// (in a slot the URL falls through and pastes as text).
-					while ( node && node.parentNode !== body ) node = node.parentNode;
-					if ( node && node.parentNode === body ) {
+					// Root-aware since nested islands: a URL pasted into an
+					// empty slot block becomes an embed island in that slot.
+					const eroot = selSlot || body;
+					while ( node && node.parentNode !== eroot ) node = node.parentNode;
+					if ( node && node.parentNode === eroot ) {
 						const existing = node.nodeType === 1 ? node.innerHTML : node.textContent;
 						if ( stripTags( existing || '' ).trim() === '' ) {
 							e.preventDefault();
@@ -20768,9 +20773,7 @@
 				// self-hosted upload, not a hotlink.
 				const imgFiles = B.caps.upload ? Array.from( cd.files || [] ).filter( ( f ) => /^image\//.test( f.type ) ) : [];
 				const htmlFlavor = cd.getData( 'text/html' ) || '';
-				// Media flow stays top-level for now (insertImageFiles is
-				// body-root by design) — a files-only paste in a slot no-ops.
-				if ( ! selSlot && imgFiles.length && ( ! htmlFlavor.trim() || /^(?:<meta[^>]*>)?\s*<img[^>]*\/?>\s*$/i.test( htmlFlavor.trim() ) ) ) {
+				if ( imgFiles.length && ( ! htmlFlavor.trim() || /^(?:<meta[^>]*>)?\s*<img[^>]*\/?>\s*$/i.test( htmlFlavor.trim() ) ) ) {
 					e.preventDefault();
 					insertImageFiles( body, imgFiles );
 					return;
@@ -20786,26 +20789,20 @@
 				// take a block splice — fall through to the HTML path there.
 				const minnBlocks = cd.getData( 'text/x-minn-blocks' );
 				if ( minnBlocks && ed2.mode !== 'locked'
-					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' ) ) {
-					const mbSegs = tokenizeBlocks( minnBlocks.trim() );
-					// Inside a slot only all-editable payloads splice — islands
-					// would need nested-island support (handoff item 5). An
-					// island-class payload falls through to the HTML/text
-					// flavors and lands as prose instead.
-					const slotSafe = ! selSlot || ( mbSegs || [] ).every( ( s ) =>
-						s.type === 'html' ? ! s.raw.trim() : segmentEditable( s ) );
-					if ( mbSegs && slotSafe ) {
-						e.preventDefault();
-						ensureBlocksMode();
-						const built = appendEditableContent( ed2, minnBlocks.trim() );
-						if ( built.trim() ) {
-							pasteBlocksInsert( selSlot || body, built );
-							renderIslandPreviews( body, ed2 );
-							updateEditorStats();
-						}
-						scheduleAutosave();
-						return;
+					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' )
+					&& tokenizeBlocks( minnBlocks.trim() ) ) {
+					// Island payloads splice inside slots too since nested
+					// islands — the same editable-vs-island split as load.
+					e.preventDefault();
+					ensureBlocksMode();
+					const built = appendEditableContent( ed2, minnBlocks.trim() );
+					if ( built.trim() ) {
+						pasteBlocksInsert( selSlot || body, built );
+						renderIslandPreviews( body, ed2 );
+						updateEditorStats();
 					}
+					scheduleAutosave();
+					return;
 				}
 				const html = cd.getData( 'text/html' );
 				if ( anchorEl.closest( 'pre' ) || closestInlineCode( anchor ) ) {
@@ -23813,8 +23810,10 @@
 		const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode;
 		if ( el.closest( 'li, td, th, h1, h2, h3, h4, h5, h6, pre, figcaption' ) ) {
 			let top = node;
-			// body-root by design: image figures only insert at the top level.
-			while ( top.parentNode && top.parentNode !== body ) top = top.parentNode;
+			// Root-aware since nested islands: a caret in a slot's list/cell
+			// hops to a landing paragraph inside that slot.
+			const hopRoot = blockRootOf( node, body );
+			while ( top.parentNode && top.parentNode !== hopRoot ) top = top.parentNode;
 			const landing = document.createElement( 'p' );
 			landing.appendChild( document.createElement( 'br' ) );
 			top.after( landing );
@@ -23969,10 +23968,11 @@
 		segs.forEach( ( seg ) => {
 			if ( seg.type !== 'block' ) return;
 			const idx = ed.islands.push( seg.raw ) - 1;
-			anchor.insertAdjacentHTML( 'beforebegin', islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw ) );
+			anchor.insertAdjacentHTML( 'beforebegin', islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw, ed ) );
 			count++;
 		} );
 		if ( ! count ) { toast( 'Nothing insertable in this pattern', true ); return; }
+		stampSlotDirtyFor( anchor );
 		renderIslandPreviews( body, ed );
 		updateEditorStats();
 		scheduleAutosave();
@@ -23981,12 +23981,6 @@
 	// The curated quick-insert set — shared by the inline slash menu and the
 	// full block picker. Embeds and galleries insert as islands, blocks mode
 	// only (classic content already auto-embeds lone URLs server-side).
-	// Stamp an action as safe inside container slots: prose blocks the slot
-	// serializer handles and the nested editable can host. Island inserts,
-	// media flows and tables (their chips/menus are top-level chrome) stay
-	// out of slots for now.
-	const slotOk = ( a ) => { a.minnSlotSafe = true; return a; };
-
 	function basicSlashItems( blocksMode ) {
 		// Always list the full Basics set. Island inserts (embed/gallery/spacer/
 		// file/shortcode) used to hide in classic mode, which made them look
@@ -23994,19 +23988,19 @@
 		// classic → blocks via ensureBlocksMode() instead.
 		void blocksMode;
 		return [
-			[ icon( 'h2' ), 'Heading 2', slotOk( () => document.execCommand( 'formatBlock', false, 'h2' ) ) ],
-			[ icon( 'h3' ), 'Heading 3', slotOk( () => document.execCommand( 'formatBlock', false, 'h3' ) ) ],
-			[ icon( 'quote' ), 'Quote', slotOk( () => document.execCommand( 'formatBlock', false, 'blockquote' ) ) ],
+			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
+			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
+			[ icon( 'quote' ), 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
 			// Pullquote is prose-class; details is an island (contenteditable
 			// <details> traps the caret and blocks typing after it in Blink).
-			[ icon( 'quote' ), 'Pullquote', slotOk( { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ) ],
+			[ icon( 'quote' ), 'Pullquote', { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ],
 			[ icon( 'list' ), 'Details', { block: 'core/details', template: detailsTemplate( 'Details', '' ) } ],
-			[ icon( 'braces' ), 'Code', slotOk( () => document.execCommand( 'formatBlock', false, 'pre' ) ) ],
-			[ icon( 'list' ), 'Bulleted list', slotOk( () => document.execCommand( 'insertUnorderedList', false, null ) ) ],
-			[ icon( 'olist' ), 'Numbered list', slotOk( () => document.execCommand( 'insertOrderedList', false, null ) ) ],
+			[ icon( 'braces' ), 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
+			[ icon( 'list' ), 'Bulleted list', () => document.execCommand( 'insertUnorderedList', false, null ) ],
+			[ icon( 'olist' ), 'Numbered list', () => document.execCommand( 'insertOrderedList', false, null ) ],
 			[ icon( 'img' ), 'Image', 'image' ],
 			[ icon( 'table' ), 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
-			[ icon( 'minus' ), 'Divider', slotOk( { html: '<hr>' } ) ],
+			[ icon( 'minus' ), 'Divider', { html: '<hr>' } ],
 			[ icon( 'play' ), 'Embed — YouTube, tweet, audio…', 'embed' ],
 			[ icon( 'gallery' ), 'Gallery', 'gallery' ],
 			[ icon( 'minus' ), 'Spacer', 'spacer' ],
@@ -24106,9 +24100,11 @@
 		{
 			const sel = window.getSelection();
 			let n = sel.rangeCount ? sel.anchorNode : null;
-			// body-root by design: the picker inserts islands — top level only.
-			while ( n && n.parentNode && n.parentNode !== body ) n = n.parentNode;
-			caretBlock = n && n.parentNode === body ? n : null;
+			// Root-aware since nested islands: a caret inside a container
+			// slot inserts within that slot.
+			const root = n ? blockRootOf( n, body ) : body;
+			while ( n && n.parentNode && n.parentNode !== root ) n = n.parentNode;
+			caretBlock = n && n.parentNode === root ? n : null;
 		}
 
 		pickerEl = document.createElement( 'div' );
@@ -24287,8 +24283,11 @@
 			const b = $( '#minn-editor-body' );
 			if ( ! b || ! state.editor ) return;
 			b.focus( { preventScroll: true } );
+			// A root child = direct child of the body or of a container slot.
+			const rootChild = ( el ) => !! ( el && el.isConnected && el.parentNode && ( el.parentNode === b
+				|| ( el.parentNode.classList && el.parentNode.classList.contains( 'minn-slot' ) ) ) );
 			let target;
-			if ( targetBlock && targetBlock.isConnected && targetBlock.parentNode === b ) {
+			if ( targetBlock && rootChild( targetBlock ) ) {
 				// The slash menu's "/" block — replaceable by design.
 				target = targetBlock;
 			} else {
@@ -24296,7 +24295,7 @@
 				// replace real content the caret happened to sit in).
 				target = document.createElement( 'p' );
 				target.appendChild( document.createElement( 'br' ) );
-				if ( caretBlock && caretBlock.isConnected && caretBlock.parentNode === b ) caretBlock.after( target );
+				if ( rootChild( caretBlock ) ) caretBlock.after( target );
 				else b.appendChild( target );
 			}
 			const range = document.createRange();
@@ -24341,6 +24340,7 @@
 					} else if ( r && r.html ) {
 						if ( /wp-block-(pullquote|table)/.test( r.html ) ) ensureBlocksMode();
 						p.insertAdjacentHTML( 'beforebegin', r.html );
+						stampSlotDirtyFor( p );
 						// Leave the empty p as the caret landing (already focused).
 						scheduleAutosave();
 					} else {
@@ -24440,10 +24440,11 @@
 			if ( ! ed ) return;
 			if ( ! ed.islands ) ed.islands = [];
 			const idx = ed.islands.push( action.template ) - 1;
-			target.insertAdjacentHTML( 'beforebegin', islandHtml( idx, action.block, action.template ) );
+			target.insertAdjacentHTML( 'beforebegin', islandHtml( idx, action.block, action.template, ed ) );
 			const p = document.createElement( 'p' );
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
+			stampSlotDirtyFor( p );
 			const range = document.createRange();
 			range.selectNodeContents( p );
 			range.collapse( true );
@@ -24483,12 +24484,13 @@
 			// save re-emits <!-- wp:… --> comments (not freeform HTML). Details
 			// always inserts as an island via action.block (never free HTML).
 			if ( /wp-block-(pullquote|table)/.test( action.html ) ) ensureBlocksMode();
-			// Replace the "/" block outright so the inserted markup lands at
-			// the top level (never wrapped inside the block's div).
+			// Replace the "/" block outright so the inserted markup lands
+			// beside it in its root (never wrapped inside the block's div).
 			target.insertAdjacentHTML( 'beforebegin', action.html );
 			const p = document.createElement( 'p' );
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
+			stampSlotDirtyFor( p );
 			const range = document.createRange();
 			range.selectNodeContents( p );
 			range.collapse( true );
@@ -24656,12 +24658,11 @@
 			const hidden = query ? 0 : items.filter( ( it ) => it[ 3 ] ).length;
 			// Browse-all opens the picker, which inserts islands — not offered
 			// inside container slots (the filtered basics ARE the slot set).
-			const inSlot = !! ( block && block.closest && block.closest( '.minn-slot' ) );
 			menu.innerHTML = filtered.map( ( idx, i ) => `
 				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" role="option" id="minn-slash-opt-${ i }" data-slash="${ idx }" aria-selected="${ i === selIdx ? 'true' : 'false' }">
 					<span class="minn-slash-icon" aria-hidden="true">${ items[ idx ][ 0 ] }</span>${ esc( items[ idx ][ 1 ] ) }${ items[ idx ][ 4 ] ? `<span class="minn-slash-ns">${ esc( items[ idx ][ 4 ] ) }</span>` : '' }
 				</div>` ).join( '' )
-				+ ( ! query && ! inSlot ? `<div class="minn-slash-hint" data-browse role="option" id="minn-slash-browse">Browse all${ hidden ? ` — ${ hidden } more blocks…` : '…' }</div>` : '' );
+				+ ( ! query ? `<div class="minn-slash-hint" data-browse role="option" id="minn-slash-browse">Browse all${ hidden ? ` — ${ hidden } more blocks…` : '…' }</div>` : '' );
 			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
 				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
 			);
@@ -24682,14 +24683,12 @@
 		const applyQuery = ( q ) => {
 			q = q.toLowerCase();
 			query = q;
-			// Inside a container slot only prose-safe basics apply — island
-			// inserts, media flows and search-only entries stay top-level.
-			const slotOnly = !! ( block && block.closest && block.closest( '.minn-slot' ) );
+			// Slots take the full menu since nested islands — island inserts,
+			// media flows and search-only entries all land inside the slot.
 			filtered = items
 				.map( ( it, i ) => i )
 				.filter( ( i ) => {
 					const it = items[ i ];
-					if ( slotOnly && ! ( it[ 2 ] && it[ 2 ].minnSlotSafe ) ) return false;
 					if ( it[ 3 ] && ! q ) return false;
 					if ( it[ 1 ].toLowerCase().includes( q ) || ( it[ 4 ] && it[ 4 ].toLowerCase().includes( q ) ) ) return true;
 					const kws = it[ 5 ];

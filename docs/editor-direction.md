@@ -366,10 +366,30 @@ one. Read the writing-context contract above before touching any of it.
    `container-slots` 44 re-pinned to the new model (a complex child no longer sinks
    the container — the acme columns is a slot island with a nested badge);
    `island-runs` 21 refixtured onto FOREIGN wrapper blocks (containers always slot
-   now, so runs belong to non-container islands). Still NOT in slots (the remaining
-   tail): island-class INSERT flows (slash menu stays prose-basics, paste still
-   refuses island payloads, media flow stays top-level), cover/media-text slots
-   (needs the content-container locator), and the chip-density design pass.
+   now, so runs belong to non-container islands).
+
+   ✅ *Insert flows shipped 2026-08-09 (same day, follow-up slice).* Slots take the
+   FULL insert surface now: the slash menu's slot filter and the `slotOk`/`minnSlotSafe`
+   mechanism are DELETED (every item incl. search-only design/pattern entries and
+   Browse all works in slots), the ⌘/ block picker targets the caret's root, embed-URL
+   paste islands in the slot, Minn-blocks paste payloads splice islands nested, and the
+   media flow (paste/drop image files, picker inserts) lands in the caret's slot.
+   Mechanics: `insertIsland`/`insertPatternIslands` are root-aware, pass `ed` (an
+   inserted group slots immediately) and stamp ancestor slots (insertAdjacentHTML fires
+   no input — the ⌘/ path never types a "/" so it can't rely on the typing stamp);
+   `runSlashAction`'s direct-DOM branches (action.html, action.block, command r.html)
+   stamp their landing paragraph; `insertImageFiles`' constrained-caret hop lands
+   inside the slot. Suites: nested-islands 20 (slash table insert + embed paste round-
+   trips), container-slots 44 re-pinned (full slot menu; island paste now SPLICES),
+   patterns 9, block-picker 10, stackable-designs 19/20. TWO SUITE-LATENCY PHANTOMS
+   fixed on the way: patterns and stackable-designs both used flat post-⌘S waits
+   (the rule-77 class) and read stale raw — both now poll for expected content.
+   stackable's remaining fail ('add clones the static column', 1 column where 2
+   expected) is PRE-EXISTING (bisected: identical at pre-nesting adec8ba) and smells
+   like upstream CDN design drift — re-pin at the next design-suite sweep, don't
+   chase it as a nesting regression. Remaining tail: cover/media-text slots (the
+   content-container locator) and the chip-density design pass; dogfood the whole
+   nesting cycle on anchor.localhost before it rides a release.
 
 **Watch items (not scope, but decide before shipping the above):**
 
