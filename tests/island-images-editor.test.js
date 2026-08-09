@@ -26,7 +26,8 @@ const G = [
 const gunit = ( g ) => `<!-- wp:image {"id":${ g.id },"sizeSlug":"large","linkDestination":"none"} -->\n<figure class="wp-block-image size-large"><img src="${ BASE }/wp-content/uploads/${ g.img }" alt="" class="wp-image-${ g.id }"/><figcaption class="wp-element-caption">${ g.cap }</figcaption></figure>\n<!-- /wp:image -->`;
 const GAL = ( set ) => `<!-- wp:gallery {"linkTo":"none"} -->\n<figure class="wp-block-gallery has-nested-images columns-default is-cropped">${ set.map( gunit ).join( '\n\n' ) }</figure>\n<!-- /wp:gallery -->`;
 
-const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
+const GRP = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class="wp-block-group">' + JP( S ) + '</div>\n<!-- /wp:group -->';
+const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + GRP + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
 
 ( async () => {
 	const t = reporter( 'island-images-editor' );
@@ -76,6 +77,11 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n<!-- wp:paragraph -->\n<p>Tai
 
 		// --- Reorder (HTML-sibling units) ---
 		t.check( 'slideshow inspector offers Edit images', await openIsland( 'jetpack/slideshow' ) );
+		const inspState = await page.evaluate( () => ( {
+			rows: document.querySelectorAll( '.minn-insp-img-row' ).length,
+			head: ( document.querySelector( '.minn-insp-imghead' ) || {} ).textContent || '',
+		} ) );
+		t.check( 'inspector shows count, no per-image rows', inspState.rows === 0 && /Images · 3/.test( inspState.head ), JSON.stringify( inspState ) );
 		await page.click( '#minn-insp-imgedit' );
 		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
 		t.check( 'modal shows three tiles', ( await page.$$( '.minn-imgedit-tile' ) ).length === 3 );
@@ -106,6 +112,28 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n<!-- wp:paragraph -->\n<p>Tai
 			t.check( 'remove is byte-exact', got === wantRemove, got === wantRemove ? '' : diffAt( got, wantRemove ) );
 		}
 
+		// --- Replace via tile click (keeps position, swaps image) ---
+		t.check( 'inspector reopens for replace', await openIsland( 'jetpack/slideshow' ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		const beforeThumb = await page.evaluate( () => document.querySelector( '.minn-imgedit-tile[data-i="0"] img' ).src );
+		await page.click( '.minn-imgedit-tile[data-i="0"]' );
+		await page.waitForSelector( '.minn-picker-item', { timeout: 10000 } );
+		await page.click( '.minn-picker-item' );
+		await page.waitForFunction( ( prev ) => {
+			const img = document.querySelector( '.minn-imgedit-tile[data-i="0"] img' );
+			return img && img.src !== prev;
+		}, beforeThumb, { timeout: 8000 } );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		const jpR = slice( raw, 'jetpack/slideshow' );
+		const idsR = ( jpR.match( /"ids":\[([\d,]+)\]/ ) || [] )[ 1 ] || '';
+		const replacedId = idsR.split( ',' )[ 0 ];
+		t.check( 'replace retargets ids[0]', !! replacedId && replacedId !== '902' && idsR.split( ',' )[ 1 ] === '903', idsR );
+		t.check( 'replaced unit carries new id, old id gone', jpR.includes( 'wp-image-' + replacedId ) && ! jpR.includes( 'wp-image-902' ) );
+		t.check( 'untouched unit byte-identical through replace', jpR.includes( slide( S[ 2 ] ) ) );
+
 		// --- Add via the media picker ---
 		t.check( 'inspector reopens after remove', await openIsland( 'jetpack/slideshow' ) );
 		await page.click( '#minn-insp-imgedit' );
@@ -122,10 +150,10 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n<!-- wp:paragraph -->\n<p>Tai
 		const jp = slice( raw, 'jetpack/slideshow' );
 		const idsM = jp.match( /"ids":\[([\d,]+)\]/ );
 		const newId = idsM ? idsM[ 1 ].split( ',' )[ 2 ] : '';
-		t.check( 'ids array grew to three with a real attachment id', !! newId && parseInt( newId, 10 ) > 0 && idsM[ 1 ].startsWith( '902,903,' ), idsM && idsM[ 1 ] );
+		t.check( 'ids array grew to three with a real attachment id', !! newId && parseInt( newId, 10 ) > 0 && idsM[ 1 ].split( ',' )[ 1 ] === '903', idsM && idsM[ 1 ] );
 		t.check( 'new unit carries the retargeted id', newId && jp.includes( 'wp-image-' + newId ) && jp.includes( 'data-id="' + newId + '"' ) );
 		t.check( 'new unit sheds proto srcset and caption', ! /srcset=/.test( jp ) && ! /figcaption/.test( jp ) );
-		t.check( 'existing units untouched by the add', jp.includes( slide( S[ 1 ] ) ) && jp.includes( slide( S[ 2 ] ) ) );
+		t.check( 'existing units untouched by the add', jp.includes( slide( S[ 2 ] ) ) );
 
 		// --- Core gallery (inner-block units, captions travel) ---
 		// Registered blocks get WP's one-time re-serialization on first save
@@ -146,6 +174,43 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n<!-- wp:paragraph -->\n<p>Tai
 			const got = slice( raw, 'gallery' );
 			t.check( 'gallery reorder byte-exact, captions travel with units', got === wantGal, got === wantGal ? '' : diffAt( got, wantGal ) );
 		}
+
+		// --- Click an image in the preview to open the tooling directly ---
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 400 );
+		const clicked = await page.evaluate( () => {
+			const isl = document.querySelector( '.minn-block-island[data-block="jetpack/slideshow"][data-imgtool="edit"]' );
+			const imgs = isl ? isl.querySelectorAll( '.minn-island-preview img' ) : [];
+			if ( ! imgs.length ) return null;
+			const target = imgs[ imgs.length - 1 ];
+			const src = target.getAttribute( 'src' );
+			target.click();
+			return src;
+		} );
+		t.check( 'slideshow island advertises image tooling', !! clicked, String( clicked ) );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		const focused = await page.evaluate( () => {
+			const f = document.querySelector( '.minn-imgedit-tile.flash' );
+			return f ? parseInt( f.dataset.i, 10 ) : -1;
+		} );
+		t.check( 'clicked image opens the editor with its tile flagged', focused >= 0, String( focused ) );
+		await page.click( '#minn-imgedit-cancel' );
+		await page.waitForTimeout( 400 );
+
+		// --- Containers list no images (each nested block manages its own) ---
+		for ( let i = 0; i < 8; i++ ) {
+			try {
+				await page.click( '.minn-block-island[data-block="group"] .minn-island-chip' );
+				await page.waitForSelector( '#minn-insp-close', { timeout: 5000 } );
+				break;
+			} catch ( e ) { await page.waitForTimeout( 1200 ); }
+		}
+		const grp = await page.evaluate( () => ( {
+			open: !! document.querySelector( '#minn-insp-close' ),
+			rows: document.querySelectorAll( '.minn-insp-img-row' ).length,
+			edit: !! document.querySelector( '#minn-insp-imgedit' ),
+		} ) );
+		t.check( 'container inspector lists no images', grp.open && grp.rows === 0 && ! grp.edit, JSON.stringify( grp ) );
 	} finally {
 		await deletePost( page, id );
 	}

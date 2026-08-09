@@ -1904,6 +1904,17 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-editor-body.locked img { max-width: 100%; height: auto; }
 .minn-editor-body img { max-width: 100%; height: auto; border-radius: 8px; }
 
+/* Row-layout containers: mirror the front end's horizontal flow in the
+   writing slot. Minn typography stays; only direction/justification carry
+   over — full styling remains the previews' job. */
+.minn-slot.minn-slot-flex { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4em 1.2em; }
+.minn-slot.minn-slot-flex.nowrap { flex-wrap: nowrap; overflow-x: auto; }
+.minn-slot.minn-slot-flex > * { margin: 0; }
+.minn-slot.minn-slot-flex > .minn-block-island { flex: 0 1 auto; min-width: 0; }
+.minn-slot.minn-slot-flex.justify-center { justify-content: center; }
+.minn-slot.minn-slot-flex.justify-end { justify-content: flex-end; }
+.minn-slot.minn-slot-flex.justify-between { justify-content: space-between; }
+
 /* ===== Island Images editor (reorder / remove / add) =====
    Sits UNDER the media picker overlay (z 55) so "Add images…" stacks the
    picker on top while the tile grid stays visible behind it. */
@@ -1928,6 +1939,9 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   overflow: hidden; aspect-ratio: 1; cursor: grab; background: var(--bg);
 }
 .minn-imgedit-tile.drag { opacity: 0.4; }
+.minn-imgedit-tile.flash { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Preview images that open image tooling on click read as clickable. */
+.minn-block-island[data-imgtool] .minn-island-preview img { cursor: pointer; }
 .minn-imgedit-tile img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .minn-imgedit-x {
   position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
