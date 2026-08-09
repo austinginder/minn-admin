@@ -15216,17 +15216,26 @@
 		return { head: base.head, open: base.open, tag: base.tag, preamble, inner, tail };
 	}
 
+	// A freeform chunk that is only plain HTML comments (+ whitespace) —
+	// AI-generated markup labels sections that way (<!-- Testimonial 1 -->).
+	// Preservable in a slot: comments become DOM comment nodes and the
+	// serializer re-emits them.
+	const slotIgnorableHtml = ( raw ) => String( raw ).replace( /<!--[\s\S]*?-->/g, '' ).trim() === '';
+
 	// A slot candidate's children: editable segments render as prose,
-	// complex segments become NESTED islands (or nested slot containers).
-	// Only unparseable inner markup or freeform HTML chunks disqualify —
-	// those keep the whole container a phase-2 island.
+	// complex segments become NESTED islands (or nested slot containers),
+	// comment-only freeform rides along verbatim. Only unparseable inner
+	// markup or freeform with real content disqualify — those keep the
+	// whole container a phase-2 island.
 	function slotChildSegments( inner ) {
 		const segs = tokenizeBlocks( inner );
 		if ( ! segs ) return null;
 		const out = [];
 		for ( const seg of segs ) {
 			if ( seg.type === 'html' ) {
-				if ( seg.raw.trim() ) return null;
+				if ( ! seg.raw.trim() ) continue;
+				if ( ! slotIgnorableHtml( seg.raw ) ) return null;
+				out.push( seg );
 				continue;
 			}
 			out.push( seg );
@@ -15248,6 +15257,7 @@
 		// renders as a plain island and upgrades on the next load (the
 		// insert-path asymmetry convention).
 		const childHtml = ( seg ) => {
+			if ( seg.type === 'html' ) return seg.raw.trim(); // comment-only freeform → DOM comment nodes
 			if ( segmentEditable( seg ) ) return editableSegmentHtml( seg );
 			if ( ! ed || ! ed.islands ) return null;
 			const ci = ed.islands.push( seg.raw ) - 1;
@@ -15269,9 +15279,14 @@
 			const segs = tokenizeBlocks( parts.inner );
 			if ( ! segs ) return null;
 			const cols = [];
+			let colCount = 0;
 			for ( const seg of segs ) {
 				if ( seg.type === 'html' ) {
-					if ( seg.raw.trim() ) return null;
+					if ( ! seg.raw.trim() ) continue;
+					// Comment-only freeform between columns (cosmetic in the
+					// DOM; the flush re-emits it from the stored raw).
+					if ( ! slotIgnorableHtml( seg.raw ) ) return null;
+					cols.push( seg.raw.trim() );
 					continue;
 				}
 				if ( seg.name.replace( /^core\//, '' ) !== 'column' ) return null;
@@ -15282,8 +15297,9 @@
 				const inner = joinKids( kids );
 				if ( inner == null ) return null;
 				cols.push( `${ cp.open }<div class="minn-slot" contenteditable="true">${ inner }</div></${ cp.tag }>` );
+				colCount++;
 			}
-			if ( ! cols.length ) return null;
+			if ( ! colCount ) return null;
 			/* translators: island hover hint on an editable columns container */
 			const colHint = __( 'Columns — write inside · layout via ⚙' );
 			return `<div class="minn-block-island minn-slot-island minn-cols-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
@@ -16646,6 +16662,14 @@
 			if ( n.nodeType === Node.TEXT_NODE ) {
 				const t = n.textContent.trim();
 				if ( t ) pushBlock( 'paragraph', null, `<p>${ esc( t ) }</p>` );
+				return;
+			}
+			// Plain HTML comments (AI-generated markup labels its sections
+			// with them) are legal freeform between blocks — re-emit so a
+			// slot flush can't drop them. Never wp: comments: blocks live as
+			// island elements or prose here, so a stray one would corrupt.
+			if ( n.nodeType === Node.COMMENT_NODE ) {
+				if ( n.data && ! /^\s*\/?wp:/.test( n.data ) ) out.push( '<!--' + n.data + '-->' );
 				return;
 			}
 			if ( n.nodeType !== Node.ELEMENT_NODE ) return;

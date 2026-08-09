@@ -371,5 +371,76 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		&& mtRaw.includes( '<figure class="wp-block-media-text__media"><img src="https://minnadmin.localhost/wp-includes/images/media/default.svg" alt=""/></figure>' ), mtRaw );
 
 	await deletePost( page, id3 );
+
+	/* ===== Comment-tolerant slotting (GH #4 follow-up, the line-return
+	 * report): AI-generated markup labels sections with plain HTML comments
+	 * (<!-- Testimonial 1 -->) — those must not sink a container to a
+	 * phase-2 island, and a DIRTY flush must re-emit them (the serializer's
+	 * COMMENT_NODE path). ===== */
+	const CONTENT4 = [
+		'<!-- wp:group {"layout":{"type":"constrained"}} -->',
+		'<div class="wp-block-group"><!-- wp:paragraph -->',
+		'<p>Before the label.</p>',
+		'<!-- /wp:paragraph -->',
+		'',
+		'<!-- Section label -->',
+		'<!-- wp:paragraph -->',
+		'<p>After the label.</p>',
+		'<!-- /wp:paragraph --></div>',
+		'<!-- /wp:group -->',
+	].join( '\n' );
+	const id4 = await createPost( page, { title: 'Comment slots ' + Date.now(), content: CONTENT4, status: 'draft' } );
+	await page.goto( BASE + '/minn-admin/editor/posts/' + id4, { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-editor-body .minn-slot', { timeout: 25000 } );
+	await page.waitForTimeout( 800 );
+
+	const rawOf4 = () => page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw&_cb=' + Date.now(), {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'include',
+		} );
+		return ( await r.json() ).content.raw;
+	}, id4 );
+
+	const commentShape = await page.evaluate( () => {
+		const isl = document.querySelector( '.minn-slot-island' );
+		const slot = isl && isl.querySelector( '.minn-slot' );
+		let hasComment = false;
+		if ( slot ) {
+			for ( const n of slot.childNodes ) {
+				if ( n.nodeType === Node.COMMENT_NODE && /Section label/.test( n.data ) ) hasComment = true;
+			}
+		}
+		return { slots: !! slot, hasComment, paras: slot ? slot.querySelectorAll( ':scope > p' ).length : 0 };
+	} );
+	t.check( 'comment-labeled group still slots (comment in DOM)', commentShape.slots && commentShape.hasComment && commentShape.paras >= 2, JSON.stringify( commentShape ) );
+
+	// Dirty the slot (Enter = a line return, the report's exact ask), save:
+	// the comment must survive the re-serialize.
+	await page.evaluate( () => {
+		const slot = document.querySelector( '.minn-slot-island .minn-slot' );
+		const p = [ ...slot.querySelectorAll( ':scope > p' ) ].find( ( x ) => /After the label/.test( x.textContent ) );
+		slot.focus( { preventScroll: true } );
+		const r = document.createRange();
+		r.selectNodeContents( p );
+		r.collapse( false );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+	} );
+	await page.keyboard.press( 'Enter' );
+	await page.keyboard.type( 'Line return line.' );
+	await page.keyboard.press( 'Meta+s' );
+	let raw4 = '';
+	for ( let i = 0; i < 15; i++ ) {
+		await page.waitForTimeout( 900 );
+		raw4 = await rawOf4();
+		if ( raw4.includes( 'Line return line.' ) ) break;
+	}
+	t.check( 'Enter creates a saved paragraph beside the comment',
+		/<!-- wp:paragraph -->\s*<p>Line return line\.<\/p>/.test( raw4 ), raw4 );
+	t.check( 'plain comment re-emitted by the dirty flush',
+		raw4.includes( '<!-- Section label -->' ) && raw4.indexOf( '<!-- Section label -->' ) < raw4.indexOf( 'After the label.' ), raw4 );
+
+	await deletePost( page, id4 );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
