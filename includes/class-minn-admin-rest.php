@@ -3010,9 +3010,12 @@ class Minn_Admin_REST {
 		if ( current_user_can( 'update_plugins' ) ) {
 			$updates = get_site_transient( 'update_plugins' );
 			$checked = $updates && ! empty( $updates->last_checked ) ? (int) $updates->last_checked : time();
-			if ( $updates && ! empty( $updates->response ) ) {
+			// real_plugin_updates: the transient's stale already-installed
+			// offers never become notification rows.
+			$real = self::real_plugin_updates();
+			if ( $real ) {
 				$all_plugins = get_plugins();
-				foreach ( $updates->response as $file => $data ) {
+				foreach ( $real as $file => $data ) {
 					$name    = isset( $all_plugins[ $file ]['Name'] ) ? $all_plugins[ $file ]['Name'] : $file;
 					$items[] = array(
 						'id'     => 'plugin-' . $file . '-' . $data->new_version,
@@ -3035,8 +3038,9 @@ class Minn_Admin_REST {
 		if ( current_user_can( 'update_themes' ) ) {
 			$tupdates = get_site_transient( 'update_themes' );
 			$tchecked = $tupdates && ! empty( $tupdates->last_checked ) ? (int) $tupdates->last_checked : time();
-			if ( $tupdates && ! empty( $tupdates->response ) ) {
-				foreach ( $tupdates->response as $stylesheet => $data ) {
+			$treal    = self::real_theme_updates();
+			if ( $treal ) {
+				foreach ( $treal as $stylesheet => $data ) {
 					$theme   = wp_get_theme( $stylesheet );
 					$ver     = is_array( $data ) ? ( $data['new_version'] ?? '' ) : '';
 					$tname   = $theme->exists() ? $theme->get( 'Name' ) : $stylesheet;
@@ -3154,18 +3158,69 @@ class Minn_Admin_REST {
 	/**
 	 * Map of plugin_file => new_version for available updates.
 	 */
-	public static function plugin_updates() {
+	/**
+	 * The update_plugins transient serves STALE offers routinely — an update
+	 * installed elsewhere (WP-CLI, wp-admin, an auto-update) leaves the old
+	 * offer in `response` until the next refresh, and wp-admin's screens
+	 * paper over it by refreshing on load. Validate every offer against the
+	 * LIVE plugin headers — never the transient's own `checked` map, which
+	 * is exactly the part that goes stale — and drop satisfied offers plus
+	 * rows for plugins that no longer exist.
+	 */
+	private static function real_plugin_updates() {
 		$updates = get_site_transient( 'update_plugins' );
-		$map     = array();
-		if ( $updates && ! empty( $updates->response ) ) {
-			foreach ( $updates->response as $file => $data ) {
-				$map[ $file ] = $data->new_version;
-			}
+		$out     = array();
+		if ( ! $updates || empty( $updates->response ) ) {
+			return $out;
 		}
-		$themes    = current_user_can( 'update_themes' ) ? get_site_transient( 'update_themes' ) : null;
+		$all = self::all_plugins();
+		foreach ( $updates->response as $file => $data ) {
+			$new = isset( $data->new_version ) ? (string) $data->new_version : '';
+			if ( '' === $new || ! isset( $all[ $file ] ) ) {
+				continue;
+			}
+			$installed = (string) ( $all[ $file ]['Version'] ?? '' );
+			if ( '' !== $installed && version_compare( $installed, $new, '>=' ) ) {
+				continue;
+			}
+			$out[ $file ] = $data;
+		}
+		return $out;
+	}
+
+	/** Same staleness gate for themes, against the live stylesheet headers. */
+	private static function real_theme_updates() {
+		$updates = get_site_transient( 'update_themes' );
+		$out     = array();
+		if ( ! $updates || empty( $updates->response ) ) {
+			return $out;
+		}
+		foreach ( $updates->response as $stylesheet => $data ) {
+			$new = is_array( $data ) ? (string) ( $data['new_version'] ?? '' ) : '';
+			if ( '' === $new ) {
+				continue;
+			}
+			$theme = wp_get_theme( $stylesheet );
+			if ( ! $theme->exists() ) {
+				continue;
+			}
+			$installed = (string) $theme->get( 'Version' );
+			if ( '' !== $installed && version_compare( $installed, $new, '>=' ) ) {
+				continue;
+			}
+			$out[ $stylesheet ] = $data;
+		}
+		return $out;
+	}
+
+	public static function plugin_updates() {
+		$map = array();
+		foreach ( self::real_plugin_updates() as $file => $data ) {
+			$map[ $file ] = $data->new_version;
+		}
 		$theme_map = array();
-		if ( $themes && ! empty( $themes->response ) ) {
-			foreach ( $themes->response as $stylesheet => $data ) {
+		if ( current_user_can( 'update_themes' ) ) {
+			foreach ( self::real_theme_updates() as $stylesheet => $data ) {
 				$theme_map[ $stylesheet ] = is_array( $data ) ? ( $data['new_version'] ?? '' ) : '';
 			}
 		}
@@ -5171,13 +5226,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 
 		wp_update_plugins();
-		$updates = get_site_transient( 'update_plugins' );
-		if ( ! $updates || empty( $updates->response ) ) {
+		// real_plugin_updates: even freshly refreshed, never reinstall a
+		// plugin whose installed version already satisfies the offer.
+		$pending_before = self::real_plugin_updates();
+		if ( ! $pending_before ) {
 			return rest_ensure_response( array( 'updated' => array() ) );
 		}
-
-		$pending_before = is_array( $updates->response ) ? $updates->response : array();
-		$files          = array_keys( $pending_before );
+		$files = array_keys( $pending_before );
 		$skin           = new WP_Ajax_Upgrader_Skin();
 		$upgrader       = new Plugin_Upgrader( $skin );
 		$results        = $upgrader->bulk_upgrade( $files );

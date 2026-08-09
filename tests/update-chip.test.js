@@ -46,7 +46,10 @@ const path = require( 'path' );
 			return c && ! c.hidden;
 		}, null, { timeout: 15000 } );
 		const chipText = await page.evaluate( () => document.querySelector( '#minn-upd-chip-text' ).textContent );
-		t.check( 'Chip appears with the plugin phase', /Updating 1 plugin/.test( chipText ), chipText );
+		// Count-agnostic: real pending updates (license-gated paid fixtures)
+		// can ride along with the fixture offer — the phase label just has
+		// to be the plugin phase.
+		t.check( 'Chip appears with the plugin phase', /Updating \d+ plugins?/.test( chipText ), chipText );
 
 		// THE ask: close the panel mid-run — the chip stays as ambient feedback.
 		// evaluate-click: the open panel's overlay intercepts a real click on
@@ -72,6 +75,32 @@ const path = require( 'path' );
 	} finally {
 		try {
 			wpCli( 'option delete minn_test_plugin_update' );
+			wpCli( `eval 'delete_site_transient( "update_plugins" ); wp_update_plugins();'` );
+		} catch ( e ) { /* cleanup is best-effort */ }
+	}
+
+	/* ===== Staleness filter: an offer AT the installed version (the classic
+	 * update-already-installed transient bug) must never surface — not in
+	 * the /plugin-updates map, not as a notification row. ===== */
+	try {
+		wpCli( 'option update minn_test_plugin_update_stale koko-analytics/koko-analytics.php' );
+		wpCli( `eval 'delete_site_transient( "update_plugins" );'` );
+		const filtered = await page.evaluate( async () => {
+			const h = { 'X-WP-Nonce': window.MINN.nonce };
+			const up = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/plugin-updates?_cb=' + Math.random(), { headers: h, credentials: 'same-origin' } ) ).json();
+			const notif = await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/notifications?_cb=' + Math.random(), { headers: h, credentials: 'same-origin' } ) ).json();
+			return {
+				inMap: !! ( up.updates && up.updates[ 'koko-analytics/koko-analytics.php' ] ),
+				inNotif: ( notif.items || [] ).some( ( i ) => i.update && i.update.plugin === 'koko-analytics/koko-analytics.php' ),
+				rawOffer: await ( async () => true )(),
+			};
+		} );
+		const rawHasOffer = wpCli( `eval '$tr = get_site_transient( "update_plugins" ); echo isset( $tr->response["koko-analytics/koko-analytics.php"] ) ? "yes" : "no";'` );
+		t.check( 'stale offer present in the raw transient', rawHasOffer === 'yes', rawHasOffer );
+		t.check( 'stale offer filtered from /plugin-updates and notifications', ! filtered.inMap && ! filtered.inNotif, JSON.stringify( filtered ) );
+	} finally {
+		try {
+			wpCli( 'option delete minn_test_plugin_update_stale' );
 			wpCli( `eval 'delete_site_transient( "update_plugins" ); wp_update_plugins();'` );
 		} catch ( e ) { /* cleanup is best-effort */ }
 	}
