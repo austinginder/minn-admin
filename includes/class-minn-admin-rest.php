@@ -5845,12 +5845,75 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		return '';
 	}
 
+	/** Where the pre-edit copy of wp-config.php lives (see backup_wpconfig). */
+	private static function wpconfig_backup_path( $path ) {
+		return dirname( $path ) . '/wp-config-minn-bak.php';
+	}
+
+	/**
+	 * Copy wp-config.php next to itself, in a form the web server can never
+	 * disclose.
+	 *
+	 * Two properties do the work:
+	 *
+	 *   1. The name ENDS IN .php, so nginx's `location ~ \.php$` and Apache's
+	 *      `<FilesMatch \.php$>` hand it to PHP instead of serving it as static
+	 *      text. A `.bak`/`.minn-bak` suffix does not match those rules and is
+	 *      served verbatim — DB credentials and the whole salt block, at a
+	 *      fixed path published in this plugin's source.
+	 *   2. It opens with `<?php exit;`, so on the off chance someone requests
+	 *      it, it stops on line 1 rather than defining the DB constants and
+	 *      running `require_once ABSPATH . 'wp-settings.php'` the way a bare
+	 *      copy would — a copy is otherwise a second, unauthenticated
+	 *      WordPress bootstrap.
+	 *
+	 * Restoring is a manual, emergency-only step: delete that first line and
+	 * rename over wp-config.php. The header says so in the file.
+	 */
+	private static function backup_wpconfig( $path ) {
+		$contents = @file_get_contents( $path );
+		if ( false === $contents ) {
+			return '';
+		}
+		$header = "<?php exit; /* Minn Admin backup of wp-config.php, taken "
+			. gmdate( 'Y-m-d H:i:s' ) . " UTC before a debug-constant edit.\n"
+			. "To restore: delete this first line, then rename this file over wp-config.php.\n"
+			. "The exit keeps the web server from ever serving these credentials. */ ?>\n";
+		$dest = self::wpconfig_backup_path( $path );
+		return false === file_put_contents( $dest, $header . $contents ) ? '' : $dest;
+	}
+
+	/**
+	 * Remove the web-root wp-config backup older versions left behind.
+	 *
+	 * Up to 0.26.0 every debug-constant toggle wrote `wp-config.php.minn-bak`
+	 * next to wp-config.php and never removed it. That name does not end in
+	 * .php, so the web server serves it as static text — any install that used
+	 * the toggle is still handing out its DB credentials and salts at a fixed,
+	 * published path. Sweep it on the settings read (cheap, admin-gated, runs
+	 * whenever the System page loads) and again on every write.
+	 */
+	private static function purge_legacy_wpconfig_backup() {
+		$path = self::wpconfig_path();
+		if ( ! $path ) {
+			return false;
+		}
+		$legacy = $path . '.minn-bak';
+		return file_exists( $legacy ) ? @unlink( $legacy ) : false;
+	}
+
 	/**
 	 * Whether editing wp-config is possible here, and the current state of each
 	 * debug constant. A constant defined OUTSIDE wp-config (a mu-plugin, the
 	 * host's prepend) is 'locked' — editing wp-config wouldn't change it.
 	 */
 	private static function config_state() {
+		// Clean up the web-root backup older versions left behind (see
+		// purge_legacy_wpconfig_backup). This read is admin-gated and runs
+		// whenever the System page loads, which is the earliest reliable
+		// moment to get the credentials off a public path.
+		self::purge_legacy_wpconfig_backup();
+
 		$path       = self::wpconfig_path();
 		$writable   = $path && wp_is_writable( $path );
 		$disallowed = ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ) || ( is_multisite() && ! is_super_admin() );
@@ -5890,9 +5953,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * Set a whitelisted boolean debug constant in wp-config.php. Every write is
 	 * gated (writability / DISALLOW_FILE_MODS / multisite super-admin), scoped
 	 * to the whitelist, syntax-validated before it touches disk, and preceded
-	 * by a .minn-bak backup.
+	 * by a backup the web server cannot disclose (see backup_wpconfig).
 	 */
 	public static function set_config_constant( WP_REST_Request $request ) {
+		self::purge_legacy_wpconfig_backup();
 		$name  = (string) $request['constant'];
 		$value = (bool) $request['value'];
 
@@ -5944,7 +6008,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'parse_error', 'The change would break wp-config.php, so it was not saved.', array( 'status' => 500 ) );
 		}
 
-		@copy( $path, $path . '.minn-bak' );
+		self::backup_wpconfig( $path );
 		if ( false === file_put_contents( $path, $new ) ) {
 			return new WP_Error( 'write_failed', 'Could not write wp-config.php.', array( 'status' => 500 ) );
 		}
