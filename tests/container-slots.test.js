@@ -97,16 +97,20 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 			slotAStyledMarker: slots[ 0 ]?.querySelector( '.minn-slot > p[data-minn-attrs]' )?.dataset.minnAttrs || '',
 			wrapperClass: slots[ 0 ]?.querySelector( '.wp-block-group' ) ? true : false,
 			columnsIsIsland: !! cols && ! cols.classList.contains( 'minn-slot-island' ),
-			columnsRuns: cols ? cols.querySelectorAll( '.minn-island-run' ).length : 0,
+			nestedBadge: !! document.querySelector( '.minn-slot .minn-block-island[data-block="acme/badge"]' ),
+			nestedBadgeSiblingP: !! document.querySelector( '.minn-slot .minn-block-island[data-block="acme/badge"]' )?.parentElement.querySelector( ':scope > p' ),
 			colsSlots: document.querySelectorAll( '.minn-cols-island' ).length,
-			colsSlotCount: document.querySelector( '.minn-cols-island' ) ? document.querySelector( '.minn-cols-island' ).querySelectorAll( '.minn-slot' ).length : 0,
+			colsSlotCounts: [ ...document.querySelectorAll( '.minn-cols-island' ) ].map( ( c ) => c.querySelectorAll( '.minn-slot' ).length ).join( ',' ),
 		};
 	} );
-	t.check( 'both groups + simple columns render as slot islands', shape.slotIslands === 3 && shape.slotEditable, JSON.stringify( shape ) );
+	t.check( 'both groups + BOTH columns render as slot islands', shape.slotIslands === 4 && shape.slotEditable, JSON.stringify( shape ) );
 	t.check( 'children are real blocks inside the wrapper', shape.slotAH2 && shape.wrapperClass, JSON.stringify( shape ) );
 	t.check( 'styled child carries its phase-1 marker', shape.slotAStyledMarker === '{"fontSize":"large"}', shape.slotAStyledMarker );
-	t.check( 'complex columns stays a phase-2 island with runs', shape.columnsIsIsland && shape.columnsRuns === 2, JSON.stringify( shape ) );
-	t.check( 'all-simple columns becomes a two-slot island', shape.colsSlots === 1 && shape.colsSlotCount === 2, JSON.stringify( shape ) );
+	// Nested-content endgame: a columns with a complex child is a slot
+	// island too — the complex child becomes a NESTED island inside its
+	// column slot, with the sibling paragraph editable prose around it.
+	t.check( 'complex child becomes a nested island inside the column', shape.columnsIsIsland === false && shape.nestedBadge && shape.nestedBadgeSiblingP, JSON.stringify( shape ) );
+	t.check( 'both columns are multi-slot islands (1 + 2 slots)', shape.colsSlots === 2 && shape.colsSlotCounts === '1,2', JSON.stringify( shape ) );
 
 	const caretEnd = ( sel ) => page.evaluate( ( s ) => {
 		const el = document.querySelector( s );
@@ -144,7 +148,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		islands: document.querySelectorAll( '.minn-slot-island' ).length,
 		h2: document.querySelector( '.minn-slot > h2' )?.textContent,
 	} ) );
-	t.check( 'backspace inside slot never arms the container', ! guardState.armed && guardState.islands === 3 && guardState.h2 === 'Slot heading edit', JSON.stringify( guardState ) );
+	t.check( 'backspace inside slot never arms the container', ! guardState.armed && guardState.islands === 4 && guardState.h2 === 'Slot heading edit', JSON.stringify( guardState ) );
 
 	// 2. Inline markdown works inside the slot.
 	await page.click( '.minn-slot-island .minn-slot > p' );
@@ -299,18 +303,31 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'wrapper bytes still verbatim', gb.startsWith( '<!-- wp:group {"layout":{"type":"flow"},"style":{"spacing":{"padding":{"top":"20px"}}}} -->\n<div class="wp-block-group" style="padding-top:20px">' ), '' );
 
 	// ---- Columns slots: line returns + editing per column ----
-	await page.click( '.minn-cols-island .minn-slot:first-of-type > p' );
-	await caretEnd( '.minn-cols-island .wp-block-column:first-child .minn-slot > p' );
+	// The acme columns is a (one-slot) cols island now too — target the
+	// TWO-slot island (the 66/33 fixture) explicitly.
+	const twoColSel = () => [ ...document.querySelectorAll( '.minn-cols-island' ) ]
+		.find( ( c ) => c.querySelectorAll( '.minn-slot' ).length === 2 );
+	await page.evaluate( `( () => {
+		const island = ( ${ twoColSel.toString() } )();
+		const p = island.querySelectorAll( '.minn-slot' )[ 0 ].querySelector( 'p' );
+		p.closest( '.minn-slot' ).focus( { preventScroll: true } );
+		const r = document.createRange();
+		r.selectNodeContents( p );
+		r.collapse( false );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+	} )()` );
 	await page.keyboard.press( 'Enter' );
 	await page.keyboard.type( 'Second line in wide column.' );
-	const colShape = await page.evaluate( () => {
-		const island = document.querySelector( '.minn-cols-island' );
+	const colShape = await page.evaluate( `( () => {
+		const island = ( ${ twoColSel.toString() } )();
 		const firstSlot = island.querySelectorAll( '.minn-slot' )[ 0 ];
 		return { paras: firstSlot.querySelectorAll( ':scope > p' ).length, armed: island.className.includes( 'armed' ) };
-	} );
+	} )()` );
 	t.check( 'Enter makes a new paragraph inside a column', colShape.paras >= 2 && ! colShape.armed, JSON.stringify( colShape ) );
-	await page.evaluate( () => {
-		const slots = document.querySelector( '.minn-cols-island' ).querySelectorAll( '.minn-slot' );
+	await page.evaluate( `( () => {
+		const slots = ( ${ twoColSel.toString() } )().querySelectorAll( '.minn-slot' );
 		const p = slots[ 1 ].querySelector( 'p' );
 		const r = document.createRange();
 		r.selectNodeContents( p );
@@ -318,7 +335,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		const ws = window.getSelection();
 		ws.removeAllRanges();
 		ws.addRange( r );
-	} );
+	} )()` );
 	await page.keyboard.type( ' Edited narrow.' );
 	raw = await save( 'Second line in wide column.' );
 	const colsStart = raw.indexOf( '<!-- wp:columns -->\n<div class="wp-block-columns"><!-- wp:column {"width":"66.66%"} -->' );

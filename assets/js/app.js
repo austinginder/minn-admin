@@ -15042,7 +15042,7 @@
 			if ( seg.type === 'html' ) return seg.raw;
 			if ( segmentEditable( seg ) ) return editableSegmentHtml( seg );
 			const idx = ed.islands.push( seg.raw ) - 1;
-			return islandHtml( idx, seg.name, seg.raw );
+			return islandHtml( idx, seg.name, seg.raw, ed );
 		} ).join( '\n' );
 	}
 
@@ -15158,8 +15158,10 @@
 		return { head, open, tag, inner, tail };
 	}
 
-	// A slot candidate's children: every segment must be an editable simple
-	// block; inter-block whitespace passes, anything else disqualifies.
+	// A slot candidate's children: editable segments render as prose,
+	// complex segments become NESTED islands (or nested slot containers).
+	// Only unparseable inner markup or freeform HTML chunks disqualify —
+	// those keep the whole container a phase-2 island.
 	function slotChildSegments( inner ) {
 		const segs = tokenizeBlocks( inner );
 		if ( ! segs ) return null;
@@ -15169,23 +15171,43 @@
 				if ( seg.raw.trim() ) return null;
 				continue;
 			}
-			if ( ! segmentEditable( seg ) ) return null;
 			out.push( seg );
 		}
 		// An EMPTY container is a legal slot (the trailing-affordance seed
-		// makes it typeable); null is reserved for complex/unparseable.
+		// makes it typeable); null is reserved for unparseable.
 		return out;
 	}
 
-	function slotIslandHtml( idx, name, raw ) {
+	function slotIslandHtml( idx, name, raw, ed ) {
 		const parts = slotParseContainer( raw );
 		if ( ! parts ) return null;
 		const short = String( name || '' ).replace( /^core\//, '' );
 		const chip = `<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( short ) } block">⚙ ${ esc( short ) }</button>`;
+		// One slot child → its editable HTML, or a NESTED island registered
+		// in ed.islands (a complex leaf keeps its protected card, a nested
+		// container recurses into its own slot island). Without ed to
+		// register into, a complex child sinks the whole slot: the container
+		// renders as a plain island and upgrades on the next load (the
+		// insert-path asymmetry convention).
+		const childHtml = ( seg ) => {
+			if ( segmentEditable( seg ) ) return editableSegmentHtml( seg );
+			if ( ! ed || ! ed.islands ) return null;
+			const ci = ed.islands.push( seg.raw ) - 1;
+			return islandHtml( ci, seg.name, seg.raw, ed );
+		};
+		const joinKids = ( kids ) => {
+			const parts2 = [];
+			for ( const k of kids ) {
+				const h = childHtml( k );
+				if ( h == null ) return null;
+				parts2.push( h );
+			}
+			return parts2.join( '\n' );
+		};
 		if ( 'columns' === short ) {
-			// Multi-slot: every direct child must be a core/column whose own
-			// children are all simple — one editable slot per column, all the
-			// wrapper bytes (columns AND columns' columns) preserved verbatim.
+			// Multi-slot: every direct child must be a core/column — one
+			// editable slot per column, all the wrapper bytes (columns AND
+			// columns' columns) preserved verbatim.
 			const segs = tokenizeBlocks( parts.inner );
 			if ( ! segs ) return null;
 			const cols = [];
@@ -15199,7 +15221,9 @@
 				if ( ! cp ) return null;
 				const kids = slotChildSegments( cp.inner );
 				if ( ! kids ) return null;
-				cols.push( `${ cp.open }<div class="minn-slot" contenteditable="true">${ kids.map( ( k ) => editableSegmentHtml( k ) ).join( '\n' ) }</div></${ cp.tag }>` );
+				const inner = joinKids( kids );
+				if ( inner == null ) return null;
+				cols.push( `${ cp.open }<div class="minn-slot" contenteditable="true">${ inner }</div></${ cp.tag }>` );
 			}
 			if ( ! cols.length ) return null;
 			/* translators: island hover hint on an editable columns container */
@@ -15212,7 +15236,8 @@
 		}
 		const kids = slotChildSegments( parts.inner );
 		if ( ! kids ) return null;
-		const childrenHtml = kids.map( ( seg ) => editableSegmentHtml( seg ) ).join( '\n' );
+		const childrenHtml = joinKids( kids );
+		if ( childrenHtml == null ) return null;
 		/* translators: island hover hint on an editable group container */
 		const hint = __( 'Grouped content — write inside · layout via ⚙' );
 		return `<div class="minn-block-island minn-slot-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
@@ -15246,11 +15271,17 @@
 	// Direct-DOM edits inside a container slot never fire `input`, so the
 	// slot's dirty stamp (which gates flushSlotIsland) must be set by hand.
 	// execCommand paths need no call — Blink fires `input` on the slot host
-	// (probed) and the body's input handler stamps it. No-op outside slots.
+	// (probed) and the body's input handler stamps it. Stamps EVERY ancestor
+	// slot island: an outer container gated on its own stamp would otherwise
+	// emit stale raw and silently drop a nested edit. No-op outside slots.
 	function stampSlotDirtyFor( el ) {
-		const slot = el && el.closest && el.closest( '.minn-slot' );
-		const isl = slot && slot.closest( '.minn-block-island' );
-		if ( isl ) isl.dataset.minnSlotDirty = '1';
+		let slot = el && el.closest && el.closest( '.minn-slot' );
+		while ( slot ) {
+			const isl = slot.closest( '.minn-block-island' );
+			if ( ! isl ) return;
+			isl.dataset.minnSlotDirty = '1';
+			slot = isl.parentElement && isl.parentElement.closest( '.minn-slot' );
+		}
 	}
 
 	// Splice a dirty slot's serialized children back between the container's
@@ -15263,7 +15294,10 @@
 		if ( ! Number.isFinite( idx ) || islands[ idx ] == null ) return;
 		const parts = slotParseContainer( String( islands[ idx ] ) );
 		if ( ! parts ) return;
-		const slots = $$( '.minn-slot', el );
+		// OWN slots only — with nesting, a descendant query would also grab
+		// the slots of nested containers (and misalign the columns walk).
+		// Nested slot islands flush through serializeToBlocks' recursion.
+		const slots = $$( '.minn-slot', el ).filter( ( s ) => s.closest( '.minn-slot-island' ) === el );
 		if ( ! slots.length ) return;
 		if ( el.classList.contains( 'minn-cols-island' ) ) {
 			// Column-by-column: each column's serialized children splice back
@@ -15290,12 +15324,14 @@
 	// Special interactive islands (shortcode, details, buttons) host live
 	// fields and commit into ed.islands[idx] on every edit — serialize never
 	// reads the fields themselves, and renderIslandPreviews must not overwrite them.
-	function islandHtml( idx, name, raw ) {
+	function islandHtml( idx, name, raw, ed ) {
 		const short = String( name || '' ).replace( /^core\//, '' );
 		if ( SLOT_BLOCKS.includes( short ) ) {
-			// Editable container: all-simple children get a real typing slot;
-			// any complex child falls through to the standard island below.
-			const slotted = slotIslandHtml( idx, name, raw );
+			// Editable container: children get a real typing slot; complex
+			// children become nested islands (ed registers them) and nested
+			// containers recurse. Unparseable inner markup falls through to
+			// the standard island below.
+			const slotted = slotIslandHtml( idx, name, raw, ed );
 			if ( slotted ) return slotted;
 		}
 		if ( short === 'shortcode' ) {
@@ -15708,6 +15744,8 @@
 		const next = shortcodeTemplate( input.value );
 		if ( ed.islands[ idx ] === next ) return;
 		ed.islands[ idx ] = next;
+		// Nested in a slot: ancestors must re-splice (idempotent elsewhere).
+		stampSlotDirtyFor( input );
 		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
 	}
 
@@ -15723,6 +15761,7 @@
 		const next = buildDetailsRaw( sum.value, body.innerHTML, prev.attrs );
 		if ( ed.islands[ idx ] === next ) return;
 		ed.islands[ idx ] = next;
+		stampSlotDirtyFor( islandEl );
 		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
 	}
 
@@ -15914,6 +15953,7 @@
 		const next = buildButtonsRaw( collectButtonsFromIsland( islandEl ), wrapAttrs );
 		if ( ed.islands[ idx ] === next ) return;
 		ed.islands[ idx ] = next;
+		stampSlotDirtyFor( islandEl );
 		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
 	}
 
@@ -15993,6 +16033,10 @@
 			const idx = parseInt( island.dataset.island, 10 );
 			if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
 			if ( isLiveFieldIsland( island ) ) return;
+			// Slot islands hold live editable DOM, not a preview — and a
+			// descendant query here would find a NESTED island's preview and
+			// walk the wrong raw. Nested islands arm themselves in this loop.
+			if ( island.classList.contains( 'minn-slot-island' ) ) return;
 			const short = String( island.dataset.block || '' ).replace( /^core\//, '' );
 			if ( ISLAND_RUN_SKIP_BLOCKS.includes( short ) ) return;
 			const preview = island.querySelector( '.minn-island-preview' );
@@ -16214,12 +16258,16 @@
 		const next = island.nextSibling;
 		if ( ed && ed.islands && ed.islands[ idx ] != null ) ed.islands[ idx ] = null;
 		island.remove();
+		// Nested island: direct-DOM removal fires no input — stamp the
+		// ancestor slots dirty by hand (and again on restore).
+		stampSlotDirtyFor( parent );
 		updateEditorStats();
 		if ( ed && ed.id ) scheduleAutosave();
 		toastAction( 'Block removed · ⌘Z', 'Undo', () => {
 			if ( ! parent.isConnected ) return;
 			if ( ed && ed.islands && template != null ) ed.islands[ idx ] = template;
 			parent.insertBefore( island, next && next.isConnected && next.parentNode === parent ? next : null );
+			stampSlotDirtyFor( parent );
 			updateEditorStats();
 			scheduleAutosave();
 		} );
@@ -16237,11 +16285,13 @@
 		const next = el.nextSibling;
 		el.classList.remove( 'minn-island-armed' );
 		el.remove();
+		stampSlotDirtyFor( parent );
 		updateEditorStats();
 		scheduleAutosave();
 		toastAction( 'Block removed · ⌘Z', 'Undo', () => {
 			if ( ! parent.isConnected ) return;
 			parent.insertBefore( el, next && next.isConnected && next.parentNode === parent ? next : null );
+			stampSlotDirtyFor( parent );
 			updateEditorStats();
 			scheduleAutosave();
 		} );
@@ -20118,13 +20168,12 @@
 				island.dataset.btnStamped = '1';
 			} );
 			body.addEventListener( 'input', ( e ) => {
-				// Container-slot edits: stamp the island dirty so serialize
-				// splices the slot instead of emitting the stale stored raw.
-				// No return — the main input handlers still run for it.
-				const slotIn = e.target.closest && e.target.closest( '.minn-slot' );
-				if ( slotIn ) {
-					const isl = slotIn.closest( '.minn-block-island' );
-					if ( isl ) isl.dataset.minnSlotDirty = '1';
+				// Container-slot edits: stamp the island (and every ancestor
+				// slot island) dirty so serialize splices the slot instead of
+				// emitting the stale stored raw. No return — the main input
+				// handlers still run for it.
+				if ( e.target.closest && e.target.closest( '.minn-slot' ) ) {
+					stampSlotDirtyFor( e.target );
 				}
 				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
 				if ( sc ) { commitShortcodeInput( sc ); return; }
@@ -20362,27 +20411,37 @@
 				}
 			}, true );
 		}
-		// Clicking an editable image opens its controls popover.
+		// Clicking an editable image opens its controls popover. Nearest
+		// wrapper decides editability: a slot is writing surface, an island
+		// is preview chrome.
 		body.addEventListener( 'click', ( e ) => {
 			const img = e.target.closest( 'img' );
-			if ( img && body.contains( img ) && ! img.closest( '.minn-block-island' ) ) {
-				openImgPop( img );
-			}
+			if ( ! img || ! body.contains( img ) ) return;
+			const wrap = img.closest( '.minn-block-island, .minn-slot' );
+			if ( wrap && ! wrap.classList.contains( 'minn-slot' ) ) return;
+			openImgPop( img );
 		} );
 		// Clicking a link opens its edit popover (links never navigate
-		// inside contenteditable anyway).
+		// inside contenteditable anyway). Same nearest-wrapper rule.
 		body.addEventListener( 'click', ( e ) => {
 			const a = e.target.closest( 'a' );
-			if ( a && body.contains( a ) && ! a.closest( '.minn-block-island' ) ) {
-				e.preventDefault();
-				openLinkPop( a );
-			}
+			if ( ! a || ! body.contains( a ) ) return;
+			const wrap = a.closest( '.minn-block-island, .minn-slot' );
+			if ( wrap && ! wrap.classList.contains( 'minn-slot' ) ) return;
+			e.preventDefault();
+			openLinkPop( a );
 		} );
 		// Right-click in a table cell → targeted row/column ops on THAT cell.
 		body.addEventListener( 'contextmenu', ( e ) => {
 			const cell = e.target.closest ? e.target.closest( 'td, th' ) : null;
 			const table = cell ? cell.closest( 'table' ) : null;
-			if ( ! cell || ! table || ! body.contains( table ) || table.closest( '.minn-block-island' ) ) return;
+			if ( ! cell || ! table || ! body.contains( table ) ) return;
+			// Editable tables live at the top level or inside a container
+			// slot; tables inside island PREVIEWS stay read-only. Nearest
+			// wrapper decides: a slot means editable surface, an island
+			// means preview chrome (a preview inside a slot still bails).
+			const wrap = table.closest( '.minn-block-island, .minn-slot' );
+			if ( wrap && ! wrap.classList.contains( 'minn-slot' ) ) return;
 			e.preventDefault();
 			openTableMenu( e.clientX, e.clientY, table, cell );
 		} );
@@ -20391,7 +20450,9 @@
 		// AND its chip — tables, images and code blocks all behave alike.
 		let hotTable = null;
 		body.addEventListener( 'mouseover', ( e ) => {
-			const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table, #minn-editor-body > figure.wp-block-image, #minn-editor-body > img, #minn-editor-body > pre:not(.wp-block-verse):not(.wp-block-preformatted)' ) : null;
+			// Direct children of the body OR of a container slot — the same
+			// per-root set the chip pass collects.
+			const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table, #minn-editor-body > figure.wp-block-image, #minn-editor-body > img, #minn-editor-body > pre:not(.wp-block-verse):not(.wp-block-preformatted), .minn-slot > figure.wp-block-table, .minn-slot > table, .minn-slot > figure.wp-block-image, .minn-slot > img, .minn-slot > pre:not(.wp-block-verse):not(.wp-block-preformatted)' ) : null;
 			let t = null;
 			if ( box ) t = box.tagName === 'TABLE' || box.tagName === 'IMG' || box.tagName === 'PRE' ? box : box.querySelector( 'table, img' );
 			if ( t === hotTable ) return;
@@ -21460,6 +21521,10 @@
 		const ed = state.editor;
 		if ( ! ed || ! ed.islands || ed.islands[ idx ] == null ) return;
 		ed.islands[ idx ] = template;
+		// A nested island's stored raw just changed via popover buttons (no
+		// input event) — ancestor slot islands must re-splice on save or
+		// their stale stored raw would emit the OLD child bytes.
+		stampSlotDirtyFor( islandEl && islandEl.parentElement );
 		const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
 		if ( prev ) {
 			const inner = stripBlockComments( template ).trim();
@@ -21717,6 +21782,9 @@
 		// Live-field islands (shortcode/details) use in-card editors instead of
 		// a preview slot — sync those fields so an inspector Apply is visible.
 		const islandEl = insp.islandEl || document.querySelector( `.minn-block-island[data-island="${ insp.idx }"]` );
+		// A nested island's raw changed via popover buttons (no input event)
+		// — ancestor slot islands must re-splice on save.
+		stampSlotDirtyFor( islandEl );
 		const scInput = islandEl && islandEl.querySelector( '.minn-shortcode-input' );
 		if ( scInput ) scInput.value = stripBlockComments( newRaw ).trim();
 		if ( islandEl && islandEl.classList.contains( 'minn-details-island' ) ) {
@@ -22718,14 +22786,17 @@
 			armed = null;
 		};
 		const isIsland = ( el ) => !!( el && el.classList && el.classList.contains( 'minn-block-island' ) );
-		// The arm/delete guards below are body-root by design: islands only
-		// exist at the top level, and the keydown handler bails for .minn-slot
-		// and .minn-island-run interiors before any of these run, so their
-		// `parentNode === body` checks stay body-anchored.
-		// Top-level blocks that arm/delete like islands when empty (or always
+		// The guards run PER BLOCK ROOT: islands live at the top level AND
+		// inside container slots (nested islands), so "root child" means a
+		// direct child of the body or of a .minn-slot. The keydown handler
+		// resolves the caret's root via blockRootOf and every walk below uses
+		// it; only .minn-island-run interiors still bail (runs are text-only).
+		const isRootChild = ( el ) => !! ( el && el.parentNode && ( el.parentNode === body
+			|| ( el.parentNode.classList && el.parentNode.classList.contains( 'minn-slot' ) ) ) );
+		// Root-child blocks that arm/delete like islands when empty (or always
 		// for HR). Not list/heading — those stay normal prose.
 		const isAtomicEl = ( el ) => {
-			if ( ! el || el.nodeType !== Node.ELEMENT_NODE || el.parentNode !== body ) return false;
+			if ( ! el || el.nodeType !== Node.ELEMENT_NODE || ! isRootChild( el ) ) return false;
 			if ( isIsland( el ) ) return true;
 			const t = el.tagName;
 			if ( t === 'HR' ) return true;
@@ -22752,7 +22823,7 @@
 			const field = el.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url' );
 			if ( ! field ) return null;
 			const island = field.closest( '.minn-block-island' );
-			if ( ! island || island.parentNode !== body ) return null;
+			if ( ! island || ! isRootChild( island ) ) return null;
 			if ( field.matches( '.minn-details-body' ) ) {
 				if ( field.textContent.replace( /\u00a0/g, ' ' ).trim() ) return null;
 				return island;
@@ -22827,23 +22898,20 @@
 				disarm();
 				return;
 			}
-			// Container-slot interiors are real typing surface — same class:
-			// the caret walk would resolve to the slot island and arm/delete
-			// the whole container mid-sentence.
-			if ( e.target.closest && e.target.closest( '.minn-slot' ) ) {
-				disarm();
-				return;
-			}
 
+			// Container slots are mini-bodies: the same arm/delete model runs
+			// inside them (nested islands need the protection there too). The
+			// caret's root — body or its nearest slot — anchors every walk.
 			const sel = window.getSelection();
 			if ( ! sel.rangeCount || ! sel.isCollapsed ) return;
+			const root = blockRootOf( sel.anchorNode, body );
 			let block = sel.anchorNode;
 			// Caret can land inside an island's chrome (rare) — walk out.
 			if ( block && block.nodeType === Node.ELEMENT_NODE && block.closest ) {
 				const inIsland = block.closest( '.minn-block-island' );
-				if ( inIsland && inIsland.parentNode === body ) block = inIsland;
+				if ( inIsland && inIsland.parentNode === root ) block = inIsland;
 			}
-			while ( block && block.parentNode !== body ) block = block.parentNode;
+			while ( block && block.parentNode !== root ) block = block.parentNode;
 			if ( ! block || block.nodeType !== Node.ELEMENT_NODE ) return;
 
 			// 2) Caret inside an empty atomic block (code <pre>, empty figure…):
