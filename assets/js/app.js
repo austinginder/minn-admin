@@ -21342,6 +21342,250 @@
 		return raw;
 	}
 
+	/* ===== Island Images editor (reorder / remove / add) =====
+	 * Gallery-shaped blocks are a run of repeating sibling units — one <li>
+	 * or <figure> per image (Jetpack slideshow, tiled galleries) or one
+	 * inner wp:image block per image (core gallery) — plus an optional
+	 * "ids" array in the block comment. Reordering permutes the unit
+	 * SUBSTRINGS verbatim: each unit is exactly what save() emitted for
+	 * that image, so the permuted whole is exactly what save() emits for
+	 * the new order — byte-safe, revalidates clean, captions travel with
+	 * their unit. Remove drops a unit + its id; Add clones a sibling unit
+	 * as prototype and retargets the src/id conventions. Detection is
+	 * offset-based on the raw string (the textRunsOf discipline); when the
+	 * shape doesn't map cleanly the feature simply doesn't offer itself. */
+	function imageUnitsOf( raw ) {
+		if ( typeof raw !== 'string' ) return null;
+		const open = raw.match( /^<!--\s*wp:[a-z][\w-]*(?:\/[\w-]+)?(\s+\{[\s\S]*?\})?\s*-->/ );
+		if ( ! open ) return null;
+		const innerStart = open[ 0 ].length;
+		const closeAt = raw.lastIndexOf( '<!-- /wp:' );
+		if ( closeAt <= innerStart ) return null;
+		const inner = raw.slice( innerStart, closeAt );
+
+		let spans = null; // [ { start, end } ] relative to inner
+
+		// Mode 1: repeated same-name inner blocks (core gallery's wp:image).
+		const tokRe = /<!--\s*(\/?)wp:([a-z][\w-]*(?:\/[\w-]+)?)[\s\S]*?-->/g;
+		const toks = [];
+		let tm;
+		while ( ( tm = tokRe.exec( inner ) ) ) toks.push( { close: !! tm[ 1 ], name: tm[ 2 ], start: tm.index, end: tm.index + tm[ 0 ].length } );
+		if ( toks.length ) {
+			// Strict open/close alternation of ONE block name — anything more
+			// structured (mixed children, nesting) is not a flat image run.
+			const name = toks[ 0 ].name;
+			const ok = toks.length >= 4 && toks.length % 2 === 0 && toks.every( ( t, i ) => t.name === name && t.close === ( i % 2 === 1 ) );
+			if ( ! ok ) return null;
+			spans = [];
+			for ( let i = 0; i < toks.length; i += 2 ) spans.push( { start: toks[ i ].start, end: toks[ i + 1 ].end } );
+		} else {
+			// Mode 2: repeated same-tag HTML siblings, non-nested (opens and
+			// closes strictly alternate).
+			for ( const tag of [ 'li', 'figure' ] ) {
+				const opens = [];
+				const closes = [];
+				const oRe = new RegExp( '<' + tag + '[\\s>]', 'g' );
+				const cRe = new RegExp( '</' + tag + '>', 'g' );
+				let m;
+				while ( ( m = oRe.exec( inner ) ) ) opens.push( m.index );
+				while ( ( m = cRe.exec( inner ) ) ) closes.push( m.index + m[ 0 ].length );
+				if ( opens.length < 2 || opens.length !== closes.length ) continue;
+				let alternate = true;
+				for ( let i = 0; i < opens.length; i++ ) {
+					if ( ! ( opens[ i ] < closes[ i ] && ( i === 0 || closes[ i - 1 ] <= opens[ i ] ) ) ) { alternate = false; break; }
+				}
+				if ( ! alternate ) continue;
+				spans = opens.map( ( s, i ) => ( { start: s, end: closes[ i ] } ) );
+				break;
+			}
+			if ( ! spans ) return null;
+		}
+
+		// Between-unit material must be pure whitespace — anything else means
+		// the run isn't the uniform sibling list this editor assumes.
+		for ( let i = 1; i < spans.length; i++ ) {
+			if ( /\S/.test( inner.slice( spans[ i - 1 ].end, spans[ i ].start ) ) ) return null;
+		}
+		const units = spans.map( ( s ) => {
+			const text = inner.slice( s.start, s.end );
+			const srcM = text.match( /<img[^>]*\ssrc="([^"]+)"/ ) || text.match( /\ssrc="([^"]+)"/ );
+			const idM = text.match( /wp-image-(\d+)/ ) || text.match( /data-id="(\d+)"/ ) || text.match( /"id":(\d+)/ );
+			return { text, src: srcM ? srcM[ 1 ] : '', id: idM ? parseInt( idM[ 1 ], 10 ) : 0 };
+		} );
+		// Every unit must carry exactly one image — a mixed run (text slides,
+		// video slides) can't be safely tile-edited as images.
+		if ( units.some( ( u ) => ( u.text.match( /<img[\s>]/g ) || [] ).length !== 1 ) ) return null;
+
+		// Comment "ids" array: must align 1:1 with the units, and where a
+		// unit declares its own id the two must agree, or the mapping is off.
+		let ids = null;
+		const idsM = open[ 0 ].match( /"ids":\[([^\]]*)\]/ );
+		if ( idsM ) {
+			ids = idsM[ 1 ].trim() === '' ? [] : idsM[ 1 ].split( ',' ).map( ( n ) => parseInt( n, 10 ) );
+			if ( ids.length !== units.length ) return null;
+			if ( units.some( ( u, i ) => u.id && ids[ i ] !== u.id ) ) return null;
+		}
+
+		const gaps = [];
+		for ( let i = 1; i < spans.length; i++ ) gaps.push( inner.slice( spans[ i - 1 ].end, spans[ i ].start ) );
+		return {
+			prefix: raw.slice( 0, innerStart + spans[ 0 ].start ),
+			suffix: raw.slice( innerStart + spans[ spans.length - 1 ].end ),
+			units,
+			gaps,
+			ids,
+		};
+	}
+
+	// Clone an existing unit for a newly picked attachment: swap the source
+	// URL (all escape forms), retarget the id conventions, refresh the alt
+	// and aspect hint, and strip what belongs to the OLD image (srcset/sizes
+	// variants, the caption).
+	function cloneImageUnit( proto, item ) {
+		let u = proto.text;
+		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
+		const slashEsc = ( s ) => s.split( '/' ).join( '\\/' );
+		if ( proto.src && item.url ) {
+			u = u.split( proto.src ).join( item.url );
+			if ( encAttr( proto.src ) !== proto.src ) u = u.split( encAttr( proto.src ) ).join( encAttr( item.url ) );
+			u = u.split( slashEsc( proto.src ) ).join( slashEsc( item.url ) );
+		}
+		if ( proto.id && item.id ) {
+			u = u.replace( new RegExp( '(wp-image-)' + proto.id + '\\b', 'g' ), '$1' + item.id );
+			u = u.replace( new RegExp( '(data-id=")' + proto.id + '(")', 'g' ), '$1' + item.id + '$2' );
+			u = u.replace( new RegExp( '(data-media-id=")' + proto.id + '(")', 'g' ), '$1' + item.id + '$2' );
+			u = u.replace( new RegExp( '("id":)' + proto.id + '\\b', 'g' ), '$1' + item.id );
+		}
+		u = u.replace( /<img[^>]*>/g, ( tag ) => tag.replace( /\s(?:srcset|sizes)="[^"]*"/g, '' ) );
+		u = u.replace( /(<img[^>]*?\salt=")[^"]*(")/g, '$1' + esc( item.alt || '' ) + '$2' );
+		if ( item.width && item.height ) {
+			u = u.replace( /(data-aspect-ratio=")[^"]*(")/g, '$1' + item.width + ' / ' + item.height + '$2' );
+		}
+		u = u.replace( /<figcaption[^>]*>[\s\S]*?<\/figcaption>/g, '' );
+		return u;
+	}
+
+	let imgEditEl = null;
+	function closeImgEdit() {
+		if ( imgEditEl && imgEditEl._minnEsc ) document.removeEventListener( 'keydown', imgEditEl._minnEsc, true );
+		if ( imgEditEl ) imgEditEl.remove();
+		imgEditEl = null;
+	}
+
+	function openImagesEditor( idx, islandEl, baseRaw, info ) {
+		closeImgEdit();
+		// Working list: existing entries reference their verbatim unit; added
+		// entries carry the picked attachment until Apply clones them in.
+		const list = info.units.map( ( u, i ) => ( { unit: u, orig: i, thumb: u.src, attachment: null } ) );
+		const overlay = document.createElement( 'div' );
+		overlay.className = 'minn-imgedit-overlay';
+		overlay.innerHTML = `
+			<div class="minn-imgedit" role="dialog" aria-modal="true" aria-label="Edit images">
+				<div class="minn-imgedit-head">
+					<strong>Edit images</strong>
+					<span class="minn-imgedit-hint">Drag to reorder · × removes</span>
+					<button type="button" class="minn-x-btn" id="minn-imgedit-close">×</button>
+				</div>
+				<div class="minn-imgedit-grid" id="minn-imgedit-grid"></div>
+				<div class="minn-imgedit-foot">
+					<button type="button" class="minn-btn-soft" id="minn-imgedit-add">Add images…</button>
+					<span style="flex:1"></span>
+					<button type="button" class="minn-btn-soft" id="minn-imgedit-cancel">Cancel</button>
+					<button type="button" class="minn-btn-primary" id="minn-imgedit-apply">Apply</button>
+				</div>
+			</div>`;
+		document.body.appendChild( overlay );
+		imgEditEl = overlay;
+		const grid = $( '#minn-imgedit-grid', overlay );
+		let dragIdx = -1;
+
+		const renderGrid = () => {
+			grid.innerHTML = list.map( ( it, i ) => `
+				<div class="minn-imgedit-tile" draggable="true" data-i="${ i }">
+					<img src="${ esc( it.thumb || '' ) }" alt="" loading="lazy">
+					${ it.attachment ? '<span class="minn-imgedit-new">new</span>' : '' }
+					<button type="button" class="minn-imgedit-x" data-x="${ i }" title="Remove" aria-label="Remove image">×</button>
+					<span class="minn-imgedit-moves">
+						<button type="button" data-mv="${ i }:-1" title="Move earlier" aria-label="Move image earlier"${ i === 0 ? ' disabled' : '' }>‹</button>
+						<button type="button" data-mv="${ i }:1" title="Move later" aria-label="Move image later"${ i === list.length - 1 ? ' disabled' : '' }>›</button>
+					</span>
+				</div>` ).join( '' ) || '<div class="minn-imgedit-empty">No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead.</div>';
+			const apply = $( '#minn-imgedit-apply', overlay );
+			if ( apply ) apply.disabled = ! list.length;
+		};
+		renderGrid();
+
+		overlay.addEventListener( 'click', ( e ) => {
+			if ( e.target === overlay || e.target.closest( '#minn-imgedit-close' ) || e.target.closest( '#minn-imgedit-cancel' ) ) { closeImgEdit(); return; }
+			const x = e.target.closest( '[data-x]' );
+			if ( x ) { list.splice( parseInt( x.dataset.x, 10 ), 1 ); renderGrid(); return; }
+			const mv = e.target.closest( '[data-mv]' );
+			if ( mv ) {
+				const [ i, dir ] = mv.dataset.mv.split( ':' ).map( Number );
+				const j = i + dir;
+				if ( j >= 0 && j < list.length ) { [ list[ i ], list[ j ] ] = [ list[ j ], list[ i ] ]; renderGrid(); }
+				return;
+			}
+			if ( e.target.closest( '#minn-imgedit-add' ) ) {
+				openMediaPicker( ( picks ) => {
+					( picks || [] ).forEach( ( p ) => {
+						if ( p && p.url ) list.push( { unit: null, orig: -1, thumb: p.thumb || p.url, attachment: p } );
+					} );
+					renderGrid();
+				}, { multi: true, doneLabel: 'Add to block' } );
+				return;
+			}
+			if ( e.target.closest( '#minn-imgedit-apply' ) && list.length ) {
+				const proto = info.units[ 0 ];
+				const parts = list.map( ( it ) => it.attachment ? cloneImageUnit( proto, it.attachment ) : it.unit.text );
+				const joiner = ( i ) => info.gaps.length ? info.gaps[ Math.min( i, info.gaps.length - 1 ) ] : '\n\n';
+				let bodyStr = '';
+				parts.forEach( ( p, i ) => { bodyStr += p; if ( i < parts.length - 1 ) bodyStr += joiner( i ); } );
+				let prefix = info.prefix;
+				if ( info.ids ) {
+					const newIds = list.map( ( it ) => it.attachment ? it.attachment.id : info.ids[ it.orig ] );
+					prefix = prefix.replace( /"ids":\[[^\]]*\]/, '"ids":[' + newIds.join( ',' ) + ']' );
+				}
+				const newRaw = prefix + bodyStr + info.suffix;
+				closeImgEdit();
+				if ( newRaw !== baseRaw ) replaceIsland( idx, islandEl, newRaw );
+			}
+		} );
+		// Drag reorder: drop before/after the target tile by horizontal midpoint.
+		overlay.addEventListener( 'dragstart', ( e ) => {
+			const t = e.target.closest( '.minn-imgedit-tile' );
+			if ( ! t ) return;
+			dragIdx = parseInt( t.dataset.i, 10 );
+			t.classList.add( 'drag' );
+		} );
+		overlay.addEventListener( 'dragover', ( e ) => { if ( dragIdx >= 0 ) e.preventDefault(); } );
+		overlay.addEventListener( 'drop', ( e ) => {
+			if ( dragIdx < 0 ) return;
+			e.preventDefault();
+			const t = e.target.closest( '.minn-imgedit-tile' );
+			if ( t ) {
+				const to = parseInt( t.dataset.i, 10 );
+				if ( to !== dragIdx ) {
+					const rect = t.getBoundingClientRect();
+					const before = e.clientX < rect.left + rect.width / 2;
+					const [ moved ] = list.splice( dragIdx, 1 );
+					let target = before ? to : to + 1;
+					if ( dragIdx < target ) target--;
+					list.splice( target, 0, moved );
+				}
+			}
+			dragIdx = -1;
+			renderGrid();
+		} );
+		overlay.addEventListener( 'dragend', () => { dragIdx = -1; renderGrid(); } );
+		const escKey = ( e ) => {
+			// The media picker stacks above this modal — its own Escape wins.
+			if ( e.key === 'Escape' && ! state.modal ) { e.stopPropagation(); closeImgEdit(); }
+		};
+		overlay._minnEsc = escKey;
+		document.addEventListener( 'keydown', escKey, true );
+	}
+
 	// Form rows for one block's editable attributes. `prefix` namespaces the
 	// inputs ("own" or a child index). A minn_admin_block_forms descriptor for
 	// the block refines labels, controls, options, ordering and hiding.
@@ -21668,8 +21912,9 @@
 			: runRows( 'head', model.headRuns ) + runRows( 'inner', model.innerRuns ) + runRows( 'tail', model.tailRuns );
 		// Images anywhere in the island's markup — replaced via the media
 		// picker (embed/gallery keep their dedicated rebuild flows instead).
+		const imgEditBtn = insp.units ? `<button class="minn-btn-soft" type="button" id="minn-insp-imgedit">Edit images…</button>` : '';
 		const imgSection = mediaRebuild || ! ( insp.images || [] ).length ? ''
-			: `<div class="minn-field-label">Images</div>` + insp.images.map( ( u, i ) => `
+			: `<div class="minn-field-label minn-insp-imghead">Images${ imgEditBtn }</div>` + insp.images.map( ( u, i ) => `
 				<div class="minn-insp-img-row">
 					<img src="${ esc( u ) }" alt="" loading="lazy">
 					<button class="minn-btn-soft" type="button" data-inspimg="${ i }">Replace…</button>
@@ -21719,6 +21964,8 @@
 			<button class="minn-btn-soft" type="button" id="minn-insp-embed-url" style="width:100%; justify-content:center;">Change URL…</button>
 			<div class="minn-insp-note">Rebuilds the embed for the new URL.</div>`
 		: short === 'gallery' ? `
+			${ insp.units ? `<button class="minn-btn-soft" type="button" id="minn-insp-imgedit" style="width:100%; justify-content:center;">Edit images…</button>
+			<div class="minn-insp-note">Reorder, remove or add images; captions and layout stay.</div>` : '' }
 			<button class="minn-btn-soft" type="button" id="minn-insp-gallery" style="width:100%; justify-content:center;">Replace images…</button>
 			<div class="minn-insp-note">Re-picks the gallery images; per-image captions and layout tweaks reset.</div>`
 		: '';
@@ -21866,7 +22113,7 @@
 		await Promise.all( [ ...new Set( names ) ].map( async ( n ) => { types[ n ] = await blockTypeFor( n ); } ) );
 		if ( ! inspectorEl ) return; // closed while loading
 
-		inspectorState = { idx, model, types, islandEl, images: islandImageUrls( raw ) };
+		inspectorState = { idx, model, types, islandEl, images: islandImageUrls( raw ), units: imageUnitsOf( raw ) };
 		renderInspectorBody();
 		// Re-apply dialog attrs after the body swap (innerHTML rebuild).
 		armBlockPopA11y( inspectorEl, {
@@ -21944,6 +22191,20 @@
 				openMediaPicker( ( picks ) => {
 					if ( picks && picks.length ) replaceIsland( idx, el, galleryTemplate( picks ) );
 				}, { multi: true } );
+				return;
+			}
+			const ie = e.target.closest( '#minn-insp-imgedit' );
+			if ( ie ) {
+				// Same discipline as image replace: fold pending field edits
+				// first, then re-detect units on the FOLDED raw (field edits
+				// shift offsets).
+				collectInspectorForms();
+				const base = buildInspectorRaw( insp );
+				const info = imageUnitsOf( base );
+				const { idx, islandEl: el } = insp;
+				if ( ! info ) { toast( 'These images can’t be edited safely here.', true ); return; }
+				closeInspector();
+				openImagesEditor( idx, el, base, info );
 				return;
 			}
 			const rep = e.target.closest( '[data-inspimg]' );
@@ -27165,7 +27426,7 @@
 					</div>` }
 					${ m.multi ? `
 					<div class="minn-modal-actions">
-						<button class="minn-btn-primary" id="minn-picker-done" disabled>Insert gallery</button>
+						<button class="minn-btn-primary" id="minn-picker-done" disabled>${ esc( m.doneLabel || 'Insert gallery' ) }</button>
 					</div>` : '' }
 				</div>
 			</div>`;
@@ -30628,7 +30889,7 @@
 	}
 
 	function openMediaPicker( callback, opts = {} ) {
-		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [], any: !! opts.any };
+		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [], any: !! opts.any, doneLabel: opts.doneLabel || '' };
 		renderOverlays();
 		// File block needs any attachment type; image/gallery stay image-only.
 		const typeQ = opts.any ? '' : ( opts.mediaType ? '&media_type=' + encodeURIComponent( opts.mediaType ) : '&media_type=image' );
@@ -30643,6 +30904,8 @@
 						name: decodeEntities( it.title.rendered ),
 						url: it.source_url,
 						alt: it.alt_text || '',
+						width: ( it.media_details && it.media_details.width ) || 0,
+						height: ( it.media_details && it.media_details.height ) || 0,
 						thumb: isImg
 							? ( ( sizes && sizes.medium && sizes.medium.source_url ) || it.source_url )
 							: '',
@@ -30925,6 +31188,7 @@
 		announceRoute();
 		closeInspector();
 		closeBlockPicker();
+		closeImgEdit();
 		hideCodePop();
 		hideTableMenu();
 		hideDatePicker();
