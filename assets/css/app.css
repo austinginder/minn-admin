@@ -2938,7 +2938,11 @@ button.minn-ac-item:hover { background: var(--hover); }
   border: 1px solid var(--border2); background: var(--panel2); flex-shrink: 0;
 }
 .minn-insp-img-row button { margin-left: auto; }
-.minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+/* Compact move cluster: tight icon buttons reading as one control. */
+.minn-insp-move { display: inline-flex; gap: 3px; }
+.minn-insp-move .minn-btn-soft { padding-left: 8px; padding-right: 8px; }
+.minn-insp-move .minn-btn-soft svg { width: 14px; height: 14px; }
 .minn-insp-actions .minn-btn-primary { flex: 1; justify-content: center; }
 .minn-insp-actions .minn-btn-soft.danger:only-child { flex: 1; justify-content: center; }
 

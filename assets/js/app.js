@@ -1445,6 +1445,10 @@
 			power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
 			shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/>',
 			'arrow-up-right': '<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
+			'chevron-up': '<polyline points="18 15 12 9 6 15"/>',
+			'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
+			'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
+			'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
 			undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11"/>',
 			gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
 			search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
@@ -16380,6 +16384,50 @@
 		return islandEl.nextElementSibling;
 	}
 
+	// The island's sibling slots when its root is a COLUMN slot: the other
+	// columns of the same columns island, in document order. Empty otherwise.
+	function islandSiblingSlots( islandEl ) {
+		const slot = islandEl.parentElement && islandEl.parentElement.closest( '.minn-slot' );
+		const colsIsland = slot && slot.closest( '.minn-cols-island' );
+		if ( ! colsIsland || slot.closest( '.minn-slot-island' ) !== colsIsland ) return { slot: null, slots: [] };
+		return { slot, slots: $$( '.minn-slot', colsIsland ).filter( ( s ) => s.closest( '.minn-slot-island' ) === colsIsland ) };
+	}
+
+	// Move an island: up/down swap with the previous/next sibling in its
+	// root; prev/next hop to the neighboring COLUMN slot (Austin's
+	// duplicated-testimonial ask — the copy lands in column one, the empty
+	// spot is column two). Direct-DOM, so both roots stamp dirty by hand.
+	function moveIsland( islandEl, dir ) {
+		if ( ! islandEl || ! islandEl.parentNode ) return false;
+		const from = islandEl.parentElement;
+		let moved = false;
+		if ( 'up' === dir || 'down' === dir ) {
+			const sib = 'up' === dir ? islandEl.previousElementSibling : islandEl.nextElementSibling;
+			if ( sib ) {
+				if ( 'up' === dir ) sib.before( islandEl );
+				else sib.after( islandEl );
+				moved = true;
+			}
+		} else {
+			const { slot, slots } = islandSiblingSlots( islandEl );
+			if ( slot ) {
+				const i = slots.indexOf( slot );
+				const target = 'prev' === dir ? slots[ i - 1 ] : slots[ i + 1 ];
+				if ( target ) {
+					target.appendChild( islandEl );
+					ensureTrailingParagraph( target );
+					moved = true;
+				}
+			}
+		}
+		if ( ! moved ) return false;
+		stampSlotDirtyFor( from );
+		stampSlotDirtyFor( islandEl );
+		updateEditorStats();
+		scheduleAutosave();
+		return true;
+	}
+
 	// Same undo toast for non-island atomic blocks (empty code <pre>, HR,
 	// image figures) that bindIslandGuards arms with the red outline.
 	function removeAtomicBlockWithUndo( el ) {
@@ -21591,6 +21639,13 @@
 			<div class="minn-insp-actions">
 				${ editable ? '<button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button>' : '' }
 				${ state.editor ? `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there.">Block editor&nbsp;↗</button>` : '' }
+				<span class="minn-insp-move" role="group" aria-label="Move block">
+					<button class="minn-btn-soft" id="minn-insp-move-up" type="button" title="Move up" aria-label="Move block up">${ icon( 'chevron-up' ) }</button>
+					<button class="minn-btn-soft" id="minn-insp-move-down" type="button" title="Move down" aria-label="Move block down">${ icon( 'chevron-down' ) }</button>
+					${ insp.islandEl && islandSiblingSlots( insp.islandEl ).slot ? `
+					<button class="minn-btn-soft" id="minn-insp-move-prev" type="button" title="Move to the previous column" aria-label="Move block to the previous column">${ icon( 'chevron-left' ) }</button>
+					<button class="minn-btn-soft" id="minn-insp-move-next" type="button" title="Move to the next column" aria-label="Move block to the next column">${ icon( 'chevron-right' ) }</button>` : '' }
+				</span>
 				<button class="minn-btn-soft" id="minn-insp-duplicate" type="button" title="Duplicate this block" aria-label="Duplicate this block">${ icon( 'copy' ) }</button>
 				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="Remove this block">${ icon( 'trash' ) }${ editable ? '' : ' Remove block' }</button>
 			</div>`;
@@ -21759,6 +21814,13 @@
 				const el = insp.islandEl;
 				closeInspector();
 				duplicateIsland( el );
+				return;
+			}
+			const mv = e.target.closest( '#minn-insp-move-up, #minn-insp-move-down, #minn-insp-move-prev, #minn-insp-move-next' );
+			if ( mv ) {
+				// Stays open so repeated presses walk the block into place.
+				const dir = mv.id.replace( 'minn-insp-move-', '' );
+				if ( moveIsland( insp.islandEl, dir ) ) positionInspector( insp.islandEl );
 				return;
 			}
 			if ( e.target.closest( '#minn-insp-embed-url' ) ) {

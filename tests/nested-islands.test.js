@@ -504,6 +504,41 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		( firstCol5.match( /testimonial-card/g ) || [] ).length >= 4 && ( raw5.match( /Card one text\./g ) || [] ).length === 2
 		&& raw5.indexOf( 'Second column.' ) > raw5.indexOf( '<!-- wp:column -->', raw5.indexOf( '<!-- /wp:column -->' ) ), firstCol5 );
 
+	/* ===== Move the duplicate to the next column (the report's exact
+	 * follow-up: "no idea how to move it to the middle") ===== */
+	await page.evaluate( () => {
+		const col = document.querySelector( '.minn-cols-island .minn-slot' );
+		const cards = col.querySelectorAll( ':scope > .minn-slot-island' );
+		cards[ cards.length - 1 ].querySelector( '.minn-island-chip' ).click();
+	} );
+	await page.waitForSelector( '#minn-insp-move-next', { timeout: 10000 } );
+	await page.click( '#minn-insp-move-next' );
+	await page.waitForTimeout( 400 );
+	const moveShape = await page.evaluate( () => {
+		const slots = [ ...document.querySelectorAll( '.minn-cols-island .minn-slot' ) ]
+			.filter( ( s ) => s.closest( '.minn-slot-island' ) === s.closest( '.minn-cols-island' ) );
+		return {
+			col1Cards: slots[ 0 ] ? slots[ 0 ].querySelectorAll( ':scope > .minn-slot-island' ).length : -1,
+			col2Cards: slots[ 1 ] ? slots[ 1 ].querySelectorAll( ':scope > .minn-slot-island' ).length : -1,
+			inspectorOpen: !! document.querySelector( '#minn-insp-move-next' ),
+		};
+	} );
+	t.check( 'move-next hops the card into the second column (inspector stays open)',
+		moveShape.col1Cards === 1 && moveShape.col2Cards === 1 && moveShape.inspectorOpen, JSON.stringify( moveShape ) );
+	await page.keyboard.press( 'Escape' );
+	await page.keyboard.press( 'Meta+s' );
+	for ( let i = 0; i < 15; i++ ) {
+		await page.waitForTimeout( 900 );
+		raw5 = await rawOf5();
+		const c1 = raw5.slice( raw5.indexOf( '<!-- wp:column -->' ), raw5.indexOf( '<!-- /wp:column -->' ) );
+		if ( ( c1.match( /Card one text\./g ) || [] ).length === 1 ) break;
+	}
+	const cols5 = raw5.split( '<!-- /wp:column -->' );
+	t.check( 'moved card saved in the SECOND column',
+		( cols5[ 0 ].match( /Card one text\./g ) || [] ).length === 1
+		&& ( cols5[ 1 ].match( /Card one text\./g ) || [] ).length === 1
+		&& cols5[ 1 ].includes( 'Second column.' ), raw5 );
+
 	await deletePost( page, id5 );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
