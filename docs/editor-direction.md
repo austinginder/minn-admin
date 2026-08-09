@@ -179,6 +179,24 @@ Three phases, each shippable alone, in order:
    the established fixed-point convention. Feature parity inside slots (markdown rules,
    toolbar, slash) arrives incrementally per feature, never as a precondition. Depth can
    stay limited to what real content needs; measure the corpus before recursing deeper.
+   ✅ *Slice 1 shipped 2026-08-08 (v0.26.0 cycle)* — `SLOT_BLOCKS = ['group']`, single
+   depth, ALL-simple children only (any complex child → the whole container stays a
+   phase-2 island; no nested mini-islands yet). `slotParseContainer()` splits the raw
+   into head/open/inner/tail with a tag-depth scan and a reassembly gate; children render
+   through the same `editableSegmentHtml()` as the top level (phase-1 markers included),
+   inside `<div class="minn-slot" contenteditable="true">` within the verbatim wrapper
+   open tag. Serialize: `flushSlotIsland()` splices `serializeToBlocks(slot)` between the
+   wrapper bytes ONLY when the slot is dirty (input-stamped `data-minn-slot-dirty`);
+   untouched groups emit stored raw byte-identical. Working in slots with zero extra
+   code: typing, Enter-splitting, merges, inline markdown, undo, phase-1 attribute
+   carry. Guarded: island-guard bail (Backspace inside a slot otherwise armed and
+   DELETED the container — the run-bail class), ⌘A clamped to the slot, plain-text
+   paste (the rich pipeline's block splicing is top-level-tuned), per-slot trailing
+   affordance, inspector flushes a dirty slot before modeling. Deliberately NOT in
+   slice 1: markdown block prefixes / toolbar block ops in slots (their block detection
+   is top-level-anchored; they no-op harmlessly), multi-block paste, columns/cover, and
+   nesting. Suite: `tests/container-slots.test.js` (19 checks incl. untouched-group
+   byte-identity).
 
 The never-build list is unchanged by this plan. Slots edit **content** inside layouts;
 layout itself (spacing, variations, query loops, the block inserter's full catalog) remains

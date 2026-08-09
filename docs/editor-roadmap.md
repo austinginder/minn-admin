@@ -230,7 +230,9 @@ The measured answer to grouped/columns content locking on FSE sites (GH #4) live
 [editor-direction.md](editor-direction.md), "The nested-content plan": three phases —
 attribute carry for text-flow blocks (✅ shipped 2026-08-08, `tests/attr-carry.test.js`),
 editable text inside island previews
-(✅ shipped 2026-08-08, `tests/island-runs.test.js`), and container slots. Slots edit
+(✅ shipped 2026-08-08, `tests/island-runs.test.js`), and container slots (slice 1 —
+all-simple `group` wrappers — ✅ shipped 2026-08-08, `tests/container-slots.test.js`;
+columns/cover, nesting and multi-block paste into slots remain). Slots edit
 content inside layouts; layout itself stays Gutenberg's job. The never-build list below
 is unchanged by that plan.
 

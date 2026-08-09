@@ -15023,55 +15023,169 @@
 		if ( ! ed.islands ) ed.islands = [];
 		return segments.map( ( seg ) => {
 			if ( seg.type === 'html' ) return seg.raw;
-			if ( segmentEditable( seg ) ) {
-				const name = seg.name.replace( /^core\//, '' );
-				let pre = seg.raw;
-				// Park each list item's own comment attrs on its <li> BEFORE the
-				// comments are stripped — list-item blocks nest inside the list
-				// segment, and their className/style used to vanish silently on
-				// the next save (the list looked editable, the item attrs were
-				// never re-emitted).
-				if ( name === 'list' ) {
-					pre = pre.replace( /<!--\s*wp:list-item\s+(\{(?:(?!-->)[\s\S])*?\})\s*-->\s*(<li)([\s>])/g, ( m0, json, li, tail ) => {
-						try {
-							const a = JSON.parse( json );
-							if ( a && Object.keys( a ).length ) return `${ li } data-minn-attrs="${ esc( JSON.stringify( a ) ) }"${ tail }`;
-						} catch ( e ) { /* invalid JSON — stripped, as before */ }
-						return li + tail;
-					} );
-				}
-				let html = stripBlockComments( pre );
-				// Code blocks that keep their language in the comment attr (the
-				// {"language":"sql"} dialect): surface it as a language-* class so the
-				// picker and highlighter see it, and mark the pre so serialization
-				// restores the attr dialect instead of persisting the class.
-				if ( name === 'code' ) {
-					const lang = String( ( segmentAttrs( seg ) || {} ).language || '' ).toLowerCase();
-					if ( /^[a-z0-9-]+$/.test( lang ) ) {
-						html = html.replace( '<pre class="wp-block-code"', '<pre data-lang-attr="1" class="wp-block-code"' );
-						if ( ! /language-/.test( html ) ) html = html.replace( /<code(\s|>)/, `<code class="language-${ lang }"$1` );
-					}
-				} else if ( PASSTHROUGH_BLOCKS.includes( name ) ) {
-					// Park the comment attrs on the element; serialization re-emits them.
-					const attrs = segmentAttrs( seg );
-					if ( attrs && Object.keys( attrs ).length ) {
-						html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
-					}
-				} else if ( TEXTFLOW_CARRY_BLOCKS.includes( name ) ) {
-					// Attrs the serializer derives from the DOM need no marker; a
-					// styled block parks its FULL attrs JSON for verbatim re-emit
-					// (the serializer merges the DOM-derived keys back in).
-					const attrs = segmentAttrs( seg );
-					const allowed = EDITABLE_ATTRS[ name ] || [];
-					if ( attrs && Object.keys( attrs ).length && ! Object.keys( attrs ).every( ( k ) => allowed.includes( k ) ) ) {
-						html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
-					}
-				}
-				return html;
-			}
+			if ( segmentEditable( seg ) ) return editableSegmentHtml( seg );
 			const idx = ed.islands.push( seg.raw ) - 1;
 			return islandHtml( idx, seg.name, seg.raw );
 		} ).join( '\n' );
+	}
+
+	// One editable segment → its contenteditable HTML (comments stripped,
+	// attrs parked where the block carries them). Shared by the top-level
+	// load path and container-slot children, so a paragraph inside a group
+	// gets the exact same treatment as a top-level one.
+	function editableSegmentHtml( seg ) {
+		const name = seg.name.replace( /^core\//, '' );
+		let pre = seg.raw;
+		// Park each list item's own comment attrs on its <li> BEFORE the
+		// comments are stripped — list-item blocks nest inside the list
+		// segment, and their className/style used to vanish silently on
+		// the next save (the list looked editable, the item attrs were
+		// never re-emitted).
+		if ( name === 'list' ) {
+			pre = pre.replace( /<!--\s*wp:list-item\s+(\{(?:(?!-->)[\s\S])*?\})\s*-->\s*(<li)([\s>])/g, ( m0, json, li, tail ) => {
+				try {
+					const a = JSON.parse( json );
+					if ( a && Object.keys( a ).length ) return `${ li } data-minn-attrs="${ esc( JSON.stringify( a ) ) }"${ tail }`;
+				} catch ( e ) { /* invalid JSON — stripped, as before */ }
+				return li + tail;
+			} );
+		}
+		let html = stripBlockComments( pre );
+		// Code blocks that keep their language in the comment attr (the
+		// {"language":"sql"} dialect): surface it as a language-* class so the
+		// picker and highlighter see it, and mark the pre so serialization
+		// restores the attr dialect instead of persisting the class.
+		if ( name === 'code' ) {
+			const lang = String( ( segmentAttrs( seg ) || {} ).language || '' ).toLowerCase();
+			if ( /^[a-z0-9-]+$/.test( lang ) ) {
+				html = html.replace( '<pre class="wp-block-code"', '<pre data-lang-attr="1" class="wp-block-code"' );
+				if ( ! /language-/.test( html ) ) html = html.replace( /<code(\s|>)/, `<code class="language-${ lang }"$1` );
+			}
+		} else if ( PASSTHROUGH_BLOCKS.includes( name ) ) {
+			// Park the comment attrs on the element; serialization re-emits them.
+			const attrs = segmentAttrs( seg );
+			if ( attrs && Object.keys( attrs ).length ) {
+				html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
+			}
+		} else if ( TEXTFLOW_CARRY_BLOCKS.includes( name ) ) {
+			// Attrs the serializer derives from the DOM need no marker; a
+			// styled block parks its FULL attrs JSON for verbatim re-emit
+			// (the serializer merges the DOM-derived keys back in).
+			const attrs = segmentAttrs( seg );
+			const allowed = EDITABLE_ATTRS[ name ] || [];
+			if ( attrs && Object.keys( attrs ).length && ! Object.keys( attrs ).every( ( k ) => allowed.includes( k ) ) ) {
+				html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
+			}
+		}
+		return html;
+	}
+
+	/* ===== Container slots (nested-content plan, phase 3, slice 1) =====
+	 * A core/group whose children are ALL simple blocks renders as a SLOT
+	 * island: the wrapper — opening comment + open tag, close tag + closing
+	 * comment — is preserved byte-verbatim from the raw, and the children
+	 * live inside a nested contenteditable region as ordinary editable
+	 * blocks. Typing, Enter-splitting, inline marks and phase-1 attribute
+	 * carry work exactly like the top level (children render through the
+	 * same editableSegmentHtml). Serialize splices the slot's serialized
+	 * children back between the wrapper's bytes ONLY when the slot was
+	 * edited; an untouched group emits its stored raw unchanged. A container
+	 * with any complex child (nested group, embed, image…) stays a phase-2
+	 * island with in-place text runs. Columns/cover are the next slices. */
+	const SLOT_BLOCKS = [ 'group' ];
+
+	// Split a container's raw into { head, open, tag, inner, tail } where
+	// head = opening comment + whitespace, open = the wrapper's own open tag
+	// and tail = wrapper close tag + closing comment. Byte-identity is the
+	// gate: head + open + inner + tail must reassemble the raw, and nothing
+	// but the closing block comment may follow the wrapper — otherwise null
+	// and the container stays an island. The depth scan skips block comments
+	// (Gutenberg escapes < > in comment JSON, but skipping is the safe read).
+	function slotParseContainer( raw ) {
+		const str = String( raw || '' );
+		const m = str.match( /^(<!--\s*wp:[a-z0-9\/_-]+(?:\s+\{[\s\S]*?\})?\s*-->\s*)(<([a-z][a-z0-9]*)((?:[^>"']|"[^"]*"|'[^']*')*)>)/ );
+		if ( ! m ) return null;
+		const head = m[ 1 ];
+		const open = m[ 2 ];
+		const tag = m[ 3 ].toLowerCase();
+		const lower = str.toLowerCase();
+		let depth = 1;
+		let i = head.length + open.length;
+		let close = -1;
+		while ( i < str.length ) {
+			if ( str.startsWith( '<!--', i ) ) {
+				const end = str.indexOf( '-->', i );
+				i = end === -1 ? str.length : end + 3;
+				continue;
+			}
+			if ( str[ i ] === '<' ) {
+				const end = str.indexOf( '>', i );
+				if ( end === -1 ) return null;
+				if ( lower.startsWith( '</' + tag, i ) ) {
+					depth--;
+					if ( depth === 0 ) { close = i; break; }
+				} else if ( lower.startsWith( '<' + tag, i ) && /[\s>\/]/.test( lower[ i + 1 + tag.length ] || '' ) ) {
+					depth++;
+				}
+				i = end + 1;
+				continue;
+			}
+			i++;
+		}
+		if ( close === -1 ) return null;
+		const closeEnd = str.indexOf( '>', close ) + 1;
+		if ( ! /^\s*<!--\s*\/wp:[a-z0-9\/_-]+\s*-->\s*$/.test( str.slice( closeEnd ) ) ) return null;
+		const inner = str.slice( head.length + open.length, close );
+		const tail = str.slice( close );
+		if ( head + open + inner + tail !== str ) return null;
+		return { head, open, tag, inner, tail };
+	}
+
+	// A slot candidate's children: every segment must be an editable simple
+	// block; inter-block whitespace passes, anything else disqualifies.
+	function slotChildSegments( inner ) {
+		const segs = tokenizeBlocks( inner );
+		if ( ! segs ) return null;
+		const out = [];
+		for ( const seg of segs ) {
+			if ( seg.type === 'html' ) {
+				if ( seg.raw.trim() ) return null;
+				continue;
+			}
+			if ( ! segmentEditable( seg ) ) return null;
+			out.push( seg );
+		}
+		return out.length ? out : null;
+	}
+
+	function slotIslandHtml( idx, name, raw ) {
+		const parts = slotParseContainer( raw );
+		if ( ! parts ) return null;
+		const kids = slotChildSegments( parts.inner );
+		if ( ! kids ) return null;
+		const short = String( name || '' ).replace( /^core\//, '' );
+		const childrenHtml = kids.map( ( seg ) => editableSegmentHtml( seg ) ).join( '\n' );
+		/* translators: island hover hint on an editable group container */
+		const hint = __( 'Grouped content — write inside · layout via ⚙' );
+		return `<div class="minn-block-island minn-slot-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
+			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( short ) } block">⚙ ${ esc( short ) }</button>
+			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
+			${ parts.open }<div class="minn-slot" contenteditable="true">${ childrenHtml }</div></${ parts.tag }>
+		</div>`;
+	}
+
+	// Splice a dirty slot's serialized children back between the container's
+	// verbatim wrapper bytes and store the result as the island's raw. Used
+	// by the serializer and by the inspector (which must see current text
+	// before it builds its model). No-op while the slot is clean.
+	function flushSlotIsland( el, islands ) {
+		if ( ! el || ! el.dataset || ! el.dataset.minnSlotDirty || ! islands ) return;
+		const idx = parseInt( el.dataset.island, 10 );
+		if ( ! Number.isFinite( idx ) || islands[ idx ] == null ) return;
+		const slot = el.querySelector( '.minn-slot' );
+		const parts = slotParseContainer( String( islands[ idx ] ) );
+		if ( ! slot || ! parts ) return;
+		islands[ idx ] = parts.head + parts.open + serializeToBlocks( slot, islands ) + parts.tail;
 	}
 
 	// The contenteditable=false card an island renders as. Shared by content
@@ -15081,6 +15195,12 @@
 	// reads the fields themselves, and renderIslandPreviews must not overwrite them.
 	function islandHtml( idx, name, raw ) {
 		const short = String( name || '' ).replace( /^core\//, '' );
+		if ( SLOT_BLOCKS.includes( short ) ) {
+			// Editable container: all-simple children get a real typing slot;
+			// any complex child falls through to the standard island below.
+			const slotted = slotIslandHtml( idx, name, raw );
+			if ( slotted ) return slotted;
+		}
 		if ( short === 'shortcode' ) {
 			const code = stripBlockComments( raw || '' ).trim();
 			return `<div class="minn-block-island minn-shortcode-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
@@ -16298,8 +16418,11 @@
 				return;
 			}
 			if ( n.nodeType !== Node.ELEMENT_NODE ) return;
-			// Islands pass through byte-for-byte from the original markup.
+			// Islands pass through byte-for-byte from the original markup —
+			// except an edited container slot, whose children re-serialize
+			// between the wrapper's verbatim bytes first.
 			if ( n.classList.contains( 'minn-block-island' ) ) {
+				if ( n.classList.contains( 'minn-slot-island' ) ) flushSlotIsland( n, islands );
 				const raw = islands && islands[ parseInt( n.dataset.island, 10 ) ];
 				if ( raw != null ) out.push( raw.trim() );
 				return;
@@ -17406,6 +17529,9 @@
 		const body = $( '#minn-editor-body' );
 		if ( ! el || ! body ) return;
 		ensureTrailingParagraph( body );
+		// Container slots need the same terminal affordance as the body — a
+		// slot ending in a table/figure/quote is otherwise untypeable-below.
+		$$( '.minn-slot', body ).forEach( ensureTrailingParagraph );
 		const words = countEditorWords( body );
 		const ed = state.editor;
 		// While clean, keep re-basing so late island previews don't count as
@@ -19880,6 +20006,14 @@
 				island.dataset.btnStamped = '1';
 			} );
 			body.addEventListener( 'input', ( e ) => {
+				// Container-slot edits: stamp the island dirty so serialize
+				// splices the slot instead of emitting the stale stored raw.
+				// No return — the main input handlers still run for it.
+				const slotIn = e.target.closest && e.target.closest( '.minn-slot' );
+				if ( slotIn ) {
+					const isl = slotIn.closest( '.minn-block-island' );
+					if ( isl ) isl.dataset.minnSlotDirty = '1';
+				}
 				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
 				if ( sc ) { commitShortcodeInput( sc ); return; }
 				const runEl = e.target.closest && e.target.closest( '.minn-island-run' );
@@ -20023,6 +20157,21 @@
 					if ( ! appShortcut ) e.stopPropagation();
 					return;
 				}
+				// ⌘A inside a container slot escapes to the whole outer body
+				// (probed for runs; same nested-editable behavior) — clamp the
+				// first press to the slot's own content, like Gutenberg's
+				// select-block-first convention.
+				const slotKd = e.target.closest && e.target.closest( '.minn-slot' );
+				if ( slotKd && appShortcut && e.key.toLowerCase() === 'a' && ! e.shiftKey && ! e.altKey ) {
+					e.preventDefault();
+					e.stopPropagation();
+					const r = document.createRange();
+					r.selectNodeContents( slotKd );
+					const sel = window.getSelection();
+					sel.removeAllRanges();
+					sel.addRange( r );
+					return;
+				}
 				// Marker-block end-split (attribute carry, phase 1): Blink
 				// copies element attributes to BOTH halves of an Enter split —
 				// right for mid-splits (Gutenberg's own semantics), but an
@@ -20037,7 +20186,11 @@
 						? ( sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement )
 						: null;
 					const carrier = anchorEl && anchorEl.closest ? anchorEl.closest( '[data-minn-attrs]' ) : null;
-					if ( carrier && ! carrier.closest( '.minn-block-island' ) && body.contains( carrier ) ) {
+					// Preview interiors are excluded (their text edits ride the
+					// run splice, not element splits) — container SLOTS are real
+					// typing surface and get the same end-split normalization
+					// as the top level.
+					if ( carrier && ! carrier.closest( '.minn-island-preview' ) && body.contains( carrier ) ) {
 						const stamp = carrier.dataset.minnAttrs;
 						requestAnimationFrame( () => {
 							// End-split leaves the empty clone AFTER the carrier;
@@ -20067,12 +20220,26 @@
 			// body's own paste handler regardless of registration order.
 			body.addEventListener( 'paste', ( e ) => {
 				const runEl = e.target.closest && e.target.closest( '.minn-island-run' );
-				if ( ! runEl ) return;
-				e.preventDefault();
-				e.stopPropagation();
-				const text = ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) || '' )
-					.replace( /\s+/g, ' ' );
-				if ( text ) document.execCommand( 'insertText', false, text );
+				if ( runEl ) {
+					e.preventDefault();
+					e.stopPropagation();
+					const text = ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) || '' )
+						.replace( /\s+/g, ' ' );
+					if ( text ) document.execCommand( 'insertText', false, text );
+					return;
+				}
+				// Container slots: the rich-paste pipeline's block splicing is
+				// tuned to the top-level body (bracket markers, top-level
+				// island rebuilds) — inside a slot, land plain text at the
+				// caret. Newlines survive; multi-block paste into slots is a
+				// follow-up slice.
+				const slotEl = e.target.closest && e.target.closest( '.minn-slot' );
+				if ( slotEl ) {
+					e.preventDefault();
+					e.stopPropagation();
+					const text = ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) || '' ).replace( /\r/g, '' );
+					if ( text ) document.execCommand( 'insertText', false, text );
+				}
 			}, true );
 			// Clicking the summary text field must not toggle <details> closed.
 			body.addEventListener( 'click', ( e ) => {
@@ -21185,6 +21352,9 @@
 		if ( ! ed ) return;
 		closeInspector();
 		const idx = parseInt( islandEl.dataset.island, 10 );
+		// A dirty container slot's stored raw lags the DOM — flush first so
+		// the inspector models what the writer actually sees.
+		if ( islandEl.classList.contains( 'minn-slot-island' ) ) flushSlotIsland( islandEl, ed.islands );
 		const raw = ed.islands && ed.islands[ idx ];
 		if ( raw == null ) return;
 		const model = inspectorModel( raw );
@@ -22504,6 +22674,13 @@
 			// the arm/remove path deletes the whole block out from under the
 			// writer (found in the island-runs suite).
 			if ( e.target.closest && e.target.closest( '.minn-island-run' ) ) {
+				disarm();
+				return;
+			}
+			// Container-slot interiors are real typing surface — same class:
+			// the caret walk would resolve to the slot island and arm/delete
+			// the whole container mid-sentence.
+			if ( e.target.closest && e.target.closest( '.minn-slot' ) ) {
 				disarm();
 				return;
 			}
