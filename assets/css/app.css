@@ -2540,6 +2540,25 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-island-preview { pointer-events: none; opacity: 0.85; overflow: hidden; background: transparent !important; }
 .minn-island-preview > :last-child { margin-bottom: 0; }
 .minn-island-empty { color: var(--text3); font-size: 13.5px; font-style: italic; }
+/* In-place island text runs: aligned preview text nodes wrapped in nested
+   contenteditable spans. pointer-events:auto punches through the preview's
+   pointer-events:none so the text is clickable; the dotted underline on
+   island hover advertises which text is editable, and focus swaps it for a
+   soft accent wash. Full opacity: editable text should not look dimmed. */
+.minn-island-run { pointer-events: auto; cursor: text; border-radius: 3px; opacity: 1; }
+.minn-block-island:hover .minn-island-run,
+.minn-block-island.minn-island-selected .minn-island-run {
+  text-decoration: underline dotted color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.minn-island-run:focus {
+  outline: none;
+  text-decoration: none;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+/* An emptied run keeps a caret target instead of collapsing to zero width. */
+.minn-island-run:empty { display: inline-block; min-width: 10px; min-height: 1em; vertical-align: baseline; }
 /* Shortcode island — type the shortcode in place (no browser prompt). */
 .minn-shortcode-island {
   user-select: text;

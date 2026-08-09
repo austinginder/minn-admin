@@ -224,6 +224,15 @@ point were the last items).
   opens on "a reimagined WordPress admin experience" with an Overview screenshot,
   not the writing surface.
 
+## Nested content (plan of record, 2026-08-08)
+
+The measured answer to grouped/columns content locking on FSE sites (GH #4) lives in
+[editor-direction.md](editor-direction.md), "The nested-content plan": three phases —
+attribute carry for text-flow blocks, editable text inside island previews
+(✅ shipped 2026-08-08, `tests/island-runs.test.js`), and container slots. Slots edit
+content inside layouts; layout itself stays Gutenberg's job. The never-build list below
+is unchanged by that plan.
+
 ## What we will never build (unchanged, load-bearing)
 
 **North star:** Minn is the writing editor for WordPress. Gutenberg is the layout tool.
