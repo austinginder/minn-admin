@@ -55,10 +55,16 @@
 		'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 	}[ c ] ) );
 
+	// Parse in an INERT document. A div created from the live document still
+	// runs the resource-loading side of HTML parsing, so `<img src=x
+	// onerror=…>` fires its handler during the parse — before any escaping of
+	// the RETURN value can help. An inert document fetches nothing and fires
+	// nothing. (`<script>` never executes via innerHTML either way; event
+	// handler attributes are the vector, so test with those.)
+	const stripTagsDoc = document.implementation.createHTMLDocument( '' );
 	const stripTags = ( html ) => {
-		const d = document.createElement( 'div' );
-		d.innerHTML = html || '';
-		return d.textContent || '';
+		stripTagsDoc.body.innerHTML = html || '';
+		return stripTagsDoc.body.textContent || '';
 	};
 
 	const decodeEntities = stripTags;
