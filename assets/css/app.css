@@ -2575,16 +2575,24 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-slot .minn-block-island > .minn-island-chip { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
 .minn-slot .minn-block-island:is(:hover, :focus-within, .minn-island-armed, .minn-island-selected) > .minn-island-chip { opacity: 1; pointer-events: auto; }
 /* Deepest wins: a container holding the hovered/focused island keeps its
-   own chip hidden and its border resting. */
-.minn-block-island:has(.minn-block-island:is(:hover, :focus-within)) > .minn-island-chip { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
-.minn-block-island:hover:has(.minn-block-island:hover):not(.minn-island-armed):not(.minn-island-selected) { border-color: var(--border2); }
-.minn-slot .minn-block-island:hover:has(.minn-block-island:hover):not(.minn-island-armed):not(.minn-island-selected) {
+   own chip hidden and its border resting. The ancestor marker class is set
+   by cheap pointer/focus handlers — the :has() form of these rules bound
+   style invalidation to every DOM mutation and cost ~300ms PER KEYSTROKE
+   on nested pages (perf-editor.bench.js; never reintroduce :has() inside
+   the editor surface). The covered ancestor is ALSO hovered (the pointer
+   is physically inside it), so these must out-specify the hover-reveal
+   above — hence the :hover in the selector, matching its weight, winning
+   on source order. */
+.minn-block-island.minn-island-covered:hover > .minn-island-chip,
+.minn-slot .minn-block-island.minn-island-covered:hover > .minn-island-chip { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
+.minn-block-island:hover.minn-island-covered:not(.minn-island-armed):not(.minn-island-selected) { border-color: var(--border2); }
+.minn-slot .minn-block-island:hover.minn-island-covered:not(.minn-island-armed):not(.minn-island-selected) {
   border-color: color-mix( in srgb, var(--border2) 55%, transparent );
 }
 /* Hints teach the concept once: top-level containers only, and never
    while the writer is down inside a nested card. */
 .minn-slot .minn-block-island .minn-island-hint { display: none; }
-.minn-block-island:has(.minn-block-island:hover) > .minn-island-hint { opacity: 0; }
+.minn-block-island.minn-island-covered > .minn-island-hint { opacity: 0; }
 /* No max-height: a hard cap (was 420px) clipped multi-card grids and tall
    design-library inserts mid-block while the front end looked fine. overflow
    stays hidden so child border-radii don't paint outside the island.

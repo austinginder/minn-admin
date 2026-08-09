@@ -20777,6 +20777,29 @@
 			// handlers (and everything else block-shaped) expect <p> — inside
 			// container slots AND the main body. One document-wide setting.
 			try { document.execCommand( 'defaultParagraphSeparator', false, 'p' ); } catch ( e ) { /* non-Blink */ }
+			// Deepest-wins chrome: ancestors of the hovered/focused island
+			// wear .minn-island-covered so their chip/hint/highlight rest.
+			// Event-driven ON PURPOSE — the :has() selector form bound style
+			// invalidation to every DOM mutation and benched at ~300ms per
+			// keystroke on nested pages (tests/perf-editor.bench.js).
+			let coveredMarks = [];
+			const markCovered = ( innermost ) => {
+				coveredMarks.forEach( ( el ) => el.classList.remove( 'minn-island-covered' ) );
+				coveredMarks = [];
+				let a = innermost && innermost.parentElement && innermost.parentElement.closest( '.minn-block-island' );
+				while ( a ) {
+					a.classList.add( 'minn-island-covered' );
+					coveredMarks.push( a );
+					a = a.parentElement && a.parentElement.closest( '.minn-block-island' );
+				}
+			};
+			const coveredFrom = ( e ) => {
+				const isl = e.target.closest && e.target.closest( '.minn-block-island' );
+				markCovered( isl && body.contains( isl ) ? isl : null );
+			};
+			body.addEventListener( 'mouseover', coveredFrom );
+			body.addEventListener( 'focusin', coveredFrom );
+			body.addEventListener( 'mouseleave', () => markCovered( null ) );
 			bindIslandGuards( body );
 			bindMarkdown( body );
 			bindSlashMenu( body, insertImage );

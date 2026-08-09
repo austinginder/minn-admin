@@ -96,3 +96,37 @@ The v0.5.x cycle also verified
 menu filtering, table/image chips + ops, island backspace guards, image delete/undo,
 embed render pipeline, backup-restore notice, alignment, link popover. When you fix a bug
 in any of those areas, port its scratchpad suite into this directory as part of the fix.
+
+## Editor feel benchmark (perf, not pass/fail)
+
+`perf-editor.bench.js` measures what a writer feels — per-keystroke latency
+(Event Timing: event start → next paint), long tasks while typing, and editor
+open time — across three reference documents (prose, nested layout, heavy). It
+is a MEASUREMENT, not a gate: it prints a table and exits 0.
+
+```
+MINN_TEST_PASS=… node perf-editor.bench.js <label>
+```
+
+The number that matters is `worst_ms` on the **nested** fixture (deep
+group/columns with nested cards) — that is where editor bloat shows up first.
+To answer "did this cycle slow the editor?", bench HEAD and bench a baseline by
+temporarily swapping in the old asset files:
+
+```
+cp assets/js/app.js /tmp/app.js.work; cp assets/css/app.css /tmp/app.css.work
+git checkout <old-tag-or-commit> -- assets/js/app.js assets/css/app.css
+( cd tests && MINN_TEST_PASS=… node perf-editor.bench.js baseline )
+cp /tmp/app.js.work assets/js/app.js; cp /tmp/app.css.work assets/css/app.css
+```
+
+**Recorded findings.** v0.25.0 nested worst ≈ 56ms. The v0.26.0 chip-density
+pass (deepest-wins chrome) first shipped as `:has()` selectors on the editor
+surface and benched at **~300ms per keystroke** on the nested fixture — real,
+writer-noticeable bloat. Rewritten as an event-driven marker class
+(`.minn-island-covered`, set by cheap mouseover/focusin handlers), it returned
+to ~56ms. **Rule that fell out: never use `:has()` in a selector that matches
+inside `#minn-editor-body`.** `:has()` makes Blink re-evaluate the subject on
+every descendant mutation, so it turns each keystroke into a full-subtree style
+recalc. A marker class toggled by a pointer/focus handler is O(1). Run this
+bench at release cut when a cycle touched editor rendering.
