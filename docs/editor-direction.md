@@ -317,6 +317,24 @@ one. Read the writing-context contract above before touching any of it.
    item can stay unbuilt indefinitely — a legitimate stopping point, not a compromise. The
    earlier probe measured which blocks island, not which containers are mixed.
 
+   ✅ *Measured 2026-08-09* (`scratchpad/probe-container-mix.php` + `-names.php`, TT4+TT5
+   patterns, 155 patterns / 494 container units). **Mixed is the norm, not the exception —
+   the "stay unbuilt" exit does NOT hold.** Of 494 units (columns counted with their
+   columns as one unit): 20% all-simple, 39% mixed only by NESTED CONTAINERS, 41% carry a
+   complex leaf. At the top level, 3 of 131 containers slot today (2%); nesting alone
+   (item 4) lifts that to 26 (20%); the other 105 need nested islands (item 5) — so the
+   two items are confirmed as one project, and it is the whole remaining game. The
+   complex-LEAF distribution is the encouraging part: template constructs (pattern, query,
+   post-*/site-*/query-*, navigation, template-part) dominate the corpus but never appear
+   in POST content — for post-shaped content the leaf problem collapses to essentially
+   **spacer (122) + buttons (31)**, both of which already render as well-behaved islands.
+   REPRIORITIZATION: **item 3 (cover/media-text) is skipped as a standalone slice** —
+   media-text appears ZERO times in the corpus, cover 21 times but almost always NESTED
+   inside groups (top-level coverage gain on this corpus: zero). Cover joins as a nested
+   unit when item 4 lands. Caveat to carry: this corpus is FSE-template-heavy; it is the
+   same stand-in the original 63% probe used, so the numbers are comparable, but they
+   overstate template constructs relative to what a writer's post contains.
+
 **Watch items (not scope, but decide before shipping the above):**
 
 - **Chip and hint density.** Slots + nested islands multiply ⚙ chips and hover hints on a
