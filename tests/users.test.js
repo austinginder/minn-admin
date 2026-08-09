@@ -137,5 +137,34 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		}
 	}
 
+	/* ===== Issue #9: no avatar URL renders the letter tile, never a broken img ===== */
+	// With Show Avatars off, core drops avatar_urls from wp/v2/users entirely
+	// (schema-gated), which used to leave <img src=""> broken-image icons.
+	try {
+		// Write-verify-retry: REST settings writes can race the boot requests
+		// (rule-47c heisenbug) — never trust a lone 200.
+		// Minn registers show_avatars as an integer setting (INT_TOGGLES).
+		let avOff = false;
+		for ( let i = 0; i < 5 && ! avOff; i++ ) {
+			await rest( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { show_avatars: 0 } ) } );
+			const s = await rest( `wp/v2/settings?_=${ Date.now() }` );
+			avOff = !! s.body && ! s.body.show_avatars;
+			if ( ! avOff ) await page.waitForTimeout( 800 );
+		}
+		t.check( 'show_avatars turned off for the probe', avOff, '' );
+
+		await page.goto( `${ BASE }/minn-admin/users`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '.minn-user-cols.minn-table-row', { timeout: 15000 } );
+		const av = await page.evaluate( () => ( {
+			emptySrc: document.querySelectorAll( 'img.minn-user-row-avatar[src=""], .minn-user-row-avatar img[src=""]' ).length,
+			tiles: [ ...document.querySelectorAll( 'div.minn-user-row-avatar' ) ].filter( ( d ) => ! d.querySelector( 'img' ) && d.textContent.trim() ).length,
+			rows: document.querySelectorAll( '.minn-user-cols.minn-table-row' ).length,
+		} ) );
+		t.check( 'no empty-src avatar images with avatars off', av.emptySrc === 0, JSON.stringify( av ) );
+		t.check( 'every row falls back to a letter tile', av.rows > 0 && av.tiles === av.rows, JSON.stringify( av ) );
+	} finally {
+		await rest( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { show_avatars: 1 } ) } ).catch( () => {} );
+	}
+
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

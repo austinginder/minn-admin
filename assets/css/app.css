@@ -400,7 +400,11 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-switchback + .minn-user { margin-top: 8px; }
 .minn-user { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid var(--border); cursor: pointer; border-radius: 9px; }
 .minn-user:hover { background: var(--hover); }
-.minn-user-avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--pink), var(--amber)); flex-shrink: 0; object-fit: cover; }
+.minn-user-avatar {
+  width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--pink), var(--amber));
+  flex-shrink: 0; object-fit: cover; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; font-size: 13px;
+}
 .minn-user-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-user-role { font-size: 12px; color: var(--text3); }
 /* Account actions: WordPress admin (a quiet, discoverable exit — the
@@ -2407,7 +2411,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-profile-fields { display: flex; flex-direction: column; gap: 13px; margin-top: 12px; }
 .minn-pf-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .minn-pf-avatar { display: flex; align-items: center; gap: 12px; }
-.minn-pf-avatar img { width: 38px; height: 38px; }
+.minn-pf-avatar .minn-user-row-avatar { width: 38px; height: 38px; font-size: 15px; }
 .minn-profile-grid .minn-session-row:first-of-type { margin-top: 6px; }
 @media (max-width: 900px) {
   .minn-profile-grid { grid-template-columns: 1fr; }
@@ -2419,7 +2423,13 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* Structure-modal toggle rows: whole row is the click target. */
 .minn-cpt-toggle { display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 500; padding: 5px 0; cursor: pointer; user-select: none; }
 .minn-cpt-toggle:has(.minn-switch:disabled) { cursor: default; }
-.minn-user-row-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel2); object-fit: cover; }
+/* Letter tile; the real avatar covers it and broken/absent URLs reveal it. */
+.minn-user-row-avatar {
+  position: relative; width: 30px; height: 30px; border-radius: 50%; background: var(--panel2); object-fit: cover;
+  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px;
+  overflow: hidden; flex-shrink: 0;
+}
+.minn-user-row-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
 /* ===== Editor extras ===== */
 .minn-tool-hint { margin-left: auto; align-self: center; font-size: 12px; color: var(--text3); }
