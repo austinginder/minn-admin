@@ -26,7 +26,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		'<ul class="wp-block-list"><!-- wp:list-item -->',
 		'<li>First reminder item</li>',
 		'<!-- /wp:list-item --></ul>',
-		'<!-- /wp:list --></div>',
+		'<!-- /wp:list -->',
+		'',
+		'<!-- wp:acme/badge -->',
+		'<div class="acme-badge">Badge text</div>',
+		'<!-- /wp:acme/badge --></div>',
 		'<!-- /wp:group -->',
 		'',
 		'<!-- wp:columns -->',
@@ -68,7 +72,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 			editable: g ? [ ...g.querySelectorAll( '.minn-island-run' ) ].every( ( s ) => s.isContentEditable ) : false,
 		};
 	} );
-	t.check( 'group arms three runs', shape.groupRuns === 3, JSON.stringify( shape ) );
+	t.check( 'group arms four runs (incl. unregistered child)', shape.groupRuns === 4, JSON.stringify( shape ) );
 	t.check( 'columns arm two runs', shape.colRuns === 2, JSON.stringify( shape ) );
 	t.check( 'runs are editable, hint updated', shape.editable && /editable in place/i.test( shape.hint ), shape.hint );
 

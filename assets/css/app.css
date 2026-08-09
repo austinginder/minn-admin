@@ -2559,6 +2559,14 @@ button.minn-ac-item:hover { background: var(--hover); }
 }
 /* An emptied run keeps a caret target instead of collapsing to zero width. */
 .minn-island-run:empty { display: inline-block; min-width: 10px; min-height: 1em; vertical-align: baseline; }
+/* Container slots (phase 3): a group renders as a shell with its children
+   directly editable inside. Full-strength text — an editable interior must
+   not look dimmed like a preview — and the island frame stays as the
+   grouping signal. */
+.minn-slot-island { cursor: default; }
+.minn-slot { outline: none; cursor: text; min-height: 1.5em; caret-color: var(--accent); }
+.minn-slot > :first-child { margin-top: 0; }
+.minn-slot > :last-child { margin-bottom: 0; }
 /* Shortcode island — type the shortcode in place (no browser prompt). */
 .minn-shortcode-island {
   user-select: text;
