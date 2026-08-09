@@ -107,10 +107,18 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
 - **Editor** — a calm, block-aware writing surface that stores **native Gutenberg markup**
   (zero lock-in: open any post in the block editor, any time). Markdown typing conventions
   (`**bold**`, `` `code` ``, `## headings`, lists, quotes, fences, dividers…), with wraps
-  that stay on the undo stack (including inline code). Link popover on ⌘K, text alignment,
-  table and image controls in island-style cutouts, complex blocks preserved byte-for-byte
-  as **configurable islands** with real front-end styles (full height; previews no longer
-  clip tall grids). Slash commands stay curated and type-to-filter; **Browse all** or **⌘/**
+  that stay on the undo stack (including inline code). **Every core layout container is a
+  writing surface**: Group, Columns, Cover and Media & Text open for typing, nested to any
+  depth, with markdown, the slash menu, the block picker and rich paste all working inside
+  and each column its own side-by-side surface; container framing and styling re-save
+  **byte-for-byte**, so the block editor always reopens the layout cleanly. Complex blocks
+  (a spacer, a buttons row, a plugin's block) stay preserved byte-for-byte as
+  **configurable islands** with real front-end styles, right where they live, with
+  **duplicate and move arrows** in the ⚙ popover (left/right hops between columns) and
+  in-place text editing. **Pasting raw block markup** (from an AI tool or a pattern file)
+  converts to real blocks instantly. Link popover on ⌘K, text alignment,
+  table and image controls in island-style cutouts, at the top level and inside
+  containers. Slash commands stay curated and type-to-filter; **Browse all** or **⌘/**
   opens the **block picker**, grouped by source (basics, plugin blocks, design libraries,
   patterns). Plugins can register free-form slash items through
   **`minn_admin_editor_commands`** (boilerplate HTML, island templates, or an async REST
@@ -216,7 +224,9 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   render **typed rows**: status pills, code blocks, key-value tables and sandboxed HTML
   previews. Surface lists open a **⋯ / right-click** menu of that collection's actions. Plugins that need
   their own first-run install get a **setup card** that runs their installer in place. The sidebar
-  organizes into **Workspace / Tools / Manage** groups so daily inboxes stay separate from site plumbing
+  organizes into **Workspace / Tools / Manage** groups so daily inboxes stay separate from site plumbing,
+  and **admin menus a developer removed with `remove_menu_page` stay hidden in Minn too**
+  (cosmetic like the original; opt out with `minn_admin_respect_removed_menus`)
 - **Backups** — with **UpdraftPlus** or **WPvivid**: sets listed, status cards, a System health
   check answering "is my site backed up?", and **Back up site now** from ⌘K. With **BackWPup**:
   local folder archives and run-now. With **All-in-One WP Migration**: local `.wpress` exports

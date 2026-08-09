@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.25.0. This file ships inside the plugin, so the copy you
+*Current as of v0.26.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -71,7 +71,9 @@ you: a pending WordPress update, or a site that is not fully public.
 ## Writing
 
 Press **New** (or ⌘K, "Create new post") and write. The editor is built
-for drafting, not for page design:
+for writing, from quick posts to full pages assembled from groups and
+columns; heavy page design still belongs to the block editor, one click
+away:
 
 - **Type markdown, get formatting.** `#` for a heading, `-` for a list,
   `>` for a quote, `**bold**`, `` `code` ``, `[link](url)`, `---` for a
@@ -81,20 +83,31 @@ for drafting, not for page design:
   including your plugins' blocks and entire designs and patterns you can
   drop in.
 - **Paste from anywhere.** Word, Google Docs and web pages paste in clean.
-  A pasted image or a lone URL to a tweet or video becomes the real thing.
+  A pasted image or a lone URL to a tweet or video becomes the real thing,
+  and raw block markup (from an AI tool or a tutorial) pastes in as real,
+  editable blocks.
 - **Your patterns come along.** Patterns you save in WordPress (synced or
   not) appear in the slash menu and the block library, and a Patterns
   entry in the Content list manages them. A synced pattern inserts as a
   live reference: edit the pattern once and every post using it follows,
   and Minn reminds you of that reach before you save one. An unsynced
   pattern drops in as a detached copy you can edit freely.
+- **Layout blocks open for writing.** Groups, columns, covers and
+  media-and-text blocks are writing surfaces, nested to any depth: click
+  in and type, with markdown, the slash menu and paste all working
+  inside, and each column its own surface laid out like the front end.
+  The layout itself (widths, colors, spacing) is preserved exactly, and
+  anything you do not touch saves back byte for byte, so the block
+  editor always reopens the page cleanly.
 - **Complex blocks are kept safe, untouched.** If a post contains a block
-  Minn's editor doesn't natively edit (a plugin's fancy block, a Gutenberg
-  layout), it appears as a framed island rendered with your site's real
-  styling. Hovering an island shows a short note saying why it is
-  protected and where edits live. Its text and images are usually
-  editable in place via the ⚙
-  chip; its structure is preserved byte for byte. One click on "Block
+  Minn's editor doesn't natively edit (a plugin's fancy block, a spacer,
+  a row of buttons), it appears as a framed card rendered with your
+  site's real styling, right where it lives, even inside a group.
+  Hovering the card shows a short note saying why it is protected and
+  where edits live. Its text and images are usually editable in place,
+  and the ⚙ chip holds its settings plus duplicate and move arrows, so
+  a testimonial can hop into the next column without leaving Minn; its
+  structure is preserved byte for byte. One click on "Block
   editor ↗" opens the same post in Gutenberg whenever you want the full
   toolkit. Posts built with page builders (Elementor, Bricks, Divi and
   friends) open read-only with an "Edit in your builder" button, because
@@ -166,6 +179,10 @@ site itself:
 - Right-click a group heading in the block library to hide that plugin's
   blocks or designs from your menus.
 - Hide any notice from the Notices tab.
+- If a developer already hid admin menus in wp-admin with code (a common
+  client-site setup), Minn notices and keeps those entries out of its
+  sidebar too, automatically. Like the wp-admin original this is
+  cosmetic; the screens stay reachable by address and from the palette.
 
 Everything hidden is listed under **Your profile**, where one click
 restores it, and an administrator can restore items for you from your
