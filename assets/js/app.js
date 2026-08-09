@@ -2860,11 +2860,13 @@
 	// past the viewable gate (not publicly queryable, but daily-manageable
 	// content; their markup opens natively in the editor).
 	function slimContentTypes( list ) {
+		// Type labels are HTML-context strings (translations legitimately
+		// carry &#039;/&amp;) — decode once here; every consumer re-escapes.
 		const kept = list
 			.filter( ( t ) => t.viewable && t.rest_base && ! HIDDEN_TYPES.includes( t.slug ) )
-			.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: t.name } ) );
+			.map( ( t ) => ( { slug: t.slug, restBase: t.rest_base, name: decodeEntities( t.name ) } ) );
 		const wpb = list.find( ( t ) => t.slug === 'wp_block' && t.rest_base );
-		if ( wpb ) kept.push( { slug: 'wp_block', restBase: wpb.rest_base, name: wpb.name || __( 'Patterns' ) } );
+		if ( wpb ) kept.push( { slug: 'wp_block', restBase: wpb.rest_base, name: decodeEntities( wpb.name ) || __( 'Patterns' ) } );
 		return kept;
 	}
 	let typesPromise = null;

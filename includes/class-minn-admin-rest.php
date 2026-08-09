@@ -23,6 +23,14 @@ class Minn_Admin_REST {
 		// next lock refresh notices. Requests without the header (Gutenberg,
 		// third parties) are untouched.
 		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'guard_locked_save' ), 10, 3 );
+		// Core's WP_Locale swaps a space thousands separator for the literal
+		// string `&nbsp;` (wp-admin prints numbers as HTML, where the entity
+		// renders invisibly). Minn renders REST values as plain text, so on
+		// space-separated locales (pl, cs, fr, ru…) every
+		// number_format_i18n() value — size_format() included — would show
+		// the raw entity. Scoped to Minn routes; decoding to U+00A0 keeps
+		// core's no-wrap intent.
+		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'arm_plain_numbers' ), 10, 3 );
 	}
 
 	public static function register_routes() {
@@ -2713,6 +2721,24 @@ class Minn_Admin_REST {
 	 * by failing the save itself with a 409 the client turns into the
 	 * taken-over UI. Only fires when the request carries our header.
 	 */
+	/**
+	 * See init(): number_format_i18n output carries a literal `&nbsp;` on
+	 * space-separated locales. One filter here fixes every call site (the
+	 * overview stats, the DB browser, every adapter status card) at once.
+	 */
+	public static function arm_plain_numbers( $response, $handler, $request ) {
+		if ( 0 === strpos( $request->get_route(), '/' . self::NS . '/' ) ) {
+			add_filter( 'number_format_i18n', array( __CLASS__, 'decode_formatted_number' ) );
+		}
+		return $response;
+	}
+
+	public static function decode_formatted_number( $formatted ) {
+		return false === strpos( (string) $formatted, '&' )
+			? $formatted
+			: html_entity_decode( (string) $formatted, ENT_QUOTES, 'UTF-8' );
+	}
+
 	public static function guard_locked_save( $response, $handler, $request ) {
 		if ( null !== $response ) {
 			return $response;
@@ -4262,8 +4288,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$out[] = array(
 				'slug'         => $tax->name,
 				'rest'         => $tax->rest_base ? $tax->rest_base : $tax->name,
-				'label'        => $tax->labels->name,
-				'item'         => strtolower( $tax->labels->singular_name ),
+				'label'        => Minn_Admin::plain_text( $tax->labels->name ),
+				'item'         => strtolower( Minn_Admin::plain_text( $tax->labels->singular_name ) ),
 				'hierarchical' => (bool) $tax->hierarchical,
 				'canDelete'    => current_user_can( $tax->cap->delete_terms ),
 				'canEdit'      => current_user_can( $tax->cap->edit_terms ),

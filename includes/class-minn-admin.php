@@ -534,6 +534,16 @@ class Minn_Admin {
 		return add_query_arg( self::QUERY_VAR, '1', home_url( '/' ) );
 	}
 
+	/**
+	 * A display string as plain text. Labels and names are HTML-context by
+	 * WordPress convention — translators and plugins legitimately put
+	 * &#039;, &amp; or &nbsp; in them because wp-admin prints them as HTML.
+	 * Minn renders text, so decode before sending; the client re-escapes.
+	 */
+	public static function plain_text( $s ) {
+		return html_entity_decode( wp_strip_all_tags( (string) $s ), ENT_QUOTES, 'UTF-8' );
+	}
+
 	public static function admin_bar_link( $bar ) {
 		if ( ! current_user_can( 'edit_posts' ) ) {
 			return;
