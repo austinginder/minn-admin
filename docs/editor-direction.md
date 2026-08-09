@@ -132,6 +132,22 @@ Three phases, each shippable alone, in order:
    serialize. Enter-splitting duplicates the marker to both halves, which matches Gutenberg's
    own split behavior. Gate the build on a one-script Blink probe of split/merge/undo around
    the marker. This alone unlocks the 63%.
+   ✅ *Shipped 2026-08-08 (v0.26.0 cycle)* — `TEXTFLOW_CARRY_BLOCKS` (paragraph, heading,
+   list) join `segmentEditable`; the load path parks the full attrs JSON on the element
+   (and, for lists, each list-item's own attrs on its `<li>` — closing a pre-existing hole
+   where list-item attrs vanished silently on save). The serializer emits carried JSON
+   verbatim, merging only the DOM-editable keys back in (paragraph `align`, heading
+   `textAlign`, list numbering — the table `hasFixedLayout` precedent), keeps the marker
+   element's inline style (saved content, exempt from the chrome style-strip), and keeps
+   empty marker paragraphs as real blocks. Probed Blink facts (`scratchpad/probe-attr-carry.*`):
+   mid-split copies class+style+marker to both halves (correct Gutenberg semantics); merge
+   keeps the first block's attrs (also correct); end-split clones the marker onto the empty
+   half, so a keydown observer strips marker+class+style from an empty same-marker sibling
+   one frame later (out-of-stack ATTR mutation is undo-safe — probed; text mutation is not);
+   `formatBlock` HALF-drops attrs (class+marker gone, style kept), which is why block-TYPE
+   conversions (markdown `#`/`-`/`1.`/`>`/```` ``` ````/`---` prefixes, toolbar block +
+   list buttons) are refused on marker blocks with a toast. Inline marks stay fully allowed.
+   Suite: `tests/attr-carry.test.js` (20 checks, byte-identity assertions on saved JSON).
 2. **Editable text inside island previews** (medium, highest daily leverage). The text-runs
    machinery (`textRunsOf` / `spliceTextRuns`) already edits island text through inspector
    textareas by byte-offset splice. Move that editing in place: the preview's text runs
