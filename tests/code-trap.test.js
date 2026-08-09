@@ -89,12 +89,79 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 	t.check( 'chip label tracks the picked language', !! relabeled && /php/.test( relabeled.text ), JSON.stringify( relabeled ) );
 	await page.keyboard.press( 'Escape' );
 	await page.keyboard.press( 'Meta+s' );
-	await page.waitForTimeout( 1500 );
-	const saved3 = await page.evaluate( async ( pid ) => {
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
-		return ( await r.json() ).content.raw;
-	}, id2 );
+	// Poll for the save to land — a flat wait reads stale under load (the
+	// rule-77 class; this was the suite's long-standing 11/12 flake).
+	let saved3 = '';
+	for ( let i = 0; i < 15; i++ ) {
+		await page.waitForTimeout( 800 );
+		saved3 = await page.evaluate( async ( pid ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw&_cb=' + Date.now(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( await r.json() ).content.raw;
+		}, id2 );
+		if ( /language-php/.test( saved3 ) ) break;
+	}
 	t.check( 'picked language persists, no hover styles leak', /language-php/.test( saved3 ) && ! /border-color/.test( saved3 ), saved3.slice( -120 ) );
+
+	/* ===== Remove via the chip popover (the report: no UI way to delete a
+	 * code block). The island removal pattern: Undo toast, ⌘Z restores
+	 * while the toast is live. ===== */
+	// The PREVIOUS step's save can land late under load; its "Draft saved"
+	// toast would replace the Undo toast (and clear the pending ⌘Z
+	// restore). Wait for that save to fully settle first.
+	await page.waitForFunction( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw&_cb=' + Date.now(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+		return /language-php/.test( ( await r.json() ).content.raw );
+	}, id2, { timeout: 20000 } );
+	await page.waitForTimeout( 1200 );
+	const openCodeChip = () => page.evaluate( () => {
+		const chip = [ ...document.querySelectorAll( '#minn-table-chips button' ) ].find( ( c ) => c._kind === 'code' );
+		chip.click();
+	} );
+	// Give the (empty, ```-born) pre content so the restore check proves
+	// the block comes back WITH its text, not just as a shell.
+	await page.evaluate( () => {
+		const pre = document.querySelector( '#minn-editor-body pre' );
+		pre.focus( { preventScroll: true } );
+		const r = document.createRange();
+		r.selectNodeContents( pre );
+		r.collapse( true );
+		const s = getSelection();
+		s.removeAllRanges();
+		s.addRange( r );
+	} );
+	await page.keyboard.type( 'restore_me()' );
+	await openCodeChip();
+	await page.waitForSelector( '.minn-code-pop [data-code-remove]', { timeout: 5000 } );
+	await page.click( '.minn-code-pop [data-code-remove]' );
+	await page.waitForTimeout( 400 );
+	const afterRemove = await page.evaluate( () => ( {
+		pre: !! document.querySelector( '#minn-editor-body pre' ),
+		toast: /Block removed/.test( ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ),
+	} ) );
+	t.check( 'popover Remove deletes the code block with an Undo toast', ! afterRemove.pre && afterRemove.toast, JSON.stringify( afterRemove ) );
+	await page.keyboard.press( 'Meta+z' ); // toast is live → runs the restore
+	await page.waitForTimeout( 300 );
+	const restored = await page.evaluate( () => {
+		const pre = document.querySelector( '#minn-editor-body pre' );
+		return { pre: !! pre, text: pre ? pre.textContent : '' };
+	} );
+	t.check( '⌘Z while the toast shows restores the code block with its text', restored.pre && /restore_me/.test( restored.text ), JSON.stringify( restored ) );
+	// Remove again and save: the deletion must persist.
+	await openCodeChip();
+	await page.waitForSelector( '.minn-code-pop [data-code-remove]', { timeout: 5000 } );
+	await page.click( '.minn-code-pop [data-code-remove]' );
+	await page.waitForTimeout( 300 );
+	await page.keyboard.press( 'Meta+s' );
+	let saved4 = '';
+	for ( let i = 0; i < 12; i++ ) {
+		await page.waitForTimeout( 800 );
+		saved4 = await page.evaluate( async ( pid ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw&_cb=' + Date.now(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( await r.json() ).content.raw;
+		}, id2 );
+		if ( ! /wp:code/.test( saved4 ) ) break;
+	}
+	t.check( 'removed code block stays gone in saved markup', ! /wp:code/.test( saved4 ), saved4.slice( 0, 160 ) );
 
 	await deletePost( page, id );
 	await deletePost( page, id2 );
