@@ -15243,6 +15243,16 @@
 		return n && n.nodeType === Node.ELEMENT_NODE && n.parentNode === root ? n : null;
 	}
 
+	// Direct-DOM edits inside a container slot never fire `input`, so the
+	// slot's dirty stamp (which gates flushSlotIsland) must be set by hand.
+	// execCommand paths need no call — Blink fires `input` on the slot host
+	// (probed) and the body's input handler stamps it. No-op outside slots.
+	function stampSlotDirtyFor( el ) {
+		const slot = el && el.closest && el.closest( '.minn-slot' );
+		const isl = slot && slot.closest( '.minn-block-island' );
+		if ( isl ) isl.dataset.minnSlotDirty = '1';
+	}
+
 	// Splice a dirty slot's serialized children back between the container's
 	// verbatim wrapper bytes and store the result as the island's raw. Used
 	// by the serializer and by the inspector (which must see current text
@@ -21826,12 +21836,17 @@
 		const ed = state.editor;
 		if ( ! body || ! ed || ed.mode === 'locked' || state.route !== 'editor' ) return clearTableChips();
 		const targets = [];
-		$$( ':scope > table, :scope > figure.wp-block-table table', body ).forEach( ( t ) => targets.push( { el: t, kind: 'table' } ) );
-		$$( ':scope > figure.wp-block-image img, :scope > img', body ).forEach( ( i ) => targets.push( { el: i, kind: 'image' } ) );
-		// Code blocks ride the same persistent chips as tables/images — the
-		// old hover-shown chip flickered and only the chip itself was a hover
-		// target. Verse/preformatted pres have no language to configure.
-		$$( ':scope > pre:not(.wp-block-verse):not(.wp-block-preformatted)', body ).forEach( ( p ) => targets.push( { el: p, kind: 'code' } ) );
+		// Per block root (body + every container slot), the liftNestedLists
+		// shape — a table/image/code block inside a group or column is a
+		// direct child of its slot, not the body, and earns the same chip.
+		[ body, ...$$( '.minn-slot', body ) ].forEach( ( root ) => {
+			$$( ':scope > table, :scope > figure.wp-block-table table', root ).forEach( ( t ) => targets.push( { el: t, kind: 'table' } ) );
+			$$( ':scope > figure.wp-block-image img, :scope > img', root ).forEach( ( i ) => targets.push( { el: i, kind: 'image' } ) );
+			// Code blocks ride the same persistent chips as tables/images — the
+			// old hover-shown chip flickered and only the chip itself was a hover
+			// target. Verse/preformatted pres have no language to configure.
+			$$( ':scope > pre:not(.wp-block-verse):not(.wp-block-preformatted)', root ).forEach( ( p ) => targets.push( { el: p, kind: 'code' } ) );
+		} );
 		if ( ! targets.length ) return clearTableChips();
 		// The chips live INSIDE the scroller at content coordinates and ride
 		// scrolling natively — fixed-on-body chips chased per scroll frame
@@ -22140,6 +22155,8 @@
 		const fig = table.closest( 'figure' ) || table;
 		const editorBody = $( '#minn-editor-body' );
 		if ( ! editorBody || ! editorBody.contains( fig ) ) return;
+		// Captured before any mutation — the fig may be gone by landing time.
+		const tableRoot = blockRootOf( fig, editorBody );
 
 		// Mutate a detached clone, then swap via the browser command stack so
 		// every row/col/header/delete change is a real ⌘Z step (see
@@ -22172,9 +22189,10 @@
 				: commandOnBlock( fig, { contentsOnly: false, html: '<p><br></p>' } );
 			if ( ! ok ) return;
 			hideTablePop();
-			// Seat the caret in a real block if one remains (or the empty p).
-			const landing = editorBody.querySelector( 'p, h1, h2, h3, h4, h5, h6, td, th' )
-				|| editorBody.firstElementChild;
+			// Seat the caret in a real block if one remains (or the empty p) —
+			// within the table's own root, so a slot table lands in its slot.
+			const landing = tableRoot.querySelector( 'p, h1, h2, h3, h4, h5, h6, td, th' )
+				|| tableRoot.firstElementChild || editorBody.firstElementChild;
 			if ( landing ) setCaret( landing, 0 );
 			toast( 'Table deleted. ⌘Z restores it' );
 		} else {
@@ -22281,6 +22299,7 @@
 		}
 		code.className = lang === 'auto' ? '' : 'language-' + lang;
 		delete pre.dataset.hl;
+		stampSlotDirtyFor( pre );
 		const body = $( '#minn-editor-body' );
 		if ( body ) highlightCodeBlocks( body, true );
 		scheduleAutosave();
@@ -22617,6 +22636,7 @@
 				if ( Object.keys( attrs ).length ) fig.dataset.minnAttrs = JSON.stringify( attrs );
 				else fig.removeAttribute( 'data-minn-attrs' );
 			}
+			stampSlotDirtyFor( img );
 			scheduleAutosave();
 			toast( 'Image updated' );
 			hideImgPop();
@@ -22639,6 +22659,7 @@
 						host.dataset.minnAttrs = JSON.stringify( a );
 					} catch ( e ) {}
 				}
+				stampSlotDirtyFor( img );
 				scheduleAutosave();
 				toast( 'Image replaced' );
 			} );

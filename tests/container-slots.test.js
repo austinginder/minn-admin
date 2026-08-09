@@ -345,6 +345,98 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	} );
 	t.check( 'slot-interior copy stays native', ! copyShape.hijacked && ! copyShape.blockPayload, JSON.stringify( copyShape ) );
 
+	/* ===== Chips inside slots (handoff item 1): table + code blocks in a
+	 * group get the same persistent ⚙ chips as at top level, their ops
+	 * splice into the stored raw (dirty stamp), and table-delete lands the
+	 * caret in the slot, not the document top. ===== */
+	const CHIP_GROUP = [
+		'<!-- wp:group {"layout":{"type":"constrained"}} -->',
+		'<div class="wp-block-group"><!-- wp:paragraph -->',
+		'<p>Chip fixture paragraph.</p>',
+		'<!-- /wp:paragraph -->',
+		'',
+		'<!-- wp:table -->',
+		'<figure class="wp-block-table"><table><tbody><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></tbody></table></figure>',
+		'<!-- /wp:table -->',
+		'',
+		'<!-- wp:code -->',
+		'<pre class="wp-block-code"><code>chips()</code></pre>',
+		'<!-- /wp:code --></div>',
+		'<!-- /wp:group -->',
+	].join( '\n' );
+	const id2 = await createPost( page, { title: 'Slot chips ' + Date.now(), content: CHIP_GROUP, status: 'draft' } );
+	await page.goto( BASE + '/minn-admin/editor/posts/' + id2, { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-editor-body .minn-slot', { timeout: 25000 } );
+	await page.waitForTimeout( 1000 );
+
+	const rawOf2 = () => page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw&_cb=' + Date.now(), {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'include',
+		} );
+		return ( await r.json() ).content.raw;
+	}, id2 );
+	const save2 = async ( expectFn ) => {
+		await page.keyboard.press( 'Meta+s' );
+		for ( let i = 0; i < 20; i++ ) {
+			await page.waitForTimeout( 900 );
+			const raw = await rawOf2();
+			if ( ! expectFn || expectFn( raw ) ) return raw;
+		}
+		return rawOf2();
+	};
+
+	const chipShape = await page.evaluate( () => {
+		const chips = [ ...document.querySelectorAll( '#minn-table-chips button' ) ];
+		return chips.map( ( c ) => ( {
+			kind: c._kind,
+			inSlot: !! ( c._target && c._target.closest( '.minn-slot' ) ),
+		} ) );
+	} );
+	t.check( 'slot table and code blocks get chips', chipShape.filter( ( c ) => c.inSlot ).map( ( c ) => c.kind ).sort().join( ',' ) === 'code,table', JSON.stringify( chipShape ) );
+
+	// Code language via chip popover (direct-DOM path → explicit dirty stamp).
+	await page.evaluate( () => {
+		const chip = [ ...document.querySelectorAll( '#minn-table-chips button' ) ].find( ( c ) => c._kind === 'code' );
+		chip.click();
+	} );
+	await page.waitForSelector( '.minn-code-pop [data-lang]', { timeout: 8000 } );
+	await page.selectOption( '.minn-code-pop [data-lang]', 'js' );
+	let raw2 = await save2( ( r ) => r.includes( 'language-js' ) );
+	const grpOf = ( r ) => r.slice( r.indexOf( '<!-- wp:group' ), r.indexOf( '<!-- /wp:group -->' ) );
+	t.check( 'slot code language saved into the group', grpOf( raw2 ).includes( 'language-js' ), '' );
+
+	// Table row op via chip popover (execCommand path → input auto-stamp).
+	await page.evaluate( () => {
+		const chip = [ ...document.querySelectorAll( '#minn-table-chips button' ) ].find( ( c ) => c._kind === 'table' );
+		chip.click();
+	} );
+	await page.waitForSelector( '.minn-table-pop [data-op="row-below"], .minn-inspector [data-op="row-below"]', { timeout: 8000 } );
+	await page.click( '[data-op="row-below"]' );
+	await page.waitForTimeout( 400 );
+	raw2 = await save2( ( r ) => ( grpOf( r ).match( /<tr>/g ) || [] ).length === 3 );
+	t.check( 'slot table row op saved (3 rows in the group)', ( grpOf( raw2 ).match( /<tr>/g ) || [] ).length === 3, grpOf( raw2 ) );
+
+	// Table delete: caret lands inside the SLOT, not the document top.
+	await page.evaluate( () => {
+		const chip = [ ...document.querySelectorAll( '#minn-table-chips button' ) ].find( ( c ) => c._kind === 'table' );
+		chip.click();
+	} );
+	await page.waitForSelector( '[data-op="table-del"]', { timeout: 8000 } );
+	await page.click( '[data-op="table-del"]' );
+	await page.waitForTimeout( 400 );
+	const landing = await page.evaluate( () => {
+		const sel = window.getSelection();
+		let n = sel.anchorNode;
+		while ( n && n.nodeType !== Node.ELEMENT_NODE ) n = n.parentNode;
+		return { inSlot: !! ( n && n.closest( '.minn-slot' ) ) };
+	} );
+	t.check( 'table-delete caret lands inside the slot', landing.inSlot, JSON.stringify( landing ) );
+	raw2 = await save2( ( r ) => ! grpOf( r ).includes( '<table' ) );
+	const grp2 = grpOf( raw2 );
+	t.check( 'table removed from group, siblings intact', ! grp2.includes( '<table' ) && grp2.includes( 'Chip fixture paragraph.' ) && grp2.includes( 'language-js' ), grp2 );
+
+	await deletePost( page, id2 );
+
 	await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => {

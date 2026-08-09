@@ -256,6 +256,16 @@ one. Read the writing-context contract above before touching any of it.
    `#minn-table-chips` at content coordinates inside the scroller. The fix is to run the
    collection per block root (body + each `.minn-slot`), the `liftNestedLists` shape.
    Watch: chip count on a heavily structured page (the visual-noise question below).
+   ✅ *Shipped 2026-08-09* — per-root collection landed as scoped. The real work was the
+   DIRTY-STAMP half: chip ops that mutate the DOM directly (`setCodeLang`, image-popover
+   apply/replace) never fire `input`, so `flushSlotIsland` would silently drop them at
+   save — `stampSlotDirtyFor( el )` now stamps the containing island by hand on those
+   paths. execCommand paths (all table ops, image remove) need no call: probed
+   (`scratchpad/probe-slot-chips.js`), Blink fires `input` ON THE SLOT HOST for a
+   selection inside a nested editable, and the body's existing input handler stamps it.
+   Bonus: table-delete now seats the caret via `blockRootOf`, so deleting a slot table
+   lands in its slot instead of the document top. Suite: `container-slots` grew to 39
+   (chip presence, code-language + row-op round-trips through saved raw, delete landing).
 2. **Multi-block rich paste into slots.** Slot paste is deliberately plain text today
    (`body.addEventListener('paste', …)` capture branch). `pasteBlocksInsert()` brackets
    payloads with `<p data-minn-bkt>` markers and rebuilds islands at the top level; the
