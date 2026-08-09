@@ -16369,9 +16369,13 @@
 	// emit <p><ul>… (invalid markup). Shared by the toolbar, the slash menu
 	// and the markdown "- " prefix.
 	function liftNestedLists( body ) {
-		$$( ':scope > p > ul, :scope > p > ol', body ).forEach( ( l ) => {
-			const p = l.parentNode;
-			if ( p.textContent === l.textContent ) p.replaceWith( l );
+		// Container slots are mini-bodies — lift within each slot too, or a
+		// markdown "- " inside a group would serialize as <p><ul>.
+		[ body, ...$$( '.minn-slot', body ) ].forEach( ( root ) => {
+			$$( ':scope > p > ul, :scope > p > ol', root ).forEach( ( l ) => {
+				const p = l.parentNode;
+				if ( p.textContent === l.textContent ) p.replaceWith( l );
+			} );
 		} );
 	}
 
@@ -20407,7 +20411,10 @@
 						// headings only. Pressing the active alignment clears it.
 						const sel3 = window.getSelection();
 						let blk = sel3.rangeCount ? sel3.anchorNode : null;
-						while ( blk && blk.parentNode && blk.parentNode !== body ) blk = blk.parentNode;
+						// Slot-aware: inside a group the slot is the block root.
+						const alignRootEl = blk && ( blk.nodeType === Node.ELEMENT_NODE ? blk : blk.parentElement );
+						const alignRoot = ( alignRootEl && alignRootEl.closest && alignRootEl.closest( '.minn-slot' ) ) || body;
+						while ( blk && blk.parentNode && blk.parentNode !== alignRoot ) blk = blk.parentNode;
 						if ( blk && blk.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6])$/.test( blk.tagName ) ) {
 							const had = blk.classList.contains( 'has-text-align-' + btn.dataset.align );
 							blk.classList.remove( 'has-text-align-left', 'has-text-align-center', 'has-text-align-right' );
@@ -20444,6 +20451,11 @@
 				} )
 			);
 
+			// Blink's default block for insertParagraph/list-exit is <div>;
+			// the serializer papered over stray divs, but the markdown prefix
+			// handlers (and everything else block-shaped) expect <p> — inside
+			// container slots AND the main body. One document-wide setting.
+			try { document.execCommand( 'defaultParagraphSeparator', false, 'p' ); } catch ( e ) { /* non-Blink */ }
 			bindIslandGuards( body );
 			bindMarkdown( body );
 			bindSlashMenu( body, insertImage );
@@ -22827,9 +22839,13 @@
 			return;
 		}
 		if ( range.collapsed ) return;
-		// Only wrap within one top-level block — cross-block inline code isn't a thing.
+		// Only wrap within one top-level block — cross-block inline code isn't
+		// a thing. Slot-aware: inside a group the slot is the block root, so a
+		// cross-paragraph selection there is refused too (not flattened).
 		const blockOf = ( n ) => {
-			while ( n && n.parentNode && n.parentNode !== body ) n = n.parentNode;
+			const el = n && ( n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement );
+			const root = ( el && el.closest && el.closest( '.minn-slot' ) ) || body;
+			while ( n && n.parentNode && n.parentNode !== root ) n = n.parentNode;
 			return n;
 		};
 		if ( blockOf( range.startContainer ) !== blockOf( range.endContainer ) ) return;
@@ -22879,8 +22895,15 @@
 		// boundary escapes outside once, then normal typing rules apply.
 		let mdEscape = null;
 
+		// Container slots are mini-bodies: the nearest slot (else the body)
+		// is the block root, so markdown block prefixes work inside groups.
+		const mdRootOf = ( n ) => {
+			const el = n && ( n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement );
+			return ( el && el.closest && el.closest( '.minn-slot' ) ) || body;
+		};
 		const topBlockOf = ( n ) => {
-			while ( n && n.parentNode && n.parentNode !== body ) n = n.parentNode;
+			const root = mdRootOf( n );
+			while ( n && n.parentNode && n.parentNode !== root ) n = n.parentNode;
 			return n && n.nodeType === Node.ELEMENT_NODE ? n : null;
 		};
 
@@ -23760,6 +23783,12 @@
 	// The curated quick-insert set — shared by the inline slash menu and the
 	// full block picker. Embeds and galleries insert as islands, blocks mode
 	// only (classic content already auto-embeds lone URLs server-side).
+	// Stamp an action as safe inside container slots: prose blocks the slot
+	// serializer handles and the nested editable can host. Island inserts,
+	// media flows and tables (their chips/menus are top-level chrome) stay
+	// out of slots for now.
+	const slotOk = ( a ) => { a.minnSlotSafe = true; return a; };
+
 	function basicSlashItems( blocksMode ) {
 		// Always list the full Basics set. Island inserts (embed/gallery/spacer/
 		// file/shortcode) used to hide in classic mode, which made them look
@@ -23767,19 +23796,19 @@
 		// classic → blocks via ensureBlocksMode() instead.
 		void blocksMode;
 		return [
-			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
-			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
-			[ icon( 'quote' ), 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
+			[ icon( 'h2' ), 'Heading 2', slotOk( () => document.execCommand( 'formatBlock', false, 'h2' ) ) ],
+			[ icon( 'h3' ), 'Heading 3', slotOk( () => document.execCommand( 'formatBlock', false, 'h3' ) ) ],
+			[ icon( 'quote' ), 'Quote', slotOk( () => document.execCommand( 'formatBlock', false, 'blockquote' ) ) ],
 			// Pullquote is prose-class; details is an island (contenteditable
 			// <details> traps the caret and blocks typing after it in Blink).
-			[ icon( 'quote' ), 'Pullquote', { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ],
+			[ icon( 'quote' ), 'Pullquote', slotOk( { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ) ],
 			[ icon( 'list' ), 'Details', { block: 'core/details', template: detailsTemplate( 'Details', '' ) } ],
-			[ icon( 'braces' ), 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
-			[ icon( 'list' ), 'Bulleted list', () => document.execCommand( 'insertUnorderedList', false, null ) ],
-			[ icon( 'olist' ), 'Numbered list', () => document.execCommand( 'insertOrderedList', false, null ) ],
+			[ icon( 'braces' ), 'Code', slotOk( () => document.execCommand( 'formatBlock', false, 'pre' ) ) ],
+			[ icon( 'list' ), 'Bulleted list', slotOk( () => document.execCommand( 'insertUnorderedList', false, null ) ) ],
+			[ icon( 'olist' ), 'Numbered list', slotOk( () => document.execCommand( 'insertOrderedList', false, null ) ) ],
 			[ icon( 'img' ), 'Image', 'image' ],
 			[ icon( 'table' ), 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
-			[ icon( 'minus' ), 'Divider', { html: '<hr>' } ],
+			[ icon( 'minus' ), 'Divider', slotOk( { html: '<hr>' } ) ],
 			[ icon( 'play' ), 'Embed — YouTube, tweet, audio…', 'embed' ],
 			[ icon( 'gallery' ), 'Gallery', 'gallery' ],
 			[ icon( 'minus' ), 'Spacer', 'spacer' ],
@@ -24426,11 +24455,14 @@
 			// until typed for — the Browse row is both the hint and the door
 			// to the full picker.
 			const hidden = query ? 0 : items.filter( ( it ) => it[ 3 ] ).length;
+			// Browse-all opens the picker, which inserts islands — not offered
+			// inside container slots (the filtered basics ARE the slot set).
+			const inSlot = !! ( block && block.closest && block.closest( '.minn-slot' ) );
 			menu.innerHTML = filtered.map( ( idx, i ) => `
 				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" role="option" id="minn-slash-opt-${ i }" data-slash="${ idx }" aria-selected="${ i === selIdx ? 'true' : 'false' }">
 					<span class="minn-slash-icon" aria-hidden="true">${ items[ idx ][ 0 ] }</span>${ esc( items[ idx ][ 1 ] ) }${ items[ idx ][ 4 ] ? `<span class="minn-slash-ns">${ esc( items[ idx ][ 4 ] ) }</span>` : '' }
 				</div>` ).join( '' )
-				+ ( ! query ? `<div class="minn-slash-hint" data-browse role="option" id="minn-slash-browse">Browse all${ hidden ? ` — ${ hidden } more blocks…` : '…' }</div>` : '' );
+				+ ( ! query && ! inSlot ? `<div class="minn-slash-hint" data-browse role="option" id="minn-slash-browse">Browse all${ hidden ? ` — ${ hidden } more blocks…` : '…' }</div>` : '' );
 			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
 				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
 			);
@@ -24451,10 +24483,14 @@
 		const applyQuery = ( q ) => {
 			q = q.toLowerCase();
 			query = q;
+			// Inside a container slot only prose-safe basics apply — island
+			// inserts, media flows and search-only entries stay top-level.
+			const slotOnly = !! ( block && block.closest && block.closest( '.minn-slot' ) );
 			filtered = items
 				.map( ( it, i ) => i )
 				.filter( ( i ) => {
 					const it = items[ i ];
+					if ( slotOnly && ! ( it[ 2 ] && it[ 2 ].minnSlotSafe ) ) return false;
 					if ( it[ 3 ] && ! q ) return false;
 					if ( it[ 1 ].toLowerCase().includes( q ) || ( it[ 4 ] && it[ 4 ].toLowerCase().includes( q ) ) ) return true;
 					const kws = it[ 5 ];
@@ -24490,14 +24526,19 @@
 			if ( ! sel.rangeCount ) return close();
 			let node = sel.anchorNode;
 			if ( ! node || ! body.contains( node ) ) return close();
-			while ( node.parentNode && node.parentNode !== body ) node = node.parentNode;
+			// Container slots are mini-bodies: the menu opens on the slot's own
+			// paragraphs too (offering the prose-safe basics only — applyQuery
+			// filters on the block's slot ancestry).
+			const nodeEl = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+			const slashRoot = ( nodeEl && nodeEl.closest && nodeEl.closest( '.minn-slot' ) ) || body;
+			while ( node.parentNode && node.parentNode !== slashRoot ) node = node.parentNode;
 			let blockEl = node.nodeType === Node.ELEMENT_NODE ? node : null;
 			// Empty editor / after select-all+delete: Chrome parks a bare text
 			// node as a direct child of the contenteditable. Promote it to a
 			// <p> so slash detection, insert-as-replace, and serialize agree.
-			if ( ! blockEl && node.nodeType === Node.TEXT_NODE && node.parentNode === body ) {
+			if ( ! blockEl && node.nodeType === Node.TEXT_NODE && node.parentNode === slashRoot ) {
 				const p = document.createElement( 'p' );
-				body.insertBefore( p, node );
+				slashRoot.insertBefore( p, node );
 				p.appendChild( node );
 				blockEl = p;
 			}

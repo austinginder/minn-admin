@@ -187,6 +187,94 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	raw = await save( 'RICH slot paste' );
 	t.check( 'paste saved inside group', raw.indexOf( 'RICH slot paste' ) > -1 && raw.indexOf( 'RICH slot paste' ) < raw.indexOf( '<!-- /wp:group -->' ), '' );
 
+	// ---- Block creation inside slots (phase 3 follow-up slice) ----
+	// Work in the SECOND group (its untouched byte-identity was already
+	// asserted above, before these edits dirty it).
+	const slotB = '.minn-slot-island:nth-of-type(2) .minn-slot';
+	await page.click( slotB + ' > p' );
+	await caretEnd( slotB + ' > p' );
+	await page.keyboard.press( 'Enter' );
+
+	// 8. Slash menu opens inside the slot, offering prose basics only.
+	await page.keyboard.type( '/' );
+	await page.waitForTimeout( 400 );
+	const menuShape = await page.evaluate( () => {
+		const menu = document.querySelector( '.minn-slash-menu' );
+		return {
+			open: !! menu,
+			labels: menu ? [ ...menu.querySelectorAll( '.minn-slash-item' ) ].map( ( el ) => el.textContent.trim() ) : [],
+			browse: !! ( menu && menu.querySelector( '[data-browse]' ) ),
+		};
+	} );
+	t.check( 'slash menu opens inside slot', menuShape.open, JSON.stringify( menuShape ) );
+	t.check( 'slot menu is prose basics only',
+		menuShape.labels.some( ( l ) => /Heading 2/.test( l ) )
+		&& ! menuShape.labels.some( ( l ) => /Image|Embed|Table|Gallery|Buttons|Details/.test( l ) )
+		&& ! menuShape.browse,
+		JSON.stringify( menuShape.labels ) );
+
+	// 9. Run Heading 2 from the menu; type into the new heading.
+	await page.evaluate( () => {
+		const item = [ ...document.querySelectorAll( '.minn-slash-item' ) ].find( ( el ) => /Heading 2/.test( el.textContent ) );
+		item.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+	} );
+	await page.waitForTimeout( 250 );
+	await page.keyboard.type( 'Slot subheading' );
+	const h2InSlot = await page.evaluate( ( sel ) => !! document.querySelector( sel + ' > h2' ), slotB );
+	t.check( 'slash heading lands inside slot', h2InSlot, '' );
+
+	// 10. Markdown list prefix inside the slot. Enter at a heading's end
+	// clones the heading (Blink, same as top level) — convert the clone to
+	// a paragraph with the toolbar ¶, which also proves the toolbar's block
+	// buttons are slot-contained now.
+	await page.keyboard.press( 'Enter' );
+	await page.evaluate( () => {
+		const b = document.querySelector( '.minn-tool[data-block="p"]' );
+		b.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+	} );
+	await page.waitForTimeout( 200 );
+	const afterPilcrow = await page.evaluate( ( sel ) => {
+		const slot = document.querySelector( sel );
+		return { lastTag: slot.lastElementChild.tagName, inSlot: true, h2s: slot.querySelectorAll( 'h2' ).length };
+	}, slotB );
+	t.check( 'toolbar ¶ converts inside slot', afterPilcrow.lastTag === 'P' && afterPilcrow.h2s === 1, JSON.stringify( afterPilcrow ) );
+	await page.keyboard.type( '- ' );
+	await page.keyboard.type( 'Slot list item' );
+	const listShape = await page.evaluate( ( sel ) => ( {
+		ul: !! document.querySelector( sel + ' > ul' ),
+		nested: !! document.querySelector( sel + ' > p > ul' ),
+		li: document.querySelector( sel + ' > ul > li' )?.textContent || '',
+	} ), slotB );
+	t.check( 'markdown list converts inside slot (lifted)', listShape.ul && ! listShape.nested && listShape.li === 'Slot list item', JSON.stringify( listShape ) );
+
+	// 11. Markdown heading prefix inside the slot.
+	await page.keyboard.press( 'Enter' );
+	await page.keyboard.press( 'Enter' ); // out of the list
+	await page.keyboard.type( '### ' );
+	await page.keyboard.type( 'Deep heading' );
+	const h3State = await page.evaluate( ( sel ) => {
+		const slot = document.querySelector( sel );
+		const selN = window.getSelection();
+		return {
+			h3: slot.querySelector( ':scope > h3' )?.textContent || '',
+			tail: slot.innerHTML.slice( -220 ),
+			caretIn: selN.anchorNode ? ( selN.anchorNode.nodeType === 1 ? selN.anchorNode : selN.anchorNode.parentElement ).tagName : 'none',
+		};
+	}, slotB );
+	t.check( 'markdown heading converts inside slot', h3State.h3 === 'Deep heading', JSON.stringify( h3State ) );
+
+	// 12. Save; everything landed INSIDE the second group's comments.
+	raw = await save( 'Slot subheading' );
+	const gbStart = raw.indexOf( '<!-- wp:group {"layout":{"type":"flow"' );
+	const gbEnd = raw.indexOf( '<!-- /wp:group -->', gbStart );
+	const gb = raw.slice( gbStart, gbEnd );
+	t.check( 'created blocks saved inside the group',
+		gb.includes( 'Slot subheading' ) && gb.includes( '<!-- wp:heading' )
+		&& gb.includes( '<!-- wp:list' ) && gb.includes( 'Slot list item' )
+		&& gb.includes( '<h3 class="wp-block-heading">Deep heading</h3>' ),
+		gb.slice( 0, 200 ) );
+	t.check( 'wrapper bytes still verbatim', gb.startsWith( '<!-- wp:group {"layout":{"type":"flow"},"style":{"spacing":{"padding":{"top":"20px"}}}} -->\n<div class="wp-block-group" style="padding-top:20px">' ), '' );
+
 	await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
