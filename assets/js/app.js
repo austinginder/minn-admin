@@ -20880,6 +20880,32 @@
 					scheduleAutosave();
 					return;
 				}
+				// Plain text that IS Gutenberg block markup (copied from an AI
+				// tool, a tutorial, a theme's pattern file): rebuild it as real
+				// blocks through the load pipeline's editable-vs-island split —
+				// the block editor does the same via its raw handler.
+				// Conservative sniff: the paste must START with a block comment
+				// (prose that merely mentions markup stays prose), and code
+				// contexts already took the literal paste above. Any html
+				// flavor is ignored on purpose — a ChatGPT/code-viewer copy
+				// wraps the markup in code-styled html that would paste as
+				// styled TEXT, while the text flavor holds the real thing.
+				if ( ed2.mode !== 'locked' && /^<!--\s*wp:/.test( trimmed )
+					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' ) ) {
+					const rawSegs = tokenizeBlocks( trimmed );
+					if ( rawSegs && rawSegs.some( ( s ) => s.type === 'block' ) ) {
+						e.preventDefault();
+						ensureBlocksMode();
+						const built = appendEditableContent( ed2, trimmed );
+						if ( built.trim() ) {
+							pasteBlocksInsert( selSlot || body, built );
+							renderIslandPreviews( body, ed2 );
+							updateEditorStats();
+						}
+						scheduleAutosave();
+						return;
+					}
+				}
 				if ( html ) {
 					// Rich flavor present: always ours from here — falling back
 					// to the default would insert the raw vendor HTML.

@@ -389,6 +389,13 @@ one. Read the writing-context contract above before touching any of it.
    like upstream CDN design drift — re-pin at the next design-suite sweep, don't
    chase it as a nesting regression.
 
+   ✅ *Raw-markup paste shipped 2026-08-09 (Austin's ask).* Plain text that IS block
+   markup (starts with a block comment, tokenizes cleanly) rebuilds as real blocks on
+   paste — the editable-vs-island split, same as the `text/x-minn-blocks` flavor. Code
+   contexts keep the literal paste (writing ABOUT markup never converts), and the html
+   flavor is ignored for these pastes (code-viewer copies wrap the markup in styled
+   html; the text flavor holds the real thing). Suite: paste 40.
+
    ✅ *Cover + media-text slots shipped 2026-08-09 (same day, final slice).*
    `SLOT_CONTENT` maps a block to its content-container class
    (cover → `wp-block-cover__inner-container`, media-text →
