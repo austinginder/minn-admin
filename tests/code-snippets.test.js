@@ -10,25 +10,38 @@
  * leftover Minn fixtures via WP-CLI before seeding.
  */
 const { execSync } = require( 'child_process' );
+const fs = require( 'fs' );
+const os = require( 'os' );
+const path = require( 'path' );
 const { BASE, launch, login, reporter } = require( './helpers' );
 
 const WP = process.env.MINN_TEST_WP
 	|| '/Users/austin/Cove/Sites/minnadmin.localhost/public';
 
 function purgeMinnSnippets() {
+	// eval-file, never inline `wp eval`: the shell expands $wpdb/$t inside
+	// the double-quoted command to EMPTY, silently breaking the query — this
+	// purge never actually ran, which is how crash-leftover ACTIVE snippets
+	// accumulated (one carrying a the_content kill switch blanked the whole
+	// front end). Same class as the deploy script's transient lines.
 	const php = [
-		'if ( ! function_exists( "Code_Snippets\\\\delete_snippet" ) ) { return; }',
+		'<?php',
+		"if ( ! function_exists( 'Code_Snippets\\\\delete_snippet' ) ) { return; }",
 		'global $wpdb;',
-		'$t = $wpdb->prefix . "snippets";',
-		'$ids = $wpdb->get_col( "SELECT id FROM `$t` WHERE name LIKE \'Minn suite%\' OR name LIKE \'probe%\' OR tags LIKE \'%minn-test%\'" );',
+		"$t = $wpdb->prefix . 'snippets';",
+		'$ids = $wpdb->get_col( "SELECT id FROM `{$t}` WHERE name LIKE \'Minn suite%\' OR name LIKE \'probe%\' OR tags LIKE \'%minn-test%\'" );',
 		'foreach ( (array) $ids as $id ) { \\Code_Snippets\\delete_snippet( (int) $id ); }',
-	].join( ' ' );
+	].join( '\n' );
+	const tmp = path.join( os.tmpdir(), 'minn-purge-snippets-' + process.pid + '.php' );
 	try {
-		execSync( `wp --path=${ WP } eval ${ JSON.stringify( php ) }`, {
+		fs.writeFileSync( tmp, php );
+		execSync( `wp --path=${ WP } eval-file ${ tmp }`, {
 			stdio: 'ignore',
 			timeout: 60000,
 		} );
-	} catch ( e ) { /* best-effort */ }
+	} catch ( e ) { /* best-effort */ } finally {
+		try { fs.unlinkSync( tmp ); } catch ( e ) { /* already gone */ }
+	}
 }
 
 ( async () => {
@@ -166,7 +179,11 @@ function purgeMinnSnippets() {
 		/* ===== In-place save — rewrite code + name ===== */
 		const nameRenamed = `Minn suite renamed ${ uid }`;
 		await page.fill( '#minn-modal-overlay [data-editfield="name"]', nameRenamed );
-		await page.fill( '#minn-modal-overlay [data-editfield="code"]', '// minn test EDITED\nadd_filter( "the_content", "__return_false" );\n' );
+		// INERT code only: a crash-aborted run leaves its snippet ACTIVE, and
+		// this string executes on every request until someone cleans it up.
+		// An earlier version used the_content + __return_false — a stray
+		// active copy blanked every page and post on the site's front end.
+		await page.fill( '#minn-modal-overlay [data-editfield="code"]', '// minn test EDITED\nadd_filter( "minn_test_snippet_noop", "__return_false" );\n' );
 		await page.click( '#minn-surface-save' );
 		await page.waitForFunction( () => ! document.querySelector( '#minn-modal-overlay' ), { timeout: 10000 } );
 
