@@ -15092,7 +15092,7 @@
 	 * edited; an untouched group emits its stored raw unchanged. A container
 	 * with any complex child (nested group, embed, image…) stays a phase-2
 	 * island with in-place text runs. Columns/cover are the next slices. */
-	const SLOT_BLOCKS = [ 'group' ];
+	const SLOT_BLOCKS = [ 'group', 'columns' ];
 
 	// Split a container's raw into { head, open, tag, inner, tail } where
 	// head = opening comment + whitespace, open = the wrapper's own open tag
@@ -15155,20 +15155,51 @@
 			if ( ! segmentEditable( seg ) ) return null;
 			out.push( seg );
 		}
-		return out.length ? out : null;
+		// An EMPTY container is a legal slot (the trailing-affordance seed
+		// makes it typeable); null is reserved for complex/unparseable.
+		return out;
 	}
 
 	function slotIslandHtml( idx, name, raw ) {
 		const parts = slotParseContainer( raw );
 		if ( ! parts ) return null;
+		const short = String( name || '' ).replace( /^core\//, '' );
+		const chip = `<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( short ) } block">⚙ ${ esc( short ) }</button>`;
+		if ( 'columns' === short ) {
+			// Multi-slot: every direct child must be a core/column whose own
+			// children are all simple — one editable slot per column, all the
+			// wrapper bytes (columns AND columns' columns) preserved verbatim.
+			const segs = tokenizeBlocks( parts.inner );
+			if ( ! segs ) return null;
+			const cols = [];
+			for ( const seg of segs ) {
+				if ( seg.type === 'html' ) {
+					if ( seg.raw.trim() ) return null;
+					continue;
+				}
+				if ( seg.name.replace( /^core\//, '' ) !== 'column' ) return null;
+				const cp = slotParseContainer( seg.raw );
+				if ( ! cp ) return null;
+				const kids = slotChildSegments( cp.inner );
+				if ( ! kids ) return null;
+				cols.push( `${ cp.open }<div class="minn-slot" contenteditable="true">${ kids.map( ( k ) => editableSegmentHtml( k ) ).join( '\n' ) }</div></${ cp.tag }>` );
+			}
+			if ( ! cols.length ) return null;
+			/* translators: island hover hint on an editable columns container */
+			const colHint = __( 'Columns — write inside · layout via ⚙' );
+			return `<div class="minn-block-island minn-slot-island minn-cols-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
+			${ chip }
+			<span class="minn-island-hint" aria-hidden="true">${ esc( colHint ) }</span>
+			${ parts.open }${ cols.join( '' ) }</${ parts.tag }>
+		</div>`;
+		}
 		const kids = slotChildSegments( parts.inner );
 		if ( ! kids ) return null;
-		const short = String( name || '' ).replace( /^core\//, '' );
 		const childrenHtml = kids.map( ( seg ) => editableSegmentHtml( seg ) ).join( '\n' );
 		/* translators: island hover hint on an editable group container */
 		const hint = __( 'Grouped content — write inside · layout via ⚙' );
 		return `<div class="minn-block-island minn-slot-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
-			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( short ) } block">⚙ ${ esc( short ) }</button>
+			${ chip }
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
 			${ parts.open }<div class="minn-slot" contenteditable="true">${ childrenHtml }</div></${ parts.tag }>
 		</div>`;
@@ -15182,10 +15213,28 @@
 		if ( ! el || ! el.dataset || ! el.dataset.minnSlotDirty || ! islands ) return;
 		const idx = parseInt( el.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || islands[ idx ] == null ) return;
-		const slot = el.querySelector( '.minn-slot' );
 		const parts = slotParseContainer( String( islands[ idx ] ) );
-		if ( ! slot || ! parts ) return;
-		islands[ idx ] = parts.head + parts.open + serializeToBlocks( slot, islands ) + parts.tail;
+		if ( ! parts ) return;
+		const slots = $$( '.minn-slot', el );
+		if ( ! slots.length ) return;
+		if ( el.classList.contains( 'minn-cols-island' ) ) {
+			// Column-by-column: each column's serialized children splice back
+			// between ITS wrapper bytes; inter-column whitespace segments and
+			// every comment/open-tag byte re-emit verbatim from the stored raw.
+			const segs = tokenizeBlocks( parts.inner );
+			if ( ! segs ) return;
+			let ci = 0;
+			const innerOut = segs.map( ( seg ) => {
+				if ( seg.type === 'html' ) return seg.raw;
+				const cp = slotParseContainer( seg.raw );
+				const slot = slots[ ci++ ];
+				if ( ! cp || ! slot ) return seg.raw;
+				return cp.head + cp.open + serializeToBlocks( slot, islands ) + cp.tail;
+			} ).join( '' );
+			islands[ idx ] = parts.head + parts.open + innerOut + parts.tail;
+			return;
+		}
+		islands[ idx ] = parts.head + parts.open + serializeToBlocks( slots[ 0 ], islands ) + parts.tail;
 	}
 
 	// The contenteditable=false card an island renders as. Shared by content

@@ -43,7 +43,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		'<!-- wp:column -->',
 		'<div class="wp-block-column"><!-- wp:paragraph -->',
 		'<p>Right column text stays untouched.</p>',
-		'<!-- /wp:paragraph --></div>',
+		'<!-- /wp:paragraph -->',
+		'',
+		'<!-- wp:acme/badge -->',
+		'<div class="acme-badge">Column badge</div>',
+		'<!-- /wp:acme/badge --></div>',
 		'<!-- /wp:column --></div>',
 		'<!-- /wp:columns -->',
 		'',
@@ -73,7 +77,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		};
 	} );
 	t.check( 'group arms four runs (incl. unregistered child)', shape.groupRuns === 4, JSON.stringify( shape ) );
-	t.check( 'columns arm two runs', shape.colRuns === 2, JSON.stringify( shape ) );
+	t.check( 'columns arm three runs (incl. unregistered child)', shape.colRuns === 3, JSON.stringify( shape ) );
 	t.check( 'runs are editable, hint updated', shape.editable && /editable in place/i.test( shape.hint ), shape.hint );
 
 	// Place the caret at the END of a run (deterministic Range — the

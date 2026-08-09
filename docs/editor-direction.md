@@ -202,10 +202,18 @@ Three phases, each shippable alone, in order:
    top-level. Root-cause fix that fell out: Minn never set
    `defaultParagraphSeparator`, so Blink created `<div>`s on list-exit/insertParagraph
    (the serializer papered over them; the prefix handlers refused them) — now set to
-   `p` document-wide at editor bind. Still NOT in slots: multi-block paste, table/code
-   chips (top-level chrome), columns/cover, nesting. Suite:
-   `tests/container-slots.test.js` (27 checks incl. untouched-group byte-identity and
-   slot slash-menu contents).
+   `p` document-wide at editor bind. COLUMNS shipped the same day:
+   an all-simple `columns` block becomes a MULTI-slot island — one editable slot per
+   `column`, both nesting levels' wrapper bytes (columns comment/open tag AND each
+   column's) preserved verbatim; flush walks the stored raw's segments and splices each
+   column's serialized children between ITS bytes, inter-column whitespace re-emitting
+   untouched. Editor-side flex CSS mirrors the front-end shape (a column's own
+   flex-basis inline style applies since the open tag is verbatim); a dashed divider
+   marks each column's region. Any complex child in ANY column → the whole block stays
+   a phase-2 island. Still NOT in slots: multi-block paste, table/code chips (top-level
+   chrome), cover/media-text, nesting. Suite: `tests/container-slots.test.js`
+   (33 checks incl. untouched-group byte-identity, slot slash-menu contents and
+   per-column splice targeting).
 
 The never-build list is unchanged by this plan. Slots edit **content** inside layouts;
 layout itself (spacing, variations, query loops, the block inserter's full catalog) remains

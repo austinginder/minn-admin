@@ -47,6 +47,24 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		'<div class="wp-block-columns"><!-- wp:column -->',
 		'<div class="wp-block-column"><!-- wp:paragraph -->',
 		'<p>Column text stays a phase-2 island.</p>',
+		'<!-- /wp:paragraph -->',
+		'',
+		'<!-- wp:acme/badge -->',
+		'<div class="acme-badge">Badge keeps this an island</div>',
+		'<!-- /wp:acme/badge --></div>',
+		'<!-- /wp:column --></div>',
+		'<!-- /wp:columns -->',
+		'',
+		'<!-- wp:columns -->',
+		'<div class="wp-block-columns"><!-- wp:column {"width":"66.66%"} -->',
+		'<div class="wp-block-column" style="flex-basis:66.66%"><!-- wp:paragraph -->',
+		'<p>Wide column text.</p>',
+		'<!-- /wp:paragraph --></div>',
+		'<!-- /wp:column -->',
+		'',
+		'<!-- wp:column {"width":"33.33%"} -->',
+		'<div class="wp-block-column" style="flex-basis:33.33%"><!-- wp:paragraph -->',
+		'<p>Narrow column text.</p>',
 		'<!-- /wp:paragraph --></div>',
 		'<!-- /wp:column --></div>',
 		'<!-- /wp:columns -->',
@@ -66,7 +84,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	await page.goto( BASE + '/minn-admin/editor/posts/' + id, { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-editor-body .minn-slot', { timeout: 25000 } );
 	// Phase-2 arming on the columns island is async (render-blocks round trip).
-	await page.waitForSelector( '.minn-block-island[data-block="columns"] .minn-island-run', { timeout: 20000 } ).catch( () => {} );
+	await page.waitForSelector( '.minn-block-island[data-block="columns"]:not(.minn-slot-island) .minn-island-run', { timeout: 20000 } ).catch( () => {} );
 
 	const shape = await page.evaluate( () => {
 		const body = document.querySelector( '#minn-editor-body' );
@@ -80,12 +98,15 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 			wrapperClass: slots[ 0 ]?.querySelector( '.wp-block-group' ) ? true : false,
 			columnsIsIsland: !! cols && ! cols.classList.contains( 'minn-slot-island' ),
 			columnsRuns: cols ? cols.querySelectorAll( '.minn-island-run' ).length : 0,
+			colsSlots: document.querySelectorAll( '.minn-cols-island' ).length,
+			colsSlotCount: document.querySelector( '.minn-cols-island' ) ? document.querySelector( '.minn-cols-island' ).querySelectorAll( '.minn-slot' ).length : 0,
 		};
 	} );
-	t.check( 'both groups render as slot islands', shape.slotIslands === 2 && shape.slotEditable, JSON.stringify( shape ) );
+	t.check( 'both groups + simple columns render as slot islands', shape.slotIslands === 3 && shape.slotEditable, JSON.stringify( shape ) );
 	t.check( 'children are real blocks inside the wrapper', shape.slotAH2 && shape.wrapperClass, JSON.stringify( shape ) );
 	t.check( 'styled child carries its phase-1 marker', shape.slotAStyledMarker === '{"fontSize":"large"}', shape.slotAStyledMarker );
-	t.check( 'columns stays a phase-2 island with runs', shape.columnsIsIsland && shape.columnsRuns === 1, JSON.stringify( shape ) );
+	t.check( 'complex columns stays a phase-2 island with runs', shape.columnsIsIsland && shape.columnsRuns === 2, JSON.stringify( shape ) );
+	t.check( 'all-simple columns becomes a two-slot island', shape.colsSlots === 1 && shape.colsSlotCount === 2, JSON.stringify( shape ) );
 
 	const caretEnd = ( sel ) => page.evaluate( ( s ) => {
 		const el = document.querySelector( s );
@@ -123,7 +144,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		islands: document.querySelectorAll( '.minn-slot-island' ).length,
 		h2: document.querySelector( '.minn-slot > h2' )?.textContent,
 	} ) );
-	t.check( 'backspace inside slot never arms the container', ! guardState.armed && guardState.islands === 2 && guardState.h2 === 'Slot heading edit', JSON.stringify( guardState ) );
+	t.check( 'backspace inside slot never arms the container', ! guardState.armed && guardState.islands === 3 && guardState.h2 === 'Slot heading edit', JSON.stringify( guardState ) );
 
 	// 2. Inline markdown works inside the slot.
 	await page.click( '.minn-slot-island .minn-slot > p' );
@@ -274,6 +295,38 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		&& gb.includes( '<h3 class="wp-block-heading">Deep heading</h3>' ),
 		gb.slice( 0, 200 ) );
 	t.check( 'wrapper bytes still verbatim', gb.startsWith( '<!-- wp:group {"layout":{"type":"flow"},"style":{"spacing":{"padding":{"top":"20px"}}}} -->\n<div class="wp-block-group" style="padding-top:20px">' ), '' );
+
+	// ---- Columns slots: line returns + editing per column ----
+	await page.click( '.minn-cols-island .minn-slot:first-of-type > p' );
+	await caretEnd( '.minn-cols-island .wp-block-column:first-child .minn-slot > p' );
+	await page.keyboard.press( 'Enter' );
+	await page.keyboard.type( 'Second line in wide column.' );
+	const colShape = await page.evaluate( () => {
+		const island = document.querySelector( '.minn-cols-island' );
+		const firstSlot = island.querySelectorAll( '.minn-slot' )[ 0 ];
+		return { paras: firstSlot.querySelectorAll( ':scope > p' ).length, armed: island.className.includes( 'armed' ) };
+	} );
+	t.check( 'Enter makes a new paragraph inside a column', colShape.paras >= 2 && ! colShape.armed, JSON.stringify( colShape ) );
+	await page.evaluate( () => {
+		const slots = document.querySelector( '.minn-cols-island' ).querySelectorAll( '.minn-slot' );
+		const p = slots[ 1 ].querySelector( 'p' );
+		const r = document.createRange();
+		r.selectNodeContents( p );
+		r.collapse( false );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+	} );
+	await page.keyboard.type( ' Edited narrow.' );
+	raw = await save( 'Second line in wide column.' );
+	const colsStart = raw.indexOf( '<!-- wp:columns -->\n<div class="wp-block-columns"><!-- wp:column {"width":"66.66%"} -->' );
+	t.check( 'columns + column wrapper bytes verbatim', colsStart > -1, '' );
+	const colsEnd = raw.indexOf( '<!-- /wp:columns -->', colsStart );
+	const colsRaw = raw.slice( colsStart, colsEnd );
+	const wideCol = colsRaw.slice( 0, colsRaw.indexOf( '<!-- /wp:column -->' ) );
+	t.check( 'new paragraph saved inside the FIRST column', wideCol.includes( 'Second line in wide column.' ), '' );
+	t.check( 'narrow-column edit saved in the SECOND column', colsRaw.indexOf( 'Narrow column text. Edited narrow.' ) > colsRaw.indexOf( '<!-- wp:column {"width":"33.33%"} -->' ), '' );
+	t.check( 'column width attrs + styles preserved', colsRaw.includes( '<!-- wp:column {"width":"33.33%"} -->\n<div class="wp-block-column" style="flex-basis:33.33%">' ), '' );
 
 	await deletePost( page, id );
 	await t.done( browser, errors );
