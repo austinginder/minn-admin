@@ -442,5 +442,68 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		raw4.includes( '<!-- Section label -->' ) && raw4.indexOf( '<!-- Section label -->' ) < raw4.indexOf( 'After the label.' ), raw4 );
 
 	await deletePost( page, id4 );
+
+	/* ===== Duplicate (Austin's testimonial ask): the inspector's copy
+	 * button clones an island in place — a nested card group duplicates
+	 * INSIDE its column and both copies save. ===== */
+	const CONTENT5 = [
+		'<!-- wp:columns -->',
+		'<div class="wp-block-columns"><!-- wp:column -->',
+		'<div class="wp-block-column"><!-- wp:group {"className":"testimonial-card"} -->',
+		'<div class="wp-block-group testimonial-card"><!-- wp:paragraph -->',
+		'<p>Card one text.</p>',
+		'<!-- /wp:paragraph --></div>',
+		'<!-- /wp:group --></div>',
+		'<!-- /wp:column -->',
+		'',
+		'<!-- wp:column -->',
+		'<div class="wp-block-column"><!-- wp:paragraph -->',
+		'<p>Second column.</p>',
+		'<!-- /wp:paragraph --></div>',
+		'<!-- /wp:column --></div>',
+		'<!-- /wp:columns -->',
+	].join( '\n' );
+	const id5 = await createPost( page, { title: 'Duplicate card ' + Date.now(), content: CONTENT5, status: 'draft' } );
+	await page.goto( BASE + '/minn-admin/editor/posts/' + id5, { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '.minn-cols-island .minn-slot .minn-slot-island', { timeout: 25000 } );
+	await page.waitForTimeout( 800 );
+
+	// Open the nested card's inspector via its chip, then Duplicate.
+	await page.evaluate( () => {
+		const card = document.querySelector( '.minn-cols-island .minn-slot .minn-slot-island' );
+		card.querySelector( '.minn-island-chip' ).click();
+	} );
+	await page.waitForSelector( '#minn-insp-duplicate', { timeout: 10000 } );
+	await page.click( '#minn-insp-duplicate' );
+	await page.waitForTimeout( 500 );
+	const dupShape = await page.evaluate( () => {
+		const col = document.querySelector( '.minn-cols-island .minn-slot' );
+		const cards = col.querySelectorAll( ':scope > .minn-slot-island' );
+		return {
+			cards: cards.length,
+			bothEditable: [ ...cards ].every( ( c ) => c.querySelector( '.minn-slot' )?.isContentEditable ),
+		};
+	} );
+	t.check( 'duplicate clones the card inside its column', dupShape.cards === 2 && dupShape.bothEditable, JSON.stringify( dupShape ) );
+
+	const rawOf5 = () => page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw&_cb=' + Date.now(), {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'include',
+		} );
+		return ( await r.json() ).content.raw;
+	}, id5 );
+	await page.keyboard.press( 'Meta+s' );
+	let raw5 = '';
+	for ( let i = 0; i < 15; i++ ) {
+		await page.waitForTimeout( 900 );
+		raw5 = await rawOf5();
+		if ( ( raw5.match( /Card one text\./g ) || [] ).length === 2 ) break;
+	}
+	const firstCol5 = raw5.slice( raw5.indexOf( '<!-- wp:column -->' ), raw5.indexOf( '<!-- /wp:column -->' ) );
+	t.check( 'both card copies saved inside the FIRST column',
+		( firstCol5.match( /testimonial-card/g ) || [] ).length >= 4 && ( raw5.match( /Card one text\./g ) || [] ).length === 2
+		&& raw5.indexOf( 'Second column.' ) > raw5.indexOf( '<!-- wp:column -->', raw5.indexOf( '<!-- /wp:column -->' ) ), firstCol5 );
+
+	await deletePost( page, id5 );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

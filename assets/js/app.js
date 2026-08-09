@@ -16356,6 +16356,30 @@
 		} );
 	}
 
+	// Duplicate an island in place (Austin's testimonial ask): a fresh copy
+	// of the stored raw lands right after the original, in the same root —
+	// nested islands duplicate inside their slot. A dirty slot island
+	// flushes first so the copy carries the writer's current text.
+	function duplicateIsland( islandEl ) {
+		const ed = state.editor;
+		if ( ! ed || ! ed.islands || ! islandEl || ! islandEl.parentNode ) return;
+		const idx = parseInt( islandEl.dataset.island, 10 );
+		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		if ( islandEl.classList.contains( 'minn-slot-island' ) ) flushSlotIsland( islandEl, ed.islands );
+		const raw = ed.islands[ idx ];
+		const ni = ed.islands.push( raw ) - 1;
+		islandEl.insertAdjacentHTML( 'afterend', islandHtml( ni, islandEl.dataset.block || 'block', raw, ed ) );
+		// Direct-DOM insertion fires no input — ancestor slots must re-splice.
+		stampSlotDirtyFor( islandEl );
+		const body = $( '#minn-editor-body' );
+		if ( body ) renderIslandPreviews( body, ed );
+		updateEditorStats();
+		scheduleAutosave();
+		/* translators: toast after duplicating a block */
+		toast( __( 'Block duplicated' ) );
+		return islandEl.nextElementSibling;
+	}
+
 	// Same undo toast for non-island atomic blocks (empty code <pre>, HR,
 	// image figures) that bindIslandGuards arms with the red outline.
 	function removeAtomicBlockWithUndo( el ) {
@@ -21567,6 +21591,7 @@
 			<div class="minn-insp-actions">
 				${ editable ? '<button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button>' : '' }
 				${ state.editor ? `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there.">Block editor&nbsp;↗</button>` : '' }
+				<button class="minn-btn-soft" id="minn-insp-duplicate" type="button" title="Duplicate this block" aria-label="Duplicate this block">${ icon( 'copy' ) }</button>
 				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="Remove this block">${ icon( 'trash' ) }${ editable ? '' : ' Remove block' }</button>
 			</div>`;
 		positionInspector( insp.islandEl );
@@ -21728,6 +21753,12 @@
 				const el = insp.islandEl;
 				closeInspector();
 				removeIslandWithUndo( el );
+				return;
+			}
+			if ( e.target.closest( '#minn-insp-duplicate' ) ) {
+				const el = insp.islandEl;
+				closeInspector();
+				duplicateIsland( el );
 				return;
 			}
 			if ( e.target.closest( '#minn-insp-embed-url' ) ) {
