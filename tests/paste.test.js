@@ -241,6 +241,63 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	raw = await save( plainId );
 	t.check( 'non-URL paste leaves the words unlinked in saved markup', /Replace WORD here\./.test( raw ) && ! /<a /.test( raw ), raw );
 
-	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, classicId, e2eId, linkId, plainId ] ) await deletePost( page, id );
+	/* ===== Plain text that IS block markup → real blocks (GH #4 follow-up:
+	 * AI tools and tutorials hand over raw Gutenberg markup as text; the
+	 * block editor converts it via its raw handler, so Minn does too) ===== */
+	const MARKUP = [
+		'<!-- wp:group {"layout":{"type":"constrained"}} -->',
+		'<div class="wp-block-group"><!-- wp:heading {"textAlign":"center","level":2} -->',
+		'<h2 class="wp-block-heading has-text-align-center">Pasted markup heading</h2>',
+		'<!-- /wp:heading -->',
+		'',
+		'<!-- wp:paragraph -->',
+		'<p>Pasted markup body.</p>',
+		'<!-- /wp:paragraph --></div>',
+		'<!-- /wp:group -->',
+	].join( '\n' );
+	const markupId = await createPost( page, { title: 'Paste: Block markup', content: '<!-- wp:paragraph -->\n<p>Start.</p>\n<!-- /wp:paragraph -->' } );
+	await openEditor( page, markupId );
+	await freshParagraph( page );
+	const markupPrevented = await paste( { 'text/plain': MARKUP } );
+	await page.waitForTimeout( 600 );
+	const markupShape = await page.evaluate( () => {
+		const body = document.querySelector( '#minn-editor-body' );
+		const group = body.querySelector( '.minn-block-island[data-block="group"], .minn-block-island[data-block="core/group"]' );
+		return {
+			slot: !! ( group && group.classList.contains( 'minn-slot-island' ) ),
+			h2: group ? ( group.querySelector( '.minn-slot > h2' ) || {} ).textContent || '' : '',
+			literal: body.textContent.includes( '<!-- wp:group' ),
+		};
+	} );
+	t.check( 'block-markup text converts to real blocks (group slots, no literal text)',
+		markupPrevented && markupShape.slot && markupShape.h2.includes( 'Pasted markup heading' ) && ! markupShape.literal,
+		JSON.stringify( markupShape ) );
+	raw = await save( markupId );
+	t.check( 'converted markup saves as blocks',
+		raw.includes( '<!-- wp:group {"layout":{"type":"constrained"}} -->' ) && raw.includes( 'Pasted markup body.' ), raw.slice( 0, 300 ) );
+
+	// Into a code block the same text stays LITERAL — pasting markup into
+	// code to talk ABOUT it must never convert.
+	const codeId = await createPost( page, { title: 'Paste: Markup into code', content: '<!-- wp:code -->\n<pre class="wp-block-code"><code>start</code></pre>\n<!-- /wp:code -->' } );
+	await openEditor( page, codeId );
+	await page.evaluate( () => {
+		const code = document.querySelector( '#minn-editor-body pre code' );
+		const r = document.createRange();
+		r.selectNodeContents( code );
+		r.collapse( false );
+		const s = getSelection();
+		s.removeAllRanges();
+		s.addRange( r );
+		document.querySelector( '#minn-editor-body' ).focus();
+	} );
+	await paste( { 'text/plain': MARKUP } );
+	await page.waitForTimeout( 400 );
+	const codeShape = await page.evaluate( () => ( {
+		literal: document.querySelector( '#minn-editor-body pre' ).textContent.includes( '<!-- wp:group' ),
+		islands: document.querySelectorAll( '#minn-editor-body .minn-block-island' ).length,
+	} ) );
+	t.check( 'markup pasted into a code block stays literal', codeShape.literal && codeShape.islands === 0, JSON.stringify( codeShape ) );
+
+	for ( const id of [ docsId, wordId, webId, undoId, ctxId, textId, classicId, e2eId, linkId, plainId, markupId, codeId ] ) await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
