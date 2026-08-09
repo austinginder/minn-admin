@@ -119,7 +119,10 @@ add_filter(
 			}
 		}
 
-		if ( ! $post_id ) {
+		// /render-blocks is gated on edit_posts with no per-post check, so an
+		// unchecked id here hands back Otter's cached CSS (and below, a preview
+		// link) for private posts and other people's drafts.
+		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
 			return $styles;
 		}
 

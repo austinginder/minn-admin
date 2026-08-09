@@ -18,7 +18,11 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_stream_can() {
-	return current_user_can( 'view_stream' ) || current_user_can( 'manage_options' );
+	// Defer entirely to Stream. view_stream is granted dynamically from its
+	// general_role_access setting, so an operator who removes administrator
+	// from Role Access means it — a manage_options backstop overrides that
+	// choice. Stream registers the cap filter for REST contexts itself.
+	return current_user_can( apply_filters( 'wp_stream_view_cap', 'view_stream' ) );
 }
 
 function minn_admin_stream_admin_url() {

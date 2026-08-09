@@ -88,7 +88,9 @@ function minn_admin_sureforms_summary( array $data ) {
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_sureforms_active() ) {
+	// Every sibling forms adapter gates registration on its own helper; without
+	// it the nav entry is advertised to every Contributor and dead-ends on 403.
+	if ( ! minn_admin_sureforms_active() || ! minn_admin_sureforms_can() ) {
 		return $surfaces;
 	}
 	$surfaces['sureforms'] = array(
