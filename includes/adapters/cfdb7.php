@@ -142,6 +142,42 @@ function minn_admin_cfdb7_summary( $values ) {
 	return $parts ? implode( ' · ', $parts ) : '(empty entry)';
 }
 
+/**
+ * Rewrite a CFDB7 entry's read/unread flag without string surgery.
+ *
+ * The old approach ran str_replace for a fixed 31-byte token over the WHOLE
+ * serialized blob. The tokens are constants, but the HAYSTACK is not: CFDB7
+ * serializes raw Contact Form 7 submission values, so an unauthenticated
+ * visitor can type that token into a form field. The replacement then fires
+ * inside their own answer, shrinking the value by two bytes while its s:LEN:
+ * prefix still declares the old length — the blob desyncs, unserialize()
+ * returns false, and every CFDB7 consumer breaks for that row permanently
+ * (their CSV export feeds the false straight into array_keys(), a fatal).
+ *
+ * Decode with allowed_classes => false (exactly what CFDB7 itself does on all
+ * four of its own read paths, so the object-injection risk the surgery was
+ * avoiding is already handled), set the key, re-serialize.
+ *
+ * @param string $blob   Raw form_value column.
+ * @param string $status 'read' or 'unread'.
+ * @return string|null New blob, or null when nothing should be written.
+ */
+function minn_admin_cfdb7_set_status( $blob, $status ) {
+	$blob = (string) $blob;
+	if ( ! is_serialized( $blob ) ) {
+		return null;
+	}
+	$data = @unserialize( $blob, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+	if ( ! is_array( $data ) ) {
+		return null;
+	}
+	if ( isset( $data['cfdb7_status'] ) && (string) $data['cfdb7_status'] === $status ) {
+		return null;
+	}
+	$data['cfdb7_status'] = $status;
+	return serialize( $data ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_cfdb7_ready() || ! minn_admin_cfdb7_can_view() ) {
 		return $surfaces;
@@ -328,15 +364,10 @@ add_action( 'rest_api_init', function () {
 				}
 				$values = minn_admin_cfdb7_values( (string) $row->form_value );
 
-				// Opening marks read — CFDB7's own view semantics. Fixed-token
-				// surgery on the blob; both tokens are constants we control.
+				// Opening marks read — CFDB7's own view semantics.
 				if ( ( $values['cfdb7_status'] ?? '' ) !== 'read' ) {
-					$patched = str_replace(
-						's:12:"cfdb7_status";s:6:"unread"',
-						's:12:"cfdb7_status";s:4:"read"',
-						(string) $row->form_value
-					);
-					if ( $patched !== (string) $row->form_value ) {
+					$patched = minn_admin_cfdb7_set_status( $row->form_value, 'read' );
+					if ( null !== $patched ) {
 						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 						$wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) );
 					}
@@ -424,12 +455,8 @@ add_action( 'rest_api_init', function () {
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
 			}
-			$patched = str_replace(
-				's:12:"cfdb7_status";s:4:"read"',
-				's:12:"cfdb7_status";s:6:"unread"',
-				(string) $row->form_value
-			);
-			if ( $patched !== (string) $row->form_value ) {
+			$patched = minn_admin_cfdb7_set_status( $row->form_value, 'unread' );
+			if ( null !== $patched ) {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) );
 			}
