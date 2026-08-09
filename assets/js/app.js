@@ -15109,7 +15109,7 @@
 	 * edited; an untouched group emits its stored raw unchanged. A container
 	 * with any complex child (nested group, embed, image…) stays a phase-2
 	 * island with in-place text runs. Columns/cover are the next slices. */
-	const SLOT_BLOCKS = [ 'group', 'columns' ];
+	const SLOT_BLOCKS = [ 'group', 'columns', 'cover', 'media-text' ];
 
 	// Split a container's raw into { head, open, tag, inner, tail } where
 	// head = opening comment + whitespace, open = the wrapper's own open tag
@@ -15155,7 +15155,65 @@
 		const inner = str.slice( head.length + open.length, close );
 		const tail = str.slice( close );
 		if ( head + open + inner + tail !== str ) return null;
-		return { head, open, tag, inner, tail };
+		return { head, open, tag, inner, tail, preamble: '' };
+	}
+
+	// Blocks whose children live in a CONTENT CONTAINER below the wrapper,
+	// with static media/background bytes before it. The preamble (everything
+	// from the wrapper's open tag through the content container's open tag)
+	// is preserved verbatim like the wrapper bytes.
+	const SLOT_CONTENT = { cover: 'wp-block-cover__inner-container', 'media-text': 'wp-block-media-text__content' };
+
+	// slotParseContainer, extended per block: for SLOT_CONTENT blocks the
+	// slot region is the content container's interior and everything before
+	// it folds into `preamble` (after it must be whitespace — the content
+	// container is the last child in core's markup; anything else fails the
+	// gate and the block stays an island). Reassembly identity still rules:
+	// head + open + preamble + inner + tail === raw.
+	function slotParseContent( raw, short ) {
+		const base = slotParseContainer( raw );
+		if ( ! base ) return null;
+		const cls = SLOT_CONTENT[ short ];
+		if ( ! cls ) return base;
+		const str = base.inner;
+		// [^>]* is honest enough for a class-carrying open tag; the
+		// reassembly identity below catches anything it misreads.
+		const om = str.match( new RegExp( '<div[^>]*\\b' + cls.replace( /-/g, '[-]' ) + '\\b[^>]*>' ) );
+		if ( ! om ) return null;
+		const openEnd = om.index + om[ 0 ].length;
+		// Depth-scan the content div's close within the wrapper's inner.
+		let depth = 1;
+		let i = openEnd;
+		let close = -1;
+		const lower = str.toLowerCase();
+		while ( i < str.length ) {
+			if ( str.startsWith( '<!--', i ) ) {
+				const end = str.indexOf( '-->', i );
+				i = end === -1 ? str.length : end + 3;
+				continue;
+			}
+			if ( str[ i ] === '<' ) {
+				const end = str.indexOf( '>', i );
+				if ( end === -1 ) return null;
+				if ( lower.startsWith( '</div', i ) ) {
+					depth--;
+					if ( depth === 0 ) { close = i; break; }
+				} else if ( lower.startsWith( '<div', i ) && /[\s>\/]/.test( lower[ i + 4 ] || '' ) ) {
+					depth++;
+				}
+				i = end + 1;
+				continue;
+			}
+			i++;
+		}
+		if ( close === -1 ) return null;
+		const closeEnd = str.indexOf( '>', close ) + 1;
+		if ( str.slice( closeEnd ).trim() !== '' ) return null;
+		const preamble = str.slice( 0, openEnd );
+		const inner = str.slice( openEnd, close );
+		const tail = str.slice( close ) + base.tail;
+		if ( base.head + base.open + preamble + inner + tail !== String( raw || '' ) ) return null;
+		return { head: base.head, open: base.open, tag: base.tag, preamble, inner, tail };
 	}
 
 	// A slot candidate's children: editable segments render as prose,
@@ -15179,9 +15237,9 @@
 	}
 
 	function slotIslandHtml( idx, name, raw, ed ) {
-		const parts = slotParseContainer( raw );
-		if ( ! parts ) return null;
 		const short = String( name || '' ).replace( /^core\//, '' );
+		const parts = slotParseContent( raw, short );
+		if ( ! parts ) return null;
 		const chip = `<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( short ) } block">⚙ ${ esc( short ) }</button>`;
 		// One slot child → its editable HTML, or a NESTED island registered
 		// in ed.islands (a complex leaf keeps its protected card, a nested
@@ -15240,10 +15298,14 @@
 		if ( childrenHtml == null ) return null;
 		/* translators: island hover hint on an editable group container */
 		const hint = __( 'Grouped content — write inside · layout via ⚙' );
-		return `<div class="minn-block-island minn-slot-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
+		// SLOT_CONTENT blocks (cover, media-text): the preamble carries the
+		// background/media bytes plus the content container's OPEN tag, so
+		// the slot nests inside the content container; the tail closes it.
+		const closers = parts.preamble ? '</div></' + parts.tag + '>' : '</' + parts.tag + '>';
+		return `<div class="minn-block-island minn-slot-island${ parts.preamble ? ' minn-media-slot-island' : '' }" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			${ chip }
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
-			${ parts.open }<div class="minn-slot" contenteditable="true">${ childrenHtml }</div></${ parts.tag }>
+			${ parts.open }${ parts.preamble }<div class="minn-slot" contenteditable="true">${ childrenHtml }</div>${ closers }
 		</div>`;
 	}
 
@@ -15292,7 +15354,8 @@
 		if ( ! el || ! el.dataset || ! el.dataset.minnSlotDirty || ! islands ) return;
 		const idx = parseInt( el.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || islands[ idx ] == null ) return;
-		const parts = slotParseContainer( String( islands[ idx ] ) );
+		const shortName = String( el.dataset.block || '' ).replace( /^core\//, '' );
+		const parts = slotParseContent( String( islands[ idx ] ), shortName );
 		if ( ! parts ) return;
 		// OWN slots only — with nesting, a descendant query would also grab
 		// the slots of nested containers (and misalign the columns walk).
@@ -15316,7 +15379,7 @@
 			islands[ idx ] = parts.head + parts.open + innerOut + parts.tail;
 			return;
 		}
-		islands[ idx ] = parts.head + parts.open + serializeToBlocks( slots[ 0 ], islands ) + parts.tail;
+		islands[ idx ] = parts.head + parts.open + parts.preamble + serializeToBlocks( slots[ 0 ], islands ) + parts.tail;
 	}
 
 	// The contenteditable=false card an island renders as. Shared by content

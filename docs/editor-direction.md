@@ -387,8 +387,26 @@ one. Read the writing-context contract above before touching any of it.
    stackable's remaining fail ('add clones the static column', 1 column where 2
    expected) is PRE-EXISTING (bisected: identical at pre-nesting adec8ba) and smells
    like upstream CDN design drift — re-pin at the next design-suite sweep, don't
-   chase it as a nesting regression. Remaining tail: cover/media-text slots (the
-   content-container locator) and the chip-density design pass; dogfood the whole
+   chase it as a nesting regression.
+
+   ✅ *Cover + media-text slots shipped 2026-08-09 (same day, final slice).*
+   `SLOT_CONTENT` maps a block to its content-container class
+   (cover → `wp-block-cover__inner-container`, media-text →
+   `wp-block-media-text__content`); `slotParseContent( raw, short )` wraps
+   `slotParseContainer` and yields head/open/**preamble**/inner/tail — the preamble
+   is everything from the wrapper's open tag through the content container's open
+   tag (backgrounds, media figure), preserved verbatim like the wrapper bytes; the
+   content container must be the LAST child (whitespace only after its close) or
+   the gate fails and the block stays an island, and the reassembly identity now
+   includes the preamble. REGEX LESSON: the content-open matcher must be a plain
+   `<div[^>]*\\bCLASS\\b[^>]*>` — the attr-alternation form
+   (`[^>"']|"[^"]*"|'[^']*'`) makes quoted content unreachable for the class
+   match (quoted strings only match whole tokens), so it NEVER found the class
+   inside `class="…"`. Editor CSS approximates the front-end SHAPE only
+   (`.minn-media-slot-island`: cover background absolute behind a z-raised slot,
+   media-text as a 2-col grid). SLOT_BLOCKS is now group/columns/cover/media-text.
+   Suite: nested-islands 27 (cover + media-text byte-identity, preamble-verbatim
+   edits in both). Remaining tail: the chip-density design pass; dogfood the whole
    nesting cycle on anchor.localhost before it rides a release.
 
 **Watch items (not scope, but decide before shipping the above):**
