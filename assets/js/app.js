@@ -20340,18 +20340,9 @@
 					if ( text ) document.execCommand( 'insertText', false, text );
 					return;
 				}
-				// Container slots: the rich-paste pipeline's block splicing is
-				// tuned to the top-level body (bracket markers, top-level
-				// island rebuilds) — inside a slot, land plain text at the
-				// caret. Newlines survive; multi-block paste into slots is a
-				// follow-up slice.
-				const slotEl = e.target.closest && e.target.closest( '.minn-slot' );
-				if ( slotEl ) {
-					e.preventDefault();
-					e.stopPropagation();
-					const text = ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) || '' ).replace( /\r/g, '' );
-					if ( text ) document.execCommand( 'insertText', false, text );
-				}
+				// Container slots ride the MAIN paste pipeline now (root-aware
+				// pasteInsert/pasteBlocksInsert; island-producing paths guard
+				// on the caret's slot) — no capture-phase intercept.
 			}, true );
 			// Clicking the summary text field must not toggle <details> closed.
 			body.addEventListener( 'click', ( e ) => {
@@ -20666,6 +20657,15 @@
 				if ( ! ed2 || ! cd ) return;
 				const text = cd.getData( 'text/plain' ) || '';
 				const trimmed = text.trim();
+				// The caret's container slot (selection-based, not e.target —
+				// synthetic ClipboardEvents dispatch on the body). Prose paste
+				// works in slots; island-producing paths guard on this.
+				const selSlot = ( () => {
+					const s = window.getSelection();
+					const n = s && s.rangeCount ? s.anchorNode : null;
+					const el2 = n && ( n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement );
+					return el2 && el2.closest ? el2.closest( '.minn-slot' ) : null;
+				} )();
 				// Paste a URL over selected text → wrap as <a>, don't replace.
 				// Runs before the HTML flavor path so browser-copied links
 				// (plain + <a href> HTML) still keep the selected words.
@@ -20685,11 +20685,11 @@
 						}
 					}
 				}
-				if ( ed2.mode === 'blocks' && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
+				if ( ed2.mode === 'blocks' && ! selSlot && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
 					const sel = window.getSelection();
 					let node = sel && sel.anchorNode;
 					// body-root by design: embeds are islands — top level only
-					// (slot paste is intercepted as plain text before this).
+					// (in a slot the URL falls through and pastes as text).
 					while ( node && node.parentNode !== body ) node = node.parentNode;
 					if ( node && node.parentNode === body ) {
 						const existing = node.nodeType === 1 ? node.innerHTML : node.textContent;
@@ -20707,7 +20707,9 @@
 				// self-hosted upload, not a hotlink.
 				const imgFiles = B.caps.upload ? Array.from( cd.files || [] ).filter( ( f ) => /^image\//.test( f.type ) ) : [];
 				const htmlFlavor = cd.getData( 'text/html' ) || '';
-				if ( imgFiles.length && ( ! htmlFlavor.trim() || /^(?:<meta[^>]*>)?\s*<img[^>]*\/?>\s*$/i.test( htmlFlavor.trim() ) ) ) {
+				// Media flow stays top-level for now (insertImageFiles is
+				// body-root by design) — a files-only paste in a slot no-ops.
+				if ( ! selSlot && imgFiles.length && ( ! htmlFlavor.trim() || /^(?:<meta[^>]*>)?\s*<img[^>]*\/?>\s*$/i.test( htmlFlavor.trim() ) ) ) {
 					e.preventDefault();
 					insertImageFiles( body, imgFiles );
 					return;
@@ -20723,18 +20725,26 @@
 				// take a block splice — fall through to the HTML path there.
 				const minnBlocks = cd.getData( 'text/x-minn-blocks' );
 				if ( minnBlocks && ed2.mode !== 'locked'
-					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' )
-					&& tokenizeBlocks( minnBlocks.trim() ) ) {
-					e.preventDefault();
-					ensureBlocksMode();
-					const built = appendEditableContent( ed2, minnBlocks.trim() );
-					if ( built.trim() ) {
-						pasteBlocksInsert( body, built );
-						renderIslandPreviews( body, ed2 );
-						updateEditorStats();
+					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' ) ) {
+					const mbSegs = tokenizeBlocks( minnBlocks.trim() );
+					// Inside a slot only all-editable payloads splice — islands
+					// would need nested-island support (handoff item 5). An
+					// island-class payload falls through to the HTML/text
+					// flavors and lands as prose instead.
+					const slotSafe = ! selSlot || ( mbSegs || [] ).every( ( s ) =>
+						s.type === 'html' ? ! s.raw.trim() : segmentEditable( s ) );
+					if ( mbSegs && slotSafe ) {
+						e.preventDefault();
+						ensureBlocksMode();
+						const built = appendEditableContent( ed2, minnBlocks.trim() );
+						if ( built.trim() ) {
+							pasteBlocksInsert( selSlot || body, built );
+							renderIslandPreviews( body, ed2 );
+							updateEditorStats();
+						}
+						scheduleAutosave();
+						return;
 					}
-					scheduleAutosave();
-					return;
 				}
 				const html = cd.getData( 'text/html' );
 				if ( anchorEl.closest( 'pre' ) || closestInlineCode( anchor ) ) {
@@ -23643,11 +23653,14 @@
 	// brackets are removed after (outside the undo stack, like the markdown
 	// nbsp fix — ⌘Z still reverts the whole paste in one step, and a redo's
 	// resurrected empty bracket serializes to nothing).
-	function pasteBlocksInsert( body, blocksHtml ) {
+	// root: the block root receiving the paste — the body, or a container
+	// slot (slots are mini-bodies; the bracket markers and list lift scan
+	// within the root so a slot paste can't touch its neighbors).
+	function pasteBlocksInsert( root, blocksHtml ) {
 		const BKT = '<p data-minn-bkt="1"><br></p>';
 		document.execCommand( 'insertHTML', false, BKT + blocksHtml + BKT );
 		const sel = window.getSelection();
-		$$( 'p[data-minn-bkt]', body ).forEach( ( p ) => {
+		$$( 'p[data-minn-bkt]', root ).forEach( ( p ) => {
 			p.removeAttribute( 'data-minn-bkt' );
 			if ( p.textContent.trim() ) return; // absorbed real text — it's a paragraph now
 			const holdsCaret = sel.rangeCount && p.contains( sel.anchorNode );
@@ -23663,7 +23676,7 @@
 			// is handled at serialize instead (cleanLeadingNbsp).
 			p.remove();
 		} );
-		liftNestedLists( body );
+		liftNestedLists( root );
 	}
 
 	// Route a sanitized payload to the right insertion for the caret context.
@@ -23671,6 +23684,8 @@
 	// pasted into headings/list items — probed): lists merge into lists
 	// natively, paragraphs merge into quotes, anything else flattens to text.
 	function pasteInsert( body, payload, anchorEl ) {
+		// Slots are mini-bodies: block splices land within the caret's root.
+		const root = blockRootOf( anchorEl, body );
 		if ( payload.kind === 'inline' ) {
 			document.execCommand( 'insertHTML', false, payload.html );
 			return;
@@ -23678,7 +23693,7 @@
 		if ( anchorEl.closest( 'li' ) ) {
 			if ( payload.list ) {
 				document.execCommand( 'insertHTML', false, payload.list );
-				liftNestedLists( body );
+				liftNestedLists( root );
 			} else {
 				document.execCommand( 'insertHTML', false, pasteFlatHtml( payload ) );
 			}
@@ -23692,7 +23707,7 @@
 			document.execCommand( 'insertHTML', false, payload.allParagraphs ? payload.html : pasteFlatHtml( payload ) );
 			return;
 		}
-		pasteBlocksInsert( body, payload.html );
+		pasteBlocksInsert( root, payload.html );
 	}
 
 	/* ===== Inline media flow (paste/drop image files → library at caret) ===== */

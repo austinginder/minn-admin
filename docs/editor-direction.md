@@ -272,6 +272,19 @@ one. Read the writing-context contract above before touching any of it.
    generalization is the same root swap plus refusing island-class payloads inside a slot
    (they'd need nested islands, item 5). Suite should cover a Word/Docs multi-paragraph
    paste landing as separate blocks inside a group.
+   ✅ *Shipped 2026-08-09* — the capture-phase plain-text intercept is GONE; slots ride
+   the main pipeline. `pasteInsert`/`pasteBlocksInsert` take the caret's block root
+   (`blockRootOf`, bracket-marker scan + list lift per root), so sanitized Docs/Word
+   payloads land as separate real blocks inside the group and splice on save. Guards,
+   all keyed on the SELECTION's slot (`selSlot` — e.target is useless for synthetic
+   ClipboardEvents, which dispatch on the body): the embed-URL fast path and clipboard
+   image FILES stay top-level (media flow in slots is future work; a files-only paste
+   in a slot no-ops), and a `text/x-minn-blocks` payload splices in a slot only when
+   EVERY segment is editable — island-class payloads fall through to the html/text
+   flavors and land as prose. Suite: container-slots 44 (multi-block html paste saved
+   inside the group, multi-line text → paragraphs, island payload refused); the two
+   legacy plain-paste checks flipped to assert rich behavior. Neighbors green: paste
+   37, island-runs 21, media-flow 14, undo-toast 22, island-copy 14, attr-carry 20.
 
 **Ready to build (medium, 1–2 days each):**
 
