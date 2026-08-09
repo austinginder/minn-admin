@@ -14964,6 +14964,22 @@
 	// becoming islands.
 	const PASSTHROUGH_BLOCKS = [ 'image', 'table', 'quote', 'pullquote', 'separator', 'verse', 'preformatted', 'video', 'audio' ];
 
+	// Text-flow blocks whose attributes ALSO carry verbatim (nested-content
+	// plan, phase 1): a styled paragraph/heading/list — fontSize, style,
+	// className, textColor and friends — stays editable prose instead of
+	// islanding, with the comment JSON parked on the element. The old
+	// duplication fear is settled: Enter-splitting copies element attributes
+	// to both halves in Blink (probed 2026-08-08), which is exactly
+	// Gutenberg's own split semantics, so duplication is correct — and a
+	// merge keeps the first block's attrs, also matching. The serializer
+	// merges the few DOM-editable attrs (alignment, list numbering) into the
+	// carried JSON; everything else re-emits untouched. Block-TYPE
+	// conversions (markdown prefixes, toolbar block buttons) are refused on
+	// marker blocks: formatBlock rebuilds the element and drops class +
+	// marker while half-keeping inline style (probed) — partial survival is
+	// worse than an honest "convert it in the block editor".
+	const TEXTFLOW_CARRY_BLOCKS = [ 'paragraph', 'heading', 'list' ];
+
 	// Attributes JSON from a segment's opening block comment ({} when absent/invalid;
 	// null distinguishes "invalid JSON" for segmentEditable's bail-out).
 	function segmentAttrs( seg ) {
@@ -14982,6 +14998,7 @@
 		const attrs = segmentAttrs( seg );
 		if ( attrs === null ) return false;
 		if ( PASSTHROUGH_BLOCKS.includes( name ) ) return true; // attrs re-emitted verbatim
+		if ( TEXTFLOW_CARRY_BLOCKS.includes( name ) ) return true; // attrs carried on the element
 		const allowed = EDITABLE_ATTRS[ name ] || [];
 		return Object.keys( attrs ).every( ( k ) => allowed.includes( k ) );
 	}
@@ -15002,8 +15019,23 @@
 		return segments.map( ( seg ) => {
 			if ( seg.type === 'html' ) return seg.raw;
 			if ( segmentEditable( seg ) ) {
-				let html = stripBlockComments( seg.raw );
 				const name = seg.name.replace( /^core\//, '' );
+				let pre = seg.raw;
+				// Park each list item's own comment attrs on its <li> BEFORE the
+				// comments are stripped — list-item blocks nest inside the list
+				// segment, and their className/style used to vanish silently on
+				// the next save (the list looked editable, the item attrs were
+				// never re-emitted).
+				if ( name === 'list' ) {
+					pre = pre.replace( /<!--\s*wp:list-item\s+(\{(?:(?!-->)[\s\S])*?\})\s*-->\s*(<li)([\s>])/g, ( m0, json, li, tail ) => {
+						try {
+							const a = JSON.parse( json );
+							if ( a && Object.keys( a ).length ) return `${ li } data-minn-attrs="${ esc( JSON.stringify( a ) ) }"${ tail }`;
+						} catch ( e ) { /* invalid JSON — stripped, as before */ }
+						return li + tail;
+					} );
+				}
+				let html = stripBlockComments( pre );
 				// Code blocks that keep their language in the comment attr (the
 				// {"language":"sql"} dialect): surface it as a language-* class so the
 				// picker and highlighter see it, and mark the pre so serialization
@@ -15018,6 +15050,15 @@
 					// Park the comment attrs on the element; serialization re-emits them.
 					const attrs = segmentAttrs( seg );
 					if ( attrs && Object.keys( attrs ).length ) {
+						html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
+					}
+				} else if ( TEXTFLOW_CARRY_BLOCKS.includes( name ) ) {
+					// Attrs the serializer derives from the DOM need no marker; a
+					// styled block parks its FULL attrs JSON for verbatim re-emit
+					// (the serializer merges the DOM-derived keys back in).
+					const attrs = segmentAttrs( seg );
+					const allowed = EDITABLE_ATTRS[ name ] || [];
+					if ( attrs && Object.keys( attrs ).length && ! Object.keys( attrs ).every( ( k ) => allowed.includes( k ) ) ) {
 						html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
 					}
 				}
@@ -16264,7 +16305,10 @@
 			if ( n.nodeType === Node.ELEMENT_NODE && n.dataset && n.dataset.minnUpload ) return;
 			const tag = n.tagName.toLowerCase();
 			const el = n.cloneNode( true );
-			el.removeAttribute( 'style' );
+			// Editor chrome styles (table hot-border) are stripped — but a
+			// marker element's inline style is SAVED content (Gutenberg style
+			// attrs paint through it) and must survive.
+			if ( ! ( el.dataset && el.dataset.minnAttrs ) ) el.removeAttribute( 'style' );
 			// A redo can resurrect an empty paste-bracket paragraph (see
 			// pasteBlocksInsert) — typed-into, it must not leak its marker.
 			el.removeAttribute( 'data-minn-bkt' );
@@ -16281,15 +16325,40 @@
 				return m ? m[ 1 ] : null;
 			};
 			if ( tag === 'p' ) {
-				if ( ! el.textContent.trim() && ! el.querySelector( 'img' ) ) return;
+				const pa = takeMinnAttrs( el );
+				// An empty marker paragraph is a real block (styled spacer from
+				// the original content) — emptying the affordance <br> keeps
+				// Gutenberg's empty-paragraph shape. Plain empties still drop.
+				if ( ! el.textContent.trim() && ! el.querySelector( 'img' ) ) {
+					if ( ! pa ) return;
+					el.innerHTML = '';
+				}
 				const align = alignOf( el );
-				pushBlock( 'paragraph', align ? { align } : null, el.outerHTML );
+				if ( pa ) {
+					// Alignment is Minn-editable — merge the DOM truth into the
+					// carried JSON; everything else re-emits untouched.
+					if ( align ) pa.align = align;
+					else delete pa.align;
+					pushBlock( 'paragraph', pa, el.outerHTML );
+				} else {
+					pushBlock( 'paragraph', align ? { align } : null, el.outerHTML );
+				}
 			} else if ( /^h[1-6]$/.test( tag ) ) {
+				const pa = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-heading' );
 				const textAlign = alignOf( el );
-				const hAttrs = { level: parseInt( tag[ 1 ], 10 ) };
-				if ( textAlign ) hAttrs.textAlign = textAlign;
-				pushBlock( 'heading', hAttrs, el.outerHTML );
+				if ( pa ) {
+					// The tag can't change on a marker heading (conversions are
+					// refused), so the carried `level` stays truthful — only
+					// alignment merges from the DOM.
+					if ( textAlign ) pa.textAlign = textAlign;
+					else delete pa.textAlign;
+					pushBlock( 'heading', pa, el.outerHTML );
+				} else {
+					const hAttrs = { level: parseInt( tag[ 1 ], 10 ) };
+					if ( textAlign ) hAttrs.textAlign = textAlign;
+					pushBlock( 'heading', hAttrs, el.outerHTML );
+				}
 			} else if ( tag === 'blockquote' ) {
 				const pa = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-quote' );
@@ -16367,19 +16436,36 @@
 					`<figure class="${ figClass }"><table${ table.className ? ` class="${ table.className }"` : '' }>${ table.innerHTML }</table>${ caption ? caption.outerHTML : '' }</figure>`
 				);
 			} else if ( tag === 'ul' || tag === 'ol' ) {
+				const carried = takeMinnAttrs( el );
 				el.classList.add( 'wp-block-list' );
-				const la = tag === 'ol' ? { ordered: true } : null;
+				// Numbering attrs are Minn-editable (list popover) — the DOM is
+				// their truth and overwrites the carried copies; a carried list
+				// keeps its other attrs (fontSize, className, style…) verbatim.
+				const la = carried || ( tag === 'ol' ? {} : null );
 				let listHtmlAttrs = '';
 				if ( tag === 'ol' ) {
+					la.ordered = true;
 					const start = parseInt( el.getAttribute( 'start' ), 10 );
 					const type = el.getAttribute( 'type' );
-					if ( start ) { la.start = start; listHtmlAttrs += ` start="${ start }"`; }
-					if ( el.hasAttribute( 'reversed' ) ) { la.reversed = true; listHtmlAttrs += ' reversed'; }
-					if ( type ) { la.type = type; listHtmlAttrs += ` type="${ esc( type ) }"`; }
+					if ( start ) { la.start = start; listHtmlAttrs += ` start="${ start }"`; } else { delete la.start; }
+					if ( el.hasAttribute( 'reversed' ) ) { la.reversed = true; listHtmlAttrs += ' reversed'; } else { delete la.reversed; }
+					if ( type ) { la.type = type; listHtmlAttrs += ` type="${ esc( type ) }"`; } else { delete la.type; }
+				} else if ( carried ) {
+					delete la.ordered;
+					delete la.start;
+					delete la.reversed;
+					delete la.type;
 				}
 				const items = Array.from( el.querySelectorAll( ':scope > li' ) )
-					.map( ( li ) => `<!-- wp:list-item -->\n${ li.outerHTML }\n<!-- /wp:list-item -->` ).join( '' );
-				pushBlock( 'list', la, `<${ tag }${ listHtmlAttrs } class="${ el.className }">${ items }</${ tag }>` );
+					.map( ( li ) => {
+						const liAttrs = takeMinnAttrs( li );
+						return `<!-- wp:list-item${ serializeBlockAttrs( liAttrs && Object.keys( liAttrs ).length ? liAttrs : null ) } -->\n${ li.outerHTML }\n<!-- /wp:list-item -->`;
+					} ).join( '' );
+				// The open tag is rebuilt — a carried list's inline style is
+				// saved content and must ride along (attribute order may
+				// normalize on first save; the established fixed-point rule).
+				const listStyle = carried && el.getAttribute( 'style' ) ? ` style="${ esc( el.getAttribute( 'style' ) ) }"` : '';
+				pushBlock( 'list', la, `<${ tag }${ listHtmlAttrs } class="${ el.className }"${ listStyle }>${ items }</${ tag }>` );
 			} else if ( tag === 'figure' && ! el.querySelector( 'img, video, audio, table, iframe' ) && ! el.textContent.trim() ) {
 				return; // husk left behind by an undoable image delete
 			} else if ( tag === 'figure' && el.querySelector( 'video' ) ) {
@@ -19930,6 +20016,39 @@
 						}
 					}
 					if ( ! appShortcut ) e.stopPropagation();
+					return;
+				}
+				// Marker-block end-split (attribute carry, phase 1): Blink
+				// copies element attributes to BOTH halves of an Enter split —
+				// right for mid-splits (Gutenberg's own semantics), but an
+				// end-of-block Enter should yield a DEFAULT paragraph like
+				// Gutenberg's, not an empty styled clone. Observe the split and
+				// strip marker + class + style from an empty half that carries
+				// the same marker. Out-of-stack ATTR mutations are undo-safe
+				// (probed 2026-08-08; text mutations are not — rule 25b).
+				if ( e.key === 'Enter' && ! appShortcut && ! e.isComposing && e.keyCode !== 229 ) {
+					const sel = window.getSelection();
+					const anchorEl = sel && sel.rangeCount
+						? ( sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement )
+						: null;
+					const carrier = anchorEl && anchorEl.closest ? anchorEl.closest( '[data-minn-attrs]' ) : null;
+					if ( carrier && ! carrier.closest( '.minn-block-island' ) && body.contains( carrier ) ) {
+						const stamp = carrier.dataset.minnAttrs;
+						requestAnimationFrame( () => {
+							// End-split leaves the empty clone AFTER the carrier;
+							// start-split leaves it BEFORE. Strip whichever empty
+							// sibling shares the marker (mid-split halves both
+							// hold text, so they never match).
+							[ carrier.nextElementSibling, carrier.previousElementSibling ].forEach( ( sib ) => {
+								if ( sib && sib.dataset && sib.dataset.minnAttrs === stamp
+									&& ! sib.textContent.trim() && ! sib.querySelector( 'img' ) ) {
+									sib.removeAttribute( 'data-minn-attrs' );
+									sib.removeAttribute( 'class' );
+									sib.removeAttribute( 'style' );
+								}
+							} );
+						} );
+					}
 				}
 			} );
 			body.addEventListener( 'mousedown', ( e ) => {
@@ -20087,6 +20206,17 @@
 					if ( runAnchorEl && runAnchorEl.closest && runAnchorEl.closest( '.minn-island-run' ) ) {
 						toast( __( 'Island text is plain-text only — use ⚙ or the block editor for formatting' ) );
 						return;
+					}
+					// Block-TYPE conversions are refused on attr-carrying blocks:
+					// formatBlock rebuilds the element and half-drops the styling
+					// (class + marker gone, inline style kept — probed), so the
+					// honest answer is the block editor. Inline marks stay fine.
+					if ( btn.dataset.block || btn.dataset.cmd === 'insertUnorderedList' || btn.dataset.cmd === 'insertOrderedList' ) {
+						const mk = runAnchorEl && runAnchorEl.closest ? runAnchorEl.closest( '[data-minn-attrs]' ) : null;
+						if ( mk && body.contains( mk ) ) {
+							toast( __( 'This block keeps custom styling — change its type in the block editor' ) );
+							return;
+						}
 					}
 					if ( btn.dataset.cmd === 'link' ) {
 						const sel2 = window.getSelection();
@@ -22734,9 +22864,10 @@
 
 			let m;
 			if ( e.key === '`' ) {
-				// ``` alone in a paragraph → code block.
+				// ``` alone in a paragraph → code block. (Not on attr-carrying
+				// paragraphs: formatBlock drops the carried styling — probed.)
 				const blockEl = topBlockOf( node );
-				if ( blockEl && blockEl.tagName === 'P' && blockEl.textContent.trim() === '``' && upto.endsWith( '``' ) ) {
+				if ( blockEl && blockEl.tagName === 'P' && ! blockEl.dataset.minnAttrs && blockEl.textContent.trim() === '``' && upto.endsWith( '``' ) ) {
 					e.preventDefault();
 					const r = document.createRange();
 					r.selectNodeContents( blockEl );
@@ -22764,9 +22895,11 @@
 				m = /\[([^\[\]]+)\]\(((?:https?:\/\/|\/|#|mailto:)[^)\s]*)$/.exec( upto );
 				if ( m ) wrapInline( m.index, 'a', m[ 1 ], ` href="${ esc( m[ 2 ] ) }"` );
 			} else if ( e.key === ' ' ) {
-				// Block prefixes at the start of a paragraph.
+				// Block prefixes at the start of a paragraph. Attr-carrying
+				// paragraphs keep their type: the conversion would drop the
+				// carried styling (probed), so the prefix stays literal text.
 				const blockEl = topBlockOf( node );
-				if ( ! blockEl || blockEl.tagName !== 'P' ) return;
+				if ( ! blockEl || blockEl.tagName !== 'P' || blockEl.dataset.minnAttrs ) return;
 				const r = document.createRange();
 				r.selectNodeContents( blockEl );
 				r.setEnd( node, sel.anchorOffset );
@@ -22791,9 +22924,10 @@
 				scheduleAutosave();
 			} else if ( e.key === '-' ) {
 				// --- alone in a paragraph → divider, caret stays in the
-				// (emptied) paragraph below it.
+				// (emptied) paragraph below it. (Not on attr-carrying
+				// paragraphs — an emptied styled p would linger as a spacer.)
 				const blockEl = topBlockOf( node );
-				if ( blockEl && blockEl.tagName === 'P' && blockEl.textContent.trim() === '--' && upto.endsWith( '--' ) ) {
+				if ( blockEl && blockEl.tagName === 'P' && ! blockEl.dataset.minnAttrs && blockEl.textContent.trim() === '--' && upto.endsWith( '--' ) ) {
 					e.preventDefault();
 					blockEl.insertAdjacentHTML( 'beforebegin', '<hr>' );
 					blockEl.textContent = '';
