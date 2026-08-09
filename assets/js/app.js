@@ -15183,6 +15183,11 @@
 		if ( preview ) {
 			const clone = preview.cloneNode( true );
 			$$( 'script, style, .minn-island-chip', clone ).forEach( ( n ) => n.remove() );
+			// Run spans are editor chrome — unwrap so copied HTML stays clean.
+			$$( '.minn-island-run', clone ).forEach( ( s ) => {
+				while ( s.firstChild ) s.parentNode.insertBefore( s.firstChild, s );
+				s.remove();
+			} );
 			const html = clone.innerHTML.trim() || ( rawStr ? stripBlockComments( rawStr ).trim() : '' );
 			// innerText off the LIVE node, not the clone: a detached clone has
 			// no layout, so Chrome runs block children together
@@ -15688,6 +15693,110 @@
 		commitButtonsIsland( island );
 	}
 
+	/* ===== In-place island text editing (nested-content plan, phase 2) =====
+	 * The text-runs machinery already edits island text through inspector
+	 * textareas by byte-offset splice; this moves that editing in place. After
+	 * a preview renders, each preview TEXT NODE that aligns exactly with a raw
+	 * text run gets wrapped in a small contenteditable=true span (the details-
+	 * island precedent: Blink respects the editable-inside-non-editable
+	 * boundary — probed 2026-08-08: edge Backspace/Delete are native no-ops,
+	 * ⌘Z tracks in-span typing, arrows flow between runs). Edits splice back
+	 * into ed.islands[idx] from the ORIGINAL base via spliceTextRuns, so the
+	 * raw markup outside the edited text stays byte-identical and serialize
+	 * needs no changes. Alignment is strict — every run must match its text
+	 * node exactly (pre + text + post) — and any mismatch (dynamic renders
+	 * that rewrite text, filters, unexpected splits) leaves the island
+	 * read-only with the ⚙ inspector as before. Text-only by design: Enter,
+	 * formatting shortcuts, toolbar marks and rich paste are blocked inside
+	 * runs (the splice reads textContent; markup would be silently lost). */
+
+	const ISLAND_RUN_SKIP_BLOCKS = [ 'embed', 'gallery' ]; // mediaRebuild — the URL is itself a text node
+
+	function armIslandTextRuns( body, ed ) {
+		if ( ! body || ! ed || ! ed.islands || ed.mode === 'locked' ) return;
+		$$( '.minn-block-island', body ).forEach( ( island ) => {
+			const idx = parseInt( island.dataset.island, 10 );
+			if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+			if ( isLiveFieldIsland( island ) ) return;
+			const short = String( island.dataset.block || '' ).replace( /^core\//, '' );
+			if ( ISLAND_RUN_SKIP_BLOCKS.includes( short ) ) return;
+			const preview = island.querySelector( '.minn-island-preview' );
+			if ( ! preview ) return;
+			island._minnRuns = null;
+			// A re-render that adopted the live DOM (rule-18 path) can carry
+			// stale run spans whose arm state is gone — unwrap before walking
+			// so re-arming never nests spans inside old spans.
+			$$( '.minn-island-run', preview ).forEach( ( s ) => {
+				while ( s.firstChild ) s.parentNode.insertBefore( s.firstChild, s );
+				s.remove();
+			} );
+			preview.normalize();
+			const base = String( ed.islands[ idx ] );
+			const runs = textRunsOf( base );
+			if ( ! runs.length ) return;
+			const walker = document.createTreeWalker( preview, NodeFilter.SHOW_TEXT, {
+				acceptNode( n ) {
+					if ( ! n.textContent.trim() ) return NodeFilter.FILTER_REJECT;
+					const p = n.parentElement;
+					if ( ! p || p.closest( 'script, style, svg, textarea, noscript' ) ) return NodeFilter.FILTER_REJECT;
+					return NodeFilter.FILTER_ACCEPT;
+				},
+			} );
+			const nodes = [];
+			while ( walker.nextNode() ) nodes.push( walker.currentNode );
+			// Strict alignment: same count, and every node's content is exactly
+			// the run's whitespace-padded text. Anything else → stay read-only.
+			if ( nodes.length !== runs.length ) return;
+			for ( let i = 0; i < runs.length; i++ ) {
+				if ( nodes[ i ].textContent !== runs[ i ].pre + runs[ i ].text + runs[ i ].post ) return;
+			}
+			const spans = nodes.map( ( n, i ) => {
+				const span = document.createElement( 'span' );
+				span.className = 'minn-island-run';
+				span.setAttribute( 'contenteditable', 'true' );
+				span.setAttribute( 'spellcheck', 'true' );
+				span.dataset.run = String( i );
+				n.parentNode.replaceChild( span, n );
+				span.appendChild( n );
+				return span;
+			} );
+			island._minnRuns = { base, runs, spans };
+			const hint = island.querySelector( '.minn-island-hint' );
+			if ( hint ) hint.textContent = __( 'Text is editable in place · structure via ⚙' );
+		} );
+	}
+
+	// Splice the current span texts back into the island's raw markup. Reads
+	// EVERY span (not just the event target) so a missed input event can never
+	// desync; untouched runs never rewrite (byte-identity by construction).
+	function commitIslandRuns( island, opts ) {
+		const ed = state.editor;
+		if ( ! ed || ! ed.islands || ! island || ! island._minnRuns ) return;
+		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
+		const idx = parseInt( island.dataset.island, 10 );
+		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		const arm = island._minnRuns;
+		arm.spans.forEach( ( span, i ) => {
+			if ( ! span || ! span.isConnected ) return;
+			const r = arm.runs[ i ];
+			let v = span.textContent;
+			// Chrome inserts nbsp when typing spaces at editable edges; convert
+			// them back — but only when the ORIGINAL text had none, so a run
+			// that legitimately carries nbsp never rewrites untouched.
+			if ( ! /\u00a0/.test( r.text ) ) v = v.replace( /\u00a0/g, ' ' );
+			// The span wraps the node's whitespace padding too — strip the
+			// run's own pre/post so the splice doesn't double it.
+			if ( r.pre && v.startsWith( r.pre ) ) v = v.slice( r.pre.length );
+			if ( r.post && v.length >= r.post.length && v.endsWith( r.post ) ) v = v.slice( 0, v.length - r.post.length );
+			r.value = v;
+		} );
+		const next = spliceTextRuns( arm.base, arm.runs );
+		if ( ed.islands[ idx ] === next ) return;
+		ed.islands[ idx ] = next;
+		ed.dirty = true;
+		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
+	}
+
 	// Live-field islands (shortcode/details/buttons) — never overwrite with a
 	// server render; their DOM is the source of truth until commit.
 	function isLiveFieldIsland( island ) {
@@ -16117,6 +16226,7 @@
 			$$( '.minn-shortcode-input', root ).forEach( ( el ) => commitShortcodeInput( el, { silent: true } ) );
 			$$( '.minn-details-island', root ).forEach( ( el ) => commitDetailsIsland( el, { silent: true } ) );
 			$$( '.minn-buttons-island', root ).forEach( ( el ) => commitButtonsIsland( el, { silent: true } ) );
+			$$( '.minn-block-island', root ).forEach( ( el ) => { if ( el._minnRuns ) commitIslandRuns( el, { silent: true } ); } );
 		}
 		const out = [];
 		// serializeBlockAttrs applies Gutenberg's comment-safe escaping ("--", <, >, &).
@@ -19681,6 +19791,12 @@
 			body.addEventListener( 'input', ( e ) => {
 				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
 				if ( sc ) { commitShortcodeInput( sc ); return; }
+				const runEl = e.target.closest && e.target.closest( '.minn-island-run' );
+				if ( runEl ) {
+					const island = runEl.closest( '.minn-block-island' );
+					if ( island ) commitIslandRuns( island );
+					return;
+				}
 				const detField = e.target.closest && e.target.closest( '.minn-details-summary, .minn-details-body' );
 				if ( detField ) {
 					const island = detField.closest( '.minn-details-island' );
@@ -19721,6 +19837,47 @@
 					if ( e.key === 'Enter' && ! appShortcut ) {
 						e.preventDefault();
 						e.target.blur();
+					}
+					if ( ! appShortcut ) e.stopPropagation();
+					return;
+				}
+				const runEl = e.target.closest && e.target.closest( '.minn-island-run' );
+				if ( runEl ) {
+					// Text-only edits: the splice reads textContent, so anything
+					// that would insert markup is blocked here. IME composition
+					// keys pass through untouched (isComposing rule).
+					if ( e.isComposing || e.keyCode === 229 ) return;
+					// stopPropagation is NOT enough here: bindMarkdown and the
+					// slash menu listen on this same body node, and same-node
+					// listeners still run after stopPropagation — markdown
+					// wraps fired inside runs (found in verification). This
+					// delegation is registered first, so immediate stops them.
+					if ( ! ( e.metaKey || e.ctrlKey ) ) e.stopImmediatePropagation();
+					// Enter would insert <br><br> inside the run (probed) — and
+					// splitting into new blocks is out of scope by design.
+					if ( e.key === 'Enter' && ! appShortcut ) {
+						e.preventDefault();
+						e.stopPropagation();
+						return;
+					}
+					// ⌘A escapes the nested editable (probed: selects the whole
+					// outer body) — clamp it to this run's contents.
+					if ( appShortcut && e.key.toLowerCase() === 'a' && ! e.shiftKey && ! e.altKey ) {
+						e.preventDefault();
+						e.stopPropagation();
+						const r = document.createRange();
+						r.selectNodeContents( runEl );
+						const sel = window.getSelection();
+						sel.removeAllRanges();
+						sel.addRange( r );
+						return;
+					}
+					// Formatting/link shortcuts would insert markup the splice
+					// drops — block them rather than silently losing the marks.
+					if ( appShortcut && [ 'b', 'i', 'u', 'k' ].includes( e.key.toLowerCase() ) && ! e.altKey ) {
+						e.preventDefault();
+						e.stopPropagation();
+						return;
 					}
 					if ( ! appShortcut ) e.stopPropagation();
 					return;
@@ -19776,9 +19933,22 @@
 				}
 			} );
 			body.addEventListener( 'mousedown', ( e ) => {
-				if ( e.target.closest && e.target.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url, .minn-btn-opt, .minn-buttons-add, .minn-btn-row-del' ) ) {
+				if ( e.target.closest && e.target.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url, .minn-btn-opt, .minn-buttons-add, .minn-btn-row-del, .minn-island-run' ) ) {
 					e.stopPropagation();
 				}
+			}, true );
+			// Paste inside a run: plain text only — the sanitized rich-paste
+			// pipeline targets the outer body, and markup inside a run would be
+			// dropped by the splice anyway. Capture phase so it runs before the
+			// body's own paste handler regardless of registration order.
+			body.addEventListener( 'paste', ( e ) => {
+				const runEl = e.target.closest && e.target.closest( '.minn-island-run' );
+				if ( ! runEl ) return;
+				e.preventDefault();
+				e.stopPropagation();
+				const text = ( e.clipboardData && e.clipboardData.getData( 'text/plain' ) || '' )
+					.replace( /\s+/g, ' ' );
+				if ( text ) document.execCommand( 'insertText', false, text );
 			}, true );
 			// Clicking the summary text field must not toggle <details> closed.
 			body.addEventListener( 'click', ( e ) => {
@@ -19909,6 +20079,15 @@
 			$$( '.minn-tool', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'mousedown', ( e ) => {
 					e.preventDefault(); // keep the selection in the editable region
+					// In-place island text is TEXT-only: formatting marks would
+					// be dropped by the run splice, so refuse loudly instead.
+					const runSel = window.getSelection();
+					const runAnchor = runSel && runSel.rangeCount ? runSel.anchorNode : null;
+					const runAnchorEl = runAnchor && ( runAnchor.nodeType === Node.ELEMENT_NODE ? runAnchor : runAnchor.parentElement );
+					if ( runAnchorEl && runAnchorEl.closest && runAnchorEl.closest( '.minn-island-run' ) ) {
+						toast( __( 'Island text is plain-text only — use ⚙ or the block editor for formatting' ) );
+						return;
+					}
 					if ( btn.dataset.cmd === 'link' ) {
 						const sel2 = window.getSelection();
 						let n = sel2.rangeCount ? sel2.anchorNode : null;
@@ -21150,6 +21329,9 @@
 					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
 					if ( el && html && html.trim() ) el.innerHTML = html;
 				} );
+				// Rendered previews are the arming surface for in-place island
+				// text editing — align text nodes against the raw's text runs.
+				armIslandTextRuns( body, ed );
 				// Preview text counts toward the word-count pill — recount now
 				// that the real rendered content replaced the placeholders.
 				updateEditorStats();
@@ -22178,6 +22360,15 @@
 			}
 			// Typing inside a non-empty live field: don't arm, don't steal the key.
 			if ( e.target.closest && e.target.closest( '.minn-shortcode-input, .minn-details-summary, .minn-details-body, .minn-btn-label, .minn-btn-url' ) ) {
+				disarm();
+				return;
+			}
+			// In-place island text runs: Backspace/Delete inside a run is real
+			// editing, natively contained by the editable boundary (probed) —
+			// without this bail the caret walks up to the island itself and
+			// the arm/remove path deletes the whole block out from under the
+			// writer (found in the island-runs suite).
+			if ( e.target.closest && e.target.closest( '.minn-island-run' ) ) {
 				disarm();
 				return;
 			}

@@ -2,6 +2,9 @@
 
 ## **v0.26.0** - Unreleased
 
+### Added
+* **Grouped content is editable in place:** text inside Group and Columns blocks, and most other protected blocks, can now be edited right where it sits. Click any text in a block card and type; your words save into the exact spot they live in while the block's layout, styling and settings stay byte-for-byte untouched, so the block editor always reopens it cleanly. Editing inside these blocks is deliberately text-only: formatting, new paragraphs and rich paste belong to the ⚙ inspector and the block editor, and the hover hint says so. A block whose displayed text can't be matched safely back to its saved markup simply stays as it was, with the ⚙ inspector available as before.
+
 ### Improved
 * **Plugin views read like cards on phones:** every plugin-contributed list (snippets, redirects, activity logs, email logs, form entries, diagnostics and the rest) now stacks each row as a small card at phone widths: the item's name gets the full line and can wrap, the details sit quietly underneath, and nothing scrolls sideways or truncates to a few letters. Status cards tidy up too, with stats flowing two-up and charts taking the full width. Desktop keeps the familiar table.
 * **The What's-new popup reads one release at a time:** a clickable version list sits beside the notes (the same layout as the changelog on minnadmin.com), so finding what changed in any release is one click instead of a long scroll. On phones the list becomes a compact row of version chips that scrolls on its own.

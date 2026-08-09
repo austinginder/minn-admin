@@ -139,6 +139,21 @@ Three phases, each shippable alone, in order:
    otherwise stays verbatim. Serialization fidelity is free by construction, and it works
    for every island, core containers and third-party blocks alike. Accepted constraint,
    stated in the UI: text and inline edits only, no Enter-splitting into new blocks.
+   ✅ *Shipped 2026-08-08 (v0.26.0 cycle)* — `armIslandTextRuns()` wraps preview text
+   nodes in nested `contenteditable` spans after every preview render, gated on STRICT
+   alignment (every raw text run must byte-match its preview text node, whitespace
+   padding included; any mismatch leaves that island read-only with the ⚙ inspector as
+   before — the fallback for dynamic renders that rewrite text). Edits splice into
+   `ed.islands[idx]` from the arm-time base on every input, so serialize needed zero
+   changes. Blink facts the build stands on (probed, `scratchpad/probe-nested-span.*`):
+   edge Backspace/Delete inside a nested editable are native no-ops, ⌘Z tracks in-span
+   typing, arrows flow between runs — but ⌘A escapes to the outer body (clamped), Enter
+   inserts `<br><br>` (blocked), and `stopPropagation` does NOT stop same-node listeners,
+   so the run keydown branch uses `stopImmediatePropagation` or markdown wraps and the
+   slash menu fire inside runs. `bindIslandGuards` needed an explicit run bail: its
+   caret walk otherwise resolves to the island itself and Backspace-in-run arms then
+   DELETES the whole block. Embed/gallery islands are excluded (their URL is itself a
+   text node). Suite: `tests/island-runs.test.js` (20 checks, saved-markup assertions).
 3. **Container slots** (large). `group` / `columns` / `column` / `cover` / `media-text`
    render their real wrapper markup as a preserved shell (the details-island pattern),
    their inner markup tokenizes into child segments, simple children become editable slots,
