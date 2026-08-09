@@ -195,8 +195,8 @@ Three phases, each shippable alone, in order:
    affordance, inspector flushes a dirty slot before modeling. Same day, the follow-up
    slice shipped BLOCK CREATION inside slots: markdown block prefixes (`#`…, `-`, `1.`,
    `>`, `---`), the toolbar's block/list buttons, and the slash menu all treat the
-   nearest `.minn-slot` as their block root (`mdRootOf`/`topBlockOf`, the toolbar
-   walks, `liftNestedLists` per root). The slash menu inside a slot offers ONLY the
+   nearest `.minn-slot` as their block root (via `blockRootOf`/`topBlockIn` since
+   the consolidation pass, plus `liftNestedLists` per root). The slash menu inside a slot offers ONLY the
    prose-safe basics — actions stamped `minnSlotSafe` (headings, quote, pullquote,
    code, lists, divider); island inserts, media flows, tables and Browse-all stay
    top-level. Root-cause fix that fell out: Minn never set
@@ -212,8 +212,8 @@ Three phases, each shippable alone, in order:
    marks each column's region. Any complex child in ANY column → the whole block stays
    a phase-2 island. Still NOT in slots: multi-block paste, table/code chips (top-level
    chrome), cover/media-text, nesting. Suite: `tests/container-slots.test.js`
-   (33 checks incl. untouched-group byte-identity, slot slash-menu contents and
-   per-column splice targeting).
+   (34 checks incl. untouched-group byte-identity, slot slash-menu contents,
+   per-column splice targeting and slot-interior copy).
 
 ### The writing-context contract (consolidation pass, 2026-08-08)
 
@@ -239,6 +239,79 @@ Bug the pass surfaced: a partial-text selection inside a slot or run resolved
 through the body walk to the whole island, so copying two words copied the entire
 block. Copy/cut now bails to native handling when the selection is contained in
 one slot or one run (suites: `container-slots`, `island-runs`).
+
+### What remains (handoff, as of 2026-08-08)
+
+Everything below is scoped but NOT built. Ordered as recommended, cheapest first.
+Nothing here is required for the plan to be useful: the fallback at every gate is a
+phase-2 island with in-place text editing, which is a working experience, not a broken
+one. Read the writing-context contract above before touching any of it.
+
+**Ready to build (small, ~half day each):**
+
+1. **Table and code chips inside slots.** `syncTableChips()` collects its targets with
+   `:scope > table` / `:scope > figure … img` / `:scope > pre` against the body only, so a
+   table or code block inside a group gets no ⚙ chip (and therefore no row/column ops or
+   language picker). Positioning already works at any depth — the chips live in
+   `#minn-table-chips` at content coordinates inside the scroller. The fix is to run the
+   collection per block root (body + each `.minn-slot`), the `liftNestedLists` shape.
+   Watch: chip count on a heavily structured page (the visual-noise question below).
+2. **Multi-block rich paste into slots.** Slot paste is deliberately plain text today
+   (`body.addEventListener('paste', …)` capture branch). `pasteBlocksInsert()` brackets
+   payloads with `<p data-minn-bkt>` markers and rebuilds islands at the top level; the
+   generalization is the same root swap plus refusing island-class payloads inside a slot
+   (they'd need nested islands, item 5). Suite should cover a Word/Docs multi-paragraph
+   paste landing as separate blocks inside a group.
+
+**Ready to build (medium, 1–2 days each):**
+
+3. **Cover and media-text slots.** These break `slotParseContainer()`'s assumption that
+   children sit directly inside the wrapper's open tag: `cover` is
+   `wrapper → background span/img → inner-container div → children`, `media-text` is
+   `wrapper → figure → div.wp-block-media-text__content → children`. Add a per-block
+   "content container" locator so the parse yields head/open/**preamble**/inner/tail, with
+   the background/media bytes preserved verbatim like everything else. The reassembly gate
+   still decides: no byte-identical parse, no slot. Keep the SAME dirty-flush contract.
+
+**The last big piece (large, 3–5 days, do it last):**
+
+4. **Nested containers** (a group inside a group) and **5. nested islands** (an image,
+   embed or third-party block inside a group) are ONE project, not two. Today
+   `slotChildSegments()` returns null for any non-simple child, which is exactly what keeps
+   the protective apparatus simple: `bindIslandGuards` bails wholesale for slot interiors,
+   island inserts are body-anchored by design, and `ed.islands` is a flat top-level array.
+   Allowing islands inside slots means re-scoping all of that per root instead of bailing:
+   arm/delete guards and the undo toast per slot, insert flows (slash/picker/paste/image
+   upload) targeting a slot, and island indices that live inside a container's stored raw
+   rather than the flat array. Nested containers then fall out for free (a group child is
+   just another slot island), and the `SLOT_BLOCKS` + all-simple gates can be DELETED —
+   every group/columns becomes writable, with complex children as protected cards inside.
+   That is the plan's true end state.
+
+   **Measure before building this.** Re-run the corpus probe asking a different question
+   than last time: *what share of real containers are MIXED* (simple + complex children)?
+   If mixed containers are rare, the current fallback already covers real content and this
+   item can stay unbuilt indefinitely — a legitimate stopping point, not a compromise. The
+   earlier probe measured which blocks island, not which containers are mixed.
+
+**Watch items (not scope, but decide before shipping the above):**
+
+- **Chip and hint density.** Slots + nested islands multiply ⚙ chips and hover hints on a
+  structured page. Hover-reveal exists; a deeply nested page still wants a design answer
+  before item 5 ships, not after.
+- **`defaultParagraphSeparator`.** The consolidation-era fix sets it to `p` document-wide
+  at editor bind, correcting a pre-existing quirk (Blink made `<div>`s on list-exit; the
+  serializer papered over them). All suites pass, but this is the kind of change whose
+  edges show up in real writing rather than tests — dogfood a week on anchor.localhost
+  before it goes out in a release.
+- **`code-trap.test.js` sits at 11/12** and did so BEFORE this cycle (verified by stashing
+  the changes) — the known save-race-under-load class, not a nested-content regression.
+  Don't chase it as one.
+
+**Suites owning this work:** `tests/attr-carry.test.js` (20), `tests/island-runs.test.js`
+(21), `tests/container-slots.test.js` (34). Any change to the slot/run/carry machinery
+should keep all three green plus `markdown`, `paste`, `undo-toast`, `island-copy` and
+`media-flow` (the Enter/clipboard-sensitive neighbours).
 
 The never-build list is unchanged by this plan. Slots edit **content** inside layouts;
 layout itself (spacing, variations, query loops, the block inserter's full catalog) remains
