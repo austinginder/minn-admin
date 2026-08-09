@@ -328,6 +328,23 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'narrow-column edit saved in the SECOND column', colsRaw.indexOf( 'Narrow column text. Edited narrow.' ) > colsRaw.indexOf( '<!-- wp:column {"width":"33.33%"} -->' ), '' );
 	t.check( 'column width attrs + styles preserved', colsRaw.includes( '<!-- wp:column {"width":"33.33%"} -->\n<div class="wp-block-column" style="flex-basis:33.33%">' ), '' );
 
+	// Copy of a selection INSIDE one slot stays a native text copy (the
+	// whole-island copy hijack was the block-root audit's bug find).
+	const copyShape = await page.evaluate( () => {
+		const p2 = document.querySelector( '.minn-slot-island .minn-slot > p' );
+		const r = document.createRange();
+		r.setStart( p2.firstChild, 0 );
+		r.setEnd( p2.firstChild, 9 );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+		const dt = new DataTransfer();
+		const ev = new ClipboardEvent( 'copy', { clipboardData: dt, bubbles: true, cancelable: true } );
+		p2.dispatchEvent( ev );
+		return { hijacked: ev.defaultPrevented, blockPayload: dt.getData( 'text/x-minn-blocks' ) };
+	} );
+	t.check( 'slot-interior copy stays native', ! copyShape.hijacked && ! copyShape.blockPayload, JSON.stringify( copyShape ) );
+
 	await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => {

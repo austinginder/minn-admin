@@ -15205,6 +15205,27 @@
 		</div>`;
 	}
 
+	// THE canonical block-root resolver for editing code: the container slot
+	// the node lives in, else the editor body. Every "walk to the top-level
+	// block" that should treat slots as mini-bodies goes through here — so
+	// "what is the writing context?" has exactly one answer in the codebase
+	// when a new context arrives. Walks that MUST stay body-anchored (island
+	// inserts, whole-block copy semantics, the island guards' caret math)
+	// say so at the call site with a "body-root by design" comment.
+	function blockRootOf( node, body ) {
+		const el = node && ( node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement );
+		return ( el && el.closest && el.closest( '.minn-slot' ) ) || body;
+	}
+
+	// The node's top-level block WITHIN its root (body or slot): the element
+	// that is a direct child of that root, or null.
+	function topBlockIn( node, body ) {
+		const root = blockRootOf( node, body );
+		let n = node;
+		while ( n && n.parentNode && n.parentNode !== root ) n = n.parentNode;
+		return n && n.nodeType === Node.ELEMENT_NODE && n.parentNode === root ? n : null;
+	}
+
 	// Splice a dirty slot's serialized children back between the container's
 	// verbatim wrapper bytes and store the result as the island's raw. Used
 	// by the serializer and by the inspector (which must see current text
@@ -15319,6 +15340,9 @@
 			let n = node;
 			if ( ! n ) return null;
 			if ( n === body ) return null;
+			// body-root by design: block-level copy/cut works in whole
+			// top-level blocks (islands are the atoms); slot/run-interior
+			// selections bail to native copy before this runs.
 			while ( n && n.parentNode !== body ) n = n.parentNode;
 			return n && n.parentNode === body ? n : null;
 		};
@@ -15501,6 +15525,15 @@
 		const endField = nodeEl( range.endContainer ) && nodeEl( range.endContainer ).closest
 			? nodeEl( range.endContainer ).closest( fieldSel ) : null;
 		if ( startField && startField === endField ) return;
+		// A selection contained in ONE container slot or ONE island text run
+		// is a plain text copy — native handling is right. Without this bail
+		// the top-level walk resolves to the island and copies the WHOLE
+		// block for a two-word selection (found in the block-root audit).
+		const startBox = nodeEl( range.startContainer ) && nodeEl( range.startContainer ).closest
+			? nodeEl( range.startContainer ).closest( '.minn-slot, .minn-island-run' ) : null;
+		const endBox = nodeEl( range.endContainer ) && nodeEl( range.endContainer ).closest
+			? nodeEl( range.endContainer ).closest( '.minn-slot, .minn-island-run' ) : null;
+		if ( startBox && startBox === endBox ) return;
 
 		const blocks = editorSelectionBlocks( body, range );
 		if ( ! blocks.length ) return;
@@ -16117,6 +16150,7 @@
 		if ( ! anchor || ! anchor.isConnected ) {
 			const sel = window.getSelection();
 			let node = sel && sel.anchorNode;
+			// body-root by design: islands only insert at the top level.
 			while ( node && node.parentNode !== body ) node = node.parentNode;
 			anchor = node && node.parentNode === body ? node : null;
 		}
@@ -17679,9 +17713,7 @@
 		// or quote; falls back to the top-level block for anything exotic.
 		const c = n.closest( 'p, h1, h2, h3, h4, h5, h6, li, pre, figcaption, td, th, figure' );
 		if ( c && body.contains( c ) && c !== body ) return c;
-		let t = n;
-		while ( t.parentNode && t.parentNode !== body ) t = t.parentNode;
-		return t.parentNode === body ? t : null;
+		return topBlockIn( n, body );
 	}
 
 	function removeFocusDim() {
@@ -20460,10 +20492,8 @@
 						// headings only. Pressing the active alignment clears it.
 						const sel3 = window.getSelection();
 						let blk = sel3.rangeCount ? sel3.anchorNode : null;
-						// Slot-aware: inside a group the slot is the block root.
-						const alignRootEl = blk && ( blk.nodeType === Node.ELEMENT_NODE ? blk : blk.parentElement );
-						const alignRoot = ( alignRootEl && alignRootEl.closest && alignRootEl.closest( '.minn-slot' ) ) || body;
-						while ( blk && blk.parentNode && blk.parentNode !== alignRoot ) blk = blk.parentNode;
+						// Canonical root resolution (slots are mini-bodies).
+						blk = topBlockIn( blk, body );
 						if ( blk && blk.nodeType === Node.ELEMENT_NODE && /^(P|H[1-6])$/.test( blk.tagName ) ) {
 							const had = blk.classList.contains( 'has-text-align-' + btn.dataset.align );
 							blk.classList.remove( 'has-text-align-left', 'has-text-align-center', 'has-text-align-right' );
@@ -20631,6 +20661,8 @@
 				if ( ed2.mode === 'blocks' && /^https?:\/\/\S+$/.test( trimmed ) && embedProviderFor( trimmed ) ) {
 					const sel = window.getSelection();
 					let node = sel && sel.anchorNode;
+					// body-root by design: embeds are islands — top level only
+					// (slot paste is intercepted as plain text before this).
 					while ( node && node.parentNode !== body ) node = node.parentNode;
 					if ( node && node.parentNode === body ) {
 						const existing = node.nodeType === 1 ? node.innerHTML : node.textContent;
@@ -21683,7 +21715,12 @@
 		// response aligned by index and satisfy the endpoint's string schema.
 		// Shortcode islands host a live input (not a preview slot) — still
 		// request a render for index alignment, but never overwrite the field.
-		const blocks = ed.islands.map( ( r ) => ( r == null ? '' : r ) );
+		// SLOT islands have no preview element at all (their content is live
+		// editable DOM) — rendering them server-side is pure waste that grows
+		// with exactly the grouped content slots exist for, so send '' too.
+		const slotIdx = new Set( $$( '.minn-slot-island', body ).map( ( el ) => parseInt( el.dataset.island, 10 ) ) );
+		const blocks = ed.islands.map( ( r, i ) => ( r == null || slotIdx.has( i ) ? '' : r ) );
+		if ( ! blocks.some( ( b ) => b !== '' ) ) return;
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks, post: ( state.editor && state.editor.id ) || 0 } ) } )
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
@@ -22633,6 +22670,10 @@
 			armed = null;
 		};
 		const isIsland = ( el ) => !!( el && el.classList && el.classList.contains( 'minn-block-island' ) );
+		// The arm/delete guards below are body-root by design: islands only
+		// exist at the top level, and the keydown handler bails for .minn-slot
+		// and .minn-island-run interiors before any of these run, so their
+		// `parentNode === body` checks stay body-anchored.
 		// Top-level blocks that arm/delete like islands when empty (or always
 		// for HR). Not list/heading — those stay normal prose.
 		const isAtomicEl = ( el ) => {
@@ -22889,14 +22930,9 @@
 		}
 		if ( range.collapsed ) return;
 		// Only wrap within one top-level block — cross-block inline code isn't
-		// a thing. Slot-aware: inside a group the slot is the block root, so a
-		// cross-paragraph selection there is refused too (not flattened).
-		const blockOf = ( n ) => {
-			const el = n && ( n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement );
-			const root = ( el && el.closest && el.closest( '.minn-slot' ) ) || body;
-			while ( n && n.parentNode && n.parentNode !== root ) n = n.parentNode;
-			return n;
-		};
+		// a thing. Canonical root resolution: a cross-paragraph selection
+		// inside a slot is refused too (not flattened).
+		const blockOf = ( n ) => topBlockIn( n, body );
 		if ( blockOf( range.startContainer ) !== blockOf( range.endContainer ) ) return;
 		// Clone selection HTML (may include bold/etc.), wrap as code. Trailing
 		// ZWSP keeps Blink from rewriting CODE → styled SPAN at block end.
@@ -22944,17 +22980,9 @@
 		// boundary escapes outside once, then normal typing rules apply.
 		let mdEscape = null;
 
-		// Container slots are mini-bodies: the nearest slot (else the body)
-		// is the block root, so markdown block prefixes work inside groups.
-		const mdRootOf = ( n ) => {
-			const el = n && ( n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement );
-			return ( el && el.closest && el.closest( '.minn-slot' ) ) || body;
-		};
-		const topBlockOf = ( n ) => {
-			const root = mdRootOf( n );
-			while ( n && n.parentNode && n.parentNode !== root ) n = n.parentNode;
-			return n && n.nodeType === Node.ELEMENT_NODE ? n : null;
-		};
+		// Canonical block-root resolution: slots are mini-bodies, so markdown
+		// block prefixes work inside groups/columns like at the top level.
+		const topBlockOf = ( n ) => topBlockIn( n, body );
 
 		// The element insertHTML just created, located from the collapsed caret.
 		const justInserted = ( tag ) => {
@@ -22989,8 +23017,7 @@
 			// destructively. Use nbsp there (as Chrome's own typing does);
 			// against a non-space character a clean regular space is fine.
 			const spaceFor = ( codeEl, side ) => {
-				let blockEl = codeEl;
-				while ( blockEl.parentNode && blockEl.parentNode !== body ) blockEl = blockEl.parentNode;
+				const blockEl = topBlockIn( codeEl, body ) || codeEl;
 				const r = document.createRange();
 				r.selectNodeContents( blockEl );
 				if ( side === 'start' ) r.setEndBefore( codeEl );
@@ -23665,6 +23692,7 @@
 		const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode;
 		if ( el.closest( 'li, td, th, h1, h2, h3, h4, h5, h6, pre, figcaption' ) ) {
 			let top = node;
+			// body-root by design: image figures only insert at the top level.
 			while ( top.parentNode && top.parentNode !== body ) top = top.parentNode;
 			const landing = document.createElement( 'p' );
 			landing.appendChild( document.createElement( 'br' ) );
@@ -23957,6 +23985,7 @@
 		{
 			const sel = window.getSelection();
 			let n = sel.rangeCount ? sel.anchorNode : null;
+			// body-root by design: the picker inserts islands — top level only.
 			while ( n && n.parentNode && n.parentNode !== body ) n = n.parentNode;
 			caretBlock = n && n.parentNode === body ? n : null;
 		}
@@ -24578,8 +24607,7 @@
 			// Container slots are mini-bodies: the menu opens on the slot's own
 			// paragraphs too (offering the prose-safe basics only — applyQuery
 			// filters on the block's slot ancestry).
-			const nodeEl = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-			const slashRoot = ( nodeEl && nodeEl.closest && nodeEl.closest( '.minn-slot' ) ) || body;
+			const slashRoot = blockRootOf( node, body );
 			while ( node.parentNode && node.parentNode !== slashRoot ) node = node.parentNode;
 			let blockEl = node.nodeType === Node.ELEMENT_NODE ? node : null;
 			// Empty editor / after select-all+delete: Chrome parks a bare text
