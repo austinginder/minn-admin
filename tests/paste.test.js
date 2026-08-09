@@ -276,6 +276,24 @@ console.log(x);</code></pre><blockquote><p>Quoted wisdom.</p></blockquote><figur
 	t.check( 'converted markup saves as blocks',
 		raw.includes( '<!-- wp:group {"layout":{"type":"constrained"}} -->' ) && raw.includes( 'Pasted markup body.' ), raw.slice( 0, 300 ) );
 
+	// A section-tagged group MISSING its "tagName" attr (the AI-markup
+	// idiom) heals on paste — without the attr, core's classic-theme group
+	// wrap assumes <div> and mis-nests the whole section on the front end.
+	await freshParagraph( page );
+	await paste( { 'text/plain': [
+		'<!-- wp:group {"style":{"spacing":{"padding":{"top":"10px"}}}} -->',
+		'<section class="wp-block-group" style="padding-top:10px"><!-- wp:paragraph -->',
+		'<p>Sectioned content.</p>',
+		'<!-- /wp:paragraph --></section>',
+		'<!-- /wp:group -->',
+	].join( '\n' ) } );
+	await page.waitForTimeout( 500 );
+	raw = await save( markupId );
+	const healedGroup = raw.slice( raw.lastIndexOf( '<!-- wp:group' ) );
+	t.check( 'section group heals its tagName attr on paste',
+		healedGroup.includes( '"tagName":"section"' ) && healedGroup.includes( '<section class="wp-block-group"' )
+		&& healedGroup.includes( 'Sectioned content.' ), healedGroup.slice( 0, 200 ) );
+
 	// Into a code block the same text stays LITERAL — pasting markup into
 	// code to talk ABOUT it must never convert.
 	const codeId = await createPost( page, { title: 'Paste: Markup into code', content: '<!-- wp:code -->\n<pre class="wp-block-code"><code>start</code></pre>\n<!-- /wp:code -->' } );

@@ -20988,11 +20988,12 @@
 				// styled TEXT, while the text flavor holds the real thing.
 				if ( ed2.mode !== 'locked' && /^<!--\s*wp:/.test( trimmed )
 					&& ! anchorEl.closest( 'li,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote' ) ) {
-					const rawSegs = tokenizeBlocks( trimmed );
+					const healed = healPastedGroupTags( trimmed );
+					const rawSegs = tokenizeBlocks( healed );
 					if ( rawSegs && rawSegs.some( ( s ) => s.type === 'block' ) ) {
 						e.preventDefault();
 						ensureBlocksMode();
-						const built = appendEditableContent( ed2, trimmed );
+						const built = appendEditableContent( ed2, healed );
 						if ( built.trim() ) {
 							pasteBlocksInsert( selSlot || body, built );
 							renderIslandPreviews( body, ed2 );
@@ -21081,6 +21082,30 @@
 
 	// Gutenberg's serializeAttributes escaping — keeps "-->" (and HTML-ish
 	// chars) out of the comment so the block can't break the document.
+	// AI-generated markup often uses a semantic wrapper (<section>, <aside>)
+	// WITHOUT the matching "tagName" attr. That LOOKS fine, but on classic
+	// themes core's legacy group wrap (wp_restore_group_inner_container)
+	// trusts the attr, assumes <div>, anchors its multiline regex on the
+	// first INNER div at a line start and mis-nests the whole section — the
+	// stacked-columns front-end report. Paste is a conversion boundary (the
+	// block editor normalizes there too): heal the comment to match the
+	// element. Load paths never call this — stored bytes stay verbatim.
+	function healPastedGroupTags( raw ) {
+		return String( raw ).replace(
+			/(<!--\s*wp:group)(\s+\{[\s\S]*?\})?(\s*-->)(\s*<)([a-z][a-z0-9]*)/g,
+			( m, head, json, close, ws, tag ) => {
+				let attrs = {};
+				if ( json ) {
+					try { attrs = JSON.parse( json.trim() ) || {}; } catch ( err ) { return m; }
+				}
+				const expected = attrs.tagName || 'div';
+				if ( tag.toLowerCase() === expected.toLowerCase() ) return m;
+				attrs.tagName = tag.toLowerCase();
+				return head + serializeBlockAttrs( attrs ) + ' -->' + ws + tag;
+			}
+		);
+	}
+
 	function serializeBlockAttrs( attrs ) {
 		if ( ! attrs || ! Object.keys( attrs ).length ) return '';
 		return ' ' + JSON.stringify( attrs )
