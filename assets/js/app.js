@@ -15259,6 +15259,21 @@
 		const short = String( name || '' ).replace( /^core\//, '' );
 		const parts = slotParseContent( raw, short );
 		if ( ! parts ) return null;
+		// Row-layout containers (layout:{"type":"flex"}) flow their children
+		// HORIZONTALLY on the front end. The slot keeps Minn typography by
+		// design, but flow DIRECTION is gross layout the writing surface must
+		// honor — a details strip of label/value paragraphs otherwise reads
+		// as a tower of one-word lines (a real slide-deck site).
+		let slotCls = 'minn-slot';
+		try {
+			const am = parts.head.match( /\{[\s\S]*\}/ );
+			const lay = ( am ? JSON.parse( am[ 0 ] ) : {} ).layout || {};
+			if ( lay.type === 'flex' && lay.orientation !== 'vertical' ) {
+				slotCls += ' minn-slot-flex' + ( lay.flexWrap === 'nowrap' ? ' nowrap' : '' );
+				const j = { left: 'start', center: 'center', right: 'end', 'space-between': 'between' }[ lay.justifyContent || '' ];
+				if ( j ) slotCls += ' justify-' + j;
+			}
+		} catch ( e ) {}
 		const chip = `<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( short ) } block">⚙ ${ esc( short ) }</button>`;
 		// One slot child → its editable HTML, or a NESTED island registered
 		// in ed.islands (a complex leaf keeps its protected card, a nested
@@ -15331,7 +15346,7 @@
 		return `<div class="minn-block-island minn-slot-island${ parts.preamble ? ' minn-media-slot-island' : '' }" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			${ chip }
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
-			${ parts.open }${ parts.preamble }<div class="minn-slot" contenteditable="true">${ childrenHtml }</div>${ closers }
+			${ parts.open }${ parts.preamble }<div class="${ slotCls }" contenteditable="true">${ childrenHtml }</div>${ closers }
 		</div>`;
 	}
 
@@ -15472,7 +15487,11 @@
 		const hint = SIMPLE_BLOCKS.includes( short )
 			? __( 'Styled block: edit text via ⚙' )
 			: __( 'Edit via ⚙ or the block editor' );
-		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
+		// Images in the preview are click-through doorways: gallery-shaped
+		// blocks open the Images editor, single-image blocks the replace
+		// picker. The stamp drives the pointer cursor and the click branch.
+		const imgTool = imageUnitsOf( raw ) ? 'edit' : ( islandImageUrls( raw || '' ).length ? 'swap' : '' );
+		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }>
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
@@ -20369,10 +20388,41 @@
 		// because locked posts never send content, but islands only exist in blocks mode anyway).
 		body.addEventListener( 'click', ( e ) => {
 			const chip = e.target.closest( '.minn-island-chip' );
-			if ( ! chip ) return;
+			if ( chip ) {
+				e.preventDefault();
+				const island = chip.closest( '.minn-block-island' );
+				if ( island ) openInspector( island );
+				return;
+			}
+			// Clicking an image inside a protected preview opens the image
+			// tooling directly (Austin's ask): gallery-shaped blocks → the
+			// Images editor with the clicked image's tile highlighted;
+			// single-image blocks → the replace picker for that image.
+			const img = e.target.closest( '.minn-block-island[data-imgtool] .minn-island-preview img' );
+			if ( ! img ) return;
+			const island = img.closest( '.minn-block-island' );
+			if ( ! island || ! ed.islands || ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
+			const idx = parseInt( island.dataset.island, 10 );
+			const raw = ed.islands[ idx ];
+			if ( raw == null ) return;
+			const src = img.getAttribute( 'src' ) || '';
+			const info = imageUnitsOf( raw );
+			if ( info ) {
+				e.preventDefault();
+				const focus = info.units.findIndex( ( u ) => u.src && ( u.src === src || src.endsWith( u.src ) || u.src.endsWith( src ) ) );
+				closeInspector();
+				openImagesEditor( idx, island, raw, info, { focus: focus === -1 ? null : focus } );
+				return;
+			}
+			const oldUrl = islandImageUrls( raw ).find( ( u ) => u === src || src.endsWith( u ) || u.endsWith( src ) );
+			if ( ! oldUrl ) return;
 			e.preventDefault();
-			const island = chip.closest( '.minn-block-island' );
-			if ( island ) openInspector( island );
+			closeInspector();
+			openMediaPicker( ( it ) => {
+				if ( ! it || ! it.url ) return;
+				replaceIsland( idx, island, swapIslandImage( raw, oldUrl, it ) );
+				toast( 'Image replaced' );
+			} );
 		} );
 		const openBe = $( '#minn-open-block-editor', view );
 		if ( openBe ) openBe.addEventListener( 'click', () => openInBlockEditor( openBe ) );
@@ -21446,8 +21496,9 @@
 	// Clone an existing unit for a newly picked attachment: swap the source
 	// URL (all escape forms), retarget the id conventions, refresh the alt
 	// and aspect hint, and strip what belongs to the OLD image (srcset/sizes
-	// variants, the caption).
-	function cloneImageUnit( proto, item ) {
+	// variants, the caption). A REPLACE keeps the caption (opts.keepCaption):
+	// the slot's editorial text usually still applies to its stand-in image.
+	function cloneImageUnit( proto, item, opts = {} ) {
 		let u = proto.text;
 		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
 		const slashEsc = ( s ) => s.split( '/' ).join( '\\/' );
@@ -21467,7 +21518,7 @@
 		if ( item.width && item.height ) {
 			u = u.replace( /(data-aspect-ratio=")[^"]*(")/g, '$1' + item.width + ' / ' + item.height + '$2' );
 		}
-		u = u.replace( /<figcaption[^>]*>[\s\S]*?<\/figcaption>/g, '' );
+		if ( ! opts.keepCaption ) u = u.replace( /<figcaption[^>]*>[\s\S]*?<\/figcaption>/g, '' );
 		return u;
 	}
 
@@ -21478,18 +21529,20 @@
 		imgEditEl = null;
 	}
 
-	function openImagesEditor( idx, islandEl, baseRaw, info ) {
+	function openImagesEditor( idx, islandEl, baseRaw, info, opts = {} ) {
 		closeImgEdit();
 		// Working list: existing entries reference their verbatim unit; added
-		// entries carry the picked attachment until Apply clones them in.
-		const list = info.units.map( ( u, i ) => ( { unit: u, orig: i, thumb: u.src, attachment: null } ) );
+		// entries carry the picked attachment until Apply clones them in;
+		// replaced entries get their unit text rewritten in place (caption
+		// kept) and carry the new attachment id.
+		const list = info.units.map( ( u, i ) => ( { unit: u, orig: i, id: info.ids ? info.ids[ i ] : u.id, thumb: u.src, attachment: null } ) );
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-imgedit-overlay';
 		overlay.innerHTML = `
 			<div class="minn-imgedit" role="dialog" aria-modal="true" aria-label="Edit images">
 				<div class="minn-imgedit-head">
 					<strong>Edit images</strong>
-					<span class="minn-imgedit-hint">Drag to reorder · × removes</span>
+					<span class="minn-imgedit-hint">Drag to reorder · click a tile to replace · × removes</span>
 					<button type="button" class="minn-x-btn" id="minn-imgedit-close">×</button>
 				</div>
 				<div class="minn-imgedit-grid" id="minn-imgedit-grid"></div>
@@ -21507,7 +21560,7 @@
 
 		const renderGrid = () => {
 			grid.innerHTML = list.map( ( it, i ) => `
-				<div class="minn-imgedit-tile" draggable="true" data-i="${ i }">
+				<div class="minn-imgedit-tile" draggable="true" data-i="${ i }" title="Click to replace this image">
 					<img src="${ esc( it.thumb || '' ) }" alt="" loading="lazy">
 					${ it.attachment ? '<span class="minn-imgedit-new">new</span>' : '' }
 					<button type="button" class="minn-imgedit-x" data-x="${ i }" title="Remove" aria-label="Remove image">×</button>
@@ -21520,6 +21573,16 @@
 			if ( apply ) apply.disabled = ! list.length;
 		};
 		renderGrid();
+		// Entered by clicking an image in the preview: show which tile that
+		// was. Manual scrollTop, never scrollIntoView (rule-31 page yank).
+		if ( opts.focus != null && opts.focus >= 0 ) {
+			const tile = grid.querySelector( `.minn-imgedit-tile[data-i="${ opts.focus }"]` );
+			if ( tile ) {
+				grid.scrollTop = Math.max( 0, tile.offsetTop - grid.clientHeight / 2 );
+				tile.classList.add( 'flash' );
+				setTimeout( () => tile.classList.remove( 'flash' ), 1600 );
+			}
+		}
 
 		overlay.addEventListener( 'click', ( e ) => {
 			if ( e.target === overlay || e.target.closest( '#minn-imgedit-close' ) || e.target.closest( '#minn-imgedit-cancel' ) ) { closeImgEdit(); return; }
@@ -21535,10 +21598,31 @@
 			if ( e.target.closest( '#minn-imgedit-add' ) ) {
 				openMediaPicker( ( picks ) => {
 					( picks || [] ).forEach( ( p ) => {
-						if ( p && p.url ) list.push( { unit: null, orig: -1, thumb: p.thumb || p.url, attachment: p } );
+						if ( p && p.url ) list.push( { unit: null, orig: -1, id: p.id, thumb: p.thumb || p.url, attachment: p } );
 					} );
 					renderGrid();
 				}, { multi: true, doneLabel: 'Add to block' } );
+				return;
+			}
+			// Clicking the tile itself (not its controls) replaces that image.
+			const tile = e.target.closest( '.minn-imgedit-tile' );
+			if ( tile ) {
+				const i = parseInt( tile.dataset.i, 10 );
+				openMediaPicker( ( it ) => {
+					if ( ! it || ! it.url ) return;
+					const entry = list[ i ];
+					if ( ! entry ) return;
+					if ( entry.attachment ) {
+						// Not yet materialized — just swap the pending pick.
+						entry.attachment = it;
+					} else {
+						entry.unit = { text: cloneImageUnit( entry.unit, it, { keepCaption: true } ), src: it.url, id: it.id };
+						entry.orig = -1;
+					}
+					entry.id = it.id;
+					entry.thumb = it.thumb || it.url;
+					renderGrid();
+				} );
 				return;
 			}
 			if ( e.target.closest( '#minn-imgedit-apply' ) && list.length ) {
@@ -21549,7 +21633,7 @@
 				parts.forEach( ( p, i ) => { bodyStr += p; if ( i < parts.length - 1 ) bodyStr += joiner( i ); } );
 				let prefix = info.prefix;
 				if ( info.ids ) {
-					const newIds = list.map( ( it ) => it.attachment ? it.attachment.id : info.ids[ it.orig ] );
+					const newIds = list.map( ( it ) => it.attachment ? it.attachment.id : it.id );
 					prefix = prefix.replace( /"ids":\[[^\]]*\]/, '"ids":[' + newIds.join( ',' ) + ']' );
 				}
 				const newRaw = prefix + bodyStr + info.suffix;
@@ -21919,8 +22003,17 @@
 		// Images anywhere in the island's markup — replaced via the media
 		// picker (embed/gallery keep their dedicated rebuild flows instead).
 		const imgEditBtn = insp.units ? `<button class="minn-btn-soft" type="button" id="minn-insp-imgedit">Edit images…</button>` : '';
-		const imgSection = mediaRebuild || ! ( insp.images || [] ).length ? ''
-			: `<div class="minn-field-label minn-insp-imghead">Images${ imgEditBtn }</div>` + insp.images.map( ( u, i ) => `
+		// Containers (slot islands) never list nested images — each nested
+		// block manages its own set from its own ⚙ chip. Gallery-shaped
+		// blocks get a count plus the Edit images… doorway only (replace,
+		// reorder, remove and add all live in the modal). Per-image Replace
+		// rows remain only for plain blocks that carry a few images with no
+		// unit structure — there the row IS the management surface.
+		const isSlot = insp.islandEl && insp.islandEl.classList && insp.islandEl.classList.contains( 'minn-slot-island' );
+		const imgSection = mediaRebuild || isSlot || ! ( insp.images || [] ).length ? ''
+			: insp.units
+				? `<div class="minn-field-label minn-insp-imghead">Images · ${ insp.units.units.length }${ imgEditBtn }</div>`
+				: `<div class="minn-field-label">Images</div>` + insp.images.map( ( u, i ) => `
 				<div class="minn-insp-img-row">
 					<img src="${ esc( u ) }" alt="" loading="lazy">
 					<button class="minn-btn-soft" type="button" data-inspimg="${ i }">Replace…</button>
