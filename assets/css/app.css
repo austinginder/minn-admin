@@ -1599,6 +1599,10 @@ select.minn-input {
 .minn-editor-body pre { padding: 12px 14px; overflow-x: auto; }
 .minn-editor-body code { padding: 1px 6px; }
 .minn-editor-body:empty::before { content: 'Keep writing…'; color: var(--text3); }
+/* Locked bodies are read-only, so "Keep writing…" would be a lie. A builder
+   page whose canvas is fully dynamic (a WooCommerce My Account page, say)
+   previews as empty (GH #10): say what is actually happening instead. */
+.minn-editor-body.locked:empty::before { content: 'Nothing to preview here. This content renders dynamically on the site.'; }
 /* Gutenberg alignment classes — the serializer emits them, the front end
    styles them; the editor must preview them too. */
 .minn-editor-body .has-text-align-left { text-align: left; }
@@ -1873,9 +1877,16 @@ body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert her
   background: var(--panel2); color: var(--text3);
   font-size: 11px; font-weight: 600; white-space: nowrap;
 }
+/* The whole banner is the link (Austin: one big obvious target). The inner
+   "Edit in X" pill is a SPAN — a nested anchor was how the old hover bug
+   happened: the note's generic link rules recolored the pill's text to the
+   accent while btn-primary:hover painted the accent behind it. */
 .minn-builder-note { display: flex; align-items: center; gap: 14px; }
-.minn-builder-note > span { flex: 1; }
-.minn-builder-note .minn-builder-open { flex-shrink: 0; text-decoration: none; }
+.minn-builder-note > span:first-child { flex: 1; }
+a.minn-builder-note { text-decoration: none; color: var(--text2); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+a.minn-builder-note:hover { border-color: rgba(224, 164, 88, 0.6); background: rgba(224, 164, 88, 0.16); }
+.minn-builder-note .minn-builder-open { flex-shrink: 0; text-decoration: none; color: var(--accent-fg); }
+a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color: var(--accent-fg); }
 
 /* ===== Editor locked mode ===== */
 .minn-editor-locked-note {
