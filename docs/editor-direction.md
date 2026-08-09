@@ -335,6 +335,42 @@ one. Read the writing-context contract above before touching any of it.
    same stand-in the original 63% probe used, so the numbers are comparable, but they
    overstate template constructs relative to what a writer's post contains.
 
+   ✅ *Slice 1 shipped 2026-08-09 — nested islands + nested containers are LIVE.* The
+   all-simple gate is DELETED: every group/columns whose inner markup parses becomes a
+   slot island; complex children render as protected nested islands (previews, runs,
+   live fields, inspector, ⚙ chips all work through the existing per-root machinery)
+   and container children recurse (group-in-group, columns-in-group, any depth). What
+   the slice actually consisted of: (a) `slotChildSegments` keeps complex segments;
+   `slotIslandHtml`/`islandHtml` take `ed` and register child islands (no `ed` at an
+   insert site → plain island, upgraded on reload — the standing asymmetry);
+   (b) `flushSlotIsland` filters to OWN slots (`closest('.minn-slot-island') === el` —
+   a descendant query would misalign the columns walk once slots nest); nested slot
+   islands flush through `serializeToBlocks`' existing recursion; (c) THE LOAD-BEARING
+   INVARIANT: any write to a nested island's `ed.islands[idx]` or any direct-DOM edit
+   inside a slot must stamp EVERY ANCESTOR slot island dirty (`stampSlotDirtyFor` walks
+   up; called from the input handler, both undo helpers, `replaceIsland`,
+   `applyInspector` and the three live-field commits) — an unstamped ancestor emits its
+   stale stored raw and silently drops the nested edit; (d) `bindIslandGuards` is
+   root-scoped (`blockRootOf` from the SELECTION; `isRootChild` = direct child of body
+   or slot) instead of bailing for slots — Backspace arms/removes nested islands with
+   the same two-press + undo-toast model; the `.minn-island-run` bail stays;
+   (e) "nearest wrapper" rule for editability checks (image click, link click, table
+   context menu): closest of `.minn-block-island, .minn-slot` — a slot means writing
+   surface, an island means preview chrome; (f) slot-scoped CSS twins for the
+   table/image cutouts and cell gridlines (`.minn-slot > …` beside
+   `.minn-editor-body > …`); (g) `armIslandTextRuns` explicitly skips slot islands
+   (its descendant preview query would otherwise walk a NESTED island's preview
+   against the container's raw). Suites: NEW `tests/nested-islands.test.js` (16 —
+   spacer+buttons leaves, group-in-group both-wrapper splice, byte-identity modulo
+   the buttons live-field's first-save fixed point, nested arm/remove/undo/save);
+   `container-slots` 44 re-pinned to the new model (a complex child no longer sinks
+   the container — the acme columns is a slot island with a nested badge);
+   `island-runs` 21 refixtured onto FOREIGN wrapper blocks (containers always slot
+   now, so runs belong to non-container islands). Still NOT in slots (the remaining
+   tail): island-class INSERT flows (slash menu stays prose-basics, paste still
+   refuses island payloads, media flow stays top-level), cover/media-text slots
+   (needs the content-container locator), and the chip-density design pass.
+
 **Watch items (not scope, but decide before shipping the above):**
 
 - **Chip and hint density.** Slots + nested islands multiply ⚙ chips and hover hints on a
