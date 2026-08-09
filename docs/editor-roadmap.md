@@ -146,3 +146,10 @@ good.
   islands, attribute allowlists that must be DOM-reproducible. New capabilities extend
   the allowlists one proven attribute at a time (see editor-direction.md); they never
   loosen the model.
+- **Feel is measured, not assumed.** `tests/perf-editor.bench.js` reports per-keystroke
+  latency across prose/nested/heavy documents; run it at release cut when a cycle touched
+  editor rendering, and A/B against the previous tag by swapping asset files (recipe in
+  `tests/README.md`). The one hard rule it produced: **no `:has()` in any selector that
+  matches inside `#minn-editor-body`** — it forces a full-subtree style recalc on every
+  keystroke (the v0.26.0 chip-density pass benched at ~300ms/keystroke on nested pages
+  before it was rewritten as an event-set marker class).
