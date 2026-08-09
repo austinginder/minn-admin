@@ -415,9 +415,19 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Per-object meta cap, not the plural primitive. `edit_users` is
+		// administrator-only on stock WordPress, but WooCommerce grants it
+		// outright to every shop_manager and relies ENTIRELY on its
+		// map_meta_cap filter to confine them to customers — a filter that only
+		// runs for `edit_user, $id`. Checking the primitive skips that
+		// confinement and lets a shop manager read an administrator's session
+		// IPs and force them out. Also require a session and a real target: an
+		// anonymous request has get_current_user_id() === 0, and the route
+		// regex happily matches /users/0/sessions.
 		$sessions_perm = function ( WP_REST_Request $request ) {
 			$uid = (int) $request['id'];
-			return get_current_user_id() === $uid || current_user_can( 'edit_users' );
+			return is_user_logged_in() && $uid > 0
+				&& ( get_current_user_id() === $uid || current_user_can( 'edit_user', $uid ) );
 		};
 
 		register_rest_route(
@@ -736,8 +746,10 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'user_reset_password' ),
-				'permission_callback' => function () {
-					return current_user_can( 'edit_users' );
+				// Per-object meta cap — see $sessions_perm above for why the
+				// plural primitive is not enough on a WooCommerce site.
+				'permission_callback' => function ( WP_REST_Request $request ) {
+					return current_user_can( 'edit_user', (int) $request['id'] );
 				},
 			)
 		);
@@ -749,8 +761,9 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'user_send_email' ),
-				'permission_callback' => function () {
-					return current_user_can( 'edit_users' );
+				// Per-object meta cap — see $sessions_perm above.
+				'permission_callback' => function ( WP_REST_Request $request ) {
+					return current_user_can( 'edit_user', (int) $request['id'] );
 				},
 				'args'                => array(
 					'subject' => array(
@@ -2423,10 +2436,19 @@ class Minn_Admin_REST {
 		// date and sort out of an orderby=modified window, but a fresh draft
 		// IS activity — the by-date query catches them. The usort below
 		// settles the merged order.
+		// 'perm' => 'editable' makes WP_Query add the post_author restriction
+		// for callers without edit_others_posts. Without it the non-public
+		// statuses below come back for EVERY author, so a Contributor reading
+		// /overview saw the titles and authors of other people's unpublished
+		// and embargoed drafts — content wp-admin's list table scopes away from
+		// them and core's wp/v2/posts strips per item. Each row is additionally
+		// filtered through read_post below, the same way the comment rows a few
+		// lines down already gate on moderate_comments.
 		$base_query   = array(
 			'post_type'   => array( 'post', 'page' ),
 			'post_status' => array( 'publish', 'draft', 'future', 'pending' ),
 			'numberposts' => 5,
+			'perm'        => 'editable',
 		);
 		$recent_posts = get_posts( array_merge( $base_query, array( 'orderby' => 'modified' ) ) );
 		$seen_ids     = wp_list_pluck( $recent_posts, 'ID' );
@@ -2436,6 +2458,12 @@ class Minn_Admin_REST {
 			}
 		}
 		foreach ( $recent_posts as $p ) {
+			// Belt and braces behind 'perm' => 'editable': never surface a row
+			// for a post this user cannot read (a published post is fine; a
+			// draft resolves read_post to edit_post).
+			if ( ! current_user_can( 'read_post', $p->ID ) ) {
+				continue;
+			}
 			$time = strtotime( $p->post_modified_gmt . ' UTC' );
 			if ( ! $time || $time < 0 ) {
 				// Never-updated drafts zero BOTH gmt columns — post_date
@@ -3301,10 +3329,26 @@ class Minn_Admin_REST {
 	}
 
 	/**
+	 * Which user a shared /me + /users/{id} handler is acting on.
+	 *
+	 * Read the id from the URL SEGMENT only. `$request['id']` also resolves
+	 * from the JSON body, the POST body and the QUERY STRING (see
+	 * WP_REST_Request::get_parameter_order), so on the /me/* routes — whose
+	 * permission callback is only `edit_posts` — `?id=1` used to retarget the
+	 * write at any account, including an administrator's. The /users/{id}
+	 * routes carry a real per-object gate ($edit_user_gate) and a real URL
+	 * segment, so they are unaffected.
+	 */
+	private static function target_user_id( WP_REST_Request $request ) {
+		$url = $request->get_url_params();
+		return isset( $url['id'] ) ? (int) $url['id'] : get_current_user_id();
+	}
+
+	/**
 	 * GET minn-admin/v1/me/appearance — current user's color scheme preference.
 	 */
 	public static function get_my_appearance( WP_REST_Request $request ) {
-		$uid = $request['id'] ? (int) $request['id'] : get_current_user_id();
+		$uid = self::target_user_id( $request );
 		return rest_ensure_response( Minn_Admin::get_user_appearance( $uid ) );
 	}
 
@@ -3449,7 +3493,7 @@ class Minn_Admin_REST {
 		}
 		$result = wp_update_user(
 			array(
-				'ID'     => $request['id'] ? (int) $request['id'] : get_current_user_id(),
+				'ID'     => self::target_user_id( $request ),
 				'locale' => $locale,
 			)
 		);
@@ -3504,7 +3548,7 @@ class Minn_Admin_REST {
 	public static function update_my_appearance( WP_REST_Request $request ) {
 		// {id} present = the admin user-edit page targeting another user
 		// (permission_callback gated on edit_user); absent = self.
-		$uid = $request['id'] ? (int) $request['id'] : get_current_user_id();
+		$uid = self::target_user_id( $request );
 		$cur = Minn_Admin::get_user_appearance( $uid );
 		// JSON body may put nested custom under get_json_params.
 		$json = $request->get_json_params();

@@ -45,8 +45,16 @@ class Minn_Admin_DB {
 	}
 
 	public static function register_routes() {
+		// On multisite, manage_options is a PER-SITE capability while the
+		// database is shared network-wide: wp_users and wp_usermeta are common
+		// tables, and every other tenant's wp_N_options sit in the same schema.
+		// A subsite administrator reading them would cross a real boundary —
+		// they cannot install plugins or edit files here either, which is why
+		// the wp-config routes already gate on is_super_admin(). Match that.
 		$manage = function () {
-			return current_user_can( 'manage_options' );
+			return is_multisite()
+				? current_user_can( 'manage_network_options' )
+				: current_user_can( 'manage_options' );
 		};
 		register_rest_route(
 			self::NS,
@@ -120,7 +128,33 @@ class Minn_Admin_DB {
 				'BASE TABLE'
 			)
 		);
-		$memo = is_array( $rows ) ? $rows : array();
+		$rows = is_array( $rows ) ? $rows : array();
+
+		// Defence in depth for networks: a subsite only ever sees its own
+		// tables plus the shared ones, so no route can name another tenant's
+		// wp_N_options even if the capability gate above is ever loosened.
+		// ($wpdb->prefix is the CURRENT site's; base_prefix covers shared.)
+		if ( is_multisite() ) {
+			$own  = strtolower( $wpdb->prefix );
+			$base = strtolower( $wpdb->base_prefix );
+			$rows = array_values(
+				array_filter(
+					$rows,
+					function ( $t ) use ( $own, $base ) {
+						$name = strtolower( (string) $t->name );
+						if ( 0 === strpos( $name, $own ) ) {
+							return true;
+						}
+						// Base-prefixed tables are shared only when they are
+						// not some OTHER site's wp_N_ table.
+						return 0 === strpos( $name, $base )
+							&& ! preg_match( '/^' . preg_quote( $base, '/' ) . '\d+_/', $name );
+					}
+				)
+			);
+		}
+
+		$memo = $rows;
 		return $memo;
 	}
 
