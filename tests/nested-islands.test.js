@@ -180,9 +180,15 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	} ) );
 	t.check( 'second press removes the nested island', afterRemove.gone && afterRemove.toast, JSON.stringify( afterRemove ) );
 
-	/* ===== Undo toast restores the nested island (click within the 7s
-	 * toast window — before any slow save polling) ===== */
-	await page.click( '.minn-toast-btn' );
+	/* ===== Undo toast restores the nested island (evaluate-click NOW —
+	 * the toast auto-dismisses at 7s and page.click's actionability waits
+	 * can race the detach) ===== */
+	const undoClicked = await page.evaluate( () => {
+		const b = document.querySelector( '.minn-toast-btn' );
+		if ( b ) { b.click(); return true; }
+		return false;
+	} );
+	t.check( 'undo toast button clicked in time', undoClicked, '' );
 	const restored = await page.evaluate( () => !! document.querySelector( '.minn-slot .minn-block-island[data-block="buttons"]' ) );
 	t.check( 'undo toast restores the nested island', restored, '' );
 	raw = await save( ( r ) => groupA( r ).includes( 'Press me' ) );
@@ -269,5 +275,101 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'slot embed saved inside the group', groupA( raw ).includes( 'wp:embed' ) && groupA( raw ).includes( 'dQw4w9WgXcQ' ), groupA( raw ).slice( -400 ) );
 
 	await deletePost( page, id );
+
+	/* ===== Cover + media-text slots (the content-container locator): the
+	 * background/media bytes are preserved as a verbatim PREAMBLE and the
+	 * children edit inside the content container. ===== */
+	const CONTENT3 = [
+		'<!-- wp:cover {"dimRatio":50} -->',
+		'<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><div class="wp-block-cover__inner-container"><!-- wp:paragraph {"align":"center"} -->',
+		'<p class="has-text-align-center">Cover line.</p>',
+		'<!-- /wp:paragraph --></div></div>',
+		'<!-- /wp:cover -->',
+		'',
+		'<!-- wp:media-text {"mediaType":"image"} -->',
+		'<div class="wp-block-media-text is-stacked-on-mobile"><figure class="wp-block-media-text__media"><img src="https://minnadmin.localhost/wp-includes/images/media/default.svg" alt=""/></figure><div class="wp-block-media-text__content"><!-- wp:paragraph -->',
+		'<p>Media text body.</p>',
+		'<!-- /wp:paragraph --></div></div>',
+		'<!-- /wp:media-text -->',
+		'',
+		'<!-- wp:paragraph -->',
+		'<p>Below the media blocks.</p>',
+		'<!-- /wp:paragraph -->',
+	].join( '\n' );
+	const id3 = await createPost( page, { title: 'Media slots ' + Date.now(), content: CONTENT3, status: 'draft' } );
+	await page.goto( BASE + '/minn-admin/editor/posts/' + id3, { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '#minn-editor-body .minn-slot', { timeout: 25000 } );
+	await page.waitForTimeout( 1000 );
+
+	const rawOf3 = () => page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw&_cb=' + Date.now(), {
+			headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'include',
+		} );
+		return ( await r.json() ).content.raw;
+	}, id3 );
+	const save3 = async ( expectFn ) => {
+		await page.keyboard.press( 'Meta+s' );
+		for ( let i = 0; i < 20; i++ ) {
+			await page.waitForTimeout( 900 );
+			const raw3 = await rawOf3();
+			if ( ! expectFn || expectFn( raw3 ) ) return raw3;
+		}
+		return rawOf3();
+	};
+
+	const mediaShape = await page.evaluate( () => {
+		const cover = document.querySelector( '.minn-block-island[data-block="cover"], .minn-block-island[data-block="core/cover"]' );
+		const mt = document.querySelector( '.minn-block-island[data-block="media-text"], .minn-block-island[data-block="core/media-text"]' );
+		return {
+			coverSlots: !! ( cover && cover.classList.contains( 'minn-media-slot-island' ) && cover.querySelector( '.wp-block-cover__inner-container > .minn-slot' ) ),
+			coverText: cover ? ( cover.querySelector( '.minn-slot' ) || {} ).textContent || '' : '',
+			coverBg: !! ( cover && cover.querySelector( '.wp-block-cover__background' ) ),
+			mtSlots: !! ( mt && mt.querySelector( '.wp-block-media-text__content > .minn-slot' ) ),
+			mtMedia: !! ( mt && mt.querySelector( '.wp-block-media-text__media img' ) ),
+		};
+	} );
+	t.check( 'cover renders as a media slot island (background kept)', mediaShape.coverSlots && mediaShape.coverBg && mediaShape.coverText.includes( 'Cover line.' ), JSON.stringify( mediaShape ) );
+	t.check( 'media-text slots with its figure kept', mediaShape.mtSlots && mediaShape.mtMedia, JSON.stringify( mediaShape ) );
+
+	let raw3 = await save3();
+	t.check( 'untouched cover + media-text re-save byte-identical', raw3 === CONTENT3, raw3 === CONTENT3 ? '' : raw3.slice( 0, 400 ) );
+
+	await page.evaluate( () => {
+		const p = document.querySelector( '.wp-block-cover__inner-container .minn-slot > p' );
+		p.closest( '.minn-slot' ).focus( { preventScroll: true } );
+		const r = document.createRange();
+		r.selectNodeContents( p );
+		r.collapse( false );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+	} );
+	await page.keyboard.type( ' Edited cover.' );
+	raw3 = await save3( ( r ) => r.includes( 'Cover line. Edited cover.' ) );
+	const coverRaw = raw3.slice( raw3.indexOf( '<!-- wp:cover' ), raw3.indexOf( '<!-- /wp:cover -->' ) );
+	t.check( 'cover edit saved inside the inner container',
+		coverRaw.includes( 'Cover line. Edited cover.' )
+		&& coverRaw.indexOf( 'wp-block-cover__background' ) < coverRaw.indexOf( 'Cover line.' ), coverRaw );
+	t.check( 'cover preamble bytes verbatim',
+		coverRaw.includes( '<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><div class="wp-block-cover__inner-container">' ), coverRaw );
+
+	await page.evaluate( () => {
+		const p = document.querySelector( '.wp-block-media-text__content .minn-slot > p' );
+		p.closest( '.minn-slot' ).focus( { preventScroll: true } );
+		const r = document.createRange();
+		r.selectNodeContents( p );
+		r.collapse( false );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+	} );
+	await page.keyboard.type( ' Edited media.' );
+	raw3 = await save3( ( r ) => r.includes( 'Media text body. Edited media.' ) );
+	const mtRaw = raw3.slice( raw3.indexOf( '<!-- wp:media-text' ), raw3.indexOf( '<!-- /wp:media-text -->' ) );
+	t.check( 'media-text edit saved; figure bytes verbatim',
+		mtRaw.includes( 'Media text body. Edited media.' )
+		&& mtRaw.includes( '<figure class="wp-block-media-text__media"><img src="https://minnadmin.localhost/wp-includes/images/media/default.svg" alt=""/></figure>' ), mtRaw );
+
+	await deletePost( page, id3 );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );
