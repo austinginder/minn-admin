@@ -786,9 +786,12 @@ class Minn_Admin {
 			// Site discussion defaults — new-post editor state starts from
 			// these so the sidebar switches match what WP will actually store
 			// (GH #6: they were hardcoded open).
+			// Normalized to open/closed: wp-admin's unchecked Discussion
+			// checkbox stores '' (null write bypasses sanitize_option), and
+			// core treats anything other than 'open' as closed.
 			'discussion' => array(
-				'comments' => get_option( 'default_comment_status', 'open' ),
-				'pings'    => get_option( 'default_ping_status', 'open' ),
+				'comments' => ( 'open' === get_option( 'default_comment_status', 'open' ) ) ? 'open' : 'closed',
+				'pings'    => ( 'open' === get_option( 'default_ping_status', 'open' ) ) ? 'open' : 'closed',
 			),
 			'roles'    => current_user_can( 'list_users' ) ? wp_roles()->get_names() : new \stdClass(),
 			'surfaces' => Minn_Admin_Surfaces::for_current_user(),

@@ -17259,9 +17259,14 @@
 				tagIds: new Set(), tags: [],
 				revisions: null, panels: null,
 				// Discussion switches start from the SITE defaults, matching what
-				// WP stores when the create payload omits them (GH #6).
-				commentStatus: ( B.discussion && B.discussion.comments ) || 'open',
-				pingStatus: ( B.discussion && B.discussion.pings ) || 'open',
+				// WP stores when the create payload omits them (GH #6). Only a
+				// literal 'open' means open (the stored option is '' when the
+				// wp-admin checkbox was unchecked), and core hardcodes new
+				// pages to closed regardless of the option.
+				commentStatus: newType === 'pages' ? 'closed'
+					: ( B.discussion && B.discussion.comments ) === 'open' ? 'open' : 'closed',
+				pingStatus: newType === 'pages' ? 'closed'
+					: ( B.discussion && B.discussion.pings ) === 'open' ? 'open' : 'closed',
 				password: '', visibility: 'public',
 				sticky: false, serverSticky: false, supportsSticky: newType === 'posts', supportsDiscussion: ! isPattern,
 				supportsThumb: ! isPattern, featuredMedia: 0, featuredThumb: null,
