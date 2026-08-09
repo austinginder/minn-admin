@@ -45,14 +45,17 @@ what real sites are made of. The nesting cycle (2026-08-08/09) was this goal's b
 Not stars for a screenshot. Sites that update, and users who file the kind of bug you
 only hit doing real work.
 
-- **Metric:** the ≈active-sites estimate (median downloads of the last five closed
-  releases, computed daily by minnadmin.com), plus issues filed by people other than
-  the author.
-- **Now (2026-08-09):** ≈35 active sites · 627 total downloads across 27 releases ·
+- **Metric:** the ≈active-sites estimate, computed daily by minnadmin.com: the
+  largest closed-release download cohort of the trailing 30 days. The self-updater
+  serves only the current release, so a superseded release's downloads are the
+  distinct sites that updated during its reign, and the per-release data saturates
+  within two to three days — the largest recent cohort is the honest lower bound.
+  Plus issues filed by people other than the author.
+- **Now (2026-08-09):** ≈69 active sites · 644 total downloads across 27 releases ·
   43 stars · 10 external issues, several of them exactly the doing-real-work kind
   (grouped-content editing, stale update offers, entity rendering).
-- **Targets:** ≈100 active sites (the marketing site's ethos strip flips to the
-  active-sites claim automatically at that line), then ≈500. Keep external issue
+- **Targets:** ≈100 active sites, then ≈500. The marketing site's ethos strip shows
+  the active-sites claim automatically from ≈50 up. Keep external issue
   intake healthy: every real-work report answered, and the fix suite-pinned, within
   the release cycle it arrives in.
 
