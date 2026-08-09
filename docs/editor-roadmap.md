@@ -1,7 +1,8 @@
 # Editor roadmap — the long-term plan
 
-*Statuses last verified against the code at v0.24.0 (unreleased), 2026-08-06 — except
-the nested-content work, verified 2026-08-08 (see below).*
+*Statuses last verified against the code 2026-08-09 (v0.26.0 cycle, unreleased). The
+measurable goals this plan serves live in [roadmap.md](roadmap.md); this document holds
+the editor thesis, the shipped ledger, and the open frontier.*
 
 **Thesis: the editor is the selling feature.** Minn Admin started as "a calmer admin," but
 the editor is where the product wins or loses. The rest of the admin is supporting cast —
@@ -20,9 +21,9 @@ switch tools over *where they write*.
   post in the block editor, any time, forever) and block islands preserve complex layouts
   byte-identical. No competitor has this story; Gutenberg itself can't have the "calm"
   half of it.
-- **The writing use case is 90% of edits.** Paragraphs, headings, lists, quotes, code,
-  images, the occasional table and embed. Minn's editor already does all of it with
-  markdown conventions, undo that works, and previews that wear the site's real styles.
+- **The writing use case is 90% of edits — and since the nesting cycle, the layout-shaped
+  rest opens for writing too.** Paragraphs, headings, lists, quotes, code, images, tables,
+  embeds, and now the text inside groups, columns, covers and media-text.
 
 ## Positioning
 
@@ -33,9 +34,9 @@ Saying "that's Gutenberg's job" is the strategy, not a limitation to apologize f
 
 The bar for "it works": **every post on a real production site gets written and
 edited in Minn without opening the block editor once.** Dogfooding is the
-roadmap's referee.
+roadmap's referee — formalized as Goal 1 in [roadmap.md](roadmap.md).
 
-## What was learned building v0.5.x (the paper-cut ledger)
+## The paper-cut ledger (engineering knowledge, keep)
 
 Editors are judged on a thousand small behaviors, and contenteditable fights back on each
 one. The ledger so far, all fixed and regression-tested: Chrome rebalances whitespace
@@ -47,201 +48,73 @@ via `justify*` writes styles the serializer strips. **Every future feature budge
 this class of fight** — the browser-level Playwright verification loop is not optional
 overhead, it's how an editor earns trust.
 
-Two chrome-positioning corollaries joined the ledger 2026-07-11: anything
-that must visually track scrolling content lives INSIDE the scroller at
-content coordinates (fixed-position chrome chased per scroll frame lags the
-compositor and elastic overscroll reports nothing until it settles — the
-block chips wiggled; a ResizeObserver re-anchors on real reflow), and a
-panel that HAS escaped to fixed positioning closes on ancestor scroll like
-a native select rather than chasing (the combobox). Same day: images gained
-link + lightbox through the popover (the link is the saved DOM itself —
-core sources href from figure > a — and lightbox rides the attrs
-passthrough), and focus/outline modes wear a topbar exit chip.
+Two chrome-positioning corollaries (2026-07-11): anything that must visually track
+scrolling content lives INSIDE the scroller at content coordinates (fixed-position
+chrome chased per scroll frame lags the compositor; a ResizeObserver re-anchors on real
+reflow), and a panel that HAS escaped to fixed positioning closes on ancestor scroll
+like a native select rather than chasing (the combobox).
 
-## Horizon 1 — trust (0.6.x): nothing surprising, ever
+## Shipped ledger (Horizons 1 + 2, closed)
 
-The theme: a writer who moves in must never lose work or hit a behavior that makes them
-distrust the surface.
+Horizon 1 (trust) and Horizon 2 (delight) are complete. The deep notes live in the
+suites, in `editor-direction.md`, and in the per-feature app.js sections; this ledger
+is the index. Format: feature — landed — suite.
 
-- **Paste cleanup.** Word / Google Docs / arbitrary HTML paste → clean safe-subset markup.
-  ✅ *Shipped 2026-07-05* — `sanitizePastedHtml()` + caret-context insertion (see the
-  "Paste cleanup" section in app.js and `tests/paste.test.js`). Word mso-lists rebuild as
-  real nested lists; Docs style-spans map to strong/em/s/code; js: hrefs, handlers and
-  vendor styling never pass; single ⌘Z reverts a whole paste. Clipboard *images* (files,
-  not URLs) landed with the "inline media flow" item below. The mirror half arrived in
-  v0.23.0: a selection spanning islands copies their real block markup
-  (`text/x-minn-blocks`), and pasting back into Minn (this post or another) rebuilds the
-  blocks with settings intact; suite `tests/island-copy.test.js`.
-- **Undo completeness.** Island operations (insert, remove, table ops) sit outside the
-  browser undo stack today.
-  🔍 *Investigated 2026-07-05* (empirical, `scratchpad/undo-probe*.js`). The map:
-  - **execCommand ops are fully tracked** — typing, markdown, toolbar formatting, rich
-    paste (a whole paste reverts in one ⌘Z), image insert/remove, link create/edit.
-  - **Direct-DOM ops are outside the stack** — island insert (embed/gallery/slash custom),
-    island remove (backspace guard / inspector), table row/col/header ops, inspector
-    attribute regen. For all of these ⌘Z is a **safe no-op**, never a corruption.
-  - **The headline: no sequence corrupts.** The dangerous case — native undo of typing
-    restoring a stale full-DOM snapshot that wipes or duplicates an untracked island —
-    does **not** happen. Blink's undo is transaction-based, not snapshot-based: it replays
-    the specific ranges its execCommands recorded and leaves direct-DOM nodes alone. Even
-    the worst adversarial case (type into a table cell, delete that row out from under the
-    pending transaction, then ⌘Z) is a clean no-op with zero console errors.
-  - **The one genuine gap: structural DELETION is unrecoverable.** Remove an embed island
-    or a table row and ⌘Z can't bring it back (only autosave / revisions / the crash net
-    can, coarsely). Everything else that's a no-op is merely *incomplete*, not lossy.
+**Horizon 1 — trust: nothing surprising, ever**
 
-  **Decision: do NOT build the interleaved custom undo journal.** Because there's no
-  corruption, this is a completeness/polish gap, not a data-integrity one — and a journal
-  that correctly interleaves with Blink's native stack means intercepting ⌘Z globally and
-  essentially reimplementing the whole undo stack (capturing typing too, to keep ordering
-  right). That's a large, fragile core rewrite for a polish feature — against the "no build
-  step / greppable / islands keep the editor good" ethos. Instead:
-  1. **Toast-Undo for island deletions** (embed/gallery/custom block remove): a Gmail-style
-     "Deleted — Undo" toast (~7s) that re-inserts the removed node + its islands[] entry.
-     ✅ *Shipped 2026-07-05* — `toastAction()` + `removeIslandWithUndo()`; suite
-     `tests/undo-toast.test.js`. Since 2026-07-09, ⌘Z while the toast is live also runs
-     the restore (capture-phase `pendingToastUndo`), so keyboard undo matches the button.
-  2. **Table ops on the real undo stack** (2026-07-09): row/col add/delete, header toggle,
-     and table delete mutate a detached clone then swap via `commandOnBlock` /
-     `applyTableMutation`. Figures use `selectNodeContents` + insertHTML of the inner
-     markup (Blink nests a full-figure `selectNode` insertHTML); bare tables use
-     `selectNode`. Table-delete is contents-delete on the figure (⌘Z restores). Same
-     idea as image remove. Destructive ops toast a "⌘Z restores it" hint. Suite:
-     `tests/undo-toast.test.js` + `tests/table-menu.test.js`.
-  3. **Document the boundary:** ⌘Z covers writing + table structure + image remove;
-     island deletions offer the Undo toast (and ⌘Z while it shows). Remaining direct-DOM
-     ops (inspector attr regen, island insert) are still safe no-ops under ⌘Z.
-     Re-verified at v0.24.0: pattern and island insertion (`insertPatternIslands()`) and
-     inspector attribute regen remain direct-DOM, and remain safe no-ops.
-- **Conflict safety.** Post locking / "someone else is editing" (core's heartbeat locks),
-  and a localStorage safety net for drafts so a crashed browser loses nothing even before
-  the first autosave.
-  ✅ *Shipped 2026-07-05* — locking rides core's own `_edit_lock`
-  (`minn-admin/v1/posts/{id}/lock`; Minn, classic and Gutenberg all honor each other;
-  takeover dialog, 30s refresh doubling as takeover detection, read-only + banner when
-  taken, release on leave incl. `sendBeacon` from pagehide). The crash net snapshots
-  every edit to localStorage within ~1.2s, offers recovery on the next open (including
-  never-saved new posts) and clears itself on successful saves. Suites: `tests/lock.test.js`,
-  `tests/localnet.test.js`. This also delivers Horizon 3's presence groundwork.
-- **Input long tail.** IME/composition, mobile Safari, accessibility.
-  - **IME / composition (CJK).** ✅ *Shipped 2026-07-12* — every keydown path that
-    `preventDefault`s printable keys or steals Enter/Backspace bails on
-    `isComposing` / keyCode 229: markdown wraps + code-edge escape, island
-    arming, slash-menu Enter, figcaption Enter. Real IME engines aren't in
-    headless Chrome; `tests/ime.test.js` synthesizes composition-shaped
-    KeyboardEvents.
-  - **Mobile Safari pass.** ✅ *Shipped 2026-07-12* — `visualViewport` writes
-    `--minn-kb-inset` so fixed bottom chrome (stats pill, toasts) rides above
-    the software keyboard; `viewport-fit=cover` + safe-area insets; larger
-    toolbar/chip/find hit targets on phones and coarse pointers; body padding
-    under the stats pill; find inputs 16px (no iOS focus-zoom). Sticky toolbar
-    keeps `-webkit-sticky` + opaque background. Suite: `tests/mobile-editor.test.js`
-    (phone viewport + simulated keyboard inset; not a real iOS device).
-  - **Accessibility pass.** ✅ *Shipped 2026-07-12 (first cut)* — formatting
-    toolbar is `role="toolbar"` with labelled tools; body is a multiline
-    textbox; island/table/image/code chips carry `aria-label`; slash menu is a
-    listbox with `aria-activedescendant`; block popovers (table/image/code/
-    link/inspector) are modal dialogs with Escape dismiss + initial focus;
-    toasts are `status`/`alert` live regions; lock takeover is `role="alert"`.
-    Suite: `tests/editor-a11y.test.js`. Not a full WCAG audit (no focus trap
-    ring, no axe CI) — the named writer-facing affordances.
-- **Inline media flow.** Paste/drag an image from the clipboard straight to the media
-  library at the caret; inline figcaption editing.
-  ✅ *Shipped 2026-07-05* — screenshot ⌘V and dropped image files upload to the library
-  with an instant blob preview and an undo-safe swap to the real attachment (id + class,
-  a true Gutenberg image block); serializers skip in-flight uploads so an autosave can
-  never store a blob URL. Every editable image carries a typable caption ("Write a
-  caption…" placeholder; empty ones never serialize; Enter/Backspace edge guards).
-  Suite: `tests/media-flow.test.js`. Fixing the suite also flushed out and fixed a
-  pre-existing race: a late editor re-render could revert unsaved DOM edits before a
-  save (renderEditor now adopts the live DOM when dirty).
+- Paste cleanup (Word/Docs/web → safe subset; island copy round-trip v0.23.0) —
+  2026-07-05 — `paste`, `island-copy`
+- Undo completeness (probed: no sequence corrupts; toast-undo for island deletion;
+  table ops on the real stack; the interleaved custom journal deliberately NOT built) —
+  2026-07-05/09 — `undo-toast`, `table-menu`
+- Conflict safety (core `_edit_lock` interop, takeover flow, localStorage crash net) —
+  2026-07-05 — `lock`, `localnet`
+- IME/composition guards — 2026-07-12 — `ime`
+- Mobile Safari pass (keyboard inset, hit targets) — 2026-07-12 — `mobile-editor`
+- Accessibility first cut (toolbar/dialog/listbox semantics; not a WCAG audit) —
+  2026-07-12 — `editor-a11y`
+- Inline media flow (paste/drop images → library at caret; inline captions) —
+  2026-07-05 — `media-flow`
 
-## Horizon 2 — delight (0.7–0.9): things Gutenberg will never feel like
+**Horizon 2 — delight: things Gutenberg will never feel like**
 
-The theme: features that only make sense in a *writing* tool, where the calm surface is
-the point. This horizon is closed as of v0.13.0 (writing stats + slash-command extension
-point were the last items).
+- Outline panel + outline mode (⌘⇧O) — 2026-07-05 — `outline`
+- Focus mode + zen (⌘⇧D) — 2026-07-05/06 — `focus`
+- Revision diffs (side-by-side vs live serializer output) — 2026-07-05 — `revision-diff`
+- Internal link picker — 2026-07-05 — `link-picker`
+- Find & replace (⌘⇧F; overlay rects; native-undo replaces) — 2026-07-10 — `find-replace`
+- Writing stats (session delta, word goal) — 2026-07-12 — `writing-stats`
+- Slash-command extension point + plugin content (auto-insert blocks, design
+  libraries, patterns incl. the user's own, ⌘/ Browse all) — v0.9.0–v0.23.0 —
+  `editor-commands`, `patterns`, `user-patterns`, `block-picker`
 
-- **Outline panel.** ✅ *Shipped 2026-07-05 (v0.8.0)* — heading ToC as the last sidebar
-  card, sticky; rebuilds on the stats cadence; click ping lives inside the scroller at
-  content coordinates. Outline *mode* (⌘⇧O) collapses nav + every sidebar card except the
-  outline. Suite: `tests/outline.test.js`.
-- **Focus mode.** ✅ *Shipped 2026-07-05 / zen 2026-07-06* — caret-block dim bands,
-  typewriter scroll (capped instant steps; smooth scroll is canceled by caret-reveal),
-  zen collapses nav + editor sidebar. ⌘⇧D palette command (not a toolbar icon). Suite:
-  `tests/focus.test.js`.
-- **Revision diffs.** ✅ *Shipped 2026-07-05 (v0.8.0)* — History card opens a side-by-side
-  word diff vs the current serializer output (unsaved edits count); LCS with sameRatio
-  gate so unrelated del/add paragraphs stay separate. Suite: `tests/revision-diff.test.js`.
-- **Internal link picker.** ✅ *Shipped 2026-07-05 (v0.8.0)* — link popover URL field
-  searches `wp/v2/search` for non-URL text; pick applies immediately. Suite:
-  `tests/link-picker.test.js`.
-- **Find & replace** within the post, markdown-aware.
-  ✅ *Shipped 2026-07-10* — ⌘⇧F (rebound from ⌘F so the browser keeps plain find; also a
-  ⌘K command). Matching runs over the text writers see: text nodes concatenated per block, so a
-  match crosses inline marks (a split `<strong>`) but never a block boundary, and islands /
-  `contenteditable=false` subtrees are excluded entirely. Highlights are overlay rects inside
-  the scroller at content coordinates (nothing touches the typing surface); replaces select
-  the match Range and run `execCommand insertText`, so every replacement is a native undo
-  entry and Replace-all applies last-to-first to keep earlier ranges valid. Locked mode falls
-  through to browser find. Suite: `tests/find-replace.test.js`.
-- **Writing stats that matter.** ✅ *Shipped 2026-07-12 (v0.13.0)* — the sticky pill
-  grows a session delta (words since first edit this open; baseline re-bases while the
-  post is clean so late island previews don't inflate "session") and an optional word
-  goal (global, localStorage `minn-writing-goal`, click the pill to set/clear). Goal-met
-  paints green. Suite: `tests/writing-stats.test.js`.
-- **Slash-command extension point.** Shipped: `minn_admin_editor_commands` filter so
-  plugins add free-form slash items (boilerplate `html`, island `template`, or async
-  `route` returning either). Pure descriptors, no third-party JS. Documented in
-  `docs/for-plugin-authors.md`; suite `tests/editor-commands.test.js`. The plugin-content
-  half shipped in v0.9.0: auto-insert blocks, design libraries, every registered pattern
-  in the slash menu (`insertPatternIslands()`; suite `tests/patterns.test.js`), and the
-  Browse-all block picker on ⌘/ (`openBlockPicker()`; suite `tests/block-picker.test.js`).
-  v0.23.0 added the user's own synced and unsynced patterns to the slash menu and picker,
-  with a Patterns entry in the Content switcher (suite `tests/user-patterns.test.js`).
+**Nested content (GH #4) — complete 2026-08-09.** The full arc — attribute carry,
+in-place island text, container slots, nested islands and containers at any depth,
+cover/media-text, the full insert surface inside slots, raw-markup paste conversion,
+duplicate + move, comment tolerance, and the deepest-wins chrome pass — is documented
+as the plan of record in [editor-direction.md](editor-direction.md), each slice with
+its probes and suites (`attr-carry` 20, `island-runs` 21, `container-slots` 44,
+`nested-islands` 34). Every core layout container is a writing surface; byte-identity
+for untouched content remains the non-negotiable invariant.
 
-## Horizon 3 — the editor as platform (1.0+)
+## Horizon 3 — the editor as platform (the open frontier)
 
 - **Presence** (who else has this post open), building on core's locks rather than
-  inventing collaboration infrastructure. First slices shipped: the v0.19.0 cycle
-  closed the lock story's last blind windows (saves carry an `X-Minn-Expect-Lock`
-  header verified server-side, so an ousted session can never silently overwrite;
-  regaining a lock checks the server's modified stamp and offers "Load theirs"),
-  and the v0.20.0 content list shows a "{name} is editing" chip read from core's
-  own edit lock. v0.21.0 hardened the seam: a public REST read no longer reveals
-  the lock holder's name (the editing signal is for the dashboard, not the world).
-  Live cursors / multi-presence beyond the lock model remain the open 1.0+
-  question; nothing beyond the lock model exists in code at v0.24.0.
-- **Offline-tolerant drafting** if the localStorage net from Horizon 1 proves itself.
-  Still open at v0.24.0: no offline-specific work has landed (app.js carries no
-  connectivity awareness). The net keeps proving itself, though: the crash net is
-  suite-covered (`tests/localnet.test.js`), and v0.21.0's expired-nonce recovery
-  means a tab left open overnight saves again without a reload.
+  inventing collaboration infrastructure. Shipped so far: the lock story's blind
+  windows are closed (v0.19.0 `X-Minn-Expect-Lock` save verification; "Load theirs"
+  on regain), the content list shows a "{name} is editing" chip (v0.20.0), and public
+  REST reads don't leak the holder's name (v0.21.0). Live cursors / multi-presence
+  beyond the lock model remain the open 1.0+ question; nothing beyond the lock model
+  exists in code.
+- **Offline-tolerant drafting** if the localStorage net keeps proving itself. Still
+  open: app.js carries no connectivity awareness. The net is suite-covered
+  (`localnet`), and expired-nonce recovery (v0.21.0) means an overnight tab saves
+  without a reload.
 - **The marketing turn.** minnadmin.com leads with the editor: the hero is the writing
-  surface, the admin is "and it comes with a better admin around it." The readme and
-  screenshots follow. Landed so far (v0.21.0): minnadmin.com is the plugin's listed
-  website with shareable docs pages, and readme.txt is gone (readme.md and the site
-  are the listing surfaces). Remaining: the editor-led hero itself; readme.md still
-  opens on "a reimagined WordPress admin experience" with an Overview screenshot,
-  not the writing surface.
-
-## Nested content (plan of record, 2026-08-08)
-
-The measured answer to grouped/columns content locking on FSE sites (GH #4) lives in
-[editor-direction.md](editor-direction.md), "The nested-content plan": three phases —
-attribute carry for text-flow blocks (✅ shipped 2026-08-08, `tests/attr-carry.test.js`),
-editable text inside island previews
-(✅ shipped 2026-08-08, `tests/island-runs.test.js`), and container slots
-(✅ shipped 2026-08-08, `tests/container-slots.test.js` — all-simple `group` wrappers,
-block creation inside slots, and multi-slot `columns`; cover/media-text, nesting and
-multi-block paste into slots remain). Slots edit
-content inside layouts; layout itself stays Gutenberg's job. The never-build list below
-is unchanged by that plan.
-
-**Picking this up fresh:** the scoped remaining work — five items with effort estimates,
-a recommended order, watch items, and a measure-first gate on the largest one — is the
-"What remains (handoff)" section of [editor-direction.md](editor-direction.md). Start
-there, and read the writing-context contract above it before touching slot code.
+  surface, the admin is "and it comes with a better admin around it." Landed:
+  minnadmin.com is the plugin's listed website with shareable docs pages; readme.txt is
+  gone. Remaining: the editor-led hero itself; readme.md still opens on "a reimagined
+  WordPress admin experience" with an Overview screenshot, not the writing surface.
 
 ## What we will never build (unchanged, load-bearing)
 
@@ -253,8 +126,9 @@ page building, FSE, hosting third-party block editor JS, regenerating static `sa
 or "block parity" as a KPI.
 
 OK (not the never-build list): **insert** finished patterns/design-library markup as
-islands; content-edit text/images/attrs inside islands; ship **content blocks** that
-Minn edits fully (dynamic + schema-first).
+islands; content-edit text/images/attrs inside islands (and, since the nesting cycle,
+write directly inside core containers); ship **content blocks** that Minn edits fully
+(dynamic + schema-first).
 
 Islands make the cost of *not* supporting a layout block small — it displays, survives, and
 can be configured through the inspector where the server allows. If a post is mostly layout,
@@ -265,11 +139,9 @@ good.
 
 - **No build step stays.** One file, sections clearly banded. If the editor doubles the
   file, it doubles the file — greppability beats architecture astronautics at this scale.
-- **The test suites are repo citizens** (done since 2026-07-05). The Playwright suites
-  live in `tests/` with shared helpers and conventions in `tests/README.md`; a
-  sequential full-suite runner drove all 171 suites green before v0.18.0 and is part
-  of the release rhythm; the suite count stands at 206 at v0.24.0. Editor bug fixes
-  still ship with a ported suite.
+- **The test suites are repo citizens** (since 2026-07-05). Suites live in `tests/`
+  with conventions in `tests/README.md`; the sequential full-suite runner is part of
+  the release rhythm. Editor bug fixes still ship with a ported suite.
 - **Safety model is frozen.** `editorModeFor` → classic/blocks/locked, byte-identity
   islands, attribute allowlists that must be DOM-reproducible. New capabilities extend
   the allowlists one proven attribute at a time (see editor-direction.md); they never
