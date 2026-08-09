@@ -110,6 +110,37 @@ function minn_admin_hfcm_get( $id ) {
 	return $row ? minn_admin_hfcm_item( $row ) : null;
 }
 
+/**
+ * HFCM snippets are raw markup that HFCM DECODES before echoing.
+ *
+ * Their renderer runs html_entity_decode( $snippet ) into wp_head on every
+ * page, and their own admin form compensates by storing snippets
+ * htmlentities-encoded. wp_kses_post() passes entities through untouched, so
+ * using it as the fallback for a caller without unfiltered_html was no
+ * protection at all: `&lt;script&gt;` survives kses and the renderer decodes it
+ * back into a live script tag for every visitor.
+ *
+ * HFCM's own gate refuses snippet writes outright in that situation, so mirror
+ * it rather than pretending to sanitize. Who this affects: every site
+ * administrator on multisite (only super admins hold unfiltered_html there)
+ * and any install using DISALLOW_UNFILTERED_HTML.
+ */
+function minn_admin_hfcm_can_write_code() {
+	if ( defined( 'DISALLOW_UNFILTERED_HTML' ) && DISALLOW_UNFILTERED_HTML ) {
+		return false;
+	}
+	return current_user_can( 'unfiltered_html' );
+}
+
+/** WP_Error explaining why a snippet write was refused. */
+function minn_admin_hfcm_code_error() {
+	return new WP_Error(
+		'forbidden',
+		'Header Footer Code Manager snippets run as raw markup in the page head, so editing them needs the unfiltered_html capability on this site.',
+		array( 'status' => 403 )
+	);
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_hfcm_active() || ! minn_admin_hfcm_can() ) {
 		return $surfaces;
@@ -339,8 +370,8 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'missing_name', 'Name is required.', array( 'status' => 400 ) );
 				}
 				$code = isset( $body['code'] ) ? (string) $body['code'] : '';
-				if ( ! current_user_can( 'unfiltered_html' ) ) {
-					$code = wp_kses_post( $code );
+				if ( ! minn_admin_hfcm_can_write_code() ) {
+					return minn_admin_hfcm_code_error();
 				}
 				$type     = isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], array( 'html', 'css', 'js' ), true )
 					? $body['snippet_type'] : 'html';
@@ -416,8 +447,8 @@ add_action( 'rest_api_init', function () {
 				}
 				if ( array_key_exists( 'code', $body ) ) {
 					$code = (string) $body['code'];
-					if ( ! current_user_can( 'unfiltered_html' ) ) {
-						$code = wp_kses_post( $code );
+					if ( ! minn_admin_hfcm_can_write_code() ) {
+						return minn_admin_hfcm_code_error();
 					}
 					$data['snippet'] = $code;
 					$fmt[]           = '%s';
