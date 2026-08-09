@@ -215,6 +215,31 @@ Three phases, each shippable alone, in order:
    (33 checks incl. untouched-group byte-identity, slot slash-menu contents and
    per-column splice targeting).
 
+### The writing-context contract (consolidation pass, 2026-08-08)
+
+Slots and runs mean the editor now has FOUR editing contexts — body, container
+slot (a mini-body), island text run (text-only) and live-field island — and every
+future editor feature owes an answer for each. Two things keep that from rotting:
+
+- **One canonical resolver.** `blockRootOf( node, body )` returns the node's
+  container slot else the body; `topBlockIn( node, body )` returns its top-level
+  block within that root. Every "walk to the top-level block" that should treat
+  slots as mini-bodies goes through these (markdown prefixes, the toolbar's block
+  and alignment buttons, inline code, the slash menu, focus-mode banding, the
+  code-chip space heuristic). A new feature that uses them inherits slot support
+  for free; a new CONTEXT is one function to teach.
+- **Deliberate exceptions are labelled.** The walks that must stay body-anchored
+  carry a `body-root by design` comment saying why: island inserts (islands only
+  exist at the top level), image-figure landing, the block picker, block-level
+  copy/cut semantics, and the island arm/delete guards (which bail for slot and
+  run interiors before their body checks run). Any future body-anchored walk
+  should either migrate or say why not.
+
+Bug the pass surfaced: a partial-text selection inside a slot or run resolved
+through the body walk to the whole island, so copying two words copied the entire
+block. Copy/cut now bails to native handling when the selection is contained in
+one slot or one run (suites: `container-slots`, `island-runs`).
+
 The never-build list is unchanged by this plan. Slots edit **content** inside layouts;
 layout itself (spacing, variations, query loops, the block inserter's full catalog) remains
 Gutenberg's job, one click away. Byte-identity for everything untouched stays the

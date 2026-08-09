@@ -189,6 +189,23 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'untouched text byte-identical', raw.includes( '<p>Right column text stays untouched.</p>' ) && raw.includes( '<p>Ungrouped paragraph after.</p>' ), '' );
 	t.check( 'no editor chrome leaked', ! raw.includes( 'minn-island-run' ) && ! raw.includes( 'contenteditable' ), '' );
 
+	// Copy of a selection INSIDE one run stays a native text copy — the
+	// same block-root-audit fix as slots.
+	const runCopy = await page.evaluate( () => {
+		const run = document.querySelector( '.minn-block-island[data-block="columns"] .minn-island-run' );
+		const r = document.createRange();
+		r.setStart( run.firstChild, 0 );
+		r.setEnd( run.firstChild, 4 );
+		const ws = window.getSelection();
+		ws.removeAllRanges();
+		ws.addRange( r );
+		const dt = new DataTransfer();
+		const ev = new ClipboardEvent( 'copy', { clipboardData: dt, bubbles: true, cancelable: true } );
+		run.dispatchEvent( ev );
+		return { hijacked: ev.defaultPrevented, blockPayload: dt.getData( 'text/x-minn-blocks' ) };
+	} );
+	t.check( 'run-interior copy stays native', ! runCopy.hijacked && ! runCopy.blockPayload, JSON.stringify( runCopy ) );
+
 	await deletePost( page, id );
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
