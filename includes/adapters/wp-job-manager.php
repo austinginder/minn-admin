@@ -126,6 +126,26 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 			default:
 				continue 2;
 		}
+		// Their own per-field AUTHORIZATION wins too. WPJM's schema is not
+		// uniformly gated: get_job_listing_fields() attaches an
+		// auth_edit_callback per field, and overrides it to
+		// auth_check_can_manage_job_listings for _featured and _job_expires —
+		// a capability WPJM grants to administrators only, because both are
+		// monetized (WooCommerce Paid Listings sells featured placement and
+		// listing duration). WPJM enforces this on both of its own doors; this
+		// is a third one, so it has to ask the same question. Without it any
+		// listing owner self-grants sticky placement and a new expiry date.
+		if ( isset( $f['auth_edit_callback'] ) && is_callable( $f['auth_edit_callback'] ) ) {
+			$allowed = false;
+			try {
+				$allowed = (bool) call_user_func( $f['auth_edit_callback'], false, $key, $post_id, get_current_user_id() );
+			} catch ( \Throwable $e ) {
+				$allowed = false;
+			}
+			if ( ! $allowed ) {
+				continue;
+			}
+		}
 		// Their own field sanitizer wins when declared (application's
 		// email-or-url rule, the expiry date's Y-m-d validation).
 		if ( 'checkbox' !== $type && isset( $f['sanitize_callback'] ) && is_callable( $f['sanitize_callback'] ) ) {

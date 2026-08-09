@@ -229,7 +229,18 @@ add_action( 'rest_api_init', function () {
 			$occ  = $wpdb->prefix . 'wsal_occurrences';
 			$meta = $wpdb->prefix . 'wsal_metadata';
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$occ} WHERE id = %d", (int) $request['id'] ) );
+			// Scope to this site, exactly like the list route above. Without
+			// it, a subsite administrator on a network-activated install can
+			// walk the dense auto-increment ids and read every other tenant's
+			// audit rows — acting username, client IP and all metadata, which
+			// includes the ATTEMPTED username on failed logins. (Stream guards
+			// the same shape for the same reason; 404 rather than 403 so the
+			// endpoint does not confirm out-of-scope ids exist.)
+			$row = $wpdb->get_row( $wpdb->prepare(
+				"SELECT * FROM {$occ} WHERE id = %d AND site_id IN (0, %d)",
+				(int) $request['id'],
+				get_current_blog_id()
+			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', 'Event not found.', array( 'status' => 404 ) );
 			}

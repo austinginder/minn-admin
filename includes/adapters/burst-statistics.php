@@ -11,8 +11,22 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Burst Statistics is loaded AND this user may read its reports.
+ *
+ * Burst grants `view_burst_statistics` to administrator and editor at
+ * activation (includes/class-bootstrap.php).
+ */
+function minn_admin_burst_ready() {
+	return ( defined( 'BURST_VERSION' ) || class_exists( 'Burst\\Burst' ) )
+		&& current_user_can( 'view_burst_statistics' );
+}
+
 add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic || ! defined( 'BURST_VERSION' ) ) {
+		return $traffic;
+	}
+	if ( ! minn_admin_burst_ready() ) {
 		return $traffic;
 	}
 
@@ -63,6 +77,9 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 		return $data;
 	}
 	if ( ! defined( 'BURST_VERSION' ) ) {
+		return $data;
+	}
+	if ( ! minn_admin_burst_ready() ) {
 		return $data;
 	}
 

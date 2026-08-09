@@ -12,8 +12,32 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * WP Statistics is loaded AND this user may read its reports.
+ *
+ * WP Statistics gates reporting on its `read_capability` OPTION, default
+ * manage_options (includes/class-wp-statistics-user.php). Read the option so a
+ * site that loosened or tightened it is honoured either way.
+ */
+function minn_admin_wps_ready() {
+	if ( ! defined( 'WP_STATISTICS_VERSION' ) ) {
+		return false;
+	}
+	$cap = 'manage_options';
+	if ( class_exists( '\\WP_STATISTICS\\Option' ) && method_exists( '\\WP_STATISTICS\\Option', 'get' ) ) {
+		$stored = \WP_STATISTICS\Option::get( 'read_capability', 'manage_options' );
+		if ( is_string( $stored ) && '' !== $stored ) {
+			$cap = $stored;
+		}
+	}
+	return current_user_can( $cap );
+}
+
 add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic || ! defined( 'WP_STATISTICS_VERSION' ) ) {
+		return $traffic;
+	}
+	if ( ! minn_admin_wps_ready() ) {
 		return $traffic;
 	}
 
@@ -75,6 +99,9 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 		return $data;
 	}
 	if ( ! defined( 'WP_STATISTICS_VERSION' ) ) {
+		return $data;
+	}
+	if ( ! minn_admin_wps_ready() ) {
 		return $data;
 	}
 
