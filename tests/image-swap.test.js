@@ -11,6 +11,11 @@
  *   - background-image style + all URL occurrences
  * Replacing the image via the inspector must retarget ALL of them.
  *
+ * A second block covers images that live ONLY in attributes, the shape
+ * Gutenslider uses: string ids ("id":"1971"), a mirror array on the parent,
+ * and TWO url keys per picture (a sized copy plus the original). Those pair
+ * into one inspector row, and replacing moves both keys everywhere.
+ *
  * Fixtures: gal-blue / gal-red images in the minnadmin media library.
  */
 const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
@@ -83,6 +88,62 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		t.check( 'no stale 999 ids remain', ! raw.includes( '999' ) );
 	} finally {
 		await deletePost( page, id );
+	}
+
+	// --- Attribute-only images with paired url keys (Gutenslider shape) ---
+	const R = media.red.source_url;
+	const RFULL = R.replace( /\.png$/, '-full.png' );
+	const gsContent = [
+		`<!-- wp:acme/gslider {"media":[{"alt":"","id":"7001","url":"${ R }","fullUrl":"${ RFULL }"}]} -->`,
+		`<!-- wp:acme/gslide {"background":{"backgroundImage":{"alt":"","id":"7001","url":"${ R }","fullUrl":"${ RFULL }"},"mediaId":"7001"}} -->`,
+		'<!-- wp:paragraph -->',
+		'<p>Slide one.</p>',
+		'<!-- /wp:paragraph -->',
+		'<!-- /wp:acme/gslide -->',
+		'<!-- /wp:acme/gslider -->',
+	].join( '\n' );
+	const gsId = await createPost( page, { title: 'Attribute image swap test', content: gsContent } );
+	try {
+		await openEditor( page, gsId );
+		await page.waitForSelector( '.minn-block-island[data-block="acme/gslider"]', { timeout: 15000 } );
+		await page.waitForTimeout( 1500 );
+		for ( let i = 0; i < 8; i++ ) {
+			try {
+				await page.click( '.minn-block-island[data-block="acme/gslider"] .minn-island-chip' );
+				await page.waitForSelector( '[data-inspimg]', { timeout: 6000 } );
+				break;
+			} catch ( e ) { await page.waitForTimeout( 1200 ); }
+		}
+		// Four URL occurrences, one picture: the inspector offers ONE row.
+		t.check( 'paired url keys collapse to one image row', ( await page.$$( '[data-inspimg]' ) ).length === 1,
+			String( ( await page.$$( '[data-inspimg]' ) ).length ) );
+		await page.click( '[data-inspimg]' );
+		await page.waitForSelector( '.minn-picker-item', { timeout: 15000 } );
+		const pickedBlue = await page.evaluate( () => {
+			const el = [ ...document.querySelectorAll( '.minn-picker-item' ) ].find( ( e ) => /gal-blue/i.test( e.title ) );
+			if ( ! el ) return false;
+			el.dispatchEvent( new MouseEvent( 'click', { bubbles: true } ) );
+			return true;
+		} );
+		t.check( 'gal-blue picked for the attribute block', pickedBlue );
+		await page.waitForTimeout( 1200 );
+		await page.keyboard.press( 'Meta+s' );
+		await page.waitForTimeout( 2500 );
+		const gsRaw = await page.evaluate( async ( pid ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content&_cb=' + Math.random(), {
+				headers: { 'X-WP-Nonce': window.MINN.nonce },
+			} );
+			return ( await r.json() ).content.raw;
+		}, gsId );
+		const bid = media.blue.id;
+		t.check( 'both url keys moved to the new image', ! gsRaw.includes( R ) && ! gsRaw.includes( RFULL )
+			&& ( gsRaw.match( /"(?:url|fullUrl)":"[^"]*gal-blue[^"]*"/g ) || [] ).length === 4, gsRaw.slice( 0, 200 ) );
+		t.check( 'string-form ids retargeted in both objects', ( gsRaw.match( new RegExp( '"id":"' + bid + '"', 'g' ) ) || [] ).length === 2, gsRaw.slice( 0, 200 ) );
+		t.check( 'string-form mediaId retargeted', gsRaw.includes( '"mediaId":"' + bid + '"' ) );
+		t.check( 'no stale 7001 ids remain', ! gsRaw.includes( '7001' ) );
+		t.check( 'slide content untouched', gsRaw.includes( '<p>Slide one.</p>' ) );
+	} finally {
+		await deletePost( page, gsId );
 	}
 
 	await t.done( browser, errors );
