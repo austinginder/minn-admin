@@ -6,7 +6,7 @@
  * saveEventMeta, so the suite verifies stored values through the panel's
  * REST field after real UI interaction.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'tec-panel' );
@@ -18,17 +18,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	// Fixtures over core REST: a venue, an organizer, a bare draft event.
 	const fx = await page.evaluate( async () => {
 		const jhead = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };
-		const mk = async ( type, title ) => ( await ( await fetch( window.MINN.restUrl + 'wp/v2/' + type, {
+		const mk = async ( type, title, status = null ) => ( await ( await fetch( window.MINN.restUrl + 'wp/v2/' + type, {
 			method: 'POST', headers: jhead, credentials: 'same-origin',
-			body: JSON.stringify( { title, status: type === 'tribe_events' ? 'draft' : 'publish' } ),
+			body: JSON.stringify( { title, status: status || ( type === 'tribe_events' ? 'draft' : 'publish' ) } ),
 		} ) ).json() ).id;
 		return {
 			venue: await mk( 'tribe_venue', 'Minn Suite Hall' ),
+			hiddenVenue: await mk( 'tribe_venue', 'Minn Suite Secret Hall', 'draft' ),
 			organizer: await mk( 'tribe_organizer', 'Minn Suite Presenters' ),
 			event: await mk( 'tribe_events', 'Minn Suite Event' ),
 		};
 	} );
-	t.check( 'fixtures created', !! ( fx.venue && fx.organizer && fx.event ), JSON.stringify( fx ) );
+	t.check( 'fixtures created', !! ( fx.venue && fx.hiddenVenue && fx.organizer && fx.event ), JSON.stringify( fx ) );
 
 	const readTec = () => page.evaluate( async ( id ) => {
 		const r = await fetch( window.MINN.restUrl + `wp/v2/tribe_events/${ id }?context=edit&_fields=minn_tec&_cb=` + Math.random(), {
@@ -38,6 +39,19 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	}, fx.event );
 
 	try {
+		// Object authorization regression: an Author may reuse published venues
+		// but must not enumerate an administrator's draft venue title or id.
+		const { ctx: authorCtx, page: authorPage } = await loginAs( browser, 'minn-author', 'minn-author-pass-1' );
+		const authorSuggestions = await authorPage.evaluate( async () => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/tec/suggest?kind=venue&q=Minn%20Suite', {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			return r.json();
+		} );
+		t.check( 'Author can suggest a shared published venue', authorSuggestions.some( ( row ) => row.value === String( fx.venue ) ), JSON.stringify( authorSuggestions ) );
+		t.check( 'Author cannot enumerate another user\'s draft venue', ! authorSuggestions.some( ( row ) => row.value === String( fx.hiddenVenue ) ), JSON.stringify( authorSuggestions ) );
+		await authorCtx.close();
+
 		await page.goto( BASE + '/minn-admin/editor/tribe_events/' + fx.event, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '[data-side-door="panel:tec"]', { timeout: 20000 } );
 		const door = await page.$eval( '[data-side-door="panel:tec"]', ( el ) => el.textContent );
@@ -99,7 +113,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'all-day flip snaps to TEC day bounds', !! allday && allday.all_day === true && /00:00$/.test( allday.start ), JSON.stringify( allday && { a: allday.all_day, s: allday.start } ) );
 	} finally {
 		await page.evaluate( async ( fx2 ) => {
-			for ( const [ type, id ] of [ [ 'tribe_events', fx2.event ], [ 'tribe_venue', fx2.venue ], [ 'tribe_organizer', fx2.organizer ] ] ) {
+			for ( const [ type, id ] of [ [ 'tribe_events', fx2.event ], [ 'tribe_venue', fx2.venue ], [ 'tribe_venue', fx2.hiddenVenue ], [ 'tribe_organizer', fx2.organizer ] ] ) {
 				await fetch( window.MINN.restUrl + `wp/v2/${ type }/${ id }?force=true`, {
 					method: 'DELETE', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
 				} ).catch( () => {} );

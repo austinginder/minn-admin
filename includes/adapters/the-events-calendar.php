@@ -126,7 +126,8 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	// Venue / organizer suggestions: titles only, newest first, q filters.
+	// Venue / organizer suggestions: published records plus drafts the caller
+	// may edit, alphabetical, with q filtering.
 	register_rest_route( 'minn-admin/v1', '/tec/suggest', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
@@ -137,20 +138,38 @@ add_action( 'rest_api_init', function () {
 			'q'    => array( 'type' => 'string', 'default' => '' ),
 		),
 		'callback'            => function ( WP_REST_Request $request ) {
-			$type  = 'venue' === $request['kind'] ? 'tribe_venue' : 'tribe_organizer';
-			$query = array(
+			$type = 'venue' === $request['kind'] ? 'tribe_venue' : 'tribe_organizer';
+			$base = array(
 				'post_type'      => $type,
-				'post_status'    => array( 'publish', 'draft' ),
 				'posts_per_page' => 20,
 				'orderby'        => 'title',
 				'order'          => 'ASC',
 			);
 			$q = trim( (string) $request['q'] );
 			if ( '' !== $q ) {
-				$query['s'] = $q;
+				$base['s'] = $q;
 			}
+
+			// Published venues/organizers are shared choices. Drafts are not:
+			// mirror wp-admin's ownership boundary for users who cannot edit
+			// other people's records instead of returning every draft title/id.
+			$posts       = get_posts( array_merge( $base, array( 'post_status' => 'publish' ) ) );
+			$draft_query = array_merge( $base, array( 'post_status' => 'draft' ) );
+			$post_type   = get_post_type_object( $type );
+			if ( ! $post_type || ! current_user_can( $post_type->cap->edit_others_posts ) ) {
+				$draft_query['author'] = get_current_user_id();
+			}
+			$posts = array_merge( $posts, get_posts( $draft_query ) );
+			usort( $posts, function ( $a, $b ) {
+				return strcasecmp( (string) $a->post_title, (string) $b->post_title );
+			} );
+
 			$rows = array();
-			foreach ( get_posts( $query ) as $p ) {
+			foreach ( array_slice( $posts, 0, 20 ) as $p ) {
+				// Respect object-level capability filters as a final boundary too.
+				if ( ! current_user_can( 'read_post', $p->ID ) ) {
+					continue;
+				}
 				$rows[] = array(
 					'value' => (string) $p->ID,
 					'label' => '' !== $p->post_title ? $p->post_title : ( '#' . $p->ID ),
