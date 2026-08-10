@@ -15505,10 +15505,18 @@
 		const imgBadge = imgTool === 'edit' ? __( 'Edit images' )
 			/* translators: overlay on a single-image block's image */
 			: imgTool ? __( 'Replace image' ) : '';
-		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }>
+		// A synced pattern is a REFERENCE to a wp_block post — its content
+		// isn't in this post at all, so the doorway is that pattern's own
+		// editor (where every editing tool already works, and where the
+		// save-reach warning lives).
+		const refM = short === 'block' ? ( raw || '' ).match( /"ref"\s*:\s*(\d+)/ ) : null;
+		const patternRef = refM ? refM[ 1 ] : '';
+		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
+			${ imgTool ? `<button class="minn-island-act" data-islanddup="${ idx }" type="button" title="${ esc( __( 'Duplicate this block' ) ) }" aria-label="${ esc( __( 'Duplicate this block' ) ) }">${ icon( 'copy' ) }</button>` : '' }
 			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
+			${ patternRef ? `<button class="minn-pattern-badge" data-patternedit="${ esc( patternRef ) }" type="button">${ esc( __( 'Edit pattern' ) ) } ↗</button>` : '' }
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 		</div>`;
 	}
@@ -20409,6 +20417,30 @@
 				if ( island ) openInspector( island );
 				return;
 			}
+			// Duplicate straight from the card's hover chrome (image blocks
+			// inside containers, where the tile grid doesn't apply).
+			const dupBtn = e.target.closest( '[data-islanddup]' );
+			if ( dupBtn ) {
+				e.preventDefault();
+				const island = dupBtn.closest( '.minn-block-island' );
+				if ( island ) duplicateIsland( island );
+				return;
+			}
+			// Synced pattern → its own editor. Save first (same discipline as
+			// the block-editor escape hatch) so nothing in this post is lost
+			// on the way out.
+			const patBtn = e.target.closest( '[data-patternedit]' );
+			if ( patBtn ) {
+				e.preventDefault();
+				const ref = patBtn.dataset.patternedit;
+				( async () => {
+					try {
+						if ( ed.dirty || ! ed.id ) await saveEditor( { _explicit: true } );
+					} catch ( err ) {}
+					go( 'editor/blocks/' + ref );
+				} )();
+				return;
+			}
 			// Preview images are pointer-events:auto so they can be pressed
 			// (mousedown opens the tooling). Swallow the click so a preview
 			// image wrapped in a link can never navigate the editor away.
@@ -23342,6 +23374,7 @@
 			<div class="minn-insp-actions">
 				<button class="minn-btn-primary" data-img-apply type="button">Apply</button>
 				<button class="minn-btn-soft" data-img-replace type="button">${ icon( 'img' ) } Replace</button>
+				<button class="minn-btn-soft" data-img-dup type="button" title="Duplicate image">${ icon( 'copy' ) }</button>
 				<button class="minn-btn-soft danger" data-img-remove type="button" title="Remove image">${ icon( 'trash' ) }</button>
 			</div>`;
 		document.body.appendChild( imgPop );
@@ -23460,6 +23493,28 @@
 				scheduleAutosave();
 				toast( 'Image replaced' );
 			} );
+		} );
+
+		// Duplicate an editable image (inside a container or at top level).
+		// The copy is the figure's own markup cloned verbatim and inserted
+		// right after it, so caption, classes and the attachment id all
+		// travel — serialization re-reads the DOM, so nothing else to do
+		// beyond stamping the slot dirty.
+		imgPop.querySelector( '[data-img-dup]' ).addEventListener( 'click', () => {
+			const target = img.closest( 'figure' ) || img;
+			const editorBody = $( '#minn-editor-body' );
+			if ( ! editorBody || ! editorBody.contains( target ) ) return hideImgPop();
+			const copy = target.cloneNode( true );
+			// Chrome chrome (chips/run spans) never lives inside the figure,
+			// but a stray upload marker would re-trigger the swap watcher.
+			copy.removeAttribute( 'data-minn-upload' );
+			target.insertAdjacentElement( 'afterend', copy );
+			stampSlotDirtyFor( copy );
+			queueTableChips();
+			updateEditorStats();
+			scheduleAutosave();
+			toast( 'Image duplicated' );
+			hideImgPop();
 		} );
 
 		imgPop.querySelector( '[data-img-remove]' ).addEventListener( 'click', () => {
