@@ -2061,10 +2061,12 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
    file and often disables pointer events on slide images (Jetpack's swiper
    does exactly that) — a plain declaration loses that cascade on real
    third-party blocks while passing on plain fixtures. */
-.minn-block-island[data-imgtool] > .minn-island-preview { pointer-events: auto; cursor: pointer; }
+.minn-block-island[data-imgtool] > .minn-island-preview,
+.minn-block-island[data-cted] > .minn-island-preview { pointer-events: auto; cursor: pointer; }
 .minn-block-island[data-imgtool] > .minn-island-preview img { pointer-events: auto !important; cursor: pointer; }
 /* Text that is editable in place keeps its own cursor and its own click. */
-.minn-block-island[data-imgtool] > .minn-island-preview .minn-island-run { cursor: text; }
+.minn-block-island[data-imgtool] > .minn-island-preview .minn-island-run,
+.minn-block-island[data-cted] > .minn-island-preview .minn-island-run { cursor: text; }
 /* Hover affordance: name the action right on the images. pointer-events:none
    so the badge never swallows the press it is advertising; the generic
    "edit via ⚙" hint steps aside since this block has a better doorway. */
@@ -2080,23 +2082,30 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
      so it can only be hit while the card is offering it. */
   pointer-events: none; cursor: pointer; border: none; font: inherit; font-weight: 650;
 }
-.minn-block-island[data-imgtool]:hover > .minn-imgtool-badge { pointer-events: auto; }
+.minn-block-island[data-imgtool]:hover > .minn-imgtool-badge,
+.minn-block-island[data-cted]:hover > .minn-imgtool-badge { pointer-events: auto; }
 /* Over editable text the card stops claiming the click: no dim, no badge, so
    what you see is what the press will do. */
 .minn-block-island[data-imgtool].minn-run-hover::after,
-.minn-block-island[data-imgtool].minn-run-hover > .minn-imgtool-badge { opacity: 0; pointer-events: none; }
-.minn-block-island[data-imgtool]:hover > .minn-imgtool-badge { opacity: 1; }
+.minn-block-island[data-cted].minn-run-hover::after,
+.minn-block-island[data-imgtool].minn-run-hover > .minn-imgtool-badge,
+.minn-block-island[data-cted].minn-run-hover > .minn-imgtool-badge { opacity: 0; pointer-events: none; }
+.minn-block-island[data-imgtool]:hover > .minn-imgtool-badge,
+.minn-block-island[data-cted]:hover > .minn-imgtool-badge { opacity: 1; }
 /* Dim the card behind the badge, exactly like the synced-pattern cover: the
    images ARE the button, so hovering should say so with more than a pill.
    pointer-events:none keeps the press on the image underneath, and the chip
    is lifted over the wash (it keeps its own settings job). */
-.minn-block-island[data-imgtool]::after {
+.minn-block-island[data-imgtool]::after,
+.minn-block-island[data-cted]::after {
   content: ""; position: absolute; inset: 0; border-radius: 10px; z-index: 1;
   background: rgba(8, 8, 12, 0.45); opacity: 0; transition: opacity 0.15s;
   pointer-events: none;
 }
-.minn-block-island[data-imgtool]:hover::after { opacity: 1; }
-.minn-block-island[data-imgtool] > .minn-island-chip { z-index: 4; }
+.minn-block-island[data-imgtool]:hover::after,
+.minn-block-island[data-cted]:hover::after { opacity: 1; }
+.minn-block-island[data-imgtool] > .minn-island-chip,
+.minn-block-island[data-cted] > .minn-island-chip { z-index: 4; }
 /* Synced-pattern doorway: its content lives in another post, so the card
    offers that pattern's editor rather than pretending to edit in place. */
 /* The WHOLE card is the doorway: a synced pattern has nothing editable in
@@ -2121,9 +2130,12 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 /* The chip must stay clickable above the cover. */
 .minn-block-island[data-patternref] > .minn-island-chip { z-index: 4; }
 .minn-block-island[data-patternref]:hover > .minn-island-hint { opacity: 0; }
-.minn-block-island[data-imgtool]:hover > .minn-island-hint { opacity: 0; }
-.minn-block-island[data-imgtool].minn-island-covered:hover > .minn-imgtool-badge { opacity: 0; }
-.minn-block-island[data-imgtool].minn-island-covered:hover::after { opacity: 0; }
+.minn-block-island[data-imgtool]:hover > .minn-island-hint,
+.minn-block-island[data-cted]:hover > .minn-island-hint { opacity: 0; }
+.minn-block-island[data-imgtool].minn-island-covered:hover > .minn-imgtool-badge,
+.minn-block-island[data-cted].minn-island-covered:hover > .minn-imgtool-badge { opacity: 0; }
+.minn-block-island[data-imgtool].minn-island-covered:hover::after,
+.minn-block-island[data-cted].minn-island-covered:hover::after { opacity: 0; }
 .minn-imgedit-tile img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .minn-imgedit-x {
   position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
@@ -2159,6 +2171,57 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-imgedit-empty { grid-column: 1 / -1; color: var(--text2); font-size: 14px; padding: 20px 4px; }
 .minn-imgedit-foot { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border); }
 .minn-insp-imghead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* ===== Content editor modal (nested blocks — GitHub #12) =====
+   The nested-content sibling of the images editor: same overlay tier (z 52,
+   under the media picker's 55), one card per child block — text flat and
+   prominent, the schema form tucked behind a per-card Settings disclosure. */
+.minn-cted-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 52;
+  display: flex; align-items: center; justify-content: center; padding: 4vh 20px;
+}
+.minn-cted {
+  width: 640px; max-width: 94vw; max-height: 88vh; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border2); border-radius: 14px;
+  box-shadow: var(--shadow); animation: minnScaleIn 0.18s ease;
+}
+.minn-cted-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.minn-cted-head strong { font-size: 16px; }
+.minn-cted-hint { color: var(--text2); font-size: 13px; flex: 1; min-width: 0; }
+/* position:relative makes card offsetTop scroll-space for the focus math. */
+.minn-cted-body {
+  position: relative; display: flex; flex-direction: column; gap: 12px;
+  padding: 16px 18px; overflow-y: auto; min-height: 120px;
+}
+.minn-cted-card {
+  border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px;
+  display: flex; flex-direction: column; gap: 8px; background: var(--bg);
+}
+.minn-cted-card.flash { outline: 2px solid var(--accent); outline-offset: 2px; }
+.minn-cted-card-head { display: flex; align-items: center; gap: 8px; }
+.minn-cted-card-title {
+  font-size: 11.5px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text2); flex: 1; min-width: 0;
+}
+.minn-cted-text { min-height: 52px; }
+.minn-cted-setbtn {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px; border-radius: 7px; border: 1px solid var(--border);
+  background: transparent; color: var(--text2); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.minn-cted-setbtn:hover { color: var(--text); border-color: var(--border2); }
+.minn-cted-setbtn svg { width: 13px; height: 13px; transition: transform 0.15s; }
+.minn-cted-setbtn[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* The [hidden]-vs-display rule (rules 38/44): an explicit display would
+   defeat the hidden attribute, so gate it on :not([hidden]). */
+.minn-cted-set:not([hidden]) {
+  display: flex; flex-direction: column; gap: 2px;
+  padding-top: 6px; border-top: 1px dashed var(--border);
+}
+.minn-cted-empty { color: var(--text2); font-size: 14px; padding: 22px 8px; text-align: center; }
+.minn-cted-foot { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--border); }
+.minn-cted-addslot { display: inline-flex; align-items: center; gap: 8px; }
+.minn-cted-addslot select { width: auto; }
 
 /* ===== Modal (media preview · order detail · picker) ===== */
 .minn-modal-overlay {
