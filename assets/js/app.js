@@ -15533,6 +15533,16 @@
 	// Special interactive islands (shortcode, details, buttons) host live
 	// fields and commit into ed.islands[idx] on every edit — serialize never
 	// reads the fields themselves, and renderIslandPreviews must not overwrite them.
+	// Top-level child blocks inside an island's markup — a cheap census for
+	// the content-editor doorway (full modeling waits until the modal opens).
+	function islandChildCount( raw ) {
+		const parts = blockParts( raw || '' );
+		if ( ! parts || parts.selfClosing || ! parts.inner ) return 0;
+		const segs = tokenizeBlocks( parts.inner );
+		if ( ! segs ) return 0;
+		return segs.filter( ( s ) => s.type === 'block' ).length;
+	}
+
 	function islandHtml( idx, name, raw, ed ) {
 		const short = String( name || '' ).replace( /^core\//, '' );
 		if ( SLOT_BLOCKS.includes( short ) ) {
@@ -15611,10 +15621,21 @@
 		// save-reach warning lives).
 		const refM = short === 'block' ? ( raw || '' ).match( /"ref"\s*:\s*(\d+)/ ) : null;
 		const patternRef = refM ? refM[ 1 ] : '';
-		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
+		// Nested-content islands (a protected Group of styled paragraphs): the
+		// whole card opens the content editor — text first, settings tucked —
+		// instead of unrolling every child in the ⚙ popover (GitHub #12).
+		// Mutually exclusive with the image and pattern doorways (those win;
+		// their nested text still reaches the modal through the ⚙ popover).
+		// Slot containers never take this path — their children are live DOM.
+		const kidCount = imgTool || patternRef ? 0 : islandChildCount( raw );
+		const ctool = kidCount >= 2;
+		/* translators: %d: number of nested blocks */
+		const ctedBadge = ctool ? sprintf( __( 'Edit content · %d' ), kidCount ) : '';
+		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ ctool ? ` data-cted="${ kidCount }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click duplicates · ⇧⌥-click removes" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			${ hint ? `<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>` : '' }
 			${ imgBadge ? `<button class="minn-imgtool-badge" type="button" data-imgbadge="1" tabindex="-1">${ esc( imgBadge ) }</button>` : '' }
+			${ ctedBadge ? `<button class="minn-imgtool-badge" type="button" data-ctedbadge="1" tabindex="-1">${ esc( ctedBadge ) }</button>` : '' }
 			${ patternRef ? `<button class="minn-pattern-cover" data-patternedit="${ esc( patternRef ) }" type="button" aria-label="${ esc( __( 'Edit this pattern' ) ) }"><span class="minn-pattern-badge">${ esc( __( 'Edit pattern' ) ) } ↗</span></button>` : '' }
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 		</div>`;
@@ -20789,7 +20810,7 @@
 			// The card takes pointer events so it can be pressed anywhere
 			// (mousedown opens the tooling). Swallow the click so a linked
 			// photo or caption can never navigate the editor away.
-			if ( e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' ) ) e.preventDefault();
+			if ( e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' ) ) e.preventDefault();
 		} );
 		// Clicking an image inside a protected preview opens the image tooling
 		// directly (Austin's ask): gallery-shaped blocks → the Images editor
@@ -20804,6 +20825,35 @@
 		// from seating a caret inside the protected card.
 		body.addEventListener( 'mousedown', ( e ) => {
 			if ( e.button !== 0 ) return;
+			// Nested-content cards first: the whole card is the doorway to the
+			// content editor (GitHub #12) — in-place editable text still wins
+			// the press, exactly like the image doorway below.
+			const cbadge = e.target.closest && e.target.closest( '[data-ctedbadge]' );
+			const cprev = cbadge
+				? cbadge.parentElement.querySelector( ':scope > .minn-island-preview' )
+				: ( e.target.closest && e.target.closest( '.minn-block-island[data-cted] > .minn-island-preview' ) );
+			if ( cprev ) {
+				const ceditable = ! cbadge && e.target.closest( '[contenteditable="true"]' );
+				if ( ! cbadge && ( e.target.closest( '.minn-island-run' ) || ( ceditable && cprev.contains( ceditable ) ) ) ) return;
+				const cisland = cprev.closest( '.minn-block-island' );
+				if ( ! cisland || ! ed.islands || ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
+				const cidx = parseInt( cisland.dataset.island, 10 );
+				const craw = ed.islands[ cidx ];
+				if ( craw == null ) return;
+				e.preventDefault();
+				// Best-effort focus: when the rendered wrapper's children align
+				// 1:1 with the child blocks, the pressed one opens highlighted.
+				let focus = null;
+				const wrap = cprev.firstElementChild;
+				const kidCount = parseInt( cisland.dataset.cted, 10 ) || 0;
+				if ( ! cbadge && wrap && wrap !== e.target && wrap.children.length === kidCount ) {
+					const hit = Array.from( wrap.children ).find( ( el2 ) => el2.contains( e.target ) );
+					if ( hit ) focus = Array.prototype.indexOf.call( wrap.children, hit );
+				}
+				closeInspector();
+				openContentEditor( cidx, cisland, craw, { focus } );
+				return;
+			}
 			// The WHOLE card is the doorway: it dims and names the action as
 			// one button, so the gaps between photos (captions, the block's own
 			// padding) have to open the editor too — clicking a photo simply
@@ -20846,7 +20896,7 @@
 			} );
 		} );
 		body.addEventListener( 'click', ( e ) => {
-			const prev = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' );
+			const prev = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' );
 			if ( prev && e.target.closest( 'a' ) ) e.preventDefault(); // a linked photo must not navigate
 		} );
 		const openBe = $( '#minn-open-block-editor', view );
@@ -22618,6 +22668,218 @@
 		document.addEventListener( 'keydown', escKey, true );
 	}
 
+	// ===== Content editor (nested blocks) =====================================
+	// The nested-content sibling of the images editor (GitHub #12): a Group of
+	// styled paragraphs used to unroll in the 320px ⚙ popover as text plus a
+	// dozen schema inputs PER CHILD — fixing a typo meant scrolling the wall.
+	// The modal puts text first, one card per child, with the schema form
+	// tucked behind a per-card Settings disclosure; reorder/remove/add ride
+	// the same model ops as the popover. Writes go through the popover's own
+	// collect/build pipeline, so untouched children stay byte-identical.
+	let ctedEl = null;
+	function closeContentEditor() {
+		if ( ctedEl && ctedEl._minnEsc ) document.removeEventListener( 'keydown', ctedEl._minnEsc, true );
+		if ( ctedEl ) ctedEl.remove();
+		ctedEl = null;
+	}
+
+	async function openContentEditor( idx, islandEl, baseRaw, opts = {} ) {
+		closeContentEditor();
+		const model = inspectorModel( baseRaw );
+		if ( ! model || ! model.children.length ) {
+			toast( __( 'This block’s content can’t be edited here.' ), true );
+			return;
+		}
+		const structural = model.mode === 'structural';
+		const overlay = document.createElement( 'div' );
+		overlay.className = 'minn-cted-overlay';
+		overlay.innerHTML = `
+			<div class="minn-cted" role="dialog" aria-modal="true" aria-label="${ esc( __( 'Edit content' ) ) }">
+				<div class="minn-cted-head">
+					<strong>${ esc( __( 'Edit content' ) ) }</strong>
+					<span class="minn-cted-hint">${ esc( structural
+						? __( 'Text first; each block’s other settings are tucked below it.' )
+						: __( 'Text first; each block’s other settings are tucked below it. This block’s structure is locked.' ) ) }</span>
+					<button type="button" class="minn-x-btn" id="minn-cted-close">×</button>
+				</div>
+				<div class="minn-cted-body" id="minn-cted-body">
+					<div class="minn-loading" style="padding:24px;">${ esc( __( 'Loading block schema…' ) ) }</div>
+				</div>
+				<div class="minn-cted-foot">
+					<span class="minn-cted-addslot" id="minn-cted-addslot"></span>
+					<span style="flex:1"></span>
+					<button type="button" class="minn-btn-soft" id="minn-cted-cancel">${ esc( __( 'Cancel' ) ) }</button>
+					<button type="button" class="minn-btn-primary" id="minn-cted-apply" disabled>${ esc( __( 'Apply' ) ) }</button>
+				</div>
+			</div>`;
+		document.body.appendChild( overlay );
+		ctedEl = overlay;
+		const escKey2 = ( e ) => {
+			if ( e.key === 'Escape' && ! state.modal ) { e.stopPropagation(); closeContentEditor(); }
+		};
+		overlay._minnEsc = escKey2;
+		document.addEventListener( 'keydown', escKey2, true );
+
+		const names = [ model.parts.name, ...model.children.map( ( c ) => c.name ) ];
+		const types = {};
+		await Promise.all( [ ...new Set( names ) ].map( async ( n ) => { types[ n ] = await blockTypeFor( n ); } ) );
+		if ( ctedEl !== overlay ) return; // closed while loading
+		const insp = { idx, model, types, islandEl };
+		const bodyEl = $( '#minn-cted-body', overlay );
+
+		const cardHtml = ( c, i ) => {
+			const t = types[ c.name ];
+			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '';
+			// Seed from __text when a structure op re-rendered mid-edit
+			// (collect stored the live value; the pristine tail would
+			// silently revert it).
+			const ct = childTextOf( c );
+			const textRow = ct ? `<textarea class="minn-input minn-insp-textarea minn-cted-text" data-insptext="${ i }" spellcheck="true">${ esc( c.__text != null ? c.__text : ct.inner ) }</textarea>` : '';
+			const runRowsC = ! textRow && c.runs && c.runs.length ? runFieldRows( 'c' + i, c.runs ) : '';
+			const nf = fields ? ( fields.match( /data-insp="/g ) || [] ).length : 0;
+			/* translators: %d: number of settings fields */
+			const setLabel = sprintf( __( 'Settings (%d)' ), nf );
+			const setBlock = fields ? `
+				<button type="button" class="minn-cted-setbtn" data-ctset="${ i }" aria-expanded="false">${ icon( 'chevron-down' ) }${ esc( setLabel ) }</button>
+				<div class="minn-cted-set" data-ctset-panel="${ i }" hidden>${ fields }</div>` : '';
+			const title = ( t && t.title ) || c.name.replace( /^core\//, '' );
+			const content = textRow || runRowsC;
+			return `<div class="minn-cted-card" data-ci="${ i }">
+				<div class="minn-cted-card-head">
+					<span class="minn-cted-card-title">${ i + 1 }. ${ esc( title ) }</span>
+					${ structural ? `<span class="minn-insp-ctl">
+						<button type="button" data-cmove="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }>↑</button>
+						<button type="button" data-cmove="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === model.children.length - 1 ? ' disabled' : '' }>↓</button>
+						<button type="button" data-cdel="${ i }" title="${ esc( __( 'Remove' ) ) }">×</button>
+					</span>` : '' }
+				</div>
+				${ content }${ setBlock }
+				${ content || setBlock ? '' : `<div class="minn-insp-note">${ esc( __( 'No editable settings.' ) ) }</div>` }
+			</div>`;
+		};
+
+		const renderCards = () => {
+			bodyEl.innerHTML = model.children.map( cardHtml ).join( '' )
+				|| `<div class="minn-cted-empty">${ esc( __( 'No blocks left. Add one, or Cancel and remove the whole block from its ⚙ popover instead.' ) ) }</div>`;
+			const addSlot = $( '#minn-cted-addslot', overlay );
+			// "+ Add" only for types whose schema we can form-edit (the
+			// popover's own rule).
+			const addable = structural ? ( model.addTypes || [] ).filter( ( n ) => types[ n ] && types[ n ].attributes ) : [];
+			if ( addSlot ) addSlot.innerHTML = addable.length ? `
+				${ addable.length > 1 ? `<select class="minn-input" id="minn-cted-add-type">${ addable.map( ( n ) => `<option value="${ esc( n ) }">${ esc( n.replace( /^core\//, '' ) ) }</option>` ).join( '' ) }</select>` : '' }
+				<button class="minn-btn-soft" type="button" id="minn-cted-add"${ addable.length === 1 ? ` data-add-type="${ esc( addable[ 0 ] ) }"` : '' }>+ ${ esc( __( 'Add' ) ) } ${ esc( addable.length === 1 ? addable[ 0 ].split( '/' ).pop() : __( 'block' ) ) }</button>` : '';
+			const apply = $( '#minn-cted-apply', overlay );
+			if ( apply ) apply.disabled = ! model.children.length;
+		};
+		renderCards();
+
+		// Entered by clicking a child in the preview: show which card that was.
+		// Manual scrollTop, never scrollIntoView (rule-31 page yank).
+		if ( opts.focus != null && opts.focus >= 0 ) {
+			const card = bodyEl.querySelector( `.minn-cted-card[data-ci="${ opts.focus }"]` );
+			if ( card ) {
+				bodyEl.scrollTop = Math.max( 0, card.offsetTop - bodyEl.clientHeight / 2 + card.offsetHeight / 2 );
+				card.classList.add( 'flash' );
+				setTimeout( () => card.classList.remove( 'flash' ), 1600 );
+			}
+		}
+		// Land in a text field — fixing words is what the modal is for.
+		const firstField = ( opts.focus != null && opts.focus >= 0
+			? bodyEl.querySelector( `.minn-cted-card[data-ci="${ opts.focus }"] [data-insptext], .minn-cted-card[data-ci="${ opts.focus }"] [data-insprun]` )
+			: null ) || bodyEl.querySelector( '[data-insptext], [data-insprun]' );
+		if ( firstField ) setTimeout( () => firstField.focus( { preventScroll: true } ), 0 );
+
+		// Filter box inside a nested "More settings" panel (huge schemas).
+		overlay.addEventListener( 'input', ( e ) => {
+			const f = e.target.closest( '[data-inspmore-filter]' );
+			if ( ! f ) return;
+			const q = f.value.trim().toLowerCase();
+			$$( '.minn-insp-row', f.closest( '.minn-insp-more' ) ).forEach( ( row ) => {
+				row.style.display = ! q || row.dataset.fkey.includes( q ) ? '' : 'none';
+			} );
+		} );
+
+		overlay.addEventListener( 'click', ( e ) => {
+			if ( e.target === overlay || e.target.closest( '#minn-cted-close' ) || e.target.closest( '#minn-cted-cancel' ) ) { closeContentEditor(); return; }
+			const set = e.target.closest( '[data-ctset]' );
+			if ( set ) {
+				const panel = bodyEl.querySelector( `[data-ctset-panel="${ set.dataset.ctset }"]` );
+				if ( panel ) {
+					panel.hidden = ! panel.hidden;
+					set.setAttribute( 'aria-expanded', panel.hidden ? 'false' : 'true' );
+				}
+				return;
+			}
+			const moreBtn = e.target.closest( '[data-inspmore]' );
+			if ( moreBtn ) {
+				const panel = bodyEl.querySelector( `[data-inspmore-panel="${ moreBtn.dataset.inspmore }"]` );
+				if ( panel ) {
+					panel.hidden = ! panel.hidden;
+					/* translators: %d: number of collapsed settings fields */
+					moreBtn.textContent = panel.hidden ? sprintf( __( 'More settings (%d)' ), panel.querySelectorAll( '.minn-insp-row' ).length ) : __( 'Fewer settings' );
+				}
+				return;
+			}
+			if ( e.target.closest( '#minn-cted-apply' ) ) {
+				collectInspectorForms( bodyEl, insp );
+				const newRaw = buildInspectorRaw( insp );
+				const isSlotIsland = islandEl && islandEl.classList && islandEl.classList.contains( 'minn-slot-island' );
+				closeContentEditor();
+				if ( newRaw != null && newRaw !== baseRaw ) {
+					if ( isSlotIsland ) {
+						const ok = rebuildIslandFromRaw( islandEl, idx, newRaw );
+						toast( ok ? __( 'Block updated' ) : __( 'This block could not be updated.' ), ! ok );
+					} else {
+						replaceIsland( idx, islandEl, newRaw );
+					}
+				}
+				return;
+			}
+			const move = e.target.closest( '[data-cmove]' );
+			const del = e.target.closest( '[data-cdel]' );
+			const add = e.target.closest( '#minn-cted-add' );
+			if ( ! move && ! del && ! add ) return;
+			collectInspectorForms( bodyEl, insp ); // typed values survive the re-render
+			if ( move ) {
+				const [ i, dir ] = move.dataset.cmove.split( ':' ).map( Number );
+				const j = i + dir;
+				const kids = model.children;
+				if ( j >= 0 && j < kids.length ) [ kids[ i ], kids[ j ] ] = [ kids[ j ], kids[ i ] ];
+			} else if ( del ) {
+				model.children.splice( parseInt( del.dataset.cdel, 10 ), 1 );
+			} else if ( add ) {
+				const typeSel = $( '#minn-cted-add-type', overlay );
+				const name = add.dataset.addType || ( typeSel && typeSel.value );
+				const proto = name && model.addProto && model.addProto[ name ];
+				if ( proto && ! proto.selfClosing ) {
+					// Static child: clone the sibling prototype verbatim (the
+					// popover's hybrid-block rule — an empty self-closing
+					// comment would render nothing).
+					const clone = { name, attrs: JSON.parse( JSON.stringify( proto.attrs ) ), selfClosing: false, tail: proto.tail };
+					if ( ! childTextOf( clone ) ) clone.runs = textRunsOf( clone.tail );
+					model.children.push( clone );
+				} else if ( name ) {
+					model.children.push( { name, attrs: {}, selfClosing: true, tail: '' } );
+				}
+			}
+			renderCards();
+			if ( add ) bodyEl.scrollTop = bodyEl.scrollHeight;
+		} );
+	}
+
+	// Post-insert tooling: content-shaped islands (data-cted) open the roomy
+	// content editor — replacing a design's placeholder copy is exactly its
+	// job — and everything else keeps the ⚙ popover.
+	function openIslandTooling( islandEl ) {
+		const ed = state.editor;
+		const idx = parseInt( islandEl.dataset.island, 10 );
+		if ( ed && ed.islands && islandEl.dataset.cted && ed.islands[ idx ] != null ) {
+			openContentEditor( idx, islandEl, ed.islands[ idx ] );
+			return;
+		}
+		openInspector( islandEl );
+	}
+
 	// Form rows for one block's editable attributes. `prefix` namespaces the
 	// inputs ("own" or a child index). A minn_admin_block_forms descriptor for
 	// the block refines labels, controls, options, ordering and hiding.
@@ -22881,11 +23143,14 @@
 	// default are omitted ONLY if the attribute wasn't explicitly in the block
 	// already — an untouched "color":"blue" survives an Apply byte-for-byte
 	// even when blue is the default (nothing silently drops).
-	function collectInspectorForms() {
-		const insp = inspectorState;
-		if ( ! insp || ! inspectorEl ) return;
+	// Defaults to the popover's globals; the content-editor modal passes its
+	// own root + state so both surfaces share one fold pipeline.
+	function collectInspectorForms( rootEl, inspIn ) {
+		const root = rootEl || inspectorEl;
+		const insp = inspIn || inspectorState;
+		if ( ! insp || ! root ) return;
 		const fold = ( attrs, defs, target ) => {
-			$$( '[data-insp]', inspectorEl ).forEach( ( input ) => {
+			$$( '[data-insp]', root ).forEach( ( input ) => {
 				const [ t, key ] = input.dataset.insp.split( ':' );
 				if ( t !== target ) return;
 				// Engine read; fold's contract is undefined = cleared (remove
@@ -22914,15 +23179,15 @@
 		insp.model.children.forEach( ( c, i ) => {
 			const t = insp.types[ c.name ];
 			fold( c.attrs, t && t.attributes, String( i ) );
-			const ta = inspectorEl.querySelector( `[data-insptext="${ i }"]` );
+			const ta = root.querySelector( `[data-insptext="${ i }"]` );
 			if ( ta ) c.__text = ta.value;
 		} );
 		( insp.model.wt || [] ).forEach( ( w, i ) => {
-			const input = inspectorEl.querySelector( `[data-insp="wt:${ i }"]` );
+			const input = root.querySelector( `[data-insp="wt:${ i }"]` );
 			if ( input ) w.value = input.value;
 		} );
 		// Generic text-run fields (head/inner/tail groups + per-child cN groups).
-		$$( '[data-insprun]', inspectorEl ).forEach( ( input ) => {
+		$$( '[data-insprun]', root ).forEach( ( input ) => {
 			const [ group, j ] = input.dataset.insprun.split( ':' );
 			const runs = group === 'head' ? insp.model.headRuns
 				: group === 'inner' ? insp.model.innerRuns
@@ -22931,6 +23196,14 @@
 			if ( runs && runs[ Number( j ) ] ) runs[ Number( j ) ].value = input.value;
 		} );
 	}
+
+	// Generic text-run fields (saved-HTML text nodes, offset-addressed) —
+	// shared by the inspector popover and the content-editor modal so the
+	// data-insprun contract can never drift between the two surfaces.
+	const runFieldRows = ( group, runs ) => ( runs || [] ).map( ( r, j ) => r.text.length > 40
+		? `<textarea class="minn-input minn-insp-textarea" data-insprun="${ group }:${ j }">${ esc( r.value ) }</textarea>`
+		: `<input class="minn-input" data-insprun="${ group }:${ j }" value="${ esc( r.value ) }">`
+	).join( '' );
 
 	function renderInspectorBody() {
 		const insp = inspectorState;
@@ -22941,11 +23214,7 @@
 		// desync from it (a url field that "doesn't work"). Those blocks get
 		// ONLY the rebuild actions below, never the generic form.
 		const mediaRebuild = [ 'embed', 'gallery' ].includes( model.parts.name.replace( /^core\//, '' ) );
-		// Generic text-run fields (saved-HTML text nodes, offset-addressed).
-		const runRows = ( group, runs ) => ( runs || [] ).map( ( r, j ) => r.text.length > 40
-			? `<textarea class="minn-input minn-insp-textarea" data-insprun="${ group }:${ j }">${ esc( r.value ) }</textarea>`
-			: `<input class="minn-input" data-insprun="${ group }:${ j }" value="${ esc( r.value ) }">`
-		).join( '' );
+		const runRows = runFieldRows;
 		const ownRunRows = mediaRebuild ? ''
 			: runRows( 'head', model.headRuns ) + runRows( 'inner', model.innerRuns ) + runRows( 'tail', model.tailRuns );
 		// Images anywhere in the island's markup — replaced via the media
@@ -22971,14 +23240,26 @@
 			<input class="minn-input" data-insp="wt:${ i }" value="${ esc( w.value ) }">` ).join( '' )
 			+ ( ownRunRows ? `<div class="minn-field-label">Text</div>${ ownRunRows }` : '' );
 		const structural = model.mode === 'structural' && ! mediaRebuild;
-		const childSections = mediaRebuild ? '' : model.children.map( ( c, i ) => {
+		// Multi-child islands hand their children to the content-editor modal
+		// (GitHub #12): unrolled in this popover they read as text plus a dozen
+		// schema inputs PER CHILD, and a typo fix meant scrolling the wall. The
+		// popover keeps the block's own settings; the summary row is the
+		// doorway. Structural add/reorder live in the modal too.
+		const manyKids = ! mediaRebuild && model.children.length >= 2;
+		/* translators: %d: number of nested blocks */
+		const kidsLabel = manyKids ? sprintf( _n( 'Content · %d block', 'Content · %d blocks', model.children.length ), model.children.length ) : '';
+		const childSections = mediaRebuild ? '' : manyKids
+			? `<div class="minn-field-label minn-insp-imghead">${ esc( kidsLabel ) }<button class="minn-btn-soft" type="button" id="minn-insp-cted">${ esc( __( 'Edit content…' ) ) }</button></div>`
+			: model.children.map( ( c, i ) => {
 			const t = types[ c.name ];
 			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '';
 			// The child's text (from its saved HTML) leads the section — it's
-			// what a writer came to change; schema attrs follow.
+			// what a writer came to change; schema attrs follow. Seed from
+			// __text when a structure op re-rendered mid-edit (collect stored
+			// the live value; the pristine tail would silently revert it).
 			const ct = childTextOf( c );
 			const textRow = ct ? `<div class="minn-field-label">text</div>
-				<textarea class="minn-input minn-insp-textarea" data-insptext="${ i }">${ esc( ct.inner ) }</textarea>` : '';
+				<textarea class="minn-input minn-insp-textarea" data-insptext="${ i }">${ esc( c.__text != null ? c.__text : ct.inner ) }</textarea>` : '';
 			// Deep text runs for schema-less children (the Stackable case) —
 			// mutually exclusive with the single-element text editor above.
 			const runRowsC = ! textRow && c.runs && c.runs.length
@@ -22996,8 +23277,9 @@
 				${ textRow + runRowsC + fields || '<div class="minn-insp-note">No editable settings.</div>' }
 			</div>`;
 		} ).join( '' );
-		// "+ Add" only for types whose schema we can form-edit.
-		const addable = structural ? ( model.addTypes || [] ).filter( ( n ) => types[ n ] && types[ n ].attributes ) : [];
+		// "+ Add" only for types whose schema we can form-edit. Multi-child
+		// islands add through the content-editor modal instead.
+		const addable = structural && ! manyKids ? ( model.addTypes || [] ).filter( ( n ) => types[ n ] && types[ n ].attributes ) : [];
 		const addRow = addable.length ? `<div class="minn-insp-add-row">
 			${ addable.length > 1 ? `<select class="minn-input" id="minn-insp-add-type">${ addable.map( ( n ) => `<option value="${ esc( n ) }">${ esc( n.replace( /^core\//, '' ) ) }</option>` ).join( '' ) }</select>` : '' }
 			<button class="minn-btn-soft" type="button" id="minn-insp-add"${ addable.length === 1 ? ` data-add-type="${ esc( addable[ 0 ] ) }"` : '' }>+ Add ${ addable.length === 1 ? esc( addable[ 0 ].split( '/' ).pop() ) : 'block' }</button>
@@ -23138,6 +23420,39 @@
 		scheduleAutosave();
 	}
 
+	// Rebuild a SLOT island's DOM from new raw markup. Slot containers keep
+	// their children as live DOM plus per-child ed.islands entries, so a
+	// stored-raw patch alone desyncs: the next flush would re-emit the old
+	// child bytes over the edit. Re-running islandHtml re-registers nested
+	// islands against the new bytes; the old children's entries are nulled
+	// first (serialize is DOM-driven — orphaned indexes must not linger as
+	// live raw). Returns true when the swap happened.
+	function rebuildIslandFromRaw( islandEl, idx, newRaw ) {
+		const ed = state.editor;
+		if ( ! ed || ! ed.islands || ed.islands[ idx ] == null || ! islandEl ) return false;
+		$$( '.minn-block-island', islandEl ).forEach( ( n ) => {
+			const i = parseInt( n.dataset.island, 10 );
+			if ( Number.isFinite( i ) && i !== idx ) ed.islands[ i ] = null;
+		} );
+		ed.islands[ idx ] = newRaw;
+		const tmp = document.createElement( 'div' );
+		tmp.innerHTML = islandHtml( idx, String( islandEl.dataset.block || '' ), newRaw, ed );
+		const fresh = tmp.firstElementChild;
+		if ( ! fresh ) return false;
+		islandEl.replaceWith( fresh );
+		// An ancestor container's stored raw still carries the old child bytes
+		// — stamp it dirty so serialize re-splices from the (now current) DOM.
+		stampSlotDirtyFor( fresh.parentElement );
+		const body = fresh.closest( '.minn-editor-body' );
+		if ( body ) {
+			renderIslandPreviews( body, ed );
+			armIslandTextRuns( body, ed );
+		}
+		updateEditorStats();
+		scheduleAutosave();
+		return true;
+	}
+
 	async function openInspector( islandEl ) {
 		const ed = state.editor;
 		if ( ! ed ) return;
@@ -23247,6 +23562,17 @@
 				openMediaPicker( ( picks ) => {
 					if ( picks && picks.length ) replaceIsland( idx, el, galleryTemplate( picks ) );
 				}, { multi: true } );
+				return;
+			}
+			const ce = e.target.closest( '#minn-insp-cted' );
+			if ( ce ) {
+				// Fold pending own-attr edits first — the modal re-models the
+				// raw, and typed values must not be lost with the popover.
+				collectInspectorForms();
+				const base = buildInspectorRaw( insp );
+				const { idx, islandEl: el } = insp;
+				closeInspector();
+				openContentEditor( idx, el, base );
 				return;
 			}
 			const ie = e.target.closest( '#minn-insp-imgedit' );
@@ -23396,6 +23722,18 @@
 		if ( ! insp || ! ed || ! inspectorEl ) return;
 		collectInspectorForms();
 		const newRaw = buildInspectorRaw( insp );
+
+		// Slot containers keep their children as live DOM plus per-child
+		// ed.islands entries — patching only the stored raw lets the next slot
+		// flush re-emit the OLD child bytes over this edit (the DOM wins for
+		// dirty slots). Rebuild the container's DOM from the new raw instead.
+		if ( insp.islandEl && insp.islandEl.classList.contains( 'minn-slot-island' ) ) {
+			const { idx, islandEl: el } = insp;
+			closeInspector();
+			const ok = rebuildIslandFromRaw( el, idx, newRaw );
+			toast( ok ? __( 'Block updated' ) : __( 'This block could not be updated.' ), ! ok );
+			return;
+		}
 
 		btn.disabled = true;
 		btn.textContent = 'Applying…';
@@ -26114,7 +26452,7 @@
 					if ( r && r.template ) {
 						if ( ! ensureBlocksMode() ) return;
 						const islandEl = insertIsland( p, r.block || 'core/group', r.template );
-						if ( islandEl ) openInspector( islandEl );
+						if ( islandEl ) openIslandTooling( islandEl );
 					} else if ( r && r.html ) {
 						if ( /wp-block-(pullquote|table)/.test( r.html ) ) ensureBlocksMode();
 						p.insertAdjacentHTML( 'beforebegin', r.html );
@@ -26152,9 +26490,10 @@
 					if ( ! r || ! r.template ) throw new Error( 'Design unavailable' );
 					if ( ! p.isConnected || ! state.editor ) return;
 					const islandEl = insertIsland( p, r.block || 'core/group', r.template );
-					// The inspector's text-run fields are how the design's
-					// placeholder copy gets replaced — open it right away.
-					if ( islandEl ) openInspector( islandEl );
+					// The text fields are how the design's placeholder copy
+					// gets replaced — open the right tooling right away
+					// (content editor for multi-child designs).
+					if ( islandEl ) openIslandTooling( islandEl );
 				} )
 				.catch( ( e ) => toast( 'Design insert failed: ' + e.message, true ) );
 			return;
@@ -26252,7 +26591,7 @@
 					islandEl.dataset.btnStamped = '1';
 					focusButtonsIsland( islandEl );
 				}
-				else openInspector( islandEl );
+				else openIslandTooling( islandEl );
 			}
 			scheduleAutosave();
 			return;
@@ -32408,6 +32747,7 @@
 		closeInspector();
 		closeBlockPicker();
 		closeImgEdit();
+		closeContentEditor();
 		hideCodePop();
 		hideTableMenu();
 		hideDatePicker();
