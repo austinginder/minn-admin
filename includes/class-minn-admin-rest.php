@@ -1992,6 +1992,18 @@ class Minn_Admin_REST {
 			'urls'   => array(),
 			'inline' => '',
 		);
+		// Core's layout support (gallery columns, group flex/grid, blockGap)
+		// generates per-render `wp-container-…` classes whose CSS lands in the
+		// style engine's store; a real pageload emits it via
+		// wp_enqueue_stored_styles, a REST render never does — so a columns:4
+		// gallery previewed at the browser's default wrap (James's corporate
+		// page). The store only holds THIS render's rules, so hand them over.
+		if ( function_exists( 'wp_style_engine_get_stylesheet_from_context' ) ) {
+			$support_css = (string) wp_style_engine_get_stylesheet_from_context( 'block-supports' );
+			if ( '' !== trim( $support_css ) ) {
+				$styles['inline'] = trim( ( $styles['inline'] ?? '' ) . "\n" . $support_css );
+			}
+		}
 		/**
 		 * Preview styles adapters can extend — e.g. per-post generated CSS a
 		 * plugin cached in postmeta (Otter/atomic-wind) or CSS carried inside
