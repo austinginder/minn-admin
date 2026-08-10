@@ -15614,7 +15614,7 @@
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click duplicates · ⇧⌥-click removes" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			${ hint ? `<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>` : '' }
-			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
+			${ imgBadge ? `<button class="minn-imgtool-badge" type="button" data-imgbadge="1" tabindex="-1">${ esc( imgBadge ) }</button>` : '' }
 			${ patternRef ? `<button class="minn-pattern-cover" data-patternedit="${ esc( patternRef ) }" type="button" aria-label="${ esc( __( 'Edit this pattern' ) ) }"><span class="minn-pattern-badge">${ esc( __( 'Edit pattern' ) ) } ↗</span></button>` : '' }
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 		</div>`;
@@ -20686,19 +20686,23 @@
 			// padding) have to open the editor too — clicking a photo simply
 			// opens it with that photo's tile highlighted (Austin's repro:
 			// only the images themselves were live).
-			const prev = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' );
+			const badge = e.target.closest && e.target.closest( '.minn-imgtool-badge' );
+			const prev = badge
+				? badge.parentElement.querySelector( ':scope > .minn-island-preview' )
+				: ( e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' ) );
 			if ( ! prev ) return;
-			// Text a writer can edit in place inside the card wins the click.
+			// Text a writer can edit in place inside the card wins the click —
+			// unless the press is on the badge, which says what it does.
 			// The editable ancestor has to be INSIDE the card: the editor body
 			// itself is contenteditable, so an unscoped check bails always.
-			const editable = e.target.closest( '[contenteditable="true"]' );
-			if ( e.target.closest( '.minn-island-run' ) || ( editable && prev.contains( editable ) ) ) return;
+			const editable = ! badge && e.target.closest( '[contenteditable="true"]' );
+			if ( ! badge && ( e.target.closest( '.minn-island-run' ) || ( editable && prev.contains( editable ) ) ) ) return;
 			const island = prev.closest( '.minn-block-island' );
 			if ( ! island || ! ed.islands || ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
 			const idx = parseInt( island.dataset.island, 10 );
 			const raw = ed.islands[ idx ];
 			if ( raw == null ) return;
-			const img = e.target.closest( 'img' );
+			const img = badge ? null : e.target.closest( 'img' );
 			const src = img ? ( img.getAttribute( 'src' ) || '' ) : '';
 			const info = imageUnitsOf( raw );
 			if ( info ) {
@@ -21003,6 +21007,15 @@
 			e.preventDefault();
 			openLinkPop( a );
 		} );
+		// Hovering editable text inside an image card: the card stops advertising
+		// itself as one button, because right there it is not one.
+		body.addEventListener( 'pointerover', ( e ) => {
+			const isl = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool]' );
+			$$( '.minn-run-hover', body ).forEach( ( el ) => { if ( el !== isl ) el.classList.remove( 'minn-run-hover' ); } );
+			if ( ! isl ) return;
+			isl.classList.toggle( 'minn-run-hover', !! e.target.closest( '.minn-island-run' ) );
+		} );
+
 		// Right-click inside a column → column ops on THAT column, the shape the
 		// table block already uses. Bound before the table handler so a table
 		// inside a column still gets its own menu (its check runs first when

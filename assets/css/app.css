@@ -2072,9 +2072,19 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 650;
   background: rgba(17, 17, 21, 0.82); color: #fff; backdrop-filter: blur(3px);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3); pointer-events: none; user-select: none;
-  opacity: 0; transition: opacity 0.15s; white-space: nowrap; z-index: 2;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3); user-select: none;
+  opacity: 0; transition: opacity 0.15s; white-space: nowrap; z-index: 3;
+  /* The badge is a real target. It sits dead centre, which is where the hand
+     goes, and on a card whose slides carry text that centre may be editable
+     text that would otherwise take the press (Austin's repro). Hidden at rest,
+     so it can only be hit while the card is offering it. */
+  pointer-events: none; cursor: pointer; border: none; font: inherit; font-weight: 650;
 }
+.minn-block-island[data-imgtool]:hover > .minn-imgtool-badge { pointer-events: auto; }
+/* Over editable text the card stops claiming the click: no dim, no badge, so
+   what you see is what the press will do. */
+.minn-block-island[data-imgtool].minn-run-hover::after,
+.minn-block-island[data-imgtool].minn-run-hover > .minn-imgtool-badge { opacity: 0; pointer-events: none; }
 .minn-block-island[data-imgtool]:hover > .minn-imgtool-badge { opacity: 1; }
 /* Dim the card behind the badge, exactly like the synced-pattern cover: the
    images ARE the button, so hovering should say so with more than a pill.

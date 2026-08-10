@@ -399,8 +399,8 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + ASLID
 		} );
 		// The count rides the overlay: on a slider the preview shows one slide,
 		// so this is where "there are more of these" gets said.
-		t.check( 'image overlay names the action, counts the images, stays click-through',
-			badge && /^Edit images · \d+$/.test( badge.text ) && badge.pe === 'none' && badge.dimPe === 'none',
+		t.check( 'image overlay names the action and counts the images',
+			badge && /^Edit images · \d+$/.test( badge.text ) && badge.dimPe === 'none',
 			JSON.stringify( badge ) );
 		if ( spot ) await page.mouse.click( spot.x, spot.y );
 		const opened = await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } ).then( () => true ).catch( () => false );
@@ -436,6 +436,29 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + ASLID
 		} ) );
 		t.check( 'shift-alt-click removes the block with an Undo offer',
 			afterRemove.count === dupState.before && afterRemove.undoToast, JSON.stringify( afterRemove ) );
+
+		// --- The badge itself is pressable ---
+		// On a card whose slides carry text, the centre (where the hand goes,
+		// and where the badge sits) can be editable text that takes the press.
+		// The badge has to work there (Austin's repro).
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 400 );
+		const badgeHit = await page.evaluate( () => {
+			const isl = document.querySelector( '.minn-block-island[data-imgtool="edit"]' );
+			isl.scrollIntoView( { block: 'center' } );
+			const b = isl.querySelector( '.minn-imgtool-badge' );
+			const r = b.getBoundingClientRect();
+			return { x: r.left + r.width / 2, y: r.top + r.height / 2, tag: b.tagName };
+		} );
+		t.check( 'the overlay is a real button', badgeHit.tag === 'BUTTON', badgeHit.tag );
+		// Hover first: the badge only takes presses while the card offers it.
+		await page.mouse.move( badgeHit.x, badgeHit.y );
+		await page.waitForTimeout( 250 );
+		await page.mouse.click( badgeHit.x, badgeHit.y );
+		const badgeOpened = await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } ).then( () => true ).catch( () => false );
+		t.check( 'pressing the overlay opens the editor', badgeOpened );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 400 );
 
 		// --- The whole card is the doorway, not just the photos ---
 		// It dims and names the action as one button, so a press in the gaps
