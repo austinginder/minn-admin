@@ -1988,14 +1988,27 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-block-island[data-imgtool]:hover > .minn-imgtool-badge { opacity: 1; }
 /* Synced-pattern doorway: its content lives in another post, so the card
    offers that pattern's editor rather than pretending to edit in place. */
-.minn-pattern-badge {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  padding: 9px 18px; border-radius: 999px; font-size: 13px; font-weight: 650;
-  background: rgba(17, 17, 21, 0.86); color: #fff; border: none; cursor: pointer;
-  backdrop-filter: blur(3px); box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-  opacity: 0; transition: opacity 0.15s; white-space: nowrap; z-index: 3;
+/* The WHOLE card is the doorway: a synced pattern has nothing editable in
+   place, so any click on it should open the pattern. The cover sits under
+   the ⚙ chip (which keeps its own settings job) and dims on hover so the
+   card reads as one big button. */
+.minn-pattern-cover {
+  position: absolute; inset: 0; z-index: 2; display: flex;
+  align-items: center; justify-content: center; padding: 0;
+  background: transparent; border: none; cursor: pointer; border-radius: 10px;
+  transition: background 0.15s;
 }
-.minn-block-island[data-patternref]:hover > .minn-pattern-badge { opacity: 1; }
+.minn-pattern-cover:hover, .minn-pattern-cover:focus-visible { background: rgba(8, 8, 12, 0.45); }
+.minn-pattern-badge {
+  padding: 9px 18px; border-radius: 999px; font-size: 13px; font-weight: 650;
+  background: rgba(17, 17, 21, 0.88); color: #fff;
+  backdrop-filter: blur(3px); box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  opacity: 0; transition: opacity 0.15s; white-space: nowrap; pointer-events: none;
+}
+.minn-pattern-cover:hover .minn-pattern-badge,
+.minn-pattern-cover:focus-visible .minn-pattern-badge { opacity: 1; }
+/* The chip must stay clickable above the cover. */
+.minn-block-island[data-patternref] > .minn-island-chip { z-index: 4; }
 .minn-block-island[data-patternref]:hover > .minn-island-hint { opacity: 0; }
 .minn-block-island[data-imgtool]:hover > .minn-island-hint { opacity: 0; }
 .minn-block-island[data-imgtool].minn-island-covered:hover > .minn-imgtool-badge { opacity: 0; }

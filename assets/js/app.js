@@ -15509,7 +15509,7 @@
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click duplicates · ⇧⌥-click removes" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
 			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
-			${ patternRef ? `<button class="minn-pattern-badge" data-patternedit="${ esc( patternRef ) }" type="button">${ esc( __( 'Edit pattern' ) ) } ↗</button>` : '' }
+			${ patternRef ? `<button class="minn-pattern-cover" data-patternedit="${ esc( patternRef ) }" type="button" aria-label="${ esc( __( 'Edit this pattern' ) ) }"><span class="minn-pattern-badge">${ esc( __( 'Edit pattern' ) ) } ↗</span></button>` : '' }
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 		</div>`;
 	}
@@ -15586,7 +15586,7 @@
 			const wrap = document.createElement( 'div' );
 			wrap.appendChild( frag );
 			// Drop editor chrome if any leaked in.
-			$$( '.minn-island-chip, .minn-island-hint, .minn-imgtool-badge, .minn-table-chip', wrap ).forEach( ( c ) => c.remove() );
+			$$( '.minn-island-chip, .minn-island-hint, .minn-imgtool-badge, .minn-pattern-cover, .minn-table-chip', wrap ).forEach( ( c ) => c.remove() );
 			return {
 				html: wrap.innerHTML,
 				text: ( wrap.innerText || wrap.textContent || '' ).replace( /\u00a0/g, ' ' ),
@@ -15608,7 +15608,7 @@
 		const preview = el.querySelector( '.minn-island-preview' );
 		if ( preview ) {
 			const clone = preview.cloneNode( true );
-			$$( 'script, style, .minn-island-chip, .minn-imgtool-badge', clone ).forEach( ( n ) => n.remove() );
+			$$( 'script, style, .minn-island-chip, .minn-imgtool-badge, .minn-pattern-cover', clone ).forEach( ( n ) => n.remove() );
 			// Run spans are editor chrome — unwrap so copied HTML stays clean.
 			$$( '.minn-island-run', clone ).forEach( ( s ) => {
 				while ( s.firstChild ) s.parentNode.insertBefore( s.firstChild, s );
@@ -17857,7 +17857,7 @@
 	// started typing this open. Goal is a global localStorage target.
 	function countEditorWords( body ) {
 		const walker = document.createTreeWalker( body, NodeFilter.SHOW_TEXT, {
-			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-hint, .minn-imgtool-badge, .minn-island-empty, .minn-shortcode-label, .minn-shortcode-input' )
+			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-hint, .minn-imgtool-badge, .minn-pattern-cover, .minn-island-empty, .minn-shortcode-label, .minn-shortcode-input' )
 				? NodeFilter.FILTER_REJECT
 				: NodeFilter.FILTER_ACCEPT,
 		} );
