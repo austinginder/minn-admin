@@ -7,7 +7,7 @@
  */
 const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
-const IMG = ( n ) => `<!-- wp:image {"id":${ 950 + n },"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${ BASE }/wp-content/uploads/gal-red.png" alt="" class="wp-image-${ 950 + n }"/><figcaption class="wp-element-caption">Caption ${ n }</figcaption></figure>\n<!-- /wp:image -->`;
+const IMG = ( n ) => `<!-- wp:image {"id":${ 950 + n },"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${ BASE }/wp-content/uploads/2026/07/gal-blue.png" alt="" class="wp-image-${ 950 + n }"/><figcaption class="wp-element-caption">Caption ${ n }</figcaption></figure>\n<!-- /wp:image -->`;
 const CONTENT = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class="wp-block-group">' + IMG( 1 ) + '\n\n<!-- wp:paragraph -->\n<p>After.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->';
 
 ( async () => {
@@ -20,7 +20,7 @@ const CONTENT = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class
 		id = await createPost( page, { title: 'Image duplicate probe', content: CONTENT } );
 		t.check( 'fixture post created', id > 0, String( id ) );
 		await openEditor( page, id );
-		await page.waitForSelector( '.minn-slot img', { timeout: 20000, state: 'attached' } );
+		await page.waitForSelector( '.minn-slot img', { timeout: 20000 } );
 		await page.waitForTimeout( 2000 );
 
 		t.check( 'image inside the container is editable DOM, not a card',
@@ -36,7 +36,16 @@ const CONTENT = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class
 			return true;
 		} );
 		t.check( 'image located', chip );
-		await page.waitForTimeout( 800 );
+		// Chips reveal on hover of their block now — point at the image first.
+		const spot = await page.evaluate( () => {
+			const img = document.querySelector( '.minn-slot img' );
+			const r = img.getBoundingClientRect();
+			return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+		} );
+		await page.mouse.move( spot.x, spot.y );
+		await page.waitForTimeout( 700 );
+		const chipShown = await page.evaluate( () => document.querySelectorAll( '#minn-table-chips .minn-code-chip.shown' ).length );
+		t.check( 'only the hovered image shows a chip', chipShown === 1, String( chipShown ) );
 		const opened = await page.evaluate( () => {
 			const c = [ ...document.querySelectorAll( '#minn-table-chips button, .minn-table-chip' ) ].find( ( b ) => b._kind === 'image' || /image/i.test( b.textContent ) );
 			if ( ! c ) return false;
@@ -66,6 +75,21 @@ const CONTENT = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class
 		} ) );
 		t.check( 'alt-click on the chip duplicates without opening settings',
 			altDup === 'clicked' && afterAlt.figures === 3 && ! afterAlt.popoverOpen, JSON.stringify( afterAlt ) );
+
+		// ⌃⌥-click removes, through the undoable path.
+		const removed = await page.evaluate( () => {
+			const c = [ ...document.querySelectorAll( '#minn-table-chips button' ) ].find( ( b ) => b._kind === 'image' );
+			if ( ! c ) return false;
+			c.dispatchEvent( new MouseEvent( 'click', { altKey: true, ctrlKey: true, bubbles: true } ) );
+			return true;
+		} );
+		await page.waitForTimeout( 900 );
+		const afterRemove = await page.evaluate( () => document.querySelectorAll( '.minn-slot figure.wp-block-image img' ).length );
+		t.check( 'ctrl-alt-click removes an image', removed && afterRemove === 2, String( afterRemove ) );
+		await page.keyboard.press( 'Meta+z' );
+		await page.waitForTimeout( 700 );
+		const afterUndo = await page.evaluate( () => document.querySelectorAll( '.minn-slot figure.wp-block-image img' ).length );
+		t.check( 'undo brings it back', afterUndo === 3, String( afterUndo ) );
 
 		await page.keyboard.press( 'Meta+s' );
 		await page.waitForTimeout( 3500 );

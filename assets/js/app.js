@@ -15512,7 +15512,7 @@
 		const refM = short === 'block' ? ( raw || '' ).match( /"ref"\s*:\s*(\d+)/ ) : null;
 		const patternRef = refM ? refM[ 1 ] : '';
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
-			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click to duplicate" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
+			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click duplicates · ⌃⌥-click removes" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
 			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
 			${ patternRef ? `<button class="minn-pattern-badge" data-patternedit="${ esc( patternRef ) }" type="button">${ esc( __( 'Edit pattern' ) ) } ↗</button>` : '' }
@@ -20406,6 +20406,7 @@
 		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) setEditorWritable( false );
 		// Image loads change layout under the fixed chips — reposition then.
 		body.addEventListener( 'load', queueTableChips, true );
+		bindChipHover( body );
 		// Island chips open the block inspector (works in locked mode too — read-only there is fine
 		// because locked posts never send content, but islands only exist in blocks mode anyway).
 		body.addEventListener( 'click', ( e ) => {
@@ -20414,7 +20415,10 @@
 				e.preventDefault();
 				const island = chip.closest( '.minn-block-island' );
 				if ( ! island ) return;
-				// ⌥-click: duplicate the block rather than open its settings.
+				// Modifier grammar on the handle: ⌥ duplicates, ⌃⌥ removes.
+				// Removal routes through the Undo-toast path, never a bare
+				// delete — a modifier click must always be take-backable.
+				if ( e.altKey && ( e.ctrlKey || e.metaKey ) ) { removeIslandWithUndo( island ); return; }
 				if ( e.altKey ) { duplicateIsland( island ); return; }
 				openInspector( island );
 				return;
@@ -22602,6 +22606,40 @@
 		document.removeEventListener( 'mousedown', tablePopAway, true );
 	}
 
+	/* Chips are revealed one at a time by the pointer. HYSTERESIS IS LOAD-
+	 * BEARING: a chip floats just outside its block, so the pointer crosses
+	 * a gap of neither-block-nor-chip on the way there — hiding immediately
+	 * makes the chip vanish under the cursor (the old hover-chip flicker
+	 * this system replaced). A short delay before hiding covers the gap. */
+	let chipHideTimer = 0;
+	function showChipFor( target ) {
+		if ( chipHideTimer ) { clearTimeout( chipHideTimer ); chipHideTimer = 0; }
+		if ( ! tableChipsBox ) return;
+		$$( '.minn-code-chip', tableChipsBox ).forEach( ( c ) => {
+			c.classList.toggle( 'shown', !! target && c._target === target );
+		} );
+	}
+	function scheduleChipHide() {
+		if ( chipHideTimer ) clearTimeout( chipHideTimer );
+		chipHideTimer = setTimeout( () => {
+			chipHideTimer = 0;
+			if ( tableChipsBox ) $$( '.minn-code-chip', tableChipsBox ).forEach( ( c ) => c.classList.remove( 'shown' ) );
+		}, 260 );
+	}
+	// One delegated listener on the body rather than per-target binding: the
+	// chip list is rebuilt constantly (scroll, edit, resize) and targets are
+	// reassigned in place, so per-node listeners would leak or go stale.
+	function bindChipHover( body ) {
+		body.addEventListener( 'mousemove', ( e ) => {
+			if ( ! tableChipsBox || ! tableChipsBox.children.length ) return;
+			const chips = $$( '.minn-code-chip', tableChipsBox );
+			const hit = chips.find( ( c ) => c._target && c._target.isConnected && c._target.contains( e.target ) );
+			if ( hit ) showChipFor( hit._target );
+			else if ( chips.some( ( c ) => c.classList.contains( 'shown' ) ) ) scheduleChipHide();
+		} );
+		body.addEventListener( 'mouseleave', () => scheduleChipHide() );
+	}
+
 	function clearTableChips() {
 		if ( tableChipsBox ) tableChipsBox.remove();
 		tableChipsBox = null;
@@ -22691,15 +22729,19 @@
 					// WordPress button, and it keeps the card chrome quiet.
 					if ( ev.altKey ) {
 						const node = chip._kind === 'image' ? ( chip._target.closest( 'figure' ) || chip._target ) : chip._target;
-						if ( duplicateEditableNode( node ) ) toast( 'Block duplicated' );
+						if ( ev.ctrlKey || ev.metaKey ) {
+							if ( removeEditableNode( node ) ) toast( 'Block removed — ⌘Z restores it' );
+						} else if ( duplicateEditableNode( node ) ) {
+							toast( 'Block duplicated' );
+						}
 						return;
 					}
 					if ( chip._kind === 'table' ) openTablePop( chip._target );
 					else if ( chip._kind === 'code' ) openCodePop( chip._target );
 					else openImgPop( chip._target );
 				} );
-				chip.addEventListener( 'mouseenter', () => setTableHot( chip._target, true ) );
-				chip.addEventListener( 'mouseleave', () => setTableHot( chip._target, false ) );
+				chip.addEventListener( 'mouseenter', () => { showChipFor( chip._target ); setTableHot( chip._target, true ); } );
+				chip.addEventListener( 'mouseleave', () => { setTableHot( chip._target, false ); scheduleChipHide(); } );
 				tableChipsBox.appendChild( chip );
 			}
 			chip._target = t.el;
@@ -23153,6 +23195,29 @@
 		copy.removeAttribute( 'data-minn-upload' );
 		target.insertAdjacentElement( 'afterend', copy );
 		stampSlotDirtyFor( copy );
+		queueTableChips();
+		updateEditorStats();
+		scheduleAutosave();
+		return true;
+	}
+
+	// Remove an editable block node through the EDITING COMMAND STACK (never
+	// element.remove()), so ⌘Z brings it back — the same discipline as the
+	// image popover's Remove.
+	function removeEditableNode( target ) {
+		const editorBody = $( '#minn-editor-body' );
+		if ( ! target || ! editorBody || ! editorBody.contains( target ) ) return false;
+		editorBody.focus( { preventScroll: true } );
+		const sel = window.getSelection();
+		const r = document.createRange();
+		// Contents-only for figures: a whole-block selection makes Chrome
+		// merge the next paragraph into the husk (the serializer drops
+		// media-less husks anyway).
+		if ( target.tagName === 'FIGURE' ) r.selectNodeContents( target );
+		else r.selectNode( target );
+		sel.removeAllRanges();
+		sel.addRange( r );
+		document.execCommand( 'delete', false, null );
 		queueTableChips();
 		updateEditorStats();
 		scheduleAutosave();
@@ -27473,7 +27538,10 @@
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
 							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
-							<span class="minn-kbd">⌥click</span><span>A block's ⚙ handle: duplicate it · the WordPress button (bottom left): this post in the block editor</span>
+							<span class="minn-kbd">⌥click</span><span>A block's ⚙ handle: duplicate that block in place</span>
+							<span class="minn-kbd">⌃⌥click</span><span>A block's ⚙ handle: remove that block (⌘Z restores it)</span>
+							<span class="minn-kbd">⌥click</span><span>The WordPress button (bottom left) while editing: open this post in the block editor</span>
+							<span class="minn-kbd">click</span><span>An image in a protected block: edit, reorder or replace its images</span>
 							<span class="minn-kbd">← →</span><span>Previous / next item in a media or entry detail</span>
 							<span class="minn-kbd">Esc</span><span>Close menus and dialogs</span>
 						</div>
