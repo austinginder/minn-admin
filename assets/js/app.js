@@ -15512,7 +15512,7 @@
 		const refM = short === 'block' ? ( raw || '' ).match( /"ref"\s*:\s*(\d+)/ ) : null;
 		const patternRef = refM ? refM[ 1 ] : '';
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
-			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click duplicates · ⌃⌥-click removes" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
+			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click duplicates · ⇧⌥-click removes" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
 			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
 			${ patternRef ? `<button class="minn-pattern-badge" data-patternedit="${ esc( patternRef ) }" type="button">${ esc( __( 'Edit pattern' ) ) } ↗</button>` : '' }
@@ -20415,10 +20415,12 @@
 				e.preventDefault();
 				const island = chip.closest( '.minn-block-island' );
 				if ( ! island ) return;
-				// Modifier grammar on the handle: ⌥ duplicates, ⌃⌥ removes.
-				// Removal routes through the Undo-toast path, never a bare
-				// delete — a modifier click must always be take-backable.
-				if ( e.altKey && ( e.ctrlKey || e.metaKey ) ) { removeIslandWithUndo( island ); return; }
+				// Modifier grammar on the handle: ⌥ duplicates, ⇧⌥ removes.
+				// NOT ⌃⌥: on macOS Control+click IS the secondary click, so it
+				// fires contextmenu and the OS menu opens instead (Austin's
+				// repro). Removal routes through the Undo-toast path, never a
+				// bare delete — a modifier click must always be take-backable.
+				if ( e.altKey && e.shiftKey ) { removeIslandWithUndo( island ); return; }
 				if ( e.altKey ) { duplicateIsland( island ); return; }
 				openInspector( island );
 				return;
@@ -22729,7 +22731,7 @@
 					// WordPress button, and it keeps the card chrome quiet.
 					if ( ev.altKey ) {
 						const node = chip._kind === 'image' ? ( chip._target.closest( 'figure' ) || chip._target ) : chip._target;
-						if ( ev.ctrlKey || ev.metaKey ) {
+						if ( ev.shiftKey ) {
 							if ( removeEditableNode( node ) ) toast( 'Block removed — ⌘Z restores it' );
 						} else if ( duplicateEditableNode( node ) ) {
 							toast( 'Block duplicated' );
@@ -27539,7 +27541,7 @@
 							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
 							<span class="minn-kbd">⌥click</span><span>A block's ⚙ handle: duplicate that block in place</span>
-							<span class="minn-kbd">⌃⌥click</span><span>A block's ⚙ handle: remove that block (⌘Z restores it)</span>
+							<span class="minn-kbd">⇧⌥click</span><span>A block's ⚙ handle: remove that block (⌘Z restores it)</span>
 							<span class="minn-kbd">⌥click</span><span>The WordPress button (bottom left) while editing: open this post in the block editor</span>
 							<span class="minn-kbd">click</span><span>An image in a protected block: edit, reorder or replace its images</span>
 							<span class="minn-kbd">← →</span><span>Previous / next item in a media or entry detail</span>
