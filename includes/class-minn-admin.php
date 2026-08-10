@@ -888,6 +888,9 @@ class Minn_Admin {
 			// third-party plugin) — drive the lazy designs fetches in the
 			// editor's slash menu and block picker.
 			'designs'  => self::design_sources(),
+			// Blocks whose images a plugin rebuilds for us (adapters answer
+			// minn_admin_image_blocks) — see image_blocks() below.
+			'imageBlocks' => self::image_blocks_payload(),
 			/**
 			 * Plugin-declared slash-menu commands (boilerplate, async inserts).
 			 * See minn_admin_editor_commands / docs/for-plugin-authors.md.
@@ -980,6 +983,57 @@ class Minn_Admin {
 					? $src['label']
 					: ucfirst( $id ),
 				'route' => $src['route'],
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Blocks whose image list only their own plugin can lay out.
+	 *
+	 * Minn edits images generically wherever the markup lets it: a run of
+	 * repeating units can be reordered, dropped and cloned byte-for-byte, and
+	 * a fixed layout's openings can at least trade their photos. Some blocks
+	 * are neither. Jetpack's tiled gallery packs photos into columns whose
+	 * widths it derived from their aspect ratios, so ADDING or REMOVING one
+	 * means re-running that layout — knowledge that belongs to the plugin.
+	 *
+	 * An adapter answers this filter with a `rebuild` callable and Minn hands
+	 * it the images the writer chose, in order, getting whole block markup
+	 * back. The callable runs in PHP where the plugin's own helpers live; the
+	 * editor stays generic and never learns a plugin's layout rules.
+	 *
+	 * @return array<string,array> Keyed by block name. See
+	 *                             docs/for-plugin-authors.md.
+	 */
+	public static function image_blocks() {
+		$blocks = apply_filters( 'minn_admin_image_blocks', array() );
+		$out    = array();
+		foreach ( (array) $blocks as $name => $desc ) {
+			if ( ! is_string( $name ) || ! preg_match( '#^[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$#', $name ) ) {
+				continue;
+			}
+			if ( ! is_array( $desc ) || empty( $desc['rebuild'] ) || ! is_callable( $desc['rebuild'] ) ) {
+				continue;
+			}
+			$out[ $name ] = array(
+				'label'   => ( isset( $desc['label'] ) && is_string( $desc['label'] ) && '' !== $desc['label'] )
+					? $desc['label']
+					: ucwords( str_replace( array( '-', '/' ), ' ', $name ) ),
+				'insert'  => ! empty( $desc['insert'] ),
+				'rebuild' => $desc['rebuild'],
+			);
+		}
+		return $out;
+	}
+
+	/** The same list without the callables — safe for the boot payload. */
+	public static function image_blocks_payload() {
+		$out = array();
+		foreach ( self::image_blocks() as $name => $desc ) {
+			$out[ $name ] = array(
+				'label'  => $desc['label'],
+				'insert' => $desc['insert'],
 			);
 		}
 		return $out;

@@ -1140,6 +1140,36 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Rebuild an image block's markup for a chosen set of images. The
+		// layout rules belong to the plugin that owns the block; Minn only
+		// says WHICH images, in what order (see Minn_Admin::image_blocks).
+		register_rest_route(
+			self::NS,
+			'/image-block',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'rebuild_image_block' ),
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+				'args'                => array(
+					'block' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+					'ids'   => array(
+						'type'     => 'array',
+						'required' => true,
+						'items'    => array( 'type' => 'integer' ),
+					),
+					'raw'   => array(
+						'type'    => 'string',
+						'default' => '',
+					),
+				),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/render-blocks',
@@ -1863,6 +1893,52 @@ class Minn_Admin_REST {
 	 * same render callbacks the front end runs on every page view; the cap gate
 	 * (edit_posts) matches the editor itself.
 	 */
+	/**
+	 * Hand a block's owner the images a writer picked, take back its markup.
+	 *
+	 * Attachments are resolved HERE rather than trusted from the browser: the
+	 * callable gets real dimensions and URLs, which is what a layout needs,
+	 * and a caller cannot describe an image that isn't in the library.
+	 */
+	public static function rebuild_image_block( $req ) {
+		$name   = (string) $req->get_param( 'block' );
+		$blocks = Minn_Admin::image_blocks();
+		if ( ! isset( $blocks[ $name ] ) ) {
+			return new WP_Error( 'minn_unknown_image_block', __( 'That block does not offer image editing here.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$images = array();
+		foreach ( (array) $req->get_param( 'ids' ) as $id ) {
+			$id = (int) $id;
+			$post = $id ? get_post( $id ) : null;
+			if ( ! $post || 'attachment' !== $post->post_type ) {
+				continue;
+			}
+			$meta = wp_get_attachment_metadata( $id );
+			$full = wp_get_attachment_image_src( $id, 'full' );
+			$images[] = array(
+				'id'     => $id,
+				'url'    => $full ? $full[0] : wp_get_attachment_url( $id ),
+				'width'  => $full ? (int) $full[1] : (int) ( isset( $meta['width'] ) ? $meta['width'] : 0 ),
+				'height' => $full ? (int) $full[2] : (int) ( isset( $meta['height'] ) ? $meta['height'] : 0 ),
+				'alt'    => (string) get_post_meta( $id, '_wp_attachment_image_alt', true ),
+				'link'   => (string) get_attachment_link( $id ),
+			);
+		}
+		if ( ! $images ) {
+			return new WP_Error( 'minn_no_images', __( 'Pick at least one image.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$markup = null;
+		try {
+			$markup = call_user_func( $blocks[ $name ]['rebuild'], $images, (string) $req->get_param( 'raw' ) );
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'minn_image_block_failed', $e->getMessage(), array( 'status' => 500 ) );
+		}
+		if ( ! is_string( $markup ) || '' === trim( $markup ) ) {
+			return new WP_Error( 'minn_image_block_failed', __( 'That block could not be rebuilt for those images.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return array( 'markup' => $markup );
+	}
+
 	public static function render_blocks( WP_REST_Request $request ) {
 		$blocks = $request['blocks'];
 		if ( ! is_array( $blocks ) ) {
