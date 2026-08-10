@@ -41,8 +41,20 @@ const CAR = ( set ) => `<!-- wp:acme/carousel -->\n<div class="wp-block-acme-car
 // from the tiles' own square, not collapse and let them overlap.
 const MANY = Array.from( { length: 30 }, ( _, i ) => ( { id: 9500 + i, img: [ 'gal-red.png', 'gal-green.png', 'gal-blue.png' ][ i % 3 ] } ) );
 
+// Fourth shape: no image tag anywhere. The pictures live in block settings
+// (Gutenslider), with a mirror list on the parent that has to travel with the
+// slides, string ids, and two addresses per picture.
+const A = [
+	{ id: 931, img: 'gal-red.png' },
+	{ id: 932, img: 'gal-green.png' },
+	{ id: 933, img: 'gal-blue.png' },
+];
+const amedia = ( a ) => `{"alt":"","id":"${ a.id }","url":"${ BASE }/wp-content/uploads/${ a.img }","fullUrl":"${ BASE }/wp-content/uploads/${ a.img }"}`;
+const aslide = ( a ) => `<!-- wp:acme/gslide {"background":{"backgroundImage":${ amedia( a ) },"mediaId":"${ a.id }"}} -->\n<!-- wp:paragraph -->\n<p>Slide ${ a.id }.</p>\n<!-- /wp:paragraph -->\n<!-- /wp:acme/gslide -->`;
+const ASLIDER = ( set ) => `<!-- wp:acme/gslider {"media":[${ set.map( amedia ).join( ',' ) }]} -->\n${ set.map( aslide ).join( '\n' ) }\n<!-- /wp:acme/gslider -->`;
+
 const GRP = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class="wp-block-group">' + JP( S ) + '</div>\n<!-- /wp:group -->';
-const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
+const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + ASLIDER( A ) + '\n\n' + GRP + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
 
 ( async () => {
 	const t = reporter( 'island-images-editor' );
@@ -294,6 +306,36 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP +
 			droppedId = newId ? parseInt( newId, 10 ) : 0;
 			t.check( 'dropped image becomes a real slide unit', units.length === 4 && !! newId && ! [ '921', '922', '923' ].includes( newId ), units.length + ' units, new id ' + newId );
 			t.check( 'dropped slide keeps the wrapper block shape', last.includes( '<div class="wp-block-acme-slide">' ) && last.includes( 'dropped-slide' ) );
+		}
+
+		// --- Slides whose image lives only in block settings ---
+		const asBefore = slice( raw, 'acme/gslider' );
+		t.check( 'saved attribute slider still has three slides', ( asBefore.match( /<!-- wp:acme\/gslide \{/g ) || [] ).length === 3 );
+		t.check( 'attribute slider offers Edit images', await openIsland( 'acme/gslider' ) );
+		const asInsp = await page.evaluate( () => ( {
+			rows: document.querySelectorAll( '.minn-insp-img-row' ).length,
+			head: ( document.querySelector( '.minn-insp-imghead' ) || {} ).textContent || '',
+		} ) );
+		// Two addresses per picture, three pictures: still three, not six.
+		t.check( 'attribute slider counts three images, no per-image rows', asInsp.rows === 0 && /Images · 3/.test( asInsp.head ), JSON.stringify( asInsp ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		t.check( 'modal shows a tile per attribute slide', ( await page.$$( '.minn-imgedit-tile' ) ).length === 3 );
+		await page.click( '[data-mv="0:1"]' );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		{
+			const got = slice( raw, 'acme/gslider' );
+			const slides = got.match( /<!-- wp:acme\/gslide \{[\s\S]*?<!-- \/wp:acme\/gslide -->/g ) || [];
+			const order = slides.map( ( u ) => ( u.match( /Slide (\d+)\./ ) || [] )[ 1 ] );
+			const mirrorIds = ( ( got.match( /"media":\[([\s\S]*?)\]\}/ ) || [] )[ 1 ] || '' ).match( /"id":"(\d+)"/g ) || [];
+			t.check( 'slides reordered with their own content', order.join( ',' ) === '932,931,933', order.join( ',' ) );
+			// The parent's mirror list has to follow, or the block renders one
+			// set and lists another.
+			t.check( 'the parent mirror list followed the reorder',
+				mirrorIds.join( ',' ) === '"id":"932","id":"931","id":"933"', mirrorIds.join( ',' ) );
+			t.check( 'untouched slide stays byte-identical', got.includes( aslide( A[ 2 ] ) ) );
 		}
 
 		// --- Click an image in the preview to open the tooling directly ---

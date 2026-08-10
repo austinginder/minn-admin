@@ -16225,8 +16225,11 @@
 		// The island's stored markup changed under this arming (an image
 		// replaced, a URL swapped, an inspector Apply): splicing the armed
 		// base would write those old bytes back. Drop the arming instead —
-		// the next preview render re-arms against the new raw.
-		if ( arm.base !== ed.islands[ idx ] ) { island._minnRuns = null; return; }
+		// the next preview render re-arms against the new raw. This arming's
+		// OWN commits are the expected case: they splice from the pristine
+		// base every time, so the stored raw is whatever it last wrote.
+		const stored = ed.islands[ idx ];
+		if ( stored !== arm.base && stored !== arm.last ) { island._minnRuns = null; return; }
 		arm.spans.forEach( ( span, i ) => {
 			if ( ! span || ! span.isConnected ) return;
 			const r = arm.runs[ i ];
@@ -16242,7 +16245,8 @@
 			r.value = v;
 		} );
 		const next = spliceTextRuns( arm.base, arm.runs );
-		if ( ed.islands[ idx ] === next ) return;
+		arm.last = next;
+		if ( stored === next ) return;
 		ed.islands[ idx ] = next;
 		ed.dirty = true;
 		if ( ! ( opts && opts.silent ) ) scheduleAutosave();
@@ -21666,13 +21670,24 @@
 		}
 		const units = spans.map( ( s ) => {
 			const text = base.slice( s.start, s.end );
+			const imgs = ( text.match( /<img[\s>]/g ) || [] ).length;
+			// Sliders that keep no image tag at all (Gutenslider) carry the
+			// picture in the block's attributes instead: one media object per
+			// slide, whose several URL keys describe the same image.
+			const attrPics = imgs ? [] : islandImageRows( text );
 			const srcM = text.match( /<img[^>]*\ssrc="([^"]+)"/ ) || text.match( /\ssrc="([^"]+)"/ );
-			const idM = text.match( /wp-image-(\d+)/ ) || text.match( /data-id="(\d+)"/ ) || text.match( /"id":(\d+)/ );
-			return { text, src: srcM ? srcM[ 1 ] : '', id: idM ? parseInt( idM[ 1 ], 10 ) : 0 };
+			const idM = text.match( /wp-image-(\d+)/ ) || text.match( /data-id="(\d+)"/ ) || text.match( /"id":"?(\d+)"?/ );
+			return {
+				text,
+				attrOnly: ! imgs,
+				pictures: imgs || attrPics.length,
+				src: imgs ? ( srcM ? srcM[ 1 ] : '' ) : ( attrPics[ 0 ] || '' ),
+				id: idM ? parseInt( idM[ 1 ], 10 ) : 0,
+			};
 		} );
-		// Every unit must carry exactly one image — a mixed run (text slides,
+		// Every unit must carry exactly one picture — a mixed run (text slides,
 		// video slides) can't be safely tile-edited as images.
-		if ( units.some( ( u ) => ( u.text.match( /<img[\s>]/g ) || [] ).length !== 1 ) ) return null;
+		if ( units.some( ( u ) => u.pictures !== 1 || ! u.src ) ) return null;
 
 		// Comment "ids" array: must align 1:1 with the units, and where a
 		// unit declares its own id the two must agree, or the mapping is off.
@@ -21692,7 +21707,70 @@
 			units,
 			gaps,
 			ids,
+			mirror: findMediaMirror( open[ 0 ], units ),
 		};
+	}
+
+	// Depth- and quote-aware scan for the matching bracket of the one at `at`.
+	function matchBracket( str, at ) {
+		let depth = 0;
+		let quoted = false;
+		for ( let i = at; i < str.length; i++ ) {
+			const c = str[ i ];
+			if ( quoted ) {
+				if ( c === '\\' ) i++;
+				else if ( c === '"' ) quoted = false;
+				continue;
+			}
+			if ( c === '"' ) quoted = true;
+			else if ( c === '[' || c === '{' ) depth++;
+			else if ( c === ']' || c === '}' ) { depth--; if ( ! depth ) return i; }
+		}
+		return -1;
+	}
+
+	// Top-level members of a JSON array body, as verbatim substrings.
+	function splitJsonArray( body ) {
+		const out = [];
+		let depth = 0;
+		let quoted = false;
+		let start = 0;
+		for ( let i = 0; i < body.length; i++ ) {
+			const c = body[ i ];
+			if ( quoted ) {
+				if ( c === '\\' ) i++;
+				else if ( c === '"' ) quoted = false;
+				continue;
+			}
+			if ( c === '"' ) quoted = true;
+			else if ( c === '[' || c === '{' ) depth++;
+			else if ( c === ']' || c === '}' ) depth--;
+			else if ( c === ',' && ! depth ) { out.push( body.slice( start, i ) ); start = i + 1; }
+		}
+		if ( body.slice( start ).trim() !== '' ) out.push( body.slice( start ) );
+		return out;
+	}
+
+	/* A parent block that ALSO keeps a flat list of its images (Gutenslider's
+	 * "media") has to travel with the units: reorder the slides without it and
+	 * the block renders one set while listing another. Found by shape, never by
+	 * name — an array attribute whose entries each describe exactly the picture
+	 * of the unit in the same position. */
+	function findMediaMirror( head, units ) {
+		const re = /"(\w+)"\s*:\s*\[/g;
+		let m;
+		while ( ( m = re.exec( head ) ) ) {
+			const at = m.index + m[ 0 ].length - 1;
+			const end = matchBracket( head, at );
+			if ( end < 0 ) continue;
+			const entries = splitJsonArray( head.slice( at + 1, end ) );
+			if ( ! entries || entries.length !== units.length ) continue;
+			const pics = entries.map( ( e ) => islandImageRows( e ) );
+			if ( pics.some( ( p ) => p.length !== 1 ) ) continue;
+			if ( ! units.every( ( u, i ) => pics[ i ][ 0 ] === u.src ) ) continue;
+			return { key: m[ 1 ], start: at, end: end + 1, entries };
+		}
+		return null;
 	}
 
 	// Top-level segments of a region that are ALL blocks of one name, with
@@ -21756,6 +21834,10 @@
 	// variants, the caption). A REPLACE keeps the caption (opts.keepCaption):
 	// the slot's editorial text usually still applies to its stand-in image.
 	function cloneImageUnit( proto, item, opts = {} ) {
+		// Attribute-only units (no image tag anywhere) carry the picture in
+		// block settings: paired URL keys, string ids, a mirror entry. The
+		// attribute swapper already knows all of that.
+		if ( proto.attrOnly && proto.src ) return swapIslandImage( proto.text, proto.src, item );
 		let u = proto.text;
 		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
 		const slashEsc = ( s ) => s.split( '/' ).join( '\\/' );
@@ -21792,7 +21874,16 @@
 		// entries carry the picked attachment until Apply clones them in;
 		// replaced entries get their unit text rewritten in place (caption
 		// kept) and carry the new attachment id.
-		const list = info.units.map( ( u, i ) => ( { unit: u, orig: i, id: info.ids ? info.ids[ i ] : u.id, thumb: u.src, attachment: null } ) );
+		const list = info.units.map( ( u, i ) => ( {
+			unit: u,
+			orig: i,
+			id: info.ids ? info.ids[ i ] : u.id,
+			thumb: u.src,
+			attachment: null,
+			// The parent's mirror entry for this picture, moved verbatim with
+			// its tile (rewritten in place when the tile is replaced).
+			mirror: info.mirror ? info.mirror.entries[ i ] : null,
+		} ) );
 		const canUpload = !! ( B.caps && B.caps.upload );
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-imgedit-overlay';
@@ -21963,7 +22054,16 @@
 						// Not yet materialized — just swap the pending pick.
 						entry.attachment = it;
 					} else {
-						entry.unit = { text: cloneImageUnit( entry.unit, it, { keepCaption: true } ), src: it.url, id: it.id };
+						if ( entry.mirror ) {
+							const was = ( islandImageRows( entry.mirror ) || [] )[ 0 ];
+							if ( was ) entry.mirror = swapIslandImage( entry.mirror, was, it );
+						}
+						entry.unit = {
+							text: cloneImageUnit( entry.unit, it, { keepCaption: true } ),
+							src: it.url,
+							id: it.id,
+							attrOnly: entry.unit.attrOnly,
+						};
 						entry.orig = -1;
 					}
 					entry.id = it.id;
@@ -21982,6 +22082,18 @@
 				if ( info.ids ) {
 					const newIds = list.map( ( it ) => it.attachment ? it.attachment.id : it.id );
 					prefix = prefix.replace( /"ids":\[[^\]]*\]/, '"ids":[' + newIds.join( ',' ) + ']' );
+				}
+				if ( info.mirror ) {
+					const protoEntry = info.mirror.entries[ 0 ];
+					const protoPic = ( islandImageRows( protoEntry ) || [] )[ 0 ];
+					const entries = list.map( ( it ) => {
+						if ( it.mirror ) return it.mirror;
+						// Added tiles clone the first entry onto their pick.
+						return it.attachment && protoPic
+							? swapIslandImage( protoEntry, protoPic, it.attachment )
+							: protoEntry;
+					} );
+					prefix = prefix.slice( 0, info.mirror.start ) + '[' + entries.join( ',' ) + ']' + prefix.slice( info.mirror.end );
 				}
 				const newRaw = prefix + bodyStr + info.suffix;
 				closeImgEdit();
@@ -25831,6 +25943,7 @@
 				.map( ( it, i ) => i )
 				.filter( ( i ) => {
 					const it = items[ i ];
+					if ( typeof it[ 6 ] === 'function' && ! it[ 6 ]( block ) ) return false;
 					if ( it[ 3 ] && ! q ) return false;
 					if ( it[ 1 ].toLowerCase().includes( q ) || ( it[ 4 ] && it[ 4 ].toLowerCase().includes( q ) ) ) return true;
 					const kws = it[ 5 ];
