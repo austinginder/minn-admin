@@ -15514,7 +15514,6 @@
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
-			${ imgTool ? `<button class="minn-island-act" data-islanddup="${ idx }" type="button" title="${ esc( __( 'Duplicate this block' ) ) }" aria-label="${ esc( __( 'Duplicate this block' ) ) }">${ icon( 'copy' ) }</button>` : '' }
 			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
 			${ patternRef ? `<button class="minn-pattern-badge" data-patternedit="${ esc( patternRef ) }" type="button">${ esc( __( 'Edit pattern' ) ) } ↗</button>` : '' }
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
@@ -20415,15 +20414,6 @@
 				e.preventDefault();
 				const island = chip.closest( '.minn-block-island' );
 				if ( island ) openInspector( island );
-				return;
-			}
-			// Duplicate straight from the card's hover chrome (image blocks
-			// inside containers, where the tile grid doesn't apply).
-			const dupBtn = e.target.closest( '[data-islanddup]' );
-			if ( dupBtn ) {
-				e.preventDefault();
-				const island = dupBtn.closest( '.minn-block-island' );
-				if ( island ) duplicateIsland( island );
 				return;
 			}
 			// Synced pattern → its own editor. Save first (same discipline as
