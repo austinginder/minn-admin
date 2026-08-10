@@ -2061,6 +2061,11 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
    file and often disables pointer events on slide images (Jetpack's swiper
    does exactly that) — a plain declaration loses that cascade on real
    third-party blocks while passing on plain fixtures. */
+/* The island whose ⚙ popover is open. Nested containers stack their chips in
+   the same corner, so without this two popovers read as one changing its
+   mind: the outer group says 2 blocks, the inner one 14, and which is which
+   is invisible (a real-site repro). */
+.minn-block-island.minn-insp-target { outline: 2px solid var(--accent); outline-offset: 2px; }
 .minn-block-island[data-imgtool] > .minn-island-preview,
 .minn-block-island[data-cted] > .minn-island-preview { pointer-events: auto; cursor: pointer; }
 .minn-block-island[data-imgtool] > .minn-island-preview img { pointer-events: auto !important; cursor: pointer; }

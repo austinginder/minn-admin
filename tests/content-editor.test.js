@@ -156,8 +156,12 @@ const CONTENT = STATS( 'Type:', 'Residential', 'Location:' ) + '\n\n' + GRP( 'Co
 		const popState = await page.evaluate( () => ( {
 			head: ( document.querySelector( '.minn-inspector .minn-insp-imghead' ) || {} ).textContent || '',
 			walls: document.querySelectorAll( '.minn-inspector [data-insptext]' ).length,
+			// Nested chips stack in one corner — the open popover's island
+			// must wear the highlight so 2-vs-14-blocks reads as two blocks.
+			target: ( document.querySelector( '.minn-insp-target' ) || {} ).dataset,
 		} ) );
 		t.check( 'popover shows a summary, not per-child sections', /Content · 3 blocks/.test( popState.head ) && popState.walls === 0, JSON.stringify( popState ) );
+		t.check( 'popover highlights its island', !! popState.target && popState.target.block === 'acme/stats', JSON.stringify( popState.target ) );
 		await page.click( '#minn-insp-cted' );
 		await page.waitForSelector( '.minn-cted-card', { timeout: 8000 } );
 		t.check( 'popover doorway opens the modal', ( await page.$$( '.minn-cted-card' ) ).length === 3 );
