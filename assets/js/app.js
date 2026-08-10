@@ -15335,11 +15335,8 @@
 				colCount++;
 			}
 			if ( ! colCount ) return null;
-			/* translators: island hover hint on an editable columns container */
-			const colHint = __( 'Columns — write inside · layout via ⚙' );
 			return `<div class="minn-block-island minn-slot-island minn-cols-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			${ chip }
-			<span class="minn-island-hint" aria-hidden="true">${ esc( colHint ) }</span>
 			${ parts.open }${ cols.join( '' ) }</${ parts.tag }>
 		</div>`;
 		}
@@ -15347,15 +15344,12 @@
 		if ( ! kids ) return null;
 		const childrenHtml = joinKids( kids );
 		if ( childrenHtml == null ) return null;
-		/* translators: island hover hint on an editable group container */
-		const hint = __( 'Grouped content — write inside · layout via ⚙' );
 		// SLOT_CONTENT blocks (cover, media-text): the preamble carries the
 		// background/media bytes plus the content container's OPEN tag, so
 		// the slot nests inside the content container; the tail closes it.
 		const closers = parts.preamble ? '</div></' + parts.tag + '>' : '</' + parts.tag + '>';
 		return `<div class="minn-block-island minn-slot-island${ parts.preamble ? ' minn-media-slot-island' : '' }" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			${ chip }
-			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
 			${ parts.open }${ parts.preamble }<div class="${ slotCls }" contenteditable="true">${ childrenHtml }</div>${ closers }
 		</div>`;
 	}
