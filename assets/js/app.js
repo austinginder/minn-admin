@@ -23244,13 +23244,17 @@
 		// (GitHub #12): unrolled in this popover they read as text plus a dozen
 		// schema inputs PER CHILD, and a typo fix meant scrolling the wall. The
 		// popover keeps the block's own settings; the summary row is the
-		// doorway. Structural add/reorder live in the modal too.
+		// doorway — rendered FIRST, above the block's own attr fields, or a
+		// container's schema (Group alone is a dozen rows) buries it below the
+		// fold and the doorway reads as missing (a real-site repro).
+		// Structural add/reorder live in the modal too.
 		const manyKids = ! mediaRebuild && model.children.length >= 2;
 		/* translators: %d: number of nested blocks */
 		const kidsLabel = manyKids ? sprintf( _n( 'Content · %d block', 'Content · %d blocks', model.children.length ), model.children.length ) : '';
-		const childSections = mediaRebuild ? '' : manyKids
+		const kidsSummary = manyKids
 			? `<div class="minn-field-label minn-insp-imghead">${ esc( kidsLabel ) }<button class="minn-btn-soft" type="button" id="minn-insp-cted">${ esc( __( 'Edit content…' ) ) }</button></div>`
-			: model.children.map( ( c, i ) => {
+			: '';
+		const childSections = mediaRebuild || manyKids ? '' : model.children.map( ( c, i ) => {
 			const t = types[ c.name ];
 			const fields = t && t.attributes ? inspectorFields( t.attributes, c.attrs, String( i ), c.name ) : '';
 			// The child's text (from its saved HTML) leads the section — it's
@@ -23308,10 +23312,11 @@
 			<div class="minn-insp-body">
 				${ special }
 				${ imgSection }
+				${ kidsSummary }
 				${ ownFields }
 				${ childSections }
 				${ addRow }
-				${ editable || special || imgSection ? '' : `<div class="minn-insp-note">${ ownType
+				${ editable || special || imgSection || kidsSummary ? '' : `<div class="minn-insp-note">${ ownType
 					? 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.'
 					: 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' }</div>` }
 			</div>
