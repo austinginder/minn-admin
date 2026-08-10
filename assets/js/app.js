@@ -16746,6 +16746,7 @@
 			$$( '.minn-island-preview' ).forEach( ( el ) => {
 				revealJsGatedPreview( el );
 				collapseSliderPreview( el );
+				clampTallImagePreview( el );
 				markMissingImages( el );
 			} );
 		} );
@@ -16847,6 +16848,23 @@
 		if ( el.offsetHeight < best[ 0 ].offsetHeight * 1.6 ) return;
 		best.slice( 1 ).forEach( ( n ) => { n.style.display = 'none'; } );
 		el.dataset.sliderCollapsed = String( best.length );
+	}
+
+	/* Galleries are not sliders — every photo is meant to be visible — but two
+	 * dozen of them at full width turn one block into a scroll marathon with
+	 * the editing doorway buried in the middle. Clamp the card instead: the
+	 * layout stays the block's own, the badge says how many images are inside,
+	 * and clicking opens the editor. Only ever applied to blocks that HAVE that
+	 * editor, so the clamp can never hide something with no way in. */
+	const PREVIEW_CLAMP_AT = 560;
+	function clampTallImagePreview( el ) {
+		if ( ! el || ! el.isConnected ) return;
+		const island = el.closest( '.minn-block-island' );
+		if ( ! island || island.dataset.imgtool !== 'edit' ) return;
+		if ( el.classList.contains( 'minn-preview-clamped' ) ) return;
+		if ( el.dataset.sliderCollapsed ) return;   // already showing one slide
+		if ( el.offsetHeight <= PREVIEW_CLAMP_AT ) return;
+		el.classList.add( 'minn-preview-clamped' );
 	}
 
 	// Relative url(...) references break once CSS moves into an inline <style>
@@ -22021,6 +22039,33 @@
 		return u;
 	}
 
+	/* Captions live in the unit's own markup (<figcaption>), which is where the
+	 * block editor puts them and where the front end reads them. Read the first
+	 * one; write it back in place so everything else about the unit stays
+	 * byte-identical, and only when it actually changed. Units with no figure
+	 * (a slider that keeps its picture in settings) have nowhere to put one,
+	 * and simply do not offer the field. */
+	const FIGCAPTION_RE = /(<figcaption[^>]*>)([\s\S]*?)(<\/figcaption>)/;
+	function unitCaption( text ) {
+		const m = String( text || '' ).match( FIGCAPTION_RE );
+		return m ? decodeEntities( m[ 2 ].replace( /<br\s*\/?>/gi, '\n' ) ) : '';
+	}
+	function unitCanCaption( unit ) {
+		return !! unit && ! unit.attrOnly && /<\/figure>/i.test( String( unit.text || '' ) );
+	}
+	function setUnitCaption( text, value ) {
+		const escText = ( v ) => String( v ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' ).replace( /\n/g, '<br>' );
+		const has = FIGCAPTION_RE.test( text );
+		if ( ! String( value ).trim() ) {
+			// An emptied caption leaves no empty element behind (both
+			// serializers drop those anyway).
+			return has ? text.replace( FIGCAPTION_RE, '' ) : text;
+		}
+		if ( has ) return text.replace( FIGCAPTION_RE, ( m0, open, was, close ) => open + escText( value ) + close );
+		// Core's own class, so the front end styles it like any other caption.
+		return text.replace( /<\/figure>/i, '<figcaption class="wp-element-caption">' + escText( value ) + '</figcaption></figure>' );
+	}
+
 	let imgEditEl = null;
 	function closeImgEdit() {
 		if ( imgEditEl && imgEditEl._minnEsc ) document.removeEventListener( 'keydown', imgEditEl._minnEsc, true );
@@ -22040,10 +22085,12 @@
 			id: info.ids ? info.ids[ i ] : u.id,
 			thumb: u.src,
 			attachment: null,
+			caption: unitCaption( u.text ),
 			// The parent's mirror entry for this picture, moved verbatim with
 			// its tile (rewritten in place when the tile is replaced).
 			mirror: info.mirror ? info.mirror.entries[ i ] : null,
 		} ) );
+		const canCaption = info.units.some( unitCanCaption );
 		const canUpload = !! ( B.caps && B.caps.upload );
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-imgedit-overlay';
@@ -22077,6 +22124,7 @@
 
 		const renderGrid = () => {
 			grid.innerHTML = list.map( ( it, i ) => `
+				<div class="minn-imgedit-cell">
 				<div class="minn-imgedit-tile" draggable="true" data-i="${ i }" title="Click to replace this image">
 					<img src="${ esc( it.thumb || '' ) }" alt="" loading="lazy">
 					${ it.attachment ? '<span class="minn-imgedit-new">new</span>' : '' }
@@ -22086,6 +22134,7 @@
 						<button type="button" data-mv="${ i }:-1" title="Move earlier" aria-label="Move image earlier"${ i === 0 ? ' disabled' : '' }>‹</button>
 						<button type="button" data-mv="${ i }:1" title="Move later" aria-label="Move image later"${ i === list.length - 1 ? ' disabled' : '' }>›</button>
 					</span>
+				</div>${ canCaption ? `<input class="minn-imgedit-cap" type="text" data-cap="${ i }" value="${ esc( it.caption || '' ) }" placeholder="${ esc( __( 'Caption' ) ) }" aria-label="${ esc( __( 'Caption' ) ) }" spellcheck="true">` : '' }
 				</div>` ).join( '' ) || '<div class="minn-imgedit-empty">No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead.</div>';
 			const apply = $( '#minn-imgedit-apply', overlay );
 			if ( apply ) apply.disabled = ! list.length;
@@ -22175,6 +22224,12 @@
 			}
 		}
 
+		overlay.addEventListener( 'input', ( e ) => {
+			const cap = e.target.closest( '[data-cap]' );
+			if ( ! cap ) return;
+			const entry = list[ parseInt( cap.dataset.cap, 10 ) ];
+			if ( entry ) entry.caption = cap.value;   // never re-render here: it would blur the field
+		} );
 		overlay.addEventListener( 'click', ( e ) => {
 			if ( e.target === overlay || e.target.closest( '#minn-imgedit-close' ) || e.target.closest( '#minn-imgedit-cancel' ) ) { closeImgEdit(); return; }
 			const x = e.target.closest( '[data-x]' );
@@ -22237,7 +22292,12 @@
 			}
 			if ( e.target.closest( '#minn-imgedit-apply' ) && list.length ) {
 				const proto = info.units[ 0 ];
-				const parts = list.map( ( it ) => it.attachment ? cloneImageUnit( proto, it.attachment ) : it.unit.text );
+				const parts = list.map( ( it ) => {
+					const text = it.attachment ? cloneImageUnit( proto, it.attachment ) : it.unit.text;
+					// Only a CHANGED caption rewrites its unit; everything else
+					// stays the bytes it arrived as.
+					return it.caption !== unitCaption( text ) ? setUnitCaption( text, it.caption || '' ) : text;
+				} );
 				const joiner = ( i ) => info.gaps.length ? info.gaps[ Math.min( i, info.gaps.length - 1 ) ] : '\n\n';
 				let bodyStr = '';
 				parts.forEach( ( p, i ) => { bodyStr += p; if ( i < parts.length - 1 ) bodyStr += joiner( i ); } );
@@ -22265,6 +22325,7 @@
 		} );
 		// Drag reorder: drop before/after the target tile by horizontal midpoint.
 		overlay.addEventListener( 'dragstart', ( e ) => {
+			if ( e.target.closest( '[data-cap]' ) ) { e.preventDefault(); return; }
 			const t = e.target.closest( '.minn-imgedit-tile' );
 			if ( ! t ) return;
 			dragIdx = parseInt( t.dataset.i, 10 );

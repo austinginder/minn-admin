@@ -229,6 +229,36 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + ASLID
 			t.check( 'gallery reorder byte-exact, captions travel with units', got === wantGal, got === wantGal ? '' : diffAt( got, wantGal ) );
 		}
 
+		// --- Captions, edited in the modal ---
+		// wp-admin edits these inline under each photo; Minn's images editor is
+		// where the whole set is managed, so they belong on the tiles.
+		t.check( 'gallery inspector reopens for captions', await openIsland( 'gallery' ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		const caps = await page.evaluate( () => [ ...document.querySelectorAll( '[data-cap]' ) ].map( ( i ) => i.value ) );
+		t.check( 'existing captions load into the tiles', caps.length === 2 && caps.some( ( c ) => /caption/i.test( c ) ), JSON.stringify( caps ) );
+		await page.fill( '[data-cap="0"]', 'Edited caption & more' );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		{
+			const got = slice( raw, 'gallery' );
+			t.check( 'the typed caption is saved, escaped', got.includes( 'Edited caption &amp; more' ), got.slice( 0, 300 ) );
+			t.check( 'the other caption is untouched', ( got.match( /figcaption/g ) || [] ).length === 4, got.slice( 0, 400 ) );
+		}
+		// Clearing one removes the element rather than leaving an empty tag.
+		t.check( 'gallery inspector reopens to clear a caption', await openIsland( 'gallery' ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		await page.fill( '[data-cap="0"]', '' );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		{
+			const got = slice( raw, 'gallery' );
+			t.check( 'an emptied caption leaves no empty element', ( got.match( /figcaption/g ) || [] ).length === 2 && ! /<figcaption[^>]*><\/figcaption>/.test( got ), got.slice( 0, 400 ) );
+		}
+
 		// --- Nested slide units (slider markup: wrapper element + wrapper block) ---
 		const carBefore = slice( raw, 'acme/carousel' );
 		const cUnits = carBefore.match( /<!-- wp:acme\/slide[\s\S]*?<!-- \/wp:acme\/slide -->/g ) || [];
