@@ -1959,6 +1959,18 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: 12px; padding: 16px 18px; overflow-y: auto; min-height: 120px;
 }
+/* Drop-to-add affordance. The modal owns every drop while it is open, so the
+   app-wide "Drop files to upload" veil stays down and this is the only hint;
+   pointer-events:none keeps the drop itself landing on the overlay. */
+.minn-imgedit { position: relative; }
+.minn-imgedit-drop-veil {
+  position: absolute; inset: 8px; z-index: 3; display: flex;
+  align-items: center; justify-content: center; border-radius: 11px;
+  border: 2px dashed var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--text); font-size: 14.5px; font-weight: 650;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.minn-imgedit-overlay.dropping .minn-imgedit-drop-veil { opacity: 1; }
 .minn-imgedit-tile {
   position: relative; border: 1px solid var(--border); border-radius: 10px;
   overflow: hidden; aspect-ratio: 1; cursor: grab; background: var(--bg);

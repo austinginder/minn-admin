@@ -79,6 +79,8 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP +
 	};
 
 	let id = 0;
+	// The drop test uploads a real attachment — deleted on the way out.
+	let droppedId = 0;
 	try {
 		id = await createPost( page, { title: 'Images editor probe', content: CONTENT } );
 		t.check( 'fixture post created', id > 0, String( id ) );
@@ -210,6 +212,85 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP +
 			t.check( 'gallery reorder byte-exact, captions travel with units', got === wantGal, got === wantGal ? '' : diffAt( got, wantGal ) );
 		}
 
+		// --- Nested slide units (slider markup: wrapper element + wrapper block) ---
+		const carBefore = slice( raw, 'acme/carousel' );
+		const cUnits = carBefore.match( /<!-- wp:acme\/slide[\s\S]*?<!-- \/wp:acme\/slide -->/g ) || [];
+		t.check( 'saved carousel still has three slide units', cUnits.length === 3, String( cUnits.length ) );
+		const carState = await page.evaluate( () => {
+			const isl = document.querySelector( '.minn-block-island[data-block="acme/carousel"]' );
+			const prev = isl && isl.querySelector( '.minn-island-preview' );
+			if ( ! prev ) return null;
+			return {
+				tool: isl.dataset.imgtool || '',
+				badge: ( isl.querySelector( '.minn-imgtool-badge' ) || {} ).textContent || '',
+				collapsed: prev.dataset.sliderCollapsed || '',
+				shown: Array.from( prev.querySelectorAll( 'img' ) ).filter( ( im ) => im.offsetParent !== null ).length,
+			};
+		} );
+		t.check( 'nested slides read as image units, not loose images', carState && carState.tool === 'edit' && carState.badge === 'Edit images · 3', JSON.stringify( carState ) );
+		// A slider is a stack until its JS runs — the preview shows slide one,
+		// the way the block itself does on the site.
+		t.check( 'uninitialized slider preview collapses to one slide', carState && carState.collapsed === '3' && carState.shown === 1, JSON.stringify( carState ) );
+		const wantCar = carBefore.replace( cUnits[ 0 ], '@@MINN-SWAP@@' ).replace( cUnits[ 1 ], cUnits[ 0 ] ).replace( '@@MINN-SWAP@@', cUnits[ 1 ] );
+		t.check( 'carousel inspector offers Edit images', await openIsland( 'acme/carousel' ) );
+		const carInsp = await page.evaluate( () => ( {
+			rows: document.querySelectorAll( '.minn-insp-img-row' ).length,
+			head: ( document.querySelector( '.minn-insp-imghead' ) || {} ).textContent || '',
+		} ) );
+		t.check( 'carousel inspector shows a count, not per-image rows', carInsp.rows === 0 && /Images · 3/.test( carInsp.head ), JSON.stringify( carInsp ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		t.check( 'modal shows a tile per slide', ( await page.$$( '.minn-imgedit-tile' ) ).length === 3 );
+		await page.click( '[data-mv="0:1"]' );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		{
+			const got = slice( raw, 'acme/carousel' );
+			t.check( 'slide reorder byte-exact, wrapper markup untouched', got === wantCar, got === wantCar ? '' : diffAt( got, wantCar ) );
+		}
+
+		// --- Drop an image FILE straight into the modal ---
+		// The window-level handler would otherwise take the writer to the media
+		// library with the file uploaded there instead (Austin's repro): while
+		// this modal is open it owns every drop.
+		t.check( 'inspector reopens for the drop', await openIsland( 'acme/carousel' ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		const beforeTiles = ( await page.$$( '.minn-imgedit-tile' ) ).length;
+		const dropped = await page.evaluate( async () => {
+			const overlay = document.querySelector( '.minn-imgedit-overlay' );
+			const canvas = document.createElement( 'canvas' );
+			canvas.width = 32; canvas.height = 32;
+			const cx = canvas.getContext( '2d' );
+			cx.fillStyle = '#f9a8d4';
+			cx.fillRect( 0, 0, 32, 32 );
+			const blob = await new Promise( ( res ) => canvas.toBlob( res, 'image/png' ) );
+			const dt = new DataTransfer();
+			dt.items.add( new File( [ blob ], 'dropped-slide.png', { type: 'image/png' } ) );
+			// Chrome's DragEvent constructor drops the dataTransfer member.
+			const ev = new DragEvent( 'drop', { bubbles: true, cancelable: true } );
+			Object.defineProperty( ev, 'dataTransfer', { value: dt } );
+			overlay.dispatchEvent( ev );
+			return { prevented: ev.defaultPrevented, zone: overlay.id };
+		} );
+		t.check( 'modal claims the drop instead of the media library', dropped.prevented && dropped.zone === 'minn-imgedit-drop', JSON.stringify( dropped ) );
+		const grew = await page.waitForFunction( ( n ) => document.querySelectorAll( '.minn-imgedit-tile' ).length === n + 1, beforeTiles, { timeout: 25000 } ).then( () => true ).catch( () => false );
+		t.check( 'dropped image uploads and joins the grid', grew );
+		t.check( 'stayed in the editor, modal still open', page.url().includes( '/editor/' ) && !! ( await page.$( '.minn-imgedit' ) ) );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		{
+			const got = slice( raw, 'acme/carousel' );
+			const units = got.match( /<!-- wp:acme\/slide[\s\S]*?<!-- \/wp:acme\/slide -->/g ) || [];
+			const last = units[ units.length - 1 ] || '';
+			const newId = ( last.match( /wp-image-(\d+)/ ) || [] )[ 1 ];
+			droppedId = newId ? parseInt( newId, 10 ) : 0;
+			t.check( 'dropped image becomes a real slide unit', units.length === 4 && !! newId && ! [ '921', '922', '923' ].includes( newId ), units.length + ' units, new id ' + newId );
+			t.check( 'dropped slide keeps the wrapper block shape', last.includes( '<div class="wp-block-acme-slide">' ) && last.includes( 'dropped-slide' ) );
+		}
+
 		// --- Click an image in the preview to open the tooling directly ---
 		// REAL MOUSE CLICK, never el.click(): a synthetic click skips the
 		// press/release cycle, and this doorway exists precisely because a
@@ -295,6 +376,13 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP +
 		t.check( 'container inspector lists no images', grp.open && grp.rows === 0 && ! grp.edit, JSON.stringify( grp ) );
 	} finally {
 		await deletePost( page, id );
+		if ( droppedId ) {
+			await page.evaluate( async ( mid ) => {
+				await fetch( window.MINN.restUrl + 'wp/v2/media/' + mid + '?force=true', {
+					method: 'DELETE', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+				} );
+			}, droppedId ).catch( () => {} );
+		}
 	}
 
 	await t.done( browser, errors );
