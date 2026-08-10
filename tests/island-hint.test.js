@@ -18,9 +18,12 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		'<p>Plain control paragraph.</p>',
 		'<!-- /wp:paragraph -->',
 		'',
-		'<!-- wp:paragraph {"style":{"typography":{"fontSize":"22px"}}} -->',
-		'<p style="font-size:22px">Styled island text.</p>',
-		'<!-- /wp:paragraph -->',
+		// Paragraphs, headings, lists and the passthrough blocks all carry
+		// their styling and stay editable now, so the styled-island case needs
+		// a block whose extra attrs the serializer can't reproduce.
+		'<!-- wp:code {"style":{"color":{"background":"#eeeeee"}}} -->',
+		'<pre class="wp-block-code has-background" style="background-color:#eeeeee"><code>Styled island text.</code></pre>',
+		'<!-- /wp:code -->',
 		'',
 		'<!-- wp:acme/hero {"x":1} -->',
 		'<div class="wp-block-acme-hero"><p>Hero island body.</p></div>',
