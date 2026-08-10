@@ -176,19 +176,33 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + GRP + '\n\n<!-- wp:paragr
 		}
 
 		// --- Click an image in the preview to open the tooling directly ---
+		// REAL MOUSE CLICK, never el.click(): a synthetic click skips the
+		// press/release cycle, and this doorway exists precisely because a
+		// real press re-renders the island between mousedown and mouseup
+		// (the click then lands on the container, not the image).
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 400 );
-		const clicked = await page.evaluate( () => {
+		const spot = await page.evaluate( () => {
 			const isl = document.querySelector( '.minn-block-island[data-block="jetpack/slideshow"][data-imgtool="edit"]' );
-			const imgs = isl ? isl.querySelectorAll( '.minn-island-preview img' ) : [];
-			if ( ! imgs.length ) return null;
-			const target = imgs[ imgs.length - 1 ];
-			const src = target.getAttribute( 'src' );
-			target.click();
-			return src;
+			const img = isl && isl.querySelector( '.minn-island-preview img' );
+			if ( ! img ) return null;
+			img.scrollIntoView( { block: 'center' } );
+			const r = img.getBoundingClientRect();
+			return { x: r.left + r.width / 2, y: r.top + r.height / 2, src: img.getAttribute( 'src' ) };
 		} );
-		t.check( 'slideshow island advertises image tooling', !! clicked, String( clicked ) );
-		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		t.check( 'slideshow island advertises image tooling', !! spot, JSON.stringify( spot ) );
+		// The hover overlay names the action and must never swallow the press
+		// it advertises, nor count as content.
+		const badge = await page.evaluate( () => {
+			const isl = document.querySelector( '.minn-block-island[data-imgtool="edit"]' );
+			const b = isl && isl.querySelector( '.minn-imgtool-badge' );
+			if ( ! b ) return null;
+			return { text: b.textContent.trim(), pe: getComputedStyle( b ).pointerEvents };
+		} );
+		t.check( 'image overlay reads Edit images and is click-through', badge && badge.text === 'Edit images' && badge.pe === 'none', JSON.stringify( badge ) );
+		if ( spot ) await page.mouse.click( spot.x, spot.y );
+		const opened = await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } ).then( () => true ).catch( () => false );
+		t.check( 'real mouse click on the image opens the editor', opened );
 		const focused = await page.evaluate( () => {
 			const f = document.querySelector( '.minn-imgedit-tile.flash' );
 			return f ? parseInt( f.dataset.i, 10 ) : -1;

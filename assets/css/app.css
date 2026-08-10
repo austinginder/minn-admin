@@ -1940,8 +1940,29 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 }
 .minn-imgedit-tile.drag { opacity: 0.4; }
 .minn-imgedit-tile.flash { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* Preview images that open image tooling on click read as clickable. */
-.minn-block-island[data-imgtool] .minn-island-preview img { cursor: pointer; }
+/* Preview images that open image tooling on click: punch through the
+   preview's pointer-events:none inertness (same technique as
+   .minn-island-run) so the image itself receives the press. Without this the
+   event falls through to the island beneath and the container gets selected
+   instead — the image looks clickable but nothing happens (Austin's repro).
+   !important because the block's OWN front-end CSS is injected after this
+   file and often disables pointer events on slide images (Jetpack's swiper
+   does exactly that) — a plain declaration loses that cascade on real
+   third-party blocks while passing on plain fixtures. */
+.minn-block-island[data-imgtool] > .minn-island-preview img { pointer-events: auto !important; cursor: pointer; }
+/* Hover affordance: name the action right on the images. pointer-events:none
+   so the badge never swallows the press it is advertising; the generic
+   "edit via ⚙" hint steps aside since this block has a better doorway. */
+.minn-imgtool-badge {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 650;
+  background: rgba(17, 17, 21, 0.82); color: #fff; backdrop-filter: blur(3px);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3); pointer-events: none; user-select: none;
+  opacity: 0; transition: opacity 0.15s; white-space: nowrap; z-index: 2;
+}
+.minn-block-island[data-imgtool]:hover > .minn-imgtool-badge { opacity: 1; }
+.minn-block-island[data-imgtool]:hover > .minn-island-hint { opacity: 0; }
+.minn-block-island[data-imgtool].minn-island-covered:hover > .minn-imgtool-badge { opacity: 0; }
 .minn-imgedit-tile img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .minn-imgedit-x {
   position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;

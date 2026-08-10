@@ -15491,9 +15491,14 @@
 		// blocks open the Images editor, single-image blocks the replace
 		// picker. The stamp drives the pointer cursor and the click branch.
 		const imgTool = imageUnitsOf( raw ) ? 'edit' : ( islandImageUrls( raw || '' ).length ? 'swap' : '' );
+		/* translators: overlay on a gallery-shaped block's images */
+		const imgBadge = imgTool === 'edit' ? __( 'Edit images' )
+			/* translators: overlay on a single-image block's image */
+			: imgTool ? __( 'Replace image' ) : '';
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }>
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
+			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
 		</div>`;
 	}
@@ -15570,7 +15575,7 @@
 			const wrap = document.createElement( 'div' );
 			wrap.appendChild( frag );
 			// Drop editor chrome if any leaked in.
-			$$( '.minn-island-chip, .minn-island-hint, .minn-table-chip', wrap ).forEach( ( c ) => c.remove() );
+			$$( '.minn-island-chip, .minn-island-hint, .minn-imgtool-badge, .minn-table-chip', wrap ).forEach( ( c ) => c.remove() );
 			return {
 				html: wrap.innerHTML,
 				text: ( wrap.innerText || wrap.textContent || '' ).replace( /\u00a0/g, ' ' ),
@@ -15592,7 +15597,7 @@
 		const preview = el.querySelector( '.minn-island-preview' );
 		if ( preview ) {
 			const clone = preview.cloneNode( true );
-			$$( 'script, style, .minn-island-chip', clone ).forEach( ( n ) => n.remove() );
+			$$( 'script, style, .minn-island-chip, .minn-imgtool-badge', clone ).forEach( ( n ) => n.remove() );
 			// Run spans are editor chrome — unwrap so copied HTML stays clean.
 			$$( '.minn-island-run', clone ).forEach( ( s ) => {
 				while ( s.firstChild ) s.parentNode.insertBefore( s.firstChild, s );
@@ -17841,7 +17846,7 @@
 	// started typing this open. Goal is a global localStorage target.
 	function countEditorWords( body ) {
 		const walker = document.createTreeWalker( body, NodeFilter.SHOW_TEXT, {
-			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-hint, .minn-island-empty, .minn-shortcode-label, .minn-shortcode-input' )
+			acceptNode: ( n ) => n.parentNode.closest( '.minn-island-chip, .minn-island-hint, .minn-imgtool-badge, .minn-island-empty, .minn-shortcode-label, .minn-shortcode-input' )
 				? NodeFilter.FILTER_REJECT
 				: NodeFilter.FILTER_ACCEPT,
 		} );
@@ -20394,11 +20399,25 @@
 				if ( island ) openInspector( island );
 				return;
 			}
-			// Clicking an image inside a protected preview opens the image
-			// tooling directly (Austin's ask): gallery-shaped blocks → the
-			// Images editor with the clicked image's tile highlighted;
-			// single-image blocks → the replace picker for that image.
-			const img = e.target.closest( '.minn-block-island[data-imgtool] .minn-island-preview img' );
+			// Preview images are pointer-events:auto so they can be pressed
+			// (mousedown opens the tooling). Swallow the click so a preview
+			// image wrapped in a link can never navigate the editor away.
+			if ( e.target.closest( '.minn-block-island[data-imgtool] .minn-island-preview img' ) ) e.preventDefault();
+		} );
+		// Clicking an image inside a protected preview opens the image tooling
+		// directly (Austin's ask): gallery-shaped blocks → the Images editor
+		// with the clicked image's tile highlighted; single-image blocks → the
+		// replace picker for that image.
+		// MOUSEDOWN, NOT CLICK: a real mouse press moves the caret/selection,
+		// which re-renders the island — the img node is replaced between
+		// mousedown and mouseup, so the browser fires `click` on the nearest
+		// surviving ancestor (the container) and the image never sees it.
+		// Same detach-between-press-and-release class as the marketing
+		// palette's rebuild-on-hover bug. preventDefault also keeps the press
+		// from seating a caret inside the protected card.
+		body.addEventListener( 'mousedown', ( e ) => {
+			if ( e.button !== 0 ) return;
+			const img = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] .minn-island-preview img' );
 			if ( ! img ) return;
 			const island = img.closest( '.minn-block-island' );
 			if ( ! island || ! ed.islands || ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
