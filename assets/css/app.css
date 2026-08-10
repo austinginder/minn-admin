@@ -1967,6 +1967,31 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   grid-auto-rows: min-content;
   gap: 12px; padding: 16px 18px; overflow-y: auto; min-height: 120px;
 }
+/* ===== Missing-image placeholder =====
+   A dead image URL renders as the browser's broken glyph — on a themed slide
+   that reads as "this block is broken" rather than "this photo is gone"
+   (James's slider, whose first image 404s). A failed <img> still paints its
+   own background and border, so the illustration goes there: no element is
+   swapped, the src attribute stays exactly as authored (the image-tooling
+   doorway matches on it), and this only ever runs on preview and modal
+   chrome, never on the images in your content. */
+.minn-img-missing {
+  /* `content: url(...)` REPLACES the failed image, which is what keeps
+     Chrome's own broken-file glyph from painting (an empty content value does
+     not), and object-fit:none draws the illustration at its own size instead
+     of blowing it up to fill a full-bleed slide. The src attribute is never
+     touched. */
+  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='168' viewBox='0 0 240 168' fill='none'%3E%3Crect x='9' y='9' width='222' height='150' rx='15' stroke='%238a8a94' stroke-width='2' stroke-dasharray='8 8' opacity='.5'/%3E%3Cg opacity='.42' fill='%238a8a94'%3E%3Ccircle cx='79' cy='56' r='11'/%3E%3Cpath d='M40 111l35-33 24 23 20-16 41 33H40z'/%3E%3C/g%3E%3Cpath d='M120 22l-9 26 15 8-13 26 12 9-10 24 14 12' stroke='%238a8a94' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' opacity='.85' fill='none'/%3E%3Ctext x='120' y='146' text-anchor='middle' fill='%238a8a94' font-family='system-ui,-apple-system,Segoe UI,sans-serif' font-size='15' font-weight='600'%3EImage missing%3C/text%3E%3C/svg%3E");
+  object-fit: none !important; object-position: center;
+  min-width: 96px; min-height: 96px;
+  border-radius: 10px;
+  background-color: var(--panel2);
+}
+/* Tiles are square and small: the label would not survive the scale-down. */
+/* Small chrome (tiles, inspector rows) scales the illustration down to fit. */
+.minn-imgedit-tile .minn-img-missing,
+.minn-insp-img-row .minn-img-missing { min-width: 0; min-height: 0; object-fit: contain !important; }
+
 /* Drop-to-add affordance. The modal owns every drop while it is open, so the
    app-wide "Drop files to upload" veil stays down and this is the only hint;
    pointer-events:none keeps the drop itself landing on the overlay. */
