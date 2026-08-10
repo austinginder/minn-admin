@@ -1,10 +1,11 @@
 /**
- * Island hover hint: locked blocks explain themselves.
+ * Island hover hint: a block locked for a REASON explains itself.
  *
- * A core text block that islands because of styling attrs gets the
- * "Styled block" variant; any other island gets the generic "block editor"
- * variant. The hint is editor chrome: hidden until hover/selection, never
- * counted by the word-count pill, never copied with a selection.
+ * A core text block that islands because of styling attrs looks typeable and
+ * is not, so it says so. Every other card carries the ⚙ chip in view and gets
+ * NO hint — the label only repeated it (Austin, v0.27.0). The hint is editor
+ * chrome: hidden until hover/selection, never counted by the word-count pill,
+ * never copied with a selection.
  */
 const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
@@ -46,23 +47,23 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 			};
 		} );
 
-		// Since v0.26.0 a STYLED paragraph stays editable prose (its attrs ride
-		// along) — only genuinely unreproducible blocks island, so this fixture
-		// yields exactly one card.
-		t.check( 'only the third-party block islands', state.islands.length === 1, JSON.stringify( state.islands ) );
+		// A styled code block can't be reproduced from the DOM, so it islands and
+		// keeps the explaining hint; the third-party card gets none.
+		t.check( 'the styled code block and the third-party block both island', state.islands.length === 2, JSON.stringify( state.islands ) );
 		t.check( 'control paragraph stays prose', state.proseParas >= 1 );
-		t.check( 'styled paragraph stays editable prose', state.proseParas >= 2, String( state.proseParas ) );
 		const hero = state.islands.find( ( i ) => i.block === 'acme/hero' );
-		t.check( 'third-party island gets the generic hint', !! hero && /block editor/.test( hero.hint ), hero && hero.hint );
+		t.check( 'third-party island carries no hint', !! hero && hero.hint === '', hero && hero.hint );
+		const styled = state.islands.find( ( i ) => /code/.test( i.block || '' ) );
+		t.check( 'styled text island explains why it is locked', !! styled && /Styled block/.test( styled.hint ), styled && styled.hint );
 
 		// Hidden at rest, revealed on hover.
 		const restOpacity = await page.evaluate( () =>
-			getComputedStyle( document.querySelector( '.minn-block-island .minn-island-hint' ) ).opacity );
+			getComputedStyle( document.querySelector( '.minn-island-hint' ) ).opacity );
 		t.check( 'hint hidden at rest', restOpacity === '0', restOpacity );
 
-		await page.hover( '.minn-block-island[data-block="acme/hero"]' );
+		await page.hover( '.minn-block-island[data-block="code"], .minn-block-island[data-block="core/code"]' );
 		await page.waitForFunction( () => {
-			const el = document.querySelector( '.minn-block-island[data-block="acme/hero"] .minn-island-hint' );
+			const el = document.querySelector( '.minn-island-hint' );
 			return el && getComputedStyle( el ).opacity === '1';
 		}, null, { timeout: 4000 } );
 		t.check( 'hint revealed on hover', true );

@@ -15540,9 +15540,11 @@
 		// can't reproduce; everything else is protected markup. Reveal rides
 		// island hover/selection in CSS; the span is chrome, so it joins the
 		// island-chip exclusion lists (copy, word count).
-		const hint = SIMPLE_BLOCKS.includes( short )
-			? __( 'Styled block: edit text via ⚙' )
-			: __( 'Edit via ⚙ or the block editor' );
+		// Only blocks locked for a REASON explain themselves: a styled text
+		// block looks typeable and is not, so the hint answers "why can't I
+		// type here?". Everything else already has the ⚙ chip in view, and a
+		// label repeating it was pure noise (Austin).
+		const hint = SIMPLE_BLOCKS.includes( short ) ? __( 'Styled block: edit text via ⚙' ) : '';
 		// Images in the preview are click-through doorways: gallery-shaped
 		// blocks open the Images editor, single-image blocks the replace
 		// picker. The stamp drives the pointer cursor and the click branch.
@@ -15562,7 +15564,7 @@
 		const patternRef = refM ? refM[ 1 ] : '';
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
 			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click duplicates · ⇧⌥-click removes" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
-			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
+			${ hint ? `<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>` : '' }
 			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
 			${ patternRef ? `<button class="minn-pattern-cover" data-patternedit="${ esc( patternRef ) }" type="button" aria-label="${ esc( __( 'Edit this pattern' ) ) }"><span class="minn-pattern-badge">${ esc( __( 'Edit pattern' ) ) } ↗</span></button>` : '' }
 			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
@@ -16259,8 +16261,17 @@
 				return span;
 			} );
 			island._minnRuns = { base, runs, spans };
-			const hint = island.querySelector( '.minn-island-hint' );
-			if ( hint ) hint.textContent = __( 'Text is editable in place · structure via ⚙' );
+			// This hint is an AFFORDANCE, not a restatement of the ⚙ chip: the
+			// card looks locked but its text is not. Cards with nothing to say
+			// carry no hint element at all now, so create one here.
+			let hint = island.querySelector( ':scope > .minn-island-hint' );
+			if ( ! hint ) {
+				hint = document.createElement( 'span' );
+				hint.className = 'minn-island-hint';
+				hint.setAttribute( 'aria-hidden', 'true' );
+				island.insertBefore( hint, island.firstChild );
+			}
+			hint.textContent = __( 'Text is editable in place · structure via ⚙' );
 		} );
 	}
 
