@@ -22955,6 +22955,10 @@
 	let inspectorScrollFn = null;
 
 	function closeInspector() {
+		// Nested containers stack their ⚙ chips in the same corner, so two
+		// popovers can read as one changing its mind (Austin's 2-vs-14-blocks
+		// repro) — the open popover's island wears a highlight instead.
+		$$( '.minn-insp-target' ).forEach( ( el ) => el.classList.remove( 'minn-insp-target' ) );
 		if ( inspectorEl && inspectorEl._minnA11yEsc ) {
 			document.removeEventListener( 'keydown', inspectorEl._minnA11yEsc, true );
 		}
@@ -23472,6 +23476,7 @@
 		if ( ! model ) { toast( 'This block’s markup can’t be parsed safely.', true ); return; }
 
 		// Placeholder while schemas load.
+		islandEl.classList.add( 'minn-insp-target' );
 		inspectorEl = document.createElement( 'div' );
 		inspectorEl.className = 'minn-inspector';
 		inspectorEl.innerHTML = '<div class="minn-loading" style="padding:24px;">Loading block schema…</div>';
