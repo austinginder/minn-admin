@@ -18366,11 +18366,40 @@
 		el.classList.toggle( 'has-goal', !! goal );
 		el.classList.toggle( 'goal-met', !!( goal && words >= goal ) );
 		syncTableChips();
+		fanIslandChips( body );
 		updateOutline();
 		// Focus mode and the find bar ride the same typing cadence.
 		syncFocusDim();
 		focusTypewriter();
 		syncFindBar();
+	}
+
+	// Nested ⚙ chips fan LEFT of their ancestors' chips. The deepest-wins
+	// reveal swaps chips IN PLACE, so two "⚙ group" pills could occupy the
+	// same pixels and answer differently depending on hover approach — the
+	// outer group said 2 blocks, the inner one 14, and the cluster read as
+	// one button changing its mind (Austin's Royal Palm repro). Geometry
+	// instead of hover state: a click target never changes identity.
+	function fanIslandChips( body ) {
+		// Cheap bail on the common page: no nested island carries a chip.
+		if ( ! body.querySelector( '.minn-block-island .minn-block-island > .minn-island-chip' ) ) return;
+		$$( '.minn-block-island .minn-block-island > .minn-island-chip', body ).forEach( ( chip ) => {
+			chip.style.transform = '';
+			const own = chip.closest( '.minn-block-island' );
+			const r = chip.getBoundingClientRect();
+			if ( ! r.width ) return;
+			let dx = 0;
+			for ( let anc = own.parentElement && own.parentElement.closest( '.minn-block-island' ); anc;
+				anc = anc.parentElement && anc.parentElement.closest( '.minn-block-island' ) ) {
+				const ac = anc.querySelector( ':scope > .minn-island-chip' );
+				if ( ! ac ) continue;
+				const ar = ac.getBoundingClientRect();
+				if ( r.left + dx < ar.right + 6 && r.right + dx > ar.left - 6 && r.top < ar.bottom && r.bottom > ar.top ) {
+					dx = ( ar.left - 6 - r.width ) - r.left;
+				}
+			}
+			if ( dx ) chip.style.transform = `translateX(${ Math.round( dx ) }px)`;
+		} );
 	}
 
 	/* ===== Outline panel ===== */
@@ -20898,6 +20927,16 @@
 		body.addEventListener( 'click', ( e ) => {
 			const prev = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' );
 			if ( prev && e.target.closest( 'a' ) ) e.preventDefault(); // a linked photo must not navigate
+		} );
+		// Hovering a ⚙ chip outlines the island it configures — with nested
+		// chips fanned side by side, the outline says which card each pill
+		// belongs to before the click commits. Event-set class, never :has()
+		// (the chip-density perf rule).
+		body.addEventListener( 'mouseover', ( e ) => {
+			const chip = e.target.closest && e.target.closest( '.minn-island-chip' );
+			const isl = chip && chip.closest( '.minn-block-island' );
+			$$( '.minn-chip-hover', body ).forEach( ( el ) => { if ( el !== isl ) el.classList.remove( 'minn-chip-hover' ); } );
+			if ( isl ) isl.classList.add( 'minn-chip-hover' );
 		} );
 		const openBe = $( '#minn-open-block-editor', view );
 		if ( openBe ) openBe.addEventListener( 'click', () => openInBlockEditor( openBe ) );
