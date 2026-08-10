@@ -22200,9 +22200,12 @@
 			mirror: info.mirror ? info.mirror.entries[ i ] : null,
 		} ) );
 		const canCaption = info.units.some( unitCanCaption );
-		// A fixed layout has a set number of openings — offering × or Add
-		// would promise something the block cannot keep.
-		const fixed = !! info.fixedSlots;
+		// A fixed layout has a set number of openings — offering × or Add would
+		// promise something the block cannot keep. Unless its own plugin can
+		// lay it out again: an image-block adapter takes the images a writer
+		// chose and hands back new markup (Minn_Admin::image_blocks).
+		const rebuilder = ( B.imageBlocks || {} )[ String( islandEl && islandEl.dataset.block || '' ) ];
+		const fixed = !! info.fixedSlots && ! rebuilder;
 		const canUpload = !! ( B.caps && B.caps.upload );
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-imgedit-overlay';
@@ -22405,6 +22408,25 @@
 				return;
 			}
 			if ( e.target.closest( '#minn-imgedit-apply' ) && list.length ) {
+				// Adapter-owned block: the layout is the plugin's to compute,
+				// so send the images in order and take back whole markup.
+				if ( rebuilder ) {
+					const ids = list.map( ( it ) => ( it.attachment ? it.attachment.id : it.id ) ).filter( Boolean );
+					if ( ids.length !== list.length ) { toast( 'Every image needs to be in the media library.', true ); return; }
+					const applyBtn = $( '#minn-imgedit-apply', overlay );
+					if ( applyBtn ) { applyBtn.disabled = true; applyBtn.textContent = 'Applying…'; }
+					api( 'minn-admin/v1/image-block', {
+						method: 'POST',
+						body: JSON.stringify( { block: islandEl.dataset.block, ids, raw: baseRaw } ),
+					} ).then( ( r ) => {
+						closeImgEdit();
+						if ( r && r.markup ) replaceIsland( idx, islandEl, r.markup );
+					} ).catch( ( err ) => {
+						if ( applyBtn ) { applyBtn.disabled = false; applyBtn.textContent = 'Apply'; }
+						toast( err.message, true );
+					} );
+					return;
+				}
 				const proto = info.units[ 0 ];
 				const parts = list.map( ( it ) => {
 					const text = it.attachment ? cloneImageUnit( proto, it.attachment ) : it.unit.text;
@@ -25913,6 +25935,25 @@
 	// full block picker. `target` is the block to insert before/replace
 	// (the emptied "/" block, or a fresh paragraph the picker created).
 	function runSlashAction( action, target, body, insertImage ) {
+		// An image block built by its own plugin: pick the photos first, then
+		// ask the block's owner for markup. Nothing is inserted until it
+		// answers, so a cancelled picker leaves the line as it was.
+		if ( action && action.imageBlock ) {
+			openMediaPicker( ( picks ) => {
+				const ids = ( picks || [] ).map( ( p ) => p && p.id ).filter( Boolean );
+				if ( ! ids.length ) return;
+				ensureBlocksMode();
+				toast( 'Building the gallery…' );
+				api( 'minn-admin/v1/image-block', {
+					method: 'POST',
+					body: JSON.stringify( { block: action.imageBlock, ids, raw: '' } ),
+				} ).then( ( r ) => {
+					if ( ! r || ! r.markup ) return;
+					insertIsland( target, action.imageBlock, r.markup );
+				} ).catch( ( err ) => toast( err.message, true ) );
+			}, { multi: true, doneLabel: 'Build gallery' } );
+			return;
+		}
 		// A new column joins the Columns block the caret is in (the menu only
 		// offers this there). The "/column" line stays as that column's first
 		// empty paragraph; the caret moves into the new one.
@@ -26166,6 +26207,16 @@
 		let filtered = [];
 		let query = '';
 		const items = basicSlashItems( state.editor && state.editor.mode === 'blocks' );
+		// Blocks whose owner builds them from a set of images (a tiled gallery):
+		// pick the photos, the plugin lays them out. Blocks mode only — the
+		// result is an island.
+		if ( state.editor && state.editor.mode === 'blocks' ) {
+			Object.keys( B.imageBlocks || {} ).forEach( ( name ) => {
+				const desc = B.imageBlocks[ name ];
+				if ( ! desc || ! desc.insert ) return;
+				items.push( [ icon( 'gallery' ), desc.label, { imageBlock: name }, false, name.split( '/' )[ 0 ], [ 'gallery', 'images' ] ] );
+			} );
+		}
 		// Only inside a Columns block, where it is the one structural thing the
 		// slash menu could not do: item[6] is a predicate over the caret block.
 		items.unshift( [ icon( 'columns' ), 'Column', { addColumn: true }, false, '', [ 'columns', 'add column' ],
