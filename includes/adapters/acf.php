@@ -38,8 +38,12 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/acf/fields', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return current_user_can( 'edit_posts' );
+		'permission_callback' => function ( WP_REST_Request $request ) {
+			if ( ! current_user_can( 'edit_posts' ) ) {
+				return false;
+			}
+			$post_id = (int) $request['post_id'];
+			return ! $post_id || current_user_can( 'edit_post', $post_id );
 		},
 		'args'                => array(
 			'post_id'   => array( 'type' => 'integer', 'default' => 0 ),

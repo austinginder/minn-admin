@@ -65,6 +65,34 @@ async function login( page ) {
 	await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 15000 } );
 }
 
+/* Log a SECOND account in, in its own context, for role-boundary checks.
+ *
+ * Two things this does that a hand-rolled form login must not skip. It hands
+ * wp-login a redirect_to so the account lands on Minn rather than wp-admin:
+ * the dashboard on a site carrying dozens of plugins can take longer to reach
+ * DOMContentLoaded than the default 30s navigation timeout allows, which is a
+ * timeout in a suite that has nothing to do with what it is testing. And it
+ * waits on window.MINN rather than on the navigation alone, so a rejected
+ * password fails as a clear timeout here instead of as a puzzling 403 later.
+ *
+ * Role accounts on the dev site: minn-editor / minn-editor-pass-1 and
+ * minn-author / minn-author-pass-1.
+ */
+async function loginAs( browser, user, pass ) {
+	const ctx = await browser.newContext( { ignoreHTTPSErrors: true } );
+	const page = await ctx.newPage();
+	const dest = BASE + '/minn-admin/overview';
+	await page.goto( BASE + '/wp-login.php?redirect_to=' + encodeURIComponent( dest ), { waitUntil: 'domcontentloaded' } );
+	await page.fill( '#user_login', user );
+	await page.fill( '#user_pass', pass );
+	await Promise.all( [
+		page.waitForNavigation( { waitUntil: 'domcontentloaded', timeout: 60000 } ),
+		page.click( '#wp-submit' ),
+	] );
+	await page.waitForFunction( () => window.MINN && window.MINN.nonce, null, { timeout: 20000 } );
+	return { ctx, page };
+}
+
 // Create a post through the app's own REST credentials. Returns the post ID.
 async function createPost( page, { title, content, status = 'draft', ...extra } ) {
 	return page.evaluate( async ( args ) => {
@@ -158,4 +186,4 @@ function reporter( name ) {
 	};
 }
 
-module.exports = { BASE, launch, login, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter };
+module.exports = { BASE, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter };

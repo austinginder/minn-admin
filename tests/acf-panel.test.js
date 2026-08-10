@@ -13,7 +13,7 @@
  * (subtitle text, layout select, featured_story true_false, editor_notes
  * textarea, photo_gallery gallery — the gallery only feeds the locked count).
  */
-const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
+const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
 ( async () => {
 	const t = reporter( 'acf-panel' );
@@ -48,6 +48,18 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	};
 
 	try {
+		// Object authorization regression: field groups can carry internal
+		// workflow labels/choices, so another Author's draft must be opaque.
+		const { ctx: authorCtx, page: authorPage } = await loginAs( browser, 'minn-author', 'minn-author-pass-1' );
+		const denied = await authorPage.evaluate( async ( postId ) => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/acf/fields?post_type=posts&post_id=' + postId, {
+				headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+			} );
+			return { status: r.status, body: await r.json() };
+		}, id );
+		t.check( 'Author cannot inspect another user\'s draft ACF schema', denied.status === 403 && denied.body.code === 'rest_forbidden', JSON.stringify( denied ) );
+		await authorCtx.close();
+
 		await openEditor( page, id );
 		await page.waitForSelector( '[data-side-door="panel:acf"]', { timeout: 15000 } );
 		await page.click( '[data-side-door="panel:acf"]' );
