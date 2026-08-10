@@ -50,6 +50,23 @@ const CONTENT = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class
 		const domCount = await page.evaluate( () => document.querySelectorAll( '.minn-slot figure.wp-block-image' ).length );
 		t.check( 'a second image appears in the container', domCount === 2, String( domCount ) );
 
+		// ⌥-clicking the ⚙ chip duplicates without opening the popover.
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 500 );
+		const altDup = await page.evaluate( () => {
+			const c = [ ...document.querySelectorAll( '#minn-table-chips button' ) ].find( ( b ) => b._kind === 'image' );
+			if ( ! c ) return 'no chip';
+			c.dispatchEvent( new MouseEvent( 'click', { altKey: true, bubbles: true } ) );
+			return 'clicked';
+		} );
+		await page.waitForTimeout( 900 );
+		const afterAlt = await page.evaluate( () => ( {
+			figures: document.querySelectorAll( '.minn-slot figure.wp-block-image' ).length,
+			popoverOpen: !! document.querySelector( '[data-img-dup]' ),
+		} ) );
+		t.check( 'alt-click on the chip duplicates without opening settings',
+			altDup === 'clicked' && afterAlt.figures === 3 && ! afterAlt.popoverOpen, JSON.stringify( afterAlt ) );
+
 		await page.keyboard.press( 'Meta+s' );
 		await page.waitForTimeout( 3500 );
 		const raw = await page.evaluate( async ( pid ) => {
@@ -60,9 +77,9 @@ const CONTENT = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class
 			return ( j.content && j.content.raw ) || '';
 		}, id );
 		const imgBlocks = ( raw.match( /<!-- wp:image/g ) || [] ).length;
-		t.check( 'saved as two real image blocks', imgBlocks === 2, String( imgBlocks ) );
-		t.check( 'the copy kept the caption and attachment id',
-			( raw.match( /Caption 1/g ) || [] ).length === 2 && ( raw.match( /wp-image-951/g ) || [] ).length === 2 );
+		t.check( 'saved as three real image blocks', imgBlocks === 3, String( imgBlocks ) );
+		t.check( 'every copy kept the caption and attachment id',
+			( raw.match( /Caption 1/g ) || [] ).length === 3 && ( raw.match( /wp-image-951/g ) || [] ).length === 3 );
 		t.check( 'the paragraph after it survived', raw.indexOf( '<p>After.</p>' ) !== -1 );
 	} finally {
 		await deletePost( page, id );

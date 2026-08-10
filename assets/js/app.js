@@ -15512,7 +15512,7 @@
 		const refM = short === 'block' ? ( raw || '' ).match( /"ref"\s*:\s*(\d+)/ ) : null;
 		const patternRef = refM ? refM[ 1 ] : '';
 		return `<div class="minn-block-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }"${ imgTool ? ` data-imgtool="${ imgTool }"` : '' }${ patternRef ? ` data-patternref="${ esc( patternRef ) }"` : '' }>
-			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
+			<button class="minn-island-chip" data-inspect="${ idx }" title="Configure block · ⌥-click to duplicate" type="button" aria-label="Configure ${ esc( chipLabel ) } block">⚙ ${ esc( chipLabel ) }</button>
 			<span class="minn-island-hint" aria-hidden="true">${ esc( hint ) }</span>
 			${ imgBadge ? `<span class="minn-imgtool-badge" aria-hidden="true">${ esc( imgBadge ) }</span>` : '' }
 			${ patternRef ? `<button class="minn-pattern-badge" data-patternedit="${ esc( patternRef ) }" type="button">${ esc( __( 'Edit pattern' ) ) } ↗</button>` : '' }
@@ -20413,7 +20413,10 @@
 			if ( chip ) {
 				e.preventDefault();
 				const island = chip.closest( '.minn-block-island' );
-				if ( island ) openInspector( island );
+				if ( ! island ) return;
+				// ⌥-click: duplicate the block rather than open its settings.
+				if ( e.altKey ) { duplicateIsland( island ); return; }
+				openInspector( island );
 				return;
 			}
 			// Synced pattern → its own editor. Save first (same discipline as
@@ -22681,8 +22684,16 @@
 				chip.type = 'button';
 				chip.className = 'minn-code-chip';
 				chip.addEventListener( 'mousedown', ( ev ) => ev.preventDefault() ); // keep the editor caret
-				chip.addEventListener( 'click', () => {
+				chip.addEventListener( 'click', ( ev ) => {
 					if ( ! chip._target || ! chip._target.isConnected ) return;
+					// ⌥-click duplicates the block instead of opening its
+					// settings — the same modifier grammar as ⌥-clicking the
+					// WordPress button, and it keeps the card chrome quiet.
+					if ( ev.altKey ) {
+						const node = chip._kind === 'image' ? ( chip._target.closest( 'figure' ) || chip._target ) : chip._target;
+						if ( duplicateEditableNode( node ) ) toast( 'Block duplicated' );
+						return;
+					}
 					if ( chip._kind === 'table' ) openTablePop( chip._target );
 					else if ( chip._kind === 'code' ) openCodePop( chip._target );
 					else openImgPop( chip._target );
@@ -23131,6 +23142,23 @@
 	 * attributes honest: the {"id":…} attr and wp-image-N class follow the
 	 * new attachment, and stale srcset/sizes/width/height are dropped. */
 
+	// Duplicate an editable block node (figure, table, pre) in place: the copy
+	// is that node's own markup cloned verbatim, inserted right after it, so
+	// caption/classes/attachment id all travel and serialization just re-reads
+	// the DOM. Shared by the ⚙ popovers and the ⌥-click shortcut on chips.
+	function duplicateEditableNode( target ) {
+		const editorBody = $( '#minn-editor-body' );
+		if ( ! target || ! editorBody || ! editorBody.contains( target ) ) return false;
+		const copy = target.cloneNode( true );
+		copy.removeAttribute( 'data-minn-upload' );
+		target.insertAdjacentElement( 'afterend', copy );
+		stampSlotDirtyFor( copy );
+		queueTableChips();
+		updateEditorStats();
+		scheduleAutosave();
+		return true;
+	}
+
 	let imgPop = null;
 	let imgPopTarget = null;
 
@@ -23491,19 +23519,7 @@
 		// travel — serialization re-reads the DOM, so nothing else to do
 		// beyond stamping the slot dirty.
 		imgPop.querySelector( '[data-img-dup]' ).addEventListener( 'click', () => {
-			const target = img.closest( 'figure' ) || img;
-			const editorBody = $( '#minn-editor-body' );
-			if ( ! editorBody || ! editorBody.contains( target ) ) return hideImgPop();
-			const copy = target.cloneNode( true );
-			// Chrome chrome (chips/run spans) never lives inside the figure,
-			// but a stray upload marker would re-trigger the swap watcher.
-			copy.removeAttribute( 'data-minn-upload' );
-			target.insertAdjacentElement( 'afterend', copy );
-			stampSlotDirtyFor( copy );
-			queueTableChips();
-			updateEditorStats();
-			scheduleAutosave();
-			toast( 'Image duplicated' );
+			if ( duplicateEditableNode( img.closest( 'figure' ) || img ) ) toast( 'Image duplicated' );
 			hideImgPop();
 		} );
 
@@ -27457,7 +27473,7 @@
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
 							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
-							<span class="minn-kbd">⌥click</span><span>The WordPress button (bottom left) while editing: this post in the block editor</span>
+							<span class="minn-kbd">⌥click</span><span>A block's ⚙ handle: duplicate it · the WordPress button (bottom left): this post in the block editor</span>
 							<span class="minn-kbd">← →</span><span>Previous / next item in a media or entry detail</span>
 							<span class="minn-kbd">Esc</span><span>Close menus and dialogs</span>
 						</div>
