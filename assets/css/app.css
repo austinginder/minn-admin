@@ -1978,6 +1978,27 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   grid-auto-rows: min-content;
   gap: 12px; padding: 16px 18px; overflow-y: auto; min-height: 120px;
 }
+/* ===== Editor ignores viewport-sized heights =====
+   A slide deck sets min-height:100vh on every section so each one fills the
+   screen for a reader. While EDITING that is acres of dead space between two
+   paragraphs (James's deck runs six viewports tall). The front end still gets
+   it: this is a stylesheet rule, so the saved markup is untouched, and it is
+   scoped to viewport units — a cover block's fixed pixel height still means
+   what it says. */
+.minn-editor-body [style*="min-height"][style*="vh"],
+.minn-island-preview [style*="min-height"][style*="vh"] { min-height: 0 !important; }
+
+/* A gallery of two dozen photos previews as a column of full-width images you
+   have to scroll past to reach the rest of the post, with the editing doorway
+   somewhere in the middle (Austin's 23-image repro). Clamp the card and fade
+   its foot: the hover badge carries the real count, and clicking anywhere in
+   it opens the images editor. */
+.minn-island-preview.minn-preview-clamped {
+  max-height: 420px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+}
+
 /* ===== Missing-image placeholder =====
    A dead image URL renders as the browser's broken glyph — on a themed slide
    that reads as "this block is broken" rather than "this photo is gone"
@@ -2015,6 +2036,16 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   opacity: 0; pointer-events: none; transition: opacity 0.12s;
 }
 .minn-imgedit-overlay.dropping .minn-imgedit-drop-veil { opacity: 1; }
+/* Tile + its caption field are one grid cell, so captions never break the
+   columns and a long one wraps under its own photo. */
+.minn-imgedit-cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.minn-imgedit-cap {
+  width: 100%; box-sizing: border-box; padding: 5px 8px; font: inherit; font-size: 12.5px;
+  color: var(--text); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 7px; outline: none;
+}
+.minn-imgedit-cap::placeholder { color: var(--text3); }
+.minn-imgedit-cap:focus { border-color: var(--accent); }
 .minn-imgedit-tile {
   position: relative; border: 1px solid var(--border); border-radius: 10px;
   overflow: hidden; aspect-ratio: 1; cursor: grab; background: var(--bg);
