@@ -15427,43 +15427,92 @@
 		islands[ idx ] = parts.head + parts.open + parts.preamble + serializeToBlocks( slots[ 0 ], islands ) + parts.tail;
 	}
 
-	/* Add an empty column to a Columns block. The stored raw and the live DOM
-	 * are index-aligned (the serializer walks the raw's column segments and the
-	 * DOM's slots in step), so BOTH grow here, in the same position. A fresh
-	 * column carries no width: Gutenberg writes the same for one added to an
-	 * unsized set, and an explicit width copied off a sibling would silently
-	 * squeeze the row. */
-	function addColumnToIsland( island ) {
+	/* Column operations on a Columns block. The stored raw and the live DOM are
+	 * index-aligned (the serializer walks the raw's column segments and the
+	 * DOM's slots in step), so every op moves BOTH, in the same position. A
+	 * fresh column carries no width: Gutenberg writes the same for one added to
+	 * an unsized set, and a width copied off a sibling would silently squeeze
+	 * the row. Ops: 'before' / 'after' (relative to refCol, or the end when
+	 * there is none) and 'remove'. */
+	function columnOp( island, op, refCol ) {
 		const ed = state.editor;
 		if ( ! ed || ! ed.islands || ! island ) return null;
 		const idx = parseInt( island.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return null;
-		// The writer has been typing in these columns — take the live text
-		// into the stored raw before rewriting it.
+		// The writer has been typing in these columns — take the live text into
+		// the stored raw before rewriting it.
 		flushSlotIsland( island, ed.islands );
 		const parts = slotParseContent( String( ed.islands[ idx ] ), 'columns' );
 		if ( ! parts ) return null;
 		const segs = tokenizeBlocks( parts.inner );
 		if ( ! segs ) return null;
+		// Column segments with their offsets, plus the separator this block
+		// already uses between them.
+		const cols = [];
 		let at = 0;
-		let endOfLast = 0;
 		let sep = '';
 		segs.forEach( ( seg ) => {
+			if ( seg.type === 'block' ) cols.push( { start: at, end: at + seg.raw.length } );
+			else if ( ! sep && ! seg.raw.trim() && cols.length ) sep = seg.raw;
 			at += seg.raw.length;
-			if ( seg.type === 'block' ) endOfLast = at;
-			else if ( ! sep && ! seg.raw.trim() && endOfLast ) sep = seg.raw;
 		} );
-		if ( ! endOfLast ) return null;
+		if ( ! cols.length ) return null;
+		const domCols = $$( '.minn-slot', island )
+			.filter( ( sl ) => sl.closest( '.minn-slot-island' ) === island )
+			.map( ( sl ) => sl.parentElement );
+		if ( domCols.length !== cols.length ) return null; // never guess when they disagree
+		let i = refCol ? domCols.indexOf( refCol ) : -1;
+		if ( i < 0 ) i = domCols.length - 1;
+		const gap = sep || '\n';
+		const write = ( inner ) => { ed.islands[ idx ] = parts.head + parts.open + inner + parts.tail; };
+
+		if ( op === 'remove' ) {
+			// The last column would leave an empty Columns block behind; remove
+			// the whole block from its ⚙ instead, which offers Undo.
+			if ( cols.length < 2 ) { toast( 'A columns block keeps at least one column.', true ); return null; }
+			const cut = cols[ i ];
+			// Swallow one separator so the remaining columns stay evenly joined.
+			const from = i > 0 ? cols[ i - 1 ].end : cut.start;
+			const to = i > 0 ? cut.end : cols[ i + 1 ].start;
+			const removedRaw = parts.inner.slice( cut.start, cut.end );
+			const removedEl = domCols[ i ];
+			const anchor = domCols[ i + 1 ] || null;
+			const holder = removedEl.parentElement;
+			write( parts.inner.slice( 0, from ) + parts.inner.slice( to ) );
+			removedEl.remove();
+			stampSlotDirtyFor( holder.querySelector( '.minn-slot' ) );
+			scheduleAutosave();
+			// Structural deletion is the one thing Blink's undo can't restore
+			// (rule: island removal offers a toast instead).
+			toastAction( 'Column removed', 'Undo', () => {
+				const back = slotParseContent( String( ed.islands[ idx ] ), 'columns' );
+				if ( ! back ) return;
+				const marks = tokenizeBlocks( back.inner );
+				if ( ! marks ) return;
+				let a2 = 0;
+				const spots = [];
+				marks.forEach( ( seg ) => { if ( seg.type === 'block' ) spots.push( a2 + seg.raw.length ); a2 += seg.raw.length; } );
+				const cutAt = i > 0 ? spots[ i - 1 ] : 0;
+				ed.islands[ idx ] = back.head + back.open
+					+ back.inner.slice( 0, cutAt ) + ( i > 0 ? gap + removedRaw : removedRaw + gap ) + back.inner.slice( cutAt )
+					+ back.tail;
+				if ( anchor && anchor.isConnected ) anchor.before( removedEl );
+				else holder.appendChild( removedEl );
+				scheduleAutosave();
+			} );
+			return removedEl;
+		}
+
 		const colRaw = '<!-- wp:column -->\n<div class="wp-block-column"></div>\n<!-- /wp:column -->';
-		const inner = parts.inner.slice( 0, endOfLast ) + ( sep || '\n' ) + colRaw + parts.inner.slice( endOfLast );
-		const ownSlots = $$( '.minn-slot', island ).filter( ( sl ) => sl.closest( '.minn-slot-island' ) === island );
-		const lastCol = ownSlots.length ? ownSlots[ ownSlots.length - 1 ].parentElement : null;
-		if ( ! lastCol || ! lastCol.parentElement ) return null;
-		ed.islands[ idx ] = parts.head + parts.open + inner + parts.tail;
+		const cutAt = op === 'before' ? cols[ i ].start : cols[ i ].end;
+		write( parts.inner.slice( 0, cutAt )
+			+ ( op === 'before' ? colRaw + gap : gap + colRaw )
+			+ parts.inner.slice( cutAt ) );
 		const el = document.createElement( 'div' );
 		el.className = 'wp-block-column';
 		el.innerHTML = '<div class="minn-slot" contenteditable="true"><p><br></p></div>';
-		lastCol.after( el );
+		if ( op === 'before' ) domCols[ i ].before( el );
+		else domCols[ i ].after( el );
 		const slot = el.querySelector( '.minn-slot' );
 		const p = slot && slot.firstElementChild;
 		if ( p ) {
@@ -20921,6 +20970,28 @@
 			e.preventDefault();
 			openLinkPop( a );
 		} );
+		// Right-click inside a column → column ops on THAT column, the shape the
+		// table block already uses. Bound before the table handler so a table
+		// inside a column still gets its own menu (its check runs first when
+		// the press lands in a cell).
+		body.addEventListener( 'contextmenu', ( e ) => {
+			if ( e.defaultPrevented ) return;
+			if ( e.target.closest && e.target.closest( 'td, th' ) ) return; // the table menu owns cells
+			const slot = e.target.closest ? e.target.closest( '.minn-slot' ) : null;
+			const col = slot && slot.parentElement;
+			const island = col && col.parentElement && col.parentElement.closest( '.minn-cols-island' );
+			if ( ! island || ! body.contains( island ) ) return;
+			// Only this island's OWN columns: a nested Columns block inside a
+			// column has its own slots and owns its own menu.
+			if ( slot.closest( '.minn-slot-island' ) !== island ) return;
+			e.preventDefault();
+			openMinnMenu( e.clientX, e.clientY, [
+				{ label: __( 'Add column before' ), run: () => columnOp( island, 'before', col ) },
+				{ label: __( 'Add column after' ), run: () => columnOp( island, 'after', col ) },
+				{ label: __( 'Remove column' ), danger: true, run: () => columnOp( island, 'remove', col ) },
+			] );
+		} );
+
 		// Right-click in a table cell → targeted row/column ops on THAT cell.
 		body.addEventListener( 'contextmenu', ( e ) => {
 			const cell = e.target.closest ? e.target.closest( 'td, th' ) : null;
@@ -25327,6 +25398,12 @@
 	// The curated quick-insert set — shared by the inline slash menu and the
 	// full block picker. Embeds and galleries insert as islands, blocks mode
 	// only (classic content already auto-embeds lone URLs server-side).
+	// An empty Columns row. No widths: the columns share the space evenly and
+	// stay that way as more are added.
+	const columnsTemplate = ( n ) => '<!-- wp:columns -->\n<div class="wp-block-columns">'
+		+ Array.from( { length: n }, () => '\n<!-- wp:column -->\n<div class="wp-block-column">\n<!-- wp:paragraph -->\n<p></p>\n<!-- /wp:paragraph -->\n</div>\n<!-- /wp:column -->' ).join( '' )
+		+ '</div>\n<!-- /wp:columns -->';
+
 	function basicSlashItems( blocksMode ) {
 		// Always list the full Basics set. Island inserts (embed/gallery/spacer/
 		// file/shortcode) used to hide in classic mode, which made them look
@@ -25355,6 +25432,9 @@
 			// Buttons: live island with label/URL rows (not free HTML — nested
 			// core/button markup must stay in the island raw store).
 			[ icon( 'send' ), 'Buttons', { block: 'core/buttons', template: buttonsTemplate( 'Button', '' ) } ],
+			// A row of columns: two to start, /column adds more. Inserted as a
+			// real container, so you can type in it straight away.
+			[ icon( 'columns' ), 'Columns', { block: 'core/columns', template: columnsTemplate( 2 ) }, false, '', [ 'row', 'columns' ] ],
 		];
 	}
 
@@ -25665,7 +25745,10 @@
 			const cols = target && target.closest && target.closest( '.minn-cols-island' );
 			if ( ! cols ) return;
 			target.innerHTML = '<br>';
-			if ( ! addColumnToIsland( cols ) ) toast( 'This block’s columns can’t be edited here.', true );
+			const here = target.closest( '.minn-slot' );
+			if ( ! columnOp( cols, 'after', here ? here.parentElement : null ) ) {
+				toast( 'This block’s columns can’t be edited here.', true );
+			}
 			return;
 		}
 		// Plugin command with a REST route: async insert (html or template).

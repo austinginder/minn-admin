@@ -1,5 +1,6 @@
 /**
- * /column adds a column to the Columns block the caret is in.
+ * Column editing: /column, the right-click column menu (add before / add
+ * after / remove, with Undo), and inserting a whole Columns row.
  * Verifies the SAVED markup: the new column is a real core/column, the rest
  * of the block keeps its text, and no width is invented for the new column
  * (which would silently squeeze the row).
@@ -32,6 +33,15 @@ const COLS = [
 	const t = reporter( 'column-slash' );
 	const { browser, page, errors } = await launch();
 	await login( page );
+	const saveAndRead = async ( pid ) => {
+		await page.keyboard.press( 'Meta+s' );
+		await page.waitForTimeout( 3000 );
+		return page.evaluate( async ( p2 ) => {
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + p2 + '?context=edit&_fields=content&_cb=' + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( await r.json() ).content.raw;
+		}, pid );
+	};
+
 	let id = 0;
 	try {
 		id = await createPost( page, { title: 'Column slash probe', content: COLS } );
@@ -73,22 +83,131 @@ const COLS = [
 			} )(),
 		} ) );
 		t.check( 'a third column appears immediately', after.slots === 3, JSON.stringify( after ) );
-		t.check( 'the caret lands in the new column', after.caretInNew === 2, JSON.stringify( after ) );
+		// It lands NEXT TO the column you were in, not at the far end.
+		t.check( 'the caret lands in the new column, beside the one you were in', after.caretInNew === 1, JSON.stringify( after ) );
 
 		await page.keyboard.type( 'Third.' );
 		await page.keyboard.press( 'Meta+s' );
 		await page.waitForTimeout( 3000 );
-		const raw = await page.evaluate( async ( pid ) => {
+		let raw = await page.evaluate( async ( pid ) => {
 			const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content&_cb=' + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
 			return ( await r.json() ).content.raw;
 		}, id );
 		const cols = ( raw.match( /<!-- wp:column -->/g ) || [] ).length;
 		t.check( 'saved markup has three real columns', cols === 3, String( cols ) );
-		t.check( 'the new column carries the typed text', /<!-- wp:column -->[\s\S]*Third\./.test( raw ), raw.slice( -320 ) );
+		t.check( 'the new column carries the typed text', /<p>Left\.<\/p>[\s\S]*Third\.[\s\S]*<p>Right\.<\/p>/.test( raw ), raw.slice( 0, 400 ) );
 		t.check( 'untouched columns kept their text', raw.includes( '<p>Left.</p>' ) && raw.includes( '<p>Right.</p>' ) );
 		t.check( 'no width was invented for the new column', ! /wp:column \{/.test( raw ), raw.slice( 0, 160 ) );
+
+		// --- Right-click menu: add before / add after / remove ---
+		const colBox = ( i ) => page.evaluate( ( n ) => {
+			const cols = [ ...document.querySelectorAll( '.minn-cols-island .minn-slot' ) ].map( ( s2 ) => s2.parentElement );
+			const el = cols[ n ];
+			el.scrollIntoView( { block: 'center' } );
+			const r = el.getBoundingClientRect();
+			return { x: r.left + r.width / 2, y: r.top + 12 };
+		}, i );
+		const menuLabels = async ( i ) => {
+			const at = await colBox( i );
+			await page.mouse.click( at.x, at.y, { button: 'right' } );
+			await page.waitForSelector( '.minn-ctx-menu', { timeout: 6000 } );
+			return page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].map( ( b ) => b.textContent.trim() ) );
+		};
+		const runMenu = ( label ) => page.evaluate( ( l ) => {
+			const b = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( x ) => x.textContent.trim() === l );
+			if ( ! b ) return false;
+			b.click();
+			return true;
+		}, label );
+
+		const ops = await menuLabels( 0 );
+		t.check( 'right-click in a column offers the column ops',
+			[ 'Add column before', 'Add column after', 'Remove column' ].every( ( l ) => ops.includes( l ) ), JSON.stringify( ops ) );
+		t.check( 'add column before ran', await runMenu( 'Add column before' ) );
+		await page.waitForTimeout( 800 );
+		let count = await page.evaluate( () => document.querySelectorAll( '.minn-cols-island .minn-slot' ).length );
+		t.check( 'a fourth column appears, before the first', count === 4, String( count ) );
+		raw = await saveAndRead( id );
+		t.check( 'the new column is first in the saved markup',
+			/<!-- wp:column -->\s*<div class="wp-block-column"><\/div>[\s\S]*<p>Left\.<\/p>/.test( raw ), raw.slice( 0, 260 ) );
+
+		// Remove it again, then take the Undo.
+		await menuLabels( 0 );
+		t.check( 'remove column ran', await runMenu( 'Remove column' ) );
+		await page.waitForTimeout( 800 );
+		count = await page.evaluate( () => document.querySelectorAll( '.minn-cols-island .minn-slot' ).length );
+		t.check( 'the column is gone', count === 3, String( count ) );
+		const undo = await page.evaluate( () => {
+			const b = [ ...document.querySelectorAll( '.minn-toast button' ) ].find( ( x ) => /undo/i.test( x.textContent ) );
+			if ( ! b ) return false;
+			b.click();
+			return true;
+		} );
+		t.check( 'removing a column offers Undo', undo );
+		await page.waitForTimeout( 800 );
+		count = await page.evaluate( () => document.querySelectorAll( '.minn-cols-island .minn-slot' ).length );
+		t.check( 'Undo puts the column back', count === 4, String( count ) );
+		raw = await saveAndRead( id );
+		t.check( 'the restored column survives a save', ( raw.match( /<!-- wp:column -->/g ) || [] ).length === 4, String( ( raw.match( /<!-- wp:column -->/g ) || [] ).length ) );
+		t.check( 'the columns that were never touched still read the same', raw.includes( '<p>Left.</p>' ) && raw.includes( '<p>Right.</p>' ) && /Third\./.test( raw ) );
 	} finally {
 		if ( id ) await deletePost( page, id ).catch( () => {} );
 	}
+	// --- Inserting a whole row of columns (the group case) ---
+	{
+		const gid = await createPost( page, { title: 'Columns row probe', content: '<!-- wp:group -->\n<div class="wp-block-group"><!-- wp:paragraph -->\n<p>Inside the group.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->' } );
+		try {
+			await openEditor( page, gid );
+			await page.waitForSelector( '.minn-slot-island', { timeout: 20000 } );
+			await page.waitForTimeout( 1500 );
+			const spot = await page.evaluate( () => {
+				const p = document.querySelector( '.minn-slot p' );
+				p.scrollIntoView( { block: 'center' } );
+				const r = p.getBoundingClientRect();
+				return { x: r.left + Math.min( 40, r.width / 2 ), y: r.top + r.height / 2 };
+			} );
+			await page.mouse.click( spot.x, spot.y );
+			// Park the caret at the paragraph's END: a click lands wherever it
+			// lands, and End scrolls rather than moving the caret on macOS.
+			// Focus the SLOT, never the editor body — that pulls the caret out
+			// of the container's own contenteditable.
+			await page.evaluate( () => {
+				const p = document.querySelector( '.minn-slot p' );
+				p.closest( '.minn-slot' ).focus( { preventScroll: true } );
+				const r = document.createRange();
+				r.selectNodeContents( p );
+				r.collapse( false );
+				const sel = window.getSelection();
+				sel.removeAllRanges();
+				sel.addRange( r );
+			} );
+			await page.keyboard.press( 'Enter' );
+			await page.keyboard.type( '/columns' );
+			await page.waitForSelector( '.minn-slash-item', { timeout: 6000 } );
+			const found = await page.evaluate( () => {
+				const el = [ ...document.querySelectorAll( '.minn-slash-item' ) ].find( ( e ) => /^Columns$/.test( e.textContent.trim() ) );
+				if ( ! el ) return false;
+				el.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+				return true;
+			} );
+			t.check( 'the menu offers a Columns row inside a group', found );
+			await page.waitForTimeout( 1500 );
+			const cols = await page.evaluate( () => document.querySelectorAll( '.minn-cols-island .minn-slot' ).length );
+			t.check( 'the row lands as two writable columns', cols === 2, String( cols ) );
+			await page.keyboard.press( 'Meta+s' );
+			await page.waitForTimeout( 3000 );
+			const raw2 = await page.evaluate( async ( pid ) => {
+				const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content&_cb=' + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+				return ( await r.json() ).content.raw;
+			}, gid );
+			t.check( 'the saved row is a real columns block inside the group',
+				/<!-- wp:group[\s\S]*<!-- wp:columns -->[\s\S]*<!-- wp:column -->[\s\S]*<!-- \/wp:columns -->[\s\S]*<!-- \/wp:group -->/.test( raw2 ),
+				raw2.slice( 0, 300 ) );
+			t.check( 'the group keeps its own paragraph', raw2.includes( '<p>Inside the group.</p>' ) );
+		} finally {
+			await deletePost( page, gid ).catch( () => {} );
+		}
+	}
+
 	await t.done( browser, errors );
 } )();
