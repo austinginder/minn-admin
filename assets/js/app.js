@@ -1895,7 +1895,7 @@
 						<div class="minn-user-role">${ esc( B.user.role ) }</div>
 					</div>
 					<div class="minn-user-acts">
-						<a class="minn-user-logout" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }" aria-label="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>
+						<a class="minn-user-logout" id="minn-wp-admin-link" href="${ esc( B.site.adminUrl ) }" target="_blank" rel="noopener" title="${ esc( __( 'WordPress admin (opens in a new tab) · ⌥-click while editing opens this post in the block editor)' ) ) }" aria-label="${ esc( __( 'WordPress admin (opens in a new tab)' ) ) }">${ icon( 'wp' ) }</a>
 						<a class="minn-user-logout" href="${ esc( B.site.logout ) }" title="${ esc( __( 'Log out' ) ) }" aria-label="${ esc( __( 'Log out' ) ) }">${ icon( 'logout' ) }</a>
 					</div>
 				</div>
@@ -1945,6 +1945,16 @@
 			try { localStorage.setItem( 'minn-nav-hidden', hidden ? '1' : '' ); } catch ( e ) { /* private mode */ }
 		} );
 		$( '#minn-user-area' ).addEventListener( 'click', ( e ) => {
+			// ⌥-click the WordPress button while editing a post: open THAT
+			// post in wp-admin's block editor instead of the dashboard. The
+			// quiet escape hatch — no new chrome, and the ⌘K palette carries
+			// the same command for anyone who doesn't know the modifier.
+			const wpLink = e.target.closest( '#minn-wp-admin-link' );
+			if ( wpLink && e.altKey && state.route === 'editor' && state.editor ) {
+				e.preventDefault();
+				openInBlockEditor();
+				return;
+			}
 			if ( e.target.closest( 'a' ) ) return; // logout link
 			go( 'profile' );
 		} );
@@ -21583,6 +21593,7 @@
 					<img src="${ esc( it.thumb || '' ) }" alt="" loading="lazy">
 					${ it.attachment ? '<span class="minn-imgedit-new">new</span>' : '' }
 					<button type="button" class="minn-imgedit-x" data-x="${ i }" title="Remove" aria-label="Remove image">×</button>
+					<button type="button" class="minn-imgedit-dup" data-dup="${ i }" title="Duplicate" aria-label="Duplicate image">${ icon( 'copy' ) }</button>
 					<span class="minn-imgedit-moves">
 						<button type="button" data-mv="${ i }:-1" title="Move earlier" aria-label="Move image earlier"${ i === 0 ? ' disabled' : '' }>‹</button>
 						<button type="button" data-mv="${ i }:1" title="Move later" aria-label="Move image later"${ i === list.length - 1 ? ' disabled' : '' }>›</button>
@@ -21607,6 +21618,16 @@
 			if ( e.target === overlay || e.target.closest( '#minn-imgedit-close' ) || e.target.closest( '#minn-imgedit-cancel' ) ) { closeImgEdit(); return; }
 			const x = e.target.closest( '[data-x]' );
 			if ( x ) { list.splice( parseInt( x.dataset.x, 10 ), 1 ); renderGrid(); return; }
+			// Duplicate: the copy lands right after the original and re-emits
+			// that unit's exact bytes (an entry's unit object is replaced, not
+			// mutated, so sharing the reference stays safe).
+			const dup = e.target.closest( '[data-dup]' );
+			if ( dup ) {
+				const i = parseInt( dup.dataset.dup, 10 );
+				if ( list[ i ] ) list.splice( i + 1, 0, { ...list[ i ] } );
+				renderGrid();
+				return;
+			}
 			const mv = e.target.closest( '[data-mv]' );
 			if ( mv ) {
 				const [ i, dir ] = mv.dataset.mv.split( ':' ).map( Number );
@@ -25930,6 +25951,11 @@
 			if ( state.editor.mode !== 'locked' ) cmds.push( { label: 'Find & replace (⌘⇧F)', kind: 'view', icon: '⌕', run: () => openFindBar() } );
 			cmds.push( { label: 'Toggle focus mode (⌘⇧D)', kind: 'view', icon: '◎', run: () => toggleFocusMode() } );
 			cmds.push( { label: 'Toggle outline mode (⌘⇧O)', kind: 'view', icon: '☰', run: () => toggleOutlineMode() } );
+			// The escape hatch without new chrome: this post in wp-admin's own
+			// editor. Saves first (openInBlockEditor), so unsaved islands are
+			// there when it opens. ⌥-clicking the sidebar's WordPress button
+			// does the same thing.
+			cmds.push( { label: 'Edit in the block editor ↗', kind: 'action', icon: '↗', run: () => openInBlockEditor() } );
 		}
 		cmds.push(
 			{ label: 'Go to Overview', kind: 'nav', icon: '▦', run: () => go( 'overview' ) },
@@ -27386,6 +27412,7 @@
 							<span class="minn-kbd">⌘⇧D</span><span>Focus mode: fade all but the current paragraph</span>
 							<span class="minn-kbd">⌘⇧O</span><span>Outline mode: just the writing and the outline</span>
 							<span class="minn-kbd">⌘.</span><span>Show or hide the navigation</span>
+							<span class="minn-kbd">⌥click</span><span>The WordPress button (bottom left) while editing: this post in the block editor</span>
 							<span class="minn-kbd">← →</span><span>Previous / next item in a media or entry detail</span>
 							<span class="minn-kbd">Esc</span><span>Close menus and dialogs</span>
 						</div>

@@ -112,6 +112,30 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + GRP + '\n\n<!-- wp:paragr
 			t.check( 'remove is byte-exact', got === wantRemove, got === wantRemove ? '' : diffAt( got, wantRemove ) );
 		}
 
+		// --- Duplicate a tile (copy lands right after, byte-identical) ---
+		t.check( 'inspector reopens for duplicate', await openIsland( 'jetpack/slideshow' ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		await page.click( '[data-dup="0"]' );
+		t.check( 'duplicate adds a tile', ( await page.$$( '.minn-imgedit-tile' ) ).length === 3 );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		{
+			const got = slice( raw, 'jetpack/slideshow' );
+			const wantDup = JP( [ S[ 1 ], S[ 1 ], S[ 2 ] ] );
+			t.check( 'duplicate is byte-exact (unit + id repeated)', got === wantDup, got === wantDup ? '' : diffAt( got, wantDup ) );
+		}
+		// Undo the duplicate so the following steps keep their expectations.
+		t.check( 'inspector reopens after duplicate', await openIsland( 'jetpack/slideshow' ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		await page.click( '[data-x="1"]' );
+		await page.click( '#minn-imgedit-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		t.check( 'removing the copy restores the earlier markup', slice( raw, 'jetpack/slideshow' ) === wantRemove );
+
 		// --- Replace via tile click (keeps position, swaps image) ---
 		t.check( 'inspector reopens for replace', await openIsland( 'jetpack/slideshow' ) );
 		await page.click( '#minn-insp-imgedit' );
