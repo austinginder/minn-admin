@@ -37,6 +37,10 @@ const C = [
 const cslide = ( c ) => `<!-- wp:acme/slide -->\n<div class="wp-block-acme-slide">\n<!-- wp:image {"id":${ c.id },"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${ BASE }/wp-content/uploads/${ c.img }" alt="" class="wp-image-${ c.id }"/></figure>\n<!-- /wp:image -->\n</div>\n<!-- /wp:acme/slide -->`;
 const CAR = ( set ) => `<!-- wp:acme/carousel -->\n<div class="wp-block-acme-carousel" data-slick="{}">\n${ set.map( cslide ).join( '\n' ) }\n</div>\n<!-- /wp:acme/carousel -->`;
 
+// A gallery big enough to overflow the tile grid: the row tracks must size
+// from the tiles' own square, not collapse and let them overlap.
+const MANY = Array.from( { length: 30 }, ( _, i ) => ( { id: 9500 + i, img: [ 'gal-red.png', 'gal-green.png', 'gal-blue.png' ][ i % 3 ] } ) );
+
 const GRP = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class="wp-block-group">' + JP( S ) + '</div>\n<!-- /wp:group -->';
 const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
 
@@ -81,6 +85,7 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP +
 	let id = 0;
 	// The drop test uploads a real attachment — deleted on the way out.
 	let droppedId = 0;
+	let bigId = 0;
 	try {
 		id = await createPost( page, { title: 'Images editor probe', content: CONTENT } );
 		t.check( 'fixture post created', id > 0, String( id ) );
@@ -374,8 +379,33 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP +
 			edit: !! document.querySelector( '#minn-insp-imgedit' ),
 		} ) );
 		t.check( 'container inspector lists no images', grp.open && grp.rows === 0 && ! grp.edit, JSON.stringify( grp ) );
+
+		// --- A gallery with many images keeps square, non-overlapping tiles ---
+		bigId = await createPost( page, { title: 'Images editor overflow probe', content: JP( MANY ) } );
+		await openEditor( page, bigId );
+		await page.waitForSelector( '.minn-block-island[data-block="jetpack/slideshow"]', { timeout: 20000 } );
+		await page.waitForTimeout( 2500 );
+		t.check( 'big gallery inspector offers Edit images', await openIsland( 'jetpack/slideshow' ) );
+		await page.click( '#minn-insp-imgedit' );
+		await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } );
+		await page.waitForTimeout( 800 );
+		const gridBox = await page.evaluate( () => {
+			const grid = document.querySelector( '.minn-imgedit-grid' );
+			const tiles = Array.from( grid.querySelectorAll( '.minn-imgedit-tile' ) );
+			const rows = [ ...new Set( tiles.map( ( el ) => Math.round( el.getBoundingClientRect().top ) ) ) ].sort( ( a, b ) => a - b );
+			const h = Math.round( tiles[ 0 ].getBoundingClientRect().height );
+			const w = Math.round( tiles[ 0 ].getBoundingClientRect().width );
+			return { tiles: tiles.length, w, h, pitch: rows.length > 1 ? rows[ 1 ] - rows[ 0 ] : 0, rows: rows.length, scrollH: grid.scrollHeight };
+		} );
+		// Row pitch must clear the tile: a collapsed track crushes the images
+		// into each other (the tile stays square, the row does not follow).
+		t.check( 'many tiles stay square and never overlap',
+			gridBox.tiles === 30 && Math.abs( gridBox.w - gridBox.h ) <= 2 && gridBox.pitch >= gridBox.h,
+			JSON.stringify( gridBox ) );
+		t.check( 'the grid scrolls to hold every row', gridBox.scrollH >= gridBox.rows * gridBox.h, JSON.stringify( gridBox ) );
 	} finally {
 		await deletePost( page, id );
+		if ( bigId ) await deletePost( page, bigId ).catch( () => {} );
 		if ( droppedId ) {
 			await page.evaluate( async ( mid ) => {
 				await fetch( window.MINN.restUrl + 'wp/v2/media/' + mid + '?force=true', {
