@@ -21815,7 +21815,19 @@
 	 * as prototype and retargets the src/id conventions. Detection is
 	 * offset-based on the raw string (the textRunsOf discipline); when the
 	 * shape doesn't map cleanly the feature simply doesn't offer itself. */
+	/* Two shapes of image block. A RUN is a list of repeating units, one per
+	 * image, that can be permuted, dropped and cloned freely. SLOTS are a fixed
+	 * layout whose openings happen to hold images — Jetpack's tiled gallery
+	 * packs its photos into columns whose widths it computed from their aspect
+	 * ratios, so the arrangement is not ours to rewrite. Where the openings
+	 * carry nothing of their own, though, the images inside them are
+	 * interchangeable: they can be reordered and replaced, just not added or
+	 * removed (the layout has a fixed number of openings). */
 	function imageUnitsOf( raw ) {
+		return imageUnitRunOf( raw ) || imageSlotsOf( raw );
+	}
+
+	function imageUnitRunOf( raw ) {
 		if ( typeof raw !== 'string' ) return null;
 		const open = raw.match( /^<!--\s*wp:[a-z][\w-]*(?:\/[\w-]+)?(\s+\{[\s\S]*?\})?\s*-->/ );
 		if ( ! open ) return null;
@@ -21914,6 +21926,57 @@
 			gaps,
 			ids,
 			mirror: findMediaMirror( open[ 0 ], units ),
+		};
+	}
+
+	/* Images sitting in a fixed layout. Every image is a unit; the markup
+	 * BETWEEN them is the layout, kept exactly where it is, so a reorder moves
+	 * the photos through the openings and changes nothing else. Only offered
+	 * when the openings carry no identity of their own: a wrapper with an
+	 * href, an id, a data-attribute or a caption might belong to the image it
+	 * currently holds, and moving images past it would quietly mismatch them.
+	 * The block's own opening comment is exempt — its attributes are handled
+	 * separately (the ids array permutes with the units). */
+	const IMG_TAG_RE = /<img\b[^>]*>/gi;
+	function imageSlotsOf( raw ) {
+		if ( typeof raw !== 'string' ) return null;
+		const open = raw.match( /^<!--\s*wp:[a-z][\w-]*(?:\/[\w-]+)?(\s+\{[\s\S]*?\})?\s*-->/ );
+		if ( ! open ) return null;
+		const spans = [];
+		let m;
+		IMG_TAG_RE.lastIndex = 0;
+		while ( ( m = IMG_TAG_RE.exec( raw ) ) ) spans.push( { start: m.index, end: m.index + m[ 0 ].length } );
+		if ( spans.length < 2 ) return null;
+		// The layout, with the images and the block's own comments taken out.
+		const chrome = ( raw.slice( 0, spans[ 0 ].start ) + spans.slice( 1 ).map( ( sp, i ) => raw.slice( spans[ i ].end, sp.start ) ).join( '' ) + raw.slice( spans[ spans.length - 1 ].end ) )
+			.replace( /<!--[\s\S]*?-->/g, '' );
+		if ( /\s(?:href|id|data-[\w-]+|title|alt)\s*=/i.test( chrome ) ) return null;
+		if ( /<figcaption|<a\b/i.test( chrome ) ) return null;
+		const units = spans.map( ( sp ) => {
+			const text = raw.slice( sp.start, sp.end );
+			const srcM = text.match( /\ssrc="([^"]+)"/ );
+			const idM = text.match( /wp-image-(\d+)/ ) || text.match( /data-id="(\d+)"/ );
+			return { text, slotImg: true, pictures: 1, src: srcM ? srcM[ 1 ] : '', id: idM ? parseInt( idM[ 1 ], 10 ) : 0 };
+		} );
+		if ( units.some( ( u ) => ! u.src ) ) return null;
+		let ids = null;
+		const idsM = open[ 0 ].match( /"ids":\[([^\]]*)\]/ );
+		if ( idsM ) {
+			ids = idsM[ 1 ].trim() === '' ? [] : idsM[ 1 ].split( ',' ).map( ( n ) => parseInt( n, 10 ) );
+			if ( ids.length !== units.length ) return null;
+			if ( units.some( ( u, i ) => u.id && ids[ i ] !== u.id ) ) return null;
+		}
+		const gaps = [];
+		for ( let i = 1; i < spans.length; i++ ) gaps.push( raw.slice( spans[ i - 1 ].end, spans[ i ].start ) );
+		return {
+			prefix: raw.slice( 0, spans[ 0 ].start ),
+			suffix: raw.slice( spans[ spans.length - 1 ].end ),
+			units,
+			gaps,
+			ids,
+			mirror: null,
+			// A fixed number of openings: reorder and replace, never add or drop.
+			fixedSlots: true,
 		};
 	}
 
@@ -22044,6 +22107,24 @@
 		// block settings: paired URL keys, string ids, a mirror entry. The
 		// attribute swapper already knows all of that.
 		if ( proto.attrOnly && proto.src ) return swapIslandImage( proto.text, proto.src, item );
+		// A slot's unit IS the image tag: rewrite what describes the picture
+		// and drop what described the OLD one. data-link points at the old
+		// attachment's page, and a wrong link is worse than none.
+		if ( proto.slotImg ) {
+			let t = proto.text;
+			if ( proto.src && item.url ) t = t.split( proto.src ).join( item.url );
+			t = t.replace( /\sdata-url="[^"]*"/i, item.url ? ' data-url="' + esc( item.url ) + '"' : '' );
+			t = t.replace( /\sdata-link="[^"]*"/i, '' );
+			t = t.replace( /\ssrcset="[^"]*"/i, '' ).replace( /\ssizes="[^"]*"/i, '' );
+			if ( item.id ) {
+				t = t.replace( /\sdata-id="\d+"/i, ' data-id="' + item.id + '"' );
+				t = t.replace( /(wp-image-)\d+/i, '$1' + item.id );
+			}
+			if ( item.width ) t = t.replace( /\sdata-width="\d+"/i, ' data-width="' + item.width + '"' );
+			if ( item.height ) t = t.replace( /\sdata-height="\d+"/i, ' data-height="' + item.height + '"' );
+			t = t.replace( /(\salt=")[^"]*(")/i, '$1' + esc( item.alt || '' ) + '$2' );
+			return t;
+		}
 		let u = proto.text;
 		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
 		const slashEsc = ( s ) => s.split( '/' ).join( '\\/' );
@@ -22119,6 +22200,9 @@
 			mirror: info.mirror ? info.mirror.entries[ i ] : null,
 		} ) );
 		const canCaption = info.units.some( unitCanCaption );
+		// A fixed layout has a set number of openings — offering × or Add
+		// would promise something the block cannot keep.
+		const fixed = !! info.fixedSlots;
 		const canUpload = !! ( B.caps && B.caps.upload );
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-imgedit-overlay';
@@ -22126,20 +22210,22 @@
 		// install modals): a photo aimed at the tile grid must join THIS block,
 		// not land in the media library with the editor navigated away from
 		// under the writer (Austin's repro).
-		if ( canUpload ) overlay.id = 'minn-imgedit-drop';
+		if ( canUpload && ! fixed ) overlay.id = 'minn-imgedit-drop';
 		overlay.innerHTML = `
 			<div class="minn-imgedit" role="dialog" aria-modal="true" aria-label="Edit images">
 				<div class="minn-imgedit-head">
 					<strong>Edit images</strong>
-					<span class="minn-imgedit-hint">${ canUpload
-						? 'Drag to reorder · click a tile to replace · × removes · drop images to add'
-						: 'Drag to reorder · click a tile to replace · × removes' }</span>
+					<span class="minn-imgedit-hint">${ fixed
+						? 'Drag to reorder · click a tile to replace · this block\'s layout has a fixed number of images'
+						: ( canUpload
+							? 'Drag to reorder · click a tile to replace · × removes · drop images to add'
+							: 'Drag to reorder · click a tile to replace · × removes' ) }</span>
 					<button type="button" class="minn-x-btn" id="minn-imgedit-close">×</button>
 				</div>
 				<div class="minn-imgedit-grid" id="minn-imgedit-grid"></div>
 				<div class="minn-imgedit-drop-veil" aria-hidden="true">Drop images to add them here</div>
 				<div class="minn-imgedit-foot">
-					<button type="button" class="minn-btn-soft" id="minn-imgedit-add">Add images…</button>
+					${ fixed ? '' : '<button type="button" class="minn-btn-soft" id="minn-imgedit-add">Add images…</button>' }
 					<span style="flex:1"></span>
 					<button type="button" class="minn-btn-soft" id="minn-imgedit-cancel">Cancel</button>
 					<button type="button" class="minn-btn-primary" id="minn-imgedit-apply">Apply</button>
@@ -22156,8 +22242,8 @@
 				<div class="minn-imgedit-tile" draggable="true" data-i="${ i }" title="Click to replace this image">
 					<img src="${ esc( it.thumb || '' ) }" alt="" loading="lazy">
 					${ it.attachment ? '<span class="minn-imgedit-new">new</span>' : '' }
-					<button type="button" class="minn-imgedit-x" data-x="${ i }" title="Remove" aria-label="Remove image">×</button>
-					<button type="button" class="minn-imgedit-dup" data-dup="${ i }" title="Duplicate" aria-label="Duplicate image">${ icon( 'copy' ) }</button>
+					${ fixed ? '' : `<button type="button" class="minn-imgedit-x" data-x="${ i }" title="Remove" aria-label="Remove image">×</button>
+					<button type="button" class="minn-imgedit-dup" data-dup="${ i }" title="Duplicate" aria-label="Duplicate image">${ icon( 'copy' ) }</button>` }
 					<span class="minn-imgedit-moves">
 						<button type="button" data-mv="${ i }:-1" title="Move earlier" aria-label="Move image earlier"${ i === 0 ? ' disabled' : '' }>‹</button>
 						<button type="button" data-mv="${ i }:1" title="Move later" aria-label="Move image later"${ i === list.length - 1 ? ' disabled' : '' }>›</button>
@@ -22213,7 +22299,7 @@
 				toast( added === 1 ? 'Image added — Apply to save it into the block.' : `${ added } images added — Apply to save them into the block.` );
 			}
 		};
-		if ( canUpload ) {
+		if ( canUpload && ! fixed ) {
 			overlay._accept = ( file ) => addDroppedFiles( [ file ] );
 			overlay._acceptAll = ( files ) => addDroppedFiles( files );
 			const hasFiles = ( e ) => !! ( e.dataTransfer && Array.from( e.dataTransfer.types || [] ).includes( 'Files' ) );
