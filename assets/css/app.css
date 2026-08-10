@@ -3066,6 +3066,12 @@ button.minn-ac-item:hover { background: var(--hover); }
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
   touch-action: manipulation;
 }
+/* Chips stay out of the way until you point at their block: a page of
+   images otherwise wears a chip on every one. `.shown` is driven by the
+   pointer tracker (block OR chip, with a grace delay so crossing the gap
+   between them never flickers it away). */
+.minn-code-chip { opacity: 0; transition: opacity 0.12s, color 0.12s, border-color 0.12s; pointer-events: none; }
+.minn-code-chip.shown { opacity: 1; pointer-events: auto; }
 .minn-code-chip:hover, .minn-code-chip.hot { color: var(--accent2); border-color: var(--accent); }
 .minn-code-chip:focus-visible, .minn-island-chip:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px; color: var(--accent2); border-color: var(--accent);
@@ -3098,8 +3104,12 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-table-ops { display: flex; gap: 6px; margin-bottom: 12px; }
 .minn-table-ops:last-child { margin-bottom: 2px; }
 .minn-table-ops .minn-btn-soft { flex: 1; justify-content: center; padding: 5px 8px; font-size: 12.5px; }
-.minn-img-pop { width: 300px; }
+.minn-img-pop { width: 348px; }
 .minn-img-pop .minn-insp-actions .minn-btn-primary { flex: 0 1 auto; }
+/* Apply · Replace · duplicate · remove read as one row (they wrapped the
+   trash button onto a second line at the old width). */
+.minn-img-pop .minn-insp-actions { flex-wrap: nowrap; align-items: center; }
+.minn-img-pop .minn-insp-actions .minn-btn-soft { padding-left: 10px; padding-right: 10px; }
 .minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
 /* "More settings" collapse for huge block schemas (300+ attr design suites). */
 .minn-insp-more-btn { width: 100%; justify-content: center; margin: 10px 0 2px; }
