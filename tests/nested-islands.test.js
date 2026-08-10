@@ -280,8 +280,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	 * background/media bytes are preserved as a verbatim PREAMBLE and the
 	 * children edit inside the content container. ===== */
 	const CONTENT3 = [
-		'<!-- wp:cover {"dimRatio":50} -->',
-		'<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><div class="wp-block-cover__inner-container"><!-- wp:paragraph {"align":"center"} -->',
+		// A real background image: it is absolutely positioned, so it used to
+		// paint OVER the writing slot and swallow every click (no caret, no
+		// "/" menu — Austin's repro).
+		'<!-- wp:cover {"url":"https://minnadmin.localhost/wp-includes/images/media/default.svg","dimRatio":50} -->',
+		'<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><img class="wp-block-cover__image-background" src="https://minnadmin.localhost/wp-includes/images/media/default.svg" alt=""/><div class="wp-block-cover__inner-container"><!-- wp:paragraph {"align":"center"} -->',
 		'<p class="has-text-align-center">Cover line.</p>',
 		'<!-- /wp:paragraph --></div></div>',
 		'<!-- /wp:cover -->',
@@ -331,6 +334,41 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	t.check( 'cover renders as a media slot island (background kept)', mediaShape.coverSlots && mediaShape.coverBg && mediaShape.coverText.includes( 'Cover line.' ), JSON.stringify( mediaShape ) );
 	t.check( 'media-text slots with its figure kept', mediaShape.mtSlots && mediaShape.mtMedia, JSON.stringify( mediaShape ) );
 
+	// A press inside the cover must reach the WORDS: its background image is
+	// absolutely positioned and used to sit on top, so clicks landed on the
+	// picture, no caret was placed, and the "/" menu was unreachable in there.
+	const coverPt = await page.evaluate( () => {
+		const slot = document.querySelector( '.wp-block-cover__inner-container .minn-slot' );
+		slot.scrollIntoView( { block: 'center' } );
+		const r = slot.getBoundingClientRect();
+		const pt = { x: r.left + r.width / 2, y: r.top + Math.min( 20, r.height / 2 ) };
+		const top = document.elementFromPoint( pt.x, pt.y );
+		return { pt, onBackground: !! ( top && top.closest( '.wp-block-cover__image-background, .wp-block-cover__background' ) ) };
+	} );
+	t.check( 'the cover background is not on top of its text', ! coverPt.onBackground, JSON.stringify( coverPt ) );
+	await page.mouse.click( coverPt.pt.x, coverPt.pt.y );
+	// The menu triggers on a block whose whole text is "/…", so start a line.
+	await page.evaluate( () => {
+		const p = document.querySelector( '.wp-block-cover__inner-container .minn-slot > p' );
+		const r = document.createRange();
+		r.selectNodeContents( p );
+		r.collapse( false );
+		const sel = window.getSelection();
+		sel.removeAllRanges();
+		sel.addRange( r );
+	} );
+	await page.keyboard.press( 'Enter' );
+	await page.keyboard.type( '/' );
+	await page.waitForTimeout( 700 );
+	const coverSlash = await page.evaluate( () => ( {
+		menu: !! document.querySelector( '.minn-slash-menu' ),
+		items: document.querySelectorAll( '.minn-slash-item' ).length,
+	} ) );
+	t.check( 'the slash menu opens inside a cover', coverSlash.menu && coverSlash.items > 0, JSON.stringify( coverSlash ) );
+	await page.keyboard.press( 'Escape' );
+	await page.keyboard.press( 'Backspace' );
+	await page.waitForTimeout( 300 );
+
 	let raw3 = await save3();
 	t.check( 'untouched cover + media-text re-save byte-identical', raw3 === CONTENT3, raw3 === CONTENT3 ? '' : raw3.slice( 0, 400 ) );
 
@@ -351,7 +389,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		coverRaw.includes( 'Cover line. Edited cover.' )
 		&& coverRaw.indexOf( 'wp-block-cover__background' ) < coverRaw.indexOf( 'Cover line.' ), coverRaw );
 	t.check( 'cover preamble bytes verbatim',
-		coverRaw.includes( '<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><div class="wp-block-cover__inner-container">' ), coverRaw );
+		coverRaw.includes( '<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><img class="wp-block-cover__image-background" src="https://minnadmin.localhost/wp-includes/images/media/default.svg" alt=""/><div class="wp-block-cover__inner-container">' ), coverRaw );
 
 	await page.evaluate( () => {
 		const p = document.querySelector( '.wp-block-media-text__content .minn-slot > p' );

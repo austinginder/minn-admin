@@ -2882,7 +2882,17 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-media-slot-island .wp-block-cover__background { position: absolute; inset: 0; opacity: 0.35; }
 .minn-media-slot-island img.wp-block-cover__image-background,
 .minn-media-slot-island video.wp-block-cover__video-background { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.minn-media-slot-island .wp-block-cover > .minn-slot { position: relative; z-index: 1; padding: 26px; }
+/* The writing slot sits INSIDE the cover's inner container, not directly in
+   the cover, so a direct-child rule never lifted it above the background:
+   the absolutely positioned image painted over the text and swallowed every
+   click, which left no caret and therefore no way to reach the "/" menu
+   (Austin's repro). Lift the slot at any depth, and make the background
+   media inert so a press always reaches the words. */
+.minn-media-slot-island .wp-block-cover .minn-slot { position: relative; z-index: 1; padding: 26px; }
+.minn-media-slot-island .wp-block-cover__inner-container { position: relative; z-index: 1; }
+.minn-media-slot-island .wp-block-cover__background,
+.minn-media-slot-island img.wp-block-cover__image-background,
+.minn-media-slot-island video.wp-block-cover__video-background { pointer-events: none; }
 .minn-media-slot-island .wp-block-media-text { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; }
 .minn-media-slot-island .wp-block-media-text__media img,
 .minn-media-slot-island .wp-block-media-text__media video { max-width: 100%; height: auto; display: block; border-radius: 6px; }
