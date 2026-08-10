@@ -437,6 +437,36 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + ASLID
 		t.check( 'shift-alt-click removes the block with an Undo offer',
 			afterRemove.count === dupState.before && afterRemove.undoToast, JSON.stringify( afterRemove ) );
 
+		// --- The whole card is the doorway, not just the photos ---
+		// It dims and names the action as one button, so a press in the gaps
+		// between photos has to open the editor too (Austin's repro).
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 500 );
+		const gap = await page.evaluate( () => {
+			const isl = document.querySelector( '.minn-block-island[data-imgtool="edit"]' );
+			const prev = isl.querySelector( '.minn-island-preview' );
+			isl.scrollIntoView( { block: 'center' } );
+			const pr = prev.getBoundingClientRect();
+			const imgs = [ ...prev.querySelectorAll( 'img' ) ].map( ( im ) => im.getBoundingClientRect() );
+			// A point inside the card that is over NO image and no chrome.
+			for ( let y = pr.top + 6; y < Math.min( pr.bottom - 6, window.innerHeight - 10 ); y += 7 ) {
+				for ( let x = pr.left + 6; x < pr.right - 6; x += 7 ) {
+					if ( imgs.some( ( r ) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom ) ) continue;
+					const el = document.elementFromPoint( x, y );
+					if ( ! el || ! prev.contains( el ) ) continue;
+					if ( el.closest( '.minn-island-chip, .minn-island-run' ) ) continue;
+					return { x, y };
+				}
+			}
+			return null;
+		} );
+		t.check( 'the card has space that is not a photo', !! gap, JSON.stringify( gap ) );
+		if ( gap ) await page.mouse.click( gap.x, gap.y );
+		const gapOpened = await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } ).then( () => true ).catch( () => false );
+		t.check( 'clicking between the photos opens the editor too', gapOpened );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 400 );
+
 		// --- Containers list no images (each nested block manages its own) ---
 		for ( let i = 0; i < 8; i++ ) {
 			try {
