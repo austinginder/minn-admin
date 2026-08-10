@@ -71,9 +71,23 @@ and emits it through front-end-only machinery:
   markup; materialized to `uploads/eb-style/eb-style-{post}.min.css` on save and
   enqueued with a real `$post`.
 
-The render-blocks **style-queue diff** (shipped this cycle) covers the lazy-register
-class (Stackable, Kadence base styles). The per-post-generated class needs per-suite
-shims — candidates ranked in the roadmap.
+- **Gutenslider** (added 2026-08-10): the sixth model, and the one no server-side
+  collector can reach. Its base layout sheet (`build/vendor/gs-base.css`, the grid the
+  slide is built on) is fetched by the front-end script as a webpack async chunk, so it
+  never passes through `wp_styles()` at all. The plugin's own
+  `wp_enqueue_style('eedee-gutenslider-block-editor')` names a handle registered only as
+  a *script*, so even that is a no-op. Without the sheet the background div and the slide
+  content stack in normal flow and the content is clipped out of a fixed-height frame.
+
+The render-blocks **style-queue diff** covers the lazy-register class (Stackable, Kadence
+base styles). The per-post-generated class needs per-suite shims — candidates ranked in
+the roadmap. The **runtime-loaded** class (Gutenslider) is covered by the runtime-CSS
+harvest: `harvestRuntimeStyles()` loads the post's front end in the hidden same-origin
+iframe the Otter warm-up already uses, reads the `<link>` sheets the page's own scripts
+pulled in, and sends the new ones through the same scoper. Trigger is geometric, not
+library-specific: a preview holding text at or past its own bottom edge. Runtime `<style>`
+elements are deliberately skipped (a page's inline CSS is mostly what the server already
+reported). Suite: `tests/runtime-css.test.js`, fixture `minn-test/runtime-css`.
 
 ## Image attribute conventions (for `swapIslandImage` coverage)
 

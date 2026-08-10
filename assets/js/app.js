@@ -16638,6 +16638,10 @@
 						.then( ( css ) => absolutizeCssUrls( css, u ) )
 						.catch( () => '' )
 				) );
+				// These count as injected too, so a later pass that reports the
+				// same sheet (a render-blocks queue diff, the runtime harvest
+				// below) adds only what is genuinely new.
+				( r.urls || [] ).forEach( ( u ) => injectedPreviewCss.add( u ) );
 				texts.push( r.inline || '' );
 				const scoped = scopeCssToPreviews( texts.join( '\n' ) );
 				if ( ! scoped ) return;
@@ -16719,6 +16723,114 @@
 		} catch ( e ) { /* previews simply stay unstyled */ }
 	}
 
+	/* Some blocks load the CSS their layout is built on at RUNTIME, from their
+	 * own front-end script: Gutenslider pulls build/vendor/gs-base.css as a
+	 * webpack async chunk, and that file is where the slide's grid lives. It
+	 * never passes through wp_styles(), so neither the editor-styles sweep nor
+	 * render-blocks' queue diff can report it, and previews never run
+	 * third-party JS to fetch it themselves. What is left stacks in normal
+	 * flow: on a real slider the slide text landed one pixel past a 360px
+	 * frame and was clipped away, so a working block previewed as an empty box.
+	 *
+	 * The only place that stylesheet exists is a real front-end load, so take
+	 * it from one. The same hidden same-origin iframe the Otter warm-up uses
+	 * runs the page's scripts, and whatever they pull in lands in its document
+	 * as a <link>; harvest those, drop the ones already injected, and send the
+	 * rest through the same scoper as every other preview stylesheet. Runtime
+	 * <style> ELEMENTS are deliberately left alone: a page's inline CSS is
+	 * mostly what the server already reported, and re-injecting it wholesale
+	 * would double a payload that is already hundreds of KB. Preview chrome
+	 * only, exactly like the rest of this pipeline. */
+	let runtimeCssHarvested = false;
+	function harvestRuntimeStyles() {
+		if ( runtimeCssHarvested ) return;
+		const ed = state.editor;
+		if ( ! ed || ! ed.id || ! ed.link ) return;
+		runtimeCssHarvested = true;
+		// minn_warm marks the load as ours, the same hint the Otter warm-up
+		// carries — this IS a real front-end render, third-party scripts and
+		// all, so anything counting pageviews has a way to tell.
+		let url = ed.status === 'publish' ? ed.link
+			: ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true';
+		url += ( url.includes( '?' ) ? '&' : '?' ) + 'minn_warm=1';
+		const frame = document.createElement( 'iframe' );
+		frame.style.cssText = 'position:fixed;width:10px;height:10px;left:-9999px;top:-9999px;visibility:hidden;';
+		let settled = false;
+		const finish = ( urls ) => {
+			if ( settled ) return;
+			settled = true;
+			clearTimeout( bail );
+			frame.remove();
+			if ( ! urls || ! urls.length ) return;
+			addPreviewStyles( { urls } )
+				.then( () => {
+					resetPreviewPolish();
+					schedulePreviewReveal();
+				} )
+				.catch( () => {} );
+		};
+		const bail = setTimeout( () => finish( null ), 20000 );
+		frame.addEventListener( 'load', () => {
+			// The chunks are requested by the page's own scripts, so they land
+			// after load rather than with it.
+			setTimeout( () => {
+				let urls = [];
+				try {
+					urls = Array.from( frame.contentDocument.querySelectorAll( 'link[rel="stylesheet"][href]' ) )
+						.map( ( l ) => l.href )
+						.filter( ( u ) => u && ! injectedPreviewCss.has( u ) );
+				} catch ( e ) { /* cross-origin document: nothing to take */ }
+				finish( urls );
+			}, 2500 );
+		} );
+		frame.src = url;
+		document.body.appendChild( frame );
+	}
+
+	/* New CSS invalidates every measurement the polish passes made — a slider
+	 * collapsed because it stacked may lay out as a proper row once its real
+	 * stylesheet lands. Put the hidden slides back and let the sweep decide
+	 * again from what is now on screen. */
+	function resetPreviewPolish() {
+		$$( '.minn-island-preview' ).forEach( ( el ) => {
+			( el._minnCollapsedSlides || [] ).forEach( ( n ) => { n.style.display = ''; } );
+			delete el._minnCollapsedSlides;
+			delete el.dataset.sliderCollapsed;
+			delete el.dataset.sliderWait;
+			delete el.dataset.harvestWait;
+			el.classList.remove( 'minn-preview-clamped' );
+		} );
+	}
+
+	/* Text sitting at or past the bottom edge of its own preview means an
+	 * ancestor with a fixed height clipped it away: the block expected an
+	 * overlay that its runtime CSS never built. Deliberately geometric, with no
+	 * class-name guessing, so it reads the same for any library. Previews Minn
+	 * clamped itself are exempt — that clip is ours. */
+	function previewLayoutUnfinished( el ) {
+		if ( ! el || ! el.isConnected || el.offsetHeight < 24 ) return false;
+		if ( el.classList.contains( 'minn-preview-clamped' ) ) return false;
+		// An image that has not loaded carries no height, so the geometry would
+		// read as settled before it is. Decide once the frame is real.
+		const pending = $$( 'img', el ).filter( ( im ) => ! im.complete );
+		if ( pending.length ) {
+			if ( ! el.dataset.harvestWait ) {
+				el.dataset.harvestWait = '1';
+				pending.forEach( ( im ) => {
+					im.addEventListener( 'load', schedulePreviewReveal, { once: true } );
+					im.addEventListener( 'error', schedulePreviewReveal, { once: true } );
+				} );
+			}
+			return false;
+		}
+		const frame = el.getBoundingClientRect();
+		return $$( 'p, h1, h2, h3, h4, h5, h6, li, figcaption, blockquote', el ).some( ( n ) => {
+			if ( ! ( n.textContent || '' ).trim() ) return false;
+			const b = n.getBoundingClientRect();
+			return b.height > 0 && b.top >= frame.bottom - 2;
+		} );
+	}
+
 	/* Some blocks hide their markup until a view script finishes booting —
 	 * Jetpack slideshow keeps its whole container at opacity:0 until Swiper
 	 * adds wp-swiper-initialized. Previews never run third-party JS, so such
@@ -16735,6 +16847,8 @@
 		if ( ! prev ) return;
 		delete prev.dataset.sliderCollapsed;
 		delete prev.dataset.sliderWait;
+		delete prev.dataset.harvestWait;
+		delete prev._minnCollapsedSlides;
 		prev.innerHTML = html;
 	}
 
@@ -16743,12 +16857,17 @@
 		if ( previewRevealRaf ) return;
 		previewRevealRaf = requestAnimationFrame( () => {
 			previewRevealRaf = 0;
+			let unfinished = false;
 			$$( '.minn-island-preview' ).forEach( ( el ) => {
 				revealJsGatedPreview( el );
 				collapseSliderPreview( el );
 				clampTallImagePreview( el );
 				markMissingImages( el );
+				if ( ! unfinished && previewLayoutUnfinished( el ) ) unfinished = true;
 			} );
+			// One front-end load per session, and only once a preview shows the
+			// symptom — nothing is fetched for a post whose blocks all render.
+			if ( unfinished ) harvestRuntimeStyles();
 		} );
 	}
 
@@ -16846,7 +16965,11 @@
 		// Only when they actually stack: a slider whose slides already lay out
 		// in a row reads fine as-is and keeps every image visible.
 		if ( el.offsetHeight < best[ 0 ].offsetHeight * 1.6 ) return;
-		best.slice( 1 ).forEach( ( n ) => { n.style.display = 'none'; } );
+		const hidden = best.slice( 1 );
+		hidden.forEach( ( n ) => { n.style.display = 'none'; } );
+		// Kept so a later stylesheet (the runtime harvest) can undo this and let
+		// the sweep re-measure against the layout the block actually has.
+		el._minnCollapsedSlides = hidden;
 		el.dataset.sliderCollapsed = String( best.length );
 	}
 
