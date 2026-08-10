@@ -62,12 +62,12 @@ const CONTENT = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class
 		// ⌥-clicking the ⚙ chip duplicates without opening the popover.
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 500 );
-		const altDup = await page.evaluate( () => {
-			const c = [ ...document.querySelectorAll( '#minn-table-chips button' ) ].find( ( b ) => b._kind === 'image' );
-			if ( ! c ) return 'no chip';
-			c.dispatchEvent( new MouseEvent( 'click', { altKey: true, bubbles: true } ) );
-			return 'clicked';
-		} );
+		// REAL modifier click (page.mouse), never a synthetic MouseEvent: a
+		// dispatched event bypasses the OS/browser layer, which is exactly
+		// where ⌃-click turned out to be a right-click on macOS.
+		await page.mouse.move( spot.x, spot.y );
+		await page.waitForTimeout( 600 );
+		const altDup = await page.click( '#minn-table-chips .minn-code-chip.shown', { modifiers: [ 'Alt' ] } ).then( () => 'clicked' ).catch( ( e ) => String( e ) );
 		await page.waitForTimeout( 900 );
 		const afterAlt = await page.evaluate( () => ( {
 			figures: document.querySelectorAll( '.minn-slot figure.wp-block-image' ).length,
@@ -77,15 +77,12 @@ const CONTENT = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class
 			altDup === 'clicked' && afterAlt.figures === 3 && ! afterAlt.popoverOpen, JSON.stringify( afterAlt ) );
 
 		// ⌃⌥-click removes, through the undoable path.
-		const removed = await page.evaluate( () => {
-			const c = [ ...document.querySelectorAll( '#minn-table-chips button' ) ].find( ( b ) => b._kind === 'image' );
-			if ( ! c ) return false;
-			c.dispatchEvent( new MouseEvent( 'click', { altKey: true, ctrlKey: true, bubbles: true } ) );
-			return true;
-		} );
+		await page.mouse.move( spot.x, spot.y );
+		await page.waitForTimeout( 600 );
+		const removed = await page.click( '#minn-table-chips .minn-code-chip.shown', { modifiers: [ 'Alt', 'Shift' ] } ).then( () => true ).catch( () => false );
 		await page.waitForTimeout( 900 );
 		const afterRemove = await page.evaluate( () => document.querySelectorAll( '.minn-slot figure.wp-block-image img' ).length );
-		t.check( 'ctrl-alt-click removes an image', removed && afterRemove === 2, String( afterRemove ) );
+		t.check( 'shift-alt-click removes an image', removed && afterRemove === 2, String( afterRemove ) );
 		await page.keyboard.press( 'Meta+z' );
 		await page.waitForTimeout( 700 );
 		const afterUndo = await page.evaluate( () => document.querySelectorAll( '.minn-slot figure.wp-block-image img' ).length );
