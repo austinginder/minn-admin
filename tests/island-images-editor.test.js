@@ -26,8 +26,19 @@ const G = [
 const gunit = ( g ) => `<!-- wp:image {"id":${ g.id },"sizeSlug":"large","linkDestination":"none"} -->\n<figure class="wp-block-image size-large"><img src="${ BASE }/wp-content/uploads/${ g.img }" alt="" class="wp-image-${ g.id }"/><figcaption class="wp-element-caption">${ g.cap }</figcaption></figure>\n<!-- /wp:image -->`;
 const GAL = ( set ) => `<!-- wp:gallery {"linkTo":"none"} -->\n<figure class="wp-block-gallery has-nested-images columns-default is-cropped">${ set.map( gunit ).join( '\n\n' ) }</figure>\n<!-- /wp:gallery -->`;
 
+// Third unit shape: a slider that nests its run inside a viewport element and
+// gives every image its own wrapper BLOCK (Carousel Slider's cb/slide, and
+// most slick/swiper blocks). Unregistered on purpose — islands preserve those.
+const C = [
+	{ id: 921, img: 'gal-red.png' },
+	{ id: 922, img: 'gal-green.png' },
+	{ id: 923, img: 'gal-blue.png' },
+];
+const cslide = ( c ) => `<!-- wp:acme/slide -->\n<div class="wp-block-acme-slide">\n<!-- wp:image {"id":${ c.id },"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${ BASE }/wp-content/uploads/${ c.img }" alt="" class="wp-image-${ c.id }"/></figure>\n<!-- /wp:image -->\n</div>\n<!-- /wp:acme/slide -->`;
+const CAR = ( set ) => `<!-- wp:acme/carousel -->\n<div class="wp-block-acme-carousel" data-slick="{}">\n${ set.map( cslide ).join( '\n' ) }\n</div>\n<!-- /wp:acme/carousel -->`;
+
 const GRP = '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class="wp-block-group">' + JP( S ) + '</div>\n<!-- /wp:group -->';
-const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + GRP + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
+const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + GRP + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
 
 ( async () => {
 	const t = reporter( 'island-images-editor' );
@@ -221,9 +232,18 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + GRP + '\n\n<!-- wp:paragr
 			const isl = document.querySelector( '.minn-block-island[data-imgtool="edit"]' );
 			const b = isl && isl.querySelector( '.minn-imgtool-badge' );
 			if ( ! b ) return null;
-			return { text: b.textContent.trim(), pe: getComputedStyle( b ).pointerEvents };
+			return {
+				text: b.textContent.trim(),
+				pe: getComputedStyle( b ).pointerEvents,
+				// The hover dim is a card-level ::after; it must be inert too.
+				dimPe: getComputedStyle( isl, '::after' ).pointerEvents,
+			};
 		} );
-		t.check( 'image overlay reads Edit images and is click-through', badge && badge.text === 'Edit images' && badge.pe === 'none', JSON.stringify( badge ) );
+		// The count rides the overlay: on a slider the preview shows one slide,
+		// so this is where "there are more of these" gets said.
+		t.check( 'image overlay names the action, counts the images, stays click-through',
+			badge && /^Edit images · \d+$/.test( badge.text ) && badge.pe === 'none' && badge.dimPe === 'none',
+			JSON.stringify( badge ) );
 		if ( spot ) await page.mouse.click( spot.x, spot.y );
 		const opened = await page.waitForSelector( '.minn-imgedit-tile', { timeout: 8000 } ).then( () => true ).catch( () => false );
 		t.check( 'real mouse click on the image opens the editor', opened );
