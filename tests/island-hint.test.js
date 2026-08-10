@@ -43,11 +43,13 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 			};
 		} );
 
-		t.check( 'two islands render', state.islands.length === 2, JSON.stringify( state.islands ) );
+		// Since v0.26.0 a STYLED paragraph stays editable prose (its attrs ride
+		// along) — only genuinely unreproducible blocks island, so this fixture
+		// yields exactly one card.
+		t.check( 'only the third-party block islands', state.islands.length === 1, JSON.stringify( state.islands ) );
 		t.check( 'control paragraph stays prose', state.proseParas >= 1 );
-		const styled = state.islands.find( ( i ) => i.block === 'paragraph' );
+		t.check( 'styled paragraph stays editable prose', state.proseParas >= 2, String( state.proseParas ) );
 		const hero = state.islands.find( ( i ) => i.block === 'acme/hero' );
-		t.check( 'styled paragraph gets the styled-block hint', !! styled && /^Styled block/.test( styled.hint ), styled && styled.hint );
 		t.check( 'third-party island gets the generic hint', !! hero && /block editor/.test( hero.hint ), hero && hero.hint );
 
 		// Hidden at rest, revealed on hover.
@@ -88,6 +90,20 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 		t.check( 'copied selection carries no hint text', blob.length > 0 && ! /Styled block: edit text/.test( blob ) && ! /or the block editor/.test( blob ), blob.slice( 0, 200 ) );
 	} finally {
 		await deletePost( page, id );
+	}
+
+	// Container cards carry no hint: their affordance is that you can type in
+	// them, so the label only restated the obvious (Austin, v0.27.0).
+	{
+		const gid = await createPost( page, { title: 'Container hint probe', content: '<!-- wp:group -->\n<div class="wp-block-group"><!-- wp:paragraph -->\n<p>Inside.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->' } );
+		try {
+			await openEditor( page, gid );
+			await page.waitForSelector( '.minn-slot', { timeout: 15000 } );
+			const hints = await page.evaluate( () => document.querySelectorAll( '.minn-slot-island > .minn-island-hint' ).length );
+			t.check( 'container cards carry no hover hint', hints === 0, String( hints ) );
+		} finally {
+			await deletePost( page, gid );
+		}
 	}
 
 	await t.done( browser, errors );
