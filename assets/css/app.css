@@ -2061,7 +2061,10 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
    file and often disables pointer events on slide images (Jetpack's swiper
    does exactly that) — a plain declaration loses that cascade on real
    third-party blocks while passing on plain fixtures. */
+.minn-block-island[data-imgtool] > .minn-island-preview { pointer-events: auto; cursor: pointer; }
 .minn-block-island[data-imgtool] > .minn-island-preview img { pointer-events: auto !important; cursor: pointer; }
+/* Text that is editable in place keeps its own cursor and its own click. */
+.minn-block-island[data-imgtool] > .minn-island-preview .minn-island-run { cursor: text; }
 /* Hover affordance: name the action right on the images. pointer-events:none
    so the badge never swallows the press it is advertising; the generic
    "edit via ⚙" hint steps aside since this block has a better doorway. */

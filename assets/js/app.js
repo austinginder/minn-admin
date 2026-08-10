@@ -20663,10 +20663,10 @@
 				} )();
 				return;
 			}
-			// Preview images are pointer-events:auto so they can be pressed
-			// (mousedown opens the tooling). Swallow the click so a preview
-			// image wrapped in a link can never navigate the editor away.
-			if ( e.target.closest( '.minn-block-island[data-imgtool] .minn-island-preview img' ) ) e.preventDefault();
+			// The card takes pointer events so it can be pressed anywhere
+			// (mousedown opens the tooling). Swallow the click so a linked
+			// photo or caption can never navigate the editor away.
+			if ( e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' ) ) e.preventDefault();
 		} );
 		// Clicking an image inside a protected preview opens the image tooling
 		// directly (Austin's ask): gallery-shaped blocks → the Images editor
@@ -20681,14 +20681,25 @@
 		// from seating a caret inside the protected card.
 		body.addEventListener( 'mousedown', ( e ) => {
 			if ( e.button !== 0 ) return;
-			const img = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] .minn-island-preview img' );
-			if ( ! img ) return;
-			const island = img.closest( '.minn-block-island' );
+			// The WHOLE card is the doorway: it dims and names the action as
+			// one button, so the gaps between photos (captions, the block's own
+			// padding) have to open the editor too — clicking a photo simply
+			// opens it with that photo's tile highlighted (Austin's repro:
+			// only the images themselves were live).
+			const prev = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' );
+			if ( ! prev ) return;
+			// Text a writer can edit in place inside the card wins the click.
+			// The editable ancestor has to be INSIDE the card: the editor body
+			// itself is contenteditable, so an unscoped check bails always.
+			const editable = e.target.closest( '[contenteditable="true"]' );
+			if ( e.target.closest( '.minn-island-run' ) || ( editable && prev.contains( editable ) ) ) return;
+			const island = prev.closest( '.minn-block-island' );
 			if ( ! island || ! ed.islands || ed.lockState === 'taken' || ed.lockState === 'blocked' ) return;
 			const idx = parseInt( island.dataset.island, 10 );
 			const raw = ed.islands[ idx ];
 			if ( raw == null ) return;
-			const src = img.getAttribute( 'src' ) || '';
+			const img = e.target.closest( 'img' );
+			const src = img ? ( img.getAttribute( 'src' ) || '' ) : '';
 			const info = imageUnitsOf( raw );
 			if ( info ) {
 				e.preventDefault();
@@ -20697,7 +20708,7 @@
 				openImagesEditor( idx, island, raw, info, { focus: focus === -1 ? null : focus } );
 				return;
 			}
-			const oldUrl = islandImageUrls( raw ).find( ( u ) => u === src || src.endsWith( u ) || u.endsWith( src ) );
+			const oldUrl = src && islandImageUrls( raw ).find( ( u ) => u === src || src.endsWith( u ) || u.endsWith( src ) );
 			if ( ! oldUrl ) return;
 			e.preventDefault();
 			closeInspector();
@@ -20706,6 +20717,10 @@
 				replaceIsland( idx, island, swapIslandImage( raw, oldUrl, it ) );
 				toast( 'Image replaced' );
 			} );
+		} );
+		body.addEventListener( 'click', ( e ) => {
+			const prev = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' );
+			if ( prev && e.target.closest( 'a' ) ) e.preventDefault(); // a linked photo must not navigate
 		} );
 		const openBe = $( '#minn-open-block-editor', view );
 		if ( openBe ) openBe.addEventListener( 'click', () => openInBlockEditor( openBe ) );
