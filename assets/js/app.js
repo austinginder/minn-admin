@@ -15427,6 +15427,58 @@
 		islands[ idx ] = parts.head + parts.open + parts.preamble + serializeToBlocks( slots[ 0 ], islands ) + parts.tail;
 	}
 
+	/* Add an empty column to a Columns block. The stored raw and the live DOM
+	 * are index-aligned (the serializer walks the raw's column segments and the
+	 * DOM's slots in step), so BOTH grow here, in the same position. A fresh
+	 * column carries no width: Gutenberg writes the same for one added to an
+	 * unsized set, and an explicit width copied off a sibling would silently
+	 * squeeze the row. */
+	function addColumnToIsland( island ) {
+		const ed = state.editor;
+		if ( ! ed || ! ed.islands || ! island ) return null;
+		const idx = parseInt( island.dataset.island, 10 );
+		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return null;
+		// The writer has been typing in these columns — take the live text
+		// into the stored raw before rewriting it.
+		flushSlotIsland( island, ed.islands );
+		const parts = slotParseContent( String( ed.islands[ idx ] ), 'columns' );
+		if ( ! parts ) return null;
+		const segs = tokenizeBlocks( parts.inner );
+		if ( ! segs ) return null;
+		let at = 0;
+		let endOfLast = 0;
+		let sep = '';
+		segs.forEach( ( seg ) => {
+			at += seg.raw.length;
+			if ( seg.type === 'block' ) endOfLast = at;
+			else if ( ! sep && ! seg.raw.trim() && endOfLast ) sep = seg.raw;
+		} );
+		if ( ! endOfLast ) return null;
+		const colRaw = '<!-- wp:column -->\n<div class="wp-block-column"></div>\n<!-- /wp:column -->';
+		const inner = parts.inner.slice( 0, endOfLast ) + ( sep || '\n' ) + colRaw + parts.inner.slice( endOfLast );
+		const ownSlots = $$( '.minn-slot', island ).filter( ( sl ) => sl.closest( '.minn-slot-island' ) === island );
+		const lastCol = ownSlots.length ? ownSlots[ ownSlots.length - 1 ].parentElement : null;
+		if ( ! lastCol || ! lastCol.parentElement ) return null;
+		ed.islands[ idx ] = parts.head + parts.open + inner + parts.tail;
+		const el = document.createElement( 'div' );
+		el.className = 'wp-block-column';
+		el.innerHTML = '<div class="minn-slot" contenteditable="true"><p><br></p></div>';
+		lastCol.after( el );
+		const slot = el.querySelector( '.minn-slot' );
+		const p = slot && slot.firstElementChild;
+		if ( p ) {
+			const range = document.createRange();
+			range.selectNodeContents( p );
+			range.collapse( true );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( range );
+		}
+		stampSlotDirtyFor( slot );
+		scheduleAutosave();
+		return el;
+	}
+
 	// The contenteditable=false card an island renders as. Shared by content
 	// loading and slash-menu insertion of custom blocks.
 	// Special interactive islands (shortcode, details, buttons) host live
@@ -25566,6 +25618,16 @@
 	// full block picker. `target` is the block to insert before/replace
 	// (the emptied "/" block, or a fresh paragraph the picker created).
 	function runSlashAction( action, target, body, insertImage ) {
+		// A new column joins the Columns block the caret is in (the menu only
+		// offers this there). The "/column" line stays as that column's first
+		// empty paragraph; the caret moves into the new one.
+		if ( action && action.addColumn ) {
+			const cols = target && target.closest && target.closest( '.minn-cols-island' );
+			if ( ! cols ) return;
+			target.innerHTML = '<br>';
+			if ( ! addColumnToIsland( cols ) ) toast( 'This block’s columns can’t be edited here.', true );
+			return;
+		}
 		// Plugin command with a REST route: async insert (html or template).
 		// Same placeholder dance as design/pattern inserts so the "/" block
 		// is never left half-typed while the network is in flight.
@@ -25806,6 +25868,10 @@
 		let filtered = [];
 		let query = '';
 		const items = basicSlashItems( state.editor && state.editor.mode === 'blocks' );
+		// Only inside a Columns block, where it is the one structural thing the
+		// slash menu could not do: item[6] is a predicate over the caret block.
+		items.unshift( [ icon( 'columns' ), 'Column', { addColumn: true }, false, '', [ 'columns', 'add column' ],
+			( el ) => !! ( el && el.closest && el.closest( '.minn-cols-island' ) ) ] );
 		liveSlashItems = items; // per-user hide prunes this array in place
 		// Attention budget (v1.0 gate G3): a namespace holds at most 3 slots
 		// in the DEFAULT slash menu (commands first, insert templates after —
