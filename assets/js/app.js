@@ -15494,9 +15494,12 @@
 		// Images in the preview are click-through doorways: gallery-shaped
 		// blocks open the Images editor, single-image blocks the replace
 		// picker. The stamp drives the pointer cursor and the click branch.
-		const imgTool = imageUnitsOf( raw ) ? 'edit' : ( islandImageUrls( raw || '' ).length ? 'swap' : '' );
-		/* translators: overlay on a gallery-shaped block's images */
-		const imgBadge = imgTool === 'edit' ? __( 'Edit images' )
+		const imgUnits = imageUnitsOf( raw );
+		const imgTool = imgUnits ? 'edit' : ( islandImageUrls( raw || '' ).length ? 'swap' : '' );
+		// The count matters on sliders: the preview shows one slide, so the
+		// overlay is where "there are six of these" gets said.
+		/* translators: %d: number of images in the block */
+		const imgBadge = imgTool === 'edit' ? sprintf( _n( 'Edit image · %d', 'Edit images · %d', imgUnits.units.length ), imgUnits.units.length )
 			/* translators: overlay on a single-image block's image */
 			: imgTool ? __( 'Replace image' ) : '';
 		// A synced pattern is a REFERENCE to a wp_block post — its content
@@ -16636,6 +16639,52 @@
 				try { if ( getComputedStyle( n ).visibility === 'hidden' ) n.style.visibility = 'visible'; } catch ( e ) {}
 			} );
 		}
+	}
+
+	/* A slider is a STACK until its JS runs. Carousel markup saves every slide
+	 * as a sibling and lets a view script turn them into a one-at-a-time
+	 * viewport; previews never run third-party JS, so a six-slide carousel
+	 * renders as six full-width images and buries the rest of the post
+	 * (a real slide-deck site). Show the first slide only, which is what the
+	 * block itself shows on the site. Preview DOM only — saves splice the
+	 * stored raw, so nothing hidden here can reach serialized content, and the
+	 * images stay reachable through the Edit images modal on the ⚙ chip. */
+	const SLIDER_MARKUP_RE = /(^|[-_\s])(swiper|slick|glide|splide|owl|flickity|carousel|slider|slideshow)($|[-_\s])/i;
+	function collapseSliderPreview( el ) {
+		if ( ! el || ! el.isConnected || el.dataset.sliderCollapsed ) return;
+		const classOf = ( n ) => ( typeof n.className === 'string' ? n.className : '' );
+		const root = $$( '*', el ).find( ( n ) => n.hasAttribute( 'data-slick' ) || SLIDER_MARKUP_RE.test( classOf( n ) ) );
+		if ( ! root ) return;
+		// The slide list: the deepest run of sibling elements that each carry
+		// exactly one image. Arrows, dots and captions are left alone.
+		let best = null;
+		const scan = ( p ) => {
+			const kids = Array.from( p.children );
+			const slides = kids.filter( ( k ) => k.querySelectorAll( 'img' ).length === 1 );
+			if ( slides.length >= 2 && ( ! best || slides.length > best.length ) ) best = slides;
+			kids.forEach( scan );
+		};
+		scan( root );
+		if ( ! best ) return;
+		// Images the preview hasn't loaded yet carry no height, so the stack
+		// test would read as a tidy row and skip the collapse. Wait for them
+		// and re-run the sweep instead of deciding on an empty box.
+		const pending = $$( 'img', el ).filter( ( im ) => ! im.complete );
+		if ( pending.length ) {
+			if ( ! el.dataset.sliderWait ) {
+				el.dataset.sliderWait = '1';
+				pending.forEach( ( im ) => {
+					im.addEventListener( 'load', schedulePreviewReveal, { once: true } );
+					im.addEventListener( 'error', schedulePreviewReveal, { once: true } );
+				} );
+			}
+			return;
+		}
+		// Only when they actually stack: a slider whose slides already lay out
+		// in a row reads fine as-is and keeps every image visible.
+		if ( el.offsetHeight < best[ 0 ].offsetHeight * 1.6 ) return;
+		best.slice( 1 ).forEach( ( n ) => { n.style.display = 'none'; } );
+		el.dataset.sliderCollapsed = String( best.length );
 	}
 
 	// Relative url(...) references break once CSS moves into an inline <style>
@@ -21473,21 +21522,28 @@
 		if ( closeAt <= innerStart ) return null;
 		const inner = raw.slice( innerStart, closeAt );
 
-		let spans = null; // [ { start, end } ] relative to inner
+		let spans = null;         // [ { start, end } ] relative to `base`
+		let base = inner;         // the region those offsets index into
+		let baseOff = innerStart; // where `base` starts inside raw
 
-		// Mode 1: repeated same-name inner blocks (core gallery's wp:image).
-		const tokRe = /<!--\s*(\/?)wp:([a-z][\w-]*(?:\/[\w-]+)?)[\s\S]*?-->/g;
-		const toks = [];
-		let tm;
-		while ( ( tm = tokRe.exec( inner ) ) ) toks.push( { close: !! tm[ 1 ], name: tm[ 2 ], start: tm.index, end: tm.index + tm[ 0 ].length } );
-		if ( toks.length ) {
-			// Strict open/close alternation of ONE block name — anything more
-			// structured (mixed children, nesting) is not a flat image run.
-			const name = toks[ 0 ].name;
-			const ok = toks.length >= 4 && toks.length % 2 === 0 && toks.every( ( t, i ) => t.name === name && t.close === ( i % 2 === 1 ) );
-			if ( ! ok ) return null;
-			spans = [];
-			for ( let i = 0; i < toks.length; i += 2 ) spans.push( { start: toks[ i ].start, end: toks[ i + 1 ].end } );
+		// Mode 1: a run of same-name inner blocks. Core gallery keeps that run
+		// directly in the block's markup; slider blocks nest it inside their
+		// viewport element and give each image its own wrapper block (Carousel
+		// Slider's cb/carousel > div > cb/slide > wp:image). Peel single
+		// wrapper ELEMENTS until the interior is a uniform run — the units are
+		// still complete sibling blocks, so permuting them stays byte-safe.
+		if ( /<!--\s*wp:/.test( inner ) ) {
+			for ( let level = 0; level < 4; level++ ) {
+				spans = uniformBlockRun( base );
+				if ( spans ) break;
+				const peel = peelWrapperEl( base );
+				if ( ! peel ) break;
+				baseOff += peel.start;
+				base = base.slice( peel.start, peel.end );
+			}
+			// Inner blocks that never resolve to a uniform run are structure,
+			// not a flat image list — don't guess at HTML siblings under them.
+			if ( ! spans ) return null;
 		} else {
 			// Mode 2: repeated same-tag HTML siblings, non-nested (opens and
 			// closes strictly alternate).
@@ -21497,8 +21553,8 @@
 				const oRe = new RegExp( '<' + tag + '[\\s>]', 'g' );
 				const cRe = new RegExp( '</' + tag + '>', 'g' );
 				let m;
-				while ( ( m = oRe.exec( inner ) ) ) opens.push( m.index );
-				while ( ( m = cRe.exec( inner ) ) ) closes.push( m.index + m[ 0 ].length );
+				while ( ( m = oRe.exec( base ) ) ) opens.push( m.index );
+				while ( ( m = cRe.exec( base ) ) ) closes.push( m.index + m[ 0 ].length );
 				if ( opens.length < 2 || opens.length !== closes.length ) continue;
 				let alternate = true;
 				for ( let i = 0; i < opens.length; i++ ) {
@@ -21514,10 +21570,10 @@
 		// Between-unit material must be pure whitespace — anything else means
 		// the run isn't the uniform sibling list this editor assumes.
 		for ( let i = 1; i < spans.length; i++ ) {
-			if ( /\S/.test( inner.slice( spans[ i - 1 ].end, spans[ i ].start ) ) ) return null;
+			if ( /\S/.test( base.slice( spans[ i - 1 ].end, spans[ i ].start ) ) ) return null;
 		}
 		const units = spans.map( ( s ) => {
-			const text = inner.slice( s.start, s.end );
+			const text = base.slice( s.start, s.end );
 			const srcM = text.match( /<img[^>]*\ssrc="([^"]+)"/ ) || text.match( /\ssrc="([^"]+)"/ );
 			const idM = text.match( /wp-image-(\d+)/ ) || text.match( /data-id="(\d+)"/ ) || text.match( /"id":(\d+)/ );
 			return { text, src: srcM ? srcM[ 1 ] : '', id: idM ? parseInt( idM[ 1 ], 10 ) : 0 };
@@ -21537,14 +21593,69 @@
 		}
 
 		const gaps = [];
-		for ( let i = 1; i < spans.length; i++ ) gaps.push( inner.slice( spans[ i - 1 ].end, spans[ i ].start ) );
+		for ( let i = 1; i < spans.length; i++ ) gaps.push( base.slice( spans[ i - 1 ].end, spans[ i ].start ) );
 		return {
-			prefix: raw.slice( 0, innerStart + spans[ 0 ].start ),
-			suffix: raw.slice( innerStart + spans[ spans.length - 1 ].end ),
+			prefix: raw.slice( 0, baseOff + spans[ 0 ].start ),
+			suffix: raw.slice( baseOff + spans[ spans.length - 1 ].end ),
 			units,
 			gaps,
 			ids,
 		};
+	}
+
+	// Top-level segments of a region that are ALL blocks of one name, with
+	// nothing but whitespace between them — the shape a gallery or slide run
+	// has. Offsets are relative to the region.
+	function uniformBlockRun( str ) {
+		const segs = tokenizeBlocks( str );
+		if ( ! segs ) return null;
+		if ( segs.some( ( s ) => s.type === 'html' && /\S/.test( s.raw ) ) ) return null;
+		const blocks = segs.filter( ( s ) => s.type === 'block' );
+		if ( blocks.length < 2 || blocks.some( ( s ) => s.name !== blocks[ 0 ].name ) ) return null;
+		const spans = [];
+		let at = 0;
+		segs.forEach( ( s ) => {
+			if ( s.type === 'block' ) spans.push( { start: at, end: at + s.raw.length } );
+			at += s.raw.length;
+		} );
+		return spans;
+	}
+
+	// The interior of a region that is ONE wrapper element (`<div …>…</div>`
+	// with only whitespace outside it) — a slider's viewport/track markup.
+	// Returns offsets into str, or null when the region isn't shaped that way.
+	function peelWrapperEl( str ) {
+		const m = str.match( /^\s*<([a-z][\w-]*)(?:\s[^>]*)?>/i );
+		if ( ! m ) return null;
+		const tag = m[ 1 ].toLowerCase();
+		const openEnd = m[ 0 ].length;
+		const lower = str.toLowerCase();
+		let depth = 1;
+		let i = openEnd;
+		let close = -1;
+		while ( i < str.length ) {
+			if ( str.startsWith( '<!--', i ) ) {
+				const e = str.indexOf( '-->', i );
+				i = e === -1 ? str.length : e + 3;
+				continue;
+			}
+			if ( str[ i ] === '<' ) {
+				const e = str.indexOf( '>', i );
+				if ( e === -1 ) return null;
+				if ( lower.startsWith( '</' + tag, i ) ) {
+					depth--;
+					if ( ! depth ) { close = i; break; }
+				} else if ( lower.startsWith( '<' + tag, i ) && /[\s>/]/.test( lower[ i + 1 + tag.length ] || '' ) && str[ e - 1 ] !== '/' ) {
+					depth++;
+				}
+				i = e + 1;
+				continue;
+			}
+			i++;
+		}
+		if ( close === -1 ) return null;
+		if ( str.slice( str.indexOf( '>', close ) + 1 ).trim() !== '' ) return null;
+		return { start: openEnd, end: close };
 	}
 
 	// Clone an existing unit for a newly picked attachment: swap the source
@@ -21904,7 +22015,7 @@
 	function inspectorModel( raw ) {
 		const parts = blockParts( raw );
 		if ( ! parts ) return null;
-		const model = { parts, ownAttrs: { ...parts.attrs }, head: '', tail: '', children: [], mode: 'none', segments: null };
+		const model = { parts, ownAttrs: { ...parts.attrs }, head: '', tail: '', children: [], mode: 'none', segments: null, sep: null };
 		if ( ! parts.inner ) return model;
 		const segments = tokenizeBlocks( parts.inner );
 		if ( ! segments ) return model;
@@ -21927,6 +22038,12 @@
 				model.tail = seg.raw;
 			} else if ( seg.raw.trim() !== '' ) {
 				structural = false; // real HTML between children — don't reflow it
+			} else if ( model.sep == null ) {
+				// The block's OWN child separator. Gutenberg writes a blank
+				// line; slider markup usually writes a single newline, and
+				// reflowing it would rewrite bytes nobody edited (the images
+				// editor reorders through this rebuild).
+				model.sep = seg.raw;
 			}
 		} );
 		if ( model.children.length ) {
@@ -22468,10 +22585,11 @@
 			else inner = rep( inner );
 		} );
 		if ( model.mode === 'structural' ) {
-			// Reassemble: wrapper head + children (Gutenberg's blank-line
-			// separator) + wrapper tail. Interior whitespace was verified
-			// insignificant when the model was built.
-			inner = model.head + model.children.map( childRaw ).join( '\n\n' ) + model.tail;
+			// Reassemble: wrapper head + children + wrapper tail, rejoined with
+			// the separator this block already used (Gutenberg's blank line by
+			// default). Interior whitespace was verified insignificant when the
+			// model was built.
+			inner = model.head + model.children.map( childRaw ).join( model.sep == null ? '\n\n' : model.sep ) + model.tail;
 		} else if ( model.mode === 'inplace' && model.segments ) {
 			model.children.forEach( ( c ) => {
 				model.segments[ c.segIdx ] = { ...model.segments[ c.segIdx ], raw: childRaw( c ) };

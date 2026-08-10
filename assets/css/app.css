@@ -1986,6 +1986,17 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   opacity: 0; transition: opacity 0.15s; white-space: nowrap; z-index: 2;
 }
 .minn-block-island[data-imgtool]:hover > .minn-imgtool-badge { opacity: 1; }
+/* Dim the card behind the badge, exactly like the synced-pattern cover: the
+   images ARE the button, so hovering should say so with more than a pill.
+   pointer-events:none keeps the press on the image underneath, and the chip
+   is lifted over the wash (it keeps its own settings job). */
+.minn-block-island[data-imgtool]::after {
+  content: ""; position: absolute; inset: 0; border-radius: 10px; z-index: 1;
+  background: rgba(8, 8, 12, 0.45); opacity: 0; transition: opacity 0.15s;
+  pointer-events: none;
+}
+.minn-block-island[data-imgtool]:hover::after { opacity: 1; }
+.minn-block-island[data-imgtool] > .minn-island-chip { z-index: 4; }
 /* Synced-pattern doorway: its content lives in another post, so the card
    offers that pattern's editor rather than pretending to edit in place. */
 /* The WHOLE card is the doorway: a synced pattern has nothing editable in
@@ -2012,6 +2023,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-block-island[data-patternref]:hover > .minn-island-hint { opacity: 0; }
 .minn-block-island[data-imgtool]:hover > .minn-island-hint { opacity: 0; }
 .minn-block-island[data-imgtool].minn-island-covered:hover > .minn-imgtool-badge { opacity: 0; }
+.minn-block-island[data-imgtool].minn-island-covered:hover::after { opacity: 0; }
 .minn-imgedit-tile img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .minn-imgedit-x {
   position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
