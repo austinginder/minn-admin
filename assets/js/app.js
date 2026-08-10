@@ -16697,6 +16697,7 @@
 			$$( '.minn-island-preview' ).forEach( ( el ) => {
 				revealJsGatedPreview( el );
 				collapseSliderPreview( el );
+				markMissingImages( el );
 			} );
 		} );
 	}
@@ -16727,6 +16728,31 @@
 			} );
 		}
 	}
+
+	/* A dead image URL is worth SAYING rather than leaving as the browser's
+	 * broken glyph — inside a themed slide that glyph reads as a broken block.
+	 * The placeholder is painted as the failed image's own background (CSS),
+	 * so no element is replaced and the src attribute stays exactly as
+	 * authored: the image-tooling doorway still matches on it, and the class
+	 * lands only on PREVIEW and MODAL chrome. Images in the content itself are
+	 * never touched — a class there would serialize into the saved markup. */
+	function markMissingImages( root ) {
+		if ( ! root ) return;
+		$$( 'img', root ).forEach( ( img ) => {
+			if ( ! img.complete ) return;              // still loading; the error handler covers it
+			if ( img.naturalWidth || ! img.getAttribute( 'src' ) ) { img.classList.remove( 'minn-img-missing' ); return; }
+			img.classList.add( 'minn-img-missing' );
+		} );
+	}
+
+	// `error` never bubbles, so this rides the capture phase for the whole
+	// document and filters down to chrome images.
+	document.addEventListener( 'error', ( e ) => {
+		const img = e.target;
+		if ( ! img || img.tagName !== 'IMG' || ! img.closest ) return;
+		if ( ! img.closest( '.minn-island-preview, .minn-imgedit-tile, .minn-insp-img-row' ) ) return;
+		img.classList.add( 'minn-img-missing' );
+	}, true );
 
 	/* A slider is a STACK until its JS runs. Carousel markup saves every slide
 	 * as a sibling and lets a view script turn them into a one-at-a-time
@@ -21992,6 +22018,9 @@
 				</div>` ).join( '' ) || '<div class="minn-imgedit-empty">No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead.</div>';
 			const apply = $( '#minn-imgedit-apply', overlay );
 			if ( apply ) apply.disabled = ! list.length;
+			// Tiles for images that no longer exist say so instead of sitting
+			// blank — the tile is still clickable, which is how you fix it.
+			requestAnimationFrame( () => markMissingImages( grid ) );
 		};
 		renderGrid();
 
