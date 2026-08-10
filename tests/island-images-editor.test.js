@@ -235,6 +235,27 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + GRP + '\n\n<!-- wp:paragr
 		await page.click( '#minn-imgedit-cancel' );
 		await page.waitForTimeout( 400 );
 
+		// --- ⌥-click the island's ⚙ chip duplicates the whole card ---
+		const dupState = await page.evaluate( () => {
+			const before = document.querySelectorAll( '.minn-block-island[data-block="jetpack/slideshow"]' ).length;
+			const chip = document.querySelector( '.minn-block-island[data-block="jetpack/slideshow"] .minn-island-chip' );
+			if ( ! chip ) return null;
+			chip.dispatchEvent( new MouseEvent( 'click', { altKey: true, bubbles: true } ) );
+			return { before };
+		} );
+		await page.waitForTimeout( 1200 );
+		const dupAfter = await page.evaluate( () => ( {
+			count: document.querySelectorAll( '.minn-block-island[data-block="jetpack/slideshow"]' ).length,
+			inspectorOpen: !! document.querySelector( '#minn-insp-close' ),
+		} ) );
+		t.check( 'alt-click the block handle duplicates it, no settings popover',
+			dupState && dupAfter.count === dupState.before + 1 && ! dupAfter.inspectorOpen, JSON.stringify( dupAfter ) );
+		// Undo the duplicate so nothing downstream shifts.
+		await page.evaluate( () => {
+			const isls = [ ...document.querySelectorAll( '.minn-block-island[data-block="jetpack/slideshow"]' ) ];
+			if ( isls.length > 1 ) isls[ isls.length - 1 ].remove();
+		} );
+
 		// --- Containers list no images (each nested block manages its own) ---
 		for ( let i = 0; i < 8; i++ ) {
 			try {
