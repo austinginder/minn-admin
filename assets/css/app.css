@@ -1590,6 +1590,17 @@ select.minn-input {
   border: 1px dashed var(--border2); border-radius: 11px; padding: 14px 16px; margin: 0 0 18px; display: block;
 }
 .minn-editor-body > figure.wp-block-image img, .minn-slot > figure.wp-block-image img { max-width: 100%; height: auto; display: block; border-radius: 6px; }
+/* In a column that frame is a THIRD of the width: a four-up row of photos
+   rendered as stamps floating in mostly-empty cards (a slide deck,
+   where each image lost 32px of its ~120px column). The cutout still reads
+   at this size, and the photo gets the space. No :has() here — it would
+   match inside the editor body and force a full-subtree style recalc on
+   every keystroke (the editor-feel benchmark's one hard rule); an empty
+   delete-husk wearing a small frame for one undo step is the cheaper miss. */
+.minn-cols-island .minn-slot > figure.wp-block-image,
+.minn-cols-island .minn-slot > img {
+  padding: 5px; border-radius: 9px; margin: 0 0 10px;
+}
 .minn-editor-body > figure.wp-block-image figcaption, .minn-slot > figure.wp-block-image figcaption { color: var(--text3); font-size: 13px; margin-top: 8px; }
 .minn-editor-body iframe, .minn-editor-body video { max-width: 100%; }
 .minn-editor-body p { margin: 0 0 16px; }

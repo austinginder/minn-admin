@@ -5,7 +5,7 @@
  * of the block keeps its text, and no width is invented for the new column
  * (which would silently squeeze the row).
  */
-const { launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
+const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = require( './helpers' );
 
 const COLS = [
 	'<!-- wp:columns -->',
@@ -206,6 +206,37 @@ const COLS = [
 			t.check( 'the group keeps its own paragraph', raw2.includes( '<p>Inside the group.</p>' ) );
 		} finally {
 			await deletePost( page, gid ).catch( () => {} );
+		}
+	}
+
+	// --- A photo in a narrow column gets the space, not the frame ---
+	{
+		const cols = Array.from( { length: 4 }, () =>
+			'<!-- wp:column -->\n<div class="wp-block-column"><!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="' + BASE + '/wp-content/uploads/gal-red.png" alt=""/></figure>\n<!-- /wp:image --></div>\n<!-- /wp:column -->' ).join( '\n' );
+		const iid = await createPost( page, { title: 'Column image probe', content: '<!-- wp:columns -->\n<div class="wp-block-columns">' + cols + '</div>\n<!-- /wp:columns -->' } );
+		try {
+			await openEditor( page, iid );
+			// Wait on the LOADED image rather than Playwright's visibility check:
+			// a fresh <img> has no box until it decodes.
+			await page.waitForFunction( () => {
+				const im = document.querySelector( '.minn-cols-island .minn-slot img' );
+				return im && im.complete && im.getBoundingClientRect().width > 1;
+			}, null, { timeout: 25000 } );
+			const fit = await page.evaluate( () => {
+				const img = document.querySelector( '.minn-cols-island .minn-slot img' );
+				const fig = img.closest( 'figure' );
+				return {
+					img: Math.round( img.getBoundingClientRect().width ),
+					figure: Math.round( fig.getBoundingClientRect().width ),
+					column: Math.round( fig.closest( '.wp-block-column' ).getBoundingClientRect().width ),
+				};
+			} );
+			// The editor frame around an image is generous at full width and
+			// used to eat a THIRD of a four-up column.
+			t.check( 'a photo keeps most of its column', fit.img >= fit.figure * 0.85, JSON.stringify( fit ) );
+			t.check( 'the column itself is not squeezed', fit.figure >= fit.column * 0.8, JSON.stringify( fit ) );
+		} finally {
+			await deletePost( page, iid ).catch( () => {} );
 		}
 	}
 
