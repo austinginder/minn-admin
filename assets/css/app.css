@@ -1986,15 +1986,18 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   opacity: 0; transition: opacity 0.15s; white-space: nowrap; z-index: 2;
 }
 .minn-block-island[data-imgtool]:hover > .minn-imgtool-badge { opacity: 1; }
-/* Hover action on a card (duplicate) — sits left of the ⚙ chip. */
+/* Hover action on a card (duplicate). Anchored to the card's LEFT edge, not
+   offset from the ⚙ chip: chip width tracks the block name, so a long one
+   ("jetpack/slideshow") slid the button on top of the label. The hover hint
+   that normally sits here is hidden for these cards, so the corner is free. */
 .minn-island-act {
-  position: absolute; top: -12px; right: 92px; z-index: 3;
+  position: absolute; top: -13px; left: 12px; z-index: 3;
   display: flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; padding: 0; border-radius: 7px;
+  width: 26px; height: 26px; padding: 0; border-radius: 8px;
   background: var(--panel); border: 1px solid var(--border); color: var(--text2);
-  cursor: pointer; opacity: 0; transition: opacity 0.12s;
+  cursor: pointer; opacity: 0; transition: opacity 0.12s, color 0.12s, border-color 0.12s;
 }
-.minn-island-act svg { width: 13px; height: 13px; }
+.minn-island-act svg { width: 14px; height: 14px; stroke-width: 1.8; }
 .minn-island-act:hover { color: var(--text); border-color: var(--border2); }
 .minn-block-island:hover > .minn-island-act,
 .minn-block-island.minn-island-selected > .minn-island-act { opacity: 1; }
