@@ -16222,6 +16222,11 @@
 		const idx = parseInt( island.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
 		const arm = island._minnRuns;
+		// The island's stored markup changed under this arming (an image
+		// replaced, a URL swapped, an inspector Apply): splicing the armed
+		// base would write those old bytes back. Drop the arming instead —
+		// the next preview render re-arms against the new raw.
+		if ( arm.base !== ed.islands[ idx ] ) { island._minnRuns = null; return; }
 		arm.spans.forEach( ( span, i ) => {
 			if ( ! span || ! span.isConnected ) return;
 			const r = arm.runs[ i ];
@@ -21463,6 +21468,52 @@
 		...( raw.replace( /\\\//g, '/' ).match( ISLAND_IMG_RE ) || [] ),
 	] ) ];
 	const escRegex = ( s ) => s.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+
+	/* Media objects in block attributes often describe ONE image with several
+	 * URL keys: a sized copy under "url" and the original under "fullUrl"
+	 * (Gutenslider), a thumbnail under "thumbUrl", and so on. Return the other
+	 * image URLs living in the same attribute object as `url` — the inspector
+	 * lists one row per image instead of one per key, and a replace moves the
+	 * whole set. Flat-object scan, no JSON parse: attribute JSON is machine
+	 * written, and anything this misreads simply isn't paired. */
+	const imgUrlKeyRe = () => /"[\w.-]*(?:url|src)"\s*:\s*"([^"]+)"/gi;
+	// Every spelling of an image URL a key's value can yield: as written
+	// (what islandImageUrls surfaces, which stops at a backslash escape) and
+	// with the serializer's escapes undone.
+	function imageTokensIn( value ) {
+		const set = new Set();
+		[ value, value.replace( /\\u002d/gi, '-' ).replace( /\\\//g, '/' ) ].forEach( ( v ) => {
+			( v.match( ISLAND_IMG_RE ) || [] ).forEach( ( u ) => set.add( u ) );
+		} );
+		return [ ...set ];
+	}
+	function islandImageSiblings( raw, url ) {
+		const out = new Set();
+		( String( raw || '' ).match( /\{[^{}]*\}/g ) || [] ).forEach( ( obj ) => {
+			const groups = [];
+			let m;
+			const re = imgUrlKeyRe();
+			while ( ( m = re.exec( obj ) ) ) {
+				const toks = imageTokensIn( m[ 1 ] );
+				if ( toks.length ) groups.push( toks );
+			}
+			if ( groups.length < 2 || ! groups.some( ( g ) => g.includes( url ) ) ) return;
+			groups.forEach( ( g ) => g.forEach( ( u ) => { if ( u !== url ) out.add( u ); } ) );
+		} );
+		return [ ...out ];
+	}
+
+	// The image list an inspector should offer: one row per picture, with the
+	// extra keys of a multi-URL media object folded into their primary.
+	function islandImageRows( raw ) {
+		const all = islandImageUrls( String( raw || '' ) );
+		const secondary = new Set();
+		all.forEach( ( u ) => {
+			if ( secondary.has( u ) ) return;
+			islandImageSiblings( raw, u ).forEach( ( s ) => secondary.add( s ) );
+		} );
+		return all.filter( ( u ) => ! secondary.has( u ) );
+	}
 	function swapIslandImage( raw, oldUrl, item ) {
 		const newUrl = item && item.url;
 		if ( ! newUrl || newUrl === oldUrl ) return raw;
@@ -21470,9 +21521,32 @@
 		const encAttr = ( s ) => s.replace( /--/g, '\\u002d\\u002d' ).replace( /</g, '\\u003c' ).replace( />/g, '\\u003e' ).replace( /&/g, '\\u0026' );
 		// PHP-side wp_json_encode escapes forward slashes — cover that form too.
 		const slashEsc = ( s ) => s.split( '/' ).join( '\\/' );
-		raw = raw.split( oldUrl ).join( newUrl );
-		if ( encAttr( oldUrl ) !== oldUrl ) raw = raw.split( encAttr( oldUrl ) ).join( encAttr( newUrl ) );
-		raw = raw.split( slashEsc( oldUrl ) ).join( slashEsc( newUrl ) );
+		const swapUrl = ( str, from ) => {
+			let out = str.split( from ).join( newUrl );
+			if ( encAttr( from ) !== from ) out = out.split( encAttr( from ) ).join( encAttr( newUrl ) );
+			return out.split( slashEsc( from ) ).join( slashEsc( newUrl ) );
+		};
+		// One image, several URLs: an attribute media object routinely carries
+		// a sized copy AND the original (Gutenslider's url + fullUrl). They
+		// describe the same picture, so every image key in the object that
+		// holds this one is rewritten WHOLE. Substring swapping can't do that
+		// safely: a serialize-escaped URL ("…jpg--700x700.jpg")
+		// contains the sibling key's value as a prefix, so a plain replace
+		// would splice the new name into the middle of the old one.
+		const writeUrl = ( oldVal ) => encAttr( /\\\//.test( oldVal ) ? slashEsc( newUrl ) : newUrl );
+		raw = raw.replace( /\{[^{}]*\}/g, ( obj ) => {
+			let holds = false;
+			obj.replace( imgUrlKeyRe(), ( m0, val ) => {
+				if ( imageTokensIn( val ).includes( oldUrl ) ) holds = true;
+				return m0;
+			} );
+			if ( ! holds ) return obj;
+			return obj.replace( imgUrlKeyRe(), ( m0, val ) =>
+				( imageTokensIn( val ).length ? m0.replace( '"' + val + '"', '"' + writeUrl( val ) + '"' ) : m0 ) );
+		} );
+		// Remaining occurrences (saved HTML, srcset, anything outside an
+		// attribute object).
+		raw = swapUrl( raw, oldUrl );
 		if ( item.id ) {
 			const urlPat = '(?:' + escRegex( newUrl ) + '|' + escRegex( encAttr( newUrl ) ) + '|' + escRegex( slashEsc( newUrl ) ) + ')';
 			raw = raw.replace( /<!--(?:(?!-->)[\s\S])*-->/g, ( comment ) => {
@@ -21487,19 +21561,22 @@
 						? [ m[ 1 ] + m[ 2 ] ]      // bgImg → bgImgID / bgImgId
 						: [ m[ 1 ] ];               // imageUrl → imageId / imageID
 					stems.forEach( ( stem ) => {
-						out = out.replace( new RegExp( '"' + stem + '(Id|ID)":\\d+', 'g' ), '"' + stem + '$1":' + item.id );
+						// Ids are written both as numbers and as strings
+						// ("id":"1971" — Gutenslider); keep whichever the
+						// block used.
+						out = out.replace( new RegExp( '"' + stem + '(Id|ID)":("?)\\d+\\2', 'g' ), '"' + stem + '$1":$2' + item.id + '$2' );
 					} );
 				}
 				// Media objects ({ "url": …, "id": N } in either order): bare
 				// keys are only safe to retarget INSIDE the object that carries
 				// the swapped URL.
 				out = out.replace( new RegExp( '\\{[^{}]*"url":"' + urlPat + '"[^{}]*\\}', 'g' ), ( obj ) =>
-					obj.replace( /"id":\d+/g, '"id":' + item.id ) );
+					obj.replace( /"id":("?)\d+\1/g, '"id":$1' + item.id + '$1' ) );
 				// GenerateBlocks: no URL attribute at all — mediaId pairs with
 				// the src living in htmlAttributes/saved HTML. Comment-scoped:
 				// a GB media comment carries exactly one mediaId.
 				if ( new RegExp( urlPat ).test( comment ) ) {
-					out = out.replace( /"mediaId":\d+/g, '"mediaId":' + item.id );
+					out = out.replace( /"mediaId":("?)\d+\1/g, '"mediaId":$1' + item.id + '$1' );
 				}
 				return out;
 			} );
@@ -22436,6 +22513,11 @@
 		const ed = state.editor;
 		if ( ! ed || ! ed.islands || ed.islands[ idx ] == null ) return;
 		ed.islands[ idx ] = template;
+		// Armed in-place text runs describe the PREVIOUS markup. Leaving them
+		// armed lets their splice write the old bytes back over this change at
+		// save time (a replaced image silently reverted); the new preview
+		// re-arms below against the new raw.
+		if ( islandEl ) islandEl._minnRuns = null;
 		// A nested island's stored raw just changed via popover buttons (no
 		// input event) — ancestor slot islands must re-splice on save or
 		// their stale stored raw would emit the OLD child bytes.
@@ -22451,6 +22533,9 @@
 				const html = r && r.rendered && r.rendered[ 0 ];
 				if ( prev && html && html.trim() ) setPreviewHtml( prev, html );
 				schedulePreviewReveal();
+				// Re-arm in-place text editing against the new markup.
+				const body = islandEl && islandEl.closest( '.minn-editor-body' );
+				if ( body ) armIslandTextRuns( body, ed );
 				updateEditorStats();
 			} )
 			.catch( () => {} );
@@ -22489,7 +22574,7 @@
 		await Promise.all( [ ...new Set( names ) ].map( async ( n ) => { types[ n ] = await blockTypeFor( n ); } ) );
 		if ( ! inspectorEl ) return; // closed while loading
 
-		inspectorState = { idx, model, types, islandEl, images: islandImageUrls( raw ), units: imageUnitsOf( raw ) };
+		inspectorState = { idx, model, types, islandEl, images: islandImageRows( raw ), units: imageUnitsOf( raw ) };
 		renderInspectorBody();
 		// Re-apply dialog attrs after the body swap (innerHTML rebuild).
 		armBlockPopA11y( inspectorEl, {
