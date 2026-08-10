@@ -16367,7 +16367,7 @@
 				injectPreviewStyles( r && r.styles );
 				const rendered = r && r.rendered && r.rendered[ 0 ];
 				const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
-				if ( prev && rendered && rendered.trim() ) prev.innerHTML = rendered;
+				if ( prev && rendered && rendered.trim() ) setPreviewHtml( prev, rendered );
 				updateEditorStats();
 			} )
 			.catch( () => {} );
@@ -16605,12 +16605,27 @@
 	 * has size and NOTHING visible in it, un-hide the opacity-0 (then
 	 * visibility:hidden) wrappers. Preview DOM only: saves splice the stored
 	 * raw, so inline styles set here can never reach serialized content. */
+	// Every write to a preview's contents goes through here: the polish passes
+	// below stamp what they already did on the element, and fresh markup must
+	// start from a clean slate or a re-render (Apply, a server render landing)
+	// leaves the slider stack un-collapsed with the flag still saying "done"
+	// (Austin's post-drop repro).
+	function setPreviewHtml( prev, html ) {
+		if ( ! prev ) return;
+		delete prev.dataset.sliderCollapsed;
+		delete prev.dataset.sliderWait;
+		prev.innerHTML = html;
+	}
+
 	let previewRevealRaf = 0;
 	function schedulePreviewReveal() {
 		if ( previewRevealRaf ) return;
 		previewRevealRaf = requestAnimationFrame( () => {
 			previewRevealRaf = 0;
-			$$( '.minn-island-preview' ).forEach( revealJsGatedPreview );
+			$$( '.minn-island-preview' ).forEach( ( el ) => {
+				revealJsGatedPreview( el );
+				collapseSliderPreview( el );
+			} );
 		} );
 	}
 
@@ -21701,16 +21716,25 @@
 		// replaced entries get their unit text rewritten in place (caption
 		// kept) and carry the new attachment id.
 		const list = info.units.map( ( u, i ) => ( { unit: u, orig: i, id: info.ids ? info.ids[ i ] : u.id, thumb: u.src, attachment: null } ) );
+		const canUpload = !! ( B.caps && B.caps.upload );
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-imgedit-overlay';
+		// While this modal is open it owns EVERY window drop (rule of the
+		// install modals): a photo aimed at the tile grid must join THIS block,
+		// not land in the media library with the editor navigated away from
+		// under the writer (Austin's repro).
+		if ( canUpload ) overlay.id = 'minn-imgedit-drop';
 		overlay.innerHTML = `
 			<div class="minn-imgedit" role="dialog" aria-modal="true" aria-label="Edit images">
 				<div class="minn-imgedit-head">
 					<strong>Edit images</strong>
-					<span class="minn-imgedit-hint">Drag to reorder · click a tile to replace · × removes</span>
+					<span class="minn-imgedit-hint">${ canUpload
+						? 'Drag to reorder · click a tile to replace · × removes · drop images to add'
+						: 'Drag to reorder · click a tile to replace · × removes' }</span>
 					<button type="button" class="minn-x-btn" id="minn-imgedit-close">×</button>
 				</div>
 				<div class="minn-imgedit-grid" id="minn-imgedit-grid"></div>
+				<div class="minn-imgedit-drop-veil" aria-hidden="true">Drop images to add them here</div>
 				<div class="minn-imgedit-foot">
 					<button type="button" class="minn-btn-soft" id="minn-imgedit-add">Add images…</button>
 					<span style="flex:1"></span>
@@ -21739,6 +21763,76 @@
 			if ( apply ) apply.disabled = ! list.length;
 		};
 		renderGrid();
+
+		// Dropped image FILES upload and join the grid as new entries — the
+		// same shape the media picker hands back, so Apply clones them in
+		// through the one code path. Non-images are refused rather than
+		// silently uploaded.
+		const addDroppedFiles = async ( files ) => {
+			const imgs = files.filter( ( f ) => /^image\//.test( f.type || '' ) );
+			if ( ! imgs.length ) {
+				toast( 'Only image files can be dropped here.', true );
+				return;
+			}
+			toast( imgs.length === 1 ? 'Uploading image…' : `Uploading ${ imgs.length } images…` );
+			let added = 0;
+			for ( const file of imgs ) {
+				try {
+					const fd = new FormData();
+					fd.append( 'file', file, file.name || 'image.png' );
+					const m = await api( 'wp/v2/media', { method: 'POST', body: fd } );
+					const sizes = ( m.media_details && m.media_details.sizes ) || {};
+					const it = {
+						id: m.id,
+						url: m.source_url,
+						alt: m.alt_text || '',
+						width: ( m.media_details && m.media_details.width ) || 0,
+						height: ( m.media_details && m.media_details.height ) || 0,
+						thumb: ( sizes.medium && sizes.medium.source_url ) || m.source_url,
+					};
+					// The modal can be closed mid-upload; the attachment is
+					// still in the library, so say so rather than losing it.
+					if ( imgEditEl !== overlay ) { toast( `${ it.url.split( '/' ).pop() } uploaded to the media library.` ); continue; }
+					list.push( { unit: null, orig: -1, id: it.id, thumb: it.thumb, attachment: it } );
+					added++;
+					renderGrid();
+				} catch ( err ) {
+					toast( `${ file.name }: ${ err.message }`, true );
+				}
+			}
+			if ( added ) {
+				state.cache.media = null;
+				toast( added === 1 ? 'Image added — Apply to save it into the block.' : `${ added } images added — Apply to save them into the block.` );
+			}
+		};
+		if ( canUpload ) {
+			overlay._accept = ( file ) => addDroppedFiles( [ file ] );
+			overlay._acceptAll = ( files ) => addDroppedFiles( files );
+			const hasFiles = ( e ) => !! ( e.dataTransfer && Array.from( e.dataTransfer.types || [] ).includes( 'Files' ) );
+			let overDepth = 0;
+			overlay.addEventListener( 'dragenter', ( e ) => {
+				if ( ! hasFiles( e ) ) return;
+				overDepth++;
+				overlay.classList.add( 'dropping' );
+			} );
+			overlay.addEventListener( 'dragleave', () => {
+				overDepth = Math.max( 0, overDepth - 1 );
+				if ( ! overDepth ) overlay.classList.remove( 'dropping' );
+			} );
+			overlay.addEventListener( 'dragover', ( e ) => { if ( hasFiles( e ) ) e.preventDefault(); } );
+			// The window handler routes drops here too (including ones that
+			// land a few pixels outside the modal); this one just wins first
+			// and must stop the propagation so nothing uploads twice.
+			overlay.addEventListener( 'drop', ( e ) => {
+				if ( ! hasFiles( e ) ) return;
+				e.preventDefault();
+				e.stopPropagation();
+				overDepth = 0;
+				overlay.classList.remove( 'dropping' );
+				addDroppedFiles( Array.from( e.dataTransfer.files || [] ) );
+			} );
+		}
+
 		// Entered by clicking an image in the preview: show which tile that
 		// was. Manual scrollTop, never scrollIntoView (rule-31 page yank).
 		if ( opts.focus != null && opts.focus >= 0 ) {
@@ -22349,13 +22443,14 @@
 		const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
 		if ( prev ) {
 			const inner = stripBlockComments( template ).trim();
-			if ( inner ) prev.innerHTML = inner;
+			if ( inner ) setPreviewHtml( prev, inner );
 		}
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ template ], post: ( state.editor && state.editor.id ) || 0 } ) } )
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
 				const html = r && r.rendered && r.rendered[ 0 ];
-				if ( prev && html && html.trim() ) prev.innerHTML = html;
+				if ( prev && html && html.trim() ) setPreviewHtml( prev, html );
+				schedulePreviewReveal();
 				updateEditorStats();
 			} )
 			.catch( () => {} );
@@ -22684,7 +22779,7 @@
 					// Shortcode/details host live fields — never clobber them.
 					if ( isLiveFieldIsland( island ) ) return;
 					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
-					if ( el && html && html.trim() ) el.innerHTML = html;
+					if ( el && html && html.trim() ) setPreviewHtml( el, html );
 				} );
 				// Rendered previews are the arming surface for in-place island
 				// text editing — align text nodes against the raw's text runs.
@@ -25419,7 +25514,7 @@
 					injectPreviewStyles( r && r.styles );
 					const html = r && r.rendered && r.rendered[ 0 ];
 					const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
-					if ( prev && html && html.trim() ) prev.innerHTML = html;
+					if ( prev && html && html.trim() ) setPreviewHtml( prev, html );
 					updateEditorStats();
 				} )
 				.catch( () => {} );
@@ -31964,17 +32059,19 @@
 		// Warm the content cache so the sidebar count appears.
 		if ( state.route !== 'content' ) loadContent().catch( () => {} );
 
-		// Drag & drop upload from anywhere in the app. When an install modal
-		// (Add plugin / Add theme) is open, its dropzone owns EVERY drop: a
-		// zip aimed at the modal but landing a few pixels outside it must
-		// never end up in the media library (Austin's wp-rocket_3.23 repro),
-		// and the "Drop files to upload" veil stays hidden so the modal's own
-		// zone is the only affordance. The zones expose their upload path as
-		// zone._accept (the chips' _target/_kind convention).
+		// Drag & drop upload from anywhere in the app. When a modal with its own
+		// file target is open (Add plugin / Add theme / Edit images), that
+		// dropzone owns EVERY drop: a file aimed at the modal but landing a few
+		// pixels outside it must never end up in the media library with the app
+		// navigated away (Austin's wp-rocket_3.23 zip and his slider-image
+		// repros), and the "Drop files to upload" veil stays hidden so the
+		// modal's own affordance is the only one. Zones expose their upload
+		// path as zone._accept (one file) / zone._acceptAll (the whole drop) —
+		// the chips' _target/_kind convention.
 		if ( B.caps.upload ) {
 			const installDropZone = () => {
-				const z = $( '#minn-pi-dropzone' ) || $( '#minn-ti-dropzone' );
-				return z && z._accept ? z : null;
+				const z = $( '#minn-pi-dropzone' ) || $( '#minn-ti-dropzone' ) || $( '#minn-imgedit-drop' );
+				return z && ( z._accept || z._acceptAll ) ? z : null;
 			};
 			let dragDepth = 0;
 			window.addEventListener( 'dragenter', ( e ) => {
@@ -31997,7 +32094,8 @@
 				if ( ! files.length ) return;
 				const zone = installDropZone();
 				if ( zone ) {
-					zone._accept( files[ 0 ] );
+					if ( zone._acceptAll ) zone._acceptAll( files );
+					else zone._accept( files[ 0 ] );
 					return;
 				}
 				if ( state.route !== 'media' ) go( 'media' );
