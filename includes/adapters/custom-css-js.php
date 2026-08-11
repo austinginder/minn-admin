@@ -63,6 +63,18 @@ function minn_admin_ccj_can_write_code( $opts ) {
 	return current_user_can( 'unfiltered_html' );
 }
 
+/**
+ * Whether this caller may make an EXISTING snippet run.
+ *
+ * Publishing is the same privilege as authoring: the stored bytes are written
+ * to CCJ_UPLOAD_DIR and, for a js snippet or an admin-side one, execute in a
+ * context this caller may not write to. Checked against the snippet's stored
+ * options rather than anything in the request.
+ */
+function minn_admin_ccj_can_activate( $post_id ) {
+	return minn_admin_ccj_can_write_code( minn_admin_ccj_get_options( (int) $post_id ) );
+}
+
 /** WP_Error explaining why a snippet write was refused. */
 function minn_admin_ccj_code_error( $opts ) {
 	$language = isset( $opts['language'] ) ? (string) $opts['language'] : 'css';
@@ -555,6 +567,9 @@ add_action( 'rest_api_init', function () {
 					$update['post_content'] = (string) $body['code'];
 				}
 				if ( array_key_exists( 'active', $body ) ) {
+					if ( ! empty( $body['active'] ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
+						return minn_admin_ccj_code_error( $opts );
+					}
 					$update['post_status'] = $body['active'] ? 'publish' : 'draft';
 					update_post_meta( $id, '_active', $body['active'] ? 'yes' : 'no' );
 				}
@@ -572,6 +587,11 @@ add_action( 'rest_api_init', function () {
 				$post = get_post( $id );
 				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
 					return new WP_Error( 'not_found', 'Code not found.', array( 'status' => 404 ) );
+				}
+				// Deleting is a write to the same store, and it takes the file
+				// in CCJ_UPLOAD_DIR with it.
+				if ( ! minn_admin_ccj_can_activate( $id ) ) {
+					return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
 				}
 				wp_delete_post( $id, true );
 				minn_admin_ccj_rebuild_tree();
@@ -591,6 +611,10 @@ add_action( 'rest_api_init', function () {
 			}
 			$body   = $request->get_json_params();
 			$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
+			// Turning a snippet ON runs it. Turning it OFF is always allowed.
+			if ( $active && ! minn_admin_ccj_can_activate( $id ) ) {
+				return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
+			}
 			wp_update_post( array(
 				'ID'          => $id,
 				'post_status' => $active ? 'publish' : 'draft',
