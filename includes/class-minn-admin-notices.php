@@ -417,7 +417,7 @@ class Minn_Admin_Notices {
 			}
 			// Capture-piggyback links (minn_notices=) OR admin dismiss/opt-out
 			// URLs (ThemeIsle tsdk_dismiss_nonce, nid=, generic dismiss).
-			$is_action = false !== strpos( $url, 'minn_notices=' )
+			$is_action = ( false !== strpos( $url, 'minn_notices=' ) && self::is_same_origin( $url ) )
 				|| self::is_admin_dismiss_url( $url, $label );
 			if ( false !== strpos( $url, 'minn_notices=' ) ) {
 				$url = remove_query_arg( array( 'minn_notices', 'minn_nonce' ), $url );
@@ -460,6 +460,22 @@ class Minn_Admin_Notices {
 	 * &tsdk_dismiss_nonce=…), and similar dismiss nonces on wp-admin URLs.
 	 * External review CTAs (wordpress.org) stay non-action.
 	 */
+	/**
+	 * Whether a URL is on this site.
+	 *
+	 * An "action" link is fetched by the app with Minn's capture nonce
+	 * appended, so the origin has to be established before anything is
+	 * classified as one. Notice HTML comes from third-party plugins and can
+	 * embed unauthenticated input, so the anchor is not necessarily trusted.
+	 */
+	private static function is_same_origin( $url ) {
+		$host = (string) ( wp_parse_url( $url, PHP_URL_HOST ) ?: '' );
+		$site = (string) ( wp_parse_url( home_url(), PHP_URL_HOST ) ?: '' );
+		// hrefs are absolutized against home_url()/admin_url() before this
+		// runs, so a genuine relative admin path already carries the site host.
+		return '' !== $host && '' !== $site && 0 === strcasecmp( $host, $site );
+	}
+
 	private static function is_admin_dismiss_url( $url, $label = '' ) {
 		// Never treat public marketing / directory URLs as dismiss actions.
 		if ( preg_match( '#https?://(?:www\.)?wordpress\.org/#i', $url ) ) {
@@ -470,8 +486,12 @@ class Minn_Admin_Notices {
 		$host  = (string) ( wp_parse_url( $url, PHP_URL_HOST ) ?: '' );
 		$site  = (string) ( wp_parse_url( home_url(), PHP_URL_HOST ) ?: '' );
 		// Must be same-site admin (or relative admin path we already absolutized).
-		$is_admin = ( $host && $site && strcasecmp( $host, $site ) === 0 && false !== strpos( $path, '/wp-admin' ) )
-			|| ( $admin && 0 === strpos( $path, $admin ) );
+		// Both clauses require the SAME ORIGIN. The second used to compare only
+		// the path against /wp-admin/ and ignore the host entirely, so
+		// https://evil.example/wp-admin/x?dismiss=1 satisfied it and was then
+		// fetched with Minn's nonce attached, presented as a local button.
+		$is_admin = self::is_same_origin( $url )
+			&& ( false !== strpos( $path, '/wp-admin' ) || ( $admin && 0 === strpos( $path, $admin ) ) );
 		if ( ! $is_admin ) {
 			return false;
 		}
