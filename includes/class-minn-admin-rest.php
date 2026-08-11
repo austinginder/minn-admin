@@ -763,6 +763,53 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Multisite "Remove from this site" — the per-site counterpart of
+		// deletion, which core REST refuses outright on multisite (501).
+		// The remove_user meta cap carries core's own rules (super-admin
+		// targets need a super-admin actor); the id resolves from the URL
+		// segment in the gate AND the handler (target_user_id rule).
+		register_rest_route(
+			self::NS,
+			'/users/(?P<id>\d+)/remove',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'user_remove_from_site' ),
+				'permission_callback' => function ( WP_REST_Request $request ) {
+					$url = $request->get_url_params();
+					$id  = isset( $url['id'] ) ? (int) $url['id'] : 0;
+					return is_multisite() && $id && current_user_can( 'remove_user', $id );
+				},
+			)
+		);
+
+		// Multisite "Add existing user": attach a network account to this
+		// site with a role — wp-admin's user-new.php Add Existing flow,
+		// which promote_users holders (subsite admins) may run even though
+		// creating accounts stays a network-admin job.
+		register_rest_route(
+			self::NS,
+			'/users/add-existing',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'user_add_existing' ),
+				'permission_callback' => function () {
+					return is_multisite() && current_user_can( 'promote_users' );
+				},
+				'args'                => array(
+					'user' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'role' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_key',
+					),
+				),
+			)
+		);
+
 		// Styled HTML email from Minn Admin to a user.
 		register_rest_route(
 			self::NS,
@@ -3790,6 +3837,109 @@ class Minn_Admin_REST {
 	 * List users with optional session-status filter. Shape matches the
 	 * fields the Users view loads from wp/v2/users (context=edit).
 	 */
+	/**
+	 * POST /users/{id}/remove — take an account off THIS site (multisite).
+	 * The user keeps their network account and any other site memberships;
+	 * their content here stays attributed to them (core's own remove
+	 * semantics — wp-admin's Remove bulk action reassigns nothing either).
+	 */
+	public static function user_remove_from_site( WP_REST_Request $request ) {
+		$id = self::target_user_id( $request );
+		if ( $id === get_current_user_id() ) {
+			return new WP_Error(
+				'cannot_remove_self',
+				__( 'You cannot remove your own account from this site.', 'minn-admin' ),
+				array( 'status' => 400 )
+			);
+		}
+		$user = get_userdata( $id );
+		if ( ! $user || ! is_user_member_of_blog( $id ) ) {
+			return new WP_Error(
+				'not_a_member',
+				__( 'That account is not a member of this site.', 'minn-admin' ),
+				array( 'status' => 404 )
+			);
+		}
+		// The remove_user meta cap does NOT protect super admins — wp-admin
+		// enforces that at the screen level (its list table never offers
+		// Remove against get_super_admins()). Without this, a subsite admin
+		// could eject every network administrator from their own site.
+		if ( is_super_admin( $id ) ) {
+			return new WP_Error(
+				'cannot_remove_super_admin',
+				__( 'Network administrators cannot be removed from a site here. Manage network administrators in Network Admin.', 'minn-admin' ),
+				array( 'status' => 403 )
+			);
+		}
+		$result = remove_user_from_blog( $id, get_current_blog_id() );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response( array( 'removed' => true ) );
+	}
+
+	/**
+	 * POST /users/add-existing — attach an existing network account to this
+	 * site by email or username, with a role. Deliberately NOT account
+	 * creation: an unknown address gets an honest refusal naming the
+	 * network-admin path, never a new user.
+	 */
+	public static function user_add_existing( WP_REST_Request $request ) {
+		$who  = trim( (string) $request->get_param( 'user' ) );
+		$role = (string) $request->get_param( 'role' );
+
+		// wp-admin's own vocabulary for assignable roles (editable_roles
+		// filter included, so role-manager plugins keep their say).
+		$editable = apply_filters( 'editable_roles', wp_roles()->roles );
+		if ( '' === $role || ! isset( $editable[ $role ] ) ) {
+			return new WP_Error(
+				'bad_role',
+				__( 'That role cannot be assigned here.', 'minn-admin' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$user = get_user_by( 'email', $who );
+		if ( ! $user ) {
+			$user = get_user_by( 'login', $who );
+		}
+		if ( ! $user ) {
+			return new WP_Error(
+				'no_such_user',
+				__( 'No account on this network matches that email or username. New accounts are created by a network administrator.', 'minn-admin' ),
+				array( 'status' => 404 )
+			);
+		}
+		if ( is_user_member_of_blog( $user->ID ) ) {
+			return new WP_Error(
+				'already_member',
+				/* translators: %s: the user's display name. */
+				sprintf( __( '%s is already a member of this site.', 'minn-admin' ), $user->display_name ),
+				array( 'status' => 400 )
+			);
+		}
+		// Per-target meta cap, same as every role write in wp-admin.
+		if ( ! current_user_can( 'promote_user', $user->ID ) ) {
+			return new WP_Error(
+				'cannot_promote',
+				__( 'You are not allowed to add that account.', 'minn-admin' ),
+				array( 'status' => 403 )
+			);
+		}
+		$result = add_user_to_blog( get_current_blog_id(), $user->ID, $role );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response(
+			array(
+				'id'    => $user->ID,
+				'name'  => $user->display_name,
+				'email' => $user->user_email,
+				'roles' => array( $role ),
+			)
+		);
+	}
+
 	public static function list_users( WP_REST_Request $request ) {
 		$page     = max( 1, (int) $request->get_param( 'page' ) );
 		$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ) );
@@ -3875,6 +4025,12 @@ class Minn_Admin_REST {
 				'registered_date' => mysql_to_rfc3339( $user->user_registered ),
 				'avatar_urls'     => rest_get_avatar_urls( $user->user_email ),
 			);
+			// Multisite: the client hides per-site role/removal controls for
+			// network administrators (wp-admin's list table does the same —
+			// their power doesn't ride the per-site role anyway).
+			if ( is_multisite() && is_super_admin( $uid ) ) {
+				$item['super'] = true;
+			}
 			// Same shape as the User Switching REST field when the plugin is active.
 			if ( class_exists( 'user_switching' ) && method_exists( 'user_switching', 'maybe_switch_url' ) ) {
 				$url = user_switching::maybe_switch_url( $user );

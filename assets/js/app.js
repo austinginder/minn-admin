@@ -7804,7 +7804,12 @@
 		const order = state.userOrder === 'asc' ? 'asc' : 'desc';
 		const session = state.userSession || 'all';
 		let q;
-		if ( session === 'all' ) {
+		// Multisite always rides Minn's /users route: core's edit-context
+		// list drops every user the caller can't edit_user (a subsite admin
+		// would see a one-row "list" of themselves), and only the Minn route
+		// flags network administrators (`super`) so per-site role/removal
+		// controls know to stand down. Single-site keeps the core default.
+		if ( session === 'all' && B.caps.editUsers && ! B.multisite ) {
 			// Default path: core REST (and User Switching's minn_switch_url field).
 			// minn_switch_url only exists while User Switching is active — an
 			// unregistered field in _fields is silently absent (safe).
@@ -7852,10 +7857,15 @@
 	async function runUserBulkRole( role, roleLabel, btn ) {
 		const ids = Array.from( state.userSel || [] );
 		if ( ! ids.length || ! role ) return;
-		const targets = ids.filter( ( id ) => id !== B.user.id );
-		const skippedSelf = targets.length !== ids.length;
+		// Network administrators are skipped too: their power doesn't ride
+		// the per-site role, and wp-admin's list table never offers the edit.
+		const items = ( state.cache.users && state.cache.users.items ) || [];
+		const isSuper = ( id ) => !! ( items.find( ( x ) => x.id === id ) || {} ).super;
+		const targets = ids.filter( ( id ) => id !== B.user.id && ! isSuper( id ) );
+		const skippedSelf = ids.includes( B.user.id );
+		const skippedSuper = ids.some( ( id ) => isSuper( id ) && id !== B.user.id );
 		if ( ! targets.length ) {
-			toast( 'Pick users other than yourself to change roles in bulk.', true );
+			toast( 'Pick users other than yourself or network administrators to change roles in bulk.', true );
 			return;
 		}
 		btn.disabled = true;
@@ -7868,7 +7878,11 @@
 		state.userSel.clear();
 		state.userLastIdx = null;
 		state.cache.users = null;
-		const tail = skippedSelf ? ' (your own account was skipped)' : '';
+		const skipBits = [
+			skippedSelf ? 'your own account' : '',
+			skippedSuper ? 'network administrators' : '',
+		].filter( Boolean );
+		const tail = skipBits.length ? ` (${ skipBits.join( ' and ' ) } skipped)` : '';
 		toast( fail ? `Set ${ roleLabel }: ${ ok } done, ${ fail } failed${ tail }` : `Set ${ ok } user${ ok === 1 ? '' : 's' } to ${ roleLabel }${ tail }`, fail > 0 && ok === 0 );
 		if ( state.route === 'users' ) renderUsers();
 	}
@@ -7927,6 +7941,7 @@
 			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="Search users…" value="${ esc( state.userSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
 			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } Add user</button>` : '' }
+			${ B.multisite && B.caps.promoteUsers ? `<button class="minn-btn-soft" id="minn-add-existing-user" style="margin-left:0;" title="Attach an account that already exists on this network">${ icon( 'plus' ) } Add existing user</button>` : '' }
 		</div>
 		<div class="minn-toolbar minn-toolbar-filters">
 			<div class="minn-tabs minn-ext-filters" role="group" aria-label="${ esc( __( 'Session filter' ) ) }">
@@ -8042,6 +8057,11 @@
 		} );
 		const addBtn = $( '#minn-add-user', view );
 		if ( addBtn ) addBtn.addEventListener( 'click', () => openUserModal( null ) );
+		const addExistingBtn = $( '#minn-add-existing-user', view );
+		if ( addExistingBtn ) addExistingBtn.addEventListener( 'click', () => {
+			state.modal = { type: 'user-add-existing', who: '' };
+			renderOverlays();
+		} );
 
 		const userFromRow = ( row ) => {
 			const id = parseInt( row.dataset.user, 10 );
@@ -8056,7 +8076,29 @@
 		const openUserMenu = ( x, y, u ) => {
 			const isSelf = u.id === B.user.id;
 			const entries = [
-				{ label: 'View user', run: () => openUserModal( u.id ) },
+				// The user modal reads context=edit — without edit_users the
+				// fetch 403s, so the entry only renders when it can work
+				// (multisite subsite admins manage role + membership instead).
+				...( B.caps.editUsers || isSelf ? [ { label: 'View user', run: () => openUserModal( u.id ) } ] : [] ),
+				// wp-admin's per-row tool for promote-but-not-edit admins:
+				// role changes ride promote_users and work per-site.
+				...( ! B.caps.editUsers && B.caps.promoteUsers && ! isSelf && ! u.super ? [
+					{ heading: 'Set role' },
+					...Object.entries( B.roles || {} ).map( ( [ key, label ] ) => ( {
+						label: ( u.roles || [] ).includes( key ) ? label + ' ✓' : label,
+						run: async () => {
+							if ( ( u.roles || [] ).includes( key ) ) return;
+							try {
+								await api( `wp/v2/users/${ u.id }`, { method: 'POST', body: JSON.stringify( { roles: [ key ] } ) } );
+								toast( `${ u.name || 'User' } set to ${ label }` );
+								state.cache.users = null;
+								if ( state.route === 'users' ) renderUsers();
+							} catch ( err ) {
+								toast( err.message, true );
+							}
+						},
+					} ) ),
+				] : [] ),
 				...( u.email ? [ {
 					label: 'Copy email',
 					run: async () => {
@@ -8094,11 +8136,45 @@
 					label: isSelf ? 'Sign out other sessions' : 'Sign out all sessions',
 					run: () => killUserSessions( u ),
 				} ] : [] ),
-				{
+				// Without edit_users the wp-admin screen refuses too (edit_user
+				// maps to manage_network_users on multisite) — no dead links.
+				...( B.caps.editUsers || isSelf ? [ {
 					label: 'Edit in wp-admin ↗',
 					href: B.site.adminUrl + 'user-edit.php?user_id=' + u.id,
-				},
-				...( B.caps.deleteUsers && ! isSelf ? [
+				} ] : [] ),
+				// Multisite: accounts are network-shared, so the per-site
+				// action is removal (membership), not deletion — core REST
+				// refuses user deletion on multisite outright. True deletion
+				// lives in Network Admin.
+				...( B.multisite && B.caps.removeUsers && ! isSelf && ! u.super ? [
+					{ heading: 'Danger' },
+					{
+						label: 'Remove from this site…',
+						danger: true,
+						run: async () => {
+							const okRm = await minnConfirm( {
+								title: `Remove ${ u.name || 'this user' } from this site?`,
+								body: 'Their account and any other site memberships stay; they just lose access here. Content they wrote here keeps their name.',
+								danger: true,
+								confirmLabel: 'Remove from site',
+							} );
+							if ( ! okRm ) return;
+							try {
+								await api( `minn-admin/v1/users/${ u.id }/remove`, { method: 'POST' } );
+								toast( `${ u.name || 'User' } removed from this site` );
+								state.cache.users = null;
+								if ( state.route === 'users' ) renderUsers();
+							} catch ( err ) {
+								toast( err.message, true );
+							}
+						},
+					},
+					...( B.site.networkAdminUrl ? [ {
+						label: 'Delete network-wide ↗',
+						href: B.site.networkAdminUrl + 'users.php',
+					} ] : [] ),
+				] : [] ),
+				...( ! B.multisite && B.caps.deleteUsers && ! isSelf ? [
 					{ heading: 'Danger' },
 					{
 						label: 'Delete user…',
@@ -8113,8 +8189,12 @@
 		$$( '[data-user]', view ).forEach( ( row ) => {
 			row.addEventListener( 'click', ( e ) => {
 				if ( e.target.closest( '.minn-row-more' ) ) return;
-				if ( B.caps.editUsers ) openUserModal( parseInt( row.dataset.user, 10 ) );
-				else window.open( B.site.adminUrl + 'user-edit.php?user_id=' + row.dataset.user, '_blank' );
+				// Without edit_users, wp-admin's user-edit.php refuses these
+				// users too — surface the actions that DO work (role,
+				// remove, email copy) instead of a dead tab.
+				const rowId = parseInt( row.dataset.user, 10 );
+				if ( B.caps.editUsers || rowId === B.user.id ) openUserModal( rowId );
+				else openUserMenu( e.clientX, e.clientY, userFromRow( row ) );
 			} );
 			row.addEventListener( 'contextmenu', ( e ) => {
 				e.preventDefault();
@@ -28640,6 +28720,40 @@
 			</div>`;
 		}
 
+		if ( m.type === 'user-add-existing' ) {
+			const roleOpts = Object.entries( B.roles || {} );
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">Add existing user</div>
+							<div class="minn-modal-sub">Attach a network account to this site</div>
+						</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						<div>
+							<div class="minn-field-label">Email or username</div>
+							<input class="minn-input" id="minn-uae-who" value="${ esc( m.who || '' ) }" placeholder="person@example.com" autocomplete="off" spellcheck="false">
+							<div class="minn-toggle-desc" style="margin-top:8px;">The account must already exist on this network. Creating new accounts is a network administrator job.</div>
+						</div>
+						<div>
+							<div class="minn-field-label">Role on this site</div>
+							<div class="minn-ac" id="minn-uae-role-ac">
+								<input class="minn-input minn-ac-input" id="minn-uae-role" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" placeholder="Pick a role…">
+								<div class="minn-ac-panel" hidden></div>
+							</div>
+						</div>
+					</div>
+					<div class="minn-modal-actions">
+						<button class="minn-btn-primary" id="minn-uae-add"${ roleOpts.length ? '' : ' disabled' }>${ icon( 'plus' ) } Add to site</button>
+						<button class="minn-btn-soft" id="minn-modal-cancel">Cancel</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
 		if ( m.type === 'user-delete' ) {
 			const u = m.user || {};
 			const cands = m.candidates;
@@ -30086,6 +30200,47 @@
 					} );
 					toast( 'Email sent' + ( r && r.email ? ' to ' + r.email : '' ) );
 					closeModal();
+				} catch ( err ) {
+					toast( err.message, true );
+					btn.disabled = false;
+				}
+			} );
+		}
+
+		if ( m.type === 'user-add-existing' ) {
+			const who = $( '#minn-uae-who' );
+			const roleAc = $( '#minn-uae-role-ac' );
+			if ( roleAc ) {
+				const roles = Object.entries( B.roles || {} ).map( ( [ value, label ] ) => ( { value, label } ) );
+				bindAutocomplete( roleAc, roles, {
+					strict: true,
+					value: ( B.roles || {} ).author ? 'author' : ( roles[ 0 ] ? roles[ 0 ].value : '' ),
+				} );
+			}
+			if ( who ) setTimeout( () => who.focus(), 30 );
+			$( '#minn-uae-add' ).addEventListener( 'click', async ( e ) => {
+				const btn = e.currentTarget;
+				const roleInput = $( '#minn-uae-role' );
+				const user = ( who && who.value || '' ).trim();
+				const role = ( roleInput && roleInput.dataset.acValue ) || '';
+				if ( ! user ) {
+					toast( 'Enter an email or username', true );
+					return;
+				}
+				if ( ! role ) {
+					toast( 'Pick a role', true );
+					return;
+				}
+				btn.disabled = true;
+				try {
+					const r = await api( 'minn-admin/v1/users/add-existing', {
+						method: 'POST',
+						body: JSON.stringify( { user, role } ),
+					} );
+					toast( ( r && r.name ? r.name : 'User' ) + ' added to this site' );
+					closeModal();
+					state.cache.users = null;
+					if ( state.route === 'users' ) renderUsers();
 				} catch ( err ) {
 					toast( err.message, true );
 					btn.disabled = false;
