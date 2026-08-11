@@ -445,6 +445,9 @@ button.minn-nav-label:hover { color: var(--text2); }
    page title) — margin reset kills the UA heading margins. */
 .minn-topbar-title { font-weight: 700; font-size: 16px; letter-spacing: -0.2px; margin: 0; }
 .minn-topbar-sub { font-size: 13px; color: var(--text3); background: var(--panel); border: 1px solid var(--border); padding: 3px 9px; border-radius: 20px; }
+/* The pill is its CONTENT's frame, so a route or surface with nothing to say
+   there must not leave an empty capsule floating beside the title. */
+.minn-topbar-sub:empty { display: none; }
 /* Family provider switcher — sits where the static sub badge was; opens a
    combobox of installed adapters (Code Snippets / WPCode / Fluent…). */
 .minn-topbar-sub:has(.minn-surface-switch) {

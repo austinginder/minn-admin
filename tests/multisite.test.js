@@ -370,6 +370,14 @@ async function gotoRoute( page, site, route ) {
 			check( 'Sites lists the network', sites.rows > 1, `${ sites.rows } rows` );
 			check( 'Sites offers status tabs', sites.tabs.some( ( t ) => /Archived/.test( t ) ) && sites.tabs.some( ( t ) => /Spam/.test( t ) ), sites.tabs.join( ' | ' ) );
 			check( 'Sites shows the network status card', sites.status );
+			// The topbar badge is a frame for its content: a surface with
+			// nothing to say there must not leave an empty capsule.
+			const badge = await page.evaluate( () => {
+				const el = document.querySelector( '#minn-sub' );
+				const b = el.getBoundingClientRect();
+				return { text: el.textContent.trim(), visible: b.width > 0 && b.height > 0 };
+			} );
+			check( 'the title badge names the scope', badge.text === 'Network' && badge.visible, JSON.stringify( badge ) );
 
 			// Row verbs: an ordinary site offers the lifecycle; the MAIN site
 			// never offers archive, spam or delete (its row menu is read-only).
@@ -530,6 +538,12 @@ async function gotoRoute( page, site, route ) {
 				broke: /Something went wrong/.test( document.querySelector( '#minn-view' ).textContent ),
 			} ) );
 			check( 'network settings renders as its own page', ! ns.broke && ns.controls > 0, `${ ns.controls } controls` );
+			const emptyBadge = await page.evaluate( () => {
+				const el = document.querySelector( '#minn-sub' );
+				const b = el.getBoundingClientRect();
+				return { text: el.textContent.trim(), visible: b.width > 0 && b.height > 0 };
+			} );
+			check( 'a surface with no badge text shows no empty pill', ! emptyBadge.text && ! emptyBadge.visible, JSON.stringify( emptyBadge ) );
 			check( 'network settings offers its sections', ns.tabs.length >= 3, ns.tabs.join( ' | ' ) );
 
 			// Round trip through the endpoint the form posts to, then restore.
