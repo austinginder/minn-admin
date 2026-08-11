@@ -18,6 +18,12 @@ MINN_TEST_PASS=<admin password> node editor-sidebar.test.js # slug, discussion, 
 MINN_TEST_PASS=<admin password> node system.test.js     # diagnostics endpoint + page + copy-report
 MINN_TEST_PASS=<admin password> node undo-toast.test.js # structural-deletion Undo (islands, tables)
 
+# multisite (network) — runs against a SEPARATE subdomain-multisite lab, not
+# minnadmin. SKIPs (exit 0) with no MINN_MS_SUPER_PASS or no lab, so run-all is
+# unaffected on the single-site dev box. Create the lab first:
+#   cove add minnms --multisite=subdomain   (see project_minn_multisite_lab)
+MINN_MS_SUPER_PASS=<lab super-admin password> node multisite.test.js
+
 # all suites (release pre-flight / overnight): sequential, settle-guarded,
 # one retry per failed suite, full logs + summary in the output dir
 MINN_TEST_PASS=… ./run-all.sh /tmp/minn-run
@@ -46,6 +52,8 @@ Environment (all optional except the password):
 | `MINN_TEST_CHROME` | macOS system Chrome path |
 | `MINN_TEST_USER2` | `minn-editor` (lock.test.js's second session; needs Editor role) |
 | `MINN_TEST_PASS2` | `minn-editor-pass-1` |
+| `MINN_MS_SUPER_PASS` | — (multisite.test.js only; unset ⇒ SKIP) |
+| `MINN_MS_URL` / `MINN_MS_STORE` / `MINN_MS_BLOG` | `https://minnms.localhost` / `store.` / `blog.` |
 
 ## Conventions (read before writing a suite)
 
