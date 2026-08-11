@@ -782,6 +782,10 @@ class Minn_Admin {
 				'icon'       => get_site_icon_url( 64 ),
 				'url'        => home_url( '/' ),
 				'adminUrl'   => admin_url(),
+				// Multisite + super admin only: honest link-outs to the
+				// network screens Minn does not cover (site/user deletion,
+				// network plugins). Absent otherwise — entries gate on it.
+				'networkAdminUrl' => is_multisite() && current_user_can( 'manage_network' ) ? network_admin_url() : '',
 				'logout'     => str_replace( '&amp;', '&', wp_logout_url( home_url( '/' ) ) ),
 				// Block themes manage navigation/widgets in the site editor, so
 				// Minn (like wp-admin) only offers Menus/Widgets on classic themes.
@@ -838,10 +842,17 @@ class Minn_Admin {
 					&& current_user_can( 'edit_shop_orders' ),
 				'themeOptions' => current_user_can( 'edit_theme_options' ),
 				'core'         => current_user_can( 'update_core' ),
+				// Multisite-only: "Remove from this site" (per-site
+				// membership). Deletion stays a Network Admin job there.
+				'removeUsers'  => is_multisite() && current_user_can( 'remove_users' ),
 				// Drives Settings → Design (Additional CSS). Core maps this
 				// from unfiltered_html; multisite keeps it super-admin-only.
 				'editCss'      => current_user_can( 'edit_css' ),
 			),
+			// Multisite context: users are network-shared (delete becomes
+			// remove-from-site, profile edits need network caps), plugins can
+			// be network-activated. Client views branch on this.
+			'multisite' => is_multisite(),
 			'wc'       => class_exists( 'WooCommerce' ),
 			// WooCommerce Subscriptions extension (wc/v3/subscriptions REST).
 			'wcs'      => class_exists( 'WooCommerce' ) && class_exists( 'WC_Subscriptions' ),
