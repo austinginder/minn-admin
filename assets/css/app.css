@@ -218,6 +218,18 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-site-switch:hover { background: var(--panel2); color: var(--text); }
 .minn-site-switch svg { width: 15px; height: 15px; }
+/* Site picker (networks with more sites than the switcher menu holds). */
+.minn-sp-list { max-height: 52vh; overflow-y: auto; padding: 0 10px 12px; }
+.minn-sp-row {
+  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 11px; border: none; border-radius: 9px; background: none;
+  color: var(--text); cursor: pointer;
+}
+.minn-sp-row:hover:not(:disabled) { background: var(--panel2); }
+.minn-sp-row:disabled { cursor: default; }
+.minn-sp-name { font-weight: 600; font-size: 14px; }
+.minn-sp-url { color: var(--text3); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.minn-sp-here { margin-left: auto; color: var(--accent2); font-size: 11.5px; font-weight: 600; flex: none; }
 /* Version + changelog live in the topbar actions (GH #5: a badge beside the
    logo truncated longer site names; Austin moved it up by the view-site
    button). Sized to sit flush with the .minn-icon-btn row. */
