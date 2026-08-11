@@ -11898,7 +11898,11 @@
 		const updateCount = Object.keys( updates ).length;
 		const queueCount = pluginUpdatePending.size;
 		const bulkBusy = queueCount > 0;
-		const active = plugins.filter( ( p ) => p.status === 'active' ).length;
+		// On multisite, network-activated plugins report a third status.
+		// They are running (count as active) but per-site toggles can't
+		// touch them — that's Network Admin's call.
+		const isOn = ( p ) => p.status === 'active' || p.status === 'network-active';
+		const active = plugins.filter( isOn ).length;
 		const hasUpd = ( p ) => !! updates[ p.plugin + '.php' ] || pluginUpdatePending.has( p.plugin );
 		// Count remaining offers + anything still in the update queue.
 		const updatesFilterCount = new Set( [
@@ -11915,8 +11919,8 @@
 		// Client-side filter + search over the already-cached plugin set.
 		const q = ( state.extSearch || '' ).trim().toLowerCase();
 		const matchesFilter = ( p ) =>
-			state.extFilter === 'active' ? p.status === 'active'
-			: state.extFilter === 'inactive' ? p.status !== 'active'
+			state.extFilter === 'active' ? isOn( p )
+			: state.extFilter === 'inactive' ? ! isOn( p )
 			: state.extFilter === 'updates' ? hasUpd( p )
 			: true;
 		const matchesSearch = ( p ) => ! q ||
@@ -11962,7 +11966,8 @@
 				const offered = updates[ p.plugin + '.php' ] || '';
 				const isUpdating = pluginUpdatePending.has( p.plugin );
 				const isCurrent = pluginUpdateCurrent === p.plugin;
-				const on = p.status === 'active';
+				const net = p.status === 'network-active';
+				const on = p.status === 'active' || net;
 				// wp.org plugins wear their real icon, and the icon links to
 				// their directory page; everything else keeps the letter tile.
 				const meta = ( state.cache.pluginMeta || {} )[ p.plugin + '.php' ];
@@ -11990,8 +11995,8 @@
 						<div class="minn-plugin-foot">
 							<div class="minn-plugin-ver">v${ esc( p.version || '?' ) }</div>
 							${ B.caps.update && state.cache.autoAllowed ? autoToggleHtml( 'plugin', p.plugin + '.php', ( state.cache.autoPlugins || [] ).includes( p.plugin + '.php' ), name ) : '' }
-							<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="Toggle ${ esc( name ) }"><span class="minn-switch-knob"></span></button>
-							<span class="minn-state-label${ on ? ' on' : '' }">${ on ? 'Active' : 'Inactive' }</span>
+							${ net ? '' : `<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="Toggle ${ esc( name ) }"><span class="minn-switch-knob"></span></button>` }
+							<span class="minn-state-label${ on ? ' on' : '' }"${ net ? ' title="Activated for the whole network in Network Admin"' : '' }>${ net ? 'Network active' : on ? 'Active' : 'Inactive' }</span>
 							${ ! on && B.caps.delete ? `<button class="minn-plugin-delete" data-del="${ esc( p.plugin ) }" title="Delete ${ esc( name ) }">${ icon( 'trash' ) }</button>` : '' }
 						</div>
 					</div>
@@ -12012,7 +12017,7 @@
 		// three entry points never drift (content-row menu pattern).
 		const togglePluginByFile = async ( file ) => {
 			const plugin = plugins.find( ( p ) => p.plugin === file );
-			if ( ! plugin ) return;
+			if ( ! plugin || plugin.status === 'network-active' ) return;
 			const activating = plugin.status !== 'active';
 			if ( ! activating && file === 'minn-admin/minn-admin' ) {
 				// Turning Minn off ejects the user — that deserves a real
@@ -12051,7 +12056,7 @@
 
 		const deletePluginByFile = async ( file ) => {
 			const plugin = plugins.find( ( p ) => p.plugin === file );
-			if ( ! plugin || plugin.status === 'active' ) return;
+			if ( ! plugin || plugin.status !== 'inactive' ) return;
 			const name = pluginDisplayName( plugin.name );
 			const okDel = await minnConfirm( {
 				title: `Delete ${ name }?`,
@@ -12081,22 +12086,25 @@
 		const pluginMenuEntries = ( p ) => {
 			const file = p.plugin;
 			const name = pluginDisplayName( p.name );
+			const net = p.status === 'network-active';
 			const on = p.status === 'active';
 			const meta = ( state.cache.pluginMeta || {} )[ file + '.php' ] || {};
 			const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || '';
 			const authorName = p.author ? decodeEntities( stripTags( p.author ) ) : '';
 			const entries = [];
-			entries.push( {
-				label: on ? 'Deactivate' : 'Activate',
-				run: () => togglePluginByFile( file ),
-			} );
+			if ( ! net ) {
+				entries.push( {
+					label: on ? 'Deactivate' : 'Activate',
+					run: () => togglePluginByFile( file ),
+				} );
+			}
 			if ( offered && B.caps.update && ! pluginUpdatePending.has( file ) ) {
 				entries.push( {
 					label: `Update → ${ offered }`,
 					run: () => queuePluginUpdate( file, name ),
 				} );
 			}
-			if ( ! on && B.caps.delete ) {
+			if ( ! on && ! net && B.caps.delete ) {
 				entries.push( {
 					label: 'Delete plugin',
 					danger: true,
@@ -28968,7 +28976,7 @@
 				: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">No results for “${ esc( m.q ) }”.</div>`
 				: m.results.map( ( p, i ) => {
 					const local = installedNow( p.slug );
-					const stateLabel = local && local.status === 'active' ? 'Active'
+					const stateLabel = local && ( local.status === 'active' || local.status === 'network-active' ) ? 'Active'
 						: ( local || p.installed ) ? 'Activate' : 'Install';
 					return `
 					<div class="minn-pi-row">
@@ -30648,7 +30656,7 @@
 
 	function catalogChipState( entry ) {
 		const local = catalogLocal( entry );
-		if ( local && local.status === 'active' ) return 'active';
+		if ( local && ( local.status === 'active' || local.status === 'network-active' ) ) return 'active';
 		if ( local ) return 'activate';
 		return 'install';
 	}
