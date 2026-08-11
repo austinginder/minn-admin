@@ -731,23 +731,130 @@ add_action( 'rest_api_init', function () {
 } );
 
 /**
+ * Fuzzy score one query against a site's name and address fields.
+ *
+ * Contiguous text wins, punctuation-free text lets `team1` match `Team 1`,
+ * and an ordered subsequence lets `tm10` match `Team 10`. Lower is better;
+ * null means no match. This mirrors the compact client filter closely enough
+ * that an out-of-cap result does not jump away when the server responds.
+ *
+ * @param string   $query  Search text.
+ * @param string[] $values Candidate strings.
+ * @return int|null
+ */
+function minn_admin_site_search_score( $query, $values ) {
+	$normalize = function ( $value ) {
+		$value = remove_accents( Minn_Admin::plain_text( $value ) );
+		$value = function_exists( 'mb_strtolower' ) ? mb_strtolower( $value, 'UTF-8' ) : strtolower( $value );
+		return trim( $value );
+	};
+	$q      = $normalize( $query );
+	$q_flat = preg_replace( '/[^a-z0-9]+/', '', $q );
+	$best   = null;
+	foreach ( $values as $value ) {
+		$text = $normalize( $value );
+		if ( '' === $text ) {
+			continue;
+		}
+		$score = null;
+		if ( $text === $q ) {
+			$score = 0;
+		} elseif ( 0 === strpos( $text, $q ) ) {
+			$score = 2;
+		} else {
+			$at = strpos( $text, $q );
+			if ( false !== $at ) {
+				$score = 10 + $at;
+			}
+		}
+		$flat = preg_replace( '/[^a-z0-9]+/', '', $text );
+		if ( '' !== $q_flat ) {
+			$flat_at = strpos( $flat, $q_flat );
+			if ( false !== $flat_at ) {
+				$score = min( null === $score ? PHP_INT_MAX : $score, 20 + $flat_at );
+			}
+			$cursor = -1;
+			$first  = 0;
+			$gaps   = 0;
+			$found  = true;
+			for ( $i = 0, $length = strlen( $q_flat ); $i < $length; $i++ ) {
+				$next = strpos( $flat, $q_flat[ $i ], $cursor + 1 );
+				if ( false === $next ) {
+					$found = false;
+					break;
+				}
+				if ( 0 === $i ) {
+					$first = $next;
+				} else {
+					$gaps += $next - $cursor - 1;
+				}
+				$cursor = $next;
+			}
+			if ( $found ) {
+				$score = min( null === $score ? PHP_INT_MAX : $score, 40 + $first + $gaps );
+			}
+		}
+		if ( null !== $score ) {
+			$best = null === $best ? $score : min( $best, $score );
+		}
+	}
+	return $best;
+}
+
+/**
  * GET /my-sites — search across the sites the CURRENT user belongs to.
  *
- * Matching runs in SQL over domain and path (WP_Site_Query's own `search`,
- * the same field core's network Sites screen searches), so a user with
- * thousands of memberships costs one query plus a page of per-site reads —
- * never a full sweep. Site titles live in each site's own options table and
- * cannot be searched without entering every site, which is exactly the work
- * being avoided; the client filters the visible page by title on top.
+ * Empty searches keep the bounded WP_Site_Query page. Typed searches rank
+ * the current user's own membership objects by site title and address, then
+ * only the matched page enters blog contexts for Minn availability and URLs.
+ * This makes the inline finder genuinely fuzzy without turning it into a
+ * network directory or describing every site in a large membership.
  */
 function minn_admin_my_sites( WP_REST_Request $request ) {
+	$per_page = min( 50, max( 1, (int) ( $request['per_page'] ?: 20 ) ) );
+	$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
+	$search   = trim( (string) $request['search'] );
+	if ( '' !== $search ) {
+		$matches = array();
+		foreach ( (array) get_blogs_of_user( get_current_user_id() ) as $blog ) {
+			if ( (int) $blog->site_id !== (int) get_current_network_id()
+				|| ! empty( $blog->archived ) || ! empty( $blog->spam ) || ! empty( $blog->deleted ) ) {
+				continue;
+			}
+			$score = minn_admin_site_search_score(
+				$search,
+				array( $blog->blogname, $blog->domain, $blog->path, $blog->siteurl )
+			);
+			if ( null !== $score ) {
+				$matches[] = array(
+					'id'    => (int) $blog->userblog_id,
+					'name'  => Minn_Admin::plain_text( $blog->blogname ),
+					'score' => $score,
+				);
+			}
+		}
+		usort( $matches, function ( $a, $b ) {
+			return $a['score'] <=> $b['score'] ?: strcasecmp( $a['name'], $b['name'] );
+		} );
+		$total    = count( $matches );
+		$page_ids = array_column( array_slice( $matches, ( $page - 1 ) * $per_page, $per_page ), 'id' );
+		$found    = Minn_Admin::describe_sites( $page_ids );
+		$by_id    = array();
+		foreach ( $found as $site ) {
+			$by_id[ (int) $site['id'] ] = $site;
+		}
+		$items = array();
+		foreach ( $page_ids as $id ) {
+			if ( isset( $by_id[ $id ] ) ) {
+				$items[] = $by_id[ $id ];
+			}
+		}
+		return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+	}
 	$ids = Minn_Admin::user_site_ids();
 	if ( ! $ids ) {
 		return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
 	}
-	$per_page = min( 50, max( 1, (int) ( $request['per_page'] ?: 20 ) ) );
-	$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-	$search   = trim( (string) $request['search'] );
 
 	$args = array(
 		'site__in'   => $ids,
@@ -760,9 +867,6 @@ function minn_admin_my_sites( WP_REST_Request $request ) {
 		'orderby'    => 'domain',
 		'order'      => 'ASC',
 	);
-	if ( '' !== $search ) {
-		$args['search'] = $search;
-	}
 	$query = new WP_Site_Query();
 	$sites = $query->query( $args );
 	$total = (int) $query->query( array_merge( $args, array( 'count' => true, 'number' => 0, 'offset' => 0 ) ) );

@@ -1806,59 +1806,192 @@
 	// serves its own Minn at its own origin), which is what the admin bar's
 	// "My Sites" does. Network Admin rides along for super admins as the
 	// honest link-out to what Minn does not cover.
-	// True when the user belongs to more sites than the boot payload carries
-	// — the menu then offers search instead of pretending to be complete.
+	// True when the user belongs to more sites than the boot payload carries;
+	// the inline finder then adds user-scoped server results to local matches.
 	function hasMoreSites() {
 		return ( B.sitesTotal || 0 ) > ( B.sites || [] ).length;
 	}
 
-	function siteSwitchEntries() {
-		const sites = B.sites || [];
-		if ( ! sites.length ) return [];
-		const entries = [ { heading: __( 'Switch site' ) } ];
-		sites.forEach( ( s ) => entries.push( {
-			label: s.name || s.url,
-			active: !! s.current,
-			run: () => {
-				if ( s.current ) return;
-				window.location.href = s.app;
-			},
-		} ) );
-		if ( hasMoreSites() ) {
-			entries.push( {
-				/* translators: %d: number of sites the person belongs to. */
-				label: sprintf( __( 'Search all %d sites…' ), B.sitesTotal ),
-				run: () => openSitePicker(),
-			} );
-		}
-		if ( B.site.networkAdminUrl ) {
-			entries.push( { heading: __( 'Network' ) } );
-			entries.push( { label: __( 'Network Admin ↗' ), href: B.site.networkAdminUrl } );
-		}
-		return entries;
+	// Compact fuzzy scoring shared by the inline switcher and the full picker.
+	// Contiguous matches win, but punctuation-free and subsequence matches make
+	// "team1" find "Team 1" and "tm10" find "Team 10". Lower is better;
+	// null means no match.
+	function siteFuzzyScore( query, site ) {
+		const norm = ( value ) => String( value || '' ).normalize( 'NFKD' )
+			.replace( /[\u0300-\u036f]/g, '' ).toLowerCase().trim();
+		const q = norm( query );
+		if ( ! q ) return 0;
+		const qFlat = q.replace( /[^a-z0-9]+/g, '' );
+		const values = typeof site === 'string'
+			? [ site ]
+			: [ site && site.name, site && site.url ];
+		let best = null;
+		values.forEach( ( value ) => {
+			const text = norm( value );
+			if ( ! text ) return;
+			let score = null;
+			if ( text === q ) score = 0;
+			else if ( text.startsWith( q ) ) score = 2;
+			else {
+				const at = text.indexOf( q );
+				if ( at >= 0 ) score = 10 + at;
+			}
+			const flat = text.replace( /[^a-z0-9]+/g, '' );
+			if ( qFlat ) {
+				const flatAt = flat.indexOf( qFlat );
+				if ( flatAt >= 0 ) score = Math.min( score == null ? Infinity : score, 20 + flatAt );
+				let cursor = -1;
+				let gaps = 0;
+				let first = 0;
+				for ( let i = 0; i < qFlat.length; i++ ) {
+					const next = flat.indexOf( qFlat[ i ], cursor + 1 );
+					if ( next < 0 ) { cursor = -2; break; }
+					if ( i === 0 ) first = next;
+					else gaps += next - cursor - 1;
+					cursor = next;
+				}
+				if ( cursor >= 0 ) score = Math.min( score == null ? Infinity : score, 40 + first + gaps );
+			}
+			if ( score != null && Number.isFinite( score ) ) best = best == null ? score : Math.min( best, score );
+		} );
+		return best;
 	}
 
-	// Searchable site picker for people who belong to more sites than a menu
-	// can hold. Server-side search runs over each site's ADDRESS (titles live
-	// in per-site option tables and cannot be searched without visiting every
-	// site); the loaded page is additionally filtered by title here, so a
-	// title match among the results still works.
+	function siteSwitchMatches( sites, query ) {
+		const unique = new Map();
+		( sites || [] ).forEach( ( site ) => unique.set( String( site.id ), site ) );
+		return [ ...unique.values() ].map( ( site ) => ( {
+			site,
+			score: siteFuzzyScore( query, site ),
+		} ) ).filter( ( match ) => match.score != null ).sort( ( a, b ) =>
+			a.score - b.score || String( a.site.name || a.site.url ).localeCompare( String( b.site.name || b.site.url ) )
+		).slice( 0, 5 ).map( ( match ) => match.site );
+	}
+
+	// The switcher is intentionally a menu, not a modal: the search field is
+	// the first item beneath its heading, keeps focus while results update, and
+	// never shows more than five matches. The boot payload answers immediately;
+	// larger memberships add a debounced, user-scoped server search.
+	function openSiteSwitchMenu( x, y ) {
+		hideMinnMenu();
+		const seed = B.sites || [];
+		let remote = [];
+		let query = '';
+		let loading = false;
+		let selected = -1;
+		let timer = null;
+		let request = 0;
+		const menu = document.createElement( 'div' );
+		minnMenuEl = menu;
+		menu.className = 'minn-new-menu minn-ctx-menu minn-site-switch-menu';
+		menu.innerHTML = `
+			<div class="minn-new-menu-label">${ esc( __( 'Switch site' ) ) }</div>
+			<label class="minn-site-switch-search" for="minn-site-switch-q">
+				${ icon( 'search' ) }
+				<input id="minn-site-switch-q" type="search" placeholder="${ esc( __( 'Search sites…' ) ) }" autocomplete="off" spellcheck="false" aria-controls="minn-site-switch-results">
+			</label>
+			<div id="minn-site-switch-results" role="listbox"></div>
+			<span class="minn-sr-only" id="minn-site-switch-status" aria-live="polite"></span>
+			${ B.site.networkAdminUrl ? `
+				<div class="minn-new-menu-label">${ esc( __( 'Network' ) ) }</div>
+				<a href="${ esc( B.site.networkAdminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'Network Admin ↗' ) ) }</a>` : '' }`;
+		document.body.appendChild( menu );
+		const input = menu.querySelector( '#minn-site-switch-q' );
+		const results = menu.querySelector( '#minn-site-switch-results' );
+		const status = menu.querySelector( '#minn-site-switch-status' );
+		const place = () => {
+			menu.style.left = Math.max( 10, Math.min( x, window.innerWidth - menu.offsetWidth - 10 ) ) + 'px';
+			menu.style.top = Math.max( 10, Math.min( y, window.innerHeight - menu.offsetHeight - 10 ) ) + 'px';
+		};
+		const render = () => {
+			const pool = query ? seed.concat( remote ) : seed;
+			const matches = siteSwitchMatches( pool, query );
+			selected = -1;
+			results.innerHTML = matches.length ? matches.map( ( site ) => `
+				<button type="button" role="option" data-site-id="${ esc( site.id ) }" class="${ site.current ? 'is-on' : '' }"${ site.current ? ' aria-current="page"' : '' }>${ esc( site.name || site.url ) }</button>` ).join( '' )
+				: `<div class="minn-site-switch-empty">${ esc( loading ? __( 'Searching…' ) : __( 'No matching sites' ) ) }</div>`;
+			const buttons = [ ...results.querySelectorAll( 'button' ) ];
+			buttons.forEach( ( button ) => button.addEventListener( 'click', () => {
+				const site = matches.find( ( item ) => String( item.id ) === button.dataset.siteId );
+				hideMinnMenu();
+				if ( site && ! site.current ) window.location.href = site.app;
+			} ) );
+			/* translators: %s: number of matching sites. */
+			status.textContent = sprintf( _n( '%s matching site', '%s matching sites', matches.length ), matches.length );
+			place();
+		};
+		const searchRemote = () => {
+			const q = query.trim();
+			if ( ! q || ! hasMoreSites() || minnMenuEl !== menu ) return;
+			const thisRequest = ++request;
+			loading = true;
+			render();
+			api( 'minn-admin/v1/my-sites?per_page=20&search=' + encodeURIComponent( q ) ).then( ( response ) => {
+				if ( minnMenuEl !== menu || thisRequest !== request || query.trim() !== q ) return;
+				remote = Array.isArray( response.items ) ? response.items : [];
+			} ).catch( () => {
+				if ( thisRequest === request ) remote = [];
+			} ).finally( () => {
+				if ( minnMenuEl !== menu || thisRequest !== request ) return;
+				loading = false;
+				render();
+			} );
+		};
+		input.addEventListener( 'input', () => {
+			query = input.value;
+			remote = [];
+			request++;
+			loading = !! query.trim() && hasMoreSites();
+			render();
+			clearTimeout( timer );
+			timer = setTimeout( searchRemote, 180 );
+		} );
+		input.addEventListener( 'keydown', ( event ) => {
+			const buttons = [ ...results.querySelectorAll( 'button' ) ];
+			if ( event.key === 'Escape' ) {
+				event.preventDefault();
+				event.stopPropagation();
+				hideMinnMenu();
+				return;
+			}
+			if ( ! buttons.length ) return;
+			if ( event.key === 'ArrowDown' || event.key === 'ArrowUp' ) {
+				event.preventDefault();
+				selected = event.key === 'ArrowDown'
+					? ( selected + 1 ) % buttons.length
+					: ( selected - 1 + buttons.length ) % buttons.length;
+				buttons.forEach( ( button, i ) => {
+					button.classList.toggle( 'is-keyboard', i === selected );
+					button.setAttribute( 'aria-selected', i === selected ? 'true' : 'false' );
+				} );
+			} else if ( event.key === 'Enter' ) {
+				event.preventDefault();
+				buttons[ selected >= 0 ? selected : 0 ].click();
+			}
+		} );
+		render();
+		document.addEventListener( 'mousedown', minnMenuAway, true );
+		requestAnimationFrame( () => input.focus( { preventScroll: true } ) );
+	}
+
+	// Full searchable picker used by the command palette on larger networks.
+	// It shares the fuzzy name/address endpoint and scorer with the inline
+	// switcher, but shows a longer result page when someone asks for it.
 	function openSitePicker() {
 		state.modal = { type: 'site-picker', q: '', items: null, total: 0, loading: true };
 		renderOverlays();
 		loadSitePicker( '' );
 	}
 
-	// Hide picker rows that don't match what's typed, without touching the
-	// input node (see the render comment). Matches name OR address, so a
-	// title match works even though the server searches addresses only.
+	// Hide picker rows that don't fuzzy-match what's typed, without touching
+	// the input node (see the render comment).
 	function filterSitePickerRows() {
 		const m = state.modal;
 		if ( ! m || m.type !== 'site-picker' ) return;
 		const q = ( m.q || '' ).trim().toLowerCase();
 		let shown = 0;
 		$$( '[data-spfind]' ).forEach( ( row ) => {
-			const hit = ! q || row.dataset.spfind.includes( q );
+			const hit = ! q || siteFuzzyScore( q, row.dataset.spfind ) != null;
 			row.hidden = ! hit;
 			if ( hit ) shown++;
 		} );
@@ -2054,7 +2187,7 @@
 		if ( siteSwitch ) siteSwitch.addEventListener( 'click', ( e ) => {
 			e.stopPropagation();
 			const r = siteSwitch.getBoundingClientRect();
-			openMinnMenu( r.left, r.bottom + 4, siteSwitchEntries() );
+			openSiteSwitchMenu( r.left, r.bottom + 4 );
 		} );
 		$( '#minn-ver-btn' ).addEventListener( 'click', openChangelog );
 
