@@ -59,18 +59,36 @@ function minn_admin_wpforms_can_form( $form_id, $cap = 'view_entries_form_single
  * The form ids whose entries this user may read. Null means "no restriction".
  */
 function minn_admin_wpforms_allowed_form_ids() {
-	$titles = minn_admin_wpforms_form_titles();
-	if ( ! is_array( $titles ) || ! $titles ) {
+	// The universe must be every form the entries table can point at, not the
+	// menu's list. minn_admin_wpforms_form_titles() is capped at 200 and
+	// publish-only, so deriving the scope from it, and then treating
+	// "allowed matches the sample" as unrestricted, dropped the constraint
+	// entirely on a site with more forms than the cap or with entries on an
+	// unpublished form — exactly the rows the sample could not evaluate.
+	global $wpdb;
+	$table = $wpdb->prefix . 'wpforms_entries';
+	$ids   = array();
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table ) {
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
+		$ids = $wpdb->get_col( "SELECT DISTINCT form_id FROM {$table}" );
+	}
+	$ids = array_map( 'intval', (array) $ids );
+	foreach ( array_keys( minn_admin_wpforms_form_titles() ) as $fid ) {
+		$ids[] = (int) $fid;
+	}
+	$ids = array_values( array_unique( array_filter( $ids ) ) );
+	if ( ! $ids ) {
 		return array();
 	}
 	$allowed = array();
-	foreach ( array_keys( $titles ) as $fid ) {
+	foreach ( $ids as $fid ) {
 		if ( minn_admin_wpforms_can_form( $fid ) ) {
-			$allowed[] = (int) $fid;
+			$allowed[] = $fid;
 		}
 	}
-	// Everything visible → no need to constrain the query.
-	return count( $allowed ) === count( $titles ) ? null : $allowed;
+	// Unrestricted only when the caller passes for every form that exists,
+	// which is a statement about the real universe rather than a sample.
+	return count( $allowed ) === count( $ids ) ? null : $allowed;
 }
 
 /**
