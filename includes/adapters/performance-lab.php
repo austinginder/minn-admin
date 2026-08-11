@@ -284,6 +284,18 @@ add_action( 'rest_api_init', function () {
 	$can = function () {
 		return current_user_can( 'manage_options' );
 	};
+	// Activating a feature INSTALLS a plugin from wordpress.org and activates
+	// it. Core gates those on install_plugins / activate_plugins, which are
+	// strictly narrower than manage_options: a subsite administrator is denied
+	// install_plugins outright on multisite, and DISALLOW_FILE_MODS strips both
+	// while leaving manage_options intact. Performance Lab re-checks internally,
+	// but the gate should not depend on a third party's internal re-check, and
+	// the adapter's own deactivate path already checks activate_plugin.
+	$can_install = function () {
+		return current_user_can( 'manage_options' )
+			&& current_user_can( 'install_plugins' )
+			&& current_user_can( 'activate_plugins' );
+	};
 
 	register_rest_route( 'minn-admin/v1', '/performance-lab/status', array(
 		'methods'             => 'GET',
@@ -303,7 +315,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/performance-lab/features/(?P<id>[a-z0-9_-]+)/activate', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can,
+		'permission_callback' => $can_install,
 		'callback'            => function ( $req ) {
 			$r = minn_admin_performance_lab_activate( $req['id'] );
 			if ( is_wp_error( $r ) ) {

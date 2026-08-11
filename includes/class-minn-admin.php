@@ -608,7 +608,10 @@ class Minn_Admin {
 			function () {
 				printf(
 					'<script>window.location.href = %s;</script><p><a href="%s">Open Minn Admin</a></p>',
-					wp_json_encode( self::app_url() ),
+					// JSON_HEX_TAG or a home_url containing </script> closes the
+					// element and everything after it parses as HTML. Same flag
+					// set the app shell uses in template.php.
+					wp_json_encode( self::app_url(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ),
 					esc_url( self::app_url() )
 				);
 			},
