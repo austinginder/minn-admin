@@ -188,11 +188,36 @@ function minn_admin_fluent_forms_status_model() {
 	global $wpdb;
 	$subs  = $wpdb->prefix . 'fluentform_submissions';
 	$forms = $wpdb->prefix . 'fluentform_forms';
+	// Counters follow the same scope as the list: Fluent scopes its own
+	// admin-bar and menu counts the same way, so a manager provisioned for one
+	// form must not learn the whole estate's volume.
+	$scope  = minn_admin_fluent_forms_scope();
+	$clause = '';
+	$params = array();
+	if ( is_array( $scope ) ) {
+		if ( ! $scope ) {
+			return array(
+				'rows'    => array(
+					array( 'label' => 'Unread entries', 'value' => '0', 'hint' => '0 total' ),
+					array( 'label' => 'Forms', 'value' => '0' ),
+				),
+				'actions' => array(
+					array( 'label' => 'Open Fluent Forms ↗', 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
+				),
+			);
+		}
+		$clause = ' AND form_id IN (' . implode( ',', array_fill( 0, count( $scope ), '%d' ) ) . ')';
+		$params = $scope;
+	}
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$unread = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$subs} WHERE status = 'unread'" );
-	$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$subs} WHERE status <> 'trashed'" );
-	$spam   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$subs} WHERE status = 'spam'" );
-	$nforms = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$forms}" );
+	$count = function ( $where ) use ( $wpdb, $subs, $clause, $params ) {
+		$sql = "SELECT COUNT(*) FROM {$subs} WHERE {$where}{$clause}";
+		return (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $sql, $params ) ) : $wpdb->get_var( $sql ) );
+	};
+	$unread = $count( "status = 'unread'" );
+	$total  = $count( "status <> 'trashed'" );
+	$spam   = $count( "status = 'spam'" );
+	$nforms = is_array( $scope ) ? count( $scope ) : (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$forms}" );
 	// phpcs:enable
 	$hint = number_format_i18n( $total ) . ' total';
 	if ( $spam ) {
@@ -398,12 +423,32 @@ add_action( 'rest_api_init', function () {
 			$forms_table = $wpdb->prefix . 'fluentform_forms';
 			$subs_table  = $wpdb->prefix . 'fluentform_submissions';
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived tables.
-			$rows = $wpdb->get_results(
-				"SELECT f.id, f.title, f.status, f.updated_at,
-					(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id) AS entries
-				 FROM `{$forms_table}` f
-				 ORDER BY f.title ASC"
-			);
+			// Scope the form estate the same way the entries are scoped. Fluent's
+			// own dropdowns, reports and search all wrap this in
+			// whereIn('id', $allowForms ?: [0]); without it a manager scoped to
+			// one form still enumerates every form's title and traffic volume.
+			$scope = minn_admin_fluent_forms_scope();
+			if ( is_array( $scope ) && ! $scope ) {
+				$rows = array();
+			} elseif ( is_array( $scope ) ) {
+				$in   = implode( ',', array_fill( 0, count( $scope ), '%d' ) );
+				$rows = $wpdb->get_results( $wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived tables; ids bound below.
+					"SELECT f.id, f.title, f.status, f.updated_at,
+						(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id) AS entries
+					 FROM `{$forms_table}` f
+					 WHERE f.id IN ({$in})
+					 ORDER BY f.title ASC",
+					$scope
+				) );
+			} else {
+				$rows = $wpdb->get_results(
+					"SELECT f.id, f.title, f.status, f.updated_at,
+						(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id) AS entries
+					 FROM `{$forms_table}` f
+					 ORDER BY f.title ASC"
+				);
+			}
 			// phpcs:enable
 			$manage = ! empty( $request['manage'] );
 			$out    = array();
