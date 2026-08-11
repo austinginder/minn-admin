@@ -1415,25 +1415,24 @@ class Minn_Admin_REST {
 				array(
 					'methods'             => 'GET',
 					'callback'            => array( __CLASS__, 'read_debug_log' ),
-					'permission_callback' => function () {
-						return current_user_can( 'manage_options' );
-					},
+					'permission_callback' => array( __CLASS__, 'can_read_logs' ),
 				),
 				array(
 					'methods'             => 'DELETE',
 					'callback'            => array( __CLASS__, 'clear_debug_log' ),
-					'permission_callback' => function () {
-						return current_user_can( 'manage_options' );
-					},
+					'permission_callback' => array( __CLASS__, 'can_read_logs' ),
 				),
 			)
 		);
 
 		// The multi-source log viewer: list sources, tail one, clear one.
 		// /system/debug-log above stays as the debug source's legacy alias.
-		$logs_cap = function () {
-			return current_user_can( 'manage_options' );
-		};
+		// wp-content is NETWORK-SHARED on multisite, so debug.log accumulates
+		// every subsite's fatals and query errors, and these routes both read
+		// it and truncate it. manage_options is a per-site capability that a
+		// subsite administrator holds, so gate the way the database viewer
+		// already does: network data needs a network capability.
+		$logs_cap = array( __CLASS__, 'can_read_logs' );
 		register_rest_route(
 			self::NS,
 			'/system/logs',
@@ -3443,6 +3442,18 @@ class Minn_Admin_REST {
 		update_site_option( $option, $list );
 
 		return rest_ensure_response( array( 'auto' => $list ) );
+	}
+
+	/**
+	 * Gate for every log-reading route.
+	 *
+	 * wp-content is shared by the whole network on multisite, so a per-site
+	 * capability is not enough to read or truncate what lands there.
+	 */
+	public static function can_read_logs() {
+		return is_multisite()
+			? current_user_can( 'manage_network_options' )
+			: current_user_can( 'manage_options' );
 	}
 
 	/**

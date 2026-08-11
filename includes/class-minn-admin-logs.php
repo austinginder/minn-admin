@@ -36,11 +36,36 @@ class Minn_Admin_Logs {
 		if ( defined( 'WP_DEBUG_LOG' ) && is_string( WP_DEBUG_LOG ) && '' !== WP_DEBUG_LOG ) {
 			return WP_DEBUG_LOG;
 		}
-		$ini = ini_get( 'error_log' );
-		if ( $ini && 'syslog' !== $ini && ( file_exists( $ini ) || is_dir( dirname( $ini ) ) ) && '/' === substr( $ini, 0, 1 ) ) {
-			return $ini;
-		}
+		// Deliberately no ini_get( 'error_log' ) fallback here. On shared or
+		// multi-vhost hosting that value routinely points at a host-level file
+		// written by other customers' sites, and this source is offered for
+		// reading AND for clearing. An unset WP_DEBUG_LOG means this site has
+		// no log of its own, not that it may read the server's.
 		return WP_CONTENT_DIR . '/debug.log';
+	}
+
+	/**
+	 * Whether a log path belongs to this WordPress install.
+	 *
+	 * Anything outside the install is somebody else's file: the host's shared
+	 * PHP error log, another vhost's output. Such a source is never registered
+	 * for clearing, and its absolute path is never echoed back.
+	 */
+	private static function site_owned( $path ) {
+		$real = realpath( $path );
+		if ( ! $real ) {
+			$real = realpath( dirname( $path ) );
+			if ( ! $real ) {
+				return false;
+			}
+		}
+		foreach ( array( WP_CONTENT_DIR, ABSPATH ) as $root ) {
+			$rr = realpath( $root );
+			if ( $rr && 0 === strpos( $real, rtrim( $rr, '/\\' ) . DIRECTORY_SEPARATOR ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -55,7 +80,8 @@ class Minn_Admin_Logs {
 		// The PHP error log, when it is a separate real file (not syslog,
 		// not already the debug path).
 		$ini = ini_get( 'error_log' );
-		if ( $ini && 'syslog' !== $ini && '/' === substr( $ini, 0, 1 ) && $ini !== $debug && file_exists( $ini ) ) {
+		if ( $ini && 'syslog' !== $ini && '/' === substr( $ini, 0, 1 ) && $ini !== $debug && file_exists( $ini )
+			&& self::site_owned( $ini ) ) {
 			$sources['php-error'] = self::file_source( 'PHP error log', 'Server', $ini, true );
 		}
 
@@ -231,7 +257,7 @@ class Minn_Admin_Logs {
 				return self::tail_file( $path );
 			},
 		);
-		if ( $clearable ) {
+		if ( $clearable && self::site_owned( $path ) ) {
 			$src['clear'] = function () use ( $path ) {
 				if ( ! file_exists( $path ) ) {
 					return true;
