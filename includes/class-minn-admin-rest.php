@@ -6095,7 +6095,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			. "To restore: delete this first line, then rename this file over wp-config.php.\n"
 			. "The exit keeps the web server from ever serving these credentials. */ ?>\n";
 		$dest = self::wpconfig_backup_path( $path );
-		return false === file_put_contents( $dest, $header . $contents ) ? '' : $dest;
+		if ( false === file_put_contents( $dest, $header . $contents ) ) {
+			return '';
+		}
+		// Owner-only while it exists. It holds the database password and the
+		// full salt block.
+		@chmod( $dest, 0600 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		return $dest;
 	}
 
 	/**
@@ -6226,9 +6232,30 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'parse_error', 'The change would break wp-config.php, so it was not saved.', array( 'status' => 500 ) );
 		}
 
-		self::backup_wpconfig( $path );
+		// Honour the backup's return value: a write that proceeds without a
+		// rollback copy is the case the copy exists for.
+		$backup = self::backup_wpconfig( $path );
+		if ( '' === $backup ) {
+			return new WP_Error(
+				'minn_backup_failed',
+				'Could not write a rollback copy of wp-config.php, so the change was not made.',
+				array( 'status' => 500 )
+			);
+		}
 		if ( false === file_put_contents( $path, $new ) ) {
+			self::drop_wpconfig_backup( $path );
 			return new WP_Error( 'write_failed', 'Could not write wp-config.php.', array( 'status' => 500 ) );
+		}
+
+		// The write landed and was syntax-checked before it went out, so the
+		// rollback copy has done its job. Re-read from disk and confirm it
+		// parses before dropping the copy: if anything truncated the write,
+		// keep the copy and say so rather than leaving the site with a broken
+		// wp-config.php and nothing to restore from.
+		$written = @file_get_contents( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$intact  = false !== $written && $written === $new;
+		if ( $intact ) {
+			self::drop_wpconfig_backup( $path );
 		}
 
 		return rest_ensure_response(
@@ -6237,8 +6264,28 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				// The value that will apply on the next request (this one already
 				// bootstrapped with the old constant).
 				'value'    => $value,
+				// Present only when the rollback copy had to be kept.
+				'backup'   => $intact ? '' : basename( self::wpconfig_backup_path( $path ) ),
 			)
 		);
+	}
+
+	/**
+	 * Remove the rollback copy.
+	 *
+	 * It is a full plaintext copy of DB_USER, DB_PASSWORD and the whole salt
+	 * block, at a fixed path published in this plugin's source, inside the web
+	 * root. The `<?php exit;` header and the .php name stop a web server
+	 * serving it, but host and security-plugin rules that protect credentials
+	 * match the literal filename wp-config.php and do not cover this one, so
+	 * any local file read or backup archive picks it up. A pre-write rollback
+	 * copy has no reason to outlive the write.
+	 */
+	private static function drop_wpconfig_backup( $path ) {
+		$bak = self::wpconfig_backup_path( $path );
+		if ( file_exists( $bak ) ) {
+			wp_delete_file( $bak );
+		}
 	}
 
 	/** Turn an ordered assoc array into [{key,value}] rows for the client. */
