@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.26.0. This file ships inside the plugin, so the copy you
+*Current as of v0.27.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -107,11 +107,29 @@ away:
   where edits live. Its text and images are usually editable in place,
   and the ⚙ chip holds its settings plus duplicate and move arrows, so
   a testimonial can hop into the next column without leaving Minn; its
-  structure is preserved byte for byte. One click on "Block
-  editor ↗" opens the same post in Gutenberg whenever you want the full
-  toolkit. Posts built with page builders (Elementor, Bricks, Divi and
-  friends) open read-only with an "Edit in your builder" button, because
-  the builder owns that content.
+  structure is preserved byte for byte. Hovering any ⚙ chip outlines the
+  block it configures, so nested blocks read as distinct controls. One
+  click on "Block editor ↗" opens the same post in Gutenberg whenever you
+  want the full toolkit. Posts built with page builders (Elementor,
+  Bricks, Divi and friends) open read-only with an "Edit in your builder"
+  button, because the builder owns that content.
+- **Galleries and sliders open an images editor.** Hover a gallery-shaped
+  block and the card names the action: click anywhere on it for a tile
+  grid where you reorder (drag or arrows), replace (click a tile), add,
+  remove, duplicate and caption photos. Dropping image files on the grid
+  uploads them into that block. Each photo moves as an exact unit, so its
+  caption and settings travel with it, and this covers sliders and
+  carousels, layouts with a fixed set of openings, and blocks that keep
+  their pictures in settings. A gallery's ⚙ chip also offers columns,
+  crop and random order; link, size and lightbox options stay in the
+  block editor and the popover says so.
+- **Groups of styled text open an Edit content window.** A container
+  holding several styled blocks (a stats strip of label-and-value
+  paragraphs, say) edits in a roomy window: one card per block with its
+  text front and center and the other settings tucked behind a toggle,
+  plus reorder, remove and add. Enter it from the container's ⚙ chip
+  ("Content · N blocks") or, on protected cards, by clicking the card
+  itself; the block you clicked opens highlighted.
 - **Saving is status-aware.** Drafts autosave as you write. Published
   posts never change under you: edits back up silently, and the live post
   only updates when you press Update. A crash net keeps a local copy of

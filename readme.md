@@ -130,7 +130,13 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   copies, with a Patterns entry in Content to manage them. Island content is editable: **text runs** and an
   **Images** section rewrite only what you change; block settings scale (used fields first,
   the rest behind **More settings**); every island links out to the block editor for layout
-  controls. Previews pick up lazy CSS and **auto-warm** browser-compiled styles when needed.
+  controls. **Gallery-shaped blocks** (core galleries, sliders and carousels, fixed layouts,
+  Jetpack's tiled gallery) open an **images editor**: reorder, replace, add, remove, duplicate
+  and caption photos, each moved as an exact unit, with dropped files uploading into the block
+  and gallery **columns, crop and random order** editable from the ⚙ popover. **Multi-block
+  containers** open an **Edit content** window: one card per block, text first, other settings
+  tucked behind a toggle. Previews pick up lazy CSS, layout-support CSS (gallery columns,
+  group gaps) and **auto-warm** browser-compiled styles when needed.
   Syntax-highlighted code blocks; **writing stats** on the sticky pill (words, reading time,
   session delta, optional word goal); scheduling and one-click publish. **Paste cleanup**
   turns Word / Google Docs / web HTML into the safe subset; **paste or drag an image**
