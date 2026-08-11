@@ -14,6 +14,7 @@ class Minn_Admin {
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'load_textdomain' ) );
 		add_action( 'init', array( __CLASS__, 'register_route' ) );
+		add_action( 'wp_loaded', array( __CLASS__, 'maybe_heal_rewrites' ), 20 );
 		add_filter( 'query_vars', array( __CLASS__, 'query_vars' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_render_app' ), 0 );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_maintenance_mode' ), 1 );
@@ -219,6 +220,50 @@ class Minn_Admin {
 	public static function register_route() {
 		// Catch-all so app routes like /minn-admin/content resolve to the SPA.
 		add_rewrite_rule( '^minn-admin(/.*)?$', 'index.php?' . self::QUERY_VAR . '=1', 'top' );
+	}
+
+	/**
+	 * Self-healing rewrites: any site where Minn runs but the compiled rules
+	 * lack its route gets one soft flush. Covers the multisite cases the
+	 * activation hook cannot reach — network activation only flushes the site
+	 * it runs in, and subsites that existed before activation keep serving
+	 * 404 at /minn-admin/ until their rules are rebuilt. An empty rules
+	 * option is left alone: core regenerates it lazily on this same request,
+	 * with the route included.
+	 */
+	public static function maybe_heal_rewrites() {
+		if ( ! get_option( 'permalink_structure' ) ) {
+			return; // Plain permalinks: the ?minn_admin=1 fallback is the route.
+		}
+		$rules = get_option( 'rewrite_rules' );
+		if ( ! is_array( $rules ) || ! $rules || isset( $rules['^minn-admin(/.*)?$'] ) ) {
+			return;
+		}
+		flush_rewrite_rules( false );
+	}
+
+	/**
+	 * Drop every site's compiled rewrite rules so each rebuilds them lazily
+	 * on its next request — with Minn's route when the plugin is active
+	 * there, without it when not. Deleting the option (rather than flushing
+	 * under switch_to_blog) sidesteps WP_Rewrite's unreliability in switched
+	 * contexts and keeps network activation/deactivation O(sites) cheap.
+	 */
+	public static function invalidate_network_rewrites() {
+		if ( ! is_multisite() || wp_is_large_network() ) {
+			return;
+		}
+		$site_ids = get_sites(
+			array(
+				'fields' => 'ids',
+				'number' => 10000,
+			)
+		);
+		foreach ( $site_ids as $site_id ) {
+			switch_to_blog( $site_id );
+			delete_option( 'rewrite_rules' );
+			restore_current_blog();
+		}
 	}
 
 	public static function query_vars( $vars ) {

@@ -124,9 +124,21 @@ Minn_Admin_Notices::init();
 Minn_Admin_CPT::init();
 new Minn_Admin_Updater();
 
-register_activation_hook( __FILE__, function () {
+register_activation_hook( __FILE__, function ( $network_wide ) {
 	Minn_Admin::register_route();
 	flush_rewrite_rules();
+	if ( $network_wide ) {
+		Minn_Admin::invalidate_network_rewrites();
+	}
 } );
 
-register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );
+register_deactivation_hook( __FILE__, function ( $network_wide ) {
+	// Not flush_rewrite_rules(): init already registered the route this
+	// request, so a flush here would regenerate the rules WITH it and leave
+	// /minn-admin/ serving the homepage after deactivation. Dropping the
+	// option makes the site rebuild on its next request, route omitted.
+	delete_option( 'rewrite_rules' );
+	if ( $network_wide ) {
+		Minn_Admin::invalidate_network_rewrites();
+	}
+} );
