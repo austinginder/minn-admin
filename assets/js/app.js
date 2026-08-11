@@ -8685,8 +8685,22 @@
 	}
 
 	// Fill {field} placeholders on an action href from the item.
+	//
+	// A placeholder standing INSIDE a larger URL is a path segment or a query
+	// value and must be percent-encoded ("post.php?post={id}"). A href that is
+	// NOTHING BUT a placeholder is the whole destination ("{app}"), and
+	// encoding it turns an absolute URL into a nonsense relative path
+	// (".../minn-admin/https%3A%2F%2Fteam7…"). Only http(s) values may pass
+	// through unencoded, so a stray value can never introduce a javascript:
+	// or data: destination.
 	function surfaceFillHref( href, item ) {
-		return String( href ).replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( item[ k ] ?? '' ) );
+		const tpl = String( href );
+		const whole = tpl.match( /^\{(\w+)\}$/ );
+		if ( whole ) {
+			const value = String( item[ whole[ 1 ] ] ?? '' );
+			if ( /^https?:\/\//i.test( value ) ) return value;
+		}
+		return tpl.replace( /\{(\w+)\}/g, ( _, k ) => encodeURIComponent( item[ k ] ?? '' ) );
 	}
 
 	// External-link honesty: a plugin-supplied href that leaves this site

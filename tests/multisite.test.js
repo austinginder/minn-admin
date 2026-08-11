@@ -403,6 +403,15 @@ async function gotoRoute( page, site, route ) {
 			check( 'an ordinary site offers the lifecycle verbs',
 				ordinary && ordinary.some( ( e ) => /Archive site/.test( e ) ) && ordinary.some( ( e ) => /Delete site/.test( e ) ),
 				( ordinary || [] ).join( ' | ' ) );
+			// A href that is nothing but a placeholder carries a WHOLE URL, so
+			// it must not be percent-encoded into a relative path.
+			const hrefs = await page.evaluate( () =>
+				[ ...document.querySelectorAll( '.minn-ctx-menu a' ) ].map( ( a ) => a.getAttribute( 'href' ) ) );
+			check( 'whole-URL row links resolve to real addresses',
+				hrefs.length >= 2 && hrefs.every( ( h ) => /^https?:\/\/[^%]+$/.test( h ) ),
+				hrefs.join( ' | ' ) );
+			check( 'the site link points at that site\'s own Minn',
+				hrefs.some( ( h ) => /\/\/[^/]+\/minn-admin\/$/.test( h ) ), hrefs.join( ' | ' ) );
 			if ( mainName ) {
 				const main = await rowMenu( mainName.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) );
 				check( 'the main site offers NO archive, spam or delete',
@@ -450,6 +459,13 @@ async function gotoRoute( page, site, route ) {
 			};
 			const member = await rowMenu( false );
 			check( 'an ordinary account can be promoted', member && member.some( ( e ) => /Make network administrator/.test( e ) ), ( member || [] ).join( ' | ' ) );
+			// The other half of the href rule: a placeholder INSIDE a URL is
+			// still substituted as a value, not left raw.
+			const userHref = await page.evaluate( () => {
+				const a = [ ...document.querySelectorAll( '.minn-ctx-menu a' ) ].find( ( x ) => /Network Admin/.test( x.textContent ) );
+				return a ? a.getAttribute( 'href' ) : '';
+			} );
+			check( 'a placeholder inside a URL still fills in', /user_id=\d+$/.test( userHref ), userHref );
 			const superRow = await rowMenu( true );
 			check( 'a network administrator is not offered promotion again',
 				superRow && ! superRow.some( ( e ) => /Make network administrator/.test( e ) ), ( superRow || [] ).join( ' | ' ) );
