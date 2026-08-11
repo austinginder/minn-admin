@@ -57,6 +57,11 @@ function minn_admin_ccj_can_write_code( $opts ) {
 	if ( ! $scripty && ! $admin ) {
 		return true;
 	}
+	// Executable snippets are code, so a site that forbids dashboard code
+	// editing forbids these too. Plain front end CSS returned above already.
+	if ( $scripty && class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+		return false;
+	}
 	if ( defined( 'DISALLOW_UNFILTERED_HTML' ) && DISALLOW_UNFILTERED_HTML ) {
 		return false;
 	}

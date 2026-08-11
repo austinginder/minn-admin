@@ -527,6 +527,30 @@ class Minn_Admin {
 		return $norm;
 	}
 
+	/**
+	 * Whether the site permits dashboard-driven code editing.
+	 *
+	 * DISALLOW_FILE_EDIT is the directive a site owner sets to stop anyone,
+	 * administrators included, reaching PHP on disk from the dashboard; core
+	 * folds it into edit_files via map_meta_cap. DISALLOW_FILE_MODS is the
+	 * broader "no filesystem changes" switch. Minn is presented as the whole
+	 * admin surface, so a hardened wp-config must describe what Minn will do
+	 * too, not just what wp-admin will.
+	 *
+	 * Deliberately consulted only where code is written or executed: the
+	 * wp-config writer and PHP snippet authoring. Ordinary content and
+	 * stylesheet editing are not file editing.
+	 */
+	public static function code_edits_allowed() {
+		if ( defined( 'DISALLOW_FILE_EDIT' ) && DISALLOW_FILE_EDIT ) {
+			return false;
+		}
+		if ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ) {
+			return false;
+		}
+		return true;
+	}
+
 	public static function app_url() {
 		if ( get_option( 'permalink_structure' ) ) {
 			return home_url( '/minn-admin/' );
