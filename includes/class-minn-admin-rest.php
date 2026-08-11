@@ -461,8 +461,17 @@ class Minn_Admin_REST {
 		// page (GH #8): admins pre-configure a user's Minn experience before
 		// their first sign-in. Same callbacks as the /me routes; the {id}
 		// param retargets them, gated on edit_user like wp-admin's profile.
-		$edit_user_gate = function ( $request ) {
-			return is_user_logged_in() && current_user_can( 'edit_user', (int) $request['id'] );
+		// Resolve the target from the URL SEGMENT, exactly like the handlers do
+		// via self::target_user_id(). `$request['id']` also resolves from the
+		// JSON body, the POST body and the query string, so a gate reading it
+		// could be aimed at the caller's own id (`?id=<self>`) while the handler
+		// still acted on the id in the path: current_user_can('edit_user', $own)
+		// is true for EVERY logged-in user, so that let a Subscriber write to an
+		// administrator's account. Gate and handler must read the same source.
+		$edit_user_gate = function ( WP_REST_Request $request ) {
+			$url = $request->get_url_params();
+			$uid = isset( $url['id'] ) ? (int) $url['id'] : 0;
+			return is_user_logged_in() && $uid > 0 && current_user_can( 'edit_user', $uid );
 		};
 		register_rest_route(
 			self::NS,
@@ -3433,9 +3442,12 @@ class Minn_Admin_REST {
 	 * from the JSON body, the POST body and the QUERY STRING (see
 	 * WP_REST_Request::get_parameter_order), so on the /me/* routes — whose
 	 * permission callback is only `edit_posts` — `?id=1` used to retarget the
-	 * write at any account, including an administrator's. The /users/{id}
-	 * routes carry a real per-object gate ($edit_user_gate) and a real URL
-	 * segment, so they are unaffected.
+	 * write at any account, including an administrator's.
+	 *
+	 * $edit_user_gate resolves the id the SAME way (URL segment only). It used
+	 * to read `$request['id']`, which let a caller satisfy the gate against
+	 * their own id while this resolver handed the handler the id in the path.
+	 * Any new gate gating these handlers must resolve through this method.
 	 */
 	private static function target_user_id( WP_REST_Request $request ) {
 		$url = $request->get_url_params();
