@@ -62,6 +62,14 @@ form plugins, two backup plugins), Minn shows one sidebar entry with a
 switcher inside, instead of three lookalike menus. The view stays the same;
 the provider changes.
 
+**On a network**, a small chevron sits beside the site name at the top of
+the sidebar. It lists every site on the network you can work on, marks the
+one you are in, and takes you straight to Minn on any other. Network
+administrators also get a link to Network Admin from there, since site
+creation and network-wide settings stay with WordPress. The palette knows
+the sites too: press ⌘K and type "switch", or just start typing a site's
+name. The chevron does not appear when you belong to only one site.
+
 **The topbar** carries the page title, a button that shows or hides the
 sidebar (⌘. does the same), the version badge (click it for what's new),
 a View site link, the theme toggle (system, light, dark), notifications,
