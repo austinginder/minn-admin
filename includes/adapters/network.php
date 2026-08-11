@@ -428,6 +428,33 @@ add_action( 'rest_api_init', function () {
 		'callback'            => 'minn_admin_network_users_status',
 	) );
 
+	// Network activation. The plugin file rides in the BODY, not the path:
+	// it contains a slash ("folder/file.php"), and every candidate is checked
+	// against the installed set before anything runs.
+	register_rest_route( 'minn-admin/v1', '/network/plugins/activate', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return minn_admin_network_can( 'manage_network_plugins' );
+		},
+		'callback'            => 'minn_admin_network_plugin_activate',
+		'args'                => array(
+			'plugin' => array( 'type' => 'string', 'required' => true ),
+			'on'     => array( 'type' => 'boolean', 'required' => true ),
+		),
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/network/themes/enable', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return minn_admin_network_can( 'manage_network_themes' );
+		},
+		'callback'            => 'minn_admin_network_theme_enable',
+		'args'                => array(
+			'theme' => array( 'type' => 'string', 'required' => true ),
+			'on'    => array( 'type' => 'boolean', 'required' => true ),
+		),
+	) );
+
 	register_rest_route( 'minn-admin/v1', '/network/sites', array(
 		array(
 			'methods'             => 'GET',
@@ -684,6 +711,79 @@ function minn_admin_network_site_delete( WP_REST_Request $request ) {
 		return $result;
 	}
 	return rest_ensure_response( array( 'deleted' => true, 'id' => $id ) );
+}
+
+/**
+ * POST /network/plugins/activate — turn a plugin on (or off) for every site.
+ *
+ * Network activation is not per-site activation with a wider reach: it is a
+ * separate switch core keeps in the active_sitewide_plugins network option,
+ * and turning it off leaves each site's own activation exactly as it was.
+ * Minn itself is refused: switching it off network-wide from inside Minn
+ * would tear the app out from under the person doing it, which the Extensions
+ * card already handles with its own dedicated flow.
+ */
+function minn_admin_network_plugin_activate( WP_REST_Request $request ) {
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	$file = (string) $request['plugin'];
+	$on   = (bool) $request['on'];
+
+	if ( validate_file( $file ) || ! array_key_exists( $file, get_plugins() ) ) {
+		return new WP_Error( 'no_such_plugin', __( 'That plugin is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	if ( ! $on && plugin_basename( MINN_ADMIN_FILE ) === $file ) {
+		return new WP_Error(
+			'self',
+			__( 'Turn Minn Admin off from its own card, which explains what happens first.', 'minn-admin' ),
+			array( 'status' => 400 )
+		);
+	}
+	if ( $on ) {
+		$result = activate_plugin( $file, '', true );
+		if ( is_wp_error( $result ) ) {
+			return new WP_Error( 'activate_failed', wp_strip_all_tags( $result->get_error_message() ), array( 'status' => 500 ) );
+		}
+	} else {
+		deactivate_plugins( $file, false, true );
+	}
+	return rest_ensure_response(
+		array(
+			'plugin'  => $file,
+			'network' => is_plugin_active_for_network( $file ),
+		)
+	);
+}
+
+/**
+ * POST /network/themes/enable — let sites choose this theme, or stop them.
+ *
+ * Network enabling only decides which themes appear in each site's theme
+ * picker; it never switches a site's theme. Disabling one that sites already
+ * use leaves those sites on it, exactly as wp-admin does.
+ */
+function minn_admin_network_theme_enable( WP_REST_Request $request ) {
+	$stylesheet = (string) $request['theme'];
+	$on         = (bool) $request['on'];
+
+	if ( validate_file( $stylesheet ) ) {
+		return new WP_Error( 'bad_theme', __( 'That theme name is not valid.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$theme = wp_get_theme( $stylesheet );
+	if ( ! $theme->exists() ) {
+		return new WP_Error( 'no_such_theme', __( 'That theme is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	if ( $on ) {
+		WP_Theme::network_enable_theme( $stylesheet );
+	} else {
+		WP_Theme::network_disable_theme( $stylesheet );
+	}
+	$allowed = (array) get_site_option( 'allowedthemes', array() );
+	return rest_ensure_response(
+		array(
+			'theme'   => $stylesheet,
+			'network' => ! empty( $allowed[ $stylesheet ] ),
+		)
+	);
 }
 
 /** GET /network/users — every account on the network, paginated. */

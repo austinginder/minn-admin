@@ -465,6 +465,57 @@ async function gotoRoute( page, site, route ) {
 			await ctx.close();
 		}
 
+		// 5c3) Network activation from Extensions: a separate switch from this
+		//      site's own, and Minn never offers to pull itself out from under
+		//      the person using it.
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
+			await gotoRoute( page, MAIN, 'extensions' );
+			await page.waitForSelector( '.minn-plugin', { timeout: 15000 } );
+			const caps = await page.evaluate( () => ( {
+				plugins: !! window.MINN.caps.networkPlugins,
+				themes: !! window.MINN.caps.networkThemes,
+			} ) );
+			check( 'super admin gets network activation capabilities', caps.plugins && caps.themes );
+
+			const cardMenu = async ( name ) => {
+				await page.evaluate( () => document.querySelectorAll( '.minn-ctx-menu' ).forEach( ( m ) => m.remove() ) );
+				const pt = await page.evaluate( ( n ) => {
+					const card = [ ...document.querySelectorAll( '.minn-plugin' ) ].find( ( c ) => ( c.querySelector( '.minn-plugin-name' )?.textContent || '' ).includes( n ) );
+					if ( ! card ) return null;
+					const b = card.getBoundingClientRect();
+					return { x: b.x + b.width / 2, y: b.y + 40 };
+				}, name );
+				if ( ! pt ) return null;
+				await page.mouse.click( pt.x, pt.y, { button: 'right' } );
+				await page.waitForTimeout( 450 );
+				return page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu > *' ) ].map( ( b ) => b.textContent.trim() ) );
+			};
+			const perSite = await cardMenu( 'WooCommerce' );
+			check( 'a per-site plugin can be activated network-wide',
+				perSite && perSite.some( ( e ) => /Activate for the whole network/.test( e ) ), ( perSite || [] ).join( ' | ' ) );
+			await page.keyboard.press( 'Escape' );
+			const self = await cardMenu( 'Minn Admin' );
+			check( 'Minn never offers to deactivate ITSELF network-wide',
+				self && ! self.some( ( e ) => /Deactivate across the network/.test( e ) ), ( self || [] ).join( ' | ' ) );
+			await page.keyboard.press( 'Escape' );
+
+			// The server refuses it too, not just the menu.
+			const direct = await page.evaluate( async () => {
+				const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/network/plugins/activate', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+					credentials: 'same-origin',
+					body: JSON.stringify( { plugin: 'minn-admin/minn-admin.php', on: false } ),
+				} );
+				return { status: r.status, code: ( await r.json() ).code };
+			} );
+			check( 'the server refuses a network self-deactivation', direct.status === 400 && direct.code === 'self', JSON.stringify( direct ) );
+			allErrors.push( ...errors );
+			await ctx.close();
+		}
+
 		// 5d) A site administrator is not a network administrator.
 		{
 			const { ctx, page, errors } = await ctxFor( browser );
