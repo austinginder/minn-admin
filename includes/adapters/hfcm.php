@@ -465,6 +465,9 @@ add_action( 'rest_api_init', function () {
 					$data['device_type'] = $body['device_type'];
 					$fmt[]               = '%s';
 				}
+				if ( array_key_exists( 'active', $body ) && ! empty( $body['active'] ) && ! minn_admin_hfcm_can_write_code() ) {
+					return minn_admin_hfcm_code_error();
+				}
 				if ( array_key_exists( 'active', $body ) ) {
 					$data['status'] = $body['active'] ? 'active' : 'inactive';
 					$fmt[]          = '%s';
@@ -480,6 +483,10 @@ add_action( 'rest_api_init', function () {
 				$id = (int) $request['id'];
 				if ( ! minn_admin_hfcm_get( $id ) ) {
 					return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+				}
+				// Destroying a snippet is a write to the same raw-markup store.
+				if ( ! minn_admin_hfcm_can_write_code() ) {
+					return minn_admin_hfcm_code_error();
 				}
 				if ( class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'delete_snippet' ) ) {
 					Hfcm_Snippets_List::delete_snippet( $id );
@@ -503,6 +510,13 @@ add_action( 'rest_api_init', function () {
 			}
 			$body   = $request->get_json_params();
 			$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
+			// Publishing a snippet is the same privilege as writing one: HFCM
+			// html_entity_decode()s the stored markup into wp_head for every
+			// visitor, so flipping an existing row to active runs it. Turning a
+			// snippet OFF is always allowed.
+			if ( $active && ! minn_admin_hfcm_can_write_code() ) {
+				return minn_admin_hfcm_code_error();
+			}
 			if ( $active && class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'activate_snippet' ) ) {
 				Hfcm_Snippets_List::activate_snippet( $id );
 			} elseif ( ! $active && class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'deactivate_snippet' ) ) {
