@@ -171,6 +171,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 	$surfaces['network-sites'] = array(
 		'label'      => __( 'Sites', 'minn-admin' ),
+		// The other two network surfaces name the network in their own label;
+		// this one does not, so the topbar badge supplies the scope.
+		'sub'        => __( 'Network', 'minn-admin' ),
 		'group'      => 'network',
 		'icon'       => 'grid',
 		'cap'        => 'manage_sites',
