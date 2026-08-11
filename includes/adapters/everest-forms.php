@@ -285,12 +285,35 @@ function minn_admin_everest_set_status( $entry_id, $op, $form_id = 0 ) {
 function minn_admin_everest_status_model() {
 	global $wpdb;
 	$table = $wpdb->prefix . 'evf_entries';
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$viewed   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'publish' AND viewed = 1" );
-	$received = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'publish'" );
-	$spam     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'spam'" );
-	// phpcs:enable
-	$forms  = count( minn_admin_everest_titles() );
+	// Counts follow the same scope as the list: a caller provisioned for their
+	// own forms must not learn other authors' submission volumes.
+	$scope  = minn_admin_everest_allowed_form_ids();
+	$clause = '';
+	$params = array();
+	if ( is_array( $scope ) ) {
+		if ( ! $scope ) {
+			return array(
+				'rows'    => array(
+					array( 'label' => 'Unread entries', 'value' => '0', 'hint' => '0 total' ),
+					array( 'label' => 'Forms', 'value' => '0' ),
+				),
+				'actions' => array(
+					array( 'label' => 'Open Everest Forms ↗', 'href' => admin_url( 'admin.php?page=evf-entries' ) ),
+				),
+			);
+		}
+		$clause = ' AND form_id IN (' . implode( ',', array_fill( 0, count( $scope ), '%d' ) ) . ')';
+		$params = $scope;
+	}
+	$count = function ( $status, $extra = '' ) use ( $wpdb, $table, $clause, $params ) {
+		$sql  = "SELECT COUNT(*) FROM {$table} WHERE status = %s{$extra}{$clause}"; // phpcs:ignore
+		$args = array_merge( array( $status ), $params );
+		return (int) $wpdb->get_var( $wpdb->prepare( $sql, ...$args ) ); // phpcs:ignore
+	};
+	$viewed   = $count( 'publish', ' AND viewed = 1' );
+	$received = $count( 'publish' );
+	$spam     = $count( 'spam' );
+	$forms  = is_array( $scope ) ? count( $scope ) : count( minn_admin_everest_titles() );
 	$unread = max( 0, $received - $viewed );
 	$hint   = number_format_i18n( $received ) . ' total';
 	if ( $spam ) {
@@ -318,6 +341,37 @@ function minn_admin_everest_status_model() {
  * primitives with no id collapses that split, so a user granted entries for
  * their own forms reads and deletes every author's submissions.
  */
+/**
+ * Which forms this caller may read entries for, or null for unrestricted.
+ *
+ * Everest resolves an ENTRY to its form and compares the form's post_author
+ * before mapping everest_forms_view_entry down to the *own* or the *others*
+ * primitive (EVF_Install::filter_map_meta_cap). A caller provisioned for their
+ * own forms only must therefore not see anyone else's entries.
+ *
+ * The universe is deliberately every form regardless of status and with no
+ * row cap: a scope computed from a truncated or publish-only sample would be
+ * narrower than the data it is filtering, and the gap would fail open.
+ *
+ * @return int[]|null Allowed form ids, or null when the caller may read all.
+ */
+function minn_admin_everest_allowed_form_ids() {
+	if ( current_user_can( 'manage_everest_forms' )
+		|| current_user_can( 'manage_options' )
+		|| current_user_can( 'everest_forms_view_others_entries' ) ) {
+		return null;
+	}
+	$ids = get_posts( array(
+		'post_type'        => 'everest_form',
+		'post_status'      => 'any',
+		'numberposts'      => -1,
+		'fields'           => 'ids',
+		'author'           => get_current_user_id(),
+		'suppress_filters' => false,
+	) );
+	return array_map( 'intval', (array) $ids );
+}
+
 function minn_admin_everest_can_entry( $entry_id, $context = 'view' ) {
 	$entry_id = (int) $entry_id;
 	if ( $entry_id <= 0 ) {
@@ -524,7 +578,11 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$manage = ! empty( $request['manage'] );
 			$out    = array();
+			$scope  = minn_admin_everest_allowed_form_ids();
 			foreach ( minn_admin_everest_titles() as $id => $title ) {
+				if ( is_array( $scope ) && ! in_array( (int) $id, $scope, true ) ) {
+					continue;
+				}
 				$row = array( 'id' => (int) $id, 'title' => $title );
 				if ( $manage ) {
 					$row['entries'] = (int) $wpdb->get_var( $wpdb->prepare(
@@ -559,6 +617,21 @@ add_action( 'rest_api_init', function () {
 
 			$where = 'WHERE e.status = %s';
 			$args  = array( $status );
+			// Scope to the caller's own forms unless they hold the others /
+			// manage capability. Without this the list spans every author's
+			// entries, and it returns real answer values, so it is the bulk
+			// read the per-entry guards on detail and delete exist to prevent.
+			$allowed = minn_admin_everest_allowed_form_ids();
+			if ( is_array( $allowed ) ) {
+				if ( ! $allowed ) {
+					return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
+				}
+				if ( $request['form_id'] && ! in_array( (int) $request['form_id'], $allowed, true ) ) {
+					return new WP_Error( 'forbidden', 'You cannot view entries for that form.', array( 'status' => 403 ) );
+				}
+				$where .= ' AND e.form_id IN (' . implode( ',', array_fill( 0, count( $allowed ), '%d' ) ) . ')';
+				$args   = array_merge( $args, $allowed );
+			}
 			if ( $request['form_id'] ) {
 				$where .= ' AND e.form_id = %d';
 				$args[] = (int) $request['form_id'];
