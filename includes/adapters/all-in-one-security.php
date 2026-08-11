@@ -43,6 +43,26 @@ function minn_admin_aios_table() {
 	return $wpdb->base_prefix . 'aiowps_audit_log';
 }
 
+/**
+ * Site scope for the audit log, which lives on base_prefix and is therefore
+ * SHARED BY EVERY SITE on a multisite network.
+ *
+ * AIOS's own audit viewer appends `site_id = get_current_blog_id()` for
+ * anyone who is not a super admin (admin/wp-security-list-audit.php), and
+ * applies the same guard to its deletes. This shim gates on manage_options,
+ * which a SUBSITE administrator holds, so without the same predicate it would
+ * hand a tenant every other tenant's acting usernames, client IPs and, on
+ * failed logins, the ATTEMPTED usernames from neighbouring sites.
+ *
+ * @return array{0:string,1:array} SQL fragment to append, and its args.
+ */
+function minn_admin_aios_site_scope() {
+	if ( ! is_multisite() || is_super_admin() ) {
+		return array( '', array() );
+	}
+	return array( ' AND site_id = %d', array( get_current_blog_id() ) );
+}
+
 /** Temporary lockouts live on the blog prefix (not base_prefix). */
 function minn_admin_aios_lockdown_table() {
 	if ( defined( 'AIOWPSEC_TBL_LOGIN_LOCKOUT' ) ) {
@@ -105,10 +125,10 @@ function minn_admin_aios_login_posture() {
 
 	$audit = minn_admin_aios_table();
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $audit ) ) === $audit ) {
+		list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
 		$out['failed_24h'] = (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$audit} WHERE event_type = %s AND created >= %d",
-			'failed_login',
-			time() - DAY_IN_SECONDS
+			"SELECT COUNT(*) FROM {$audit} WHERE event_type = %s AND created >= %d{$scope_sql}",
+			array_merge( array( 'failed_login', time() - DAY_IN_SECONDS ), $scope_args )
 		) );
 	}
 	// phpcs:enable
@@ -232,8 +252,13 @@ add_action( 'rest_api_init', function () {
 			}
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
+			list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
 			$where    = array( '1=1' );
 			$args     = array();
+			if ( $scope_sql ) {
+				$where[] = 'site_id = %d';
+				$args    = array_merge( $args, $scope_args );
+			}
 			if ( $request['level'] ) {
 				$where[] = 'level = %s';
 				$args[]  = minn_admin_aios_level( $request['level'] );
@@ -277,7 +302,13 @@ add_action( 'rest_api_init', function () {
 			global $wpdb;
 			$table = minn_admin_aios_table();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $request['id'] ) );
+			// Scope like the list route. 404 rather than 403 so the endpoint
+			// never confirms that an out-of-scope id exists.
+			list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
+			$row = $wpdb->get_row( $wpdb->prepare(
+				"SELECT * FROM {$table} WHERE id = %d{$scope_sql}",
+				array_merge( array( (int) $request['id'] ), $scope_args )
+			) );
 			if ( ! $row ) {
 				return new WP_Error( 'not_found', 'Event not found.', array( 'status' => 404 ) );
 			}
@@ -354,11 +385,18 @@ add_action( 'rest_api_init', function () {
 				) );
 			}
 			$now   = time();
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-			$day   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created >= %d", $now - DAY_IN_SECONDS ) );
-			$week  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created >= %d", $now - 7 * DAY_IN_SECONDS ) );
-			$warn  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created >= %d AND level IN ('warning','error','fatal')", $now - 7 * DAY_IN_SECONDS ) );
-			$last  = $wpdb->get_var( "SELECT created FROM {$table} ORDER BY id DESC LIMIT 1" );
+			list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
+			$scoped = function ( $extra, $extra_args ) use ( $wpdb, $table, $scope_sql, $scope_args ) {
+				$sql  = "SELECT COUNT(*) FROM {$table} WHERE 1=1{$extra}{$scope_sql}";
+				$args = array_merge( $extra_args, $scope_args );
+				return (int) ( $args ? $wpdb->get_var( $wpdb->prepare( $sql, $args ) ) : $wpdb->get_var( $sql ) );
+			};
+			$total = $scoped( '', array() );
+			$day   = $scoped( ' AND created >= %d', array( $now - DAY_IN_SECONDS ) );
+			$week  = $scoped( ' AND created >= %d', array( $now - 7 * DAY_IN_SECONDS ) );
+			$warn  = $scoped( " AND created >= %d AND level IN ('warning','error','fatal')", array( $now - 7 * DAY_IN_SECONDS ) );
+			$last_sql  = "SELECT created FROM {$table} WHERE 1=1{$scope_sql} ORDER BY id DESC LIMIT 1";
+			$last  = $scope_args ? $wpdb->get_var( $wpdb->prepare( $last_sql, $scope_args ) ) : $wpdb->get_var( $last_sql );
 			// phpcs:enable
 			$posture = minn_admin_aios_login_posture();
 			$rows    = array(
