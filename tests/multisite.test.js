@@ -294,6 +294,136 @@ async function gotoRoute( page, site, route ) {
 			await ctx.close();
 		}
 
+		// 5b) Scale: the switcher is CAPPED and offers search past the cap, so
+		//     a network with hundreds of sites cannot produce an unusable menu
+		//     (or pay per-site work on every page load).
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
+			await gotoRoute( page, MAIN, 'overview' );
+			const cap = await page.evaluate( () => ( {
+				shown: ( window.MINN.sites || [] ).length,
+				total: window.MINN.sitesTotal || 0,
+			} ) );
+			check( 'boot payload caps the switcher list', cap.shown <= 8, `${ cap.shown } shown of ${ cap.total }` );
+			if ( cap.total > cap.shown ) {
+				const btnBox = await page.evaluate( () => {
+					const r = document.querySelector( '#minn-site-switch' ).getBoundingClientRect();
+					return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+				} );
+				await page.mouse.click( btnBox.x, btnBox.y );
+				await page.waitForTimeout( 400 );
+				const searchBox = await page.evaluate( () => {
+					const btn = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( x ) => /Search all/.test( x.textContent ) );
+					if ( ! btn ) return null;
+					const r = btn.getBoundingClientRect();
+					return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+				} );
+				check( 'a capped menu offers "Search all N sites…"', !! searchBox );
+				if ( searchBox ) {
+					await page.mouse.click( searchBox.x, searchBox.y );
+					await page.waitForSelector( '#minn-sp-q', { timeout: 8000 } );
+					await page.waitForTimeout( 1500 );
+					// Typing must not destroy the field it is typed into: the
+					// modal re-renders on the server response, so this pins
+					// value, caret and focus after a full word.
+					await page.click( '#minn-sp-q' );
+					await page.keyboard.type( 'team1' );
+					await page.waitForTimeout( 1200 );
+					const typed = await page.evaluate( () => {
+						const i = document.querySelector( '#minn-sp-q' );
+						const rows = [ ...document.querySelectorAll( '.minn-sp-row' ) ].filter( ( r ) => ! r.hidden );
+						return {
+							value: i.value,
+							caret: i.selectionStart,
+							focused: document.activeElement === i,
+							names: rows.map( ( r ) => r.querySelector( '.minn-sp-name' ).textContent.trim() ),
+						};
+					} );
+					check( 'the picker keeps every keystroke', typed.value === 'team1', JSON.stringify( typed.value ) );
+					check( 'the picker keeps focus and caret while searching', typed.focused && typed.caret === 5 );
+					check( 'the picker filters to matching sites', typed.names.length > 0 && typed.names.every( ( n ) => /team ?1/i.test( n ) ), typed.names.join( ', ' ) );
+					await page.keyboard.press( 'Escape' );
+				}
+			} else {
+				check( 'lab has enough sites to exercise the cap', false, `${ cap.total } total` );
+			}
+			allErrors.push( ...errors );
+			await ctx.close();
+		}
+
+		// 5c) Network group: the Sites surface, its guards, and the fact that
+		//     it does not exist for a site administrator.
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
+			await gotoRoute( page, MAIN, 'network-sites' );
+			await page.waitForSelector( '#minn-view [data-sitem]', { timeout: 15000 } );
+			const sites = await page.evaluate( () => ( {
+				navGroup: !! document.querySelector( '#minn-navgrp-network:not([hidden])' ),
+				navItems: [ ...document.querySelectorAll( '#minn-navgrp-network .minn-nav-btn' ) ].map( ( b ) => b.textContent.trim() ),
+				rows: document.querySelectorAll( '#minn-view [data-sitem]' ).length,
+				tabs: [ ...document.querySelectorAll( '#minn-view .minn-tab' ) ].map( ( t ) => t.textContent.trim() ),
+				status: !! document.querySelector( '#minn-view' ).textContent.match( /Subdomain network|Subdirectory network/ ),
+			} ) );
+			check( 'Network nav group renders for a super admin', sites.navGroup && sites.navItems.includes( 'Sites' ), sites.navItems.join( ', ' ) );
+			check( 'Sites lists the network', sites.rows > 1, `${ sites.rows } rows` );
+			check( 'Sites offers status tabs', sites.tabs.some( ( t ) => /Archived/.test( t ) ) && sites.tabs.some( ( t ) => /Spam/.test( t ) ), sites.tabs.join( ' | ' ) );
+			check( 'Sites shows the network status card', sites.status );
+
+			// Row verbs: an ordinary site offers the lifecycle; the MAIN site
+			// never offers archive, spam or delete (its row menu is read-only).
+			const rowMenu = async ( match ) => {
+				await page.evaluate( () => document.querySelectorAll( '.minn-ctx-menu' ).forEach( ( m ) => m.remove() ) );
+				const ok = await page.evaluate( ( mm ) => {
+					const row = [ ...document.querySelectorAll( '#minn-view [data-sitem]' ) ].find( ( r ) => new RegExp( mm ).test( r.textContent ) );
+					if ( ! row ) return false;
+					const more = row.querySelector( '.minn-row-more' );
+					if ( ! more ) return false;
+					more.click();
+					return true;
+				}, match );
+				if ( ! ok ) return null;
+				await page.waitForTimeout( 500 );
+				return page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu > *' ) ].map( ( b ) => b.textContent.trim() ) );
+			};
+			const mainName = await page.evaluate( () => {
+				const s = ( window.MINN.sites || [] ).find( ( x ) => x.id === 1 );
+				return s ? s.name : '';
+			} );
+			const ordinary = await rowMenu( 'Team' );
+			check( 'an ordinary site offers the lifecycle verbs',
+				ordinary && ordinary.some( ( e ) => /Archive site/.test( e ) ) && ordinary.some( ( e ) => /Delete site/.test( e ) ),
+				( ordinary || [] ).join( ' | ' ) );
+			if ( mainName ) {
+				const main = await rowMenu( mainName.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) );
+				check( 'the main site offers NO archive, spam or delete',
+					main && ! main.some( ( e ) => /(Archive site|Mark as spam|Delete site)/.test( e ) ),
+					( main || [] ).join( ' | ' ) );
+			}
+			await page.keyboard.press( 'Escape' );
+			allErrors.push( ...errors );
+			await ctx.close();
+		}
+
+		// 5d) A site administrator is not a network administrator.
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, STORE, SUBSITE_ADMIN.user, SUBSITE_ADMIN.pass );
+			await gotoRoute( page, STORE, 'overview' );
+			const denied = await page.evaluate( async () => {
+				const grp = document.querySelector( '#minn-navgrp-network' );
+				const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/network/sites', {
+					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+				} );
+				return { navHidden: ! grp || grp.hidden, status: r.status };
+			} );
+			check( 'site administrator sees no Network group', denied.navHidden );
+			check( 'network routes refuse a site administrator', denied.status === 403, String( denied.status ) );
+			// The 403 above is the point of the check, not an app error.
+			await ctx.close();
+		}
+
 		// 6) The switcher HIDES for a user who belongs to only one site —
 		//    a menu with nothing to switch to is worse than no control.
 		{
