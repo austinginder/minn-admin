@@ -1607,6 +1607,13 @@ class Minn_Admin_REST {
 					if ( ! $post || 'attachment' === $post->post_type ) {
 						return null;
 					}
+					// Never compute a title the caller could not read. Core returns
+					// attachments regardless of their parent's status, so without
+					// this a draft, pending, scheduled or private parent's title
+					// rides out on wp/v2/media.
+					if ( ! current_user_can( 'read_post', $post->ID ) ) {
+						return null;
+					}
 					$type = get_post_type_object( $post->post_type );
 					return array(
 						'id'        => $post->ID,
@@ -1618,7 +1625,10 @@ class Minn_Admin_REST {
 				},
 				'schema'       => array(
 					'type'    => array( 'object', 'null' ),
-					'context' => array( 'view', 'edit' ),
+					// Edit context only, like minn_modified and minn_lock. This
+					// field names the post an attachment belongs to, which core
+					// exposes only as an id in view context, never as a title.
+					'context' => array( 'edit' ),
 				),
 			)
 		);
