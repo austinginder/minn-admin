@@ -5946,7 +5946,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'generated'  => current_time( 'c' ),
 				'checks'     => $checks,
 				'config'     => self::config_state(),
-				'logs'       => Minn_Admin_Logs::list_payload(),
+				// The log routes are network-gated on multisite (wp-content's
+				// debug.log is shared by every subsite), so don't advertise
+				// sources this user's reads would 403 on — an empty list also
+				// drops the whole Debug card client-side when the config
+				// toggles are super-admin-locked too.
+				'logs'       => self::can_read_logs() ? Minn_Admin_Logs::list_payload() : array(),
 				'licenses'   => $licenses,
 				'extensions' => self::extensions_manifest(),
 				// Live registry of everything hooked into Minn, with owner
