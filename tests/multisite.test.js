@@ -406,6 +406,65 @@ async function gotoRoute( page, site, route ) {
 			await ctx.close();
 		}
 
+		// 5c2) Network users: the list, and the two guards that matter — a
+		//      network administrator is never offered "make one", and the
+		//      person doing the looking can never revoke their own status.
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
+			await gotoRoute( page, MAIN, 'network-users' );
+			await page.waitForSelector( '#minn-view [data-sitem]', { timeout: 15000 } );
+			const nu = await page.evaluate( () => ( {
+				navItems: [ ...document.querySelectorAll( '#minn-navgrp-network .minn-nav-btn' ) ].map( ( b ) => b.textContent.trim() ),
+				rows: document.querySelectorAll( '#minn-view [data-sitem]' ).length,
+				supers: [ ...document.querySelectorAll( '#minn-view [data-sitem]' ) ].filter( ( r ) => /network admin/.test( r.textContent ) ).length,
+				tabs: [ ...document.querySelectorAll( '#minn-view .minn-tab' ) ].map( ( t ) => t.textContent.trim() ),
+			} ) );
+			check( 'Network group carries a users surface', nu.navItems.some( ( n ) => /users/i.test( n ) ), nu.navItems.join( ', ' ) );
+			check( 'network users lists every account', nu.rows > 1, `${ nu.rows } rows` );
+			check( 'network administrators are marked', nu.supers >= 1 );
+			check( 'network users offers an admins tab', nu.tabs.some( ( t ) => /admin/i.test( t ) ), nu.tabs.join( ' | ' ) );
+
+			const rowMenu = async ( pick ) => {
+				await page.evaluate( () => document.querySelectorAll( '.minn-ctx-menu' ).forEach( ( m ) => m.remove() ) );
+				const ok = await page.evaluate( ( wantSuper ) => {
+					const rows = [ ...document.querySelectorAll( '#minn-view [data-sitem]' ) ];
+					const row = rows.find( ( r ) => /network admin/.test( r.textContent ) === wantSuper );
+					if ( ! row ) return false;
+					const more = row.querySelector( '.minn-row-more' );
+					if ( ! more ) return false;
+					more.click();
+					return true;
+				}, pick );
+				if ( ! ok ) return null;
+				await page.waitForTimeout( 500 );
+				return page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu > *' ) ].map( ( b ) => b.textContent.trim() ) );
+			};
+			const member = await rowMenu( false );
+			check( 'an ordinary account can be promoted', member && member.some( ( e ) => /Make network administrator/.test( e ) ), ( member || [] ).join( ' | ' ) );
+			const superRow = await rowMenu( true );
+			check( 'a network administrator is not offered promotion again',
+				superRow && ! superRow.some( ( e ) => /Make network administrator/.test( e ) ), ( superRow || [] ).join( ' | ' ) );
+			check( 'the only network administrator cannot be demoted here',
+				superRow && ! superRow.some( ( e ) => /Remove network administrator/.test( e ) ), ( superRow || [] ).join( ' | ' ) );
+
+			// The server refuses a self-revoke even when asked directly.
+			const direct = await page.evaluate( async () => {
+				const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/network/users/' + window.MINN.user.id + '/super', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+					credentials: 'same-origin',
+					body: JSON.stringify( { on: false } ),
+				} );
+				const j = await r.json();
+				return { status: r.status, code: j.code };
+			} );
+			check( 'the server refuses a self-revoke', direct.status === 400 && direct.code === 'cannot_revoke_self', JSON.stringify( direct ) );
+			await page.keyboard.press( 'Escape' );
+			allErrors.push( ...errors );
+			await ctx.close();
+		}
+
 		// 5d) A site administrator is not a network administrator.
 		{
 			const { ctx, page, errors } = await ctxFor( browser );

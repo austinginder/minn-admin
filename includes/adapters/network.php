@@ -265,6 +265,137 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
+/**
+ * Whether network-administrator status can be changed at all.
+ *
+ * Defining $super_admins in wp-config.php pins the list in code, and core's
+ * grant_super_admin()/revoke_super_admin() then return false without doing
+ * anything. Offering buttons that silently no-op is worse than saying why,
+ * so the rows explain instead.
+ */
+function minn_admin_network_super_admins_locked() {
+	return isset( $GLOBALS['super_admins'] );
+}
+
+/** One network user's row. */
+function minn_admin_network_user_row( $user, $site_counts = array(), $super_count = 0 ) {
+	$id     = (int) $user->ID;
+	$super  = is_super_admin( $id );
+	$self   = $id === get_current_user_id();
+	$locked = minn_admin_network_super_admins_locked();
+	return array(
+		'id'         => $id,
+		'name'       => $user->display_name,
+		'email'      => $user->user_email,
+		'username'   => $user->user_login,
+		'sites'      => isset( $site_counts[ $id ] ) ? (int) $site_counts[ $id ] : 0,
+		'registered' => mysql_to_rfc3339( $user->user_registered ),
+		'status'     => $super ? 'network admin' : 'member',
+		// Gates (the routes re-derive all of these):
+		// never grant twice, never revoke your own status (that is a
+		// self-lockout) and never revoke the last network administrator.
+		'canGrant'   => ( ! $super && ! $locked ) ? '1' : '0',
+		'canRevoke'  => ( $super && ! $self && ! $locked && $super_count > 1 ) ? '1' : '0',
+	);
+}
+
+/**
+ * How many sites each listed user belongs to, in ONE query.
+ *
+ * Membership is a per-site capabilities meta row ({base_prefix}capabilities,
+ * {base_prefix}N_capabilities), so counting those rows per user beats calling
+ * get_blogs_of_user() once per row. The LIKE is anchored to this network's
+ * table prefix; a stray plugin key ending in "capabilities" would inflate a
+ * count, which is a display number only and never a permission input.
+ *
+ * @param int[] $user_ids Users on the current page.
+ * @return array<int,int> user id => site count.
+ */
+function minn_admin_network_site_counts( $user_ids ) {
+	global $wpdb;
+	if ( ! $user_ids ) {
+		return array();
+	}
+	$ids  = implode( ',', array_map( 'intval', $user_ids ) );
+	$like = $wpdb->esc_like( $wpdb->base_prefix ) . '%' . $wpdb->esc_like( 'capabilities' );
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- ids cast to int above.
+	$rows = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT user_id, COUNT(*) AS n FROM {$wpdb->usermeta}
+			 WHERE user_id IN ({$ids}) AND meta_key LIKE %s GROUP BY user_id",
+			$like
+		)
+	);
+	// phpcs:enable
+	$out = array();
+	foreach ( (array) $rows as $r ) {
+		$out[ (int) $r->user_id ] = (int) $r->n;
+	}
+	return $out;
+}
+
+add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+	if ( ! minn_admin_network_can( 'manage_network_users' ) ) {
+		return $surfaces;
+	}
+	$locked = minn_admin_network_super_admins_locked();
+
+	$surfaces['network-users'] = array(
+		'label'      => __( 'Network users', 'minn-admin' ),
+		'group'      => 'network',
+		'icon'       => 'users',
+		'cap'        => 'manage_network_users',
+		'status'     => array( 'route' => 'minn-admin/v1/network/users/status' ),
+		'collection' => array(
+			'route'    => 'minn-admin/v1/network/users',
+			'itemsKey' => 'items',
+			'totalKey' => 'total',
+			'search'   => 'search={q}',
+			'tabs'     => array(
+				'param'    => 'kind',
+				'allLabel' => __( 'All accounts', 'minn-admin' ),
+				'static'   => array(
+					array( 'super', __( 'Network admins', 'minn-admin' ) ),
+				),
+			),
+			'columns'  => array(
+				array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1fr)' ),
+				array( 'key' => 'email', 'label' => __( 'Email', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
+				array( 'key' => 'sites', 'label' => __( 'Sites', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
+				array( 'key' => 'registered', 'label' => __( 'Joined', 'minn-admin' ), 'format' => 'ago', 'utc' => true, 'width' => '120px' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '130px' ),
+			),
+			'detail'   => array(
+				'skip' => array( 'canGrant', 'canRevoke' ),
+			),
+			'actions'  => array(
+				array(
+					'label'   => __( 'Make network administrator', 'minn-admin' ),
+					'route'   => 'minn-admin/v1/network/users/{id}/super',
+					'body'    => array( 'on' => true ),
+					'when'    => array( 'key' => 'canGrant', 'equals' => '1' ),
+					'confirm' => __( 'Give this account full control of every site on the network?', 'minn-admin' ),
+				),
+				array(
+					'label'   => __( 'Remove network administrator', 'minn-admin' ),
+					'route'   => 'minn-admin/v1/network/users/{id}/super',
+					'body'    => array( 'on' => false ),
+					'when'    => array( 'key' => 'canRevoke', 'equals' => '1' ),
+					'confirm' => __( 'Take away network-wide control? They keep their role on each site.', 'minn-admin' ),
+				),
+				// Account creation and deletion stay in Network Admin: deleting
+				// a network account removes that person's posts on every site,
+				// and only wp-admin's own flow offers to reassign them first.
+				array( 'label' => __( 'Edit in Network Admin ↗', 'minn-admin' ), 'href' => network_admin_url( 'user-edit.php?user_id={id}' ) ),
+			),
+		),
+	);
+	if ( $locked ) {
+		$surfaces['network-users']['sub'] = __( 'Set in wp-config', 'minn-admin' );
+	}
+	return $surfaces;
+} );
+
 add_action( 'rest_api_init', function () {
 	if ( ! is_multisite() ) {
 		return;
@@ -272,6 +403,30 @@ add_action( 'rest_api_init', function () {
 	$manage = function () {
 		return minn_admin_network_can( 'manage_sites' );
 	};
+	$users = function () {
+		return minn_admin_network_can( 'manage_network_users' );
+	};
+
+	register_rest_route( 'minn-admin/v1', '/network/users', array(
+		'methods'             => 'GET',
+		'permission_callback' => $users,
+		'callback'            => 'minn_admin_network_users_list',
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/network/users/(?P<id>\d+)/super', array(
+		'methods'             => 'POST',
+		'permission_callback' => $users,
+		'callback'            => 'minn_admin_network_user_super',
+		'args'                => array(
+			'on' => array( 'type' => 'boolean', 'required' => true ),
+		),
+	) );
+
+	register_rest_route( 'minn-admin/v1', '/network/users/status', array(
+		'methods'             => 'GET',
+		'permission_callback' => $users,
+		'callback'            => 'minn_admin_network_users_status',
+	) );
 
 	register_rest_route( 'minn-admin/v1', '/network/sites', array(
 		array(
@@ -529,6 +684,144 @@ function minn_admin_network_site_delete( WP_REST_Request $request ) {
 		return $result;
 	}
 	return rest_ensure_response( array( 'deleted' => true, 'id' => $id ) );
+}
+
+/** GET /network/users — every account on the network, paginated. */
+function minn_admin_network_users_list( WP_REST_Request $request ) {
+	$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
+	$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
+	$search   = trim( (string) $request['search'] );
+	$kind     = sanitize_key( (string) $request['kind'] );
+
+	$args = array(
+		'number'  => $per_page,
+		'paged'   => $page,
+		'orderby' => 'registered',
+		'order'   => 'DESC',
+		'blog_id' => 0, // network-wide, not this site's members
+		'fields'  => 'all',
+	);
+	if ( '' !== $search ) {
+		$args['search']         = '*' . $search . '*';
+		$args['search_columns'] = array( 'user_login', 'user_email', 'display_name' );
+	}
+	// The network-admins tab: get_super_admins() is a login list, so resolve
+	// it to ids and constrain the query rather than filtering after paging
+	// (which would report the wrong total).
+	if ( 'super' === $kind ) {
+		$ids = array();
+		foreach ( (array) get_super_admins() as $login ) {
+			$u = get_user_by( 'login', $login );
+			if ( $u ) {
+				$ids[] = (int) $u->ID;
+			}
+		}
+		if ( ! $ids ) {
+			return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
+		}
+		$args['include'] = $ids;
+	}
+
+	$query = new WP_User_Query( $args );
+	$users = (array) $query->get_results();
+	$total = (int) $query->get_total();
+
+	$ids         = array_map( function ( $u ) { return (int) $u->ID; }, $users );
+	$counts      = minn_admin_network_site_counts( $ids );
+	$super_count = count( (array) get_super_admins() );
+	$items       = array();
+	foreach ( $users as $user ) {
+		$items[] = minn_admin_network_user_row( $user, $counts, $super_count );
+	}
+	return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+}
+
+/**
+ * POST /network/users/{id}/super — grant or revoke network-administrator
+ * status, with the guards core leaves to the screen: nobody may revoke their
+ * own status (a self-lockout), and the last network administrator stays.
+ */
+function minn_admin_network_user_super( WP_REST_Request $request ) {
+	require_once ABSPATH . 'wp-admin/includes/ms.php';
+	$url = $request->get_url_params();
+	$id  = isset( $url['id'] ) ? (int) $url['id'] : 0;
+	$on  = (bool) $request['on'];
+
+	$user = $id ? get_userdata( $id ) : null;
+	if ( ! $user ) {
+		return new WP_Error( 'no_such_user', __( 'That account does not exist.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	if ( minn_admin_network_super_admins_locked() ) {
+		return new WP_Error(
+			'locked',
+			__( 'Network administrators are set in wp-config.php on this network, so they cannot be changed here.', 'minn-admin' ),
+			array( 'status' => 400 )
+		);
+	}
+	$is_super = is_super_admin( $id );
+	if ( ! $on ) {
+		if ( $id === get_current_user_id() ) {
+			return new WP_Error(
+				'cannot_revoke_self',
+				__( 'You cannot remove your own network-administrator status. Ask another network administrator to do it.', 'minn-admin' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( ! $is_super ) {
+			return new WP_Error( 'not_super', __( 'That account is not a network administrator.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( count( (array) get_super_admins() ) <= 1 ) {
+			return new WP_Error(
+				'last_super_admin',
+				__( 'This is the only network administrator. Promote someone else first.', 'minn-admin' ),
+				array( 'status' => 400 )
+			);
+		}
+		revoke_super_admin( $id );
+	} else {
+		if ( $is_super ) {
+			return new WP_Error( 'already_super', __( 'That account is already a network administrator.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		grant_super_admin( $id );
+	}
+	$fresh = get_userdata( $id );
+	return rest_ensure_response(
+		minn_admin_network_user_row(
+			$fresh,
+			minn_admin_network_site_counts( array( $id ) ),
+			count( (array) get_super_admins() )
+		)
+	);
+}
+
+/** GET /network/users/status — the card above the network users list. */
+function minn_admin_network_users_status() {
+	$supers = (array) get_super_admins();
+	$rows   = array(
+		array(
+			'label' => __( 'Accounts', 'minn-admin' ),
+			'value' => function_exists( 'get_user_count' ) ? number_format_i18n( (int) get_user_count() ) : '—',
+			'hint'  => __( 'One account works across every site on the network', 'minn-admin' ),
+		),
+		array(
+			'label' => __( 'Network administrators', 'minn-admin' ),
+			'value' => number_format_i18n( count( $supers ) ),
+			'hint'  => minn_admin_network_super_admins_locked()
+				? __( 'Set in wp-config.php, so they cannot be changed here', 'minn-admin' )
+				: __( 'Full control of every site and of the network itself', 'minn-admin' ),
+		),
+		array(
+			'label' => __( 'New accounts', 'minn-admin' ),
+			'value' => minn_admin_network_registration_label(),
+			'hint'  => __( 'Accounts are created in Network Admin', 'minn-admin' ),
+		),
+	);
+	$actions = array();
+	if ( current_user_can( 'manage_network' ) ) {
+		$actions[] = array( 'label' => __( 'Add account ↗', 'minn-admin' ), 'href' => network_admin_url( 'user-new.php' ) );
+		$actions[] = array( 'label' => __( 'Network Admin ↗', 'minn-admin' ), 'href' => network_admin_url( 'users.php' ) );
+	}
+	return rest_ensure_response( array( 'rows' => $rows, 'actions' => $actions ) );
 }
 
 /** GET /network/status — the card above the Sites list. */
