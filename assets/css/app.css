@@ -218,6 +218,25 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-site-switch:hover { background: var(--panel2); color: var(--text); }
 .minn-site-switch svg { width: 15px; height: 15px; }
+/* Inline multisite finder: menu-sized, one quiet field, five results max. */
+.minn-site-switch-menu { width: 238px; }
+.minn-site-switch-search {
+  display: flex; align-items: center; gap: 7px; margin: 4px; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg2);
+  color: var(--text3);
+}
+.minn-site-switch-search:focus-within { border-color: var(--accent); color: var(--text2); }
+.minn-site-switch-search svg { width: 14px; height: 14px; flex: none; }
+.minn-site-switch-search input {
+  width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: none;
+  color: var(--text); font: inherit; font-size: 13px;
+}
+.minn-site-switch-search input::placeholder { color: var(--text3); }
+/* Chromium paints a bulky clear button into type=search by default. */
+.minn-site-switch-search input::-webkit-search-cancel-button { display: none; }
+.minn-site-switch-menu #minn-site-switch-results button { padding-top: 7px; padding-bottom: 7px; }
+.minn-site-switch-menu #minn-site-switch-results button.is-keyboard { background: var(--hover); }
+.minn-site-switch-empty { padding: 8px 11px; color: var(--text3); font-size: 12.5px; }
 /* Site picker (networks with more sites than the switcher menu holds). */
 .minn-sp-list { max-height: 52vh; overflow-y: auto; padding: 0 10px 12px; }
 .minn-sp-row {

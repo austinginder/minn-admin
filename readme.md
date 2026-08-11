@@ -69,7 +69,8 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   language, sessions, plus the user's **Minn appearance set by an admin** (color scheme
   including custom palettes, default admin, toolbar) so a client's Minn looks right before
   their first sign-in, and a **Hidden for them** card restoring anything they hid
-- **Multisite** — switch among the sites you can use from the sidebar or command palette;
+- **Multisite** — fuzzy-search the sites you can use from a compact sidebar switcher or
+  the command palette;
   subsite administrators can add existing network accounts, change roles, and remove site
   memberships. Network administrators get first-class **Sites**, **Network users**, and
   **Network settings** surfaces, plus network-wide plugin activation, theme availability,

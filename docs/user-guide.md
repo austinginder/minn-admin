@@ -63,14 +63,15 @@ switcher inside, instead of three lookalike menus. The view stays the same;
 the provider changes.
 
 **On a network**, a small chevron sits beside the site name at the top of
-the sidebar. It lists every site on the network you can work on, marks the
-one you are in, and takes you straight to Minn on any other. Network
+the sidebar. It opens a short list of sites you can work on and takes you
+straight to Minn on any other. Network
 administrators also get a link to Network Admin from there, since account
 creation and deletion, the long tail of network settings, restores, exports
 and network setup stay with WordPress. The palette knows the sites too: press
 ⌘K and type "switch", or just start typing a site's name. The chevron does
-not appear when you belong to only one site, and on a large network the menu
-stays short and offers a search instead.
+not appear when you belong to only one site. Its menu opens with search already
+focused, fuzzy-matches site names and addresses, and shows no more than five
+matches at once even on a large network.
 
 **If you run the network**, a fourth sidebar group appears: Network. Sites
 lists every site with its address, members and state, filters for archived

@@ -227,8 +227,8 @@ async function gotoRoute( page, site, route ) {
 			await ctx.close();
 		}
 
-		// 5) Site switcher (Phase 2 glue): the super admin's list carries every
-		//    site, marks the current one, and a REAL click navigates there.
+		// 5) Site switcher: the compact menu carries an autofocused inline
+		//    finder, keeps its result set short, and a REAL click navigates.
 		{
 			const { ctx, page, errors } = await ctxFor( browser );
 			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
@@ -259,12 +259,15 @@ async function gotoRoute( page, site, route ) {
 					count: kids.length,
 					firstIsHeading: kids[ 0 ] && kids[ 0 ].classList.contains( 'minn-new-menu-label' ),
 					firstBorder: kids[ 0 ] && getComputedStyle( kids[ 0 ] ).borderTopWidth,
-					current: kids.filter( ( el ) => el.classList.contains( 'is-on' ) ).length,
+					search: !! m.querySelector( '#minn-site-switch-q' ),
+					focused: document.activeElement === m.querySelector( '#minn-site-switch-q' ),
+					results: m.querySelectorAll( '#minn-site-switch-results button' ).length,
 					hasNetwork: kids.some( ( el ) => /Network Admin/.test( el.textContent ) ),
 				};
 			} );
 			check( 'switcher opens a menu', !! menu );
-			check( 'menu marks the current site', menu && menu.current === 1 );
+			check( 'inline site search is autofocused', menu && menu.search && menu.focused );
+			check( 'switcher shows no more than five sites', menu && menu.results > 0 && menu.results <= 5, menu && menu.results );
 			check( 'super admin gets a Network Admin entry', menu && menu.hasNetwork );
 			// Regression: a heading that OPENS a menu draws no separator.
 			check( 'no stranded divider above the leading heading',
@@ -294,9 +297,8 @@ async function gotoRoute( page, site, route ) {
 			await ctx.close();
 		}
 
-		// 5b) Scale: the switcher is CAPPED and offers search past the cap, so
-		//     a network with hundreds of sites cannot produce an unusable menu
-		//     (or pay per-site work on every page load).
+		// 5b) Scale: the boot list stays capped, while the inline finder fuzzy
+		//     searches the full membership and returns no more than five rows.
 		{
 			const { ctx, page, errors } = await ctxFor( browser );
 			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
@@ -304,6 +306,7 @@ async function gotoRoute( page, site, route ) {
 			const cap = await page.evaluate( () => ( {
 				shown: ( window.MINN.sites || [] ).length,
 				total: window.MINN.sitesTotal || 0,
+				names: ( window.MINN.sites || [] ).map( ( s ) => s.name ),
 			} ) );
 			check( 'boot payload caps the switcher list', cap.shown <= 8, `${ cap.shown } shown of ${ cap.total }` );
 			if ( cap.total > cap.shown ) {
@@ -312,39 +315,34 @@ async function gotoRoute( page, site, route ) {
 					return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
 				} );
 				await page.mouse.click( btnBox.x, btnBox.y );
-				await page.waitForTimeout( 400 );
-				const searchBox = await page.evaluate( () => {
-					const btn = [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( x ) => /Search all/.test( x.textContent ) );
-					if ( ! btn ) return null;
-					const r = btn.getBoundingClientRect();
-					return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+				await page.waitForSelector( '#minn-site-switch-q', { timeout: 8000 } );
+				check( 'the remote fixture is outside the boot cap', ! cap.names.some( ( n ) => /Team 10/i.test( n ) ), cap.names.join( ', ' ) );
+				// Ordered-subsequence search proves this is fuzzy ("tm10" is
+				// not a literal substring) and reaches beyond the boot payload.
+				await page.keyboard.type( 'tm10' );
+				await page.waitForTimeout( 1200 );
+				const typed = await page.evaluate( () => {
+					const input = document.querySelector( '#minn-site-switch-q' );
+					const rows = [ ...document.querySelectorAll( '#minn-site-switch-results button' ) ];
+					return {
+						value: input.value,
+						caret: input.selectionStart,
+						focused: document.activeElement === input,
+						names: rows.map( ( row ) => row.textContent.trim() ),
+					};
 				} );
-				check( 'a capped menu offers "Search all N sites…"', !! searchBox );
-				if ( searchBox ) {
-					await page.mouse.click( searchBox.x, searchBox.y );
-					await page.waitForSelector( '#minn-sp-q', { timeout: 8000 } );
-					await page.waitForTimeout( 1500 );
-					// Typing must not destroy the field it is typed into: the
-					// modal re-renders on the server response, so this pins
-					// value, caret and focus after a full word.
-					await page.click( '#minn-sp-q' );
-					await page.keyboard.type( 'team1' );
-					await page.waitForTimeout( 1200 );
-					const typed = await page.evaluate( () => {
-						const i = document.querySelector( '#minn-sp-q' );
-						const rows = [ ...document.querySelectorAll( '.minn-sp-row' ) ].filter( ( r ) => ! r.hidden );
-						return {
-							value: i.value,
-							caret: i.selectionStart,
-							focused: document.activeElement === i,
-							names: rows.map( ( r ) => r.querySelector( '.minn-sp-name' ).textContent.trim() ),
-						};
-					} );
-					check( 'the picker keeps every keystroke', typed.value === 'team1', JSON.stringify( typed.value ) );
-					check( 'the picker keeps focus and caret while searching', typed.focused && typed.caret === 5 );
-					check( 'the picker filters to matching sites', typed.names.length > 0 && typed.names.every( ( n ) => /team ?1/i.test( n ) ), typed.names.join( ', ' ) );
-					await page.keyboard.press( 'Escape' );
-				}
+				check( 'inline search keeps every keystroke', typed.value === 'tm10', JSON.stringify( typed.value ) );
+				check( 'inline search keeps focus and caret', typed.focused && typed.caret === 4 );
+				check( 'fuzzy search reaches a site outside the boot cap', typed.names.some( ( n ) => /Team 10/i.test( n ) ), typed.names.join( ', ' ) );
+				check( 'fuzzy results stay compact', typed.names.length > 0 && typed.names.length <= 5, `${ typed.names.length } rows` );
+				await page.keyboard.press( 'ArrowDown' );
+				const selected = await page.evaluate( () => {
+					const button = document.querySelector( '#minn-site-switch-results button[aria-selected="true"]' );
+					return button ? button.textContent.trim() : '';
+				} );
+				check( 'arrow keys select a switcher result', /Team 10/i.test( selected ), selected );
+				await page.keyboard.press( 'Escape' );
+				check( 'Escape closes the switcher', ! await page.$( '.minn-site-switch-menu' ) );
 			} else {
 				check( 'lab has enough sites to exercise the cap', false, `${ cap.total } total` );
 			}
