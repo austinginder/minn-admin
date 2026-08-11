@@ -69,6 +69,13 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   language, sessions, plus the user's **Minn appearance set by an admin** (color scheme
   including custom palettes, default admin, toolbar) so a client's Minn looks right before
   their first sign-in, and a **Hidden for them** card restoring anything they hid
+- **Multisite** — switch among the sites you can use from the sidebar or command palette;
+  subsite administrators can add existing network accounts, change roles, and remove site
+  memberships. Network administrators get first-class **Sites**, **Network users**, and
+  **Network settings** surfaces, plus network-wide plugin activation, theme availability,
+  and post-core-update database migrations. Main/current-site, self-lockout, and last-admin
+  guards protect destructive actions; account creation/deletion, the long settings tail,
+  and very large network upgrades link to WordPress Network Admin
 - **Your profile** — a full page at `/minn-admin/profile`: account, public profile (first/last
   name, website, bio, Gravatar), **per-user language** with automatic pack installs, the
   front-end toolbar preference, appearance, hidden integrations, and login sessions

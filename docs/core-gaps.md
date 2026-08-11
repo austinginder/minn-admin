@@ -22,7 +22,10 @@ synced patterns; marked below), and the Media section's folders verdict
 was stale: the browse-first provider contract (Wave D) had already
 shipped in the v0.18.0 cycle, corrected below. The v0.24.0 cycle so far
 is adapter depth (WPForms entries, forms status cards, FluentSMTP) and
-changes no core-gap status. Still open: block-theme surfaces, builder
+changes no core-gap status. Re-checked 2026-08-11 at v0.28.0 open:
+multisite moved from defensive degradation to daily network operations;
+the section below now records the shipped surface and its deliberate
+boundaries. Still open: block-theme surfaces, builder
 theme templates, bulk category/author edit. Minn's
 positioning grades these: daily work belongs in Minn, the long tail stays
 one click away in wp-admin. Each area below gets a status and a judgment on
@@ -214,10 +217,27 @@ v0.20.0 cycle: inline comment editing (text always; author name/email for
 guest comments) and Block commenter (adds the author's email or IP to
 core's disallowed list, visible under Settings → Comments, with Undo).
 
-### Multisite — non-goal, degrades sanely
-Defensive gating exists (`manage_network_users`, super-admin file-mod
-checks, System report row). No network surfaces, no visible hard breakage on
-a subsite.
+### Multisite — daily network operations covered
+Minn boots on main sites and subsites, heals routes after network activation,
+and offers a capped, searchable site switcher in the sidebar and command
+palette. A subsite administrator gets the site's full Users list with role
+changes, add-existing-account and remove-membership actions; network
+administrators are protected from those per-site controls.
+
+Network administrators get first-class Sites, Network users and Network
+settings surfaces. The daily slice covers site creation and lifecycle,
+network-administrator promotion and revocation, registration, uploads, site
+administrator permissions and network mail. Extensions adds network-wide
+plugin activation and theme availability, and a core update runs the required
+database migration across each subsite.
+
+The boundary is deliberate: network account creation/deletion, welcome
+emails, first-post text, reserved names, language defaults, restores, exports
+and network setup stay in WordPress Network Admin. Very large networks use
+WordPress's Upgrade Network screen rather than a request-bound site walk.
+Network-shared logs, database tables and plugin data are either scoped by site
+or restricted to super administrators; a per-site `manage_options` check is
+never treated as permission to read the whole network.
 
 ### Structural observation — REST-only is a hard boundary
 Anything not exposed to REST is invisible to Minn by construction: CPTs and

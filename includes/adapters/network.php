@@ -3,9 +3,10 @@
  * Bundled adapter: Network (multisite).
  *
  * The Network nav group — surfaces that belong to the whole network rather
- * than the site you happen to be standing in. This one covers SITES: the
- * list, its states (public, archived, spam, deleted), creating one, and the
- * lifecycle verbs, each through core's own multisite functions.
+ * than the site you happen to be standing in. It covers Sites, Network users
+ * and the daily slice of Network settings. This adapter also owns the
+ * network-wide plugin activation and theme-availability actions shown in
+ * Extensions. Every mutation rides core's own multisite functions.
  *
  * Deliberately built on the ordinary surface descriptor contract rather than
  * bespoke client code (docs/for-plugin-authors.md): the list, tabs, search,
@@ -21,9 +22,9 @@
  * UI — those flags decide what to OFFER, never what to allow.
  *
  * Not covered here on purpose: per-site option editing (that is the site's
- * own Settings, one click away through "Open in Minn") and network settings
- * (Network Admin). Restores, exports and the network setup screen stay in
- * wp-admin.
+ * own Settings, one click away through "Open in Minn"), network account
+ * creation/deletion, and the long tail of network settings. Restores,
+ * exports and the network setup screen stay in wp-admin.
  *
  * @package minn-admin
  */
