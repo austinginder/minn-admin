@@ -24,7 +24,12 @@ const STATS = ( a, b, c ) => `<!-- wp:acme/stats -->\n<div class="wp-block-acme-
 const PLAIN = '<!-- wp:paragraph -->\n<p>A plain intro line.</p>\n<!-- /wp:paragraph -->';
 const GRP = ( a, b, c ) => `<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class="wp-block-group">${ PLAIN }\n\n${ P( a ) }\n\n${ P( b ) }\n\n${ P( c ) }</div>\n<!-- /wp:group -->`;
 
-const CONTENT = STATS( 'Type:', 'Residential', 'Location:' ) + '\n\n' + GRP( 'Completed:', '2024', 'Size:' ) + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
+// Gallery with the safe-settings form (columns/crop regenerate figure
+// classes on Apply; expectations are byte-exact strings built here).
+const GIMG = ( id ) => `<!-- wp:image {"id":${ id },"sizeSlug":"large","linkDestination":"none"} -->\n<figure class="wp-block-image size-large"><img src="/wp-content/uploads/gal-red.png" alt="" class="wp-image-${ id }"/></figure>\n<!-- /wp:image -->`;
+const GAL = ( attrs, cls ) => `<!-- wp:gallery ${ attrs } -->\n<figure class="${ cls }">${ GIMG( 901 ) }\n\n${ GIMG( 902 ) }</figure>\n<!-- /wp:gallery -->`;
+
+const CONTENT = STATS( 'Type:', 'Residential', 'Location:' ) + '\n\n' + GRP( 'Completed:', '2024', 'Size:' ) + '\n\n' + GAL( '{"linkTo":"none"}', 'wp-block-gallery has-nested-images columns-default is-cropped' ) + '\n\n<!-- wp:paragraph -->\n<p>Tail.</p>\n<!-- /wp:paragraph -->';
 
 ( async () => {
 	const t = reporter( 'content-editor' );
@@ -195,6 +200,29 @@ const CONTENT = STATS( 'Type:', 'Residential', 'Location:' ) + '\n\n' + GRP( 'Co
 		raw = await saveAndRead( id );
 		t.check( 'modal edit survives a slot edit + save', /Sq\. footage:/.test( raw ) && ! /<p class="has-small-font-size">Size:/.test( raw ) );
 		t.check( 'typed slot edit saved alongside it', /A plain intro line\. Now typed\./.test( raw ) );
+
+		// --- Gallery safe settings: columns + crop regenerate figure classes ---
+		t.check( 'gallery popover offers safe settings', await openChip( '.minn-block-island[data-block="gallery"] .minn-island-chip', '[data-insp="own:columns"]' ) );
+		const galPop = await page.evaluate( () => ( {
+			cols: !! document.querySelector( '[data-insp="own:columns"]' ),
+			crop: !! document.querySelector( '[data-insp="own:imageCrop"]' ),
+			rand: !! document.querySelector( '[data-insp="own:randomOrder"]' ),
+			linkTo: !! document.querySelector( '[data-insp="own:linkTo"]' ),
+			edit: !! document.querySelector( '#minn-insp-imgedit' ),
+			apply: !! document.querySelector( '#minn-insp-apply' ),
+		} ) );
+		t.check( 'exactly the safe attrs, alongside Edit images + Apply',
+			galPop.cols && galPop.crop && galPop.rand && ! galPop.linkTo && galPop.edit && galPop.apply, JSON.stringify( galPop ) );
+		await page.fill( '[data-insp="own:columns"]', '3' );
+		await page.uncheck( '[data-insp="own:imageCrop"]' );
+		await page.click( '#minn-insp-apply' );
+		await page.waitForTimeout( 1500 );
+		raw = await saveAndRead( id );
+		{
+			const want = GAL( '{"linkTo":"none","columns":3,"imageCrop":false}', 'wp-block-gallery has-nested-images columns-3' );
+			const got = slice( raw, 'gallery' );
+			t.check( 'columns + crop are byte-exact (attrs AND figure classes)', got === want, got === want ? '' : diffAt( got, want ) );
+		}
 	} finally {
 		await deletePost( page, id );
 	}
