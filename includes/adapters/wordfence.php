@@ -20,11 +20,17 @@ function minn_admin_wordfence_active() {
 	if ( ! defined( 'WORDFENCE_VERSION' ) && ! class_exists( 'wordfence' ) ) {
 		return false;
 	}
+	// Wordfence keeps ONE table set on base_prefix for the whole network
+	// (wfDB) and its own UI lives in Network Admin there — the login log
+	// holds every site's events, so on multisite it is super-admin data.
+	if ( is_multisite() && ! is_super_admin() ) {
+		return false;
+	}
 	// Case-insensitive existence check: on case-folding MySQL setups
 	// (macOS, lower_case_table_names) SHOW TABLES returns wp_wflogins while
 	// Wordfence names it wfLogins — a strict === would wrongly report it
 	// absent. The SELECTs themselves resolve fine either way.
-	$table = $wpdb->prefix . 'wfLogins';
+	$table = $wpdb->base_prefix . 'wfLogins';
 	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 	return $found && 0 === strcasecmp( (string) $found, $table );
 }
@@ -89,7 +95,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 /** Status-card model: login totals + System-page firewall/scan posture. */
 function minn_admin_wordfence_status_model() {
 	global $wpdb;
-	$table = $wpdb->prefix . 'wfLogins';
+	$table = $wpdb->base_prefix . 'wfLogins';
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	$failed_24h = (int) $wpdb->get_var( $wpdb->prepare(
 		"SELECT COUNT(*) FROM {$table} WHERE fail = 1 AND ctime >= %d",
@@ -141,11 +147,12 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/wordfence/logins', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
-			return current_user_can( 'manage_options' );
+			// Network-shared table (see minn_admin_wordfence_active).
+			return current_user_can( 'manage_options' ) && ( ! is_multisite() || is_super_admin() );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
-			$table    = $wpdb->prefix . 'wfLogins';
+			$table    = $wpdb->base_prefix . 'wfLogins';
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
 			$kind     = sanitize_key( (string) $request['kind'] );
@@ -196,7 +203,8 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/wordfence/status', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
-			return current_user_can( 'manage_options' );
+			// Network-shared table (see minn_admin_wordfence_active).
+			return current_user_can( 'manage_options' ) && ( ! is_multisite() || is_super_admin() );
 		},
 		'callback'            => function () {
 			return rest_ensure_response( minn_admin_wordfence_status_model() );

@@ -33,6 +33,15 @@ function minn_admin_solid_security_active() {
 }
 
 function minn_admin_solid_security_can() {
+	// {base_prefix}itsec_lockouts is ONE network-shared table with no site
+	// column (schema.php) — rows can't be attributed to a site, so on
+	// multisite this surface would show a subsite admin every other site's
+	// lockout IPs and attempted usernames. Same class (and same fix) as the
+	// All-In-One Security scoping in v0.28.0, except here scoping is
+	// impossible: network data needs a network administrator.
+	if ( is_multisite() && ! is_super_admin() ) {
+		return false;
+	}
 	try {
 		return current_user_can( ITSEC_Core::get_required_cap() );
 	} catch ( \Throwable $e ) {

@@ -30,7 +30,13 @@ function minn_admin_duplicator_active() {
 	if ( ! defined( 'DUPLICATOR_VERSION' ) && ! class_exists( 'DUP_Package' ) ) {
 		return false;
 	}
-	$table = $wpdb->prefix . 'duplicator_packages';
+	// Duplicator keeps ONE packages table on base_prefix and its archives
+	// hold the WHOLE network's database — on multisite that's super-admin
+	// data (its own menu lives in Network Admin there).
+	if ( is_multisite() && ! is_super_admin() ) {
+		return false;
+	}
+	$table = $wpdb->base_prefix . 'duplicator_packages';
 	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 	return $found && 0 === strcasecmp( (string) $found, $table );
 }
@@ -68,7 +74,7 @@ function minn_admin_duplicator_archive_size( $name, $hash ) {
 /** Display rows for the packages table, newest first. */
 function minn_admin_duplicator_rows() {
 	global $wpdb;
-	$table = $wpdb->prefix . 'duplicator_packages';
+	$table = $wpdb->base_prefix . 'duplicator_packages';
 	$rows  = $wpdb->get_results( "SELECT id, name, hash, status, created, owner FROM {$table} ORDER BY id DESC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	$gmt   = minn_admin_duplicator_dates_are_gmt();
 	$items = array();
@@ -138,7 +144,8 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$perm = function () {
-		return current_user_can( 'export' );
+		// Network-shared packages table (see minn_admin_duplicator_active).
+		return current_user_can( 'export' ) && ( ! is_multisite() || is_super_admin() );
 	};
 
 	register_rest_route( 'minn-admin/v1', '/duplicator/packages', array(
@@ -177,7 +184,7 @@ add_action( 'rest_api_init', function () {
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'delete_failed', 'Duplicator could not delete: ' . $e->getMessage(), array( 'status' => 500 ) );
 			}
-			$table = $wpdb->prefix . 'duplicator_packages';
+			$table = $wpdb->base_prefix . 'duplicator_packages';
 			if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				return new WP_Error( 'delete_failed', 'Duplicator reported success but the package row is still there.', array( 'status' => 500 ) );
 			}
