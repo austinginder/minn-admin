@@ -84,7 +84,14 @@ class Minn_Admin_Updater {
 		if ( ! in_array( $host, self::PACKAGE_HOSTS, true ) ) {
 			return false;
 		}
-		return false !== strpos( (string) ( $parts['path'] ?? '' ), '/austinginder/minn-admin/' );
+		// ANCHORED, not a substring search. Unanchored, anyone could satisfy
+		// this with a repository of their own containing that directory path
+		// (github.com/<attacker>/<repo>/raw/main/austinginder/minn-admin/x.zip),
+		// which is the opposite of what the check claims to enforce.
+		// objects.githubusercontent.com is only ever reached as a redirect
+		// target inside download_url(), never as a manifest download_url, so it
+		// does not carry the owner/repo pair and legitimately never matches.
+		return 0 === strpos( (string) ( $parts['path'] ?? '' ), '/austinginder/minn-admin/' );
 	}
 
 	/**
