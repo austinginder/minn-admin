@@ -1148,6 +1148,21 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Multisite only: re-run every subsite's DB migration (see
+		// core_network_upgrade). upgrade_network is core's own cap for
+		// exactly this screen.
+		register_rest_route(
+			self::NS,
+			'/core/network-upgrade',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'core_network_upgrade' ),
+				'permission_callback' => function () {
+					return is_multisite() && current_user_can( 'upgrade_network' );
+				},
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/plugins/update-all',
@@ -5355,13 +5370,19 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// The loaded $GLOBALS['wp_version'] can be stale right after an update —
 		// read the file that ships with the current core instead.
 		include ABSPATH . WPINC . '/version.php';
+		// True when files updated but a DB migration hasn't run — the update
+		// request's connection dropped before its loopback. On multisite the
+		// walk covers every subsite, and core's own wpmu_upgrade_site stamp
+		// (network/upgrade.php line-for-line) says whether it finished.
+		$db_stale = (int) get_option( 'db_version' ) < (int) $wp_db_version;
+		if ( ! $db_stale && is_multisite() && current_user_can( 'upgrade_network' )
+			&& (int) get_site_option( 'wpmu_upgrade_site' ) !== (int) $wp_db_version ) {
+			$db_stale = true;
+		}
 		return rest_ensure_response(
 			array(
 				'version' => $wp_version,
-				// True when files updated but the DB migration hasn't run —
-				// happens when the update request's connection dropped before
-				// its upgrade.php loopback. The client poll finishes the job.
-				'dbUpgrade' => (int) get_option( 'db_version' ) < (int) $wp_db_version,
+				'dbUpgrade' => $db_stale,
 				'update'  => $offer ? array(
 					'version' => $offer->current,
 					'locale'  => $offer->locale,
@@ -5401,8 +5422,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		// Run any database migration with the NEW code — the standard
 		// upgrade.php step, hit over loopback (what wp-admin does after its
-		// post-update redirect).
-		wp_remote_get( admin_url( 'upgrade.php?step=1' ), array( 'timeout' => 60, 'sslverify' => false ) );
+		// post-update redirect). Multisite walks EVERY subsite: their
+		// migrations otherwise wait for someone to open each wp-admin, which
+		// a Minn-only site never does.
+		if ( is_multisite() ) {
+			self::run_network_upgrade();
+		} else {
+			wp_remote_get( admin_url( 'upgrade.php?step=1' ), array( 'timeout' => 60, 'sslverify' => false ) );
+		}
 
 		include ABSPATH . WPINC . '/version.php';
 		return rest_ensure_response(
@@ -5411,6 +5438,80 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'version' => $wp_version,
 			)
 		);
+	}
+
+	/**
+	 * Multisite: run every subsite's database migration — the
+	 * network/upgrade.php loop (per-site upgrade.php?step=upgrade_db over
+	 * loopback, DESC id order, wpmu_upgrade_site stamped, the same two
+	 * actions fired). Serves both the post-update path above and the
+	 * healing route the client polls when an update's connection dropped.
+	 *
+	 * @return int|WP_Error Sites walked, or an error on large networks.
+	 */
+	private static function run_network_upgrade() {
+		global $wp_db_version;
+		if ( wp_is_large_network() ) {
+			return new WP_Error(
+				'large_network',
+				__( 'This network is too large to upgrade from here. Run Network Admin → Upgrade Network instead.', 'minn-admin' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( 600 );
+		}
+		update_site_option( 'wpmu_upgrade_site', $wp_db_version );
+		$site_ids = get_sites(
+			array(
+				'spam'                   => 0,
+				'deleted'                => 0,
+				'archived'               => 0,
+				'network_id'             => get_current_network_id(),
+				'number'                 => 10000,
+				'fields'                 => 'ids',
+				'order'                  => 'DESC',
+				'orderby'                => 'id',
+				'update_site_meta_cache' => false,
+			)
+		);
+		$done = 0;
+		foreach ( (array) $site_ids as $site_id ) {
+			switch_to_blog( $site_id );
+			$upgrade_url = admin_url( 'upgrade.php?step=upgrade_db' );
+			restore_current_blog();
+			$response = wp_remote_get(
+				$upgrade_url,
+				array(
+					'timeout'     => 120,
+					'httpversion' => '1.1',
+					'sslverify'   => false,
+				)
+			);
+			if ( ! is_wp_error( $response ) ) {
+				/** This action is documented in wp-admin/network/upgrade.php */
+				do_action( 'after_mu_upgrade', $response );
+				/** This action is documented in wp-admin/network/upgrade.php */
+				do_action( 'wpmu_upgrade_site', $site_id );
+				$done++;
+			}
+		}
+		return $done;
+	}
+
+	/**
+	 * POST /core/network-upgrade — the client's healing path: when a core
+	 * update's own request dropped mid-flight (the FrankenPHP-class worker
+	 * recycle), the status poll sees dbUpgrade and calls this instead of a
+	 * single-site upgrade.php fetch, which could never reach the other
+	 * subsites' migrations.
+	 */
+	public static function core_network_upgrade() {
+		$result = self::run_network_upgrade();
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response( array( 'sites' => $result ) );
 	}
 
 	/**
