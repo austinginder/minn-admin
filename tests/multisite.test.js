@@ -227,7 +227,89 @@ async function gotoRoute( page, site, route ) {
 			await ctx.close();
 		}
 
-		// 5) Cross-site denial: the blog editor has no role on store.
+		// 5) Site switcher (Phase 2 glue): the super admin's list carries every
+		//    site, marks the current one, and a REAL click navigates there.
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
+			await gotoRoute( page, MAIN, 'overview' );
+
+			const boot = await page.evaluate( () => ( {
+				sites: ( window.MINN.sites || [] ).map( ( s ) => s.name ),
+				current: ( window.MINN.sites || [] ).filter( ( s ) => s.current ).length,
+				hasBtn: !! document.querySelector( '#minn-site-switch' ),
+			} ) );
+			check( 'switcher lists more than one site', boot.sites.length > 1, boot.sites.join( ', ' ) );
+			check( 'exactly one site is marked current', boot.current === 1 );
+			check( 'switcher control renders in the sidebar', boot.hasBtn );
+
+			// Open with a real mouse click — a synthetic .click() would pass
+			// even on an unhittable control.
+			const btnBox = await page.evaluate( () => {
+				const r = document.querySelector( '#minn-site-switch' ).getBoundingClientRect();
+				return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+			} );
+			await page.mouse.click( btnBox.x, btnBox.y );
+			await page.waitForTimeout( 400 );
+			const menu = await page.evaluate( () => {
+				const m = document.querySelector( '.minn-ctx-menu' );
+				if ( ! m ) return null;
+				const kids = [ ...m.children ];
+				return {
+					count: kids.length,
+					firstIsHeading: kids[ 0 ] && kids[ 0 ].classList.contains( 'minn-new-menu-label' ),
+					firstBorder: kids[ 0 ] && getComputedStyle( kids[ 0 ] ).borderTopWidth,
+					current: kids.filter( ( el ) => el.classList.contains( 'is-on' ) ).length,
+					hasNetwork: kids.some( ( el ) => /Network Admin/.test( el.textContent ) ),
+				};
+			} );
+			check( 'switcher opens a menu', !! menu );
+			check( 'menu marks the current site', menu && menu.current === 1 );
+			check( 'super admin gets a Network Admin entry', menu && menu.hasNetwork );
+			// Regression: a heading that OPENS a menu draws no separator.
+			check( 'no stranded divider above the leading heading',
+				menu && menu.firstIsHeading && menu.firstBorder === '0px', menu && menu.firstBorder );
+
+			// Real navigation to another site's Minn.
+			const target = await page.evaluate( () => {
+				const m = document.querySelector( '.minn-ctx-menu' );
+				const btn = [ ...m.querySelectorAll( 'button' ) ].find( ( x ) => ! x.classList.contains( 'is-on' ) );
+				if ( ! btn ) return null;
+				const r = btn.getBoundingClientRect();
+				return { x: r.x + r.width / 2, y: r.y + r.height / 2, name: btn.textContent.trim() };
+			} );
+			if ( target ) {
+				await page.mouse.click( target.x, target.y );
+				await page.waitForTimeout( 4000 );
+				const landed = await page.evaluate( () => ( {
+					url: location.href,
+					name: window.MINN && window.MINN.site ? window.MINN.site.name : '',
+				} ) );
+				check( 'clicking a site opens that site\'s Minn', /\/minn-admin\/?$/.test( landed.url ) && landed.name === target.name,
+					`${ landed.url } (${ landed.name })` );
+			} else {
+				check( 'a non-current site was offered to click', false );
+			}
+			allErrors.push( ...errors );
+			await ctx.close();
+		}
+
+		// 6) The switcher HIDES for a user who belongs to only one site —
+		//    a menu with nothing to switch to is worse than no control.
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, STORE, SUBSITE_ADMIN.user, SUBSITE_ADMIN.pass );
+			await gotoRoute( page, STORE, 'overview' );
+			const one = await page.evaluate( () => ( {
+				sites: ( window.MINN.sites || [] ).length,
+				hasBtn: !! document.querySelector( '#minn-site-switch' ),
+			} ) );
+			check( 'single-site member gets no switcher', one.sites === 0 && ! one.hasBtn );
+			allErrors.push( ...errors );
+			await ctx.close();
+		}
+
+		// 7) Cross-site denial: the blog editor has no role on store.
 		{
 			const { ctx, page, errors } = await ctxFor( browser );
 			await loginApp( page, STORE, BLOG_EDITOR.user, BLOG_EDITOR.pass );

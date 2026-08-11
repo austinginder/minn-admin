@@ -604,6 +604,70 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Multisite: the sites this user can open Minn on — the switcher's model
+	 * (core's own admin-bar "My Sites" membership, narrowed to sites where
+	 * the app would actually let them in).
+	 *
+	 * A site qualifies only when Minn is active there (network-wide or on
+	 * that site) AND the user clears the same `edit_posts` gate the app's
+	 * route enforces, so every entry leads somewhere usable rather than to a
+	 * "not allowed" page or a 404. Each site's URL is read in ITS OWN
+	 * context, because permalink structure (and therefore whether the app
+	 * lives at /minn-admin/ or ?minn_admin=1) is per site.
+	 *
+	 * Returns [] off multisite, on large networks (get_blogs_of_user is not
+	 * a query to run there), and when only the current site qualifies — the
+	 * client hides the switcher on an empty list, so a one-site membership
+	 * never renders a menu with nothing to switch to.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function user_sites() {
+		if ( ! is_multisite() || wp_is_large_network() ) {
+			return array();
+		}
+		$uid = get_current_user_id();
+		if ( ! $uid ) {
+			return array();
+		}
+		$blogs = get_blogs_of_user( $uid );
+		if ( ! is_array( $blogs ) || count( $blogs ) < 2 ) {
+			return array();
+		}
+		$current = get_current_blog_id();
+		$plugin  = plugin_basename( MINN_ADMIN_FILE );
+		$network = (array) get_site_option( 'active_sitewide_plugins', array() );
+		$net_on  = isset( $network[ $plugin ] );
+		$sites   = array();
+		foreach ( $blogs as $blog ) {
+			$blog_id = (int) $blog->userblog_id;
+			switch_to_blog( $blog_id );
+			$active = $net_on || in_array( $plugin, (array) get_option( 'active_plugins', array() ), true );
+			if ( $active && user_can( $uid, 'edit_posts' ) ) {
+				$sites[] = array(
+					'id'      => $blog_id,
+					'name'    => self::plain_text( get_bloginfo( 'name' ) ),
+					'url'     => home_url( '/' ),
+					'app'     => self::app_url(),
+					'icon'    => get_site_icon_url( 64 ),
+					'current' => $blog_id === $current,
+				);
+			}
+			restore_current_blog();
+		}
+		if ( count( $sites ) < 2 ) {
+			return array();
+		}
+		usort(
+			$sites,
+			function ( $a, $b ) {
+				return strcasecmp( $a['name'], $b['name'] );
+			}
+		);
+		return $sites;
+	}
+
+	/**
 	 * A display string as plain text. Labels and names are HTML-context by
 	 * WordPress convention — translators and plugins legitimately put
 	 * &#039;, &amp; or &nbsp; in them because wp-admin prints them as HTML.
@@ -853,6 +917,10 @@ class Minn_Admin {
 			// remove-from-site, profile edits need network caps), plugins can
 			// be network-activated. Client views branch on this.
 			'multisite' => is_multisite(),
+			// The sites this user can actually open Minn on (empty off
+			// multisite, and when only this one qualifies — the switcher and
+			// its palette command both hide rather than show a list of one).
+			'sites'    => self::user_sites(),
 			'wc'       => class_exists( 'WooCommerce' ),
 			// WooCommerce Subscriptions extension (wc/v3/subscriptions REST).
 			'wcs'      => class_exists( 'WooCommerce' ) && class_exists( 'WC_Subscriptions' ),

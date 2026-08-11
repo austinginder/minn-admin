@@ -208,6 +208,16 @@ a { color: var(--accent2); text-decoration: none; }
 /* The wordmark is the SITE NAME now (falls back to "minn") — truncate so a
    long site title can't push the version pill off or wrap the logo row. */
 .minn-logo-name { font-weight: 700; font-size: 17px; letter-spacing: -0.3px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Multisite site switcher: a quiet chevron beside the wordmark (absent off
+   multisite and when the user belongs to only one site). flex:none so a long
+   site name truncates rather than squeezing the control away. */
+.minn-site-switch {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; height: 24px; padding: 0; border: none; border-radius: 7px;
+  background: none; color: var(--text3); cursor: pointer;
+}
+.minn-site-switch:hover { background: var(--panel2); color: var(--text); }
+.minn-site-switch svg { width: 15px; height: 15px; }
 /* Version + changelog live in the topbar actions (GH #5: a badge beside the
    logo truncated longer site names; Austin moved it up by the view-site
    button). Sized to sit flush with the .minn-icon-btn row. */

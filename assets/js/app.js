@@ -1782,6 +1782,34 @@
 		} );
 	}
 
+	/* ===== Site switcher (multisite) ===== */
+	// B.sites carries only the sites this user can actually open Minn on, and
+	// is empty unless there are at least two — so every caller can treat a
+	// non-empty list as "worth offering" without re-checking multisite.
+	//
+	// Switching is a same-tab navigation to another site's app (each subsite
+	// serves its own Minn at its own origin), which is what the admin bar's
+	// "My Sites" does. Network Admin rides along for super admins as the
+	// honest link-out to what Minn does not cover.
+	function siteSwitchEntries() {
+		const sites = B.sites || [];
+		if ( ! sites.length ) return [];
+		const entries = [ { heading: __( 'Switch site' ) } ];
+		sites.forEach( ( s ) => entries.push( {
+			label: s.name || s.url,
+			active: !! s.current,
+			run: () => {
+				if ( s.current ) return;
+				window.location.href = s.app;
+			},
+		} ) );
+		if ( B.site.networkAdminUrl ) {
+			entries.push( { heading: __( 'Network' ) } );
+			entries.push( { label: __( 'Network Admin ↗' ), href: B.site.networkAdminUrl } );
+		}
+		return entries;
+	}
+
 	// Update the sidebar brand in place from B.site (name + Site Icon). The
 	// logo is part of the app shell rendered once at boot, so a Settings save
 	// that changes the site title or icon must patch it here rather than wait
@@ -1886,6 +1914,10 @@
 							: '<span class="minn-logo-mark">m</span>' }
 						<span class="minn-logo-name">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</span>
 					</button>
+					${ ( B.sites || [] ).length ? `
+					<button class="minn-site-switch" id="minn-site-switch" title="${ esc( __( 'Switch site' ) ) }" aria-label="${ esc( __( 'Switch site' ) ) }" aria-haspopup="menu">
+						${ icon( 'chevron-down' ) }
+					</button>` : '' }
 				</div>
 				<button class="minn-search-btn" id="minn-open-palette">
 					${ icon( 'search' ) }<span>${ esc( __( 'Search…' ) ) }</span><span class="minn-kbd">⌘K</span>
@@ -1942,6 +1974,12 @@
 		bindNavGroupToggles();
 		$( '#minn-open-palette' ).addEventListener( 'click', openPalette );
 		$( '#minn-logo-home' ).addEventListener( 'click', () => go( 'overview' ) );
+		const siteSwitch = $( '#minn-site-switch' );
+		if ( siteSwitch ) siteSwitch.addEventListener( 'click', ( e ) => {
+			e.stopPropagation();
+			const r = siteSwitch.getBoundingClientRect();
+			openMinnMenu( r.left, r.bottom + 4, siteSwitchEntries() );
+		} );
 		$( '#minn-ver-btn' ).addEventListener( 'click', openChangelog );
 
 		// Global nav show/hide — a topbar icon button (panel-left glyph, the
@@ -27587,6 +27625,28 @@
 		if ( B.caps.settings ) cmds.push( { label: __( 'Browse database (read-only)' ), kind: 'nav', icon: '⛁', run: () => go( 'database' ) } );
 		if ( B.caps.settings ) cmds.push( { label: 'View site logs', kind: 'nav', icon: '📄', run: () => openLogViewer() } );
 		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
+		// Multisite: one entry PER SITE (not a single "Switch site…" that
+		// opens a second picker), so typing a site's name reaches it in one
+		// step. The palette matches a contiguous substring of the label, so
+		// "switch" lists them all. B.sites excludes the one-site case.
+		( B.sites || [] ).forEach( ( s ) => {
+			if ( s.current ) return;
+			cmds.push( {
+				/* translators: %s: site name. */
+				label: sprintf( __( 'Switch to %s' ), s.name || s.url ),
+				kind: 'nav',
+				icon: '⊞',
+				run: () => { window.location.href = s.app; },
+			} );
+		} );
+		if ( B.site.networkAdminUrl ) {
+			cmds.push( {
+				label: __( 'Open Network Admin ↗' ),
+				kind: 'nav',
+				icon: '⊞',
+				run: () => { window.location.href = B.site.networkAdminUrl; },
+			} );
+		}
 		cmds.push(
 			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
 			...( B.caps.editPages ? [ { label: 'Create new page', kind: 'action', icon: '▭', run: () => newContent( 'pages' ) } ] : [] ),
