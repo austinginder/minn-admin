@@ -1624,10 +1624,14 @@ class Minn_Admin_REST {
 				},
 				'schema'       => array(
 					'type'    => array( 'object', 'null' ),
-					// Edit context only, like minn_modified and minn_lock. This
-					// field names the post an attachment belongs to, which core
-					// exposes only as an id in view context, never as a title.
-					'context' => array( 'edit' ),
+					// Stays in view context because the media library reads it
+					// there (the grid's _fields list, no context=edit). The
+					// read_post check in the callback above is the actual
+					// control: it returns null for a parent the caller cannot
+					// read, so an anonymous request gets nothing for a draft,
+					// pending, scheduled or private post. Restricting the
+					// context as well only removed the Attached to button.
+					'context' => array( 'view', 'edit' ),
 				),
 			)
 		);
