@@ -12255,6 +12255,37 @@
 			if ( state.route === 'extensions' ) renderExtensions();
 		};
 
+		// Network activate/deactivate. The plugin list carries `status`
+		// 'network-active' from the server, so a refresh is what makes the
+		// card flip — never a local guess.
+		const setNetworkPlugin = async ( file, name, on ) => {
+			if ( ! on ) {
+				const okNet = await minnConfirm( {
+					title: `Deactivate ${ name } across the network?`,
+					body: 'Sites that turned it on for themselves keep it. Everywhere else it stops running.',
+					danger: true,
+					confirmLabel: 'Deactivate network-wide',
+				} );
+				if ( ! okNet ) return;
+			}
+			toast( `${ on ? 'Activating' : 'Deactivating' } ${ name } across the network…` );
+			try {
+				await api( 'minn-admin/v1/network/plugins/activate', {
+					method: 'POST',
+					body: JSON.stringify( { plugin: file + '.php', on } ),
+				} );
+				toast( on ? `${ name } is active on every site` : `${ name } is no longer network active` );
+				state.cache.plugins = null;
+				state.cache.overview = null;
+				bustTypeCaches();
+				await refreshAfterPluginChange();
+				await loadPlugins().catch( () => {} );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			if ( state.route === 'extensions' ) renderExtensions();
+		};
+
 		const deletePluginByFile = async ( file ) => {
 			const plugin = plugins.find( ( p ) => p.plugin === file );
 			if ( ! plugin || plugin.status !== 'inactive' ) return;
@@ -12298,6 +12329,25 @@
 					label: on ? 'Deactivate' : 'Activate',
 					run: () => togglePluginByFile( file ),
 				} );
+			}
+			// Network activation is a SEPARATE switch from this site's own
+			// (core keeps it in a network option), so it gets its own entry
+			// rather than overloading Activate. Minn's own row is excluded
+			// when turning off: the card's dedicated flow explains the
+			// consequence of removing the app you are standing in.
+			if ( B.caps.networkPlugins ) {
+				const isSelf = file === 'minn-admin/minn-admin';
+				if ( ! net ) {
+					entries.push( {
+						label: __( 'Activate for the whole network' ),
+						run: () => setNetworkPlugin( file, name, true ),
+					} );
+				} else if ( ! isSelf ) {
+					entries.push( {
+						label: __( 'Deactivate across the network' ),
+						run: () => setNetworkPlugin( file, name, false ),
+					} );
+				}
 			}
 			if ( offered && B.caps.update && ! pluginUpdatePending.has( file ) ) {
 				entries.push( {
@@ -12554,6 +12604,23 @@
 				renderOverlays();
 			} );
 		}
+		// Multisite: add or remove a theme from the network's allowed list.
+		const setNetworkTheme = async ( t, on ) => {
+			toast( `${ on ? 'Offering' : 'Withdrawing' } ${ t.name }…` );
+			try {
+				await api( 'minn-admin/v1/network/themes/enable', {
+					method: 'POST',
+					body: JSON.stringify( { theme: t.stylesheet, on } ),
+				} );
+				toast( on ? `${ t.name } is available to every site` : `${ t.name } is no longer offered to sites` );
+				state.cache.themes = null;
+				await loadThemes().catch( () => {} );
+			} catch ( e ) {
+				toast( e.message, true );
+			}
+			if ( state.route === 'extensions' ) renderExtensions();
+		};
+
 		const runThemeAction = async ( action, t, btn ) => {
 			if ( ! t ) return;
 			if ( action === 'activate' && ! await confirmThemeActivate( t.name ) ) return;
@@ -12620,6 +12687,14 @@
 			}
 			if ( t.update && B.caps.updateThemes ) {
 				entries.push( { label: `Update → ${ t.update }`, run: () => runThemeAction( 'update', t ) } );
+			}
+			// Network enabling decides which themes each site may CHOOSE; it
+			// never switches a site's theme, so it is not a variant of
+			// Activate and reads as its own thing.
+			if ( B.caps.networkThemes ) {
+				entries.push( t.network
+					? { label: __( 'Stop offering to sites' ), run: () => setNetworkTheme( t, false ) }
+					: { label: __( 'Offer to every site' ), run: () => setNetworkTheme( t, true ) } );
 			}
 			if ( ! t.active && B.caps.deleteThemes ) {
 				entries.push( { label: 'Delete theme', danger: true, run: () => runThemeAction( 'delete', t ) } );

@@ -4551,6 +4551,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$updates    = get_site_transient( 'update_themes' );
 		$active     = get_stylesheet();
 		$auto       = (array) get_site_option( 'auto_update_themes', array() );
+		// Which themes this network lets its sites choose from (multisite).
+		$network_themes = is_multisite() ? (array) get_site_option( 'allowedthemes', array() ) : array();
 		$items      = array();
 		foreach ( wp_get_themes() as $stylesheet => $theme ) {
 			// update_themes lists only themes WordPress.org (or a licensed
@@ -4572,6 +4574,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'active'     => $stylesheet === $active,
 				'parent'     => $theme->parent() ? $theme->parent()->get_stylesheet() : null,
 				'on_wporg'   => (bool) $on_wporg,
+				// Multisite: whether sites may CHOOSE this theme (the network
+				// allowedthemes list). Not the same as being active anywhere.
+				'network'    => is_multisite() && ! empty( $network_themes[ $stylesheet ] ),
 				'update'     => $updates && isset( $updates->response[ $stylesheet ]['new_version'] )
 					? $updates->response[ $stylesheet ]['new_version'] : null,
 				// Block themes live-preview through the Site Editor, classic
