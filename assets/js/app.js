@@ -11918,9 +11918,16 @@
 					// version with no remaining offer means the update landed.
 					if ( s && s.version === offered && ! s.update ) {
 						// The dropped request may also have skipped the DB
-						// migration step — run it before declaring done.
+						// migration step — run it before declaring done. On
+						// multisite that means EVERY subsite (subdomain
+						// subsites are cross-origin, so the walk must run
+						// server-side — the network-upgrade route).
 						if ( s.dbUpgrade ) {
-							await fetch( B.site.adminUrl + 'upgrade.php?step=1', { credentials: 'same-origin' } ).catch( () => {} );
+							if ( B.multisite ) {
+								await api( 'minn-admin/v1/core/network-upgrade', { method: 'POST' } ).catch( () => {} );
+							} else {
+								await fetch( B.site.adminUrl + 'upgrade.php?step=1', { credentials: 'same-origin' } ).catch( () => {} );
+							}
 						}
 						state.cache.core = s;
 						finish( s.version );
