@@ -516,21 +516,131 @@ async function gotoRoute( page, site, route ) {
 			await ctx.close();
 		}
 
-		// 5d) A site administrator is not a network administrator.
+		// 5c4) Network settings: a settings-only surface (no list), a real
+		//      save round trip, and the refusal to write anything outside its
+		//      own spec.
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
+			await gotoRoute( page, MAIN, 'network-settings' );
+			await page.waitForTimeout( 2500 );
+			const ns = await page.evaluate( () => ( {
+				tabs: [ ...document.querySelectorAll( '#minn-view [data-ssettab]' ) ].map( ( t ) => t.textContent.trim() ),
+				controls: document.querySelectorAll( '#minn-view input, #minn-view select, #minn-view textarea, #minn-view .minn-switch' ).length,
+				broke: /Something went wrong/.test( document.querySelector( '#minn-view' ).textContent ),
+			} ) );
+			check( 'network settings renders as its own page', ! ns.broke && ns.controls > 0, `${ ns.controls } controls` );
+			check( 'network settings offers its sections', ns.tabs.length >= 3, ns.tabs.join( ' | ' ) );
+
+			// Round trip through the endpoint the form posts to, then restore.
+			const trip = await page.evaluate( async () => {
+				const post = async ( value ) => {
+					const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/network/settings/registration', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+						credentials: 'same-origin',
+						body: JSON.stringify( { values: { registration: value } } ),
+					} );
+					return ( await r.json() ).values;
+				};
+				const before = ( await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/network/settings/registration', {
+					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+				} ) ).json() ).values.registration;
+				const saved = await post( 'user' );
+				// An unknown key must be ignored rather than written anywhere.
+				const r2 = await fetch( window.MINN.restUrl + 'minn-admin/v1/network/settings/registration', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+					credentials: 'same-origin',
+					body: JSON.stringify( { values: { registration: 'not-a-real-value', siteurl: 'http://evil.test' } } ),
+				} );
+				const after = ( await r2.json() ).values.registration;
+				await post( before );
+				return { saved: saved.registration, afterBogus: after, restored: before };
+			} );
+			check( 'a network setting saves', trip.saved === 'user', JSON.stringify( trip ) );
+			check( 'an out-of-vocabulary value is refused', trip.afterBogus === 'user', JSON.stringify( trip ) );
+			allErrors.push( ...errors );
+			await ctx.close();
+		}
+
+		// 5d) THE AUTHORIZATION MATRIX. A site administrator holds
+		//     manage_options on their own subsite, which is the realistic
+		//     attacker on a network: every network route must refuse them,
+		//     and nothing may change as a result. This is the durable form of
+		//     the Phase 3 security audit — extend it whenever a network route
+		//     is added, or the route ships unproven.
 		{
 			const { ctx, page, errors } = await ctxFor( browser );
 			await loginApp( page, STORE, SUBSITE_ADMIN.user, SUBSITE_ADMIN.pass );
 			await gotoRoute( page, STORE, 'overview' );
 			const denied = await page.evaluate( async () => {
+				const call = async ( method, path, body ) => {
+					const r = await fetch( window.MINN.restUrl + path, {
+						method,
+						headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+						credentials: 'same-origin',
+						body: body ? JSON.stringify( body ) : undefined,
+					} );
+					return { path: method + ' ' + path.replace( 'minn-admin/v1/network/', '' ), status: r.status };
+				};
+				const me = window.MINN.user.id;
+				const probes = await Promise.all( [
+					call( 'GET', 'minn-admin/v1/network/sites' ),
+					call( 'POST', 'minn-admin/v1/network/sites', { address: 'pwned', title: 'P', email: 'admin@minnms.localhost' } ),
+					call( 'POST', 'minn-admin/v1/network/sites/3/flag', { flag: 'archived', on: true } ),
+					call( 'DELETE', 'minn-admin/v1/network/sites/3' ),
+					call( 'GET', 'minn-admin/v1/network/status' ),
+					call( 'GET', 'minn-admin/v1/network/users' ),
+					call( 'GET', 'minn-admin/v1/network/users/status' ),
+					call( 'POST', 'minn-admin/v1/network/users/' + me + '/super', { on: true } ),
+					call( 'POST', 'minn-admin/v1/network/plugins/activate', { plugin: 'woocommerce/woocommerce.php', on: true } ),
+					call( 'POST', 'minn-admin/v1/network/themes/enable', { theme: 'twentytwentyfour', on: true } ),
+					call( 'GET', 'minn-admin/v1/network/settings/registration' ),
+					call( 'POST', 'minn-admin/v1/network/settings/registration', { values: { registration: 'all' } } ),
+					call( 'POST', 'minn-admin/v1/network/settings/sites', { values: { admin_email: 'attacker@evil.test' } } ),
+				] );
 				const grp = document.querySelector( '#minn-navgrp-network' );
-				const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/network/sites', {
-					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
-				} );
-				return { navHidden: ! grp || grp.hidden, status: r.status };
+				return { navHidden: ! grp || grp.hidden, probes };
 			} );
 			check( 'site administrator sees no Network group', denied.navHidden );
-			check( 'network routes refuse a site administrator', denied.status === 403, String( denied.status ) );
-			// The 403 above is the point of the check, not an app error.
+			const allowed = denied.probes.filter( ( p ) => p.status < 400 );
+			check( 'EVERY network route refuses a site administrator',
+				allowed.length === 0,
+				allowed.length ? allowed.map( ( p ) => `${ p.path } → ${ p.status }` ).join( '; ' ) : `${ denied.probes.length } routes refused` );
+			// The refusals above are the point of the check, not app errors,
+			// so this context's console output stays out of the error gate.
+			await ctx.close();
+		}
+
+		// 5e) The control for 5d: the same reads MUST work for the network
+		//     administrator. A permission wall that also blocks the person it
+		//     exists for is a regression, not a fix.
+		{
+			const { ctx, page, errors } = await ctxFor( browser );
+			await loginApp( page, MAIN, SUPER_USER, SUPER_PASS );
+			await gotoRoute( page, MAIN, 'overview' );
+			const allowed = await page.evaluate( async () => {
+				const get = async ( path ) => {
+					const r = await fetch( window.MINN.restUrl + path, {
+						headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+					} );
+					return { path, status: r.status };
+				};
+				return Promise.all( [
+					get( 'minn-admin/v1/network/sites' ),
+					get( 'minn-admin/v1/network/status' ),
+					get( 'minn-admin/v1/network/users' ),
+					get( 'minn-admin/v1/network/users/status' ),
+					get( 'minn-admin/v1/network/settings/registration' ),
+					get( 'minn-admin/v1/my-sites' ),
+				] );
+			} );
+			const blocked = allowed.filter( ( p ) => p.status >= 400 );
+			check( 'the network administrator is not over-blocked',
+				blocked.length === 0,
+				blocked.length ? blocked.map( ( p ) => `${ p.path } → ${ p.status }` ).join( '; ' ) : `${ allowed.length } routes allowed` );
+			allErrors.push( ...errors );
 			await ctx.close();
 		}
 

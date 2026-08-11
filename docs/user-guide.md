@@ -68,7 +68,24 @@ one you are in, and takes you straight to Minn on any other. Network
 administrators also get a link to Network Admin from there, since site
 creation and network-wide settings stay with WordPress. The palette knows
 the sites too: press ⌘K and type "switch", or just start typing a site's
-name. The chevron does not appear when you belong to only one site.
+name. The chevron does not appear when you belong to only one site, and on a
+large network the menu stays short and offers a search instead.
+
+**If you run the network**, a fourth sidebar group appears: Network. Sites
+lists every site with its address, members and state, filters for archived
+and spam sites, and search; from a row you can open a site in Minn, visit it,
+archive or restore it, mark it as spam, or delete it. Adding a site asks for
+an address, a title and the email of someone who already has an account.
+Network users lists every account on the network, shows how many sites each
+belongs to, and lets you promote someone to network administrator or take
+that away. Network settings covers registration, uploads, what site
+administrators may do, and where network mail goes. Two things Minn will not
+do: it never offers to archive or delete the main site of the network or the
+site you are currently working in, and it never lets you remove your own
+network-administrator status or the last one on the network. Creating and
+deleting accounts stays in Network Admin, because deleting a network account
+removes that person's posts from every site and WordPress's own flow offers
+to reassign them first.
 
 **The topbar** carries the page title, a button that shows or hides the
 sidebar (⌘. does the same), the version badge (click it for what's new),
