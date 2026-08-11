@@ -116,6 +116,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/perfmatters.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/autoptimize.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/asset-cleanup.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/performance-lab.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/network.php';
 
 Minn_Admin::init();
 Minn_Admin_REST::init();

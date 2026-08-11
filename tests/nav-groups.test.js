@@ -16,9 +16,13 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	await login( page );
 
 	try {
+		// The Network group's wrapper is always in the markup (an empty group
+		// keeps a hidden home so a mid-session change has somewhere to land),
+		// but off multisite it must never be VISIBLE — this is a single-site
+		// dev box, so exactly the original three groups show.
 		const labels = await page.$$eval( 'button.minn-nav-label', ( els ) =>
-			els.map( ( e ) => e.dataset.navgroup ) );
-		t.check( 'three collapsible group labels render',
+			els.filter( ( e ) => e.offsetParent !== null ).map( ( e ) => e.dataset.navgroup ) );
+		t.check( 'three collapsible group labels render (network hidden off multisite)',
 			JSON.stringify( labels ) === JSON.stringify( [ 'workspace', 'tools', 'manage' ] ), labels.join( ', ' ) );
 
 		const groupNavs = ( key ) => page.$$eval( `#minn-nav-${ key } .minn-nav-btn`, ( els ) =>
