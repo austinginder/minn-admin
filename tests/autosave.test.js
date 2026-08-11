@@ -63,16 +63,25 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	// editor styles) can delay the ⌘S save — and the Control+s fallback's
 	// second queued save — by several seconds. Watch the request traffic
 	// itself: proceed only after 2.5s with no posts/{id} POST starting or
-	// finishing.
+	// finishing AND none still in flight — a single slow save has >2.5s of
+	// silence BETWEEN its start and finish, and the window used to open
+	// during it; the fallback's queued save then landed inside the calm
+	// check (forensic 2026-08-10: saves at t0-2577ms and t0+183ms).
 	let lastPostActivity = Date.now();
-	const bumpActivity = ( r ) => {
-		if ( r.method() === 'POST' && r.url().includes( `/posts/${ draftId }` ) ) lastPostActivity = Date.now();
+	let inFlight = 0;
+	const bumpStart = ( r ) => {
+		if ( r.method() === 'POST' && r.url().includes( `/posts/${ draftId }` ) ) { inFlight++; lastPostActivity = Date.now(); }
 	};
-	page.on( 'request', bumpActivity );
-	page.on( 'requestfinished', bumpActivity );
-	while ( Date.now() - lastPostActivity < 2500 ) await page.waitForTimeout( 250 );
-	page.off( 'request', bumpActivity );
-	page.off( 'requestfinished', bumpActivity );
+	const bumpEnd = ( r ) => {
+		if ( r.method() === 'POST' && r.url().includes( `/posts/${ draftId }` ) ) { inFlight = Math.max( 0, inFlight - 1 ); lastPostActivity = Date.now(); }
+	};
+	page.on( 'request', bumpStart );
+	page.on( 'requestfinished', bumpEnd );
+	page.on( 'requestfailed', bumpEnd );
+	while ( inFlight > 0 || Date.now() - lastPostActivity < 2500 ) await page.waitForTimeout( 250 );
+	page.off( 'request', bumpStart );
+	page.off( 'requestfinished', bumpEnd );
+	page.off( 'requestfailed', bumpEnd );
 	writes.length = 0;
 	await page.click( '#minn-editor-body p' );
 	await page.keyboard.press( 'End' );
