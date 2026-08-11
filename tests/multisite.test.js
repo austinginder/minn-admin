@@ -6,7 +6,7 @@
  * disposable fixture (`cove add minnms --multisite=subdomain`), not a standing
  * dependency.
  *
- * What it pins (Phase 1 of multisite support):
+ * What it pins (the v0.28.0 multisite contract):
  *   - /minn-admin/ boots on the main site AND a subsite created before the
  *     plugin was network-activated (the rewrite self-heal).
  *   - The whole role matrix renders with ZERO console/page errors.

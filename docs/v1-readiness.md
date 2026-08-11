@@ -245,8 +245,10 @@ Two tracks, both in service of the gates above.
   sovereignty plus link honesty make marketing unprofitable without Minn
   judging copy).
 - Multisite, native editors, and the parked items in native-editors.md.
-  *(One of those later shipped on schedule elsewhere: the read-only
-  database viewer landed in the v0.22.0 cycle; see native-editors.md.)*
+  *(These were deferred from v0.17.0, not permanent non-goals. The read-only
+  database viewer landed in v0.22.0, and daily multisite/network operations
+  landed in v0.28.0. The remaining native-editor items stay parked; see
+  native-editors.md.)*
 
 ## Roadmap corrections made during this audit (2026-07-16)
 

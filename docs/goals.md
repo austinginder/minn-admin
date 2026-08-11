@@ -37,7 +37,9 @@ live in [roadmap.md](roadmap.md).
   cleanly (`editor-direction.md`).
 - **Settings-page parity.** Minn surfaces the settings people actually change. The long tail
   stays in wp-admin.
-- **Multisite network admin, for now.**
+- **Network Admin parity.** Minn covers daily multisite operations. Network account
+  creation and deletion, the long settings tail, restores, exports and network setup stay
+  in WordPress Network Admin.
 - **Being a page builder.**
 
 ## Quality bar
