@@ -23278,7 +23278,17 @@
 					<img src="${ esc( u ) }" alt="" loading="lazy">
 					<button class="minn-btn-soft" type="button" data-inspimg="${ i }">Replace…</button>
 				</div>` ).join( '' );
-		const ownFields = mediaRebuild ? '' : ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
+		// Gallery settings that are SAFE without a rebuild:
+		// columns and crop live in the comment attrs plus figure class tokens
+		// Minn regenerates on Apply; randomOrder is a render-time shuffle with
+		// no saved-HTML mirror. linkTo/sizeSlug/lightbox rewrite every child
+		// image's saved HTML — those stay with Edit images / the block editor.
+		const gallerySafe = [ 'columns', 'imageCrop', 'randomOrder' ];
+		const galleryFields = mediaRebuild && 'gallery' === model.parts.name.replace( /^core\//, '' ) && ownType && ownType.attributes
+			? inspectorFields( Object.fromEntries( gallerySafe.filter( ( k ) => ownType.attributes[ k ] ).map( ( k ) => [ k, ownType.attributes[ k ] ] ) ), model.ownAttrs, 'own', model.parts.name )
+			+ `<div class="minn-insp-note">${ esc( __( 'Link, size and lightbox options live in the block editor.' ) ) }</div>`
+			: '';
+		const ownFields = mediaRebuild ? galleryFields : ( ownType && ownType.attributes ? inspectorFields( ownType.attributes, model.ownAttrs, 'own', model.parts.name ) : '' )
 			+ ( model.wt || [] ).map( ( w, i ) => `<div class="minn-field-label">${ esc( w.label ) }</div>
 			<input class="minn-input" data-insp="wt:${ i }" value="${ esc( w.value ) }">` ).join( '' )
 			+ ( ownRunRows ? `<div class="minn-field-label">Text</div>${ ownRunRows }` : '' );
@@ -23761,6 +23771,21 @@
 			} );
 			sa.height = h;
 			newRaw = `<!-- wp:spacer${ serializeBlockAttrs( sa ) } -->\n<div style="height:${ h }" aria-hidden="true" class="wp-block-spacer"></div>\n<!-- /wp:spacer -->`;
+		}
+		// Gallery columns/crop live in BOTH the comment attrs and the figure's
+		// class tokens — regenerate the classes when those attrs changed so
+		// the edit actually renders (the spacer lesson, at gallery scale).
+		// Replacement is a FUNCTION (never a string: $-pattern hazard) and
+		// only the first <figure> — the wrapper — is touched.
+		if ( 'gallery' === model.parts.name.replace( /^core\//, '' ) && ! model.parts.selfClosing
+			&& ( model.ownAttrs.columns !== model.parts.attrs.columns || model.ownAttrs.imageCrop !== model.parts.attrs.imageCrop ) ) {
+			newRaw = newRaw.replace( /(<figure\b[^>]*\bclass=")([^"]*)(")/, ( m, a, cls, z ) => {
+				const toks = cls.split( /\s+/ ).filter( ( t ) => t && ! /^columns-(?:\d+|default)$/.test( t ) && 'is-cropped' !== t );
+				const n = parseInt( model.ownAttrs.columns, 10 );
+				toks.push( n >= 1 ? 'columns-' + Math.min( n, 8 ) : 'columns-default' );
+				if ( false !== model.ownAttrs.imageCrop ) toks.push( 'is-cropped' );
+				return a + toks.join( ' ' ) + z;
+			} );
 		}
 		return newRaw;
 	}
