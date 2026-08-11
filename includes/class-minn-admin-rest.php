@@ -2389,7 +2389,12 @@ class Minn_Admin_REST {
 		 * 'pageviews' => int]], 'prev_visitors' => int] covering the requested
 		 * range (prev_visitors = the period before it, for the delta).
 		 */
-		$traffic     = apply_filters( 'minn_admin_traffic', null, $days );
+		// Visitor and pageview totals are site intelligence: every analytics
+		// plugin gates its own reports behind a reporting capability, and
+		// routing them through the dashboard's edit_posts floor handed them to
+		// Contributors. Filterable so a provider can name its own cap.
+		$can_traffic = (bool) apply_filters( 'minn_admin_traffic_cap', current_user_can( 'manage_options' ) );
+		$traffic     = $can_traffic ? apply_filters( 'minn_admin_traffic', null, $days ) : null;
 		$traffic_out = null;
 
 		$stats = array(
@@ -2408,7 +2413,11 @@ class Minn_Admin_REST {
 			// Many sites never use comments — an eternal zero is dead weight,
 			// so a comment-less site gets a Users count instead. Pending
 			// comments still force the card (they need moderating).
-			( 0 === (int) $comments->approved && 0 === (int) $comments->moderated ) ? array(
+			// The Users fallback is a site-wide registered-user count, which is
+			// list_users territory in wp-admin. A Contributor who simply has no
+			// comments on the site should not learn the size of the user base,
+			// so fall back to the Comments card for them instead.
+			( 0 === (int) $comments->approved && 0 === (int) $comments->moderated && current_user_can( 'list_users' ) ) ? array(
 				'label' => 'Users',
 				'value' => number_format_i18n( self::user_count() ),
 				'delta' => 'registered',
@@ -2698,7 +2707,11 @@ class Minn_Admin_REST {
 		 * @param string     $from Inclusive Y-m-d start.
 		 * @param string     $to   Inclusive Y-m-d end.
 		 */
-		$data = apply_filters( 'minn_admin_traffic_day', null, $from, $to );
+		// Same reporting gate as the overview card this drills into, or the
+		// per-page paths and referrers would still be a Contributor read.
+		$data = apply_filters( 'minn_admin_traffic_cap', current_user_can( 'manage_options' ) )
+			? apply_filters( 'minn_admin_traffic_day', null, $from, $to )
+			: null;
 		if ( ! is_array( $data ) ) {
 			return rest_ensure_response(
 				array(
@@ -2775,10 +2788,18 @@ class Minn_Admin_REST {
 			);
 		}
 
-		$comments = $wpdb->get_results(
+		// Same gate the overview feed applies: unapproved, spam and trashed
+		// rows are moderation-queue data and carry the commenter's name, so
+		// they only appear for someone who can act on them. Without this the
+		// drill-down let a Contributor, who has no comment screen at all, walk
+		// the moderation queue through the chart.
+		$approved_only = ! current_user_can( 'moderate_comments' );
+		$comment_where = $approved_only ? " AND comment_approved = '1'" : '';
+		$comments      = $wpdb->get_results(
 			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- literal fragment chosen above.
 				"SELECT comment_ID, comment_author, comment_post_ID, comment_date_gmt, comment_approved FROM {$wpdb->comments}
-				 WHERE comment_date_gmt > %s AND comment_date_gmt <= %s
+				 WHERE comment_date_gmt > %s AND comment_date_gmt <= %s{$comment_where}
 				 ORDER BY comment_date_gmt DESC LIMIT 100",
 				$from,
 				$to
