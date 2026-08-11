@@ -3,7 +3,8 @@
 *Principles live in [goals.md](goals.md). Deep technical plans live in the per-area docs
 (the editor in [editor-roadmap.md](editor-roadmap.md) and [editor-direction.md](editor-direction.md),
 adapters in [plugin-support.md](plugin-support.md) and [adapter-coverage.md](adapter-coverage.md),
-the v1.0 charter in [v1-readiness.md](v1-readiness.md)). This document is the scoreboard:
+WP-CLI in [wp-cli-roadmap.md](wp-cli-roadmap.md), and the v1.0 charter in
+[v1-readiness.md](v1-readiness.md)). This document is the scoreboard:
 a short list of outcomes, each judged by a real-world number we can measure honestly.*
 
 Minn phones home to no one, so every metric here is one we can read without telemetry:
