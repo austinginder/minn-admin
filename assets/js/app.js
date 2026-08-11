@@ -55,6 +55,19 @@
 		'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 	}[ c ] ) );
 
+	// Escape for a CSS url() STRING, which is one nesting level below HTML.
+	// esc() is the HTML escaper: it turns ' into &#39;, but the HTML parser
+	// decodes entity references in an attribute value BEFORE the CSS parser
+	// sees it, so the apostrophe comes back and closes the url() string. That
+	// let an attacker-shaped media URL append declarations to the element
+	// (a beacon background-image, or a full-viewport fixed overlay). encodeURI
+	// covers <>"' already; the extra class catches ( ) and backslash.
+	// NOTE: the map is explicit because encodeURIComponent leaves ' ( ) alone
+	// (they are unreserved), so using it as the replacer would be a no-op for
+	// exactly the characters that break out of url('…').
+	const CSS_URL_ESC = { "'": '%27', '"': '%22', '(': '%28', ')': '%29', '\\': '%5C' };
+	const escCssUrl = ( u ) => encodeURI( String( u == null ? '' : u ) ).replace( /['"()\\]/g, ( c ) => CSS_URL_ESC[ c ] );
+
 	// Parse in an INERT document. A div created from the live document still
 	// runs the resource-loading side of HTML parsing, so `<img src=x
 	// onerror=…>` fires its handler during the parse — before any escaping of
@@ -991,7 +1004,7 @@
 			const has = img && img.id;
 			const url = has ? ( img.url || '' ) : '';
 			return `<div class="minn-field-image" ${ attr }="${ esc( id ) }" data-ftype="image" data-img-id="${ has ? esc( String( img.id ) ) : '' }" data-img-url="${ esc( url ) }">
-				${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ esc( url ) }')" title="Replace image"></button>` : '' }
+				${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="Replace image"></button>` : '' }
 				<div class="minn-field-image-actions">
 					<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : 'Set image' }</button>
 					${ has ? '<button type="button" class="minn-btn-soft danger" data-img-clear>Remove</button>' : '' }
@@ -1781,7 +1794,7 @@
 		if ( B.site.icon ) {
 			mark.classList.add( 'minn-logo-mark-icon' );
 			mark.textContent = '';
-			mark.style.backgroundImage = `url('${ B.site.icon }')`;
+			mark.style.backgroundImage = `url('${ escCssUrl( B.site.icon ) }')`;
 		} else {
 			mark.classList.remove( 'minn-logo-mark-icon' );
 			mark.style.backgroundImage = '';
@@ -1869,7 +1882,7 @@
 				<div class="minn-logo">
 					<button class="minn-logo-home" id="minn-logo-home" title="${ esc( __( 'Overview' ) ) }">
 						${ B.site.icon
-							? `<span class="minn-logo-mark minn-logo-mark-icon" style="background-image:url('${ esc( B.site.icon ) }')"></span>`
+							? `<span class="minn-logo-mark minn-logo-mark-icon" style="background-image:url('${ escCssUrl( B.site.icon ) }')"></span>`
 							: '<span class="minn-logo-mark">m</span>' }
 						<span class="minn-logo-name">${ esc( ( B.site.name || '' ).trim() || 'minn' ) }</span>
 					</button>
@@ -3934,7 +3947,7 @@
 		const countLabel = metaLabel( c.total, 'file' )
 			+ ( state.mediaFolder != null && state.mediaFolderCapped ? ' (newest 500 in folder)' : '' );
 		const thumbStyle = ( m ) => m.thumb
-			? `background-image:url('${ esc( m.thumb ) }')`
+			? `background-image:url('${ escCssUrl( m.thumb ) }')`
 			: `background:${ m.grad }`;
 
 		view.innerHTML = `
@@ -12288,8 +12301,8 @@
 					${ t.active ? '<span class="minn-status publish minn-theme-badge">Active</span>' : '' }
 					${ t.update && ! B.caps.updateThemes ? `<span class="minn-badge-update minn-theme-badge-u">Update ${ esc( t.update ) }</span>` : '' }`;
 				const shot = hubHref
-					? `<a class="minn-theme-shot minn-theme-shot-link"${ t.screenshot ? ` style="background-image:url('${ esc( t.screenshot ) }')"` : '' } href="${ esc( hubHref ) }" target="_blank" rel="noopener" title="${ esc( hubTitle ) }">${ shotInner }</a>`
-					: `<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ esc( t.screenshot ) }')"` : '' }>${ shotInner }</div>`;
+					? `<a class="minn-theme-shot minn-theme-shot-link"${ t.screenshot ? ` style="background-image:url('${ escCssUrl( t.screenshot ) }')"` : '' } href="${ esc( hubHref ) }" target="_blank" rel="noopener" title="${ esc( hubTitle ) }">${ shotInner }</a>`
+					: `<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ escCssUrl( t.screenshot ) }')"` : '' }>${ shotInner }</div>`;
 				return `
 				<div class="minn-card minn-theme${ t.active ? ' is-active' : '' }" data-theme="${ i }" data-stylesheet="${ esc( t.stylesheet ) }">
 					${ shot }
@@ -19657,7 +19670,7 @@
 					const has = !!( img && img.id );
 					const url = has ? ( img.url || '' ) : '';
 					wrap.innerHTML = `
-						${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ esc( url ) }')" title="Replace image"></button>` : '' }
+						${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="Replace image"></button>` : '' }
 						<div class="minn-field-image-actions">
 							<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : 'Set image' }</button>
 							${ has ? '<button type="button" class="minn-btn-soft danger" data-img-clear>Remove</button>' : '' }
@@ -20123,7 +20136,7 @@
 		<div class="minn-side-card">
 			<div class="minn-side-title">Featured image</div>
 			${ ed.featuredMedia && ed.featuredThumb ? `
-			<button type="button" class="minn-featured-thumb" id="minn-featured-preview" style="background-image:url('${ esc( ed.featuredThumb ) }')" title="Preview featured image" aria-label="Preview featured image"></button>
+			<button type="button" class="minn-featured-thumb" id="minn-featured-preview" style="background-image:url('${ escCssUrl( ed.featuredThumb ) }')" title="Preview featured image" aria-label="Preview featured image"></button>
 			<div style="display:flex; gap:8px; margin-top:10px;">
 				<button class="minn-btn-soft" id="minn-featured-set">Replace</button>
 				<button class="minn-btn-soft danger" id="minn-featured-remove">Remove</button>
@@ -29018,7 +29031,7 @@
 							: `<div class="minn-ti-grid">
 								${ m.results.map( ( t, i ) => `
 								<div class="minn-ti-card">
-									<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ esc( t.screenshot ) }')"` : '' }></div>
+									<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ escCssUrl( t.screenshot ) }')"` : '' }></div>
 									<div class="minn-ti-info">
 										<div class="minn-row-title">${ esc( t.name ) }</div>
 										<div class="minn-pi-meta">${ t.installs ? Number( t.installs ).toLocaleString() + '+ installs · ' : '' }v${ esc( t.version ) }</div>
@@ -29052,7 +29065,7 @@
 					${ items == null ? `<div class="minn-loading">Loading ${ any ? 'files' : 'images' }…</div>` : ! items.length ? `<div class="minn-empty">No ${ any ? 'files' : 'images' } in the library yet.</div>` : `
 					<div class="minn-picker-grid${ any ? ' any' : '' }">
 						${ items.map( ( it, i ) => it.thumb
-							? `<div class="minn-picker-item${ m.picked && m.picked.includes( it.id ) ? ' sel' : '' }" data-pick="${ i }" style="background-image:url('${ esc( it.thumb ) }')" title="${ esc( it.name ) }"></div>`
+							? `<div class="minn-picker-item${ m.picked && m.picked.includes( it.id ) ? ' sel' : '' }" data-pick="${ i }" style="background-image:url('${ escCssUrl( it.thumb ) }')" title="${ esc( it.name ) }"></div>`
 							: `<div class="minn-picker-item file${ m.picked && m.picked.includes( it.id ) ? ' sel' : '' }" data-pick="${ i }" title="${ esc( it.name ) }"><span class="minn-picker-file-icon">${ icon( 'file' ) }</span><span class="minn-picker-file-name">${ esc( it.name ) }</span></div>`
 						).join( '' ) }
 					</div>` }
