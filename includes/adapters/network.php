@@ -334,6 +334,202 @@ function minn_admin_network_site_counts( $user_ids ) {
 	return $out;
 }
 
+/**
+ * The network settings Minn edits: the daily slice of wp-admin's network
+ * settings screen, not all of it.
+ *
+ * Registration, uploads, what site administrators may do, and where network
+ * mail goes are the ones an operator actually revisits. The long tail (welcome
+ * emails, the first post's text, reserved names, language defaults) stays in
+ * Network Admin behind a link, the same stance Minn takes on the single-site
+ * settings long tail.
+ *
+ * Each entry declares how its option is STORED, because core's shapes differ
+ * per option ('yes'/'no', '1'/'0', an int as a string), and the save path
+ * writes those shapes exactly rather than inventing its own.
+ */
+function minn_admin_network_settings_spec() {
+	return array(
+		'registration' => array(
+			'title'  => __( 'Registration', 'minn-admin' ),
+			'fields' => array(
+				array(
+					'key'     => 'registration',
+					'label'   => __( 'Anyone can register', 'minn-admin' ),
+					'type'    => 'select',
+					'store'   => 'enum',
+					'options' => array(
+						array( 'none', __( 'Registration is closed', 'minn-admin' ) ),
+						array( 'user', __( 'Accounts may be registered', 'minn-admin' ) ),
+						array( 'blog', __( 'Existing accounts may add sites', 'minn-admin' ) ),
+						array( 'all', __( 'Accounts and sites may be registered', 'minn-admin' ) ),
+					),
+				),
+				array(
+					'key'   => 'registrationnotification',
+					'label' => __( 'Email me when someone registers', 'minn-admin' ),
+					'type'  => 'toggle',
+					'store' => 'yesno',
+				),
+				array(
+					'key'   => 'add_new_users',
+					'label' => __( 'Site administrators may create accounts', 'minn-admin' ),
+					'type'  => 'toggle',
+					'store' => 'onezero',
+				),
+			),
+		),
+		'uploads'      => array(
+			'title'  => __( 'Uploads', 'minn-admin' ),
+			'fields' => array(
+				array(
+					'key'   => 'blog_upload_space',
+					'label' => __( 'Storage per site (MB)', 'minn-admin' ),
+					'type'  => 'number',
+					'store' => 'int',
+				),
+				array(
+					'key'   => 'fileupload_maxk',
+					'label' => __( 'Largest single upload (KB)', 'minn-admin' ),
+					'type'  => 'number',
+					'store' => 'int',
+				),
+				array(
+					'key'         => 'upload_filetypes',
+					'label'       => __( 'Allowed file types', 'minn-admin' ),
+					'type'        => 'textarea',
+					'store'       => 'types',
+					'rows'        => 4,
+					'mono'        => true,
+					'placeholder' => 'jpg jpeg png gif pdf',
+				),
+			),
+		),
+		'sites'        => array(
+			'title'  => __( 'Sites', 'minn-admin' ),
+			'fields' => array(
+				array(
+					'key'   => 'menu_items_plugins',
+					'label' => __( 'Site administrators can manage plugins', 'minn-admin' ),
+					'type'  => 'toggle',
+					'store' => 'menu_items',
+				),
+				array(
+					'key'   => 'admin_email',
+					'label' => __( 'Network admin email', 'minn-admin' ),
+					'type'  => 'email',
+					'store' => 'email',
+				),
+			),
+		),
+	);
+}
+
+/** Current value of one spec field, in the shape the client's form wants. */
+function minn_admin_network_setting_value( $field ) {
+	$key = $field['key'];
+	switch ( $field['store'] ) {
+		case 'yesno':
+			return 'yes' === get_site_option( $key, 'no' );
+		case 'onezero':
+			return (bool) (int) get_site_option( $key, 0 );
+		case 'menu_items':
+			$items = (array) get_site_option( 'menu_items', array() );
+			return ! empty( $items['plugins'] );
+		case 'int':
+			return (int) get_site_option( $key, 0 );
+		case 'email':
+			return (string) get_site_option( $key, '' );
+		case 'types':
+			return (string) get_site_option( $key, '' );
+		case 'enum':
+		default:
+			return (string) get_site_option( $key, '' );
+	}
+}
+
+/**
+ * Write edited network settings, one option at a time, in core's own shapes.
+ * Keys are matched against the spec — never an arbitrary site-option write.
+ */
+function minn_admin_network_settings_save( $tab, $values ) {
+	$spec = minn_admin_network_settings_spec();
+	if ( ! isset( $spec[ $tab ] ) ) {
+		return new WP_Error( 'bad_tab', __( 'Unknown settings section.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$by_key = array();
+	foreach ( $spec[ $tab ]['fields'] as $f ) {
+		$by_key[ $f['key'] ] = $f;
+	}
+	foreach ( (array) $values as $key => $value ) {
+		if ( ! isset( $by_key[ $key ] ) ) {
+			continue; // not ours: ignore rather than write something unknown
+		}
+		$field = $by_key[ $key ];
+		switch ( $field['store'] ) {
+			case 'enum':
+				$allowed = wp_list_pluck( $field['options'], 0 );
+				if ( in_array( (string) $value, $allowed, true ) ) {
+					update_site_option( $key, (string) $value );
+				}
+				break;
+			case 'yesno':
+				update_site_option( $key, $value ? 'yes' : 'no' );
+				break;
+			case 'onezero':
+				update_site_option( $key, $value ? '1' : '0' );
+				break;
+			case 'menu_items':
+				$items            = (array) get_site_option( 'menu_items', array() );
+				$items['plugins'] = $value ? '1' : '0';
+				update_site_option( 'menu_items', $items );
+				break;
+			case 'int':
+				update_site_option( $key, (string) max( 0, (int) $value ) );
+				break;
+			case 'email':
+				$email = sanitize_email( (string) $value );
+				if ( ! is_email( $email ) ) {
+					return new WP_Error( 'bad_email', __( 'Enter a valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				update_site_option( $key, $email );
+				break;
+			case 'types':
+				// Core's own normalization: a space-separated lowercase list.
+				$types = array_filter( array_map( 'sanitize_key', preg_split( '/[\s,]+/', strtolower( (string) $value ) ) ) );
+				update_site_option( $key, implode( ' ', array_unique( $types ) ) );
+				break;
+		}
+	}
+	return true;
+}
+
+add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+	if ( ! minn_admin_network_can( 'manage_network_options' ) ) {
+		return $surfaces;
+	}
+	// Settings tabs are {id, label} objects (the surface settings contract),
+	// unlike a collection's [id, label] pairs.
+	$tabs = array();
+	foreach ( minn_admin_network_settings_spec() as $id => $section ) {
+		$tabs[] = array( 'id' => $id, 'label' => $section['title'] );
+	}
+	// A settings-only surface: no collection, so the settings form IS the
+	// page (the Perfmatters pattern).
+	$surfaces['network-settings'] = array(
+		'label'    => __( 'Network settings', 'minn-admin' ),
+		'group'    => 'network',
+		'icon'     => 'gear',
+		'cap'      => 'manage_network_options',
+		'settings' => array(
+			'label' => __( 'Network settings', 'minn-admin' ),
+			'tabs'  => $tabs,
+			'route' => 'minn-admin/v1/network/settings/{tab}',
+		),
+	);
+	return $surfaces;
+} );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_network_can( 'manage_network_users' ) ) {
 		return $surfaces;
@@ -440,6 +636,22 @@ add_action( 'rest_api_init', function () {
 		'args'                => array(
 			'plugin' => array( 'type' => 'string', 'required' => true ),
 			'on'     => array( 'type' => 'boolean', 'required' => true ),
+		),
+	) );
+
+	$options = function () {
+		return minn_admin_network_can( 'manage_network_options' );
+	};
+	register_rest_route( 'minn-admin/v1', '/network/settings/(?P<tab>[a-z0-9_-]+)', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => $options,
+			'callback'            => 'minn_admin_network_settings_get',
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => $options,
+			'callback'            => 'minn_admin_network_settings_post',
 		),
 	) );
 
@@ -784,6 +996,60 @@ function minn_admin_network_theme_enable( WP_REST_Request $request ) {
 			'network' => ! empty( $allowed[ $stylesheet ] ),
 		)
 	);
+}
+
+/** GET /network/settings/{tab} — the form model for one section. */
+function minn_admin_network_settings_get( WP_REST_Request $request ) {
+	$url  = $request->get_url_params();
+	$tab  = isset( $url['tab'] ) ? sanitize_key( $url['tab'] ) : '';
+	$spec = minn_admin_network_settings_spec();
+	if ( ! isset( $spec[ $tab ] ) ) {
+		return new WP_Error( 'bad_tab', __( 'Unknown settings section.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$fields = array();
+	$values = array();
+	foreach ( $spec[ $tab ]['fields'] as $f ) {
+		$field = array(
+			'key'   => $f['key'],
+			'label' => $f['label'],
+			'type'  => $f['type'],
+		);
+		foreach ( array( 'options', 'rows', 'mono', 'placeholder', 'desc' ) as $extra ) {
+			if ( isset( $f[ $extra ] ) ) {
+				$field[ $extra ] = $f[ $extra ];
+			}
+		}
+		$fields[]              = $field;
+		$values[ $f['key'] ]   = minn_admin_network_setting_value( $f );
+	}
+	return rest_ensure_response(
+		array(
+			'groups'   => array(
+				array(
+					'title'  => $spec[ $tab ]['title'],
+					'fields' => $fields,
+					'locked' => 0,
+				),
+			),
+			'values'   => $values,
+			'adminUrl' => network_admin_url( 'settings.php' ),
+		)
+	);
+}
+
+/** POST /network/settings/{tab} — save the edited keys, then re-read. */
+function minn_admin_network_settings_post( WP_REST_Request $request ) {
+	$url    = $request->get_url_params();
+	$tab    = isset( $url['tab'] ) ? sanitize_key( $url['tab'] ) : '';
+	$values = $request->get_param( 'values' );
+	if ( ! is_array( $values ) ) {
+		$values = array();
+	}
+	$saved = minn_admin_network_settings_save( $tab, $values );
+	if ( is_wp_error( $saved ) ) {
+		return $saved;
+	}
+	return minn_admin_network_settings_get( $request );
 }
 
 /** GET /network/users — every account on the network, paginated. */
