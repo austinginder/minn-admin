@@ -351,9 +351,17 @@ add_action( 'rest_api_init', function () {
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
 					}
-					$json = (array) $request->get_json_params();
-					if ( array_key_exists( 'code_type', $json ) ) {
-						$guard_new = minn_admin_wpcode_guard_type( sanitize_key( (string) $request['code_type'] ), (int) $request['id'] );
+					// Resolve the submitted type ONCE, from the same accessor the
+					// write below uses. $request['code_type'] resolves JSON, then
+					// POST, then GET, then URL — so a guard that peeked only at
+					// get_json_params() was skipped entirely by sending
+					// ?code_type=php in the query string while the write still
+					// picked it up. Guard and write must never read different
+					// parameter sources.
+					$new_type = $request['code_type'];
+					if ( null !== $new_type ) {
+						$new_type  = sanitize_key( (string) $new_type );
+						$guard_new = minn_admin_wpcode_guard_type( $new_type, (int) $request['id'] );
 						if ( is_wp_error( $guard_new ) ) {
 							return $guard_new;
 						}
@@ -378,8 +386,8 @@ add_action( 'rest_api_init', function () {
 					if ( null !== $request['code'] ) {
 						$patch['code'] = (string) $request['code'];
 					}
-					if ( null !== $request['code_type'] ) {
-						$patch['code_type'] = sanitize_key( (string) $request['code_type'] );
+					if ( null !== $new_type ) {
+						$patch['code_type'] = $new_type;
 					}
 					if ( null !== $request['location'] ) {
 						$patch['location'] = sanitize_key( (string) $request['location'] );
@@ -412,6 +420,17 @@ add_action( 'rest_api_init', function () {
 					if ( ! $post || 'wpcode' !== $post->post_type ) {
 						return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
 					}
+					// Destroying a snippet needs the same bar as editing it: the
+					// stored code type's tier AND edit_post on this snippet.
+					// Without it a text/markup-tier user could permanently delete
+					// production PHP snippets they were never allowed to author.
+					$guard = minn_admin_wpcode_guard_type( (string) ( new WPCode_Snippet( $id ) )->get_code_type(), $id );
+					if ( is_wp_error( $guard ) ) {
+						return $guard;
+					}
+					if ( ! current_user_can( 'delete_post', $id ) ) {
+						return new WP_Error( 'forbidden', 'You cannot delete that snippet.', array( 'status' => 403 ) );
+					}
 					$ok = wp_delete_post( $id, true );
 					if ( ! $ok ) {
 						return new WP_Error( 'wpcode_delete_failed', 'Could not delete the snippet.', array( 'status' => 500 ) );
@@ -432,6 +451,13 @@ add_action( 'rest_api_init', function () {
 				$snippet = new WPCode_Snippet( (int) $request['id'] );
 				if ( ! $snippet->get_id() ) {
 					return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+				}
+				// Publishing a snippet runs its code, so the stored type's tier
+				// gates this too — a text-tier user must not be able to activate
+				// or deactivate someone else's PHP snippet.
+				$guard = minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $request['id'] );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
 				}
 				if ( ! empty( $request['active'] ) ) {
 					$snippet->activate();
