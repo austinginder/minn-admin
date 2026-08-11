@@ -25,6 +25,17 @@ function minn_admin_llar_active() {
 }
 
 function minn_admin_llar_can() {
+	// LLA-R has a network mode: when its "use local options" network setting
+	// is off on multisite, the log/lockouts live in SITE options shared by
+	// every subsite — network data, so a per-site cap is not enough (their
+	// own admin UI moves to Network Admin in that mode). Local mode keeps
+	// per-site options and per-site access.
+	if ( is_multisite() && ! is_super_admin()
+		&& class_exists( '\LLAR\Core\Helpers' )
+		&& method_exists( '\LLAR\Core\Helpers', 'use_local_options' )
+		&& ! \LLAR\Core\Helpers::use_local_options() ) {
+		return false;
+	}
 	return current_user_can( 'manage_options' ) || current_user_can( 'llar_admin' );
 }
 
