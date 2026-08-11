@@ -4,6 +4,8 @@
 
 The images release. Every gallery-shaped block gets one images editor: a tile grid to reorder, replace, add, remove, duplicate and caption photos, covering sliders, fixed layouts and blocks that keep their pictures in settings. Each image moves as an exact unit, so captions and per-image tweaks travel with it. Columns, crop and random order sit on the gallery's ⚙ popover, dropped photos upload straight into the block, and Jetpack's tiled gallery can be built and edited outright. Groups of styled paragraphs open in an Edit content window, text first, with each block's other settings behind a toggle. Previews match the front end, and a security audit of v0.26.0 is complete with every finding fixed.
 
+![The Edit content window over a stats strip: one card per paragraph with its text front and center, other settings tucked behind a toggle](https://minnadmin.com/content/18/uploads/2026/08/minn-edit-content-v0-27-scaled.webp)
+
 ### Added
 * **Gallery settings, the safe ones:** a gallery's ⚙ popover now offers Columns, Crop images and Random order alongside Edit images. Columns and crop live in both the block's settings and its markup, so applying rewrites the two together and the change renders exactly as the block editor would have written it. Link, size and lightbox options rewrite every photo in the gallery, so those stay in the block editor and the popover says so.
 * **Previews lay galleries out correctly:** a four-column gallery used to preview three across. The width each column reserves assumes the gap the theme actually uses, and that gap value only existed on a real page view; previews now receive it, so columns match the block's setting (this also tightens group and grid spacing in previews generally).
