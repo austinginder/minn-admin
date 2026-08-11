@@ -1216,6 +1216,12 @@
 	// `group` places the entry: 'workspace' for inbox-shaped surfaces the
 	// descriptor opts into (form entries), everything else defaults to the
 	// Tools group so the prime real estate stays curated.
+	// The nav groups a surface may claim. Anything else lands in Tools, which
+	// is the catch-all for site plumbing (the server separately demotes a
+	// workspace claim that is not inbox-shaped).
+	const NAV_GROUPS = [ 'workspace', 'network' ];
+	const navGroupOf = ( g ) => NAV_GROUPS.includes( g ) ? g : 'tools';
+
 	function surfaceNavItems() {
 		const out = [];
 		const seen = new Set();
@@ -1225,9 +1231,9 @@
 				seen.add( s.family );
 				const id = preferredSurfaceId( s.family );
 				const primary = surfaceById( id ) || s;
-				out.push( { id: primary.id, label: primary.label, icon: primary.icon || 'plug', family: s.family, group: ( primary.group || s.group ) === 'workspace' ? 'workspace' : 'tools' } );
+				out.push( { id: primary.id, label: primary.label, icon: primary.icon || 'plug', family: s.family, group: navGroupOf( primary.group || s.group ) } );
 			} else {
-				out.push( { id: s.id, label: s.label, icon: s.icon || 'plug', group: s.group === 'workspace' ? 'workspace' : 'tools' } );
+				out.push( { id: s.id, label: s.label, icon: s.icon || 'plug', group: navGroupOf( s.group ) } );
 			}
 		} );
 		return out;
@@ -1598,7 +1604,16 @@
 	// Tools nav items: site plumbing (logs, redirects, snippets, backups) —
 	// where surface families land unless their descriptor claims workspace.
 	function toolsNavItems() {
-		return surfaceNavItems().filter( ( s ) => s.group !== 'workspace' )
+		return surfaceNavItems().filter( ( s ) => s.group !== 'workspace' && s.group !== 'network' )
+			.map( ( s ) => ( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } ) );
+	}
+
+	// Network nav items (multisite): surfaces that belong to the whole
+	// network rather than this site. The group is capability-gated on the
+	// server — its surfaces never reach a boot payload without the network
+	// capability — so an empty list here simply means "not a super admin".
+	function networkNavItems() {
+		return surfaceNavItems().filter( ( s ) => s.group === 'network' )
 			.map( ( s ) => ( { id: s.id, label: s.label, icon: s.icon || 'plug', family: s.family || '' } ) );
 	}
 
@@ -1791,6 +1806,12 @@
 	// serves its own Minn at its own origin), which is what the admin bar's
 	// "My Sites" does. Network Admin rides along for super admins as the
 	// honest link-out to what Minn does not cover.
+	// True when the user belongs to more sites than the boot payload carries
+	// — the menu then offers search instead of pretending to be complete.
+	function hasMoreSites() {
+		return ( B.sitesTotal || 0 ) > ( B.sites || [] ).length;
+	}
+
 	function siteSwitchEntries() {
 		const sites = B.sites || [];
 		if ( ! sites.length ) return [];
@@ -1803,11 +1824,65 @@
 				window.location.href = s.app;
 			},
 		} ) );
+		if ( hasMoreSites() ) {
+			entries.push( {
+				/* translators: %d: number of sites the person belongs to. */
+				label: sprintf( __( 'Search all %d sites…' ), B.sitesTotal ),
+				run: () => openSitePicker(),
+			} );
+		}
 		if ( B.site.networkAdminUrl ) {
 			entries.push( { heading: __( 'Network' ) } );
 			entries.push( { label: __( 'Network Admin ↗' ), href: B.site.networkAdminUrl } );
 		}
 		return entries;
+	}
+
+	// Searchable site picker for people who belong to more sites than a menu
+	// can hold. Server-side search runs over each site's ADDRESS (titles live
+	// in per-site option tables and cannot be searched without visiting every
+	// site); the loaded page is additionally filtered by title here, so a
+	// title match among the results still works.
+	function openSitePicker() {
+		state.modal = { type: 'site-picker', q: '', items: null, total: 0, loading: true };
+		renderOverlays();
+		loadSitePicker( '' );
+	}
+
+	// Hide picker rows that don't match what's typed, without touching the
+	// input node (see the render comment). Matches name OR address, so a
+	// title match works even though the server searches addresses only.
+	function filterSitePickerRows() {
+		const m = state.modal;
+		if ( ! m || m.type !== 'site-picker' ) return;
+		const q = ( m.q || '' ).trim().toLowerCase();
+		let shown = 0;
+		$$( '[data-spfind]' ).forEach( ( row ) => {
+			const hit = ! q || row.dataset.spfind.includes( q );
+			row.hidden = ! hit;
+			if ( hit ) shown++;
+		} );
+		const none = $( '#minn-sp-none' );
+		if ( none ) none.hidden = shown > 0 || ! m.items;
+	}
+
+	async function loadSitePicker( q ) {
+		const m = state.modal;
+		if ( ! m || m.type !== 'site-picker' ) return;
+		m.loading = true;
+		try {
+			const r = await api( 'minn-admin/v1/my-sites?per_page=20&search=' + encodeURIComponent( q ) );
+			// Discard a response the query moved past (the input keeps typing).
+			if ( state.modal !== m || ( m.q || '' ) !== q ) return;
+			m.items = Array.isArray( r.items ) ? r.items : [];
+			m.total = r.total || 0;
+		} catch ( e ) {
+			if ( state.modal !== m ) return;
+			m.items = [];
+			m.error = e.message;
+		}
+		m.loading = false;
+		renderOverlays();
 	}
 
 	// Update the sidebar brand in place from B.site (name + Site Icon). The
@@ -1868,7 +1943,7 @@
 			ordersHidden: $( '#minn-orders-count' )?.hidden,
 			dotHidden: $( '#minn-plugin-dot' )?.hidden,
 		};
-		[ [ 'workspace', workspaceNavItems() ], [ 'tools', toolsNavItems() ], [ 'manage', manageNavItems() ] ].forEach( ( [ key, items ] ) => {
+		[ [ 'workspace', workspaceNavItems() ], [ 'tools', toolsNavItems() ], [ 'manage', manageNavItems() ], [ 'network', networkNavItems() ] ].forEach( ( [ key, items ] ) => {
 			const body = $( '#minn-nav-' + key );
 			if ( ! body ) return;
 			body.innerHTML = items.map( navBtnHtml ).join( '' );
@@ -1926,6 +2001,7 @@
 					${ navGroupHtml( 'workspace', __( 'Workspace' ), workspaceNavItems() ) }
 					${ navGroupHtml( 'tools', __( 'Tools' ), toolsNavItems(), true ) }
 					${ navGroupHtml( 'manage', __( 'Manage' ), manageItems, true ) }
+					${ navGroupHtml( 'network', __( 'Network' ), networkNavItems(), true ) }
 				</nav>
 				${ B.switchBack ? `
 			<a class="minn-switchback" href="${ esc( B.switchBack.url ) }" title="${ esc( __( 'End this switched session' ) ) }">
@@ -27629,16 +27705,30 @@
 		// opens a second picker), so typing a site's name reaches it in one
 		// step. The palette matches a contiguous substring of the label, so
 		// "switch" lists them all. B.sites excludes the one-site case.
-		( B.sites || [] ).forEach( ( s ) => {
-			if ( s.current ) return;
+		//
+		// Past the boot cap the palette would be listing an arbitrary slice
+		// of a much longer list, which reads as "these are your sites" when
+		// it is not — so a big network gets ONE entry that opens the
+		// searchable picker instead.
+		if ( ( B.sites || [] ).length && hasMoreSites() ) {
 			cmds.push( {
-				/* translators: %s: site name. */
-				label: sprintf( __( 'Switch to %s' ), s.name || s.url ),
+				label: __( 'Switch site…' ),
 				kind: 'nav',
 				icon: '⊞',
-				run: () => { window.location.href = s.app; },
+				run: () => openSitePicker(),
 			} );
-		} );
+		} else {
+			( B.sites || [] ).forEach( ( s ) => {
+				if ( s.current ) return;
+				cmds.push( {
+					/* translators: %s: site name. */
+					label: sprintf( __( 'Switch to %s' ), s.name || s.url ),
+					kind: 'nav',
+					icon: '⊞',
+					run: () => { window.location.href = s.app; },
+				} );
+			} );
+		}
 		if ( B.site.networkAdminUrl ) {
 			cmds.push( {
 				label: __( 'Open Network Admin ↗' ),
@@ -28782,6 +28872,44 @@
 					<div class="minn-modal-actions">
 						<button class="minn-btn-primary" id="minn-ue-send">${ icon( 'send' ) } Send email</button>
 						<button class="minn-btn-soft" id="minn-modal-cancel">Cancel</button>
+					</div>
+				</div>
+			</div>`;
+		}
+
+		if ( m.type === 'site-picker' ) {
+			// Rows render UNFILTERED and carry their own search text: typing
+			// filters them in place (filterSitePickerRows) rather than
+			// re-rendering, because a re-render per keystroke would replace
+			// the input the person is typing into and drop the keystrokes
+			// after the first. The server call is debounced separately and
+			// only its RESULT re-renders.
+			const items = m.items || [];
+			return `
+			<div class="minn-modal-overlay" id="minn-modal-overlay">
+				<div class="minn-modal">
+					<div class="minn-modal-head">
+						<div class="minn-modal-title-block">
+							<div class="minn-modal-title">${ esc( __( 'Switch site' ) ) }</div>
+							<div class="minn-modal-sub">${ esc( sprintf(
+								/* translators: %d: number of sites. */
+								__( 'You belong to %d sites' ), B.sitesTotal || 0 ) ) }</div>
+						</div>
+						<button class="minn-x-btn" id="minn-modal-close">×</button>
+					</div>
+					<div class="minn-modal-form">
+						<input class="minn-input" id="minn-sp-q" value="${ esc( m.q || '' ) }" placeholder="${ esc( __( 'Search by name or address…' ) ) }" autocomplete="off" spellcheck="false">
+					</div>
+					<div class="minn-sp-list">
+						${ m.loading && ! m.items ? `<div class="minn-loading">${ esc( __( 'Loading sites…' ) ) }</div>` : '' }
+						${ m.items && ! items.length ? `<div class="minn-empty" style="padding:18px;">${ esc( __( 'No sites match that search.' ) ) }</div>` : '' }
+						${ items.map( ( s ) => `
+							<button class="minn-sp-row${ s.current ? ' is-on' : '' }" data-spgo="${ esc( s.app ) }" data-spfind="${ esc( ( ( s.name || '' ) + ' ' + ( s.url || '' ) ).toLowerCase() ) }"${ s.current ? ' disabled' : '' }>
+								<span class="minn-sp-name">${ esc( s.name || s.url ) }</span>
+								<span class="minn-sp-url mono">${ esc( s.url ) }</span>
+								${ s.current ? `<span class="minn-sp-here">${ esc( __( 'You are here' ) ) }</span>` : '' }
+							</button>` ).join( '' ) }
+						<div class="minn-empty" id="minn-sp-none" hidden style="padding:18px;">${ esc( __( 'No sites match that search.' ) ) }</div>
 					</div>
 				</div>
 			</div>`;
@@ -30272,6 +30400,29 @@
 					btn.disabled = false;
 				}
 			} );
+		}
+
+		if ( m.type === 'site-picker' ) {
+			const input = $( '#minn-sp-q' );
+			if ( input ) {
+				// A server response re-renders this modal; put the caret back
+				// where it was so an in-flight search never disturbs typing.
+				input.focus( { preventScroll: true } );
+				const pos = m.caret == null ? input.value.length : m.caret;
+				input.setSelectionRange( pos, pos );
+				let t = null;
+				input.addEventListener( 'input', () => {
+					m.q = input.value;
+					m.caret = input.selectionStart;
+					filterSitePickerRows();
+					clearTimeout( t );
+					t = setTimeout( () => loadSitePicker( ( m.q || '' ).trim() ), 250 );
+				} );
+			}
+			filterSitePickerRows();
+			$$( '[data-spgo]' ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
+				window.location.href = btn.dataset.spgo;
+			} ) );
 		}
 
 		if ( m.type === 'user-add-existing' ) {

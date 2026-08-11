@@ -622,8 +622,16 @@ class Minn_Admin {
 	 *
 	 * @return array<int, array<string, mixed>>
 	 */
-	public static function user_sites() {
-		if ( ! is_multisite() || wp_is_large_network() ) {
+	const SITES_MENU_LIMIT = 8;
+
+	/**
+	 * The blog ids this user belongs to, newest membership last, or an empty
+	 * array off multisite. One query; no per-site work.
+	 *
+	 * @return int[]
+	 */
+	public static function user_site_ids() {
+		if ( ! is_multisite() ) {
 			return array();
 		}
 		$uid = get_current_user_id();
@@ -631,40 +639,95 @@ class Minn_Admin {
 			return array();
 		}
 		$blogs = get_blogs_of_user( $uid );
-		if ( ! is_array( $blogs ) || count( $blogs ) < 2 ) {
+		if ( ! is_array( $blogs ) ) {
+			return array();
+		}
+		return array_map( 'intval', wp_list_pluck( $blogs, 'userblog_id' ) );
+	}
+
+	/**
+	 * Describe specific sites for the switcher: name, address, and the app
+	 * URL to jump to.
+	 *
+	 * Reading a site's name and permalink structure means entering its
+	 * context, so this is O(sites passed in) and callers MUST pass a bounded
+	 * page — never a whole network's worth of ids. That is why the boot
+	 * payload caps at SITES_MENU_LIMIT and search is paginated: a network can
+	 * have thousands of sites, and neither a page load nor a menu can carry
+	 * them.
+	 *
+	 * A site is included only when Minn is active there and the user clears
+	 * the app's own `edit_posts` gate, so every entry leads somewhere usable.
+	 *
+	 * @param int[] $ids Bounded list of blog ids.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function describe_sites( $ids ) {
+		$uid = get_current_user_id();
+		if ( ! $uid || ! $ids ) {
 			return array();
 		}
 		$current = get_current_blog_id();
 		$plugin  = plugin_basename( MINN_ADMIN_FILE );
 		$network = (array) get_site_option( 'active_sitewide_plugins', array() );
 		$net_on  = isset( $network[ $plugin ] );
-		$sites   = array();
-		foreach ( $blogs as $blog ) {
-			$blog_id = (int) $blog->userblog_id;
+		$out     = array();
+		foreach ( $ids as $blog_id ) {
+			$blog_id = (int) $blog_id;
 			switch_to_blog( $blog_id );
 			$active = $net_on || in_array( $plugin, (array) get_option( 'active_plugins', array() ), true );
 			if ( $active && user_can( $uid, 'edit_posts' ) ) {
-				$sites[] = array(
+				$out[] = array(
 					'id'      => $blog_id,
 					'name'    => self::plain_text( get_bloginfo( 'name' ) ),
 					'url'     => home_url( '/' ),
 					'app'     => self::app_url(),
-					'icon'    => get_site_icon_url( 64 ),
 					'current' => $blog_id === $current,
 				);
 			}
 			restore_current_blog();
 		}
-		if ( count( $sites ) < 2 ) {
-			return array();
-		}
 		usort(
-			$sites,
+			$out,
 			function ( $a, $b ) {
 				return strcasecmp( $a['name'], $b['name'] );
 			}
 		);
-		return $sites;
+		return $out;
+	}
+
+	/**
+	 * Multisite: the switcher's boot model — a CAPPED page of the sites this
+	 * user can open Minn on, always including the one they are standing in,
+	 * plus the true total so the client knows when to offer search instead of
+	 * a longer menu.
+	 *
+	 * Returns an empty list when only one site qualifies (a menu with nothing
+	 * to switch to is worse than no control) and off multisite.
+	 *
+	 * @return array{sites: array, total: int}
+	 */
+	public static function user_sites_payload() {
+		$ids = self::user_site_ids();
+		if ( count( $ids ) < 2 ) {
+			return array( 'sites' => array(), 'total' => 0 );
+		}
+		$current = get_current_blog_id();
+		// The current site always earns a slot; the rest fill the cap in id
+		// order, and the describe pass sorts what survives by name.
+		$page = array_slice( array_values( array_diff( $ids, array( $current ) ) ), 0, self::SITES_MENU_LIMIT - 1 );
+		if ( in_array( $current, $ids, true ) ) {
+			array_unshift( $page, $current );
+		}
+		$sites = self::describe_sites( $page );
+		if ( count( $sites ) < 2 ) {
+			return array( 'sites' => array(), 'total' => 0 );
+		}
+		// `total` counts memberships, not qualifying sites: resolving that
+		// exactly would cost the per-site work the cap exists to avoid. It
+		// drives one decision only — whether to offer search — and erring
+		// toward offering it is the safe direction.
+		return array( 'sites' => $sites, 'total' => count( $ids ) );
 	}
 
 	/**
@@ -796,6 +859,7 @@ class Minn_Admin {
 		// only the descriptor payload sent to the client. See insertable_blocks.
 		$raw_block_forms = apply_filters( 'minn_admin_block_forms', array() );
 		$block_forms     = self::filter_block_forms( $raw_block_forms );
+		$sites_payload   = self::user_sites_payload();
 
 		$boot = array(
 			'restUrl'  => esc_url_raw( rest_url() ),
@@ -917,10 +981,12 @@ class Minn_Admin {
 			// remove-from-site, profile edits need network caps), plugins can
 			// be network-activated. Client views branch on this.
 			'multisite' => is_multisite(),
-			// The sites this user can actually open Minn on (empty off
-			// multisite, and when only this one qualifies — the switcher and
-			// its palette command both hide rather than show a list of one).
-			'sites'    => self::user_sites(),
+			// The sites this user can open Minn on: a CAPPED page for the
+			// switcher plus the membership total, so a network with thousands
+			// of sites costs a page load nothing and offers search instead of
+			// an unusable menu. Empty off multisite and for single-site users.
+			'sites'     => $sites_payload['sites'],
+			'sitesTotal' => $sites_payload['total'],
 			'wc'       => class_exists( 'WooCommerce' ),
 			// WooCommerce Subscriptions extension (wc/v3/subscriptions REST).
 			'wcs'      => class_exists( 'WooCommerce' ) && class_exists( 'WC_Subscriptions' ),
