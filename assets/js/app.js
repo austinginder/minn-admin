@@ -237,6 +237,16 @@
 		return s;
 	}
 
+	// Absolute fallback for timeAgo once a date is older (or further ahead)
+	// than a week. Month + day is enough inside the current year; a yearless
+	// "Aug 17" on a long-lived site reads as this August and the list looks
+	// out of order. Full year only when the calendar year differs.
+	function formatListDate( d ) {
+		const opts = { month: 'short', day: 'numeric' };
+		if ( d.getFullYear() !== new Date().getFullYear() ) opts.year = 'numeric';
+		return d.toLocaleDateString( undefined, opts );
+	}
+
 	function timeAgo( dateStr, opts ) {
 		const s = normalizeTimeInput( dateStr, opts && typeof opts === 'object' ? opts : null );
 		if ( ! s ) return '—';
@@ -249,14 +259,14 @@
 			if ( f < 3600 ) return 'in ' + Math.max( 1, Math.round( f / 60 ) ) + ' min';
 			if ( f < 86400 ) return 'in ' + Math.round( f / 3600 ) + 'h';
 			if ( f < 86400 * 7 ) return 'in ' + Math.round( f / 86400 ) + 'd';
-			return d.toLocaleDateString( undefined, { month: 'short', day: 'numeric' } );
+			return formatListDate( d );
 		}
 		const sec = Math.max( 1, diff );
 		if ( sec < 60 ) return 'just now';
 		if ( sec < 3600 ) return Math.round( sec / 60 ) + ' min ago';
 		if ( sec < 86400 ) return Math.round( sec / 3600 ) + 'h ago';
 		if ( sec < 86400 * 7 ) return Math.round( sec / 86400 ) + 'd ago';
-		return d.toLocaleDateString( undefined, { month: 'short', day: 'numeric' } );
+		return formatListDate( d );
 	}
 
 	// Surface list cells: pass field key + optional col.utc.
@@ -647,6 +657,8 @@
 		editorType: 'posts',
 		filter: 'all',
 		contentSearch: '',
+		contentOrderby: 'date',
+		contentOrder: 'desc',
 		mediaView: 'grid',
 		uploadOpen: false,
 		commentTab: 'hold',
@@ -3110,11 +3122,14 @@
 		const statuses = state.contentTrash
 			? 'trash'
 			: 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' );
-		// orderby=date puts scheduled posts (future dates) first, then everything
-		// else newest-published first — the list reads as a publishing timeline.
+		// Default orderby=date puts scheduled posts (future dates) first, then
+		// everything else newest-published first — a publishing timeline.
+		// Title sort is opt-in via the column header (page-heavy sites).
 		// featured_media + _embed=wp:featuredmedia power the list thumbnails;
 		// author embed is unchanged (names without a second users request).
-		let q = `context=edit&status=${ statuses }&per_page=25&orderby=date`
+		const orderby = state.contentOrderby === 'title' ? 'title' : 'date';
+		const order = state.contentOrder === 'asc' ? 'asc' : 'desc';
+		let q = `context=edit&status=${ statuses }&per_page=25&orderby=${ orderby }&order=${ order }`
 			+ `&_embed=author,wp:featuredmedia`
 			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,minn_modified,minn_lock,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
@@ -3180,7 +3195,7 @@
 	// into the new context — in trash mode that would put Restore/Delete
 	// buttons on live posts. Same-context loads may land freely (they fetch
 	// identical data), so parallel startup loads can't starve each other.
-	const contentCtx = () => [ state.filter || 'all', state.contentTrash ? 't' : '', state.contentModified ? 'm' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '' ].join( '|' );
+	const contentCtx = () => [ state.filter || 'all', state.contentTrash ? 't' : '', state.contentModified ? 'm' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '', state.contentOrderby || 'date', state.contentOrder || 'desc' ].join( '|' );
 
 	async function loadCpt( page = 1 ) {
 		const t = currentCpt();
@@ -3244,7 +3259,17 @@
 		}
 		await Promise.all( jobs );
 		if ( ctx !== contentCtx() ) return; // context changed mid-flight — discard
-		c.items.sort( ( a, b ) => ( a.date < b.date ? 1 : -1 ) );
+		// All-tab merge: each source is already server-sorted; this only
+		// interleaves the two page-N slices the same way date-desc always did.
+		const dir = state.contentOrder === 'asc' ? 1 : -1;
+		if ( ( state.contentOrderby || 'date' ) === 'title' ) {
+			c.items.sort( ( a, b ) => dir * ( a.title || '' ).localeCompare( b.title || '', undefined, { sensitivity: 'base' } ) );
+		} else {
+			c.items.sort( ( a, b ) => {
+				if ( a.date === b.date ) return 0;
+				return dir * ( a.date < b.date ? -1 : 1 );
+			} );
+		}
 		c.total = ( c.postTotal || 0 ) + ( c.pageTotal || 0 );
 		c.totalPages = Math.max( c.postPages || 0, c.pagePages || 0, 1 );
 		state.cache.content = c;
@@ -3258,6 +3283,23 @@
 	}
 
 	const STATUS_LABELS = { publish: 'Published', draft: 'Draft', future: 'Scheduled', pending: 'Pending', private: 'Private', trash: 'Trashed' };
+
+	// Title and Date only — author and status are not useful sort keys here
+	// and status is not a WP REST orderby.
+	const CONTENT_SORT_COLS = {
+		title: { orderby: 'title', label: 'Title', defaultOrder: 'asc' },
+		date: { orderby: 'date', label: 'Date', defaultOrder: 'desc' },
+	};
+
+	function contentSortHead( key ) {
+		const col = CONTENT_SORT_COLS[ key ];
+		if ( ! col ) return '';
+		const active = ( state.contentOrderby || 'date' ) === col.orderby;
+		const order = state.contentOrder === 'asc' ? 'asc' : 'desc';
+		const mark = active ? ( order === 'asc' ? ' ↑' : ' ↓' ) : '';
+		const label = sortButtonLabel( col.label, active, order );
+		return `<button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-csort="${ esc( key ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ esc( col.label ) }${ mark }</button>`;
+	}
 
 	let contentSearchTimer = null;
 
@@ -3408,7 +3450,7 @@
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-content-cols${ state.contentTrash ? ' trash' : '' }">
 				<div><input type="checkbox" class="minn-cb" id="minn-sel-all" aria-label="${ esc( __( 'Select all items' ) ) }"${ filtered.length && filtered.every( ( p ) => sel.has( p.id ) ) ? ' checked' : '' }></div>
-				<div></div><div>Title</div><div>Status</div><div>Author</div><div>Date</div><div></div>
+				<div></div><div>${ contentSortHead( 'title' ) }</div><div>Status</div><div>Author</div><div>${ contentSortHead( 'date' ) }</div><div></div>
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
 				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }">
@@ -3424,7 +3466,7 @@
 					</div>
 					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.unsaved ? '<span class="minn-status modified" title="Carrying unsaved edits: an autosave is newer than the version being served">Modified</span>' : '' }${ p.lockedBy ? `<span class="minn-status editing" title="${ esc( p.lockedBy ) } has this open in an editor right now">${ esc( p.lockedBy ) } is editing</span>` : '' }</div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
-					<div class="minn-row-meta" title="${ esc( parseWpDate( p.date ).toLocaleString() ) }">${ timeAgo( p.date ) }</div>
+					<div class="minn-row-meta minn-row-date" title="${ esc( parseWpDate( p.date ).toLocaleString() ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
 					<div class="minn-row-actions">
 						<button class="minn-btn-soft" data-restore="${ p.id }">Restore</button>
@@ -3485,6 +3527,22 @@
 			load: () => ( currentCpt() ? loadCpt() : loadContent() ),
 			render: renderContent,
 		} );
+		// Same-column click flips; a new column uses that field's default.
+		$$( '[data-csort]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', ( e ) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const col = CONTENT_SORT_COLS[ btn.dataset.csort ];
+				if ( ! col ) return;
+				if ( ( state.contentOrderby || 'date' ) === col.orderby ) {
+					state.contentOrder = state.contentOrder === 'asc' ? 'desc' : 'asc';
+				} else {
+					state.contentOrderby = col.orderby;
+					state.contentOrder = col.defaultOrder;
+				}
+				reloadContent();
+			} )
+		);
 		const catWrap = view.querySelector( '[data-taxcombo="cat"]' );
 		if ( catWrap ) bindAutocomplete( catWrap, taxComboOptions( 'All categories', terms.categories ), {
 			strict: true, value: state.contentCat || '',

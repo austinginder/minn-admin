@@ -804,7 +804,7 @@ button.minn-nav-label:hover { color: var(--text2); }
   border-bottom: 1px solid var(--border); align-items: center;
 }
 .minn-table-head { font-size: 12.5px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
-/* Sortable column headers (Users list). */
+/* Sortable column headers (Content list, Users list, surface collections). */
 .minn-th-sort {
   display: inline-flex; align-items: center; gap: 2px;
   margin: 0; padding: 0; border: 0; background: none;
@@ -2375,8 +2375,8 @@ a.minn-btn-soft { text-decoration: none; }
 button.minn-chip.sel[data-tagchip] { cursor: pointer; background: var(--accent-soft); border-color: var(--accent); color: var(--accent2); font-family: inherit; }
 button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(--red); }
 /* Content bulk selection. */
-.minn-content-cols { grid-template-columns: 34px 44px 1fr 110px 130px 110px 40px; }
-.minn-content-cols.trash { grid-template-columns: 34px 44px 1fr 110px 130px 110px 158px; }
+.minn-content-cols { grid-template-columns: 34px 44px 1fr 110px 130px 124px 40px; }
+.minn-content-cols.trash { grid-template-columns: 34px 44px 1fr 110px 130px 124px 158px; }
 .minn-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .minn-row-actions .minn-btn-soft { padding: 4px 10px; font-size: 12.5px; }
 .minn-cbcell { display: flex; align-items: center; justify-content: center; }
