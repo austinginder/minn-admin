@@ -34,8 +34,14 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		} );
 		return await r.json();
 	} );
-	const pluginId = ( frag ) => ( plugins.find( ( p ) => p.name.toLowerCase().includes( frag ) ) || {} ).plugin;
-	const IDS = { yoast: pluginId( 'yoast seo' ), aioseo: pluginId( 'all in one seo' ), seopress: pluginId( 'seopress' ), siteseo: pluginId( 'siteseo' ), surerank: pluginId( 'surerank' ) };
+	// Resolve by plugin DIRECTORY, never by a name substring: "Admin Columns
+	// Pro - Yoast SEO" contains "yoast seo" and sorts first, so the old
+	// name match pointed IDS.yoast at an Admin Columns ADDON. The suite then
+	// deactivated the real Yoast and "restored" the addon, quietly leaving
+	// the dev site without its resident SEO provider after every run.
+	const DIRS = { yoast: 'wordpress-seo', aioseo: 'all-in-one-seo-pack', seopress: 'wp-seopress', siteseo: 'siteseo', surerank: 'surerank' };
+	const pluginId = ( dir ) => ( plugins.find( ( p ) => p.plugin.split( '/' )[ 0 ] === dir ) || {} ).plugin;
+	const IDS = { yoast: pluginId( DIRS.yoast ), aioseo: pluginId( DIRS.aioseo ), seopress: pluginId( DIRS.seopress ), siteseo: pluginId( DIRS.siteseo ), surerank: pluginId( DIRS.surerank ) };
 	t.check( 'All five SEO plugins installed', !! ( IDS.yoast && IDS.aioseo && IDS.seopress && IDS.siteseo && IDS.surerank ), JSON.stringify( IDS ) );
 
 	const setStatus = ( id, status ) => page.evaluate( async ( a ) => {
@@ -59,7 +65,11 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		} );
 		const keep = IDS[ key ];
 		for ( const p of all ) {
-			if ( ! /yoast|all.in.one.seo|seopress|siteseo|rank.?math|surerank/i.test( p.name || '' ) ) continue;
+			// Directory match again, plus the Premium/Pro siblings that ship
+			// their own directories. An unrelated addon whose NAME mentions
+			// an SEO plugin must never be switched off by this sweep.
+			const dir = p.plugin.split( '/' )[ 0 ];
+			if ( ! /^(wordpress-seo|wordpress-seo-premium|all-in-one-seo-pack|wp-seopress|siteseo|seo-by-rank-math|seo-by-rank-math-pro|surerank)$/.test( dir ) ) continue;
 			if ( p.plugin === keep ) continue;
 			if ( p.status === 'active' ) await setStatus( p.plugin, 'inactive' );
 		}
