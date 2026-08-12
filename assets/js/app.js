@@ -3323,6 +3323,7 @@
 	}
 
 	function renderContent() {
+		hideFloatTip();
 		const view = $( '#minn-view' );
 		// Keep the topbar badge in sync with the active type / trash filter
 		// (renderView only runs on route change; tab clicks re-render here).
@@ -32055,21 +32056,34 @@
 		if ( el ) el.remove();
 	}
 
+	// Tips for in-flow list/editor chrome belong INSIDE .minn-scroll at
+	// content coordinates so they ride the scroll. Fixed overlays (date
+	// picker, modals) live on body and keep a viewport-fixed tip.
+	function floatTipHost( anchor ) {
+		const sc = document.querySelector( '.minn-scroll' );
+		if ( sc && sc.contains( anchor ) ) return sc;
+		return document.body;
+	}
+
 	function showFloatTip( anchor, text ) {
 		if ( ! text || ! anchor ) {
 			hideFloatTip();
 			return;
 		}
+		const host = floatTipHost( anchor );
+		const inScroll = host !== document.body;
 		let tip = document.getElementById( 'minn-float-tip' );
 		if ( ! tip ) {
 			tip = document.createElement( 'div' );
 			tip.id = 'minn-float-tip';
 			tip.className = 'minn-float-tip';
 			tip.setAttribute( 'role', 'tooltip' );
-			document.body.appendChild( tip );
+			host.appendChild( tip );
+		} else if ( tip.parentNode !== host ) {
+			host.appendChild( tip );
 		}
 		tip.textContent = text;
-		// Measure off-screen then pin above (or below) the anchor, clamped to viewport.
+		// Measure off-screen then pin above (or below) the anchor.
 		tip.style.visibility = 'hidden';
 		tip.style.left = '0';
 		tip.style.top = '0';
@@ -32077,13 +32091,26 @@
 		const tw = tip.offsetWidth || 160;
 		const th = tip.offsetHeight || 28;
 		const pad = 8;
-		let left = r.left + ( r.width / 2 ) - ( tw / 2 );
-		left = Math.max( pad, Math.min( left, window.innerWidth - tw - pad ) );
-		let top = r.top - th - 8;
-		let place = 'above';
-		if ( top < pad ) {
-			top = r.bottom + 8;
-			place = 'below';
+		let left, top, place = 'above';
+		if ( inScroll ) {
+			const hr = host.getBoundingClientRect();
+			left = ( r.left - hr.left ) + host.scrollLeft + ( r.width / 2 ) - ( tw / 2 );
+			const minL = host.scrollLeft + pad;
+			const maxL = host.scrollLeft + host.clientWidth - tw - pad;
+			left = Math.max( minL, Math.min( left, maxL ) );
+			top = ( r.top - hr.top ) + host.scrollTop - th - 8;
+			if ( top < host.scrollTop + pad ) {
+				top = ( r.bottom - hr.top ) + host.scrollTop + 8;
+				place = 'below';
+			}
+		} else {
+			left = r.left + ( r.width / 2 ) - ( tw / 2 );
+			left = Math.max( pad, Math.min( left, window.innerWidth - tw - pad ) );
+			top = r.top - th - 8;
+			if ( top < pad ) {
+				top = r.bottom + 8;
+				place = 'below';
+			}
 		}
 		tip.style.left = Math.round( left ) + 'px';
 		tip.style.top = Math.round( top ) + 'px';
@@ -33566,6 +33593,7 @@
 		removeOutlineMode();
 		closeFindBar();
 		closeWritingGoalPop();
+		hideFloatTip();
 		hideMinnMenu();
 		$$( '.minn-row-menu' ).forEach( ( el ) => el.remove() );
 		hideImgPop();
