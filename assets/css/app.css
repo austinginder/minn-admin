@@ -2780,9 +2780,20 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-refund-del { border: 0; background: none; color: var(--text3); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 7px; vertical-align: baseline; }
 .minn-refund-del:hover { color: var(--red); }
 .minn-status.trash-status { color: var(--red); background: rgba(228,107,107,0.12); }
-/* Live post carrying unsaved edits (a newer autosave than the saved copy) */
-.minn-status.modified { color: var(--amber-text); background: rgba(224,164,88,0.14); margin-left: 5px; }
-.minn-status.editing { color: var(--blue-text); background: rgba(91,155,224,0.14); margin-left: 5px; }
+/* Status cell stays one line: the publish pill plus an optional flag. */
+.minn-row-status {
+  display: flex; align-items: center; gap: 6px;
+  min-width: 0; white-space: nowrap;
+}
+/* Live post carrying unsaved edits (a newer autosave than the saved copy).
+   A mark, not a second status pill: the column already named the state. */
+.minn-row-modified {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; width: 18px; height: 18px;
+  color: var(--amber-text); cursor: default;
+}
+.minn-row-modified svg { width: 13px; height: 13px; }
+.minn-status.editing { color: var(--blue-text); background: rgba(91,155,224,0.14); }
 
 /* ===== Users ===== */
 .minn-user-cols { grid-template-columns: 40px 52px 1.2fr 1.4fr 130px 110px 40px; }
