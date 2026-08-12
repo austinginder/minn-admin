@@ -107,6 +107,27 @@ const pluginInstalled = ( slug ) => {
 			await page.reload( { waitUntil: 'domcontentloaded' } ).catch( () => null );
 			const res = await api( opt.route );
 			assertStatusShape( opt.label, res );
+
+			// Stream's visibility is its own Role Access setting, and Minn
+			// reads that setting directly because Stream only registers its
+			// view_stream cap filter in wp-admin (its REST-side equivalent
+			// sits behind a default-OFF Abilities API flag). Prove that is a
+			// DEFERRAL and not a manage_options backstop: take administrator
+			// out of Role Access and the same administrator must be refused.
+			if ( 'stream' === opt.slug ) {
+				try {
+					wp( `eval "update_option( 'wp_stream', array( 'general_role_access' => array( 'editor' ) ) );"` );
+					const denied = await api( opt.route );
+					t.check( 'Stream honors Role Access over the caller being an administrator',
+						denied.status === 403, `${ denied.status }` );
+				} finally {
+					// The option did not exist before (defaults in use).
+					wp( `eval "delete_option( 'wp_stream' );"` );
+				}
+				const restored = await api( opt.route );
+				t.check( 'Stream reads again once Role Access is back to its default',
+					restored.status === 200, `${ restored.status }` );
+			}
 		} finally {
 			if ( ! was ) wp( `plugin deactivate ${ opt.slug }` );
 		}

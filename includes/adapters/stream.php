@@ -20,9 +20,59 @@ defined( 'ABSPATH' ) || exit;
 function minn_admin_stream_can() {
 	// Defer entirely to Stream. view_stream is granted dynamically from its
 	// general_role_access setting, so an operator who removes administrator
-	// from Role Access means it — a manage_options backstop overrides that
-	// choice. Stream registers the cap filter for REST contexts itself.
-	return current_user_can( apply_filters( 'wp_stream_view_cap', 'view_stream' ) );
+	// from Role Access means it — a manage_options backstop would override
+	// that choice, and this must never become one.
+	$cap = apply_filters( 'wp_stream_view_cap', 'view_stream' );
+	if ( current_user_can( $cap ) ) {
+		return true;
+	}
+	// Stream grants view_stream through a user_has_cap filter that its Admin
+	// class registers, and Admin never loads in a REST request. Stream ships
+	// a REST-side equivalent in its Abilities class, but registers it inside
+	// a method that returns early unless the Abilities API integration is
+	// switched on — an unrelated, default-OFF feature flag. Verified from
+	// inside a real REST request on a default install: role_access is
+	// ["administrator"], the caller IS an administrator, no Stream callback
+	// is on user_has_cap, and view_stream comes back false. So on any site
+	// that has not opted into that flag, nobody can read Stream over REST.
+	//
+	// Falling back to Stream's OWN rule keeps the deferral honest: read
+	// their Role Access setting and match the caller's roles exactly as
+	// their filter does. Remove administrator from Role Access and this
+	// returns false for administrators, which is the whole point.
+	if ( 'view_stream' !== $cap ) {
+		return false; // A site that renamed the cap is telling us to use it.
+	}
+	try {
+		$plugin = function_exists( 'wp_stream_get_instance' ) ? wp_stream_get_instance() : null;
+		if ( ! $plugin || ! isset( $plugin->settings ) || ! method_exists( $plugin->settings, 'get_setting_value' ) ) {
+			return false;
+		}
+		// Their own reader, so the network-level option is consulted on a
+		// network-activated multisite.
+		$role_access = (array) $plugin->settings->get_setting_value( 'general_role_access', array() );
+		if ( ! $role_access ) {
+			return false;
+		}
+		$user = wp_get_current_user();
+		if ( ! $user || ! $user->exists() ) {
+			return false;
+		}
+		global $wp_roles;
+		$roles_obj = isset( $wp_roles ) ? $wp_roles : new WP_Roles();
+		$roles     = array_unique( array_merge(
+			(array) $user->roles,
+			array_filter( array_keys( (array) $user->caps ), array( $roles_obj, 'is_role' ) )
+		) );
+		foreach ( $roles as $role ) {
+			if ( in_array( $role, $role_access, true ) ) {
+				return true;
+			}
+		}
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+	return false;
 }
 
 function minn_admin_stream_admin_url() {
