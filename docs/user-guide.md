@@ -98,7 +98,7 @@ and Minn will not offer to deactivate itself network-wide from inside Minn.
 
 **The topbar** carries the page title, a button that shows or hides the
 sidebar (⌘. does the same), the version badge (click it for what's new),
-a View site link, the theme toggle (system, light, dark), notifications,
+a View site link, the theme toggle (click switches light and dark; right-click to follow the system), notifications,
 and the New button. Amber chips appear here only when something needs
 you: a pending WordPress update, or a site that is not fully public.
 

@@ -2179,7 +2179,7 @@
 						<button class="minn-topbar-ver" id="minn-ver-btn" title="${ esc( __( "What's new — full changelog" ) ) }">v${ esc( B.version ) }</button>
 						<a class="minn-icon-btn" id="minn-view-site" href="${ esc( B.site.url ) }" target="_blank" rel="noopener" title="${ esc( __( 'View site' ) ) }" aria-label="${ esc( __( 'View site (opens in a new tab)' ) ) }">${ icon( 'globe' ) }</a>
 						<button class="minn-icon-btn" id="minn-help-btn" title="${ esc( __( 'About Minn' ) ) }" aria-label="${ esc( __( 'About Minn' ) ) }">${ icon( 'help' ) }</button>
-						<button class="minn-icon-btn" id="minn-theme-btn" title="${ esc( __( 'Theme: System (click to cycle, right-click for options)' ) ) }" aria-label="${ esc( __( 'Color theme' ) ) }"></button>
+						<button class="minn-icon-btn" id="minn-theme-btn" title="${ esc( __( 'Theme: System (click to switch light and dark, right-click for options)' ) ) }" aria-label="${ esc( __( 'Color theme' ) ) }"></button>
 						<button class="minn-icon-btn" id="minn-notif-btn" title="${ esc( __( 'Notifications' ) ) }" aria-label="${ esc( __( 'Notifications' ) ) }">
 							${ icon( 'bell' ) }<span class="minn-unread-dot" id="minn-unread-dot" hidden aria-hidden="true"></span>
 						</button>
@@ -2232,7 +2232,7 @@
 			go( 'profile' );
 		} );
 		$( '#minn-theme-btn' ).addEventListener( 'click', toggleTheme );
-		// Right-click picks Dark / Light / System (click still quick-toggles).
+		// Right-click picks Dark / Light / System. Click is light ↔ dark only.
 		$( '#minn-theme-btn' ).addEventListener( 'contextmenu', ( e ) => {
 			e.preventDefault();
 			openThemeMenu( e.clientX, e.clientY );
@@ -2374,8 +2374,9 @@
 		// effective paint — otherwise System + dark OS looks like locked Dark.
 		const pref = themePref();
 		btn.innerHTML = icon( pref === 'system' ? 'contrast' : ( pref === 'light' ? 'sun' : 'moon' ) );
-		const label = pref === 'system' ? 'System' : ( pref === 'light' ? 'Light' : 'Dark' );
-		btn.title = `Theme: ${ label } (click to cycle, right-click for options)`;
+		const label = pref === 'system' ? __( 'System' ) : ( pref === 'light' ? __( 'Light' ) : __( 'Dark' ) );
+		/* translators: %s: System, Light, or Dark. */
+		btn.title = sprintf( __( 'Theme: %s (click to switch light and dark, right-click for options)' ), label );
 	}
 
 	// 'light' | 'dark' | 'system'. Default is System (absent key or the
@@ -2776,11 +2777,11 @@
 	}
 
 	function toggleTheme() {
-		// Cycle System → Light → Dark → System. System is the default and a
-		// first-class stop, not something you only reach via the right-click menu.
-		const order = [ 'system', 'light', 'dark' ];
-		const i = order.indexOf( themePref() );
-		setThemePref( order[ ( i < 0 ? 0 : i + 1 ) % order.length ] );
+		// Click is light ↔ dark only. System stays a right-click (or
+		// profile) pick. From System, flip whatever the OS is showing now
+		// and lock that as an explicit preference.
+		const now = themePref() === 'system' ? osTheme() : themePref();
+		setThemePref( now === 'light' ? 'dark' : 'light' );
 	}
 
 	function openThemeMenu( x, y ) {
@@ -28058,7 +28059,7 @@
 		cmds.push(
 			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
 			...( B.caps.editPages ? [ { label: 'Create new page', kind: 'action', icon: '▭', run: () => newContent( 'pages' ) } ] : [] ),
-			{ label: 'Cycle theme (System / Light / Dark)', kind: 'action', icon: '◐', run: toggleTheme },
+			{ label: 'Toggle light / dark', kind: 'action', icon: '◐', run: toggleTheme },
 			{ label: 'View notifications', kind: 'action', icon: '◔', run: () => { state.notifOpen = true; renderOverlays(); loadNotifications().then( () => state.notifOpen && renderOverlays() ); } },
 			...( ( B.cache || [] ).length ? [ {
 				label: `Clear site cache (${ B.cache.map( ( c ) => c.name ).join( ', ' ) })`,
