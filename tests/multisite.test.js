@@ -409,7 +409,7 @@ async function gotoRoute( page, site, route ) {
 				hrefs.length >= 2 && hrefs.every( ( h ) => /^https?:\/\/[^%]+$/.test( h ) ),
 				hrefs.join( ' | ' ) );
 			check( 'the site link points at that site\'s own Minn',
-				hrefs.some( ( h ) => /\/\/[^/]+\/minn-admin\/$/.test( h ) ), hrefs.join( ' | ' ) );
+				hrefs.some( ( h ) => /^https?:\/\/[^/]+(?:\/[^/]+)*\/minn-admin\/$/.test( h ) ), hrefs.join( ' | ' ) );
 			if ( mainName ) {
 				const main = await rowMenu( mainName.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ) );
 				check( 'the main site offers NO archive, spam or delete',
