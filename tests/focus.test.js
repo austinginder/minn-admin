@@ -88,12 +88,24 @@ const PARAS = Array.from( { length: 14 }, ( _, i ) =>
 
 	/* ===== Nothing decorative reaches the database ===== */
 	await page.keyboard.press( process.platform === 'darwin' ? 'Meta+s' : 'Control+s' );
-	await page.waitForTimeout( 1500 );
-	const saved = await page.evaluate( async ( pid ) => {
+	// The save is asynchronous and a flat wait races it: under load the fetch
+	// below lands before the POST drains and reads the PREVIOUS copy, which
+	// looks exactly like the typed text never arriving. Poll for the text to
+	// reach the database, then assert against that same copy. A save that
+	// genuinely never lands still fails here, it just takes the full window.
+	const readSaved = () => page.evaluate( async ( pid ) => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw', {
 			headers: { 'X-WP-Nonce': window.MINN.nonce } } );
 		return ( await r.json() ).content.raw;
 	}, id );
+	let saved = '';
+	for ( let i = 0; i < 30; i++ ) {
+		saved = await readSaved();
+		if ( saved.includes( 'typing at the bottom' ) ) {
+			break;
+		}
+		await page.waitForTimeout( 500 );
+	}
 	t.check( 'saved markup carries no focus chrome', ! /minn-focus|style=/.test( saved ) && saved.includes( 'typing at the bottom' ), saved.slice( 0, 90 ) );
 
 	/* ===== Persists across editor loads ===== */
