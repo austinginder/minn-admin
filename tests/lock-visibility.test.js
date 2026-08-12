@@ -70,7 +70,11 @@ const EDITOR_PASS = process.env.MINN_TEST_PASS2 || 'minn-editor-pass-1';
 		t.check( 'row wears the is-editing chip naming the holder', locked.found && !! locked.chip && locked.chip.includes( editorName ), JSON.stringify( locked ) );
 
 		const field = await pageA.evaluate( async ( id ) => {
-			const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ id }?_fields=minn_lock`, {
+			// minn_lock is edit-context only on purpose: the holder's id and
+			// display name is editor data, not something a public wp/v2 read
+			// should hand out. Asking in view context correctly gets nothing,
+			// so the request has to name the context the field lives in.
+			const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ id }?context=edit&_fields=minn_lock`, {
 				headers: { 'X-WP-Nonce': window.MINN.nonce },
 				credentials: 'same-origin',
 			} );

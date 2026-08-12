@@ -69,7 +69,13 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 		/* ===== Core nav rows offer no hide menu ===== */
 		await page.click( '.minn-nav-btn[data-nav="content"]', { button: 'right' } );
 		await page.waitForTimeout( 250 );
-		t.check( 'core views offer no hide menu', ! ( await page.$( '.minn-ctx-menu' ) ) );
+		// GH #7 made core nav rows hideable too ("hide just for you"), so the old
+	// expectation that only integration surfaces offered a menu is obsolete.
+	// Both kinds carry one now; core-hide.test.js owns the hide/restore round
+	// trip, this only pins that the row is not silently inert.
+	t.check( 'core views offer a hide menu too', !! ( await page.$( '.minn-ctx-menu' ) ) );
+	await page.keyboard.press( 'Escape' );
+	await page.waitForTimeout( 200 );
 
 		/* ===== Hide via nav right-click ===== */
 		await page.click( `.minn-nav-btn[data-nav="${ SID }"]`, { button: 'right' } );
