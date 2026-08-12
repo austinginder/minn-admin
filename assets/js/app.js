@@ -33415,10 +33415,33 @@
 	// is already in another field (never steal focus), and skipped entirely
 	// on touch devices where autofocus would pop the software keyboard.
 	let searchFocusArmed = false;
+	// The exact input autofocus last put the caret in, so a later paint can
+	// tell "the DOM swapped underneath us" from "the user moved on".
+	let focusedSearchEl = null;
 	function maybeFocusSearch() {
+		const swapped = focusedSearchEl && ! document.contains( focusedSearchEl );
+		if ( ! searchFocusArmed && swapped ) {
+			// A list view that finishes loading re-renders its toolbar, which
+			// destroys the focused search box and drops the caret on <body>.
+			// Media does this about a second after arriving, so the caret was
+			// there, vanished, and the next keystroke went nowhere. Put it
+			// back. Restoring ONLY when the element we focused actually left
+			// the document, and only when focus landed on nothing, keeps this
+			// from stealing the caret out of whatever the user picked instead.
+			const ae = document.activeElement;
+			const orphaned = ! ae || ae === document.body;
+			const inp = $( '#minn-view .minn-toolbar-search' );
+			focusedSearchEl = null;
+			if ( orphaned && inp && ! inp.disabled ) {
+				focusedSearchEl = inp;
+				inp.focus( { preventScroll: true } );
+			}
+			return;
+		}
 		if ( ! searchFocusArmed ) return;
 		if ( window.matchMedia( '(pointer: coarse)' ).matches ) {
 			searchFocusArmed = false;
+			focusedSearchEl = null;
 			return;
 		}
 		const inp = $( '#minn-view .minn-toolbar-search' );
@@ -33433,9 +33456,11 @@
 			&& ( ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable );
 		if ( typing ) {
 			searchFocusArmed = false;
+			focusedSearchEl = null;
 			return;
 		}
 		searchFocusArmed = false;
+		focusedSearchEl = inp;
 		inp.focus( { preventScroll: true } );
 	}
 
