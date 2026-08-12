@@ -1,7 +1,8 @@
 /**
  * The "Modified" state — a live post carrying unsaved edits (an autosave
- * newer than the saved copy) is named in the content list: an amber chip on
- * the row and a quiet Modified toolbar filter backed by ?minn_modified=1.
+ * newer than the saved copy) is named in the content list: an amber pencil
+ * on the row (hover tip) and a quiet Modified toolbar filter backed by
+ * ?minn_modified=1.
  *
  * Fixtures: two published posts; one gets a REST autosave so it enters the
  * state deterministically. Both deleted on the way out.
@@ -51,13 +52,20 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		t.check( 'minn_modified=1 filters to the modified post only',
 			ids.includes( idA ) && ! ids.includes( idB ), JSON.stringify( ids ) );
 
-		// The list: chip on A's row, nothing on B's.
+		// The list: pencil flag on A's row, nothing on B's.
 		await page.goto( BASE + '/minn-admin/content', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( `.minn-table-row[data-id="${ idA }"]`, { timeout: 20000 } );
-		t.check( 'Modified chip on the autosaved row',
-			!! ( await page.$( `.minn-table-row[data-id="${ idA }"] .minn-status.modified` ) ), '' );
-		t.check( 'no chip on the clean row',
-			! ( await page.$( `.minn-table-row[data-id="${ idB }"] .minn-status.modified` ) ), '' );
+		t.check( 'Modified mark on the autosaved row',
+			!! ( await page.$( `.minn-table-row[data-id="${ idA }"] .minn-row-modified` ) ), '' );
+		t.check( 'no mark on the clean row',
+			! ( await page.$( `.minn-table-row[data-id="${ idB }"] .minn-status.modified, .minn-table-row[data-id="${ idB }"] .minn-row-modified` ) ), '' );
+
+		const flag = page.locator( `.minn-table-row[data-id="${ idA }"] .minn-row-modified` );
+		await flag.hover();
+		await page.waitForSelector( '#minn-float-tip', { timeout: 5000 } );
+		const tipText = await page.$eval( '#minn-float-tip', ( el ) => ( el.textContent || '' ).trim() );
+		t.check( 'hover shows the unsaved-edits tip', /unsaved edits/i.test( tipText ), tipText );
+		await page.mouse.move( 0, 0 );
 
 		// The toolbar filter: only modified rows remain.
 		await page.click( '#minn-content-modified' );
@@ -68,11 +76,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		}, idB, { timeout: 20000 } );
 		t.check( 'Modified filter keeps the modified post and drops the clean one',
 			!! ( await page.$( `.minn-table-row[data-id="${ idA }"]` ) ), '' );
-		const allChipped = await page.evaluate( () => {
+		const allMarked = await page.evaluate( () => {
 			const rows = Array.from( document.querySelectorAll( '.minn-table-row' ) );
-			return rows.length > 0 && rows.every( ( r ) => !! r.querySelector( '.minn-status.modified' ) );
+			return rows.length > 0 && rows.every( ( r ) => !! r.querySelector( '.minn-row-modified' ) );
 		} );
-		t.check( 'every filtered row carries the chip', allChipped, '' );
+		t.check( 'every filtered row carries the mark', allMarked, '' );
 
 		// Toggle off restores the full list.
 		await page.click( '#minn-content-modified' );

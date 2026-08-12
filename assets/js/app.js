@@ -1562,6 +1562,7 @@
 			clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
 			bug: '<path d="M8 2l1.5 1.5M16 2l-1.5 1.5"/><path d="M9 7h6a3 3 0 0 1 3 3v3a6 6 0 0 1-12 0v-3a3 3 0 0 1 3-3Z"/><path d="M3 13h3M18 13h3M4 8l2.5 1.5M20 8l-2.5 1.5M4 18l2.5-1.5M20 18l-2.5-1.5M12 19v3"/>',
 			alignRight: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="7" y2="18"/>',
+			pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
 		};
 		// Icons are always decorative: the accessible name lives on the
 		// control (text, aria-label or title), never on the glyph.
@@ -3464,7 +3465,7 @@
 							${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }
 						</div>
 					</div>
-					<div><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.unsaved ? '<span class="minn-status modified" title="Carrying unsaved edits: an autosave is newer than the version being served">Modified</span>' : '' }${ p.lockedBy ? `<span class="minn-status editing" title="${ esc( p.lockedBy ) } has this open in an editor right now">${ esc( p.lockedBy ) } is editing</span>` : '' }</div>
+					<div class="minn-row-status"><span class="minn-status ${ esc( p.status ) }">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.unsaved ? `<span class="minn-row-modified" tabindex="0" data-tip="${ esc( __( 'This has unsaved edits. An autosave is newer than the version on the site.' ) ) }" aria-label="${ esc( __( 'Unsaved edits' ) ) }">${ icon( 'pencil' ) }</span>` : '' }${ p.lockedBy ? `<span class="minn-status editing" title="${ esc( p.lockedBy ) } has this open in an editor right now">${ esc( p.lockedBy ) } is editing</span>` : '' }</div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
 					<div class="minn-row-meta minn-row-date" title="${ esc( parseWpDate( p.date ).toLocaleString() ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
@@ -3516,6 +3517,13 @@
 					applyTypeFilter( next );
 				},
 			} );
+		$$( '.minn-row-modified', view ).forEach( ( flag ) => {
+			const tip = flag.dataset.tip || '';
+			flag.addEventListener( 'mouseenter', () => showFloatTip( flag, tip ) );
+			flag.addEventListener( 'mouseleave', hideFloatTip );
+			flag.addEventListener( 'focus', () => showFloatTip( flag, tip ) );
+			flag.addEventListener( 'blur', hideFloatTip );
+		} );
 		const reloadContent = () => softListReload( {
 			route: 'content',
 			view,
