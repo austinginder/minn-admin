@@ -56,6 +56,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'key' => 'tags', 'label' => 'Tags', 'type' => 'tags', 'required' => false, 'placeholder' => 'media, sample' ),
 	);
 
+	// A Code Snippets snippet is PHP the plugin eval()s, so authoring one is code
+	// editing in the sense DISALLOW_FILE_EDIT means, the same call Minn already
+	// makes for WPCode PHP snippets. Writes here go to the plugin's OWN route, so
+	// this is Minn declining to offer the affordance rather than a boundary; the
+	// plugin's own screen is unaffected, exactly as it is for WPCode.
+	$code_edits = ! class_exists( 'Minn_Admin' ) || Minn_Admin::code_edits_allowed();
+
 	$surfaces['code-snippets'] = array(
 		'label'      => 'Snippets',
 		// Surfaces that share a family collapse to one sidebar item; the topbar
@@ -167,6 +174,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 	);
+
+	if ( ! $code_edits ) {
+		unset( $surfaces['code-snippets']['collection']['create'] );
+		unset( $surfaces['code-snippets']['collection']['detail']['edit'] );
+		// Activating a snippet runs its code. Deactivating one stops code
+		// running, so it stays available on a hardened site.
+		$surfaces['code-snippets']['collection']['actions'] = array_values(
+			array_filter(
+				$surfaces['code-snippets']['collection']['actions'],
+				function ( $a ) {
+					return empty( $a['label'] ) || 'Activate' !== $a['label'];
+				}
+			)
+		);
+	}
+
 	return $surfaces;
 } );
 
