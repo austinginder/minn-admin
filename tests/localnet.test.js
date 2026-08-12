@@ -47,13 +47,31 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 	t.check( 'restore brings the lost text back', /Unsaved recovery text/.test( bodyText ), bodyText );
 	await page.waitForTimeout( 1500 ); // let the post-restore re-snapshot land first
 	await page.keyboard.press( 'Meta+s' );
-	await page.waitForTimeout( 1500 );
-	const rawAfterSave = await page.evaluate( async ( pid ) => {
-		const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ pid }?context=edit&_fields=content`, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+	// POLL, never a flat wait. The first save of a fresh session queues
+	// behind the boot requests (notice capture, editor styles) on one h1
+	// connection pool and can take several seconds, which a 1.5s window
+	// reads as "the restored work never saved".
+	const readRaw = () => page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + `wp/v2/posts/${ pid }?context=edit&_fields=content&_cb=` + Math.random(), { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
 		return ( await r.json() ).content.raw;
 	}, postId );
+	let rawAfterSave = '';
+	for ( let i = 0; i < 40; i++ ) {
+		rawAfterSave = await readRaw();
+		if ( /Unsaved recovery text/.test( rawAfterSave ) ) break;
+		await page.waitForTimeout( 500 );
+	}
 	t.check( 'restored work saves to the server', /Unsaved recovery text/.test( rawAfterSave ), rawAfterSave );
-	const snapAfterSave = await page.evaluate( ( k ) => localStorage.getItem( k ), netKey );
+
+	// The snapshot is cleared by the save's own completion handler, and only
+	// when it is not newer than what that save captured, so give it its own
+	// window rather than reading straight after the server confirms.
+	let snapAfterSave = null;
+	for ( let i = 0; i < 20; i++ ) {
+		snapAfterSave = await page.evaluate( ( k ) => localStorage.getItem( k ), netKey );
+		if ( ! snapAfterSave ) break;
+		await page.waitForTimeout( 500 );
+	}
 	t.check( 'successful save clears the snapshot', ! snapAfterSave, String( snapAfterSave ).slice( 0, 120 ) );
 
 	/* ===== Clean posts don't nag ===== */
