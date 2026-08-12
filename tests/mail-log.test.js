@@ -2,15 +2,56 @@
  * Email Log family — FluentSMTP shim (active mail provider on minnadmin).
  * List, tabs, search, detail, Resend, Delete. Opens /minn-admin/fluent-smtp
  * with family preference pinned so Gravity SMTP does not steal the slot.
+ *
+ * The search checks used to rely on a hand-sent "Minn mail test" message
+ * that happened to be sitting in the log. FluentSMTP's retention eventually
+ * took it and both search assertions went red against working code, so the
+ * suite now seeds that message itself, once: wp_mail while FluentSMTP is
+ * active is logged by its own hooks, and the seed is skipped when the
+ * subject is already there, so the log gains exactly one such row ever.
  */
 const { BASE, launch, login, reporter } = require( './helpers' );
+
+// Everything node-side is required INLINE below. This file already declares
+// its own `const { execSync }` and `const path` further down inside the main
+// function, which would put any module-level pair of the same names in the
+// temporal dead zone for every line above those declarations.
+const WP_PATH = require( 'path' ).resolve( __dirname, '../../../..' );
+const SEARCH_SUBJECT = 'Minn mail test';
 
 ( async () => {
 	const { browser, page, errors } = await launch();
 	const t = reporter( 'mail-log' );
 	page.on( 'dialog', ( d ) => d.accept().catch( () => {} ) );
 
+	// Seed the searchable message if the log does not already carry one.
+	// eval-file, not eval: the shell would eat $wpdb in an inline snippet.
+	let seedState = 'present';
+	try {
+		const fs = require( 'fs' );
+		// require() inline: a later `const path` inside this same function
+		// scope puts the module-level one in the temporal dead zone here.
+		const seedFile = require( 'path' ).join( require( 'os' ).tmpdir(), 'minn-mail-search-seed.php' );
+		fs.writeFileSync( seedFile, [
+			'<?php',
+			'global $wpdb;',
+			'$table = $wpdb->prefix . "fsmpt_email_logs";',
+			'$have = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE subject LIKE %s", "%' + SEARCH_SUBJECT + '%" ) );',
+			'if ( $have > 0 ) { echo "present"; return; }',
+			'wp_mail( "mail-search@example.com", "' + SEARCH_SUBJECT + '", "<p>Standing fixture for the mail-log search checks.</p>", array( "Content-Type: text/html; charset=UTF-8" ) );',
+			'echo "seeded";',
+		].join( '\n' ) );
+		seedState = require( 'child_process' ).execSync(
+			`wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( seedFile ) } 2>/dev/null`,
+			{ encoding: 'utf8', timeout: 60000 }
+		).trim();
+		fs.unlinkSync( seedFile );
+	} catch ( e ) {
+		seedState = 'failed: ' + e.message;
+	}
+
 	await login( page );
+	t.check( 'Searchable message is in the log', /present|seeded/.test( seedState ), seedState );
 
 	const api = ( path, opts ) => page.evaluate( async ( a ) => {
 		const r = await fetch( window.MINN.restUrl + a.path, Object.assign( {
@@ -45,7 +86,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		String( detail.body.to ) );
 
 	// Search
-	const searchHit = await api( 'minn-admin/v1/fluent-smtp/emails?search=' + encodeURIComponent( 'Minn mail test' ) );
+	const searchHit = await api( 'minn-admin/v1/fluent-smtp/emails?search=' + encodeURIComponent( SEARCH_SUBJECT ) );
 	const hitItems = ( searchHit.body && searchHit.body.items ) || [];
 	t.check( 'Search by subject returns matches',
 		searchHit.status === 200 && hitItems.length >= 1
@@ -91,7 +132,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	// Toolbar search (input event, 350ms debounce).
 	if ( ui.search ) {
 		await page.click( '#minn-surface-search', { clickCount: 3 } );
-		await page.keyboard.type( 'Minn mail test', { delay: 20 } );
+		await page.keyboard.type( SEARCH_SUBJECT, { delay: 20 } );
 		await page.waitForFunction( () => {
 			const rows = Array.from( document.querySelectorAll( '.minn-table-row .minn-row-title' ) );
 			return rows.length > 0 && rows.every( ( r ) => /Minn mail test/i.test( r.textContent || '' ) );
