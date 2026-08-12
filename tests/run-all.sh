@@ -21,10 +21,21 @@ mkdir -p "$OUT"
 BASE="${MINN_TEST_URL:-https://minnadmin.localhost}"
 
 settle() {
-	local tries=0 t ok
+	local tries=0 t ok code probe
 	while [ $tries -lt 60 ]; do
-		t=$(curl -sk -o /dev/null -w '%{time_total}' --max-time 5 "$BASE/" 2>/dev/null || echo 9)
+		# Speed alone is not health: when the stack is down the request fails
+		# in milliseconds, which satisfied the old "under a second" test and
+		# sent every remaining suite straight into a doomed run. Require a real
+		# HTTP answer as well (2026-08-12, after a machine-wide overload took
+		# FrankenPHP down mid-run and the guard waved it through).
+		probe=$(curl -sk -o /dev/null -w '%{http_code} %{time_total}' --max-time 5 "$BASE/" 2>/dev/null || echo "000 9")
+		code=${probe%% *}
+		t=${probe##* }
 		ok=$(echo "$t < 1.0" | bc 2>/dev/null || echo 0)
+		case $code in
+		200 | 301 | 302) ;;
+		*) ok=0 ;;
+		esac
 		[ "$ok" = "1" ] && return 0
 		tries=$((tries + 1))
 		sleep 5
