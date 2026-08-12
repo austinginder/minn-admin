@@ -70,8 +70,10 @@ creation and deletion, the long tail of network settings, restores, exports
 and network setup stay with WordPress. The palette knows the sites too: press
 ⌘K and type "switch", or just start typing a site's name. The chevron does
 not appear when you belong to only one site. Its menu opens with search already
-focused, fuzzy-matches site names and addresses, and shows no more than five
-matches at once even on a large network.
+focused and lists up to eight sites. Typing fuzzy-matches names and addresses
+across every site you can use, not just the ones already listed, and narrows to
+the five closest, so a shorthand like "tm10" still finds Team 10 on a large
+network.
 
 **If you run the network**, a fourth sidebar group appears: Network. Sites
 lists every site with its address, members and state, filters for archived
@@ -196,8 +198,12 @@ the notice wall, and it is permanent policy: plugins cannot buy space in
 Minn's interface.
 
 **Updates**: the Updates tab shows everything pending, and **Update
-everything** runs plugins, then themes, then WordPress core, telling you
-exactly what will change and what is untouched before it starts. While a
+everything** runs plugins, then themes, then any waiting translations, then
+WordPress core, telling you exactly what will change and what is untouched
+before it starts. Translations are worth calling out because WordPress keeps
+language packs apart from everything else: a site can be current on plugins,
+themes and core and still owe translations, so they are counted here rather
+than left for the WordPress updates screen to mention. While a
 run is going, a progress pill in the top bar names the current phase and
 stays visible on every screen, so you can close the panel or move around
 Minn and still see that updates are working; click it to come back to the
