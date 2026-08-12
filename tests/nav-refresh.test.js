@@ -106,7 +106,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 			};
 		} );
 		t.check( 'HTML email detail gets the mail modal', modal.mail && modal.frame, JSON.stringify( modal ) );
-		// 900px (the large-media-modal width) — 1080 read as too big (Austin).
+		// 900px (the large-media-modal width) — 1080 read as too big.
 		t.check( 'Mail modal is wider than the 720px dialog', modal.w >= 850 && modal.w <= 940, `w=${ modal.w }` );
 		await page.keyboard.press( 'Escape' );
 	} finally {

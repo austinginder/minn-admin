@@ -1,5 +1,5 @@
 /**
- * Bulk-update progress chip (2026-08-06, Austin's report: once the
+ * Bulk-update progress chip (once the
  * notification panel closes, a running "Update everything" is invisible).
  * Arms a same-version plugin offer via the minn_test_plugin_update fixture
  * (harmless wp.org reinstall of the active koko-analytics), drives the real

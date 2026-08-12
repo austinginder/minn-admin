@@ -1139,7 +1139,7 @@ add_action( 'rest_api_init', function () {
 			// Only ONE mail plugin can own the wp_mail pipeline. If another
 			// active mailer (FluentSMTP on a typical multi-mailer site)
 			// carries the send, Gravity SMTP never sees it and nothing lands
-			// in ITS log — deliverable but invisible here (Austin's repro).
+			// in ITS log — deliverable but invisible here.
 			// Their own Event_Model fires this action when GS records the
 			// send; its absence is the honest tell.
 			$logged   = 0;

@@ -4284,7 +4284,7 @@ add_action( 'rest_api_init', function () {
 				}
 				// Some vendors (Gravity SMTP, Brizy) keep no local validity
 				// state, so their rows would read "unknown" forever even
-				// after a successful activation (Austin's anchor repro).
+				// after a successful activation.
 				// Minn remembers ITS OWN check outcome per provider — the
 				// status word and a timestamp, never a key — and the read
 				// side upgrades unknown rows from it with "as of" honesty.

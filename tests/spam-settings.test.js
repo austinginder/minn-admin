@@ -127,7 +127,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'Review spam lands on the Comments spam tab', activeTab === 'Spam', activeTab );
 
 		/* ===== Extensions toggle refreshes the Spam page without reload =====
-		   (Austin's report: state.cache.settings survived plugin toggles, so
+		   (state.cache.settings survived plugin toggles, so
 		   an activated spam plugin never appeared until a hard refresh). */
 		const spaNav = ( id ) => page.$$eval( '.minn-nav-btn', ( els, target ) => {
 			const btn = els.find( ( e ) => e.dataset.nav === target );

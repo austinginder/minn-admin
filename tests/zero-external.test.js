@@ -3,7 +3,7 @@
  * invariant: a full app session (boot, every chrome route, notifications,
  * palette, a real editor session) makes no browser requests off the origin.
  *
- * Deliberate allowances (Austin, 2026-07-23), each a named tier so a new
+ * Deliberate allowances, each a named tier so a new
  * external host fails loudly instead of joining silently:
  * - *.gravatar.com — core's avatar URLs; kept as-is by decision.
  * - *.w.org / *.wp.org / *.wordpress.org — plugin icons on Extensions ride

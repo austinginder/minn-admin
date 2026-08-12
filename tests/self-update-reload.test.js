@@ -2,7 +2,7 @@
  * When "Update everything" (notifications panel) includes Minn Admin in the
  * bulk plugin batch, the SPA must hard-reload so the new app.js / version
  * badge land. Extensions single-plugin and bulk paths already did this;
- * the notif-panel path did not (Austin, 2026-07-12).
+ * the notif-panel path did not.
  *
  * No real update runs: update-all is stubbed via page.route. The 700ms
  * setTimeout that schedules location.reload is intercepted (Chromium will

@@ -7,8 +7,8 @@
  * deliberately LIVE-ROBUST: it asserts the shape of the family (a row per
  * registry product, a sane state, the controls that state is allowed to
  * carry) and never an exact pill. Real licenses drift — a key can be
- * deactivated from the vendor's store between runs, and Austin licenses
- * and unlicenses products by hand while working.
+ * deactivated from the vendor's store between runs, and products get licensed
+ * and unlicensed by hand between runs.
  *
  * Nothing here calls the Brainstorm Force API: activation is proven
  * against the live service by hand (docs/license-manager.md), and a suite

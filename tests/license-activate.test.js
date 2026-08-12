@@ -118,7 +118,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		/* ===== Paste field appears; wrong key fails IN PLACE ===== */
 		await clickActivate();
 		// Plain text on purpose: a license key isn't a credential and the
-		// password type summoned 1Password over the field (Austin's report);
+		// password type summoned 1Password over the field;
 		// the data-*-ignore trio is each manager's documented opt-out.
 		const field = await page.$eval( '#minn-sys-licenses .minn-lic-key', ( el ) => ( {
 			type: el.type,

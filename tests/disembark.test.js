@@ -96,8 +96,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	try {
 		// Baseline: a REAL Disembark scan on the dev site leaves session dirs
-		// that break the "Working files: None" asserts below (Austin tests
-		// live). The workspace is disposable — the suite's own teardown wipes
+		// that break the "Working files: None" asserts below (the site sees
+		// live use). The workspace is disposable — the suite's own teardown wipes
 		// it — so establish the empty baseline up front the same way.
 		await page.evaluate( async () => {
 			await fetch( window.MINN.restUrl + 'minn-admin/v1/disembark/cleanup', {

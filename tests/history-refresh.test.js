@@ -84,7 +84,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	);
 
 	// Opening the top row must diff against the current content, not show the
-	// identical mirror (the off-by-one Austin hit).
+	// identical mirror (the off-by-one bug this pins).
 	await page.evaluate( () => document.querySelector( '#minn-rev-list [data-revlist]' ).click() );
 	await page.waitForSelector( '#minn-diff, #minn-restore-rev', { timeout: 10000 } );
 	await page.waitForTimeout( 400 );
