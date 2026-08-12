@@ -1,5 +1,5 @@
 /**
- * Sessions listing (profile modal). The list looked full of
+ * Sessions listing on the user editor. The list looked full of
  * duplicates. They are genuinely distinct WordPress session tokens (each
  * login creates one), but two problems made them look buggy:
  *   1. Minn read session_tokens raw and showed EXPIRED tokens that core
@@ -44,12 +44,15 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'endpoint returns only the 2 non-expired sessions', sessions.length === 2, String( sessions.length ) );
 		t.check( 'the expired Windows token is filtered out', ! sessions.some( ( s ) => /Windows/.test( s.ua ) ), JSON.stringify( sessions.map( ( s ) => s.ua ) ) );
 
-		// Open the profile modal for that user and read the rendered rows.
-		await page.goto( BASE + '/minn-admin/users', { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( `[data-user="${ uid }"]`, { timeout: 20000 } );
-		await page.click( `[data-user="${ uid }"] .minn-row-title` );
-		await page.waitForSelector( '#minn-uf-sessions .minn-session-row', { timeout: 10000 } );
-		const rows = await page.$$eval( '#minn-uf-sessions .minn-session-row', ( els ) => els.map( ( el ) => ( {
+		// GH #8 moved another user's sessions onto the deep-linkable editor at
+		// /minn-admin/users/{id}; the old modal path is no longer where an
+		// admin reads them. Sessions rows are the ones carrying a Sign out
+		// button, which keeps them distinct from the "Hidden for them" rows
+		// that reuse the same row class.
+		const SESS = '.minn-session-row:has( [data-ue-kill] )';
+		await page.goto( BASE + `/minn-admin/users/${ uid }`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( SESS, { timeout: 20000 } );
+		const rows = await page.$$eval( SESS, ( els ) => els.map( ( el ) => ( {
 			ua: el.querySelector( '.minn-session-ua' ).textContent.trim(),
 			meta: el.querySelector( '.minn-session-meta' ).textContent.trim(),
 		} ) ) );
