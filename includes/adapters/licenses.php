@@ -600,6 +600,259 @@ function minn_admin_smash_classify( $remote ) {
 	return array( 'ok' => false, 'code' => 'invalid', 'message' => $msg ? $msg : 'Smash Balloon did not accept that key' );
 }
 
+/**
+ * Brainstorm Force products, read from their own registry option.
+ *
+ * Every BSF product (Astra Pro, the Ultimate Addons, Convert Pro, Schema
+ * Pro, WP Portfolio, Spectra Pro, Premium Starter Templates …) shares one
+ * licensing core — bsf-core, internally "graupi", bundled inside each
+ * product under admin/bsf-core — and one registry option,
+ * `brainstrom_products` (their spelling), keyed by the product id from
+ * each product's admin/bsf.yml. Each product carries its OWN purchase key
+ * and its own registration, so each becomes its own provider row.
+ *
+ * Pure option read: the vendor's own registry is the only source.
+ *
+ * @return array product_id => { id, kind, name, component, key, status, expires }
+ */
+function minn_admin_bsf_products() {
+	$reg = get_option( 'brainstrom_products' );
+	if ( ! is_array( $reg ) ) {
+		return array();
+	}
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	$plugins = get_plugins();
+	$out     = array();
+	foreach ( array( 'plugins' => 'plugin', 'themes' => 'theme' ) as $group => $kind ) {
+		if ( empty( $reg[ $group ] ) || ! is_array( $reg[ $group ] ) ) {
+			continue;
+		}
+		foreach ( $reg[ $group ] as $slug => $p ) {
+			if ( ! is_array( $p ) ) {
+				continue;
+			}
+			$id = (string) ( ! empty( $p['id'] ) ? $p['id'] : $slug );
+			if ( '' === $id ) {
+				continue;
+			}
+			// `template` is 'dir/file.php' for plugins and the stylesheet
+			// directory for themes; both are written by their init_bsf_core.
+			$template  = isset( $p['template'] ) ? (string) $p['template'] : '';
+			$component = '';
+			if ( 'plugin' === $kind && false !== strpos( $template, '/' ) ) {
+				$component = $template;
+			} elseif ( 'theme' === $kind && '' !== $template ) {
+				$component = 'theme:' . $template;
+			}
+			// product_name is filled by their bsf_update_all_product_version
+			// from the component header; it can be absent or empty on a
+			// registry that has only ever been seeded by init_bsf_core.
+			$name = isset( $p['product_name'] ) ? trim( (string) $p['product_name'] ) : '';
+			if ( '' === $name && 'plugin' === $kind && isset( $plugins[ $template ]['Name'] ) ) {
+				$name = (string) $plugins[ $template ]['Name'];
+			}
+			if ( '' === $name && 'theme' === $kind && $template ) {
+				$theme = wp_get_theme( $template );
+				$name  = $theme->exists() ? (string) $theme->get( 'Name' ) : '';
+			}
+			$out[ $id ] = array(
+				'id'        => $id,
+				'kind'      => $kind,
+				'name'      => '' !== $name ? $name : $id,
+				'component' => $component,
+				'key'       => ! empty( $p['purchase_key'] ),
+				'status'    => strtolower( trim( (string) ( $p['status'] ?? '' ) ) ),
+				// bsf-core stores `expires` from the license-status API
+				// (since their 1.29.14); older registries simply lack it.
+				'expires'   => minn_admin_license_expiry( $p['expires'] ?? '' ),
+			);
+		}
+	}
+	return $out;
+}
+
+/**
+ * Populate BSF's registry the way their own code does.
+ *
+ * init_bsf_core() is hooked to admin_init ONLY, so under REST the registry
+ * is whatever a wp-admin pageload last wrote: a product installed since the
+ * last dashboard visit is simply absent (routine on CLI-provisioned sites).
+ * Their own WP-CLI command calls this first for exactly that reason.
+ * get_plugins() lives in wp-admin/includes, which REST never loads.
+ *
+ * This WRITES their option, so the read path only reaches for it behind a
+ * long transient (a self-heal, not a per-request side effect) while the
+ * action path always syncs — you must be able to license a product the
+ * moment it is installed.
+ *
+ * @return bool Whether bsf-core was loaded and the sync ran.
+ */
+function minn_admin_bsf_sync() {
+	if ( ! function_exists( 'init_bsf_core' ) ) {
+		return false;
+	}
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	try {
+		init_bsf_core();
+		if ( function_exists( 'bsf_update_all_product_version' ) ) {
+			bsf_update_all_product_version();
+		}
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+	return true;
+}
+
+/**
+ * The shared bsf-core license manager, or null when no BSF product is
+ * active (their core is bundled inside the products, so nothing licensing
+ * related is loaded without one).
+ */
+function minn_admin_bsf_manager() {
+	return class_exists( 'BSF_License_Manager' ) ? \BSF_License_Manager::instance() : null;
+}
+
+/** One product's RAW registry row, for snapshot and restore. */
+function minn_admin_bsf_raw_row( $product_id ) {
+	$reg = get_option( 'brainstrom_products' );
+	if ( ! is_array( $reg ) ) {
+		return null;
+	}
+	foreach ( array( 'plugins', 'themes' ) as $group ) {
+		if ( isset( $reg[ $group ][ $product_id ] ) ) {
+			return array( 'group' => $group, 'row' => $reg[ $group ][ $product_id ] );
+		}
+	}
+	return null;
+}
+
+/** Put a snapshot back, used only when a rejected call wrote anyway. */
+function minn_admin_bsf_restore_row( $product_id, $snapshot ) {
+	if ( ! is_array( $snapshot ) || empty( $snapshot['group'] ) ) {
+		return;
+	}
+	$reg = get_option( 'brainstrom_products' );
+	if ( ! is_array( $reg ) ) {
+		return;
+	}
+	$reg[ $snapshot['group'] ][ $product_id ] = $snapshot['row'];
+	update_option( 'brainstrom_products', $reg );
+}
+
+/**
+ * Classify a Brainstorm Force API message. Their endpoint answers with a
+ * human sentence and no machine code, so the wording is all there is; the
+ * seat-limit case has to stay first-class (a retry burns nothing, but the
+ * user needs to know it is a seat problem and not a bad key).
+ */
+function minn_admin_bsf_message_code( $message ) {
+	$m = strtolower( wp_strip_all_tags( (string) $message ) );
+	if ( preg_match( '/(activation|site).{0,20}limit|limit.{0,20}(reach|exceed)|maximum number|no activations/', $m ) ) {
+		return 'site_limit';
+	}
+	if ( false !== strpos( $m, 'expire' ) ) {
+		return 'expired';
+	}
+	if ( preg_match( '/connecting to our license api|could not resolve|timed out|curl error/', $m ) ) {
+		return 'error';
+	}
+	return 'invalid';
+}
+
+/**
+ * Activate one BSF product through bsf-core's own activation flow.
+ *
+ * bsf_process_license_activation() is the complete vendor path: it calls
+ * their API, and on acceptance writes the purchase key, status and expiry
+ * into the registry itself. The nonce check lives in the admin_init
+ * wrapper (bsf_activate_license), not in this method, which is why their
+ * WP-CLI command can drive it too.
+ */
+function minn_admin_bsf_activate( $product_id, $secret ) {
+	$mgr = minn_admin_bsf_manager();
+	if ( ! $mgr ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => 'Brainstorm Force licensing is not loaded on this site.' );
+	}
+	minn_admin_bsf_sync();
+	$before = minn_admin_bsf_raw_row( $product_id );
+	$res    = $mgr->bsf_process_license_activation( array(
+		'license_key' => $secret,
+		'product_id'  => $product_id,
+	) );
+	$ok  = is_array( $res ) && ! empty( $res['success'] ) && 'false' !== $res['success'];
+	$msg = is_array( $res ) && isset( $res['message'] ) ? trim( wp_strip_all_tags( (string) $res['message'] ) ) : '';
+	delete_transient( $product_id . '_license_status' );
+	if ( $ok ) {
+		return array( 'ok' => true, 'code' => '', 'message' => $msg );
+	}
+	// Their code writes nothing on rejection, but a key must never be able
+	// to land halfway: put the row back if anything moved.
+	$after = minn_admin_bsf_raw_row( $product_id );
+	if ( $before && $after !== $before ) {
+		minn_admin_bsf_restore_row( $product_id, $before );
+	}
+	return array(
+		'ok'      => false,
+		'code'    => minn_admin_bsf_message_code( $msg ),
+		'message' => '' !== $msg ? $msg : 'Brainstorm Force did not accept that key.',
+	);
+}
+
+/**
+ * Deactivate one BSF product. This is a real deregistration against their
+ * API, so the seat is freed; their method clears the stored key, status
+ * and expiry on success.
+ */
+function minn_admin_bsf_deactivate( $product_id ) {
+	$mgr = minn_admin_bsf_manager();
+	if ( ! $mgr ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => 'Brainstorm Force licensing is not loaded on this site.' );
+	}
+	$res = $mgr->process_license_deactivation( $product_id );
+	$ok  = is_array( $res ) && ! empty( $res['success'] ) && 'false' !== $res['success'];
+	$msg = is_array( $res ) && isset( $res['message'] ) ? trim( wp_strip_all_tags( (string) $res['message'] ) ) : '';
+	delete_transient( $product_id . '_license_status' );
+	return array(
+		'ok'      => $ok,
+		'code'    => $ok ? '' : 'error',
+		'message' => '' !== $msg ? $msg : ( $ok ? '' : 'Brainstorm Force did not release that activation.' ),
+	);
+}
+
+/**
+ * Ask Brainstorm Force whether this product's stored key is still active.
+ *
+ * get_remote_license_status() caches its answer in a 6 hour transient, so
+ * a verify has to drop that first or it would replay a stale yes. The call
+ * also stores the returned expiry back into the registry, which is where
+ * the row's renewal date comes from.
+ */
+function minn_admin_bsf_verify( $product_id ) {
+	$mgr = minn_admin_bsf_manager();
+	if ( ! $mgr ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => 'Brainstorm Force licensing is not loaded on this site.' );
+	}
+	$row = minn_admin_bsf_raw_row( $product_id );
+	$key = is_array( $row ) && ! empty( $row['row']['purchase_key'] ) ? (string) $row['row']['purchase_key'] : '';
+	if ( '' === $key ) {
+		return array( 'ok' => false, 'code' => 'error', 'message' => 'No license key is stored for this product.' );
+	}
+	delete_transient( $product_id . '_license_status' );
+	$ok = (bool) $mgr->get_remote_license_status( $key, $product_id );
+	if ( $ok ) {
+		return array( 'ok' => true, 'code' => '', 'message' => 'Brainstorm Force confirmed this license is active.' );
+	}
+	// Their status call answers a bare boolean, but it stores the expiry
+	// alongside it — an elapsed date is the difference between a lapsed
+	// renewal and a key their API no longer recognizes.
+	$after   = minn_admin_bsf_raw_row( $product_id );
+	$expires = minn_admin_license_expiry( is_array( $after ) ? ( $after['row']['expires'] ?? '' ) : '' );
+	if ( minn_admin_license_expired( $expires ) ) {
+		return array( 'ok' => false, 'code' => 'expired', 'message' => 'This license expired on ' . $expires . '.' );
+	}
+	return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Brainstorm Force reports this license is not active on this site.' );
+}
+
 function minn_admin_license_fingerprints() {
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	$plugins = get_plugins();
@@ -1064,41 +1317,76 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
-	// Brainstorm Force family (Astra Pro, Ultimate Addons, Spectra Pro …):
-	// one registry option, per-product purchase_key + 'registered' status.
-	$providers['bsf'] = array(
-		'name'      => 'Brainstorm Force products',
-		'component' => 'bsf-registry',
-		'detect'    => function () {
-			$reg = get_option( 'brainstrom_products' );
-			return is_array( $reg ) && ! empty( $reg );
-		},
-		'read'      => function () use ( $item ) {
-			$reg   = get_option( 'brainstrom_products' );
-			$items = array();
-			foreach ( array( 'plugins' => 'plugin', 'themes' => 'theme' ) as $group => $kind ) {
-				if ( empty( $reg[ $group ] ) || ! is_array( $reg[ $group ] ) ) {
-					continue;
+	// Brainstorm Force family (Astra Pro, the Ultimate Addons, Convert Pro,
+	// Schema Pro, WP Portfolio, Spectra Pro, Premium Starter Templates …).
+	// One shared licensing core and one registry option, but a separate
+	// purchase key and registration per product — so each product becomes
+	// its own provider: one row, one key field, one set of controls.
+	// The list is whatever their registry holds, so a BSF product Minn has
+	// never heard of is covered the day it ships.
+	//
+	// Their registry only refreshes on admin_init, which REST never runs.
+	// Self-heal it at most twice a day so a CLI-installed product does not
+	// stay invisible until somebody opens wp-admin.
+	if ( class_exists( 'BSF_License_Manager' ) && ! get_transient( 'minn_admin_bsf_synced' ) ) {
+		set_transient( 'minn_admin_bsf_synced', 1, 12 * HOUR_IN_SECONDS );
+		minn_admin_bsf_sync();
+	}
+	// Actions route through bsf-core, which is only loaded while at least
+	// one BSF product is active; without it the rows stay read-only.
+	$bsf_actionable = class_exists( 'BSF_License_Manager' );
+	foreach ( minn_admin_bsf_products() as $bsf_id => $bsf_product ) {
+		$provider = array(
+			'name'      => $bsf_product['name'],
+			'component' => $bsf_product['component'],
+			'detect'    => function () use ( $bsf_id ) {
+				$all = minn_admin_bsf_products();
+				return isset( $all[ $bsf_id ] );
+			},
+			'read'      => function () use ( $item, $bsf_id ) {
+				$all = minn_admin_bsf_products();
+				if ( ! isset( $all[ $bsf_id ] ) ) {
+					return array();
 				}
-				foreach ( $reg[ $group ] as $slug => $p ) {
-					if ( ! is_array( $p ) ) {
-						continue;
+				$p     = $all[ $bsf_id ];
+				$state = 'missing';
+				$note  = '';
+				if ( $p['key'] ) {
+					if ( 'registered' === $p['status'] ) {
+						$state = minn_admin_license_expired( $p['expires'] ) ? 'expired' : 'valid';
+					} else {
+						$state = 'unknown';
+						$note  = $p['status']
+							? str_replace( '_', ' ', $p['status'] )
+							: 'Key stored; Brainstorm Force has not recorded a registration';
 					}
-					$name = (string) ( $p['product_name'] ?? $slug );
-					$key  = ! empty( $p['purchase_key'] );
-					$reg_ok = isset( $p['status'] ) && 'registered' === $p['status'];
-					$items[] = $item( array(
-						'name'  => $name,
-						'kind'  => $kind,
-						'state' => $key ? ( $reg_ok ? 'valid' : 'unknown' ) : 'missing',
-						'key'   => $key,
-						'note'  => $key && $reg_ok ? 'registered' : '',
-					) );
 				}
+				return array( $item( array(
+					'name'    => $p['name'],
+					'kind'    => $p['kind'],
+					'state'   => $state,
+					'key'     => $p['key'],
+					'expires' => $p['expires'],
+					'note'    => $note,
+				) ) );
+			},
+		);
+		if ( $bsf_actionable ) {
+			$provider['activate'] = function ( $secret ) use ( $bsf_id ) {
+				return minn_admin_bsf_activate( $bsf_id, $secret );
+			};
+			// Deactivate and verify both need a stored key to act on.
+			if ( $bsf_product['key'] ) {
+				$provider['deactivate'] = function () use ( $bsf_id ) {
+					return minn_admin_bsf_deactivate( $bsf_id );
+				};
+				$provider['verify'] = function () use ( $bsf_id ) {
+					return minn_admin_bsf_verify( $bsf_id );
+				};
 			}
-			return $items;
-		},
-	);
+		}
+		$providers[ 'bsf-' . sanitize_key( $bsf_id ) ] = $provider;
+	}
 
 	// WPMU DEV: one Hub API key (site option wpmudev_apikey, or the
 	// WPMUDEV_APIKEY constant) unlocks the whole family. Membership status

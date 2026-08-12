@@ -67,7 +67,7 @@ Major single vendors, each a small dedicated reader (all verified in source):
 | Elementor Pro | `elementor_pro_license_key` + `_elementor_pro_license_v2_data` (12h cache; holds `expired`/`site_inactive`/`disabled` and `expires`, or `lifetime`) | Full classification + expiry |
 | ACF Pro | `acf_pro_license` + `acf_pro_license_status` (status + expiry array) | Full classification + expiry |
 | WP Rocket | keys in `wp_rocket_settings`; invalid flag `wp_rocket_no_licence`; expiry in the 1-day `wp_rocket_customer_data` transient | Full when cache warm; key + invalid flag always |
-| Astra / Brainstorm Force | `brainstrom_products` (sic), per-product `purchase_key` + `status === 'registered'` (covers Astra Pro, UAE, Spectra Pro) | Full classification |
+| Astra / Brainstorm Force | `brainstrom_products` (sic), per-product `purchase_key` + `status === 'registered'`, plus `expires` (their bsf-core 1.29.14 and later stores it from the license-status call) | Full classification + expiry |
 | Kadence (StellarWP Uplink) | per-plugin `stellarwp_uplink_license_key_{slug}` + status options | Full classification |
 | Bricks | `bricks_license_key` + `bricks_license_status` transient (7d TTL) | Status while cache warm, else unknown-stale |
 | Beaver Builder | `fl_themes_subscription_email` + `fl_get_subscription_info` transient (`active`, `expiration`) | Status while cache warm |
@@ -327,6 +327,55 @@ plugins (SearchWP, Soflyy) and the option-pair sweep MISSES GP Premium's
 naming, so dedicated readers cover them all; Perfmatters could go either
 way by build, and its dedicated reader wins to avoid double rows.
 
+### Brainstorm Force family (SHIPPED 2026-08-12)
+
+Astra Pro, the two Ultimate Addons, Convert Pro, Schema Pro, WP Portfolio,
+Premium Starter Templates and Spectra Blocks Pro all share one licensing
+core: bsf-core, internally "graupi", bundled inside every product under
+`admin/bsf-core` (the newest copy on the site wins). One registry option
+holds them all, but each product carries its own purchase key and its own
+registration, so Minn registers ONE PROVIDER PER PRODUCT
+(`bsf-{product_id}`), built by walking the registry. A BSF product Minn has
+never heard of is covered the day it ships.
+
+The vendor entry points, all public and all reachable outside wp-admin:
+
+- **activate** — `BSF_License_Manager::instance()->bsf_process_license_activation( [ 'license_key' => …, 'product_id' => … ] )`.
+  The nonce check lives in the `admin_init` wrapper (`bsf_activate_license`),
+  not in this method, which is why their own WP-CLI command
+  (`wp brainstormforce license`) can drive it too. On acceptance their code
+  writes the key, status and message into the registry itself.
+- **deactivate** — `process_license_deactivation( $product_id )`. A real
+  API-side deregistration: the seat frees and the stored key, status and
+  expiry are cleared.
+- **verify** — `get_remote_license_status( $purchase_key, $product_id )`.
+
+Facts worth keeping:
+
+- **`product_id` is not the plugin slug.** It comes from each product's
+  `admin/bsf.yml` — `uabb`, `uael`, `astra-addon`, `astra-pro-sites`,
+  `wp-schema-pro`, `convertpro`, `astra-portfolio`, `spectra-blocks-pro`.
+  Convert Pro's addon (`convertpro-addon`) ships no bsf.yml: it is licensed
+  through Convert Pro and never appears as its own row.
+- **Their registry only refreshes on `admin_init`.** `init_bsf_core()` is
+  what discovers installed BSF products, and it is hooked to admin_init
+  alone, so under REST the registry is whatever a wp-admin pageload last
+  wrote. On a CLI-provisioned site (the whole CaptainCore fleet) a freshly
+  installed product is simply absent. Minn self-heals it behind a 12 hour
+  transient on read and always before an activate; `init_bsf_core()` needs
+  `wp-admin/includes/plugin.php` required first, the same trap perfmatters
+  and Gravity Forms sprang.
+- **Expiry only arrives from a verify.** Their activation response omits
+  it; `get_remote_license_status()` is what stores `expires`, and it caches
+  its answer for six hours, so a verify has to drop the
+  `{product_id}_license_status` transient first or it replays a stale yes.
+- **Their API answers in sentences, not codes.** A rejected key comes back
+  as "License Key is not valid." with no machine-readable field, so the
+  seat-limit case is recognized by wording. That mapping is the one part of
+  this provider not proven against the live service: every one of Austin's
+  BSF licenses is unlimited-activation, so there was no way to make their
+  API refuse for seats.
+
 ## Next candidates, ranked by real fleet impact (2026-07-10)
 
 Measured across 2,790 production sites on the CaptainCore fleet (the
@@ -469,7 +518,8 @@ license data on a lab site.
 | WPForms Pro | activate / deactivate / verify | bogus key (live wpforms.com refusal, nothing written, secret never echoed) | 2026-08-06 | option `wpforms_license` {key, type, is_* flags}; their deactivate resets it to '' (a string); WPFORMS_LICENSE_KEY constant wins and blocks Minn deactivate; class-license.php is admin/cron/CLI-gated so actions require it manually; first Awesome Motive family provider |
 | Akismet | activate / deactivate / verify | bogus key (live akismet.com refusal, nothing written; also driven through the spam-card paste field) | 2026-08-06 | SERVICE KEY, first connections-center row; `Akismet_Admin::save_key()` is the complete activate (verify + subscription check + store), admin class require'd manually under REST; alert options are the local validity signal; predefined_api_key (constant/filter) renders read-only |
 | WooCommerce.com, Site Kit, Jetpack connections | read + Connect ↗ link-out | read (live states on minnadmin: WC unconnected → missing, Site Kit half-connected → unknown, Jetpack off) | 2026-08-06 | connections-center brick 3; presence-only reads, tokens never decoded; no actions by design (OAuth stays on vendor screens) |
-| Freemius / EDD / SureCart generics, Avada, Smush Pro, AnalyticsWP, BSF family | read | real stored data on labs | 2026-07-10 | see the verification map above |
+| Brainstorm Force family (Convert Pro, Schema Pro, WP Portfolio, Premium Starter Templates, Spectra Blocks Pro, UABB, UAEL) | activate / deactivate / verify | real keys, full loop on all seven | 2026-08-12 | one provider per product off their registry; Astra Pro shares the identical path but was not on hand to install. Seat-limit wording is unproven (every key is unlimited-activation) |
+| Freemius / EDD / SureCart generics, Avada, Smush Pro, AnalyticsWP | read | real stored data on labs | 2026-07-10 | see the verification map above |
 | StellarWP Uplink / PUE catch-all | read | real stored data (TEC six-pack) | 2026-07-11 | registry reader; skips slugs claimed by dedicated providers |
 
 Keep this table current when a vendor gets a real-key pass or a new provider
