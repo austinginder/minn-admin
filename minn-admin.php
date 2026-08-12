@@ -49,6 +49,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/post-smtp.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-mail-logging.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/suremails.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/site-mailer.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/ottokit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/acf.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/meta-box.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/pods.php';

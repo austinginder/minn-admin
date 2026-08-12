@@ -111,6 +111,12 @@ Reference depth: **Gravity Forms**.
 | custom-css-js | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | CPT shim; tree rebuild on write; **status card** (active codes, running languages via regex peek) |
 | hfcm | Y | Y | Y | Y | — | Y | — | · | — | Y | 2026-07-17 | hfcm_scripts; page targeting = **L**; **status card** (active/inactive, running types, last change) |
 
+### automation
+
+| Adapter | list | tabs | bulk | detail | manage | status | chart | settings | views | suite | Reviewed | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ottokit | Y | Y | Y | Y | — | Y | · | · | · | Y | 2026-08-12 | Connector. Workflows, recipes and run history are CLOUD state with no local copy, so they stay **L** link-outs; their REST is machine-to-machine (`st_authorization` shared secret) and is never called. Local table `{prefix}suretriggers_webhook_requests`; retry through their `WebhookRequestsController::suretriggers_retry_trigger_request` (fires a real `wp_remote_post`, so fixtures point at 127.0.0.1:9 to stay offline); `created_at` is `current_time('mysql')` = site-local, emitted raw; installed-inactive |
+
 ### settings-only / other surfaces
 
 | Adapter | Shape | suite | Reviewed | Notes |
