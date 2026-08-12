@@ -2790,7 +2790,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-row-modified {
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0; width: 18px; height: 18px;
-  color: var(--amber-text); cursor: default;
+  color: var(--text3); cursor: default;
 }
 .minn-row-modified svg { width: 13px; height: 13px; }
 .minn-status.editing { color: var(--blue-text); background: rgba(91,155,224,0.14); }
