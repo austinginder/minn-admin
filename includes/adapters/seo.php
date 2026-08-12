@@ -1,6 +1,7 @@
 <?php
 /**
- * Bundled adapter: SEO editor panel — Yoast, Rank Math, AIOSEO, SEOPress.
+ * Bundled adapter: SEO editor panel — Yoast, Rank Math, AIOSEO, SEOPress,
+ * SureRank, SiteSEO.
  *
  * The valuable 90% of every SEO plugin at write time is three fields: SEO
  * title, meta description and focus keyword. None of them expose those over
@@ -13,10 +14,12 @@
  * Rank Math also maps social thumbnail (Facebook OG image, which Twitter
  * reuses when "use Facebook" is on) as an image field on the same panel.
  *
- * Yoast, Rank Math and SEOPress store postmeta; AIOSEO v4 keeps its own
- * {prefix}aioseo_posts table, so providers carry read/write callables and
- * AIOSEO's go through its own Post model (never raw SQL into their table).
- * Detection order follows install base; the first active plugin wins.
+ * Yoast, Rank Math, SEOPress and SiteSEO store postmeta; AIOSEO v4 keeps
+ * its own {prefix}aioseo_posts table and SureRank keeps GROUPED postmeta
+ * blobs, so providers carry read/write callables and those two go through
+ * their own models (never raw SQL into AIOSEO's table, never a hand-built
+ * group array for SureRank). Detection order follows install base; the
+ * first active plugin wins.
  *
  * @package minn-admin
  */
@@ -186,6 +189,150 @@ function minn_admin_seo_rank_math_provider() {
 }
 
 /**
+ * SureRank provider.
+ *
+ * SureRank does not keep one meta key per field. Everything lives in a few
+ * GROUPED postmeta blobs (surerank_settings_general, _social, …) and their
+ * own Get::all_post_meta() flattens those groups into a single map, which
+ * is the shape their API writes back through
+ * Post::update_post_meta_common(). Both are used here, so the grouping,
+ * processing and any future shape change stay their business.
+ *
+ * THE EMPTY-VALUE TRAP (verified, and it bites both ways): SureRank treats
+ * an empty SEO title or description as "inherit the site-wide template",
+ * and their save path SUBSTITUTES that template into the post. Writing ''
+ * through update_post_meta_common therefore stores '%title% - %site_name%'
+ * as this post's own explicit title, and the next read shows the raw
+ * template in the box. So clearing a field UNSETS the key inside the group
+ * instead, and a stored value identical to the site template is read back
+ * as empty, which is what it means.
+ *
+ * Every call is guarded: their models can never break a post save.
+ */
+function minn_admin_seo_surerank_provider() {
+	$fields = array(
+		'title'         => 'page_title',
+		'description'   => 'page_description',
+		'focus_keyword' => 'focus_keyword',
+	);
+	// The site-wide fallbacks a post inherits when its own field is empty.
+	$site_defaults = function () {
+		try {
+			$d = \SureRank\Inc\Functions\Defaults::get_instance()->get_post_defaults( false );
+			return ( is_array( $d ) && isset( $d['general'] ) && is_array( $d['general'] ) ) ? $d['general'] : array();
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+	};
+	// Their flattened per-post map, or an empty one.
+	$flat = function ( $post_id ) {
+		try {
+			$m = \SureRank\Inc\Functions\Get::all_post_meta( (int) $post_id );
+			return is_array( $m ) ? $m : array();
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+	};
+	return array(
+		'name'   => 'SureRank',
+		'social' => true,
+		'read'   => function ( $post_id ) use ( $fields, $site_defaults, $flat ) {
+			$meta = $flat( $post_id );
+			$def  = $site_defaults();
+			$out  = array();
+			foreach ( $fields as $field => $key ) {
+				$value = isset( $meta[ $key ] ) ? (string) $meta[ $key ] : '';
+				// A value equal to the site template is SureRank's way of
+				// saying this post sets nothing of its own.
+				if ( '' !== $value && isset( $def[ $key ] ) && (string) $def[ $key ] === $value ) {
+					$value = '';
+				}
+				$out[ $field ] = $value;
+			}
+			$id  = isset( $meta['facebook_image_id'] ) ? (int) $meta['facebook_image_id'] : 0;
+			$url = isset( $meta['facebook_image_url'] ) ? (string) $meta['facebook_image_url'] : '';
+			if ( $id && ! $url ) {
+				$url = (string) wp_get_attachment_image_url( $id, 'medium' );
+			}
+			$out['social_image'] = ( $id || $url ) ? array( 'id' => $id, 'url' => $url ) : null;
+			return $out;
+		},
+		'write'  => function ( $post_id, $field, $clean ) use ( $fields ) {
+			$post_id = (int) $post_id;
+			try {
+				if ( 'social_image' === $field ) {
+					$id  = 0;
+					$url = '';
+					if ( is_array( $clean ) ) {
+						$id  = isset( $clean['id'] ) ? (int) $clean['id'] : 0;
+						$url = isset( $clean['url'] ) ? (string) $clean['url'] : '';
+					} elseif ( is_numeric( $clean ) ) {
+						$id = (int) $clean;
+					}
+					if ( $id > 0 && ! $url ) {
+						$url = (string) wp_get_attachment_url( $id );
+					}
+					if ( $id > 0 || '' !== $url ) {
+						\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array(
+							'facebook_image_id'  => $id,
+							'facebook_image_url' => $url,
+						) );
+					} else {
+						minn_admin_seo_surerank_unset( $post_id, 'social', array( 'facebook_image_id', 'facebook_image_url' ) );
+					}
+					return;
+				}
+				if ( ! isset( $fields[ $field ] ) ) {
+					return;
+				}
+				$key = $fields[ $field ];
+				if ( '' === $clean ) {
+					// See the file note: their save path would substitute
+					// the site template here and store it as this post's own.
+					minn_admin_seo_surerank_unset( $post_id, 'general', array( $key ) );
+					return;
+				}
+				\SureRank\Inc\API\Post::update_post_meta_common( $post_id, array( $key => $clean ) );
+			} catch ( \Throwable $e ) {
+				// A vendor model must never break the post save around it.
+				return;
+			}
+		},
+	);
+}
+
+/**
+ * Remove keys from one of SureRank's grouped postmeta blobs, which is what
+ * "this post sets nothing here" really looks like in their storage.
+ *
+ * @param int      $post_id Post id.
+ * @param string   $group   Group suffix ('general', 'social', …).
+ * @param string[] $keys    Keys to drop.
+ */
+function minn_admin_seo_surerank_unset( $post_id, $group, $keys ) {
+	$meta_key = 'surerank_settings_' . $group;
+	$stored   = get_post_meta( (int) $post_id, $meta_key, true );
+	if ( ! is_array( $stored ) ) {
+		return;
+	}
+	$changed = false;
+	foreach ( $keys as $key ) {
+		if ( array_key_exists( $key, $stored ) ) {
+			unset( $stored[ $key ] );
+			$changed = true;
+		}
+	}
+	if ( ! $changed ) {
+		return;
+	}
+	try {
+		\SureRank\Inc\Functions\Update::post_meta( (int) $post_id, $meta_key, $stored );
+	} catch ( \Throwable $e ) {
+		return;
+	}
+}
+
+/**
  * The active SEO plugin as { name, read, write } — first active wins, in
  * install-base order.
  *
@@ -211,6 +358,11 @@ function minn_admin_seo_plugin() {
 			'description'   => '_seopress_titles_desc',
 			'focus_keyword' => '_seopress_analysis_target_kw',
 		) );
+	}
+	if ( defined( 'SURERANK_VERSION' )
+		&& class_exists( '\SureRank\Inc\Functions\Get' )
+		&& class_exists( '\SureRank\Inc\API\Post' ) ) {
+		return minn_admin_seo_surerank_provider();
 	}
 	// SiteSEO is the SEOPress fork; same postmeta shape under its own prefix.
 	if ( defined( 'SITESEO_VERSION' ) ) {

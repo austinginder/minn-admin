@@ -121,7 +121,7 @@ Reference depth: **Gravity Forms**.
 | performance-lab | features list + status + activate/deactivate; family `performance` | Y | 2026-07-14 | Hub for WP Performance Team standalone plugins |
 | licenses | Extensions → Licenses (filter providers) | Y | | Use license-manager skill loop for new vendors |
 | spam | Settings → Spam cards | Y | | |
-| seo | Editor panel (providers) | Y | | |
+| seo | Editor panel (providers) | Y | 2026-08-12 | SureRank added (6th provider): GROUPED postmeta blobs read via their Get::all_post_meta() flatten + written via Post::update_post_meta_common(); empty values UNSET the key inside the group because their save path substitutes the site-wide template ('%title% - %site_name%') and would store it as the post's own; social thumbnail maps facebook_image_url/_id |
 | meta-box | Editor panel (simple fields) | Y | 2026-07-14 | Clone/media = locked + deep link |
 | seriously-simple-podcasting | Editor panel (episode details on ssp_post_types) | Y | 2026-07-17 | Schema live from their CPT_Podcast_Handler::custom_fields() (container service); 'on'/'' checkbox convention; cover image locked; Castos sync untouched; active fixture + standing demo episode |
 | the-events-calendar | Editor panel (Event details on tribe_events) + `suggest` panel primitive | Y | 2026-07-17 | Writes via Tribe__Events__API::saveEventMeta in their OWN REST endpoint's payload shape; venue/organizer via the new async-suggest field (minn-admin/v1/tec/suggest); multi-organizer events lock the field; recurrence/tickets/timezone = **L**. Active fixture (six-pack) |
