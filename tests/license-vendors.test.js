@@ -141,7 +141,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const envItem = await rowState( 'Fixture Salient' );
 		t.check( 'Envato failed item token is invalid', envItem && envItem.state === 'invalid', envItem ? envItem.state : 'no row' );
 
-		// Brick-3 site connections (WooCommerce.com / Site Kit / Jetpack):
+		// Site connections (WooCommerce.com / Site Kit / Jetpack / SureCart):
 		// read-only rows with the connection chip, never vendor-action
 		// controls; an unconnected active row offers Connect ↗ instead.
 		const connRow = ( n ) => page.evaluate( ( name ) => {
@@ -156,7 +156,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 				buttons: [ ...row.querySelectorAll( '[data-lic]' ) ].map( ( b ) => ( { k: b.dataset.lic, t: b.textContent.trim() } ) ),
 			};
 		}, n );
-		for ( const name of [ 'WooCommerce.com', 'Site Kit by Google', 'Jetpack' ] ) {
+		for ( const name of [ 'WooCommerce.com', 'Site Kit by Google', 'Jetpack', 'SureCart' ] ) {
 			const c = await connRow( name );
 			const sane = c && [ 'valid', 'missing', 'unknown' ].includes( c.state ) && c.chip === 'connection';
 			const readOnly = c && ! c.buttons.some( ( b ) => [ 'activate', 'deactivate', 'verify' ].includes( b.k ) );
