@@ -130,7 +130,30 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 			!! chip && !! chip.label && /settings/i.test( chip.label ), JSON.stringify( chip ) );
 
 		if ( chip ) {
-			await page.click( '#minn-table-chips .minn-code-chip' );
+			// Chips live in the DOM permanently but are REVEALED one at a
+			// time by the pointer (opacity 0 + pointer-events none until
+			// their target block is hovered), so a bare click can never
+			// land on one: the figure under it takes the hit. Move a real
+			// mouse over the table first, wait for the reveal, then click
+			// the chip where it actually is.
+			const fig = await page.evaluate( () => {
+				const f = document.querySelector( '#minn-editor-body figure.wp-block-table' );
+				if ( ! f ) return null;
+				const r = f.getBoundingClientRect();
+				return { x: Math.round( r.left + r.width / 2 ), y: Math.round( r.top + r.height / 2 ) };
+			} );
+			await page.mouse.move( fig.x, fig.y );
+			await page.waitForFunction(
+				() => !! document.querySelector( '#minn-table-chips .minn-code-chip.shown' ),
+				null, { timeout: 5000 }
+			);
+			const spot = await page.evaluate( () => {
+				const c = document.querySelector( '#minn-table-chips .minn-code-chip.shown' );
+				const r = c.getBoundingClientRect();
+				return { x: Math.round( r.left + r.width / 2 ), y: Math.round( r.top + r.height / 2 ) };
+			} );
+			await page.mouse.move( spot.x, spot.y );
+			await page.mouse.click( spot.x, spot.y );
 			await page.waitForSelector( '.minn-table-pop, .minn-img-pop, .minn-code-pop, .minn-inspector', { timeout: 5000 } );
 			const pop = await page.evaluate( () => {
 				const el = document.querySelector( '.minn-table-pop, .minn-img-pop, .minn-code-pop, .minn-inspector[role="dialog"]' );
