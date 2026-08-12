@@ -33569,6 +33569,7 @@
 			state.cache.pluginNames = buildPluginNameMap( d.plugins );
 			state.cache.pluginUpdates = ( d.pluginUpdates && d.pluginUpdates.updates ) || {};
 			state.cache.themeUpdates = ( d.pluginUpdates && d.pluginUpdates.themes ) || {};
+			state.cache.translationUpdates = ( d.pluginUpdates && d.pluginUpdates.translations ) || 0;
 			state.cache.autoPlugins = ( d.pluginUpdates && d.pluginUpdates.auto ) || [];
 			state.cache.autoAllowed = !! ( d.pluginUpdates && d.pluginUpdates.autoAllowed );
 			if ( d.pluginMeta ) state.cache.pluginMeta = d.pluginMeta;
