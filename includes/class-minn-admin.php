@@ -937,6 +937,9 @@ class Minn_Admin {
 				'themes'       => current_user_can( 'switch_themes' ),
 				'deleteThemes' => current_user_can( 'delete_themes' ),
 				'updateThemes' => current_user_can( 'update_themes' ),
+				// Core's own gate for the Update Translations button. On a
+				// network this maps to the super admin, the same as core.
+				'updateLanguages' => current_user_can( 'update_languages' ),
 				'installThemes' => current_user_can( 'install_themes' ),
 				'settings'     => current_user_can( 'manage_options' ),
 				'moderate'     => current_user_can( 'moderate_comments' ),

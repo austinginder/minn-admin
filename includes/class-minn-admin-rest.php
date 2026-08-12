@@ -390,6 +390,18 @@ class Minn_Admin_REST {
 
 		register_rest_route(
 			self::NS,
+			'/translations/update',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'update_translations' ),
+				'permission_callback' => function () {
+					return current_user_can( 'update_languages' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/auto-updates',
 			array(
 				'methods'             => 'POST',
@@ -3266,6 +3278,33 @@ class Minn_Admin_REST {
 			}
 		}
 
+		// Language packs are counted, not listed: core offers one button for
+		// all of them, and a row per plugin translation would bury everything
+		// else in the panel.
+		$lang_count = self::translation_update_count();
+		if ( $lang_count ) {
+			$items[] = array(
+				'id'     => 'translations-' . $lang_count,
+				'kind'   => 'updates',
+				'icon'   => '⬆',
+				/* translators: %d is a number of translations. */
+				'title'  => sprintf(
+					_n(
+						'%d translation is available to update',
+						'%d translations are available to update',
+						$lang_count,
+						'minn-admin'
+					),
+					$lang_count
+				),
+				'time'   => time(),
+				'update' => array(
+					'type'  => 'translations',
+					'count' => $lang_count,
+				),
+			);
+		}
+
 		if ( current_user_can( 'update_themes' ) ) {
 			$tupdates = get_site_transient( 'update_themes' );
 			$tchecked = $tupdates && ! empty( $tupdates->last_checked ) ? (int) $tupdates->last_checked : time();
@@ -3457,15 +3496,79 @@ class Minn_Admin_REST {
 		}
 		return rest_ensure_response(
 			array(
-				'updates'     => $map,
-				'themes'      => $theme_map,
-				'auto'        => array_values( array_intersect(
+				'updates'      => $map,
+				'themes'       => $theme_map,
+				'translations' => self::translation_update_count(),
+				'auto'         => array_values( array_intersect(
 					(array) get_site_option( 'auto_update_plugins', array() ),
 					array_keys( self::all_plugins() )
 				) ),
-				'autoAllowed' => self::auto_updates_allowed( 'plugin' ),
+				'autoAllowed'  => self::auto_updates_allowed( 'plugin' ),
 			)
 		);
+	}
+
+	/**
+	 * Update every waiting language pack, the way core's Update Translations
+	 * button does. Language packs are small and independent, so this is one
+	 * bulk call rather than the per-item loop themes need.
+	 */
+	public static function update_translations() {
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+
+		$pending = (array) wp_get_translation_updates();
+		if ( ! $pending ) {
+			return rest_ensure_response( array( 'updated' => 0, 'remaining' => 0 ) );
+		}
+
+		$skin     = new WP_Ajax_Upgrader_Skin();
+		$upgrader = new Language_Pack_Upgrader( $skin );
+		$result   = $upgrader->bulk_upgrade( $pending, array( 'clear_update_cache' => true ) );
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( false === $result ) {
+			$errors = $skin->get_error_messages();
+			return new WP_Error(
+				'translations_failed',
+				$errors ? implode( ' ', (array) $errors ) : __( 'Translation update failed.', 'minn-admin' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		$done = 0;
+		foreach ( (array) $result as $one ) {
+			if ( $one && ! is_wp_error( $one ) ) {
+				++$done;
+			}
+		}
+		// Re-read rather than subtract: a pack that failed is still pending,
+		// and the client decides what to say from what is actually left.
+		return rest_ensure_response(
+			array(
+				'updated'   => $done,
+				'remaining' => count( (array) wp_get_translation_updates() ),
+			)
+		);
+	}
+
+	/**
+	 * How many language packs have an update waiting.
+	 *
+	 * Core keeps these alongside the plugin, theme and core update transients
+	 * rather than in one of them, which is why a site can read "everything is
+	 * current" while wp-admin still offers Update Translations. Counted the
+	 * way core's own update-core.php screen counts them, and only for a user
+	 * who could act on it.
+	 */
+	public static function translation_update_count() {
+		if ( ! current_user_can( 'update_languages' ) ) {
+			return 0;
+		}
+		return count( (array) wp_get_translation_updates() );
 	}
 
 	/**
