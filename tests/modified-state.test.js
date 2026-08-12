@@ -1,7 +1,7 @@
 /**
  * The "Modified" state — a live post carrying unsaved edits (an autosave
- * newer than the saved copy) is named in the content list: an amber pencil
- * on the row (hover tip) and a quiet Modified toolbar filter backed by
+ * newer than the saved copy) is named in the content list: an amber dot on
+ * the row's status pill and a quiet Modified toolbar filter backed by
  * ?minn_modified=1.
  *
  * Fixtures: two published posts; one gets a REST autosave so it enters the
@@ -52,7 +52,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		t.check( 'minn_modified=1 filters to the modified post only',
 			ids.includes( idA ) && ! ids.includes( idB ), JSON.stringify( ids ) );
 
-		// The list: pencil flag on A's row, nothing on B's.
+		// The list: amber dot on A's status pill, nothing on B's.
 		await page.goto( BASE + '/minn-admin/content', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( `.minn-table-row[data-id="${ idA }"]`, { timeout: 20000 } );
 		t.check( 'Modified mark on the autosaved row',
@@ -60,34 +60,36 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		t.check( 'no mark on the clean row',
 			! ( await page.$( `.minn-table-row[data-id="${ idB }"] .minn-status.modified, .minn-table-row[data-id="${ idB }"] .minn-row-modified` ) ), '' );
 
-		const flag = page.locator( `.minn-table-row[data-id="${ idA }"] .minn-row-modified` );
-		await flag.hover();
-		await page.waitForSelector( '#minn-float-tip', { timeout: 5000 } );
-		const tipText = await page.$eval( '#minn-float-tip', ( el ) => ( el.textContent || '' ).trim() );
-		t.check( 'hover shows the unsaved-edits tip', /unsaved edits/i.test( tipText ), tipText );
-		const tipHost = await page.$eval( '#minn-float-tip', ( el ) => ( el.parentElement && el.parentElement.className ) || '' );
-		t.check( 'tip is mounted in the list scroller', /\bminn-scroll\b/.test( tipHost ), tipHost );
-		const gapBefore = await page.evaluate( () => {
-			const tip = document.getElementById( 'minn-float-tip' );
-			const mark = document.querySelector( '.minn-row-modified' );
-			return tip.getBoundingClientRect().top - mark.getBoundingClientRect().top;
-		} );
-		await page.evaluate( () => {
-			const sc = document.querySelector( '.minn-scroll' );
-			if ( sc ) sc.scrollTop += 80;
-		} );
-		const afterScroll = await page.evaluate( () => {
-			const tip = document.getElementById( 'minn-float-tip' );
-			const mark = document.querySelector( '.minn-row-modified' );
-			if ( ! tip || ! mark ) return { gone: ! tip };
-			return { gone: false, gap: tip.getBoundingClientRect().top - mark.getBoundingClientRect().top };
-		} );
-		t.check(
-			'tip rides the list scroll with the icon',
-			afterScroll.gone || Math.abs( afterScroll.gap - gapBefore ) < 2,
-			JSON.stringify( afterScroll )
-		);
-		await page.mouse.move( 0, 0 );
+		// The dot rides INSIDE the one status pill: the column never stacks
+		// a second pill, and the pill itself carries the explanation.
+		const pill = await page.evaluate( ( id ) => {
+			const row = document.querySelector( `.minn-table-row[data-id="${ id }"]` );
+			const cell = row && row.querySelector( '.minn-row-status' );
+			const st = cell && cell.querySelector( '.minn-status' );
+			const dot = st && st.querySelector( '.minn-row-modified' );
+			if ( ! st || ! dot ) return { ok: false };
+			const cs = getComputedStyle( dot );
+			return {
+				ok: true,
+				pills: cell.querySelectorAll( '.minn-status' ).length,
+				title: st.getAttribute( 'title' ) || '',
+				label: ( st.textContent || '' ).trim(),
+				round: cs.borderTopLeftRadius,
+				width: cs.width,
+				sr: !! st.querySelector( '.minn-sr-only' ),
+				oneLine: Math.round( cell.getBoundingClientRect().height ) <= 30,
+			};
+		}, idA );
+		t.check( 'dot lives inside the status pill', pill.ok && pill.pills === 1, JSON.stringify( pill ) );
+		t.check( 'pill explains the state on hover', /unsaved edits/i.test( pill.title ), pill.title );
+		t.check( 'pill still reads as its status', /^Published/.test( pill.label || '' ), pill.label );
+		// Chrome reports the specified 50%, not a resolved px radius.
+		t.check( 'mark is a 6px round dot', pill.width === '6px' && /^(50%|3px)$/.test( pill.round ),
+			`${ pill.width } / ${ pill.round }` );
+		t.check( 'state has an accessible name', !! pill.sr, '' );
+		t.check( 'status cell stays one line', !! pill.oneLine, JSON.stringify( pill.oneLine ) );
+		t.check( 'no bespoke float tip in the content list',
+			! ( await page.$( '#minn-float-tip' ) ), '' );
 
 		// The toolbar filter: only modified rows remain.
 		await page.click( '#minn-content-modified' );
