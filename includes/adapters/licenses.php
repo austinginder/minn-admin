@@ -1646,6 +1646,40 @@ function minn_admin_license_default_providers() {
 		},
 	);
 
+	// SureCart: the store connection. Everything SureCart sells lives in
+	// THEIR cloud — orders, customers, products — reached through a site
+	// token, so this link is the whole local story. The token sits
+	// ENCRYPTED in sc_api_token and is read for PRESENCE only, never
+	// decrypted (their own isConnected() decrypts it; presence is the same
+	// answer without handling the secret). No network: a license read never
+	// calls a vendor API.
+	$providers['surecart'] = array(
+		'name'         => 'SureCart',
+		'category'     => 'connection',
+		'component'    => 'surecart/surecart.php',
+		'detect'       => function () use ( $has ) {
+			return $has( 'surecart/surecart.php' );
+		},
+		'activate_url' => function () {
+			return admin_url( 'admin.php?page=sc-getting-started' );
+		},
+		'read'         => function () use ( $item ) {
+			if ( '' === trim( (string) get_option( 'sc_api_token', '' ) ) ) {
+				return array( $item( array(
+					'name'  => 'SureCart',
+					'state' => 'missing',
+					'note'  => 'store not connected; orders, customers and products all live in SureCart',
+				) ) );
+			}
+			return array( $item( array(
+				'name'  => 'SureCart',
+				'state' => 'valid',
+				'key'   => true,
+				'note'  => 'store connected',
+			) ) );
+		},
+	);
+
 	// Site Kit: Google connection state. Site credentials live ENCRYPTED in
 	// googlesitekit_credentials (presence only, never decoded);
 	// googlesitekit_has_connected_admins is their own connected-admins flag.
