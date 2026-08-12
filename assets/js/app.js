@@ -11043,6 +11043,10 @@
 			// the Extensions dot too — per-theme badges only render inside
 			// the Themes tab. The map also feeds Update everything.
 			state.cache.themeUpdates = ( upd && upd.themes ) || {};
+			// Language packs live outside the plugin/theme/core transients, so
+			// a site can read "all caught up" while wp-admin still offers
+			// Update Translations. Carried as a plain count.
+			state.cache.translationUpdates = ( upd && upd.translations ) || 0;
 			state.cache.autoPlugins = ( upd && upd.auto ) || [];
 			state.cache.autoAllowed = !! ( upd && upd.autoAllowed );
 			const dot = $( '#minn-plugin-dot' );
@@ -11199,6 +11203,7 @@
 			// Keep cache in sync for other cards.
 			if ( state.cache ) state.cache.pluginUpdates = map;
 			if ( upd && upd.themes ) state.cache.themeUpdates = upd.themes;
+			if ( upd ) state.cache.translationUpdates = upd.translations || 0;
 			return !! map[ key ];
 		};
 
@@ -27528,6 +27533,11 @@
 		if ( p && B.caps.update ) parts.push( { kind: 'plugins', n: p, label: `${ p } plugin${ p === 1 ? '' : 's' }` } );
 		const t = Object.keys( state.cache.themeUpdates || {} ).length;
 		if ( t && B.caps.updateThemes ) parts.push( { kind: 'themes', n: t, label: `${ t } theme${ t === 1 ? '' : 's' }` } );
+		const l = state.cache.translationUpdates || 0;
+		if ( l && B.caps.updateLanguages ) {
+			/* translators: %d is a number of translations. */
+			parts.push( { kind: 'translations', n: l, label: sprintf( _n( '%d translation', '%d translations', l ), l ) } );
+		}
 		const c = state.cache.core && state.cache.core.update;
 		if ( c && B.caps.core ) parts.push( { kind: 'core', label: `WordPress ${ c.version }` } );
 		return parts;
@@ -27591,6 +27601,24 @@
 			}
 			if ( ok ) doneBits.push( `${ ok } theme${ ok === 1 ? '' : 's' }` );
 		}
+		// Language packs go before core: they are one quick bulk call, and
+		// core last still owns the maintenance window.
+		if ( parts.some( ( p ) => p.kind === 'translations' ) ) {
+			const nl = parts.find( ( p ) => p.kind === 'translations' ).n;
+			/* translators: %d is a number of translations. */
+			setPhase( sprintf( _n( 'Updating %d translation…', 'Updating %d translations…', nl ), nl ) );
+			try {
+				const r = await api( 'minn-admin/v1/translations/update', { method: 'POST' } );
+				const did = ( r && r.updated ) || 0;
+				state.cache.translationUpdates = ( r && r.remaining ) || 0;
+				if ( did ) {
+					/* translators: %d is a number of translations. */
+					doneBits.push( sprintf( _n( '%d translation', '%d translations', did ), did ) );
+				}
+			} catch ( e ) {
+				failures.push( 'translations: ' + e.message );
+			}
+		}
 		if ( hasCore ) {
 			setPhase( 'Updating WordPress…' );
 			try {
@@ -27612,6 +27640,7 @@
 		state.cache.plugins = null;
 		state.cache.pluginUpdates = {};
 		state.cache.themeUpdates = {};
+		state.cache.translationUpdates = 0;
 		state.cache.themes = null;
 		state.cache.core = null;
 		state.cache.notifications = null;
