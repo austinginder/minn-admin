@@ -23,6 +23,15 @@ body {
   font-size: 15px;
   background: var(--bg);
   color: var(--text);
+  /* JetBrains Mono ships programming ligatures on contextual alternates, and
+     one of them kerns the colon away from the slashes in `://` so a typed URL
+     reads as "https: /anchor.localhost" — it looks like Minn mangled the value
+     while the stored string was always correct (Austin's report, 2026-08-12).
+     Minn renders mono for DATA (urls, paths, versions, ip addresses), not for
+     code authoring, so contextual alternates are off. `no-contextual` is
+     deliberate rather than `none`: it leaves the sans face's ordinary prose
+     ligatures (fi, fl) alone. Inherited, so it covers every mono surface. */
+  font-variant-ligatures: no-contextual;
 }
 
 /*
