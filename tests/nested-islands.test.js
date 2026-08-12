@@ -282,7 +282,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 	const CONTENT3 = [
 		// A real background image: it is absolutely positioned, so it used to
 		// paint OVER the writing slot and swallow every click (no caret, no
-		// "/" menu — Austin's repro).
+		// "/" menu).
 		'<!-- wp:cover {"url":"https://minnadmin.localhost/wp-includes/images/media/default.svg","dimRatio":50} -->',
 		'<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><img class="wp-block-cover__image-background" src="https://minnadmin.localhost/wp-includes/images/media/default.svg" alt=""/><div class="wp-block-cover__inner-container"><!-- wp:paragraph {"align":"center"} -->',
 		'<p class="has-text-align-center">Cover line.</p>',
@@ -481,7 +481,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 
 	await deletePost( page, id4 );
 
-	/* ===== Duplicate (Austin's testimonial ask): the inspector's copy
+	/* ===== Duplicate: the inspector's copy
 	 * button clones an island in place — a nested card group duplicates
 	 * INSIDE its column and both copies save. ===== */
 	const CONTENT5 = [

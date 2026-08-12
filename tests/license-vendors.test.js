@@ -11,7 +11,7 @@
  * callables only attach while the vendor's code is loaded), so this
  * covers the READ layer — the highest-value, no-network part. Activation
  * plumbing is exercised per-vendor against the live vendor APIs as
- * Austin's manual step, exactly like the wave-1..4 providers.
+ * a manual step, exactly like the wave-1..4 providers.
  */
 const { launch, login, reporter, BASE } = require( './helpers' );
 
@@ -178,7 +178,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		// Inactive components carry the dimmed off state + explanation. Use
 		// the Avada THEME row: minnadmin's active theme is minn-admin-theme,
 		// so Avada is reliably inactive regardless of which vendor plugins
-		// happen to be active (Austin toggles plugins live — never assume a
+		// happen to be active (plugins get toggled live — never assume a
 		// specific plugin's active state in an assertion).
 		const off = await page.evaluate( () => {
 			const row = [ ...document.querySelectorAll( '#minn-sys-licenses .minn-lic-item' ) ]

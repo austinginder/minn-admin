@@ -299,7 +299,7 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + ASLID
 
 		// --- Drop an image FILE straight into the modal ---
 		// The window-level handler would otherwise take the writer to the media
-		// library with the file uploaded there instead (Austin's repro): while
+		// library with the file uploaded there instead: while
 		// this modal is open it owns every drop.
 		t.check( 'inspector reopens for the drop', await openIsland( 'acme/carousel' ) );
 		await page.click( '#minn-insp-imgedit' );
@@ -440,7 +440,7 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + ASLID
 		// --- The badge itself is pressable ---
 		// On a card whose slides carry text, the centre (where the hand goes,
 		// and where the badge sits) can be editable text that takes the press.
-		// The badge has to work there (Austin's repro).
+		// The badge has to work there.
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 400 );
 		const badgeHit = await page.evaluate( () => {
@@ -462,7 +462,7 @@ const CONTENT = JP( S ) + '\n\n' + GAL( G ) + '\n\n' + CAR( C ) + '\n\n' + ASLID
 
 		// --- The whole card is the doorway, not just the photos ---
 		// It dims and names the action as one button, so a press in the gaps
-		// between photos has to open the editor too (Austin's repro).
+		// between photos has to open the editor too.
 		await page.keyboard.press( 'Escape' );
 		await page.waitForTimeout( 500 );
 		const gap = await page.evaluate( () => {

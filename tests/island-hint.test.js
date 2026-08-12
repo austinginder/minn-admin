@@ -3,7 +3,7 @@
  *
  * A core text block that islands because of styling attrs looks typeable and
  * is not, so it says so. Every other card carries the ⚙ chip in view and gets
- * NO hint — the label only repeated it (Austin, v0.27.0). The hint is editor
+ * NO hint — the label only repeated it. The hint is editor
  * chrome: hidden until hover/selection, never counted by the word-count pill,
  * never copied with a selection.
  */
@@ -97,7 +97,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	}
 
 	// Container cards carry no hint: their affordance is that you can type in
-	// them, so the label only restated the obvious (Austin, v0.27.0).
+	// them, so the label only restated the obvious.
 	{
 		const gid = await createPost( page, { title: 'Container hint probe', content: '<!-- wp:group -->\n<div class="wp-block-group"><!-- wp:paragraph -->\n<p>Inside.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->' } );
 		try {

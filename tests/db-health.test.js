@@ -6,8 +6,8 @@
  * from a check to its table, and Author gating on the route.
  *
  * Deliberately does NOT assert specific severities: this runs against a live
- * dev site whose orphan counts and indexes change as other suites and Austin
- * work on it. It asserts SHAPE (checks present, severities valid, commands
+ * dev site whose orphan counts and indexes change as other suites and ordinary
+ * use touch it. It asserts SHAPE (checks present, severities valid, commands
  * copyable), which is what the feature promises.
  *
  * Run: MINN_TEST_PASS=… node db-health.test.js

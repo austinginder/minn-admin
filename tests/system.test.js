@@ -269,7 +269,7 @@ const fs = require( 'fs' );
 	}
 
 	/* ===== Autoload + Cron health cards expand to detail modals ===== */
-	// The health CARDS are the primary entry (Austin) and wear a corner
+	// The health CARDS are the primary entry and wear a corner
 	// expand icon; the grid rows below share the same data-sysdetail
 	// binding. querySelector hits the card first (checks render first).
 	t.check( 'autoload + cron health cards carry the expand affordance', await page.evaluate( () =>

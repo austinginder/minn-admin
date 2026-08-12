@@ -2684,7 +2684,7 @@ class Minn_Admin_REST {
 				'text'  => sprintf( '%s %s “%s”', $author, $verb, self::plain_title( $p ) ),
 				'time'  => $time,
 				'color' => 'publish' === $p->post_status ? 'green' : ( 'future' === $p->post_status ? 'blue' : 'accent' ),
-				// Rows are clickable: land in the editor (Austin's ask). The
+				// Rows are clickable: land in the editor. The
 				// editor route takes the REST base, not the post type.
 				'goto'  => array(
 					'kind' => 'editor',

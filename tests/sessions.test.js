@@ -1,5 +1,5 @@
 /**
- * Sessions listing (profile modal). Austin's report: the list looked full of
+ * Sessions listing (profile modal). The list looked full of
  * duplicates. They are genuinely distinct WordPress session tokens (each
  * login creates one), but two problems made them look buggy:
  *   1. Minn read session_tokens raw and showed EXPIRED tokens that core

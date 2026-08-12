@@ -1,5 +1,5 @@
 /**
- * Install-modal drop routing (Austin's builders repro, 2026-07-10): with the
+ * Install-modal drop routing: with the
  * Add plugin (or Add theme) modal open, a file dropped ANYWHERE must go to
  * the modal's installer, never the media library — a zip aimed at the small
  * dropzone but landing a few pixels outside used to upload to Media. The

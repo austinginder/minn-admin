@@ -45,7 +45,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	t.check( 'Filter-pill re-render does not re-steal focus', ( await focusedId() ) !== 'minn-ext-search' );
 
 	// 3b. Switching Extensions tabs is a navigation too: the Themes tab must
-	// hand focus to the themes filter box (Austin's follow-up report).
+	// hand focus to the themes filter box.
 	await page.click( '[data-xtab="themes"]' );
 	await page.waitForSelector( '#minn-ext-search', { timeout: 15000 } );
 	await page.waitForTimeout( 600 );

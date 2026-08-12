@@ -10,8 +10,8 @@
  *
  * Fixtures: ai-provider-for-anthropic ACTIVE (its setting is registered, so
  * the Anthropic card carries the key field), akismet installed-inactive.
- * OpenAI / Google may be installed mid-session (Austin dogfoods Install &
- * activate) — the suite asserts a sane card state, not a fixed install pill.
+ * OpenAI / Google may be installed mid-session through Install &
+ * activate — the suite asserts a sane card state, not a fixed install pill.
  */
 const { launch, login, reporter, BASE } = require( './helpers' );
 

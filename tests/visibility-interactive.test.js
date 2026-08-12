@@ -1,5 +1,5 @@
 /**
- * Interactive + live-updating site-visibility controls (Austin's report):
+ * Interactive + live-updating site-visibility controls:
  *  - toggling maintenance mode in Settings updated the banner/chip only after
  *    a page reload — now it refreshes live,
  *  - the chip/banner just dumped the user to Settings — now the chip opens a
@@ -71,7 +71,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		t.check( 'banner + chip clear after enabling indexing from the banner', ( await page.$( '.minn-vis-banner' ) ) === null && await chipHidden() === true );
 		t.check( 'blog_public is back on', !! ( await serverOpt( 'blog_public' ) ) );
 
-		/* ===== Toggling from the chip syncs the Settings page (Austin's bug) ===== */
+		/* ===== Toggling from the chip syncs the Settings page ===== */
 		// Drive everything through the UI to avoid the REST-settings write race.
 		// On the Settings Visibility tab, discourage indexing via the switch + Save.
 		await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded' } );

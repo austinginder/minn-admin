@@ -20,7 +20,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return await r.json();
 	}, path );
 
-	// SEED THE PLUGIN BASELINE (rule: Austin toggles plugins live; the dev
+	// SEED THE PLUGIN BASELINE (rule: plugins get toggled live; the dev
 	// convention keeps Wordfence DEACTIVATED so WSAL stays the resident
 	// activity-log provider). The shim's routes only register while
 	// Wordfence is active, so activate it for the run and restore after.

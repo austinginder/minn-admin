@@ -780,7 +780,7 @@
 	// structural block deletions recoverable without touching the browser undo
 	// stack (see the undo-completeness decision in docs/editor-roadmap.md).
 	// While the toast is up, ⌘Z / Ctrl+Z also runs the action — island delete
-	// is direct-DOM so the browser undo stack never saw it (Austin: toast Undo
+	// is direct-DOM so the browser undo stack never saw it (toast Undo
 	// worked, keyboard didn't).
 	let pendingToastUndo = null; // { run: fn, el }
 
@@ -1104,8 +1104,8 @@
 		} );
 	}
 
-	// Adapter-form selects render as the strict themed combobox (Austin,
-	// 2026-07-11): the native <select> popup was the last OS-drawn control
+	// Adapter-form selects render as the strict themed combobox:
+	// the native <select> popup was the last OS-drawn control
 	// left in adapter surfaces. The upgrade happens at render time in the
 	// adapter-form dialects only (surface settings, create/edit, action
 	// fields) — editor panels and the block inspector keep native selects,
@@ -1244,7 +1244,7 @@
 		// editorId/editorType here — onRouteChange compares the previous target
 		// to the new one. Nulling id first made editor/posts/1451 → editor/pages
 		// look like null → null (no change), so the URL updated but the open
-		// post stayed on screen (Austin). Flush + lock release run in onRouteChange.
+		// post stayed on screen. Flush + lock release run in onRouteChange.
 		go( 'editor/' + type );
 	}
 
@@ -1485,7 +1485,7 @@
 			monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
 			eye: '<path d="M2.06 12.35a1 1 0 0 1 0-.7C3.42 8.1 7.35 5 12 5s8.58 3.1 9.94 6.65a1 1 0 0 1 0 .7C20.58 15.9 16.65 19 12 19s-8.58-3.1-9.94-6.65Z"/><circle cx="12" cy="12" r="3"/>',
 			// Half-filled circle: the auto/system theme glyph (the monitor icon
-			// read as "view the site" — Austin kept clicking it for the front end).
+			// read as "view the site" and drew clicks meant for the front end).
 			contrast: '<circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor" stroke-width="0"/>',
 			plus: '<path d="M12 5v14M5 12h14"/>',
 			refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
@@ -2290,7 +2290,7 @@
 			subEl.textContent = ed.id
 				? `${ editorNoun( ed ) } · ${ STATUS_LABELS[ ed.status ] || 'Draft' }`
 				: `New ${ editorNoun( ed ).toLowerCase() }`;
-			// Focus/outline had no visible exit (Austin's report: the entry
+			// Focus/outline had no visible exit (the entry
 			// toast names the shortcut, then you're stranded). A back arrow
 			// would read as "leave the editor" — this is a MODE, so it wears
 			// a dismissible chip beside the status badge instead.
@@ -2529,7 +2529,7 @@
 	}
 
 	// Paint is always local/instant. Meta save is debounced in the background
-	// so flipping schemes never waits on the network (Austin, 2026-07-15).
+	// so flipping schemes never waits on the network.
 	let appearanceSaveTimer = null;
 	let appearanceSaveSeq = 0;
 
@@ -3385,7 +3385,7 @@
 			</div>`;
 		// Trash is a quiet text control (one boxed pill strip per row),
 		// anchored to the row's right edge with its icon so it reads as a
-		// destination, not a stray word (Austin's floating-link report).
+		// destination, not a stray word.
 		const trashHtml = `
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
 				${ ! state.contentTrash ? `<button class="minn-tab${ state.contentModified ? ' active' : '' }" id="minn-content-modified" title="Only live content carrying unsaved edits">Modified</button>` : '' }
@@ -8656,7 +8656,7 @@
 		if ( ! chart || ! Array.isArray( chart.points ) || ! chart.points.length ) return '';
 		const points = chart.points;
 		// An all-zero window renders invisible bars — 88px of dead card. Say
-		// so in one quiet line instead (Austin's Gravity SMTP test-mode repro:
+		// so in one quiet line instead (Gravity SMTP test mode:
 		// sandboxed sends never count as sent/failed).
 		if ( ! points.some( ( p ) => ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) > 0 ) ) {
 			const buckets = [ chart.primary, chart.secondary ].filter( Boolean ).map( ( b ) => String( b ).toLowerCase() ).join( ' or ' );
@@ -8762,7 +8762,7 @@
 			</div>` : '';
 		if ( ! rows && ! chart && ! cmd && ! actions ) return '';
 		// Rows and actions share the head line — the actions used to sit alone
-		// under the chart, stretching the card (Austin's header-cleanup ask).
+		// under the chart, stretching the card.
 		return `<div class="minn-card minn-surface-status">
 			${ rows || actions ? `<div class="minn-sstat-head">
 				${ rows ? `<div class="minn-sstat-rows">${ rows }</div>` : '' }
@@ -9662,7 +9662,7 @@
 					return;
 				}
 				// List views: keep Entries/Manage/… tabs painted while the
-				// collection loads (GF Forms/Entries flash — Austin 2026-07-15).
+				// collection loads (GF Forms/Entries flash).
 				ss.settingsItem = null;
 				softListReload( {
 					route: s.id,
@@ -11058,7 +11058,7 @@
 	// After a plugin upgrade the PHP worker often recycles (OPcache /
 	// FrankenPHP), so the NEXT fetch fails instantly with TypeError
 	// "Failed to fetch" / ERR_CONNECTION_REFUSED. Retry a few times rather
-	// than blanking Extensions with showErr (Austin's dual-update crash).
+	// than blanking Extensions with showErr.
 	function isFetchDrop( e ) {
 		if ( ! e ) return false;
 		if ( e instanceof TypeError ) return true;
@@ -11320,7 +11320,7 @@
 				paintPluginUpdateQueue();
 				// Critical: let FrankenPHP rebind before the next queue item.
 				// Without this, the next update fails in ~0–5ms with
-				// ERR_CONNECTION_REFUSED (Austin 2026-07-14 network panel).
+				// ERR_CONNECTION_REFUSED.
 				await waitForRestAlive( 20000 );
 			}
 			if ( pluginUpdatePending.size > 0 ) return;
@@ -11397,13 +11397,13 @@
 				state.extFilter = 'all';
 				state.extSearch = '';
 				// A tab switch lands on a different list — re-arm the filter-box
-				// autofocus like a navigation (Austin: Themes tab didn't focus).
+				// autofocus like a navigation (Themes tab didn't focus).
 				searchFocusArmed = true;
 				const cached = next === 'themes' ? state.cache.themes
 					: next === 'licenses' ? state.cache.licenses
 					: state.cache.plugins;
 				// Cached tab: instant swap. Cold first visit: soft-reload so the
-				// Plugins/Themes/Licenses strip never unmounts (Austin's flash).
+				// Plugins/Themes/Licenses strip never unmounts.
 				if ( cached ) {
 					renderExtensions();
 					return;
@@ -11576,7 +11576,7 @@
 		// ⋯ menu per row, built from the row's own hidden buttons.
 		// openMinnMenu calls entry.run (same key as every other context menu
 		// — content rows, comments, users). A stale `fn` key silently no-op'd
-		// Deactivate/Re-verify (Austin's 2026-07-12 report).
+		// Deactivate/Re-verify.
 		$$( '[data-licmore]', view ).forEach( ( more ) => more.addEventListener( 'click', ( e ) => {
 			const row = more.closest( '.minn-lic-row' );
 			const entries = $$( '.minn-lic-actions .lic-menu', row ).map( ( btn ) => ( {
@@ -11681,7 +11681,7 @@
 	 * or echoed back. Failures never auto-retry (a retried activation can
 	 * burn a paid seat). `refresh` repaints the host view from fresh server
 	 * state; a failed activate must NOT refresh (the paste field stays put,
-	 * key selected for a quick retype — Austin's bad-key repro).
+	 * key selected for a quick retype after a rejected key).
 	 */
 	function bindLicenseActions( view, refresh ) {
 		const licRun = async ( provider, action, payload, btn ) => {
@@ -11802,8 +11802,8 @@
 			// fields; everyone else gets the single paste field. Plain text,
 			// not type=password: a license key isn't a credential, the value
 			// is used once and never stored, and the password type summons
-			// 1Password/LastPass/Bitwarden over the field (Austin's report;
-			// the data-*-ignore attributes are each manager's documented
+			// 1Password/LastPass/Bitwarden over the field
+			// (the data-*-ignore attributes are each manager's documented
 			// opt-out for non-login fields).
 			const fields = btn.dataset.fields ? JSON.parse( btn.dataset.fields ) : null;
 			const wrap = btn.closest( '.minn-lic-actions' );
@@ -11847,7 +11847,7 @@
 	// filter id → count; zero-count pills are hidden UNLESS that filter is the
 	// active one (otherwise Updates vanishes after the last offer is applied
 	// while extFilter stays 'updates' → empty grid + "No updates plugins"
-	// with All looking de-selected — Austin, 2026-07-15 notif-panel update).
+	// with All looking de-selected in the notification panel).
 	function extFilterBarHtml( filters, counts, placeholder ) {
 		const pills = filters
 			.filter( ( [ id ] ) => id === 'all' || counts[ id ] || state.extFilter === id )
@@ -11899,7 +11899,7 @@
 	}
 
 	// Bulk-update progress chip: the ambient "updates are running" signal once
-	// the notification panel closes (Austin's report — the run was invisible).
+	// the notification panel closes.
 	// Text mirrors state.updatingAll's phase label; the spinning icon carries
 	// the motion. Lives in the static topbar, so like the core chip it updates
 	// by explicit call, never via renderOverlays.
@@ -11916,7 +11916,7 @@
 	// The live visibility state (state.visibility) falls back to the boot
 	// snapshot until the first refresh. refreshVisibility re-reads it after a
 	// maintenance/search toggle so the banner and chip update WITHOUT a page
-	// reload (Austin's report: they were stale until refresh).
+	// reload (they were stale until refresh).
 	const visState = () => state.visibility || B.visibility;
 	// Pass `fresh` when a write already returned the new state (the toggle
 	// endpoint does) to skip the extra GET.
@@ -11926,12 +11926,12 @@
 		updateVisChip();
 		// The System page's "Site visibility" health check is server-derived
 		// from the same posture — bust it so the row appears/disappears with
-		// the toggle instead of going stale (Austin's report).
+		// the toggle instead of going stale.
 		state.cache.system = null;
 		if ( state.route === 'overview' ) renderOverview();
 		// The Settings page's Visibility toggles read from state.cache.settings,
 		// so a toggle from the chip/banner must re-render it too — otherwise the
-		// switch there shows stale (Austin's report).
+		// switch there shows stale.
 		else if ( state.route === 'settings' ) renderSettings();
 		else if ( state.route === 'system' ) {
 			// Load first, then swap with the scroll kept — a null-cache render
@@ -12549,7 +12549,7 @@
 				const plugin = plugins.find( ( p ) => p.plugin === file );
 				if ( ! plugin ) return;
 				// Serial queue: concurrent upgrades crash the worker and blank
-				// the page (Austin's "two Update clicks → Failed to fetch").
+				// the page.
 				queuePluginUpdate( file, pluginDisplayName( plugin.name ) );
 			} )
 		);
@@ -12805,7 +12805,7 @@
 				if ( 'delete' === action ) {
 					// Soft removal: drop the card in place instead of a cold
 					// repaint of the whole tab (the loading shell read as a
-					// full page reload — Austin, 2026-07-19). The cache is
+					// full page reload). The cache is
 					// filtered so later renders agree with the DOM.
 					if ( Array.isArray( state.cache.themes ) ) state.cache.themes = state.cache.themes.filter( ( x ) => x.stylesheet !== t.stylesheet );
 					if ( state.cache.themeUpdates ) delete state.cache.themeUpdates[ t.stylesheet ];
@@ -13319,7 +13319,7 @@
 			<div class="minn-sys-checks" id="minn-sys-sec-health">
 				${ s.checks.map( ( c ) => {
 					// The Autoload size + Cron health cards open the same
-					// detail modals as the grid rows below (Austin: the
+					// detail modals as the grid rows below (the
 					// CARDS are what you reach for first).
 					const detail = c.label === 'Autoload size' ? 'autoload' : ( c.label === 'Cron' ? 'cron' : '' );
 					// A card with the arrow always goes somewhere you can act:
@@ -14368,7 +14368,7 @@
 				// frame-accurately: JS repositioning lags the compositor, and
 				// macOS elastic overscroll reports nothing until it settles —
 				// a fast scroll showed the panel detached from its input with
-				// the page visible through the gap (Austin's report; the
+				// the page visible through the gap (the
 				// outline-ping lesson). Ancestor scroll therefore CLOSES an
 				// escaped panel, like a native select; scrolling the panel's
 				// own option list stays open, and resize just re-anchors.
@@ -16051,7 +16051,7 @@
 		// Only blocks locked for a REASON explain themselves: a styled text
 		// block looks typeable and is not, so the hint answers "why can't I
 		// type here?". Everything else already has the ⚙ chip in view, and a
-		// label repeating it was pure noise (Austin).
+		// label repeating it was pure noise.
 		const hint = SIMPLE_BLOCKS.includes( short ) ? __( 'Styled block: edit text via ⚙' ) : '';
 		// Images in the preview are click-through doorways: gallery-shaped
 		// blocks open the Images editor, single-image blocks the replace
@@ -16995,7 +16995,7 @@
 		} );
 	}
 
-	// Duplicate an island in place (Austin's testimonial ask): a fresh copy
+	// Duplicate an island in place: a fresh copy
 	// of the stored raw lands right after the original, in the same root —
 	// nested islands duplicate inside their slot. A dirty slot island
 	// flushes first so the copy carries the writer's current text.
@@ -17029,8 +17029,8 @@
 	}
 
 	// Move an island: up/down swap with the previous/next sibling in its
-	// root; prev/next hop to the neighboring COLUMN slot (Austin's
-	// duplicated-testimonial ask — the copy lands in column one, the empty
+	// root; prev/next hop to the neighboring COLUMN slot (a duplicate
+	// lands in column one, the empty
 	// spot is column two). Direct-DOM, so both roots stamp dirty by hand.
 	function moveIsland( islandEl, dir ) {
 		if ( ! islandEl || ! islandEl.parentNode ) return false;
@@ -17312,7 +17312,7 @@
 	// below stamp what they already did on the element, and fresh markup must
 	// start from a clean slate or a re-render (Apply, a server render landing)
 	// leaves the slider stack un-collapsed with the flag still saying "done"
-	// (Austin's post-drop repro).
+	//.
 	function setPreviewHtml( prev, html ) {
 		if ( ! prev ) return;
 		delete prev.dataset.sliderCollapsed;
@@ -18394,7 +18394,7 @@
 	// Labels use when the version was *superseded*, not when it was written:
 	// revs[i] was replaced by revs[i-1], so revs[i-1].modified is the moment
 	// that change landed. After a save, the top visible row therefore reads
-	// "just now" instead of the previous save's age (Austin, 2026-07-09).
+	// "just now" instead of the previous save's age.
 	// Pass `list` to build rows from a full fetched set (the View all dialog).
 	function historyRowsFor( ed, list ) {
 		const revs = list || ( ed && ed.revisions );
@@ -18827,7 +18827,7 @@
 	// reveal swaps chips IN PLACE, so two "⚙ group" pills could occupy the
 	// same pixels and answer differently depending on hover approach — the
 	// outer group said 2 blocks, the inner one 14, and the cluster read as
-	// one button changing its mind (Austin's Royal Palm repro). Geometry
+	// one button changing its mind. Geometry
 	// instead of hover state: a click target never changes identity.
 	function fanIslandChips( body ) {
 		// Cheap bail on the common page: no nested island carries a chip.
@@ -19740,7 +19740,7 @@
 			// itself: the typing surface serializes, chrome must not. The ping
 			// lives INSIDE the scroller at absolute content coordinates, so it
 			// rides the smooth scroll natively — a fixed overlay chasing the
-			// heading from a timer visibly stutters (Austin's wiggle report).
+			// heading from a timer visibly stutters.
 			const sc = $( '.minn-scroll' );
 			if ( ! sc ) return;
 			const ping = document.createElement( 'div' );
@@ -21262,8 +21262,8 @@
 				if ( ! island ) return;
 				// Modifier grammar on the handle: ⌥ duplicates, ⇧⌥ removes.
 				// NOT ⌃⌥: on macOS Control+click IS the secondary click, so it
-				// fires contextmenu and the OS menu opens instead (Austin's
-				// repro). Removal routes through the Undo-toast path, never a
+				// fires contextmenu and the OS menu opens instead.
+				// Removal routes through the Undo-toast path, never a
 				// bare delete — a modifier click must always be take-backable.
 				if ( e.altKey && e.shiftKey ) { removeIslandWithUndo( island ); return; }
 				if ( e.altKey ) { duplicateIsland( island ); return; }
@@ -21291,7 +21291,7 @@
 			if ( e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview, .minn-block-island[data-cted] > .minn-island-preview' ) ) e.preventDefault();
 		} );
 		// Clicking an image inside a protected preview opens the image tooling
-		// directly (Austin's ask): gallery-shaped blocks → the Images editor
+		// directly: gallery-shaped blocks → the Images editor
 		// with the clicked image's tile highlighted; single-image blocks → the
 		// replace picker for that image.
 		// MOUSEDOWN, NOT CLICK: a real mouse press moves the caret/selection,
@@ -21335,8 +21335,8 @@
 			// The WHOLE card is the doorway: it dims and names the action as
 			// one button, so the gaps between photos (captions, the block's own
 			// padding) have to open the editor too — clicking a photo simply
-			// opens it with that photo's tile highlighted (Austin's repro:
-			// only the images themselves were live).
+			// opens it with that photo's tile highlighted
+			// (only the images themselves were live).
 			const badge = e.target.closest && e.target.closest( '.minn-imgtool-badge' );
 			const prev = badge
 				? badge.parentElement.querySelector( ':scope > .minn-island-preview' )
@@ -21452,7 +21452,7 @@
 				// handlers don't treat typing as body edits — but ⌘/Ctrl
 				// shortcuts (⌘S save, ⌘K link/palette, …) must still reach
 				// the window listeners. Without this, ⌘S in a shortcode input
-				// falls through to the browser's "Save Page As…" (Austin).
+				// falls through to the browser's "Save Page As…".
 				const appShortcut = e.metaKey || e.ctrlKey;
 				const sc = e.target.closest && e.target.closest( '.minn-shortcode-input' );
 				if ( sc ) {
@@ -22873,7 +22873,7 @@
 		// While this modal is open it owns EVERY window drop (rule of the
 		// install modals): a photo aimed at the tile grid must join THIS block,
 		// not land in the media library with the editor navigated away from
-		// under the writer (Austin's repro).
+		// under the writer.
 		if ( canUpload && ! fixed ) overlay.id = 'minn-imgedit-drop';
 		overlay.innerHTML = `
 			<div class="minn-imgedit" role="dialog" aria-modal="true" aria-label="Edit images">
@@ -23444,8 +23444,8 @@
 
 	function closeInspector() {
 		// Nested containers stack their ⚙ chips in the same corner, so two
-		// popovers can read as one changing its mind (Austin's 2-vs-14-blocks
-		// repro) — the open popover's island wears a highlight instead.
+		// popovers can read as one changing its mind
+		// — the open popover's island wears a highlight instead.
 		$$( '.minn-insp-target' ).forEach( ( el ) => el.classList.remove( 'minn-insp-target' ) );
 		if ( inspectorEl && inspectorEl._minnA11yEsc ) {
 			document.removeEventListener( 'keydown', inspectorEl._minnA11yEsc, true );
@@ -23748,7 +23748,7 @@
 		// popover keeps the block's own settings; the summary row is the
 		// doorway — rendered FIRST, above the block's own attr fields, or a
 		// container's schema (Group alone is a dozen rows) buries it below the
-		// fold and the doorway reads as missing (Austin's mmonroe repro).
+		// fold and the doorway reads as missing.
 		// Structural add/reorder live in the modal too.
 		const manyKids = ! mediaRebuild && model.children.length >= 2;
 		/* translators: %d: number of nested blocks */
@@ -23840,7 +23840,7 @@
 
 	// Escape hatch to wp-admin's block editor. Always persists the live Minn
 	// document first — islands/islands edits only exist in the browser until
-	// save, so opening without save shows a stale post (Austin, 2026-07-09).
+	// save, so opening without save shows a stale post.
 	async function openInBlockEditor( triggerEl ) {
 		const ed = state.editor;
 		if ( ! ed ) return;
@@ -25367,7 +25367,7 @@
 	// <pre>, HR, media figures). Chrome treats contenteditable=false islands
 	// as one deletable atom and would merge neighbors in a single keypress;
 	// without an arm step, empty paragraphs after a shortcode also "jumped
-	// over" the shortcode into the previous code block (Austin, 2026-07-09).
+	// over" the shortcode into the previous code block.
 	//
 	// One model everywhere:
 	//   1st press at the edge → red outline (armed)
@@ -25800,7 +25800,7 @@
 				// ZWSP after </code> keeps a real CODE element and still rides
 				// the undo stack; we strip the ZWSP right after (DOM-only —
 				// ⌘Z still restores the pre-wrap text). Manual createElement
-				// sat outside undo (Austin's report).
+				// sat outside undo.
 				const html = tag === 'code'
 					? `<code${ attrs }>${ esc( inner ) }</code>\u200B`
 					: `<${ tag }${ attrs }>${ esc( inner ) }</${ tag }>`;
@@ -27565,7 +27565,7 @@
 		const minnOfferVersion = minnOfferKey ? state.cache.pluginUpdates[ minnOfferKey ] : '';
 		let minnSelfUpdated = false;
 		if ( parts.some( ( p ) => p.kind === 'plugins' ) ) {
-			// One bulk request by design (fastest path — Austin: never slow
+			// One bulk request by design (fastest path: never slow
 			// updates down for per-item progress); the chip shows the count.
 			const np = ( parts.find( ( p ) => p.kind === 'plugins' ) || {} ).n || 0;
 			/* translators: %s: number of plugins. */
@@ -27577,7 +27577,7 @@
 				doneBits.push( `${ n } plugin${ n === 1 ? '' : 's' }` );
 				// Same hard-reload need as Extensions bulk and single-plugin
 				// Update: new app.js / CSS / boot payload stay stale until a
-				// full navigation (Austin's notif-panel repro, 2026-07-12).
+				// full navigation.
 				if ( updated.some( isMinnAdminPluginFile ) ) minnSelfUpdated = true;
 			} catch ( e ) {
 				failures.push( 'plugins: ' + e.message );
@@ -28964,7 +28964,7 @@
 			const needsWide = !! message || isCard || hasBlockRow || editFields.some( ( f ) => f.type === 'textarea' );
 			// An HTML email preview (mail-family body frame, either shape) gets
 			// the extra-wide modal: real messages lay out at 600–1000px and the
-			// 720px dialog clipped them (Austin's Gravity SMTP report).
+			// 720px dialog clipped them.
 			const hasMailPreview = ! isCard && ( ( !! message && isHtml ) || !! ( sec && ( sec.sections || [] ).some( ( g ) =>
 				( g.rows || [] ).some( ( r ) => r.type === 'html-preview' ) ) ) );
 			// Entry title = form name; activity keeps the surface label (message is body).
@@ -30885,7 +30885,7 @@
 		// A theme install swaps files and can recycle the PHP worker — the
 		// request drops with "Failed to fetch" even though the server
 		// finished the work, and a rapid second install lands on the dying
-		// socket (Austin's install-a-bunch-fast repro). On a drop: wait for
+		// socket. On a drop: wait for
 		// REST to come back, ask the themes list for the truth, and retry
 		// once before calling it a failure (the cache-purge double-drop rule).
 		const themeActionWithRecovery = async ( route, payload, check ) => {
@@ -33409,7 +33409,7 @@
 	}
 
 	// Fresh navigations drop the caret into the view's filter/search box so
-	// typing filters immediately (Austin, v0.21.0). Armed per navigation
+	// typing filters immediately. Armed per navigation
 	// (boot + onRouteChange), consumed by the first paint that shows an
 	// enabled .minn-toolbar-search. Disarmed without focusing when the user
 	// is already in another field (never steal focus), and skipped entirely
@@ -33859,8 +33859,8 @@
 		// file target is open (Add plugin / Add theme / Edit images), that
 		// dropzone owns EVERY drop: a file aimed at the modal but landing a few
 		// pixels outside it must never end up in the media library with the app
-		// navigated away (Austin's wp-rocket_3.23 zip and his slider-image
-		// repros), and the "Drop files to upload" veil stays hidden so the
+		// navigated away,
+		// and the "Drop files to upload" veil stays hidden so the
 		// modal's own affordance is the only one. Zones expose their upload
 		// path as zone._accept (one file) / zone._acceptAll (the whole drop) —
 		// the chips' _target/_kind convention.

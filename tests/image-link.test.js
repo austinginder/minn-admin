@@ -1,5 +1,5 @@
 /**
- * Image link + lightbox through the image popover (Austin's editor asks).
+ * Image link + lightbox through the image popover.
  *
  * The link is the DOM itself: core sources `href` from figure > a, so
  * wrapping the img is Gutenberg-valid by construction; linkDestination and

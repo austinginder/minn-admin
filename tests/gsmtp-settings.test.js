@@ -39,8 +39,8 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		return res.status();
 	};
 
-	// Seed the primary-connector baseline: live sessions switch it (Austin
-	// was on Google when reporting the combobox bug) — never assume generic.
+	// Seed the primary-connector baseline: live sessions switch it (a real
+	// session was on Google when the combobox bug surfaced) — never assume generic.
 	const seedPrimary = () => page.evaluate( async () => {
 		await fetch( window.MINN.restUrl + 'minn-admin/v1/gravity-smtp/settings/sending', {
 			method: 'POST', credentials: 'same-origin',
@@ -80,7 +80,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await page.evaluate( () => document.querySelectorAll( '.minn-toast' ).forEach( ( e ) => e.remove() ) );
 		await page.click( '[data-actgo]' );
 		// FluentSMTP owns wp_mail on this site, so the honest outcome message
-		// says another mailer carried the test (Austin's repro: delivered to
+		// says another mailer carried the test (delivered to
 		// Mailpit, absent from Gravity SMTP's log).
 		await page.waitForFunction( () => {
 			const tEl = document.querySelector( '.minn-toast-msg' );
@@ -96,7 +96,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		/* ===== Sending tab: mapped connector schema ===== */
 		await page.click( '[data-sview="settings"]' );
 		await page.waitForSelector( '[data-sset="primary_connector"]', { timeout: 15000 } );
-		// Primary service is a strict combobox (Austin's ask) — the wrapper
+		// Primary service is a strict combobox — the wrapper
 		// carries data-sset, the picked value rides the inner input's acValue.
 		const combo = '[data-sset="primary_connector"] .minn-ac-input';
 		t.check( 'primary combobox reads Custom SMTP', await page.$eval( combo,

@@ -1,6 +1,6 @@
 /**
- * Translation updates (2026-08-12, Austin's report: Network Admin offered
- * "Update Translations" while Minn's Updates tab said "You're all caught up").
+ * Translation updates. Network Admin offered "Update Translations" while
+ * Minn's Updates tab said "You're all caught up".
  *
  * WordPress keeps language packs OUTSIDE the plugin, theme and core update
  * responses — they hang off a `translations` property on those transients — so

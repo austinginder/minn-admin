@@ -1,7 +1,7 @@
 /**
  * Per-plugin Update clicks must serialize. Concurrent Plugin_Upgrader runs
  * recycle the PHP worker and the follow-up plugins list fetch dies with
- * "Failed to fetch", blanking Extensions (Austin 2026-07-12). This suite
+ * "Failed to fetch", blanking Extensions. This suite
  * stubs the update endpoint to measure concurrency and asserts the page
  * never paints the empty showErr card when two Updates are clicked.
  */

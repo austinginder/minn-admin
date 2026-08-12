@@ -26,7 +26,7 @@ body {
   /* JetBrains Mono ships programming ligatures on contextual alternates, and
      one of them kerns the colon away from the slashes in `://` so a typed URL
      reads as "https: /anchor.localhost" — it looks like Minn mangled the value
-     while the stored string was always correct (Austin's report, 2026-08-12).
+     while the stored string was always correct.
      Minn renders mono for DATA (urls, paths, versions, ip addresses), not for
      code authoring, so contextual alternates are off. `no-contextual` is
      deliberate rather than `none`: it leaves the sans face's ordinary prose
@@ -259,7 +259,7 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-sp-url { color: var(--text3); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .minn-sp-here { margin-left: auto; color: var(--accent2); font-size: 11.5px; font-weight: 600; flex: none; }
 /* Version + changelog live in the topbar actions (GH #5: a badge beside the
-   logo truncated longer site names; Austin moved it up by the view-site
+   logo truncated longer site names, so it moved up beside the view-site
    button). Sized to sit flush with the .minn-icon-btn row. */
 .minn-topbar-ver { height: 34px; padding: 0 11px; display: flex; align-items: center; font-size: 12px; font-family: inherit; color: var(--text3); background: transparent; border: 1px solid var(--border); border-radius: 9px; cursor: pointer; white-space: nowrap; }
 .minn-topbar-ver:hover { color: var(--text); border-color: var(--accent); }
@@ -759,7 +759,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 /* Filters row carries the bottom gap to the table (views row is tighter). */
 .minn-toolbar.minn-toolbar-filters { margin-bottom: 18px; }
 /* Extensions filters: quiet text links, not a second boxed pill strip —
-   two stacked bordered containers read as chrome soup (Austin). */
+   two stacked bordered containers read as chrome soup. */
 .minn-tabs.minn-ext-filters, .minn-tabs.minn-quiet-tabs { background: none; border: none; padding: 0; gap: 4px; overflow: visible; }
 .minn-ext-filters .minn-tab, .minn-quiet-tabs .minn-tab { background: none; border: none; padding: 6px 9px; color: var(--text3); font-weight: 500; }
 .minn-ext-filters .minn-tab:hover, .minn-quiet-tabs .minn-tab:hover { color: var(--text2); }
@@ -1945,7 +1945,7 @@ body.minn-dragging.minn-drag-editor::after { content: 'Drop images to insert her
   background: var(--panel2); color: var(--text3);
   font-size: 11px; font-weight: 600; white-space: nowrap;
 }
-/* The whole banner is the link (Austin: one big obvious target). The inner
+/* The whole banner is the link (one big obvious target). The inner
    "Edit in X" pill is a SPAN — a nested anchor was how the old hover bug
    happened: the note's generic link rules recolored the pill's text to the
    accent while btn-primary:hover painted the accent behind it. */
@@ -2028,7 +2028,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
    height from aspect-ratio and collapses each auto row to the intrinsic
    height of its contents (the img is height:100%, so ~nothing). The tiles
    then overflow their tracks and overlap — a 30-image gallery rendered as
-   vertically crushed strips (Austin's repro). min-content sizes the track
+   vertically crushed strips. min-content sizes the track
    from the tile's own aspect-derived height. */
 .minn-imgedit-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
@@ -2047,7 +2047,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 
 /* A gallery of two dozen photos previews as a column of full-width images you
    have to scroll past to reach the rest of the post, with the editing doorway
-   somewhere in the middle (Austin's 23-image repro). Clamp the card and fade
+   somewhere in the middle. Clamp the card and fade
    its foot: the hover badge carries the real count, and clicking anywhere in
    it opens the images editor. */
 .minn-island-preview.minn-preview-clamped {
@@ -2113,7 +2113,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
    preview's pointer-events:none inertness (same technique as
    .minn-island-run) so the image itself receives the press. Without this the
    event falls through to the island beneath and the container gets selected
-   instead — the image looks clickable but nothing happens (Austin's repro).
+   instead — the image looks clickable but nothing happens.
    !important because the block's OWN front-end CSS is injected after this
    file and often disables pointer events on slide images (Jetpack's swiper
    does exactly that) — a plain declaration loses that cascade on real
@@ -2121,7 +2121,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 /* The island whose ⚙ popover is open. Nested containers stack their chips in
    the same corner, so without this two popovers read as one changing its
    mind: the outer group says 2 blocks, the inner one 14, and which is which
-   is invisible (Austin's mmonroe repro). */
+   is invisible. */
 .minn-block-island.minn-insp-target { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Hovering a ⚙ chip previews the same thing: which card that pill configures.
    Dashed = "about to", solid = "open". Class set by a cheap mouseover handler
@@ -2144,7 +2144,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
   opacity: 0; transition: opacity 0.15s; white-space: nowrap; z-index: 3;
   /* The badge is a real target. It sits dead centre, which is where the hand
      goes, and on a card whose slides carry text that centre may be editable
-     text that would otherwise take the press (Austin's repro). Hidden at rest,
+     text that would otherwise take the press. Hidden at rest,
      so it can only be hit while the card is offering it. */
   pointer-events: none; cursor: pointer; border: none; font: inherit; font-weight: 650;
 }
@@ -2304,7 +2304,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-modal.xl { width: 1280px; }
 /* HTML email preview: real messages lay out at 600–900px; give the frame
    room (the 94vw cap still governs laptops) and a taller default viewport.
-   900px matches the large media modal — 1080 read as too big (Austin). */
+   900px matches the large media modal — 1080 read as too big. */
 .minn-modal.mail { width: 900px; }
 .minn-modal.mail .minn-detail-frame { height: 56vh; }
 .minn-modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
@@ -3024,8 +3024,8 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* The writing slot sits INSIDE the cover's inner container, not directly in
    the cover, so a direct-child rule never lifted it above the background:
    the absolutely positioned image painted over the text and swallowed every
-   click, which left no caret and therefore no way to reach the "/" menu
-   (Austin's repro). Lift the slot at any depth, and make the background
+   click, which left no caret and therefore no way to reach the "/" menu.
+   Lift the slot at any depth, and make the background
    media inert so a press always reaches the words. */
 .minn-media-slot-island .wp-block-cover .minn-slot { position: relative; z-index: 1; padding: 26px; }
 .minn-media-slot-island .wp-block-cover__inner-container { position: relative; z-index: 1; }
@@ -3317,8 +3317,8 @@ button.minn-ac-item:hover { background: var(--hover); }
    coordinates so they ride scrolling natively. They used to be fixed on
    body, chased per scroll frame: JS repositioning lags the compositor and
    elastic overscroll reports nothing until it settles, so fast scrolling
-   made them wiggle, drift past their line and snap back (Austin's report;
-   the outline-ping rule). z-index stays below the sticky toolbar (35) so
+   made them wiggle, drift past their line and snap back
+   (the outline-ping rule). z-index stays below the sticky toolbar (35) so
    sliding under it is natural occlusion, not a JS visibility clamp. */
 #minn-table-chips { position: absolute; top: 0; left: 0; z-index: 30; }
 .minn-code-chip {
