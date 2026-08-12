@@ -91,7 +91,7 @@ Reference depth: **Gravity Forms**.
 | simple-history | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-07-15 | Real REST list; **status** card (24h/7d/total/severity) |
 | wp-activity-log | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-07-15 | Never unserialize meta; **status** card (24h/7d/high+critical) |
 | aryo-activity-log | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-07-15 | Local epoch trap; **status** card (24h/7d/top action) |
-| stream | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-07-15 | **status** card (24h/7d/top connector); blog_id scoped |
+| stream | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-07-15 | **status** card (24h/7d/top connector); blog_id scoped **2026-08-12**: view_stream is only grantable in wp-admin — Stream registers its cap filter in Admin (never loaded over REST), and its REST-side equivalent sits inside Abilities::register(), which returns early unless the default-OFF `advanced_enable_abilities_api` flag is on. Verified inside a real REST request: administrator, role_access ['administrator'], no Stream callback on user_has_cap, view_stream false. minn_admin_stream_can() now falls back to Stream's OWN general_role_access rule (never a manage_options backstop; suite proves an administrator is refused once administrator leaves Role Access). |
 | wordfence | Y | Y | — | Y | — | Y | — | — | — | Y | 2026-07-14 | Login log + posture rows; inactive fixture (family) |
 | limit-login-attempts | Y | · | — | Y | — | Y | — | — | — | Y | 2026-07-14 | Unlock action; active resident |
 | solid-security | Y | · | — | Y | — | Y | — | — | — | Y | 2026-07-14 | Release + posture; **active** on minnadmin now (was inactive convention) |
