@@ -181,19 +181,24 @@ const fs = require( 'fs' );
 		pref: localStorage.getItem( 'minn-theme' ),
 	} ) );
 	t.check( 'theme menu System follows OS again', systemAgain.theme === 'dark' && systemAgain.pref === 'system', JSON.stringify( systemAgain ) );
-	// Click cycles System → Light → Dark → System.
+	// Click is light ↔ dark only; System is right-click only. OS is dark
+	// from the previous step, so the first click from System locks Light.
 	await page.click( '#minn-theme-btn' );
 	await page.waitForTimeout( 50 );
-	const cycledLight = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
+	const toggled = await page.evaluate( () => ( {
+		pref: localStorage.getItem( 'minn-theme' ),
+		theme: document.documentElement.getAttribute( 'data-theme' ),
+	} ) );
+	t.check( 'click from System locks the opposite of the current paint',
+		toggled.pref === 'light' && toggled.theme === 'light', JSON.stringify( toggled ) );
 	await page.click( '#minn-theme-btn' );
 	await page.waitForTimeout( 50 );
-	const cycledDark = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
+	const toDark = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
 	await page.click( '#minn-theme-btn' );
 	await page.waitForTimeout( 50 );
-	const cycledSystem = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
-	t.check( 'click cycles System → Light → Dark → System',
-		cycledLight === 'light' && cycledDark === 'dark' && cycledSystem === 'system',
-		`${ cycledLight } → ${ cycledDark } → ${ cycledSystem }` );
+	const toLight = await page.evaluate( () => localStorage.getItem( 'minn-theme' ) );
+	t.check( 'click toggles light and dark and never returns to System',
+		toDark === 'dark' && toLight === 'light', `${ toDark } → ${ toLight }` );
 
 	/* ===== Nav item + copy report ===== */
 	t.check( 'System nav item present', !! ( await page.$( '.minn-nav-btn[data-nav="system"]' ) ) );
