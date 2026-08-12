@@ -1061,7 +1061,9 @@ button.minn-nav-label:hover { color: var(--text2); }
   margin-top: 8px; font-size: 11px; color: var(--text3);
 }
 .minn-rev-heat-legend .minn-rev-heat-cell { cursor: default; pointer-events: none; }
-/* Styled hover tip (heatmap cells, schedule calendar days — not native title=). */
+/* Styled hover tip (heatmap cells, schedule calendar days — not native title=).
+   In-flow anchors mount this inside .minn-scroll as position:absolute so it
+   rides the list; fixed overlays (date picker) keep the viewport pin. */
 .minn-float-tip,
 .minn-rev-heat-tip {
   position: fixed; z-index: 95;
@@ -1076,6 +1078,7 @@ button.minn-nav-label:hover { color: var(--text2); }
   white-space: pre-line;
   animation: minn-float-tip-in 0.1s ease-out;
 }
+.minn-scroll > .minn-float-tip { position: absolute; }
 .minn-float-tip[data-place="below"],
 .minn-rev-heat-tip[data-place="below"] { animation-name: minn-float-tip-in-below; }
 @keyframes minn-float-tip-in {

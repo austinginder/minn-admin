@@ -65,6 +65,28 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		await page.waitForSelector( '#minn-float-tip', { timeout: 5000 } );
 		const tipText = await page.$eval( '#minn-float-tip', ( el ) => ( el.textContent || '' ).trim() );
 		t.check( 'hover shows the unsaved-edits tip', /unsaved edits/i.test( tipText ), tipText );
+		const tipHost = await page.$eval( '#minn-float-tip', ( el ) => ( el.parentElement && el.parentElement.className ) || '' );
+		t.check( 'tip is mounted in the list scroller', /\bminn-scroll\b/.test( tipHost ), tipHost );
+		const gapBefore = await page.evaluate( () => {
+			const tip = document.getElementById( 'minn-float-tip' );
+			const mark = document.querySelector( '.minn-row-modified' );
+			return tip.getBoundingClientRect().top - mark.getBoundingClientRect().top;
+		} );
+		await page.evaluate( () => {
+			const sc = document.querySelector( '.minn-scroll' );
+			if ( sc ) sc.scrollTop += 80;
+		} );
+		const afterScroll = await page.evaluate( () => {
+			const tip = document.getElementById( 'minn-float-tip' );
+			const mark = document.querySelector( '.minn-row-modified' );
+			if ( ! tip || ! mark ) return { gone: ! tip };
+			return { gone: false, gap: tip.getBoundingClientRect().top - mark.getBoundingClientRect().top };
+		} );
+		t.check(
+			'tip rides the list scroll with the icon',
+			afterScroll.gone || Math.abs( afterScroll.gap - gapBefore ) < 2,
+			JSON.stringify( afterScroll )
+		);
 		await page.mouse.move( 0, 0 );
 
 		// The toolbar filter: only modified rows remain.
