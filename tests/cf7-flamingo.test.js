@@ -62,7 +62,28 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		[ text, present ], { timeout: 10000 }
 	);
 
+	// Baseline: trash any disposable left behind by an aborted run BEFORE
+	// seeding. The suite ends by asserting the trashed message is gone from
+	// Received, which a leftover copy makes impossible — and the seeder used
+	// to add one per arming, so the failure compounded run over run.
+	const sweepLeftovers = () => page.evaluate( async () => {
+		const h = { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce };
+		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/cf7/messages?per_page=100&_cb=' + Math.random(), {
+			headers: h, credentials: 'same-origin',
+		} );
+		const body = await r.json();
+		const stale = ( body.items || [] ).filter( ( i ) => ( i.subject || '' ).includes( 'Minn Fixture Disposable' ) );
+		for ( const item of stale ) {
+			await fetch( window.MINN.restUrl + 'minn-admin/v1/cf7/messages/' + item.id + '/trash', {
+				method: 'POST', headers: h, credentials: 'same-origin',
+			} ).catch( () => {} );
+		}
+		return stale.length;
+	} );
+
 	try {
+		const swept = await sweepLeftovers();
+		t.check( 'Baseline clear of leftover disposables', swept >= 0, `${ swept } swept` );
 		t.check( 'Disposable fixture seeded', await seed() );
 
 		await page.goto( BASE + '/minn-admin/cf7', { waitUntil: 'domcontentloaded' } );
