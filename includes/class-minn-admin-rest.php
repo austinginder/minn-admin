@@ -437,7 +437,7 @@ class Minn_Admin_REST {
 		// anonymous request has get_current_user_id() === 0, and the route
 		// regex happily matches /users/0/sessions.
 		$sessions_perm = function ( WP_REST_Request $request ) {
-			$uid = (int) $request['id'];
+			$uid = self::target_user_id( $request );
 			return is_user_logged_in() && $uid > 0
 				&& ( get_current_user_id() === $uid || current_user_can( 'edit_user', $uid ) );
 		};
@@ -511,7 +511,7 @@ class Minn_Admin_REST {
 				'methods'             => 'GET',
 				'callback'            => function ( WP_REST_Request $request ) {
 					return rest_ensure_response( array(
-						'hidden' => Minn_Admin_Surfaces::hidden_for_user( (int) $request['id'] ),
+						'hidden' => Minn_Admin_Surfaces::hidden_for_user( self::target_user_id( $request ) ),
 					) );
 				},
 				'permission_callback' => $edit_user_gate,
@@ -523,7 +523,7 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => function ( WP_REST_Request $request ) {
-					$uid = (int) $request['id'];
+					$uid = self::target_user_id( $request );
 					Minn_Admin_Surfaces::unhide_integration( (string) $request['integration'], $uid );
 					return rest_ensure_response( array(
 						'ok'     => true,
@@ -770,7 +770,7 @@ class Minn_Admin_REST {
 				// Per-object meta cap — see $sessions_perm above for why the
 				// plural primitive is not enough on a WooCommerce site.
 				'permission_callback' => function ( WP_REST_Request $request ) {
-					return current_user_can( 'edit_user', (int) $request['id'] );
+					return current_user_can( 'edit_user', self::target_user_id( $request ) );
 				},
 			)
 		);
@@ -831,7 +831,7 @@ class Minn_Admin_REST {
 				'callback'            => array( __CLASS__, 'user_send_email' ),
 				// Per-object meta cap — see $sessions_perm above.
 				'permission_callback' => function ( WP_REST_Request $request ) {
-					return current_user_can( 'edit_user', (int) $request['id'] );
+					return current_user_can( 'edit_user', self::target_user_id( $request ) );
 				},
 				'args'                => array(
 					'subject' => array(
@@ -4171,7 +4171,7 @@ class Minn_Admin_REST {
 	 * Active login sessions for a user, from the session_tokens user meta.
 	 */
 	public static function user_sessions( WP_REST_Request $request ) {
-		$uid    = (int) $request['id'];
+		$uid    = self::target_user_id( $request );
 		$tokens = get_user_meta( $uid, 'session_tokens', true );
 		$tokens = is_array( $tokens ) ? $tokens : array();
 
@@ -4215,7 +4215,7 @@ class Minn_Admin_REST {
 	 * session when acting on themselves, so they aren't logged out mid-action).
 	 */
 	public static function destroy_all_sessions( WP_REST_Request $request ) {
-		$uid     = (int) $request['id'];
+		$uid     = self::target_user_id( $request );
 		$manager = WP_Session_Tokens::get_instance( $uid );
 		if ( get_current_user_id() === $uid ) {
 			$manager->destroy_others( wp_get_session_token() );
@@ -4229,7 +4229,7 @@ class Minn_Admin_REST {
 	 * Destroy a single session by its verifier hash.
 	 */
 	public static function destroy_session( WP_REST_Request $request ) {
-		$uid      = (int) $request['id'];
+		$uid      = self::target_user_id( $request );
 		$verifier = $request['verifier'];
 		$tokens   = get_user_meta( $uid, 'session_tokens', true );
 		if ( ! is_array( $tokens ) || ! isset( $tokens[ $verifier ] ) ) {
@@ -4244,7 +4244,7 @@ class Minn_Admin_REST {
 	 * Email the user WordPress's standard password-reset link.
 	 */
 	public static function user_reset_password( WP_REST_Request $request ) {
-		$user = get_userdata( (int) $request['id'] );
+		$user = get_userdata( self::target_user_id( $request ) );
 		if ( ! $user ) {
 			return new WP_Error( 'not_found', 'User not found.', array( 'status' => 404 ) );
 		}
@@ -4267,7 +4267,7 @@ class Minn_Admin_REST {
 	 * Send a styled HTML email to a user (from the current admin / site mail).
 	 */
 	public static function user_send_email( WP_REST_Request $request ) {
-		$user = get_userdata( (int) $request['id'] );
+		$user = get_userdata( self::target_user_id( $request ) );
 		if ( ! $user ) {
 			return new WP_Error( 'not_found', 'User not found.', array( 'status' => 404 ) );
 		}
