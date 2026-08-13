@@ -6702,7 +6702,9 @@
 		instock: 'publish', outofstock: 'trash-status', onbackorder: 'future',
 	};
 	const PRODUCT_LIST_FIELDS = 'id,name,type,status,sku,price,regular_price,sale_price,stock_status,stock_quantity,manage_stock,on_sale,catalog_visibility,permalink,date_created,categories,images,total_sales';
-	const PRODUCT_DETAIL_FIELDS = PRODUCT_LIST_FIELDS + ',short_description,description,date_modified';
+	const PRODUCT_DETAIL_FIELDS = PRODUCT_LIST_FIELDS + ',short_description,description,date_modified'
+		+ ',global_unique_id,backorders,low_stock_amount,sold_individually'
+		+ ',weight,dimensions,shipping_class,virtual';
 
 	const productCtx = () => ( state.productTab || 'any' ) + '|' + ( state.productStock || 'any' ) + '|' + ( state.productSearch || '' );
 
@@ -6844,6 +6846,23 @@
 		loadProductDetail( m );
 	}
 
+	// Shipping-class vocabulary for the Shipping card. Deduped in flight: a
+	// second product opened while the first request is out must not replace
+	// the array a render has already read (the loadPlugins race).
+	let shipClassPromise = null;
+	function loadShippingClasses() {
+		if ( state.cache.shippingClasses ) return Promise.resolve( state.cache.shippingClasses );
+		if ( shipClassPromise ) return shipClassPromise;
+		shipClassPromise = api( 'wc/v3/products/shipping_classes?per_page=100&_fields=id,slug,name' )
+			.catch( () => [] )
+			.then( ( r ) => {
+				shipClassPromise = null;
+				state.cache.shippingClasses = Array.isArray( r ) ? r : [];
+				return state.cache.shippingClasses;
+			} );
+		return shipClassPromise;
+	}
+
 	/**
 	 * Detail fetch shared by the modal and the page. isCur() keeps a late
 	 * response from painting over a surface the reader already left.
@@ -6852,6 +6871,7 @@
 		const id = m.product.id;
 		const isCur = () => ( m.page ? state.productPage === m : state.modal === m );
 		const repaint = () => { if ( m.page ) renderProductPage(); else renderOverlays(); };
+		loadShippingClasses().then( () => { if ( isCur() && ! m.loading ) repaint(); } );
 		api( `wc/v3/products/${ id }?_fields=${ PRODUCT_DETAIL_FIELDS }` )
 			.then( ( full ) => {
 				if ( ! isCur() ) return;
@@ -6899,16 +6919,22 @@
 		const stockOpts = [ [ 'instock', 'In stock' ], [ 'outofstock', 'Out of stock' ], [ 'onbackorder', 'On backorder' ] ];
 		const visOpts = [ [ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ];
 		const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ];
+		const backOpts = [ [ 'no', 'Do not allow' ], [ 'notify', 'Allow, but notify customer' ], [ 'yes', 'Allow' ] ];
+		const dims = p.dimensions || {};
+		// WooCommerce hides shipping entirely for a virtual product, and so
+		// does this: weight and dimensions on something that never ships are
+		// noise the store will never use.
+		const shipOk = ! p.virtual;
+		const shipClasses = state.cache.shippingClasses || [];
 		return `
 					<div class="minn-order-body">
-						<div class="minn-order-grid">
+						<div class="minn-order-grid minn-grid-rows">
 							<div class="minn-order-panel">
 								${ thumb ? `<div class="minn-prod-modal-img"><img src="${ esc( thumb ) }" alt=""></div>` : '' }
 								<div class="minn-side-title" style="margin:0 0 8px;">Basics</div>
 								${ canEdit ? `
 								<div class="minn-order-fields">
 									<div><div class="minn-field-label">Name</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
-									<div><div class="minn-field-label">SKU</div><input class="minn-input" id="minn-p-sku" value="${ esc( p.sku || '' ) }" placeholder="Optional"></div>
 									<div><div class="minn-field-label">Status</div>
 										<select class="minn-input" id="minn-p-status">
 											${ statusOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ p.status === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
@@ -6928,24 +6954,12 @@
 								</div>` }
 							</div>
 							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">Price &amp; stock</div>
+								<div class="minn-side-title" style="margin:0 0 8px;">Pricing</div>
 								${ canEdit && priceOk ? `
 								<div class="minn-order-fields">
 									<div class="minn-order-field-row">
 										<div><div class="minn-field-label">Regular price</div><input class="minn-input" id="minn-p-regular" type="text" inputmode="decimal" value="${ esc( p.regular_price || '' ) }"></div>
 										<div><div class="minn-field-label">Sale price</div><input class="minn-input" id="minn-p-sale" type="text" inputmode="decimal" value="${ esc( p.sale_price || '' ) }" placeholder="Optional"></div>
-									</div>
-									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
-										<input type="checkbox" id="minn-p-manage"${ p.manage_stock ? ' checked' : '' }>
-										<span>Track stock quantity</span>
-									</label>
-									<div class="minn-order-field-row" id="minn-p-stock-row" ${ p.manage_stock ? '' : 'style="display:none;"' }>
-										<div><div class="minn-field-label">Quantity</div><input class="minn-input" id="minn-p-qty" type="number" step="1" value="${ p.stock_quantity != null ? esc( String( p.stock_quantity ) ) : '' }"></div>
-									</div>
-									<div><div class="minn-field-label">Stock status</div>
-										<select class="minn-input" id="minn-p-stock">
-											${ stockOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.stock_status || 'instock' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-										</select>
 									</div>
 								</div>` : `
 								<div class="minn-modal-meta" style="padding:0;">
@@ -6953,18 +6967,75 @@
 									<div class="minn-side-row"><span class="minn-side-key">Stock</span><span>${ esc( productStockLabel( p ) ) }</span></div>
 									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">Price and stock for ${ esc( p.type || 'this type' ) } products are managed in WooCommerce (variations or grouped children).</div>` : '' }
 								</div>` }
-								${ canEdit ? `
-								<div style="margin-top:14px;">
-									<div class="minn-side-title" style="margin:0 0 8px;">Short description</div>
-									<textarea class="minn-input" id="minn-p-short" rows="4" placeholder="Shown near the product title…">${ esc( ( p.short_description || '' ).replace( /<[^>]+>/g, '' ) ) }</textarea>
-									<div class="minn-toggle-desc" style="margin-top:6px;">Plain text, shown near the price. The full description opens in Minn's editor.</div>
-								</div>` : '' }
 							</div>
+							${ canEdit ? `
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Inventory</div>
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">SKU</div><input class="minn-input" id="minn-p-sku" value="${ esc( p.sku || '' ) }" placeholder="Optional"></div>
+										<div><div class="minn-field-label">GTIN, UPC, EAN or ISBN</div><input class="minn-input" id="minn-p-gtin" value="${ esc( p.global_unique_id || '' ) }" placeholder="Optional"></div>
+									</div>
+									${ priceOk ? `
+									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+										<input type="checkbox" id="minn-p-manage"${ p.manage_stock ? ' checked' : '' }>
+										<span>Track stock quantity</span>
+									</label>
+									<div id="minn-p-stock-row" ${ p.manage_stock ? '' : 'style="display:none;"' }>
+										<div class="minn-order-field-row">
+											<div><div class="minn-field-label">Quantity</div><input class="minn-input" id="minn-p-qty" type="number" step="1" value="${ p.stock_quantity != null ? esc( String( p.stock_quantity ) ) : '' }"></div>
+											<div><div class="minn-field-label">Low stock at</div><input class="minn-input" id="minn-p-lowstock" type="number" step="1" min="0" value="${ p.low_stock_amount != null ? esc( String( p.low_stock_amount ) ) : '' }" placeholder="Store default"></div>
+										</div>
+										<div style="margin-top:8px;"><div class="minn-field-label">Backorders</div>
+											<select class="minn-input" id="minn-p-backorders">
+												${ backOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.backorders || 'no' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+											</select>
+										</div>
+									</div>
+									<div><div class="minn-field-label">Stock status</div>
+										<select class="minn-input" id="minn-p-stock">
+											${ stockOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.stock_status || 'instock' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+										</select>
+									</div>` : '' }
+									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+										<input type="checkbox" id="minn-p-solo"${ p.sold_individually ? ' checked' : '' }>
+										<span>Limit purchases to 1 item per order</span>
+									</label>
+								</div>
+							</div>` : '' }
+							${ canEdit && shipOk ? `
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Shipping</div>
+								<div class="minn-order-fields">
+									<div><div class="minn-field-label">Weight</div><input class="minn-input" id="minn-p-weight" type="text" inputmode="decimal" value="${ esc( p.weight || '' ) }" placeholder="0"></div>
+									<div>
+										<div class="minn-field-label">Dimensions</div>
+										<div class="minn-order-field-row">
+											<input class="minn-input" id="minn-p-length" type="text" inputmode="decimal" value="${ esc( dims.length || '' ) }" placeholder="Length" aria-label="${ esc( __( 'Length' ) ) }">
+											<input class="minn-input" id="minn-p-width" type="text" inputmode="decimal" value="${ esc( dims.width || '' ) }" placeholder="Width" aria-label="${ esc( __( 'Width' ) ) }">
+											<input class="minn-input" id="minn-p-height" type="text" inputmode="decimal" value="${ esc( dims.height || '' ) }" placeholder="Height" aria-label="${ esc( __( 'Height' ) ) }">
+										</div>
+									</div>
+									<div><div class="minn-field-label">Shipping class</div>
+										<select class="minn-input" id="minn-p-shipclass">
+											<option value=""${ ! p.shipping_class ? ' selected' : '' }>No shipping class</option>
+											${ shipClasses.map( ( sc ) => `<option value="${ esc( sc.slug ) }"${ p.shipping_class === sc.slug ? ' selected' : '' }>${ esc( sc.name ) }</option>` ).join( '' ) }
+										</select>
+									</div>
+									<div class="minn-toggle-desc">Units come from your WooCommerce store settings.</div>
+								</div>
+							</div>` : '' }
+							${ canEdit ? `
+							<div class="minn-order-panel wide">
+								<div class="minn-side-title" style="margin:0 0 8px;">Short description</div>
+								<textarea class="minn-input" id="minn-p-short" rows="3" placeholder="Shown near the price in the shop…">${ esc( ( p.short_description || '' ).replace( /<[^>]+>/g, '' ) ) }</textarea>
+								<div class="minn-toggle-desc" style="margin-top:6px;">Plain text summary. The full description, with blocks and images, opens in Minn's editor.</div>
+							</div>` : '' }
 						</div>
 						${ canEdit ? `
 						<div class="minn-media-edit minn-order-status">
 							<button class="minn-btn-primary" id="minn-product-save" type="button">Save changes</button>
-							<div class="minn-toggle-desc" style="margin-top:8px;">Saves name, SKU, status, visibility${ priceOk ? ', price and stock' : '' }, and short description.</div>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Saves basics, inventory${ priceOk ? ', pricing' : '' }${ shipOk ? ', shipping' : '' } and the short description.</div>
 						</div>` : '' }
 					</div>
 					<div class="minn-modal-actions">
@@ -7014,10 +7085,28 @@
 				payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
 				payload.manage_stock = !!( $( '#minn-p-manage' ) || {} ).checked;
 				payload.stock_status = ( $( '#minn-p-stock' ) || {} ).value || 'instock';
+				payload.backorders = ( $( '#minn-p-backorders' ) || {} ).value || 'no';
 				if ( payload.manage_stock ) {
 					const qtyRaw = ( ( $( '#minn-p-qty' ) || {} ).value || '' ).trim();
 					payload.stock_quantity = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
+					// Empty means "use the store-wide threshold", which WC
+					// stores as null, not as 0 (0 is a real threshold).
+					const lowRaw = ( ( $( '#minn-p-lowstock' ) || {} ).value || '' ).trim();
+					payload.low_stock_amount = lowRaw === '' ? null : parseInt( lowRaw, 10 );
 				}
+			}
+			// Identifiers and the purchase limit apply to every product type,
+			// so they are not behind the price gate.
+			if ( $( '#minn-p-gtin' ) ) payload.global_unique_id = ( $( '#minn-p-gtin' ).value || '' ).trim();
+			if ( $( '#minn-p-solo' ) ) payload.sold_individually = !! $( '#minn-p-solo' ).checked;
+			if ( $( '#minn-p-weight' ) ) {
+				payload.weight = ( $( '#minn-p-weight' ).value || '' ).trim();
+				payload.dimensions = {
+					length: ( ( $( '#minn-p-length' ) || {} ).value || '' ).trim(),
+					width: ( ( $( '#minn-p-width' ) || {} ).value || '' ).trim(),
+					height: ( ( $( '#minn-p-height' ) || {} ).value || '' ).trim(),
+				};
+				payload.shipping_class = ( $( '#minn-p-shipclass' ) || {} ).value || '';
 			}
 			saveBtn.disabled = true;
 			saveBtn.textContent = 'Saving…';

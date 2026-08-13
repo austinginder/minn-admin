@@ -73,8 +73,15 @@ its own.
 
 1. **The page** (shipped): route, shared renderer, quick-view modal kept, parity
    with the old modal fields, editor link for the description.
-2. **Inventory and shipping**: GTIN, backorders, low stock, sold individually,
-   weight, dimensions, shipping class. All flat scalars, the cheapest real win.
+2. **Inventory and shipping** (shipped): GTIN, backorders, low stock, sold
+   individually, weight, dimensions, shipping class. This wave also settled the
+   page's shape: four cards in a two-column grid named the way WooCommerce
+   groups them (Basics, Pricing, Inventory, Shipping) plus a full-width card for
+   the short description, so later waves add a card rather than a tab. Two rules
+   fell out of it. A virtual product hides the Shipping card entirely, matching
+   what WooCommerce does, and an empty low-stock box saves `null` rather than
+   `0`, because `0` is a real threshold and `null` means "use the store
+   default". Shipping classes load once per session through a deduped promise.
 3. **Organization**: categories, tags, brands, slug, featured. Needs a term
    picker, which the Terms manager's autocomplete already models.
 4. **Images**: featured plus gallery, reorder and replace. The island images
