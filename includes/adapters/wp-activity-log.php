@@ -54,15 +54,22 @@ function minn_admin_wsal_status_model() {
 	$now     = time();
 	$since_d = $now - DAY_IN_SECONDS;
 	$since_w = $now - ( 7 * DAY_IN_SECONDS );
-	$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f", $since_d ) );
-	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f", $since_w ) );
+	// WSAL keeps ONE occurrences table for the whole network with site_id as
+	// the tenant column, which is why the list and detail routes both scope to
+	// this site. Counting without it reported every other tenant's event
+	// volume, their critical/high volume and their last-event time to a main
+	// site administrator who is not a super admin.
+	$blog = get_current_blog_id();
+	$total   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE site_id IN (0, %d)", $blog ) );
+	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND site_id IN (0, %d)", $since_d, $blog ) );
+	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND site_id IN (0, %d)", $since_w, $blog ) );
 	// 500 critical + 400 high in the last week.
 	$hot = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND severity IN (500, 400)",
-		$since_w
+		"SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND severity IN (500, 400) AND site_id IN (0, %d)",
+		$since_w,
+		$blog
 	) );
-	$last = $wpdb->get_var( "SELECT created_on FROM {$table} ORDER BY id DESC LIMIT 1" );
+	$last = $wpdb->get_var( $wpdb->prepare( "SELECT created_on FROM {$table} WHERE site_id IN (0, %d) ORDER BY id DESC LIMIT 1", $blog ) );
 	// phpcs:enable
 
 	$last_label = '—';

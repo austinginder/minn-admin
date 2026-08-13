@@ -33,6 +33,39 @@ function minn_admin_simple_history_admin_url() {
 }
 
 /**
+ * The `logger IN (...)` fragment Simple History itself appends to every query.
+ *
+ * Their Log_Query never reads the table without it: each logger declares a
+ * capability, so an Editor is shown posts and media but never the user,
+ * options, plugin or core-update loggers. The collection route rides their own
+ * REST endpoint and inherits that for free. Anything here that queries the
+ * table directly has to reproduce it, or it reports on rows the same caller is
+ * refused when they ask for them one by one.
+ *
+ * Returns null when their API is missing, so the caller can fall back to
+ * refusing rather than to counting everything.
+ *
+ * @return string|null SQL fragment, already escaped by Simple History.
+ */
+function minn_admin_simple_history_logger_scope() {
+	if ( ! class_exists( 'Simple_History\\Simple_History' ) ) {
+		return null;
+	}
+	try {
+		$sh = Simple_History\Simple_History::get_instance();
+		if ( ! method_exists( $sh, 'get_loggers_that_user_can_read' ) ) {
+			return null;
+		}
+		$sql = (string) $sh->get_loggers_that_user_can_read( get_current_user_id(), 'sql' );
+		// They return "(NULL)" when the user may read nothing, which matches no
+		// rows — the correct answer, not an empty filter.
+		return '' !== $sql ? $sql : null;
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+}
+
+/**
  * Status-card model: 24h / 7d / all-time counts + level mix + last event.
  *
  * @return array{rows:array,actions:array}
@@ -47,23 +80,37 @@ function minn_admin_simple_history_status_model() {
 			'actions' => array( array( 'label' => 'Open Simple History ↗', 'href' => minn_admin_simple_history_admin_url() ) ),
 		);
 	}
+	// Count only what this caller is allowed to read, exactly as their own
+	// Log_Query does. Without it an Editor gets a live failed-login counter
+	// and an administrator-activity timeline from a screen the plugin blanks
+	// for them: failed logins are recorded by SimpleUserLogger, which asks
+	// for edit_users.
+	$scope = minn_admin_simple_history_logger_scope();
+	if ( null === $scope ) {
+		return array(
+			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'Cannot determine which loggers you may read' ) ),
+			'actions' => array( array( 'label' => 'Open Simple History ↗', 'href' => minn_admin_simple_history_admin_url() ) ),
+		);
+	}
+	$readable = " AND logger IN {$scope}";
+
 	// SH stores `date` as site-local MySQL datetime (matches list date_local).
 	$now_ts    = current_time( 'timestamp' );
 	$since_24h = wp_date( 'Y-m-d H:i:s', $now_ts - DAY_IN_SECONDS );
 	$since_7d  = wp_date( 'Y-m-d H:i:s', $now_ts - ( 7 * DAY_IN_SECONDS ) );
 
-	$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE date >= %s", $since_24h ) );
-	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE date >= %s", $since_7d ) );
+	$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE 1=1{$readable}" );
+	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE date >= %s{$readable}", $since_24h ) );
+	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE date >= %s{$readable}", $since_7d ) );
 	$errors  = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE date >= %s AND level IN ('emergency','alert','critical','error')",
+		"SELECT COUNT(*) FROM {$table} WHERE date >= %s AND level IN ('emergency','alert','critical','error'){$readable}",
 		$since_7d
 	) );
 	$warns   = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE date >= %s AND level = 'warning'",
+		"SELECT COUNT(*) FROM {$table} WHERE date >= %s AND level = 'warning'{$readable}",
 		$since_7d
 	) );
-	$last    = $wpdb->get_var( "SELECT date FROM {$table} ORDER BY id DESC LIMIT 1" );
+	$last    = $wpdb->get_var( "SELECT date FROM {$table} WHERE 1=1{$readable} ORDER BY id DESC LIMIT 1" );
 	// phpcs:enable
 
 	$last_label = '—';
