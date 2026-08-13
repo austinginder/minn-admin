@@ -71,7 +71,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'page sub carries type, SKU and id', /simple/.test( head.sub ) && head.sub.includes( '#' + id ), head.sub );
 		t.check( 'page has the shared detail fields', head.save && head.sku && head.price, JSON.stringify( head ) );
 
-		// 2. The Products nav item stays lit on the detail page.
+		// 2. Every choice on the page is a Minn combobox. A native select drops
+		// an OS-drawn menu that ignores the theme, so one creeping back in is
+		// a visual regression the eye catches long after the code lands.
+		const natives = await page.evaluate( () =>
+			document.querySelectorAll( '.minn-order-page select' ).length );
+		t.check( 'the page uses no native selects', natives === 0, String( natives ) );
+
+		// 3. The Products nav item stays lit on the detail page.
 		const navLit = await page.evaluate( () => {
 			const btn = document.querySelector( '.minn-nav-btn[data-nav="products"]' );
 			return !! btn && btn.classList.contains( 'active' );

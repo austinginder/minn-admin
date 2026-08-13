@@ -6711,6 +6711,186 @@
 		+ ',downloadable,downloads,download_limit,download_expiry'
 		+ ',external_url,button_text,upsell_ids,cross_sell_ids,attributes';
 
+	/* ===== Variations (variable products) ===== */
+
+	// Variations are a sub-resource, not a field on the product, so they load
+	// and save on their own. They still ride the page's one Save button: a
+	// second save button on the same form is a way to lose work.
+	function seedProductVariations( m, rows ) {
+		m.variations = ( Array.isArray( rows ) ? rows : [] ).map( ( v ) => ( {
+			id: v.id,
+			sku: v.sku || '',
+			regular_price: v.regular_price || '',
+			sale_price: v.sale_price || '',
+			stock_status: v.stock_status || 'instock',
+			attributes: ( v.attributes || [] ).map( ( a ) => ( { id: a.id || 0, name: a.name || '', option: a.option || '' } ) ),
+		} ) );
+		m.variationsRemoved = [];
+	}
+
+	// The attributes a variable product varies by, with their allowed values.
+	function variationAxes( m ) {
+		return ( m.attributes || [] ).filter( ( a ) => a.variation && a.options.length );
+	}
+
+	function variationLabel( m, v ) {
+		const axes = variationAxes( m );
+		if ( ! axes.length ) return __( 'Any' );
+		return axes.map( ( a ) => {
+			const hit = ( v.attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
+			return ( hit && hit.option ) || __( 'Any' );
+		} ).join( ' · ' );
+	}
+
+	function productVariationsHtml( m ) {
+		const axes = variationAxes( m );
+		if ( ! axes.length ) {
+			return `<div class="minn-pdl-empty">${ esc( __( 'Turn on Variations for an attribute above, and give it some values, to build variations here.' ) ) }</div>`;
+		}
+		if ( ! ( m.variations || [] ).length ) {
+			return `<div class="minn-pdl-empty">${ esc( __( 'No variations yet. Generate them from the attributes, or add one at a time.' ) ) }</div>`;
+		}
+		return m.variations.map( ( v, i ) => `
+			<div class="minn-pvar-row">
+				<div class="minn-pvar-axes">
+					${ axes.map( ( a, ai ) => {
+						const hit = ( v.attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
+						const cur = ( hit && hit.option ) || '';
+						const anyLabel = sprintf( __( 'Any %s' ), a.name );
+						return `<div class="minn-ac minn-pvar-axis" data-pvaraxis="${ i }:${ ai }">
+							<input class="minn-input minn-ac-input" value="${ esc( cur || anyLabel ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( a.name ) }">
+							<div class="minn-ac-panel" hidden></div>
+						</div>`;
+					} ).join( '' ) }
+				</div>
+				<input class="minn-input minn-pvar-sku" data-pvarsku="${ i }" value="${ esc( v.sku ) }" placeholder="${ esc( __( 'SKU' ) ) }" aria-label="${ esc( __( 'Variation SKU' ) ) }">
+				<input class="minn-input minn-pvar-price" data-pvarreg="${ i }" value="${ esc( v.regular_price ) }" inputmode="decimal" placeholder="${ esc( __( 'Price' ) ) }" aria-label="${ esc( __( 'Regular price' ) ) }">
+				<input class="minn-input minn-pvar-price" data-pvarsale="${ i }" value="${ esc( v.sale_price ) }" inputmode="decimal" placeholder="${ esc( __( 'Sale' ) ) }" aria-label="${ esc( __( 'Sale price' ) ) }">
+				<div class="minn-ac minn-pvar-stock" data-pvarstock="${ i }">
+					<input class="minn-input minn-ac-input" value="${ esc( ( { instock: 'In stock', outofstock: 'Out of stock', onbackorder: 'On backorder' } )[ v.stock_status ] || 'In stock' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Stock status' ) ) }">
+					<div class="minn-ac-panel" hidden></div>
+				</div>
+				<button type="button" class="minn-pdl-x" data-pvarx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( sprintf( __( 'Remove variation %s' ), variationLabel( m, v ) ) ) }">×</button>
+			</div>` ).join( '' );
+	}
+
+	function bindProductVariations( m ) {
+		const list = $( '#minn-p-variations' );
+		if ( ! list || ! Array.isArray( m.variations ) ) return;
+		const repaint = () => {
+			list.innerHTML = productVariationsHtml( m );
+			bindRows();
+			const gen = $( '#minn-p-var-gen' );
+			if ( gen ) gen.disabled = ! variationAxes( m ).length;
+		};
+		const setAxis = ( vi, ai, option ) => {
+			const axes = variationAxes( m );
+			const a = axes[ ai ];
+			if ( ! a ) return;
+			const v = m.variations[ vi ];
+			v.attributes = ( v.attributes || [] ).filter( ( x ) => ( a.id ? x.id !== a.id : x.name !== a.name ) );
+			if ( option ) v.attributes.push( { id: a.id || 0, name: a.name, option } );
+		};
+		const bindRows = () => {
+			[ [ 'pvarsku', 'sku' ], [ 'pvarreg', 'regular_price' ], [ 'pvarsale', 'sale_price' ] ].forEach( ( [ attr, key ] ) => {
+				$$( `[data-${ attr }]`, list ).forEach( ( el ) => el.addEventListener( 'input', () => {
+					m.variations[ parseInt( el.dataset[ attr ], 10 ) ][ key ] = el.value.trim();
+				} ) );
+			} );
+			// Comboboxes, not native selects, like every other choice on this
+			// page. The pick writes straight to the model, so nothing has to
+			// read a label back out of the DOM at save time.
+			$$( '[data-pvarstock]', list ).forEach( ( wrap ) => {
+				const i = parseInt( wrap.dataset.pvarstock, 10 );
+				bindAutocomplete( wrap, [
+					{ value: 'instock', label: __( 'In stock' ) },
+					{ value: 'outofstock', label: __( 'Out of stock' ) },
+					{ value: 'onbackorder', label: __( 'On backorder' ) },
+				], {
+					strict: true,
+					value: m.variations[ i ].stock_status || 'instock',
+					onPick: ( v ) => { m.variations[ i ].stock_status = v; },
+				} );
+			} );
+			$$( '[data-pvaraxis]', list ).forEach( ( wrap ) => {
+				const [ vi, ai ] = wrap.dataset.pvaraxis.split( ':' ).map( Number );
+				const a = variationAxes( m )[ ai ];
+				if ( ! a ) return;
+				const hit = ( m.variations[ vi ].attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
+				bindAutocomplete( wrap, [ { value: '', label: sprintf( __( 'Any %s' ), a.name ) } ]
+					.concat( a.options.map( ( o ) => ( { value: o, label: o } ) ) ), {
+					strict: true,
+					value: ( hit && hit.option ) || '',
+					onPick: ( v ) => setAxis( vi, ai, v ),
+				} );
+			} );
+			$$( '[data-pvarx]', list ).forEach( ( el ) => el.addEventListener( 'click', () => {
+				const i = parseInt( el.dataset.pvarx, 10 );
+				const gone = m.variations.splice( i, 1 )[ 0 ];
+				// An id means it exists on the server and has to be deleted there.
+				if ( gone && gone.id ) m.variationsRemoved.push( gone.id );
+				repaint();
+			} ) );
+		};
+		bindRows();
+		const add = $( '#minn-p-var-add' );
+		if ( add ) add.addEventListener( 'click', () => {
+			m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', attributes: [] } );
+			repaint();
+		} );
+		// Every combination the attributes allow, minus the ones already here.
+		const gen = $( '#minn-p-var-gen' );
+		if ( gen ) gen.addEventListener( 'click', () => {
+			const axes = variationAxes( m );
+			if ( ! axes.length ) return;
+			let combos = [ [] ];
+			axes.forEach( ( a ) => {
+				const next = [];
+				combos.forEach( ( c ) => a.options.forEach( ( o ) => next.push( c.concat( [ { id: a.id || 0, name: a.name, option: o } ] ) ) ) );
+				combos = next;
+			} );
+			const keyOf = ( attrs ) => axes.map( ( a ) => {
+				const hit = ( attrs || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
+				return ( hit && hit.option ) || '';
+			} ).join( ' ' );
+			const have = new Set( m.variations.map( ( v ) => keyOf( v.attributes ) ) );
+			let added = 0;
+			combos.forEach( ( attrs ) => {
+				if ( have.has( keyOf( attrs ) ) ) return;
+				m.variations.push( { id: 0, sku: '', regular_price: '', sale_price: '', stock_status: 'instock', attributes: attrs } );
+				added++;
+			} );
+			repaint();
+			toast( added
+				? sprintf( _n( '%d variation added. Save to keep it.', '%d variations added. Save to keep them.', added ), added )
+				: __( 'Every combination is already here.' ) );
+		} );
+	}
+
+	// Variations save through their own batch route, after the product itself,
+	// because a variation's attributes have to exist on the parent first.
+	async function saveProductVariations( m, productId ) {
+		if ( ! Array.isArray( m.variations ) ) return;
+		const body = { create: [], update: [], delete: ( m.variationsRemoved || [] ).slice() };
+		m.variations.forEach( ( v ) => {
+			const row = {
+				sku: v.sku,
+				regular_price: v.regular_price,
+				sale_price: v.sale_price,
+				stock_status: v.stock_status,
+				attributes: ( v.attributes || [] ).map( ( a ) => ( a.id ? { id: a.id, option: a.option } : { name: a.name, option: a.option } ) ),
+			};
+			if ( v.id ) body.update.push( Object.assign( { id: v.id }, row ) );
+			else body.create.push( row );
+		} );
+		if ( ! body.create.length && ! body.update.length && ! body.delete.length ) return;
+		await api( `wc/v3/products/${ productId }/variations/batch`, {
+			method: 'POST',
+			body: JSON.stringify( body ),
+		} );
+		m.variationsRemoved = [];
+	}
+
 	// Attributes come in two kinds. A custom one belongs to this product and
 	// carries a name; a global one is a pa_* taxonomy shared by the store and
 	// carries an id. Minn edits both, but only WooCommerce creates a new global
@@ -7054,12 +7234,20 @@
 						.catch( () => [] );
 					( Array.isArray( rows ) ? rows : [] ).forEach( ( r ) => { names[ r.id ] = r.name; } );
 				}
+				// A variable product's variations are a sub-resource, so they
+				// are fetched here rather than filled in after the paint.
+				let variationRows = [];
+				if ( ( full.type || '' ) === 'variable' ) {
+					variationRows = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,attributes` )
+						.catch( () => [] );
+				}
 				if ( ! isCur() ) return;
 				m.full = full;
 				m.loading = false;
 				seedProductTerms( m );
 				seedProductImages( m );
 				seedProductDownloads( m );
+				seedProductVariations( m, variationRows );
 				seedProductLinks( m, names );
 				seedProductAttributes( m );
 				if ( state.cache.products && state.cache.products.items ) {
@@ -7262,6 +7450,16 @@
 										<div class="minn-ac-panel" hidden></div>
 									</div>` : '' }
 									<span class="minn-toggle-desc">Values are separated by commas. Turn on Variations to vary a variable product by an attribute.</span>
+								</div>
+							</div>` : '' }
+							${ canEdit && ( p.type || 'simple' ) === 'variable' ? `
+							<div class="minn-order-panel wide">
+								<div class="minn-side-title" style="margin:0 0 8px;">Variations</div>
+								<div class="minn-pvar-list" id="minn-p-variations">${ productVariationsHtml( m ) }</div>
+								<div class="minn-pimg-foot">
+									<button type="button" class="minn-btn-soft" id="minn-p-var-gen">${ esc( __( 'Generate from attributes' ) ) }</button>
+									<button type="button" class="minn-btn-soft" id="minn-p-var-add">${ esc( __( 'Add variation' ) ) }</button>
+									<span class="minn-toggle-desc">Variations save with the rest of the page.</span>
 								</div>
 							</div>` : '' }
 							${ canEdit ? `
@@ -7906,6 +8104,7 @@
 		bindProductTermFields( m );
 		bindProductLinkFields( m, p );
 		bindProductAttributes( m );
+		bindProductVariations( m );
 		bindProductImages( m );
 		bindProductDownloads( m );
 		// Sale dates use Minn's own picker (a native datetime-local cannot be
@@ -7929,12 +8128,23 @@
 					method: 'PUT',
 					body: JSON.stringify( payload ),
 				} );
+				// After the product, never before: a variation's attributes
+				// have to exist on the parent for WooCommerce to accept them.
+				await saveProductVariations( m, p.id );
 				const full = await api( `wc/v3/products/${ p.id }?_fields=${ PRODUCT_DETAIL_FIELDS }` );
+				// Freshly created variations only have ids on the server; without
+				// re-reading them a second save would create duplicates.
+				let freshVariations = [];
+				if ( ( ( full || {} ).type || '' ) === 'variable' ) {
+					freshVariations = await api( `wc/v3/products/${ p.id }/variations?per_page=100&_fields=id,sku,regular_price,sale_price,stock_status,attributes` )
+						.catch( () => [] );
+				}
 				if ( isCur() ) {
 					m.full = full || updated;
 					seedProductTerms( m );
 					seedProductImages( m );
 					seedProductDownloads( m );
+					seedProductVariations( m, freshVariations );
 					seedProductLinks( m );
 					seedProductAttributes( m );
 					m.product = Object.assign( {}, m.product, {
