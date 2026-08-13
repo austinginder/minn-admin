@@ -6704,7 +6704,28 @@
 	const PRODUCT_LIST_FIELDS = 'id,name,type,status,sku,price,regular_price,sale_price,stock_status,stock_quantity,manage_stock,on_sale,catalog_visibility,permalink,date_created,categories,images,total_sales';
 	const PRODUCT_DETAIL_FIELDS = PRODUCT_LIST_FIELDS + ',short_description,description,date_modified'
 		+ ',global_unique_id,backorders,low_stock_amount,sold_individually'
-		+ ',weight,dimensions,shipping_class,virtual';
+		+ ',weight,dimensions,shipping_class,virtual'
+		+ ',slug,featured,tags,brands';
+
+	// The Organization card's taxonomies. A store without brands answers with
+	// no `brands` key at all, which is how that field knows to stay away.
+	const PRODUCT_TERM_FIELDS = [
+		{ key: 'categories', label: 'Categories', route: 'products/categories', create: false, placeholder: 'Search categories…' },
+		{ key: 'tags', label: 'Tags', route: 'products/tags', create: true, placeholder: 'Add a tag, press Enter' },
+		{ key: 'brands', label: 'Brands', route: 'products/brands', create: true, placeholder: 'Add a brand, press Enter' },
+	];
+
+	// Term picks live on the detail model, never only in the DOM: a re-render
+	// (a save, a late shipping-class load) would otherwise drop them.
+	function seedProductTerms( m ) {
+		const p = m.full || {};
+		m.terms = {};
+		PRODUCT_TERM_FIELDS.forEach( ( t ) => {
+			m.terms[ t.key ] = Array.isArray( p[ t.key ] )
+				? p[ t.key ].map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) )
+				: null;
+		} );
+	}
 
 	const productCtx = () => ( state.productTab || 'any' ) + '|' + ( state.productStock || 'any' ) + '|' + ( state.productSearch || '' );
 
@@ -6883,6 +6904,7 @@
 				if ( ! isCur() ) return;
 				m.full = full;
 				m.loading = false;
+				seedProductTerms( m );
 				if ( state.cache.products && state.cache.products.items ) {
 					const i = state.cache.products.items.findIndex( ( x ) => x.id === id );
 					if ( i >= 0 ) {
@@ -6951,7 +6973,6 @@
 											${ visOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.catalog_visibility || 'visible' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
 										</select>
 									</div>
-									${ cats ? `<div class="minn-toggle-desc">Categories: ${ esc( cats ) }</div>` : '' }
 								</div>` : `
 								<div class="minn-modal-meta" style="padding:0;">
 									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( p.name || '' ) }</span></div>
@@ -7032,7 +7053,25 @@
 								</div>
 							</div>` : '' }
 							${ canEdit ? `
-							<div class="minn-order-panel wide">
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Organization</div>
+								<div class="minn-order-fields">
+									${ PRODUCT_TERM_FIELDS.map( ( t ) => productTermFieldHtml( m, t ) ).join( '' ) }
+									<div><div class="minn-field-label">Slug</div>
+										<div class="minn-slug-field">
+											<span class="minn-slug-prefix">/</span>
+											<input class="minn-input minn-slug-input" id="minn-p-slug" value="${ esc( p.slug || '' ) }" placeholder="set-on-save" autocomplete="off" spellcheck="false">
+										</div>
+										${ p.status === 'publish' ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
+									</div>
+									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+										<input type="checkbox" id="minn-p-featured"${ p.featured ? ' checked' : '' }>
+										<span>Featured product</span>
+									</label>
+								</div>
+							</div>` : '' }
+							${ canEdit ? `
+							<div class="minn-order-panel">
 								<div class="minn-side-title" style="margin:0 0 8px;">Short description</div>
 								<textarea class="minn-input" id="minn-p-short" rows="3" placeholder="Shown near the price in the shop…">${ esc( ( p.short_description || '' ).replace( /<[^>]+>/g, '' ) ) }</textarea>
 								<div class="minn-toggle-desc" style="margin-top:6px;">Plain text summary. The full description, with blocks and images, opens in Minn's editor.</div>
@@ -7049,6 +7088,107 @@
 						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } Edit description</button>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
 					</div>`;
+	}
+
+	function productTermChipsHtml( list ) {
+		return list.map( ( x ) => `<button type="button" class="minn-chip sel" data-ptchip="${ x.id }" title="${ esc( __( 'Remove' ) ) }">${ esc( x.name ) } ×</button>` ).join( '' )
+			|| `<span class="minn-tag-empty">${ esc( __( 'None yet' ) ) }</span>`;
+	}
+
+	function productTermFieldHtml( m, t ) {
+		const list = ( m.terms || {} )[ t.key ];
+		if ( ! Array.isArray( list ) ) return '';
+		return `
+									<div>
+										<div class="minn-field-label">${ esc( t.label ) }</div>
+										<div class="minn-chips" data-ptchips="${ t.key }">${ productTermChipsHtml( list ) }</div>
+										<div class="minn-ac" data-ptac="${ t.key }">
+											<input class="minn-input minn-ac-input" placeholder="${ esc( t.placeholder ) }" autocomplete="off" spellcheck="false" aria-label="${ esc( t.label ) }">
+											<div class="minn-ac-panel" hidden></div>
+										</div>
+									</div>`;
+	}
+
+	/**
+	 * Chips plus an async suggest per taxonomy. Tags and brands are flat, so
+	 * Enter creates one that does not exist yet; categories are pick-only,
+	 * because a typo there would leave junk in a hierarchy Minn is not
+	 * editing here (the Terms manager and WooCommerce own that).
+	 */
+	function bindProductTermFields( m ) {
+		PRODUCT_TERM_FIELDS.forEach( ( t ) => {
+			const wrap = $( `[data-ptac="${ t.key }"]` );
+			const chips = $( `[data-ptchips="${ t.key }"]` );
+			if ( ! wrap || ! chips || ! Array.isArray( ( m.terms || {} )[ t.key ] ) ) return;
+			const input = wrap.querySelector( '.minn-ac-input' );
+			const panel = wrap.querySelector( '.minn-ac-panel' );
+			const bindChips = () => $$( '[data-ptchip]', chips ).forEach( ( ch ) =>
+				ch.addEventListener( 'click', () => {
+					const id = parseInt( ch.dataset.ptchip, 10 );
+					m.terms[ t.key ] = m.terms[ t.key ].filter( ( x ) => x.id !== id );
+					repaintChips();
+				} )
+			);
+			const repaintChips = () => {
+				chips.innerHTML = productTermChipsHtml( m.terms[ t.key ] );
+				bindChips();
+			};
+			const add = ( item ) => {
+				if ( ! m.terms[ t.key ].some( ( x ) => x.id === item.id ) ) m.terms[ t.key ].push( item );
+				input.value = '';
+				panel.hidden = true;
+				repaintChips();
+			};
+			bindChips();
+			let timer = null;
+			input.addEventListener( 'input', () => {
+				clearTimeout( timer );
+				timer = setTimeout( async () => {
+					const q = input.value.trim();
+					if ( ! q ) { panel.hidden = true; return; }
+					try {
+						const items = await api( `wc/v3/${ t.route }?search=${ encodeURIComponent( q ) }&per_page=20&_fields=id,name` );
+						const chosen = new Set( m.terms[ t.key ].map( ( x ) => x.id ) );
+						const rows = ( Array.isArray( items ) ? items : [] )
+							.map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) )
+							.filter( ( x ) => ! chosen.has( x.id ) );
+						panel.innerHTML = rows.length
+							? rows.map( ( x ) => `<button type="button" class="minn-ac-item" data-ptpick="${ x.id }" data-ptname="${ esc( x.name ) }">${ esc( x.name ) }</button>` ).join( '' )
+							: `<div class="minn-ac-empty">${ t.create ? esc( __( 'No matches. Press Enter to create it.' ) ) : esc( __( 'No matches' ) ) }</div>`;
+						panel.hidden = false;
+						$$( '[data-ptpick]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+							e.preventDefault(); // a plain click blurs the field first
+							add( { id: parseInt( b.dataset.ptpick, 10 ), name: b.dataset.ptname } );
+						} ) );
+					} catch ( e ) { /* search hiccup — keep typing */ }
+				}, 250 );
+			} );
+			input.addEventListener( 'keydown', async ( e ) => {
+				if ( e.key !== 'Enter' ) return;
+				e.preventDefault(); // Enter here must never submit anything
+				if ( ! t.create ) return;
+				const name = input.value.trim();
+				if ( ! name ) return;
+				input.disabled = true;
+				try {
+					// Reuse an existing term before making a duplicate.
+					const found = await api( `wc/v3/${ t.route }?search=${ encodeURIComponent( name ) }&per_page=20&_fields=id,name` ).catch( () => [] );
+					let match = ( Array.isArray( found ) ? found : [] )
+						.map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) )
+						.find( ( x ) => x.name.toLowerCase() === name.toLowerCase() );
+					if ( ! match ) {
+						const created = await api( `wc/v3/${ t.route }`, { method: 'POST', body: JSON.stringify( { name } ) } );
+						match = { id: created.id, name: decodeEntities( created.name || name ) };
+					}
+					add( match );
+				} catch ( err ) {
+					toast( err.message, true );
+				}
+				input.disabled = false;
+				input.focus( { preventScroll: true } );
+			} );
+			input.addEventListener( 'blur', () => setTimeout( () => { panel.hidden = true; }, 150 ) );
+		} );
 	}
 
 	/**
@@ -7072,6 +7212,7 @@
 		// revisions (docs/woocommerce-products.md).
 		const edBtn = $( '#minn-p-editor' );
 		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
+		bindProductTermFields( m );
 		const saveBtn = $( '#minn-product-save' );
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 			const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
@@ -7114,6 +7255,14 @@
 				};
 				payload.shipping_class = ( $( '#minn-p-shipclass' ) || {} ).value || '';
 			}
+			if ( $( '#minn-p-slug' ) ) payload.slug = ( $( '#minn-p-slug' ).value || '' ).trim();
+			if ( $( '#minn-p-featured' ) ) payload.featured = !! $( '#minn-p-featured' ).checked;
+			// Taxonomies send the whole set: WooCommerce replaces, never merges.
+			PRODUCT_TERM_FIELDS.forEach( ( t ) => {
+				if ( $( `[data-ptchips="${ t.key }"]` ) && Array.isArray( ( m.terms || {} )[ t.key ] ) ) {
+					payload[ t.key ] = m.terms[ t.key ].map( ( x ) => ( { id: x.id } ) );
+				}
+			} );
 			saveBtn.disabled = true;
 			saveBtn.textContent = 'Saving…';
 			try {
@@ -7124,6 +7273,7 @@
 				const full = await api( `wc/v3/products/${ p.id }?_fields=${ PRODUCT_DETAIL_FIELDS }` );
 				if ( isCur() ) {
 					m.full = full || updated;
+					seedProductTerms( m );
 					m.product = Object.assign( {}, m.product, {
 						name: full.name,
 						status: full.status,
