@@ -1567,10 +1567,23 @@ class Minn_Admin_REST {
 		foreach ( $modified_types as $modified_type ) {
 			add_filter(
 				"rest_{$modified_type}_query",
-				function ( $args, $request ) {
-					if ( ! empty( $request['minn_modified'] ) ) {
-						$args['minn_modified'] = true;
+				function ( $args, $request ) use ( $modified_type ) {
+					if ( empty( $request['minn_modified'] ) ) {
+						return $args;
 					}
+					// The FIELD above is context=edit for a stated reason: it
+					// tells the reader which posts carry unsaved edits. This
+					// filter reaches the same fact by selecting on it, and
+					// rest_{type}_query runs for unauthenticated collection
+					// reads too, so without the same gate a logged-out visitor
+					// could enumerate exactly the set the field withholds.
+					// Ask for the edit context AND the type's own edit cap.
+					$type_obj = get_post_type_object( $modified_type );
+					$can_edit = $type_obj && current_user_can( $type_obj->cap->edit_posts );
+					if ( 'edit' !== $request['context'] || ! $can_edit ) {
+						return $args;
+					}
+					$args['minn_modified'] = true;
 					return $args;
 				},
 				10,

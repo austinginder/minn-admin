@@ -82,6 +82,19 @@
 
 	const decodeEntities = stripTags;
 
+	// Structural parsing of untrusted markup, same inert document and the same
+	// reason as stripTags: a container created from the LIVE document runs the
+	// resource-loading side of parsing, so `<img src=x onerror=…>` fires while
+	// the tree is being built — including for nodes that are never displayed.
+	// Only for trees we READ (textContent, outerHTML, querySelector). Anything
+	// destined for the page must be parsed live or imported with importNode,
+	// because nodes from another document cannot be inserted directly.
+	const inertParse = ( html ) => {
+		const el = stripTagsDoc.createElement( 'div' );
+		el.innerHTML = html || '';
+		return el;
+	};
+
 	// REST nonces outlive most sessions but not an overnight tab. When a
 	// request fails with rest_cookie_invalid_nonce, mint a fresh nonce via
 	// core's admin-ajax `rest-nonce` action (cookie-authenticated, needs no
@@ -17803,8 +17816,7 @@
 			try { attrs = JSON.parse( openM[ 1 ].trim() ); } catch ( e ) { attrs = null; }
 		}
 		const html = stripBlockComments( str ).trim();
-		const wrap = document.createElement( 'div' );
-		wrap.innerHTML = html;
+		const wrap = inertParse( html );
 		const det = wrap.querySelector( 'details' );
 		if ( ! det ) {
 			return { attrs, summary: 'Details', bodyHtml: '<p></p>' };
@@ -17939,8 +17951,7 @@
 			}
 			// Attrs may be an empty array from some serializers — normalize.
 			if ( Array.isArray( attrs ) ) attrs = {};
-			const wrap = document.createElement( 'div' );
-			wrap.innerHTML = m[ 2 ];
+			const wrap = inertParse( m[ 2 ] );
 			const a = wrap.querySelector( 'a' );
 			const div = wrap.querySelector( '.wp-block-button' ) || wrap.firstElementChild;
 			const text = ( a ? a.textContent : ( attrs.text || 'Button' ) || 'Button' )
@@ -32865,8 +32876,7 @@
 	// Top-level blocks of a rendered-ish HTML string (block comments already
 	// meaningless to a writer — stripped like the old preview did).
 	function diffBlocksOf( html ) {
-		const div = document.createElement( 'div' );
-		div.innerHTML = stripBlockComments( html || '' );
+		const div = inertParse( stripBlockComments( html || '' ) );
 		const out = [];
 		div.childNodes.forEach( ( n ) => {
 			if ( n.nodeType === 1 ) {
