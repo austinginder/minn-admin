@@ -572,6 +572,9 @@ class Minn_Admin_Notices {
 				'args' => array(
 					'allow_usage_tracking' => array( 'true', 'false' ),
 				),
+				// The handler re-checks this itself; declaring it here is what
+				// the dispatcher enforces before the handler is reached.
+				'cap'  => 'manage_options',
 				// Mirror the plugin handler: no arbitrary POST keys.
 				'run'  => array( __CLASS__, 'run_everest_allow_usage' ),
 			),
@@ -579,13 +582,18 @@ class Minn_Admin_Notices {
 				'args' => array(
 					'consent' => array( 'yes', 'no' ),
 				),
+				'cap'  => 'manage_options',
 				'run'  => array( __CLASS__, 'run_sbi_review_consent' ),
 			),
 		);
 		/**
 		 * Filter the whitelist of notice admin-ajax actions Minn may run.
 		 *
-		 * @param array $map action => { args, run }.
+		 * `cap` is REQUIRED: the route this reaches is only edit_posts, so the
+		 * dispatcher refuses any entry that does not declare the capability
+		 * its handler needs, and checks it before calling `run`.
+		 *
+		 * @param array $map action => { args, cap, run }.
 		 */
 		return apply_filters( 'minn_admin_notice_ajax_actions', $map );
 	}
@@ -602,7 +610,19 @@ class Minn_Admin_Notices {
 		if ( ! isset( $map[ $action ] ) || ! is_callable( $map[ $action ]['run'] ) ) {
 			return new WP_Error( 'unknown_action', 'That notice action is not supported.', array( 'status' => 400 ) );
 		}
-		$def  = $map[ $action ];
+		$def = $map[ $action ];
+		// Every entry must declare the capability its handler needs, and the
+		// dispatcher enforces it here. The route itself is only edit_posts,
+		// and the whitelist is filterable with the docs pointing third parties
+		// at it, so without this a registrant that mirrors a plugin's
+		// admin-ajax handler and forgets its own check would hand a
+		// contributor a privileged option write.
+		if ( empty( $def['cap'] ) || ! is_string( $def['cap'] ) ) {
+			return new WP_Error( 'no_cap', 'That notice action does not declare a capability.', array( 'status' => 500 ) );
+		}
+		if ( ! current_user_can( $def['cap'] ) ) {
+			return new WP_Error( 'forbidden', 'You cannot run that notice action.', array( 'status' => 403 ) );
+		}
 		$safe = array();
 		foreach ( (array) ( $def['args'] ?? array() ) as $key => $allowed ) {
 			if ( ! isset( $args[ $key ] ) ) {

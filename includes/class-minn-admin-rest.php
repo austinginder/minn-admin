@@ -829,9 +829,15 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'user_send_email' ),
-				// Per-object meta cap — see $sessions_perm above.
+				// Per-object meta cap — see $sessions_perm above — plus a role
+				// floor. edit_user short-circuits against one's own id, so
+				// without list_users any Subscriber could make the site send
+				// arbitrary content From its admin address, with the site's
+				// real SPF/DKIM alignment, to an inbox they control.
 				'permission_callback' => function ( WP_REST_Request $request ) {
-					return current_user_can( 'edit_user', self::target_user_id( $request ) );
+					$uid = self::target_user_id( $request );
+					return current_user_can( 'edit_user', $uid )
+						&& ( get_current_user_id() !== $uid || current_user_can( 'list_users' ) );
 				},
 				'args'                => array(
 					'subject' => array(
@@ -1441,8 +1447,14 @@ class Minn_Admin_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'set_config_constant' ),
+				// edit_files as well as manage_options: this rewrites
+				// wp-config.php, and core gates every other dashboard-driven
+				// PHP write on edit_files, which map_meta_cap resolves
+				// separately. They coincide on stock WordPress; role plugins
+				// routinely grant manage_options to a site manager while
+				// withholding file editing.
 				'permission_callback' => function () {
-					return current_user_can( 'manage_options' );
+					return current_user_can( 'manage_options' ) && current_user_can( 'edit_files' );
 				},
 				'args'                => array(
 					'constant' => array(

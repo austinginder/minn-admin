@@ -148,8 +148,11 @@ add_action( 'rest_api_init', function () {
 			'methods'             => 'POST',
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
-				$from = trim( (string) $request['from'] );
-				$to   = trim( (string) $request['to'] );
+				// sanitize_text_field on both sides, matching the vendor's own
+				// writer (Admin/Ajax.php) — without it the shared option ends
+				// up holding values the plugin itself would never store.
+				$from = sanitize_text_field( trim( (string) $request['from'] ) );
+				$to   = sanitize_text_field( trim( (string) $request['to'] ) );
 				if ( '' === $from || '' === $to ) {
 					return new WP_Error( 'invalid', 'Source and target are both required.', array( 'status' => 400 ) );
 				}
@@ -171,8 +174,11 @@ add_action( 'rest_api_init', function () {
 			'permission_callback' => $perm,
 			'callback'            => function ( WP_REST_Request $request ) {
 				$old  = minn_admin_s301_decode_id( $request['id'] );
-				$from = trim( (string) $request['from'] );
-				$to   = trim( (string) $request['to'] );
+				// sanitize_text_field on both sides, matching the vendor's own
+				// writer (Admin/Ajax.php) — without it the shared option ends
+				// up holding values the plugin itself would never store.
+				$from = sanitize_text_field( trim( (string) $request['from'] ) );
+				$to   = sanitize_text_field( trim( (string) $request['to'] ) );
 				if ( '' === $from || '' === $to ) {
 					return new WP_Error( 'invalid', 'Source and target are both required.', array( 'status' => 400 ) );
 				}

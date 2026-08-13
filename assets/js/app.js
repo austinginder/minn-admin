@@ -82,6 +82,13 @@
 
 	const decodeEntities = stripTags;
 
+	// A URL safe to put in an href. esc() stops attribute breakout but not a
+	// javascript: scheme, and the target="_blank" that neutralises it
+	// elsewhere is not on every anchor. Bundled page builders all return
+	// admin_url()/get_permalink()/home_url(), but minn_admin_page_builders is
+	// a filter third-party code can populate.
+	const safeHref = ( u ) => ( /^(https?:\/\/|\/)/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
+
 	// Structural parsing of untrusted markup, same inert document and the same
 	// reason as stripTags: a container created from the LIVE document runs the
 	// resource-loading side of parsing, so `<img src=x onerror=…>` fires while
@@ -7063,10 +7070,13 @@
 	function productPriceLabel( p ) {
 		const price = p.price != null && p.price !== '' ? String( p.price ) : '';
 		if ( ! price && ! productPriceEditable( p ) ) return '—';
+		// The span is why this returns markup and cannot be esc()'d wholesale
+		// at the call sites, so escape each VALUE here instead. WooCommerce
+		// normalises these through wc_format_decimal, so this is depth.
 		if ( p.on_sale && p.sale_price ) {
-			return `$${ p.sale_price }` + ( p.regular_price ? ` <span class="minn-prod-was">$${ p.regular_price }</span>` : '' );
+			return `$${ esc( p.sale_price ) }` + ( p.regular_price ? ` <span class="minn-prod-was">$${ esc( p.regular_price ) }</span>` : '' );
 		}
-		return price ? `$${ price }` : '—';
+		return price ? `$${ esc( price ) }` : '—';
 	}
 
 	function productStockLabel( p ) {
@@ -22587,7 +22597,7 @@
 				<div class="minn-editor-locked-note minn-pattern-note">
 					${ __( 'This is a synced pattern — saving changes here updates every post and page that uses it.' ) }
 				</div>` : '' }
-				${ ed.builder && ed.builder.edit_url ? `
+				${ ed.builder && safeHref( ed.builder.edit_url ) ? `
 				<a class="minn-editor-locked-note minn-builder-note" href="${ esc( ed.builder.edit_url ) }" aria-label="Edit in ${ esc( ed.builder.name ) }">
 					<span>${ ed.builder.owns_content
 		? `This ${ ed.type === 'pages' ? 'page' : 'post' }'s canvas is managed by <b>${ esc( ed.builder.name ) }</b> —

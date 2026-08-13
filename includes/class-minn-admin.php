@@ -707,6 +707,27 @@ class Minn_Admin {
 	 *
 	 * @return int[]
 	 */
+	/**
+	 * Site visibility as the CURRENT user is allowed to see it.
+	 *
+	 * manage_options gets the full picture, the same as the REST route.
+	 * Everyone else gets the state and the search-engine flag, which is what
+	 * the banner renders, with the provider identities stripped: which
+	 * maintenance, coming-soon or password plugin a site runs is
+	 * reconnaissance, and it is not something a lower tier can act on anyway.
+	 *
+	 * @return array|null
+	 */
+	public static function visibility_for_current_user() {
+		$v = minn_admin_site_visibility();
+		if ( ! is_array( $v ) || current_user_can( 'manage_options' ) ) {
+			return $v;
+		}
+		$v['providers'] = array();
+		unset( $v['toggles'] );
+		return $v;
+	}
+
 	public static function user_site_ids() {
 		if ( ! is_multisite() ) {
 			return array();
@@ -1232,7 +1253,15 @@ class Minn_Admin {
 			 * Overview banner warning when a maintenance/coming-soon/password
 			 * plugin or "discourage search engines" is hiding the site.
 			 */
-			'visibility' => function_exists( 'minn_admin_site_visibility' ) ? minn_admin_site_visibility() : null,
+			// The /visibility ROUTE is manage_options, but this payload rides
+			// the SPA's own edit_posts gate, so the two disagreed and an author
+			// was handed the provider identities (which maintenance or
+			// password plugin is in use) that REST withholds from them. Ship
+			// the state to everyone — the banner needs it — and the provider
+			// list only to the tier that can act on it.
+			'visibility' => function_exists( 'minn_admin_site_visibility' )
+				? self::visibility_for_current_user()
+				: null,
 		);
 
 		include MINN_ADMIN_DIR . 'includes/template.php';

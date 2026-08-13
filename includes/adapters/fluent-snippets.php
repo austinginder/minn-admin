@@ -272,6 +272,12 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 	$can_write = function () {
+		// These snippets are PHP executed from files. DISALLOW_FILE_MODS
+		// happens to close this because core maps install_plugins to
+		// do_not_allow under it, but DISALLOW_FILE_EDIT alone does not.
+		if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+			return false;
+		}
 		return current_user_can( 'install_plugins' ) && current_user_can( 'unfiltered_html' );
 	};
 

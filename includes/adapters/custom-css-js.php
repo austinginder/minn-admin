@@ -242,7 +242,17 @@ function minn_admin_ccj_normalize_options( $input, $existing = array() ) {
 	$sides = array_values( array_intersect( $sides, $ok ) );
 	$base['side']     = $sides ? implode( ',', $sides ) : 'frontend';
 	$base['priority'] = (int) $base['priority'];
-	return $base;
+	// Return ONLY the settings. Merging the raw body meant name, code and any
+	// attacker-chosen key were persisted into the options meta too, so the
+	// snippet's source was duplicated into a store nothing surfaces and CCJ's
+	// own delete path does not know about, and other code regex-scans it.
+	return array(
+		'language' => $base['language'],
+		'type'     => $base['type'],
+		'linking'  => $base['linking'],
+		'side'     => $base['side'],
+		'priority' => $base['priority'],
+	);
 }
 
 function minn_admin_ccj_rows( $args = array() ) {
@@ -517,7 +527,11 @@ add_action( 'rest_api_init', function () {
 				}
 				$code = isset( $body['code'] ) ? (string) $body['code'] : '';
 				$opts = minn_admin_ccj_normalize_options( $body );
-				if ( '' !== $code && ! minn_admin_ccj_can_write_code( $opts ) ) {
+				// Unconditional, matching the PUT path and HFCM: creating the
+				// container for an execution context is the same privilege as
+				// filling it, and an empty pre-activated js/admin-side shell is
+				// exactly what a later write would need.
+				if ( ! minn_admin_ccj_can_write_code( $opts ) ) {
 					return minn_admin_ccj_code_error( $opts );
 				}
 				$id   = wp_insert_post( array(
