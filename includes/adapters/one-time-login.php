@@ -55,18 +55,30 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/otl/(?P<id>\d+)', array(
 		'methods'             => 'POST',
 		'permission_callback' => function ( WP_REST_Request $request ) {
-			// The plugin's own gate: edit_user on the target account.
-			return current_user_can( 'edit_user', (int) $request['id'] );
+			$id = (int) $request['id'];
+			// edit_user alone is not a gate here. Core's map_meta_cap
+			// short-circuits it when the target IS the caller, so every
+			// logged-in account passes for its own id — and what this route
+			// hands back is a URL that signs that account in, stored in user
+			// meta with no expiry, not cleared by logout and not cleared by
+			// the password reset an administrator would use to evict them.
+			// Minting one for yourself has no operator value, so require the
+			// administrative capability and refuse self-targeting outright.
+			return $id !== get_current_user_id()
+				&& current_user_can( 'edit_users' )
+				&& current_user_can( 'edit_user', $id );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			$user = get_userdata( (int) $request['id'] );
 			if ( ! $user ) {
 				return new WP_Error( 'not_found', 'User not found', array( 'status' => 404 ) );
 			}
-			// delay_delete=true: existing tokens keep working for 15 minutes
-			// (the plugin's own grace flag) rather than being wiped at once —
-			// friendlier when a couple of links are handed out close together.
-			$urls = one_time_login_generate_tokens( $user, 1, true );
+			// delay_delete=false, the vendor's own default on both of its entry
+			// points. With true, previously issued tokens keep authenticating
+			// for another 15 minutes — so re-minting, the natural response to a
+			// leaked link, would not revoke the leaked one, and Minn offers no
+			// other way to revoke it.
+			$urls = one_time_login_generate_tokens( $user, 1, false );
 			$url  = ! empty( $urls[0] ) ? $urls[0] : '';
 			if ( ! $url ) {
 				return new WP_Error( 'mint_failed', 'One Time Login could not generate a link.', array( 'status' => 500 ) );
