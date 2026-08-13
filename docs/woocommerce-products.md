@@ -133,8 +133,22 @@ its own.
    in that same request. wc/v3 accepts the write with a 200 and silently drops
    the attribute; the identical call succeeds on the next request. Verified
    both ways against a live store.
-9. **Variations**: a list view against the variations sub-resource, editing SKU,
-   price, stock and image per variation. Attribute creation stays in WooCommerce.
+9. **Variations** (shipped): a row per variation on a variable product, with
+   its attribute values, SKU, regular and sale price and stock status, plus
+   Generate from attributes (every combination the variation-enabled attributes
+   allow, minus the ones already there).
+
+   Variations are a sub-resource, so they load and save on their own, but they
+   ride the page's single Save button: a second save button on one form is a
+   way to lose work. The order matters. The product saves first, then the
+   variations batch, because a variation's attributes have to exist on the
+   parent before WooCommerce will accept them. Freshly created variations are
+   re-read afterwards so a second save updates them rather than creating
+   duplicates.
+
+   Per-variation images and the variation-level shipping and tax fields are not
+   here yet; the card covers what a shop owner changes rather than everything
+   the resource holds.
 
 Waves 2 through 5 cover what a shop owner touches weekly. Waves 8 and 9 are
 where WooCommerce's own UI is a canvas, so they need their own scoping pass

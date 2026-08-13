@@ -2676,6 +2676,16 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-pattr-flag { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text2); flex: none; }
 .minn-pattr-pick { flex: 0 1 250px; }
 @media (max-width: 720px) { .minn-pattr-name, .minn-pattr-pick { flex-basis: 100%; } }
+/* Variations: the attribute combination, then the fields that differ by it. */
+.minn-pvar-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
+.minn-pvar-row { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.minn-pvar-axes { display: flex; gap: 6px; flex: 1 1 220px; min-width: 0; }
+.minn-pvar-axis { flex: 1 1 auto; min-width: 0; }
+.minn-pvar-stock { position: relative; }
+.minn-pvar-sku { flex: 0 1 150px; min-width: 0; }
+.minn-pvar-price { flex: 0 1 92px; min-width: 0; }
+.minn-pvar-stock { flex: 0 1 150px; min-width: 0; }
+@media (max-width: 720px) { .minn-pvar-axes, .minn-pvar-sku, .minn-pvar-stock { flex-basis: 100%; } }
 .minn-pimg-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* A group with nothing to sit beside (the short description) takes the row. */
 .minn-order-panel.wide { grid-column: 1 / -1; border-right: none; }
