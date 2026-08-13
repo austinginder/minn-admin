@@ -17992,7 +17992,7 @@
 			}
 			aOpen += '>';
 			return `<!-- wp:button${ serializeBlockAttrs( attrs ) } -->\n`
-				+ `<div class="${ divClass }">${ aOpen }${ esc( text ) }</a></div>\n`
+				+ `<div class="${ esc( divClass ) }">${ aOpen }${ esc( text ) }</a></div>\n`
 				+ `<!-- /wp:button -->`;
 		} ).join( '' );
 
@@ -19150,7 +19150,7 @@
 				const inner = paras.length
 					? paras.map( ( p ) => `<!-- wp:paragraph -->\n${ p.outerHTML }\n<!-- /wp:paragraph -->` ).join( '' )
 					: `<!-- wp:paragraph -->\n<p>${ cite ? '' : el.innerHTML }</p>\n<!-- /wp:paragraph -->`;
-				pushBlock( 'quote', pa, `<blockquote class="${ el.className }">${ inner }${ cite ? cite.outerHTML : '' }</blockquote>` );
+				pushBlock( 'quote', pa, `<blockquote class="${ esc( el.className ) }">${ inner }${ cite ? cite.outerHTML : '' }</blockquote>` );
 			} else if ( tag === 'figure' && ( el.classList.contains( 'wp-block-pullquote' ) || ( el.querySelector( ':scope > blockquote' ) && ! el.querySelector( 'img, video, audio, table' ) ) ) ) {
 				// Pullquote: figure > blockquote > p + optional cite. Distinct
 				// from image/table figures and from bare blockquote quotes.
@@ -19184,10 +19184,10 @@
 				pushBlock( 'details', pa, el.outerHTML );
 			} else if ( tag === 'pre' && el.classList.contains( 'wp-block-verse' ) ) {
 				const pa = takeMinnAttrs( el );
-				pushBlock( 'verse', pa, `<pre class="${ el.className }">${ el.innerHTML }</pre>` );
+				pushBlock( 'verse', pa, `<pre class="${ esc( el.className ) }">${ el.innerHTML }</pre>` );
 			} else if ( tag === 'pre' && el.classList.contains( 'wp-block-preformatted' ) ) {
 				const pa = takeMinnAttrs( el );
-				pushBlock( 'preformatted', pa, `<pre class="${ el.className }">${ el.innerHTML }</pre>` );
+				pushBlock( 'preformatted', pa, `<pre class="${ esc( el.className ) }">${ el.innerHTML }</pre>` );
 			} else if ( tag === 'pre' ) {
 				// Plain text so syntax-highlight spans never reach the database;
 				// the language class is preserved (Prism-style, theme-compatible).
@@ -19216,7 +19216,7 @@
 				pushBlock(
 					'table',
 					pa,
-					`<figure class="${ figClass }"><table${ table.className ? ` class="${ table.className }"` : '' }>${ table.innerHTML }</table>${ caption ? caption.outerHTML : '' }</figure>`
+					`<figure class="${ esc( figClass ) }"><table${ table.className ? ` class="${ esc( table.className ) }"` : '' }>${ table.innerHTML }</table>${ caption ? caption.outerHTML : '' }</figure>`
 				);
 			} else if ( tag === 'ul' || tag === 'ol' ) {
 				const carried = takeMinnAttrs( el );
@@ -19248,7 +19248,7 @@
 				// saved content and must ride along (attribute order may
 				// normalize on first save; the established fixed-point rule).
 				const listStyle = carried && el.getAttribute( 'style' ) ? ` style="${ esc( el.getAttribute( 'style' ) ) }"` : '';
-				pushBlock( 'list', la, `<${ tag }${ listHtmlAttrs } class="${ el.className }"${ listStyle }>${ items }</${ tag }>` );
+				pushBlock( 'list', la, `<${ tag }${ listHtmlAttrs } class="${ esc( el.className ) }"${ listStyle }>${ items }</${ tag }>` );
 			} else if ( tag === 'figure' && ! el.querySelector( 'img, video, audio, table, iframe' ) && ! el.textContent.trim() ) {
 				return; // husk left behind by an undoable image delete
 			} else if ( tag === 'figure' && el.querySelector( 'video' ) ) {
