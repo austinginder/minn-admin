@@ -16966,7 +16966,7 @@
 			// Park the comment attrs on the element; serialization re-emits them.
 			const attrs = segmentAttrs( seg );
 			if ( attrs && Object.keys( attrs ).length ) {
-				html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
+				html = html.replace( /<([a-z][a-z0-9]*)/i, ( m, tag ) => `<${ tag } data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
 			}
 		} else if ( TEXTFLOW_CARRY_BLOCKS.includes( name ) ) {
 			// Attrs the serializer derives from the DOM need no marker; a
@@ -16975,7 +16975,7 @@
 			const attrs = segmentAttrs( seg );
 			const allowed = EDITABLE_ATTRS[ name ] || [];
 			if ( attrs && Object.keys( attrs ).length && ! Object.keys( attrs ).every( ( k ) => allowed.includes( k ) ) ) {
-				html = html.replace( /<([a-z][a-z0-9]*)/i, `<$1 data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
+				html = html.replace( /<([a-z][a-z0-9]*)/i, ( m, tag ) => `<${ tag } data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
 			}
 		}
 		return html;
@@ -24189,7 +24189,7 @@
 		if ( proto.slotImg ) {
 			let t = proto.text;
 			if ( proto.src && item.url ) t = t.split( proto.src ).join( item.url );
-			t = t.replace( /\sdata-url="[^"]*"/i, item.url ? ' data-url="' + esc( item.url ) + '"' : '' );
+			t = t.replace( /\sdata-url="[^"]*"/i, () => ( item.url ? ' data-url="' + esc( item.url ) + '"' : '' ) );
 			t = t.replace( /\sdata-link="[^"]*"/i, '' );
 			t = t.replace( /\ssrcset="[^"]*"/i, '' ).replace( /\ssizes="[^"]*"/i, '' );
 			if ( item.id ) {
@@ -24198,7 +24198,7 @@
 			}
 			if ( item.width ) t = t.replace( /\sdata-width="\d+"/i, ' data-width="' + item.width + '"' );
 			if ( item.height ) t = t.replace( /\sdata-height="\d+"/i, ' data-height="' + item.height + '"' );
-			t = t.replace( /(\salt=")[^"]*(")/i, '$1' + esc( item.alt || '' ) + '$2' );
+			t = t.replace( /(\salt=")[^"]*(")/i, ( m, a, z ) => a + esc( item.alt || '' ) + z );
 			return t;
 		}
 		let u = proto.text;
@@ -24216,7 +24216,7 @@
 			u = u.replace( new RegExp( '("id":)' + proto.id + '\\b', 'g' ), '$1' + item.id );
 		}
 		u = u.replace( /<img[^>]*>/g, ( tag ) => tag.replace( /\s(?:srcset|sizes)="[^"]*"/g, '' ) );
-		u = u.replace( /(<img[^>]*?\salt=")[^"]*(")/g, '$1' + esc( item.alt || '' ) + '$2' );
+		u = u.replace( /(<img[^>]*?\salt=")[^"]*(")/g, ( m, a, z ) => a + esc( item.alt || '' ) + z );
 		if ( item.width && item.height ) {
 			u = u.replace( /(data-aspect-ratio=")[^"]*(")/g, '$1' + item.width + ' / ' + item.height + '$2' );
 		}
