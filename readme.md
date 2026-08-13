@@ -54,8 +54,12 @@ vanilla-JS file. It lives *alongside* the classic wp-admin, which stays fully av
   card** that records hand-received payments through WooCommerce's own machinery, **itemized
   refunds** with quantity steppers and restocking, resend/custom email, pay URL, **New order**,
   **Analytics** with long-range revenue and top products, and a Store strip on the Overview naming
-  the orders that need work today,
-  **Products** (stock filters, bulk, daily fields, **Add product**), **Coupons**, **Customers**, and
+  the orders that need work today.
+  **Products** open as full pages as well (pricing with its sale schedule and tax class, inventory
+  down to GTIN and backorders, shipping, the product image and gallery as tiles you drag to reorder,
+  categories, tags and brands, upsells and cross-sells, attributes, and variations a variable product
+  can generate from its own attributes, with the long description in Minn's own editor), alongside
+  stock filters, bulk and **Add product**. **Coupons**, **Customers**, and
   **Subscriptions** when WooCommerce Subscriptions is active (status, next payment, parent order,
   related orders, customer strip). Orders, products and customers carry **right-click menus** for
   the common moves (status changes, stock and publish toggles, email, jump to a customer's orders).
