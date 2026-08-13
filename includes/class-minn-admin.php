@@ -304,6 +304,18 @@ class Minn_Admin {
 		if ( ! is_array( $rules ) || ! $rules || isset( $rules['^minn-admin(/.*)?$'] ) ) {
 			return;
 		}
+		// Latch it. This runs on wp_loaded for EVERY request, including
+		// unauthenticated front-end hits, so on a site where the rule cannot
+		// persist — another plugin filtering it out of rewrite_rules_array, a
+		// read-only or racing options store — the condition never clears and
+		// every uncached request rebuilds the whole ruleset and rewrites an
+		// autoloaded option. One attempt per version is enough to heal the
+		// case this exists for; anything else degrades to a 404 at
+		// /minn-admin/, which is recoverable from the permalinks screen.
+		if ( get_option( 'minn_admin_rewrites_healed' ) === MINN_ADMIN_VERSION ) {
+			return;
+		}
+		update_option( 'minn_admin_rewrites_healed', MINN_ADMIN_VERSION, false );
 		flush_rewrite_rules( false );
 	}
 
@@ -697,6 +709,12 @@ class Minn_Admin {
 	 */
 	public static function user_site_ids() {
 		if ( ! is_multisite() ) {
+			return array();
+		}
+		// The switcher's docblock promises this, and it was never implemented:
+		// get_blogs_of_user() is an unbounded usermeta scan, which core's own
+		// large-network threshold exists to keep off the hot path.
+		if ( wp_is_large_network() ) {
 			return array();
 		}
 		$uid = get_current_user_id();
