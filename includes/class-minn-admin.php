@@ -242,6 +242,31 @@ class Minn_Admin {
 	}
 
 	/**
+	 * REST bases of the post types where this user may edit only their own
+	 * items. Keyed by rest_base so the client can look one up by the route it
+	 * is about to call. Values are always true; absence means "no restriction".
+	 */
+	public static function own_only_types() {
+		$out = array();
+		foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $pt ) {
+			$base = $pt->rest_base ? $pt->rest_base : $pt->name;
+			// A type with no edit_others_* cap declared (some CPTs map every
+			// cap to the same string) can't be reasoned about — leave it alone
+			// rather than silently hiding other authors' rows.
+			if ( empty( $pt->cap->edit_others_posts ) || empty( $pt->cap->edit_posts ) ) {
+				continue;
+			}
+			if ( $pt->cap->edit_others_posts === $pt->cap->edit_posts ) {
+				continue;
+			}
+			if ( ! current_user_can( $pt->cap->edit_others_posts ) ) {
+				$out[ $base ] = true;
+			}
+		}
+		return (object) $out;
+	}
+
+	/**
 	 * Minn editor URL for a post, or '' when the type isn't REST-editable in Minn.
 	 */
 	public static function editor_url_for_post( $post_id ) {
@@ -1093,6 +1118,13 @@ class Minn_Admin {
 				// from unfiltered_html; multisite keeps it super-admin-only.
 				'editCss'      => current_user_can( 'edit_css' ),
 			),
+			// Post types (by REST base) whose OTHER authors' items this user
+			// cannot edit. wp/v2/<type>?context=edit drops those rows from the
+			// body but still counts them in X-WP-Total, so an author would see
+			// "16 items" above their own two. The client scopes those requests
+			// to author=<me> instead, which makes header and body agree.
+			// Empty for anyone holding edit_others_* everywhere (admins).
+			'ownOnly'  => self::own_only_types(),
 			// Multisite context: users are network-shared (delete becomes
 			// remove-from-site, profile edits need network caps), plugins can
 			// be network-activated. Client views branch on this.
