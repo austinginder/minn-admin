@@ -108,6 +108,46 @@ class Minn_Admin_DB {
 	 * (never touches the tables themselves). rows is the storage engine's
 	 * ESTIMATE — InnoDB is routinely off by 2×, which is fine for a browser.
 	 */
+	/**
+	 * Keep only the tables that belong to THIS site.
+	 *
+	 * table_index() already encodes the rule (this site's prefix plus the
+	 * shared base-prefixed tables); the health checks that ran their own
+	 * information_schema queries were the two places not using it.
+	 *
+	 * @param string[] $names Table names from information_schema.
+	 * @return string[]
+	 */
+	private static function scope_to_site( $names ) {
+		$mine = self::site_table_names();
+		$out  = array();
+		foreach ( (array) $names as $n ) {
+			if ( isset( $mine[ strtolower( (string) $n ) ] ) ) {
+				$out[] = $n;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * This site's table names as a lookup map (lowercased name => true).
+	 *
+	 * table_index() returns a LIST of row objects, so it cannot be probed with
+	 * isset() directly.
+	 *
+	 * @return array<string, true>
+	 */
+	private static function site_table_names() {
+		$map = array();
+		foreach ( (array) self::table_index() as $t ) {
+			$name = is_object( $t ) ? ( $t->name ?? '' ) : (string) $t;
+			if ( '' !== $name ) {
+				$map[ strtolower( (string) $name ) ] = true;
+			}
+		}
+		return $map;
+	}
+
 	private static function table_index() {
 		// Memoized per request: resolve_table() runs once per route call, but
 		// a health run resolves many tables back to back.
@@ -665,7 +705,10 @@ class Minn_Admin_DB {
 						'BASE TABLE'
 					)
 				);
-				$rows = is_array( $rows ) ? $rows : array();
+				// Scope to THIS site's tables. table_schema = DB_NAME alone
+				// enumerates every tenant on a network, and the names are
+				// imploded into a user-visible detail string.
+				$rows = self::scope_to_site( is_array( $rows ) ? $rows : array() );
 				return array(
 					'label'    => __( 'Tables without a primary key', 'minn-admin' ),
 					'severity' => $rows ? 'warn' : 'ok',
@@ -789,7 +832,12 @@ class Minn_Admin_DB {
 					'bigint'    => array( 9223372036854775807, 18446744073709551615 ),
 				);
 				$tight = array();
+				$mine  = self::site_table_names();
 				foreach ( (array) $rows as $r ) {
+					// Same prefix scoping as the check above.
+					if ( ! isset( $mine[ strtolower( (string) $r->name ) ] ) ) {
+						continue;
+					}
 					$type = strtolower( (string) $r->col_type );
 					$base = preg_replace( '/\(.*/', '', $type );
 					$base = trim( preg_replace( '/\s.*/', '', $base ) );

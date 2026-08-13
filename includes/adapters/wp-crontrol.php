@@ -556,6 +556,17 @@ add_action( 'rest_api_init', function () {
 			if ( ! $parts ) {
 				return new WP_Error( 'bad_id', 'Invalid event id.', array( 'status' => 400 ) );
 			}
+			// Symmetric with pause: resolve the event, 404 when it is gone and
+			// refuse a hook Crontrol does not consider pausable. Without this
+			// a hook the pause route would have refused could still be
+			// un-paused, re-enabling a callback the owner suspended.
+			$ev = \Crontrol\Event\find( $parts['h'], $parts['t'], $parts['s'] );
+			if ( ! $ev ) {
+				return new WP_Error( 'not_found', 'Cron event not found.', array( 'status' => 404 ) );
+			}
+			if ( ! $ev->pausable() ) {
+				return new WP_Error( 'forbidden', 'This hook cannot be paused or resumed.', array( 'status' => 403 ) );
+			}
 			$result = \Crontrol\Event\resume( $parts['h'] );
 			if ( is_wp_error( $result ) ) {
 				return $result;

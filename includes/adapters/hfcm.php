@@ -126,6 +126,13 @@ function minn_admin_hfcm_get( $id ) {
  * and any install using DISALLOW_UNFILTERED_HTML.
  */
 function minn_admin_hfcm_can_write_code() {
+	// HFCM html_entity_decode()s these snippets into wp_head for every
+	// visitor, so authoring one is code editing and answers to the directive
+	// that forbids it — the guard the custom-css-js and WPCode peers already
+	// carry, which this adapter was not given.
+	if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+		return false;
+	}
 	if ( defined( 'DISALLOW_UNFILTERED_HTML' ) && DISALLOW_UNFILTERED_HTML ) {
 		return false;
 	}
