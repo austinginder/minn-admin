@@ -496,7 +496,25 @@ function minn_admin_network_settings_save( $tab, $values ) {
 				if ( ! is_email( $email ) ) {
 					return new WP_Error( 'bad_email', __( 'Enter a valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				update_site_option( $key, $email );
+				// Core does not change this in place: wp-admin/network/settings.php
+				// parks the address in new_admin_email and only commits it when
+				// the confirmation link is followed, so someone riding a super
+				// admin's session cannot silently redirect the network's mail
+				// with no notice to the current address.
+				if ( get_site_option( 'admin_email' ) !== $email ) {
+					update_site_option( 'new_admin_email', $email );
+					// The confirmation mailer is hooked in
+					// wp-admin/includes/ms-admin-filters.php, which a REST
+					// request never loads — so writing the option alone would
+					// send nothing and the change would go nowhere. The
+					// function itself lives in wp-includes/ms-functions.php and
+					// is always available; call it when the hook is absent, and
+					// do not double-send when it is not.
+					if ( ! has_action( 'update_site_option_new_admin_email', 'update_network_option_new_admin_email' )
+						&& function_exists( 'update_network_option_new_admin_email' ) ) {
+						update_network_option_new_admin_email( get_site_option( 'admin_email' ), $email );
+					}
+				}
 				break;
 			case 'types':
 				// Core's own normalization: a space-separated lowercase list.
