@@ -153,8 +153,18 @@ function campfire_list( WP_REST_Request $req ) {
 
 	$sql   = 'FROM ' . campfire_table() . ' WHERE ' . implode( ' AND ', $where );
 	$total = (int) $wpdb->get_var( $args ? $wpdb->prepare( "SELECT COUNT(*) $sql", $args ) : "SELECT COUNT(*) $sql" );
+
+	$orderby = sanitize_key( $req->get_param( 'orderby' ) ?: 'created_at' );
+	if ( ! in_array( $orderby, array( 'name', 'created_at' ), true ) ) {
+		$orderby = 'created_at';
+	}
+	$order = strtoupper( sanitize_key( $req->get_param( 'order' ) ?: 'desc' ) );
+	if ( 'ASC' !== $order ) {
+		$order = 'DESC';
+	}
+
 	$q     = $wpdb->prepare(
-		"SELECT id, name, email, message, status, created_at $sql ORDER BY created_at DESC LIMIT %d OFFSET %d",
+		"SELECT id, name, email, message, status, created_at $sql ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d",
 		array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 	);
 
