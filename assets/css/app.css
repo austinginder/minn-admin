@@ -1873,7 +1873,14 @@ input.minn-vis-extra { width: 100%; }
 .minn-slug-input:disabled { opacity: 0.5; cursor: default; }
 .minn-slug-note { color: var(--amber); font-size: 11.5px; margin-top: 4px; }
 .minn-chips { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
-.minn-chip { background: var(--panel2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 6px; font-size: 12.5px; }
+/* Colour and font are explicit because a <button> chip otherwise falls back to
+   the UA's own, which is near-black text on the dark panel. */
+.minn-chip { background: var(--panel2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 6px; font-size: 12.5px; font-family: inherit; color: var(--text2); }
+/* A chosen chip (a term on a product, a tag in the editor) is a removable
+   thing, so it reads as active rather than as a dim label. */
+.minn-chip.sel { background: var(--accent-soft); border-color: var(--accent); color: var(--accent2); font-weight: 600; }
+button.minn-chip.sel { cursor: pointer; }
+button.minn-chip.sel:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* ===== Load more / toolbar search ===== */
 .minn-load-more {
