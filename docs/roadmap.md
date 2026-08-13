@@ -5,7 +5,8 @@
 [changelog.md](../changelog.md); the technical plans behind each area live in
 the per-area docs (the editor in [editor-roadmap.md](editor-roadmap.md),
 adapters in [plugin-support.md](plugin-support.md), WooCommerce products in
-[woocommerce-products.md](woocommerce-products.md), WP-CLI in
+[woocommerce-products.md](woocommerce-products.md), WooCommerce orders in
+[woocommerce-orders.md](woocommerce-orders.md), WP-CLI in
 [wp-cli-roadmap.md](wp-cli-roadmap.md), and the v1.0 charter in
 [v1-readiness.md](v1-readiness.md)).*
 
