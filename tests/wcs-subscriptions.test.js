@@ -91,12 +91,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			return document.querySelector( '[data-sub]' ) || document.querySelector( '.minn-empty' );
 		}, null, { timeout: 20000 } ).catch( () => {} );
 
-		const ui = await page.evaluate( () => {
-			const tabs = [ ...document.querySelectorAll( '[data-stab]' ) ].map( ( el ) => el.textContent.trim() );
+		// The status tabs are a dropdown on the filter bar now (same bar the
+		// orders list wears), so the statuses live inside its popover.
+		const ui = await page.evaluate( async () => {
+			const drop = document.querySelector( '#minn-order-preset' );
+			if ( drop ) drop.click();
+			await new Promise( ( r ) => setTimeout( r, 300 ) );
+			const tabs = [ ...document.querySelectorAll( '.minn-of-pop [data-opreset]' ) ].map( ( el ) => el.textContent.trim() );
+			document.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape' } ) );
 			const rows = [ ...document.querySelectorAll( '[data-sub]' ) ].map( ( el ) => el.dataset.sub );
 			return { tabs, rows };
 		} );
-		t.check( 'status tabs include Active', ui.tabs.includes( 'Active' ), ui.tabs.join( ',' ) );
+		t.check( 'status dropdown includes Active', ui.tabs.includes( 'Active' ), ui.tabs.join( ',' ) );
 		t.check( 'list shows at least one row', ui.rows.length > 0, String( ui.rows.length ) );
 
 		// Open first row.

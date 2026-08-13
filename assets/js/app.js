@@ -5049,9 +5049,10 @@
 	   Filtering client-side would be a lie the moment the list paginates:
 	   page 2 of an unfiltered query is not page 2 of a filtered one. */
 	const orderFiltersDefault = () => ( { status: [], after: '', before: '', datePreset: '', customer: null, product: null } );
-	const orderFilters = () => {
-		if ( ! state.orderFilters ) state.orderFilters = orderFiltersFromUrl();
-		return state.orderFilters;
+	const orderFilters = ( spec ) => {
+		const s = spec || listSpec();
+		if ( ! state[ s.stateKey ] ) state[ s.stateKey ] = orderFiltersFromUrl( s );
+		return state[ s.stateKey ];
 	};
 	const orderFiltersActive = () => {
 		const f = orderFilters();
@@ -5061,14 +5062,15 @@
 	 *  say something no single preset can (two statuses, say). */
 	const orderPresetActive = () => {
 		const f = orderFilters();
+		// eslint-disable-next-line no-unused-vars
 		if ( ! f.status.length ) return 'any';
 		return f.status.length === 1 ? f.status[ 0 ] : '';
 	};
 	const orderCtx = () => JSON.stringify( orderFilters() ) + '|' + ( state.orderSearch || '' );
 
 	/** Filters as query string, in WooCommerce's own parameter vocabulary. */
-	function orderFilterQuery() {
-		const f = orderFilters();
+	function orderFilterQuery( spec ) {
+		const f = orderFilters( spec );
 		let q = '';
 		if ( f.status.length ) {
 			f.status.forEach( ( s ) => { q += '&status[]=' + encodeURIComponent( s ); } );
@@ -5114,7 +5116,44 @@
 	}
 
 
-	/* ===== Orders list filters (chips over native WC parameters) ===== */
+	/* ===== List filters (chips over native WC parameters) =====
+	 *
+	 * Orders and Subscriptions are the same list in two vocabularies: both
+	 * WooCommerce collections accept status (an array), customer, product and
+	 * a date window, so one filter machine serves both. The spec below is the
+	 * only thing that differs, and the active list is read from the route,
+	 * because these controls only ever run while their own list is on screen.
+	 */
+	const LIST_FILTER_SPECS = {
+		orders: {
+			route: 'orders',
+			cacheKey: 'orders',
+			searchKey: 'orderSearch',
+			stateKey: 'orderFilters',
+			statuses: () => {
+				const known = Object.keys( B.wcOrderStatuses || {} );
+				return known.length ? known : ORDER_TAB_SLUGS.filter( ( s ) => s !== 'any' );
+			},
+			statusLabel: ( slug ) => orderStatusLabel( slug ),
+			presets: () => ORDER_TABS,
+			load: ( page ) => loadOrders( page ),
+			render: () => renderOrders(),
+		},
+		subscriptions: {
+			route: 'subscriptions',
+			cacheKey: 'subscriptions',
+			searchKey: 'subSearch',
+			stateKey: 'subFilters',
+			// WooCommerce Subscriptions owns its own status vocabulary, and it
+			// is not the order one: active, expired, pending-cancel.
+			statuses: () => SUB_TABS.map( ( [ id ] ) => id ).filter( ( s ) => s !== 'any' ),
+			statusLabel: ( slug ) => ( SUB_TABS.find( ( [ id ] ) => id === slug ) || [ '', ( slug || '' ).replace( /-/g, ' ' ) ] )[ 1 ],
+			presets: () => SUB_TABS,
+			load: ( page ) => loadSubscriptions( page ),
+			render: () => renderSubscriptions(),
+		},
+	};
+	const listSpec = () => LIST_FILTER_SPECS[ state.route === 'subscriptions' ? 'subscriptions' : 'orders' ];
 
 	const ORDER_FILTER_KINDS = [
 		[ 'status', __( 'Status' ) ],
@@ -5143,16 +5182,12 @@
 	   dates have to look like dates. The query Minn sends is built from the
 	   validated state, never from the raw string. */
 	const ORDER_URL_KEYS = [ 'status', 'after', 'before', 'date', 'customer', 'product', 'q' ];
-	const orderStatusSlugs = () => {
-		const known = Object.keys( B.wcOrderStatuses || {} );
-		return known.length ? known : ORDER_TAB_SLUGS.filter( ( s ) => s !== 'any' );
-	};
-
-	function orderFiltersFromUrl() {
+	function orderFiltersFromUrl( spec ) {
+		const s = spec || listSpec();
 		const f = orderFiltersDefault();
 		let p;
 		try { p = new URLSearchParams( location.search ); } catch ( e ) { return f; }
-		const valid = orderStatusSlugs();
+		const valid = s.statuses();
 		( p.get( 'status' ) || '' ).split( ',' ).forEach( ( slug ) => {
 			const s = slug.trim();
 			if ( s && valid.indexOf( s ) !== -1 && f.status.indexOf( s ) === -1 ) f.status.push( s );
@@ -5175,7 +5210,7 @@
 		const pid = idOf( 'product' );
 		if ( pid ) f.product = { value: pid, label: '#' + pid, unresolved: 'product' };
 		const q = ( p.get( 'q' ) || '' ).trim();
-		if ( q && ! state.orderSearch ) state.orderSearch = q;
+		if ( q && ! state[ s.searchKey ] ) state[ s.searchKey ] = q;
 		return f;
 	}
 
@@ -5205,7 +5240,7 @@
 		}
 		if ( f.customer ) url.searchParams.set( 'customer', f.customer.value );
 		if ( f.product ) url.searchParams.set( 'product', f.product.value );
-		if ( state.orderSearch ) url.searchParams.set( 'q', state.orderSearch );
+		if ( state[ listSpec().searchKey ] ) url.searchParams.set( 'q', state[ listSpec().searchKey ] );
 		history.replaceState( null, '', url.pathname + url.search + url.hash );
 	}
 
@@ -5236,7 +5271,7 @@
 	const orderPresetLabel = () => {
 		const f = orderFilters();
 		if ( ! f.status.length ) return __( 'All' );
-		if ( f.status.length === 1 ) return orderStatusLabel( f.status[ 0 ] );
+		if ( f.status.length === 1 ) return listSpec().statusLabel( f.status[ 0 ] );
 		/* translators: %d: number of order statuses being filtered on. */
 		return sprintf( _n( '%d status', '%d statuses', f.status.length ), f.status.length );
 	};
@@ -5251,7 +5286,7 @@
 	function orderFilterChipsHtml() {
 		const f = orderFilters();
 		const chips = [];
-		if ( f.status.length ) chips.push( [ 'status', __( 'Status' ), f.status.map( orderStatusLabel ).join( ', ' ) ] );
+		if ( f.status.length ) chips.push( [ 'status', __( 'Status' ), f.status.map( listSpec().statusLabel ).join( ', ' ) ] );
 		if ( f.after || f.before ) chips.push( [ 'date', __( 'Date' ), orderDateChipLabel() ] );
 		if ( f.customer ) chips.push( [ 'customer', __( 'Customer' ), f.customer.label ] );
 		if ( f.product ) chips.push( [ 'product', __( 'Product' ), f.product.label ] );
@@ -5265,6 +5300,54 @@
 			</span>` ).join( '' ) }
 			<button type="button" class="minn-btn-soft" id="minn-order-clearfilters">${ __( 'Clear all' ) }</button>
 		</div>`;
+	}
+
+
+	/** Wire a filter bar. Orders and Subscriptions render the same controls
+	 *  and the same ids, and the active list comes from the route. */
+	function bindListFilterBar( view ) {
+		const spec = listSpec();
+		const presetBtn = $( '#minn-order-preset', view );
+		if ( presetBtn ) presetBtn.addEventListener( 'click', () => openOrderFilterPop( presetBtn, 'preset', view ) );
+		const addFilterBtn = $( '#minn-order-addfilter', view );
+		if ( addFilterBtn ) addFilterBtn.addEventListener( 'click', () => openOrderFilterPop( addFilterBtn, null, view ) );
+		$$( '[data-ofremove]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const f = orderFilters();
+				const kind = btn.dataset.ofremove;
+				if ( kind === 'status' ) f.status = [];
+				else if ( kind === 'date' ) { f.after = ''; f.before = ''; f.datePreset = ''; }
+				else f[ kind ] = null;
+				reloadOrderList( view );
+			} )
+		);
+		$$( '[data-ofchip] > .minn-of-chip-body', view ).forEach( ( body ) =>
+			body.addEventListener( 'click', () =>
+				openOrderFilterPop( body, body.parentNode.dataset.ofchip, view ) )
+		);
+		const clearBtn = $( '#minn-order-clearfilters', view );
+		if ( clearBtn ) clearBtn.addEventListener( 'click', () => {
+			state[ spec.stateKey ] = orderFiltersDefault();
+			reloadOrderList( view );
+		} );
+		const search = $( '#minn-order-search', view );
+		if ( search ) {
+			let searchTimer = null;
+			search.addEventListener( 'input', () => {
+				clearTimeout( searchTimer );
+				searchTimer = setTimeout( () => {
+					state[ spec.searchKey ] = search.value.trim();
+					reloadOrderList( view );
+				}, 280 );
+			} );
+			search.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' && search.value ) {
+					search.value = '';
+					state[ spec.searchKey ] = '';
+					reloadOrderList( view );
+				}
+			} );
+		}
 	}
 
 	/** Repaint the chip bar in place. A filter change reloads the list, and
@@ -5290,17 +5373,18 @@
 
 	/** Reload the list under the current filters, keeping the toolbar painted. */
 	function reloadOrderList( view, paintChrome ) {
+		const spec = listSpec();
 		softListReload( {
-			route: 'orders',
+			route: spec.route,
 			view,
-			clear: () => { state.cache.orders = null; },
+			clear: () => { state.cache[ spec.cacheKey ] = null; },
 			paintChrome: () => {
 				syncOrderFiltersUrl();
 				paintOrderFilterBar( view );
 				if ( typeof paintChrome === 'function' ) paintChrome();
 			},
-			load: () => loadOrders( 1 ),
-			render: renderOrders,
+			load: () => spec.load( 1 ),
+			render: spec.render,
 		} );
 	}
 
@@ -5333,11 +5417,11 @@
 				`<button type="button" class="minn-of-row" data-offilter="${ id }">${ esc( label ) }</button>` ).join( '' );
 		} else if ( kind === 'preset' ) {
 			// Single-status shortcuts: the old tab strip, folded into a menu.
-			pop.innerHTML = ORDER_TABS.map( ( [ id, label ] ) =>
+			pop.innerHTML = listSpec().presets().map( ( [ id, label ] ) =>
 				`<button type="button" class="minn-of-row${ orderPresetActive() === id ? ' is-on' : '' }" data-opreset="${ id }">${ esc( label ) }</button>` ).join( '' );
 		} else if ( kind === 'status' ) {
-			pop.innerHTML = ORDER_TAB_SLUGS.filter( ( s ) => s !== 'any' ).map( ( slug ) =>
-				`<button type="button" class="minn-of-row${ f.status.indexOf( slug ) !== -1 ? ' is-on' : '' }" data-ofval="${ slug }">${ esc( orderStatusLabel( slug ) ) }</button>` ).join( '' )
+			pop.innerHTML = listSpec().statuses().map( ( slug ) =>
+				`<button type="button" class="minn-of-row${ f.status.indexOf( slug ) !== -1 ? ' is-on' : '' }" data-ofval="${ slug }">${ esc( listSpec().statusLabel( slug ) ) }</button>` ).join( '' )
 				+ `<div class="minn-of-foot"><button type="button" class="minn-btn-primary" data-ofapply>${ __( 'Apply' ) }</button></div>`;
 		} else if ( kind === 'date' ) {
 			pop.innerHTML = ORDER_DATE_PRESETS.map( ( [ days, label ] ) =>
@@ -7071,47 +7155,7 @@
 		);
 		const addOrderBtn = $( '#minn-order-add', view );
 		if ( addOrderBtn ) addOrderBtn.addEventListener( 'click', () => openNewOrderModal() );
-		const presetBtn = $( '#minn-order-preset', view );
-		if ( presetBtn ) presetBtn.addEventListener( 'click', () => openOrderFilterPop( presetBtn, 'preset', view ) );
-		const addFilterBtn = $( '#minn-order-addfilter', view );
-		if ( addFilterBtn ) addFilterBtn.addEventListener( 'click', () => openOrderFilterPop( addFilterBtn, null, view ) );
-		$$( '[data-ofremove]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const f = orderFilters();
-				const kind = btn.dataset.ofremove;
-				if ( kind === 'status' ) f.status = [];
-				else if ( kind === 'date' ) { f.after = ''; f.before = ''; f.datePreset = ''; }
-				else f[ kind ] = null;
-				reloadOrderList( view );
-			} )
-		);
-		$$( '[data-ofchip] > .minn-of-chip-body', view ).forEach( ( body ) =>
-			body.addEventListener( 'click', () =>
-				openOrderFilterPop( body, body.parentNode.dataset.ofchip, view ) )
-		);
-		const clearBtn = $( '#minn-order-clearfilters', view );
-		if ( clearBtn ) clearBtn.addEventListener( 'click', () => {
-			state.orderFilters = orderFiltersDefault();
-			reloadOrderList( view );
-		} );
-		const orderSearch = $( '#minn-order-search', view );
-		if ( orderSearch ) {
-			let orderSearchTimer = null;
-			orderSearch.addEventListener( 'input', () => {
-				clearTimeout( orderSearchTimer );
-				orderSearchTimer = setTimeout( () => {
-					state.orderSearch = orderSearch.value.trim();
-					reloadOrderList( view );
-				}, 280 );
-			} );
-			orderSearch.addEventListener( 'keydown', ( e ) => {
-				if ( e.key === 'Escape' && orderSearch.value ) {
-					orderSearch.value = '';
-					state.orderSearch = '';
-					reloadOrderList( view );
-				}
-			} );
-		}
+		bindListFilterBar( view );
 		// Clicking an order is navigation now — the /orders/{id} page is the
 		// primary detail surface; the modal survives as Quick view (the row's
 		// hover eye button and the right-click menu).
@@ -7208,7 +7252,7 @@
 	const SUB_LIST_FIELDS = 'id,number,status,total,currency,date_created,billing,line_items,billing_period,billing_interval,next_payment_date_gmt,start_date_gmt,customer_id,parent_id';
 	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,requires_manual_renewal,suspension_count';
 
-	const subCtx = () => ( state.subTab || 'any' ) + '|' + ( state.subSearch || '' );
+	const subCtx = () => JSON.stringify( orderFilters( LIST_FILTER_SPECS.subscriptions ) ) + '|' + ( state.subSearch || '' );
 
 	function subPeriodLabel( s ) {
 		const interval = Math.max( 1, parseInt( s.billing_interval, 10 ) || 1 );
@@ -7236,7 +7280,6 @@
 	}
 
 	async function loadSubscriptions( page = 1 ) {
-		const tab = state.subTab || 'any';
 		const q0 = ( state.subSearch || '' ).trim();
 		const ctx = subCtx();
 		const fields = SUB_LIST_FIELDS;
@@ -7245,15 +7288,16 @@
 				const one = await api( `wc/v3/subscriptions/${ q0 }?_fields=${ fields }` );
 				if ( ctx !== subCtx() ) return;
 				if ( one && one.id ) {
-					if ( tab === 'any' || one.status === tab ) {
+					const want = orderFilters( LIST_FILTER_SPECS.subscriptions ).status;
+					if ( ! want.length || want.indexOf( one.status ) !== -1 ) {
 						state.cache.subscriptions = { items: [ one ], page: 1, totalPages: 1, total: 1 };
 						return;
 					}
 				}
 			} catch ( e ) { /* fall through */ }
 		}
-		let q = `wc/v3/subscriptions?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ fields }`;
-		if ( tab && tab !== 'any' ) q += '&status=' + encodeURIComponent( tab );
+		let q = `wc/v3/subscriptions?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ fields }`
+			+ orderFilterQuery( LIST_FILTER_SPECS.subscriptions );
 		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
 		const r = await apiPaged( q );
 		if ( ctx !== subCtx() ) return;
@@ -7315,54 +7359,35 @@
 		const c = state.cache.subscriptions;
 		if ( ! c ) {
 			if ( softLoadPending( 'subscriptions' ) ) return; // a soft reload owns the view
-			const subTab = state.subTab || 'any';
 			view.innerHTML = `
-			<div class="minn-toolbar minn-toolbar-views">
-				<div class="minn-tabs">
-					${ SUB_TABS.map( ( [ id, label ] ) =>
-						`<button class="minn-tab${ subTab === id ? ' active' : '' }" data-stab="${ id }">${ label }</button>` ).join( '' ) }
-				</div>
+			<div class="minn-toolbar minn-order-bar">
+				<button type="button" class="minn-btn-soft minn-of-drop" id="minn-order-preset">${ esc( orderPresetLabel() ) } ${ icon( 'chevron-down' ) }</button>
+				<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="${ esc( __( 'Search subscriptions (ID, name, email…)' ) ) }" value="${ esc( state.subSearch || '' ) }">
+				<button type="button" class="minn-btn-soft" id="minn-order-addfilter">${ icon( 'plus' ) } ${ __( 'Add filter' ) }</button>
+				<div class="minn-toolbar-meta">${ c ? metaLabel( c.total, 'subscription' ) : '' }</div>
 			</div>
+			${ orderFilterChipsHtml() }
 			<div class="minn-loading">Loading subscriptions…</div>`;
-			$$( '[data-stab]', view ).forEach( ( btn ) =>
-				btn.addEventListener( 'click', () => {
-					const tab = btn.dataset.stab;
-					if ( state.subTab === tab ) return;
-					state.subTab = tab;
-					softListReload( {
-						route: 'subscriptions',
-						view,
-						clear: () => { state.cache.subscriptions = null; },
-						paintChrome: () => {
-							$$( '[data-stab]', view ).forEach( ( b ) =>
-								b.classList.toggle( 'active', b.dataset.stab === tab ) );
-						},
-						load: () => loadSubscriptions( 1 ),
-						render: renderSubscriptions,
-					} );
-				} )
-			);
+			bindListFilterBar( view );
 			loadSubscriptions().then( renderIfCurrent( 'subscriptions' ) ).catch( showErr );
 			return;
 		}
-		const subTab = state.subTab || 'any';
-		const subTabLabel = ( SUB_TABS.find( ( [ id ] ) => id === subTab ) || [] )[ 1 ] || '';
+		const subFilters = orderFilters();
 		const emptyMsg = state.subSearch
 			? `No subscriptions match “${ esc( state.subSearch ) }”.`
-			: subTab !== 'any'
-				? `No ${ esc( ( subTabLabel || subTab ).toLowerCase() ) } subscriptions.`
-				: 'No subscriptions yet. When a customer buys a subscription product, it shows up here with status, next payment and related orders.';
+			: subFilters.status.length === 1
+				? sprintf( /* translators: %s: subscription status, e.g. "active". */ __( 'No %s subscriptions.' ), listSpec().statusLabel( subFilters.status[ 0 ] ).toLowerCase() )
+				: orderFiltersActive()
+					? __( 'No subscriptions match these filters.' )
+					: 'No subscriptions yet. When a customer buys a subscription product, it shows up here with status, next payment and related orders.';
 		view.innerHTML = `
-		<div class="minn-toolbar minn-toolbar-views">
-			<div class="minn-tabs">
-				${ SUB_TABS.map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ subTab === id ? ' active' : '' }" data-stab="${ id }">${ label }</button>` ).join( '' ) }
-			</div>
-		</div>
-		<div class="minn-toolbar">
-			<input class="minn-input minn-toolbar-search" id="minn-sub-search" placeholder="Search subscriptions (ID, name, email…)" value="${ esc( state.subSearch || '' ) }">
+		<div class="minn-toolbar minn-order-bar">
+			<button type="button" class="minn-btn-soft minn-of-drop" id="minn-order-preset">${ esc( orderPresetLabel() ) } ${ icon( 'chevron-down' ) }</button>
+			<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="${ esc( __( 'Search subscriptions (ID, name, email…)' ) ) }" value="${ esc( state.subSearch || '' ) }">
+			<button type="button" class="minn-btn-soft" id="minn-order-addfilter">${ icon( 'plus' ) } ${ __( 'Add filter' ) }</button>
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'subscription' ) }</div>
 		</div>
+		${ orderFilterChipsHtml() }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-sub-cols">
 				<div>Subscription</div><div>Customer</div><div>Status</div><div>Next payment</div><div>Total</div><div></div>
@@ -7382,54 +7407,7 @@
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'subscription' ) }`;
 
-		$$( '[data-stab]', view ).forEach( ( btn ) =>
-			btn.addEventListener( 'click', () => {
-				const tab = btn.dataset.stab;
-				if ( state.subTab === tab ) return;
-				state.subTab = tab;
-				softListReload( {
-					route: 'subscriptions',
-					view,
-					clear: () => { state.cache.subscriptions = null; },
-					paintChrome: () => {
-						$$( '[data-stab]', view ).forEach( ( b ) =>
-							b.classList.toggle( 'active', b.dataset.stab === tab ) );
-					},
-					load: () => loadSubscriptions( 1 ),
-					render: renderSubscriptions,
-				} );
-			} )
-		);
-		const subSearch = $( '#minn-sub-search', view );
-		if ( subSearch ) {
-			let t = null;
-			subSearch.addEventListener( 'input', () => {
-				clearTimeout( t );
-				t = setTimeout( () => {
-					state.subSearch = subSearch.value.trim();
-					softListReload( {
-						route: 'subscriptions',
-						view,
-						clear: () => { state.cache.subscriptions = null; },
-						load: () => loadSubscriptions( 1 ),
-						render: renderSubscriptions,
-					} );
-				}, 280 );
-			} );
-			subSearch.addEventListener( 'keydown', ( e ) => {
-				if ( e.key === 'Escape' && subSearch.value ) {
-					subSearch.value = '';
-					state.subSearch = '';
-					softListReload( {
-						route: 'subscriptions',
-						view,
-						clear: () => { state.cache.subscriptions = null; },
-						load: () => loadSubscriptions( 1 ),
-						render: renderSubscriptions,
-					} );
-				}
-			} );
-		}
+		bindListFilterBar( view );
 		$$( '[data-sub]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
 				const s = c.items.find( ( x ) => x.id === parseInt( row.dataset.sub, 10 ) );

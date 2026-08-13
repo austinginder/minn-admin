@@ -248,11 +248,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			await page.evaluate( () => ! document.querySelector( '.minn-of-searching' ) ), '' );
 		const rowShape = await page.evaluate( () => {
 			const item = document.querySelector( '.minn-of-pop .minn-ac-item' );
-			const img = item && item.querySelector( '.minn-of-thumb img' );
-			return { thumbSlot: !! ( item && item.querySelector( '.minn-of-thumb' ) ), src: img ? img.getAttribute( 'src' ) : '' };
+			const thumb = item && item.querySelector( '.minn-of-thumb' );
+			const img = thumb && thumb.querySelector( 'img' );
+			const box = thumb ? thumb.getBoundingClientRect() : { width: 0, height: 0 };
+			return { thumbSlot: !! thumb, src: img ? img.getAttribute( 'src' ) : '', w: Math.round( box.width ), h: Math.round( box.height ) };
 		} );
 		t.check( 'product rows carry the product image',
 			rowShape.thumbSlot && /\.(png|jpe?g|gif|webp)/i.test( rowShape.src ), JSON.stringify( rowShape ) );
+		// The shared button.minn-ac-item rule sets display:block; losing to it
+		// left the thumb inline, where width and height are ignored (it
+		// measured 2px wide on screen while this check did not exist).
+		t.check( 'the thumbnail is actually laid out, not inline',
+			rowShape.w >= 20 && rowShape.h >= 20, JSON.stringify( rowShape ) );
 		await page.click( '.minn-of-pop .minn-ac-item' );
 		t.check( 'product filter keeps only orders containing it',
 			await waitRows( [ made.completed ], [ made.processing, made.guest ] ), JSON.stringify( await visibleIds() ) );

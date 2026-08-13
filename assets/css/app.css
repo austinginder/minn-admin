@@ -2774,12 +2774,17 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-of-search .minn-ac-panel { position: relative; margin-top: 6px; max-height: 190px; overflow-y: auto; }
 .minn-of-searching { padding: 8px 2px 2px; font-size: 12.5px; }
 /* Product rows carry the product's own picture, with the slot reserved so a
-   product without one still lines up. */
-.minn-of-item { display: flex; align-items: center; gap: 8px; }
+   product without one still lines up. The button selector matters: the
+   shared `button.minn-ac-item` rule sets display:block, and losing to it
+   left the thumb inline, where width and height simply do not apply. */
+button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px; }
 .minn-of-thumb {
+	display: inline-flex; align-items: center; justify-content: center;
 	flex: none; width: 26px; height: 26px; border-radius: 6px; overflow: hidden;
-	background: var(--panel2); border: 1px solid var(--border);
+	background: var(--panel2); border: 1px solid var(--border); color: var(--text3);
 }
+/* A product with no picture keeps the slot, with a quiet placeholder mark. */
+.minn-of-thumb:empty::after { content: ""; width: 10px; height: 10px; border-radius: 2px; border: 1.5px solid currentColor; opacity: .5; }
 .minn-of-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* Items edit dialog: name · unit price · qty · remove, per line. */
 .minn-ei-lines { display: flex; flex-direction: column; gap: 7px; }
