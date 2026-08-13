@@ -96,6 +96,27 @@ Each of these is a step change rather than an increment, and none has been begun
   marketing site is a claim that cannot be defended. Likely shape: a median or
   trimmed mean across closed cohorts, with an outlier guard and a floor on how
   much one cohort may exceed its neighbours.
+- **Minn in a language other than English.** Asked for by a user (German), and
+  the machinery is already built: the text domain loads, PHP uses the core
+  functions, and the app carries its own `__()`, `_n()` and `sprintf()` fed from
+  the boot payload, so a locale is a matter of dropping the normal `.mo` and
+  `wp i18n make-json` output into `languages/`. The gap is coverage, not
+  plumbing. 585 strings are extractable today and roughly the same number is
+  still hardcoded in the app: about 340 unique pieces of visible text and 226
+  placeholder, title and aria-label attributes. The shipped `.pot` compounds it
+  by being four releases stale, stamped 0.25.0 against 353 strings. So a
+  translator handed today's file would produce an admin that reverts to English
+  the moment anyone does real work, since Cancel, Save changes, Status and most
+  placeholders are still literals, and a half-translated interface reads worse
+  than an English one. The order is: regenerate the `.pot`, sweep the remaining
+  literals view by view the way the convention already says, then ship a locale.
+  German is the natural first because the suite already exercises it as a
+  fixture. The open question is not engineering but upkeep. Minn is distributed
+  from GitHub rather than wp.org, so there is no translate.wordpress.org and no
+  volunteer translation community attached, which means every locale shipped
+  becomes a standing obligation on each release. The likely answer is to finish
+  the sweep and publish the `.pot`, then accept locales from contributors who
+  will maintain them, rather than owning a language here.
 - **Somebody else's fleet.** Every install today is one person's or one agency's
   choice. The unlock is a host or an agency standardizing on Minn for client
   sites, which is the first time the multi-user and per-user-hiding work gets
