@@ -56,15 +56,80 @@ class Minn_Admin {
 		if ( ! isset( $all[ $file ] ) ) {
 			wp_send_json_error( array( 'message' => 'Plugin not found.' ), 404 );
 		}
+		$denied = self::plugin_toggle_denied( $file );
+		if ( $denied ) {
+			wp_send_json_error( array( 'message' => $denied->get_error_message() ), 403 );
+		}
 		if ( 'active' === $status ) {
-			$result = activate_plugin( $file );
+			$result = activate_plugin( $file, '', self::plugin_toggle_is_network( $file, true ) );
 			if ( is_wp_error( $result ) ) {
 				wp_send_json_error( array( 'message' => wp_strip_all_tags( $result->get_error_message() ) ), 500 );
 			}
 		} else {
-			deactivate_plugins( $file );
+			deactivate_plugins( $file, false, self::plugin_toggle_is_network( $file, false ) );
 		}
 		wp_send_json_success( array( 'plugin' => $id, 'status' => $status ) );
+	}
+
+	/**
+	 * May the current user flip THIS plugin's activation from a per-site surface?
+	 *
+	 * The per-object `activate_plugin` meta cap is not enough on its own. Core
+	 * only folds manage_network_plugins into it when the network HIDES the
+	 * plugins menu (capabilities.php reads menu_items['plugins']), so on a
+	 * network that grants subsite administrators that menu the meta cap passes
+	 * for a network-active plugin too. wp-admin still refuses — plugins.php
+	 * redirects away when ! is_network_admin() && is_plugin_active_for_network()
+	 * and passes is_network_admin() as $network_wide — and core's REST
+	 * controller answers rest_cannot_manage_network_plugins / rest_network_only_plugin.
+	 * These are those guards, so one tenant cannot disable a plugin for every
+	 * site on the network, or force a network-only plugin on to all of them.
+	 *
+	 * @param string $file Plugin file relative to the plugins directory.
+	 * @return WP_Error|null Error to answer with, or null when the change is allowed.
+	 */
+	public static function plugin_toggle_denied( $file ) {
+		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		if ( ! current_user_can( 'activate_plugin', $file ) ) {
+			return new WP_Error( 'forbidden', __( 'Sorry, you are not allowed to manage this plugin.', 'minn-admin' ) );
+		}
+		if ( ! is_multisite() || current_user_can( 'manage_network_plugins' ) ) {
+			return null;
+		}
+		if ( is_plugin_active_for_network( $file ) ) {
+			return new WP_Error( 'network_active', __( 'That plugin is turned on for the whole network, so only a network administrator can change it.', 'minn-admin' ) );
+		}
+		if ( is_network_only_plugin( $file ) ) {
+			return new WP_Error( 'network_only', __( 'That plugin can only run network-wide, so only a network administrator can turn it on.', 'minn-admin' ) );
+		}
+		return null;
+	}
+
+	/**
+	 * The explicit $network_wide to hand activate_plugin()/deactivate_plugins().
+	 *
+	 * Never leave it at the default: deactivate_plugins() reads null as "yes,
+	 * network-wide" for a network-active plugin, and activate_plugin() lets
+	 * is_network_only_plugin() force it true. Passing the value outright means
+	 * a per-site request can only ever become a network write for someone who
+	 * holds manage_network_plugins, which plugin_toggle_denied() has confirmed.
+	 *
+	 * @param string $file       Plugin file relative to the plugins directory.
+	 * @param bool   $activating True when turning the plugin on.
+	 * @return bool
+	 */
+	public static function plugin_toggle_is_network( $file, $activating ) {
+		if ( ! is_multisite() || ! current_user_can( 'manage_network_plugins' ) ) {
+			return false;
+		}
+		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		return $activating
+			? is_network_only_plugin( $file )
+			: is_plugin_active_for_network( $file );
 	}
 
 	/**
