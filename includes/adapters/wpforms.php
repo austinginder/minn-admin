@@ -121,6 +121,27 @@ function minn_admin_wpforms_table() {
 }
 
 /** Map of wpforms form id => title, for tabs and entry meta. */
+/**
+ * Form titles this user may actually SEE, for the tab strip and status card.
+ *
+ * WPForms' own getter defaults $args['cap'] to view_form_single once Access
+ * Controls are on, so a user provisioned for their own forms does not see
+ * other authors' form names in the plugin. The entry routes were scoped in
+ * 0.26.0; these two siblings in the same file were not, and a form TITLE is
+ * business structure ("Legal Complaint Intake") and a targeting aid.
+ *
+ * @return array<int, string> id => title
+ */
+function minn_admin_wpforms_visible_form_titles() {
+	$titles = array();
+	foreach ( minn_admin_wpforms_form_titles() as $id => $title ) {
+		if ( minn_admin_wpforms_can_form( $id, 'view_form_single' ) ) {
+			$titles[ (int) $id ] = $title;
+		}
+	}
+	return $titles;
+}
+
 function minn_admin_wpforms_form_titles() {
 	$titles = array();
 	foreach ( get_posts( array(
@@ -197,12 +218,29 @@ function minn_admin_wpforms_display_status( $row ) {
 function minn_admin_wpforms_status_model() {
 	global $wpdb;
 	$table = minn_admin_wpforms_table();
+	// Confine the tallies to the forms this user may read, the way the entry
+	// routes are confined; site-wide counts told a per-form user how much
+	// traffic every other form gets.
+	$allowed = minn_admin_wpforms_allowed_form_ids();
+	$scope   = '';
+	if ( is_array( $allowed ) ) {
+		if ( ! $allowed ) {
+			return array(
+				'rows'    => array(
+					array( 'label' => 'Unread entries', 'value' => '0' ),
+					array( 'label' => 'Forms', 'value' => '0' ),
+				),
+				'actions' => array(),
+			);
+		}
+		$scope = ' AND form_id IN (' . implode( ',', array_map( 'intval', $allowed ) ) . ')';
+	}
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$unread = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status NOT IN ('spam','trash') AND viewed = 0" );
-	$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status NOT IN ('spam','trash')" );
-	$spam   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'spam'" );
+	$unread = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status NOT IN ('spam','trash') AND viewed = 0{$scope}" );
+	$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status NOT IN ('spam','trash'){$scope}" );
+	$spam   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'spam'{$scope}" );
 	// phpcs:enable
-	$forms = count( minn_admin_wpforms_form_titles() );
+	$forms = count( minn_admin_wpforms_visible_form_titles() );
 	$hint  = number_format_i18n( $total ) . ' total';
 	if ( $spam ) {
 		$hint .= ', ' . number_format_i18n( $spam ) . ' spam';
@@ -369,7 +407,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => $view,
 		'callback'            => function () {
 			$out = array();
-			foreach ( minn_admin_wpforms_form_titles() as $id => $title ) {
+			foreach ( minn_admin_wpforms_visible_form_titles() as $id => $title ) {
 				$out[] = array( 'id' => $id, 'title' => $title );
 			}
 			return rest_ensure_response( $out );
@@ -435,7 +473,7 @@ add_action( 'rest_api_init', function () {
 				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 			// phpcs:enable
-			$titles = minn_admin_wpforms_form_titles();
+			$titles = minn_admin_wpforms_visible_form_titles();
 			$items  = array_map( function ( $r ) use ( $titles ) {
 				return array(
 					'id'         => (int) $r->entry_id,
@@ -479,7 +517,7 @@ add_action( 'rest_api_init', function () {
 				foreach ( minn_admin_wpforms_answers( $row->fields ) as $label => $value ) {
 					$answers[] = array( 'label' => $label, 'value' => '' !== $value ? $value : '—' );
 				}
-				$titles = minn_admin_wpforms_form_titles();
+				$titles = minn_admin_wpforms_visible_form_titles();
 				$meta   = array(
 					array( 'label' => 'Form', 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
 					array( 'label' => 'Entry', 'value' => '#' . (int) $row->entry_id ),

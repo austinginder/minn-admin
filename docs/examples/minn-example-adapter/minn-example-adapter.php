@@ -80,10 +80,15 @@ function campfire_install() {
  * a convenience, the REST layer is the boundary. Centralize the answer so
  * the two can never disagree. Swap this for your plugin's real capability
  * model (an option-driven cap, a granular cap, a role check).
+ *
+ * Pick the capability for the DATA, not for the screen. These rows hold
+ * visitor names, email addresses and message bodies, so the bar is the one
+ * you would set for reading comments — not edit_posts, which every
+ * Contributor holds. A surface is only ever as private as its capability.
  */
 
 function campfire_can() {
-	return current_user_can( 'edit_posts' );
+	return current_user_can( 'moderate_comments' );
 }
 
 /* ===== Step 3 — the REST shim =====
@@ -270,7 +275,8 @@ function campfire_surface( $surfaces ) {
 		'icon'       => 'inbox',
 		// Checked server-side before the surface exists for the user. Your
 		// routes' permission_callback stays the real boundary (step 2).
-		'cap'        => 'edit_posts',
+		// Match campfire_can(): the two must never disagree.
+		'cap'        => 'moderate_comments',
 		// Workspace is for inbox shapes only: new items arrive and need a
 		// human. Logs and plumbing belong in the default Tools group.
 		'group'      => 'workspace',
