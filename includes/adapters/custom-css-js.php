@@ -54,7 +54,18 @@ function minn_admin_ccj_can_write_code( $opts ) {
 	$sides    = array_filter( array_map( 'trim', explode( ',', isset( $opts['side'] ) ? (string) $opts['side'] : '' ) ) );
 	$scripty  = in_array( $language, array( 'js', 'html' ), true );
 	$admin    = (bool) array_intersect( $sides, array( 'admin', 'login' ) );
-	if ( ! $scripty && ! $admin ) {
+	// "CSS is not an execution context" holds only while the bytes never
+	// reach an HTML parser, and that is a property of the SINK, not the
+	// language. With linking=internal (the default) or 'both',
+	// minn_admin_ccj_rebuild_tree() concatenates the caller's bytes between
+	// literal <style type="text/css"> and </style> and the plugin echoes that
+	// file into the page, so a payload can close the element and run script.
+	// Only linking=external is genuinely inert: the file is loaded through
+	// wp_enqueue_style and cannot break out. The 'block' side routes into
+	// block_css.css and is inlined the same way, so it is not exempt either.
+	$linking = isset( $opts['linking'] ) ? (string) $opts['linking'] : 'internal';
+	$inlined = 'external' !== $linking || in_array( 'block', $sides, true );
+	if ( ! $scripty && ! $admin && ! $inlined ) {
 		return true;
 	}
 	// Executable snippets are code, so a site that forbids dashboard code
