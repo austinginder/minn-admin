@@ -615,7 +615,16 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/network/users/(?P<id>\d+)/super', array(
 		'methods'             => 'POST',
-		'permission_callback' => $users,
+		// NOT $users. Core gates the Super Admin checkbox on
+		// manage_network_options (wp-admin/user-edit.php), not on
+		// manage_network_users. The two coincide on stock multisite, where
+		// only a super admin holds either, but operators and role plugins do
+		// split them to make a "network user manager" who administers accounts
+		// without changing network configuration. That principal must not be
+		// able to POST their own id and become super admin.
+		'permission_callback' => function () {
+			return minn_admin_network_can( 'manage_network_options' );
+		},
 		'callback'            => 'minn_admin_network_user_super',
 		'args'                => array(
 			'on' => array( 'type' => 'boolean', 'required' => true ),
@@ -814,7 +823,13 @@ function minn_admin_my_sites( WP_REST_Request $request ) {
 	$per_page = min( 50, max( 1, (int) ( $request['per_page'] ?: 20 ) ) );
 	$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
 	$search   = trim( (string) $request['search'] );
-	if ( '' !== $search ) {
+	// get_blogs_of_user() is an unbounded usermeta scan, and every match that
+	// reaches describe_sites() costs a switch_to_blog cycle. That is fine for
+	// an ordinary membership and is not a query to run on a large network,
+	// which is the guard core provides and Minn's own docblock already
+	// promises. Above the threshold, fall through to the bounded listing
+	// below rather than letting any edit_posts holder drive the scan.
+	if ( '' !== $search && ! wp_is_large_network() ) {
 		$matches = array();
 		foreach ( (array) get_blogs_of_user( get_current_user_id() ) as $blog ) {
 			if ( (int) $blog->site_id !== (int) get_current_network_id()
@@ -965,11 +980,19 @@ function minn_admin_network_sites_create( WP_REST_Request $request ) {
 			array( 'status' => 404 )
 		);
 	}
-	// Core's own reserved-name rules (subdirectory installs reserve wp-admin,
-	// files, feed and friends), plus the site-exists check below.
+	// Core's own reserved-name rules, plus the site-exists check below.
+	// illegal_names is only half of it: core keeps a SEPARATE subdirectory
+	// list (get_subdirectory_reserved_names — wp-admin, wp-json, wp-content,
+	// feed, files…) and enforces it in wpmu_validate_blog_signup(), which
+	// this path does not call. wp_validate_site_data() does not catch it
+	// either, so a site at /wp-json/ would be created and get_site_by_path()
+	// would then route the whole network's REST traffic into it.
 	if ( ! is_subdomain_install() ) {
-		$illegal = get_network_option( null, 'illegal_names', array() );
-		if ( in_array( $address, (array) $illegal, true ) ) {
+		$illegal  = (array) get_network_option( null, 'illegal_names', array() );
+		$reserved = function_exists( 'get_subdirectory_reserved_names' )
+			? (array) get_subdirectory_reserved_names()
+			: array();
+		if ( in_array( $address, $illegal, true ) || in_array( $address, $reserved, true ) ) {
 			return new WP_Error( 'reserved', __( 'That address is reserved. Choose another.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 	}
