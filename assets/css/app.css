@@ -2658,6 +2658,14 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* The product Images card reuses the island tile grid, inline instead of in a
    modal: the page has the room, and it saves with the rest of the form. */
 .minn-pimg-grid { margin-bottom: 10px; }
+/* Downloadable files: a name, a URL and a way out, per row. */
+.minn-pdl-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
+.minn-pdl-row { display: flex; gap: 7px; align-items: center; }
+.minn-pdl-row > input:first-child { flex: 0 1 220px; min-width: 0; }
+.minn-pdl-row > input:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+.minn-pdl-x { flex: none; width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel2); color: var(--text3); cursor: pointer; font-size: 15px; line-height: 1; }
+.minn-pdl-x:hover { color: var(--red); border-color: var(--red); }
+.minn-pdl-empty { color: var(--text3); font-size: 13px; padding: 2px 0 6px; }
 .minn-pimg-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* A group with nothing to sit beside (the short description) takes the row. */
 .minn-order-panel.wide { grid-column: 1 / -1; border-right: none; }
