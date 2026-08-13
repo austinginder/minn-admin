@@ -6705,7 +6705,9 @@
 	const PRODUCT_DETAIL_FIELDS = PRODUCT_LIST_FIELDS + ',short_description,description,date_modified'
 		+ ',global_unique_id,backorders,low_stock_amount,sold_individually'
 		+ ',weight,dimensions,shipping_class,virtual'
-		+ ',slug,featured,tags,brands';
+		+ ',slug,featured,tags,brands'
+		+ ',date_on_sale_from,date_on_sale_to,tax_status,tax_class'
+		+ ',purchase_note,menu_order,reviews_allowed';
 
 	// The Organization card's taxonomies. A store without brands answers with
 	// no `brands` key at all, which is how that field knows to stay away.
@@ -6894,6 +6896,21 @@
 		return shipClassPromise;
 	}
 
+	// Tax classes, same contract: fetched before the first paint, deduped.
+	let taxClassPromise = null;
+	function loadTaxClasses() {
+		if ( state.cache.taxClasses ) return Promise.resolve( state.cache.taxClasses );
+		if ( taxClassPromise ) return taxClassPromise;
+		taxClassPromise = api( 'wc/v3/taxes/classes?_fields=slug,name' )
+			.catch( () => [] )
+			.then( ( r ) => {
+				taxClassPromise = null;
+				state.cache.taxClasses = Array.isArray( r ) ? r : [];
+				return state.cache.taxClasses;
+			} );
+		return taxClassPromise;
+	}
+
 	/**
 	 * Detail fetch shared by the modal and the page. isCur() keeps a late
 	 * response from painting over a surface the reader already left.
@@ -6909,6 +6926,7 @@
 		Promise.all( [
 			api( `wc/v3/products/${ id }?_fields=${ PRODUCT_DETAIL_FIELDS }` ),
 			loadShippingClasses(),
+			loadTaxClasses(),
 		] )
 			.then( ( [ full ] ) => {
 				if ( ! isCur() ) return;
@@ -6959,6 +6977,8 @@
 		const visOpts = [ [ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ];
 		const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ];
 		const backOpts = [ [ 'no', 'Do not allow' ], [ 'notify', 'Allow, but notify customer' ], [ 'yes', 'Allow' ] ];
+		const taxStatusOpts = [ [ 'taxable', 'Taxable' ], [ 'shipping', 'Shipping only' ], [ 'none', 'None' ] ];
+		const taxClasses = state.cache.taxClasses || [ { slug: 'standard', name: 'Standard rate' } ];
 		const dims = p.dimensions || {};
 		// WooCommerce hides shipping entirely for a virtual product, and so
 		// does this: weight and dimensions on something that never ships are
@@ -6998,6 +7018,27 @@
 									<div class="minn-order-field-row">
 										<div><div class="minn-field-label">Regular price</div><input class="minn-input" id="minn-p-regular" type="text" inputmode="decimal" value="${ esc( p.regular_price || '' ) }"></div>
 										<div><div class="minn-field-label">Sale price</div><input class="minn-input" id="minn-p-sale" type="text" inputmode="decimal" value="${ esc( p.sale_price || '' ) }" placeholder="Optional"></div>
+									</div>
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">Sale starts</div><input class="minn-input" id="minn-p-salefrom" readonly placeholder="Any time" data-dp="${ esc( wcDateMachine( p.date_on_sale_from ) ) }" value="${ esc( dpPretty( wcDateMachine( p.date_on_sale_from ) ) ) }"></div>
+										<div><div class="minn-field-label">Sale ends</div><input class="minn-input" id="minn-p-saleto" readonly placeholder="No end" data-dp="${ esc( wcDateMachine( p.date_on_sale_to ) ) }" value="${ esc( dpPretty( wcDateMachine( p.date_on_sale_to ) ) ) }"></div>
+									</div>
+									<div class="minn-toggle-desc">Dates are optional: a sale price with no dates runs until you remove it.</div>
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">Tax status</div>
+											<select class="minn-input" id="minn-p-taxstatus">
+												${ taxStatusOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.tax_status || 'taxable' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+											</select>
+										</div>
+										<div><div class="minn-field-label">Tax class</div>
+											<select class="minn-input" id="minn-p-taxclass">
+												${ taxClasses.map( ( tc ) => {
+													// WooCommerce stores the standard class as an empty string.
+													const v = tc.slug === 'standard' ? '' : tc.slug;
+													return `<option value="${ esc( v ) }"${ ( p.tax_class || '' ) === v ? ' selected' : '' }>${ esc( tc.name ) }</option>`;
+												} ).join( '' ) }
+											</select>
+										</div>
 									</div>
 								</div>` : `
 								<div class="minn-modal-meta" style="padding:0;">
@@ -7092,8 +7133,23 @@
 							</div>` : '' }
 							${ canEdit ? `
 							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Advanced</div>
+								<div class="minn-order-fields">
+									<div>
+										<div class="minn-field-label">Purchase note</div>
+										<textarea class="minn-input" id="minn-p-note" rows="3" placeholder="Sent to the customer after they buy this…">${ esc( wcPlainText( p.purchase_note ) ) }</textarea>
+									</div>
+									<div><div class="minn-field-label">Menu order</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
+									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+										<input type="checkbox" id="minn-p-reviews"${ p.reviews_allowed ? ' checked' : '' }>
+										<span>Enable reviews</span>
+									</label>
+								</div>
+							</div>` : '' }
+							${ canEdit ? `
+							<div class="minn-order-panel wide">
 								<div class="minn-side-title" style="margin:0 0 8px;">Short description</div>
-								<textarea class="minn-input" id="minn-p-short" rows="3" placeholder="Shown near the price in the shop…">${ esc( ( p.short_description || '' ).replace( /<[^>]+>/g, '' ) ) }</textarea>
+								<textarea class="minn-input" id="minn-p-short" rows="3" placeholder="Shown near the price in the shop…">${ esc( wcPlainText( p.short_description ) ) }</textarea>
 								<div class="minn-toggle-desc" style="margin-top:6px;">Plain text summary. The full description, with blocks and images, opens in Minn's editor.</div>
 							</div>` : '' }
 						</div>
@@ -7108,6 +7164,27 @@
 						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } Edit description</button>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
 					</div>`;
+	}
+
+	// WooCommerce returns the note and short description run through wpautop,
+	// but stores what it is given. Feeding the response straight back into a
+	// textarea would wrap the text in another <p> on every save, so the markup
+	// comes off on the way in and plain text goes back.
+	function wcPlainText( html ) {
+		return String( html || '' )
+			.replace( /<\/p>\s*<p[^>]*>/gi, '\n\n' )
+			.replace( /<br\s*\/?>/gi, '\n' )
+			.replace( /<[^>]+>/g, '' )
+			.trim();
+	}
+
+	// WooCommerce's non-GMT sale dates are site-local wall time, which is also
+	// what the date picker speaks, so the two convert by trimming seconds
+	// rather than by shifting a zone.
+	function wcDateMachine( iso ) {
+		if ( ! iso ) return '';
+		const m = String( iso ).match( /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/ );
+		return m ? `${ m[ 1 ] }T${ m[ 2 ] }` : '';
 	}
 
 	// The media picker hands back { id, name, url, alt, thumb }; WooCommerce
@@ -7327,6 +7404,12 @@
 		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
 		bindProductTermFields( m );
 		bindProductImages( m );
+		// Sale dates use Minn's own picker (a native datetime-local cannot be
+		// styled); the value it commits lands on the input's dataset.
+		[ '#minn-p-salefrom', '#minn-p-saleto' ].forEach( ( sel ) => {
+			const el = $( sel );
+			if ( el ) bindDatePicker( el, () => {} );
+		} );
 		const saveBtn = $( '#minn-product-save' );
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 			const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
@@ -7344,6 +7427,16 @@
 			if ( productPriceEditable( p ) ) {
 				payload.regular_price = ( ( $( '#minn-p-regular' ) || {} ).value || '' ).trim();
 				payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
+				payload.tax_status = ( $( '#minn-p-taxstatus' ) || {} ).value || 'taxable';
+				payload.tax_class = ( $( '#minn-p-taxclass' ) || {} ).value || '';
+				// Clearing a sale date sends an empty string, NOT null: WooCommerce
+				// guards these with isset(), and isset( null ) is false, so a null
+				// is accepted with a 200 and quietly changes nothing. Verified
+				// against wc/v3 directly, both ways.
+				const from = ( ( $( '#minn-p-salefrom' ) || {} ).dataset || {} ).dp || '';
+				const to = ( ( $( '#minn-p-saleto' ) || {} ).dataset || {} ).dp || '';
+				payload.date_on_sale_from = from ? from + ':00' : '';
+				payload.date_on_sale_to = to ? to + ':00' : '';
 				payload.manage_stock = !!( $( '#minn-p-manage' ) || {} ).checked;
 				payload.stock_status = ( $( '#minn-p-stock' ) || {} ).value || 'instock';
 				payload.backorders = ( $( '#minn-p-backorders' ) || {} ).value || 'no';
@@ -7369,6 +7462,9 @@
 				};
 				payload.shipping_class = ( $( '#minn-p-shipclass' ) || {} ).value || '';
 			}
+			if ( $( '#minn-p-note' ) ) payload.purchase_note = ( $( '#minn-p-note' ).value || '' ).trim();
+			if ( $( '#minn-p-menuorder' ) ) payload.menu_order = parseInt( $( '#minn-p-menuorder' ).value, 10 ) || 0;
+			if ( $( '#minn-p-reviews' ) ) payload.reviews_allowed = !! $( '#minn-p-reviews' ).checked;
 			if ( $( '#minn-p-slug' ) ) payload.slug = ( $( '#minn-p-slug' ).value || '' ).trim();
 			if ( $( '#minn-p-featured' ) ) payload.featured = !! $( '#minn-p-featured' ).checked;
 			// Images send the whole ordered set for the same reason, and the
