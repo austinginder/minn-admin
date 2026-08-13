@@ -6871,9 +6871,15 @@
 		const id = m.product.id;
 		const isCur = () => ( m.page ? state.productPage === m : state.modal === m );
 		const repaint = () => { if ( m.page ) renderProductPage(); else renderOverlays(); };
-		loadShippingClasses().then( () => { if ( isCur() && ! m.loading ) repaint(); } );
-		api( `wc/v3/products/${ id }?_fields=${ PRODUCT_DETAIL_FIELDS }` )
-			.then( ( full ) => {
+		// The shipping-class vocabulary is fetched BEFORE the first paint, not
+		// merged in when it lands. A late repaint to fill that select rebuilds
+		// the whole form and silently discards whatever has been typed into it
+		// in the meantime (the editor's late-render wipe, same shape).
+		Promise.all( [
+			api( `wc/v3/products/${ id }?_fields=${ PRODUCT_DETAIL_FIELDS }` ),
+			loadShippingClasses(),
+		] )
+			.then( ( [ full ] ) => {
 				if ( ! isCur() ) return;
 				m.full = full;
 				m.loading = false;
