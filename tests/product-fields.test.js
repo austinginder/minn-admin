@@ -190,6 +190,32 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			t.check( 'virtual product keeps Inventory', vCards.gtin, JSON.stringify( vCards ) );
 		}
 
+		// The shipping-class vocabulary must be in hand BEFORE the form paints.
+		// When it was merged in on arrival, the repaint rebuilt the form and
+		// threw away whatever had been typed. Delaying the request makes the
+		// old race deterministic: if the form ever repaints, the probe dies
+		// with the node it was stamped on.
+		await page.route( '**/products/shipping_classes*', async ( route ) => {
+			await new Promise( ( r ) => setTimeout( r, 2500 ) );
+			await route.continue();
+		} );
+		await page.goto( BASE + '/minn-admin/products/' + id, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-p-name', { timeout: 30000 } );
+		await page.evaluate( () => { document.querySelector( '#minn-p-name' )._minnProbe = 'wave2'; } );
+		await page.fill( '#minn-p-name', 'Typed during the slow load' );
+		await page.waitForTimeout( 3500 );
+		const survived = await page.evaluate( () => {
+			const el = document.querySelector( '#minn-p-name' );
+			return { probe: el && el._minnProbe, value: el && el.value,
+				opts: document.querySelectorAll( '#minn-p-shipclass option' ).length };
+		} );
+		t.check( 'a slow shipping-class load never rebuilds the form',
+			survived.probe === 'wave2' && survived.value === 'Typed during the slow load',
+			JSON.stringify( survived ) );
+		t.check( 'the shipping select is populated on first paint',
+			survived.opts > 1, String( survived.opts ) );
+		await page.unroute( '**/products/shipping_classes*' );
+
 		// The quick view shares the body, so it carries the same fields.
 		await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( `.minn-table-row[data-product="${ id }"] [data-pqv]`, { timeout: 20000 } ).catch( () => null );
