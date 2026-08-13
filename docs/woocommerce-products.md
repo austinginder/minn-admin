@@ -82,8 +82,14 @@ its own.
    what WooCommerce does, and an empty low-stock box saves `null` rather than
    `0`, because `0` is a real threshold and `null` means "use the store
    default". Shipping classes load once per session through a deduped promise.
-3. **Organization**: categories, tags, brands, slug, featured. Needs a term
-   picker, which the Terms manager's autocomplete already models.
+3. **Organization** (shipped): categories, tags, brands, slug, featured. Chips
+   plus an async suggest per taxonomy, in the Terms manager's pattern. Tags and
+   brands are flat, so Enter creates one that does not exist yet; categories are
+   pick-only, because a typo would leave junk in a hierarchy this card is not
+   editing. Brands render only when the store answers with a `brands` key, so a
+   WooCommerce without brands shows nothing. Picks live on the detail model
+   rather than in the DOM, and taxonomies save as the whole set because
+   WooCommerce replaces rather than merges.
 4. **Images**: featured plus gallery, reorder and replace. The island images
    editor's tile grid is the closest existing UI.
 5. **Advanced and pricing extras**: sale schedule, purchase note, menu order,
