@@ -6976,15 +6976,13 @@
 		const stockOpts = [ [ 'instock', 'In stock' ], [ 'outofstock', 'Out of stock' ], [ 'onbackorder', 'On backorder' ] ];
 		const visOpts = [ [ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ];
 		const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ];
-		const backOpts = [ [ 'no', 'Do not allow' ], [ 'notify', 'Allow, but notify customer' ], [ 'yes', 'Allow' ] ];
-		const taxStatusOpts = [ [ 'taxable', 'Taxable' ], [ 'shipping', 'Shipping only' ], [ 'none', 'None' ] ];
-		const taxClasses = state.cache.taxClasses || [ { slug: 'standard', name: 'Standard rate' } ];
+		const combos = productComboSpecs( p );
+		const combo = ( id ) => productComboHtml( combos.find( ( c ) => c.id === id ) );
 		const dims = p.dimensions || {};
 		// WooCommerce hides shipping entirely for a virtual product, and so
 		// does this: weight and dimensions on something that never ships are
 		// noise the store will never use.
 		const shipOk = ! p.virtual;
-		const shipClasses = state.cache.shippingClasses || [];
 		return `
 					<div class="minn-order-body">
 						<div class="minn-order-grid minn-grid-rows">
@@ -6994,16 +6992,8 @@
 								${ canEdit ? `
 								<div class="minn-order-fields">
 									<div><div class="minn-field-label">Name</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
-									<div><div class="minn-field-label">Status</div>
-										<select class="minn-input" id="minn-p-status">
-											${ statusOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ p.status === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-										</select>
-									</div>
-									<div><div class="minn-field-label">Catalog visibility</div>
-										<select class="minn-input" id="minn-p-vis">
-											${ visOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.catalog_visibility || 'visible' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-										</select>
-									</div>
+									${ combo( 'minn-p-status' ) }
+									${ combo( 'minn-p-vis' ) }
 								</div>` : `
 								<div class="minn-modal-meta" style="padding:0;">
 									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( p.name || '' ) }</span></div>
@@ -7025,20 +7015,8 @@
 									</div>
 									<div class="minn-toggle-desc">Dates are optional: a sale price with no dates runs until you remove it.</div>
 									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">Tax status</div>
-											<select class="minn-input" id="minn-p-taxstatus">
-												${ taxStatusOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.tax_status || 'taxable' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-											</select>
-										</div>
-										<div><div class="minn-field-label">Tax class</div>
-											<select class="minn-input" id="minn-p-taxclass">
-												${ taxClasses.map( ( tc ) => {
-													// WooCommerce stores the standard class as an empty string.
-													const v = tc.slug === 'standard' ? '' : tc.slug;
-													return `<option value="${ esc( v ) }"${ ( p.tax_class || '' ) === v ? ' selected' : '' }>${ esc( tc.name ) }</option>`;
-												} ).join( '' ) }
-											</select>
-										</div>
+										${ combo( 'minn-p-taxstatus' ) }
+										${ combo( 'minn-p-taxclass' ) }
 									</div>
 								</div>` : `
 								<div class="minn-modal-meta" style="padding:0;">
@@ -7065,30 +7043,16 @@
 										<div><div class="minn-field-label">GTIN, UPC, EAN or ISBN</div><input class="minn-input" id="minn-p-gtin" value="${ esc( p.global_unique_id || '' ) }" placeholder="Optional"></div>
 									</div>
 									${ priceOk ? `
-									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
-										<input type="checkbox" id="minn-p-manage"${ p.manage_stock ? ' checked' : '' }>
-										<span>Track stock quantity</span>
-									</label>
+									${ productToggleHtml( 'minn-p-manage', 'Track stock quantity', p.manage_stock ) }
 									<div id="minn-p-stock-row" ${ p.manage_stock ? '' : 'style="display:none;"' }>
 										<div class="minn-order-field-row">
 											<div><div class="minn-field-label">Quantity</div><input class="minn-input" id="minn-p-qty" type="number" step="1" value="${ p.stock_quantity != null ? esc( String( p.stock_quantity ) ) : '' }"></div>
 											<div><div class="minn-field-label">Low stock at</div><input class="minn-input" id="minn-p-lowstock" type="number" step="1" min="0" value="${ p.low_stock_amount != null ? esc( String( p.low_stock_amount ) ) : '' }" placeholder="Store default"></div>
 										</div>
-										<div style="margin-top:8px;"><div class="minn-field-label">Backorders</div>
-											<select class="minn-input" id="minn-p-backorders">
-												${ backOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.backorders || 'no' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-											</select>
-										</div>
+										<div style="margin-top:8px;">${ combo( 'minn-p-backorders' ) }</div>
 									</div>
-									<div><div class="minn-field-label">Stock status</div>
-										<select class="minn-input" id="minn-p-stock">
-											${ stockOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.stock_status || 'instock' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-										</select>
-									</div>` : '' }
-									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
-										<input type="checkbox" id="minn-p-solo"${ p.sold_individually ? ' checked' : '' }>
-										<span>Limit purchases to 1 item per order</span>
-									</label>
+									${ combo( 'minn-p-stock' ) }` : '' }
+									${ productToggleHtml( 'minn-p-solo', 'Limit purchases to 1 item per order', p.sold_individually ) }
 								</div>
 							</div>` : '' }
 							${ canEdit && shipOk ? `
@@ -7104,12 +7068,7 @@
 											<input class="minn-input" id="minn-p-height" type="text" inputmode="decimal" value="${ esc( dims.height || '' ) }" placeholder="Height" aria-label="${ esc( __( 'Height' ) ) }">
 										</div>
 									</div>
-									<div><div class="minn-field-label">Shipping class</div>
-										<select class="minn-input" id="minn-p-shipclass">
-											<option value=""${ ! p.shipping_class ? ' selected' : '' }>No shipping class</option>
-											${ shipClasses.map( ( sc ) => `<option value="${ esc( sc.slug ) }"${ p.shipping_class === sc.slug ? ' selected' : '' }>${ esc( sc.name ) }</option>` ).join( '' ) }
-										</select>
-									</div>
+									${ combo( 'minn-p-shipclass' ) }
 									<div class="minn-toggle-desc">Units come from your WooCommerce store settings.</div>
 								</div>
 							</div>` : '' }
@@ -7125,10 +7084,7 @@
 										</div>
 										${ p.status === 'publish' ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
 									</div>
-									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
-										<input type="checkbox" id="minn-p-featured"${ p.featured ? ' checked' : '' }>
-										<span>Featured product</span>
-									</label>
+									${ productToggleHtml( 'minn-p-featured', 'Featured product', p.featured ) }
 								</div>
 							</div>` : '' }
 							${ canEdit ? `
@@ -7140,10 +7096,7 @@
 										<textarea class="minn-input" id="minn-p-note" rows="3" placeholder="Sent to the customer after they buy this…">${ esc( wcPlainText( p.purchase_note ) ) }</textarea>
 									</div>
 									<div><div class="minn-field-label">Menu order</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
-									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
-										<input type="checkbox" id="minn-p-reviews"${ p.reviews_allowed ? ' checked' : '' }>
-										<span>Enable reviews</span>
-									</label>
+									${ productToggleHtml( 'minn-p-reviews', 'Enable reviews', p.reviews_allowed ) }
 								</div>
 							</div>` : '' }
 							${ canEdit ? `
@@ -7164,6 +7117,65 @@
 						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } Edit description</button>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
 					</div>`;
+	}
+
+	/**
+	 * Every choice on the product page is a Minn combobox rather than a native
+	 * select: a <select> drops an OS-drawn menu that ignores the app's theme
+	 * completely, which reads as a light popup punched through the dark UI.
+	 * The specs are built in one place so the renderer and the binder cannot
+	 * drift over what the options are.
+	 */
+	function productComboSpecs( p ) {
+		const taxClasses = state.cache.taxClasses || [ { slug: 'standard', name: 'Standard rate' } ];
+		const shipClasses = state.cache.shippingClasses || [];
+		return [
+			{ id: 'minn-p-status', label: 'Status', value: p.status || 'publish', options: [
+				[ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ] },
+			{ id: 'minn-p-vis', label: 'Catalog visibility', value: p.catalog_visibility || 'visible', options: [
+				[ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ] },
+			{ id: 'minn-p-stock', label: 'Stock status', value: p.stock_status || 'instock', options: [
+				[ 'instock', 'In stock' ], [ 'outofstock', 'Out of stock' ], [ 'onbackorder', 'On backorder' ] ] },
+			{ id: 'minn-p-backorders', label: 'Backorders', value: p.backorders || 'no', options: [
+				[ 'no', 'Do not allow' ], [ 'notify', 'Allow, but notify customer' ], [ 'yes', 'Allow' ] ] },
+			{ id: 'minn-p-taxstatus', label: 'Tax status', value: p.tax_status || 'taxable', options: [
+				[ 'taxable', 'Taxable' ], [ 'shipping', 'Shipping only' ], [ 'none', 'None' ] ] },
+			// WooCommerce stores the standard tax class as an empty string.
+			{ id: 'minn-p-taxclass', label: 'Tax class', value: p.tax_class || '', options:
+				taxClasses.map( ( tc ) => [ tc.slug === 'standard' ? '' : tc.slug, tc.name ] ) },
+			{ id: 'minn-p-shipclass', label: 'Shipping class', value: p.shipping_class || '', options:
+				[ [ '', 'No shipping class' ] ].concat( shipClasses.map( ( sc ) => [ sc.slug, sc.name ] ) ) },
+		];
+	}
+
+	function productComboHtml( spec ) {
+		if ( ! spec ) return '';
+		const cur = spec.options.find( ( [ v ] ) => String( v ) === String( spec.value ) );
+		return `<div><div class="minn-field-label">${ esc( spec.label ) }</div>
+										<div class="minn-ac">
+											<input class="minn-input minn-ac-input" id="${ esc( spec.id ) }" value="${ esc( cur ? cur[ 1 ] : '' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( spec.label ) }">
+											<div class="minn-ac-panel" hidden></div>
+										</div></div>`;
+	}
+
+	// Strict comboboxes keep the machine value on the input's dataset; .value
+	// is the human label, so reading that would save "In stock" as a status.
+	function pcomboValue( id, fallback ) {
+		const el = $( '#' + id );
+		if ( ! el ) return fallback;
+		return el.dataset.acValue != null ? el.dataset.acValue : fallback;
+	}
+
+	function productToggleHtml( id, label, on ) {
+		return `<div class="minn-toggle-row">
+										<button type="button" class="minn-switch${ on ? ' on' : '' }" id="${ esc( id ) }" role="switch" aria-checked="${ on ? 'true' : 'false' }" aria-label="${ esc( label ) }"><span class="minn-switch-knob"></span></button>
+										<div class="minn-toggle-info"><div class="minn-toggle-label">${ esc( label ) }</div></div>
+									</div>`;
+	}
+
+	function pswitchOn( id ) {
+		const el = $( '#' + id );
+		return !! ( el && el.classList.contains( 'on' ) );
 	}
 
 	// WooCommerce returns the note and short description run through wpautop,
@@ -7389,13 +7401,31 @@
 		const p = m.full || m.product;
 		const isCur = () => ( m.page ? state.productPage === m : state.modal === m );
 		const repaint = () => { if ( m.page ) renderProductPage(); else renderOverlays(); };
-		const manageCb = $( '#minn-p-manage' );
-		const stockRow = $( '#minn-p-stock-row' );
-		if ( manageCb && stockRow ) {
-			manageCb.addEventListener( 'change', () => {
-				stockRow.style.display = manageCb.checked ? '' : 'none';
+		// Comboboxes in place of native selects, armed from the same specs the
+		// markup was rendered from so the two cannot disagree.
+		productComboSpecs( p ).forEach( ( spec ) => {
+			const input = $( '#' + spec.id );
+			const wrap = input && input.closest( '.minn-ac' );
+			if ( ! wrap ) return; // that card did not render for this product
+			bindAutocomplete( wrap, spec.options.map( ( [ value, label ] ) => ( { value, label } ) ), {
+				strict: true,
+				value: spec.value,
 			} );
-		}
+		} );
+		// Switches in place of checkboxes: click flips .on, which is what the
+		// save payload reads.
+		$$( '.minn-order-body .minn-switch, .minn-order-page .minn-switch' ).forEach( ( sw ) => {
+			if ( sw._minnBound ) return;
+			sw._minnBound = true;
+			sw.addEventListener( 'click', () => {
+				const on = sw.classList.toggle( 'on' );
+				sw.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+				if ( sw.id === 'minn-p-manage' ) {
+					const row = $( '#minn-p-stock-row' );
+					if ( row ) row.style.display = on ? '' : 'none';
+				}
+			} );
+		} );
 		// The long description is Minn's own editor, not a field here: the
 		// product type registers editor + autosave support, so
 		// /editor/product/{id} is the real writing surface, with blocks and
@@ -7420,15 +7450,15 @@
 			const payload = {
 				name,
 				sku: ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim(),
-				status: ( $( '#minn-p-status' ) || {} ).value || p.status,
-				catalog_visibility: ( $( '#minn-p-vis' ) || {} ).value || 'visible',
+				status: pcomboValue( 'minn-p-status', p.status ),
+				catalog_visibility: pcomboValue( 'minn-p-vis', 'visible' ),
 				short_description: ( ( $( '#minn-p-short' ) || {} ).value || '' ).trim(),
 			};
 			if ( productPriceEditable( p ) ) {
 				payload.regular_price = ( ( $( '#minn-p-regular' ) || {} ).value || '' ).trim();
 				payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
-				payload.tax_status = ( $( '#minn-p-taxstatus' ) || {} ).value || 'taxable';
-				payload.tax_class = ( $( '#minn-p-taxclass' ) || {} ).value || '';
+				payload.tax_status = pcomboValue( 'minn-p-taxstatus', 'taxable' );
+				payload.tax_class = pcomboValue( 'minn-p-taxclass', '' );
 				// Clearing a sale date sends an empty string, NOT null: WooCommerce
 				// guards these with isset(), and isset( null ) is false, so a null
 				// is accepted with a 200 and quietly changes nothing. Verified
@@ -7437,9 +7467,9 @@
 				const to = ( ( $( '#minn-p-saleto' ) || {} ).dataset || {} ).dp || '';
 				payload.date_on_sale_from = from ? from + ':00' : '';
 				payload.date_on_sale_to = to ? to + ':00' : '';
-				payload.manage_stock = !!( $( '#minn-p-manage' ) || {} ).checked;
-				payload.stock_status = ( $( '#minn-p-stock' ) || {} ).value || 'instock';
-				payload.backorders = ( $( '#minn-p-backorders' ) || {} ).value || 'no';
+				payload.manage_stock = pswitchOn( 'minn-p-manage' );
+				payload.stock_status = pcomboValue( 'minn-p-stock', 'instock' );
+				payload.backorders = pcomboValue( 'minn-p-backorders', 'no' );
 				if ( payload.manage_stock ) {
 					const qtyRaw = ( ( $( '#minn-p-qty' ) || {} ).value || '' ).trim();
 					payload.stock_quantity = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
@@ -7452,7 +7482,7 @@
 			// Identifiers and the purchase limit apply to every product type,
 			// so they are not behind the price gate.
 			if ( $( '#minn-p-gtin' ) ) payload.global_unique_id = ( $( '#minn-p-gtin' ).value || '' ).trim();
-			if ( $( '#minn-p-solo' ) ) payload.sold_individually = !! $( '#minn-p-solo' ).checked;
+			if ( $( '#minn-p-solo' ) ) payload.sold_individually = pswitchOn( 'minn-p-solo' );
 			if ( $( '#minn-p-weight' ) ) {
 				payload.weight = ( $( '#minn-p-weight' ).value || '' ).trim();
 				payload.dimensions = {
@@ -7460,13 +7490,13 @@
 					width: ( ( $( '#minn-p-width' ) || {} ).value || '' ).trim(),
 					height: ( ( $( '#minn-p-height' ) || {} ).value || '' ).trim(),
 				};
-				payload.shipping_class = ( $( '#minn-p-shipclass' ) || {} ).value || '';
+				payload.shipping_class = pcomboValue( 'minn-p-shipclass', '' );
 			}
 			if ( $( '#minn-p-note' ) ) payload.purchase_note = ( $( '#minn-p-note' ).value || '' ).trim();
 			if ( $( '#minn-p-menuorder' ) ) payload.menu_order = parseInt( $( '#minn-p-menuorder' ).value, 10 ) || 0;
-			if ( $( '#minn-p-reviews' ) ) payload.reviews_allowed = !! $( '#minn-p-reviews' ).checked;
+			if ( $( '#minn-p-reviews' ) ) payload.reviews_allowed = pswitchOn( 'minn-p-reviews' );
 			if ( $( '#minn-p-slug' ) ) payload.slug = ( $( '#minn-p-slug' ).value || '' ).trim();
-			if ( $( '#minn-p-featured' ) ) payload.featured = !! $( '#minn-p-featured' ).checked;
+			if ( $( '#minn-p-featured' ) ) payload.featured = pswitchOn( 'minn-p-featured' );
 			// Images send the whole ordered set for the same reason, and the
 			// order is the meaning: entry one is the product image.
 			if ( $( '#minn-p-images' ) && Array.isArray( m.images ) ) {
