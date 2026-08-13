@@ -18,9 +18,31 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Who may read the Aryo activity log through Minn.
+ *
+ * edit_pages is Activity Log's MENU capability, but the menu is not where the
+ * plugin draws its boundary. AAL_Activity_Log_List_Table::_get_where_by_role()
+ * appends an object_type + user_caps clause to EVERY query it runs, so in the
+ * plugin's own screen an Editor sees only Posts/Taxonomies/Attachments/Comments
+ * performed by editor/author/guest — never administrator actions, and never
+ * the Core/Export/Users/Plugins/Options/Theme/Menu/Widget modules.
+ *
+ * Minn's shim reproduces those queries without the role clause, so copying
+ * only the menu cap would hand an Editor plugin installs, user-role changes,
+ * option changes, every acting username and every retained IP, plus the
+ * attempted usernames on failed logins. This view shows everything, so it
+ * asks for the capability that means everything, the way the Stream and WSAL
+ * adapters defer to their vendors' own resolvers. Sites that granted the
+ * lesser cap deliberately can restore it with the filter.
+ *
+ * @return bool
+ */
 function minn_admin_aryo_can_view() {
-	return current_user_can( 'view_all_aryo_activity_log' )
-		|| current_user_can( apply_filters( 'aal_menu_page_capability', 'edit_pages' ) );
+	return (bool) apply_filters(
+		'minn_admin_aryo_can_view',
+		current_user_can( 'view_all_aryo_activity_log' ) || current_user_can( 'manage_options' )
+	);
 }
 
 function minn_admin_aryo_admin_url() {
