@@ -130,14 +130,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'search by product id finds the product', byId.hit, JSON.stringify( byId ) );
 	}
 
+	// The row itself now navigates to /products/{id}; the eye button is the
+	// quick view this suite covers (see product-page.test.js for the page).
 	const clicked = await page.evaluate( ( id ) => {
 		const row = document.querySelector( `.minn-table-row[data-product="${ id }"]` )
 			|| document.querySelector( '.minn-table-row[data-product]' );
-		if ( ! row ) return false;
-		row.click();
+		const eye = row && row.querySelector( '[data-pqv]' );
+		if ( ! eye ) return false;
+		eye.click();
 		return true;
 	}, productId );
-	t.check( 'clicked product row', clicked, '' );
+	t.check( 'opened product quick view', clicked, '' );
 
 	if ( clicked ) {
 		await page.waitForFunction( () => {
