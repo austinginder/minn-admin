@@ -2648,6 +2648,10 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* The product body runs to four panels. The two-panel order body needed no
    rule between rows; a wrapped grid does, or row two floats. */
 .minn-grid-rows > .minn-order-panel:nth-child(n+3) { border-top: 1px solid var(--border); }
+/* The product Images card reuses the island tile grid, inline instead of in a
+   modal: the page has the room, and it saves with the rest of the form. */
+.minn-pimg-grid { margin-bottom: 10px; }
+.minn-pimg-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* A group with nothing to sit beside (the short description) takes the row. */
 .minn-order-panel.wide { grid-column: 1 / -1; border-right: none; }
 @media (max-width: 720px) { .minn-order-panel.wide { grid-column: auto; } }
