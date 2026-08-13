@@ -724,6 +724,7 @@
 		order: [ __( 'Order' ), 'WooCommerce' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
 		products: [ __( 'Products' ), 'WooCommerce' ],
+		product: [ __( 'Product' ), 'WooCommerce' ],
 		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
 		customers: [ __( 'Customers' ), 'WooCommerce' ],
 		users: [ __( 'Users' ), __( 'People' ) ],
@@ -1427,6 +1428,10 @@
 			// /orders/123 — the order detail page.
 			state.orderPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'order';
+		} else if ( route === 'products' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+			// /products/482 — the product detail page.
+			state.productPageId = parseInt( parts[ 1 ], 10 );
+			state.route = 'product';
 		} else if ( route === 'users' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /users/123 — the full-page user editor (GH #8).
 			state.userEditId = parseInt( parts[ 1 ], 10 );
@@ -2358,6 +2363,8 @@
 				|| ( 'terms' === state.route && 'posttypes' === btn.dataset.nav )
 				// The order detail page keeps the Orders item lit.
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
+				// Same for the product detail page and Products.
+				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
 			btn.title = on && navBtnIsCurrent( btn ) ? refreshHint : '';
@@ -6831,15 +6838,25 @@
 	}
 
 	function openProductModal( listProduct ) {
-		const id = listProduct && listProduct.id;
-		if ( ! id ) return;
-		state.modal = { type: 'product', product: listProduct, full: null, loading: true };
+		if ( ! listProduct || ! listProduct.id ) return;
+		const m = state.modal = { type: 'product', product: listProduct, full: null, loading: true };
 		renderOverlays();
+		loadProductDetail( m );
+	}
+
+	/**
+	 * Detail fetch shared by the modal and the page. isCur() keeps a late
+	 * response from painting over a surface the reader already left.
+	 */
+	function loadProductDetail( m ) {
+		const id = m.product.id;
+		const isCur = () => ( m.page ? state.productPage === m : state.modal === m );
+		const repaint = () => { if ( m.page ) renderProductPage(); else renderOverlays(); };
 		api( `wc/v3/products/${ id }?_fields=${ PRODUCT_DETAIL_FIELDS }` )
 			.then( ( full ) => {
-				if ( ! state.modal || state.modal.type !== 'product' || state.modal.product.id !== id ) return;
-				state.modal.full = full;
-				state.modal.loading = false;
+				if ( ! isCur() ) return;
+				m.full = full;
+				m.loading = false;
 				if ( state.cache.products && state.cache.products.items ) {
 					const i = state.cache.products.items.findIndex( ( x ) => x.id === id );
 					if ( i >= 0 ) {
@@ -6857,14 +6874,224 @@
 						} );
 					}
 				}
-				renderOverlays();
+				repaint();
 			} )
 			.catch( ( e ) => {
-				if ( ! state.modal || state.modal.type !== 'product' ) return;
-				state.modal.loading = false;
-				state.modal.loadError = e.message || 'Could not load product';
-				renderOverlays();
+				if ( ! isCur() ) return;
+				m.loading = false;
+				m.loadError = e.message || 'Could not load product';
+				repaint();
 			} );
+	}
+
+	/**
+	 * Product detail body — shared by the quick-view modal and the
+	 * /products/{id} page. Both surfaces edit the same fields; only the
+	 * chrome around this differs (m.page tells them apart).
+	 */
+	function productDetailInnerHtml( m ) {
+		const listP = m.product || {};
+		const p = m.full || listP;
+		const canEdit = B.caps.products;
+		const priceOk = productPriceEditable( p );
+		const cats = ( p.categories || [] ).map( ( c ) => c.name ).filter( Boolean ).join( ', ' );
+		const thumb = p.images && p.images[ 0 ] ? ( p.images[ 0 ].src || p.images[ 0 ].thumbnail || '' ) : '';
+		const stockOpts = [ [ 'instock', 'In stock' ], [ 'outofstock', 'Out of stock' ], [ 'onbackorder', 'On backorder' ] ];
+		const visOpts = [ [ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ];
+		const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ];
+		return `
+					<div class="minn-order-body">
+						<div class="minn-order-grid">
+							<div class="minn-order-panel">
+								${ thumb ? `<div class="minn-prod-modal-img"><img src="${ esc( thumb ) }" alt=""></div>` : '' }
+								<div class="minn-side-title" style="margin:0 0 8px;">Basics</div>
+								${ canEdit ? `
+								<div class="minn-order-fields">
+									<div><div class="minn-field-label">Name</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
+									<div><div class="minn-field-label">SKU</div><input class="minn-input" id="minn-p-sku" value="${ esc( p.sku || '' ) }" placeholder="Optional"></div>
+									<div><div class="minn-field-label">Status</div>
+										<select class="minn-input" id="minn-p-status">
+											${ statusOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ p.status === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+										</select>
+									</div>
+									<div><div class="minn-field-label">Catalog visibility</div>
+										<select class="minn-input" id="minn-p-vis">
+											${ visOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.catalog_visibility || 'visible' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+										</select>
+									</div>
+									${ cats ? `<div class="minn-toggle-desc">Categories: ${ esc( cats ) }</div>` : '' }
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( p.name || '' ) }</span></div>
+									${ p.sku ? `<div class="minn-side-row"><span class="minn-side-key">SKU</span><span>${ esc( p.sku ) }</span></div>` : '' }
+									${ cats ? `<div class="minn-side-row"><span class="minn-side-key">Categories</span><span>${ esc( cats ) }</span></div>` : '' }
+								</div>` }
+							</div>
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Price &amp; stock</div>
+								${ canEdit && priceOk ? `
+								<div class="minn-order-fields">
+									<div class="minn-order-field-row">
+										<div><div class="minn-field-label">Regular price</div><input class="minn-input" id="minn-p-regular" type="text" inputmode="decimal" value="${ esc( p.regular_price || '' ) }"></div>
+										<div><div class="minn-field-label">Sale price</div><input class="minn-input" id="minn-p-sale" type="text" inputmode="decimal" value="${ esc( p.sale_price || '' ) }" placeholder="Optional"></div>
+									</div>
+									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+										<input type="checkbox" id="minn-p-manage"${ p.manage_stock ? ' checked' : '' }>
+										<span>Track stock quantity</span>
+									</label>
+									<div class="minn-order-field-row" id="minn-p-stock-row" ${ p.manage_stock ? '' : 'style="display:none;"' }>
+										<div><div class="minn-field-label">Quantity</div><input class="minn-input" id="minn-p-qty" type="number" step="1" value="${ p.stock_quantity != null ? esc( String( p.stock_quantity ) ) : '' }"></div>
+									</div>
+									<div><div class="minn-field-label">Stock status</div>
+										<select class="minn-input" id="minn-p-stock">
+											${ stockOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.stock_status || 'instock' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
+										</select>
+									</div>
+								</div>` : `
+								<div class="minn-modal-meta" style="padding:0;">
+									<div class="minn-side-row"><span class="minn-side-key">Price</span><span>${ productPriceLabel( p ) }</span></div>
+									<div class="minn-side-row"><span class="minn-side-key">Stock</span><span>${ esc( productStockLabel( p ) ) }</span></div>
+									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">Price and stock for ${ esc( p.type || 'this type' ) } products are managed in WooCommerce (variations or grouped children).</div>` : '' }
+								</div>` }
+								${ canEdit ? `
+								<div style="margin-top:14px;">
+									<div class="minn-side-title" style="margin:0 0 8px;">Short description</div>
+									<textarea class="minn-input" id="minn-p-short" rows="4" placeholder="Shown near the product title…">${ esc( ( p.short_description || '' ).replace( /<[^>]+>/g, '' ) ) }</textarea>
+									<div class="minn-toggle-desc" style="margin-top:6px;">Plain text, shown near the price. The full description opens in Minn's editor.</div>
+								</div>` : '' }
+							</div>
+						</div>
+						${ canEdit ? `
+						<div class="minn-media-edit minn-order-status">
+							<button class="minn-btn-primary" id="minn-product-save" type="button">Save changes</button>
+							<div class="minn-toggle-desc" style="margin-top:8px;">Saves name, SKU, status, visibility${ priceOk ? ', price and stock' : '' }, and short description.</div>
+						</div>` : '' }
+					</div>
+					<div class="minn-modal-actions">
+						${ p.permalink ? `<a class="minn-btn-soft" href="${ esc( p.permalink ) }" target="_blank" rel="noopener">↗ View product</a>` : '' }
+						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } Edit description</button>` : '' }
+						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
+					</div>`;
+	}
+
+	/**
+	 * Product detail bindings — shared by the modal and the /products/{id}
+	 * page (m.page picks which surface repaints after a save).
+	 */
+	function bindProductDetail( m ) {
+		const p = m.full || m.product;
+		const isCur = () => ( m.page ? state.productPage === m : state.modal === m );
+		const repaint = () => { if ( m.page ) renderProductPage(); else renderOverlays(); };
+		const manageCb = $( '#minn-p-manage' );
+		const stockRow = $( '#minn-p-stock-row' );
+		if ( manageCb && stockRow ) {
+			manageCb.addEventListener( 'change', () => {
+				stockRow.style.display = manageCb.checked ? '' : 'none';
+			} );
+		}
+		// The long description is Minn's own editor, not a field here: the
+		// product type registers editor + autosave support, so
+		// /editor/product/{id} is the real writing surface, with blocks and
+		// revisions (docs/woocommerce-products.md).
+		const edBtn = $( '#minn-p-editor' );
+		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
+		const saveBtn = $( '#minn-product-save' );
+		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+			const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
+			if ( ! name ) {
+				toast( 'Name is required', true );
+				return;
+			}
+			const payload = {
+				name,
+				sku: ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim(),
+				status: ( $( '#minn-p-status' ) || {} ).value || p.status,
+				catalog_visibility: ( $( '#minn-p-vis' ) || {} ).value || 'visible',
+				short_description: ( ( $( '#minn-p-short' ) || {} ).value || '' ).trim(),
+			};
+			if ( productPriceEditable( p ) ) {
+				payload.regular_price = ( ( $( '#minn-p-regular' ) || {} ).value || '' ).trim();
+				payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
+				payload.manage_stock = !!( $( '#minn-p-manage' ) || {} ).checked;
+				payload.stock_status = ( $( '#minn-p-stock' ) || {} ).value || 'instock';
+				if ( payload.manage_stock ) {
+					const qtyRaw = ( ( $( '#minn-p-qty' ) || {} ).value || '' ).trim();
+					payload.stock_quantity = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
+				}
+			}
+			saveBtn.disabled = true;
+			saveBtn.textContent = 'Saving…';
+			try {
+				const updated = await api( `wc/v3/products/${ p.id }`, {
+					method: 'PUT',
+					body: JSON.stringify( payload ),
+				} );
+				const full = await api( `wc/v3/products/${ p.id }?_fields=${ PRODUCT_DETAIL_FIELDS }` );
+				if ( isCur() ) {
+					m.full = full || updated;
+					m.product = Object.assign( {}, m.product, {
+						name: full.name,
+						status: full.status,
+						sku: full.sku,
+						price: full.price,
+						regular_price: full.regular_price,
+						sale_price: full.sale_price,
+						stock_status: full.stock_status,
+						stock_quantity: full.stock_quantity,
+						manage_stock: full.manage_stock,
+						on_sale: full.on_sale,
+						catalog_visibility: full.catalog_visibility,
+					} );
+				}
+				toast( 'Product updated' );
+				state.cache.products = null;
+				if ( state.route === 'products' ) renderProducts();
+				repaint();
+			} catch ( e ) {
+				toast( e.message, true );
+				saveBtn.disabled = false;
+				saveBtn.textContent = 'Save changes';
+			}
+		} );
+	}
+
+	/**
+	 * The /products/{id} page — the same body the quick-view modal shows,
+	 * with page chrome instead of an overlay (mirrors renderOrderPage).
+	 */
+	function renderProductPage() {
+		const view = $( '#minn-view' );
+		if ( ! B.wc || ! B.caps.products ) {
+			view.innerHTML = '<div class="minn-empty">You don\'t have access to products on this site.</div>';
+			return;
+		}
+		let m = state.productPage;
+		if ( ! m || m.product.id !== state.productPageId ) {
+			m = state.productPage = { type: 'product', page: true, product: { id: state.productPageId }, full: null, loading: true };
+			loadProductDetail( m );
+		}
+		const p = m.full || m.product;
+		const loading = !! m.loading && ! m.full;
+		const sub = `${ p.type || 'simple' }${ p.sku ? ' · SKU ' + p.sku : '' }${ p.id ? ' · #' + p.id : '' }`;
+		view.innerHTML = `
+		<div class="minn-order-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-pp-back">← Products</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-modal-title">${ esc( p.name || 'Product' ) }</div>
+					<div class="minn-modal-sub">${ loading ? 'Loading…' : esc( sub ) }</div>
+				</div>
+				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
+			</div>
+			<div class="minn-order-page-card">
+				${ loading ? '<div class="minn-loading" style="padding:28px;">Loading product…</div>' : '' }
+				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+				${ ! loading && ! m.loadError ? productDetailInnerHtml( m ) : '' }
+			</div>
+		</div>`;
+		const back = $( '#minn-pp-back' );
+		if ( back ) back.addEventListener( 'click', () => go( 'products' ) );
+		if ( ! loading && ! m.loadError ) bindProductDetail( m );
 	}
 
 	function renderProducts() {
@@ -6965,7 +7192,7 @@
 					<div><span class="minn-status ${ STOCK_STATUS_STYLE[ p.stock_status ] || 'draft' }">${ esc( productStockLabel( p ) ) }</span></div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ productPriceLabel( p ) }</div>
 					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
-					<div class="minn-row-arrow">›</div>
+					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-pqv="${ p.id }" type="button" title="Quick view">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.productSearch ? 'No products match “' + esc( state.productSearch ) + '”.' : ( state.productStock === 'low' ? 'No low-stock products.' : 'No products here.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'product' ) }`;
@@ -7125,10 +7352,19 @@
 			);
 			syncProdBulk();
 		}
+		// The row opens the page; the eye button is the quick look (orders'
+		// pattern, so both stores' lists behave the same way).
 		$$( '[data-product]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', ( e ) => {
 				if ( e.target.closest( '.minn-cbcell' ) ) return;
-				const p = c.items.find( ( x ) => x.id === parseInt( row.dataset.product, 10 ) );
+				const id = parseInt( row.dataset.product, 10 );
+				if ( id ) go( 'products/' + id );
+			} )
+		);
+		$$( '[data-pqv]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', ( e ) => {
+				e.stopPropagation(); // the row click would navigate
+				const p = c.items.find( ( x ) => x.id === parseInt( btn.dataset.pqv, 10 ) );
 				if ( p ) openProductModal( p );
 			} )
 		);
@@ -7149,7 +7385,8 @@
 				e.preventDefault();
 				const out = p.stock_status === 'outofstock';
 				openMinnMenu( e.clientX, e.clientY, [
-					{ label: 'Open product', run: () => openProductModal( p ) },
+					{ label: 'Open product', run: () => go( 'products/' + p.id ) },
+					{ label: 'Quick view', run: () => openProductModal( p ) },
 					...( p.permalink && p.status === 'publish' ? [ { label: 'View on site ↗', href: p.permalink } ] : [] ),
 					// Managed-stock products derive stock_status from quantity — edit those in the modal.
 					...( B.caps.products && ! p.manage_stock ? [ {
@@ -28584,99 +28821,22 @@
 		if ( m.type === 'product' ) {
 			const listP = m.product || {};
 			const p = m.full || listP;
-			const canEdit = B.caps.products;
 			const loading = !! m.loading && ! m.full;
-			const priceOk = productPriceEditable( p );
-			const cats = ( p.categories || [] ).map( ( c ) => c.name ).filter( Boolean ).join( ', ' );
-			const thumb = p.images && p.images[ 0 ] ? ( p.images[ 0 ].src || p.images[ 0 ].thumbnail || '' ) : '';
-			const stockOpts = [ [ 'instock', 'In stock' ], [ 'outofstock', 'Out of stock' ], [ 'onbackorder', 'On backorder' ] ];
-			const visOpts = [ [ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ];
-			const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ];
+			const sub = `${ p.type || 'simple' }${ p.sku ? ' · SKU ' + p.sku : '' }${ p.id ? ' · #' + p.id : '' }`;
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">${ esc( p.name || listP.name || 'Product' ) }</div>
-							<div class="minn-modal-sub">${ esc( p.type || 'simple' ) }${ p.sku ? ' · SKU ' + esc( p.sku ) : '' }${ p.id ? ' · #' + p.id : '' }</div>
+							<div class="minn-modal-sub">${ esc( sub ) }</div>
 						</div>
 						<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading product…</div>' : '' }
 					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
-					${ ! loading && ! m.loadError ? `
-					<div class="minn-order-body">
-						<div class="minn-order-grid">
-							<div class="minn-order-panel">
-								${ thumb ? `<div class="minn-prod-modal-img"><img src="${ esc( thumb ) }" alt=""></div>` : '' }
-								<div class="minn-side-title" style="margin:0 0 8px;">Basics</div>
-								${ canEdit ? `
-								<div class="minn-order-fields">
-									<div><div class="minn-field-label">Name</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
-									<div><div class="minn-field-label">SKU</div><input class="minn-input" id="minn-p-sku" value="${ esc( p.sku || '' ) }" placeholder="Optional"></div>
-									<div><div class="minn-field-label">Status</div>
-										<select class="minn-input" id="minn-p-status">
-											${ statusOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ p.status === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-										</select>
-									</div>
-									<div><div class="minn-field-label">Catalog visibility</div>
-										<select class="minn-input" id="minn-p-vis">
-											${ visOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.catalog_visibility || 'visible' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-										</select>
-									</div>
-									${ cats ? `<div class="minn-toggle-desc">Categories: ${ esc( cats ) }</div>` : '' }
-								</div>` : `
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( p.name || '' ) }</span></div>
-									${ p.sku ? `<div class="minn-side-row"><span class="minn-side-key">SKU</span><span>${ esc( p.sku ) }</span></div>` : '' }
-									${ cats ? `<div class="minn-side-row"><span class="minn-side-key">Categories</span><span>${ esc( cats ) }</span></div>` : '' }
-								</div>` }
-							</div>
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">Price &amp; stock</div>
-								${ canEdit && priceOk ? `
-								<div class="minn-order-fields">
-									<div class="minn-order-field-row">
-										<div><div class="minn-field-label">Regular price</div><input class="minn-input" id="minn-p-regular" type="text" inputmode="decimal" value="${ esc( p.regular_price || '' ) }"></div>
-										<div><div class="minn-field-label">Sale price</div><input class="minn-input" id="minn-p-sale" type="text" inputmode="decimal" value="${ esc( p.sale_price || '' ) }" placeholder="Optional"></div>
-									</div>
-									<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
-										<input type="checkbox" id="minn-p-manage"${ p.manage_stock ? ' checked' : '' }>
-										<span>Track stock quantity</span>
-									</label>
-									<div class="minn-order-field-row" id="minn-p-stock-row" ${ p.manage_stock ? '' : 'style="display:none;"' }>
-										<div><div class="minn-field-label">Quantity</div><input class="minn-input" id="minn-p-qty" type="number" step="1" value="${ p.stock_quantity != null ? esc( String( p.stock_quantity ) ) : '' }"></div>
-									</div>
-									<div><div class="minn-field-label">Stock status</div>
-										<select class="minn-input" id="minn-p-stock">
-											${ stockOpts.map( ( [ v, l ] ) => `<option value="${ v }"${ ( p.stock_status || 'instock' ) === v ? ' selected' : '' }>${ esc( l ) }</option>` ).join( '' ) }
-										</select>
-									</div>
-								</div>` : `
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">Price</span><span>${ productPriceLabel( p ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">Stock</span><span>${ esc( productStockLabel( p ) ) }</span></div>
-									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">Price and stock for ${ esc( p.type || 'this type' ) } products are managed in WooCommerce (variations or grouped children).</div>` : '' }
-								</div>` }
-								${ canEdit ? `
-								<div style="margin-top:14px;">
-									<div class="minn-side-title" style="margin:0 0 8px;">Short description</div>
-									<textarea class="minn-input" id="minn-p-short" rows="4" placeholder="Shown near the product title…">${ esc( ( p.short_description || '' ).replace( /<[^>]+>/g, '' ) ) }</textarea>
-									<div class="minn-toggle-desc" style="margin-top:6px;">Plain text; full product description and gallery stay in WooCommerce.</div>
-								</div>` : '' }
-							</div>
-						</div>
-						${ canEdit ? `
-						<div class="minn-media-edit minn-order-status">
-							<button class="minn-btn-primary" id="minn-product-save" type="button">Save changes</button>
-							<div class="minn-toggle-desc" style="margin-top:8px;">Saves name, SKU, status, visibility${ priceOk ? ', price and stock' : '' }, and short description.</div>
-						</div>` : '' }
-					</div>
-					<div class="minn-modal-actions">
-						${ p.permalink ? `<a class="minn-btn-soft" href="${ esc( p.permalink ) }" target="_blank" rel="noopener">↗ View product</a>` : '' }
-						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
-					</div>` : '' }
+					${ ! loading && ! m.loadError ? productDetailInnerHtml( m ) : '' }
 				</div>
 			</div>`;
 		}
@@ -30326,72 +30486,7 @@
 		}
 
 		if ( m.type === 'product' ) {
-			const p = m.full || m.product;
-			const manageCb = $( '#minn-p-manage' );
-			const stockRow = $( '#minn-p-stock-row' );
-			if ( manageCb && stockRow ) {
-				manageCb.addEventListener( 'change', () => {
-					stockRow.style.display = manageCb.checked ? '' : 'none';
-				} );
-			}
-			const saveBtn = $( '#minn-product-save' );
-			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
-				if ( ! name ) {
-					toast( 'Name is required', true );
-					return;
-				}
-				const payload = {
-					name,
-					sku: ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim(),
-					status: ( $( '#minn-p-status' ) || {} ).value || p.status,
-					catalog_visibility: ( $( '#minn-p-vis' ) || {} ).value || 'visible',
-					short_description: ( ( $( '#minn-p-short' ) || {} ).value || '' ).trim(),
-				};
-				if ( productPriceEditable( p ) ) {
-					payload.regular_price = ( ( $( '#minn-p-regular' ) || {} ).value || '' ).trim();
-					payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
-					payload.manage_stock = !!( $( '#minn-p-manage' ) || {} ).checked;
-					payload.stock_status = ( $( '#minn-p-stock' ) || {} ).value || 'instock';
-					if ( payload.manage_stock ) {
-						const qtyRaw = ( ( $( '#minn-p-qty' ) || {} ).value || '' ).trim();
-						payload.stock_quantity = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
-					}
-				}
-				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
-				try {
-					const updated = await api( `wc/v3/products/${ p.id }`, {
-						method: 'PUT',
-						body: JSON.stringify( payload ),
-					} );
-					const full = await api( `wc/v3/products/${ p.id }?_fields=${ PRODUCT_DETAIL_FIELDS }` );
-					if ( state.modal && state.modal.type === 'product' ) {
-						state.modal.full = full || updated;
-						state.modal.product = Object.assign( {}, state.modal.product, {
-							name: full.name,
-							status: full.status,
-							sku: full.sku,
-							price: full.price,
-							regular_price: full.regular_price,
-							sale_price: full.sale_price,
-							stock_status: full.stock_status,
-							stock_quantity: full.stock_quantity,
-							manage_stock: full.manage_stock,
-							on_sale: full.on_sale,
-							catalog_visibility: full.catalog_visibility,
-						} );
-					}
-					toast( 'Product updated' );
-					state.cache.products = null;
-					if ( state.route === 'products' ) renderProducts();
-					renderOverlays();
-				} catch ( e ) {
-					toast( e.message, true );
-					saveBtn.disabled = false;
-					saveBtn.textContent = 'Save changes';
-				}
-			} );
+			bindProductDetail( m );
 		}
 
 		if ( m.type === 'cpt' ) {
@@ -33599,6 +33694,7 @@
 		if ( state.route !== 'profile' ) state.profile = null;
 		// Order-page data too — a revisit refetches, like the modal always did.
 		if ( state.route !== 'order' ) state.orderPage = null;
+		if ( state.route !== 'product' ) state.productPage = null;
 		// User-edit page data too (same per-visit contract).
 		if ( state.route !== 'useredit' ) state.userEdit = null;
 		switch ( state.route ) {
@@ -33609,6 +33705,7 @@
 			case 'order': return renderOrderPage();
 			case 'subscriptions': return renderSubscriptions();
 			case 'products': return renderProducts();
+			case 'product': return renderProductPage();
 			case 'coupons': return renderCoupons();
 			case 'customers': return renderCustomers();
 			case 'users': return renderUsers();
