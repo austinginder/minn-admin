@@ -3141,7 +3141,7 @@
 		thumb: contentFeaturedThumb( p ),
 	} );
 
-	function contentQuery( page ) {
+	function contentQuery( page, restBase ) {
 		// _fields keeps WP from running the_content on every row — much faster on
 		// large sites, and immune to render-time fatals from other plugins.
 		// "private" requires read_private_posts — requesting it without the cap 403s.
@@ -3161,6 +3161,13 @@
 			+ `&_embed=author,wp:featuredmedia`
 			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,minn_modified,minn_lock,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
+		// Types where this user edits only their own items: core drops other
+		// authors' rows from an edit-context body but still counts them in
+		// X-WP-Total, so the badge and pager would describe a list that isn't
+		// there. Asking for our own author id makes the total match the rows.
+		if ( restBase && ( B.ownOnly || {} )[ restBase ] && B.user && B.user.id ) {
+			q += '&author=' + encodeURIComponent( B.user.id );
+		}
 		// The Modified filter: live posts carrying unsaved edits (a newer
 		// autosave than the saved copy). Meaningless in trash mode.
 		if ( state.contentModified && ! state.contentTrash ) q += '&minn_modified=1';
@@ -3229,13 +3236,15 @@
 		const t = currentCpt();
 		if ( ! t ) return;
 		const ctx = contentCtx();
-		const r = await apiPaged( `wp/v2/${ t.restBase }?` + contentQuery( page ) );
+		const r = await apiPaged( `wp/v2/${ t.restBase }?` + contentQuery( page, t.restBase ) );
 		if ( ctx !== contentCtx() ) return; // context changed mid-flight — discard
+		const items = r.items.map( mapContentItem( t.restBase ) );
 		state.cache.cptContent[ t.restBase ] = {
-			items: r.items.map( mapContentItem( t.restBase ) ),
+			items,
 			page,
 			totalPages: r.totalPages,
-			total: r.total,
+			// Single page means the rows ARE the list — see loadContent.
+			total: r.totalPages <= 1 ? items.length : r.total,
 		};
 	}
 
@@ -3266,7 +3275,7 @@
 		// Requesting a page beyond a source's last one is a REST error, so skip
 		// the shorter source once its page count is known from a previous load.
 		if ( wantPosts && ! ( prev && page > 1 && page > prev.postPages ) ) {
-			jobs.push( apiPaged( 'wp/v2/posts?' + contentQuery( page ) ).then( ( r ) => {
+			jobs.push( apiPaged( 'wp/v2/posts?' + contentQuery( page, 'posts' ) ).then( ( r ) => {
 				c.postPages = r.totalPages;
 				c.postTotal = r.total;
 				c.items.push( ...r.items.map( mapContentItem( 'posts' ) ) );
@@ -3276,7 +3285,7 @@
 			c.postTotal = prev.postTotal;
 		}
 		if ( wantPages && ! ( prev && page > 1 && page > prev.pagePages ) ) {
-			jobs.push( apiPaged( 'wp/v2/pages?' + contentQuery( page ) ).then( ( r ) => {
+			jobs.push( apiPaged( 'wp/v2/pages?' + contentQuery( page, 'pages' ) ).then( ( r ) => {
 				c.pagePages = r.totalPages;
 				c.pageTotal = r.total;
 				c.items.push( ...r.items.map( mapContentItem( 'pages' ) ) );
@@ -3300,6 +3309,11 @@
 		}
 		c.total = ( c.postTotal || 0 ) + ( c.pageTotal || 0 );
 		c.totalPages = Math.max( c.postPages || 0, c.pagePages || 0, 1 );
+		// X-WP-Total counts rows the body may still omit for a per-ITEM reason
+		// the author scope above can't predict — core hides the Privacy Policy
+		// page from anyone without manage_privacy_options, for one. When the
+		// whole list arrived in this response, the rows are the honest count.
+		if ( c.totalPages <= 1 ) c.total = c.items.length;
 		state.cache.content = c;
 
 		// The sidebar badge is the ALL-content count — only a filterless load knows it.
