@@ -122,7 +122,17 @@ its own.
    the names come from a second request that is awaited BEFORE the first paint
    rather than merged in when it lands. A product never offers itself in its
    own results.
-8. **Attributes**: inline custom attributes first, global attributes second.
+8. **Attributes** (shipped): a row per attribute with its values, a Visible
+   flag and a Variations flag. Custom attributes are typed; store-wide (`pa_*`)
+   ones are picked from those that already exist and show their name as a label
+   rather than a field, because the name belongs to the taxonomy.
+
+   Creating a new store-wide attribute stays in WooCommerce, and not only on
+   taste: `pa_*` taxonomies are registered on `init` from the stored
+   definitions, so one created during a request cannot be assigned to a product
+   in that same request. wc/v3 accepts the write with a 200 and silently drops
+   the attribute; the identical call succeeds on the next request. Verified
+   both ways against a live store.
 9. **Variations**: a list view against the variations sub-resource, editing SKU,
    price, stock and image per variation. Attribute creation stays in WooCommerce.
 

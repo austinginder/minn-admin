@@ -6709,7 +6709,38 @@
 		+ ',date_on_sale_from,date_on_sale_to,tax_status,tax_class'
 		+ ',purchase_note,menu_order,reviews_allowed'
 		+ ',downloadable,downloads,download_limit,download_expiry'
-		+ ',external_url,button_text,upsell_ids,cross_sell_ids';
+		+ ',external_url,button_text,upsell_ids,cross_sell_ids,attributes';
+
+	// Attributes come in two kinds. A custom one belongs to this product and
+	// carries a name; a global one is a pa_* taxonomy shared by the store and
+	// carries an id. Minn edits both, but only WooCommerce creates a new global
+	// attribute: the taxonomy is registered on init from the stored
+	// definitions, so one created mid-request cannot be assigned until a later
+	// request (verified against wc/v3, which drops it silently).
+	function seedProductAttributes( m ) {
+		const p = m.full || {};
+		m.attributes = ( Array.isArray( p.attributes ) ? p.attributes : [] ).map( ( a ) => ( {
+			id: a.id || 0,
+			name: a.name || '',
+			options: Array.isArray( a.options ) ? a.options.slice() : [],
+			visible: a.visible !== false,
+			variation: !! a.variation,
+		} ) );
+	}
+
+	let attrDefsPromise = null;
+	function loadAttributeDefs() {
+		if ( state.cache.attributeDefs ) return Promise.resolve( state.cache.attributeDefs );
+		if ( attrDefsPromise ) return attrDefsPromise;
+		attrDefsPromise = api( 'wc/v3/products/attributes?_fields=id,name,slug' )
+			.catch( () => [] )
+			.then( ( r ) => {
+				attrDefsPromise = null;
+				state.cache.attributeDefs = Array.isArray( r ) ? r : [];
+				return state.cache.attributeDefs;
+			} );
+		return attrDefsPromise;
+	}
 
 	// Linked products are stored as bare ids, so the names have to be looked
 	// up separately before anything can be drawn.
@@ -7008,6 +7039,7 @@
 			api( `wc/v3/products/${ id }?_fields=${ PRODUCT_DETAIL_FIELDS }` ),
 			loadShippingClasses(),
 			loadTaxClasses(),
+			loadAttributeDefs(),
 		] )
 			.then( async ( [ full ] ) => {
 				if ( ! isCur() ) return;
@@ -7029,6 +7061,7 @@
 				seedProductImages( m );
 				seedProductDownloads( m );
 				seedProductLinks( m, names );
+				seedProductAttributes( m );
 				if ( state.cache.products && state.cache.products.items ) {
 					const i = state.cache.products.items.findIndex( ( x ) => x.id === id );
 					if ( i >= 0 ) {
@@ -7215,6 +7248,20 @@
 									</div>
 									<div><div class="minn-field-label">Menu order</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
 									${ productToggleHtml( 'minn-p-reviews', 'Enable reviews', p.reviews_allowed ) }
+								</div>
+							</div>` : '' }
+							${ canEdit ? `
+							<div class="minn-order-panel wide">
+								<div class="minn-side-title" style="margin:0 0 8px;">Attributes</div>
+								<div class="minn-pattr-list" id="minn-p-attrs">${ productAttributesHtml( m ) }</div>
+								<div class="minn-pimg-foot">
+									<button type="button" class="minn-btn-soft" id="minn-p-attr-add">${ esc( __( 'Add attribute' ) ) }</button>
+									${ ( state.cache.attributeDefs || [] ).length ? `
+									<div class="minn-ac minn-pattr-pick" data-pattrglobal>
+										<input class="minn-input minn-ac-input" placeholder="${ esc( __( 'Add a store-wide attribute…' ) ) }" autocomplete="off" spellcheck="false" aria-label="${ esc( __( 'Add a store-wide attribute' ) ) }">
+										<div class="minn-ac-panel" hidden></div>
+									</div>` : '' }
+									<span class="minn-toggle-desc">Values are separated by commas. Turn on Variations to vary a variable product by an attribute.</span>
 								</div>
 							</div>` : '' }
 							${ canEdit ? `
@@ -7418,6 +7465,90 @@
 				repaint();
 			}, { multi: true, doneLabel: __( 'Add' ) } );
 		} );
+	}
+
+	function productAttributesHtml( m ) {
+		const list = m.attributes || [];
+		if ( ! list.length ) {
+			return `<div class="minn-pdl-empty">${ esc( __( 'No attributes yet. Add one to describe this product, or to give a variable product something to vary by.' ) ) }</div>`;
+		}
+		return list.map( ( a, i ) => `
+			<div class="minn-pattr-row">
+				<div class="minn-pattr-name">
+					${ a.id ? `<span class="minn-pattr-global" title="${ esc( __( 'A store-wide attribute' ) ) }">${ esc( a.name ) }</span>`
+						: `<input class="minn-input" data-pattrname="${ i }" value="${ esc( a.name ) }" placeholder="${ esc( __( 'Name' ) ) }" aria-label="${ esc( __( 'Attribute name' ) ) }">` }
+				</div>
+				<input class="minn-input" data-pattrvals="${ i }" value="${ esc( a.options.join( ', ' ) ) }" placeholder="${ esc( __( 'Values, separated by commas' ) ) }" aria-label="${ esc( __( 'Attribute values' ) ) }">
+				<label class="minn-pattr-flag">
+					<button type="button" class="minn-switch${ a.visible ? ' on' : '' }" data-pattrvis="${ i }" role="switch" aria-checked="${ a.visible }" aria-label="${ esc( __( 'Show on the product page' ) ) }"><span class="minn-switch-knob"></span></button>
+					<span>${ esc( __( 'Visible' ) ) }</span>
+				</label>
+				<label class="minn-pattr-flag">
+					<button type="button" class="minn-switch${ a.variation ? ' on' : '' }" data-pattrvar="${ i }" role="switch" aria-checked="${ a.variation }" aria-label="${ esc( __( 'Use for variations' ) ) }"><span class="minn-switch-knob"></span></button>
+					<span>${ esc( __( 'Variations' ) ) }</span>
+				</label>
+				<button type="button" class="minn-pdl-x" data-pattrx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( __( 'Remove attribute' ) ) }">×</button>
+			</div>` ).join( '' );
+	}
+
+	function bindProductAttributes( m ) {
+		const list = $( '#minn-p-attrs' );
+		if ( ! list || ! Array.isArray( m.attributes ) ) return;
+		const repaint = () => {
+			list.innerHTML = productAttributesHtml( m );
+			bindRows();
+		};
+		const bindRows = () => {
+			$$( '[data-pattrname]', list ).forEach( ( el ) => el.addEventListener( 'input', () => {
+				m.attributes[ parseInt( el.dataset.pattrname, 10 ) ].name = el.value;
+			} ) );
+			$$( '[data-pattrvals]', list ).forEach( ( el ) => el.addEventListener( 'input', () => {
+				m.attributes[ parseInt( el.dataset.pattrvals, 10 ) ].options =
+					el.value.split( ',' ).map( ( v ) => v.trim() ).filter( Boolean );
+			} ) );
+			[ [ 'pattrvis', 'visible' ], [ 'pattrvar', 'variation' ] ].forEach( ( [ attr, key ] ) => {
+				$$( `[data-${ attr }]`, list ).forEach( ( el ) => el.addEventListener( 'click', () => {
+					const i = parseInt( el.dataset[ attr ], 10 );
+					const on = el.classList.toggle( 'on' );
+					el.setAttribute( 'aria-checked', on ? 'true' : 'false' );
+					m.attributes[ i ][ key ] = on;
+				} ) );
+			} );
+			$$( '[data-pattrx]', list ).forEach( ( el ) => el.addEventListener( 'click', () => {
+				m.attributes.splice( parseInt( el.dataset.pattrx, 10 ), 1 );
+				repaint();
+			} ) );
+		};
+		bindRows();
+		const add = $( '#minn-p-attr-add' );
+		if ( add ) add.addEventListener( 'click', () => {
+			m.attributes.push( { id: 0, name: '', options: [], visible: true, variation: false } );
+			repaint();
+			const names = $$( '[data-pattrname]', list );
+			if ( names.length ) names[ names.length - 1 ].focus( { preventScroll: true } );
+		} );
+		// Store-wide attributes are picked, never typed: their names belong to
+		// the taxonomy, and Minn does not create those.
+		const globalWrap = $( '[data-pattrglobal]' );
+		if ( globalWrap ) {
+			const defs = ( state.cache.attributeDefs || [] )
+				.filter( ( d ) => ! m.attributes.some( ( a ) => a.id === d.id ) );
+			bindAutocomplete( globalWrap, defs.map( ( d ) => ( { value: String( d.id ), label: d.name } ) ), {
+				onPick: ( v ) => {
+					const def = ( state.cache.attributeDefs || [] ).find( ( d ) => String( d.id ) === String( v ) );
+					if ( ! def || m.attributes.some( ( a ) => a.id === def.id ) ) return;
+					m.attributes.push( { id: def.id, name: def.name, options: [], visible: true, variation: false } );
+					repaint();
+					// Deliberately NOT re-arming this binder: repaint() rebinds
+					// the rows, and a second bindProductAttributes would attach
+					// a duplicate click handler to every switch, so one click
+					// would toggle and untoggle. Picking an attribute already
+					// on the list is guarded above instead.
+					const inp = globalWrap.querySelector( '.minn-ac-input' );
+					if ( inp ) inp.value = '';
+				},
+			} );
+		}
 	}
 
 	function productLinkFieldHtml( m, f ) {
@@ -7674,6 +7805,16 @@
 		if ( $( '#minn-p-images' ) && Array.isArray( m.images ) ) {
 			payload.images = m.images.map( ( x ) => ( { id: x.id } ) );
 		}
+		if ( $( '#minn-p-attrs' ) && Array.isArray( m.attributes ) ) {
+			// A nameless attribute is not one; it would store an empty row.
+			payload.attributes = m.attributes
+				.filter( ( a ) => a.id || ( a.name || '' ).trim() )
+				.map( ( a, i ) => {
+					const out = { position: i, visible: !! a.visible, variation: !! a.variation, options: a.options };
+					if ( a.id ) out.id = a.id; else out.name = ( a.name || '' ).trim();
+					return out;
+				} );
+		}
 		PRODUCT_LINK_FIELDS.forEach( ( f ) => {
 			if ( $( `[data-plchips="${ f.key }"]` ) && Array.isArray( ( m.links || {} )[ f.key ] ) ) {
 				payload[ f.key ] = m.links[ f.key ].map( ( x ) => x.id );
@@ -7702,6 +7843,7 @@
 		PRODUCT_TERM_FIELDS.forEach( ( t ) => delete payload[ t.key ] );
 		delete payload.downloads;
 		PRODUCT_LINK_FIELDS.forEach( ( f ) => delete payload[ f.key ] );
+		delete payload.attributes;
 		m.full = Object.assign( {}, m.full, payload );
 	}
 
@@ -7763,6 +7905,7 @@
 		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
 		bindProductTermFields( m );
 		bindProductLinkFields( m, p );
+		bindProductAttributes( m );
 		bindProductImages( m );
 		bindProductDownloads( m );
 		// Sale dates use Minn's own picker (a native datetime-local cannot be
@@ -7793,6 +7936,7 @@
 					seedProductImages( m );
 					seedProductDownloads( m );
 					seedProductLinks( m );
+					seedProductAttributes( m );
 					m.product = Object.assign( {}, m.product, {
 						name: full.name,
 						status: full.status,
