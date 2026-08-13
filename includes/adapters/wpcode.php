@@ -34,14 +34,41 @@ function minn_admin_wpcode_can_type( $code_type ) {
 }
 
 /**
+ * Does WPCode EXECUTE this code type?
+ *
+ * WPCode runs two types, not one: class-wpcode-snippet.php's
+ * run_activation_checks() declares array( 'php', 'universal' ), and the
+ * universal handler is documented as taking "both HTML and PHP at the same
+ * time in the same way you can write both in a .php file". Matching the
+ * literal 'php' let code_type=universal author executable PHP on a site that
+ * had turned dashboard code editing off.
+ *
+ * Anything not on the known-inert list counts as executing, so a type WPCode
+ * adds later is refused under DISALLOW_FILE_EDIT until it is classified here
+ * rather than silently allowed. The Pro-only WPCode_Access mapper resolving a
+ * type to the PHP tier is treated as executing too; it does not exist in the
+ * free plugin, which is why it cannot be the only signal.
+ *
+ * @param string $code_type WPCode code type.
+ * @return bool
+ */
+function minn_admin_wpcode_type_executes( $code_type ) {
+	$inert = array( 'html', 'text', 'css', 'js', 'scss', 'blocks' );
+	if ( in_array( (string) $code_type, $inert, true ) ) {
+		return false;
+	}
+	return true;
+}
+
+/**
  * 403 unless the caller may author this code type (and, on an update, edit
  * this specific snippet — WPCode requires edit_post on the target too).
  */
 function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0 ) {
-	// A php snippet is PHP that WPCode eval()s, so authoring one is code
-	// editing. Honour the directive a site owner sets to forbid exactly that.
-	// Markup and text snippets are unaffected.
-	if ( 'php' === $code_type && class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+	// A snippet WPCode EXECUTES is PHP authoring, so it answers to the
+	// directive a site owner sets to forbid exactly that. Markup and text
+	// snippets are unaffected.
+	if ( minn_admin_wpcode_type_executes( $code_type ) && class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
 		return new WP_Error(
 			'forbidden',
 			'This site disallows editing code from the dashboard, so PHP snippets cannot be created or changed here.',
