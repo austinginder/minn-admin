@@ -6715,6 +6715,16 @@
 		{ key: 'brands', label: 'Brands', route: 'products/brands', create: true, placeholder: 'Add a brand, press Enter' },
 	];
 
+	// Images ride the model for the same reason terms do. WooCommerce reads
+	// the first entry as the product image and the rest as the gallery, so
+	// order is the whole meaning here.
+	function seedProductImages( m ) {
+		const p = m.full || {};
+		m.images = Array.isArray( p.images )
+			? p.images.map( ( x ) => ( { id: x.id, src: x.src || '', alt: x.alt || '', name: x.name || '' } ) )
+			: [];
+	}
+
 	// Term picks live on the detail model, never only in the DOM: a re-render
 	// (a save, a late shipping-class load) would otherwise drop them.
 	function seedProductTerms( m ) {
@@ -6905,6 +6915,7 @@
 				m.full = full;
 				m.loading = false;
 				seedProductTerms( m );
+				seedProductImages( m );
 				if ( state.cache.products && state.cache.products.items ) {
 					const i = state.cache.products.items.findIndex( ( x ) => x.id === id );
 					if ( i >= 0 ) {
@@ -6958,7 +6969,7 @@
 					<div class="minn-order-body">
 						<div class="minn-order-grid minn-grid-rows">
 							<div class="minn-order-panel">
-								${ thumb ? `<div class="minn-prod-modal-img"><img src="${ esc( thumb ) }" alt=""></div>` : '' }
+								${ canEdit ? '' : ( thumb ? `<div class="minn-prod-modal-img"><img src="${ esc( thumb ) }" alt=""></div>` : '' ) }
 								<div class="minn-side-title" style="margin:0 0 8px;">Basics</div>
 								${ canEdit ? `
 								<div class="minn-order-fields">
@@ -6995,6 +7006,15 @@
 									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">Price and stock for ${ esc( p.type || 'this type' ) } products are managed in WooCommerce (variations or grouped children).</div>` : '' }
 								</div>` }
 							</div>
+							${ canEdit ? `
+							<div class="minn-order-panel wide">
+								<div class="minn-side-title" style="margin:0 0 8px;">Images</div>
+								<div class="minn-imgedit-grid minn-pimg-grid" id="minn-p-images">${ productImagesGridHtml( m.images || [] ) }</div>
+								<div class="minn-pimg-foot">
+									<button type="button" class="minn-btn-soft" id="minn-p-img-add">${ esc( __( 'Add images…' ) ) }</button>
+									<span class="minn-toggle-desc">The first image is the product image, the rest are the gallery. Drag a tile to reorder, click one to replace it.</span>
+								</div>
+							</div>` : '' }
 							${ canEdit ? `
 							<div class="minn-order-panel">
 								<div class="minn-side-title" style="margin:0 0 8px;">Inventory</div>
@@ -7088,6 +7108,99 @@
 						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } Edit description</button>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>
 					</div>`;
+	}
+
+	// The media picker hands back { id, name, url, alt, thumb }; WooCommerce
+	// wants { id } on save and a src to show meanwhile. Prefer the thumb: a
+	// gallery of full-size originals in a tile grid is a lot of bytes.
+	function pickedToProductImage( it ) {
+		return { id: it.id, src: it.thumb || it.url || '', alt: it.alt || '', name: it.name || '' };
+	}
+
+	function productImagesGridHtml( list ) {
+		if ( ! list.length ) {
+			return `<div class="minn-imgedit-empty">${ esc( __( 'No images yet. The first one you add becomes the product image.' ) ) }</div>`;
+		}
+		return list.map( ( it, i ) => `
+			<div class="minn-imgedit-cell">
+				<div class="minn-imgedit-tile" draggable="true" data-pimg="${ i }" title="${ esc( __( 'Click to replace this image' ) ) }">
+					<img src="${ esc( it.src || '' ) }" alt="${ esc( it.alt || '' ) }" loading="lazy">
+					${ i === 0 ? `<span class="minn-imgedit-new">${ esc( __( 'Product image' ) ) }</span>` : '' }
+					<button type="button" class="minn-imgedit-x" data-pimgx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( __( 'Remove image' ) ) }">×</button>
+					<span class="minn-imgedit-moves">
+						<button type="button" data-pimgmv="${ i }:-1" title="${ esc( __( 'Move earlier' ) ) }" aria-label="${ esc( __( 'Move image earlier' ) ) }"${ i === 0 ? ' disabled' : '' }>‹</button>
+						<button type="button" data-pimgmv="${ i }:1" title="${ esc( __( 'Move later' ) ) }" aria-label="${ esc( __( 'Move image later' ) ) }"${ i === list.length - 1 ? ' disabled' : '' }>›</button>
+					</span>
+				</div>
+			</div>` ).join( '' );
+	}
+
+	/**
+	 * The Images card. Position is meaning (first entry is the product image),
+	 * so reordering is the primary verb: drag a tile, or use its arrows when a
+	 * pointer drag is not available.
+	 */
+	function bindProductImages( m ) {
+		const grid = $( '#minn-p-images' );
+		if ( ! grid || ! Array.isArray( m.images ) ) return;
+		let dragIdx = -1;
+		const repaint = () => {
+			grid.innerHTML = productImagesGridHtml( m.images );
+			bindTiles();
+		};
+		const bindTiles = () => {
+			$$( '[data-pimgx]', grid ).forEach( ( b ) => b.addEventListener( 'click', ( e ) => {
+				e.stopPropagation(); // the tile behind it replaces on click
+				m.images.splice( parseInt( b.dataset.pimgx, 10 ), 1 );
+				repaint();
+			} ) );
+			$$( '[data-pimgmv]', grid ).forEach( ( b ) => b.addEventListener( 'click', ( e ) => {
+				e.stopPropagation();
+				const [ i, d ] = b.dataset.pimgmv.split( ':' ).map( Number );
+				const to = i + d;
+				if ( to < 0 || to >= m.images.length ) return;
+				const [ moved ] = m.images.splice( i, 1 );
+				m.images.splice( to, 0, moved );
+				repaint();
+			} ) );
+			$$( '[data-pimg]', grid ).forEach( ( tile ) => {
+				const i = parseInt( tile.dataset.pimg, 10 );
+				tile.addEventListener( 'click', () => {
+					openMediaPicker( ( picked ) => {
+						if ( ! picked ) return;
+						m.images[ i ] = pickedToProductImage( picked );
+						repaint();
+					}, { doneLabel: __( 'Replace' ) } );
+				} );
+				tile.addEventListener( 'dragstart', ( e ) => {
+					dragIdx = i;
+					if ( e.dataTransfer ) e.dataTransfer.effectAllowed = 'move';
+				} );
+				tile.addEventListener( 'dragover', ( e ) => {
+					e.preventDefault();
+					if ( e.dataTransfer ) e.dataTransfer.dropEffect = 'move';
+				} );
+				tile.addEventListener( 'drop', ( e ) => {
+					e.preventDefault();
+					if ( dragIdx < 0 || dragIdx === i ) return;
+					const [ moved ] = m.images.splice( dragIdx, 1 );
+					m.images.splice( i, 0, moved );
+					dragIdx = -1;
+					repaint();
+				} );
+			} );
+		};
+		bindTiles();
+		const addBtn = $( '#minn-p-img-add' );
+		if ( addBtn ) addBtn.addEventListener( 'click', () => {
+			openMediaPicker( ( picked ) => {
+				( Array.isArray( picked ) ? picked : [ picked ] ).filter( Boolean ).forEach( ( it ) => {
+					if ( m.images.some( ( x ) => x.id === it.id ) ) return;
+					m.images.push( pickedToProductImage( it ) );
+				} );
+				repaint();
+			}, { multi: true, doneLabel: __( 'Add' ) } );
+		} );
 	}
 
 	function productTermChipsHtml( list ) {
@@ -7213,6 +7326,7 @@
 		const edBtn = $( '#minn-p-editor' );
 		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
 		bindProductTermFields( m );
+		bindProductImages( m );
 		const saveBtn = $( '#minn-product-save' );
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 			const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
@@ -7257,6 +7371,11 @@
 			}
 			if ( $( '#minn-p-slug' ) ) payload.slug = ( $( '#minn-p-slug' ).value || '' ).trim();
 			if ( $( '#minn-p-featured' ) ) payload.featured = !! $( '#minn-p-featured' ).checked;
+			// Images send the whole ordered set for the same reason, and the
+			// order is the meaning: entry one is the product image.
+			if ( $( '#minn-p-images' ) && Array.isArray( m.images ) ) {
+				payload.images = m.images.map( ( x ) => ( { id: x.id } ) );
+			}
 			// Taxonomies send the whole set: WooCommerce replaces, never merges.
 			PRODUCT_TERM_FIELDS.forEach( ( t ) => {
 				if ( $( `[data-ptchips="${ t.key }"]` ) && Array.isArray( ( m.terms || {} )[ t.key ] ) ) {
@@ -7274,6 +7393,7 @@
 				if ( isCur() ) {
 					m.full = full || updated;
 					seedProductTerms( m );
+					seedProductImages( m );
 					m.product = Object.assign( {}, m.product, {
 						name: full.name,
 						status: full.status,

@@ -90,8 +90,13 @@ its own.
    WooCommerce without brands shows nothing. Picks live on the detail model
    rather than in the DOM, and taxonomies save as the whole set because
    WooCommerce replaces rather than merges.
-4. **Images**: featured plus gallery, reorder and replace. The island images
-   editor's tile grid is the closest existing UI.
+4. **Images** (shipped): featured plus gallery, reorder and replace. Reuses the
+   island images editor's tile CSS, but inline in the card rather than in a
+   modal: the page has the room, and it saves with the rest of the form instead
+   of needing its own Apply. Order is the meaning here, since WooCommerce reads
+   entry one as the product image and the rest as the gallery, so reordering is
+   the primary verb (drag a tile, or use its arrows) and the first tile is
+   badged. Tiles are the picker's thumbnails, not the full-size originals.
 5. **Advanced and pricing extras**: sale schedule, purchase note, menu order,
    reviews, tax status and class.
 6. **Type-conditional cards**: virtual, downloadable and its files, external URL
