@@ -57,7 +57,7 @@ function minn_admin_aios_table() {
  * @return array{0:string,1:array} SQL fragment to append, and its args.
  */
 function minn_admin_aios_site_scope() {
-	if ( ! is_multisite() || is_super_admin() ) {
+	if ( Minn_Admin::network_owner() ) {
 		return array( '', array() );
 	}
 	return array( ' AND site_id = %d', array( get_current_blog_id() ) );

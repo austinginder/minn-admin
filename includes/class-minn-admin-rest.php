@@ -6350,11 +6350,32 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			);
 		}
 
+		// Most of this page describes the SERVER and the install, which on
+		// multisite every tenant shares and none of them owns: the database
+		// connection, the machine's address and kernel, its free disk, the
+		// full plugin/theme inventory, whether wp-config is writable. This
+		// route is manage_options, which is per site there, so a subsite
+		// administrator would read the operator's fingerprint and the exact
+		// list of third-party code running on every neighbour. Core draws the
+		// same line on its own equivalent screen: Site Health Info sits behind
+		// view_site_health_checks, which is granted only to super admins on
+		// multisite. Their own site's WordPress and PHP facts stay.
+		$network_owner = Minn_Admin::network_owner();
+
+		$groups = array(
+			array( 'title' => 'WordPress', 'icon' => 'wp', 'rows' => self::kv_rows( $wordpress ) ),
+			array( 'title' => 'PHP', 'icon' => 'php', 'rows' => self::kv_rows( $php ) ),
+		);
+		if ( $network_owner ) {
+			$groups[] = array( 'title' => 'Database', 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables, 'autoload' => $autoload );
+			$groups[] = array( 'title' => 'Server', 'icon' => 'server', 'rows' => self::kv_rows( $server ) );
+		}
+
 		return rest_ensure_response(
 			array(
 				'generated'  => current_time( 'c' ),
 				'checks'     => $checks,
-				'config'     => self::config_state(),
+				'config'     => $network_owner ? self::config_state() : array(),
 				// The log routes are network-gated on multisite (wp-content's
 				// debug.log is shared by every subsite), so don't advertise
 				// sources this user's reads would 403 on — an empty list also
@@ -6362,17 +6383,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				// toggles are super-admin-locked too.
 				'logs'       => self::can_read_logs() ? Minn_Admin_Logs::list_payload() : array(),
 				'licenses'   => $licenses,
-				'extensions' => self::extensions_manifest(),
+				'extensions' => $network_owner ? self::extensions_manifest() : array(),
 				// Live registry of everything hooked into Minn, with owner
 				// attribution + descriptor-contract problems — the feedback
 				// loop for integration authors (class-minn-admin-surfaces.php).
-				'integrations' => Minn_Admin_Surfaces::integrations(),
-				'groups'     => array(
-					array( 'title' => 'WordPress', 'icon' => 'wp', 'rows' => self::kv_rows( $wordpress ) ),
-					array( 'title' => 'PHP', 'icon' => 'php', 'rows' => self::kv_rows( $php ) ),
-					array( 'title' => 'Database', 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables, 'autoload' => $autoload ),
-					array( 'title' => 'Server', 'icon' => 'server', 'rows' => self::kv_rows( $server ) ),
-				),
+				'integrations' => $network_owner ? Minn_Admin_Surfaces::integrations() : array(),
+				'groups'     => $groups,
 			)
 		);
 	}

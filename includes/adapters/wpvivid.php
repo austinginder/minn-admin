@@ -22,6 +22,14 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_wpvivid_active() {
+	// WPvivid keeps its archives in one network-shared wp-content/wpvividbackups
+	// directory and registers its admin under network_admin_menu on multisite,
+	// so the backup sets, the delete and the run-now all belong to the network
+	// owner there. manage_options is per site and would admit every subsite
+	// administrator.
+	if ( ! Minn_Admin::network_owner() ) {
+		return false;
+	}
 	return defined( 'WPVIVID_PLUGIN_DIR' )
 		&& class_exists( 'WPvivid_Backuplist' )
 		&& class_exists( 'WPvivid_Setting' );
@@ -341,7 +349,8 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$perm = function () {
-		return current_user_can( 'manage_options' );
+		// Network-shared archive directory (see minn_admin_wpvivid_active).
+		return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/wpvivid/backups', array(

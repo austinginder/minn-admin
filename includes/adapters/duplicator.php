@@ -33,7 +33,7 @@ function minn_admin_duplicator_active() {
 	// Duplicator keeps ONE packages table on base_prefix and its archives
 	// hold the WHOLE network's database — on multisite that's super-admin
 	// data (its own menu lives in Network Admin there).
-	if ( is_multisite() && ! is_super_admin() ) {
+	if ( ! Minn_Admin::network_owner() ) {
 		return false;
 	}
 	$table = $wpdb->base_prefix . 'duplicator_packages';
@@ -145,7 +145,7 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = function () {
 		// Network-shared packages table (see minn_admin_duplicator_active).
-		return current_user_can( 'export' ) && ( ! is_multisite() || is_super_admin() );
+		return current_user_can( 'export' ) && Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/duplicator/packages', array(

@@ -698,6 +698,40 @@ class Minn_Admin {
 		return true;
 	}
 
+	/**
+	 * Whether the caller owns network-shared state.
+	 *
+	 * A plugin that keeps ONE store for the whole network — a backup archive
+	 * directory, a base_prefix table, a site option — holds every tenant's
+	 * data in it, so on multisite that is the network owner's, whatever
+	 * per-site capability the plugin's own screens happen to ask for. The
+	 * capability alone can never draw this line: core's multisite pass over
+	 * map_meta_cap strips install_plugins, update_plugins and edit_files from
+	 * a subsite administrator but leaves export, manage_options and every
+	 * plugin-defined capability untouched. Most of these plugins say the same
+	 * thing themselves by registering their admin under network_admin_menu,
+	 * which shows a subsite administrator nothing at all.
+	 *
+	 * Call this in the adapter's *_active() check AND in every route's
+	 * permission callback: an adapter whose surface is hidden but whose routes
+	 * still answer is not gated, it is only quiet.
+	 */
+	public static function network_owner() {
+		return ! is_multisite() || is_super_admin();
+	}
+
+	/**
+	 * The capability meaning "may change settings", widened to the network.
+	 *
+	 * manage_options is PER SITE on multisite, so it is the wrong gate for
+	 * anything the whole network shares. Use this where the state is
+	 * site-wide-or-broader; use network_owner() where a per-site capability
+	 * still has to be checked alongside it.
+	 */
+	public static function manage_cap() {
+		return is_multisite() ? 'manage_network_options' : 'manage_options';
+	}
+
 	public static function app_url() {
 		if ( get_option( 'permalink_structure' ) ) {
 			return home_url( '/minn-admin/' );

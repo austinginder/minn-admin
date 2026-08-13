@@ -15,6 +15,12 @@
  *       );
  *       return $purgers;
  *   } );
+ *
+ * Set `'network' => true` when the purge reaches beyond the calling site, as
+ * a shared object cache or a host-wide CDN purge does. Those providers are
+ * offered only to the network owner on multisite, so one tenant cannot cold
+ * every other tenant's cache; their own native screens are network-admin
+ * screens there for the same reason. A per-site page cache needs no flag.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -31,8 +37,11 @@ function minn_admin_cache_purgers() {
 	// object cache and OPcache. `true` bypasses its once-per-request guard.
 	if ( class_exists( '\Kinsta\KMP' ) && ! empty( $GLOBALS['kinsta_muplugin']->kinsta_cache_purge ) ) {
 		$purgers[] = array(
-			'id'    => 'kinsta',
-			'name'  => 'Kinsta',
+			'id'      => 'kinsta',
+			'name'    => 'Kinsta',
+			// Host-wide: page cache, CDN, object cache and OPcache for the
+			// whole install, not just this site.
+			'network' => true,
 			'purge' => function () {
 				$GLOBALS['kinsta_muplugin']->kinsta_cache_purge->purge_complete_caches( true );
 			},
@@ -183,8 +192,10 @@ function minn_admin_cache_purgers() {
 	// a System health row (minn_admin_redis_object_cache_checks).
 	if ( defined( 'WP_REDIS_VERSION' ) ) {
 		$purgers[] = array(
-			'id'    => 'redis-object-cache',
-			'name'  => 'Redis Object Cache',
+			'id'      => 'redis-object-cache',
+			'name'    => 'Redis Object Cache',
+			// One object cache backs every site on the network.
+			'network' => true,
 			'purge' => function () {
 				// Prefer the plugin's own flush path when its drop-in is valid
 				// (same as its admin "Flush cache" button); otherwise no-op
@@ -242,7 +253,19 @@ function minn_admin_cache_purgers() {
 		);
 	}
 
-	return apply_filters( 'minn_admin_cache_purgers', $purgers );
+	$purgers = apply_filters( 'minn_admin_cache_purgers', $purgers );
+
+	// Filtered AFTER the hook so a third party's network-wide provider is
+	// covered too. On multisite manage_options is per site, so without this a
+	// single tenant could cold the shared object cache and the host's CDN for
+	// every neighbour on demand.
+	if ( ! Minn_Admin::network_owner() ) {
+		$purgers = array_values( array_filter( $purgers, function ( $p ) {
+			return empty( $p['network'] );
+		} ) );
+	}
+
+	return $purgers;
 }
 
 /**

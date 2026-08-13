@@ -22,6 +22,16 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_ai1wm_active() {
+	// AI1WM_BACKUPS_PATH is ONE wp-content/ai1wm-backups directory for the
+	// whole network and those archives hold every tenant's database, so on
+	// multisite this is the network owner's surface. The plugin says so
+	// itself: without the paid Multisite Extension it registers no admin
+	// menu on a subsite at all. `export` would otherwise let every subsite
+	// administrator through, since core's multisite capability pass never
+	// strips it.
+	if ( ! Minn_Admin::network_owner() ) {
+		return false;
+	}
 	return defined( 'AI1WM_BACKUPS_PATH' )
 		&& class_exists( 'Ai1wm_Backups' )
 		&& method_exists( 'Ai1wm_Backups', 'get_files' );
@@ -172,7 +182,8 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$perm = function () {
-		return current_user_can( 'export' );
+		// Network-shared archive directory (see minn_admin_ai1wm_active).
+		return current_user_can( 'export' ) && Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/ai1wm/exports', array(
