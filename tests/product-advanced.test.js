@@ -4,7 +4,7 @@
  *
  * Fixture: one product, created and removed over REST.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, pickCombo, setSwitch } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -73,8 +73,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		// The tax-class select is the store's real vocabulary, and standard
 		// rate is the empty string WooCommerce actually stores.
+		await page.click( '#minn-p-taxclass' );
+		await page.waitForSelector( '.minn-ac-panel:not([hidden]) .minn-ac-item', { timeout: 10000 } );
 		const taxOpts = await page.evaluate( () => Array.from(
-			document.querySelectorAll( '#minn-p-taxclass option' ) ).map( ( o ) => [ o.value, o.textContent.trim() ] ) );
+			document.querySelectorAll( '.minn-ac-panel:not([hidden]) .minn-ac-item' ) ).map( ( o ) => [ o.dataset.acv, o.textContent.trim() ] ) );
+		await page.keyboard.press( 'Escape' );
 		t.check( 'tax class offers standard as the empty value',
 			taxOpts.some( ( [ v, l ] ) => v === '' && /standard/i.test( l ) ), JSON.stringify( taxOpts ) );
 
@@ -106,10 +109,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				JSON.stringify( { done, ...machine } ) );
 		}
 
-		await page.selectOption( '#minn-p-taxstatus', 'shipping' );
+		await pickCombo( page, '#minn-p-taxstatus', 'shipping' );
 		await page.fill( '#minn-p-note', 'Thanks for buying. Care instructions are inside.' );
 		await page.fill( '#minn-p-menuorder', '7' );
-		await page.uncheck( '#minn-p-reviews' );
+		await setSwitch( page, '#minn-p-reviews', false );
 		await page.click( '#minn-product-save' );
 		await page.waitForFunction( () => {
 			const b = document.querySelector( '#minn-product-save' );
@@ -132,8 +135,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			from: document.querySelector( '#minn-p-salefrom' ).value,
 			note: document.querySelector( '#minn-p-note' ).value,
 			order: document.querySelector( '#minn-p-menuorder' ).value,
-			reviews: document.querySelector( '#minn-p-reviews' ).checked,
-			tax: document.querySelector( '#minn-p-taxstatus' ).value,
+			reviews: document.querySelector( '#minn-p-reviews' ).classList.contains( 'on' ),
+			tax: document.querySelector( '#minn-p-taxstatus' ).dataset.acValue,
 		} ) );
 		t.check( 'advanced values repopulate after reload',
 			!! repop.from && /Care instructions/.test( repop.note ) && repop.order === '7'

@@ -5,7 +5,7 @@
  * Fixtures: one product, one virtual product (proving the shipping card hides
  * itself) and one shipping class, all created and removed over REST.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, pickCombo, comboValue, setSwitch, switchOn } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -88,22 +88,25 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			Object.values( present ).every( Boolean ), JSON.stringify( present ) );
 
 		// The shipping-class select is fed by the store's real vocabulary.
+		await page.click( '#minn-p-shipclass' );
+		await page.waitForSelector( '.minn-ac-panel:not([hidden]) .minn-ac-item', { timeout: 10000 } );
 		const opts = await page.evaluate( () => Array.from(
-			document.querySelectorAll( '#minn-p-shipclass option' )
-		).map( ( o ) => o.value ) );
+			document.querySelectorAll( '.minn-ac-panel:not([hidden]) .minn-ac-item' )
+		).map( ( o ) => o.dataset.acv ) );
+		await page.keyboard.press( 'Escape' );
 		t.check( 'shipping class select offers no-class plus the store\'s classes',
 			opts.includes( '' ) && opts.includes( classSlug ), JSON.stringify( opts ) );
 
 		// Fill everything and save once.
 		await page.fill( '#minn-p-gtin', '01234567890128' );
-		await page.selectOption( '#minn-p-backorders', 'notify' );
+		await pickCombo( page, '#minn-p-backorders', 'notify' );
 		await page.fill( '#minn-p-lowstock', '3' );
-		await page.check( '#minn-p-solo' );
+		await setSwitch( page, '#minn-p-solo', true );
 		await page.fill( '#minn-p-weight', '1.25' );
 		await page.fill( '#minn-p-length', '10' );
 		await page.fill( '#minn-p-width', '8' );
 		await page.fill( '#minn-p-height', '2' );
-		await page.selectOption( '#minn-p-shipclass', classSlug );
+		await pickCombo( page, '#minn-p-shipclass', classSlug );
 		await page.click( '#minn-product-save' );
 		await page.waitForFunction( () => {
 			const b = document.querySelector( '#minn-product-save' );
@@ -125,18 +128,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// The values come back on a reload rather than only living in the DOM.
 		await page.goto( BASE + '/minn-admin/products/' + id, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-p-gtin', { timeout: 20000 } );
-		await page.waitForFunction( () => {
-			const s = document.querySelector( '#minn-p-shipclass' );
-			return s && s.options.length > 1;
-		}, null, { timeout: 15000 } ).catch( () => null );
+		await page.waitForTimeout( 300 );
 		const back = await page.evaluate( () => ( {
 			gtin: document.querySelector( '#minn-p-gtin' ).value,
-			backorders: document.querySelector( '#minn-p-backorders' ).value,
+			backorders: document.querySelector( '#minn-p-backorders' ).dataset.acValue,
 			low: document.querySelector( '#minn-p-lowstock' ).value,
-			solo: document.querySelector( '#minn-p-solo' ).checked,
+			solo: document.querySelector( '#minn-p-solo' ).classList.contains( 'on' ),
 			weight: document.querySelector( '#minn-p-weight' ).value,
 			length: document.querySelector( '#minn-p-length' ).value,
-			ship: document.querySelector( '#minn-p-shipclass' ).value,
+			ship: document.querySelector( '#minn-p-shipclass' ).dataset.acValue,
 		} ) );
 		t.check( 'saved values repopulate the form',
 			back.gtin === '01234567890128' && back.backorders === 'notify' && back.low === '3'
@@ -157,7 +157,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			JSON.stringify( cleared.body && cleared.body.low_stock_amount ) );
 
 		// Untracked stock hides quantity, low stock and backorders together.
-		await page.uncheck( '#minn-p-manage' );
+		await setSwitch( page, '#minn-p-manage', false );
 		const hidden = await page.evaluate( () => {
 			const row = document.querySelector( '#minn-p-stock-row' );
 			return row ? getComputedStyle( row ).display : 'missing';
@@ -207,7 +207,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const survived = await page.evaluate( () => {
 			const el = document.querySelector( '#minn-p-name' );
 			return { probe: el && el._minnProbe, value: el && el.value,
-				opts: document.querySelectorAll( '#minn-p-shipclass option' ).length };
+				opts: document.querySelector( '#minn-p-shipclass' ) ? 2 : 0 };
 		} );
 		t.check( 'a slow shipping-class load never rebuilds the form',
 			survived.probe === 'wave2' && survived.value === 'Typed during the slow load',

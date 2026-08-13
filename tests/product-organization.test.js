@@ -5,7 +5,7 @@
  * Fixtures: one product plus one product category, created and removed over
  * REST. The tag and brand the suite creates through the UI are deleted too.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, setSwitch } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
@@ -124,7 +124,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		// Slug and featured, then one save for the whole card.
 		await page.fill( '#minn-p-slug', 'minn-org-fixture-' + suffix );
-		await page.check( '#minn-p-featured' );
+		await setSwitch( page, '#minn-p-featured', true );
 		await page.click( '#minn-product-save' );
 		await page.waitForFunction( () => {
 			const b = document.querySelector( '#minn-product-save' );
@@ -149,7 +149,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			cats: Array.from( document.querySelectorAll( '[data-ptchips="categories"] [data-ptchip]' ) ).map( ( c ) => c.textContent.trim() ),
 			tags: Array.from( document.querySelectorAll( '[data-ptchips="tags"] [data-ptchip]' ) ).map( ( c ) => c.textContent.trim() ),
 			slug: document.querySelector( '#minn-p-slug' ).value,
-			featured: document.querySelector( '#minn-p-featured' ).checked,
+			featured: document.querySelector( '#minn-p-featured' ).classList.contains( 'on' ),
 		} ) );
 		t.check( 'organization repopulates after reload',
 			back.cats.some( ( c ) => c.includes( 'Minn Outerwear' ) )

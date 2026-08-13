@@ -186,4 +186,45 @@ function reporter( name ) {
 	};
 }
 
-module.exports = { BASE, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter };
+
+/**
+ * Pick a value in a Minn combobox. The product page (and the adapter forms)
+ * use strict autocompletes instead of native selects, so page.selectOption
+ * does not apply: open the panel, then click the item carrying the value.
+ */
+async function pickCombo( page, inputSel, value ) {
+	await page.click( inputSel );
+	const item = `.minn-ac-panel:not([hidden]) .minn-ac-item[data-acv="${ value }"]`;
+	await page.waitForSelector( item, { timeout: 10000 } );
+	await page.click( item );
+	await page.waitForTimeout( 120 );
+}
+
+/** Read a combobox's machine value (its .value is the human label). */
+function comboValue( page, inputSel ) {
+	return page.evaluate( ( s ) => {
+		const el = document.querySelector( s );
+		return el ? ( el.dataset.acValue != null ? el.dataset.acValue : el.value ) : null;
+	}, inputSel );
+}
+
+/** Drive a Minn switch to an explicit state (it is a button, not a checkbox). */
+async function setSwitch( page, sel, on ) {
+	const cur = await page.evaluate( ( s ) => {
+		const el = document.querySelector( s );
+		return el ? el.classList.contains( 'on' ) : null;
+	}, sel );
+	if ( cur === null || cur === on ) return cur !== null;
+	await page.click( sel );
+	await page.waitForTimeout( 120 );
+	return true;
+}
+
+function switchOn( page, sel ) {
+	return page.evaluate( ( s ) => {
+		const el = document.querySelector( s );
+		return el ? el.classList.contains( 'on' ) : null;
+	}, sel );
+}
+
+module.exports = { BASE, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, pickCombo, comboValue, setSwitch, switchOn };
