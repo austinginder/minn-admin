@@ -117,7 +117,11 @@ its own.
    the form through one function rather than two that can drift.
    An empty download limit or expiry stores `-1`, which is how WooCommerce
    spells "no cap".
-7. **Linked products**: upsells and cross-sells, needing a product search picker.
+7. **Linked products** (shipped): upsells and cross-sells as chips plus a
+   product search, the taxonomy shape again. These are stored as bare ids, so
+   the names come from a second request that is awaited BEFORE the first paint
+   rather than merged in when it lands. A product never offers itself in its
+   own results.
 8. **Attributes**: inline custom attributes first, global attributes second.
 9. **Variations**: a list view against the variations sub-resource, editing SKU,
    price, stock and image per variation. Attribute creation stays in WooCommerce.

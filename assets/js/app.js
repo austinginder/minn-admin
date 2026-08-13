@@ -6709,7 +6709,25 @@
 		+ ',date_on_sale_from,date_on_sale_to,tax_status,tax_class'
 		+ ',purchase_note,menu_order,reviews_allowed'
 		+ ',downloadable,downloads,download_limit,download_expiry'
-		+ ',external_url,button_text';
+		+ ',external_url,button_text,upsell_ids,cross_sell_ids';
+
+	// Linked products are stored as bare ids, so the names have to be looked
+	// up separately before anything can be drawn.
+	const PRODUCT_LINK_FIELDS = [
+		{ key: 'upsell_ids', label: 'Upsells', hint: 'Shown on this product’s page as something to consider instead.' },
+		{ key: 'cross_sell_ids', label: 'Cross-sells', hint: 'Offered in the cart alongside this product.' },
+	];
+
+	function seedProductLinks( m, names ) {
+		const p = m.full || {};
+		const known = names || m.linkNames || {};
+		m.linkNames = known;
+		m.links = {};
+		PRODUCT_LINK_FIELDS.forEach( ( f ) => {
+			m.links[ f.key ] = ( Array.isArray( p[ f.key ] ) ? p[ f.key ] : [] )
+				.map( ( id ) => ( { id, name: known[ id ] || `#${ id }` } ) );
+		} );
+	}
 
 	// The Organization card's taxonomies. A store without brands answers with
 	// no `brands` key at all, which is how that field knows to stay away.
@@ -6991,13 +7009,26 @@
 			loadShippingClasses(),
 			loadTaxClasses(),
 		] )
-			.then( ( [ full ] ) => {
+			.then( async ( [ full ] ) => {
+				if ( ! isCur() ) return;
+				// Linked products are ids; their names come from a second
+				// request that must finish BEFORE the first paint, or filling
+				// the chips in later would repaint over a form being typed in.
+				const linkIds = PRODUCT_LINK_FIELDS
+					.reduce( ( all, f ) => all.concat( Array.isArray( full[ f.key ] ) ? full[ f.key ] : [] ), [] );
+				let names = {};
+				if ( linkIds.length ) {
+					const rows = await api( `wc/v3/products?include=${ linkIds.join( ',' ) }&per_page=100&_fields=id,name` )
+						.catch( () => [] );
+					( Array.isArray( rows ) ? rows : [] ).forEach( ( r ) => { names[ r.id ] = r.name; } );
+				}
 				if ( ! isCur() ) return;
 				m.full = full;
 				m.loading = false;
 				seedProductTerms( m );
 				seedProductImages( m );
 				seedProductDownloads( m );
+				seedProductLinks( m, names );
 				if ( state.cache.products && state.cache.products.items ) {
 					const i = state.cache.products.items.findIndex( ( x ) => x.id === id );
 					if ( i >= 0 ) {
@@ -7184,6 +7215,13 @@
 									</div>
 									<div><div class="minn-field-label">Menu order</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
 									${ productToggleHtml( 'minn-p-reviews', 'Enable reviews', p.reviews_allowed ) }
+								</div>
+							</div>` : '' }
+							${ canEdit ? `
+							<div class="minn-order-panel">
+								<div class="minn-side-title" style="margin:0 0 8px;">Linked products</div>
+								<div class="minn-order-fields">
+									${ PRODUCT_LINK_FIELDS.map( ( f ) => productLinkFieldHtml( m, f ) ).join( '' ) }
 								</div>
 							</div>` : '' }
 							${ canEdit ? `
@@ -7382,6 +7420,81 @@
 		} );
 	}
 
+	function productLinkFieldHtml( m, f ) {
+		const list = ( m.links || {} )[ f.key ] || [];
+		return `
+									<div>
+										<div class="minn-field-label">${ esc( f.label ) }</div>
+										<div class="minn-chips" data-plchips="${ f.key }">${ productTermChipsHtml( list ) }</div>
+										<div class="minn-ac" data-plac="${ f.key }">
+											<input class="minn-input minn-ac-input" placeholder="${ esc( __( 'Search products…' ) ) }" autocomplete="off" spellcheck="false" aria-label="${ esc( f.label ) }">
+											<div class="minn-ac-panel" hidden></div>
+										</div>
+										<div class="minn-toggle-desc">${ esc( f.hint ) }</div>
+									</div>`;
+	}
+
+	/**
+	 * Upsells and cross-sells: the same chips-plus-suggest shape the taxonomies
+	 * use, searching products instead of terms. This product is excluded from
+	 * its own results, since linking a thing to itself does nothing.
+	 */
+	function bindProductLinkFields( m, p ) {
+		PRODUCT_LINK_FIELDS.forEach( ( f ) => {
+			const wrap = $( `[data-plac="${ f.key }"]` );
+			const chips = $( `[data-plchips="${ f.key }"]` );
+			if ( ! wrap || ! chips ) return;
+			const input = wrap.querySelector( '.minn-ac-input' );
+			const panel = wrap.querySelector( '.minn-ac-panel' );
+			const bindChips = () => $$( '[data-ptchip]', chips ).forEach( ( ch ) =>
+				ch.addEventListener( 'click', () => {
+					const id = parseInt( ch.dataset.ptchip, 10 );
+					m.links[ f.key ] = m.links[ f.key ].filter( ( x ) => x.id !== id );
+					repaintChips();
+				} )
+			);
+			const repaintChips = () => {
+				chips.innerHTML = productTermChipsHtml( m.links[ f.key ] );
+				bindChips();
+			};
+			bindChips();
+			let timer = null;
+			input.addEventListener( 'input', () => {
+				clearTimeout( timer );
+				timer = setTimeout( async () => {
+					const q = input.value.trim();
+					if ( ! q ) { panel.hidden = true; return; }
+					try {
+						const rows = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=20&_fields=id,name,sku` );
+						const chosen = new Set( ( m.links[ f.key ] || [] ).map( ( x ) => x.id ) );
+						const items = ( Array.isArray( rows ) ? rows : [] )
+							.filter( ( r ) => r.id !== p.id && ! chosen.has( r.id ) );
+						panel.innerHTML = items.length
+							? items.map( ( r ) => `<button type="button" class="minn-ac-item" data-plpick="${ r.id }" data-plname="${ esc( r.name || '' ) }">${ esc( r.name || '' ) }${ r.sku ? ` <span class="minn-ac-hint">${ esc( r.sku ) }</span>` : '' }</button>` ).join( '' )
+							: `<div class="minn-ac-empty">${ esc( __( 'No matches' ) ) }</div>`;
+						panel.hidden = false;
+						$$( '[data-plpick]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+							e.preventDefault(); // a click blurs the field first
+							const id = parseInt( b.dataset.plpick, 10 );
+							if ( ! m.links[ f.key ].some( ( x ) => x.id === id ) ) {
+								m.links[ f.key ].push( { id, name: b.dataset.plname } );
+								m.linkNames[ id ] = b.dataset.plname;
+							}
+							input.value = '';
+							panel.hidden = true;
+							repaintChips();
+						} ) );
+					} catch ( e ) { /* search hiccup — keep typing */ }
+				}, 250 );
+			} );
+			input.addEventListener( 'keydown', ( e ) => {
+				// Enter must not submit; these are pick-only.
+				if ( e.key === 'Enter' ) e.preventDefault();
+			} );
+			input.addEventListener( 'blur', () => setTimeout( () => { panel.hidden = true; }, 150 ) );
+		} );
+	}
+
 	function productTermChipsHtml( list ) {
 		return list.map( ( x ) => `<button type="button" class="minn-chip sel" data-ptchip="${ x.id }" title="${ esc( __( 'Remove' ) ) }">${ esc( x.name ) } ×</button>` ).join( '' )
 			|| `<span class="minn-tag-empty">${ esc( __( 'None yet' ) ) }</span>`;
@@ -7561,6 +7674,11 @@
 		if ( $( '#minn-p-images' ) && Array.isArray( m.images ) ) {
 			payload.images = m.images.map( ( x ) => ( { id: x.id } ) );
 		}
+		PRODUCT_LINK_FIELDS.forEach( ( f ) => {
+			if ( $( `[data-plchips="${ f.key }"]` ) && Array.isArray( ( m.links || {} )[ f.key ] ) ) {
+				payload[ f.key ] = m.links[ f.key ].map( ( x ) => x.id );
+			}
+		} );
 		// Taxonomies send the whole set: WooCommerce replaces, never merges.
 		PRODUCT_TERM_FIELDS.forEach( ( t ) => {
 			if ( $( `[data-ptchips="${ t.key }"]` ) && Array.isArray( ( m.terms || {} )[ t.key ] ) ) {
@@ -7583,6 +7701,7 @@
 		delete payload.images;
 		PRODUCT_TERM_FIELDS.forEach( ( t ) => delete payload[ t.key ] );
 		delete payload.downloads;
+		PRODUCT_LINK_FIELDS.forEach( ( f ) => delete payload[ f.key ] );
 		m.full = Object.assign( {}, m.full, payload );
 	}
 
@@ -7643,6 +7762,7 @@
 		const edBtn = $( '#minn-p-editor' );
 		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
 		bindProductTermFields( m );
+		bindProductLinkFields( m, p );
 		bindProductImages( m );
 		bindProductDownloads( m );
 		// Sale dates use Minn's own picker (a native datetime-local cannot be
@@ -7672,6 +7792,7 @@
 					seedProductTerms( m );
 					seedProductImages( m );
 					seedProductDownloads( m );
+					seedProductLinks( m );
 					m.product = Object.assign( {}, m.product, {
 						name: full.name,
 						status: full.status,
