@@ -4708,6 +4708,19 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $theme ) {
 			return new WP_Error( 'not_found', 'Theme not found.', array( 'status' => 404 ) );
 		}
+		// switch_theme() checks version floors but never the network allowlist,
+		// so this is the only enforcement point — wp-admin/themes.php refuses
+		// here too. switch_themes is an ordinary subsite administrator's
+		// capability, and the allowlist IS the tenancy boundary for themes, so
+		// without this a tenant activates a theme the network withheld from it.
+		// Single site: is_allowed() is unconditionally true.
+		if ( ! $theme->is_allowed() ) {
+			return new WP_Error(
+				'not_allowed',
+				__( 'That theme is not enabled for this site. A network administrator can enable it.', 'minn-admin' ),
+				array( 'status' => 403 )
+			);
+		}
 		switch_theme( $stylesheet );
 		return rest_ensure_response( array( 'active' => get_stylesheet() ) );
 	}
