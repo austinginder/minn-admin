@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.28.0. This file ships inside the plugin, so the copy you
+*Current as of v0.29.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -41,6 +41,10 @@ Three things to know before anything else:
 
 Group headings collapse when clicked, and the sidebar remembers your
 arrangement. Counts on Content, Comments and Orders show pending work.
+Lists show recent dates as a day and month and add the year once a date
+is from a different year, so an old site's content list reads in order at
+a glance. On Content you can sort by clicking the Title or Date heading,
+and clicking the same heading again reverses it.
 Clicking the sidebar item for the view you are already on refreshes its
 list in place, so a tab left open all day stays current without a page
 reload.
@@ -167,7 +171,9 @@ away:
 - **Saving is status-aware.** Drafts autosave as you write. Published
   posts never change under you: edits back up silently, and the live post
   only updates when you press Update. A crash net keeps a local copy of
-  unsaved work in your browser and offers to restore it.
+  unsaved work in your browser and offers to restore it. A live post
+  holding edits you never published wears a small amber dot on its status
+  in the content list, and the Modified filter there shows only those.
 - **History** shows revisions with side-by-side comparisons; restore takes
   one click. If someone else has the post open (in Minn or wp-admin), you
   will be told before you can both edit it.
@@ -249,6 +255,47 @@ own layout.
 Plugins also have hard budgets for how much space they may claim in the
 sidebar, palette and menus, so the interface stays calm as you install
 more of them.
+
+## Your store
+
+With WooCommerce active, the sidebar gains Orders, Products, Coupons and
+Customers.
+
+- **Orders** open as their own page, at their own address, so an order can
+  be linked to or kept in a second tab. You can take a payment by hand,
+  refund whole lines or an arbitrary amount, resend an email and read the
+  order's notes without leaving Minn.
+- **Products** open as a page too. It holds on one screen what WooCommerce
+  spreads across the tabs of its Product data box: name and status, pricing
+  with an optional sale schedule and tax class, inventory (SKU, GTIN,
+  whether you track quantity, backorders, a low stock threshold, the
+  one-per-order limit), shipping (weight, dimensions, shipping class),
+  images, organization (categories, tags, brands, the address slug,
+  featured), attributes, upsells and cross-sells, and a purchase note.
+  Everything saves together with one Save changes.
+
+  A few things follow the product rather than sitting there always. Marking
+  a product virtual removes the shipping fields, because nothing ships.
+  Marking it downloadable adds a Downloads card where you name each file
+  and either paste a URL or pick it from your media library. An external
+  product asks for the address and button text that send shoppers away. A
+  variable product gains a Variations card: give an attribute some values
+  and turn on its Variations switch, then Generate from attributes builds
+  every combination you do not already have, each with its own SKU, price
+  and stock.
+
+  Images are tiles you drag to reorder. The first one is the picture your
+  shop shows, so promoting a gallery photo is a drag rather than a trip to
+  WooCommerce. Click a tile to swap it, hover it for the × that removes it.
+
+  The long description opens in Minn's own editor, with blocks, autosave
+  and revisions, rather than sending you elsewhere. If you would rather see
+  a product without leaving the list, hover its row and click the eye for a
+  quick look with the same fields.
+
+  Two jobs stay in WooCommerce on purpose: creating a brand new store-wide
+  attribute, which belongs to the whole shop rather than to one product,
+  and the children of a grouped product.
 
 ## Managing the site
 
