@@ -2977,7 +2977,8 @@
 		$$( '[data-sotab]', view ).forEach( ( chip ) =>
 			chip.addEventListener( 'click', () => {
 				state.orderView = 'list';
-				state.orderTab = chip.dataset.sotab;
+				state.orderFilters = orderFiltersDefault();
+				if ( chip.dataset.sotab && chip.dataset.sotab !== 'any' ) state.orderFilters.status = [ chip.dataset.sotab ];
 				state.orderSearch = '';
 				state.cache.orders = null;
 				go( 'orders' );
@@ -5038,10 +5039,50 @@
 		cancelled: 'trash-status', refunded: 'draft', failed: 'trash-status',
 	};
 
-	const orderCtx = () => ( state.orderTab || 'any' ) + '|' + ( state.orderSearch || '' );
+	/* The orders list filters. One object drives the quick-access strip, the
+	   chips, the query and the cache key, so there is a single answer to
+	   "what is the list showing" — the old split between a status tab and a
+	   search box could not express two statuses at once, which WooCommerce's
+	   REST has always accepted (status is an array param).
+
+	   Every filter here maps to a NATIVE WooCommerce collection parameter.
+	   Filtering client-side would be a lie the moment the list paginates:
+	   page 2 of an unfiltered query is not page 2 of a filtered one. */
+	const orderFiltersDefault = () => ( { status: [], after: '', before: '', datePreset: '', customer: null, product: null } );
+	const orderFilters = () => {
+		if ( ! state.orderFilters ) state.orderFilters = orderFiltersFromUrl();
+		return state.orderFilters;
+	};
+	const orderFiltersActive = () => {
+		const f = orderFilters();
+		return !! ( f.status.length || f.after || f.before || f.customer || f.product );
+	};
+	/** The status preset the quick strip should light, or '' when the filters
+	 *  say something no single preset can (two statuses, say). */
+	const orderPresetActive = () => {
+		const f = orderFilters();
+		if ( ! f.status.length ) return 'any';
+		return f.status.length === 1 ? f.status[ 0 ] : '';
+	};
+	const orderCtx = () => JSON.stringify( orderFilters() ) + '|' + ( state.orderSearch || '' );
+
+	/** Filters as query string, in WooCommerce's own parameter vocabulary. */
+	function orderFilterQuery() {
+		const f = orderFilters();
+		let q = '';
+		if ( f.status.length ) {
+			f.status.forEach( ( s ) => { q += '&status[]=' + encodeURIComponent( s ); } );
+		} else {
+			q += '&status=any';
+		}
+		if ( f.after ) q += '&after=' + encodeURIComponent( f.after );
+		if ( f.before ) q += '&before=' + encodeURIComponent( f.before );
+		if ( f.customer ) q += '&customer=' + encodeURIComponent( f.customer.value );
+		if ( f.product ) q += '&product=' + encodeURIComponent( f.product.value );
+		return q;
+	}
 
 	async function loadOrders( page = 1 ) {
-		const tab = state.orderTab;
 		const q0 = ( state.orderSearch || '' ).trim();
 		const ctx = orderCtx();
 		const fields = 'id,number,status,total,currency_symbol,date_created,billing,line_items';
@@ -5052,8 +5093,9 @@
 				const one = await api( `wc/v3/orders/${ q0 }?_fields=${ fields }` );
 				if ( ctx !== orderCtx() ) return;
 				if ( one && one.id ) {
-					// Honor the active status tab when it is not "any".
-					if ( tab === 'any' || one.status === tab ) {
+					// Honor the active status filter when there is one.
+					const want = orderFilters().status;
+					if ( ! want.length || want.indexOf( one.status ) !== -1 ) {
 						state.cache.orders = { items: [ one ], page: 1, totalPages: 1, total: 1 };
 						return;
 					}
@@ -5063,12 +5105,359 @@
 			}
 		}
 		// Newest first so "All" still surfaces current work; page through for history.
-		let q = `wc/v3/orders?per_page=25&page=${ page }&status=${ encodeURIComponent( tab ) }&orderby=date&order=desc&_fields=${ fields }`;
+		let q = `wc/v3/orders?per_page=25&page=${ page }&orderby=date&order=desc&_fields=${ fields }` + orderFilterQuery();
 		// WC search matches order id/number, billing name/email/phone, etc.
 		if ( q0 ) q += '&search=' + encodeURIComponent( q0 );
 		const r = await apiPaged( q );
-		if ( ctx !== orderCtx() ) return; // tab/search changed mid-flight — discard
+		if ( ctx !== orderCtx() ) return; // filters/search changed mid-flight — discard
 		state.cache.orders = { items: r.items, page, totalPages: r.totalPages, total: r.total };
+	}
+
+
+	/* ===== Orders list filters (chips over native WC parameters) ===== */
+
+	const ORDER_FILTER_KINDS = [
+		[ 'status', __( 'Status' ) ],
+		[ 'date', __( 'Date' ) ],
+		[ 'customer', __( 'Customer' ) ],
+		[ 'product', __( 'Product' ) ],
+	];
+	// Windows, not calendars: a custom range wants the themed date picker,
+	// which today carries editor-specific chrome (it marks days that already
+	// have posts). Presets cover the daily question and stay honest.
+	const ORDER_DATE_PRESETS = [
+		[ '7', __( 'Last 7 days' ) ],
+		[ '30', __( 'Last 30 days' ) ],
+		[ '90', __( 'Last 90 days' ) ],
+		[ '365', __( 'Last 12 months' ) ],
+	];
+
+
+	/* Filters in the URL: a filtered list is a place, so it survives a reload
+	   and can be pasted to someone else. Only these keys are ever touched —
+	   with plain permalinks the app itself rides on a query arg
+	   (?minn_admin=1), so anything else in the query is somebody's business.
+
+	   Everything read back is validated: a hand-typed status has to be one
+	   WooCommerce actually registered, ids have to be positive integers, and
+	   dates have to look like dates. The query Minn sends is built from the
+	   validated state, never from the raw string. */
+	const ORDER_URL_KEYS = [ 'status', 'after', 'before', 'date', 'customer', 'product', 'q' ];
+	const orderStatusSlugs = () => {
+		const known = Object.keys( B.wcOrderStatuses || {} );
+		return known.length ? known : ORDER_TAB_SLUGS.filter( ( s ) => s !== 'any' );
+	};
+
+	function orderFiltersFromUrl() {
+		const f = orderFiltersDefault();
+		let p;
+		try { p = new URLSearchParams( location.search ); } catch ( e ) { return f; }
+		const valid = orderStatusSlugs();
+		( p.get( 'status' ) || '' ).split( ',' ).forEach( ( slug ) => {
+			const s = slug.trim();
+			if ( s && valid.indexOf( s ) !== -1 && f.status.indexOf( s ) === -1 ) f.status.push( s );
+		} );
+		const preset = p.get( 'date' );
+		if ( preset && ORDER_DATE_PRESETS.some( ( [ d ] ) => d === preset ) ) {
+			Object.assign( f, orderDateWindow( preset ) );
+		} else {
+			const okDate = ( v ) => /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/.test( v || '' );
+			if ( okDate( p.get( 'after' ) ) ) f.after = p.get( 'after' );
+			if ( okDate( p.get( 'before' ) ) ) f.before = p.get( 'before' );
+		}
+		// The id is all a URL can carry; the name is fetched and painted in.
+		const idOf = ( key ) => {
+			const n = parseInt( p.get( key ) || '', 10 );
+			return n > 0 && String( n ) === ( p.get( key ) || '' ).trim() ? n : 0;
+		};
+		const cid = idOf( 'customer' );
+		if ( cid ) f.customer = { value: cid, label: '#' + cid, unresolved: 'customer' };
+		const pid = idOf( 'product' );
+		if ( pid ) f.product = { value: pid, label: '#' + pid, unresolved: 'product' };
+		const q = ( p.get( 'q' ) || '' ).trim();
+		if ( q && ! state.orderSearch ) state.orderSearch = q;
+		return f;
+	}
+
+	/** The window a date preset means, as WooCommerce's own parameters. */
+	function orderDateWindow( days ) {
+		const pad = ( n ) => String( n ).padStart( 2, '0' );
+		const from = new Date( Date.now() - ( parseInt( days, 10 ) - 1 ) * 86400000 );
+		return {
+			after: `${ from.getFullYear() }-${ pad( from.getMonth() + 1 ) }-${ pad( from.getDate() ) }T00:00:00`,
+			before: '',
+			datePreset: String( days ),
+		};
+	}
+
+	/** Write the current filters back to the address bar (never a history entry:
+	 *  narrowing a list is not navigation, and Back should leave the list). */
+	function syncOrderFiltersUrl() {
+		const f = orderFilters();
+		let url;
+		try { url = new URL( location.href ); } catch ( e ) { return; }
+		ORDER_URL_KEYS.forEach( ( k ) => url.searchParams.delete( k ) );
+		if ( f.status.length ) url.searchParams.set( 'status', f.status.join( ',' ) );
+		if ( f.datePreset ) url.searchParams.set( 'date', f.datePreset );
+		else {
+			if ( f.after ) url.searchParams.set( 'after', f.after );
+			if ( f.before ) url.searchParams.set( 'before', f.before );
+		}
+		if ( f.customer ) url.searchParams.set( 'customer', f.customer.value );
+		if ( f.product ) url.searchParams.set( 'product', f.product.value );
+		if ( state.orderSearch ) url.searchParams.set( 'q', state.orderSearch );
+		history.replaceState( null, '', url.pathname + url.search + url.hash );
+	}
+
+	/** A filter restored from a URL knows an id, not a name. Fetch the names
+	 *  once and repaint the chips; a failed lookup keeps the id, which is
+	 *  still true. */
+	function resolveOrderFilterLabels( view ) {
+		const f = orderFilters();
+		[ 'customer', 'product' ].forEach( ( kind ) => {
+			const pick = f[ kind ];
+			if ( ! pick || ! pick.unresolved ) return;
+			delete pick.unresolved;
+			const route = kind === 'customer'
+				? `wc/v3/customers/${ pick.value }?_fields=id,first_name,last_name,email`
+				: `wc/v3/products/${ pick.value }?_fields=id,name,sku`;
+			api( route ).then( ( row ) => {
+				if ( ! row || ! row.id || f[ kind ] !== pick ) return;
+				pick.label = kind === 'customer'
+					? ( [ row.first_name, row.last_name ].filter( Boolean ).join( ' ' ) || row.email || pick.label )
+					: ( row.name + ( row.sku ? ' · ' + row.sku : '' ) );
+				paintOrderFilterBar( view );
+			} ).catch( () => {} );
+		} );
+	}
+
+	/** What the status dropdown reads. Two or more statuses cannot be named
+	 *  by one preset, so it says how many and the chip carries the detail. */
+	const orderPresetLabel = () => {
+		const f = orderFilters();
+		if ( ! f.status.length ) return __( 'All' );
+		if ( f.status.length === 1 ) return orderStatusLabel( f.status[ 0 ] );
+		/* translators: %d: number of order statuses being filtered on. */
+		return sprintf( _n( '%d status', '%d statuses', f.status.length ), f.status.length );
+	};
+
+	const orderDateChipLabel = () => {
+		const f = orderFilters();
+		const preset = ORDER_DATE_PRESETS.find( ( [ d ] ) => d === f.datePreset );
+		if ( preset ) return preset[ 1 ];
+		return [ f.after, f.before ].filter( Boolean ).map( ( d ) => d.slice( 0, 10 ) ).join( ' → ' );
+	};
+
+	function orderFilterChipsHtml() {
+		const f = orderFilters();
+		const chips = [];
+		if ( f.status.length ) chips.push( [ 'status', __( 'Status' ), f.status.map( orderStatusLabel ).join( ', ' ) ] );
+		if ( f.after || f.before ) chips.push( [ 'date', __( 'Date' ), orderDateChipLabel() ] );
+		if ( f.customer ) chips.push( [ 'customer', __( 'Customer' ), f.customer.label ] );
+		if ( f.product ) chips.push( [ 'product', __( 'Product' ), f.product.label ] );
+		if ( ! chips.length ) return '';
+		return `
+		<div class="minn-of-bar">
+			${ chips.map( ( [ kind, label, value ] ) => `
+			<span class="minn-of-chip" data-ofchip="${ kind }">
+				<button type="button" class="minn-of-chip-body">${ esc( label ) }: <b>${ esc( value ) }</b></button>
+				<button type="button" class="minn-of-x" data-ofremove="${ kind }" aria-label="${ esc( sprintf( /* translators: %s: filter name. */ __( 'Remove the %s filter' ), label ) ) }">×</button>
+			</span>` ).join( '' ) }
+			<button type="button" class="minn-btn-soft" id="minn-order-clearfilters">${ __( 'Clear all' ) }</button>
+		</div>`;
+	}
+
+	/** Repaint the chip bar in place. A filter change reloads the list, and
+	 *  waiting for that round trip to remove a chip the user just dismissed
+	 *  reads as a dead click. The full render that follows rebinds it. */
+	function paintOrderFilterBar( view ) {
+		const host = view || $( '#minn-view' );
+		if ( ! host ) return;
+		const existing = $( '.minn-of-bar', host );
+		const html = orderFilterChipsHtml();
+		if ( ! html ) {
+			if ( existing ) existing.remove();
+			return;
+		}
+		if ( existing ) {
+			existing.outerHTML = html;
+			return;
+		}
+		const addBtn = $( '#minn-order-addfilter', host );
+		const row = addBtn && addBtn.closest( '.minn-toolbar' );
+		if ( row ) row.insertAdjacentHTML( 'afterend', html );
+	}
+
+	/** Reload the list under the current filters, keeping the toolbar painted. */
+	function reloadOrderList( view, paintChrome ) {
+		softListReload( {
+			route: 'orders',
+			view,
+			clear: () => { state.cache.orders = null; },
+			paintChrome: () => {
+				syncOrderFiltersUrl();
+				paintOrderFilterBar( view );
+				if ( typeof paintChrome === 'function' ) paintChrome();
+			},
+			load: () => loadOrders( 1 ),
+			render: renderOrders,
+		} );
+	}
+
+	let orderFilterPop = null;
+	function closeOrderFilterPop() {
+		if ( orderFilterPop ) orderFilterPop.remove();
+		orderFilterPop = null;
+		document.removeEventListener( 'mousedown', orderFilterPopAway, true );
+		document.removeEventListener( 'keydown', orderFilterPopKey, true );
+	}
+	function orderFilterPopAway( e ) {
+		if ( orderFilterPop && ! orderFilterPop.contains( e.target ) ) closeOrderFilterPop();
+	}
+	function orderFilterPopKey( e ) {
+		if ( e.key === 'Escape' && orderFilterPop ) { e.stopPropagation(); closeOrderFilterPop(); }
+	}
+
+	/**
+	 * The filter popover. `kind` null lists the filters; a kind picks its value.
+	 * Picking applies immediately (status waits for Apply, since it is multi).
+	 */
+	function openOrderFilterPop( anchor, kind, view ) {
+		closeOrderFilterPop();
+		const f = orderFilters();
+		const pop = document.createElement( 'div' );
+		orderFilterPop = pop;
+		pop.className = 'minn-of-pop';
+		if ( ! kind ) {
+			pop.innerHTML = ORDER_FILTER_KINDS.map( ( [ id, label ] ) =>
+				`<button type="button" class="minn-of-row" data-offilter="${ id }">${ esc( label ) }</button>` ).join( '' );
+		} else if ( kind === 'preset' ) {
+			// Single-status shortcuts: the old tab strip, folded into a menu.
+			pop.innerHTML = ORDER_TABS.map( ( [ id, label ] ) =>
+				`<button type="button" class="minn-of-row${ orderPresetActive() === id ? ' is-on' : '' }" data-opreset="${ id }">${ esc( label ) }</button>` ).join( '' );
+		} else if ( kind === 'status' ) {
+			pop.innerHTML = ORDER_TAB_SLUGS.filter( ( s ) => s !== 'any' ).map( ( slug ) =>
+				`<button type="button" class="minn-of-row${ f.status.indexOf( slug ) !== -1 ? ' is-on' : '' }" data-ofval="${ slug }">${ esc( orderStatusLabel( slug ) ) }</button>` ).join( '' )
+				+ `<div class="minn-of-foot"><button type="button" class="minn-btn-primary" data-ofapply>${ __( 'Apply' ) }</button></div>`;
+		} else if ( kind === 'date' ) {
+			pop.innerHTML = ORDER_DATE_PRESETS.map( ( [ days, label ] ) =>
+				`<button type="button" class="minn-of-row${ f.datePreset === days ? ' is-on' : '' }" data-ofval="${ days }">${ esc( label ) }</button>` ).join( '' );
+		} else {
+			pop.innerHTML = `<div class="minn-ac minn-of-search">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( kind === 'customer' ? __( 'Search customers…' ) : __( 'Search products…' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<div class="minn-ac-panel" hidden></div>
+			</div>`;
+		}
+		document.body.appendChild( pop );
+		const r = anchor.getBoundingClientRect();
+		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - pop.offsetWidth - 10 ) ) + 'px';
+		pop.style.top = Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) + 'px';
+		document.addEventListener( 'mousedown', orderFilterPopAway, true );
+		document.addEventListener( 'keydown', orderFilterPopKey, true );
+
+		$$( '[data-offilter]', pop ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => openOrderFilterPop( anchor, btn.dataset.offilter, view ) ) );
+
+		$$( '[data-opreset]', pop ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const preset = btn.dataset.opreset;
+				closeOrderFilterPop();
+				if ( orderPresetActive() === preset ) return;
+				orderFilters().status = preset === 'any' ? [] : [ preset ];
+				reloadOrderList( view, () => {
+					const b = $( '#minn-order-preset', view );
+					if ( b ) b.innerHTML = esc( orderPresetLabel() ) + ' ' + icon( 'chevron-down' );
+				} );
+			} ) );
+
+		if ( kind === 'status' ) {
+			const picked = f.status.slice();
+			$$( '[data-ofval]', pop ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					const slug = btn.dataset.ofval;
+					const i = picked.indexOf( slug );
+					if ( i === -1 ) picked.push( slug ); else picked.splice( i, 1 );
+					btn.classList.toggle( 'is-on', picked.indexOf( slug ) !== -1 );
+				} ) );
+			const apply = $( '[data-ofapply]', pop );
+			if ( apply ) apply.addEventListener( 'click', () => {
+				f.status = picked;
+				closeOrderFilterPop();
+				reloadOrderList( view );
+			} );
+		} else if ( kind === 'date' ) {
+			$$( '[data-ofval]', pop ).forEach( ( btn ) =>
+				btn.addEventListener( 'click', () => {
+					// WooCommerce compares against the site's own timezone, so
+					// a local ISO string (no Z) is the honest window here.
+					Object.assign( f, orderDateWindow( btn.dataset.ofval ) );
+					closeOrderFilterPop();
+					reloadOrderList( view );
+				} ) );
+		} else if ( kind === 'customer' || kind === 'product' ) {
+			const wrap = $( '.minn-of-search', pop );
+			const input = $( '.minn-ac-input', wrap );
+			const panel = $( '.minn-ac-panel', wrap );
+			let timer = null;
+			let seq = 0;
+			// A lookup is a round trip. Without a word for it, an empty panel
+			// reads as "nothing found" while the request is still in the air.
+			let spin = null;
+			const setSearching = ( on ) => {
+				if ( on && ! spin ) {
+					spin = document.createElement( 'div' );
+					spin.className = 'minn-loading minn-of-searching';
+					spin.textContent = __( 'Searching…' );
+					wrap.appendChild( spin );
+				} else if ( ! on && spin ) {
+					spin.remove();
+					spin = null;
+				}
+			};
+			input.addEventListener( 'input', () => {
+				clearTimeout( timer );
+				panel.hidden = true;
+				setSearching( !! input.value.trim() );
+				timer = setTimeout( async () => {
+					const q = input.value.trim();
+					if ( ! q ) { panel.hidden = true; setSearching( false ); return; }
+					const mine = ++seq;
+					const route = kind === 'customer'
+						? `wc/v3/customers?search=${ encodeURIComponent( q ) }&per_page=8&_fields=id,first_name,last_name,email`
+						: `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,images`;
+					try {
+						const rows = await api( route );
+						if ( mine !== seq || ! pop.isConnected ) return;
+						setSearching( false );
+						const items = ( Array.isArray( rows ) ? rows : [] ).map( ( row ) => ( {
+							value: row.id,
+							label: kind === 'customer'
+								? ( [ row.first_name, row.last_name ].filter( Boolean ).join( ' ' ) || row.email )
+								: ( row.name + ( row.sku ? ' · ' + row.sku : '' ) ),
+							thumb: kind === 'product' ? ( ( ( row.images || [] )[ 0 ] || {} ).src || '' ) : '',
+						} ) );
+						if ( ! items.length ) { panel.hidden = true; return; }
+						panel.innerHTML = items.map( ( it ) => ( kind === 'product'
+							? `<button type="button" class="minn-ac-item minn-of-item" data-acv="${ esc( String( it.value ) ) }"><span class="minn-of-thumb">${ it.thumb ? `<img src="${ esc( it.thumb ) }" alt="" loading="lazy">` : '' }</span><span class="minn-cell-clip">${ esc( it.label ) }</span></button>`
+							: `<button type="button" class="minn-ac-item" data-acv="${ esc( String( it.value ) ) }">${ esc( it.label ) }</button>` ) ).join( '' );
+						panel.hidden = false;
+						$$( '.minn-ac-item', panel ).forEach( ( item ) =>
+							item.addEventListener( 'click', () => {
+								const hit = items.find( ( it ) => String( it.value ) === item.dataset.acv );
+								if ( ! hit ) return;
+								f[ kind ] = hit;
+								closeOrderFilterPop();
+								reloadOrderList( view );
+							} ) );
+					} catch ( e ) {
+						// A failed lookup paints nothing, but must never leave
+						// the line spinning.
+						if ( mine === seq ) { panel.hidden = true; setSearching( false ); }
+					}
+				}, 280 );
+			} );
+			setTimeout( () => input.focus(), 30 );
+		}
 	}
 
 	async function loadOrderSummary() {
@@ -5659,7 +6048,7 @@
 				if ( ! email ) return;
 				closeHost();
 				state.orderView = 'list';
-				state.orderTab = 'any';
+				state.orderFilters = orderFiltersDefault();
 				state.orderSearch = email;
 				state.cache.orders = null;
 				if ( state.route === 'orders' ) renderOrders();
@@ -6648,16 +7037,13 @@
 					${ delta ? `<div class="minn-stat-delta">${ esc( delta ) }</div>` : '' }
 				</div>` ).join( '' ) }
 		</div>` : '' }
-		<div class="minn-toolbar minn-toolbar-views">
-			<div class="minn-tabs">
-				${ ORDER_TABS.map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ state.orderTab === id ? ' active' : '' }" data-otab="${ id }">${ label }</button>` ).join( '' ) }
-			</div>
-		</div>
-		<div class="minn-toolbar">
+		<div class="minn-toolbar minn-order-bar">
+			<button type="button" class="minn-btn-soft minn-of-drop" id="minn-order-preset">${ esc( orderPresetLabel() ) } ${ icon( 'chevron-down' ) }</button>
 			<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="Search orders (ID, name, email…)" value="${ esc( state.orderSearch || '' ) }">
+			<button type="button" class="minn-btn-soft" id="minn-order-addfilter">${ icon( 'plus' ) } ${ __( 'Add filter' ) }</button>
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'order' ) }</div>
 		</div>
+		${ orderFilterChipsHtml() }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-order-cols">
 				<div>Order</div><div>Customer</div><div>Status</div><div>Items</div><div>Total</div><div></div>
@@ -6685,24 +7071,29 @@
 		);
 		const addOrderBtn = $( '#minn-order-add', view );
 		if ( addOrderBtn ) addOrderBtn.addEventListener( 'click', () => openNewOrderModal() );
-		$$( '[data-otab]', view ).forEach( ( btn ) =>
+		const presetBtn = $( '#minn-order-preset', view );
+		if ( presetBtn ) presetBtn.addEventListener( 'click', () => openOrderFilterPop( presetBtn, 'preset', view ) );
+		const addFilterBtn = $( '#minn-order-addfilter', view );
+		if ( addFilterBtn ) addFilterBtn.addEventListener( 'click', () => openOrderFilterPop( addFilterBtn, null, view ) );
+		$$( '[data-ofremove]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
-				const tab = btn.dataset.otab;
-				if ( state.orderTab === tab ) return;
-				state.orderTab = tab;
-				softListReload( {
-					route: 'orders',
-					view,
-					clear: () => { state.cache.orders = null; },
-					paintChrome: () => {
-						$$( '[data-otab]', view ).forEach( ( b ) =>
-							b.classList.toggle( 'active', b.dataset.otab === tab ) );
-					},
-					load: () => loadOrders( 1 ),
-					render: renderOrders,
-				} );
+				const f = orderFilters();
+				const kind = btn.dataset.ofremove;
+				if ( kind === 'status' ) f.status = [];
+				else if ( kind === 'date' ) { f.after = ''; f.before = ''; f.datePreset = ''; }
+				else f[ kind ] = null;
+				reloadOrderList( view );
 			} )
 		);
+		$$( '[data-ofchip] > .minn-of-chip-body', view ).forEach( ( body ) =>
+			body.addEventListener( 'click', () =>
+				openOrderFilterPop( body, body.parentNode.dataset.ofchip, view ) )
+		);
+		const clearBtn = $( '#minn-order-clearfilters', view );
+		if ( clearBtn ) clearBtn.addEventListener( 'click', () => {
+			state.orderFilters = orderFiltersDefault();
+			reloadOrderList( view );
+		} );
 		const orderSearch = $( '#minn-order-search', view );
 		if ( orderSearch ) {
 			let orderSearchTimer = null;
@@ -6710,26 +7101,14 @@
 				clearTimeout( orderSearchTimer );
 				orderSearchTimer = setTimeout( () => {
 					state.orderSearch = orderSearch.value.trim();
-					softListReload( {
-						route: 'orders',
-						view,
-						clear: () => { state.cache.orders = null; },
-						load: () => loadOrders( 1 ),
-						render: renderOrders,
-					} );
+					reloadOrderList( view );
 				}, 280 );
 			} );
 			orderSearch.addEventListener( 'keydown', ( e ) => {
 				if ( e.key === 'Escape' && orderSearch.value ) {
 					orderSearch.value = '';
 					state.orderSearch = '';
-					softListReload( {
-						route: 'orders',
-						view,
-						clear: () => { state.cache.orders = null; },
-						load: () => loadOrders( 1 ),
-						render: renderOrders,
-					} );
+					reloadOrderList( view );
 				}
 			} );
 		}
@@ -6779,6 +7158,10 @@
 			} )
 		);
 		bindPager( view, c.page, loadOrders, () => { if ( state.route === 'orders' ) renderOrders(); } );
+		// Arriving on a filtered URL: keep the address bar canonical (junk
+		// dropped, presets normalized) and turn any restored id into a name.
+		syncOrderFiltersUrl();
+		resolveOrderFilterLabels( view );
 	}
 
 	function openNewOrderModal() {

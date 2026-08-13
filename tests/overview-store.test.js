@@ -82,8 +82,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// Chip navigation: pending chip lands on Orders with the Pending tab
 		// active and the fixture order in the list.
 		await page.click( '[data-sotab="pending"]' );
-		await page.waitForSelector( '[data-otab="pending"].active', { timeout: 15000 } );
-		t.check( 'pending chip lands on Orders with Pending tab active', true, '' );
+		await page.waitForFunction( () => {
+			const b = document.querySelector( '#minn-order-preset' );
+			return b && /Pending/i.test( b.textContent );
+		}, null, { timeout: 15000 } );
+		t.check( 'pending chip lands on Orders with the Pending status selected', true, '' );
 		t.check( 'URL is the orders route', page.url().includes( '/minn-admin/orders' ), page.url() );
 		const searchCleared = await page.evaluate( () => {
 			const s = document.querySelector( '#minn-order-search' );
@@ -97,7 +100,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-store-view', { timeout: 15000 } );
 		await page.click( '#minn-store-view' );
-		await page.waitForSelector( '[data-otab]', { timeout: 15000 } );
+		await page.waitForSelector( '#minn-order-preset', { timeout: 15000 } );
 		t.check( 'View orders opens the Orders list', page.url().includes( '/minn-admin/orders' ), page.url() );
 	} finally {
 		for ( const id of fixtureIds ) {
