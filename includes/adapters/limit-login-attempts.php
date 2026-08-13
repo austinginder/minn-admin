@@ -27,14 +27,22 @@ function minn_admin_llar_active() {
 function minn_admin_llar_can() {
 	// LLA-R has a network mode: when its "use local options" network setting
 	// is off on multisite, the log/lockouts live in SITE options shared by
-	// every subsite — network data, so a per-site cap is not enough (their
-	// own admin UI moves to Network Admin in that mode). Local mode keeps
-	// per-site options and per-site access.
-	if ( is_multisite() && ! is_super_admin()
-		&& class_exists( '\LLAR\Core\Helpers' )
-		&& method_exists( '\LLAR\Core\Helpers', 'use_local_options' )
-		&& ! \LLAR\Core\Helpers::use_local_options() ) {
-		return false;
+	// every subsite, which is network data a per-site capability cannot cover
+	// (their own admin UI moves to Network Admin in that mode). Local mode
+	// keeps per-site options and per-site access.
+	//
+	// The vendor lookup decides only whether to RELAX to per-site access, so
+	// an LLA-R that has moved or renamed the helper leaves us refusing rather
+	// than opening up. Reading it the other way round, as a condition of the
+	// refusal, made an unrecognised build hand a subsite administrator every
+	// other tenant's lockout IPs and attempted usernames.
+	if ( ! Minn_Admin::network_owner() ) {
+		$local = class_exists( '\LLAR\Core\Helpers' )
+			&& method_exists( '\LLAR\Core\Helpers', 'use_local_options' )
+			&& \LLAR\Core\Helpers::use_local_options();
+		if ( ! $local ) {
+			return false;
+		}
 	}
 	return current_user_can( 'manage_options' ) || current_user_can( 'llar_admin' );
 }

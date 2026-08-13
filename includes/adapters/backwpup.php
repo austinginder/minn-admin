@@ -21,6 +21,14 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_backwpup_active() {
+	// BackWPup keeps its job registry in the `backwpup_jobs` SITE option and
+	// writes archives to one network-shared folder, so on multisite the jobs
+	// and their backups belong to the network owner. The plugin registers its
+	// whole admin under network_admin_menu there, which means a subsite
+	// administrator has no BackWPup screen at all.
+	if ( ! Minn_Admin::network_owner() ) {
+		return false;
+	}
 	return defined( 'BACKWPUP_PLUGIN_LOADED' )
 		&& class_exists( 'BackWPup' )
 		&& class_exists( 'BackWPup_Option' )
@@ -249,11 +257,16 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_backwpup_active() ) {
 		return;
 	}
+	// Network-shared job registry and archive folder (see
+	// minn_admin_backwpup_active): the per-action BackWPup capabilities below
+	// answer WHICH verb, this answers WHOSE data.
 	$perm = function () {
-		return current_user_can( 'backwpup_backups' ) || current_user_can( 'manage_options' );
+		return ( current_user_can( 'backwpup_backups' ) || current_user_can( 'manage_options' ) )
+			&& Minn_Admin::network_owner();
 	};
 	$perm_delete = function () {
-		return current_user_can( 'backwpup_backups_delete' ) || current_user_can( 'manage_options' );
+		return ( current_user_can( 'backwpup_backups_delete' ) || current_user_can( 'manage_options' ) )
+			&& Minn_Admin::network_owner();
 	};
 	// STARTING a job is a different capability from viewing the list.
 	// BackWPup ships a real non-admin role, backwpup_check ("jobs checker"),
@@ -262,7 +275,8 @@ add_action( 'rest_api_init', function () {
 	// (inc/class-page-jobs.php). Using $perm here let that role kick full
 	// backup runs on demand.
 	$perm_run = function () {
-		return current_user_can( 'backwpup_jobs_start' ) || current_user_can( 'manage_options' );
+		return ( current_user_can( 'backwpup_jobs_start' ) || current_user_can( 'manage_options' ) )
+			&& Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/backwpup/backups', array(

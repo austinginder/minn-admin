@@ -23,7 +23,7 @@ function minn_admin_wordfence_active() {
 	// Wordfence keeps ONE table set on base_prefix for the whole network
 	// (wfDB) and its own UI lives in Network Admin there — the login log
 	// holds every site's events, so on multisite it is super-admin data.
-	if ( is_multisite() && ! is_super_admin() ) {
+	if ( ! Minn_Admin::network_owner() ) {
 		return false;
 	}
 	// Case-insensitive existence check: on case-folding MySQL setups
@@ -148,7 +148,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => function () {
 			// Network-shared table (see minn_admin_wordfence_active).
-			return current_user_can( 'manage_options' ) && ( ! is_multisite() || is_super_admin() );
+			return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
@@ -204,7 +204,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'GET',
 		'permission_callback' => function () {
 			// Network-shared table (see minn_admin_wordfence_active).
-			return current_user_can( 'manage_options' ) && ( ! is_multisite() || is_super_admin() );
+			return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
 		},
 		'callback'            => function () {
 			return rest_ensure_response( minn_admin_wordfence_status_model() );
