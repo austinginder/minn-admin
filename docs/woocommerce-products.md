@@ -97,8 +97,14 @@ its own.
    entry one as the product image and the rest as the gallery, so reordering is
    the primary verb (drag a tile, or use its arrows) and the first tile is
    badged. Tiles are the picker's thumbnails, not the full-size originals.
-5. **Advanced and pricing extras**: sale schedule, purchase note, menu order,
-   reviews, tax status and class.
+5. **Advanced and pricing extras** (shipped): sale schedule, tax status and
+   class in Pricing; purchase note, menu order and reviews in a new Advanced
+   card. Two WooCommerce behaviors to keep in mind. Clearing a sale date sends
+   an empty string, NOT null: these are guarded with `isset()`, and
+   `isset( null )` is false, so a null returns 200 and changes nothing. And
+   `purchase_note` and `short_description` come back run through `wpautop`
+   while being stored raw, so the markup is stripped on the way into the
+   textarea or every save wraps the text in another paragraph.
 6. **Type-conditional cards**: virtual, downloadable and its files, external URL
    and button text. Also the point where the type select becomes safe to expose.
 7. **Linked products**: upsells and cross-sells, needing a product search picker.
