@@ -6294,7 +6294,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		// Licenses — read-only visibility (adapters/licenses.php); the health
 		// check only renders when the site has license-wanting components.
-		$licenses = function_exists( 'minn_admin_licenses' ) ? minn_admin_licenses() : null;
+		// /system is manage_options, so on multisite this re-export would hand
+		// a subsite administrator the network's licensing inventory and the
+		// account identities in each note. Defer to the same gate the licenses
+		// routes use rather than re-deciding it here.
+		$licenses = function_exists( 'minn_admin_licenses' ) && function_exists( 'minn_admin_licenses_can_manage' ) && minn_admin_licenses_can_manage()
+			? minn_admin_licenses()
+			: null;
 		if ( $licenses && ! empty( $licenses['items'] ) ) {
 			$sum  = $licenses['summary'];
 			$bad  = $sum['expired'] + $sum['invalid'];

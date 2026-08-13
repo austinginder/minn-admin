@@ -3847,6 +3847,27 @@ function minn_admin_licenses_surecart( $fingerprints ) {
 }
 
 /**
+ * Who may read or change this site's licences.
+ *
+ * On multisite the answer is the network administrator, not a site one:
+ * vendor credentials live in NETWORK options (Divi's et_automatic_updates_options,
+ * Gravity Perks' gwp_settings), a deactivate is an irreversible seat release
+ * at the vendor that the network owner paid for, and the read side carries
+ * account identities (the WooCommerce.com address, the Jetpack master login).
+ * manage_options is per-site and every subsite administrator holds it.
+ *
+ * Shared by the read route, the action route and the /system re-export so
+ * the three can never drift apart.
+ *
+ * @return bool
+ */
+function minn_admin_licenses_can_manage() {
+	return is_multisite()
+		? current_user_can( 'manage_network_options' )
+		: current_user_can( 'manage_options' );
+}
+
+/**
  * The assembled license picture: every license-wanting component with a
  * state, worst first. Vendor readers claim their components; SDK scanners
  * cover the rest of the fingerprinted set.
@@ -4252,9 +4273,13 @@ function minn_admin_force_update_check( $component = '' ) {
 }
 
 add_action( 'rest_api_init', function () {
-	$can = function () {
-		return current_user_can( 'manage_options' );
-	};
+	// Licences are NETWORK-scoped on multisite: the credentials live in site
+	// options, the seats belong to whoever bought them, and releasing one is
+	// an irreversible call to the vendor. manage_options is per-site, so
+	// without this any subsite administrator could spend or wipe the network
+	// owner's licences, and read their account identities. This is the same
+	// boundary can_read_logs() and the database viewer already draw.
+	$can = 'minn_admin_licenses_can_manage';
 	register_rest_route(
 		'minn-admin/v1',
 		'/licenses',

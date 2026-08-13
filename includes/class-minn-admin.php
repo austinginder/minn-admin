@@ -1007,6 +1007,12 @@ class Minn_Admin {
 				'updateLanguages' => current_user_can( 'update_languages' ),
 				'installThemes' => current_user_can( 'install_themes' ),
 				'settings'     => current_user_can( 'manage_options' ),
+				// Licences are network-scoped on multisite (see
+				// minn_admin_licenses_can_manage): the Licenses tab would 403
+				// for a subsite administrator, so don't offer it to them.
+				'licenses'     => function_exists( 'minn_admin_licenses_can_manage' )
+					? minn_admin_licenses_can_manage()
+					: current_user_can( 'manage_options' ),
 				'moderate'     => current_user_can( 'moderate_comments' ),
 				'terms'        => current_user_can( 'manage_categories' ),
 				'upload'       => current_user_can( 'upload_files' ),
