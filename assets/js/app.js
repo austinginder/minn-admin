@@ -12764,7 +12764,7 @@
 			<div class="minn-tabs">
 				<button class="minn-tab${ state.extTab === 'plugins' ? ' active' : '' }" data-xtab="plugins">Plugins</button>
 				${ B.caps.themes ? `<button class="minn-tab${ state.extTab === 'themes' ? ' active' : '' }" data-xtab="themes">Themes</button>` : '' }
-				${ B.caps.settings ? `<button class="minn-tab${ state.extTab === 'licenses' ? ' active' : '' }" data-xtab="licenses">Licenses</button>` : '' }
+				${ B.caps.licenses ? `<button class="minn-tab${ state.extTab === 'licenses' ? ' active' : '' }" data-xtab="licenses">Licenses</button>` : '' }
 			</div>` : '';
 
 	/** Loading shell that keeps Plugins/Themes/Licenses tabs painted. */
@@ -13644,7 +13644,7 @@
 
 	function renderExtensions() {
 		if ( state.extTab === 'themes' && B.caps.themes ) return renderThemes();
-		if ( state.extTab === 'licenses' && B.caps.settings ) return renderLicenses();
+		if ( state.extTab === 'licenses' && B.caps.licenses ) return renderLicenses();
 		const view = $( '#minn-view' );
 		const plugins = state.cache.plugins;
 		if ( ! plugins ) {
