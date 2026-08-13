@@ -223,10 +223,13 @@ function minn_admin_performance_lab_deactivate( $slug ) {
 	if ( ! function_exists( 'deactivate_plugins' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
-	if ( ! current_user_can( 'activate_plugin', $file ) ) {
-		return new WP_Error( 'minn_cannot_deactivate', 'You cannot deactivate this plugin.', array( 'status' => 403 ) );
+	// The per-object meta cap alone lets a subsite administrator network-
+	// deactivate a network-active feature; see Minn_Admin::plugin_toggle_denied().
+	$denied = Minn_Admin::plugin_toggle_denied( $file );
+	if ( $denied ) {
+		return new WP_Error( 'minn_cannot_deactivate', $denied->get_error_message(), array( 'status' => 403 ) );
 	}
-	deactivate_plugins( $file, false, is_multisite() && is_plugin_active_for_network( $file ) );
+	deactivate_plugins( $file, false, Minn_Admin::plugin_toggle_is_network( $file, false ) );
 	return true;
 }
 
