@@ -61,10 +61,66 @@ function minn_admin_wpcode_type_executes( $code_type ) {
 }
 
 /**
+ * Does this type put the author's MARKUP into the page?
+ *
+ * Distinct from executing: a `text` or `html` snippet never runs PHP, but
+ * WPCode emits its bytes verbatim at the snippet's location, so a <script>
+ * in one runs for every visitor and every administrator. That makes these
+ * types answer to unfiltered_html, the capability WordPress uses everywhere
+ * else to decide who may store raw markup, rather than to DISALLOW_FILE_EDIT.
+ *
+ * @param string $code_type WPCode code type.
+ * @return bool
+ */
+function minn_admin_wpcode_type_is_markup( $code_type ) {
+	return in_array( (string) $code_type, array( 'html', 'text' ), true );
+}
+
+/**
+ * Reproduce WPCode's own write-time sanitizing for a caller without
+ * unfiltered_html.
+ *
+ * WPCode turns core's kses OFF for its own saves: includes/post-type.php
+ * hooks wpcode_maybe_remove_core_content_filters() to wpcode_before_snippet_save,
+ * and that calls remove_all_filters( 'content_save_pre' ) immediately before
+ * wp_insert_post() runs. Nothing sanitizes post_content on that path, so the
+ * plugin compensates inside its own save listener instead
+ * (class-wpcode-admin-page-snippet-manager.php: a `text` snippet authored
+ * without unfiltered_html is passed through wp_kses_post). An adapter that
+ * writes through WPCode_Snippet gets the filter removal and none of the
+ * compensation, so it has to carry the same rule itself.
+ *
+ * @param string $code_type Effective code type.
+ * @param string $code      Raw code.
+ * @return string
+ */
+function minn_admin_wpcode_clean_code( $code_type, $code ) {
+	if ( 'text' === (string) $code_type && ! current_user_can( 'unfiltered_html' ) ) {
+		return wp_kses_post( (string) $code );
+	}
+	return (string) $code;
+}
+
+/**
  * 403 unless the caller may author this code type (and, on an update, edit
  * this specific snippet — WPCode requires edit_post on the target too).
  */
 function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0 ) {
+	// An `html` snippet is raw markup emitted site-wide, and WPCode will not
+	// let a user without unfiltered_html author one: its snippet editor drops
+	// to read-only when html is among the available types. `text` is allowed
+	// but filtered, which minn_admin_wpcode_clean_code() handles at the write.
+	// Note that neither answers to code_edits_allowed() below: they are not
+	// file editing, they are markup, and the capability for markup is
+	// unfiltered_html. Only super admins hold it on multisite, and no one
+	// holds it on a site defining DISALLOW_UNFILTERED_HTML.
+	if ( 'html' === (string) $code_type && ! current_user_can( 'unfiltered_html' ) ) {
+		return new WP_Error(
+			'forbidden',
+			'HTML snippets run as raw markup on every page, so they need the unfiltered_html capability.',
+			array( 'status' => 403 )
+		);
+	}
 	// A snippet WPCode EXECUTES is PHP authoring, so it answers to the
 	// directive a site owner sets to forbid exactly that. Markup and text
 	// snippets are unaffected.
@@ -334,11 +390,12 @@ add_action( 'rest_api_init', function () {
 					}
 					// load_from_array (via the array constructor) can set private
 					// fields like priority/note that are not assignable from outside.
+					$create_type = sanitize_key( (string) ( $request['code_type'] ?? 'php' ) );
 					$snippet = new WPCode_Snippet(
 						array(
 							'title'       => sanitize_text_field( (string) $request['name'] ),
-							'code'        => (string) ( $request['code'] ?? '' ),
-							'code_type'   => sanitize_key( (string) ( $request['code_type'] ?? 'php' ) ),
+							'code'        => minn_admin_wpcode_clean_code( $create_type, (string) ( $request['code'] ?? '' ) ),
+							'code_type'   => $create_type,
 							'location'    => sanitize_key( (string) ( $request['location'] ?? 'everywhere' ) ),
 							'priority'    => (int) ( $request['priority'] ?? 10 ),
 							'tags'        => array_map( 'sanitize_text_field', (array) ( $request['tags'] ?? array() ) ),
@@ -416,12 +473,24 @@ add_action( 'rest_api_init', function () {
 					// save() gate) — force it so location edits stick.
 					$snippet->get_auto_insert();
 
+					// The type in force AFTER this write decides how the code is
+					// filtered, so resolve it before touching the code: a request
+					// that sends only a new type still changes what the stored
+					// bytes mean.
+					$eff_type = null !== $new_type ? $new_type : (string) $snippet->get_code_type();
+
 					$patch = array( 'auto_insert' => 1 );
 					if ( null !== $request['name'] ) {
 						$patch['title'] = sanitize_text_field( (string) $request['name'] );
 					}
 					if ( null !== $request['code'] ) {
-						$patch['code'] = (string) $request['code'];
+						$patch['code'] = minn_admin_wpcode_clean_code( $eff_type, (string) $request['code'] );
+					} elseif ( null !== $new_type && minn_admin_wpcode_type_is_markup( $eff_type ) ) {
+						// Retyping is a write even when no code is sent. Creating a
+						// css snippet (never filtered, since css is not markup) and
+						// then flipping it to text would otherwise promote bytes
+						// into a markup context that never passed the markup rule.
+						$patch['code'] = minn_admin_wpcode_clean_code( $eff_type, (string) $snippet->get_code() );
 					}
 					if ( null !== $new_type ) {
 						$patch['code_type'] = $new_type;
