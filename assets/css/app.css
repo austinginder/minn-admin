@@ -2645,6 +2645,12 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--border); }
 .minn-order-panel { padding: 14px 18px 16px; border-right: 1px solid var(--border); }
 .minn-order-panel:last-child { border-right: none; }
+/* The product body runs to four panels. The two-panel order body needed no
+   rule between rows; a wrapped grid does, or row two floats. */
+.minn-grid-rows > .minn-order-panel:nth-child(n+3) { border-top: 1px solid var(--border); }
+/* A group with nothing to sit beside (the short description) takes the row. */
+.minn-order-panel.wide { grid-column: 1 / -1; border-right: none; }
+@media (max-width: 720px) { .minn-order-panel.wide { grid-column: auto; } }
 .minn-order-fields { display: flex; flex-direction: column; gap: 8px; }
 .minn-order-field-row { display: flex; gap: 8px; }
 .minn-order-field-row > * { flex: 1; min-width: 0; }
