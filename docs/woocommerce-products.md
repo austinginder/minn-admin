@@ -105,8 +105,18 @@ its own.
    `purchase_note` and `short_description` come back run through `wpautop`
    while being stored raw, so the markup is stripped on the way into the
    textarea or every save wraps the text in another paragraph.
-6. **Type-conditional cards**: virtual, downloadable and its files, external URL
-   and button text. Also the point where the type select becomes safe to expose.
+6. **Type-conditional cards** (shipped): the type combobox, Virtual and
+   Downloadable, a Downloads card and the external URL and button text.
+   Changing any of the three repaints the page, because they decide which cards
+   exist, and a repaint rebuilds the form from the model. So the form is read
+   back into the model FIRST (`harvestProductForm`), or flipping a switch would
+   throw away everything typed since the page opened. That is the same
+   late-render wipe the shipping-class load caused in wave 2, except here the
+   repaint is wanted and the harvest is what makes it safe.
+   `buildProductPayload` was extracted for this: the save and the harvest read
+   the form through one function rather than two that can drift.
+   An empty download limit or expiry stores `-1`, which is how WooCommerce
+   spells "no cap".
 7. **Linked products**: upsells and cross-sells, needing a product search picker.
 8. **Attributes**: inline custom attributes first, global attributes second.
 9. **Variations**: a list view against the variations sub-resource, editing SKU,

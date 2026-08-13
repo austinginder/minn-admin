@@ -6707,7 +6707,9 @@
 		+ ',weight,dimensions,shipping_class,virtual'
 		+ ',slug,featured,tags,brands'
 		+ ',date_on_sale_from,date_on_sale_to,tax_status,tax_class'
-		+ ',purchase_note,menu_order,reviews_allowed';
+		+ ',purchase_note,menu_order,reviews_allowed'
+		+ ',downloadable,downloads,download_limit,download_expiry'
+		+ ',external_url,button_text';
 
 	// The Organization card's taxonomies. A store without brands answers with
 	// no `brands` key at all, which is how that field knows to stay away.
@@ -6716,6 +6718,67 @@
 		{ key: 'tags', label: 'Tags', route: 'products/tags', create: true, placeholder: 'Add a tag, press Enter' },
 		{ key: 'brands', label: 'Brands', route: 'products/brands', create: true, placeholder: 'Add a brand, press Enter' },
 	];
+
+	// Downloadable files ride the model too. WooCommerce mints the id for a new
+	// entry, so a row only has to carry a name and a URL.
+	function seedProductDownloads( m ) {
+		const p = m.full || {};
+		m.downloads = Array.isArray( p.downloads )
+			? p.downloads.map( ( d ) => ( { id: d.id || '', name: d.name || '', file: d.file || '' } ) )
+			: [];
+	}
+
+	function productDownloadsHtml( list ) {
+		if ( ! list.length ) {
+			return `<div class="minn-pdl-empty">${ esc( __( 'No files yet. Buyers get nothing to download until you add one.' ) ) }</div>`;
+		}
+		return list.map( ( d, i ) => `
+			<div class="minn-pdl-row">
+				<input class="minn-input" data-pdlname="${ i }" value="${ esc( d.name ) }" placeholder="${ esc( __( 'Name' ) ) }" aria-label="${ esc( __( 'File name' ) ) }">
+				<input class="minn-input" data-pdlfile="${ i }" value="${ esc( d.file ) }" placeholder="https://example.com/file.pdf" aria-label="${ esc( __( 'File URL' ) ) }">
+				<button type="button" class="minn-pdl-x" data-pdlx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( __( 'Remove file' ) ) }">×</button>
+			</div>` ).join( '' );
+	}
+
+	function bindProductDownloads( m ) {
+		const list = $( '#minn-p-downloads' );
+		if ( ! list || ! Array.isArray( m.downloads ) ) return;
+		const repaint = () => {
+			list.innerHTML = productDownloadsHtml( m.downloads );
+			bindRows();
+		};
+		const bindRows = () => {
+			$$( '[data-pdlname]', list ).forEach( ( el ) => el.addEventListener( 'input', () => {
+				m.downloads[ parseInt( el.dataset.pdlname, 10 ) ].name = el.value;
+			} ) );
+			$$( '[data-pdlfile]', list ).forEach( ( el ) => el.addEventListener( 'input', () => {
+				m.downloads[ parseInt( el.dataset.pdlfile, 10 ) ].file = el.value;
+			} ) );
+			$$( '[data-pdlx]', list ).forEach( ( el ) => el.addEventListener( 'click', () => {
+				m.downloads.splice( parseInt( el.dataset.pdlx, 10 ), 1 );
+				repaint();
+			} ) );
+		};
+		bindRows();
+		const add = $( '#minn-p-dl-add' );
+		if ( add ) add.addEventListener( 'click', () => {
+			m.downloads.push( { id: '', name: '', file: '' } );
+			repaint();
+			const rows = $$( '[data-pdlname]', list );
+			if ( rows.length ) rows[ rows.length - 1 ].focus( { preventScroll: true } );
+		} );
+		// Most downloadable files are already in the media library, so picking
+		// beats pasting a URL by hand.
+		const pick = $( '#minn-p-dl-pick' );
+		if ( pick ) pick.addEventListener( 'click', () => {
+			openMediaPicker( ( picked ) => {
+				( Array.isArray( picked ) ? picked : [ picked ] ).filter( Boolean ).forEach( ( it ) => {
+					m.downloads.push( { id: '', name: it.name || '', file: it.url || '' } );
+				} );
+				repaint();
+			}, { multi: true, any: true, doneLabel: __( 'Add files' ) } );
+		} );
+	}
 
 	// Images ride the model for the same reason terms do. WooCommerce reads
 	// the first entry as the product image and the rest as the gallery, so
@@ -6934,6 +6997,7 @@
 				m.loading = false;
 				seedProductTerms( m );
 				seedProductImages( m );
+				seedProductDownloads( m );
 				if ( state.cache.products && state.cache.products.items ) {
 					const i = state.cache.products.items.findIndex( ( x ) => x.id === id );
 					if ( i >= 0 ) {
@@ -6983,6 +7047,9 @@
 		// does this: weight and dimensions on something that never ships are
 		// noise the store will never use.
 		const shipOk = ! p.virtual;
+		const isExternal = ( p.type || 'simple' ) === 'external';
+		// A downloadable product carries its files; nothing else does.
+		const isDownloadable = !! p.downloadable;
 		return `
 					<div class="minn-order-body">
 						<div class="minn-order-grid minn-grid-rows">
@@ -6992,6 +7059,9 @@
 								${ canEdit ? `
 								<div class="minn-order-fields">
 									<div><div class="minn-field-label">Name</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
+									${ combo( 'minn-p-type' ) }
+									${ productToggleHtml( 'minn-p-virtual', 'Virtual', !! p.virtual ) }
+									${ productToggleHtml( 'minn-p-downloadable', 'Downloadable', !! p.downloadable ) }
 									${ combo( 'minn-p-status' ) }
 									${ combo( 'minn-p-vis' ) }
 								</div>` : `
@@ -7009,6 +7079,10 @@
 										<div><div class="minn-field-label">Regular price</div><input class="minn-input" id="minn-p-regular" type="text" inputmode="decimal" value="${ esc( p.regular_price || '' ) }"></div>
 										<div><div class="minn-field-label">Sale price</div><input class="minn-input" id="minn-p-sale" type="text" inputmode="decimal" value="${ esc( p.sale_price || '' ) }" placeholder="Optional"></div>
 									</div>
+									${ isExternal ? `
+									<div><div class="minn-field-label">Product URL</div><input class="minn-input" id="minn-p-exturl" type="url" value="${ esc( p.external_url || '' ) }" placeholder="https://example.com/product"></div>
+									<div><div class="minn-field-label">Button text</div><input class="minn-input" id="minn-p-btntext" value="${ esc( p.button_text || '' ) }" placeholder="Buy product"></div>
+									<div class="minn-toggle-desc">An external product sends the shopper to this address instead of adding to the cart.</div>` : '' }
 									<div class="minn-order-field-row">
 										<div><div class="minn-field-label">Sale starts</div><input class="minn-input" id="minn-p-salefrom" readonly placeholder="Any time" data-dp="${ esc( wcDateMachine( p.date_on_sale_from ) ) }" value="${ esc( dpPretty( wcDateMachine( p.date_on_sale_from ) ) ) }"></div>
 										<div><div class="minn-field-label">Sale ends</div><input class="minn-input" id="minn-p-saleto" readonly placeholder="No end" data-dp="${ esc( wcDateMachine( p.date_on_sale_to ) ) }" value="${ esc( dpPretty( wcDateMachine( p.date_on_sale_to ) ) ) }"></div>
@@ -7087,6 +7161,19 @@
 									${ productToggleHtml( 'minn-p-featured', 'Featured product', p.featured ) }
 								</div>
 							</div>` : '' }
+							${ canEdit && isDownloadable ? `
+							<div class="minn-order-panel wide">
+								<div class="minn-side-title" style="margin:0 0 8px;">Downloads</div>
+								<div class="minn-pdl-list" id="minn-p-downloads">${ productDownloadsHtml( m.downloads || [] ) }</div>
+								<div class="minn-pimg-foot">
+									<button type="button" class="minn-btn-soft" id="minn-p-dl-add">${ esc( __( 'Add file' ) ) }</button>
+									<button type="button" class="minn-btn-soft" id="minn-p-dl-pick">${ esc( __( 'Choose from media…' ) ) }</button>
+								</div>
+								<div class="minn-order-field-row" style="margin-top:12px;">
+									<div><div class="minn-field-label">Download limit</div><input class="minn-input" id="minn-p-dllimit" type="number" step="1" min="-1" value="${ p.download_limit != null && p.download_limit >= 0 ? esc( String( p.download_limit ) ) : '' }" placeholder="Unlimited"></div>
+									<div><div class="minn-field-label">Expires after (days)</div><input class="minn-input" id="minn-p-dlexpiry" type="number" step="1" min="-1" value="${ p.download_expiry != null && p.download_expiry >= 0 ? esc( String( p.download_expiry ) ) : '' }" placeholder="Never"></div>
+								</div>
+							</div>` : '' }
 							${ canEdit ? `
 							<div class="minn-order-panel">
 								<div class="minn-side-title" style="margin:0 0 8px;">Advanced</div>
@@ -7130,6 +7217,9 @@
 		const taxClasses = state.cache.taxClasses || [ { slug: 'standard', name: 'Standard rate' } ];
 		const shipClasses = state.cache.shippingClasses || [];
 		return [
+			{ id: 'minn-p-type', label: 'Product type', value: p.type || 'simple', options: [
+				[ 'simple', 'Simple product' ], [ 'grouped', 'Grouped product' ],
+				[ 'external', 'External or affiliate product' ], [ 'variable', 'Variable product' ] ] },
 			{ id: 'minn-p-status', label: 'Status', value: p.status || 'publish', options: [
 				[ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ] },
 			{ id: 'minn-p-vis', label: 'Catalog visibility', value: p.catalog_visibility || 'visible', options: [
@@ -7394,6 +7484,109 @@
 	}
 
 	/**
+	 * Read the whole product form into a wc/v3 payload. Shared by the save and
+	 * by the type switches, which re-render the page and would otherwise throw
+	 * away everything typed since it opened.
+	 */
+	function buildProductPayload( m, p ) {
+		const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
+		const payload = {
+			name,
+			sku: ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim(),
+			status: pcomboValue( 'minn-p-status', p.status ),
+			catalog_visibility: pcomboValue( 'minn-p-vis', 'visible' ),
+			short_description: ( ( $( '#minn-p-short' ) || {} ).value || '' ).trim(),
+		};
+		if ( productPriceEditable( p ) ) {
+			payload.regular_price = ( ( $( '#minn-p-regular' ) || {} ).value || '' ).trim();
+			payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
+			payload.tax_status = pcomboValue( 'minn-p-taxstatus', 'taxable' );
+			payload.tax_class = pcomboValue( 'minn-p-taxclass', '' );
+			// Clearing a sale date sends an empty string, NOT null: WooCommerce
+			// guards these with isset(), and isset( null ) is false, so a null
+			// is accepted with a 200 and quietly changes nothing. Verified
+			// against wc/v3 directly, both ways.
+			const from = ( ( $( '#minn-p-salefrom' ) || {} ).dataset || {} ).dp || '';
+			const to = ( ( $( '#minn-p-saleto' ) || {} ).dataset || {} ).dp || '';
+			payload.date_on_sale_from = from ? from + ':00' : '';
+			payload.date_on_sale_to = to ? to + ':00' : '';
+			payload.manage_stock = pswitchOn( 'minn-p-manage' );
+			payload.stock_status = pcomboValue( 'minn-p-stock', 'instock' );
+			payload.backorders = pcomboValue( 'minn-p-backorders', 'no' );
+			if ( payload.manage_stock ) {
+				const qtyRaw = ( ( $( '#minn-p-qty' ) || {} ).value || '' ).trim();
+				payload.stock_quantity = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
+				// Empty means "use the store-wide threshold", which WC
+				// stores as null, not as 0 (0 is a real threshold).
+				const lowRaw = ( ( $( '#minn-p-lowstock' ) || {} ).value || '' ).trim();
+				payload.low_stock_amount = lowRaw === '' ? null : parseInt( lowRaw, 10 );
+			}
+		}
+		// Identifiers and the purchase limit apply to every product type,
+		// so they are not behind the price gate.
+		if ( $( '#minn-p-gtin' ) ) payload.global_unique_id = ( $( '#minn-p-gtin' ).value || '' ).trim();
+		if ( $( '#minn-p-solo' ) ) payload.sold_individually = pswitchOn( 'minn-p-solo' );
+		if ( $( '#minn-p-weight' ) ) {
+			payload.weight = ( $( '#minn-p-weight' ).value || '' ).trim();
+			payload.dimensions = {
+				length: ( ( $( '#minn-p-length' ) || {} ).value || '' ).trim(),
+				width: ( ( $( '#minn-p-width' ) || {} ).value || '' ).trim(),
+				height: ( ( $( '#minn-p-height' ) || {} ).value || '' ).trim(),
+			};
+			payload.shipping_class = pcomboValue( 'minn-p-shipclass', '' );
+		}
+		if ( $( '#minn-p-note' ) ) payload.purchase_note = ( $( '#minn-p-note' ).value || '' ).trim();
+		if ( $( '#minn-p-menuorder' ) ) payload.menu_order = parseInt( $( '#minn-p-menuorder' ).value, 10 ) || 0;
+		if ( $( '#minn-p-reviews' ) ) payload.reviews_allowed = pswitchOn( 'minn-p-reviews' );
+		if ( $( '#minn-p-slug' ) ) payload.slug = ( $( '#minn-p-slug' ).value || '' ).trim();
+		if ( $( '#minn-p-featured' ) ) payload.featured = pswitchOn( 'minn-p-featured' );
+		payload.type = pcomboValue( 'minn-p-type', p.type || 'simple' );
+		payload.virtual = pswitchOn( 'minn-p-virtual' );
+		payload.downloadable = pswitchOn( 'minn-p-downloadable' );
+		if ( $( '#minn-p-exturl' ) ) payload.external_url = ( $( '#minn-p-exturl' ).value || '' ).trim();
+		if ( $( '#minn-p-btntext' ) ) payload.button_text = ( $( '#minn-p-btntext' ).value || '' ).trim();
+		if ( $( '#minn-p-downloads' ) && Array.isArray( m.downloads ) ) {
+			// A row with no file is not a download; WooCommerce would reject it.
+			payload.downloads = m.downloads
+				.filter( ( d ) => ( d.file || '' ).trim() )
+				.map( ( d ) => ( { id: d.id || undefined, name: ( d.name || '' ).trim(), file: d.file.trim() } ) );
+			// Empty means no cap, which WooCommerce stores as -1.
+			const lim = ( ( $( '#minn-p-dllimit' ) || {} ).value || '' ).trim();
+			const exp = ( ( $( '#minn-p-dlexpiry' ) || {} ).value || '' ).trim();
+			payload.download_limit = lim === '' ? -1 : parseInt( lim, 10 );
+			payload.download_expiry = exp === '' ? -1 : parseInt( exp, 10 );
+		}
+		// Images send the whole ordered set for the same reason, and the
+		// order is the meaning: entry one is the product image.
+		if ( $( '#minn-p-images' ) && Array.isArray( m.images ) ) {
+			payload.images = m.images.map( ( x ) => ( { id: x.id } ) );
+		}
+		// Taxonomies send the whole set: WooCommerce replaces, never merges.
+		PRODUCT_TERM_FIELDS.forEach( ( t ) => {
+			if ( $( `[data-ptchips="${ t.key }"]` ) && Array.isArray( ( m.terms || {} )[ t.key ] ) ) {
+				payload[ t.key ] = m.terms[ t.key ].map( ( x ) => ( { id: x.id } ) );
+			}
+		} );
+		return payload;
+	}
+
+	/**
+	 * Type, Virtual and Downloadable decide which cards exist, so changing one
+	 * has to repaint the page. Everything on screen is read back into the model
+	 * FIRST: a repaint rebuilds the form from m.full, and without this the
+	 * reader would watch half their work disappear for flipping a switch.
+	 * Images, terms and downloads already live on the model, so they ride along
+	 * untouched.
+	 */
+	function harvestProductForm( m, p ) {
+		const payload = buildProductPayload( m, p );
+		delete payload.images;
+		PRODUCT_TERM_FIELDS.forEach( ( t ) => delete payload[ t.key ] );
+		delete payload.downloads;
+		m.full = Object.assign( {}, m.full, payload );
+	}
+
+	/**
 	 * Product detail bindings — shared by the modal and the /products/{id}
 	 * page (m.page picks which surface repaints after a save).
 	 */
@@ -7410,6 +7603,14 @@
 			bindAutocomplete( wrap, spec.options.map( ( [ value, label ] ) => ( { value, label } ) ), {
 				strict: true,
 				value: spec.value,
+				// Switching type changes which cards apply, so repaint — after
+				// reading the form back, or the change would eat the edits.
+				onPick: spec.id === 'minn-p-type' ? ( v ) => {
+					if ( String( v ) === String( p.type || 'simple' ) ) return;
+					harvestProductForm( m, p );
+					m.full.type = v;
+					repaint();
+				} : undefined,
 			} );
 		} );
 		// Switches in place of checkboxes: click flips .on, which is what the
@@ -7424,6 +7625,15 @@
 					const row = $( '#minn-p-stock-row' );
 					if ( row ) row.style.display = on ? '' : 'none';
 				}
+				// Virtual hides Shipping and Downloadable reveals Downloads, so
+				// both repaint — reading the form back first, as the type
+				// combobox does.
+				if ( sw.id === 'minn-p-virtual' || sw.id === 'minn-p-downloadable' ) {
+					harvestProductForm( m, p );
+					m.full.virtual = pswitchOn( 'minn-p-virtual' );
+					m.full.downloadable = pswitchOn( 'minn-p-downloadable' );
+					repaint();
+				}
 			} );
 		} );
 		// The long description is Minn's own editor, not a field here: the
@@ -7434,6 +7644,7 @@
 		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
 		bindProductTermFields( m );
 		bindProductImages( m );
+		bindProductDownloads( m );
 		// Sale dates use Minn's own picker (a native datetime-local cannot be
 		// styled); the value it commits lands on the input's dataset.
 		[ '#minn-p-salefrom', '#minn-p-saleto' ].forEach( ( sel ) => {
@@ -7447,67 +7658,7 @@
 				toast( 'Name is required', true );
 				return;
 			}
-			const payload = {
-				name,
-				sku: ( ( $( '#minn-p-sku' ) || {} ).value || '' ).trim(),
-				status: pcomboValue( 'minn-p-status', p.status ),
-				catalog_visibility: pcomboValue( 'minn-p-vis', 'visible' ),
-				short_description: ( ( $( '#minn-p-short' ) || {} ).value || '' ).trim(),
-			};
-			if ( productPriceEditable( p ) ) {
-				payload.regular_price = ( ( $( '#minn-p-regular' ) || {} ).value || '' ).trim();
-				payload.sale_price = ( ( $( '#minn-p-sale' ) || {} ).value || '' ).trim();
-				payload.tax_status = pcomboValue( 'minn-p-taxstatus', 'taxable' );
-				payload.tax_class = pcomboValue( 'minn-p-taxclass', '' );
-				// Clearing a sale date sends an empty string, NOT null: WooCommerce
-				// guards these with isset(), and isset( null ) is false, so a null
-				// is accepted with a 200 and quietly changes nothing. Verified
-				// against wc/v3 directly, both ways.
-				const from = ( ( $( '#minn-p-salefrom' ) || {} ).dataset || {} ).dp || '';
-				const to = ( ( $( '#minn-p-saleto' ) || {} ).dataset || {} ).dp || '';
-				payload.date_on_sale_from = from ? from + ':00' : '';
-				payload.date_on_sale_to = to ? to + ':00' : '';
-				payload.manage_stock = pswitchOn( 'minn-p-manage' );
-				payload.stock_status = pcomboValue( 'minn-p-stock', 'instock' );
-				payload.backorders = pcomboValue( 'minn-p-backorders', 'no' );
-				if ( payload.manage_stock ) {
-					const qtyRaw = ( ( $( '#minn-p-qty' ) || {} ).value || '' ).trim();
-					payload.stock_quantity = qtyRaw === '' ? null : parseInt( qtyRaw, 10 );
-					// Empty means "use the store-wide threshold", which WC
-					// stores as null, not as 0 (0 is a real threshold).
-					const lowRaw = ( ( $( '#minn-p-lowstock' ) || {} ).value || '' ).trim();
-					payload.low_stock_amount = lowRaw === '' ? null : parseInt( lowRaw, 10 );
-				}
-			}
-			// Identifiers and the purchase limit apply to every product type,
-			// so they are not behind the price gate.
-			if ( $( '#minn-p-gtin' ) ) payload.global_unique_id = ( $( '#minn-p-gtin' ).value || '' ).trim();
-			if ( $( '#minn-p-solo' ) ) payload.sold_individually = pswitchOn( 'minn-p-solo' );
-			if ( $( '#minn-p-weight' ) ) {
-				payload.weight = ( $( '#minn-p-weight' ).value || '' ).trim();
-				payload.dimensions = {
-					length: ( ( $( '#minn-p-length' ) || {} ).value || '' ).trim(),
-					width: ( ( $( '#minn-p-width' ) || {} ).value || '' ).trim(),
-					height: ( ( $( '#minn-p-height' ) || {} ).value || '' ).trim(),
-				};
-				payload.shipping_class = pcomboValue( 'minn-p-shipclass', '' );
-			}
-			if ( $( '#minn-p-note' ) ) payload.purchase_note = ( $( '#minn-p-note' ).value || '' ).trim();
-			if ( $( '#minn-p-menuorder' ) ) payload.menu_order = parseInt( $( '#minn-p-menuorder' ).value, 10 ) || 0;
-			if ( $( '#minn-p-reviews' ) ) payload.reviews_allowed = pswitchOn( 'minn-p-reviews' );
-			if ( $( '#minn-p-slug' ) ) payload.slug = ( $( '#minn-p-slug' ).value || '' ).trim();
-			if ( $( '#minn-p-featured' ) ) payload.featured = pswitchOn( 'minn-p-featured' );
-			// Images send the whole ordered set for the same reason, and the
-			// order is the meaning: entry one is the product image.
-			if ( $( '#minn-p-images' ) && Array.isArray( m.images ) ) {
-				payload.images = m.images.map( ( x ) => ( { id: x.id } ) );
-			}
-			// Taxonomies send the whole set: WooCommerce replaces, never merges.
-			PRODUCT_TERM_FIELDS.forEach( ( t ) => {
-				if ( $( `[data-ptchips="${ t.key }"]` ) && Array.isArray( ( m.terms || {} )[ t.key ] ) ) {
-					payload[ t.key ] = m.terms[ t.key ].map( ( x ) => ( { id: x.id } ) );
-				}
-			} );
+			const payload = buildProductPayload( m, p );
 			saveBtn.disabled = true;
 			saveBtn.textContent = 'Saving…';
 			try {
@@ -7520,6 +7671,7 @@
 					m.full = full || updated;
 					seedProductTerms( m );
 					seedProductImages( m );
+					seedProductDownloads( m );
 					m.product = Object.assign( {}, m.product, {
 						name: full.name,
 						status: full.status,
