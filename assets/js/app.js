@@ -508,9 +508,11 @@
 		const isOrg = /wordpress\.org\/(?:plugins|themes)\//i.test( h );
 		if ( role === 'author' ) {
 			if ( isGithub ) {
-				return name ? `Author on GitHub (${ name }) ↗` : __( 'Author on GitHub ↗' );
+				/* translators: %s: the extension author's name. */
+				return name ? sprintf( __( 'Author on GitHub (%s) ↗' ), name ) : __( 'Author on GitHub ↗' );
 			}
-			return name ? `Author (${ name }) ↗` : __( 'Author website ↗' );
+			/* translators: %s: the extension author's name. */
+			return name ? sprintf( __( 'Author (%s) ↗' ), name ) : __( 'Author website ↗' );
 		}
 		if ( isGithub ) return __( 'Open on GitHub ↗' );
 		if ( isOrg ) return __( 'Open on WordPress.org ↗' );
@@ -3373,7 +3375,7 @@
 						${ isTraffic ? `
 						<div><b>${ Number( c.value ).toLocaleString( uiLocale() ) }</b><span>${ esc( __( 'Visitors' ) ) }</span></div>
 						<div><b>${ Number( c.views || 0 ).toLocaleString( uiLocale() ) }</b><span>${ esc( __( 'Pageviews' ) ) }</span></div>` : `
-						<div><b>${ Number( c.value ).toLocaleString( uiLocale() ) }</b><span>Event${ c.value === 1 ? '' : 's' }</span></div>` }
+						<div><b>${ Number( c.value ).toLocaleString( uiLocale() ) }</b><span>${ esc( c.value === 1 ? __( 'Event' ) : __( 'Events' ) ) }</span></div>` }
 					</div>
 					${ ( isTraffic ? ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) : c.value > 0 )
 						? `<div class="minn-chart-tip-hint">${ esc( __( 'Click for details' ) ) }</div>` : '' }`;
@@ -12922,7 +12924,8 @@
 	function pluginUpdateBadgeLabel( file, offeredVersion ) {
 		if ( pluginUpdateCurrent === file ) return __( 'Updating…' );
 		if ( pluginUpdatePending.has( file ) ) return __( 'Queued…' );
-		return offeredVersion ? `Update → ${ offeredVersion }` : 'Update';
+		/* translators: %s: the version on offer. */
+		return offeredVersion ? sprintf( __( 'Update → %s' ), offeredVersion ) : __( 'Update' );
 	}
 
 	function markPluginCardBusy( file, busy ) {
@@ -12957,7 +12960,8 @@
 			const n = pluginUpdatePending.size;
 			if ( n ) {
 				allBtn.disabled = true;
-				allBtn.innerHTML = `${ icon( 'refresh' ) } Updating… (${ n })`;
+				/* translators: %s: number of plugins. */
+				allBtn.innerHTML = `${ icon( 'refresh' ) } ${ esc( sprintf( _n( 'Updating %s plugin…', 'Updating %s plugins…', n ), n ) ) }`;
 			}
 		}
 		// Notification-panel per-row Update buttons (same queue state).
@@ -13936,7 +13940,7 @@
 				<div class="minn-panel-title">${ sprintf( esc( /* translators: %s: the WordPress version being offered. */ __( 'WordPress %s is available' ) ), esc( core.update.version ) ) }</div>
 				<div class="minn-toggle-desc">${ sprintf( esc( /* translators: %s: the WordPress version currently installed. */ __( 'You\'re on %s. The site enters maintenance mode for a few seconds while core updates.' ) ), esc( core.version ) ) }</div>
 			</div>
-			<button class="minn-btn-primary" id="minn-core-update">${ icon( 'refresh' ) } Update WordPress</button>
+			<button class="minn-btn-primary" id="minn-core-update">${ icon( 'refresh' ) } ${ esc( __( 'Update WordPress' ) ) }</button>
 		</div>`;
 	}
 
@@ -14082,8 +14086,8 @@
 			stripTags( p.description && p.description.rendered ).toLowerCase().includes( q );
 		const visible = plugins.filter( ( p ) => matchesFilter( p ) && matchesSearch( p ) );
 
-		const filterDefs = [ [ 'all', 'All' ], [ 'active', 'Active' ], [ 'inactive', 'Inactive' ] ];
-		if ( B.caps.update ) filterDefs.push( [ 'updates', 'Updates' ] );
+		const filterDefs = [ [ 'all', __( 'All' ) ], [ 'active', __( 'Active' ) ], [ 'inactive', __( 'Inactive' ) ] ];
+		if ( B.caps.update ) filterDefs.push( [ 'updates', __( 'Updates' ) ] );
 		const counts = { all: plugins.length, active, inactive: plugins.length - active, updates: updatesFilterCount };
 		const emptyMsg = q
 			? __( 'No plugins match “' ) + esc( state.extSearch.trim() ) + '”.'
@@ -14100,18 +14104,20 @@
 		<div class="minn-toolbar minn-toolbar-views">
 			${ extTabsHtml() }
 			${ B.caps.update ? `
-				<span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }"${ bulkBusy ? ' disabled' : '' }>${ icon( 'refresh' ) } Check for updates</button>
+				<span style="margin-inline-start:auto;display:flex;gap:8px;align-items:center;">
+					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }"${ bulkBusy ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>
 					${ updateCount || bulkBusy ? `
 					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ esc( bulkBusy ? __( 'Updates run one at a time' ) : __( 'Update every plugin with a pending offer' ) ) }">
-						${ icon( 'refresh' ) } ${ bulkBusy ? `Updating… (${ queueCount })` : `Update all (${ updateCount })` }
+						${ icon( 'refresh' ) } ${ bulkBusy
+							? esc( sprintf( /* translators: %s: number of plugins. */ _n( 'Updating %s plugin…', 'Updating %s plugins…', queueCount ), queueCount ) )
+							: `${ esc( __( 'Update everything' ) ) } <span aria-hidden="true">(${ updateCount })</span>` }
 					</button>` : '' }
 				</span>` : '' }
 		</div>
 		<div class="minn-toolbar">
 			${ extFilterBarHtml( filterDefs, counts, __( 'Search plugins…' ) ) }
 			${ B.caps.install ? `
-				<button class="minn-btn-soft" id="minn-add-plugin">${ icon( 'plus' ) } Add plugin</button>` : '' }
+				<button class="minn-btn-soft" id="minn-add-plugin">${ icon( 'plus' ) } ${ esc( __( 'Add plugin' ) ) }</button>` : '' }
 		</div>
 		${ visible.length ? `
 		<div class="minn-plugin-grid">
@@ -14144,15 +14150,15 @@
 								: `<span class="minn-badge-update">${ esc( __( 'Update' ) ) }</span>` ) : '' }
 						</div>
 						<div class="minn-plugin-desc">${ esc( stripTags( ( ( p.description && p.description.rendered ) || '' ).replace( /<cite>[\s\S]*?<\/cite>/, '' ) ) ) }</div>
-						${ p.author ? `<div class="minn-plugin-author">by ${ p.author_uri
+						${ p.author ? `<div class="minn-plugin-author">${ esc( __( 'By' ) ) } ${ p.author_uri
 							? `<a href="${ esc( p.author_uri ) }" target="_blank" rel="noopener">${ esc( decodeEntities( stripTags( p.author ) ) ) }</a>`
 							: esc( decodeEntities( stripTags( p.author ) ) ) }</div>` : '' }
 						<div class="minn-plugin-foot">
 							<div class="minn-plugin-ver">v${ esc( p.version || '?' ) }</div>
 							${ B.caps.update && state.cache.autoAllowed ? autoToggleHtml( 'plugin', p.plugin + '.php', ( state.cache.autoPlugins || [] ).includes( p.plugin + '.php' ), name ) : '' }
-							${ net ? '' : `<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="Toggle ${ esc( name ) }"><span class="minn-switch-knob"></span></button>` }
+							${ net ? '' : `<button class="minn-switch${ on ? ' on' : '' }" data-toggle="${ esc( p.plugin ) }" role="switch" aria-checked="${ on }" aria-label="${ esc( name ) }"><span class="minn-switch-knob"></span></button>` }
 							<span class="minn-state-label${ on ? ' on' : '' }"${ net ? ` title="${ esc( __( 'Activated for the whole network in Network Admin' ) ) }"` : '' }>${ net ? __( 'Network active' ) : on ? __( 'Active' ) : __( 'Inactive' ) }</span>
-							${ ! on && B.caps.delete ? `<button class="minn-plugin-delete" data-del="${ esc( p.plugin ) }" title="Delete ${ esc( name ) }">${ icon( 'trash' ) }</button>` : '' }
+							${ ! on && B.caps.delete ? `<button class="minn-plugin-delete" data-del="${ esc( p.plugin ) }" title="${ esc( sprintf( /* translators: %s: the plugin's name. */ __( 'Delete %s' ), name ) ) }">${ icon( 'trash' ) }</button>` : '' }
 						</div>
 					</div>
 				</div>`;
@@ -14310,7 +14316,8 @@
 			}
 			if ( offered && B.caps.update && ! pluginUpdatePending.has( file ) ) {
 				entries.push( {
-					label: `Update → ${ offered }`,
+					/* translators: %s: the version on offer. */
+					label: sprintf( __( 'Update → %s' ), offered ),
 					run: () => queuePluginUpdate( file, name ),
 				} );
 			}
@@ -14329,7 +14336,7 @@
 				p.author_uri && { href: p.author_uri, role: 'author', name: authorName },
 			].filter( Boolean ) );
 			if ( links.length ) {
-				entries.push( { heading: 'Links' } );
+				entries.push( { heading: __( 'Links' ) } );
 				links.forEach( ( l ) => entries.push( l ) );
 			}
 			entries.push( {
@@ -14484,19 +14491,19 @@
 				( t.name || '' ).toLowerCase().includes( q ) ||
 				( t.author || '' ).toLowerCase().includes( q ) );
 
-		const filterDefs = [ [ 'all', 'All' ], [ 'active', 'Active' ] ];
-		if ( B.caps.updateThemes ) filterDefs.push( [ 'updates', 'Updates' ] );
+		const filterDefs = [ [ 'all', __( 'All' ) ], [ 'active', __( 'Active' ) ] ];
+		if ( B.caps.updateThemes ) filterDefs.push( [ 'updates', __( 'Updates' ) ] );
 		const counts = { all: themes.length, active: activeCount, updates: updateCount };
 
 		view.innerHTML = `
 		<div class="minn-toolbar minn-toolbar-views">
 			${ extTabsHtml() }
 			${ B.caps.updateThemes ? `
-				<button class="minn-btn-soft" id="minn-check-updates" style="margin-left:auto;" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }">${ icon( 'refresh' ) } Check for updates</button>` : '' }
+				<button class="minn-btn-soft" id="minn-check-updates" style="margin-inline-start:auto;" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }">${ icon( 'refresh' ) } ${ esc( __( 'Check for updates' ) ) }</button>` : '' }
 		</div>
 		<div class="minn-toolbar">
 			${ extFilterBarHtml( filterDefs, counts, __( 'Search themes…' ) ) }
-			${ B.caps.installThemes ? `<button class="minn-btn-soft" id="minn-add-theme">${ icon( 'plus' ) } Add theme</button>` : '' }
+			${ B.caps.installThemes ? `<button class="minn-btn-soft" id="minn-add-theme">${ icon( 'plus' ) } ${ esc( __( 'Add theme' ) ) }</button>` : '' }
 		</div>
 		${ visible.length ? `
 		<div class="minn-theme-grid">
@@ -14510,14 +14517,17 @@
 						: ( t.theme_uri || '' ) );
 				const hubTitle = hubHref
 					? ( /github\.com\//i.test( hubHref )
-						? `Open ${ t.name } on GitHub`
+						/* translators: %s: the theme's name. */
+						? sprintf( __( 'Open %s on GitHub' ), t.name )
 						: /wordpress\.org\/themes\//i.test( hubHref )
-							? `View ${ t.name } on WordPress.org`
-							: `${ t.name } theme page` )
+							/* translators: %s: the theme's name. */
+							? sprintf( __( 'View %s on WordPress.org' ), t.name )
+							/* translators: %s: the theme's name. */
+							: sprintf( __( '%s theme page' ), t.name ) )
 					: '';
 				const shotInner = `
 					${ t.active ? `<span class="minn-status publish minn-theme-badge">${ esc( __( 'Active' ) ) }</span>` : '' }
-					${ t.update && ! B.caps.updateThemes ? `<span class="minn-badge-update minn-theme-badge-u">Update ${ esc( t.update ) }</span>` : '' }`;
+					${ t.update && ! B.caps.updateThemes ? `<span class="minn-badge-update minn-theme-badge-u">${ esc( sprintf( /* translators: %s: the version on offer. */ __( 'Update → %s' ), t.update ) ) }</span>` : '' }`;
 				const shot = hubHref
 					? `<a class="minn-theme-shot minn-theme-shot-link"${ t.screenshot ? ` style="background-image:url('${ escCssUrl( t.screenshot ) }')"` : '' } href="${ esc( hubHref ) }" target="_blank" rel="noopener" title="${ esc( hubTitle ) }">${ shotInner }</a>`
 					: `<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ escCssUrl( t.screenshot ) }')"` : '' }>${ shotInner }</div>`;
@@ -14530,13 +14540,13 @@
 							? ( t.author_uri
 								? ` · <a class="minn-theme-author" href="${ esc( t.author_uri ) }" target="_blank" rel="noopener">${ esc( t.author ) }</a>`
 								: ' · ' + esc( t.author ) )
-							: '' }${ t.parent ? ' · child of ' + esc( t.parent ) : '' }</div>
+							: '' }${ t.parent ? ' · ' + esc( sprintf( /* translators: %s: the parent theme's name. */ __( 'child of %s' ), t.parent ) ) : '' }</div>
 						<div class="minn-theme-actions">
 							${ ! t.active ? `<button class="minn-btn-soft" data-tact="activate:${ i }">${ esc( __( 'Activate' ) ) }</button>` : '' }
 							${ ! t.active ? `<a class="minn-btn-soft minn-theme-preview" href="${ esc( B.site.adminUrl + ( t.block ? 'site-editor.php?wp_theme_preview=' : 'customize.php?theme=' ) + encodeURIComponent( t.stylesheet ) ) }" target="_blank" rel="noopener" title="${ esc( themePreviewTitle( t.name ) ) }">${ __( 'Live preview' ) } ↗</a>` : '' }
-							${ t.update && B.caps.updateThemes ? `<button class="minn-badge-update as-btn" data-tact="update:${ i }">Update → ${ esc( t.update ) }</button>` : '' }
+							${ t.update && B.caps.updateThemes ? `<button class="minn-badge-update as-btn" data-tact="update:${ i }">${ esc( sprintf( /* translators: %s: the version on offer. */ __( 'Update → %s' ), t.update ) ) }</button>` : '' }
 							${ B.caps.updateThemes && state.cache.themesAutoAllowed ? autoToggleHtml( 'theme', t.stylesheet, !! t.auto_update, t.name ) : '' }
-							${ ! t.active && B.caps.deleteThemes ? `<button class="minn-plugin-delete" data-tact="delete:${ i }" title="Delete ${ esc( t.name ) }">${ icon( 'trash' ) }</button>` : '' }
+							${ ! t.active && B.caps.deleteThemes ? `<button class="minn-plugin-delete" data-tact="delete:${ i }" title="${ esc( sprintf( /* translators: %s: the theme's name. */ __( 'Delete %s' ), t.name ) ) }">${ icon( 'trash' ) }</button>` : '' }
 						</div>
 					</div>
 				</div>`;
@@ -14645,10 +14655,11 @@
 		const themeMenuEntries = ( t ) => {
 			const entries = [];
 			if ( ! t.active ) {
-				entries.push( { label: 'Activate', run: () => runThemeAction( 'activate', t ) } );
+				entries.push( { label: __( 'Activate' ), run: () => runThemeAction( 'activate', t ) } );
 			}
 			if ( t.update && B.caps.updateThemes ) {
-				entries.push( { label: `Update → ${ t.update }`, run: () => runThemeAction( 'update', t ) } );
+				/* translators: %s: the version on offer. */
+				entries.push( { label: sprintf( __( 'Update → %s' ), t.update ), run: () => runThemeAction( 'update', t ) } );
 			}
 			// Network enabling decides which themes each site may CHOOSE; it
 			// never switches a site's theme, so it is not a variant of
@@ -14672,7 +14683,7 @@
 				t.author_uri && { href: t.author_uri, role: 'author', name: t.author || '' },
 			].filter( Boolean ) );
 			if ( links.length ) {
-				entries.push( { heading: 'Links' } );
+				entries.push( { heading: __( 'Links' ) } );
 				links.forEach( ( l ) => entries.push( l ) );
 			}
 			entries.push( {
@@ -29643,7 +29654,7 @@
 		// Comments follows the same gate as its nav item — a site with
 		// comments disabled never earns the tab (or its items).
 		const tabs = [
-			[ 'all', 'All' ], [ 'comments', 'Comments' ], [ 'updates', 'Updates' ], [ 'notices', 'Notices' ], [ 'system', 'System' ],
+			[ 'all', __( 'All' ) ], [ 'comments', __( 'Comments' ) ], [ 'updates', __( 'Updates' ) ], [ 'notices', __( 'Notices' ) ], [ 'system', __( 'System' ) ],
 		].filter( ( [ id ] ) => id !== 'comments' || commentsAvailable() );
 		if ( ! tabs.some( ( [ id ] ) => id === state.notifTab ) ) state.notifTab = 'all';
 		const updParts = state.notifTab === 'updates' ? pendingUpdateParts() : [];

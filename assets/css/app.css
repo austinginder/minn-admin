@@ -158,6 +158,7 @@ body {
 @keyframes minnFadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
 @keyframes minnScaleIn { from { opacity:0; transform: translateY(-6px) scale(0.98); } to { opacity:1; transform: none; } }
 @keyframes minnSlideIn { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes minnSlideInRtl { from { transform: translateX(-100%); } to { transform: none; } }
 /* Keep the translateX(-50%) centering in every frame — without it the toast
    animates in un-centered and snaps left at the end (reads as a sideways flash). */
 @keyframes minnToastIn { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
@@ -3644,6 +3645,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   border-inline-start: 1px solid var(--border); box-shadow: var(--shadow); display: flex; flex-direction: column;
   animation: minnSlideIn 0.28s cubic-bezier(0.16,1,0.3,1);
 }
+html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
 .minn-notif-head { height: 56px; flex-shrink: 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 18px; gap: 10px; }
 .minn-notif-title { font-weight: 700; font-size: 16px; }
 .minn-link-btn { margin-inline-start: auto; background: transparent; border: none; color: var(--accent2); font-size: 13.5px; font-weight: 600; cursor: pointer; }
