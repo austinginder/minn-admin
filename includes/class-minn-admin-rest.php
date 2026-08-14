@@ -6425,7 +6425,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			array(
 				'generated'  => current_time( 'c' ),
 				'checks'     => $checks,
-				'config'     => $network_owner ? self::config_state() : array(),
+				'config'     => $network_owner ? self::config_state() : null,
 				// The log routes are network-gated on multisite (wp-content's
 				// debug.log is shared by every subsite), so don't advertise
 				// sources this user's reads would 403 on — an empty list also
@@ -6433,11 +6433,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				// toggles are super-admin-locked too.
 				'logs'       => self::can_read_logs() ? Minn_Admin_Logs::list_payload() : array(),
 				'licenses'   => $licenses,
-				'extensions' => $network_owner ? self::extensions_manifest() : array(),
+				'extensions' => $network_owner ? self::extensions_manifest() : null,
 				// Live registry of everything hooked into Minn, with owner
 				// attribution + descriptor-contract problems — the feedback
 				// loop for integration authors (class-minn-admin-surfaces.php).
-				'integrations' => $network_owner ? Minn_Admin_Surfaces::integrations() : array(),
+				'integrations' => $network_owner ? Minn_Admin_Surfaces::integrations() : null,
 				'groups'     => $groups,
 			)
 		);

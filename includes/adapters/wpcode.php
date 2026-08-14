@@ -73,7 +73,12 @@ function minn_admin_wpcode_type_executes( $code_type ) {
  * @return bool
  */
 function minn_admin_wpcode_type_is_markup( $code_type ) {
-	return in_array( (string) $code_type, array( 'html', 'text' ), true );
+	// WPCode's own capability label names the tier: "Edit HTML, JavaScript &
+	// CSS Snippets". Guarding html alone covered a third of it, and js is the
+	// worse half — an html snippet has to smuggle a script tag, a js snippet
+	// IS the script body, emitted inside <script> into wp_head and admin_head.
+	// scss compiles into the same <style> sink.
+	return in_array( (string) $code_type, array( 'html', 'text', 'js', 'css', 'scss' ), true );
 }
 
 /**
@@ -102,29 +107,46 @@ function minn_admin_wpcode_clean_code( $code_type, $code ) {
 }
 
 /**
+ * Types that cannot be repaired by filtering, only refused.
+ *
+ * kses over a JavaScript body is meaningless, so html/js/css/scss are an
+ * outright refusal for a caller without unfiltered_html, while `text` is
+ * filtered the way the vendor filters it.
+ */
+function minn_admin_wpcode_type_needs_raw( $code_type ) {
+	return in_array( (string) $code_type, array( 'html', 'js', 'css', 'scss' ), true );
+}
+
+/**
  * 403 unless the caller may author this code type (and, on an update, edit
  * this specific snippet — WPCode requires edit_post on the target too).
  */
-function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0 ) {
-	// An `html` snippet is raw markup emitted site-wide, and WPCode will not
-	// let a user without unfiltered_html author one: its snippet editor drops
-	// to read-only when html is among the available types. `text` is allowed
-	// but filtered, which minn_admin_wpcode_clean_code() handles at the write.
-	// Note that neither answers to code_edits_allowed() below: they are not
-	// file editing, they are markup, and the capability for markup is
-	// unfiltered_html. Only super admins hold it on multisite, and no one
-	// holds it on a site defining DISALLOW_UNFILTERED_HTML.
-	if ( 'html' === (string) $code_type && ! current_user_can( 'unfiltered_html' ) ) {
+function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0, $writes_code = true ) {
+	// html, js, css and scss are all emitted as raw code on every page, and
+	// WPCode's own capability label treats them as one tier: "Edit HTML,
+	// JavaScript & CSS Snippets". kses cannot repair a JavaScript body, so
+	// these are refused rather than filtered; `text` is filtered instead, in
+	// minn_admin_wpcode_clean_code(). None of them answers to
+	// code_edits_allowed() below: they are not file editing, they are code
+	// going into the page, and the capability for that is unfiltered_html.
+	//
+	// Only when the request actually authors or activates. Renaming,
+	// relocating, deleting or DEACTIVATING an existing snippet stays open:
+	// telling someone a snippet is too dangerous for them to edit and then
+	// refusing to let them switch it off is not hardening.
+	if ( $writes_code
+		&& minn_admin_wpcode_type_needs_raw( $code_type )
+		&& ! current_user_can( 'unfiltered_html' ) ) {
 		return new WP_Error(
 			'forbidden',
-			__( 'HTML snippets run as raw markup on every page, so they need the unfiltered_html capability.', 'minn-admin' ),
+			__( 'This snippet type is emitted as raw code on every page, so authoring it needs the unfiltered_html capability.', 'minn-admin' ),
 			array( 'status' => 403 )
 		);
 	}
 	// A snippet WPCode EXECUTES is PHP authoring, so it answers to the
 	// directive a site owner sets to forbid exactly that. Markup and text
 	// snippets are unaffected.
-	if ( minn_admin_wpcode_type_executes( $code_type ) && class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+	if ( $writes_code && minn_admin_wpcode_type_executes( $code_type ) && class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
 		return new WP_Error(
 			'forbidden',
 			__( 'This site disallows editing code from the dashboard, so PHP snippets cannot be created or changed here.', 'minn-admin' ),
@@ -441,7 +463,11 @@ add_action( 'rest_api_init', function () {
 					// carries a new code_type that type must be allowed too —
 					// otherwise a markup-only user retypes an HTML snippet to
 					// php and authors executable code.
-					$guard = minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $request['id'] );
+					$guard = minn_admin_wpcode_guard_type(
+						(string) $snippet->get_code_type(),
+						(int) $request['id'],
+						null !== $request['code']
+					);
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
 					}
@@ -530,7 +556,7 @@ add_action( 'rest_api_init', function () {
 					// stored code type's tier AND edit_post on this snippet.
 					// Without it a text/markup-tier user could permanently delete
 					// production PHP snippets they were never allowed to author.
-					$guard = minn_admin_wpcode_guard_type( (string) ( new WPCode_Snippet( $id ) )->get_code_type(), $id );
+					$guard = minn_admin_wpcode_guard_type( (string) ( new WPCode_Snippet( $id ) )->get_code_type(), $id, false );
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
 					}
@@ -561,7 +587,11 @@ add_action( 'rest_api_init', function () {
 				// Publishing a snippet runs its code, so the stored type's tier
 				// gates this too — a text-tier user must not be able to activate
 				// or deactivate someone else's PHP snippet.
-				$guard = minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $request['id'] );
+				$guard = minn_admin_wpcode_guard_type(
+					(string) $snippet->get_code_type(),
+					(int) $request['id'],
+					! empty( $request['active'] )
+				);
 				if ( is_wp_error( $guard ) ) {
 					return $guard;
 				}
