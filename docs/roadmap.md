@@ -114,9 +114,13 @@ Each of these is a step change rather than an increment, and none has been begun
   fixture. The open question is not engineering but upkeep. Minn is distributed
   from GitHub rather than wp.org, so there is no translate.wordpress.org and no
   volunteer translation community attached, which means every locale shipped
-  becomes a standing obligation on each release. The likely answer is to finish
-  the sweep and publish the `.pot`, then accept locales from contributors who
-  will maintain them, rather than owning a language here.
+  becomes a standing obligation on each release. The answer taken is to generate
+  the catalogs from the `.pot` and correct them by hand over time, which puts
+  the standing obligation on one pipeline rather than on twenty relationships.
+  Right-to-left support rides along, proposed with a tested implementation in
+  [issue #19](https://github.com/austinginder/minn-admin/issues/19). The full
+  plan, including the locale set, the language-pack delivery model and the
+  release automation, is in [i18n-roadmap.md](i18n-roadmap.md).
 - **Somebody else's fleet.** Every install today is one person's or one agency's
   choice. The unlock is a host or an agency standardizing on Minn for client
   sites, which is the first time the multi-user and per-user-hiding work gets
