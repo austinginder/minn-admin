@@ -28,6 +28,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	}, status );
 
 	let prior = 'active';
+	let relProd = null, relParent = null, relSub = null, relRenewal = null, relPlain = null;
 	try {
 		await page.goto( `${ BASE }/minn-admin/`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-app', { state: 'attached', timeout: 20000 } );
@@ -238,7 +239,72 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Content does not advertise Subscriptions CPT', ! /subscription/i.test( contentTabs ), contentTabs );
 		// Server may still expose the type over REST; fence is client Content tabs.
 		t.check( 'types endpoint still has shop_subscription (ok)', true, types.shop_subscription ? 'present' : 'absent' );
+
+		// ---- The orders table says which orders belong to a subscription ----
+		const api = ( path, opts ) => page.evaluate( async ( a ) => {
+			const r = await fetch( window.MINN.restUrl + a.path, Object.assign( {
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
+				credentials: 'same-origin',
+			}, a.opts || {} ) );
+			const txt = await r.text();
+			let body = null;
+			try { body = JSON.parse( txt ); } catch ( e ) { body = txt; }
+			return { status: r.status, body };
+		}, { path, opts } );
+
+		const sfx = Date.now().toString( 36 );
+		const billing = { first_name: 'Rel', last_name: 'Ations', email: `minn-rel-${ sfx }@example.com`, country: 'US' };
+		const prod = await api( 'wc/v3/products', { method: 'POST', body: JSON.stringify( { name: 'Rel Widget ' + sfx, type: 'simple', regular_price: '10.00', status: 'publish' } ) } );
+		relProd = prod.body && prod.body.id;
+		const par = await api( 'wc/v3/orders', { method: 'POST', body: JSON.stringify( { status: 'completed', set_paid: true, billing, line_items: [ { product_id: relProd, quantity: 1 } ] } ) } );
+		relParent = par.body && par.body.id;
+		const rsub = await api( 'wc/v3/subscriptions', { method: 'POST', body: JSON.stringify( { status: 'active', billing, parent_id: relParent, billing_period: 'month', billing_interval: 1, line_items: [ { product_id: relProd, quantity: 1 } ] } ) } );
+		relSub = rsub.body && rsub.body.id;
+		// A renewal is an ordinary order carrying WCS's relation meta; that is
+		// exactly how WooCommerce itself records one.
+		const ren = await api( 'wc/v3/orders', { method: 'POST', body: JSON.stringify( {
+			status: 'processing', set_paid: true, billing, line_items: [ { product_id: relProd, quantity: 1 } ],
+			meta_data: [ { key: '_subscription_renewal', value: String( relSub ) } ],
+		} ) } );
+		relRenewal = ren.body && ren.body.id;
+		// A third order with no subscription at all: the badge must not be
+		// decoration that lands on everything.
+		const plain = await api( 'wc/v3/orders', { method: 'POST', body: JSON.stringify( { status: 'pending', billing, line_items: [ { product_id: relProd, quantity: 1 } ] } ) } );
+		relPlain = plain.body && plain.body.id;
+
+		await page.goto( `${ BASE }/minn-admin/orders`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `.minn-table-row[data-order="${ relRenewal }"]`, { timeout: 25000 } );
+		await page.waitForSelector( `.minn-table-row[data-order="${ relRenewal }"] [data-subrel]`, { timeout: 20000 } );
+		const marks = await page.evaluate( ( ids ) => {
+			const kindOf = ( id ) => {
+				const el = document.querySelector( `.minn-table-row[data-order="${ id }"] [data-subrel]` );
+				return el ? el.dataset.subrel : null;
+			};
+			return { parent: kindOf( ids.parent ), renewal: kindOf( ids.renewal ), plain: kindOf( ids.plain ) };
+		}, { parent: relParent, renewal: relRenewal, plain: relPlain } );
+		t.check( 'the parent order is badged as the subscription\'s first order',
+			marks.parent === 'parent', JSON.stringify( marks ) );
+		t.check( 'the renewal order is badged as a renewal', marks.renewal === 'renewal', JSON.stringify( marks ) );
+		t.check( 'an unrelated order carries no badge', marks.plain === null, JSON.stringify( marks ) );
+
+		await page.hover( `.minn-table-row[data-order="${ relRenewal }"] [data-subrel]` );
+		await page.waitForSelector( '.minn-subrel-pop', { timeout: 10000 } );
+		const pop = await page.evaluate( () => ( document.querySelector( '.minn-subrel-pop' ) || {} ).textContent || '' );
+		t.check( 'the badge tells which subscription, and its state',
+			pop.indexOf( String( relSub ) ) !== -1 && /Active/i.test( pop ) && /month/i.test( pop ),
+			pop.replace( /\s+/g, ' ' ).trim().slice( 0, 160 ) );
+		// The popover is a way in, not a dead end.
+		await page.click( '.minn-subrel-pop [data-subrel-open]' );
+		await page.waitForFunction( ( id ) => location.pathname.indexOf( '/subscriptions/' + id ) !== -1, relSub, { timeout: 15000 } );
+		t.check( 'the popover opens the subscription', true, await page.evaluate( () => location.pathname ) );
 	} finally {
+		for ( const [ route, id ] of [ [ 'orders', relRenewal ], [ 'orders', relPlain ], [ 'subscriptions', relSub ], [ 'orders', relParent ], [ 'products', relProd ] ] ) {
+			if ( id ) await page.evaluate( async ( a ) => {
+				await fetch( window.MINN.restUrl + `wc/v3/${ a.route }/${ a.id }?force=true`, {
+					method: 'DELETE', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+				} );
+			}, { route, id } ).catch( () => {} );
+		}
 		if ( prior === 'inactive' ) {
 			await pluginPut( 'inactive' ).catch( () => {} );
 		}

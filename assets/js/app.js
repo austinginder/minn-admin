@@ -5805,6 +5805,111 @@
 		document.addEventListener( 'keydown', itemsPopKey, true );
 	}
 
+	/* An order that belongs to a subscription says so in the list: the first
+	 * order that started it, or one of the renewals it has billed since. The
+	 * relation is WooCommerce Subscriptions' to know, so the server asks it
+	 * through wcs_get_subscriptions_for_order and answers for a whole page at
+	 * once. Rows already resolved are never asked for twice. */
+	const orderRelations = {};
+	let orderRelationsWanted = '';
+	function loadOrderRelations( ids ) {
+		if ( ! B.wcs ) return;
+		const missing = ids.filter( ( id ) => orderRelations[ id ] === undefined );
+		if ( ! missing.length ) return;
+		const key = missing.join( ',' );
+		if ( key === orderRelationsWanted ) return; // a render while in flight
+		orderRelationsWanted = key;
+		api( `minn-admin/v1/wc/orders/subscription-relations?ids=${ encodeURIComponent( key ) }` )
+			.then( ( rows ) => {
+				// null, not undefined: an order asked about and found unrelated
+				// must not be asked about again on the next render.
+				missing.forEach( ( id ) => { orderRelations[ id ] = ( rows && rows[ id ] ) || null; } );
+				orderRelationsWanted = '';
+				if ( state.route === 'orders' ) renderOrders();
+			} )
+			.catch( () => {
+				missing.forEach( ( id ) => { orderRelations[ id ] = null; } );
+				orderRelationsWanted = '';
+			} );
+	}
+
+	function subRelBadgeHtml( id ) {
+		const rel = orderRelations[ id ];
+		if ( ! rel ) return '';
+		const label = rel.kind === 'parent' ? __( 'Subscription' ) : __( 'Renewal' );
+		return `<span class="minn-subrel minn-subrel-${ esc( rel.kind ) }" data-subrel="${ esc( rel.kind ) }" tabindex="0" role="button" aria-haspopup="true">${ icon( 'refresh' ) }${ esc( label ) }</span>`;
+	}
+
+	let subRelPop = null;
+	function closeSubRelPop() {
+		if ( subRelPop ) subRelPop.remove();
+		subRelPop = null;
+		document.removeEventListener( 'mousedown', subRelPopAway, true );
+		document.removeEventListener( 'keydown', subRelPopKey, true );
+	}
+	function subRelPopAway( e ) {
+		if ( subRelPop && ! subRelPop.contains( e.target ) ) closeSubRelPop();
+	}
+	function subRelPopKey( e ) {
+		if ( e.key === 'Escape' && subRelPop ) { e.stopPropagation(); closeSubRelPop(); }
+	}
+	/** What the badge is about: the subscription itself, and the way into it. */
+	function openSubRelPop( anchor, rel ) {
+		closeSubRelPop();
+		const s = ( rel && rel.subscription ) || null;
+		if ( ! s ) return;
+		const pop = document.createElement( 'div' );
+		subRelPop = pop;
+		pop.className = 'minn-of-pop minn-subrel-pop';
+		const row = ( k, v ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span>${ v }</span></div>`;
+		pop.innerHTML = `
+			<div class="minn-subrel-head">
+				<strong>${ __( 'Subscription' ) } #${ esc( s.number || s.id ) }</strong>
+				<span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( s.status_label || subStatusLabel( s.status ) ) }</span>
+			</div>
+			${ row( __( 'Billing' ), esc( subPeriodLabel( s ) ) ) }
+			${ row( __( 'Recurring total' ), esc( subMoney( s, s.total ) ) ) }
+			${ s.next_payment_date_gmt ? row( __( 'Next payment' ), esc( subTime( s.next_payment_date_gmt ) ) ) : '' }
+			${ row( __( 'This order' ), rel.kind === 'parent' ? __( 'Started the subscription' ) : __( 'A renewal it billed' ) ) }
+			<button type="button" class="minn-btn-soft" data-subrel-open="${ esc( String( s.id ) ) }" style="margin-top:8px;">${ __( 'Open subscription' ) }</button>`;
+		document.body.appendChild( pop );
+		const r = anchor.getBoundingClientRect();
+		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - pop.offsetWidth - 10 ) ) + 'px';
+		// Clamped at both ends: anchored low, an unclamped top puts the first
+		// rows above the viewport, where a fixed element cannot be scrolled to.
+		pop.style.top = Math.max( 10, Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
+		const open = $( '[data-subrel-open]', pop );
+		if ( open ) open.addEventListener( 'click', ( e ) => {
+			e.stopPropagation();
+			const id = open.dataset.subrelOpen;
+			closeSubRelPop();
+			go( 'subscriptions/' + id );
+		} );
+		document.addEventListener( 'mousedown', subRelPopAway, true );
+		document.addEventListener( 'keydown', subRelPopKey, true );
+	}
+
+	/** Wire every subscription badge in the orders list. */
+	function bindSubRelBadges( view ) {
+		$$( '[data-subrel]', view ).forEach( ( badge ) => {
+			const row = badge.closest( '[data-order]' );
+			if ( ! row ) return;
+			const id = parseInt( row.getAttribute( 'data-order' ), 10 );
+			const show = () => openSubRelPop( badge, orderRelations[ id ] );
+			badge.addEventListener( 'click', ( e ) => { e.stopPropagation(); show(); } );
+			badge.addEventListener( 'keydown', ( e ) => {
+				if ( e.key !== 'Enter' && e.key !== ' ' ) return;
+				e.preventDefault(); e.stopPropagation(); show();
+			} );
+			badge.addEventListener( 'mouseenter', show );
+			badge.addEventListener( 'mouseleave', () => {
+				setTimeout( () => {
+					if ( subRelPop && ! subRelPop.matches( ':hover' ) && ! badge.matches( ':hover' ) ) closeSubRelPop();
+				}, 180 );
+			} );
+		} );
+	}
+
 	/** Wire every Items cell in a list view. `itemsOf` resolves a row id to
 	 *  its line items, `moneyOf` formats one line. */
 	function bindItemsCells( view, rowAttr, itemsOf, moneyOf ) {
@@ -7439,7 +7544,7 @@
 			${ c.items.length ? c.items.map( ( o ) => `
 				<div class="minn-table-row minn-order-cols" data-order="${ o.id }">
 					<div class="minn-cell-clip">
-						<div class="minn-row-title">#${ esc( o.number ) }</div>
+						<div class="minn-row-title">#${ esc( o.number ) }${ subRelBadgeHtml( o.id ) }</div>
 						<div class="minn-row-slug">${ timeAgo( o.date_created ) }</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( o ) ) }</div>
@@ -7476,6 +7581,10 @@
 			const o = c.items.find( ( x ) => ( x.line_items || [] ).indexOf( li ) !== -1 );
 			return orderMoney( o || {}, li.total );
 		} );
+		bindSubRelBadges( view );
+		// After the rows are on screen, never before: the badges are an
+		// enrichment, and the list must not wait on them to paint.
+		loadOrderRelations( c.items.map( ( o ) => o.id ) );
 		$$( '[data-qv]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', ( e ) => {
 				e.stopPropagation(); // the row click would navigate

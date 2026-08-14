@@ -127,6 +127,26 @@ hover or click away. That cell swallows its own clicks so the list can open the 
 instead of navigating, which means a click in the middle of a row does not open the
 subscription. That is Shopify's behavior and it is deliberate.
 
+## The orders list knows about subscriptions
+
+An order that belongs to a subscription says so: the one that started it reads
+`Subscription`, the ones it has billed since read `Renewal`. Hover or focus the badge and a
+popover names the subscription, its status, its billing period, its recurring total and its
+next payment, with a button into it.
+
+The badge rides beside the order number instead of taking a column. Most stores have no
+subscriptions at all, and a column would sit empty on every row to serve a few.
+
+The relation is WooCommerce Subscriptions' to know, so the server asks it through
+`wcs_get_subscriptions_for_order`, which understands both storage layouts. Minn never reads
+`_subscription_renewal` itself. It resolves a whole page in one request
+(`minn-admin/v1/wc/orders/subscription-relations?ids=…`) and remembers what it learned,
+including which orders are unrelated, so a re-render asks for nothing. The alternative was
+adding `meta_data` to the list's `_fields`, which drags every row's entire meta bag across
+the wire to read one key.
+
+It is an enrichment, never a gate: the list paints first and the badges arrive after.
+
 ## What stays in WooCommerce
 
 Switching a subscription's product, retrying a failed renewal, changing payment method on
@@ -145,4 +165,6 @@ subscription product, a plain one refused in WooCommerce's words), and the modal
 view.
 `tests/subscription-filters.test.js` covers the list: each filter against the rows and the
 query string, the URL round trip, the start date column, and the GMT reading of a start
-date. `tests/wcs-subscriptions.test.js` covers the integration underneath both.
+date. `tests/wcs-subscriptions.test.js` covers the integration underneath both, including
+the orders list badges: parent, renewal, an unrelated order left unbadged, and the popover
+as a way into the subscription.
