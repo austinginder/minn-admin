@@ -228,7 +228,7 @@ function minn_admin_wpforms_status_model() {
 			return array(
 				'rows'    => array(
 					array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0' ),
-					array( 'label' => 'Forms', 'value' => '0' ),
+					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => '0' ),
 				),
 				'actions' => array(),
 			);
@@ -248,7 +248,7 @@ function minn_admin_wpforms_status_model() {
 	return array(
 		'rows'    => array(
 			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
-			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
 		'actions' => array(
 			array( 'label' => __( 'Open WPForms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=wpforms-entries' ) ),
@@ -262,7 +262,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['wpforms'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'WPForms',
@@ -270,7 +270,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => 'read', // real gate is minn_admin_wpforms_can().
 		'status'     => array( 'route' => 'minn-admin/v1/wpforms/status' ),
 		'collection' => array(
-			'viewLabel' => 'Entries',
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/wpforms/entries',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -284,7 +284,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All entries',
 			),
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'unread', 'Unread' ),
 					array( 'read', 'Read' ),
@@ -295,11 +295,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'status={v}',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => 'Form' ),
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
 				array( 'key' => 'starred', 'label' => '★', 'width' => '40px' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/wpforms/entries/{id}',
@@ -320,14 +320,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'read' ),
 				),
 				array(
-					'label'  => 'Star',
+					'label'  => __( 'Star', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/star',
 					'body'   => array( 'on' => 1 ),
 					'when'   => array( 'key' => 'starred', 'equals' => '' ),
 				),
 				array(
-					'label'  => 'Unstar',
+					'label'  => __( 'Unstar', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/star',
 					'body'   => array( 'on' => 0 ),
@@ -348,14 +348,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
-					'label'  => 'Trash',
+					'label'  => __( 'Trash', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/status',
 					'body'   => array( 'status' => 'trash' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'read' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/status',
 					'body'   => array( 'status' => 'restore' ),
@@ -378,7 +378,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'body'   => array( 'status' => 'read' ),
 				),
 				array(
-					'label'   => 'Trash',
+					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/wpforms/entries/{id}/status',
 					'body'    => array( 'status' => 'trash' ),
@@ -519,24 +519,24 @@ add_action( 'rest_api_init', function () {
 				}
 				$titles = minn_admin_wpforms_visible_form_titles();
 				$meta   = array(
-					array( 'label' => 'Form', 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
-					array( 'label' => 'Entry', 'value' => '#' . (int) $row->entry_id ),
-					array( 'label' => 'Status', 'value' => minn_admin_wpforms_display_status( $row ) ),
+					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
+					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->entry_id ),
+					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => minn_admin_wpforms_display_status( $row ) ),
 				);
 				if ( $row->date ) {
-					$meta[] = array( 'label' => 'Submitted', 'value' => gmdate( 'c', strtotime( $row->date . ' UTC' ) ) );
+					$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => gmdate( 'c', strtotime( $row->date . ' UTC' ) ) );
 				}
 				if ( '' !== (string) $row->ip_address ) {
 					$meta[] = array( 'label' => __( 'IP address', 'minn-admin' ), 'value' => (string) $row->ip_address );
 				}
 				if ( (int) $row->starred ) {
-					$meta[] = array( 'label' => 'Starred', 'value' => '★' );
+					$meta[] = array( 'label' => __( 'Starred', 'minn-admin' ), 'value' => '★' );
 				}
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
 					'sections' => array(
-						array( 'title' => 'Answers', 'rows' => $answers ),
-						array( 'title' => 'Submission', 'rows' => $meta ),
+						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $answers ),
+						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=wpforms-entries&view=details&entry_id=' . (int) $row->entry_id ),
 				) );

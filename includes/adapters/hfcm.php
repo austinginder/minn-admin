@@ -171,22 +171,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 
 	$edit_fields = array(
-		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => __( 'Analytics pixel', 'minn-admin' ) ),
+		array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ), 'placeholder' => __( 'Analytics pixel', 'minn-admin' ) ),
 		array(
 			'key'         => 'code',
-			'label'       => 'Code',
+			'label'       => __( 'Code', 'minn-admin' ),
 			'type'        => 'textarea',
 			'mono'        => true,
 			'rows'        => 14,
 			'placeholder' => __( '<!-- tracking snippet -->', 'minn-admin' ),
 		),
-		array( 'key' => 'snippet_type', 'label' => 'Type', 'type' => 'select', 'options' => $type_options ),
-		array( 'key' => 'location', 'label' => 'Location', 'type' => 'select', 'options' => $location_options ),
-		array( 'key' => 'device_type', 'label' => 'Devices', 'type' => 'select', 'options' => $device_options ),
+		array( 'key' => 'snippet_type', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
+		array( 'key' => 'location', 'label' => __( 'Location', 'minn-admin' ), 'type' => 'select', 'options' => $location_options ),
+		array( 'key' => 'device_type', 'label' => __( 'Devices', 'minn-admin' ), 'type' => 'select', 'options' => $device_options ),
 	);
 
 	$surfaces['hfcm'] = array(
-		'label'      => 'Snippets',
+		'label'      => __( 'Snippets', 'minn-admin' ),
 		'family'     => 'snippets',
 		'sub'        => 'Header Footer Code Manager',
 		'icon'       => 'code',
@@ -200,7 +200,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey'  => 'total',
 			'search'    => 'search={q}',
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'all', 'All' ),
 					array( '1', 'Active' ),
@@ -222,10 +222,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'fields'   => $edit_fields,
 			),
 			'columns'   => array(
-				array( 'key' => 'name', 'label' => 'Snippet', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'name', 'label' => __( 'Snippet', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'scope', 'label' => __( 'Type · location', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
-				array( 'key' => 'active', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago' ),
+				array( 'key' => 'active', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
+				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'detailRoute' => 'minn-admin/v1/hfcm/snippets/{id}',
@@ -239,14 +239,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Activate',
+					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/hfcm/snippets/{id}/active',
 					'body'   => array( 'active' => true ),
 					'when'   => array( 'key' => 'active', 'equals' => false ),
 				),
 				array(
-					'label'  => 'Deactivate',
+					'label'  => __( 'Deactivate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/hfcm/snippets/{id}/active',
 					'body'   => array( 'active' => false ),
@@ -257,7 +257,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'href'  => admin_url( 'admin.php?page=hfcm-update&id={id}' ),
 				),
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/hfcm/snippets/{id}',
 					'confirm' => __( 'Delete this snippet permanently?', 'minn-admin' ),
@@ -266,21 +266,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'  => 'Activate',
+					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/hfcm/snippets/{id}/active',
 					'body'   => array( 'active' => true ),
 					'when'   => array( 'key' => 'active', 'equals' => false ),
 				),
 				array(
-					'label'  => 'Deactivate',
+					'label'  => __( 'Deactivate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/hfcm/snippets/{id}/active',
 					'body'   => array( 'active' => false ),
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/hfcm/snippets/{id}',
 					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),

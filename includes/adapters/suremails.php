@@ -102,7 +102,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	$surfaces['suremails'] = array(
-		'label'      => 'Email',
+		'label'      => __( 'Email', 'minn-admin' ),
 		'family'     => 'mail',
 		'sub'        => 'SureMails',
 		'icon'       => 'send',
@@ -123,17 +123,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'subject', 'label' => 'Subject', 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => 'To', 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'created_at', 'label' => 'Date', 'format' => 'ago' ),
+				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'created_at', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/suremails/emails/{id}/view',
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/suremails/emails/{id}',
 					'method'  => 'DELETE',
 					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
@@ -142,7 +142,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/suremails/emails/{id}',
 					'method'  => 'DELETE',
 					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
@@ -228,27 +228,27 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$delivery = array(
-				array( 'label' => 'Status', 'value' => (string) $row->status, 'type' => 'pill' ),
-				array( 'label' => 'To', 'value' => minn_admin_suremails_recipients( $row->email_to ) ),
-				array( 'label' => 'From', 'value' => (string) $row->email_from ),
+				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status, 'type' => 'pill' ),
+				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_suremails_recipients( $row->email_to ) ),
+				array( 'label' => __( 'From', 'minn-admin' ), 'value' => (string) $row->email_from ),
 			);
 			if ( '' !== (string) $row->connection ) {
-				$delivery[] = array( 'label' => 'Connection', 'value' => (string) $row->connection );
+				$delivery[] = array( 'label' => __( 'Connection', 'minn-admin' ), 'value' => (string) $row->connection );
 			}
 			$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
 			if ( '' !== $iso ) {
-				$delivery[] = array( 'label' => 'Date', 'value' => $iso );
+				$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $iso );
 			}
 			$body     = (string) $row->body;
 			$sections = array(
-				array( 'title' => 'Delivery', 'rows' => $delivery ),
+				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
 				array(
-					'title' => 'Message',
+					'title' => __( 'Message', 'minn-admin' ),
 					'rows'  => array(
-						array( 'label' => 'Subject', 'value' => (string) $row->subject ),
+						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
 						preg_match( '/<\/?[a-z][^>]*>/i', $body )
-							? array( 'label' => 'Body', 'value' => $body, 'type' => 'html-preview' )
-							: array( 'label' => 'Body', 'value' => $body, 'type' => 'code' ),
+							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
+							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
 					),
 				),
 			);
@@ -256,7 +256,7 @@ add_action( 'rest_api_init', function () {
 			if ( '' !== $peek ) {
 				$sections[] = array(
 					'title' => __( 'Provider reply', 'minn-admin' ),
-					'rows'  => array( array( 'label' => 'Response', 'value' => $peek ) ),
+					'rows'  => array( array( 'label' => __( 'Response', 'minn-admin' ), 'value' => $peek ) ),
 				);
 			}
 			return rest_ensure_response( array( 'sections' => $sections ) );

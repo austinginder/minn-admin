@@ -196,7 +196,7 @@ function minn_admin_backwpup_status_model() {
 				'hint'  => __( 'Only jobs that write to Website Server are listed', 'minn-admin' ),
 			),
 			array(
-				'label' => 'Status',
+				'label' => __( 'Status', 'minn-admin' ),
 				'value' => $running ? 'Running' : 'Idle',
 				'hint'  => __( 'Jobs run through BackWPup\'s own cron/auth machinery', 'minn-admin' ),
 			),
@@ -226,7 +226,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['backwpup'] = array(
-		'label'      => 'Backups',
+		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'BackWPup',
 		'icon'       => 'database',
 		// Cap is loose; routes re-check BackWPup's own caps.
@@ -239,10 +239,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'columns'   => array(
-				array( 'key' => 'filename', 'label' => 'Archive', 'format' => 'title' ),
-				array( 'key' => 'size', 'label' => 'Size', 'format' => 'text' ),
-				array( 'key' => 'job', 'label' => 'Job', 'format' => 'text' ),
-				array( 'key' => 'date', 'label' => 'Created', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'filename', 'label' => __( 'Archive', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'size', 'label' => __( 'Size', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'job', 'label' => __( 'Job', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'date', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'skip' => array( 'filename', 'size_raw', 'ts', 'jobid' ),

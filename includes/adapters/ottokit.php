@@ -116,7 +116,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['ottokit'] = array(
-		'label'      => 'Automation',
+		'label'      => __( 'Automation', 'minn-admin' ),
 		'sub'        => 'OttoKit',
 		'icon'       => 'activity',
 		'cap'        => minn_admin_ottokit_cap(),
@@ -139,17 +139,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'request_url', 'label' => 'Endpoint', 'format' => 'title' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'response_code', 'label' => 'Code', 'format' => 'text', 'num' => true, 'width' => 80 ),
-				array( 'key' => 'created_at', 'label' => 'Sent', 'format' => 'ago' ),
+				array( 'key' => 'request_url', 'label' => __( 'Endpoint', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'response_code', 'label' => __( 'Code', 'minn-admin' ), 'format' => 'text', 'num' => true, 'width' => 80 ),
+				array( 'key' => 'created_at', 'label' => __( 'Sent', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/ottokit/requests/{id}/view',
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Retry',
+					'label'   => __( 'Retry', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/ottokit/requests/{id}/retry',
 					'method'  => 'POST',
 					'confirm' => __( 'Send this request to OttoKit again?', 'minn-admin' ),
@@ -157,7 +157,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'  => 'Retry',
+					'label'  => __( 'Retry', 'minn-admin' ),
 					'route'  => 'minn-admin/v1/ottokit/requests/{id}/retry',
 					'method' => 'POST',
 				),
@@ -236,22 +236,22 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'not_found', __( 'That request is gone.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$rows = array(
-				array( 'label' => 'Endpoint', 'value' => (string) ( $row['request_url'] ?? '' ), 'type' => 'url' ),
-				array( 'label' => 'Method', 'value' => strtoupper( (string) ( $row['request_method'] ?? '' ) ) ),
-				array( 'label' => 'Status', 'value' => (string) ( $row['status'] ?? '' ), 'type' => 'pill' ),
+				array( 'label' => __( 'Endpoint', 'minn-admin' ), 'value' => (string) ( $row['request_url'] ?? '' ), 'type' => 'url' ),
+				array( 'label' => __( 'Method', 'minn-admin' ), 'value' => strtoupper( (string) ( $row['request_method'] ?? '' ) ) ),
+				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) ( $row['status'] ?? '' ), 'type' => 'pill' ),
 				array( 'label' => __( 'Response code', 'minn-admin' ), 'value' => (string) ( $row['response_code'] ?? '' ) ),
-				array( 'label' => 'Sent', 'value' => (string) ( $row['created_at'] ?? '' ) ),
+				array( 'label' => __( 'Sent', 'minn-admin' ), 'value' => (string) ( $row['created_at'] ?? '' ) ),
 			);
 			if ( ! empty( $row['processed_at'] ) ) {
-				$rows[] = array( 'label' => 'Processed', 'value' => (string) $row['processed_at'] );
+				$rows[] = array( 'label' => __( 'Processed', 'minn-admin' ), 'value' => (string) $row['processed_at'] );
 			}
 			if ( (int) ( $row['retry_attempts'] ?? 0 ) > 0 ) {
-				$rows[] = array( 'label' => 'Retries', 'value' => (string) (int) $row['retry_attempts'] );
+				$rows[] = array( 'label' => __( 'Retries', 'minn-admin' ), 'value' => (string) (int) $row['retry_attempts'] );
 			}
 			if ( ! empty( $row['error_info'] ) ) {
-				$rows[] = array( 'label' => 'Error', 'value' => (string) $row['error_info'] );
+				$rows[] = array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $row['error_info'] );
 			}
-			$sections = array( array( 'title' => 'Request', 'rows' => $rows ) );
+			$sections = array( array( 'title' => __( 'Request', 'minn-admin' ), 'rows' => $rows ) );
 
 			// Their payload is JSON; decode only, and show it as escaped code.
 			$raw = (string) ( $row['request_data'] ?? '' );
@@ -261,7 +261,7 @@ add_action( 'rest_api_init', function () {
 					? (string) wp_json_encode( $decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
 					: $raw;
 				$sections[] = array(
-					'title' => 'Payload',
+					'title' => __( 'Payload', 'minn-admin' ),
 					'rows'  => array( array( 'label' => __( 'Sent to OttoKit', 'minn-admin' ), 'value' => $pretty, 'type' => 'code' ) ),
 				);
 			}
@@ -316,13 +316,13 @@ add_action( 'rest_api_init', function () {
 
 			$rows = array(
 				array(
-					'label' => 'Account',
+					'label' => __( 'Account', 'minn-admin' ),
 					'value' => $conn['connected'] ? ( $conn['email'] ? $conn['email'] : 'Connected' ) : 'Not connected',
 					'hint'  => $conn['note'],
 				),
 				array( 'label' => __( 'Outgoing requests', 'minn-admin' ), 'value' => (string) $counts['total'] ),
 				array(
-					'label' => 'Failed',
+					'label' => __( 'Failed', 'minn-admin' ),
 					'value' => (string) $counts['failed'],
 					'hint'  => $counts['failed'] ? 'retry from the Failed tab' : '',
 				),

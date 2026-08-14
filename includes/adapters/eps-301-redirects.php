@@ -88,7 +88,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'inactive', 'Inactive' ),
 	);
 	$surfaces['eps-301-redirects'] = array(
-		'label'      => 'Redirects',
+		'label'      => __( 'Redirects', 'minn-admin' ),
 		'family'     => 'redirects',
 		'sub'        => '301 Redirects',
 		'icon'       => 'shuffle',
@@ -101,10 +101,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey' => 'total',
 			'search'   => 'search={q}',
 			'columns'  => array(
-				array( 'key' => 'from', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.3fr)' ),
-				array( 'key' => 'target', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.3fr)' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '110px' ),
-				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '70px' ),
+				array( 'key' => 'from', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.3fr)' ),
+				array( 'key' => 'target', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.3fr)' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
+				array( 'key' => 'hits', 'label' => __( 'Hits', 'minn-admin' ), 'format' => 'num', 'width' => '70px' ),
 			),
 			'create'   => array(
 				'label'  => __( 'Add redirect', 'minn-admin' ),
@@ -113,7 +113,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'fields' => array(
 					array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ),
 					array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page, https://… or a post ID', 'minn-admin' ) ),
-					array( 'key' => 'status', 'label' => 'Status', 'type' => 'select', 'options' => $status_options ),
+					array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'type' => 'select', 'options' => $status_options ),
 				),
 			),
 			'detail'   => array(
@@ -124,7 +124,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'fields' => array(
 						array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
 						array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
-						array( 'key' => 'status', 'label' => 'Status', 'type' => 'select', 'options' => $status_options ),
+						array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'type' => 'select', 'options' => $status_options ),
 					),
 				),
 			),
@@ -139,7 +139,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'     => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/eps301/redirects/{id}',
 					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
@@ -195,7 +195,7 @@ add_action( 'rest_api_init', function () {
 					'hint'  => number_format_i18n( (int) $top->count ) . ' hits',
 				);
 			}
-			$rows[] = array( 'label' => '404 log', 'value' => number_format_i18n( $misses ) );
+			$rows[] = array( 'label' => __( '404 log', 'minn-admin' ), 'value' => number_format_i18n( $misses ) );
 			return rest_ensure_response( array( 'rows' => $rows ) );
 		},
 	) );

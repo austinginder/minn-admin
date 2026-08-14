@@ -41,19 +41,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 
 	$edit_fields = array(
-		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => __( 'Disable emojis', 'minn-admin' ) ),
-		array( 'key' => 'desc', 'label' => 'Description', 'type' => 'textarea', 'rows' => 2, 'required' => false ),
+		array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ), 'placeholder' => __( 'Disable emojis', 'minn-admin' ) ),
+		array( 'key' => 'desc', 'label' => __( 'Description', 'minn-admin' ), 'type' => 'textarea', 'rows' => 2, 'required' => false ),
 		array(
 			'key'         => 'code',
-			'label'       => 'Code',
+			'label'       => __( 'Code', 'minn-admin' ),
 			'type'        => 'textarea',
 			'mono'        => true,
 			'rows'        => 14,
 			'placeholder' => "add_filter( '…', '…' );",
 		),
-		array( 'key' => 'scope', 'label' => 'Scope', 'type' => 'select', 'options' => $scope_options ),
-		array( 'key' => 'priority', 'label' => 'Priority', 'type' => 'number' ),
-		array( 'key' => 'tags', 'label' => 'Tags', 'type' => 'tags', 'required' => false, 'placeholder' => __( 'media, sample', 'minn-admin' ) ),
+		array( 'key' => 'scope', 'label' => __( 'Scope', 'minn-admin' ), 'type' => 'select', 'options' => $scope_options ),
+		array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'type' => 'number' ),
+		array( 'key' => 'tags', 'label' => __( 'Tags', 'minn-admin' ), 'type' => 'tags', 'required' => false, 'placeholder' => __( 'media, sample', 'minn-admin' ) ),
 	);
 
 	// A Code Snippets snippet is PHP the plugin eval()s, so authoring one is code
@@ -64,7 +64,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$code_edits = ! class_exists( 'Minn_Admin' ) || Minn_Admin::code_edits_allowed();
 
 	$surfaces['code-snippets'] = array(
-		'label'      => 'Snippets',
+		'label'      => __( 'Snippets', 'minn-admin' ),
 		// Surfaces that share a family collapse to one sidebar item; the topbar
 		// sub badge becomes a provider switcher when more than one is active.
 		'family'     => 'snippets',
@@ -92,12 +92,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'fields'   => $edit_fields,
 			),
 			'columns'   => array(
-				array( 'key' => 'name', 'label' => 'Snippet', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => 'Scope', 'format' => 'mono', 'width' => '100px' ),
-				array( 'key' => 'active', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'priority', 'label' => 'Priority', 'format' => 'num', 'width' => '80px' ),
+				array( 'key' => 'name', 'label' => __( 'Snippet', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'scope', 'label' => __( 'Scope', 'minn-admin' ), 'format' => 'mono', 'width' => '100px' ),
+				array( 'key' => 'active', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
+				array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
 				// Code Snippets stores/returns modified via gmdate (UTC, no Z).
-				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				// Re-fetch so the modal always has full code + fresh active flag.
@@ -123,14 +123,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// /activate|/deactivate routes exist but return an unprepared
 				// Snippet object that can 500 under rest_ensure_response.
 				array(
-					'label'  => 'Activate',
+					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'code-snippets/v1/snippets/{id}',
 					'body'   => array( 'active' => true ),
 					'when'   => array( 'key' => 'active', 'equals' => false ),
 				),
 				array(
-					'label'  => 'Deactivate',
+					'label'  => __( 'Deactivate', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'code-snippets/v1/snippets/{id}',
 					'body'   => array( 'active' => false ),
@@ -151,21 +151,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			// Their list has no active= filter, so bulk is the multi-item win.
 			'bulk'      => array(
 				array(
-					'label'  => 'Activate',
+					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'code-snippets/v1/snippets/{id}',
 					'body'   => array( 'active' => true ),
 					'when'   => array( 'key' => 'active', 'equals' => false ),
 				),
 				array(
-					'label'  => 'Deactivate',
+					'label'  => __( 'Deactivate', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'code-snippets/v1/snippets/{id}',
 					'body'   => array( 'active' => false ),
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'code-snippets/v1/snippets/{id}',
 					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),

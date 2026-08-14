@@ -36,9 +36,14 @@ const normIdx = buildNormIndex( glossary );
 
 const outPath = path.join( ROOT, 'languages', `${ loc.code }.po` );
 const reviewed = new Map();
+// Everything already in the catalog is a base layer. A top-up pass covers
+// only the strings that were missing, so without this an import would throw
+// away every translation the previous pass produced.
+const existing = new Map();
 if ( fs.existsSync( outPath ) ) {
 	for ( const e of parsePo( fs.readFileSync( outPath, 'utf8' ) ).entries ) {
 		if ( e.flags.includes( 'minn-reviewed' ) ) reviewed.set( e.msgid, e );
+		else if ( e.msgstr.some( Boolean ) ) existing.set( e.msgid, e.msgstr );
 	}
 }
 
@@ -82,7 +87,7 @@ for ( const f of fs.readdirSync( OUT ).sort() ) {
 
 // Assemble the catalog: reviewed, then core, then translated.
 const out = [];
-let nReviewed = 0, nCore = 0, nNew = 0, nSelf = 0;
+let nReviewed = 0, nCore = 0, nNew = 0, nSelf = 0, nKept = 0;
 for ( const e of potEntries ) {
 	const entry = {
 		msgid: e.msgid, msgidPlural: e.msgidPlural, msgctxt: e.msgctxt,
@@ -102,6 +107,10 @@ for ( const e of potEntries ) {
 	}
 	const forms = translated.get( e.msgid );
 	if ( forms && forms.some( Boolean ) ) { entry.msgstr = forms; nNew++; out.push( entry ); continue; }
+
+	// Nothing fresh for this string: keep whatever an earlier pass produced.
+	const prev = existing.get( e.msgid );
+	if ( prev && prev.some( Boolean ) ) { entry.msgstr = prev; nKept++; out.push( entry ); continue; }
 
 	// An English variant that needs no spelling change IS translated: to
 	// itself. Filling these in rather than leaving them blank costs nothing
@@ -137,7 +146,7 @@ fs.writeFileSync( outPath, writePo( header, kept ) );
 const pct = ( kept.length / potEntries.length * 100 ).toFixed( 1 );
 console.log( `${ loc.code }: ${ files } chunk file(s), ${ translated.size } translations read` );
 if ( orphaned ) console.log( `  ${ orphaned } translation(s) carried an id no export issued, ignored` );
-console.log( `  reviewed ${ nReviewed } | core ${ nCore } | new ${ nNew }${ nSelf ? ` | unchanged ${ nSelf }` : '' }` );
+console.log( `  reviewed ${ nReviewed } | core ${ nCore } | new ${ nNew }${ nKept ? ` | carried ${ nKept }` : '' }${ nSelf ? ` | unchanged ${ nSelf }` : '' }` );
 console.log( `  kept ${ kept.length } (${ pct }%), dropped ${ dropped.length }` );
 for ( const d of dropped.slice( 0, 8 ) ) {
 	console.log( `    DROP ${ JSON.stringify( d.entry.msgid.slice( 0, 44 ) ) }: ${ d.reason }` );

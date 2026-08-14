@@ -68,7 +68,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	$surfaces['safe-redirect-manager'] = array(
-		'label'      => 'Redirects',
+		'label'      => __( 'Redirects', 'minn-admin' ),
 		'family'     => 'redirects',
 		'sub'        => 'Safe Redirect Manager',
 		'icon'       => 'shuffle',
@@ -81,10 +81,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey' => 'total',
 			'search'   => 'search={q}',
 			'columns'  => array(
-				array( 'key' => 'from', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
-				array( 'key' => 'to', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
-				array( 'key' => 'status_code', 'label' => 'Code', 'format' => 'mono', 'width' => '64px' ),
-				array( 'key' => 'regex', 'label' => 'Regex', 'width' => '64px' ),
+				array( 'key' => 'from', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'to', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'status_code', 'label' => __( 'Code', 'minn-admin' ), 'format' => 'mono', 'width' => '64px' ),
+				array( 'key' => 'regex', 'label' => __( 'Regex', 'minn-admin' ), 'width' => '64px' ),
 			),
 			'create'   => array(
 				'label'    => __( 'Add redirect', 'minn-admin' ),
@@ -120,7 +120,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'     => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/srm/redirects/{id}',
 					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),

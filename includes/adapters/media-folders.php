@@ -20,7 +20,7 @@
  *               // Flat list; parent 0 = root. id 0 is reserved for an
  *               // optional "Uncategorized" row (files in no folder) and is
  *               // never treated as a parent. count is optional.
- *               return array( array( 'id' => 12, 'label' => 'Logos', 'parent' => 0, 'count' => 8 ) );
+ *               return array( array( 'id' => 12, 'label' => __( 'Logos', 'minn-admin' ), 'parent' => 0, 'count' => 8 ) );
  *           },
  *           'ids'     => function ( $folder_id ) {
  *               // Attachment ids in this folder, or WP_Error. Minn orders
@@ -265,7 +265,7 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 			$counts = isset( $counts['display'] ) ? (array) $counts['display'] : array();
 			// FileBird's own Uncategorized (files in none of this scope's
 			// folders); it computes no count for it and neither do we.
-			$out = array( array( 'id' => 0, 'label' => 'Uncategorized', 'parent' => 0, 'count' => null ) );
+			$out = array( array( 'id' => 0, 'label' => __( 'Uncategorized', 'minn-admin' ), 'parent' => 0, 'count' => null ) );
 			foreach ( (array) $rows as $r ) {
 				$out[] = array(
 					'id'     => (int) $r->id,
@@ -325,7 +325,7 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 		'name'    => 'Real Media Library',
 		'folders' => function () {
 			// RML calls its no-folder root "Unorganized" — the reserved id 0.
-			$out = array( array( 'id' => 0, 'label' => 'Unorganized', 'parent' => 0, 'count' => null ) );
+			$out = array( array( 'id' => 0, 'label' => __( 'Unorganized', 'minn-admin' ), 'parent' => 0, 'count' => null ) );
 			foreach ( (array) wp_rml_objects() as $f ) {
 				if ( ! is_object( $f ) || ! method_exists( $f, 'getId' ) ) {
 					continue;
@@ -375,7 +375,7 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 				return array();
 			}
 			// Their sidebar's "Unassigned" view (media_folder = -1) = id 0.
-			$out = array( array( 'id' => 0, 'label' => 'Unassigned', 'parent' => 0, 'count' => null ) );
+			$out = array( array( 'id' => 0, 'label' => __( 'Unassigned', 'minn-admin' ), 'parent' => 0, 'count' => null ) );
 			foreach ( $terms as $t ) {
 				$out[] = array(
 					'id'     => (int) $t->term_id,

@@ -165,11 +165,11 @@ function minn_admin_rri_detail( $id ) {
 	$source  = (string) ( $found['source'] ?? 'other' );
 	$rewrite = (string) ( $found['rewrite'] ?? '' );
 	$rows    = array(
-		array( 'label' => 'Match', 'value' => $rule ),
-		array( 'label' => 'Rewrite', 'value' => $rewrite ),
-		array( 'label' => 'Source', 'value' => $source ),
+		array( 'label' => __( 'Match', 'minn-admin' ), 'value' => $rule ),
+		array( 'label' => __( 'Rewrite', 'minn-admin' ), 'value' => $rewrite ),
+		array( 'label' => __( 'Source', 'minn-admin' ), 'value' => $source ),
 		array(
-			'label' => 'Status',
+			'label' => __( 'Status', 'minn-admin' ),
 			'value' => 'missing' === $source
 				? 'Missing from saved rules (generated but not stored)'
 				: 'Registered',
@@ -180,7 +180,7 @@ function minn_admin_rri_detail( $id ) {
 		'title'    => $rule,
 		'status'   => 'missing' === $source ? 'missing' : 'active',
 		'sections' => array(
-			array( 'title' => 'Rule', 'rows' => $rows ),
+			array( 'title' => __( 'Rule', 'minn-admin' ), 'rows' => $rows ),
 		),
 		'adminUrl' => minn_admin_rri_admin_url(),
 	);
@@ -206,12 +206,12 @@ function minn_admin_rri_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Rules',
+				'label' => __( 'Rules', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
 				'hint'  => number_format_i18n( count( $sources ) ) . ' sources',
 			),
 			array(
-				'label' => 'Missing',
+				'label' => __( 'Missing', 'minn-admin' ),
 				'value' => number_format_i18n( $missing ),
 				'hint'  => $missing ? 'Generated but not in the saved option' : 'Saved set matches generation',
 			),
@@ -271,7 +271,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['rewrite-rules-inspector'] = array(
-		'label'      => 'Diagnostics',
+		'label'      => __( 'Diagnostics', 'minn-admin' ),
 		'sub'        => 'Rewrites',
 		'family'     => 'diagnostics',
 		'icon'       => 'activity',
@@ -279,7 +279,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'tools',
 		'status'     => array( 'route' => 'minn-admin/v1/rewrite-rules/status' ),
 		'collection' => array(
-			'viewLabel' => 'Rules',
+			'viewLabel' => __( 'Rules', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/rewrite-rules',
 			'pageQuery' => 'per_page=50&page={page}',
 			'search'    => 'search={q}',
@@ -297,10 +297,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All rules',
 			),
 			'columns'   => array(
-				array( 'key' => 'rule', 'label' => 'Match', 'format' => 'title' ),
-				array( 'key' => 'rewrite', 'label' => 'Query', 'format' => 'text' ),
-				array( 'key' => 'source', 'label' => 'Source', 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+				array( 'key' => 'rule', 'label' => __( 'Match', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'rewrite', 'label' => __( 'Query', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'source', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/rewrite-rules/{id}',

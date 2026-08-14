@@ -198,8 +198,8 @@ function minn_admin_fluent_forms_status_model() {
 		if ( ! $scope ) {
 			return array(
 				'rows'    => array(
-					array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0', 'hint' => '0 total' ),
-					array( 'label' => 'Forms', 'value' => '0' ),
+					array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0', 'hint' => __( '0 total', 'minn-admin' ) ),
+					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => '0' ),
 				),
 				'actions' => array(
 					array( 'label' => __( 'Open Fluent Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
@@ -226,7 +226,7 @@ function minn_admin_fluent_forms_status_model() {
 	return array(
 		'rows'    => array(
 			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
-			array( 'label' => 'Forms', 'value' => number_format_i18n( $nforms ) ),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $nforms ) ),
 		),
 		'actions' => array(
 			array( 'label' => __( 'Open Fluent Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
@@ -243,7 +243,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['fluent-forms'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
 		'status'     => array( 'route' => 'minn-admin/v1/fluent-forms/status' ),
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
@@ -251,7 +251,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'collection' => array(
-			'viewLabel' => 'Entries',
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/fluent-forms/entries',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -266,7 +266,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			// Their status column: unread/read/spam/trashed (favorites is a separate flag).
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'inbox', 'Received' ),
 					array( 'spam', 'Spam' ),
@@ -275,10 +275,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'status={v}',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => 'Form' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/fluent-forms/entries/{id}',
@@ -317,7 +317,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'   => array( 'status' => 'unread' ),
@@ -356,7 +356,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
 				array(
-					'label'   => 'Trash',
+					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'    => array( 'status' => 'trashed' ),
@@ -365,7 +365,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'   => array( 'status' => 'unread' ),
@@ -382,13 +382,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 		'manage'     => array(
-			'viewLabel' => 'Forms',
+			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/fluent-forms/forms?manage=1',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => 'Form', 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => 'Entries', 'format' => 'num' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'date', 'label' => 'Updated', 'format' => 'ago' ),
+				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
+				array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(),
 			'actions'   => array(
@@ -619,23 +619,23 @@ add_action( 'rest_api_init', function () {
 
 				$meta   = array();
 				$meta[] = array(
-					'label' => 'Submitted',
+					'label' => __( 'Submitted', 'minn-admin' ),
 					'value' => $row->created_at
 						? date_i18n( 'M j, Y g:i a', strtotime( $row->created_at ) )
 						: '',
 				);
 				if ( $form_title ) {
-					$meta[] = array( 'label' => 'Form', 'value' => $form_title );
+					$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => $form_title );
 				}
 				if ( ! empty( $row->source_url ) ) {
-					$meta[] = array( 'label' => 'Source', 'value' => $row->source_url, 'type' => 'url' );
+					$meta[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => $row->source_url, 'type' => 'url' );
 				}
 				if ( ! empty( $row->ip ) ) {
 					$meta[] = array( 'label' => 'IP', 'value' => $row->ip );
 				}
 				if ( ! empty( $row->browser ) || ! empty( $row->device ) ) {
 					$meta[] = array(
-						'label' => 'Client',
+						'label' => __( 'Client', 'minn-admin' ),
 						'value' => trim( ( $row->device ?: '' ) . ' · ' . ( $row->browser ?: '' ), ' ·' ),
 					);
 				}
@@ -645,8 +645,8 @@ add_action( 'rest_api_init', function () {
 					'title'    => $form_title ?: ( 'Form #' . (int) $row->form_id ),
 					'status'   => $row->status ? (string) $row->status : 'unread',
 					'sections' => array(
-						array( 'title' => 'Responses', 'rows' => $answers ),
-						array( 'title' => 'Submission', 'rows' => $meta ),
+						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
+						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url(
 						'admin.php?page=fluent_forms&route=entries&form_id=' . (int) $row->form_id

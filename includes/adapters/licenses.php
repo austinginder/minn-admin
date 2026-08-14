@@ -2368,7 +2368,7 @@ function minn_admin_license_default_providers() {
 			if ( true === $res ) {
 				return array( 'ok' => true, 'code' => '', 'message' => '' );
 			}
-			return array( 'ok' => false, 'code' => 'exist' === $res ? 'site_limit' : 'invalid', 'message' => 'exist' === $res ? 'The stored code is now registered to another site.' : 'ThemePunch no longer accepts the stored code.' );
+			return array( 'ok' => false, 'code' => 'exist' === $res ? 'site_limit' : 'invalid', 'message' => __( 'exist', 'minn-admin' ) === $res ? 'The stored code is now registered to another site.' : 'ThemePunch no longer accepts the stored code.' );
 		};
 	}
 
@@ -2501,7 +2501,7 @@ function minn_admin_license_default_providers() {
 			}
 			$result = (string) $res->get_result();
 			$code   = 'expired' === $result ? 'expired' : ( 'unreachable' === $result ? 'error' : 'invalid' );
-			return array( 'ok' => false, 'code' => $code, 'message' => 'unreachable' === $result ? 'The Kadence licensing service is unreachable.' : 'The key was not accepted (' . $result . ').' );
+			return array( 'ok' => false, 'code' => $code, 'message' => __( 'unreachable', 'minn-admin' ) === $result ? 'The Kadence licensing service is unreachable.' : 'The key was not accepted (' . $result . ').' );
 		};
 		$providers['kadence-blocks-pro']['secret_label'] = 'Kadence license key';
 		$providers['kadence-blocks-pro']['activate']     = function ( $secret ) use ( $kbp_snapshot, $kbp_restore, $kbp_classify ) {
@@ -2703,7 +2703,7 @@ function minn_admin_license_default_providers() {
 			delete_transient( 'bricks_license_status' );
 			\Bricks\License::$license_key = $key;
 			$status = \Bricks\License::activate_license();
-			return array( 'ok' => 'active' === $status, 'code' => 'active' === $status ? '' : 'invalid', 'message' => 'active' === $status ? '' : (string) $status );
+			return array( 'ok' => 'active' === $status, 'code' => 'active' === $status ? '' : 'invalid', 'message' => __( 'active', 'minn-admin' ) === $status ? '' : (string) $status );
 		};
 	}
 

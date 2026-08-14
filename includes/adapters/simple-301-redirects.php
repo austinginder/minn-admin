@@ -32,7 +32,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	$surfaces['simple-301-redirects'] = array(
-		'label'      => 'Redirects',
+		'label'      => __( 'Redirects', 'minn-admin' ),
 		'family'     => 'redirects',
 		'sub'        => 'Simple 301 Redirects',
 		'icon'       => 'shuffle',
@@ -45,8 +45,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey' => 'total',
 			'search'   => 'search={q}',
 			'columns'  => array(
-				array( 'key' => 'from', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
-				array( 'key' => 'to', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'from', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'to', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
 			),
 			'create'   => array(
 				'label'  => __( 'Add redirect', 'minn-admin' ),
@@ -79,7 +79,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'     => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/s301/redirects/{id}',
 					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
@@ -111,7 +111,7 @@ add_action( 'rest_api_init', function () {
 				'rows' => array(
 					array( 'label' => __( 'Redirect rules', 'minn-admin' ), 'value' => (string) count( $rules ) ),
 					array(
-						'label' => 'Wildcards',
+						'label' => __( 'Wildcards', 'minn-admin' ),
 						'value' => $wildcards ? 'On' : 'Off',
 						'hint'  => $wildcards ? '* patterns match in sources' : '',
 					),

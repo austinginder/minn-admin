@@ -238,7 +238,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	$surfaces['performance-lab'] = array(
-		'label'      => 'Performance',
+		'label'      => __( 'Performance', 'minn-admin' ),
 		'sub'        => 'Performance Lab',
 		'family'     => 'performance',
 		'icon'       => 'gear',
@@ -251,19 +251,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'search'    => false,
 			'columns'   => array(
 				// format title = first-column weight (no undocumented "primary" key).
-				array( 'key' => 'name', 'label' => 'Feature', 'format' => 'title' ),
-				array( 'key' => 'status_label', 'label' => 'Status', 'format' => 'pill', 'width' => '120px' ),
-				array( 'key' => 'slug', 'label' => 'Slug', 'width' => '180px' ),
+				array( 'key' => 'name', 'label' => __( 'Feature', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'status_label', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '120px' ),
+				array( 'key' => 'slug', 'label' => __( 'Slug', 'minn-admin' ), 'width' => '180px' ),
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Activate',
+					'label'  => __( 'Activate', 'minn-admin' ),
 					'route'  => 'minn-admin/v1/performance-lab/features/{id}/activate',
 					'method' => 'POST',
 					'when'   => array( 'key' => 'can_activate', 'equals' => '1' ),
 				),
 				array(
-					'label'   => 'Deactivate',
+					'label'   => __( 'Deactivate', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/performance-lab/features/{id}/deactivate',
 					'method'  => 'POST',
 					'confirm' => __( 'Deactivate this Performance Lab feature?', 'minn-admin' ),

@@ -94,7 +94,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	$surfaces['sureforms'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
 		'group'      => 'workspace',
 		'sub'        => 'SureForms',
@@ -102,7 +102,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => 'read', // real gate is minn_admin_sureforms_can().
 		'status'     => array( 'route' => 'minn-admin/v1/sureforms/status' ),
 		'collection' => array(
-			'viewLabel' => 'Entries',
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/sureforms/entries',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -116,7 +116,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All entries',
 			),
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'unread', 'Unread' ),
 					array( 'read', 'Read' ),
@@ -125,10 +125,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'status={v}',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => 'Form' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/sureforms/entries/{id}',
@@ -149,7 +149,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'read' ),
 				),
 				array(
-					'label'   => 'Trash',
+					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/sureforms/entries/{id}/status',
 					'body'    => array( 'status' => 'trash' ),
@@ -172,7 +172,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'body'   => array( 'status' => 'read' ),
 				),
 				array(
-					'label'   => 'Trash',
+					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/sureforms/entries/{id}/status',
 					'body'    => array( 'status' => 'trash' ),
@@ -290,19 +290,19 @@ add_action( 'rest_api_init', function () {
 				}
 				$titles = minn_admin_sureforms_form_titles();
 				$meta   = array(
-					array( 'label' => 'Form', 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
-					array( 'label' => 'Entry', 'value' => '#' . (int) $row->ID ),
-					array( 'label' => 'Status', 'value' => (string) $row->status ),
+					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
+					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->ID ),
+					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
 				);
 				$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
 				if ( '' !== $iso ) {
-					$meta[] = array( 'label' => 'Submitted', 'value' => $iso );
+					$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => $iso );
 				}
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
 					'sections' => array(
-						array( 'title' => 'Answers', 'rows' => $answers ),
-						array( 'title' => 'Submission', 'rows' => $meta ),
+						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $answers ),
+						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=sureforms_entries&entry_id=' . (int) $row->ID ),
 				) );
@@ -350,7 +350,7 @@ add_action( 'rest_api_init', function () {
 			$admin_url = admin_url( 'admin.php?page=sureforms_entries' );
 			if ( ! $has_table() ) {
 				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => 'Entries', 'value' => '—', 'hint' => __( 'No submissions yet', 'minn-admin' ) ) ),
+					'rows'    => array( array( 'label' => __( 'Entries', 'minn-admin' ), 'value' => '—', 'hint' => __( 'No submissions yet', 'minn-admin' ) ) ),
 					'actions' => array( array( 'label' => __( 'Open SureForms ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 				) );
 			}
@@ -366,7 +366,7 @@ add_action( 'rest_api_init', function () {
 						'value' => number_format_i18n( $unread ),
 						'hint'  => number_format_i18n( $total ) . ' total',
 					),
-					array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
+					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 				),
 				'actions' => array( array( 'label' => __( 'Open SureForms ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 			) );

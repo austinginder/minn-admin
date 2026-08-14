@@ -43,7 +43,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['wp-mail-smtp'] = array(
-		'label'      => 'Email',
+		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'WP Mail SMTP',
 		'icon'       => 'send',
 		'cap'        => 'manage_options',
@@ -62,10 +62,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'content', 'label' => 'Event', 'format' => 'title' ),
-				array( 'key' => 'initiator', 'label' => 'Initiator', 'format' => 'text' ),
-				array( 'key' => 'type', 'label' => 'Type', 'format' => 'pill' ),
-				array( 'key' => 'created_at', 'label' => 'Date', 'format' => 'ago' ),
+				array( 'key' => 'content', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'initiator', 'label' => __( 'Initiator', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'created_at', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'detailRoute' => 'minn-admin/v1/wp-mail-smtp/events/{id}',

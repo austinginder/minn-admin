@@ -154,12 +154,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All lockouts',
 			),
 			'columns'   => array(
-				array( 'key' => 'message', 'label' => 'Event', 'format' => 'title' ),
+				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'ip', 'label' => 'IP' ),
-				array( 'key' => 'attempts', 'label' => 'Attempts', 'format' => 'num' ),
-				array( 'key' => 'gateway', 'label' => 'Via' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'attempts', 'label' => __( 'Attempts', 'minn-admin' ), 'format' => 'num' ),
+				array( 'key' => 'gateway', 'label' => __( 'Via', 'minn-admin' ) ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'skip' => array( 'message', 'locked' ),
@@ -237,7 +237,7 @@ add_action( 'rest_api_init', function () {
 						'value' => (string) $total,
 					),
 					array(
-						'label' => 'Policy',
+						'label' => __( 'Policy', 'minn-admin' ),
 						'value' => $retries ? sprintf( '%d retries, then a %s lockout', $retries, human_time_diff( 0, max( 60, $duration ) ) ) : '—',
 					),
 				),

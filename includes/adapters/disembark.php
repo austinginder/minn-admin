@@ -129,7 +129,7 @@ function minn_admin_disembark_status_model() {
 				: 'Run one from the CLI or Tools → Disembark',
 		),
 		array(
-			'label' => 'Database',
+			'label' => __( 'Database', 'minn-admin' ),
 			'value' => $db ? size_format( $db ) : '—',
 			'hint'  => __( 'exported with every backup', 'minn-admin' ),
 		),
@@ -193,7 +193,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	$surfaces['disembark'] = array(
-		'label'      => 'Backups',
+		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'Disembark',
 		'icon'       => 'database',
 		'cap'        => 'manage_options',
@@ -207,9 +207,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'viewLabel' => __( 'Scan sessions', 'minn-admin' ),
 			'columns'   => array(
 				array( 'key' => 'name', 'label' => __( 'Scan session', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'chunks', 'label' => 'Chunks', 'format' => 'num' ),
+				array( 'key' => 'chunks', 'label' => __( 'Chunks', 'minn-admin' ), 'format' => 'num' ),
 				array( 'key' => 'size', 'label' => __( 'On disk', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'date', 'label' => 'Scanned', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'date', 'label' => __( 'Scanned', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'actions'   => array(
 				array(

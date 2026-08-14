@@ -76,7 +76,7 @@ function minn_admin_simple_history_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'History table not found', 'minn-admin' ) ) ),
+			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'History table not found', 'minn-admin' ) ) ),
 			'actions' => array( array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ) ),
 		);
 	}
@@ -88,7 +88,7 @@ function minn_admin_simple_history_status_model() {
 	$scope = minn_admin_simple_history_logger_scope();
 	if ( null === $scope ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Cannot determine which loggers you may read', 'minn-admin' ) ) ),
+			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Cannot determine which loggers you may read', 'minn-admin' ) ) ),
 			'actions' => array( array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ) ),
 		);
 	}
@@ -186,12 +186,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'message', 'label' => 'Event', 'format' => 'title' ),
-				array( 'key' => 'initiator_data.user_login', 'altKey' => 'initiator', 'label' => 'Who' ),
-				array( 'key' => 'loglevel', 'label' => 'Level', 'format' => 'pill' ),
+				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'initiator_data.user_login', 'altKey' => 'initiator', 'label' => __( 'Who', 'minn-admin' ) ),
+				array( 'key' => 'loglevel', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill' ),
 				// date_local is site-local (matches parseWpDate). date_gmt
 				// without a zone suffix used to render "in 4h" on EDT.
-				array( 'key' => 'date_local', 'altKey' => 'date_gmt', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'date_local', 'altKey' => 'date_gmt', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'skip' => array(

@@ -183,14 +183,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	$surfaces['cfdb7'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
 		'group'      => 'workspace',
 		'sub'        => 'CFDB7',
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'collection' => array(
-			'viewLabel' => 'Messages',
+			'viewLabel' => __( 'Messages', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/cfdb7/entries',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -205,7 +205,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			// Read/unread lives in the serialized blob as cfdb7_status.
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'all', 'All' ),
 					array( 'unread', 'Unread' ),
@@ -214,10 +214,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'status={v}',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form', 'label' => 'Form' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ) ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/cfdb7/entries/{id}',
@@ -243,7 +243,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/cfdb7/entries/{id}',
 					'confirm' => __( 'Delete the selected entries permanently? CFDB7 has no trash.', 'minn-admin' ),
@@ -398,11 +398,11 @@ add_action( 'rest_api_init', function () {
 				$titles = minn_admin_cfdb7_form_titles();
 				$meta   = array(
 					array(
-						'label' => 'Submitted',
+						'label' => __( 'Submitted', 'minn-admin' ),
 						'value' => date_i18n( 'M j, Y g:i a', strtotime( (string) $row->form_date ) ),
 					),
 					array(
-						'label' => 'Form',
+						'label' => __( 'Form', 'minn-admin' ),
 						'value' => $titles[ (int) $row->form_post_id ] ?? ( 'Form #' . (int) $row->form_post_id ),
 					),
 				);
@@ -412,8 +412,8 @@ add_action( 'rest_api_init', function () {
 					'title'    => $titles[ (int) $row->form_post_id ] ?? 'Message',
 					'status'   => 'read',
 					'sections' => array(
-						array( 'title' => 'Responses', 'rows' => $answers ),
-						array( 'title' => 'Submission', 'rows' => $meta ),
+						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
+						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=cfdb7-list.php&fid=' . (int) $row->form_post_id . '&ufid=' . (int) $row->form_id ),
 				) );

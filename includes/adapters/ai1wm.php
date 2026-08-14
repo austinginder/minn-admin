@@ -112,7 +112,7 @@ function minn_admin_ai1wm_status_model() {
 					: 'Exports are built manually from All-in-One WP Migration\'s screen.',
 			),
 			array(
-				'label' => 'Exports',
+				'label' => __( 'Exports', 'minn-admin' ),
 				'value' => (string) count( $rows ),
 				'hint'  => __( 'Manual exports; Minn makes no freshness claims for All-in-One WP Migration.', 'minn-admin' ),
 			),
@@ -144,7 +144,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['ai1wm'] = array(
-		'label'      => 'Backups',
+		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'All-in-One WP Migration',
 		'icon'       => 'database',
 		'cap'        => 'export',
@@ -156,9 +156,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => 'Export', 'format' => 'title' ),
-				array( 'key' => 'size', 'label' => 'Size', 'format' => 'text' ),
-				array( 'key' => 'date', 'label' => 'Created', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'title', 'label' => __( 'Export', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'size', 'label' => __( 'Size', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'date', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'skip' => array( 'title', 'size_raw', 'ts', 'label' ),
