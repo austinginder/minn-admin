@@ -33254,8 +33254,10 @@
 					${ B.caps.upload && ! any ? `
 					<div class="minn-picker-drop" id="minn-picker-drop">
 						${ icon( 'img' ) }
-						<span>${ sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) }${ m.multi ? '' : ' ' + esc( __( '(it’s used right away)' ) ) }</span>
-						<input type="file" id="minn-picker-file" accept="image/*" hidden>
+						<span>${ m.multi
+							? sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop images here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` )
+							: sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) + ' ' + esc( __( '(it’s used right away)' ) ) }</span>
+						<input type="file" id="minn-picker-file" accept="image/*"${ m.multi ? ' multiple' : '' } hidden>
 					</div>` : '' }
 					${ items == null ? `<div class="minn-loading">${ esc( any ? __( 'Loading files…' ) : __( 'Loading images…' ) ) }</div>` : ! items.length ? `<div class="minn-empty">${ esc( any ? __( 'No files in the library yet.' ) : __( 'No images in the library yet.' ) ) }</div>` : `
 					<div class="minn-picker-grid${ any ? ' any' : '' }">
@@ -34003,43 +34005,66 @@
 			const drop = $( '#minn-picker-drop' );
 			if ( drop ) {
 				const fileInput = $( '#minn-picker-file' );
-				const uploadAndUse = async ( file ) => {
-					if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( __( 'Drop an image file' ), true ); return; }
+				const uploadOne = async ( file ) => {
+					const fd = new FormData();
+					fd.append( 'file', file );
+					const up = await api( 'wp/v2/media', { method: 'POST', body: fd } );
+					state.cache.media = null; // library changed
+					const sizes = up.media_details && up.media_details.sizes;
+					return {
+						id: up.id,
+						name: decodeEntities( ( up.title && up.title.rendered ) || file.name ),
+						url: up.source_url,
+						alt: up.alt_text || '',
+						thumb: ( sizes && sizes.medium && sizes.medium.source_url ) || up.source_url,
+						large: ( sizes && sizes.large && sizes.large.source_url ) || up.source_url,
+					};
+				};
+				/**
+				 * Building a gallery is a several-files-at-once job, so the
+				 * whole selection uploads, not files[0]. Sequentially, not with
+				 * Promise.all: a dozen parallel uploads is how a shared host
+				 * answers 503, and the order of the picks is the gallery's
+				 * order. A single-pick picker still takes the first file only,
+				 * because it hands its one result back and closes.
+				 */
+				const uploadAndUse = async ( files ) => {
+					const list = Array.from( files || [] ).filter( ( f ) => f && f.type.startsWith( 'image/' ) );
+					if ( ! list.length ) { toast( __( 'Drop an image file' ), true ); return; }
 					drop.classList.add( 'minn-busy' );
 					toast( __( 'Uploading…' ) );
 					try {
-						const fd = new FormData();
-						fd.append( 'file', file );
-						const up = await api( 'wp/v2/media', { method: 'POST', body: fd } );
-						state.cache.media = null; // library changed
-						const sizes = up.media_details && up.media_details.sizes;
-						const it = {
-							id: up.id,
-							name: decodeEntities( ( up.title && up.title.rendered ) || file.name ),
-							url: up.source_url,
-							alt: up.alt_text || '',
-							thumb: ( sizes && sizes.medium && sizes.medium.source_url ) || up.source_url,
-							large: ( sizes && sizes.large && sizes.large.source_url ) || up.source_url,
-						};
-						if ( m.multi ) {
-							// Add to the gallery selection and keep picking.
-							m.items.unshift( it );
-							m.picked.push( it.id );
-							renderOverlays();
-							toast( __( 'Image uploaded and selected' ) );
+						if ( ! m.multi ) {
+							const it = await uploadOne( list[ 0 ] );
+							const cb = m.callback;
+							closeModal();
+							if ( cb ) cb( it );
+							toast( __( 'Image uploaded' ) );
 							return;
 						}
-						const cb = m.callback;
-						closeModal();
-						if ( cb ) cb( it );
-						toast( __( 'Image uploaded' ) );
+						let done = 0;
+						for ( const file of list ) {
+							const it = await uploadOne( file );
+							// Newest first, and picked, so the gallery grows in
+							// the order the files were handed over.
+							m.items.unshift( it );
+							m.picked.push( it.id );
+							done++;
+							renderOverlays();
+							// The re-render replaced the zone, so the busy mark
+							// goes back on the new one while files remain.
+							const zone = $( '#minn-picker-drop' );
+							if ( zone && done < list.length ) zone.classList.add( 'minn-busy' );
+						}
+						/* translators: %d: number of images uploaded. */
+						toast( sprintf( _n( '%d image uploaded and selected', '%d images uploaded and selected', done ), done ) );
 					} catch ( e ) {
 						toast( e.message, true );
 						drop.classList.remove( 'minn-busy' );
 					}
 				};
 				drop.addEventListener( 'click', () => fileInput.click() );
-				fileInput.addEventListener( 'change', () => uploadAndUse( fileInput.files && fileInput.files[ 0 ] ) );
+				fileInput.addEventListener( 'change', () => uploadAndUse( fileInput.files ) );
 				// stopPropagation keeps the app-wide drop-to-media-library handler out of it.
 				drop.addEventListener( 'dragover', ( e ) => { e.preventDefault(); e.stopPropagation(); drop.classList.add( 'over' ); } );
 				drop.addEventListener( 'dragleave', () => drop.classList.remove( 'over' ) );
@@ -34048,7 +34073,7 @@
 					e.stopPropagation();
 					drop.classList.remove( 'over' );
 					document.body.classList.remove( 'minn-dragging' );
-					uploadAndUse( e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[ 0 ] );
+					uploadAndUse( e.dataTransfer && e.dataTransfer.files );
 				} );
 			}
 		}
