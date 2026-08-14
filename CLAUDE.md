@@ -108,13 +108,23 @@ literal, so the app runs with zero tooling. The convention:
   the site language and `is_rtl()` never became true for the user.
 - **Toolchain** (translation time only, never needed for development):
   `bin/i18n/` owns the whole pipeline and `bin/i18n/README.md` documents it.
-  `bin/i18n/release.sh v<x.y.z>` is the release step: regenerate the `.pot`,
-  report what changed since the last one (only new strings cost anything),
-  regenerate each locale, validate, build one pack per locale, stamp
-  `manifest.json`. Two traps it exists to avoid, both of which fail silently:
-  `wp i18n make-json` PURGES the `.po` it is given, so running it before
-  `make-mo` produces a `.mo` missing every app.js string; and `wp i18n make-mo`
-  needs a destination FILE, not a directory.
+  Translation itself is a Claude Code session's job, no API key involved:
+  `export-batch.js <locale> --missing-only` writes chunk files, the session
+  (or a subagent per locale) fills `<locale>.NN.done.json`, and
+  `import-batch.js` merges with validation, keeping reviewed and existing
+  entries. `translate.js` refuses to touch a finished catalog without
+  `--regenerate` — it would blank every generated entry it did not redo.
+  `bin/i18n/release.sh v<x.y.z>` is the release step and translates nothing:
+  regenerate the `.pot`, report the cycle's debt, FAIL if a shipped catalog
+  is missing entries (`missing.js` is the gate), validate, build one pack per
+  locale, stamp `manifest.json` PER LANGUAGE — a catalog whose content hash
+  is unchanged keeps its old version and package URL, so sites are offered
+  only the languages that really changed, and the stamp output ends with the
+  exact zips to attach to the GitHub release. Two traps the pack build
+  exists to avoid, both of which fail silently: `wp i18n make-json` PURGES
+  the `.po` it is given, so running it before `make-mo` produces a `.mo`
+  missing every app.js string; and `wp i18n make-mo` needs a destination
+  FILE, not a directory.
 - **RTL:** the shell sets `dir` from `is_rtl()` and `app.css` uses logical
   properties. Deliberately physical and not to be "fixed": crop-handle
   coordinates, centering, symmetric stretches, previous/next. Anything
