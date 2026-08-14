@@ -520,8 +520,9 @@ function minn_admin_scrutoscope_cron_resolve( $id ) {
 		}
 		$args = isset( $ev['args'] ) && is_array( $ev['args'] ) ? $ev['args'] : array();
 		return array(
-			'hook' => $hook,
-			'args' => $args,
+			'hook'      => $hook,
+			'args'      => $args,
+			'timestamp' => isset( $ev['timestamp'] ) ? (int) $ev['timestamp'] : 0,
 		);
 	}
 	return null;
@@ -553,31 +554,54 @@ function minn_admin_scrutoscope_cron_resolve( $id ) {
  * @param string $hook Cron hook name.
  * @return bool
  */
-function minn_admin_scrutoscope_cron_runnable( $hook ) {
+function minn_admin_scrutoscope_cron_runnable( $hook, $timestamp = 0 ) {
 	$hook = (string) $hook;
 
-	if ( function_exists( '\Crontrol\Event\find' ) && class_exists( '\Crontrol\Context\WordPressUserContext' ) ) {
+	// WP Crontrol's find() takes hook, timestamp AND the signature, which is
+	// the key core stores the event under. Passing the hook alone raised an
+	// ArgumentCountError that the catch below swallowed, so the whole vendor
+	// deferral was dead and every hook fell to the standalone rule.
+	if ( $timestamp && function_exists( '\\Crontrol\\Event\\find' ) && class_exists( '\\Crontrol\\Context\\WordPressUserContext' ) ) {
 		try {
-			$event = \Crontrol\Event\find( $hook );
-			if ( $event && method_exists( $event, 'runnable' ) ) {
-				return (bool) $event->runnable(
-					new \Crontrol\Context\WordPressUserContext(),
-					new \Crontrol\Context\WordPressFeatureContext()
-				);
+			$crons = function_exists( '_get_cron_array' ) ? (array) _get_cron_array() : array();
+			$sigs  = isset( $crons[ $timestamp ][ $hook ] ) ? array_keys( (array) $crons[ $timestamp ][ $hook ] ) : array();
+			foreach ( $sigs as $sig ) {
+				$event = \Crontrol\Event\find( $hook, (int) $timestamp, (string) $sig );
+				if ( $event && method_exists( $event, 'runnable' ) ) {
+					return (bool) $event->runnable(
+						new \Crontrol\Context\WordPressUserContext(),
+						new \Crontrol\Context\WordPressFeatureContext()
+					);
+				}
 			}
+		} catch ( \Error $e ) {
+			// A vendor API that changed shape must not read as "allowed": fall
+			// through to the standalone rule, which refuses the dangerous hooks
+			// on its own.
+			return false;
 		} catch ( \Throwable $e ) {
-			// Fall through to the standalone rule below.
+			return false;
 		}
 	}
 
-	// Without WP Crontrol loaded, apply the part of its rule that matters: a
-	// hook whose whole purpose is running stored PHP is code execution, so it
-	// answers to the directive a site owner sets to forbid that.
+	// Standalone rule for when WP Crontrol is absent or the event has gone.
+	// Both of its executing hooks answer to the constants WP Crontrol offers
+	// for exactly this, which the previous version never consulted.
 	if ( 'crontrol_cron_job' === $hook ) {
+		if ( defined( 'CRONTROL_DISALLOW_PHP_EVENTS' ) && CRONTROL_DISALLOW_PHP_EVENTS ) {
+			return false;
+		}
 		if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
 			return false;
 		}
 		return current_user_can( 'edit_files' );
+	}
+	if ( 'crontrol_url_cron_job' === $hook ) {
+		// Firing this makes a live outbound request to the stored URL.
+		if ( defined( 'CRONTROL_DISALLOW_URL_EVENTS' ) && CRONTROL_DISALLOW_URL_EVENTS ) {
+			return false;
+		}
+		return current_user_can( 'manage_options' );
 	}
 
 	return true;
@@ -601,7 +625,7 @@ function minn_admin_scrutoscope_profile_cron( $id ) {
 			array( 'status' => 404 )
 		);
 	}
-	if ( ! minn_admin_scrutoscope_cron_runnable( $ev['hook'] ) ) {
+	if ( ! minn_admin_scrutoscope_cron_runnable( $ev['hook'], $ev['timestamp'] ?? 0 ) ) {
 		return new WP_Error(
 			'forbidden',
 			__( 'This event cannot be run here.', 'minn-admin' ),
@@ -657,7 +681,7 @@ function minn_admin_scrutoscope_cron_list( WP_REST_Request $request ) {
 			// has to be allowed to make this particular hook run, so a hook
 			// they cannot run is not offered rather than refused on click.
 			'can_profile' => minn_admin_scrutoscope_can_profile_cron()
-				&& minn_admin_scrutoscope_cron_runnable( $hook ),
+				&& minn_admin_scrutoscope_cron_runnable( $hook, isset( $ev['timestamp'] ) ? (int) $ev['timestamp'] : 0 ),
 		);
 	}
 
