@@ -1744,24 +1744,44 @@ class Minn_Admin {
 	 * string (English is the source vocabulary — a missing catalog or entry
 	 * falls through to the literal, so the app runs with zero tooling).
 	 *
-	 * Files are the standard JED JSON that `wp i18n make-json` emits into
-	 * languages/ from a translated .po (one file per locale; the suffix is
-	 * the md5 of the script path). Values are a string, or an array of
-	 * plural forms for _n() entries. The filter lets sites and fixtures
-	 * inject or override entries without shipping files.
+	 * Files are the standard JED JSON that `wp i18n make-json` emits from a
+	 * translated .po (one file per locale; the suffix is the md5 of the
+	 * script path). Values are a string, or an array of plural forms for
+	 * _n() entries. The filter lets sites and fixtures inject or override
+	 * entries without shipping files.
+	 *
+	 * TWO directories, in core's own precedence order. Language packs
+	 * installed through the update system land in WP_LANG_DIR/plugins/,
+	 * NOT in the plugin's own languages/ — and WP_Textdomain_Registry
+	 * checks WP_LANG_DIR/plugins FIRST, so a pack wins over anything
+	 * bundled. Reading only the plugin directory (as this did) left PHP
+	 * translated while the whole app stayed English, which is the exact
+	 * half-translated state a locale is supposed to avoid.
 	 */
 	public static function js_translations() {
 		$locale = get_user_locale();
 		$map    = array();
-		if ( 0 !== strpos( $locale, 'en' ) ) {
-			foreach ( glob( MINN_ADMIN_DIR . 'languages/minn-admin-' . $locale . '-*.json' ) ?: array() as $file ) {
-				$jed     = json_decode( (string) file_get_contents( $file ), true );
-				$entries = $jed['locale_data']['messages'] ?? array();
-				foreach ( (array) $entries as $key => $forms ) {
-					if ( '' === $key || ! is_array( $forms ) || '' === (string) ( $forms[0] ?? '' ) ) {
-						continue;
+		// Only en_US is the source vocabulary and needs no catalog. The other
+		// English variants DO: en_GB (plus en_AU/en_CA/en_NZ/en_ZA) carry a
+		// real spelling catalog, so this must not skip every locale starting
+		// with "en".
+		if ( 'en_US' !== $locale ) {
+			// Later directories override earlier ones, so the bundled
+			// fallback is read first and the language pack lands on top.
+			$dirs = array(
+				MINN_ADMIN_DIR . 'languages',
+				WP_LANG_DIR . '/plugins',
+			);
+			foreach ( $dirs as $dir ) {
+				foreach ( glob( $dir . '/minn-admin-' . $locale . '-*.json' ) ?: array() as $file ) {
+					$jed     = json_decode( (string) file_get_contents( $file ), true );
+					$entries = $jed['locale_data']['messages'] ?? array();
+					foreach ( (array) $entries as $key => $forms ) {
+						if ( '' === $key || ! is_array( $forms ) || '' === (string) ( $forms[0] ?? '' ) ) {
+							continue;
+						}
+						$map[ $key ] = count( $forms ) > 1 ? array_values( $forms ) : (string) $forms[0];
 					}
-					$map[ $key ] = count( $forms ) > 1 ? array_values( $forms ) : (string) $forms[0];
 				}
 			}
 		}
