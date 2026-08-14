@@ -206,6 +206,22 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			sched.body && String( sched.body.billing_interval ) === '2',
 			JSON.stringify( { interval: sched.body && sched.body.billing_interval, period: sched.body && sched.body.billing_period } ) );
 
+		// ---- A related order can be glanced at without leaving the page ----
+		await page.hover( `[data-relorder="${ orderId }"]` );
+		await page.click( `[data-relqv="${ orderId }"]` );
+		await page.waitForSelector( '.minn-modal .minn-order-main', { timeout: 15000 } );
+		const glance = await page.evaluate( ( id ) => ( {
+			isOrder: !! document.querySelector( '.minn-modal .minn-order-payment' ),
+			isSub: !! document.querySelector( '.minn-modal .minn-sub-schedule' ),
+			stillHere: location.pathname.indexOf( '/subscriptions/' + id ) !== -1,
+		} ), subId );
+		t.check( 'the quick view opens the order without leaving the subscription',
+			glance.isOrder && ! glance.isSub && glance.stillHere, JSON.stringify( glance ) );
+		await page.click( '#minn-modal-close' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-modal-overlay' ), null, { timeout: 10000 } );
+		t.check( 'closing it leaves the subscription page as it was',
+			await page.evaluate( ( id ) => location.pathname.indexOf( '/subscriptions/' + id ) !== -1 && !! document.querySelector( '.minn-sub-page .minn-order-main' ), subId ), '' );
+
 		// ---- Related order navigation is a real URL ----
 		await page.click( `[data-relorder="${ orderId }"]` );
 		await page.waitForFunction( ( id ) => location.pathname.indexOf( '/orders/' + id ) !== -1, orderId, { timeout: 15000 } );

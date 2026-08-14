@@ -2611,6 +2611,13 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 	text-align: left;
 }
 .minn-sub-order-row:hover { background: var(--hover, rgba(127,127,127,.08)); }
+/* The reference and its eye sit side by side. The eye follows the list's
+   reveal-on-hover idiom, and :focus-within is not optional here: revealed by
+   hover alone, a keyboard user tabs into a control at opacity 0. */
+.minn-sub-order-line { display: flex; align-items: center; gap: 6px; }
+.minn-sub-order-line > .minn-sub-order-row { flex: 1; min-width: 0; }
+.minn-sub-order-line:hover .minn-row-more,
+.minn-sub-order-line:focus-within .minn-row-more { opacity: 1; }
 .minn-product-cols { grid-template-columns: 1.6fr 100px 140px 100px 100px 40px; }
 .minn-product-cols.with-cb { grid-template-columns: 36px 1.6fr 100px 140px 100px 100px 40px; }
 .minn-coupon-cols { grid-template-columns: 1.4fr 1fr 90px 80px 100px 100px 40px; }
@@ -3924,6 +3931,9 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-table-row[style] > .minn-row-end,
   .minn-table-row[style] > .minn-row-arrow { order: -1; flex: none; }
   .minn-table-row[style] .minn-row-more { opacity: 1; }
+  /* Same reason on the subscription's order rows: there is no hover to
+     reveal the eye with on a touch screen. */
+  .minn-sub-order-line .minn-row-more { opacity: 1; }
   .minn-table-row[style] > .minn-row-meta { font-size: 12.5px; color: var(--text3); max-width: 100%; }
   .minn-table-row[style] > .minn-row-meta.minn-num { text-align: left; padding-right: 0; }
   /* A primary cell that is itself a pill/meta column keeps its own look. */

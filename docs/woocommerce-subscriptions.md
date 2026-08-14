@@ -68,6 +68,14 @@ The pencils carry `data-soedit`, not the order surface's `data-oedit`. `bindOrde
 queries `[data-oedit]` across the whole document, so a shared name would let an order host
 bind controls that are not its own.
 
+**Related orders offer both moves.** Clicking the reference navigates, which is what an
+order reference does everywhere in Minn. The eye beside it opens the order as a quick view
+instead, stacked over the subscription, so checking what a renewal charged does not cost
+the page you were reading. From the quick view there is only one modal to give, so the
+order replaces the subscription in it, the same way a related subscription behaves on the
+order side. The two buttons are siblings, never nested: a button inside a button is invalid
+and browsers drop the inner one.
+
 ## The list
 
 Subscriptions run the same filter machinery as orders, with their own vocabulary: their
@@ -92,7 +100,8 @@ is never hidden.
 `tests/subscription-page.test.js` covers the page: the deep link, the two columns and
 their stacking, the attribution card, the status save, items editing asserted against what
 WooCommerce stored, schedule editing asserted as GMT against the site's own offset, the
-themed picker, related-order navigation, and the modal as Quick view.
+themed picker, related-order navigation, the quick view that opens an order without
+leaving the subscription, and the modal as Quick view.
 `tests/subscription-filters.test.js` covers the list: each filter against the rows and the
 query string, the URL round trip, the start date column, and the GMT reading of a start
 date. `tests/wcs-subscriptions.test.js` covers the integration underneath both.
