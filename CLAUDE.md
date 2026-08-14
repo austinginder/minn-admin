@@ -91,15 +91,40 @@ literal, so the app runs with zero tooling. The convention:
   placeholders get a `/* translators: … */` comment on the line above the call.
 - Translated values placed in HTML attributes go through `esc()` like any other
   dynamic value.
-- **Plumbing:** `Minn_Admin::js_translations()` reads standard JED files from
-  `languages/` for `get_user_locale()` and ships the map in the boot payload as
-  `B.i18n` (filter `minn_admin_js_translations`; the dev-fixtures option
-  `minn_test_i18n` arms a German test catalog for `tests/i18n.test.js`).
+- **Plumbing:** `Minn_Admin::js_translations()` reads standard JED files for
+  `get_user_locale()` and ships the map in the boot payload as `B.i18n` (filter
+  `minn_admin_js_translations`; the dev-fixtures option `minn_test_i18n` arms a
+  German test catalog for `tests/i18n.test.js`). It reads TWO directories in
+  core's own precedence order: the plugin's bundled `languages/` first, then
+  `WP_LANG_DIR/plugins/` where installed language packs land, so a pack wins.
+  `js_plural_forms()` ships the locale's Plural-Forms rule alongside it, and
+  the app parses and evaluates that rule rather than assuming `n != 1` (which
+  is wrong for ten of the thirteen shipped locales). The rule is parsed, never
+  `eval`'d: a catalog is a downloaded file.
+- **Locale on Minn's route:** `Minn_Admin::route_locale()` filters
+  `determine_locale` so `/minn-admin/` and the `minn-admin/v1` namespace serve
+  the USER's language. Core only does this for `is_admin()`, and Minn is not
+  wp-admin, so without it the app translated while every PHP string stayed in
+  the site language and `is_rtl()` never became true for the user.
 - **Toolchain** (translation time only, never needed for development):
-  `wp i18n make-pot . languages/minn-admin.pot --ignore-domain
-  --exclude=tests,docs,.wp-playground,.github` regenerates the catalog (the stock
-  extractor understands the JS helpers because they share core's names); translated
-  `.po` files compile with `wp i18n make-mo` (PHP) and `wp i18n make-json` (JS JED
-  files, into `languages/`).
+  `bin/i18n/` owns the whole pipeline and `bin/i18n/README.md` documents it.
+  `bin/i18n/release.sh v<x.y.z>` is the release step: regenerate the `.pot`,
+  report what changed since the last one (only new strings cost anything),
+  regenerate each locale, validate, build one pack per locale, stamp
+  `manifest.json`. Two traps it exists to avoid, both of which fail silently:
+  `wp i18n make-json` PURGES the `.po` it is given, so running it before
+  `make-mo` produces a `.mo` missing every app.js string; and `wp i18n make-mo`
+  needs a destination FILE, not a directory.
+- **RTL:** the shell sets `dir` from `is_rtl()` and `app.css` uses logical
+  properties. Deliberately physical and not to be "fixed": crop-handle
+  coordinates, centering, symmetric stretches, previous/next. Anything
+  positioning a floating element in PIXELS must consult `isRtl()` — CSS logical
+  properties cannot reach a value computed in JS; use the shared `menuLeftAt()`
+  and `panelLeftFor()` helpers.
+- **Guards:** `tests/i18n-static.test.js` (no browser, ~1s) fails on a new
+  unwrapped literal, a `%s` string with no translators comment, anything routing
+  off a translated label, and an `_n()` plural wrapped in `__()`.
+  `tests/plural-forms.test.js` pins every shipped locale's rule;
+  `tests/rtl.test.js` drives a real fa_IR session.
 - Plugin-supplied labels (surface descriptors, adapter data) are the PLUGIN's to
   translate; never wrap third-party data in Minn's catalog.
