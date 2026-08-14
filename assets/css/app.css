@@ -2593,7 +2593,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 
 /* ===== Orders ===== */
 .minn-order-cols { grid-template-columns: 120px 1fr 130px minmax(0,150px) 100px 40px; }
-.minn-sub-cols { grid-template-columns: 130px 1fr minmax(0,150px) 110px 120px 100px 40px; }
+.minn-sub-cols { grid-template-columns: 130px 1fr minmax(0,150px) 110px 110px 120px 100px 40px; }
 .minn-sub-order-row {
 	display: flex;
 	align-items: center;
@@ -3873,7 +3873,8 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-order-cols > :nth-child(6) { display: none; }
   .minn-sub-cols { grid-template-columns: 86px 1fr 84px; }
   .minn-sub-cols > :nth-child(3), .minn-sub-cols > :nth-child(4),
-  .minn-sub-cols > :nth-child(5), .minn-sub-cols > :nth-child(7) { display: none; }
+  .minn-sub-cols > :nth-child(5), .minn-sub-cols > :nth-child(6),
+  .minn-sub-cols > :nth-child(8) { display: none; }
   .minn-product-cols { grid-template-columns: 1fr 72px 40px; }
   .minn-product-cols.with-cb { grid-template-columns: 36px 1fr 72px 40px; }
   .minn-product-cols > :nth-child(2), .minn-product-cols > :nth-child(3),

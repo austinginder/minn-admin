@@ -5832,17 +5832,19 @@
 	}
 
 	/** The sidebar edit dialogs' bodies — same field ids the save flow reads. */
-	function orderEditFormHtml( m, kind ) {
-		const o = m.full || m.order || {};
-		const b = o.billing || {};
-		const s = o.shipping || {};
-		if ( kind === 'items' ) return `
+	/**
+	 * The Items dialog body, for anything WooCommerce models as line_items:
+	 * an order or a subscription. `money` formats one amount in the entity's
+	 * own currency, which is the only thing that differs between the two.
+	 */
+	function itemsFormHtml( entity, money ) {
+		return `
 			<div class="minn-order-fields">
 				<div class="minn-ei-lines">
-					${ ( o.line_items || [] ).map( ( li ) => `
+					${ ( entity.line_items || [] ).map( ( li ) => `
 					<div class="minn-ei-line" data-eiline="${ li.id }">
 						<span class="minn-cell-clip">${ esc( li.name ) }</span>
-						<span class="minn-ei-unit">${ esc( orderMoney( o, ( parseFloat( li.subtotal ) || 0 ) / ( li.quantity || 1 ) ) ) }</span>
+						<span class="minn-ei-unit">${ esc( money( ( parseFloat( li.subtotal ) || 0 ) / ( li.quantity || 1 ) ) ) }</span>
 						<input class="minn-input minn-ei-qty" data-eiqty="${ li.id }" type="number" min="1" step="1" value="${ li.quantity }" aria-label="Quantity of ${ esc( li.name ) }">
 						<button type="button" class="minn-pdl-x" data-eidel="${ li.id }" title="${ esc( __( 'Remove item' ) ) }">×</button>
 					</div>` ).join( '' ) }
@@ -5853,6 +5855,13 @@
 				</div>
 				<div class="minn-toggle-desc">${ __( 'Removals and quantity changes rewrite the line totals from the unit price. Taxes and shipping are not recalculated here.' ) }</div>
 			</div>`;
+	}
+
+	function orderEditFormHtml( m, kind ) {
+		const o = m.full || m.order || {};
+		const b = o.billing || {};
+		const s = o.shipping || {};
+		if ( kind === 'items' ) return itemsFormHtml( o, ( v ) => orderMoney( o, v ) );
 		if ( kind === 'note' ) return `
 			<div class="minn-order-fields">
 				<textarea class="minn-input" id="minn-o-note" rows="4" placeholder="Note from the customer…">${ esc( o.customer_note || '' ) }</textarea>
@@ -5892,25 +5901,23 @@
 			</div>`;
 	}
 
-	/** A small dialog stacked over either detail host (page or quick-view
-	 *  modal), minnConfirm-style: refund controls and the sidebar card edits
-	 *  live here. Escape peels exactly this layer. */
-	function openOrderSubModal( m, kind ) {
-		const o = m.full || m.order || {};
-		const titles = { refund: __( 'Refund' ), customer: __( 'Customer' ), shipping: __( 'Shipping address' ), note: __( 'Notes' ), items: __( 'Items' ) };
-		const isEdit = kind !== 'refund';
+	/** A small dialog stacked over any detail host (order page, subscription
+	 *  page, or either quick-view modal), minnConfirm-style. Escape peels
+	 *  exactly this layer. `withActions` adds the Cancel/Save footer; a body
+	 *  that owns its own controls (the refund card) passes false. */
+	function openEditDialog( title, bodyHtml, withActions ) {
 		const overlay = document.createElement( 'div' );
 		overlay.className = 'minn-modal-overlay minn-order-submodal';
 		overlay.innerHTML = `
-		<div class="minn-modal minn-order-submodal-box" role="dialog" aria-modal="true" aria-label="${ esc( titles[ kind ] || '' ) }">
+		<div class="minn-modal minn-order-submodal-box" role="dialog" aria-modal="true" aria-label="${ esc( title || '' ) }">
 			<div class="minn-modal-head">
-				<div class="minn-modal-title-block"><div class="minn-modal-title">${ esc( titles[ kind ] || '' ) }</div></div>
+				<div class="minn-modal-title-block"><div class="minn-modal-title">${ esc( title || '' ) }</div></div>
 				<button class="minn-x-btn" data-oclose type="button">×</button>
 			</div>
 			<div class="minn-order-submodal-body">
-				${ isEdit ? orderEditFormHtml( m, kind ) : orderRefundCardHtml( m, o, orderRefundableTotal( o ) ) }
+				${ bodyHtml }
 			</div>
-			${ isEdit ? `
+			${ withActions ? `
 			<div class="minn-modal-actions">
 				<button class="minn-btn-soft" data-oclose type="button">${ __( 'Cancel' ) }</button>
 				<button class="minn-btn-primary" data-esave type="button">${ __( 'Save' ) }</button>
@@ -5925,6 +5932,145 @@
 		const firstInput = $( 'input, textarea', overlay );
 		if ( firstInput ) setTimeout( () => firstInput.focus(), 30 );
 		return { overlay, close };
+	}
+
+	/**
+	 * The items dialog's behaviour, shared by orders and subscriptions: per-line
+	 * quantities, removals (strike, then quantity:0 on save) and an add-product
+	 * search. Quantity edits rewrite subtotal/total from the line's unit price —
+	 * WC's REST keeps the old money otherwise.
+	 *
+	 * ctx: { entity(), route, fields, savedMsg, onSaved( full ) } — both hosts
+	 * PUT the identical line_items shape, so only the route and what to
+	 * invalidate afterwards differ.
+	 */
+	function bindItemsDialog( sub, sv, ctx ) {
+		const cur = ctx.entity() || {};
+		const adds = [];
+		const removed = new Set();
+		$$( '[data-eidel]', sub.overlay ).forEach( ( x ) =>
+			x.addEventListener( 'click', () => {
+				const id = parseInt( x.dataset.eidel, 10 );
+				if ( removed.has( id ) ) removed.delete( id ); else removed.add( id );
+				const row = $( `[data-eiline="${ id }"]`, sub.overlay );
+				if ( row ) row.classList.toggle( 'removed', removed.has( id ) );
+			} )
+		);
+		const addsHost = $( '#minn-ei-adds', sub.overlay );
+		const paintAdds = () => {
+			addsHost.innerHTML = adds.map( ( a, i ) => `
+			<div class="minn-ei-line">
+				<span class="minn-cell-clip">${ esc( a.name ) }</span>
+				<span class="minn-ei-unit">$${ esc( String( a.price || '0' ) ) }</span>
+				<input class="minn-input minn-ei-qty" data-eaddqty="${ i }" type="number" min="1" step="1" value="${ a.qty }">
+				<button type="button" class="minn-pdl-x" data-eadddel="${ i }" title="${ esc( __( 'Remove item' ) ) }">×</button>
+			</div>` ).join( '' );
+			$$( '[data-eaddqty]', addsHost ).forEach( ( q ) =>
+				q.addEventListener( 'input', () => { adds[ parseInt( q.dataset.eaddqty, 10 ) ].qty = Math.max( 1, parseInt( q.value, 10 ) || 1 ); } )
+			);
+			$$( '[data-eadddel]', addsHost ).forEach( ( x ) =>
+				x.addEventListener( 'click', () => { adds.splice( parseInt( x.dataset.eadddel, 10 ), 1 ); paintAdds(); } )
+			);
+		};
+		const search = $( '#minn-ei-search', sub.overlay );
+		let timer = null;
+		let panel = null;
+		// The search is a round trip; it says so while it runs, and a
+		// stale reply never paints over a newer one (seq).
+		let seq = 0;
+		let spin = null;
+		const setSearching = ( on ) => {
+			if ( on && ! spin && search && search.parentNode ) {
+				spin = document.createElement( 'div' );
+				spin.className = 'minn-loading minn-ei-searching';
+				spin.textContent = __( 'Searching products…' );
+				search.parentNode.appendChild( spin );
+			} else if ( ! on && spin ) {
+				spin.remove();
+				spin = null;
+			}
+		};
+		if ( search ) search.addEventListener( 'input', () => {
+			clearTimeout( timer );
+			if ( panel ) { panel.remove(); panel = null; }
+			setSearching( !! search.value.trim() );
+			timer = setTimeout( async () => {
+				const q = search.value.trim();
+				if ( panel ) { panel.remove(); panel = null; }
+				if ( ! q ) { setSearching( false ); return; }
+				const mine = ++seq;
+				try {
+					const hits = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,price,regular_price` );
+					if ( mine !== seq || ! sub.overlay.isConnected ) return;
+					setSearching( false );
+					if ( ! Array.isArray( hits ) || ! hits.length ) return;
+					panel = document.createElement( 'div' );
+					panel.className = 'minn-ac-panel';
+					panel.style.cssText = 'position:relative; display:block; margin-top:6px; max-height:160px; overflow:auto;';
+					panel.innerHTML = hits.map( ( p ) =>
+						`<button type="button" class="minn-ac-item" data-ei-pick="${ p.id }" style="display:block; width:100%; text-align:left;">${ esc( p.name ) }${ p.sku ? ' · ' + esc( p.sku ) : '' } · $${ esc( String( p.price || p.regular_price || '0' ) ) }</button>` ).join( '' );
+					search.parentNode.appendChild( panel );
+					$$( '[data-ei-pick]', panel ).forEach( ( bn ) =>
+						bn.addEventListener( 'click', () => {
+							const hit = hits.find( ( p ) => p.id === parseInt( bn.dataset.eiPick, 10 ) );
+							if ( ! hit ) return;
+							adds.push( { product_id: hit.id, qty: 1, name: hit.name, price: hit.price || hit.regular_price || '0' } );
+							search.value = '';
+							if ( panel ) { panel.remove(); panel = null; }
+							paintAdds();
+						} )
+					);
+				} catch ( e ) {
+					// A failed search paints nothing, but must never
+					// leave the loading line spinning forever.
+					if ( mine === seq ) setSearching( false );
+				}
+			}, 280 );
+		} );
+		if ( sv ) sv.addEventListener( 'click', async () => {
+			const line_items = [];
+			( cur.line_items || [] ).forEach( ( li ) => {
+				if ( removed.has( li.id ) ) { line_items.push( { id: li.id, quantity: 0 } ); return; }
+				const inp = $( `[data-eiqty="${ li.id }"]`, sub.overlay );
+				const q = Math.max( 1, parseInt( inp && inp.value, 10 ) || li.quantity );
+				if ( q !== li.quantity ) {
+					const qty0 = li.quantity || 1;
+					line_items.push( {
+						id: li.id,
+						quantity: q,
+						subtotal: ( ( parseFloat( li.subtotal ) || 0 ) / qty0 * q ).toFixed( 2 ),
+						total: ( ( parseFloat( li.total ) || 0 ) / qty0 * q ).toFixed( 2 ),
+					} );
+				}
+			} );
+			adds.forEach( ( a ) => line_items.push( { product_id: a.product_id, quantity: a.qty } ) );
+			if ( ! line_items.length ) { sub.close(); return; }
+			sv.disabled = true;
+			sv.textContent = 'Saving…';
+			try {
+				await api( `${ ctx.route }/${ cur.id }`, { method: 'PUT', body: JSON.stringify( { line_items } ) } );
+				const full = await api( `${ ctx.route }/${ cur.id }?_fields=${ ctx.fields }` );
+				ctx.onSaved( full );
+				toast( __( 'Items updated' ) );
+				sub.close();
+			} catch ( e ) {
+				toast( e.message, true );
+				sv.disabled = false;
+				sv.textContent = __( 'Save' );
+			}
+		} );
+	}
+
+	/** The order surface's edit dialogs, by kind. */
+	function openOrderSubModal( m, kind ) {
+		const o = m.full || m.order || {};
+		const titles = { refund: __( 'Refund' ), customer: __( 'Customer' ), shipping: __( 'Shipping address' ), note: __( 'Notes' ), items: __( 'Items' ) };
+		const isEdit = kind !== 'refund';
+		return openEditDialog(
+			titles[ kind ] || '',
+			isEdit ? orderEditFormHtml( m, kind ) : orderRefundCardHtml( m, o, orderRefundableTotal( o ) ),
+			isEdit
+		);
 	}
 
 	function orderDetailInnerHtml( m ) {
@@ -6241,7 +6387,19 @@
 					const sub = openOrderSubModal( m, kind );
 					const sv = $( '[data-esave]', sub.overlay );
 					if ( kind === 'items' ) {
-						bindItemsDialog( sub, sv );
+						bindItemsDialog( sub, sv, {
+							entity: () => m.full || m.order || {},
+							route: 'wc/v3/orders',
+							fields: ORDER_DETAIL_FIELDS,
+							onSaved: ( full ) => {
+								m.full = full;
+								m.order = Object.assign( {}, m.order, { status: full.status, total: full.total, line_items: full.line_items } );
+								state.cache.orders = null;
+								state.cache.orderSummary = null;
+								if ( state.route === 'orders' ) renderOrders();
+								rerender();
+							},
+						} );
 						return;
 					}
 					if ( kind === 'shipping' ) {
@@ -6283,131 +6441,6 @@
 					copyAddrBtn.disabled = false;
 				}
 			} );
-			// The items dialog: per-line quantities, removals (strike, then
-			// quantity:0 on save) and an add-product search. Quantity edits
-			// rewrite subtotal/total from the line's unit price — WC's REST
-			// keeps the old money otherwise.
-			const bindItemsDialog = ( sub, sv ) => {
-				const cur = m.full || m.order || {};
-				const adds = [];
-				const removed = new Set();
-				$$( '[data-eidel]', sub.overlay ).forEach( ( x ) =>
-					x.addEventListener( 'click', () => {
-						const id = parseInt( x.dataset.eidel, 10 );
-						if ( removed.has( id ) ) removed.delete( id ); else removed.add( id );
-						const row = $( `[data-eiline="${ id }"]`, sub.overlay );
-						if ( row ) row.classList.toggle( 'removed', removed.has( id ) );
-					} )
-				);
-				const addsHost = $( '#minn-ei-adds', sub.overlay );
-				const paintAdds = () => {
-					addsHost.innerHTML = adds.map( ( a, i ) => `
-					<div class="minn-ei-line">
-						<span class="minn-cell-clip">${ esc( a.name ) }</span>
-						<span class="minn-ei-unit">$${ esc( String( a.price || '0' ) ) }</span>
-						<input class="minn-input minn-ei-qty" data-eaddqty="${ i }" type="number" min="1" step="1" value="${ a.qty }">
-						<button type="button" class="minn-pdl-x" data-eadddel="${ i }" title="${ esc( __( 'Remove item' ) ) }">×</button>
-					</div>` ).join( '' );
-					$$( '[data-eaddqty]', addsHost ).forEach( ( q ) =>
-						q.addEventListener( 'input', () => { adds[ parseInt( q.dataset.eaddqty, 10 ) ].qty = Math.max( 1, parseInt( q.value, 10 ) || 1 ); } )
-					);
-					$$( '[data-eadddel]', addsHost ).forEach( ( x ) =>
-						x.addEventListener( 'click', () => { adds.splice( parseInt( x.dataset.eadddel, 10 ), 1 ); paintAdds(); } )
-					);
-				};
-				const search = $( '#minn-ei-search', sub.overlay );
-				let timer = null;
-				let panel = null;
-				// The search is a round trip; it says so while it runs, and a
-				// stale reply never paints over a newer one (seq).
-				let seq = 0;
-				let spin = null;
-				const setSearching = ( on ) => {
-					if ( on && ! spin && search && search.parentNode ) {
-						spin = document.createElement( 'div' );
-						spin.className = 'minn-loading minn-ei-searching';
-						spin.textContent = __( 'Searching products…' );
-						search.parentNode.appendChild( spin );
-					} else if ( ! on && spin ) {
-						spin.remove();
-						spin = null;
-					}
-				};
-				if ( search ) search.addEventListener( 'input', () => {
-					clearTimeout( timer );
-					if ( panel ) { panel.remove(); panel = null; }
-					setSearching( !! search.value.trim() );
-					timer = setTimeout( async () => {
-						const q = search.value.trim();
-						if ( panel ) { panel.remove(); panel = null; }
-						if ( ! q ) { setSearching( false ); return; }
-						const mine = ++seq;
-						try {
-							const hits = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,price,regular_price` );
-							if ( mine !== seq || ! sub.overlay.isConnected ) return;
-							setSearching( false );
-							if ( ! Array.isArray( hits ) || ! hits.length ) return;
-							panel = document.createElement( 'div' );
-							panel.className = 'minn-ac-panel';
-							panel.style.cssText = 'position:relative; display:block; margin-top:6px; max-height:160px; overflow:auto;';
-							panel.innerHTML = hits.map( ( p ) =>
-								`<button type="button" class="minn-ac-item" data-ei-pick="${ p.id }" style="display:block; width:100%; text-align:left;">${ esc( p.name ) }${ p.sku ? ' · ' + esc( p.sku ) : '' } · $${ esc( String( p.price || p.regular_price || '0' ) ) }</button>` ).join( '' );
-							search.parentNode.appendChild( panel );
-							$$( '[data-ei-pick]', panel ).forEach( ( bn ) =>
-								bn.addEventListener( 'click', () => {
-									const hit = hits.find( ( p ) => p.id === parseInt( bn.dataset.eiPick, 10 ) );
-									if ( ! hit ) return;
-									adds.push( { product_id: hit.id, qty: 1, name: hit.name, price: hit.price || hit.regular_price || '0' } );
-									search.value = '';
-									if ( panel ) { panel.remove(); panel = null; }
-									paintAdds();
-								} )
-							);
-						} catch ( e ) {
-							// A failed search paints nothing, but must never
-							// leave the loading line spinning forever.
-							if ( mine === seq ) setSearching( false );
-						}
-					}, 280 );
-				} );
-				if ( sv ) sv.addEventListener( 'click', async () => {
-					const line_items = [];
-					( cur.line_items || [] ).forEach( ( li ) => {
-						if ( removed.has( li.id ) ) { line_items.push( { id: li.id, quantity: 0 } ); return; }
-						const inp = $( `[data-eiqty="${ li.id }"]`, sub.overlay );
-						const q = Math.max( 1, parseInt( inp && inp.value, 10 ) || li.quantity );
-						if ( q !== li.quantity ) {
-							const qty0 = li.quantity || 1;
-							line_items.push( {
-								id: li.id,
-								quantity: q,
-								subtotal: ( ( parseFloat( li.subtotal ) || 0 ) / qty0 * q ).toFixed( 2 ),
-								total: ( ( parseFloat( li.total ) || 0 ) / qty0 * q ).toFixed( 2 ),
-							} );
-						}
-					} );
-					adds.forEach( ( a ) => line_items.push( { product_id: a.product_id, quantity: a.qty } ) );
-					if ( ! line_items.length ) { sub.close(); return; }
-					sv.disabled = true;
-					sv.textContent = 'Saving…';
-					try {
-						await api( `wc/v3/orders/${ o.id }`, { method: 'PUT', body: JSON.stringify( { line_items } ) } );
-						const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
-						m.full = full;
-						m.order = Object.assign( {}, m.order, { status: full.status, total: full.total, line_items: full.line_items } );
-						toast( __( 'Items updated' ) );
-						state.cache.orders = null;
-						state.cache.orderSummary = null;
-						if ( state.route === 'orders' ) renderOrders();
-						sub.close();
-						rerender();
-					} catch ( e ) {
-						toast( e.message, true );
-						sv.disabled = false;
-						sv.textContent = __( 'Save' );
-					}
-				} );
-			};
 			// Refund lives behind a header action now; its dialog hosts the card.
 			const refundOpen = $( '#minn-o-refund-open' );
 			if ( refundOpen ) refundOpen.addEventListener( 'click', () => {
@@ -7352,7 +7385,7 @@
 	// WCS 9.x REST is the same shape as 5.x for these fields; 9.x also
 	// exposes requires_manual_renewal + suspension_count on detail reads.
 	const SUB_LIST_FIELDS = 'id,number,status,total,currency,date_created,billing,line_items,billing_period,billing_interval,next_payment_date_gmt,start_date_gmt,customer_id,parent_id';
-	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,requires_manual_renewal,suspension_count,meta_data';
+	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,requires_manual_renewal,suspension_count,meta_data,is_editable';
 
 	const subCtx = () => JSON.stringify( orderFilters( LIST_FILTER_SPECS.subscriptions ) ) + '|' + ( state.subSearch || '' );
 
@@ -7372,13 +7405,69 @@
 		return code + ' ' + num;
 	}
 
+	// Every subscription date arrives as *_gmt. Read as site-local instead, a
+	// site at UTC-5 shows a subscription that started seconds ago as "in 5h" —
+	// one that has not started yet. Hard-won: the offset only shows up on a
+	// site whose timezone is not UTC, so it survives a UTC dev box unnoticed.
+	const subTime = ( v ) => timeAgo( v, { utc: true } );
+
+	// The schedule's two directions. WCS reads dates as `next_payment_date_gmt`
+	// and writes them as `next_payment_date`, interpreting the value it is
+	// given as GMT (proven against a live install, not inferred from the
+	// schema). Minn shows site time everywhere, so both ends convert through
+	// B.gmtOffset — a datetime-local input carries no zone of its own.
+	const SUB_PERIODS = [ [ 'day', __( 'Day' ) ], [ 'week', __( 'Week' ) ], [ 'month', __( 'Month' ) ], [ 'year', __( 'Year' ) ] ];
+	const gmtOffsetMs = () => ( typeof B.gmtOffset === 'number' ? B.gmtOffset : 0 ) * 3600000;
+	function gmtToSiteInput( gmt ) {
+		if ( ! gmt ) return '';
+		const d = new Date( String( gmt ).replace( ' ', 'T' ).replace( /Z?$/, 'Z' ) );
+		if ( isNaN( d.getTime() ) ) return '';
+		return new Date( d.getTime() + gmtOffsetMs() ).toISOString().slice( 0, 16 );
+	}
+	function siteInputToGmt( v ) {
+		if ( ! v ) return '';
+		const d = new Date( v + ':00Z' ); // read the field as if it were UTC…
+		if ( isNaN( d.getTime() ) ) return '';
+		// …then take the site's offset back out to land on real GMT.
+		return new Date( d.getTime() - gmtOffsetMs() ).toISOString().slice( 0, 19 ).replace( 'T', ' ' );
+	}
+
+	/** The Schedule dialog. Start date is deliberately absent: moving a live
+	 *  subscription's start rewrites its billing history, and WCS rejects any
+	 *  order it disagrees with (trial end ≤ next payment ≤ end). */
+	function subScheduleFormHtml( s ) {
+		// Minn's own picker, not a native datetime-local: Chrome's calendar is
+		// unstyleable. The machine value on dataset.dp keeps the same
+		// "YYYY-MM-DDTHH:mm" shape, here holding SITE time.
+		const field = ( id, label, machine ) => `
+			<div><div class="minn-field-label">${ esc( label ) }</div>
+				<input class="minn-input minn-dp-input" id="${ id }" type="text" readonly placeholder="${ esc( __( 'Not set' ) ) }" data-dp="${ esc( machine ) }" value="${ esc( dpPretty( machine ) ) }">
+			</div>`;
+		return `
+			<div class="minn-order-fields">
+				<div class="minn-side-row"><span class="minn-side-key">${ __( 'Start date' ) }</span><span>${ esc( s.start_date_gmt ? subTime( s.start_date_gmt ) : '—' ) }</span></div>
+				${ field( 'minn-ss-next', __( 'Next payment' ), gmtToSiteInput( s.next_payment_date_gmt ) ) }
+				${ field( 'minn-ss-trial', __( 'Trial ends' ), gmtToSiteInput( s.trial_end_date_gmt ) ) }
+				${ field( 'minn-ss-end', __( 'Ends' ), gmtToSiteInput( s.end_date_gmt ) ) }
+				<div class="minn-order-field-row">
+					<div><div class="minn-field-label">${ __( 'Billing interval' ) }</div>
+						<input class="minn-input" id="minn-ss-interval" type="number" min="1" step="1" value="${ esc( String( s.billing_interval || 1 ) ) }">
+					</div>
+					<div><div class="minn-field-label">${ __( 'Billing period' ) }</div>
+						<div class="minn-ac" data-oc="subperiod"><input class="minn-input minn-ac-input" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Billing period' ) ) }"><div class="minn-ac-panel" hidden></div></div>
+					</div>
+				</div>
+				<div class="minn-toggle-desc">${ __( 'Times are in the site timezone. Clearing a date removes it. WooCommerce keeps trial end, next payment and end date in that order and rejects anything else.' ) }</div>
+			</div>`;
+	}
+
 	function subNextLabel( s ) {
 		const next = s.next_payment_date_gmt;
 		if ( ! next ) {
 			if ( s.status === 'cancelled' || s.status === 'expired' || s.status === 'pending-cancel' ) return '—';
 			return 'None scheduled';
 		}
-		return timeAgo( next );
+		return subTime( next );
 	}
 
 	async function loadSubscriptions( page = 1 ) {
@@ -7440,12 +7529,16 @@
 		/* translators: %d: number of items on the subscription. */
 		const countLabel = sprintf( _n( '%d item', '%d items', itemCount ), itemCount );
 		const row = ( key, value, title ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( key ) }</span><span${ title ? ` title="${ esc( title ) }"` : '' }>${ value }</span></div>`;
+		// Its own attribute, not the order surface's data-oedit: bindOrderDetail
+		// queries [data-oedit] across the whole document, so sharing the name
+		// would let an order host bind pencils that are not its own.
+		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
 		return `
 					<div class="minn-order-body">
 						<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec minn-order-itemscard">
-								<div class="minn-order-card-head"><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span><span class="minn-order-card-meta">${ esc( countLabel ) }</span></div>
+								<div class="minn-order-card-head"><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span><span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ s.is_editable ? pencil( 'items', __( 'Edit items' ) ) : '' }</div>
 								<div class="minn-order-items">
 									${ ( s.line_items || [] ).map( ( li ) => `
 										<div class="minn-order-item">
@@ -7497,14 +7590,14 @@
 								${ canOpenCustomer ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-customer" style="margin-top:10px;">${ __( 'View customer' ) }</button>` : '' }
 							</div>
 							<div class="minn-order-sec minn-sub-schedule">
-								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Schedule' ) }</div></div>
+								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Schedule' ) }</div>${ pencil( 'schedule', __( 'Edit schedule' ) ) }</div>
 								<div class="minn-order-read">
 									${ row( __( 'Billing' ), esc( subPeriodLabel( s ) ) ) }
 									${ row( __( 'Next payment' ), esc( subNextLabel( s ) ), s.next_payment_date_gmt || '' ) }
-									${ s.last_payment_date_gmt ? row( __( 'Last payment' ), esc( timeAgo( s.last_payment_date_gmt ) ) ) : '' }
-									${ s.trial_end_date_gmt ? row( __( 'Trial ends' ), esc( timeAgo( s.trial_end_date_gmt ) ) ) : '' }
-									${ s.end_date_gmt ? row( __( 'Ends' ), esc( timeAgo( s.end_date_gmt ) ) ) : '' }
-									${ s.start_date_gmt ? row( __( 'Started' ), esc( timeAgo( s.start_date_gmt ) ) ) : '' }
+									${ s.start_date_gmt ? row( __( 'Start date' ), esc( subTime( s.start_date_gmt ) ), s.start_date_gmt ) : '' }
+									${ s.last_payment_date_gmt ? row( __( 'Last payment' ), esc( subTime( s.last_payment_date_gmt ) ), s.last_payment_date_gmt ) : '' }
+									${ s.trial_end_date_gmt ? row( __( 'Trial ends' ), esc( subTime( s.trial_end_date_gmt ) ), s.trial_end_date_gmt ) : '' }
+									${ s.end_date_gmt ? row( __( 'Ends' ), esc( subTime( s.end_date_gmt ) ), s.end_date_gmt ) : '' }
 								</div>
 							</div>
 							${ attributionCardHtml( s, __( 'Subscription attribution' ) ) }
@@ -7652,6 +7745,86 @@
 		if ( custBtn ) custBtn.addEventListener( 'click', openCustomer );
 		const custBtnFoot = $( '#minn-sub-open-customer-foot' );
 		if ( custBtnFoot ) custBtnFoot.addEventListener( 'click', openCustomer );
+		/** Schedule edits go out as a diff: an untouched date is never sent, so
+		 *  WCS never validates a field the user did not open the dialog for. */
+		const openScheduleDialog = ( cur ) => {
+			const dlg = openEditDialog( __( 'Schedule' ), subScheduleFormHtml( cur ), true );
+			[ '#minn-ss-next', '#minn-ss-trial', '#minn-ss-end' ].forEach( ( sel ) => {
+				const el = $( sel, dlg.overlay );
+				if ( el ) bindDatePicker( el, () => {} );
+			} );
+			let period = cur.billing_period || 'month';
+			const periodWrap = $( '[data-oc="subperiod"]', dlg.overlay );
+			if ( periodWrap ) bindAutocomplete( periodWrap,
+				SUB_PERIODS.map( ( [ value, label ] ) => ( { value, label } ) ),
+				{ strict: true, value: period, onPick: ( v ) => { period = v; } } );
+			const sv = $( '[data-esave]', dlg.overlay );
+			if ( ! sv ) return;
+			sv.addEventListener( 'click', async () => {
+				const body = {};
+				[ [ 'minn-ss-next', 'next_payment_date', 'next_payment_date_gmt' ],
+					[ 'minn-ss-trial', 'trial_end_date', 'trial_end_date_gmt' ],
+					[ 'minn-ss-end', 'end_date', 'end_date_gmt' ] ].forEach( ( [ id, write, read ] ) => {
+					const el = $( '#' + id, dlg.overlay );
+					if ( ! el ) return;
+					const was = gmtToSiteInput( cur[ read ] );
+					const now = ( el.dataset.dp || '' ).slice( 0, 16 );
+					if ( now === was ) return;
+					body[ write ] = now ? siteInputToGmt( now ) : '';
+				} );
+				const iv = $( '#minn-ss-interval', dlg.overlay );
+				const ivVal = Math.max( 1, parseInt( iv && iv.value, 10 ) || 1 );
+				if ( ivVal !== ( parseInt( cur.billing_interval, 10 ) || 1 ) ) body.billing_interval = ivVal;
+				if ( period !== ( cur.billing_period || 'month' ) ) body.billing_period = period;
+				if ( ! Object.keys( body ).length ) { dlg.close(); return; }
+				sv.disabled = true;
+				sv.textContent = 'Saving…';
+				try {
+					await api( `wc/v3/subscriptions/${ cur.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
+					const full = await api( `wc/v3/subscriptions/${ cur.id }?_fields=${ SUB_DETAIL_FIELDS }` );
+					m.full = full;
+					m.sub = Object.assign( {}, m.sub, {
+						status: full.status,
+						next_payment_date_gmt: full.next_payment_date_gmt,
+						billing_period: full.billing_period,
+						billing_interval: full.billing_interval,
+					} );
+					state.cache.subscriptions = null;
+					toast( __( 'Schedule updated' ) );
+					if ( state.route === 'subscriptions' ) renderSubscriptions();
+					dlg.close();
+					rerender();
+				} catch ( e ) {
+					toast( e.message, true );
+					sv.disabled = false;
+					sv.textContent = __( 'Save' );
+				}
+			} );
+		};
+		// A subscription's line_items take the same PUT an order's do, so the
+		// items dialog is the order surface's, pointed at this route.
+		const view = m.page ? ( $( '.minn-sub-page' ) || document ) : document;
+		$$( '[data-soedit]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const kind = btn.dataset.soedit;
+				const cur = m.full || m.sub || {};
+				if ( kind === 'schedule' ) { openScheduleDialog( cur ); return; }
+				if ( kind !== 'items' ) return;
+				const dlg = openEditDialog( __( 'Items' ), itemsFormHtml( cur, ( v ) => subMoney( cur, v ) ), true );
+				bindItemsDialog( dlg, $( '[data-esave]', dlg.overlay ), {
+					entity: () => m.full || m.sub || {},
+					route: 'wc/v3/subscriptions',
+					fields: SUB_DETAIL_FIELDS,
+					onSaved: ( full ) => {
+						m.full = full;
+						m.sub = Object.assign( {}, m.sub, { status: full.status, total: full.total, line_items: full.line_items } );
+						state.cache.subscriptions = null;
+						if ( state.route === 'subscriptions' ) renderSubscriptions();
+						rerender();
+					},
+				} );
+			} )
+		);
 		// Themed combobox: the status select was the last OS-drawn control here.
 		const statusWrap = $( '[data-oc="substatus"]' );
 		let picked = s.status || 'active';
@@ -7755,7 +7928,7 @@
 		${ orderFilterChipsHtml() }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-sub-cols">
-				<div>Subscription</div><div>Customer</div><div>${ __( 'Items' ) }</div><div>Status</div><div>Next payment</div><div>Total</div><div></div>
+				<div>Subscription</div><div>Customer</div><div>${ __( 'Items' ) }</div><div>Status</div><div>${ __( 'Start date' ) }</div><div>Next payment</div><div>Total</div><div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( s ) => `
 				<div class="minn-table-row minn-sub-cols" data-sub="${ s.id }">
@@ -7766,6 +7939,7 @@
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( s ) ) }</div>
 					${ itemsCellHtml( s.line_items ) }
 					<div><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span></div>
+					<div class="minn-row-meta" data-substart title="${ esc( s.start_date_gmt || '' ) }">${ esc( subTime( s.start_date_gmt ) ) }</div>
 					<div class="minn-row-meta" title="${ esc( s.next_payment_date_gmt || '' ) }">${ esc( subNextLabel( s ) ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( subMoney( s, s.total ) ) }</div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-sqv="${ s.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
@@ -22134,7 +22308,12 @@
 				const rect = input.getBoundingClientRect();
 				const w = dpPop.offsetWidth || 260;
 				dpPop.style.left = Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) + 'px';
-				dpPop.style.top = Math.min( rect.bottom + 6, window.innerHeight - dpPop.offsetHeight - 10 ) + 'px';
+				// The 10px floor matters: without it a tall popover anchored low
+				// (a field near the bottom of a dialog) is placed at a negative
+				// top and its first rows sit above the viewport, unreachable —
+				// a fixed element cannot be scrolled into view. Every other
+				// popover in this file clamps the same way.
+				dpPop.style.top = Math.max( 10, Math.min( rect.bottom + 6, window.innerHeight - dpPop.offsetHeight - 10 ) ) + 'px';
 
 				const syncLegend = ( byDay ) => {
 					const leg = $( '[data-dp-legend]', dpPop );
