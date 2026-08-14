@@ -148,7 +148,28 @@
 	// numerals (١٢٣ / ۱۲۳), but PHP's number_format_i18n — which renders the
 	// server half of the very same screens — emits Latin. One digit system per
 	// screen matters more than either choice.
-	const uiLocale = () => String( B.locale || 'en_US' ).replace( '_', '-' ) + '-u-nu-latn';
+	// WP locales are not BCP-47: variant forms (de_CH_informal, pt_PT_ao90,
+	// nl_NL_formal) turn into tags Intl refuses outright, and the RangeError
+	// from any date or number formatter takes the whole render down with it.
+	// Validate the tag and degrade (language+region → language → en) rather
+	// than trust the underscore swap. Cached per raw locale: this runs on
+	// every date a list paints.
+	let uiLocaleTag = '', uiLocaleFor = null;
+	const uiLocale = () => {
+		const raw = String( B.locale || 'en_US' );
+		if ( uiLocaleFor === raw ) return uiLocaleTag;
+		const parts = raw.split( '_' ).filter( Boolean );
+		const candidates = [];
+		if ( parts.length >= 2 ) candidates.push( parts[ 0 ] + '-' + parts[ 1 ] );
+		candidates.push( parts[ 0 ] || 'en', 'en' );
+		let tag = 'en';
+		for ( const c of candidates ) {
+			try { Intl.getCanonicalLocales( c + '-u-nu-latn' ); tag = c; break; } catch ( e ) { /* next candidate */ }
+		}
+		uiLocaleFor = raw;
+		uiLocaleTag = tag + '-u-nu-latn';
+		return uiLocaleTag;
+	};
 
 	// Writing direction, read from the document rather than the locale: the
 	// shell sets dir from is_rtl(), and a site can override it. Anything that
