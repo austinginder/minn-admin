@@ -113,13 +113,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'is_starred', 'equals' => '1' ),
 				),
 				array(
-					'label'   => 'Resend notifications',
+					'label'   => __( 'Resend notifications', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'gf/v2/entries/{id}/notifications',
-					'confirm' => 'Resend this entry’s notifications (all active ones for its form)?',
+					'confirm' => __( 'Resend this entry’s notifications (all active ones for its form)?', 'minn-admin' ),
 				),
 				array(
-					'label'  => 'Add note',
+					'label'  => __( 'Add note', 'minn-admin' ),
 					'method' => 'POST',
 					// Shimmed: gf/v2's notes POST creates the note but then 500s
 					// preparing its own response (prepare_note_for_response returns
@@ -127,20 +127,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					// never exercises this route). GFAPI::add_note is reliable.
 					'route'  => 'minn-admin/v1/gf/entries/{id}/notes',
 					'fields' => array(
-						array( 'key' => 'value', 'label' => 'Note', 'type' => 'textarea', 'rows' => 3, 'placeholder' => 'Visible on the entry here and in Gravity Forms.' ),
+						array( 'key' => 'value', 'label' => 'Note', 'type' => 'textarea', 'rows' => 3, 'placeholder' => __( 'Visible on the entry here and in Gravity Forms.', 'minn-admin' ) ),
 					),
 				),
 				array(
-					'label'   => 'Mark as spam',
+					'label'   => __( 'Mark as spam', 'minn-admin' ),
 					'method'  => 'PUT',
 					'route'   => 'gf/v2/entries/{id}/properties',
 					'body'    => array( 'status' => 'spam' ),
-					'confirm' => 'Mark this entry as spam? Find it under the Spam filter.',
+					'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
 				),
 				array(
-					'label'  => 'Not spam',
+					'label'  => __( 'Not spam', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'gf/v2/entries/{id}/properties',
 					'body'   => array( 'status' => 'active' ),
@@ -154,26 +154,26 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Trash entry',
+					'label'   => __( 'Trash entry', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'gf/v2/entries/{id}',
-					'confirm' => 'Move this entry to trash?',
+					'confirm' => __( 'Move this entry to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'gf/v2/entries/{id}?force=1',
-					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'gf/v2/entries/{id}?force=1',
-					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
@@ -187,7 +187,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'is_starred', 'equals' => '0' ),
 				),
 				array(
-					'label'  => 'Mark read',
+					'label'  => __( 'Mark read', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'gf/v2/entries/{id}/properties',
 					'body'   => array( 'is_read' => 1 ),
@@ -198,12 +198,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'method'  => 'PUT',
 					'route'   => 'gf/v2/entries/{id}/properties',
 					'body'    => array( 'status' => 'spam' ),
-					'confirm' => 'Mark the selected entries as spam?',
+					'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
 				),
 				array(
-					'label'  => 'Not spam',
+					'label'  => __( 'Not spam', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'gf/v2/entries/{id}/properties',
 					'body'   => array( 'status' => 'active' ),
@@ -220,15 +220,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Trash',
 					'method'  => 'DELETE',
 					'route'   => 'gf/v2/entries/{id}',
-					'confirm' => 'Move the selected entries to trash?',
+					'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'active' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'gf/v2/entries/{id}?force=1',
-					'confirm' => 'Delete the selected entries permanently? There is no undo.',
+					'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
@@ -263,7 +263,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'inactive' ),
 				),
 				array(
-					'label' => 'Edit in Gravity Forms ↗',
+					'label' => __( 'Edit in Gravity Forms ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=gf_edit_forms&id={id}' ),
 				),
 			),
@@ -281,13 +281,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// never from the view switcher. The schema is read from GF's own
 		// Settings framework at request time (the mapper below).
 		$surfaces['gravity-forms']['settings'] = array(
-			'label' => 'Form settings',
-			'tabs'  => array( array( 'id' => 'form', 'label' => 'Form settings' ) ),
+			'label' => __( 'Form settings', 'minn-admin' ),
+			'tabs'  => array( array( 'id' => 'form', 'label' => __( 'Form settings', 'minn-admin' ) ) ),
 			'route' => 'minn-admin/v1/gf/forms/{id}/settings/{tab}',
 		);
 		array_unshift(
 			$surfaces['gravity-forms']['manage']['actions'],
-			array( 'label' => 'Form settings', 'settingsItem' => true )
+			array( 'label' => __( 'Form settings', 'minn-admin' ), 'settingsItem' => true )
 		);
 		$surfaces['gravity-forms']['views'] = array(
 			array(
@@ -316,7 +316,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 						'route'  => 'minn-admin/v1/gf/notifications/{id}',
 						'fields' => array(
 							array( 'key' => 'name', 'label' => 'Name' ),
-							array( 'key' => 'to_email', 'label' => 'Send to', 'required' => false, 'placeholder' => 'address@example.com, {admin_email} — email-type notifications only' ),
+							array( 'key' => 'to_email', 'label' => __( 'Send to', 'minn-admin' ), 'required' => false, 'placeholder' => __( 'address@example.com, {admin_email} — email-type notifications only', 'minn-admin' ) ),
 							array( 'key' => 'subject', 'label' => 'Subject' ),
 							array( 'key' => 'message', 'label' => 'Message', 'type' => 'textarea', 'rows' => 8 ),
 						),
@@ -338,7 +338,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 						'when'   => array( 'key' => 'status', 'equals' => 'inactive' ),
 					),
 					array(
-						'label' => 'Edit in Gravity Forms ↗',
+						'label' => __( 'Edit in Gravity Forms ↗', 'minn-admin' ),
 						'href'  => admin_url( 'admin.php?page=gf_edit_forms&view=settings&subview=notification&id={form_id}&nid={nid}' ),
 					),
 				),
@@ -398,11 +398,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 						'label'   => 'Delete',
 						'method'  => 'DELETE',
 						'route'   => 'minn-admin/v1/gf/feeds/{id}',
-						'confirm' => 'Delete this feed permanently? The add-on stops running for its form.',
+						'confirm' => __( 'Delete this feed permanently? The add-on stops running for its form.', 'minn-admin' ),
 						'danger'  => true,
 					),
 					array(
-						'label' => 'Edit in Gravity Forms ↗',
+						'label' => __( 'Edit in Gravity Forms ↗', 'minn-admin' ),
 						'href'  => admin_url( 'admin.php?page=gf_edit_forms&view=settings&subview={slug}&id={form_id}&fid={id}' ),
 					),
 				),
@@ -432,7 +432,7 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) $request['id'] );
 			if ( is_wp_error( $entry ) ) {
-				return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$form    = GFAPI::get_form( $entry['form_id'] );
 			$answers = array();
@@ -530,12 +530,12 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) $request['id'] );
 			if ( is_wp_error( $entry ) ) {
-				return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$body  = $request->get_json_params();
 			$value = sanitize_textarea_field( (string) ( isset( $body['value'] ) ? $body['value'] : '' ) );
 			if ( '' === $value ) {
-				return new WP_Error( 'empty_note', 'Write a note first.', array( 'status' => 400 ) );
+				return new WP_Error( 'empty_note', __( 'Write a note first.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			$user    = wp_get_current_user();
 			$note_id = GFAPI::add_note( (int) $entry['id'], $user->ID, $user->display_name, $value );
@@ -620,7 +620,7 @@ add_action( 'rest_api_init', function () {
 		if ( $form_id ) {
 			$form = GFAPI::get_form( $form_id );
 			if ( ! $form ) {
-				return new WP_Error( 'not_found', 'Form not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$forms = array( $form );
 		} else {
@@ -686,25 +686,25 @@ add_action( 'rest_api_init', function () {
 			$nid     = (string) $request['nid'];
 			$form    = GFFormsModel::get_form_meta( $form_id );
 			if ( ! $form || ! isset( $form['notifications'][ $nid ] ) ) {
-				return new WP_Error( 'not_found', 'Notification not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Notification not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$body = $request->get_json_params();
 			$n    = $form['notifications'][ $nid ];
 
 			$name = sanitize_text_field( (string) ( isset( $body['name'] ) ? $body['name'] : '' ) );
 			if ( '' === $name ) {
-				return new WP_Error( 'empty_name', 'Give the notification a name.', array( 'status' => 400 ) );
+				return new WP_Error( 'empty_name', __( 'Give the notification a name.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			// GF enforces unique names per form (its is_unique_name check).
 			foreach ( $form['notifications'] as $other_id => $other ) {
 				if ( $other_id !== $nid && isset( $other['name'] ) && strtolower( $other['name'] ) === strtolower( $name ) ) {
-					return new WP_Error( 'dup_name', 'Another notification on this form already uses that name.', array( 'status' => 400 ) );
+					return new WP_Error( 'dup_name', __( 'Another notification on this form already uses that name.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 			}
 			$n['name']    = $name;
 			$n['subject'] = sanitize_text_field( (string) ( isset( $body['subject'] ) ? $body['subject'] : '' ) );
 			if ( '' === $n['subject'] ) {
-				return new WP_Error( 'empty_subject', 'Give the notification a subject.', array( 'status' => 400 ) );
+				return new WP_Error( 'empty_subject', __( 'Give the notification a subject.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			// Message is email-body HTML; kses keeps normal markup and GF
 			// merge tags ({all_fields}) are plain text that passes untouched.
@@ -714,7 +714,7 @@ add_action( 'rest_api_init', function () {
 			$to      = trim( (string) ( isset( $body['to_email'] ) ? $body['to_email'] : '' ) );
 			if ( '' !== $to ) {
 				if ( 'email' !== $to_type ) {
-					return new WP_Error( 'not_email_type', 'This notification routes by ' . $to_type . '; edit its recipients in Gravity Forms.', array( 'status' => 400 ) );
+					return new WP_Error( 'not_email_type', __( 'This notification routes by ', 'minn-admin' ) . $to_type . '; edit its recipients in Gravity Forms.', array( 'status' => 400 ) );
 				}
 				// GF accepts comma-separated addresses and merge tags
 				// ({admin_email}, {Email:2}) in the To field.
@@ -745,7 +745,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$form = GFAPI::get_form( (int) $request['id'] );
 				if ( ! $form ) {
-					return new WP_Error( 'not_found', 'Form not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				return rest_ensure_response( minn_admin_gf_form_settings_shape( $form ) );
 			},
@@ -768,7 +768,7 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$id = (int) $request['id'];
 			if ( ! GFAPI::form_id_exists( $id ) ) {
-				return new WP_Error( 'not_found', 'Form not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			GFAPI::update_forms_property( array( $id ), 'is_active', $request['active'] ? '1' : '0' );
 			return rest_ensure_response( array( 'id' => $id, 'status' => $request['active'] ? 'active' : 'inactive' ) );
@@ -861,12 +861,12 @@ add_action( 'rest_api_init', function () {
 			$id    = (int) $request['id'];
 			$feeds = GFAPI::get_feeds( array( $id ), null, null, null );
 			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
-				return new WP_Error( 'not_found', 'Feed not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Feed not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			// GF's own property write (their model, their column).
 			$ok = GFFormsModel::update_feed_property( $id, 'is_active', $request['active'] ? 1 : 0 );
 			if ( ! $ok ) {
-				return new WP_Error( 'toggle_failed', 'Gravity Forms refused the change.', array( 'status' => 500 ) );
+				return new WP_Error( 'toggle_failed', __( 'Gravity Forms refused the change.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array( 'id' => $id, 'status' => $request['active'] ? 'active' : 'inactive' ) );
 		},
@@ -878,7 +878,7 @@ add_action( 'rest_api_init', function () {
 			$id    = (int) $request['id'];
 			$feeds = GFAPI::get_feeds( array( $id ), null, null, null );
 			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
-				return new WP_Error( 'not_found', 'Feed not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Feed not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$deleted = GFAPI::delete_feed( $id );
 			if ( is_wp_error( $deleted ) ) {
@@ -1161,7 +1161,7 @@ function minn_admin_gf_form_settings_shape( $form ) {
 function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 	$form = GFAPI::get_form( (int) $request['id'] );
 	if ( ! $form ) {
-		return new WP_Error( 'not_found', 'Form not found.', array( 'status' => 404 ) );
+		return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	$body = $request->get_json_params();
 	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
@@ -1174,11 +1174,11 @@ function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 	if ( array_key_exists( 'title', $vals ) ) {
 		$title = sanitize_text_field( (string) $vals['title'] );
 		if ( '' === $title ) {
-			return new WP_Error( 'empty_title', 'Give the form a title.', array( 'status' => 400 ) );
+			return new WP_Error( 'empty_title', __( 'Give the form a title.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		foreach ( GFFormsModel::get_forms() as $f ) {
 			if ( (int) $f->id !== (int) $form['id'] && strtolower( $f->title ) === strtolower( $title ) ) {
-				return new WP_Error( 'dup_title', 'Another form already uses that title.', array( 'status' => 400 ) );
+				return new WP_Error( 'dup_title', __( 'Another form already uses that title.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 		}
 		$vals['title'] = $title;

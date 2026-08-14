@@ -41,7 +41,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 
 	$edit_fields = array(
-		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => 'Disable emojis' ),
+		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => __( 'Disable emojis', 'minn-admin' ) ),
 		array( 'key' => 'desc', 'label' => 'Description', 'type' => 'textarea', 'rows' => 2, 'required' => false ),
 		array(
 			'key'         => 'code',
@@ -53,7 +53,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 		array( 'key' => 'scope', 'label' => 'Scope', 'type' => 'select', 'options' => $scope_options ),
 		array( 'key' => 'priority', 'label' => 'Priority', 'type' => 'number' ),
-		array( 'key' => 'tags', 'label' => 'Tags', 'type' => 'tags', 'required' => false, 'placeholder' => 'media, sample' ),
+		array( 'key' => 'tags', 'label' => 'Tags', 'type' => 'tags', 'required' => false, 'placeholder' => __( 'media, sample', 'minn-admin' ) ),
 	);
 
 	// A Code Snippets snippet is PHP the plugin eval()s, so authoring one is code
@@ -80,7 +80,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			// Their list endpoint has no free-text search; names are scannable
 			// in the title column and full code is editable in the detail.
 			'create'    => array(
-				'label'    => 'Add snippet',
+				'label'    => __( 'Add snippet', 'minn-admin' ),
 				'route'    => 'code-snippets/v1/snippets',
 				'method'   => 'POST',
 				'defaults' => array(
@@ -137,14 +137,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
-					'label' => 'Edit in Code Snippets ↗',
+					'label' => __( 'Edit in Code Snippets ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=edit-snippet&id={id}' ),
 				),
 				array(
-					'label'   => 'Delete snippet',
+					'label'   => __( 'Delete snippet', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'code-snippets/v1/snippets/{id}',
-					'confirm' => 'Delete this snippet permanently? Its code will be gone.',
+					'confirm' => __( 'Delete this snippet permanently? Its code will be gone.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -168,7 +168,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'code-snippets/v1/snippets/{id}',
-					'confirm' => 'Delete the selected snippets permanently?',
+					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -237,7 +237,7 @@ add_action( 'rest_api_init', function () {
 			}
 			$rows = array(
 				array(
-					'label' => 'Active snippets',
+					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
 					'hint'  => $hint ? implode( ' · ', $hint ) : 'nothing inactive',
 				),
@@ -245,7 +245,7 @@ add_action( 'rest_api_init', function () {
 			$scopes = $wpdb->get_results( "SELECT scope, COUNT(*) AS c FROM {$table} WHERE active = 1 GROUP BY scope ORDER BY c DESC LIMIT 3" ); // phpcs:ignore
 			if ( $scopes ) {
 				$rows[] = array(
-					'label' => 'Running scopes',
+					'label' => __( 'Running scopes', 'minn-admin' ),
 					'value' => implode( ' · ', array_map( function ( $s ) {
 						return $s->c . ' ' . $s->scope;
 					}, $scopes ) ),
@@ -254,16 +254,16 @@ add_action( 'rest_api_init', function () {
 			$last = $wpdb->get_row( "SELECT name, modified FROM {$table} WHERE active >= 0 ORDER BY modified DESC LIMIT 1" ); // phpcs:ignore
 			if ( $last && $last->modified && '0000-00-00 00:00:00' !== $last->modified ) {
 				$rows[] = array(
-					'label' => 'Last change',
+					'label' => __( 'Last change', 'minn-admin' ),
 					'value' => (string) $last->name,
 					'hint'  => substr( (string) $last->modified, 0, 10 ),
 				);
 			}
 			if ( defined( 'CODE_SNIPPETS_SAFE_MODE' ) && CODE_SNIPPETS_SAFE_MODE ) {
 				$rows[] = array(
-					'label' => 'Safe mode',
+					'label' => __( 'Safe mode', 'minn-admin' ),
 					'value' => 'On',
-					'hint'  => 'No snippets are executing while safe mode is armed',
+					'hint'  => __( 'No snippets are executing while safe mode is armed', 'minn-admin' ),
 				);
 			}
 			return rest_ensure_response( array( 'rows' => $rows ) );

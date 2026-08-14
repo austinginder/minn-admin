@@ -77,12 +77,12 @@ function minn_admin_asset_cleanup_schema() {
 				array(
 					'title'  => 'CSS',
 					'fields' => array(
-						array( 'key' => 'minify_loaded_css', 'label' => 'Minify loaded CSS', 'type' => 'toggle' ),
-						array( 'key' => 'combine_loaded_css', 'label' => 'Combine loaded CSS', 'type' => 'toggle' ),
-						array( 'key' => 'inline_css_files', 'label' => 'Inline CSS files', 'type' => 'toggle' ),
+						array( 'key' => 'minify_loaded_css', 'label' => __( 'Minify loaded CSS', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'combine_loaded_css', 'label' => __( 'Combine loaded CSS', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'inline_css_files', 'label' => __( 'Inline CSS files', 'minn-admin' ), 'type' => 'toggle' ),
 						array(
 							'key'   => 'minify_loaded_css_exceptions',
-							'label' => 'Minify CSS exceptions',
+							'label' => __( 'Minify CSS exceptions', 'minn-admin' ),
 							'type'  => 'textarea',
 							'help'  => 'One path/handle fragment per line.',
 						),
@@ -91,11 +91,11 @@ function minn_admin_asset_cleanup_schema() {
 				array(
 					'title'  => 'JavaScript',
 					'fields' => array(
-						array( 'key' => 'minify_loaded_js', 'label' => 'Minify loaded JavaScript', 'type' => 'toggle' ),
-						array( 'key' => 'combine_loaded_js', 'label' => 'Combine loaded JavaScript', 'type' => 'toggle' ),
+						array( 'key' => 'minify_loaded_js', 'label' => __( 'Minify loaded JavaScript', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'combine_loaded_js', 'label' => __( 'Combine loaded JavaScript', 'minn-admin' ), 'type' => 'toggle' ),
 						array(
 							'key'   => 'minify_loaded_js_exceptions',
-							'label' => 'Minify JS exceptions',
+							'label' => __( 'Minify JS exceptions', 'minn-admin' ),
 							'type'  => 'textarea',
 							'help'  => 'One path/handle fragment per line.',
 						),
@@ -107,17 +107,17 @@ function minn_admin_asset_cleanup_schema() {
 			'label'  => 'Cleanup',
 			'groups' => array(
 				array(
-					'title'  => 'Site-wide cleanup',
+					'title'  => __( 'Site-wide cleanup', 'minn-admin' ),
 					'fields' => array(
-						array( 'key' => 'disable_emojis', 'label' => 'Disable emojis', 'type' => 'toggle' ),
-						array( 'key' => 'disable_oembed', 'label' => 'Disable oEmbed', 'type' => 'toggle' ),
-						array( 'key' => 'remove_wp_version', 'label' => 'Remove WordPress version meta', 'type' => 'toggle' ),
-						array( 'key' => 'remove_generator_tag', 'label' => 'Remove generator meta tags', 'type' => 'toggle' ),
-						array( 'key' => 'remove_rsd_link', 'label' => 'Remove RSD link', 'type' => 'toggle' ),
-						array( 'key' => 'remove_wlw_link', 'label' => 'Remove Windows Live Writer link', 'type' => 'toggle' ),
-						array( 'key' => 'remove_shortlink', 'label' => 'Remove shortlink', 'type' => 'toggle' ),
-						array( 'key' => 'remove_rest_api_link', 'label' => 'Remove REST API link', 'type' => 'toggle' ),
-						array( 'key' => 'disable_xmlrpc', 'label' => 'Disable XML-RPC', 'type' => 'toggle' ),
+						array( 'key' => 'disable_emojis', 'label' => __( 'Disable emojis', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'disable_oembed', 'label' => __( 'Disable oEmbed', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'remove_wp_version', 'label' => __( 'Remove WordPress version meta', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'remove_generator_tag', 'label' => __( 'Remove generator meta tags', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'remove_rsd_link', 'label' => __( 'Remove RSD link', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'remove_wlw_link', 'label' => __( 'Remove Windows Live Writer link', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'remove_shortlink', 'label' => __( 'Remove shortlink', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'remove_rest_api_link', 'label' => __( 'Remove REST API link', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'disable_xmlrpc', 'label' => __( 'Disable XML-RPC', 'minn-admin' ), 'type' => 'toggle' ),
 					),
 				),
 			),
@@ -126,11 +126,11 @@ function minn_admin_asset_cleanup_schema() {
 			'label'  => 'Fonts',
 			'groups' => array(
 				array(
-					'title'  => 'Google Fonts',
+					'title'  => __( 'Google Fonts', 'minn-admin' ),
 					'fields' => array(
-						array( 'key' => 'google_fonts_remove', 'label' => 'Remove Google Fonts', 'type' => 'toggle' ),
-						array( 'key' => 'google_fonts_combine', 'label' => 'Combine Google Fonts requests', 'type' => 'toggle' ),
-						array( 'key' => 'google_fonts_preconnect', 'label' => 'Preconnect to fonts.gstatic.com', 'type' => 'toggle' ),
+						array( 'key' => 'google_fonts_remove', 'label' => __( 'Remove Google Fonts', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'google_fonts_combine', 'label' => __( 'Combine Google Fonts requests', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'google_fonts_preconnect', 'label' => __( 'Preconnect to fonts.gstatic.com', 'minn-admin' ), 'type' => 'toggle' ),
 					),
 				),
 			),
@@ -139,17 +139,17 @@ function minn_admin_asset_cleanup_schema() {
 			'label'  => 'Misc',
 			'groups' => array(
 				array(
-					'title'  => 'Plugin behaviour',
+					'title'  => __( 'Plugin behaviour', 'minn-admin' ),
 					'fields' => array(
 						array(
 							'key'   => 'test_mode',
-							'label' => 'Test mode',
+							'label' => __( 'Test mode', 'minn-admin' ),
 							'type'  => 'toggle',
 							'help'  => 'Only admins see optimizations; guests get an unoptimized view.',
 						),
-						array( 'key' => 'dashboard_show', 'label' => 'Manage assets in the Dashboard', 'type' => 'toggle' ),
-						array( 'key' => 'frontend_show', 'label' => 'Manage assets on the front-end', 'type' => 'toggle' ),
-						array( 'key' => 'hide_from_admin_bar', 'label' => 'Hide from admin bar', 'type' => 'toggle' ),
+						array( 'key' => 'dashboard_show', 'label' => __( 'Manage assets in the Dashboard', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'frontend_show', 'label' => __( 'Manage assets on the front-end', 'minn-admin' ), 'type' => 'toggle' ),
+						array( 'key' => 'hide_from_admin_bar', 'label' => __( 'Hide from admin bar', 'minn-admin' ), 'type' => 'toggle' ),
 					),
 				),
 			),
@@ -229,7 +229,7 @@ function minn_admin_asset_cleanup_value( $field, $settings ) {
 function minn_admin_asset_cleanup_tab_shape( $tab_id ) {
 	$schema = minn_admin_asset_cleanup_schema();
 	if ( ! isset( $schema[ $tab_id ] ) ) {
-		return new WP_Error( 'minn_no_tab', 'Unknown settings tab.', array( 'status' => 404 ) );
+		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	$settings = minn_admin_asset_cleanup_settings();
 	$tab      = $schema[ $tab_id ];
@@ -298,7 +298,7 @@ function minn_admin_asset_cleanup_save( $values ) {
 	// round-trips of the fields we map (getAll fills missing keys as '').
 	$json = wp_json_encode( $settings );
 	if ( false === $json ) {
-		return new WP_Error( 'minn_acu_encode', 'Could not encode settings.', array( 'status' => 500 ) );
+		return new WP_Error( 'minn_acu_encode', __( 'Could not encode settings.', 'minn-admin' ), array( 'status' => 500 ) );
 	}
 	if ( class_exists( '\\WpAssetCleanUp\\Misc', false ) && method_exists( '\\WpAssetCleanUp\\Misc', 'addUpdateOption' ) ) {
 		\WpAssetCleanUp\Misc::addUpdateOption( minn_admin_asset_cleanup_option_key(), $json );

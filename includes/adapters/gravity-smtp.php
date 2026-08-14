@@ -350,14 +350,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Resend',
 					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}/resend',
 					'method'  => 'POST',
-					'confirm' => 'Resend this email to the original recipients?',
+					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
 					'when'    => array( 'key' => 'can_resend', 'equals' => true ),
 				),
 				array(
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete this log entry permanently? There is no trash.',
+					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -366,7 +366,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete the selected log entries permanently?',
+					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -390,19 +390,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'detail'    => array(),
 			'create'    => array(
-				'label'  => 'Suppress email',
+				'label'  => __( 'Suppress email', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/gravity-smtp/suppressed',
 				'fields' => array(
-					array( 'key' => 'email', 'label' => 'Email address', 'type' => 'email' ),
-					array( 'key' => 'notes', 'label' => 'Notes', 'required' => false, 'placeholder' => 'Why sending to this address is off' ),
+					array( 'key' => 'email', 'label' => __( 'Email address', 'minn-admin' ), 'type' => 'email' ),
+					array( 'key' => 'notes', 'label' => 'Notes', 'required' => false, 'placeholder' => __( 'Why sending to this address is off', 'minn-admin' ) ),
 				),
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Reactivate (allow sending again)',
+					'label'   => __( 'Reactivate (allow sending again)', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/gravity-smtp/suppressed/{id}/reactivate',
-					'confirm' => 'Allow Gravity SMTP to send to this address again?',
+					'confirm' => __( 'Allow Gravity SMTP to send to this address again?', 'minn-admin' ),
 				),
 			),
 		),
@@ -410,7 +410,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// wp-admin link-out on the status card until surfaces grew this slot.
 		'views'      => array_values( array_filter( array(
 			array(
-				'viewLabel' => 'Debug log',
+				'viewLabel' => __( 'Debug log', 'minn-admin' ),
 				'cap'       => minn_admin_gsmtp_cap( 'VIEW_DEBUG_LOG' ),
 				'route'     => 'minn-admin/v1/gravity-smtp/debug',
 				'pageQuery' => 'per_page=25&page={page}',
@@ -447,7 +447,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'columns'   => array(
 					array( 'key' => 'order', 'label' => '#', 'format' => 'text', 'width' => '48px' ),
 					array( 'key' => 'name', 'label' => 'Rule', 'format' => 'title' ),
-					array( 'key' => 'provider', 'label' => 'Send with', 'format' => 'text' ),
+					array( 'key' => 'provider', 'label' => __( 'Send with', 'minn-admin' ), 'format' => 'text' ),
 					array( 'key' => 'conditions', 'label' => 'When', 'format' => 'text' ),
 					array( 'key' => 'enabled', 'label' => 'Enabled', 'format' => 'pill' ),
 				),
@@ -468,14 +468,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 						'when'   => array( 'key' => 'enabled', 'equals' => 'on' ),
 					),
 					array(
-						'label'   => 'Delete rule',
+						'label'   => __( 'Delete rule', 'minn-admin' ),
 						'method'  => 'DELETE',
 						'route'   => 'minn-admin/v1/gravity-smtp/routing/{id}',
-						'confirm' => 'Delete this routing rule permanently?',
+						'confirm' => __( 'Delete this routing rule permanently?', 'minn-admin' ),
 						'danger'  => true,
 					),
 					array(
-						'label' => 'Edit in Gravity SMTP ↗',
+						'label' => __( 'Edit in Gravity SMTP ↗', 'minn-admin' ),
 						'href'  => minn_admin_gsmtp_routing_admin_url(),
 					),
 				),
@@ -689,7 +689,7 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$out = array(
 					'id'           => (int) $row->id,
@@ -744,14 +744,14 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
 				if ( ! $exists ) {
-					return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				if ( minn_admin_gsmtp_delete_event_ids( array( $id ) ) < 1 ) {
-					return new WP_Error( 'delete_failed', 'Could not delete this log entry.', array( 'status' => 500 ) );
+					return new WP_Error( 'delete_failed', __( 'Could not delete this log entry.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 				return rest_ensure_response( array(
 					'deleted' => true,
-					'message' => 'Log entry deleted.',
+					'message' => __( 'Log entry deleted.', 'minn-admin' ),
 				) );
 			},
 		),
@@ -772,7 +772,7 @@ add_action( 'rest_api_init', function () {
 				(int) $request['id']
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$delivery = array(
 				array( 'label' => 'Status', 'value' => $row->status, 'type' => 'pill' ),
@@ -830,7 +830,7 @@ add_action( 'rest_api_init', function () {
 			if ( $headers ) {
 				$sections[] = array(
 					'title' => 'Headers',
-					'rows'  => array( array( 'label' => 'Stored headers', 'value' => $headers, 'type' => 'kv-table' ) ),
+					'rows'  => array( array( 'label' => __( 'Stored headers', 'minn-admin' ), 'value' => $headers, 'type' => 'kv-table' ) ),
 				);
 			}
 
@@ -943,7 +943,7 @@ add_action( 'rest_api_init', function () {
 				$body  = $request->get_json_params();
 				$email = sanitize_email( (string) ( isset( $body['email'] ) ? $body['email'] : '' ) );
 				if ( ! is_email( $email ) ) {
-					return new WP_Error( 'bad_email', 'Enter a valid email address.', array( 'status' => 400 ) );
+					return new WP_Error( 'bad_email', __( 'Enter a valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				$notes = sanitize_text_field( (string) ( isset( $body['notes'] ) ? $body['notes'] : '' ) );
 				$model = new Gravity_Forms\Gravity_SMTP\Models\Suppressed_Emails_Model();
@@ -966,13 +966,13 @@ add_action( 'rest_api_init', function () {
 				(int) $request['id']
 			) );
 			if ( ! $email ) {
-				return new WP_Error( 'not_found', 'Suppressed address not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Suppressed address not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$model = new Gravity_Forms\Gravity_SMTP\Models\Suppressed_Emails_Model();
 			$model->reactivate_email( $email );
 			return rest_ensure_response( array(
 				'reactivated' => $email,
-				'message'     => 'Reactivated — Gravity SMTP can send to ' . $email . ' again.',
+				'message'     => __( 'Reactivated — Gravity SMTP can send to ', 'minn-admin' ) . $email . ' again.',
 			) );
 		},
 	) );
@@ -994,9 +994,9 @@ add_action( 'rest_api_init', function () {
 				|| ( class_exists( 'Gravity_Forms\Gravity_SMTP\Utils\Booliesh' )
 					&& Gravity_Forms\Gravity_SMTP\Utils\Booliesh::get( $router->get_plugin_setting( 'test_mode', 'false' ) ) );
 			$rows = array(
-				array( 'label' => 'Sending through', 'value' => $title ),
+				array( 'label' => __( 'Sending through', 'minn-admin' ), 'value' => $title ),
 				array(
-					'label' => 'Test mode',
+					'label' => __( 'Test mode', 'minn-admin' ),
 					'value' => $test_mode ? 'On' : 'Off',
 					'hint'  => $test_mode ? 'Emails are logged, not sent.' : '',
 				),
@@ -1032,17 +1032,17 @@ add_action( 'rest_api_init', function () {
 			$out['actions'] = array();
 			if ( current_user_can( minn_admin_gsmtp_cap( 'VIEW_TOOLS_SENDATEST' ) ) ) {
 				$out['actions'][] = array(
-					'label'  => 'Send a test email',
+					'label'  => __( 'Send a test email', 'minn-admin' ),
 					'route'  => 'minn-admin/v1/gravity-smtp/send-test',
 					'method' => 'POST',
 					'fields' => array(
-						array( 'key' => 'email', 'label' => 'Send to', 'type' => 'email', 'placeholder' => 'you@example.com' ),
+						array( 'key' => 'email', 'label' => __( 'Send to', 'minn-admin' ), 'type' => 'email', 'placeholder' => __( 'you@example.com', 'minn-admin' ) ),
 					),
 				);
 			}
 			if ( minn_admin_gsmtp_routing_available() && current_user_can( minn_admin_gsmtp_cap( 'VIEW_ROUTING' ) ) ) {
 				$out['actions'][] = array(
-					'label' => 'Edit routing rules ↗',
+					'label' => __( 'Edit routing rules ↗', 'minn-admin' ),
 					'href'  => minn_admin_gsmtp_routing_admin_url(),
 				);
 			}
@@ -1081,7 +1081,7 @@ add_action( 'rest_api_init', function () {
 					$recipes = minn_admin_gsmtp_routing_recipes();
 					$id      = (int) $request['id'];
 					if ( ! isset( $recipes[ $id ] ) || ! is_array( $recipes[ $id ] ) ) {
-						return new WP_Error( 'not_found', 'Routing rule not found.', array( 'status' => 404 ) );
+						return new WP_Error( 'not_found', __( 'Routing rule not found.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
 					$recipes[ $id ]['enabled'] = $on;
 					minn_admin_gsmtp_routing_save( $recipes );
@@ -1101,13 +1101,13 @@ add_action( 'rest_api_init', function () {
 				$recipes = minn_admin_gsmtp_routing_recipes();
 				$id      = (int) $request['id'];
 				if ( ! isset( $recipes[ $id ] ) ) {
-					return new WP_Error( 'not_found', 'Routing rule not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Routing rule not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				array_splice( $recipes, $id, 1 );
 				minn_admin_gsmtp_routing_save( $recipes );
 				return rest_ensure_response( array(
 					'deleted' => true,
-					'message' => 'Routing rule deleted.',
+					'message' => __( 'Routing rule deleted.', 'minn-admin' ),
 				) );
 			},
 		) );
@@ -1123,7 +1123,7 @@ add_action( 'rest_api_init', function () {
 			$body  = $request->get_json_params();
 			$email = sanitize_email( (string) ( isset( $body['email'] ) ? $body['email'] : '' ) );
 			if ( ! is_email( $email ) ) {
-				return new WP_Error( 'bad_email', 'Enter a valid email address.', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_email', __( 'Enter a valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			// Their own Send_Test_Endpoint pattern: force the chosen
 			// connector for this send, then let the wp_mail interception
@@ -1155,7 +1155,7 @@ add_action( 'rest_api_init', function () {
 			);
 			remove_action( 'gravitysmtp_after_mail_created', $listener );
 			if ( ! $sent ) {
-				return new WP_Error( 'send_failed', 'The mailer reported the test could not be sent.', array( 'status' => 500 ) );
+				return new WP_Error( 'send_failed', __( 'The mailer reported the test could not be sent.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array(
 				'sent'    => true,
@@ -1243,11 +1243,11 @@ function minn_admin_gsmtp_settings_shape( $tab ) {
 		$primary = minn_admin_gsmtp_primary();
 		$groups  = array(
 			array(
-				'title'  => 'Sending service',
+				'title'  => __( 'Sending service', 'minn-admin' ),
 				'fields' => array(
 					array(
 						'key'     => 'primary_connector',
-						'label'   => 'Primary service',
+						'label'   => __( 'Primary service', 'minn-admin' ),
 						'type'    => 'combobox',
 						'options' => minn_admin_gsmtp_connector_options(),
 						'help'    => 'Saving a different service reloads this tab with its settings.',
@@ -1286,25 +1286,25 @@ function minn_admin_gsmtp_settings_shape( $tab ) {
 	return array(
 		'groups'   => array(
 			array(
-				'title'  => 'Sending behavior',
+				'title'  => __( 'Sending behavior', 'minn-admin' ),
 				'fields' => array(
-					array( 'key' => 'test_mode', 'label' => 'Test mode', 'type' => 'toggle', 'help' => 'Log emails without actually sending them.' ),
+					array( 'key' => 'test_mode', 'label' => __( 'Test mode', 'minn-admin' ), 'type' => 'toggle', 'help' => 'Log emails without actually sending them.' ),
 				),
 			),
 			array(
-				'title'  => 'Email log',
+				'title'  => __( 'Email log', 'minn-admin' ),
 				'fields' => array(
-					array( 'key' => 'event_log_enabled', 'label' => 'Keep an email log', 'type' => 'toggle' ),
-					array( 'key' => 'save_email_body_enabled', 'label' => 'Store message bodies', 'type' => 'toggle', 'help' => 'Needed for the detail preview and resend.', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
-					array( 'key' => 'save_attachments_enabled', 'label' => 'Store attachments', 'type' => 'toggle', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
-					array( 'key' => 'event_log_retention', 'label' => 'Retention (days)', 'type' => 'number', 'min' => 0, 'help' => '0 keeps the log forever.', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
+					array( 'key' => 'event_log_enabled', 'label' => __( 'Keep an email log', 'minn-admin' ), 'type' => 'toggle' ),
+					array( 'key' => 'save_email_body_enabled', 'label' => __( 'Store message bodies', 'minn-admin' ), 'type' => 'toggle', 'help' => 'Needed for the detail preview and resend.', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
+					array( 'key' => 'save_attachments_enabled', 'label' => __( 'Store attachments', 'minn-admin' ), 'type' => 'toggle', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
+					array( 'key' => 'event_log_retention', 'label' => __( 'Retention (days)', 'minn-admin' ), 'type' => 'number', 'min' => 0, 'help' => '0 keeps the log forever.', 'showWhen' => array( 'key' => 'event_log_enabled', 'equals' => true ) ),
 				),
 			),
 			array(
-				'title'  => 'Debug log',
+				'title'  => __( 'Debug log', 'minn-admin' ),
 				'fields' => array(
-					array( 'key' => 'debug_log_enabled', 'label' => 'Keep a debug log', 'type' => 'toggle' ),
-					array( 'key' => 'debug_log_retention', 'label' => 'Retention (days)', 'type' => 'number', 'min' => 0, 'showWhen' => array( 'key' => 'debug_log_enabled', 'equals' => true ) ),
+					array( 'key' => 'debug_log_enabled', 'label' => __( 'Keep a debug log', 'minn-admin' ), 'type' => 'toggle' ),
+					array( 'key' => 'debug_log_retention', 'label' => __( 'Retention (days)', 'minn-admin' ), 'type' => 'number', 'min' => 0, 'showWhen' => array( 'key' => 'debug_log_enabled', 'equals' => true ) ),
 				),
 			),
 		),
@@ -1386,7 +1386,7 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 		(int) $request['id']
 	) );
 	if ( ! $row ) {
-		return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+		return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 
 	$to          = null;
@@ -1397,7 +1397,7 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 		$events    = $container->get( Gravity_Forms\Gravity_SMTP\Connectors\Connector_Service_Provider::EVENT_MODEL );
 		$event     = $events ? $events->get( (int) $row->id ) : null;
 		if ( is_array( $event ) && array_key_exists( 'can_resend', $event ) && ! $event['can_resend'] ) {
-			return new WP_Error( 'cannot_resend', 'Gravity SMTP reports this email cannot be resent (body or attachments were not stored).', array( 'status' => 422 ) );
+			return new WP_Error( 'cannot_resend', __( 'Gravity SMTP reports this email cannot be resent (body or attachments were not stored).', 'minn-admin' ), array( 'status' => 422 ) );
 		}
 		$extra = unserialize( // phpcs:ignore -- their own endpoint's exact allowlist on their own data.
 			(string) $row->extra,
@@ -1440,7 +1440,7 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 	if ( ! $to ) {
 		$addresses = array_filter( minn_admin_gravity_smtp_to_addresses( $row->extra ), 'is_email' );
 		if ( ! $addresses ) {
-			return new WP_Error( 'no_recipients', 'No recipient address on record for this email.', array( 'status' => 422 ) );
+			return new WP_Error( 'no_recipients', __( 'No recipient address on record for this email.', 'minn-admin' ), array( 'status' => 422 ) );
 		}
 		$to      = $addresses;
 		$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $row->message );
@@ -1457,7 +1457,7 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 	$sent = wp_mail( $to, (string) $row->subject, (string) $row->message, $headers, $attachments );
 	remove_action( 'gravitysmtp_after_mail_created', $listener );
 	if ( ! $sent ) {
-		return new WP_Error( 'send_failed', 'The mailer reported the message could not be sent.', array( 'status' => 500 ) );
+		return new WP_Error( 'send_failed', __( 'The mailer reported the message could not be sent.', 'minn-admin' ), array( 'status' => 500 ) );
 	}
 	return rest_ensure_response( array(
 		'resent'  => true,
@@ -1538,7 +1538,7 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 	}
 
 	return array(
-		'title'     => 'Last ' . $days . ' days',
+		'title'     => __( 'Last ', 'minn-admin' ) . $days . ' days',
 		'primary'   => 'Sent',
 		'secondary' => 'Failed',
 		'points'    => $points,

@@ -171,7 +171,7 @@ function minn_admin_aios_checks() {
 	);
 	return array(
 		array(
-			'label'  => 'All-In-One Security',
+			'label'  => __( 'All-In-One Security', 'minn-admin' ),
 			'status' => $status,
 			'detail' => implode( ' · ', $bits ),
 			'href'   => $p['locked'] > 0 ? minn_admin_aios_lockout_url() : minn_admin_aios_admin_url(),
@@ -199,7 +199,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['all-in-one-security'] = array(
-		'label'      => 'Activity Log',
+		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'All-In-One Security',
 		'icon'       => 'shield',
@@ -310,7 +310,7 @@ add_action( 'rest_api_init', function () {
 				array_merge( array( (int) $request['id'] ), $scope_args )
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Event not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Event not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$who   = (string) $row->username;
 			$event = array(
@@ -380,8 +380,8 @@ add_action( 'rest_api_init', function () {
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'Audit log table not found' ) ),
-					'actions' => array( array( 'label' => 'Open All-In-One Security ↗', 'href' => minn_admin_aios_admin_url() ) ),
+					'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Audit log table not found', 'minn-admin' ) ) ),
+					'actions' => array( array( 'label' => __( 'Open All-In-One Security ↗', 'minn-admin' ), 'href' => minn_admin_aios_admin_url() ) ),
 				) );
 			}
 			$now   = time();
@@ -401,44 +401,44 @@ add_action( 'rest_api_init', function () {
 			$posture = minn_admin_aios_login_posture();
 			$rows    = array(
 				array(
-					'label' => 'Events (24h)',
+					'label' => __( 'Events (24h)', 'minn-admin' ),
 					'value' => number_format_i18n( $day ),
 					'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
 				),
-				array( 'label' => 'Events all-time', 'value' => number_format_i18n( $total ) ),
+				array( 'label' => __( 'Events all-time', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
 				array(
-					'label' => 'Warnings (7d)',
+					'label' => __( 'Warnings (7d)', 'minn-admin' ),
 					'value' => number_format_i18n( $warn ),
 					'hint'  => $warn ? 'warning, error or fatal' : 'all clear',
 				),
 				array(
-					'label' => 'Failed logins (24h)',
+					'label' => __( 'Failed logins (24h)', 'minn-admin' ),
 					'value' => number_format_i18n( $posture['failed_24h'] ),
-					'hint'  => 'from the audit log',
+					'hint'  => __( 'from the audit log', 'minn-admin' ),
 				),
 				array(
-					'label' => 'Locked out now',
+					'label' => __( 'Locked out now', 'minn-admin' ),
 					'value' => $posture['locked'] ? number_format_i18n( $posture['locked'] ) : 'Nobody',
 					'hint'  => $posture['locked'] ? 'temporary login lockdowns' : 'no active lockdowns',
 				),
 				array(
-					'label' => 'Permanent blocks',
+					'label' => __( 'Permanent blocks', 'minn-admin' ),
 					'value' => number_format_i18n( $posture['blocks'] ),
 					'hint'  => $posture['blocks'] ? 'blocked IPs' : 'none',
 				),
 				array(
-					'label' => 'Last event',
+					'label' => __( 'Last event', 'minn-admin' ),
 					'value' => $last ? human_time_diff( (int) $last, time() ) . ' ago' : '—',
 				),
 			);
 			$actions = array(
-				array( 'label' => 'Open All-In-One Security ↗', 'href' => minn_admin_aios_admin_url() ),
+				array( 'label' => __( 'Open All-In-One Security ↗', 'minn-admin' ), 'href' => minn_admin_aios_admin_url() ),
 			);
 			if ( $posture['locked'] > 0 ) {
-				$actions[] = array( 'label' => 'View locked IPs ↗', 'href' => minn_admin_aios_lockout_url() );
+				$actions[] = array( 'label' => __( 'View locked IPs ↗', 'minn-admin' ), 'href' => minn_admin_aios_lockout_url() );
 			}
 			if ( $posture['blocks'] > 0 ) {
-				$actions[] = array( 'label' => 'View permanent blocks ↗', 'href' => minn_admin_aios_perm_block_url() );
+				$actions[] = array( 'label' => __( 'View permanent blocks ↗', 'minn-admin' ), 'href' => minn_admin_aios_perm_block_url() );
 			}
 			return rest_ensure_response( array(
 				'rows'    => $rows,

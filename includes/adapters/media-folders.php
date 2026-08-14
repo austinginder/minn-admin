@@ -226,12 +226,12 @@ add_action( 'rest_api_init', function () {
 				if ( count( $ids ) !== $submitted ) {
 					return new WP_Error(
 						'forbidden',
-						'You cannot move one or more of those items.',
+						__( 'You cannot move one or more of those items.', 'minn-admin' ),
 						array( 'status' => 403 )
 					);
 				}
 				if ( ! $ids ) {
-					return new WP_Error( 'minn_move_no_ids', 'Nothing to move.', array( 'status' => 400 ) );
+					return new WP_Error( 'minn_move_no_ids', __( 'Nothing to move.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				try {
 					$result = call_user_func( $p['move'], (int) $req['folder'], $ids );
@@ -294,7 +294,7 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 			}
 			$per_user = get_option( 'njt_fbv_folder_per_user', '0' ) === '1';
 			if ( ! \FileBird\Model\Folder::verifyAuthor( (int) $folder_id, get_current_user_id(), $per_user ) ) {
-				return new WP_Error( 'minn_folder_denied', 'That folder belongs to another user.', array( 'status' => 403 ) );
+				return new WP_Error( 'minn_folder_denied', __( 'That folder belongs to another user.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			return \FileBird\Classes\Helpers::getAttachmentIdsByFolderId( (int) $folder_id );
 		},
@@ -303,7 +303,7 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 			// their model (fires their hooks, updates their counters).
 			$per_user = get_option( 'njt_fbv_folder_per_user', '0' ) === '1';
 			if ( ! \FileBird\Model\Folder::verifyAuthor( (int) $folder_id, get_current_user_id(), $per_user ) ) {
-				return new WP_Error( 'minn_folder_denied', 'That folder belongs to another user.', array( 'status' => 403 ) );
+				return new WP_Error( 'minn_folder_denied', __( 'That folder belongs to another user.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			\FileBird\Model\Folder::assignFolder( (int) $folder_id, $ids, '' );
 			return true;
@@ -344,7 +344,7 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 			// 0 = the contract's Uncategorized = RML's root (-1, Unorganized).
 			$ids = wp_rml_get_attachments( 0 === (int) $folder_id ? -1 : (int) $folder_id );
 			return null === $ids
-				? new WP_Error( 'minn_folder_missing', 'That folder no longer exists.', array( 'status' => 404 ) )
+				? new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) )
 				: $ids;
 		},
 		'move'    => function ( $folder_id, array $ids ) {
@@ -400,7 +400,7 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 				);
 			}
 			if ( ! term_exists( (int) $folder_id, 'media_folder' ) ) {
-				return new WP_Error( 'minn_folder_missing', 'That folder no longer exists.', array( 'status' => 404 ) );
+				return new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			return get_posts( array(
 				'post_type'      => 'attachment',
@@ -417,7 +417,7 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 		},
 		'move'    => function ( $folder_id, array $ids ) {
 			if ( $folder_id && ! term_exists( (int) $folder_id, 'media_folder' ) ) {
-				return new WP_Error( 'minn_folder_missing', 'That folder no longer exists.', array( 'status' => 404 ) );
+				return new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			// Plain taxonomy assignment, exactly what their drag-drop does;
 			// an empty term list is their "Unassigned".

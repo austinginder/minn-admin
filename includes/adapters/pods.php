@@ -385,7 +385,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 		return $panels;
 	}
 	$panels['pods'] = array(
-		'label'       => 'Custom fields',
+		'label'       => __( 'Custom fields', 'minn-admin' ),
 		'sub'         => 'Pods',
 		'cap'         => 'edit_posts',
 		'fieldsRoute' => 'minn-admin/v1/pods/fields?post_id={id}&post_type={type}',
@@ -417,10 +417,10 @@ add_action( 'rest_api_init', function () {
 				// A missing post used to fall THROUGH with the caller's own
 				// post_type intact, which is the same hole as post_id=0.
 				if ( ! $post ) {
-					return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				if ( ! current_user_can( 'edit_post', $post_id ) ) {
-					return new WP_Error( 'rest_forbidden', 'You cannot edit this post.', array( 'status' => 403 ) );
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this post.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 				$post_type = $post->post_type;
 			} else {
@@ -430,7 +430,7 @@ add_action( 'rest_api_init', function () {
 				// internal naming and credential field ids are common there.
 				$type_obj = get_post_type_object( $post_type );
 				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
-					return new WP_Error( 'rest_forbidden', 'You cannot edit that post type.', array( 'status' => 403 ) );
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit that post type.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 			}
 			return rest_ensure_response( minn_admin_pods_fields_payload( $post_id, $post_type ) );

@@ -407,9 +407,9 @@ add_action( 'rest_api_init', function () {
 				array(
 					'group'  => 'Search appearance',
 					'fields' => array(
-						array( 'name' => 'title', 'label' => 'SEO title', 'type' => 'text' ),
-						array( 'name' => 'description', 'label' => 'Meta description', 'type' => 'textarea' ),
-						array( 'name' => 'focus_keyword', 'label' => 'Focus keyword', 'type' => 'text' ),
+						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text' ),
+						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea' ),
+						array( 'name' => 'focus_keyword', 'label' => __( 'Focus keyword', 'minn-admin' ), 'type' => 'text' ),
 					),
 					'locked' => 0,
 				),
@@ -421,7 +421,7 @@ add_action( 'rest_api_init', function () {
 					'fields' => array(
 						array(
 							'name'  => 'social_image',
-							'label' => 'Social thumbnail',
+							'label' => __( 'Social thumbnail', 'minn-admin' ),
 							'type'  => 'image',
 						),
 					),
@@ -455,7 +455,7 @@ add_action( 'rest_api_init', function () {
 				return null;
 			}
 			if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-				return new WP_Error( 'rest_forbidden', 'You cannot edit SEO fields on this post.', array( 'status' => 403 ) );
+				return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO fields on this post.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			foreach ( array( 'title', 'description', 'focus_keyword' ) as $field ) {
 				if ( ! array_key_exists( $field, $value ) ) {

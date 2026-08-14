@@ -56,7 +56,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['wordfence'] = array(
-		'label'      => 'Activity Log',
+		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Wordfence',
 		'icon'       => 'shield',
@@ -109,7 +109,7 @@ function minn_admin_wordfence_status_model() {
 
 	$rows = array(
 		array(
-			'label' => 'Failed logins (24h)',
+			'label' => __( 'Failed logins (24h)', 'minn-admin' ),
 			'value' => number_format_i18n( $failed_24h ),
 			'hint'  => $ok_24h ? number_format_i18n( $ok_24h ) . ' successful' : 'No successful logins in the window',
 		),
@@ -124,11 +124,11 @@ function minn_admin_wordfence_status_model() {
 	}
 
 	$actions = array(
-		array( 'label' => 'Open Wordfence ↗', 'href' => admin_url( 'admin.php?page=Wordfence' ) ),
+		array( 'label' => __( 'Open Wordfence ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=Wordfence' ) ),
 	);
 	foreach ( minn_admin_wordfence_checks() as $check ) {
 		if ( ! empty( $check['href'] ) && false !== strpos( $check['label'], 'scan' ) ) {
-			$actions[] = array( 'label' => 'Scan ↗', 'href' => $check['href'] );
+			$actions[] = array( 'label' => __( 'Scan ↗', 'minn-admin' ), 'href' => $check['href'] );
 			break;
 		}
 	}
@@ -238,7 +238,7 @@ function minn_admin_wordfence_checks() {
 				'disabled'      => array( 'warn', 'The firewall is turned off' ),
 			);
 			$m = isset( $map[ $mode ] ) ? $map[ $mode ] : array( 'warn', 'Mode: ' . (string) $mode );
-			$rows[] = array( 'label' => 'Wordfence firewall', 'status' => $m[0], 'detail' => $m[1], 'href' => admin_url( 'admin.php?page=WordfenceWAF' ) );
+			$rows[] = array( 'label' => __( 'Wordfence firewall', 'minn-admin' ), 'status' => $m[0], 'detail' => $m[1], 'href' => admin_url( 'admin.php?page=WordfenceWAF' ) );
 		}
 	} catch ( \Throwable $e ) {
 		// A version mismatch just drops the row.
@@ -250,15 +250,15 @@ function minn_admin_wordfence_checks() {
 			$last   = wfScanner::shared()->lastScanTime();
 			$issues = (int) ( new wfIssues() )->getIssueCount();
 			if ( ! $last ) {
-				$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'warn', 'detail' => 'No malware scan has run yet' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
+				$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'warn', 'detail' => __( 'No malware scan has run yet', 'minn-admin' ) , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 			} else {
 				$when = human_time_diff( (int) $last ) . ' ago';
 				if ( $issues > 0 ) {
-					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'fail', 'detail' => $issues . ' unresolved issue' . ( 1 === $issues ? '' : 's' ) . ' from the last scan (' . $when . ')' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
+					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'fail', 'detail' => $issues . ' unresolved issue' . ( 1 === $issues ? '' : 's' ) . ' from the last scan (' . $when . ')' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				} elseif ( time() - (int) $last > 14 * DAY_IN_SECONDS ) {
-					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'warn', 'detail' => 'Last scan was ' . $when . ' — run a fresh one' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
+					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'warn', 'detail' => __( 'Last scan was ', 'minn-admin' ) . $when . ' — run a fresh one' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				} else {
-					$rows[] = array( 'label' => 'Wordfence scan', 'status' => 'pass', 'detail' => 'Last scan ' . $when . ', no issues found' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
+					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'pass', 'detail' => __( 'Last scan ', 'minn-admin' ) . $when . ', no issues found' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				}
 			}
 		}

@@ -166,7 +166,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 		return $panels;
 	}
 	$panels['wpjm'] = array(
-		'label'       => 'Job listing',
+		'label'       => __( 'Job listing', 'minn-admin' ),
 		'sub'         => 'WP Job Manager',
 		'cap'         => 'edit_posts',
 		'fieldsRoute' => 'minn-admin/v1/wpjm/fields?post_id={id}&post_type={type}',
@@ -207,7 +207,7 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( array( 'groups' => array() ) );
 			}
 			if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
-				return new WP_Error( 'rest_forbidden', 'You cannot edit this listing.', array( 'status' => 403 ) );
+				return new WP_Error( 'rest_forbidden', __( 'You cannot edit this listing.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			$mapped = minn_admin_wpjm_mapped_fields();
 			return rest_ensure_response( array(

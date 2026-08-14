@@ -66,7 +66,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 		return $panels;
 	}
 	$panels['tec'] = array(
-		'label'       => 'Event details',
+		'label'       => __( 'Event details', 'minn-admin' ),
 		'sub'         => 'The Events Calendar',
 		'cap'         => 'edit_posts',
 		'fieldsRoute' => 'minn-admin/v1/tec/fields?post_id={id}&post_type={type}',
@@ -98,23 +98,23 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( array( 'groups' => array() ) );
 			}
 			if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
-				return new WP_Error( 'rest_forbidden', 'You cannot edit this event.', array( 'status' => 403 ) );
+				return new WP_Error( 'rest_forbidden', __( 'You cannot edit this event.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			$fields = array(
-				array( 'name' => 'start', 'label' => 'Starts', 'type' => 'text', 'placeholder' => 'YYYY-MM-DD HH:MM' ),
-				array( 'name' => 'end', 'label' => 'Ends', 'type' => 'text', 'placeholder' => 'YYYY-MM-DD HH:MM' ),
-				array( 'name' => 'all_day', 'label' => 'All-day event', 'type' => 'true_false' ),
-				array( 'name' => 'venue', 'label' => 'Venue', 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => 'Search venues…' ),
+				array( 'name' => 'start', 'label' => 'Starts', 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
+				array( 'name' => 'end', 'label' => 'Ends', 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
+				array( 'name' => 'all_day', 'label' => __( 'All-day event', 'minn-admin' ), 'type' => 'true_false' ),
+				array( 'name' => 'venue', 'label' => 'Venue', 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => __( 'Search venues…', 'minn-admin' ) ),
 			);
 			$locked = 0;
 			if ( $post_id && minn_admin_tec_multi_organizer( $post_id ) ) {
 				// Several organizers: single-pick would silently drop the rest.
 				$locked++;
 			} else {
-				$fields[] = array( 'name' => 'organizer', 'label' => 'Organizer', 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=organizer', 'placeholder' => 'Search organizers…' );
+				$fields[] = array( 'name' => 'organizer', 'label' => 'Organizer', 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=organizer', 'placeholder' => __( 'Search organizers…', 'minn-admin' ) );
 			}
-			$fields[] = array( 'name' => 'cost', 'label' => 'Cost', 'type' => 'text', 'placeholder' => 'e.g. 25 or Free' );
-			$fields[] = array( 'name' => 'website', 'label' => 'Event website', 'type' => 'url' );
+			$fields[] = array( 'name' => 'cost', 'label' => 'Cost', 'type' => 'text', 'placeholder' => __( 'e.g. 25 or Free', 'minn-admin' ) );
+			$fields[] = array( 'name' => 'website', 'label' => __( 'Event website', 'minn-admin' ), 'type' => 'url' );
 			// Recurrence / tickets / timezone stay TEC's (plus the organizer
 			// row when locked above).
 			$locked += 1;
@@ -265,7 +265,7 @@ add_action( 'rest_api_init', function () {
 				}
 				if ( false === $ok ) {
 					// Their invalid-meta path (e.g. end before start).
-					return new WP_Error( 'minn_tec_refused', 'The Events Calendar refused those event details (check that the end is after the start).', array( 'status' => 400 ) );
+					return new WP_Error( 'minn_tec_refused', __( 'The Events Calendar refused those event details (check that the end is after the start).', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				return null;
 			},

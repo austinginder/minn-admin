@@ -175,7 +175,7 @@ function minn_admin_site_visibility() {
 		$providers[] = array(
 			'name' => 'Minn maintenance mode',
 			'kind' => 'maintenance',
-			'note' => 'Visitors get a 503 holding page',
+			'note' => __( 'Visitors get a 503 holding page', 'minn-admin' ),
 			'minn' => true, // toggled in Minn's own Settings, not a wp-admin screen
 		);
 	}
@@ -309,7 +309,7 @@ function minn_admin_site_visibility() {
 			'name' => 'Password Protected',
 			'id'   => 'password-protected',
 			'kind' => 'password',
-			'note' => 'The whole site is behind a password',
+			'note' => __( 'The whole site is behind a password', 'minn-admin' ),
 			'url'  => admin_url( 'options-reading.php' ),
 		);
 	}
@@ -394,7 +394,7 @@ function minn_admin_visibility_check() {
 			'key'    => 'visibility',
 			'label'  => __( 'Site visibility', 'minn-admin' ),
 			'status' => 'warn',
-			'detail' => 'Hidden from the public by ' . implode( ', ', $names ) . ' — visitors cannot see the site',
+			'detail' => __( 'Hidden from the public by ', 'minn-admin' ) . implode( ', ', $names ) . ' — visitors cannot see the site',
 		);
 	}
 	if ( 'password' === $v['state'] ) {
@@ -402,7 +402,7 @@ function minn_admin_visibility_check() {
 			'key'    => 'visibility',
 			'label'  => __( 'Site visibility', 'minn-admin' ),
 			'status' => 'warn',
-			'detail' => 'The whole site is password-protected (' . implode( ', ', $names ) . ')',
+			'detail' => __( 'The whole site is password-protected (', 'minn-admin' ) . implode( ', ', $names ) . ')',
 		);
 	}
 	if ( 'partial' === $v['state'] ) {
@@ -410,7 +410,7 @@ function minn_admin_visibility_check() {
 			'key'    => 'visibility',
 			'label'  => __( 'Site visibility', 'minn-admin' ),
 			'status' => 'warn',
-			'detail' => 'Part of the site is hidden by ' . implode( ', ', $names ) . ' — some pages show a coming-soon page',
+			'detail' => __( 'Part of the site is hidden by ', 'minn-admin' ) . implode( ', ', $names ) . ' — some pages show a coming-soon page',
 		);
 	}
 	if ( 'search-discouraged' === $v['state'] ) {
@@ -418,7 +418,7 @@ function minn_admin_visibility_check() {
 			'key'    => 'visibility',
 			'label'  => __( 'Site visibility', 'minn-admin' ),
 			'status' => 'warn',
-			'detail' => 'Search engines are discouraged (Settings → Reading) — the site is public but asks not to be indexed',
+			'detail' => __( 'Search engines are discouraged (Settings → Reading) — the site is public but asks not to be indexed', 'minn-admin' ),
 		);
 	}
 	// Fully public: no row. Like the backup/licenses checks, the visibility
@@ -442,16 +442,16 @@ function minn_admin_rsssl_check() {
 	$enabled = (bool) rsssl_get_option( 'ssl_enabled' );
 	if ( ! $enabled ) {
 		return array(
-			'label'  => 'SSL enforcement',
+			'label'  => __( 'SSL enforcement', 'minn-admin' ),
 			'status' => 'warn',
-			'detail' => 'Really Simple SSL is installed but SSL is not enabled yet — finish its setup',
+			'detail' => __( 'Really Simple SSL is installed but SSL is not enabled yet — finish its setup', 'minn-admin' ),
 		);
 	}
 	$fixer = (bool) rsssl_get_option( 'mixed_content_fixer' );
 	return array(
-		'label'  => 'SSL enforcement',
+		'label'  => __( 'SSL enforcement', 'minn-admin' ),
 		'status' => 'pass',
-		'detail' => 'Really Simple SSL is enforcing HTTPS' . ( $fixer ? ', mixed-content fixer on' : '' ),
+		'detail' => __( 'Really Simple SSL is enforcing HTTPS', 'minn-admin' ) . ( $fixer ? ', mixed-content fixer on' : '' ),
 	);
 }
 
@@ -490,7 +490,7 @@ add_action( 'rest_api_init', function () {
 				$on      = ! empty( $request['on'] );
 				$toggles = minn_admin_visibility_toggles();
 				if ( '' === $id || ! isset( $toggles[ $id ] ) ) {
-					return new WP_Error( 'minn_no_toggle', 'No visibility toggle is registered for that provider.', array( 'status' => 404 ) );
+					return new WP_Error( 'minn_no_toggle', __( 'No visibility toggle is registered for that provider.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$mem = get_option( 'minn_admin_vis_restore', array() );
 				if ( ! is_array( $mem ) ) {

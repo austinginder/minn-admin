@@ -114,9 +114,9 @@ function minn_admin_fluent_smtp_health() {
 				return null;
 			}
 			return array(
-				'label' => 'Connection health',
+				'label' => __( 'Connection health', 'minn-admin' ),
 				'value' => 'Not checked yet',
-				'hint'  => 'FluentSMTP runs its first daily check within 24 hours',
+				'hint'  => __( 'FluentSMTP runs its first daily check within 24 hours', 'minn-admin' ),
 			);
 		}
 		$failing = (array) $svc->getFailing();
@@ -128,7 +128,7 @@ function minn_admin_fluent_smtp_health() {
 			}
 			$msg = ( is_array( $first ) && ! empty( $first['message'] ) ) ? (string) $first['message'] : '';
 			return array(
-				'label' => 'Connection health',
+				'label' => __( 'Connection health', 'minn-admin' ),
 				'value' => number_format_i18n( count( $failing ) ) . ' failing',
 				'hint'  => trim( $who . ( $msg ? ': ' . ( strlen( $msg ) > 120 ? substr( $msg, 0, 117 ) . '…' : $msg ) : '' ) ),
 			);
@@ -143,9 +143,9 @@ function minn_admin_fluent_smtp_health() {
 			}
 		}
 		return array(
-			'label' => 'Connection health',
+			'label' => __( 'Connection health', 'minn-admin' ),
 			'value' => 'All passing',
-			'hint'  => 'Daily check by FluentSMTP' . $ago,
+			'hint'  => __( 'Daily check by FluentSMTP', 'minn-admin' ) . $ago,
 		);
 	} catch ( \Throwable $e ) {
 		return null;
@@ -174,7 +174,7 @@ function minn_admin_fluent_smtp_checks() {
 		$total   = count( $report );
 		if ( ! $failing ) {
 			return array( array(
-				'label'  => 'FluentSMTP connections',
+				'label'  => __( 'FluentSMTP connections', 'minn-admin' ),
 				'status' => 'pass',
 				'detail' => sprintf(
 					/* translators: %s: number of email connections. */
@@ -190,7 +190,7 @@ function minn_admin_fluent_smtp_checks() {
 			}
 		}
 		return array( array(
-			'label'  => 'FluentSMTP connections',
+			'label'  => __( 'FluentSMTP connections', 'minn-admin' ),
 			// Every connection failing means outgoing email is down, not degraded.
 			'status' => count( $failing ) >= $total ? 'fail' : 'warn',
 			'detail' => sprintf(
@@ -215,9 +215,9 @@ function minn_admin_fluent_smtp_status_model() {
 	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 	if ( ! $found ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Email log', 'value' => 'Not ready', 'hint' => 'FluentSMTP has not created its log table yet' ) ),
+			'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => 'Not ready', 'hint' => __( 'FluentSMTP has not created its log table yet', 'minn-admin' ) ) ),
 			'actions' => array(
-				array( 'label' => 'Open FluentSMTP ↗', 'href' => admin_url( 'options-general.php?page=fluent-mail#/' ) ),
+				array( 'label' => __( 'Open FluentSMTP ↗', 'minn-admin' ), 'href' => admin_url( 'options-general.php?page=fluent-mail#/' ) ),
 			),
 		);
 	}
@@ -257,7 +257,7 @@ function minn_admin_fluent_smtp_status_model() {
 
 	$rows = array(
 		array(
-			'label' => 'Logged emails',
+			'label' => __( 'Logged emails', 'minn-admin' ),
 			'value' => number_format_i18n( $total ),
 			'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
 		),
@@ -279,27 +279,27 @@ function minn_admin_fluent_smtp_status_model() {
 	return array(
 		'rows'    => $rows,
 		'chart'   => array(
-			'title'     => 'Last 14 days',
+			'title'     => __( 'Last 14 days', 'minn-admin' ),
 			'primary'   => 'Sent',
 			'secondary' => 'Failed',
 			'points'    => array_values( $by_day ),
 		),
 		'actions' => array(
 			array(
-				'label'  => 'Send a test email',
+				'label'  => __( 'Send a test email', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/fluent-smtp/test',
 				'method' => 'POST',
 				'fields' => array(
 					array(
 						'key'         => 'email',
-						'label'       => 'Send to',
+						'label'       => __( 'Send to', 'minn-admin' ),
 						'placeholder' => wp_get_current_user()->user_email,
 						'required'    => true,
 					),
 				),
 			),
 			array(
-				'label' => 'Open FluentSMTP ↗',
+				'label' => __( 'Open FluentSMTP ↗', 'minn-admin' ),
 				'href'  => admin_url( 'options-general.php?page=fluent-mail#/' ),
 			),
 		),
@@ -356,20 +356,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Resend',
 					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}/resend',
 					'method'  => 'POST',
-					'confirm' => 'Resend this email to the original recipients?',
+					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
 				),
 				// Their 2.3.0 Recipient Picker equivalent: a parameterized
 				// action lives in the detail modal (field-less actions are
 				// the only ones list rows render — by design).
 				array(
-					'label'  => 'Resend to…',
+					'label'  => __( 'Resend to…', 'minn-admin' ),
 					'route'  => 'minn-admin/v1/fluent-smtp/emails/{id}/resend',
 					'method' => 'POST',
 					'fields' => array(
 						array(
 							'key'         => 'to',
-							'label'       => 'Send to',
-							'placeholder' => 'address@example.com, second@example.com',
+							'label'       => __( 'Send to', 'minn-admin' ),
+							'placeholder' => __( 'address@example.com, second@example.com', 'minn-admin' ),
 							'required'    => true,
 						),
 					),
@@ -378,7 +378,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete this log entry permanently? There is no trash.',
+					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -387,7 +387,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete the selected log entries permanently?',
+					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -477,14 +477,14 @@ function minn_admin_fluent_smtp_settings_shape() {
 			'fields' => array(
 				array(
 					'key'     => 'default_connection',
-					'label'   => 'Default connection',
+					'label'   => __( 'Default connection', 'minn-admin' ),
 					'type'    => 'combobox',
 					'options' => minn_admin_fluent_smtp_connection_options(),
 					'help'    => 'Used when no sender mapping claims the From address. Connection credentials stay in FluentSMTP.',
 				),
 				array(
 					'key'     => 'fallback_connection',
-					'label'   => 'Fallback connection',
+					'label'   => __( 'Fallback connection', 'minn-admin' ),
 					'type'    => 'combobox',
 					'options' => minn_admin_fluent_smtp_connection_options( true ),
 					'help'    => 'Tried when the chosen connection fails to send.',
@@ -496,13 +496,13 @@ function minn_admin_fluent_smtp_settings_shape() {
 			'fields' => array(
 				array(
 					'key'   => 'log_emails',
-					'label' => 'Log all emails',
+					'label' => __( 'Log all emails', 'minn-admin' ),
 					'type'  => 'toggle',
 					'help'  => 'Keep a copy of every outgoing email in the log.',
 				),
 				array(
 					'key'     => 'log_saved_interval_days',
-					'label'   => 'Delete logs older than',
+					'label'   => __( 'Delete logs older than', 'minn-admin' ),
 					'type'    => 'select',
 					'options' => array_map( function ( $d ) {
 						return array( $d, $d . ' days' );
@@ -512,11 +512,11 @@ function minn_admin_fluent_smtp_settings_shape() {
 			),
 		),
 		array(
-			'title'  => 'Email simulation',
+			'title'  => __( 'Email simulation', 'minn-admin' ),
 			'fields' => $sim_locked ? array() : array(
 				array(
 					'key'   => 'simulate_emails',
-					'label' => 'Simulate outgoing emails',
+					'label' => __( 'Simulate outgoing emails', 'minn-admin' ),
 					'type'  => 'toggle',
 					'help'  => 'Emails are logged but never actually sent. For staging and test sites.',
 				),
@@ -541,7 +541,7 @@ function minn_admin_fluent_smtp_settings_shape() {
 /** POST: whitelist keys, then their Settings::updateMiscSettings. */
 function minn_admin_fluent_smtp_settings_save( WP_REST_Request $request ) {
 	if ( ! class_exists( 'FluentMail\\App\\Models\\Settings' ) ) {
-		return new WP_Error( 'minn_fsmtp_unavailable', 'FluentSMTP is not fully loaded.', array( 'status' => 500 ) );
+		return new WP_Error( 'minn_fsmtp_unavailable', __( 'FluentSMTP is not fully loaded.', 'minn-admin' ), array( 'status' => 500 ) );
 	}
 	$body = $request->get_json_params();
 	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
@@ -563,7 +563,7 @@ function minn_admin_fluent_smtp_settings_save( WP_REST_Request $request ) {
 			continue;
 		}
 		if ( ! isset( $conns[ $pick ] ) ) {
-			return new WP_Error( 'minn_fsmtp_bad_connection', 'That connection no longer exists.', array( 'status' => 400 ) );
+			return new WP_Error( 'minn_fsmtp_bad_connection', __( 'That connection no longer exists.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$misc[ $key ] = $pick;
 	}
@@ -683,7 +683,7 @@ add_action( 'rest_api_init', function () {
 				(int) $request['id']
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$delivery = array(
 				array( 'label' => 'Status', 'value' => $row->status, 'type' => 'pill' ),
@@ -720,7 +720,7 @@ add_action( 'rest_api_init', function () {
 			}
 			if ( '' !== $response ) {
 				$sections[] = array(
-					'title' => 'Provider reply',
+					'title' => __( 'Provider reply', 'minn-admin' ),
 					'rows'  => array( array( 'label' => 'Response', 'value' => $response ) ),
 				);
 			}
@@ -776,7 +776,7 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// `response` may be a serialized provider reply — surface only a
 				// short plain-text peek, never the raw blob.
@@ -809,20 +809,20 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
 				if ( ! $exists ) {
-					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				if ( ! minn_admin_fluent_smtp_delete_ids( array( $id ) ) ) {
-					return new WP_Error( 'delete_failed', 'Could not delete this log entry.', array( 'status' => 500 ) );
+					return new WP_Error( 'delete_failed', __( 'Could not delete this log entry.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 				// Confirm gone (Logger can return falsey without throwing).
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$still = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
 				if ( $still ) {
-					return new WP_Error( 'delete_failed', 'Log entry still exists after delete.', array( 'status' => 500 ) );
+					return new WP_Error( 'delete_failed', __( 'Log entry still exists after delete.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 				return rest_ensure_response( array(
 					'deleted' => true,
-					'message' => 'Log entry deleted.',
+					'message' => __( 'Log entry deleted.', 'minn-admin' ),
 				) );
 			},
 		),
@@ -839,7 +839,7 @@ add_action( 'rest_api_init', function () {
 				$id
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 
 			// Optional recipient override ("Resend to…"): comma-separated
@@ -861,7 +861,7 @@ add_action( 'rest_api_init', function () {
 
 			$original = array_filter( minn_admin_fluent_smtp_recipients( $row->to, true ), 'is_email' );
 			if ( ! $override && ! $original ) {
-				return new WP_Error( 'no_recipients', 'No recipient address on record for this email.', array( 'status' => 422 ) );
+				return new WP_Error( 'no_recipients', __( 'No recipient address on record for this email.', 'minn-admin' ), array( 'status' => 422 ) );
 			}
 
 			// FluentSMTP 2.3.0+: their own resend flow — bumps resent_count,
@@ -881,12 +881,12 @@ add_action( 'rest_api_init', function () {
 				}
 				$to_str = ! empty( $rec['to'] ) ? implode( ', ', (array) $rec['to'] ) : implode( ', ', $override ? $override : $original );
 				if ( $rec && empty( $rec['sent'] ) ) {
-					return new WP_Error( 'send_failed', 'The mailer reported the resend to ' . $to_str . ' could not be delivered (the attempt is recorded on the log entry).', array( 'status' => 500 ) );
+					return new WP_Error( 'send_failed', __( 'The mailer reported the resend to ', 'minn-admin' ) . $to_str . ' could not be delivered (the attempt is recorded on the log entry).', array( 'status' => 500 ) );
 				}
 				return rest_ensure_response( array(
 					'resent'  => true,
 					'to'      => $to_str,
-					'message' => 'Resent to ' . $to_str,
+					'message' => __( 'Resent to ', 'minn-admin' ) . $to_str,
 				) );
 			}
 
@@ -901,7 +901,7 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'resent'  => true,
 				'to'      => implode( ', ', $to ),
-				'message' => 'Resent to ' . implode( ', ', $to ),
+				'message' => __( 'Resent to ', 'minn-admin' ) . implode( ', ', $to ),
 			) );
 		},
 	) );
@@ -920,7 +920,7 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$email = sanitize_email( (string) ( $request['email'] ?? '' ) );
 			if ( ! is_email( $email ) ) {
-				return new WP_Error( 'bad_email', 'Enter a valid email address.', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_email', __( 'Enter a valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			// Prefer FluentSMTP's own test helper when their Settings model loads.
 			if ( class_exists( 'FluentMail\\App\\Models\\Settings' ) ) {
@@ -931,11 +931,11 @@ add_action( 'rest_api_init', function () {
 						$settings->get()
 					);
 					if ( false === $result ) {
-						return new WP_Error( 'send_failed', 'FluentSMTP could not send the test email.', array( 'status' => 500 ) );
+						return new WP_Error( 'send_failed', __( 'FluentSMTP could not send the test email.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
 					return rest_ensure_response( array(
 						'ok'      => true,
-						'message' => 'Test email sent to ' . $email,
+						'message' => __( 'Test email sent to ', 'minn-admin' ) . $email,
 					) );
 				} catch ( \Throwable $e ) {
 					return new WP_Error( 'send_failed', $e->getMessage(), array( 'status' => 500 ) );
@@ -948,7 +948,7 @@ add_action( 'rest_api_init', function () {
 			}
 			return rest_ensure_response( array(
 				'ok'      => true,
-				'message' => 'Test email sent to ' . $email,
+				'message' => __( 'Test email sent to ', 'minn-admin' ) . $email,
 			) );
 		},
 	) );

@@ -107,10 +107,10 @@ function minn_admin_wpforms_entry_form_id( $entry_id ) {
 function minn_admin_wpforms_guard_entry( $entry_id, $cap = 'view_entries_form_single' ) {
 	$form_id = minn_admin_wpforms_entry_form_id( $entry_id );
 	if ( ! $form_id ) {
-		return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+		return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	if ( ! minn_admin_wpforms_can_form( $form_id, $cap ) ) {
-		return new WP_Error( 'forbidden', 'You cannot access entries for that form.', array( 'status' => 403 ) );
+		return new WP_Error( 'forbidden', __( 'You cannot access entries for that form.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	return $form_id;
 }
@@ -227,7 +227,7 @@ function minn_admin_wpforms_status_model() {
 		if ( ! $allowed ) {
 			return array(
 				'rows'    => array(
-					array( 'label' => 'Unread entries', 'value' => '0' ),
+					array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0' ),
 					array( 'label' => 'Forms', 'value' => '0' ),
 				),
 				'actions' => array(),
@@ -247,11 +247,11 @@ function minn_admin_wpforms_status_model() {
 	}
 	return array(
 		'rows'    => array(
-			array( 'label' => 'Unread entries', 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
+			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
 			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
 		),
 		'actions' => array(
-			array( 'label' => 'Open WPForms ↗', 'href' => admin_url( 'admin.php?page=wpforms-entries' ) ),
+			array( 'label' => __( 'Open WPForms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=wpforms-entries' ) ),
 		),
 	);
 }
@@ -306,14 +306,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Mark read',
+					'label'  => __( 'Mark read', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/status',
 					'body'   => array( 'status' => 'read' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'unread' ),
 				),
 				array(
-					'label'  => 'Mark unread',
+					'label'  => __( 'Mark unread', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/status',
 					'body'   => array( 'status' => 'unread' ),
@@ -334,14 +334,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'starred', 'equals' => '★' ),
 				),
 				array(
-					'label'  => 'Mark spam',
+					'label'  => __( 'Mark spam', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/status',
 					'body'   => array( 'status' => 'spam' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'read' ),
 				),
 				array(
-					'label'  => 'Not spam',
+					'label'  => __( 'Not spam', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/status',
 					'body'   => array( 'status' => 'restore' ),
@@ -362,17 +362,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/wpforms/entries/{id}',
-					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 			),
 			'bulk'      => array(
 				array(
-					'label'  => 'Mark read',
+					'label'  => __( 'Mark read', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/wpforms/entries/{id}/status',
 					'body'   => array( 'status' => 'read' ),
@@ -444,7 +444,7 @@ add_action( 'rest_api_init', function () {
 			}
 			if ( $form_id ) {
 				if ( ! minn_admin_wpforms_can_form( $form_id ) ) {
-					return new WP_Error( 'forbidden', 'You cannot access entries for that form.', array( 'status' => 403 ) );
+					return new WP_Error( 'forbidden', __( 'You cannot access entries for that form.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 				$where[]  = 'form_id = %d';
 				$params[] = $form_id;
@@ -502,7 +502,7 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE entry_id = %d", (int) $request['id'] ) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Their entry screen marks an opened entry viewed; mirror it
 				// through their handler (hooks fire). Never for spam/trash.
@@ -527,7 +527,7 @@ add_action( 'rest_api_init', function () {
 					$meta[] = array( 'label' => 'Submitted', 'value' => gmdate( 'c', strtotime( $row->date . ' UTC' ) ) );
 				}
 				if ( '' !== (string) $row->ip_address ) {
-					$meta[] = array( 'label' => 'IP address', 'value' => (string) $row->ip_address );
+					$meta[] = array( 'label' => __( 'IP address', 'minn-admin' ), 'value' => (string) $row->ip_address );
 				}
 				if ( (int) $row->starred ) {
 					$meta[] = array( 'label' => 'Starred', 'value' => '★' );
@@ -558,7 +558,7 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT entry_id FROM {$table} WHERE entry_id = %d", $id ) );
 				if ( ! $exists ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Their delete cleans entry_fields/entry_meta and fires hooks.
 				try {
@@ -567,9 +567,9 @@ add_action( 'rest_api_init', function () {
 					return new WP_Error( 'delete_failed', $e->getMessage(), array( 'status' => 500 ) );
 				}
 				if ( ! $ok ) {
-					return new WP_Error( 'delete_failed', 'WPForms could not delete this entry.', array( 'status' => 500 ) );
+					return new WP_Error( 'delete_failed', __( 'WPForms could not delete this entry.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
-				return rest_ensure_response( array( 'deleted' => true, 'message' => 'Entry deleted.' ) );
+				return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Entry deleted.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -584,7 +584,7 @@ add_action( 'rest_api_init', function () {
 			}
 			$op = sanitize_key( (string) $request->get_param( 'status' ) );
 			if ( ! in_array( $op, array( 'read', 'unread', 'spam', 'trash', 'restore' ), true ) ) {
-				return new WP_Error( 'bad_status', 'Unknown status', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			global $wpdb;
 			$id    = (int) $request['id'];
@@ -592,7 +592,7 @@ add_action( 'rest_api_init', function () {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$exists = (int) $wpdb->get_var( $wpdb->prepare( "SELECT entry_id FROM {$table} WHERE entry_id = %d", $id ) );
 			if ( ! $exists ) {
-				return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$data = array();
 			if ( 'read' === $op ) {

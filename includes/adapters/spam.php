@@ -61,8 +61,8 @@ function minn_admin_spam_providers() {
 					'toggles'    => array(
 						array(
 							'id'    => 'strictness',
-							'label' => 'Silently discard the worst spam',
-							'desc'  => 'The most pervasive spam never reaches the spam folder. Off keeps everything reviewable for 15 days.',
+							'label' => __( 'Silently discard the worst spam', 'minn-admin' ),
+							'desc'  => __( 'The most pervasive spam never reaches the spam folder. Off keeps everything reviewable for 15 days.', 'minn-admin' ),
 							'on'    => get_option( 'akismet_strictness' ) === '1',
 						),
 					),
@@ -93,19 +93,19 @@ function minn_admin_spam_providers() {
 				$o = $asb_read();
 				return array(
 					'configured' => true, // works out of the box, no key
-					'note'       => 'Local filtering, no cloud service or key needed',
+					'note'       => __( 'Local filtering, no cloud service or key needed', 'minn-admin' ),
 					'blocked'    => isset( $o['spam_count'] ) ? (int) $o['spam_count'] : 0,
 					'toggles'    => array(
 						array(
 							'id'    => 'flag_spam',
-							'label' => 'Keep spam for review',
-							'desc'  => 'Move detected spam to the spam folder instead of deleting it immediately.',
+							'label' => __( 'Keep spam for review', 'minn-admin' ),
+							'desc'  => __( 'Move detected spam to the spam folder instead of deleting it immediately.', 'minn-admin' ),
 							'on'    => ! isset( $o['flag_spam'] ) || (int) $o['flag_spam'] === 1, // default 1
 						),
 						array(
 							'id'    => 'email_notify',
-							'label' => 'Email me about new spam',
-							'desc'  => 'Send a notification when a comment lands in the spam folder.',
+							'label' => __( 'Email me about new spam', 'minn-admin' ),
+							'desc'  => __( 'Send a notification when a comment lands in the spam folder.', 'minn-admin' ),
 							'on'    => isset( $o['email_notify'] ) && (int) $o['email_notify'] === 1, // default 0
 						),
 					),
@@ -162,7 +162,7 @@ function minn_admin_spam_providers() {
 				$week  = isset( $total['week']['count'] ) ? (int) $total['week']['count'] : 0;
 				return array(
 					'configured' => true, // honeypot needs no setup
-					'note'       => 'Honeypot protection runs automatically on comments and supported forms' . ( $week ? ' (' . $week . ' blocked this week)' : '' ),
+					'note'       => __( 'Honeypot protection runs automatically on comments and supported forms', 'minn-admin' ) . ( $week ? ' (' . $week . ' blocked this week)' : '' ),
 					'blocked'    => isset( $total['all_time'] ) ? (int) $total['all_time'] : 0,
 					'toggles'    => array(), // its options are field/markup tuning, not policy
 					'adminUrl'   => admin_url( 'admin.php?page=wp-armour' ),

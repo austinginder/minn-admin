@@ -152,18 +152,18 @@ function minn_admin_performance_lab_status() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Active features',
+				'label' => __( 'Active features', 'minn-admin' ),
 				'value' => $active . ' of ' . $total,
-				'hint'  => 'Standalone plugins managed by Performance Lab',
+				'hint'  => __( 'Standalone plugins managed by Performance Lab', 'minn-admin' ),
 			),
 			array(
-				'label' => 'Performance Lab',
+				'label' => __( 'Performance Lab', 'minn-admin' ),
 				'value' => defined( 'PERFLAB_VERSION' ) ? 'v' . PERFLAB_VERSION : '—',
 			),
 		),
 		'actions' => array(
 			array(
-				'label' => 'Open Performance features ↗',
+				'label' => __( 'Open Performance features ↗', 'minn-admin' ),
 				'href'  => admin_url( 'options-general.php?page=' . ( defined( 'PERFLAB_SCREEN' ) ? PERFLAB_SCREEN : 'performance-lab' ) ),
 			),
 		),
@@ -179,7 +179,7 @@ function minn_admin_performance_lab_status() {
 function minn_admin_performance_lab_activate( $slug ) {
 	$data = perflab_get_standalone_plugin_data();
 	if ( ! isset( $data[ $slug ] ) ) {
-		return new WP_Error( 'minn_unknown_feature', 'Unknown Performance Lab feature.', array( 'status' => 404 ) );
+		return new WP_Error( 'minn_unknown_feature', __( 'Unknown Performance Lab feature.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	if ( ! function_exists( 'perflab_install_and_activate_plugin' ) ) {
 		// Their helper lives in admin/plugins.php; load it for REST.
@@ -196,7 +196,7 @@ function minn_admin_performance_lab_activate( $slug ) {
 		}
 	}
 	if ( ! function_exists( 'perflab_install_and_activate_plugin' ) ) {
-		return new WP_Error( 'minn_no_activate', 'Performance Lab activate helper is not available.', array( 'status' => 500 ) );
+		return new WP_Error( 'minn_no_activate', __( 'Performance Lab activate helper is not available.', 'minn-admin' ), array( 'status' => 500 ) );
 	}
 	$result = perflab_install_and_activate_plugin( $slug );
 	if ( is_wp_error( $result ) ) {
@@ -214,11 +214,11 @@ function minn_admin_performance_lab_activate( $slug ) {
 function minn_admin_performance_lab_deactivate( $slug ) {
 	$data = perflab_get_standalone_plugin_data();
 	if ( ! isset( $data[ $slug ] ) ) {
-		return new WP_Error( 'minn_unknown_feature', 'Unknown Performance Lab feature.', array( 'status' => 404 ) );
+		return new WP_Error( 'minn_unknown_feature', __( 'Unknown Performance Lab feature.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	$file = minn_admin_performance_lab_file( $slug );
 	if ( ! $file ) {
-		return new WP_Error( 'minn_not_installed', 'That feature is not installed.', array( 'status' => 400 ) );
+		return new WP_Error( 'minn_not_installed', __( 'That feature is not installed.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
 	if ( ! function_exists( 'deactivate_plugins' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -266,11 +266,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Deactivate',
 					'route'   => 'minn-admin/v1/performance-lab/features/{id}/deactivate',
 					'method'  => 'POST',
-					'confirm' => 'Deactivate this Performance Lab feature?',
+					'confirm' => __( 'Deactivate this Performance Lab feature?', 'minn-admin' ),
 					'when'    => array( 'key' => 'can_deactivate', 'equals' => '1' ),
 				),
 				array(
-					'label' => 'Settings ↗',
+					'label' => __( 'Settings ↗', 'minn-admin' ),
 					'href'  => '{settings_url}',
 					'when'  => array( 'key' => 'has_settings', 'equals' => '1' ),
 				),

@@ -49,12 +49,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'to', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
 			),
 			'create'   => array(
-				'label'  => 'Add redirect',
+				'label'  => __( 'Add redirect', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/s301/redirects',
 				'method' => 'POST',
 				'fields' => array(
-					array( 'key' => 'from', 'label' => 'Source URL', 'mono' => true, 'placeholder' => '/old-page' ),
-					array( 'key' => 'to', 'label' => 'Target URL', 'mono' => true, 'placeholder' => '/new-page or https://…' ),
+					array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ),
+					array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page or https://…', 'minn-admin' ) ),
 				),
 			),
 			'detail'   => array(
@@ -63,17 +63,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'  => 'minn-admin/v1/s301/redirects/{id}',
 					'method' => 'PUT',
 					'fields' => array(
-						array( 'key' => 'from', 'label' => 'Source URL', 'mono' => true ),
-						array( 'key' => 'to', 'label' => 'Target URL', 'mono' => true ),
+						array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
+						array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
 					),
 				),
 			),
 			'actions'  => array(
 				array(
-					'label'   => 'Delete redirect',
+					'label'   => __( 'Delete redirect', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/s301/redirects/{id}',
-					'confirm' => 'Delete this redirect permanently?',
+					'confirm' => __( 'Delete this redirect permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -82,7 +82,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/s301/redirects/{id}',
-					'confirm' => 'Delete the selected redirects permanently?',
+					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -109,7 +109,7 @@ add_action( 'rest_api_init', function () {
 			$wildcards = get_option( '301_redirects_wildcard', false );
 			return rest_ensure_response( array(
 				'rows' => array(
-					array( 'label' => 'Redirect rules', 'value' => (string) count( $rules ) ),
+					array( 'label' => __( 'Redirect rules', 'minn-admin' ), 'value' => (string) count( $rules ) ),
 					array(
 						'label' => 'Wildcards',
 						'value' => $wildcards ? 'On' : 'Off',
@@ -154,7 +154,7 @@ add_action( 'rest_api_init', function () {
 				$from = sanitize_text_field( trim( (string) $request['from'] ) );
 				$to   = sanitize_text_field( trim( (string) $request['to'] ) );
 				if ( '' === $from || '' === $to ) {
-					return new WP_Error( 'invalid', 'Source and target are both required.', array( 'status' => 400 ) );
+					return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				$rows          = (array) get_option( '301_redirects', array() );
 				$rows[ $from ] = $to;
@@ -180,11 +180,11 @@ add_action( 'rest_api_init', function () {
 				$from = sanitize_text_field( trim( (string) $request['from'] ) );
 				$to   = sanitize_text_field( trim( (string) $request['to'] ) );
 				if ( '' === $from || '' === $to ) {
-					return new WP_Error( 'invalid', 'Source and target are both required.', array( 'status' => 400 ) );
+					return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				$rows = (array) get_option( '301_redirects', array() );
 				if ( ! array_key_exists( $old, $rows ) ) {
-					return new WP_Error( 'not_found', 'Redirect not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Renaming the source: drop the old key, write the new one.
 				if ( $old !== $from ) {

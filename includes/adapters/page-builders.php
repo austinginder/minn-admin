@@ -271,12 +271,12 @@ add_action(
 					$builders = minn_admin_page_builders();
 					$bid      = sanitize_key( $request['builder'] );
 					if ( ! isset( $builders[ $bid ] ) ) {
-						return new WP_Error( 'unknown_builder', 'That builder is not active.', array( 'status' => 404 ) );
+						return new WP_Error( 'unknown_builder', __( 'That builder is not active.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
 					$type     = 'posts' === $request['type'] ? 'post' : 'page';
 					$type_obj = get_post_type_object( $type );
 					if ( ! current_user_can( $type_obj->cap->edit_posts ) ) {
-						return new WP_Error( 'forbidden', 'You are not allowed to create this.', array( 'status' => 403 ) );
+						return new WP_Error( 'forbidden', __( 'You are not allowed to create this.', 'minn-admin' ), array( 'status' => 403 ) );
 					}
 					$title = sanitize_text_field( (string) $request['title'] );
 					if ( '' === $title ) {

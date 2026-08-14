@@ -229,14 +229,14 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 	}
 	$data = $res->get_data();
 	if ( ! is_array( $data ) || empty( $data['id'] ) ) {
-		return new WP_Error( 'not_found', 'Profile not found.', array( 'status' => 404 ) );
+		return new WP_Error( 'not_found', __( 'Profile not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 
 	$summary = isset( $data['summary'] ) && is_array( $data['summary'] ) ? $data['summary'] : array();
 	$meta    = array(
 		array( 'label' => 'Route', 'value' => (string) ( $data['route'] ?? '' ) ),
 		array( 'label' => 'Duration', 'value' => ( isset( $data['duration_ms'] ) ? $data['duration_ms'] . ' ms' : '—' ) ),
-		array( 'label' => 'Memory peak', 'value' => isset( $data['memory_peak_mb'] ) ? $data['memory_peak_mb'] . ' MB' : '—' ),
+		array( 'label' => __( 'Memory peak', 'minn-admin' ), 'value' => isset( $data['memory_peak_mb'] ) ? $data['memory_peak_mb'] . ' MB' : '—' ),
 		array( 'label' => 'Callbacks', 'value' => isset( $summary['total_callbacks'] ) ? (string) (int) $summary['total_callbacks'] : '—' ),
 		array( 'label' => 'Sources', 'value' => isset( $summary['total_sources'] ) ? (string) (int) $summary['total_sources'] : '—' ),
 		array(
@@ -321,10 +321,10 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 				return '' !== (string) $r['value'] && '—' !== (string) $r['value'];
 			} ) ),
 		),
-		$sources ? array( 'title' => 'Top sources', 'rows' => $sources ) : null,
+		$sources ? array( 'title' => __( 'Top sources', 'minn-admin' ), 'rows' => $sources ) : null,
 		$queries ? array( 'title' => 'Queries', 'rows' => $queries ) : null,
-		$http ? array( 'title' => 'HTTP calls', 'rows' => $http ) : null,
-		$milestones ? array( 'title' => 'Timeline milestones', 'rows' => $milestones ) : null,
+		$http ? array( 'title' => __( 'HTTP calls', 'minn-admin' ), 'rows' => $http ) : null,
+		$milestones ? array( 'title' => __( 'Timeline milestones', 'minn-admin' ), 'rows' => $milestones ) : null,
 	) ) );
 
 	$title = (string) ( $data['route'] ?? ( 'Profile #' . (int) $data['id'] ) );
@@ -402,12 +402,12 @@ function minn_admin_scrutoscope_status_model() {
 
 	$rows = array(
 		array(
-			'label' => 'Background capture',
+			'label' => __( 'Background capture', 'minn-admin' ),
 			'value' => $bg ? ( 'On · ' . rtrim( rtrim( sprintf( '%.1f', $rate ), '0' ), '.' ) . '% sample' ) : 'Off',
 			'hint'  => $bg ? 'Sampled front-end and admin requests' : 'Start a session or enable sampling in Scrutoscope',
 		),
 		array(
-			'label' => 'Profiles stored',
+			'label' => __( 'Profiles stored', 'minn-admin' ),
 			'value' => number_format_i18n( $total ),
 			'hint'  => $last
 				? trim(
@@ -421,14 +421,14 @@ function minn_admin_scrutoscope_status_model() {
 				: 'None yet',
 		),
 		array(
-			'label' => 'Query profiling',
+			'label' => __( 'Query profiling', 'minn-admin' ),
 			'value' => ! empty( $qprof['active'] ) ? 'On' : 'Off',
 			'hint'  => ! empty( $qprof['managed'] )
 				? 'SAVEQUERIES via Scrutoscope settings'
 				: 'SAVEQUERIES set outside Scrutoscope',
 		),
 		array(
-			'label' => 'Capture mode',
+			'label' => __( 'Capture mode', 'minn-admin' ),
 			'value' => $light ? 'Lightweight' : 'Full',
 			'hint'  => $light ? 'Sources only (smaller profiles)' : 'Timeline + per-callback trace',
 		),
@@ -461,7 +461,7 @@ function minn_admin_scrutoscope_status_model() {
 		'rows'    => $rows,
 		'actions' => array(
 			array(
-				'label' => 'Open Scrutoscope ↗',
+				'label' => __( 'Open Scrutoscope ↗', 'minn-admin' ),
 				'href'  => minn_admin_scrutoscope_admin_url(),
 			),
 		),
@@ -742,14 +742,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label' => 'Open Scrutoscope ↗',
+					'label' => __( 'Open Scrutoscope ↗', 'minn-admin' ),
 					'href'  => minn_admin_scrutoscope_admin_url(),
 				),
 				array(
-					'label'   => 'Delete profile',
+					'label'   => __( 'Delete profile', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/scrutoscope/profiles/{id}',
-					'confirm' => 'Delete this profile permanently? Pinned profiles can be deleted too.',
+					'confirm' => __( 'Delete this profile permanently? Pinned profiles can be deleted too.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -774,7 +774,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'key' => 'schedule', 'label' => 'Schedule', 'format' => 'text' ),
 					array( 'key' => 'source', 'label' => 'Source', 'format' => 'text' ),
 					array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-					array( 'key' => 'date', 'label' => 'Next run', 'format' => 'ago', 'utc' => true ),
+					array( 'key' => 'date', 'label' => __( 'Next run', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 				),
 				// No detail modal for cron rows — inventory + row actions only.
 				'detail'    => array(),
@@ -783,19 +783,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// the confirm says so. Hidden cleanly when the method is absent.
 				'actions'   => minn_admin_scrutoscope_can_profile_cron() ? array(
 					array(
-						'label'   => 'Profile this hook',
+						'label'   => __( 'Profile this hook', 'minn-admin' ),
 						'method'  => 'POST',
 						'route'   => 'minn-admin/v1/scrutoscope/cron/{id}/profile',
-						'confirm' => 'Run this cron hook now while profiling it? The hook’s normal side effects will happen (emails, updates, cleanup, queue work). A profile is saved under Profiles afterward.',
+						'confirm' => __( 'Run this cron hook now while profiling it? The hook’s normal side effects will happen (emails, updates, cleanup, queue work). A profile is saved under Profiles afterward.', 'minn-admin' ),
 						'when'    => array( 'key' => 'can_profile', 'equals' => true ),
 					),
 					array(
-						'label' => 'Open Scrutoscope ↗',
+						'label' => __( 'Open Scrutoscope ↗', 'minn-admin' ),
 						'href'  => minn_admin_scrutoscope_admin_url(),
 					),
 				) : array(
 					array(
-						'label' => 'Open Scrutoscope ↗',
+						'label' => __( 'Open Scrutoscope ↗', 'minn-admin' ),
 						'href'  => minn_admin_scrutoscope_admin_url(),
 					),
 				),
@@ -839,10 +839,10 @@ add_action( 'rest_api_init', function () {
 				$id = (int) $request['id'];
 				$row = \Scrutoscope\Profiler\Storage::get_profile( $id );
 				if ( null === $row ) {
-					return new WP_Error( 'not_found', 'Profile not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Profile not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				\Scrutoscope\Profiler\Storage::delete_profile( $id );
-				return rest_ensure_response( array( 'ok' => true, 'message' => 'Profile deleted.' ) );
+				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Profile deleted.', 'minn-admin' ) ) );
 			},
 		),
 	) );

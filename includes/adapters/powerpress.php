@@ -194,7 +194,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 		return $panels;
 	}
 	$panels['powerpress'] = array(
-		'label'       => 'Podcast episode',
+		'label'       => __( 'Podcast episode', 'minn-admin' ),
 		'sub'         => 'PowerPress',
 		'cap'         => 'edit_posts',
 		'fieldsRoute' => 'minn-admin/v1/powerpress/fields?post_id={id}&post_type={type}',
@@ -227,23 +227,23 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( array( 'groups' => array() ) );
 			}
 			if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
-				return new WP_Error( 'rest_forbidden', 'You cannot edit this post.', array( 'status' => 403 ) );
+				return new WP_Error( 'rest_forbidden', __( 'You cannot edit this post.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			return rest_ensure_response( array(
 				'groups' => array(
 					array(
 						'group'  => 'Episode (default channel)',
 						'fields' => array(
-							array( 'name' => 'url', 'label' => 'Media file URL', 'type' => 'url', 'placeholder' => 'https://example.com/episode.mp3 — clearing this removes the episode' ),
-							array( 'name' => 'size', 'label' => 'File size (bytes)', 'type' => 'text', 'placeholder' => 'Detected by PowerPress when blank' ),
+							array( 'name' => 'url', 'label' => __( 'Media file URL', 'minn-admin' ), 'type' => 'url', 'placeholder' => 'https://example.com/episode.mp3 — clearing this removes the episode' ),
+							array( 'name' => 'size', 'label' => __( 'File size (bytes)', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'Detected by PowerPress when blank', 'minn-admin' ) ),
 							array( 'name' => 'duration', 'label' => 'Duration', 'type' => 'text', 'placeholder' => 'HH:MM:SS' ),
 							array( 'name' => 'subtitle', 'label' => 'Subtitle', 'type' => 'text' ),
-							array( 'name' => 'episode_title', 'label' => 'Episode title (Apple)', 'type' => 'text' ),
-							array( 'name' => 'episode_no', 'label' => 'Episode number', 'type' => 'number' ),
+							array( 'name' => 'episode_title', 'label' => __( 'Episode title (Apple)', 'minn-admin' ), 'type' => 'text' ),
+							array( 'name' => 'episode_no', 'label' => __( 'Episode number', 'minn-admin' ), 'type' => 'number' ),
 							array( 'name' => 'season', 'label' => 'Season', 'type' => 'number' ),
 							array(
 								'name'    => 'episode_type',
-								'label'   => 'Episode type',
+								'label'   => __( 'Episode type', 'minn-admin' ),
 								'type'    => 'select',
 								'choices' => array( '' => 'Full (default)', 'full' => 'Full Episode', 'trailer' => 'Trailer', 'bonus' => 'Bonus' ),
 							),

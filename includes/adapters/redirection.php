@@ -41,22 +41,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				}
 				return ( new Red_Database_Status() )->needs_installing();
 			},
-			'title'   => 'Redirection needs its one-time setup',
-			'note'    => 'Redirection stores redirects in its own database tables, which it creates on first setup. This runs the same install its own setup wizard performs; the choices below are the wizard\'s questions.',
+			'title'   => __( 'Redirection needs its one-time setup', 'minn-admin' ),
+			'note'    => __( 'Redirection stores redirects in its own database tables, which it creates on first setup. This runs the same install its own setup wizard performs; the choices below are the wizard\'s questions.', 'minn-admin' ),
 			'options' => array(
 				array(
 					'id'      => 'monitor',
-					'label'   => 'Monitor permalink changes in posts and pages, and add a redirect when they change',
+					'label'   => __( 'Monitor permalink changes in posts and pages, and add a redirect when they change', 'minn-admin' ),
 					'default' => true,
 				),
 				array(
 					'id'      => 'log',
-					'label'   => 'Keep a log of redirects and 404 errors (kept for 7 days)',
+					'label'   => __( 'Keep a log of redirects and 404 errors (kept for 7 days)', 'minn-admin' ),
 					'default' => true,
 				),
 				array(
 					'id'      => 'ip',
-					'label'   => 'Store IP addresses with logged redirects and errors',
+					'label'   => __( 'Store IP addresses with logged redirects and errors', 'minn-admin' ),
 					'default' => false,
 				),
 			),
@@ -89,7 +89,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey'  => 'total',
 			'search'    => 'filterBy[url]={q}',
 			'create'    => array(
-				'label'    => 'Add redirect',
+				'label'    => __( 'Add redirect', 'minn-admin' ),
 				'route'    => 'redirection/v1/redirect',
 				'method'   => 'POST',
 				// Plain URL-match redirect in the default group; power users
@@ -101,9 +101,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'regex'       => false,
 				),
 				'fields'   => array(
-					array( 'key' => 'url', 'label' => 'Source URL', 'mono' => true, 'placeholder' => '/old-page' ),
-					array( 'key' => 'action_data.url', 'label' => 'Target URL', 'mono' => true, 'placeholder' => '/new-page or https://…' ),
-					array( 'key' => 'action_code', 'label' => 'HTTP status', 'type' => 'number', 'value' => 301 ),
+					array( 'key' => 'url', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ),
+					array( 'key' => 'action_data.url', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page or https://…', 'minn-admin' ) ),
+					array( 'key' => 'action_code', 'label' => __( 'HTTP status', 'minn-admin' ), 'type' => 'number', 'value' => 301 ),
 				),
 			),
 			'columns'   => array(
@@ -112,7 +112,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'action_code', 'label' => 'Code', 'format' => 'mono', 'width' => '64px' ),
 				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '72px', 'sort' => 'last_count' ),
 				// last_access is stored via gmdate (UTC, no zone).
-				array( 'key' => 'last_access', 'label' => 'Last hit', 'format' => 'ago', 'utc' => true, 'sort' => 'last_access' ),
+				array( 'key' => 'last_access', 'label' => __( 'Last hit', 'minn-admin' ), 'format' => 'ago', 'utc' => true, 'sort' => 'last_access' ),
 			),
 			'detail'    => array(
 				'skip' => array( 'match_data', 'match_type', 'match_url', 'position', 'group_id' ),
@@ -123,9 +123,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'method'   => 'POST',
 					'preserve' => array( 'match_type', 'action_type', 'group_id', 'title', 'regex' ),
 					'fields'   => array(
-						array( 'key' => 'url', 'label' => 'Source URL', 'mono' => true ),
-						array( 'key' => 'action_data.url', 'label' => 'Target URL', 'mono' => true ),
-						array( 'key' => 'action_code', 'label' => 'HTTP status', 'type' => 'number' ),
+						array( 'key' => 'url', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
+						array( 'key' => 'action_data.url', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
+						array( 'key' => 'action_code', 'label' => __( 'HTTP status', 'minn-admin' ), 'type' => 'number' ),
 					),
 				),
 			),
@@ -141,10 +141,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'  => 'redirection/v1/bulk/redirect/enable?items={id}',
 				),
 				array(
-					'label'   => 'Delete redirect',
+					'label'   => __( 'Delete redirect', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'redirection/v1/bulk/redirect/delete?items={id}',
-					'confirm' => 'Delete this redirect permanently?',
+					'confirm' => __( 'Delete this redirect permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -165,7 +165,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'POST',
 					'route'   => 'redirection/v1/bulk/redirect/delete?items={id}',
-					'confirm' => 'Delete the selected redirects permanently?',
+					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -226,15 +226,15 @@ add_action( 'rest_api_init', function () {
 					$hits += (int) $r->hits;
 				}
 				$rows[] = array(
-					'label' => 'Redirect rules',
+					'label' => __( 'Redirect rules', 'minn-admin' ),
 					'value' => (string) $enabled,
 					'hint'  => $disabled ? $disabled . ' disabled' : 'all enabled',
 				);
-				$rows[] = array( 'label' => 'Hits, all time', 'value' => number_format_i18n( $hits ) );
+				$rows[] = array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( $hits ) );
 				$top = $wpdb->get_row( "SELECT url, last_count FROM {$wpdb->prefix}redirection_items WHERE last_count > 0 ORDER BY last_count DESC LIMIT 1" ); // phpcs:ignore
 				if ( $top ) {
 					$rows[] = array(
-						'label' => 'Top redirect',
+						'label' => __( 'Top redirect', 'minn-admin' ),
 						'value' => $top->url,
 						'hint'  => number_format_i18n( (int) $top->last_count ) . ' hits',
 					);
@@ -249,7 +249,7 @@ add_action( 'rest_api_init', function () {
 				? (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}redirection_404 WHERE created >= %s", $since ) ) // phpcs:ignore
 				: null;
 			if ( null !== $served ) {
-				$rows[] = array( 'label' => 'Served, 7 days', 'value' => number_format_i18n( $served ) );
+				$rows[] = array( 'label' => __( 'Served, 7 days', 'minn-admin' ), 'value' => number_format_i18n( $served ) );
 			}
 			if ( null !== $missed ) {
 				$rows[] = array( 'label' => '404s, 7 days', 'value' => number_format_i18n( $missed ) );
@@ -288,7 +288,7 @@ add_action( 'rest_api_init', function () {
 					);
 				}
 				$out['chart'] = array(
-					'title'     => 'Last 14 days',
+					'title'     => __( 'Last 14 days', 'minn-admin' ),
 					'primary'   => 'Redirects',
 					'secondary' => '404s',
 					'points'    => $points,
@@ -313,11 +313,11 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( array(
 					'groups' => array(
 						array(
-							'title'  => 'Permalink monitor',
+							'title'  => __( 'Permalink monitor', 'minn-admin' ),
 							'fields' => array(
 								array(
 									'key'   => 'monitor',
-									'label' => 'Monitor permalink changes',
+									'label' => __( 'Monitor permalink changes', 'minn-admin' ),
 									'type'  => 'toggle',
 									'help'  => 'Add a redirect when a post or page slug changes.',
 								),
@@ -328,13 +328,13 @@ add_action( 'rest_api_init', function () {
 							'fields' => array(
 								array(
 									'key'   => 'log',
-									'label' => 'Keep a log of redirects and 404s',
+									'label' => __( 'Keep a log of redirects and 404s', 'minn-admin' ),
 									'type'  => 'toggle',
 									'help'  => 'When on, logs are kept for the number of days below.',
 								),
 								array(
 									'key'      => 'expire_days',
-									'label'    => 'Keep logs for (days)',
+									'label'    => __( 'Keep logs for (days)', 'minn-admin' ),
 									'type'     => 'number',
 									'min'      => 1,
 									'max'      => 60,
@@ -342,7 +342,7 @@ add_action( 'rest_api_init', function () {
 								),
 								array(
 									'key'      => 'ip_logging',
-									'label'    => 'Store IP addresses with logs',
+									'label'    => __( 'Store IP addresses with logs', 'minn-admin' ),
 									'type'     => 'toggle',
 									'help'     => 'A privacy choice — off by default on fresh installs.',
 									'showWhen' => array( 'key' => 'log', 'equals' => true ),

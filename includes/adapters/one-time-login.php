@@ -71,7 +71,7 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$user = get_userdata( (int) $request['id'] );
 			if ( ! $user ) {
-				return new WP_Error( 'not_found', 'User not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'User not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			// delay_delete=false, the vendor's own default on both of its entry
 			// points. With true, previously issued tokens keep authenticating
@@ -81,7 +81,7 @@ add_action( 'rest_api_init', function () {
 			$urls = one_time_login_generate_tokens( $user, 1, false );
 			$url  = ! empty( $urls[0] ) ? $urls[0] : '';
 			if ( ! $url ) {
-				return new WP_Error( 'mint_failed', 'One Time Login could not generate a link.', array( 'status' => 500 ) );
+				return new WP_Error( 'mint_failed', __( 'One Time Login could not generate a link.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array(
 				'url'  => $url,

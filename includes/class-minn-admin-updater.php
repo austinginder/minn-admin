@@ -129,7 +129,7 @@ class Minn_Admin_Updater {
 		if ( empty( $remote->sha256 ) ) {
 			return new WP_Error(
 				'minn_admin_missing_package_hash',
-				'Minn Admin update rejected: the release manifest does not publish a sha256 for this package.'
+				__( 'Minn Admin update rejected: the release manifest does not publish a sha256 for this package.', 'minn-admin' )
 			);
 		}
 		if ( ! function_exists( 'download_url' ) ) {
@@ -144,7 +144,7 @@ class Minn_Admin_Updater {
 			wp_delete_file( $file );
 			return new WP_Error(
 				'minn_admin_bad_package_hash',
-				'Minn Admin update rejected: the downloaded package does not match the sha256 published in the release manifest.'
+				__( 'Minn Admin update rejected: the downloaded package does not match the sha256 published in the release manifest.', 'minn-admin' )
 			);
 		}
 		return $file;

@@ -46,7 +46,7 @@ class Minn_Admin {
 		$id     = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
 		$status = isset( $_POST['status'] ) ? sanitize_key( wp_unslash( $_POST['status'] ) ) : '';
 		if ( '' === $id || validate_file( $id ) || ! in_array( $status, array( 'active', 'inactive' ), true ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid plugin or status.' ), 400 );
+			wp_send_json_error( array( 'message' => __( 'Invalid plugin or status.', 'minn-admin' ) ), 400 );
 		}
 		$file = $id . '.php';
 		if ( ! function_exists( 'get_plugins' ) ) {
@@ -54,7 +54,7 @@ class Minn_Admin {
 		}
 		$all = get_plugins();
 		if ( ! isset( $all[ $file ] ) ) {
-			wp_send_json_error( array( 'message' => 'Plugin not found.' ), 404 );
+			wp_send_json_error( array( 'message' => __( 'Plugin not found.', 'minn-admin' ) ), 404 );
 		}
 		$denied = self::plugin_toggle_denied( $file );
 		if ( $denied ) {
@@ -912,7 +912,7 @@ class Minn_Admin {
 		$bar->add_node(
 			array(
 				'id'    => 'minn-admin',
-				'title' => 'Minn Admin',
+				'title' => __( 'Minn Admin', 'minn-admin' ),
 				'href'  => self::app_url(),
 			)
 		);

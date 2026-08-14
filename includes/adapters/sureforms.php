@@ -135,14 +135,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Mark read',
+					'label'  => __( 'Mark read', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/sureforms/entries/{id}/status',
 					'body'   => array( 'status' => 'read' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'unread' ),
 				),
 				array(
-					'label'  => 'Mark unread',
+					'label'  => __( 'Mark unread', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/sureforms/entries/{id}/status',
 					'body'   => array( 'status' => 'unread' ),
@@ -156,17 +156,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'status', 'equals' => 'read' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/sureforms/entries/{id}',
-					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 			),
 			'bulk'      => array(
 				array(
-					'label'  => 'Mark read',
+					'label'  => __( 'Mark read', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/sureforms/entries/{id}/status',
 					'body'   => array( 'status' => 'read' ),
@@ -274,7 +274,7 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE ID = %d", (int) $request['id'] ) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$data   = json_decode( (string) $row->form_data, true );
 				$data   = is_array( $data ) ? $data : array();
@@ -317,9 +317,9 @@ add_action( 'rest_api_init', function () {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE ID = %d", (int) $request['id'] ) );
 				if ( ! $deleted ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				return rest_ensure_response( array( 'deleted' => true, 'message' => 'Entry deleted.' ) );
+				return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Entry deleted.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -330,14 +330,14 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$status = sanitize_key( (string) $request->get_param( 'status' ) );
 			if ( ! in_array( $status, array( 'read', 'unread', 'trash' ), true ) ) {
-				return new WP_Error( 'bad_status', 'Unknown status', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			global $wpdb;
 			$table   = minn_admin_sureforms_table();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$updated = $wpdb->update( $table, array( 'status' => $status ), array( 'ID' => (int) $request['id'] ), array( '%s' ), array( '%d' ) );
 			if ( false === $updated ) {
-				return new WP_Error( 'update_failed', 'Could not update the entry.', array( 'status' => 500 ) );
+				return new WP_Error( 'update_failed', __( 'Could not update the entry.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array( 'ok' => true, 'status' => $status ) );
 		},
@@ -350,8 +350,8 @@ add_action( 'rest_api_init', function () {
 			$admin_url = admin_url( 'admin.php?page=sureforms_entries' );
 			if ( ! $has_table() ) {
 				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => 'Entries', 'value' => '—', 'hint' => 'No submissions yet' ) ),
-					'actions' => array( array( 'label' => 'Open SureForms ↗', 'href' => $admin_url ) ),
+					'rows'    => array( array( 'label' => 'Entries', 'value' => '—', 'hint' => __( 'No submissions yet', 'minn-admin' ) ) ),
+					'actions' => array( array( 'label' => __( 'Open SureForms ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 				) );
 			}
 			global $wpdb;
@@ -362,13 +362,13 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
-						'label' => 'Unread entries',
+						'label' => __( 'Unread entries', 'minn-admin' ),
 						'value' => number_format_i18n( $unread ),
 						'hint'  => number_format_i18n( $total ) . ' total',
 					),
 					array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
 				),
-				'actions' => array( array( 'label' => 'Open SureForms ↗', 'href' => $admin_url ) ),
+				'actions' => array( array( 'label' => __( 'Open SureForms ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 			) );
 		},
 	) );

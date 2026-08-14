@@ -143,7 +143,7 @@ function minn_admin_hfcm_can_write_code() {
 function minn_admin_hfcm_code_error() {
 	return new WP_Error(
 		'forbidden',
-		'Header Footer Code Manager snippets run as raw markup in the page head, so editing them needs the unfiltered_html capability on this site.',
+		__( 'Header Footer Code Manager snippets run as raw markup in the page head, so editing them needs the unfiltered_html capability on this site.', 'minn-admin' ),
 		array( 'status' => 403 )
 	);
 }
@@ -171,14 +171,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 
 	$edit_fields = array(
-		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => 'Analytics pixel' ),
+		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => __( 'Analytics pixel', 'minn-admin' ) ),
 		array(
 			'key'         => 'code',
 			'label'       => 'Code',
 			'type'        => 'textarea',
 			'mono'        => true,
 			'rows'        => 14,
-			'placeholder' => '<!-- tracking snippet -->',
+			'placeholder' => __( '<!-- tracking snippet -->', 'minn-admin' ),
 		),
 		array( 'key' => 'snippet_type', 'label' => 'Type', 'type' => 'select', 'options' => $type_options ),
 		array( 'key' => 'location', 'label' => 'Location', 'type' => 'select', 'options' => $location_options ),
@@ -209,7 +209,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'active={v}',
 			),
 			'create'    => array(
-				'label'    => 'Add snippet',
+				'label'    => __( 'Add snippet', 'minn-admin' ),
 				'route'    => 'minn-admin/v1/hfcm/snippets',
 				'method'   => 'POST',
 				'defaults' => array(
@@ -223,7 +223,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'columns'   => array(
 				array( 'key' => 'name', 'label' => 'Snippet', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => 'Type · location', 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
+				array( 'key' => 'scope', 'label' => __( 'Type · location', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
 				array( 'key' => 'active', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
 				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago' ),
 			),
@@ -253,14 +253,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
-					'label' => 'Edit in HFCM ↗',
+					'label' => __( 'Edit in HFCM ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=hfcm-update&id={id}' ),
 				),
 				array(
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/hfcm/snippets/{id}',
-					'confirm' => 'Delete this snippet permanently?',
+					'confirm' => __( 'Delete this snippet permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -283,7 +283,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/hfcm/snippets/{id}',
-					'confirm' => 'Delete the selected snippets permanently?',
+					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -315,7 +315,7 @@ add_action( 'rest_api_init', function () {
 			$inactive = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status <> 'active'" ); // phpcs:ignore
 			$rows     = array(
 				array(
-					'label' => 'Active snippets',
+					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
 					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
 				),
@@ -323,7 +323,7 @@ add_action( 'rest_api_init', function () {
 			$types = $wpdb->get_results( "SELECT snippet_type AS t, COUNT(*) AS c FROM {$table} WHERE status = 'active' GROUP BY snippet_type ORDER BY c DESC LIMIT 3" ); // phpcs:ignore
 			if ( $types ) {
 				$rows[] = array(
-					'label' => 'Running types',
+					'label' => __( 'Running types', 'minn-admin' ),
 					'value' => implode( ' · ', array_map( function ( $t ) {
 						return $t->c . ' ' . strtolower( (string) $t->t );
 					}, $types ) ),
@@ -332,7 +332,7 @@ add_action( 'rest_api_init', function () {
 			$last = $wpdb->get_row( "SELECT name, last_revision_date FROM {$table} ORDER BY last_revision_date DESC LIMIT 1" ); // phpcs:ignore
 			if ( $last && $last->last_revision_date ) {
 				$rows[] = array(
-					'label' => 'Last change',
+					'label' => __( 'Last change', 'minn-admin' ),
 					'value' => (string) $last->name,
 					'hint'  => substr( (string) $last->last_revision_date, 0, 10 ),
 				);
@@ -374,7 +374,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$name = isset( $body['name'] ) ? sanitize_text_field( $body['name'] ) : '';
 				if ( ! $name ) {
-					return new WP_Error( 'missing_name', 'Name is required.', array( 'status' => 400 ) );
+					return new WP_Error( 'missing_name', __( 'Name is required.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				$code = isset( $body['code'] ) ? (string) $body['code'] : '';
 				if ( ! minn_admin_hfcm_can_write_code() ) {
@@ -408,7 +408,7 @@ add_action( 'rest_api_init', function () {
 					array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 				);
 				if ( ! $ok ) {
-					return new WP_Error( 'insert_failed', 'Could not create the snippet.', array( 'status' => 500 ) );
+					return new WP_Error( 'insert_failed', __( 'Could not create the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 				return rest_ensure_response( minn_admin_hfcm_get( (int) $wpdb->insert_id ) );
 			},
@@ -422,7 +422,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$item = minn_admin_hfcm_get( (int) $request['id'] );
 				if ( ! $item ) {
-					return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				return rest_ensure_response( $item );
 			},
@@ -435,7 +435,7 @@ add_action( 'rest_api_init', function () {
 				$id   = (int) $request['id'];
 				$item = minn_admin_hfcm_get( $id );
 				if ( ! $item ) {
-					return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$body = $request->get_json_params();
 				if ( ! is_array( $body ) ) {
@@ -489,7 +489,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$id = (int) $request['id'];
 				if ( ! minn_admin_hfcm_get( $id ) ) {
-					return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Destroying a snippet is a write to the same raw-markup store.
 				if ( ! minn_admin_hfcm_can_write_code() ) {
@@ -513,7 +513,7 @@ add_action( 'rest_api_init', function () {
 			$id   = (int) $request['id'];
 			$item = minn_admin_hfcm_get( $id );
 			if ( ! $item ) {
-				return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$body   = $request->get_json_params();
 			$active = is_array( $body ) ? ! empty( $body['active'] ) : true;

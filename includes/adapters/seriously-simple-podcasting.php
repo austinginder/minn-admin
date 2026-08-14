@@ -151,7 +151,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 		return $panels;
 	}
 	$panels['ssp'] = array(
-		'label'       => 'Podcast episode',
+		'label'       => __( 'Podcast episode', 'minn-admin' ),
 		'sub'         => 'Seriously Simple Podcasting',
 		'cap'         => 'edit_posts',
 		'fieldsRoute' => 'minn-admin/v1/ssp/fields?post_id={id}&post_type={type}',
@@ -190,7 +190,7 @@ add_action( 'rest_api_init', function () {
 			if ( $post_id ) {
 				$post = get_post( $post_id );
 				if ( $post && ! current_user_can( 'edit_post', $post_id ) ) {
-					return new WP_Error( 'rest_forbidden', 'You cannot edit this post.', array( 'status' => 403 ) );
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this post.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 				if ( $post ) {
 					$post_type = $post->post_type;

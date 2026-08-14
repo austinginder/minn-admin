@@ -159,7 +159,7 @@ function minn_admin_rri_detail( $id ) {
 		}
 	}
 	if ( null === $found ) {
-		return new WP_Error( 'not_found', 'Rewrite rule not found.', array( 'status' => 404 ) );
+		return new WP_Error( 'not_found', __( 'Rewrite rule not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 
 	$source  = (string) ( $found['source'] ?? 'other' );
@@ -216,36 +216,36 @@ function minn_admin_rri_status_model() {
 				'hint'  => $missing ? 'Generated but not in the saved option' : 'Saved set matches generation',
 			),
 			array(
-				'label' => 'Permalink structure',
+				'label' => __( 'Permalink structure', 'minn-admin' ),
 				'value' => $struct ? $struct : 'Plain (no pretty permalinks)',
 				'hint'  => $struct ? 'Pretty permalinks on' : 'Flush only helps after a structure is set',
 			),
 			array(
-				'label' => 'Rewrite Rules Inspector',
+				'label' => __( 'Rewrite Rules Inspector', 'minn-admin' ),
 				'value' => (string) $ver,
 			),
 		),
 		'actions' => array(
 			array(
-				'label'   => 'Flush rewrite rules',
+				'label'   => __( 'Flush rewrite rules', 'minn-admin' ),
 				'method'  => 'POST',
 				'route'   => 'minn-admin/v1/rewrite-rules/flush',
-				'confirm' => 'Flush rewrite rules? WordPress will regenerate them from the current structure and plugins.',
+				'confirm' => __( 'Flush rewrite rules? WordPress will regenerate them from the current structure and plugins.', 'minn-admin' ),
 			),
 			array(
-				'label'  => 'Test a URL',
+				'label'  => __( 'Test a URL', 'minn-admin' ),
 				'method' => 'POST',
 				'route'  => 'minn-admin/v1/rewrite-rules/test',
 				'fields' => array(
 					array(
 						'key'         => 'url',
-						'label'       => 'Path or URL',
-						'placeholder' => '/sample-page/ or full URL',
+						'label'       => __( 'Path or URL', 'minn-admin' ),
+						'placeholder' => __( '/sample-page/ or full URL', 'minn-admin' ),
 					),
 				),
 			),
 			array(
-				'label' => 'Open Rewrite Rules Inspector ↗',
+				'label' => __( 'Open Rewrite Rules Inspector ↗', 'minn-admin' ),
 				'href'  => minn_admin_rri_admin_url(),
 			),
 		),
@@ -307,7 +307,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label' => 'Open Rewrite Rules Inspector ↗',
+					'label' => __( 'Open Rewrite Rules Inspector ↗', 'minn-admin' ),
 					'href'  => minn_admin_rri_admin_url(),
 				),
 			),
@@ -356,7 +356,7 @@ add_action( 'rest_api_init', function () {
 			global $rewrite_rules_inspector;
 			if ( is_object( $rewrite_rules_inspector ) && isset( $rewrite_rules_inspector->flushing_enabled )
 				&& ! $rewrite_rules_inspector->flushing_enabled ) {
-				return new WP_Error( 'forbidden', 'Rewrite rule flushing is disabled.', array( 'status' => 403 ) );
+				return new WP_Error( 'forbidden', __( 'Rewrite rule flushing is disabled.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			minn_admin_rri_flush();
 			$count = count( minn_admin_rri_all_rules() );
@@ -374,17 +374,17 @@ add_action( 'rest_api_init', function () {
 			$body = $request->get_json_params();
 			$url  = isset( $body['url'] ) ? sanitize_text_field( (string) $body['url'] ) : '';
 			if ( '' === $url ) {
-				return new WP_Error( 'empty_url', 'Enter a path or URL to test.', array( 'status' => 400 ) );
+				return new WP_Error( 'empty_url', __( 'Enter a path or URL to test.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			if ( ! class_exists( '\\Automattic\\RewriteRulesInspector\\Core\\UrlTester' ) ) {
-				return new WP_Error( 'unavailable', 'URL tester is not available.', array( 'status' => 500 ) );
+				return new WP_Error( 'unavailable', __( 'URL tester is not available.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			$tester = new \Automattic\RewriteRulesInspector\Core\UrlTester();
 			$result = $tester->test_url_with_rules( $url, minn_admin_rri_all_rules() );
 			if ( ! empty( $result['is_404'] ) || empty( $result['first_match'] ) ) {
 				return rest_ensure_response( array(
 					'ok'      => true,
-					'message' => 'No rewrite rule matches “' . $url . '” (would 404 on routing alone).',
+					'message' => __( 'No rewrite rule matches “', 'minn-admin' ) . $url . '” (would 404 on routing alone).',
 				) );
 			}
 			$m = $result['first_match'];

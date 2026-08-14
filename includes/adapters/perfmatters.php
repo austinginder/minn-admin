@@ -31,7 +31,7 @@ function minn_admin_perfmatters_tabs() {
 		'css'       => array( 'label' => 'CSS', 'sections' => array( 'assets_css', 'assets_css_minify' ) ),
 		'code'      => array( 'label' => 'Code', 'sections' => array( 'assets_code' ) ),
 		'preload'   => array( 'label' => 'Preload', 'sections' => array( 'preload', 'preload_speculative', 'preload_connection' ) ),
-		'lazyload'  => array( 'label' => 'Lazy Loading', 'sections' => array( 'lazyload', 'lazyload_css_background_images', 'lazyload_elements' ) ),
+		'lazyload'  => array( 'label' => __( 'Lazy Loading', 'minn-admin' ), 'sections' => array( 'lazyload', 'lazyload_css_background_images', 'lazyload_elements' ) ),
 		'fonts'     => array( 'label' => 'Fonts', 'sections' => array( 'perfmatters_fonts' ) ),
 		'cdn'       => array( 'label' => 'CDN', 'sections' => array( 'perfmatters_cdn' ) ),
 		'analytics' => array( 'label' => 'Analytics', 'sections' => array( 'perfmatters_analytics' ) ),
@@ -146,7 +146,7 @@ function minn_admin_perfmatters_value( $args, $type ) {
 function minn_admin_perfmatters_tab_shape( $tab_id ) {
 	$tabs = minn_admin_perfmatters_tabs();
 	if ( ! isset( $tabs[ $tab_id ] ) ) {
-		return new WP_Error( 'minn_no_tab', 'Unknown settings tab.', array( 'status' => 404 ) );
+		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	$reg    = minn_admin_perfmatters_registry();
 	$groups = array();
