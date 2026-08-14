@@ -2592,8 +2592,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 }
 
 /* ===== Orders ===== */
-.minn-order-cols { grid-template-columns: 120px 1fr 130px 60px 100px 40px; }
-.minn-sub-cols { grid-template-columns: 130px 1fr 120px 120px 100px 40px; }
+.minn-order-cols { grid-template-columns: 120px 1fr 130px minmax(0,150px) 100px 40px; }
+.minn-sub-cols { grid-template-columns: 130px 1fr minmax(0,150px) 110px 120px 100px 40px; }
 .minn-sub-order-row {
 	display: flex;
 	align-items: center;
@@ -2735,6 +2735,21 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-read-sub { font-weight: 600; font-size: 12px; color: var(--text); margin-top: 8px; }
 .minn-order-read-empty { color: var(--text3); }
 .minn-order-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+/* The Items cell: the first line item by name, the rest one hover away. */
+.minn-items-cell {
+	display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%;
+	background: none; border: none; padding: 0; font: inherit; color: inherit;
+	text-align: left; cursor: pointer;
+}
+.minn-items-cell:hover .minn-cell-clip { color: var(--text); }
+.minn-items-more {
+	flex: none; font-size: 11.5px; font-weight: 600; color: var(--text3);
+	background: var(--panel2); border: 1px solid var(--border);
+	border-radius: 999px; padding: 1px 6px;
+}
+.minn-items-pop { min-width: 240px; max-width: 380px; padding: 8px; }
+.minn-items-row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 3px 2px; }
+.minn-items-row > .minn-cell-clip { flex: 1; min-width: 0; }
 /* Orders list filters: one row (status dropdown · search · add filter), the
    active filters as chips beneath it, and one popover that both picks which
    filter to add and picks its value. */
@@ -3858,7 +3873,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-order-cols > :nth-child(6) { display: none; }
   .minn-sub-cols { grid-template-columns: 86px 1fr 84px; }
   .minn-sub-cols > :nth-child(3), .minn-sub-cols > :nth-child(4),
-  .minn-sub-cols > :nth-child(6) { display: none; }
+  .minn-sub-cols > :nth-child(5), .minn-sub-cols > :nth-child(7) { display: none; }
   .minn-product-cols { grid-template-columns: 1fr 72px 40px; }
   .minn-product-cols.with-cb { grid-template-columns: 36px 1fr 72px 40px; }
   .minn-product-cols > :nth-child(2), .minn-product-cols > :nth-child(3),

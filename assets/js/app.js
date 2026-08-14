@@ -743,6 +743,7 @@
 		orders: [ __( 'Orders' ), 'WooCommerce' ],
 		order: [ __( 'Order' ), 'WooCommerce' ],
 		subscriptions: [ __( 'Subscriptions' ), 'WooCommerce' ],
+		subscription: [ __( 'Subscription' ), 'WooCommerce' ],
 		products: [ __( 'Products' ), 'WooCommerce' ],
 		product: [ __( 'Product' ), 'WooCommerce' ],
 		coupons: [ __( 'Coupons' ), 'WooCommerce' ],
@@ -1448,6 +1449,10 @@
 			// /orders/123 — the order detail page.
 			state.orderPageId = parseInt( parts[ 1 ], 10 );
 			state.route = 'order';
+		} else if ( route === 'subscriptions' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
+			// /subscriptions/42 — the subscription detail page.
+			state.subPageId = parseInt( parts[ 1 ], 10 );
+			state.route = 'subscription';
 		} else if ( route === 'products' && parts[ 1 ] && /^\d+$/.test( parts[ 1 ] ) ) {
 			// /products/482 — the product detail page.
 			state.productPageId = parseInt( parts[ 1 ], 10 );
@@ -2386,6 +2391,8 @@
 				|| ( 'order' === state.route && 'orders' === btn.dataset.nav )
 				// Same for the product detail page and Products.
 				|| ( 'product' === state.route && 'products' === btn.dataset.nav )
+				// And the subscription detail page and Subscriptions.
+				|| ( 'subscription' === state.route && 'subscriptions' === btn.dataset.nav )
 				|| ( activeFamily && btn.dataset.family === activeFamily );
 			btn.classList.toggle( 'active', on );
 			btn.title = on && navBtnIsCurrent( btn ) ? refreshHint : '';
@@ -5683,6 +5690,131 @@
 	 * the /orders/{id} page. `m` is the detail context (state.modal or
 	 * state.orderPage), distinguished by m.page.
 	 */
+	/**
+	 * WooCommerce order attribution (WC 8.5+) rides order meta, and
+	 * WooCommerce Subscriptions records the same keys on a subscription.
+	 * Returns '' when the meta is absent: an absence is not a "Direct".
+	 */
+	function attributionCardHtml( entity, title ) {
+		const attrib = {};
+		( ( entity && entity.meta_data ) || [] ).forEach( ( md ) => {
+			if ( md && md.key && md.key.indexOf( '_wc_order_attribution_' ) === 0 ) {
+				attrib[ md.key.slice( '_wc_order_attribution_'.length ) ] = md.value;
+			}
+		} );
+		if ( ! attrib.source_type ) return '';
+		const refHost = ( () => {
+			try { return attrib.referrer ? new URL( attrib.referrer ).host : ''; } catch ( e ) { return attrib.referrer || ''; }
+		} )();
+		const origin = ( () => {
+			const st = attrib.source_type || '';
+			/* translators: %s: campaign source / medium, e.g. "newsletter / email". */
+			if ( st === 'utm' ) return sprintf( __( 'Campaign: %s' ), [ attrib.utm_source, attrib.utm_medium ].filter( Boolean ).join( ' / ' ) );
+			/* translators: %s: search engine name. */
+			if ( st === 'organic' ) return sprintf( __( 'Organic: %s' ), attrib.utm_source || '' );
+			/* translators: %s: referring site. */
+			if ( st === 'referral' ) return sprintf( __( 'Referral: %s' ), refHost );
+			if ( st === 'typein' ) return __( 'Direct' );
+			if ( st === 'admin' ) return __( 'Web admin' );
+			return st;
+		} )();
+		const sessions = ( () => {
+			const p = parseInt( attrib.session_pages, 10 );
+			const c = parseInt( attrib.session_count, 10 );
+			if ( ! p && ! c ) return '';
+			/* translators: %d: number of pages viewed in the session. */
+			const pages = p ? sprintf( _n( '%d page', '%d pages', p ), p ) : '';
+			/* translators: %d: number of sessions before the order. */
+			const sess = c ? sprintf( _n( '%d session', '%d sessions', c ), c ) : '';
+			return [ pages, sess ].filter( Boolean ).join( ' · ' );
+		} )();
+		const row = ( key, value ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( key ) }</span><span>${ esc( value ) }</span></div>`;
+		return `
+							<div class="minn-order-sec minn-order-attrib">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( title || __( 'Attribution' ) ) }</div></div>
+								<div class="minn-order-read">
+									${ row( __( 'Origin' ), origin ) }
+									${ attrib.device_type ? row( __( 'Device' ), attrib.device_type ) : '' }
+									${ refHost ? row( __( 'Referrer' ), refHost ) : '' }
+									${ sessions ? row( __( 'Session' ), sessions ) : '' }
+								</div>
+							</div>`;
+	}
+
+	/**
+	 * The Items cell for a list row: the first item by name, plus how many
+	 * more. A bare count ("3") tells you nothing about what was bought, and
+	 * the whole list would blow the row apart, so the rest lives one click
+	 * (or hover) away, the way Shopify does it.
+	 *
+	 * The list response already carries line_items, so this costs no request.
+	 */
+	function itemsCellHtml( lineItems ) {
+		const items = lineItems || [];
+		if ( ! items.length ) return '<div class="minn-row-meta">—</div>';
+		const first = items[ 0 ];
+		const more = items.length - 1;
+		return `<button type="button" class="minn-row-meta minn-items-cell" aria-haspopup="true">
+			<span class="minn-cell-clip">${ esc( first.name || __( 'Item' ) ) }</span>
+			${ more > 0 ? `<span class="minn-items-more">+${ more }</span>` : '' }
+		</button>`;
+	}
+
+	let itemsPop = null;
+	function closeItemsPop() {
+		if ( itemsPop ) itemsPop.remove();
+		itemsPop = null;
+		document.removeEventListener( 'mousedown', itemsPopAway, true );
+		document.removeEventListener( 'keydown', itemsPopKey, true );
+	}
+	function itemsPopAway( e ) {
+		if ( itemsPop && ! itemsPop.contains( e.target ) ) closeItemsPop();
+	}
+	function itemsPopKey( e ) {
+		if ( e.key === 'Escape' && itemsPop ) { e.stopPropagation(); closeItemsPop(); }
+	}
+	/** Show every line item of a row, anchored to its cell. */
+	function openItemsPop( anchor, lineItems, moneyOf ) {
+		closeItemsPop();
+		const items = lineItems || [];
+		if ( ! items.length ) return;
+		const pop = document.createElement( 'div' );
+		itemsPop = pop;
+		pop.className = 'minn-of-pop minn-items-pop';
+		pop.innerHTML = items.map( ( li ) => `
+			<div class="minn-items-row">
+				<span class="minn-order-qty">${ li.quantity || 1 }×</span>
+				<span class="minn-cell-clip">${ esc( li.name || __( 'Item' ) ) }</span>
+				<span class="minn-order-line-total">${ esc( moneyOf ? moneyOf( li ) : '' ) }</span>
+			</div>` ).join( '' );
+		document.body.appendChild( pop );
+		const r = anchor.getBoundingClientRect();
+		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - pop.offsetWidth - 10 ) ) + 'px';
+		pop.style.top = Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) + 'px';
+		document.addEventListener( 'mousedown', itemsPopAway, true );
+		document.addEventListener( 'keydown', itemsPopKey, true );
+	}
+
+	/** Wire every Items cell in a list view. `itemsOf` resolves a row id to
+	 *  its line items, `moneyOf` formats one line. */
+	function bindItemsCells( view, rowAttr, itemsOf, moneyOf ) {
+		$$( '.minn-items-cell', view ).forEach( ( cell ) => {
+			const row = cell.closest( '[' + rowAttr + ']' );
+			if ( ! row ) return;
+			const id = parseInt( row.getAttribute( rowAttr ), 10 );
+			const show = () => openItemsPop( cell, itemsOf( id ), moneyOf );
+			// Click must not open the row underneath; hover is the shortcut.
+			cell.addEventListener( 'click', ( e ) => { e.stopPropagation(); show(); } );
+			cell.addEventListener( 'mouseenter', show );
+			cell.addEventListener( 'mouseleave', () => {
+				// Leaving for the popover itself keeps it open.
+				setTimeout( () => {
+					if ( itemsPop && ! itemsPop.matches( ':hover' ) && ! cell.matches( ':hover' ) ) closeItemsPop();
+				}, 180 );
+			} );
+		} );
+	}
+
 	/** Order actions row — the /orders/{id} page hosts it in the header, the
 	 *  quick-view modal at its foot. Same ids either way; one host at a time. */
 	function orderActionsHtml( m ) {
@@ -5828,34 +5960,6 @@
 		const addrKeys = [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ];
 		const shipEmpty = addrKeys.every( ( k ) => ! ( s[ k ] || '' ) );
 		const shipSameAsBilling = ! shipEmpty && addrKeys.every( ( k ) => ( s[ k ] || '' ) === ( b[ k ] || '' ) );
-		// WooCommerce order attribution (WC 8.5+) rides order meta.
-		const attrib = {};
-		( o.meta_data || [] ).forEach( ( md ) => {
-			if ( md && md.key && md.key.indexOf( '_wc_order_attribution_' ) === 0 ) attrib[ md.key.slice( '_wc_order_attribution_'.length ) ] = md.value;
-		} );
-		const refHost = ( () => { try { return attrib.referrer ? new URL( attrib.referrer ).host : ''; } catch ( e ) { return attrib.referrer || ''; } } )();
-		const attribOrigin = ( () => {
-			const st = attrib.source_type || '';
-			/* translators: %s: campaign source / medium, e.g. "newsletter / email". */
-			if ( st === 'utm' ) return sprintf( __( 'Campaign: %s' ), [ attrib.utm_source, attrib.utm_medium ].filter( Boolean ).join( ' / ' ) );
-			/* translators: %s: search engine name. */
-			if ( st === 'organic' ) return sprintf( __( 'Organic: %s' ), attrib.utm_source || '' );
-			/* translators: %s: referring site. */
-			if ( st === 'referral' ) return sprintf( __( 'Referral: %s' ), refHost );
-			if ( st === 'typein' ) return __( 'Direct' );
-			if ( st === 'admin' ) return __( 'Web admin' );
-			return st;
-		} )();
-		const attribSessions = ( () => {
-			const p = parseInt( attrib.session_pages, 10 );
-			const c = parseInt( attrib.session_count, 10 );
-			if ( ! p && ! c ) return '';
-			/* translators: %d: number of pages viewed in the session. */
-			const pages = p ? sprintf( _n( '%d page', '%d pages', p ), p ) : '';
-			/* translators: %d: number of sessions before the order. */
-			const sess = c ? sprintf( _n( '%d session', '%d sessions', c ), c ) : '';
-			return [ pages, sess ].filter( Boolean ).join( ' · ' );
-		} )();
 		const statusChip = `<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>`;
 		const paidChip = o.date_paid
 			? `<span class="minn-status publish">${ __( 'Paid' ) }</span>`
@@ -5999,16 +6103,7 @@
 									<button type="button" class="minn-btn-soft" id="minn-o-copy-pay" style="margin-top:8px;">${ icon( 'copy' ) } Copy payment URL</button>
 								</div>` : '' }
 							</div>
-							${ attrib.source_type ? `
-							<div class="minn-order-sec minn-order-attrib">
-								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Attribution' ) }</div></div>
-								<div class="minn-order-read">
-									<div class="minn-side-row"><span class="minn-side-key">${ __( 'Origin' ) }</span><span>${ esc( attribOrigin ) }</span></div>
-									${ attrib.device_type ? `<div class="minn-side-row"><span class="minn-side-key">${ __( 'Device' ) }</span><span>${ esc( attrib.device_type ) }</span></div>` : '' }
-									${ refHost ? `<div class="minn-side-row"><span class="minn-side-key">${ __( 'Referrer' ) }</span><span>${ esc( refHost ) }</span></div>` : '' }
-									${ attribSessions ? `<div class="minn-side-row"><span class="minn-side-key">${ __( 'Session' ) }</span><span>${ esc( attribSessions ) }</span></div>` : '' }
-								</div>
-							</div>` : '' }
+							${ attributionCardHtml( o ) }
 							${ B.wcs ? `
 							<div class="minn-order-sec minn-order-subs">
 								<div class="minn-side-title" style="margin:0 0 8px;">Subscriptions</div>
@@ -7140,7 +7235,7 @@
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( o ) ) }</div>
 					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( o.status.replace( '-', ' ' ) ) }</span></div>
-					<div class="minn-row-meta">${ ( o.line_items || [] ).reduce( ( n, li ) => n + ( li.quantity || 0 ), 0 ) }</div>
+					${ itemsCellHtml( o.line_items ) }
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-qv="${ o.id }" type="button" title="Quick view">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? 'No orders match “' + esc( state.orderSearch ) + '”.' : 'No orders here.' }</div>` }
@@ -7165,6 +7260,13 @@
 				if ( id ) go( 'orders/' + id );
 			} )
 		);
+		bindItemsCells( view, 'data-order', ( id ) => {
+			const o = c.items.find( ( x ) => x.id === id );
+			return o ? o.line_items : [];
+		}, ( li ) => {
+			const o = c.items.find( ( x ) => ( x.line_items || [] ).indexOf( li ) !== -1 );
+			return orderMoney( o || {}, li.total );
+		} );
 		$$( '[data-qv]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', ( e ) => {
 				e.stopPropagation(); // the row click would navigate
@@ -7250,7 +7352,7 @@
 	// WCS 9.x REST is the same shape as 5.x for these fields; 9.x also
 	// exposes requires_manual_renewal + suspension_count on detail reads.
 	const SUB_LIST_FIELDS = 'id,number,status,total,currency,date_created,billing,line_items,billing_period,billing_interval,next_payment_date_gmt,start_date_gmt,customer_id,parent_id';
-	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,requires_manual_renewal,suspension_count';
+	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,requires_manual_renewal,suspension_count,meta_data';
 
 	const subCtx = () => JSON.stringify( orderFilters( LIST_FILTER_SPECS.subscriptions ) ) + '|' + ( state.subSearch || '' );
 
@@ -7304,22 +7406,145 @@
 		state.cache.subscriptions = { items: r.items, page, totalPages: r.totalPages, total: r.total };
 	}
 
-	function openSubscriptionModal( listSub ) {
-		const id = listSub && listSub.id;
-		if ( ! id ) return;
-		state.modal = {
-			type: 'subscription',
-			sub: listSub,
-			full: null,
-			loading: true,
-			relatedOrders: null,
+
+	/** Subscription actions — the page hosts them in the header, the quick
+	 *  view at its foot. Same ids either way; one host at a time. */
+	function subActionsHtml( m ) {
+		const s = m.full || m.sub || {};
+		const parentId = parseInt( s.parent_id, 10 ) || 0;
+		const canOpenCustomer = !!( s.customer_id && B.caps.customers );
+		return `
+					${ parentId ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-parent" data-relorder="${ parentId }">${ __( 'Open parent order' ) }</button>` : '' }
+					${ canOpenCustomer ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-customer-foot">${ __( 'View customer' ) }</button>` : '' }
+					${ B.site && B.site.adminUrl ? `<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ s.id }&action=edit" target="_blank" rel="noopener">↗ ${ __( 'Edit in WooCommerce' ) }</a>` : '' }`;
+	}
+
+	/**
+	 * The subscription detail body, shared by the page and the quick view.
+	 * Same two-column shape as the order detail: the work in the main column,
+	 * the context in the sidebar. The modal stacks it into one column.
+	 */
+	function subscriptionDetailInnerHtml( m ) {
+		const listS = m.sub || {};
+		const s = m.full || listS;
+		const b = s.billing || {};
+		const canEdit = B.caps.subscriptions;
+		const related = m.relatedOrders;
+		const parentId = parseInt( s.parent_id, 10 ) || 0;
+		// The parent order is listed on its own; do not repeat it below.
+		const relatedOnly = Array.isArray( related )
+			? related.filter( ( o ) => ! parentId || o.id !== parentId )
+			: related;
+		const canOpenCustomer = !!( s.customer_id && B.caps.customers );
+		const itemCount = ( s.line_items || [] ).reduce( ( n, li ) => n + ( li.quantity || 0 ), 0 );
+		/* translators: %d: number of items on the subscription. */
+		const countLabel = sprintf( _n( '%d item', '%d items', itemCount ), itemCount );
+		const row = ( key, value, title ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( key ) }</span><span${ title ? ` title="${ esc( title ) }"` : '' }>${ value }</span></div>`;
+		return `
+					<div class="minn-order-body">
+						<div class="minn-order-layout">
+						<div class="minn-order-main">
+							<div class="minn-order-sec minn-order-itemscard">
+								<div class="minn-order-card-head"><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span><span class="minn-order-card-meta">${ esc( countLabel ) }</span></div>
+								<div class="minn-order-items">
+									${ ( s.line_items || [] ).map( ( li ) => `
+										<div class="minn-order-item">
+											<span class="minn-order-qty">${ li.quantity || 1 }×</span>
+											<span class="minn-cell-clip">${ esc( li.name || 'Item' ) }</span>
+											<span class="minn-order-line-total">${ esc( subMoney( s, li.total ) ) }</span>
+										</div>` ).join( '' ) || `<div class="minn-toggle-desc">${ __( 'No line items.' ) }</div>` }
+									<div class="minn-order-item total">
+										<span></span><span>${ __( 'Recurring total' ) }</span>
+										<span class="minn-order-line-total">${ esc( subMoney( s, s.total ) ) } / ${ esc( subPeriodLabel( s ) ) }</span>
+									</div>
+								</div>
+							</div>
+							${ canEdit ? `
+							<div class="minn-order-sec minn-order-status">
+								<div class="minn-field-label">${ __( 'Status' ) }</div>
+								<div style="display:flex; gap:8px; flex-wrap:wrap;">
+									<div style="flex:1; min-width:140px;"><div class="minn-ac" data-oc="substatus"><input class="minn-input minn-ac-input" placeholder="${ esc( __( 'Status' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Status' ) ) }"><div class="minn-ac-panel" hidden></div></div></div>
+									<button class="minn-btn-primary" id="minn-sub-save" type="button">${ __( 'Save status' ) }</button>
+								</div>
+								<div class="minn-toggle-desc" style="margin-top:8px;">${ __( 'Active, On hold and Cancelled cover daily work. Switched and Expired are usually set by WooCommerce Subscriptions itself.' ) }</div>
+							</div>` : '' }
+							<div class="minn-order-sec minn-sub-orders">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Orders' ) }</div></div>
+								${ parentId ? `
+								<button type="button" class="minn-sub-order-row" data-relorder="${ parentId }" title="${ esc( __( 'Order that started this subscription' ) ) }">
+									<span>#${ esc( String( parentId ) ) }</span>
+									<span class="minn-row-meta">${ __( 'Initial' ) }</span>
+									<span>›</span>
+								</button>` : '' }
+								${ related == null ? `<div class="minn-loading" style="padding:8px;">${ __( 'Loading…' ) }</div>`
+									: ! ( relatedOnly && relatedOnly.length ) ? `<div class="minn-toggle-desc">${ __( 'No renewal orders yet.' ) }</div>`
+									: relatedOnly.map( ( o ) => `
+									<button type="button" class="minn-sub-order-row" data-relorder="${ o.id }">
+										<span>#${ esc( o.number || o.id ) }</span>
+										<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
+										<span>${ esc( subMoney( s, o.total ) ) }</span>
+									</button>` ).join( '' ) }
+							</div>
+						</div>
+						<div class="minn-order-side">
+							<div class="minn-order-sec minn-order-customer">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Customer' ) }</div></div>
+								<div class="minn-order-read">
+									<div class="minn-order-read-name">${ esc( customerName( s ) ) }</div>
+									<div>${ b.email ? esc( b.email ) : `<span class="minn-order-read-empty">${ __( 'No email address' ) }</span>` }</div>
+									${ s.customer_id ? `<div class="minn-order-read-sub">${ __( 'Account' ) }</div><div>#${ esc( String( s.customer_id ) ) }</div>` : '' }
+								</div>
+								${ canOpenCustomer ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-customer" style="margin-top:10px;">${ __( 'View customer' ) }</button>` : '' }
+							</div>
+							<div class="minn-order-sec minn-sub-schedule">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Schedule' ) }</div></div>
+								<div class="minn-order-read">
+									${ row( __( 'Billing' ), esc( subPeriodLabel( s ) ) ) }
+									${ row( __( 'Next payment' ), esc( subNextLabel( s ) ), s.next_payment_date_gmt || '' ) }
+									${ s.last_payment_date_gmt ? row( __( 'Last payment' ), esc( timeAgo( s.last_payment_date_gmt ) ) ) : '' }
+									${ s.trial_end_date_gmt ? row( __( 'Trial ends' ), esc( timeAgo( s.trial_end_date_gmt ) ) ) : '' }
+									${ s.end_date_gmt ? row( __( 'Ends' ), esc( timeAgo( s.end_date_gmt ) ) ) : '' }
+									${ s.start_date_gmt ? row( __( 'Started' ), esc( timeAgo( s.start_date_gmt ) ) ) : '' }
+								</div>
+							</div>
+							${ attributionCardHtml( s, __( 'Subscription attribution' ) ) }
+							<div class="minn-order-sec minn-sub-payment">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Payment' ) }</div></div>
+								<div class="minn-order-read">
+									${ row( __( 'Method' ), s.payment_method_title ? esc( s.payment_method_title ) : `<span class="minn-order-read-empty">${ __( 'Not recorded' ) }</span>` ) }
+									${ s.requires_manual_renewal ? row( __( 'Renewal' ), `<span class="minn-status private">${ __( 'Manual' ) }</span>` ) : '' }
+									${ s.suspension_count ? row( __( 'Suspensions' ), esc( String( s.suspension_count ) ) ) : '' }
+								</div>
+							</div>
+						</div>
+						</div>
+					</div>
+					${ m.page ? '' : `<div class="minn-modal-actions">
+						${ subActionsHtml( m ) }
+						<button type="button" class="minn-btn-soft" id="minn-sub-fullpage">${ icon( 'columns' ) } ${ __( 'Open full page' ) }</button>
+					</div>` }`;
+	}
+
+	/** WooCommerce Subscriptions' own label for a status slug. */
+	const subStatusLabel = ( slug ) => ( SUB_TABS.find( ( [ id ] ) => id === slug ) || [ '', ( slug || '' ).replace( /-/g, ' ' ) ] )[ 1 ];
+
+	/** Load the full subscription for either host (page or quick view). */
+	function loadSubscriptionDetail( m ) {
+		const id = m.sub.id;
+		const isCur = () => ( m.page ? state.subPage === m : state.modal === m );
+		const rr = () => {
+			if ( ! isCur() ) return;
+			if ( m.page ) {
+				if ( state.route === 'subscription' ) renderSubscriptionPage();
+			} else {
+				renderOverlays();
+			}
 		};
-		renderOverlays();
 		api( `wc/v3/subscriptions/${ id }?_fields=${ SUB_DETAIL_FIELDS }` )
 			.then( ( full ) => {
-				if ( ! state.modal || state.modal.type !== 'subscription' || state.modal.sub.id !== id ) return;
-				state.modal.full = full;
-				state.modal.loading = false;
+				if ( ! isCur() ) return;
+				m.full = full;
+				m.loading = false;
 				if ( state.cache.subscriptions && state.cache.subscriptions.items ) {
 					const i = state.cache.subscriptions.items.findIndex( ( x ) => x.id === id );
 					if ( i >= 0 ) {
@@ -7331,27 +7556,167 @@
 						} );
 					}
 				}
-				renderOverlays();
+				rr();
+				// Renewal orders arrive on their own request; a failure leaves
+				// the card empty rather than breaking the detail.
+				api( `wc/v3/subscriptions/${ id }/orders?per_page=10&_fields=id,number,status,total,date_created,currency` )
+					.then( ( rows ) => {
+						if ( ! isCur() ) return;
+						m.relatedOrders = Array.isArray( rows ) ? rows : [];
+						rr();
+					} )
+					.catch( () => {
+						if ( ! isCur() ) return;
+						m.relatedOrders = [];
+						rr();
+					} );
 			} )
 			.catch( ( e ) => {
-				if ( ! state.modal || state.modal.type !== 'subscription' ) return;
-				state.modal.loading = false;
-				state.modal.loadError = e.message || 'Could not load subscription';
-				renderOverlays();
+				if ( ! isCur() ) return;
+				m.loading = false;
+				m.loadError = e.message;
+				rr();
 			} );
-		api( `wc/v3/subscriptions/${ id }/orders?per_page=10&_fields=id,number,status,total,date_created,currency` )
-			.then( ( orders ) => {
-				if ( state.modal && state.modal.type === 'subscription' && state.modal.sub.id === id ) {
-					state.modal.relatedOrders = Array.isArray( orders ) ? orders : [];
-					renderOverlays();
+	}
+
+	/** The /subscriptions/{id} page. */
+	function renderSubscriptionPage() {
+		const view = $( '#minn-view' );
+		if ( ! B.wcs || ! B.caps.subscriptions ) {
+			view.innerHTML = `<div class="minn-empty">${ __( 'You don\'t have access to subscriptions on this site.' ) }</div>`;
+			return;
+		}
+		let m = state.subPage;
+		if ( ! m || m.sub.id !== state.subPageId ) {
+			m = state.subPage = { type: 'subscription', page: true, sub: { id: state.subPageId, number: String( state.subPageId ) }, full: null, loading: true, relatedOrders: null };
+			loadSubscriptionDetail( m );
+		}
+		const s = m.full || m.sub;
+		const loading = !! m.loading && ! m.full;
+		view.innerHTML = `
+		<div class="minn-order-page minn-order-page-wide minn-sub-page">
+			<div class="minn-order-page-head">
+				<button type="button" class="minn-btn-soft" id="minn-sp-back">← ${ __( 'Subscriptions' ) }</button>
+				<div class="minn-modal-title-block">
+					<div class="minn-order-head-row">
+						<span class="minn-modal-title">${ __( 'Subscription' ) } #${ esc( s.number || s.id ) }</span>
+						<span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span>
+					</div>
+					<div class="minn-modal-sub">${ loading ? __( 'Loading…' ) : `${ esc( subMoney( s, s.total ) ) } · ${ esc( subPeriodLabel( s ) ) }${ s.start_date_gmt ? ' · ' + esc( timeAgo( s.start_date_gmt ) ) : '' }` }</div>
+				</div>
+				<div class="minn-order-head-actions">${ loading || m.loadError ? '' : subActionsHtml( m ) }</div>
+			</div>
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ __( 'Loading subscription…' ) }</div></div>` : '' }
+				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
+				${ ! loading && ! m.loadError ? subscriptionDetailInnerHtml( m ) : '' }
+			</div>
+		</div>`;
+		const back = $( '#minn-sp-back' );
+		if ( back ) back.addEventListener( 'click', () => go( 'subscriptions' ) );
+		if ( ! loading && ! m.loadError ) bindSubscriptionDetail( m );
+	}
+
+
+	/**
+	 * Subscription detail bindings — shared by the quick view and the
+	 * /subscriptions/{id} page (m.page distinguishes the host).
+	 */
+	function bindSubscriptionDetail( m ) {
+		const s = m.full || m.sub || {};
+		const isCur = () => ( m.page
+			? ( state.subPage === m && state.route === 'subscription' )
+			: ( state.modal === m ) );
+		const rerender = () => {
+			if ( ! isCur() ) return;
+			if ( m.page ) renderSubscriptionPage();
+			else renderOverlays();
+		};
+		const closeHost = () => { if ( ! m.page ) closeModal(); };
+		const closeBtn = $( '#minn-modal-close-btn' );
+		if ( closeBtn ) closeBtn.addEventListener( 'click', () => closeModal() );
+		const openCustomer = () => {
+			const cur = m.full || m.sub || {};
+			const cid = parseInt( cur.customer_id, 10 );
+			if ( ! cid ) return;
+			const b = cur.billing || {};
+			closeHost();
+			openCustomerModal( {
+				id: cid,
+				email: b.email || '',
+				first_name: b.first_name || '',
+				last_name: b.last_name || '',
+			} );
+		};
+		const custBtn = $( '#minn-sub-open-customer' );
+		if ( custBtn ) custBtn.addEventListener( 'click', openCustomer );
+		const custBtnFoot = $( '#minn-sub-open-customer-foot' );
+		if ( custBtnFoot ) custBtnFoot.addEventListener( 'click', openCustomer );
+		// Themed combobox: the status select was the last OS-drawn control here.
+		const statusWrap = $( '[data-oc="substatus"]' );
+		let picked = s.status || 'active';
+		if ( statusWrap ) bindAutocomplete( statusWrap,
+			SUB_TABS.filter( ( [ id ] ) => id !== 'any' ).map( ( [ id, label ] ) => ( { value: id, label } ) ),
+			{ strict: true, value: picked, onPick: ( v ) => { picked = v; } } );
+		const saveBtn = $( '#minn-sub-save' );
+		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
+			if ( ! picked ) return;
+			saveBtn.disabled = true;
+			saveBtn.textContent = 'Saving…';
+			try {
+				const updated = await api( `wc/v3/subscriptions/${ m.sub.id }`, {
+					method: 'PUT',
+					body: JSON.stringify( { status: picked } ),
+				} );
+				toast( 'Subscription #' + ( updated.number || updated.id ) + ' updated' );
+				m.full = Object.assign( {}, m.full || m.sub, updated );
+				m.sub = Object.assign( {}, m.sub, { status: updated.status, total: updated.total } );
+				if ( state.cache.subscriptions && state.cache.subscriptions.items ) {
+					const i = state.cache.subscriptions.items.findIndex( ( x ) => x.id === m.sub.id );
+					if ( i >= 0 ) {
+						state.cache.subscriptions.items[ i ] = Object.assign( {}, state.cache.subscriptions.items[ i ], {
+							status: updated.status,
+							total: updated.total,
+							next_payment_date_gmt: updated.next_payment_date_gmt,
+						} );
+					}
 				}
+				rerender();
+				if ( state.route === 'subscriptions' ) renderSubscriptions();
+			} catch ( e ) {
+				toast( e.message, true );
+				saveBtn.disabled = false;
+				saveBtn.textContent = 'Save status';
+			}
+		} );
+		$$( '[data-relorder]' ).forEach( ( row ) =>
+			row.addEventListener( 'click', () => {
+				const oid = parseInt( row.dataset.relorder, 10 );
+				if ( ! oid ) return;
+				closeHost();
+				go( 'orders/' + oid );
 			} )
-			.catch( () => {
-				if ( state.modal && state.modal.type === 'subscription' && state.modal.sub.id === id ) {
-					state.modal.relatedOrders = [];
-					renderOverlays();
-				}
-			} );
+		);
+		const fullPageBtn = $( '#minn-sub-fullpage' );
+		if ( fullPageBtn ) fullPageBtn.addEventListener( 'click', () => {
+			closeModal();
+			go( 'subscriptions/' + m.sub.id );
+		} );
+	}
+
+	/** Open the quick view and load the full subscription (list rows are slim). */
+	function openSubscriptionModal( listSub ) {
+		const id = listSub && listSub.id;
+		if ( ! id ) return;
+		const m = state.modal = {
+			type: 'subscription',
+			sub: listSub,
+			full: null,
+			loading: true,
+			relatedOrders: null,
+		};
+		renderOverlays();
+		loadSubscriptionDetail( m );
 	}
 
 	function renderSubscriptions() {
@@ -7390,7 +7755,7 @@
 		${ orderFilterChipsHtml() }
 		<div class="minn-card minn-table">
 			<div class="minn-table-head minn-sub-cols">
-				<div>Subscription</div><div>Customer</div><div>Status</div><div>Next payment</div><div>Total</div><div></div>
+				<div>Subscription</div><div>Customer</div><div>${ __( 'Items' ) }</div><div>Status</div><div>Next payment</div><div>Total</div><div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( s ) => `
 				<div class="minn-table-row minn-sub-cols" data-sub="${ s.id }">
@@ -7399,18 +7764,32 @@
 						<div class="minn-row-slug">${ esc( subPeriodLabel( s ) ) }${ s.parent_id ? ' · order #' + esc( String( s.parent_id ) ) : '' }</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( s ) ) }</div>
-					<div><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( ( s.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
+					${ itemsCellHtml( s.line_items ) }
+					<div><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span></div>
 					<div class="minn-row-meta" title="${ esc( s.next_payment_date_gmt || '' ) }">${ esc( subNextLabel( s ) ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( subMoney( s, s.total ) ) }</div>
-					<div class="minn-row-arrow">›</div>
+					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-sqv="${ s.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ emptyMsg }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'subscription' ) }`;
 
 		bindListFilterBar( view );
+		// Clicking a subscription is navigation: /subscriptions/{id} is the
+		// primary detail surface, and the modal survives as Quick view.
 		$$( '[data-sub]', view ).forEach( ( row ) =>
 			row.addEventListener( 'click', () => {
-				const s = c.items.find( ( x ) => x.id === parseInt( row.dataset.sub, 10 ) );
+				const id = parseInt( row.dataset.sub, 10 );
+				if ( id ) go( 'subscriptions/' + id );
+			} )
+		);
+		bindItemsCells( view, 'data-sub', ( id ) => {
+			const s = c.items.find( ( x ) => x.id === id );
+			return s ? s.line_items : [];
+		}, ( li ) => subMoney( c.items[ 0 ] || {}, li.total ) );
+		$$( '[data-sqv]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', ( e ) => {
+				e.stopPropagation(); // the row click would navigate
+				const s = c.items.find( ( x ) => x.id === parseInt( btn.dataset.sqv, 10 ) );
 				if ( s ) openSubscriptionModal( s );
 			} )
 		);
@@ -30581,22 +30960,7 @@
 		if ( m.type === 'subscription' ) {
 			const listS = m.sub || {};
 			const s = m.full || listS;
-			const b = s.billing || {};
-			const canEdit = B.caps.subscriptions;
 			const loading = !! m.loading && ! m.full;
-			const related = m.relatedOrders;
-			const parentId = parseInt( s.parent_id, 10 ) || 0;
-			// Parent order is listed separately; avoid double-row if it also appears in related.
-			const relatedOnly = Array.isArray( related )
-				? related.filter( ( o ) => ! parentId || o.id !== parentId )
-				: related;
-			const statusOpts = SUB_TABS.filter( ( [ id ] ) => id !== 'any' )
-				.map( ( [ id, label ] ) => `<option value="${ esc( id ) }"${ s.status === id ? ' selected' : '' }>${ esc( label ) }</option>` )
-				.join( '' );
-			const items = ( s.line_items || [] ).map( ( li ) =>
-				`<div class="minn-side-row"><span class="minn-side-key">${ esc( li.name || 'Item' ) } ×${ li.quantity || 1 }</span><span>${ esc( subMoney( s, li.total ) ) }</span></div>`
-			).join( '' );
-			const canOpenCustomer = !!( s.customer_id && B.caps.customers );
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
@@ -30605,70 +30969,12 @@
 							<div class="minn-modal-title">Subscription #${ esc( s.number || listS.number || s.id ) }</div>
 							<div class="minn-modal-sub">${ esc( subMoney( s, s.total ) ) } · ${ esc( subPeriodLabel( s ) ) }${ s.start_date_gmt ? ' · started ' + esc( timeAgo( s.start_date_gmt ) ) : '' }</div>
 						</div>
-						<span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( ( s.status || '' ).replace( /-/g, ' ' ) ) }</span>
+						<span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading subscription…</div>' : '' }
 					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
-					${ ! loading && ! m.loadError ? `
-					<div class="minn-order-body">
-						<div class="minn-order-grid">
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">Customer</div>
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">Name</span><span>${ esc( customerName( s ) ) }</span></div>
-									${ b.email ? `<div class="minn-side-row"><span class="minn-side-key">Email</span><span>${ esc( b.email ) }</span></div>` : '' }
-									${ s.customer_id ? `<div class="minn-side-row"><span class="minn-side-key">Customer ID</span><span>#${ esc( String( s.customer_id ) ) }</span></div>` : '' }
-								</div>
-								${ canOpenCustomer ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-customer" style="margin-top:10px;">View customer</button>` : '' }
-								<div class="minn-side-title" style="margin:16px 0 8px;">Schedule</div>
-								<div class="minn-modal-meta" style="padding:0;">
-									<div class="minn-side-row"><span class="minn-side-key">Billing</span><span>${ esc( subPeriodLabel( s ) ) }</span></div>
-									<div class="minn-side-row"><span class="minn-side-key">Next payment</span><span title="${ esc( s.next_payment_date_gmt || '' ) }">${ esc( subNextLabel( s ) ) }</span></div>
-									${ s.last_payment_date_gmt ? `<div class="minn-side-row"><span class="minn-side-key">Last payment</span><span>${ esc( timeAgo( s.last_payment_date_gmt ) ) }</span></div>` : '' }
-									${ s.trial_end_date_gmt ? `<div class="minn-side-row"><span class="minn-side-key">Trial ends</span><span>${ esc( timeAgo( s.trial_end_date_gmt ) ) }</span></div>` : '' }
-									${ s.end_date_gmt ? `<div class="minn-side-row"><span class="minn-side-key">Ends</span><span>${ esc( timeAgo( s.end_date_gmt ) ) }</span></div>` : '' }
-									${ s.payment_method_title ? `<div class="minn-side-row"><span class="minn-side-key">Payment</span><span>${ esc( s.payment_method_title ) }</span></div>` : '' }
-									${ s.requires_manual_renewal ? `<div class="minn-side-row"><span class="minn-side-key">Renewal</span><span class="minn-status private">Manual</span></div>` : '' }
-									${ s.suspension_count ? `<div class="minn-side-row"><span class="minn-side-key">Suspensions</span><span>${ esc( String( s.suspension_count ) ) }</span></div>` : '' }
-								</div>
-							</div>
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">Items</div>
-								<div class="minn-modal-meta" style="padding:0;">
-									${ items || '<div class="minn-session-empty">No line items.</div>' }
-									<div class="minn-side-row" style="margin-top:8px;font-weight:600;"><span class="minn-side-key">Recurring total</span><span>${ esc( subMoney( s, s.total ) ) }</span></div>
-								</div>
-								${ canEdit ? `
-								<div class="minn-side-title" style="margin:16px 0 8px;">Status</div>
-								<select class="minn-input" id="minn-sub-status">${ statusOpts }</select>
-								<div class="minn-toggle-desc" style="margin-top:8px;">Active, On hold and Cancelled cover daily work. Switched / Expired are usually set by WooCommerce Subscriptions itself.</div>` : '' }
-								${ parentId ? `
-								<div class="minn-side-title" style="margin:16px 0 8px;">Parent order</div>
-								<button type="button" class="minn-sub-order-row" data-relorder="${ parentId }" title="Order that started this subscription">
-									<span>#${ esc( String( parentId ) ) }</span>
-									<span class="minn-row-meta">Initial</span>
-									<span>›</span>
-								</button>` : '' }
-								<div class="minn-side-title" style="margin:16px 0 8px;">Related orders</div>
-								${ related == null ? '<div class="minn-session-empty">Loading…</div>'
-									: ! ( relatedOnly && relatedOnly.length ) ? '<div class="minn-session-empty">No renewal orders yet.</div>'
-									: relatedOnly.map( ( o ) => `
-									<button type="button" class="minn-sub-order-row" data-relorder="${ o.id }">
-										<span>#${ esc( o.number || o.id ) }</span>
-										<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
-										<span>${ esc( subMoney( s, o.total ) ) }</span>
-									</button>` ).join( '' ) }
-							</div>
-						</div>
-					</div>
-					<div class="minn-modal-actions">
-						${ canEdit ? `<button class="minn-btn-primary" id="minn-sub-save">Save status</button>` : '' }
-						${ parentId ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-parent" data-relorder="${ parentId }">Open parent order</button>` : '' }
-						${ canOpenCustomer ? `<button type="button" class="minn-btn-soft" id="minn-sub-open-customer-foot">View customer</button>` : '' }
-						${ B.site && B.site.adminUrl ? `<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ s.id }&action=edit" target="_blank" rel="noopener">↗ Edit in WooCommerce</a>` : '' }
-						<button class="minn-btn-soft" id="minn-modal-close-btn">Close</button>
-					</div>` : '' }
+					${ ! loading && ! m.loadError ? subscriptionDetailInnerHtml( m ) : '' }
 				</div>
 			</div>`;
 		}
@@ -32175,65 +32481,7 @@
 		}
 
 		if ( m.type === 'subscription' ) {
-			const closeBtn = $( '#minn-modal-close-btn' );
-			if ( closeBtn ) closeBtn.addEventListener( 'click', () => closeModal() );
-			const openCustomer = () => {
-				const s = m.full || m.sub || {};
-				const cid = parseInt( s.customer_id, 10 );
-				if ( ! cid ) return;
-				const b = s.billing || {};
-				closeModal();
-				openCustomerModal( {
-					id: cid,
-					email: b.email || '',
-					first_name: b.first_name || '',
-					last_name: b.last_name || '',
-				} );
-			};
-			const custBtn = $( '#minn-sub-open-customer' );
-			if ( custBtn ) custBtn.addEventListener( 'click', openCustomer );
-			const custBtnFoot = $( '#minn-sub-open-customer-foot' );
-			if ( custBtnFoot ) custBtnFoot.addEventListener( 'click', openCustomer );
-			const saveBtn = $( '#minn-sub-save' );
-			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const status = ( $( '#minn-sub-status' ) || {} ).value;
-				if ( ! status ) return;
-				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
-				try {
-					const updated = await api( `wc/v3/subscriptions/${ m.sub.id }`, {
-						method: 'PUT',
-						body: JSON.stringify( { status } ),
-					} );
-					toast( 'Subscription #' + ( updated.number || updated.id ) + ' updated' );
-					state.modal.full = Object.assign( {}, m.full || m.sub, updated );
-					state.modal.sub = Object.assign( {}, m.sub, { status: updated.status, total: updated.total } );
-					if ( state.cache.subscriptions && state.cache.subscriptions.items ) {
-						const i = state.cache.subscriptions.items.findIndex( ( x ) => x.id === m.sub.id );
-						if ( i >= 0 ) {
-							state.cache.subscriptions.items[ i ] = Object.assign( {}, state.cache.subscriptions.items[ i ], {
-								status: updated.status,
-								total: updated.total,
-								next_payment_date_gmt: updated.next_payment_date_gmt,
-							} );
-						}
-					}
-					renderOverlays();
-					if ( state.route === 'subscriptions' ) renderSubscriptions();
-				} catch ( e ) {
-					toast( e.message, true );
-					saveBtn.disabled = false;
-					saveBtn.textContent = 'Save status';
-				}
-			} );
-			$$( '[data-relorder]' ).forEach( ( row ) =>
-				row.addEventListener( 'click', () => {
-					const oid = parseInt( row.dataset.relorder, 10 );
-					if ( ! oid ) return;
-					closeModal();
-					go( 'orders/' + oid );
-				} )
-			);
+			bindSubscriptionDetail( m );
 		}
 
 		if ( m.type === 'order' ) {
@@ -35553,6 +35801,7 @@
 		// Order-page data too — a revisit refetches, like the modal always did.
 		if ( state.route !== 'order' ) state.orderPage = null;
 		if ( state.route !== 'product' ) state.productPage = null;
+		if ( state.route !== 'subscription' ) state.subPage = null;
 		// User-edit page data too (same per-visit contract).
 		if ( state.route !== 'useredit' ) state.userEdit = null;
 		switch ( state.route ) {
@@ -35562,6 +35811,7 @@
 			case 'orders': return renderOrders();
 			case 'order': return renderOrderPage();
 			case 'subscriptions': return renderSubscriptions();
+			case 'subscription': return renderSubscriptionPage();
 			case 'products': return renderProducts();
 			case 'product': return renderProductPage();
 			case 'coupons': return renderCoupons();
