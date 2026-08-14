@@ -74,7 +74,11 @@ function minn_admin_wsal_status_model() {
 
 	$last_label = '—';
 	if ( $last ) {
-		$last_label = human_time_diff( (int) floatval( $last ), time() ) . ' ago';
+		$last_label = sprintf(
+			/* translators: %s: human-readable time since the last event. */
+			__( '%s ago', 'minn-admin' ),
+			human_time_diff( (int) floatval( $last ), time() )
+		);
 	}
 
 	return array(
