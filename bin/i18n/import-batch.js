@@ -16,7 +16,7 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 
 const { parsePo, writePo } = require( './po.js' );
-const { loadCoreGlossary, buildNormIndex, lookup } = require( './core-glossary.js' );
+const { loadCoreGlossary, buildNormIndex, lookup, coreMayAnswer } = require( './core-glossary.js' );
 const { byCode, nplurals } = require( './locales.js' );
 const { validateCatalog } = require( './validate.js' );
 
@@ -93,7 +93,7 @@ for ( const e of potEntries ) {
 		entry.msgstr = was.msgstr; entry.flags = [ 'minn-reviewed' ];
 		out.push( entry ); nReviewed++; continue;
 	}
-	if ( e.msgidPlural == null ) {
+	if ( e.msgidPlural == null && coreMayAnswer( e.msgid ) ) {
 		const hit = lookup( glossary, normIdx, e.msgid );
 		if ( hit && hit.forms[ 0 ] ) {
 			entry.msgstr = [ hit.forms[ 0 ] ];

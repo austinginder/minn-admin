@@ -187,6 +187,26 @@ const TEXT_ALLOW = new Set( [
 	check( 'No _n() plural argument wrapped in __()', bad.length === 0, bad.slice( 0, 6 ).join( '\n      ' ) );
 }
 
+/* ---------------------------------------------------------------------------
+ * 6. No literal \uXXXX inside a gettext string.
+ *    A unicode escape inside a template literal resolves to its character;
+ *    moved verbatim into a quoted string by an extractor, the backslash gets
+ *    escaped and the user reads "‹ Back to content" instead of
+ *    "‹ Back to content". It also poisons the catalog, because the msgid the
+ *    translator is handed can never match the string the app renders.
+ * ------------------------------------------------------------------------ */
+{
+	const bad = [];
+	const re = /\b(__|_n|esc_html__|esc_attr__)\(\s*(['"])((?:[^'"\\]|\\.)*?)\2/g;
+	let m;
+	while ( ( m = re.exec( src ) ) ) {
+		if ( /\\\\u[0-9a-fA-F]{4}/.test( m[ 3 ] ) ) {
+			bad.push( `app.js:${ lineOf( m.index ) }  ${ m[ 3 ].slice( 0, 50 ) }` );
+		}
+	}
+	check( 'No literal \\uXXXX escape inside a translatable string', bad.length === 0, bad.slice( 0, 6 ).join( '\n      ' ) );
+}
+
 function walkPhp( dir ) {
 	const out = [];
 	for ( const e of fs.readdirSync( dir, { withFileTypes: true } ) ) {

@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-08-14 03:10+0000\n"
+"PO-Revision-Date: 2026-08-14 03:18+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: English (UK)\n"
 "MIME-Version: 1.0\n"
@@ -4932,7 +4932,7 @@ msgstr "Account"
 
 #: assets/js/app.js:871
 msgid "Trash"
-msgstr "Bin"
+msgstr "Trash"
 
 #: assets/js/app.js:873
 #: assets/js/app.js:880
@@ -5662,6 +5662,7 @@ msgstr "Could not copy"
 
 #: assets/js/app.js:4564
 #: assets/js/app.js:16200
+#: assets/js/app.js:26616
 msgid "Open ↗"
 msgstr "Open ↗"
 
@@ -8628,7 +8629,7 @@ msgstr "Administration email"
 
 #: assets/js/app.js:16162
 msgid "Timezone"
-msgstr "Time zone"
+msgstr "Timezone"
 
 #: assets/js/app.js:16164
 msgid "Start typing — e.g. Chicago, Berlin, UTC"
@@ -9419,8 +9420,8 @@ msgid "Backup restored — review, then Save or Update to apply"
 msgstr "Backup restored — review, then Save or Update to apply"
 
 #: assets/js/app.js:22466
-msgid "\\u2039 Back to content"
-msgstr "\\u2039 Back to content"
+msgid "‹ Back to content"
+msgstr "‹ Back to content"
 
 #: assets/js/app.js:22467
 msgid "Take over"
@@ -9915,8 +9916,8 @@ msgid "Delete column"
 msgstr "Delete column"
 
 #: assets/js/app.js:26225
-msgid "Row \\u2014 at the caret"
-msgstr "Row \\u2014 at the caret"
+msgid "Row — at the caret"
+msgstr "Row — at the caret"
 
 #: assets/js/app.js:26227
 msgid "Above"
@@ -9927,8 +9928,8 @@ msgid "Below"
 msgstr "Below"
 
 #: assets/js/app.js:26231
-msgid "Column \\u2014 at the caret"
-msgstr "Column \\u2014 at the caret"
+msgid "Column — at the caret"
+msgstr "Column — at the caret"
 
 #: assets/js/app.js:26233
 msgid "Left"
@@ -9983,18 +9984,14 @@ msgid "URL or search"
 msgstr "URL or search"
 
 #: assets/js/app.js:26604
-msgid "https://\\u2026 or search your content"
-msgstr "https://\\u2026 or search your content"
+msgid "https://… or search your content"
+msgstr "https://… or search your content"
 
 #: assets/js/app.js:26608
 #: assets/js/app.js:26609
 #: assets/js/app.js:26787
 msgid "Open in new tab"
 msgstr "Open in new tab"
-
-#: assets/js/app.js:26616
-msgid "Open \\u2197"
-msgstr "Open \\u2197"
 
 #: assets/js/app.js:26777
 msgid "Image"

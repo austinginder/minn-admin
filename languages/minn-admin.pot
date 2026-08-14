@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-14T02:52:56+00:00\n"
+"POT-Creation-Date: 2026-08-14T03:16:31+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 
@@ -5697,6 +5697,7 @@ msgstr ""
 
 #: assets/js/app.js:4564
 #: assets/js/app.js:16200
+#: assets/js/app.js:26616
 msgid "Open ↗"
 msgstr ""
 
@@ -9482,7 +9483,7 @@ msgid "Backup restored — review, then Save or Update to apply"
 msgstr ""
 
 #: assets/js/app.js:22466
-msgid "\\u2039 Back to content"
+msgid "‹ Back to content"
 msgstr ""
 
 #: assets/js/app.js:22467
@@ -9982,7 +9983,7 @@ msgid "Delete column"
 msgstr ""
 
 #: assets/js/app.js:26225
-msgid "Row \\u2014 at the caret"
+msgid "Row — at the caret"
 msgstr ""
 
 #: assets/js/app.js:26227
@@ -9994,7 +9995,7 @@ msgid "Below"
 msgstr ""
 
 #: assets/js/app.js:26231
-msgid "Column \\u2014 at the caret"
+msgid "Column — at the caret"
 msgstr ""
 
 #: assets/js/app.js:26233
@@ -10050,17 +10051,13 @@ msgid "URL or search"
 msgstr ""
 
 #: assets/js/app.js:26604
-msgid "https://\\u2026 or search your content"
+msgid "https://… or search your content"
 msgstr ""
 
 #: assets/js/app.js:26608
 #: assets/js/app.js:26609
 #: assets/js/app.js:26787
 msgid "Open in new tab"
-msgstr ""
-
-#: assets/js/app.js:26616
-msgid "Open \\u2197"
 msgstr ""
 
 #: assets/js/app.js:26777

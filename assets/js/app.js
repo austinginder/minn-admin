@@ -22463,7 +22463,7 @@
 				<h3>${ esc( ed.lockHolder.name ) } is currently editing</h3>
 				<p>This ${ esc( editorNoun( ed ).toLowerCase() ) } is open in another editor session. Taking over will lock them out of saving until they take it back.</p>
 				<div class="minn-lock-actions">
-					<button class="minn-btn-soft" id="minn-lock-back" type="button">${ esc( __( '\\u2039 Back to content' ) ) }</button>
+					<button class="minn-btn-soft" id="minn-lock-back" type="button">${ esc( __( '‹ Back to content' ) ) }</button>
 					<button class="minn-btn-primary" id="minn-lock-take" type="button">${ esc( __( 'Take over' ) ) }</button>
 				</div>
 			</div>`;
@@ -26222,13 +26222,13 @@
 				<button class="minn-x-btn" data-close type="button">\u00d7</button>
 			</div>
 			<div class="minn-insp-body">
-				<div class="minn-field-label">${ esc( __( 'Row \\u2014 at the caret' ) ) }</div>
+				<div class="minn-field-label">${ esc( __( 'Row — at the caret' ) ) }</div>
 				<div class="minn-table-ops">
 					<button class="minn-btn-soft" data-op="row-above" type="button">+ ${ esc( __( 'Above' ) ) }</button>
 					<button class="minn-btn-soft" data-op="row-below" type="button">+ ${ esc( __( 'Below' ) ) }</button>
 					<button class="minn-btn-soft danger" data-op="row-del" type="button">${ esc( __( 'Delete' ) ) }</button>
 				</div>
-				<div class="minn-field-label">${ esc( __( 'Column \\u2014 at the caret' ) ) }</div>
+				<div class="minn-field-label">${ esc( __( 'Column — at the caret' ) ) }</div>
 				<div class="minn-table-ops">
 					<button class="minn-btn-soft" data-op="col-left" type="button">+ ${ esc( __( 'Left' ) ) }</button>
 					<button class="minn-btn-soft" data-op="col-right" type="button">+ ${ esc( __( 'Right' ) ) }</button>
@@ -26601,7 +26601,7 @@
 			</div>
 			<div class="minn-insp-body">
 				<div class="minn-field-label">${ esc( __( 'URL or search' ) ) }</div>
-				<input class="minn-input" data-link-url placeholder="${ esc( __( 'https://\\u2026 or search your content' ) ) }" value="${ esc( href ) }" spellcheck="false" autocomplete="off">
+				<input class="minn-input" data-link-url placeholder="${ esc( __( 'https://… or search your content' ) ) }" value="${ esc( href ) }" spellcheck="false" autocomplete="off">
 				<div class="minn-link-results" data-link-results hidden></div>
 				<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
 					<div class="minn-toggle-row">
@@ -26613,7 +26613,7 @@
 			<div class="minn-insp-actions">
 				<button class="minn-btn-primary" data-link-apply type="button">${ esc( __( 'Apply' ) ) }</button>
 				${ a ? '<button class="minn-btn-soft danger" data-link-remove type="button">Unlink</button>' : '' }
-				${ a && href ? `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( __( 'Open \\u2197' ) ) }</a>` : '' }
+				${ a && href ? `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( __( 'Open ↗' ) ) }</a>` : '' }
 			</div>`;
 		document.body.appendChild( linkPop );
 		const rect = ( a || range ).getBoundingClientRect();
