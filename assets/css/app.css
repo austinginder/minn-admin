@@ -2618,6 +2618,24 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-sub-order-line > .minn-sub-order-row { flex: 1; min-width: 0; }
 .minn-sub-order-line:hover .minn-row-more,
 .minn-sub-order-line:focus-within .minn-row-more { opacity: 1; }
+/* An order that belongs to a subscription. It rides beside the order number
+   rather than taking a column: most stores have none of these, and a column
+   would be empty on every row to serve a few. */
+.minn-subrel {
+	display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;
+	margin-left: 6px; padding: 1px 7px 1px 5px; border-radius: 999px;
+	font-size: 11px; font-weight: 600; letter-spacing: 0.01em; cursor: pointer;
+	border: 1px solid var(--border2); background: var(--panel2); color: var(--text3);
+}
+.minn-subrel svg { width: 11px; height: 11px; }
+.minn-subrel:hover, .minn-subrel:focus-visible { color: var(--text); border-color: var(--accent); outline: none; }
+/* The first order reads as the stronger of the two: it is the one that
+   started the subscription, and there is only ever one. */
+.minn-subrel-parent { color: var(--accent2); border-color: var(--accent-soft); background: var(--accent-soft); }
+.minn-subrel-pop { min-width: 250px; padding: 10px 12px 12px; display: block; }
+.minn-subrel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.minn-subrel-pop .minn-side-row { font-size: 12.5px; }
+.minn-subrel-pop .minn-btn-soft { width: 100%; justify-content: center; }
 .minn-product-cols { grid-template-columns: 1.6fr 100px 140px 100px 100px 40px; }
 .minn-product-cols.with-cb { grid-template-columns: 36px 1.6fr 100px 140px 100px 100px 40px; }
 .minn-coupon-cols { grid-template-columns: 1.4fr 1fr 90px 80px 100px 100px 40px; }
