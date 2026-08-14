@@ -117,6 +117,24 @@
 		return 1 === n ? __( single ) : plural;
 	};
 
+	// Writing direction, read from the document rather than the locale: the
+	// shell sets dir from is_rtl(), and a site can override it. Anything that
+	// positions a floating element in PIXELS has to consult this, because CSS
+	// logical properties cannot reach values computed in JS.
+	const isRtl = () => document.documentElement.getAttribute( 'dir' ) === 'rtl';
+
+	// A menu opened AT A POINTER extends away from it in the reading
+	// direction: rightward under LTR, leftward under RTL. Always clamped, so
+	// it can never open past a viewport edge.
+	const menuLeftAt = ( x, width ) =>
+		Math.max( 10, Math.min( isRtl() ? x - width : x, window.innerWidth - width - 10 ) );
+
+	// A panel anchored to a CONTROL aligns with that control's inline-start
+	// edge, which is its right edge under RTL. Aligning to the left edge
+	// regardless leaves the panel visually detached from what opened it.
+	const panelLeftFor = ( rect, width, gap = 12 ) =>
+		Math.max( 10, Math.min( isRtl() ? rect.right - width : rect.left, window.innerWidth - width - gap ) );
+
 	// JS-initiated smooth scrolls ignore the CSS scroll-behavior override, so
 	// reduced-motion users need the behavior picked at call time. Live query:
 	// the OS setting can change mid-session.
@@ -2021,7 +2039,7 @@
 		const results = menu.querySelector( '#minn-site-switch-results' );
 		const status = menu.querySelector( '#minn-site-switch-status' );
 		const place = () => {
-			menu.style.left = Math.max( 10, Math.min( x, window.innerWidth - menu.offsetWidth - 10 ) ) + 'px';
+			menu.style.left = menuLeftAt( x, menu.offsetWidth ) + 'px';
 			menu.style.top = Math.max( 10, Math.min( y, window.innerHeight - menu.offsetHeight - 10 ) ) + 'px';
 		};
 		const render = () => {
@@ -3751,7 +3769,7 @@
 				${ p.status !== 'draft' ? '<button type="button" data-ract="draft">Move to draft</button>' : '' }
 				<button type="button" data-ract="trash" class="danger">${ esc( __( 'Move to trash' ) ) }</button>`;
 			document.body.appendChild( rowMenu );
-			rowMenu.style.left = Math.max( 10, Math.min( x, window.innerWidth - rowMenu.offsetWidth - 10 ) ) + 'px';
+			rowMenu.style.left = menuLeftAt( x, rowMenu.offsetWidth ) + 'px';
 			rowMenu.style.top = Math.max( 10, Math.min( y, window.innerHeight - rowMenu.offsetHeight - 10 ) ) + 'px';
 			$$( '[data-ract]', rowMenu ).forEach( ( b ) => b.addEventListener( 'click', () => {
 				const act = b.dataset.ract;
@@ -15864,7 +15882,7 @@
 			const below = window.innerHeight - r.bottom - 10;
 			const above = r.top - 10;
 			panel.style.position = 'fixed';
-			panel.style.left = r.left + 'px';
+			panel.style.left = panelLeftFor( r, panel.offsetWidth ) + 'px';
 			panel.style.width = r.width + 'px';
 			panel.style.right = 'auto';
 			if ( below < 160 && above > below ) {
@@ -21136,7 +21154,7 @@
 					</div>`;
 				const rect = input.getBoundingClientRect();
 				const w = dpPop.offsetWidth || 260;
-				dpPop.style.left = Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) + 'px';
+				dpPop.style.left = panelLeftFor( rect, w ) + 'px';
 				dpPop.style.top = Math.min( rect.bottom + 6, window.innerHeight - dpPop.offsetHeight - 10 ) + 'px';
 
 				const syncLegend = ( byDay ) => {
@@ -25006,12 +25024,25 @@
 	// ONE placement rule for every block-config popover (island inspector,
 	// table, image, code): BESIDE the block when it fits, else below its
 	// bottom edge — never parked on top of the content being configured.
+	// Beside the block on the reading-forward side, else below it, and always
+	// clamped inside the viewport. Under RTL "forward" is to the LEFT, so the
+	// preferred side flips: an LTR-only rule pushes every popover off the
+	// screen edge the RTL reader is heading toward.
 	function positionBlockPop( pop, anchorEl ) {
 		const rect = anchorEl.getBoundingClientRect();
 		const w = pop.offsetWidth || 320;
-		const fitsRight = rect.right + 10 + w < window.innerWidth;
-		pop.style.left = ( fitsRight ? rect.right + 10 : Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) ) + 'px';
-		pop.style.top = Math.max( 10, Math.min( fitsRight ? rect.top : rect.bottom + 8, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
+		const rtl = isRtl();
+		const fitsForward = rtl
+			? rect.left - 10 - w > 0
+			: rect.right + 10 + w < window.innerWidth;
+		let x;
+		if ( fitsForward ) {
+			x = rtl ? rect.left - 10 - w : rect.right + 10;
+		} else {
+			x = rtl ? rect.right - w : rect.left;
+		}
+		pop.style.left = Math.max( 10, Math.min( x, window.innerWidth - w - 12 ) ) + 'px';
+		pop.style.top = Math.max( 10, Math.min( fitsForward ? rect.top : rect.bottom + 8, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
 	}
 
 	// Shared a11y for fixed block popovers (table/image/code/inspector/link):
@@ -26108,7 +26139,12 @@
 				: `<button type="button" data-mi="${ i }"${ clsAttr }>${ esc( en.label ) }</button>`;
 		} ).join( '' );
 		document.body.appendChild( minnMenuEl );
-		minnMenuEl.style.left = Math.max( 10, Math.min( x, window.innerWidth - minnMenuEl.offsetWidth - 10 ) ) + 'px';
+		// A context menu opens away from the pointer in the reading direction:
+		// rightward under LTR, leftward under RTL. Clamped either way, so it
+		// can never open past a viewport edge.
+		const menuW = minnMenuEl.offsetWidth;
+		const menuX = isRtl() ? x - menuW : x;
+		minnMenuEl.style.left = Math.max( 10, Math.min( menuX, window.innerWidth - menuW - 10 ) ) + 'px';
 		minnMenuEl.style.top = Math.max( 10, Math.min( y, window.innerHeight - minnMenuEl.offsetHeight - 10 ) ) + 'px';
 		$$( 'button[data-mi]', minnMenuEl ).forEach( ( b ) => b.addEventListener( 'click', () => {
 			const en = entries[ parseInt( b.dataset.mi, 10 ) ];
@@ -26151,7 +26187,7 @@
 			<button data-op="col-right" type="button">${ esc( __( 'Add column right' ) ) }</button>
 			<button data-op="col-del" type="button" class="danger">${ esc( __( 'Delete column' ) ) }</button>`;
 		document.body.appendChild( tableMenu );
-		tableMenu.style.left = Math.max( 10, Math.min( x, window.innerWidth - tableMenu.offsetWidth - 10 ) ) + 'px';
+		tableMenu.style.left = menuLeftAt( x, tableMenu.offsetWidth ) + 'px';
 		tableMenu.style.top = Math.max( 10, Math.min( y, window.innerHeight - tableMenu.offsetHeight - 10 ) ) + 'px';
 		$$( 'button', tableMenu ).forEach( ( b ) => {
 			b.addEventListener( 'mousedown', ( ev ) => ev.preventDefault() );
@@ -26572,7 +26608,7 @@
 		document.body.appendChild( linkPop );
 		const rect = ( a || range ).getBoundingClientRect();
 		const w = linkPop.offsetWidth || 320;
-		linkPop.style.left = Math.max( 10, Math.min( rect.left, window.innerWidth - w - 12 ) ) + 'px';
+		linkPop.style.left = panelLeftFor( rect, w ) + 'px';
 		linkPop.style.top = Math.max( 10, Math.min( rect.bottom + 8, window.innerHeight - linkPop.offsetHeight - 10 ) ) + 'px';
 		document.addEventListener( 'mousedown', linkPopAway, true );
 		armBlockPopA11y( linkPop, { label: 'Link', onClose: hideLinkPop, focus: '[data-link-url]' } );
@@ -28897,7 +28933,7 @@
 		const position = ( rect ) => {
 			const top = Math.min( rect.bottom + 6, window.innerHeight - menu.offsetHeight - 12 );
 			menu.style.top = top + 'px';
-			menu.style.left = Math.min( rect.left, window.innerWidth - menu.offsetWidth - 12 ) + 'px';
+			menu.style.left = panelLeftFor( rect, menu.offsetWidth ) + 'px';
 		};
 
 		const open = ( blockEl ) => {
