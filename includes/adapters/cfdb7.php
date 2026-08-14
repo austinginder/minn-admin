@@ -3,12 +3,15 @@
  * Bundled adapter: CFDB7 (Contact Form 7 Database Addon) entries.
  *
  * CFDB7 stores every CF7 submission as one PHP-serialized map in
- * {prefix}db7_forms.form_value. Shim rule: third-party blobs are NEVER
- * unserialize()d — a byte-length token scanner walks the s:LEN:"…" shape
- * instead (LEN is bytes, so quotes, semicolons and multibyte content in
- * values can't derail it, and nothing executes). Read/unread mirrors
- * CFDB7's own semantics: opening a message marks it read via fixed-token
- * string surgery on the blob, never a re-serialize.
+ * {prefix}db7_forms.form_value. Blobs are decoded with allowed_classes set
+ * to false, which instantiates no classes at all, so object injection is not
+ * reachable — the same decode CFDB7 uses on its own read paths. A byte-length
+ * token scanner remains as a fallback for a blob that no longer decodes.
+ *
+ * The scanner alone was not enough: a submission carrying a numerically-named
+ * field stores an integer key, which the scanner could not read, and it then
+ * abandoned the rest of the entry — hiding the answers and, worse, hiding the
+ * uploaded file from the delete path.
  *
  * @package minn-admin
  */
@@ -34,8 +37,38 @@ function minn_admin_cfdb7_can_view() {
  * @return array<string,string>
  */
 function minn_admin_cfdb7_values( $blob ) {
-	$out = array();
-	$len = strlen( (string) $blob );
+	$out  = array();
+	$blob = (string) $blob;
+
+	// A CF7 submission is unauthenticated input, and CFDB7 stores every POST
+	// key it receives. A decimal-numeric field name becomes a PHP INTEGER key,
+	// which serializes as i:N; — a shape the byte-length scanner below cannot
+	// read, so it stopped at that point and silently dropped every remaining
+	// answer, the upload filename among them. Delete then found no file to
+	// remove and reported the entry permanently deleted anyway.
+	//
+	// allowed_classes => false instantiates nothing at all, so this is not the
+	// object-injection risk the scanner was written to avoid; it is what CFDB7
+	// itself uses on every one of its own read paths, and what
+	// minn_admin_cfdb7_set_status() below already relies on.
+	if ( is_serialized( $blob ) ) {
+		$data = @unserialize( $blob, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+		if ( is_array( $data ) ) {
+			foreach ( $data as $k => $v ) {
+				if ( is_array( $v ) ) {
+					$v = implode( ', ', array_filter( array_map( 'strval', $v ), 'strlen' ) );
+				}
+				if ( is_scalar( $v ) || null === $v ) {
+					$out[ (string) $k ] = (string) $v;
+				}
+			}
+			return $out;
+		}
+	}
+
+	// Fallback for a blob that no longer decodes: read what can be read rather
+	// than nothing, and never stop early on a key shape we do not recognise.
+	$len = strlen( $blob );
 	if ( 'a:' !== substr( (string) $blob, 0, 2 ) ) {
 		return $out;
 	}
@@ -69,7 +102,15 @@ function minn_admin_cfdb7_values( $blob ) {
 	while ( $pos < $len && '}' !== $blob[ $pos ] ) {
 		$key = $read_string();
 		if ( null === $key ) {
-			break;
+			// Not a string key (i:N; for a numeric field name). Skip past it
+			// rather than abandoning the rest of the entry.
+			$semi = strpos( $blob, ';', $pos );
+			if ( false === $semi ) {
+				break;
+			}
+			$pos = $semi + 1;
+			$read_string();
+			continue;
 		}
 		$type = $pos < $len ? $blob[ $pos ] : '';
 		if ( 's' === $type ) {
