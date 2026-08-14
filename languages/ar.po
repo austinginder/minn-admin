@@ -4194,7 +4194,7 @@ msgstr "الشبكة"
 msgid "All sites"
 msgstr "كافة المواقع"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "عام"
 
@@ -16681,3 +16681,85 @@ msgstr "نسخ الموقع احتياطيًا الآن (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "كلمة المرور"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "عرض الصفحة"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s مراجعة"
+msgstr[1] "%s مراجعة"
+msgstr[2] "%s مراجعتان"
+msgstr[3] "%s مراجعات"
+msgstr[4] "%s مراجعة"
+msgstr[5] "%s مراجعة"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "تعيين الصورة البارزة للصفحة"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "السجل"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "اقتباس مائل"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "مُقسّم"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "معرض"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "فراغ فاصل"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "ملف"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "أزرار"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "جارٍ تحميل الملفات…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "جارٍ تحميل الصور…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "لا توجد ملفات في المكتبة بعد."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "لا توجد صور في المكتبة بعد."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s نسخة"
+msgstr[1] "%s نسخة"
+msgstr[2] "%s نسختان"
+msgstr[3] "%s نسخ"
+msgstr[4] "%s نسخة"
+msgstr[5] "%s نسخة"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "نسخ دليل الوكيل"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "كلمة مرور جديدة"

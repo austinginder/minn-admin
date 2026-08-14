@@ -4546,7 +4546,7 @@ msgstr ""
 msgid "All sites"
 msgstr ""
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr ""
 
@@ -17811,4 +17811,80 @@ msgstr ""
 
 #: assets/js/app.js:31004
 msgid "Password"
+msgstr ""
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr ""
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+#, js-format
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] ""
+msgstr[1] ""
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr ""
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr ""
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr ""
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr ""
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr ""
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr ""
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr ""
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr ""
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr ""
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr ""
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr ""
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr ""
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+#, js-format
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] ""
+msgstr[1] ""
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr ""
+
+#: assets/js/app.js:34826
+msgid "New password"
 msgstr ""

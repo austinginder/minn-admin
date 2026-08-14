@@ -4150,7 +4150,7 @@ msgstr "Netwerk"
 msgid "All sites"
 msgstr "Alle sites"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Openbaar"
 
@@ -16441,3 +16441,77 @@ msgstr "Nu een back-up van de site maken (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Wachtwoord"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Pagina bekijken"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s revisie"
+msgstr[1] "%s revisies"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Uitgelichte afbeelding kiezen"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Geschiedenis"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Pullquote"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "scheidingsteken"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Galerij"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Vulelement"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Bestand"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Knoppen"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Bestanden laden…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Afbeeldingen laden…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "Er staan nog geen bestanden in de bibliotheek."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "Er staan nog geen afbeeldingen in de bibliotheek."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s versie"
+msgstr[1] "%s versies"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Agenthandleiding kopiëren"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Nieuw wachtwoord"

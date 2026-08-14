@@ -3047,9 +3047,9 @@
 	function themeModeHtml() {
 		const cur = themePref();
 		const opts = [
-			{ id: 'system', label: 'System', desc: __( 'Match the device setting' ) },
-			{ id: 'light', label: 'Light', desc: __( 'Always light' ) },
-			{ id: 'dark', label: 'Dark', desc: __( 'Always dark' ) },
+			{ id: 'system', label: __( 'System' ), desc: __( 'Match the device setting' ) },
+			{ id: 'light', label: __( 'Light' ), desc: __( 'Always light' ) },
+			{ id: 'dark', label: __( 'Dark' ), desc: __( 'Always dark' ) },
 		];
 		const ap = appearanceOf( B.user && B.user.appearance );
 		const defOn = !! ap.defaultAdmin;
@@ -3178,9 +3178,9 @@
 		const mark = ( id, label ) => ( cur === id ? '✓ ' : '' ) + label;
 		// System first: the default.
 		openMinnMenu( x, y, [
-			{ label: mark( 'system', 'System' ), active: cur === 'system', run: () => setThemePref( 'system' ) },
-			{ label: mark( 'light', 'Light' ), active: cur === 'light', run: () => setThemePref( 'light' ) },
-			{ label: mark( 'dark', 'Dark' ), active: cur === 'dark', run: () => setThemePref( 'dark' ) },
+			{ label: mark( 'system', __( 'System' ) ), active: cur === 'system', run: () => setThemePref( 'system' ) },
+			{ label: mark( 'light', __( 'Light' ) ), active: cur === 'light', run: () => setThemePref( 'light' ) },
+			{ label: mark( 'dark', __( 'Dark' ) ), active: cur === 'dark', run: () => setThemePref( 'dark' ) },
 		] );
 	}
 
@@ -4214,10 +4214,10 @@
 				const statusWrap = $( '[data-bulkstatus]', slot );
 				const statusOpts = [
 					{ value: '', label: __( 'Set status…' ) },
-					{ value: 'publish', label: 'Published' },
-					{ value: 'draft', label: 'Draft' },
-					{ value: 'pending', label: 'Pending' },
-					...( B.caps.readPrivate ? [ { value: 'private', label: 'Private' } ] : [] ),
+					{ value: 'publish', label: __( 'Published' ) },
+					{ value: 'draft', label: __( 'Draft' ) },
+					{ value: 'pending', label: __( 'Pending' ) },
+					...( B.caps.readPrivate ? [ { value: 'private', label: __( 'Private' ) } ] : [] ),
 				];
 				if ( statusWrap ) bindAutocomplete( statusWrap, statusOpts, { strict: true, value: '' } );
 				const bulkApply = $( '#minn-bulk-apply', slot );
@@ -8846,9 +8846,9 @@
 				const skWrap = $( '[data-prod-bulk-stock]', slot );
 				if ( stWrap ) bindAutocomplete( stWrap, [
 					{ value: '', label: __( 'Set status…' ) },
-					{ value: 'publish', label: 'Published' },
-					{ value: 'draft', label: 'Draft' },
-					{ value: 'private', label: 'Private' },
+					{ value: 'publish', label: __( 'Published' ) },
+					{ value: 'draft', label: __( 'Draft' ) },
+					{ value: 'private', label: __( 'Private' ) },
 				], { strict: true, value: '' } );
 				if ( skWrap ) bindAutocomplete( skWrap, [
 					{ value: '', label: __( 'Set stock…' ) },
@@ -10133,7 +10133,7 @@
 
 		const roleWrap = view.querySelector( '[data-rolecombo]' );
 		if ( roleWrap ) bindAutocomplete( roleWrap,
-			[ { value: '', label: __( 'All roles' ) } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label } ) ) ), {
+			[ { value: '', label: __( 'All roles' ) } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label: chromeLabel( label ) } ) ) ), {
 				strict: true,
 				value: state.userRole && state.userRole !== '_all' ? state.userRole : '',
 				onPick: async ( v ) => {
@@ -10348,7 +10348,7 @@
 					// the picked slug rides input.dataset.acValue, blank until chosen.
 					const roleWrap = $( '[data-userbulkrole]', slot );
 					bindAutocomplete( roleWrap,
-						[ { value: '', label: __( 'Choose a role…' ) } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label } ) ) ),
+						[ { value: '', label: __( 'Choose a role…' ) } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label: chromeLabel( label ) } ) ) ),
 						{ strict: true, value: '' } );
 					$( '#minn-user-bulk-apply', slot ).addEventListener( 'click', ( e ) => {
 						const acInput = $( '.minn-ac-input', roleWrap );
@@ -21734,11 +21734,11 @@
 	}
 
 	function publishLabel( ed ) {
-		if ( ed.status === 'future' || scheduledInFuture( ed ) ) return 'Schedule';
+		if ( ed.status === 'future' || scheduledInFuture( ed ) ) return __( 'Schedule' );
 		// Private is a live status — its button updates in place, not "Publish"
 		// (which would make it public).
-		if ( ( ed.status === 'publish' || ed.status === 'private' ) && ! scheduledInFuture( ed ) ) return 'Update';
-		return 'Publish';
+		if ( ( ed.status === 'publish' || ed.status === 'private' ) && ! scheduledInFuture( ed ) ) return __( 'Update' );
+		return __( 'Publish' );
 	}
 
 	function panelInput( pid, f, value ) {
@@ -21888,7 +21888,7 @@
 						</div>
 					</div>
 				</div>` : '' }
-				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">View ${ ed.type === 'pages' ? 'page' : 'post' } ↗</a></div>` : '' }
+				${ ed.link && ed.status === 'publish' ? `<div><a href="${ esc( ed.link ) }" target="_blank" rel="noopener">${ esc( ed.type === 'pages' ? __( 'View page' ) : __( 'View post' ) ) } ↗</a></div>` : '' }
 			</div>`;
 	}
 
@@ -21963,7 +21963,9 @@
 		if ( ! rows.length ) return __( 'No revisions yet' );
 		const total = ed.revisionsTotal || rows.length;
 		const last = rows[ 0 ];
-		return ( total > 1 ? `${ total } revisions · ` : '' ) + timeAgo( last.when ) + ( last.author ? ' · ' + last.author : '' );
+		/* translators: %s: localized number of revisions. */
+		const count = sprintf( _n( '%s revision', '%s revisions', total ), formattedNumber( total ) );
+		return count + ' · ' + timeAgo( last.when ) + ( last.author ? ' · ' + last.author : '' );
 	}
 
 	function editorPanelSummary( ed, p ) {
@@ -22008,7 +22010,7 @@
 		if ( ! ed ) return null;
 		if ( doorId === 'settings' ) {
 			return {
-				title: 'Settings',
+				title: __( 'Settings' ),
 				sub: '',
 				body: editorSettingsFieldsHtml( ed ),
 				bind: ( root ) => bindEditorSettingsFields( root, ed ),
@@ -22550,13 +22552,13 @@
 				<button class="minn-btn-soft" id="minn-featured-set">${ esc( __( 'Replace' ) ) }</button>
 				<button class="minn-btn-soft danger" id="minn-featured-remove">${ esc( __( 'Remove' ) ) }</button>
 			</div>` : ed.featuredMedia ? `<div class="minn-session-empty">${ esc( __( 'Loading…' ) ) }</div>` : `
-			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } Set featured image</button>` }
+			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } ${ esc( __( 'Set featured image' ) ) }</button>` }
 		</div>` : '' }
 		<div class="minn-side-doors">
-			${ editorDoorHtml( { id: 'settings', title: 'Settings', summary: editorSettingsSummary( ed ) } ) }
+			${ editorDoorHtml( { id: 'settings', title: __( 'Settings' ), summary: editorSettingsSummary( ed ) } ) }
 			${ showAttrs ? editorDoorHtml( { id: 'attrs', title: __( 'Page attributes' ), summary: editorAttrsSummary( ed ) } ) : '' }
 			${ historyRows.length || ( ed.revisionsTotal && ed.revisionsTotal > 0 )
-				? editorDoorHtml( { id: 'history', title: 'History', summary: editorHistorySummary( ed ) } )
+				? editorDoorHtml( { id: 'history', title: __( 'History' ), summary: editorHistorySummary( ed ) } )
 				: '' }
 			${ panelDoors }
 		</div>
@@ -22571,9 +22573,9 @@
 		const visWrap = $( '#minn-visibility', el );
 		if ( visWrap ) {
 			bindAutocomplete( visWrap, [
-				{ value: 'public', label: 'Public' },
-				{ value: 'password', label: 'Password' },
-				{ value: 'private', label: 'Private' },
+				{ value: 'public', label: __( 'Public' ) },
+				{ value: 'password', label: __( 'Password' ) },
+				{ value: 'private', label: __( 'Private' ) },
 			], {
 				strict: true,
 				value: ed.visibility || 'public',
@@ -28585,28 +28587,28 @@
 		return [
 			[ icon( 'h2' ), __( 'Heading 2' ), () => document.execCommand( 'formatBlock', false, 'h2' ) ],
 			[ icon( 'h3' ), __( 'Heading 3' ), () => document.execCommand( 'formatBlock', false, 'h3' ) ],
-			[ icon( 'quote' ), 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
+			[ icon( 'quote' ), __( 'Quote' ), () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
 			// Pullquote is prose-class; details is an island (contenteditable
 			// <details> traps the caret and blocks typing after it in Blink).
-			[ icon( 'quote' ), 'Pullquote', { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ],
-			[ icon( 'list' ), 'Details', { block: 'core/details', template: detailsTemplate( 'Details', '' ) } ],
-			[ icon( 'braces' ), 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
+			[ icon( 'quote' ), __( 'Pullquote' ), { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ],
+			[ icon( 'list' ), __( 'Details' ), { block: 'core/details', template: detailsTemplate( 'Details', '' ) } ],
+			[ icon( 'braces' ), __( 'Code' ), () => document.execCommand( 'formatBlock', false, 'pre' ) ],
 			[ icon( 'list' ), __( 'Bulleted list' ), () => document.execCommand( 'insertUnorderedList', false, null ) ],
 			[ icon( 'olist' ), __( 'Numbered list' ), () => document.execCommand( 'insertOrderedList', false, null ) ],
-			[ icon( 'img' ), 'Image', 'image' ],
-			[ icon( 'table' ), 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
-			[ icon( 'minus' ), 'Divider', { html: '<hr>' } ],
+			[ icon( 'img' ), __( 'Image' ), 'image' ],
+			[ icon( 'table' ), __( 'Table' ), { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
+			[ icon( 'minus' ), __( 'Divider' ), { html: '<hr>' } ],
 			[ icon( 'play' ), __( 'Embed — YouTube, tweet, audio…' ), 'embed' ],
-			[ icon( 'gallery' ), 'Gallery', 'gallery' ],
-			[ icon( 'minus' ), 'Spacer', 'spacer' ],
-			[ icon( 'file' ), 'File', 'file' ],
-			[ icon( 'braces' ), 'Shortcode', 'shortcode' ],
+			[ icon( 'gallery' ), __( 'Gallery' ), 'gallery' ],
+			[ icon( 'minus' ), __( 'Spacer' ), 'spacer' ],
+			[ icon( 'file' ), __( 'File' ), 'file' ],
+			[ icon( 'braces' ), __( 'Shortcode' ), 'shortcode' ],
 			// Buttons: live island with label/URL rows (not free HTML — nested
 			// core/button markup must stay in the island raw store).
-			[ icon( 'send' ), 'Buttons', { block: 'core/buttons', template: buttonsTemplate( 'Button', '' ) } ],
+			[ icon( 'send' ), __( 'Buttons' ), { block: 'core/buttons', template: buttonsTemplate( 'Button', '' ) } ],
 			// A row of columns: two to start, /column adds more. Inserted as a
 			// real container, so you can type in it straight away.
-			[ icon( 'columns' ), 'Columns', { block: 'core/columns', template: columnsTemplate( 2 ) }, false, '', [ 'row', 'columns' ] ],
+			[ icon( 'columns' ), __( 'Columns' ), { block: 'core/columns', template: columnsTemplate( 2 ) }, false, '', [ 'row', 'columns' ] ],
 		];
 	}
 
@@ -31018,7 +31020,7 @@
 							<div class="minn-session-row">
 								<div class="minn-session-info">
 									<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ` <span class="minn-session-current">${ esc( __( 'this session' ) ) }</span>` : '' }</div>
-									<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+									<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 								</div>
 								<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 							</div>` ).join( '' ) }
@@ -31567,7 +31569,7 @@
 						<span>${ sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) }${ m.multi ? '' : ' ' + esc( __( '(it’s used right away)' ) ) }</span>
 						<input type="file" id="minn-picker-file" accept="image/*" hidden>
 					</div>` : '' }
-					${ items == null ? `<div class="minn-loading">Loading ${ any ? 'files' : 'images' }…</div>` : ! items.length ? `<div class="minn-empty">No ${ any ? 'files' : 'images' } in the library yet.</div>` : `
+					${ items == null ? `<div class="minn-loading">${ esc( any ? __( 'Loading files…' ) : __( 'Loading images…' ) ) }</div>` : ! items.length ? `<div class="minn-empty">${ esc( any ? __( 'No files in the library yet.' ) : __( 'No images in the library yet.' ) ) }</div>` : `
 					<div class="minn-picker-grid${ any ? ' any' : '' }">
 						${ items.map( ( it, i ) => it.thumb
 							? `<div class="minn-picker-item${ m.picked && m.picked.includes( it.id ) ? ' sel' : '' }" data-pick="${ i }" style="background-image:url('${ escCssUrl( it.thumb ) }')" title="${ esc( it.name ) }"></div>`
@@ -33958,6 +33960,8 @@
 		const total = m.total || allRows.length || 0;
 		const heat = ! loading && allRows.length ? revisionsHeatmap( allRows ) : { html: '', counts: new Map() };
 		const dayCount = day ? ( heat.counts.get( day ) || rows.length ) : 0;
+		/* translators: %s: localized number of saved versions. */
+		const versionCount = sprintf( _n( '%s version', '%s versions', total ), formattedNumber( total ) );
 		return `
 		<div class="minn-modal-overlay" id="minn-modal-overlay">
 			<div class="minn-modal wide">
@@ -33965,8 +33969,8 @@
 					<div class="minn-modal-title-block">
 						<div class="minn-modal-title">${ esc( __( 'All revisions' ) ) }</div>
 						<div class="minn-modal-sub">${ day
-							? `<span>${ dayCount } on ${ esc( revisionDayLabel( day ) ) }</span><button type="button" class="minn-rev-day-clear" id="minn-rev-day-clear">Show all ${ total }</button>`
-							: ( total ? total + ' version' + ( total === 1 ? '' : 's' ) : __( 'Revision history' ) ) }</div>
+							? `<span>${ formattedNumber( dayCount ) } · ${ esc( revisionDayLabel( day ) ) }</span><button type="button" class="minn-rev-day-clear" id="minn-rev-day-clear">${ esc( __( 'All revisions' ) ) }</button>`
+							: ( total ? versionCount : __( 'Revision history' ) ) }</div>
 					</div>
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
@@ -34488,7 +34492,7 @@
 		if ( back ) back.addEventListener( 'click', () => go( 'users' ) );
 		const roleAc = $( '#minn-ue-role-ac', view );
 		if ( roleAc ) {
-			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: l } ) ), {
+			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
 				strict: true,
 				value: u.roles && u.roles[ 0 ] ? u.roles[ 0 ] : 'subscriber',
 			} );
@@ -34819,10 +34823,10 @@
 						</div>` ).join( '' ) }
 					<div style="display:flex; gap:8px; margin-top:10px;">
 						<input class="minn-input" id="minn-app-name" placeholder="${ esc( __( 'AI Agent' ) ) }" style="font-size:13px;">
-						<button class="minn-btn-soft" id="minn-app-create" style="flex-shrink:0;">${ icon( 'plus' ) } New password</button>
+						<button class="minn-btn-soft" id="minn-app-create" style="flex-shrink:0;">${ icon( 'plus' ) } ${ esc( __( 'New password' ) ) }</button>
 					</div>
 					<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-						<button class="minn-btn-soft" id="minn-guide-copy">${ icon( 'copy' ) } Copy agent guide</button>
+						<button class="minn-btn-soft" id="minn-guide-copy">${ icon( 'copy' ) } ${ esc( __( 'Copy agent guide' ) ) }</button>
 						<button class="minn-btn-soft" id="minn-guide-download">↓ ${ esc( __( 'Download agent-guide.md' ) ) }</button>
 					</div>
 				</div>
@@ -34869,7 +34873,7 @@
 						<div class="minn-session-row">
 							<div class="minn-session-info">
 								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ` <span class="minn-session-current">${ esc( __( 'this session' ) ) }</span>` : '' }</div>
-								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 							</div>
 							<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 						</div>` ).join( '' ) }
@@ -34884,7 +34888,7 @@
 		const roleAc = $( '#minn-pf-role-ac', view );
 		if ( roleAc ) {
 			const current = p.user.roles && p.user.roles[ 0 ] ? p.user.roles[ 0 ] : 'subscriber';
-			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: l } ) ), {
+			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
 				strict: true,
 				value: current,
 			} );

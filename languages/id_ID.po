@@ -4150,7 +4150,7 @@ msgstr "Jaringan"
 msgid "All sites"
 msgstr "Semua Situs"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Publik"
 
@@ -16441,3 +16441,77 @@ msgstr "Cadangkan situs sekarang (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Sandi"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Tampilkan laman"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s revisi"
+msgstr[1] "%s revisi"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Tetapkan gambar unggulan"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Riwayat"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Pullquote"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "pembagi"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Galeri"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Spasi"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Berkas"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Tombol"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Memuat berkas…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Memuat gambar…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "Belum ada berkas di pustaka."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "Belum ada gambar di pustaka."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s versi"
+msgstr[1] "%s versi"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Salin panduan agen"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Sandi baru"

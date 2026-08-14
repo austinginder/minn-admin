@@ -4150,7 +4150,7 @@ msgstr "Ağ"
 msgid "All sites"
 msgstr "Tüm siteler"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Herkese açık"
 
@@ -16441,3 +16441,77 @@ msgstr "Siteyi şimdi yedekle (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Parola"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Sayfayı görüntüle"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s revizyon"
+msgstr[1] "%s revizyon"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Öne çıkarılmış görseli ayarla"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Geçmiş"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Alıntı yap"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "ayırıcı"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Galeri"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Aralayıcı"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Dosya"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Düğmeler"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Dosyalar yükleniyor…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Görseller yükleniyor…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "Kütüphanede henüz dosya yok."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "Kütüphanede henüz görsel yok."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s sürüm"
+msgstr[1] "%s sürüm"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Ajan kılavuzunu kopyala"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Yeni parola"

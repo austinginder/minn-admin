@@ -4497,7 +4497,7 @@ msgstr "サイトネットワーク"
 msgid "All sites"
 msgstr "すべてのサイト"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "公開"
 
@@ -17402,3 +17402,75 @@ msgstr "今すぐサイトをバックアップ（%s）"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "パスワード"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "ページを表示"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s 件のリビジョン"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "アイキャッチ画像を設定"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "履歴"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "プルクオート"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "区切り線"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "ギャラリー"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "スペーサー"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "ファイル"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "ボタン"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "ファイルを読み込み中…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "画像を読み込み中…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "ライブラリにファイルはまだありません。"
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "ライブラリに画像はまだありません。"
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s 件のバージョン"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "エージェントガイドをコピー"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "新規パスワード"

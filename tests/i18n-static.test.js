@@ -243,6 +243,35 @@ check( 'System helper labels are translated', bad.length === 0, bad.slice( 0, 8 
 }
 
 /* ---------------------------------------------------------------------------
+ * 6d. Editor and appearance labels are assembled in arrays/helpers, so they
+ *     evade the template scanners above. Pin the finite chrome that the
+ *     Japanese walkthrough exposed while leaving author-defined field names
+ *     and inserted post content alone.
+ * ------------------------------------------------------------------------ */
+{
+	const forbidden = [
+		[ /\{ id: 'system', label: 'System'/g, "raw theme-mode label" ],
+		[ /mark\( 'system', 'System' \)/g, "raw theme-menu label" ],
+		[ /title: '(?:Settings|History)'/g, "raw editor-door title" ],
+		[ /\{ value: '(?:public|password|private)', label: '(?:Public|Password|Private)' \}/g, "raw visibility choice" ],
+		[ /\[ icon\( '[^']+' \), '(?:Quote|Pullquote|Details|Code|Image|Table|Divider|Gallery|Spacer|File|Shortcode|Buttons|Columns)'/g, "raw block-picker label" ],
+		[ />Loading \$\{ any \? 'files' : 'images' \}…</g, "raw picker loading state" ],
+		[ />No \$\{ any \? 'files' : 'images' \} in the library yet\.</g, "raw picker empty state" ],
+		[ /\} · signed in \$\{/g, "raw session sign-in label" ],
+		[ /\} New password<\/button>/g, "raw application-password action" ],
+		[ /Object\.entries\( B\.roles \|\| \{\} \)\.map\( \( \[ v, l \] \) => \( \{ value: v, label: l \} \) \)/g, "raw profile role label" ],
+		[ /\$\{ dayCount \} on \$\{/g, "raw revision-day summary" ],
+		[ />Show all \$\{ total \}<\/button>/g, "raw revision clear-filter action" ],
+	];
+	const bad = [];
+	for ( const [ re, label ] of forbidden ) {
+		let m;
+		while ( ( m = re.exec( src ) ) ) bad.push( `app.js:${ lineOf( m.index ) }  ${ label}` );
+	}
+	check( 'Editor and appearance helper labels are translated', bad.length === 0, bad.slice( 0, 8 ).join( '\n      ' ) );
+}
+
+/* ---------------------------------------------------------------------------
  * 7. PHP: no unwrapped prose literals in the REST/adapter layer.
  *    make-pot only sees wrapped strings, so an unwrapped PHP sentence is
  *    invisible to every other layer of the pipeline: the greeting shipped
