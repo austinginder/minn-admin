@@ -1542,6 +1542,12 @@
 			contrast: '<circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor" stroke-width="0"/>',
 			plus: '<path d="M12 5v14M5 12h14"/>',
 			refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
+			// Recurring: one ring, one arrowhead, a dot at its centre — the
+			// order a subscription started from. Deliberately not `refresh`,
+			// which keeps the two-arrow cycle for a renewal: at 12px a reader
+			// tells one arrowhead from two, and colour is not a distinction
+			// everyone can see.
+			recurring: '<circle cx="12" cy="12" r="2.25"/><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v4h-4"/>',
 			// Panel-left: the nav show/hide toggle in the topbar.
 			panel: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
 			list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
@@ -5837,7 +5843,14 @@
 		const rel = orderRelations[ id ];
 		if ( ! rel ) return '';
 		const label = rel.kind === 'parent' ? __( 'Subscription' ) : __( 'Renewal' );
-		return `<span class="minn-subrel minn-subrel-${ esc( rel.kind ) }" data-subrel="${ esc( rel.kind ) }" tabindex="0" role="button" aria-haspopup="true">${ icon( 'refresh' ) }${ esc( label ) }</span>`;
+		// The icon carries it alone. The Order column is 120px and clips its
+		// overflow, so a worded pill was 93px against an order number's 30 and
+		// the badge simply vanished — leaving a hoverable sliver, which is
+		// exactly what made it look like it was working. The word lives in
+		// aria-label and in the popover the badge opens. The two kinds get
+		// different glyphs, not one glyph in two colours: colour alone is not
+		// a distinction everyone can see.
+		return `<span class="minn-subrel minn-subrel-${ esc( rel.kind ) }" data-subrel="${ esc( rel.kind ) }" tabindex="0" role="button" aria-haspopup="true" aria-label="${ esc( label ) }">${ icon( rel.kind === 'parent' ? 'recurring' : 'refresh' ) }</span>`;
 	}
 
 	let subRelPop = null;

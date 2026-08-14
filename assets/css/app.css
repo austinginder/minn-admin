@@ -2622,12 +2622,12 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
    rather than taking a column: most stores have none of these, and a column
    would be empty on every row to serve a few. */
 .minn-subrel {
-	display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;
-	margin-left: 6px; padding: 1px 7px 1px 5px; border-radius: 999px;
-	font-size: 11px; font-weight: 600; letter-spacing: 0.01em; cursor: pointer;
+	display: inline-flex; align-items: center; justify-content: center;
+	vertical-align: middle; flex: none;
+	margin-left: 6px; width: 20px; height: 20px; border-radius: 6px; cursor: pointer;
 	border: 1px solid var(--border2); background: var(--panel2); color: var(--text3);
 }
-.minn-subrel svg { width: 11px; height: 11px; }
+.minn-subrel svg { width: 12px; height: 12px; }
 .minn-subrel:hover, .minn-subrel:focus-visible { color: var(--text); border-color: var(--accent); outline: none; }
 /* The first order reads as the stronger of the two: it is the one that
    started the subscription, and there is only ever one. */
