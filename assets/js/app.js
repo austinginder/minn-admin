@@ -10279,7 +10279,15 @@
 		// /editor/product/{id} is the real writing surface, with blocks and
 		// revisions (docs/woocommerce-products.md).
 		const edBtn = $( '#minn-p-editor' );
-		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
+		if ( edBtn ) edBtn.addEventListener( 'click', () => {
+			// Leave a trail, the way an order does for a subscription: the
+			// editor's own exits are the nav and the browser's Back, so a
+			// description opened from here would otherwise be a one-way door.
+			// Only from the page — the modal keeps its host on screen.
+			const label = p.name || __( 'Product' );
+			if ( m.page ) setPageReturn( 'products/' + p.id, label.length > 32 ? label.slice( 0, 31 ) + '…' : label );
+			go( 'editor/product/' + p.id );
+		} );
 		bindProductDirtyBar( m );
 		bindProductTermFields( m );
 		bindProductLinkFields( m, p );
@@ -24868,6 +24876,15 @@
 
 	function renderEditor() {
 		const view = $( '#minn-view' );
+		// The trail is spent on the first render of the arrival and kept
+		// against the id it was left for, so opening a different post drops it
+		// and a reload (which leaves no trail) offers no back at all. The
+		// editor re-renders constantly, hence keeping it rather than reading
+		// takePageReturn() where the button is drawn.
+		const arrived = takePageReturn();
+		if ( arrived ) state.editorReturn = Object.assign( { id: state.editorId }, arrived );
+		const back = state.editorReturn && String( state.editorReturn.id ) === String( state.editorId )
+			? state.editorReturn : null;
 		if ( ! state.editor || ( state.editorId && state.editor.id !== state.editorId ) || ( ! state.editorId && state.editor.id ) ) {
 			state.editor = null;
 			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading editor…' ) ) }</div>`;
@@ -24891,6 +24908,7 @@
 		view.innerHTML = `
 		<div class="minn-editor">
 			<div>
+				${ back ? `<button type="button" class="minn-btn-soft minn-editor-back" id="minn-editor-back">← ${ esc( back.label ) }</button>` : '' }
 				<textarea class="minn-editor-title" id="minn-editor-title" rows="1" placeholder="Untitled ${ esc( editorNoun( ed ).toLowerCase() ) }" aria-label="${ esc( __( 'Title' ) ) }">${ esc( ed.title ) }</textarea>
 				${ ed.type === 'blocks' && ed.id && ed.syncedPattern ? `
 				<div class="minn-editor-locked-note minn-pattern-note">
@@ -24937,6 +24955,8 @@
 			<div class="minn-editor-side" id="minn-editor-side"></div>
 		</div>`;
 
+		const backBtn = $( '#minn-editor-back', view );
+		if ( backBtn ) backBtn.addEventListener( 'click', () => go( back.route ) );
 		const body = $( '#minn-editor-body', view );
 		// Blank posts must not stay truly empty: a contenteditable with no
 		// children puts the first keystrokes in a bare text node, and the

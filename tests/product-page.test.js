@@ -268,6 +268,29 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			await page.waitForSelector( '#minn-editor-body, .minn-editor-body', { timeout: 20000 } ).catch( () => null );
 			t.check( 'the product opens in Minn\'s editor',
 				!! ( await page.$( '#minn-editor-body, .minn-editor-body' ) ), '' );
+
+			// Arriving from a product leaves a trail, so the editor offers the
+			// way back. Without it the description is a one-way door: the
+			// editor's only exits are the nav and the browser's own Back.
+			const backLabel = await page.evaluate( () => {
+				const b = document.querySelector( '#minn-editor-back' );
+				return b ? b.textContent.trim() : null;
+			} );
+			t.check( 'the editor offers a way back to the product',
+				!! backLabel && /renamed/.test( backLabel ), String( backLabel ) );
+			if ( backLabel ) {
+				await page.click( '#minn-editor-back' );
+				await page.waitForFunction( ( pid ) => location.pathname.endsWith( '/products/' + pid ), id, { timeout: 15000 } ).catch( () => null );
+				t.check( 'back from the editor returns to the product',
+					await page.evaluate( ( pid ) => location.pathname.endsWith( '/products/' + pid ), id ),
+					await page.evaluate( () => location.pathname ) );
+			}
+			// A deep link into the editor left no trail, so it offers no back:
+			// the button follows where the reader came from, not the post type.
+			await page.goto( BASE + '/minn-admin/editor/product/' + id, { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '#minn-editor-body, .minn-editor-body', { timeout: 20000 } ).catch( () => null );
+			t.check( 'a deep link into the editor offers no stale back',
+				! ( await page.$( '#minn-editor-back' ) ), '' );
 		}
 
 		// 7. A stale page state does not leak into the next product.
