@@ -1597,6 +1597,9 @@ select.minn-input {
   white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
 }
 .minn-editor-title::placeholder { color: var(--text3); }
+/* Only drawn when the reader arrived from somewhere with a trail (a product's
+   description, say), so the editor's usual look is untouched. */
+.minn-editor-back { margin-bottom: 10px; }
 /* Sticky so the formatting tools stay reachable in long posts; opaque so
    content scrolls beneath, below the fixed word-count pill (40) and chips.
    -webkit-sticky first for older iOS; solid background is load-bearing
