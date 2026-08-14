@@ -114,6 +114,24 @@ async function main() {
 	const pot = parsePo( fs.readFileSync( POT, 'utf8' ) );
 	const outPath = path.join( OUT_DIR, `${ loc.code }.po` );
 
+	// This tool REGENERATES: it carries forward only reviewed entries and
+	// glossary hits, and everything else is retranslated (or, with
+	// --core-only, left EMPTY). Running it against a finished catalog would
+	// blank most of it. The incremental path is export-batch.js
+	// --missing-only + import-batch.js, which keeps what exists. Refuse
+	// unless the caller explicitly asks for a regeneration.
+	if ( fs.existsSync( outPath ) && ! process.argv.includes( '--regenerate' ) ) {
+		const have = parsePo( fs.readFileSync( outPath, 'utf8' ) ).entries
+			.filter( ( e ) => e.msgid && e.msgstr.some( Boolean ) && ! e.flags.includes( REVIEWED ) ).length;
+		if ( have > 0 ) {
+			console.error( `${ loc.code }.po already holds ${ have } generated translations, and this tool` );
+			console.error( 'would drop every one it does not retranslate. For a top-up use' );
+			console.error( 'export-batch.js --missing-only + import-batch.js; pass --regenerate' );
+			console.error( 'to rebuild the catalog from scratch anyway.' );
+			process.exit( 1 );
+		}
+	}
+
 	// Pass 2 source: what a human already reviewed.
 	const prior = new Map();
 	if ( fs.existsSync( outPath ) ) {
