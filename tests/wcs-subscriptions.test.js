@@ -105,29 +105,36 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'status dropdown includes Active', ui.tabs.includes( 'Active' ), ui.tabs.join( ',' ) );
 		t.check( 'list shows at least one row', ui.rows.length > 0, String( ui.rows.length ) );
 
-		// Open first row.
+		// Open first row. A row click is navigation now (the /subscriptions/{id}
+		// page is the primary surface), so the modal comes from Quick view, and
+		// the status control is one of Minn's own comboboxes, not an OS select.
 		const firstId = ui.rows[ 0 ];
+		const pickStatus = async ( value ) => {
+			await page.click( '[data-oc="substatus"] .minn-ac-input' );
+			await page.waitForSelector( `[data-oc="substatus"] .minn-ac-item[data-acv="${ value }"]`, { timeout: 8000 } );
+			await page.click( `[data-oc="substatus"] .minn-ac-item[data-acv="${ value }"]` );
+		};
 		if ( firstId ) {
-			await page.click( `[data-sub="${ firstId }"]` );
+			await page.click( `[data-sub="${ firstId }"] .minn-row-quick` );
 			await page.waitForSelector( '.minn-modal.wide', { timeout: 10000 } );
 			// Detail loads async after the slim list row opens the modal.
-			await page.waitForSelector( '#minn-sub-status', { timeout: 15000 } );
+			await page.waitForSelector( '[data-oc="substatus"]', { timeout: 15000 } );
 			const modal = await page.evaluate( () => {
 				const title = document.querySelector( '.minn-modal-title' );
-				const status = document.querySelector( '#minn-sub-status' );
+				const status = document.querySelector( '[data-oc="substatus"] .minn-ac-input' );
 				return {
 					title: title ? title.textContent.trim() : '',
 					hasStatus: !! status,
-					statusVal: status ? status.value : '',
+					statusVal: status ? ( status.dataset.acValue || '' ) : '',
 				};
 			} );
 			t.check( 'modal title is Subscription', /Subscription/i.test( modal.title ), modal.title );
-			t.check( 'status select present', modal.hasStatus );
+			t.check( 'status combobox present', modal.hasStatus );
 
 			// Flip to on-hold then restore.
 			const original = modal.statusVal || 'active';
 			const target = original === 'on-hold' ? 'active' : 'on-hold';
-			await page.selectOption( '#minn-sub-status', target );
+			await pickStatus( target );
 			await page.click( '#minn-sub-save' );
 			await page.waitForTimeout( 1200 );
 
@@ -140,7 +147,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			t.check( 'status save round-trips', after.status === target, String( after.status ) );
 
 			// Restore.
-			await page.selectOption( '#minn-sub-status', original ).catch( () => {} );
+			await pickStatus( original ).catch( () => {} );
 			const saveAgain = await page.$( '#minn-sub-save' );
 			if ( saveAgain ) {
 				await saveAgain.click();
@@ -158,7 +165,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			}
 		} else {
 			t.check( 'modal title is Subscription', false, 'no rows' );
-			t.check( 'status select present', false );
+			t.check( 'status combobox present', false );
 			t.check( 'status save round-trips', false );
 		}
 

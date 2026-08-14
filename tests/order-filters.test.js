@@ -148,6 +148,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.goto( `${ BASE }/minn-admin/orders`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-table-row[data-order]', { timeout: 25000 } );
 
+		// ---- The Items column names the first item and reveals the rest ----
+		const cell = await page.evaluate( ( id ) => {
+			const row = document.querySelector( `.minn-table-row[data-order="${ id }"]` );
+			const c = row && row.querySelector( '.minn-items-cell' );
+			return { cell: !! c, text: c ? c.textContent.replace( /\s+/g, ' ' ).trim() : '' };
+		}, made.completed );
+		t.check( 'the items column names the product, not just a count',
+			cell.cell && /Filter Widget B/.test( cell.text ), JSON.stringify( cell ) );
+		await page.click( `.minn-table-row[data-order="${ made.completed }"] .minn-items-cell` );
+		await page.waitForSelector( '.minn-items-pop', { timeout: 8000 } );
+		const pop = await page.evaluate( () => {
+			const p = document.querySelector( '.minn-items-pop' );
+			return { open: !! p, text: p ? p.textContent.replace( /\s+/g, ' ' ) : '', onPage: location.pathname };
+		} );
+		t.check( 'clicking the items cell opens the list without navigating',
+			pop.open && /Filter Widget B/.test( pop.text ) && ! /\/orders\/\d/.test( pop.onPage ), JSON.stringify( pop ) );
+		await page.keyboard.press( 'Escape' );
+
 		// ---- The quick-access strip writes the status filter ----
 		await pickPreset( 'processing' );
 		t.check( 'status dropdown filters to processing',
