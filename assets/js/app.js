@@ -1501,6 +1501,16 @@
 		onRouteChange();
 	}
 
+	/* Where a detail page's Back should land. Reached from its own list, a page
+	 * has nothing to say here and keeps its list. Reached from another record —
+	 * an order opened from the subscription that renews into it — the trail is
+	 * left at the click and spent when the page reads it, so it can never
+	 * outlive the visit that set it. A reload leaves no trail, which is why a
+	 * deep link falls back to the list. */
+	let pageReturn = null;
+	const setPageReturn = ( route, label ) => { pageReturn = { route, label }; };
+	const takePageReturn = () => { const r = pageReturn; pageReturn = null; return r; };
+
 	/* ===== Shell ===== */
 
 	function icon( name ) {
@@ -6971,10 +6981,17 @@
 			return;
 		}
 		let m = state.orderPage;
+		const arrived = takePageReturn();
 		if ( ! m || m.order.id !== state.orderPageId ) {
-			m = state.orderPage = { type: 'order', page: true, order: { id: state.orderPageId, number: String( state.orderPageId ) }, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [], gateways: null, otherOrders: null, refundState: null };
+			m = state.orderPage = { type: 'order', page: true, order: { id: state.orderPageId, number: String( state.orderPageId ) }, full: null, loading: true, emails: null, notes: null, relatedSubs: B.wcs ? null : [], gateways: null, otherOrders: null, refundState: null, back: arrived };
 			loadOrderDetail( m );
+		} else if ( arrived ) {
+			// Same order, arrived again from somewhere else: the newest trail
+			// wins. Without this, revisiting an order already in state would
+			// answer Back with wherever the previous visit came from.
+			m.back = arrived;
 		}
+		const back = m.back || { route: 'orders', label: __( 'Orders' ) };
 		const o = m.full || m.order;
 		const loading = !! m.loading && ! m.full;
 		const dateStr = o.date_created
@@ -6983,7 +7000,7 @@
 		view.innerHTML = `
 		<div class="minn-order-page minn-order-page-wide">
 			<div class="minn-order-page-head">
-				<button type="button" class="minn-btn-soft" id="minn-op-back">← Orders</button>
+				<button type="button" class="minn-btn-soft" id="minn-op-back">← ${ esc( back.label ) }</button>
 				<div class="minn-modal-title-block">
 					<div class="minn-order-head-row">
 						<span class="minn-modal-title">Order #${ esc( o.number || o.id ) }</span>
@@ -7000,8 +7017,8 @@
 				${ ! loading && ! m.loadError ? orderDetailInnerHtml( m ) : '' }
 			</div>
 		</div>`;
-		const back = $( '#minn-op-back' );
-		if ( back ) back.addEventListener( 'click', () => go( 'orders' ) );
+		const backBtn = $( '#minn-op-back' );
+		if ( backBtn ) backBtn.addEventListener( 'click', () => go( back.route ) );
 		if ( ! loading && ! m.loadError ) bindOrderDetail( m );
 	}
 
@@ -7876,6 +7893,17 @@
 			row.addEventListener( 'click', () => {
 				const oid = parseInt( row.dataset.relorder, 10 );
 				if ( ! oid ) return;
+				const cur = m.full || m.sub || {};
+				// The order's Back returns where this click started: the
+				// subscription when it was a page, the list the quick view was
+				// opened from otherwise. Landing on the orders list instead
+				// strands you somewhere you were never at.
+				if ( m.page ) {
+					/* translators: %s: subscription number. */
+					setPageReturn( 'subscriptions/' + cur.id, sprintf( __( 'Subscription #%s' ), String( cur.number || cur.id ) ) );
+				} else {
+					setPageReturn( 'subscriptions', __( 'Subscriptions' ) );
+				}
 				closeHost();
 				go( 'orders/' + oid );
 			} )
