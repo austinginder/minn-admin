@@ -129,17 +129,24 @@ const TEXT_ALLOW = new Set( [
 			// that has no placeholders at all.
 			if ( ! /%(\d+\$)?[sd]/.test( body.replace( /%[a-z_]+%/g, '' ) ) ) continue;
 			const ln = text.slice( 0, m.index ).split( '\n' ).length;
-			// The comment may sit on this line or the two above it.
-			const window = lines.slice( Math.max( 0, ln - 3 ), ln ).join( '\n' );
+			// Same line, or the line DIRECTLY above. This matches what
+			// `wp i18n make-pot` accepts: a comment two lines up is silently
+			// not attached to the call, so allowing it here would let the
+			// guard pass while the extractor still warns.
+			const window = lines.slice( Math.max( 0, ln - 2 ), ln ).join( '\n' );
 			if ( /translators\s*:/i.test( window ) ) continue;
 			bad.push( `${ file }:${ ln }  ${ body.slice( 0, 60 ) }` );
 		}
 	};
 	scanForComments( 'app.js', src, /\b(__|_n)\(\s*'((?:[^'\\]|\\.)*)'/g );
 	scanForComments( 'app.js', src, /\b(__|_n)\(\s*"((?:[^"\\]|\\.)*)"/g );
+	// The PLURAL argument counts too: wp i18n make-pot warns on it, and a
+	// placeholder can appear only in the plural form ("%d tables").
+	scanForComments( 'app.js', src, /\b(_n)\(\s*'(?:[^'\\]|\\.)*'\s*,\s*'((?:[^'\\]|\\.)*)'/g );
 	for ( const f of walkPhp( path.join( ROOT, 'includes' ) ) ) {
 		const t = fs.readFileSync( f, 'utf8' );
 		scanForComments( path.relative( ROOT, f ), t, /\b(__|_n|esc_html__|esc_attr__)\(\s*'((?:[^'\\]|\\.)*)'/g );
+		scanForComments( path.relative( ROOT, f ), t, /\b(_n)\(\s*'(?:[^'\\]|\\.)*'\s*,\s*'((?:[^'\\]|\\.)*)'/g );
 	}
 	check( `Placeholder strings carry a translators comment`, bad.length === 0,
 		bad.length ? `${ bad.length } missing, first few:\n      ` + bad.slice( 0, 6 ).join( '\n      ' ) : '' );
@@ -157,6 +164,27 @@ const TEXT_ALLOW = new Set( [
 	const keyed = /\}\s*\[\s*\w+\.label\s*\]/g;
 	while ( ( m = keyed.exec( src ) ) ) bad.push( `app.js:${ lineOf( m.index ) }  looks a value up BY .label` );
 	check( 'Nothing routes off a translated display label', bad.length === 0, bad.slice( 0, 6 ).join( '\n      ' ) );
+}
+
+/* ---------------------------------------------------------------------------
+ * 5. _n() takes PLAIN singular and plural sources, never a nested __().
+ *    A bulk sweep once wrapped the plural argument, which registers the
+ *    plural as its own msgid and feeds _n() an already-translated string to
+ *    look up. It still runs, and it is still wrong in every locale.
+ * ------------------------------------------------------------------------ */
+{
+	const bad = [];
+	const files = [ [ 'app.js', src ] ].concat(
+		walkPhp( path.join( ROOT, 'includes' ) ).map( ( f ) => [ path.relative( ROOT, f ), fs.readFileSync( f, 'utf8' ) ] )
+	);
+	for ( const [ name, text ] of files ) {
+		const re = /\b_n\(\s*(['"])(?:[^'"\\]|\\.)*\1\s*,\s*(?:__|esc_html__|esc_attr__)\s*\(/g;
+		let m;
+		while ( ( m = re.exec( text ) ) ) {
+			bad.push( `${ name }:${ text.slice( 0, m.index ).split( '\n' ).length }  _n() plural wrapped in __()` );
+		}
+	}
+	check( 'No _n() plural argument wrapped in __()', bad.length === 0, bad.slice( 0, 6 ).join( '\n      ' ) );
 }
 
 function walkPhp( dir ) {

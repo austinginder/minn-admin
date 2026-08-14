@@ -3328,8 +3328,8 @@ class Minn_Admin_REST {
 				'id'     => 'translations-' . $lang_count,
 				'kind'   => 'updates',
 				'icon'   => '⬆',
-				/* translators: %d is a number of translations. */
 				'title'  => sprintf(
+					/* translators: %d: how many translation packs have an update waiting. */
 					_n(
 						'%d translation is available to update',
 						'%d translations are available to update',
