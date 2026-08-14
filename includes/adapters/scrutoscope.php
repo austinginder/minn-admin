@@ -535,6 +535,54 @@ function minn_admin_scrutoscope_cron_resolve( $id ) {
  * @param string $id Cron row id from the inventory.
  * @return array|WP_Error
  */
+/**
+ * May the current user cause this cron hook to actually run?
+ *
+ * "Profile this hook" is not a read: Scrutoscope's profile_cron_hook() does a
+ * real do_action_ref_array(), so every callback on the hook fires with its
+ * scheduled arguments. When WP Crontrol is also installed one of those hooks
+ * is crontrol_cron_job, whose callback evals PHP the site stored, and WP
+ * Crontrol guards running it with edit_files. Core maps edit_files to
+ * do_not_allow under DISALLOW_FILE_EDIT and DISALLOW_FILE_MODS, and for every
+ * non-super-admin on multisite, so manage_options alone is a weaker gate than
+ * the one both WP Crontrol's screen and Minn's own Crontrol adapter apply.
+ *
+ * Defers to WP Crontrol's own runnable() when it is loaded, so one predicate
+ * governs both Diagnostics providers.
+ *
+ * @param string $hook Cron hook name.
+ * @return bool
+ */
+function minn_admin_scrutoscope_cron_runnable( $hook ) {
+	$hook = (string) $hook;
+
+	if ( function_exists( '\Crontrol\Event\find' ) && class_exists( '\Crontrol\Context\WordPressUserContext' ) ) {
+		try {
+			$event = \Crontrol\Event\find( $hook );
+			if ( $event && method_exists( $event, 'runnable' ) ) {
+				return (bool) $event->runnable(
+					new \Crontrol\Context\WordPressUserContext(),
+					new \Crontrol\Context\WordPressFeatureContext()
+				);
+			}
+		} catch ( \Throwable $e ) {
+			// Fall through to the standalone rule below.
+		}
+	}
+
+	// Without WP Crontrol loaded, apply the part of its rule that matters: a
+	// hook whose whole purpose is running stored PHP is code execution, so it
+	// answers to the directive a site owner sets to forbid that.
+	if ( 'crontrol_cron_job' === $hook ) {
+		if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+			return false;
+		}
+		return current_user_can( 'edit_files' );
+	}
+
+	return true;
+}
+
 function minn_admin_scrutoscope_profile_cron( $id ) {
 	if ( ! minn_admin_scrutoscope_can_profile_cron() ) {
 		return new WP_Error(
@@ -551,6 +599,13 @@ function minn_admin_scrutoscope_profile_cron( $id ) {
 			'not_found',
 			__( 'Cron event not found. It may have already run.', 'minn-admin' ),
 			array( 'status' => 404 )
+		);
+	}
+	if ( ! minn_admin_scrutoscope_cron_runnable( $ev['hook'] ) ) {
+		return new WP_Error(
+			'forbidden',
+			__( 'This event cannot be run here.', 'minn-admin' ),
+			array( 'status' => 403 )
 		);
 	}
 
@@ -598,8 +653,11 @@ function minn_admin_scrutoscope_cron_list( WP_REST_Request $request ) {
 			'date'     => ! empty( $ev['timestamp'] )
 				? gmdate( 'Y-m-d\TH:i:s\Z', (int) $ev['timestamp'] )
 				: '',
-			// Gates the Profile action; always true while the method exists.
-			'can_profile' => minn_admin_scrutoscope_can_profile_cron(),
+			// Gates the Profile action: the method has to exist AND this caller
+			// has to be allowed to make this particular hook run, so a hook
+			// they cannot run is not offered rather than refused on click.
+			'can_profile' => minn_admin_scrutoscope_can_profile_cron()
+				&& minn_admin_scrutoscope_cron_runnable( $hook ),
 		);
 	}
 
