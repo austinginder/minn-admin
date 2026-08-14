@@ -84,7 +84,14 @@ function writePo( header, entries ) {
 		out.push( `msgid "${ esc( e.msgid ) }"` );
 		if ( e.msgidPlural != null ) {
 			out.push( `msgid_plural "${ esc( e.msgidPlural ) }"` );
-			const n = Math.max( e.msgstr.length, 2 );
+			// One slot per form this locale actually has. Forcing a floor of 2
+			// broke the round trip for every nplurals=1 locale: Japanese wrote
+			// msgstr[0] plus an empty msgstr[1], and re-reading that file
+			// handed the validator two forms where the header promises one, so
+			// a correct entry was dropped on the NEXT import. Wave 2 adds four
+			// more single-form locales, so this is a class, not a Japanese
+			// quirk.
+			const n = Math.max( e.msgstr.length, 1 );
 			for ( let i = 0; i < n; i++ ) out.push( `msgstr[${ i }] "${ esc( e.msgstr[ i ] || '' ) }"` );
 		} else {
 			out.push( `msgstr "${ esc( e.msgstr[ 0 ] || '' ) }"` );
@@ -118,9 +125,17 @@ function parseMo( buf ) {
 		// literal control characters: those do not survive a copy-paste.
 		const EOT = '\x04', NUL = '\x00';
 		const ctxSplit = original.split( EOT );
-		const key = ctxSplit.length > 1 ? ctxSplit[ 1 ] : ctxSplit[ 0 ];
+		const hasCtx = ctxSplit.length > 1;
+		const key = hasCtx ? ctxSplit[ 1 ] : ctxSplit[ 0 ];
 		const singular = key.split( NUL )[ 0 ];
 		if ( ! singular ) continue;
+		// A msgctxt entry is a NARROWER reading of the same word, and dropping
+		// the context collapses it onto the general one. Last-wins made core's
+		// Japanese answer "Site" with テーマ — the translation of "Site" in a
+		// theme-picker context — clobbering サイト. The general reading is the
+		// right default for a glossary, so a contextual entry only fills a gap
+		// it does not already occupy, and never overwrites.
+		if ( hasCtx && map.has( singular ) ) continue;
 		map.set( singular, translated.split( NUL ) );
 	}
 	return map;
