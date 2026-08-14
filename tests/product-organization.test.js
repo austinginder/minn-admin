@@ -77,6 +77,102 @@ const { BASE, launch, login, reporter, setSwitch } = require( './helpers' );
 		t.check( 'card carries categories, tags, brands, slug and featured',
 			card.cats && card.tags && card.brands && card.slug && card.featured, JSON.stringify( card ) );
 
+		// The field opens into a list, the way Shopify's collections field
+		// does: what exists is visible without guessing at a search term, and
+		// each row says whether the product is in it.
+		await page.click( '[data-ptac="categories"] .minn-ac-input' );
+		await page.waitForSelector( '[data-ptac="categories"] [data-ptpick]', { timeout: 20000 } );
+		const listed = await page.evaluate( ( name ) => {
+			const rows = Array.from( document.querySelectorAll( '[data-ptac="categories"] [data-ptpick]' ) );
+			const mine = rows.find( ( r ) => ( r.dataset.ptname || '' ) === name );
+			return {
+				count: rows.length,
+				boxes: rows.filter( ( r ) => r.querySelector( '.minn-check' ) ).length,
+				mine: !! mine,
+				mineOn: !! mine && mine.getAttribute( 'aria-selected' ) === 'true',
+				add: !! document.querySelector( '[data-ptac="categories"] [data-ptadd]' ),
+			};
+		}, catName );
+		t.check( 'clicking the field lists the categories without typing',
+			listed.count >= 1 && listed.mine, JSON.stringify( listed ) );
+		t.check( 'every row carries a tick box, unticked when not assigned',
+			listed.boxes === listed.count && ! listed.mineOn, JSON.stringify( listed ) );
+		t.check( 'a hierarchy offers no Add new, because a typo would land in it',
+			! listed.add, JSON.stringify( listed ) );
+
+		const tickRow = ( name ) => page.evaluate( ( n ) => {
+			const row = Array.from( document.querySelectorAll( '[data-ptac="categories"] [data-ptpick]' ) )
+				.find( ( r ) => ( r.dataset.ptname || '' ) === n );
+			if ( ! row ) return false;
+			row.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+			return true;
+		}, name );
+		await tickRow( catName );
+		await page.waitForTimeout( 250 );
+		const afterTick = await page.evaluate( ( name ) => {
+			const panel = document.querySelector( '[data-ptac="categories"] .minn-ac-panel' );
+			const row = Array.from( document.querySelectorAll( '[data-ptac="categories"] [data-ptpick]' ) )
+				.find( ( r ) => ( r.dataset.ptname || '' ) === name );
+			return {
+				open: !! panel && ! panel.hidden,
+				on: !! row && row.getAttribute( 'aria-selected' ) === 'true',
+				chips: Array.from( document.querySelectorAll( '[data-ptchips="categories"] [data-ptchip]' ) ).map( ( c ) => c.textContent.trim() ),
+			};
+		}, catName );
+		t.check( 'ticking a row adds the chip and leaves the list open',
+			afterTick.open && afterTick.on && afterTick.chips.some( ( c ) => c.includes( catName ) ),
+			JSON.stringify( afterTick ) );
+		await tickRow( catName );
+		await page.waitForTimeout( 250 );
+		const afterUntick = await page.evaluate( ( name ) => {
+			const row = Array.from( document.querySelectorAll( '[data-ptac="categories"] [data-ptpick]' ) )
+				.find( ( r ) => ( r.dataset.ptname || '' ) === name );
+			return {
+				on: !! row && row.getAttribute( 'aria-selected' ) === 'true',
+				chips: Array.from( document.querySelectorAll( '[data-ptchips="categories"] [data-ptchip]' ) ).map( ( c ) => c.textContent.trim() ),
+			};
+		}, catName );
+		t.check( 'ticking it again takes the product back out',
+			! afterUntick.on && ! afterUntick.chips.some( ( c ) => c.includes( catName ) ),
+			JSON.stringify( afterUntick ) );
+
+		// A flat taxonomy can be added to from the list itself. Close the open
+		// panel first: it is drawn over the field below it, so a click there
+		// would land on a category row.
+		await page.click( '#minn-p-name' );
+		await page.waitForTimeout( 250 );
+		await page.click( '[data-ptac="tags"] .minn-ac-input' );
+		await page.waitForTimeout( 800 );
+		t.check( 'a flat taxonomy offers Add new in the list',
+			!! ( await page.$( '[data-ptac="tags"] [data-ptadd]' ) ), '' );
+		await page.click( '#minn-p-name' );
+		await page.waitForTimeout( 200 );
+
+		// Anything that goes to the server says so while it is going. Delayed
+		// on purpose: a local request answers too fast to observe otherwise.
+		await page.route( '**/wc/v3/products/categories**', async ( route ) => {
+			await new Promise( ( r ) => setTimeout( r, 1200 ) );
+			await route.continue();
+		} );
+		await page.goto( BASE + '/minn-admin/products/' + id, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-p-slug', { timeout: 20000 } );
+		await page.click( '[data-ptac="categories"] .minn-ac-input' );
+		await page.waitForTimeout( 300 );
+		const busy = await page.evaluate( () => {
+			const w = document.querySelector( '[data-ptac="categories"]' );
+			return { loading: !! w && w.classList.contains( 'is-loading' ) };
+		} );
+		t.check( 'a field waiting on the server shows it is working', busy.loading, JSON.stringify( busy ) );
+		await page.waitForSelector( '[data-ptac="categories"] [data-ptpick]', { timeout: 20000 } );
+		const settled = await page.evaluate( () => {
+			const w = document.querySelector( '[data-ptac="categories"]' );
+			return !! w && w.classList.contains( 'is-loading' );
+		} );
+		t.check( 'and stops showing it once the answer lands', ! settled, String( settled ) );
+		await page.unroute( '**/wc/v3/products/categories**' );
+		await page.click( '#minn-p-name' );
+		await page.waitForTimeout( 200 );
+
 		// Categories: type, pick from the suggest panel.
 		await page.fill( '[data-ptac="categories"] .minn-ac-input', 'Minn Outerwear' );
 		await page.waitForSelector( '[data-ptac="categories"] [data-ptpick]', { timeout: 15000 } );

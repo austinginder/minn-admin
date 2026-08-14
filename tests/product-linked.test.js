@@ -62,6 +62,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Linked products card is on the page', card.titles.includes( 'Linked products' ), JSON.stringify( card.titles ) );
 		t.check( 'card carries upsells and cross-sells', card.up && card.cross, JSON.stringify( card ) );
 
+		// The search says it is searching. Delayed on purpose: a local request
+		// answers too fast to catch the state otherwise.
+		await page.route( '**/wc/v3/products?search=**', async ( route ) => {
+			await new Promise( ( r ) => setTimeout( r, 1200 ) );
+			await route.continue();
+		} );
+		await page.fill( '[data-plac="upsell_ids"] .minn-ac-input', 'Linkfi' );
+		await page.waitForTimeout( 500 );
+		const searching = await page.evaluate( () => {
+			const w = document.querySelector( '[data-plac="upsell_ids"]' );
+			return { loading: !! w && w.classList.contains( 'is-loading' ) };
+		} );
+		t.check( 'the upsell search shows it is working', searching.loading, JSON.stringify( searching ) );
+		await page.waitForSelector( '[data-plac="upsell_ids"] [data-plpick]', { timeout: 20000 } );
+		t.check( 'and stops once the matches land',
+			! ( await page.evaluate( () => document.querySelector( '[data-plac="upsell_ids"]' ).classList.contains( 'is-loading' ) ) ), '' );
+		await page.unroute( '**/wc/v3/products?search=**' );
+
 		// Search finds other products and excludes this one.
 		await page.fill( '[data-plac="upsell_ids"] .minn-ac-input', 'Linkfix ' );
 		await page.waitForSelector( '[data-plac="upsell_ids"] [data-plpick]', { timeout: 15000 } );

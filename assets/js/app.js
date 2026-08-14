@@ -9043,9 +9043,9 @@
 	// The Organization card's taxonomies. A store without brands answers with
 	// no `brands` key at all, which is how that field knows to stay away.
 	const PRODUCT_TERM_FIELDS = [
-		{ key: 'categories', label: __( 'Categories' ), route: 'products/categories', create: false, placeholder: __( 'Search categories…' ) },
-		{ key: 'tags', label: __( 'Tags' ), route: 'products/tags', create: true, placeholder: __( 'Add a tag, press Enter' ) },
-		{ key: 'brands', label: __( 'Brands' ), route: 'products/brands', create: true, placeholder: __( 'Add a brand, press Enter' ) },
+		{ key: 'categories', label: __( 'Categories' ), route: 'products/categories', create: false, placeholder: __( 'Search categories' ) },
+		{ key: 'tags', label: __( 'Tags' ), route: 'products/tags', create: true, placeholder: __( 'Search or add tags' ), addLabel: __( 'Add new tag' ) },
+		{ key: 'brands', label: __( 'Brands' ), route: 'products/brands', create: true, placeholder: __( 'Search or add brands' ), addLabel: __( 'Add new brand' ) },
 	];
 
 	// Downloadable files ride the model too. WooCommerce mints the id for a new
@@ -9906,16 +9906,26 @@
 			const repaintChips = () => {
 				chips.innerHTML = productTermChipsHtml( m.links[ f.key ] );
 				bindChips();
+				if ( m.syncDirty ) m.syncDirty();
 			};
 			bindChips();
 			let timer = null;
+			// One generation per request: a slow answer to an earlier keystroke
+			// must not repaint over a newer one or stop its spinner.
+			let seq = 0;
 			input.addEventListener( 'input', () => {
 				clearTimeout( timer );
 				timer = setTimeout( async () => {
 					const q = input.value.trim();
-					if ( ! q ) { panel.hidden = true; return; }
+					if ( ! q ) { panel.hidden = true; wrap.classList.remove( 'is-loading' ); return; }
+					const mine = ++seq;
+					wrap.classList.add( 'is-loading' );
+					panel.innerHTML = `<div class="minn-ac-empty">${ esc( __( 'Searching…' ) ) }</div>`;
+					panel.hidden = false;
 					try {
 						const rows = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=20&_fields=id,name,sku` );
+						if ( mine !== seq ) return;
+						wrap.classList.remove( 'is-loading' );
 						const chosen = new Set( ( m.links[ f.key ] || [] ).map( ( x ) => x.id ) );
 						const items = ( Array.isArray( rows ) ? rows : [] )
 							.filter( ( r ) => r.id !== p.id && ! chosen.has( r.id ) );
@@ -9934,7 +9944,14 @@
 							panel.hidden = true;
 							repaintChips();
 						} ) );
-					} catch ( e ) { /* search hiccup — keep typing */ }
+					} catch ( e ) {
+						// Search hiccup: keep typing, but never leave the field
+						// spinning at a request that is not coming back.
+						if ( mine === seq ) {
+							wrap.classList.remove( 'is-loading' );
+							panel.hidden = true;
+						}
+					}
 				}, 250 );
 			} );
 			input.addEventListener( 'keydown', ( e ) => {
@@ -9965,10 +9982,36 @@
 	}
 
 	/**
-	 * Chips plus an async suggest per taxonomy. Tags and brands are flat, so
-	 * Enter creates one that does not exist yet; categories are pick-only,
-	 * because a typo there would leave junk in a hierarchy Minn is not
-	 * editing here (the Terms manager and WooCommerce own that).
+	 * The list a taxonomy field drops: every row a tick box, ticked when the
+	 * product is in that term. Rows come from the server (a store can have
+	 * hundreds of categories, so the filtering is not local), and the first
+	 * page is cached per taxonomy, which is what makes reopening the field
+	 * instant while a search still asks.
+	 */
+	function productTermRowsHtml( m, t, rows ) {
+		const chosen = new Set( ( ( m.terms || {} )[ t.key ] || [] ).map( ( x ) => x.id ) );
+		const body = rows == null
+			? `<div class="minn-ac-empty">${ esc( __( 'Searching…' ) ) }</div>`
+			: ( rows.length
+				? rows.map( ( x ) => `<button type="button" class="minn-ac-item minn-ac-check" role="option" aria-selected="${ chosen.has( x.id ) ? 'true' : 'false' }" data-ptpick="${ x.id }" data-ptname="${ esc( x.name ) }"><span class="minn-check" aria-hidden="true"></span><span class="minn-cell-clip">${ esc( x.name ) }</span></button>` ).join( '' )
+				: `<div class="minn-ac-empty">${ t.create ? esc( __( 'No matches. Press Enter to create it.' ) ) : esc( __( 'No matches' ) ) }</div>` );
+		// Creating from the list is for flat taxonomies only. A category is a
+		// place in a hierarchy, and a typo would leave junk in a tree this
+		// field is not editing (the Terms manager and WooCommerce own that).
+		const foot = t.create
+			? `<div class="minn-ac-foot"><button type="button" class="minn-ac-item minn-ac-add" data-ptadd>${ icon( 'plus' ) }<span>${ esc( t.addLabel || __( 'Add new' ) ) }</span></button></div>`
+			: '';
+		return body + foot;
+	}
+
+	/**
+	 * Chips plus a list per taxonomy, in the shape Shopify's collections field
+	 * has: clicking the field shows what exists rather than asking the reader
+	 * to guess a search term, and a row toggles without closing, so putting a
+	 * product in four categories is four clicks and not four searches.
+	 *
+	 * Tags and brands are flat, so Enter (or Add new) creates one that does not
+	 * exist yet; categories are pick-only.
 	 */
 	function bindProductTermFields( m ) {
 		PRODUCT_TERM_FIELDS.forEach( ( t ) => {
@@ -9977,53 +10020,35 @@
 			if ( ! wrap || ! chips || ! Array.isArray( ( m.terms || {} )[ t.key ] ) ) return;
 			const input = wrap.querySelector( '.minn-ac-input' );
 			const panel = wrap.querySelector( '.minn-ac-panel' );
+			const cache = ( state.cache.productTerms = state.cache.productTerms || {} );
+			let rows = null;
+			// Every request carries a generation. A slow answer to an earlier
+			// keystroke must not repaint the panel over a newer one, nor call
+			// off the spinner the newer one turned on.
+			let seq = 0;
 			const bindChips = () => $$( '[data-ptchip]', chips ).forEach( ( ch ) =>
 				ch.addEventListener( 'click', () => {
 					const id = parseInt( ch.dataset.ptchip, 10 );
 					m.terms[ t.key ] = m.terms[ t.key ].filter( ( x ) => x.id !== id );
 					repaintChips();
+					if ( ! panel.hidden ) renderPanel();
 				} )
 			);
 			const repaintChips = () => {
 				chips.innerHTML = productTermChipsHtml( m.terms[ t.key ] );
 				bindChips();
+				if ( m.syncDirty ) m.syncDirty();
 			};
-			const add = ( item ) => {
-				if ( ! m.terms[ t.key ].some( ( x ) => x.id === item.id ) ) m.terms[ t.key ].push( item );
-				input.value = '';
-				panel.hidden = true;
+			const toggle = ( item ) => {
+				const at = m.terms[ t.key ].findIndex( ( x ) => x.id === item.id );
+				if ( at === -1 ) m.terms[ t.key ].push( item );
+				else m.terms[ t.key ].splice( at, 1 );
 				repaintChips();
+				renderPanel(); // the tick has to move, and the list stays open
 			};
-			bindChips();
-			let timer = null;
-			input.addEventListener( 'input', () => {
-				clearTimeout( timer );
-				timer = setTimeout( async () => {
-					const q = input.value.trim();
-					if ( ! q ) { panel.hidden = true; return; }
-					try {
-						const items = await api( `wc/v3/${ t.route }?search=${ encodeURIComponent( q ) }&per_page=20&_fields=id,name` );
-						const chosen = new Set( m.terms[ t.key ].map( ( x ) => x.id ) );
-						const rows = ( Array.isArray( items ) ? items : [] )
-							.map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) )
-							.filter( ( x ) => ! chosen.has( x.id ) );
-						panel.innerHTML = rows.length
-							? rows.map( ( x ) => `<button type="button" class="minn-ac-item" data-ptpick="${ x.id }" data-ptname="${ esc( x.name ) }">${ esc( x.name ) }</button>` ).join( '' )
-							: `<div class="minn-ac-empty">${ t.create ? esc( __( 'No matches. Press Enter to create it.' ) ) : esc( __( 'No matches' ) ) }</div>`;
-						panel.hidden = false;
-						$$( '[data-ptpick]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
-							e.preventDefault(); // a plain click blurs the field first
-							add( { id: parseInt( b.dataset.ptpick, 10 ), name: b.dataset.ptname } );
-						} ) );
-					} catch ( e ) { /* search hiccup — keep typing */ }
-				}, 250 );
-			} );
-			input.addEventListener( 'keydown', async ( e ) => {
-				if ( e.key !== 'Enter' ) return;
-				e.preventDefault(); // Enter here must never submit anything
-				if ( ! t.create ) return;
+			const create = async () => {
 				const name = input.value.trim();
-				if ( ! name ) return;
+				if ( ! name ) { input.focus( { preventScroll: true } ); return; }
 				input.disabled = true;
 				try {
 					// Reuse an existing term before making a duplicate.
@@ -10034,13 +10059,66 @@
 					if ( ! match ) {
 						const created = await api( `wc/v3/${ t.route }`, { method: 'POST', body: JSON.stringify( { name } ) } );
 						match = { id: created.id, name: decodeEntities( created.name || name ) };
+						// The cached first page is what the field reopens into,
+						// so a term made here belongs in it.
+						if ( Array.isArray( cache[ t.key ] ) ) cache[ t.key ].unshift( match );
 					}
-					add( match );
+					if ( ! m.terms[ t.key ].some( ( x ) => x.id === match.id ) ) m.terms[ t.key ].push( match );
+					input.value = '';
+					rows = null;
+					panel.hidden = true;
+					repaintChips();
 				} catch ( err ) {
 					toast( err.message, true );
 				}
 				input.disabled = false;
 				input.focus( { preventScroll: true } );
+			};
+			const renderPanel = () => {
+				panel.innerHTML = productTermRowsHtml( m, t, rows );
+				panel.hidden = false;
+				$$( '[data-ptpick]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
+					e.preventDefault(); // a plain click blurs the field first
+					toggle( { id: parseInt( b.dataset.ptpick, 10 ), name: b.dataset.ptname } );
+				} ) );
+				const addBtn = $( '[data-ptadd]', panel );
+				if ( addBtn ) addBtn.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); create(); } );
+			};
+			const load = async ( q ) => {
+				const mine = ++seq;
+				if ( ! q && Array.isArray( cache[ t.key ] ) ) {
+					rows = cache[ t.key ];
+					renderPanel();
+					return;
+				}
+				rows = null;
+				wrap.classList.add( 'is-loading' );
+				renderPanel(); // Searching…, so the panel is never a blank box
+				try {
+					const items = await api( `wc/v3/${ t.route }?${ q ? 'search=' + encodeURIComponent( q ) + '&' : '' }per_page=20&_fields=id,name` );
+					if ( mine !== seq ) return;
+					rows = ( Array.isArray( items ) ? items : [] )
+						.map( ( x ) => ( { id: x.id, name: decodeEntities( x.name || '' ) } ) );
+					if ( ! q ) cache[ t.key ] = rows;
+				} catch ( e ) {
+					if ( mine !== seq ) return;
+					rows = [];
+				}
+				wrap.classList.remove( 'is-loading' );
+				renderPanel();
+			};
+			bindChips();
+			let timer = null;
+			input.addEventListener( 'focus', () => load( input.value.trim() ) );
+			input.addEventListener( 'input', () => {
+				clearTimeout( timer );
+				timer = setTimeout( () => load( input.value.trim() ), 250 );
+			} );
+			input.addEventListener( 'keydown', ( e ) => {
+				if ( e.key === 'Escape' ) { panel.hidden = true; return; }
+				if ( e.key !== 'Enter' ) return;
+				e.preventDefault(); // Enter here must never submit anything
+				if ( t.create ) create();
 			} );
 			input.addEventListener( 'blur', () => setTimeout( () => { panel.hidden = true; }, 150 ) );
 		} );
