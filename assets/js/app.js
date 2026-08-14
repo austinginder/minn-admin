@@ -7540,6 +7540,15 @@
 		// queries [data-oedit] across the whole document, so sharing the name
 		// would let an order host bind pencils that are not its own.
 		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		// An order reference stays navigation, as it is everywhere else; the eye
+		// beside it opens the quick view, so glancing at a renewal does not cost
+		// the subscription you are reading. Siblings, never nested: a button
+		// inside a button is invalid, and browsers drop the inner one.
+		const orderRow = ( id, inner, title ) => `
+									<div class="minn-sub-order-line">
+										<button type="button" class="minn-sub-order-row" data-relorder="${ id }"${ title ? ` title="${ esc( title ) }"` : '' }>${ inner }</button>
+										<button type="button" class="minn-row-more minn-row-quick" data-relqv="${ id }" title="${ esc( __( 'Quick view' ) ) }" aria-label="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button>
+									</div>`;
 		return `
 					<div class="minn-order-body">
 						<div class="minn-order-layout">
@@ -7570,20 +7579,16 @@
 							</div>` : '' }
 							<div class="minn-order-sec minn-sub-orders">
 								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Orders' ) }</div></div>
-								${ parentId ? `
-								<button type="button" class="minn-sub-order-row" data-relorder="${ parentId }" title="${ esc( __( 'Order that started this subscription' ) ) }">
-									<span>#${ esc( String( parentId ) ) }</span>
-									<span class="minn-row-meta">${ __( 'Initial' ) }</span>
-									<span>›</span>
-								</button>` : '' }
+								${ parentId ? orderRow( parentId, `
+											<span>#${ esc( String( parentId ) ) }</span>
+											<span class="minn-row-meta">${ __( 'Initial' ) }</span>
+											<span>›</span>`, __( 'Order that started this subscription' ) ) : '' }
 								${ related == null ? `<div class="minn-loading" style="padding:8px;">${ __( 'Loading…' ) }</div>`
 									: ! ( relatedOnly && relatedOnly.length ) ? `<div class="minn-toggle-desc">${ __( 'No renewal orders yet.' ) }</div>`
-									: relatedOnly.map( ( o ) => `
-									<button type="button" class="minn-sub-order-row" data-relorder="${ o.id }">
-										<span>#${ esc( o.number || o.id ) }</span>
-										<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
-										<span>${ esc( subMoney( s, o.total ) ) }</span>
-									</button>` ).join( '' ) }
+									: relatedOnly.map( ( o ) => orderRow( o.id, `
+											<span>#${ esc( o.number || o.id ) }</span>
+											<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
+											<span>${ esc( subMoney( s, o.total ) ) }</span>` ) ).join( '' ) }
 							</div>
 						</div>
 						<div class="minn-order-side">
@@ -7733,8 +7738,6 @@
 			else renderOverlays();
 		};
 		const closeHost = () => { if ( ! m.page ) closeModal(); };
-		const closeBtn = $( '#minn-modal-close-btn' );
-		if ( closeBtn ) closeBtn.addEventListener( 'click', () => closeModal() );
 		const openCustomer = () => {
 			const cur = m.full || m.sub || {};
 			const cid = parseInt( cur.customer_id, 10 );
@@ -7875,6 +7878,19 @@
 				if ( ! oid ) return;
 				closeHost();
 				go( 'orders/' + oid );
+			} )
+		);
+		// Quick view instead: on the page the order stacks over the subscription
+		// and closing it hands the page back untouched. From the quick view
+		// there is only one modal to give, so this one replaces it, the way a
+		// related subscription does on the order side.
+		$$( '[data-relqv]', view ).forEach( ( btn ) =>
+			btn.addEventListener( 'click', () => {
+				const oid = parseInt( btn.dataset.relqv, 10 );
+				if ( ! oid ) return;
+				const known = ( m.relatedOrders || [] ).find( ( o ) => o.id === oid );
+				closeHost();
+				openOrderModal( known || { id: oid, number: String( oid ) } );
 			} )
 		);
 		const fullPageBtn = $( '#minn-sub-fullpage' );
