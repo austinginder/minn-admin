@@ -737,7 +737,7 @@ msgstr "Ativar fallbacks de 404"
 
 #: includes/adapters/autoptimize.php:103
 msgid "Also optimize for logged-in users"
-msgstr "Otimizar também para utilizadores conectados"
+msgstr "Otimizar também para utilizadores com sessão iniciada"
 
 #: includes/adapters/autoptimize.php:104
 msgid "Also optimize shop cart/checkout"
@@ -5123,7 +5123,7 @@ msgstr "Trailer"
 
 #: includes/adapters/powerpress.php:248
 msgid "Bonus"
-msgstr "Bônus"
+msgstr "Bónus"
 
 #: includes/adapters/powerpress.php:281
 msgid "PowerPress default-channel episode fields for Minn Admin."
@@ -6208,7 +6208,7 @@ msgstr "URL com nonce do User Switching para o visitante atual, quando permitido
 #: includes/adapters/wordfence.php:41
 #: includes/adapters/wordfence.php:50
 msgid "Signed in"
-msgstr "Conectado"
+msgstr "Com sessão iniciada"
 
 #: includes/adapters/wordfence.php:42
 msgid "Failed login (valid user)"
@@ -8148,7 +8148,7 @@ msgstr "Produtos"
 #: assets/js/app.js:885
 #: assets/js/app.js:1778
 msgid "Coupons"
-msgstr "Cupons"
+msgstr "Cupões"
 
 #: includes/class-minn-admin-surfaces.php:247
 #: assets/js/app.js:886
@@ -8301,7 +8301,7 @@ msgstr "Texto sobre o destaque"
 
 #: assets/js/app.js:251
 msgid "not signed in"
-msgstr "não conectado"
+msgstr "sem sessão iniciada"
 
 #: assets/js/app.js:262
 msgid "Your session expired. Reloading…"
@@ -10886,11 +10886,11 @@ msgstr "Desconto fixo no produto"
 
 #: assets/js/app.js:8904
 msgid "Could not load coupon"
-msgstr "Não foi possível carregar o cupom"
+msgstr "Não foi possível carregar o cupão"
 
 #: assets/js/app.js:8915
 msgid "Coupons are turned off in WooCommerce (Settings → General → Enable coupons), or you do not have permission to manage them."
-msgstr "Os cupons estão desativados no WooCommerce (Configurações → Geral → Ativar cupons), ou você não tem permissão para geri-los."
+msgstr "Os cupões estão desativados no WooCommerce (Configurações → Geral → Ativar cupões), ou você não tem permissão para geri-los."
 
 #: assets/js/app.js:8916
 msgid "Open WooCommerce settings ↗"
@@ -10898,11 +10898,11 @@ msgstr "Abrir configurações do WooCommerce ↗"
 
 #: assets/js/app.js:8930
 msgid "Loading coupons…"
-msgstr "A carregar cupons…"
+msgstr "A carregar cupões…"
 
 #: assets/js/app.js:8961
 msgid "Search coupons (code, ID…)"
-msgstr "Pesquisar cupons (código, ID…)"
+msgstr "Pesquisar cupões (código, ID…)"
 
 #: assets/js/app.js:8966
 #: assets/js/app.js:30405
@@ -10917,11 +10917,11 @@ msgstr "Uso"
 
 #: assets/js/app.js:8980
 msgid "No coupons match “"
-msgstr "Nenhum cupom corresponde a “"
+msgstr "Nenhum cupão corresponde a “"
 
 #: assets/js/app.js:8980
 msgid "No coupons yet."
-msgstr "Nenhum cupom ainda."
+msgstr "Nenhum cupão ainda."
 
 #: assets/js/app.js:9100
 msgid "Could not load customer"
@@ -11353,11 +11353,11 @@ msgstr "Encerrar a sessão em todos os outros navegadores e dispositivos? Esta s
 
 #: assets/js/app.js:10295
 msgid "Sign %s out of every active session?"
-msgstr "Desconectar %s de todas as sessões ativas?"
+msgstr "Terminar todas as sessões ativas de %s?"
 
 #: assets/js/app.js:10295
 msgid "Sign this user out of every active session?"
-msgstr "Desconectar este utilizador de todas as sessões ativas?"
+msgstr "Terminar todas as sessões ativas deste utilizador?"
 
 #: assets/js/app.js:10299
 msgid "Other sessions signed out"
@@ -13058,7 +13058,7 @@ msgstr "Apenas utilizadores registados"
 
 #: assets/js/app.js:16490
 msgid "Users must be registered and logged in to comment."
-msgstr "Os utilizadores devem estar registados e conectados para poderem publicar comentários."
+msgstr "Os utilizadores devem estar registados e ter sessão iniciada para poderem publicar comentários."
 
 #: assets/js/app.js:16491
 msgid "Show avatars"
@@ -14752,7 +14752,7 @@ msgstr "Ver produtos"
 
 #: assets/js/app.js:29748
 msgid "View Coupons"
-msgstr "Ver cupons"
+msgstr "Ver cupões"
 
 #: assets/js/app.js:29749
 msgid "View Customers"
@@ -15094,7 +15094,7 @@ msgstr "Abrir pedido principal"
 
 #: assets/js/app.js:30383
 msgid "New coupon"
-msgstr "Novo cupom"
+msgstr "Novo cupão"
 
 #: assets/js/app.js:30384
 msgid "Create a promo code"
@@ -15102,7 +15102,7 @@ msgstr "Criar um código promocional"
 
 #: assets/js/app.js:30389
 msgid "Loading coupon…"
-msgstr "A carregar cupom…"
+msgstr "A carregar cupão…"
 
 #: assets/js/app.js:30395
 msgid "Code & discount"
@@ -15151,7 +15151,7 @@ msgstr "Permitir frete grátis"
 #: assets/js/app.js:30451
 #: assets/js/app.js:31997
 msgid "Create coupon"
-msgstr "Criar cupom"
+msgstr "Criar cupão"
 
 #: assets/js/app.js:30453
 msgid "Saves code, amount, limits and options through WooCommerce."
@@ -15955,11 +15955,11 @@ msgstr "O valor é obrigatório"
 
 #: assets/js/app.js:31975
 msgid "Coupon created"
-msgstr "Cupom criado"
+msgstr "Cupão criado"
 
 #: assets/js/app.js:31982
 msgid "Coupon updated"
-msgstr "Cupom atualizado"
+msgstr "Cupão atualizado"
 
 #: assets/js/app.js:32003
 msgid "It is removed for good; orders that already used it keep their totals."
@@ -15967,11 +15967,11 @@ msgstr "Ele é removido de vez; pedidos que já o usaram mantêm os totais."
 
 #: assets/js/app.js:32003
 msgid "Delete coupon"
-msgstr "Eliminar cupom"
+msgstr "Eliminar cupão"
 
 #: assets/js/app.js:32007
 msgid "Coupon deleted"
-msgstr "Cupom eliminado"
+msgstr "Cupão eliminado"
 
 #: assets/js/app.js:32042
 msgid "Post type updated"
@@ -16567,7 +16567,7 @@ msgstr "Mostrar a barra de ferramentas ao ver o site"
 
 #: assets/js/app.js:34253
 msgid "The WordPress admin bar on the front end while they are signed in."
-msgstr "A barra de administração do WordPress no front-end enquanto ele está conectado."
+msgstr "A barra de administração do WordPress no front-end enquanto tem sessão iniciada."
 
 #: assets/js/app.js:34262
 msgid "Hidden for them"
@@ -16604,7 +16604,7 @@ msgstr "Área da barra lateral"
 
 #: assets/js/app.js:34280
 msgid "signed in"
-msgstr "conectado"
+msgstr "com sessão iniciada"
 
 #: assets/js/app.js:34288
 msgid "Danger zone"
@@ -16701,7 +16701,7 @@ msgstr "Tema"
 
 #: assets/js/app.js:34658
 msgid "The WordPress admin bar on the front end while you're signed in. Applies only to you."
-msgstr "A barra de administração do WordPress no front-end enquanto você está conectado. Vale só para você."
+msgstr "A barra de administração do WordPress no front-end enquanto tem sessão iniciada. Vale só para você."
 
 #: assets/js/app.js:34667
 msgid "Hidden for you"
