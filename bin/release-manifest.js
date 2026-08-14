@@ -76,7 +76,10 @@ const catalogHash = ( poPath ) => {
 	const rows = entries
 		.filter( ( e ) => e.msgid !== '' && e.msgstr.some( Boolean ) )
 		.map( ( e ) => [ e.msgctxt || '', e.msgid, e.msgidPlural || '', ...e.msgstr ] )
-		.sort( ( a, b ) => ( a[ 1 ] < b[ 1 ] ? -1 : a[ 1 ] > b[ 1 ] ? 1 : 0 ) );
+		// Sort the whole identity and translation, not msgid alone. Contextual
+		// entries may share one msgid; if their PO order changes, a msgid-only
+		// comparator preserves the new input order and falsely changes the hash.
+		.sort( ( a, b ) => JSON.stringify( a ).localeCompare( JSON.stringify( b ) ) );
 	return crypto.createHash( 'sha256' ).update( JSON.stringify( rows ) ).digest( 'hex' );
 };
 
