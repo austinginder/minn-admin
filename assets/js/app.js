@@ -5788,9 +5788,15 @@
 		if ( orderFilterPop ) orderFilterPop.remove();
 		orderFilterPop = null;
 		document.removeEventListener( 'mousedown', orderFilterPopAway, true );
+		document.removeEventListener( 'scroll', orderFilterPopAwayScroll, true );
 		document.removeEventListener( 'keydown', orderFilterPopKey, true );
 	}
 	function orderFilterPopAway( e ) {
+		if ( orderFilterPop && ! orderFilterPop.contains( e.target ) ) closeOrderFilterPop();
+	}
+	// The popover is position:fixed, so it cannot ride a scrolling list;
+	// any scroll outside it (capture: scroll does not bubble) closes it.
+	function orderFilterPopAwayScroll( e ) {
 		if ( orderFilterPop && ! orderFilterPop.contains( e.target ) ) closeOrderFilterPop();
 	}
 	function orderFilterPopKey( e ) {
@@ -5832,6 +5838,7 @@
 		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - pop.offsetWidth - 10 ) ) + 'px';
 		pop.style.top = Math.max( 10, Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
 		document.addEventListener( 'mousedown', orderFilterPopAway, true );
+		document.addEventListener( 'scroll', orderFilterPopAwayScroll, true );
 		document.addEventListener( 'keydown', orderFilterPopKey, true );
 
 		$$( '[data-offilter]', pop ).forEach( ( btn ) =>
@@ -6154,9 +6161,15 @@
 		if ( itemsPop ) itemsPop.remove();
 		itemsPop = null;
 		document.removeEventListener( 'mousedown', itemsPopAway, true );
+		document.removeEventListener( 'scroll', itemsPopAwayScroll, true );
 		document.removeEventListener( 'keydown', itemsPopKey, true );
 	}
 	function itemsPopAway( e ) {
+		if ( itemsPop && ! itemsPop.contains( e.target ) ) closeItemsPop();
+	}
+	// The popover is position:fixed, so it cannot ride a scrolling list;
+	// any scroll outside it (capture: scroll does not bubble) closes it.
+	function itemsPopAwayScroll( e ) {
 		if ( itemsPop && ! itemsPop.contains( e.target ) ) closeItemsPop();
 	}
 	function itemsPopKey( e ) {
@@ -6181,6 +6194,7 @@
 		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - pop.offsetWidth - 10 ) ) + 'px';
 		pop.style.top = Math.max( 10, Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
 		document.addEventListener( 'mousedown', itemsPopAway, true );
+		document.addEventListener( 'scroll', itemsPopAwayScroll, true );
 		document.addEventListener( 'keydown', itemsPopKey, true );
 	}
 
@@ -6231,9 +6245,15 @@
 		if ( subRelPop ) subRelPop.remove();
 		subRelPop = null;
 		document.removeEventListener( 'mousedown', subRelPopAway, true );
+		document.removeEventListener( 'scroll', subRelPopAwayScroll, true );
 		document.removeEventListener( 'keydown', subRelPopKey, true );
 	}
 	function subRelPopAway( e ) {
+		if ( subRelPop && ! subRelPop.contains( e.target ) ) closeSubRelPop();
+	}
+	// The popover is position:fixed, so it cannot ride a scrolling list;
+	// any scroll outside it (capture: scroll does not bubble) closes it.
+	function subRelPopAwayScroll( e ) {
 		if ( subRelPop && ! subRelPop.contains( e.target ) ) closeSubRelPop();
 	}
 	function subRelPopKey( e ) {
@@ -6272,6 +6292,7 @@
 			go( 'subscriptions/' + id );
 		} );
 		document.addEventListener( 'mousedown', subRelPopAway, true );
+		document.addEventListener( 'scroll', subRelPopAwayScroll, true );
 		document.addEventListener( 'keydown', subRelPopKey, true );
 	}
 
@@ -6370,7 +6391,7 @@
 										<div class="minn-order-note${ n.customer_note ? ' customer' : '' }">
 											<div class="minn-order-note-meta">
 												<span>${ esc( n.author || __( 'System' ) ) }</span>
-												<span>${ esc( timeAgo( n.date_created_gmt || n.date_created ) ) }</span>
+												<span>${ esc( timeAgo( n.date_created_gmt || n.date_created, { utc: !! n.date_created_gmt } ) ) }</span>
 												${ n.customer_note ? `<span class="minn-status future">${ __( 'Customer' ) }</span>` : `<span class="minn-status draft">${ __( 'Private' ) }</span>` }
 											</div>
 											<div class="minn-order-note-body">${ esc( n.note || '' ) }</div>
@@ -6399,6 +6420,15 @@
 					method: 'POST',
 					body: JSON.stringify( { note, customer_note: customer } ),
 				} );
+				// Clear via an input event too: the detail's pending-edits
+				// scratchpad records typed values by id and re-applies them
+				// after every rebuild, so a silent .value reset gets undone.
+				if ( ta ) {
+					ta.value = '';
+					ta.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+				}
+				const cb = $( '#' + ctx.prefix + '-note-customer', ctx.host || document );
+				if ( cb ) cb.checked = false;
 				const rows = await api( `${ ctx.route }/notes?per_page=50` );
 				ctx.onSaved( Array.isArray( rows ) ? rows : [] );
 				toast( customer ? __( 'Customer note added' ) : __( 'Private note added' ) );
