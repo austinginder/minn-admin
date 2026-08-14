@@ -206,6 +206,41 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			sched.body && String( sched.body.billing_interval ) === '2',
 			JSON.stringify( { interval: sched.body && sched.body.billing_interval, period: sched.body && sched.body.billing_period } ) );
 
+		// ---- The timeline takes notes, private and customer-visible ----
+		await page.waitForSelector( '.minn-sub-page .minn-sub-notes', { timeout: 20000 } );
+		await page.fill( '#minn-s-new-note', 'Called about the card on file.' );
+		await page.click( '#minn-s-note-add' );
+		await page.waitForFunction( () => /Called about the card on file/.test(
+			( document.querySelector( '.minn-sub-notes' ) || {} ).textContent || '' ), null, { timeout: 20000 } );
+		let subNotes = await api( `wc/v3/subscriptions/${ subId }/notes?per_page=20` );
+		const priv = ( subNotes.body || [] ).find( ( n ) => /Called about the card/.test( n.note || '' ) );
+		// What the card shows is not the point; what WooCommerce stored is.
+		t.check( 'a private note reaches the subscription and stays private',
+			!! priv && priv.customer_note === false, JSON.stringify( { found: !! priv, customer: priv && priv.customer_note } ) );
+
+		await page.fill( '#minn-s-new-note', 'Your next delivery ships Monday.' );
+		await page.check( '#minn-s-note-customer' );
+		await page.click( '#minn-s-note-add' );
+		await page.waitForFunction( () => /ships Monday/.test(
+			( document.querySelector( '.minn-sub-notes' ) || {} ).textContent || '' ), null, { timeout: 20000 } );
+		subNotes = await api( `wc/v3/subscriptions/${ subId }/notes?per_page=20` );
+		const cust = ( subNotes.body || [] ).find( ( n ) => /ships Monday/.test( n.note || '' ) );
+		t.check( 'a customer note is saved as visible to the customer',
+			!! cust && cust.customer_note === true, JSON.stringify( { found: !! cust, customer: cust && cust.customer_note } ) );
+		t.check( 'the timeline marks which is which',
+			await page.evaluate( () => {
+				const list = document.querySelector( '.minn-sub-notes .minn-order-notes-list' );
+				if ( ! list ) return false;
+				const rows = [ ...list.querySelectorAll( '.minn-order-note' ) ];
+				const p = rows.find( ( r ) => /Called about the card/.test( r.textContent ) );
+				const c = rows.find( ( r ) => /ships Monday/.test( r.textContent ) );
+				return !! p && !! c && ! p.classList.contains( 'customer' ) && c.classList.contains( 'customer' );
+			} ), '' );
+		// Both hosts can be on screen at once (an order quick view over this
+		// page), so the composers must not share ids with the order's.
+		t.check( 'the subscription composer does not borrow the order ids',
+			await page.evaluate( () => ! document.getElementById( 'minn-o-note-add' ) ), '' );
+
 		// ---- A related order can be glanced at without leaving the page ----
 		await page.hover( `[data-relorder="${ orderId }"]` );
 		await page.click( `[data-relqv="${ orderId }"]` );

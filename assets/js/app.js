@@ -5847,6 +5847,77 @@
 	 * an order or a subscription. `money` formats one amount in the entity's
 	 * own currency, which is the only thing that differs between the two.
 	 */
+	/**
+	 * The notes timeline: composer on top, the record's own notes below, each
+	 * marked private or customer-visible. Orders and subscriptions wear the
+	 * same card because WooCommerce gives them the same note shape
+	 * ({ note, customer_note }) under their own route.
+	 *
+	 * The ids are the caller's, and that is not decoration: an order quick
+	 * view can stack over a subscription page, putting two timelines in one
+	 * document, and a shared id would let one host's binder drive the other
+	 * host's composer — the page's, since it comes first in the DOM.
+	 */
+	function notesTimelineHtml( notes, canEdit, prefix, cls ) {
+		return `
+							<div class="minn-order-sec minn-order-notes${ cls ? ' ' + cls : '' }">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Timeline' ) }</div></div>
+								${ notes == null ? `<div class="minn-loading" style="padding:8px;">${ __( 'Loading notes…' ) }</div>` : `
+								${ canEdit ? `
+								<div class="minn-order-fields" style="margin:0 0 12px;">
+									<div><textarea class="minn-input" id="${ prefix }-new-note" rows="2" placeholder="${ esc( __( 'Internal note for staff…' ) ) }"></textarea></div>
+									<div class="minn-order-composer-foot">
+										<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
+											<input type="checkbox" id="${ prefix }-note-customer">
+											<span>${ __( 'Visible to the customer' ) }</span>
+										</label>
+										<button class="minn-btn-soft" id="${ prefix }-note-add" type="button">${ __( 'Add note' ) }</button>
+									</div>
+								</div>` : '' }
+								<div class="minn-order-notes-list">
+									${ ( notes || [] ).length ? ( notes || [] ).map( ( n ) => `
+										<div class="minn-order-note${ n.customer_note ? ' customer' : '' }">
+											<div class="minn-order-note-meta">
+												<span>${ esc( n.author || __( 'System' ) ) }</span>
+												<span>${ esc( timeAgo( n.date_created_gmt || n.date_created ) ) }</span>
+												${ n.customer_note ? `<span class="minn-status future">${ __( 'Customer' ) }</span>` : `<span class="minn-status draft">${ __( 'Private' ) }</span>` }
+											</div>
+											<div class="minn-order-note-body">${ esc( n.note || '' ) }</div>
+										</div>` ).join( '' ) : `<div class="minn-toggle-desc">${ __( 'No notes yet.' ) }</div>` }
+								</div>` }
+							</div>`;
+	}
+
+	/**
+	 * The composer's behaviour, shared the same way.
+	 * ctx: { prefix, host, route, onSaved( notes ) } — the route is the
+	 * record's own (`wc/v3/orders/12`, `wc/v3/subscriptions/34`); `/notes`
+	 * hangs off both identically.
+	 */
+	function bindNotesComposer( ctx ) {
+		const add = $( '#' + ctx.prefix + '-note-add', ctx.host || document );
+		if ( ! add ) return;
+		add.addEventListener( 'click', async () => {
+			const ta = $( '#' + ctx.prefix + '-new-note', ctx.host || document );
+			const note = ( ( ta && ta.value ) || '' ).trim();
+			if ( ! note ) { toast( __( 'Write a note first' ), true ); return; }
+			const customer = !! ( $( '#' + ctx.prefix + '-note-customer', ctx.host || document ) || {} ).checked;
+			add.disabled = true;
+			try {
+				await api( `${ ctx.route }/notes`, {
+					method: 'POST',
+					body: JSON.stringify( { note, customer_note: customer } ),
+				} );
+				const rows = await api( `${ ctx.route }/notes?per_page=50` );
+				ctx.onSaved( Array.isArray( rows ) ? rows : [] );
+				toast( customer ? __( 'Customer note added' ) : __( 'Private note added' ) );
+			} catch ( e ) {
+				toast( e.message, true );
+				add.disabled = false;
+			}
+		} );
+	}
+
 	function itemsFormHtml( entity, money ) {
 		return `
 			<div class="minn-order-fields">
@@ -6207,32 +6278,7 @@
 								</div>
 								<div class="minn-toggle-desc" style="margin-top:8px;">Resends a transactional email through WooCommerce (invoice, processing, completed, …).</div>` }
 							</div>` : '' }
-							<div class="minn-order-sec minn-order-notes">
-								<div class="minn-order-card-head"><div class="minn-side-title">${ __( 'Timeline' ) }</div></div>
-								${ m.notes == null ? '<div class="minn-loading" style="padding:8px;">Loading notes…</div>' : `
-								${ canEdit ? `
-								<div class="minn-order-fields" style="margin:0 0 12px;">
-									<div><textarea class="minn-input" id="minn-o-new-note" rows="2" placeholder="Internal note for staff…"></textarea></div>
-									<div class="minn-order-composer-foot">
-										<label class="minn-check" style="display:flex; gap:8px; align-items:center; font-size:13px;">
-											<input type="checkbox" id="minn-o-note-customer">
-											<span>Visible to the customer</span>
-										</label>
-										<button class="minn-btn-soft" id="minn-o-note-add" type="button">Add note</button>
-									</div>
-								</div>` : '' }
-								<div class="minn-order-notes-list">
-									${ ( m.notes || [] ).length ? ( m.notes || [] ).map( ( n ) => `
-										<div class="minn-order-note${ n.customer_note ? ' customer' : '' }">
-											<div class="minn-order-note-meta">
-												<span>${ esc( n.author || 'System' ) }</span>
-												<span>${ esc( timeAgo( n.date_created_gmt || n.date_created ) ) }</span>
-												${ n.customer_note ? '<span class="minn-status future">Customer</span>' : '<span class="minn-status draft">Private</span>' }
-											</div>
-											<div class="minn-order-note-body">${ esc( n.note || '' ) }</div>
-										</div>` ).join( '' ) : '<div class="minn-toggle-desc">No notes yet.</div>' }
-								</div>` }
-							</div>
+							${ notesTimelineHtml( m.notes, canEdit, 'minn-o' ) }
 						</div>
 						<div class="minn-order-side">
 							<div class="minn-order-sec minn-order-custnote">
@@ -6809,26 +6855,10 @@
 				wcSend.disabled = false;
 			} );
 
-			const noteAdd = $( '#minn-o-note-add' );
-			if ( noteAdd ) noteAdd.addEventListener( 'click', async () => {
-				const ta = $( '#minn-o-new-note' );
-				const note = ( ta && ta.value || '' ).trim();
-				if ( ! note ) { toast( 'Write a note first', true ); return; }
-				const customer = !!( $( '#minn-o-note-customer' ) || {} ).checked;
-				noteAdd.disabled = true;
-				try {
-					await api( `wc/v3/orders/${ o.id }/notes`, {
-						method: 'POST',
-						body: JSON.stringify( { note, customer_note: customer } ),
-					} );
-					const notes = await api( `wc/v3/orders/${ o.id }/notes?per_page=50` );
-					m.notes = Array.isArray( notes ) ? notes : [];
-					toast( customer ? 'Customer note added' : 'Private note added' );
-					rerender();
-				} catch ( e ) {
-					toast( e.message, true );
-					noteAdd.disabled = false;
-				}
+			bindNotesComposer( {
+				prefix: 'minn-o',
+				route: `wc/v3/orders/${ o.id }`,
+				onSaved: ( notes ) => { m.notes = notes; rerender(); },
 			} );
 	}
 
@@ -7607,6 +7637,7 @@
 											<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>
 											<span>${ esc( subMoney( s, o.total ) ) }</span>` ) ).join( '' ) }
 							</div>
+							${ notesTimelineHtml( m.notes, canEdit, 'minn-s', 'minn-sub-notes' ) }
 						</div>
 						<div class="minn-order-side">
 							<div class="minn-order-sec minn-order-customer">
@@ -7692,6 +7723,18 @@
 						m.relatedOrders = [];
 						rr();
 					} );
+				// The timeline, on its own request for the same reason.
+				api( `wc/v3/subscriptions/${ id }/notes?per_page=50` )
+					.then( ( rows ) => {
+						if ( ! isCur() ) return;
+						m.notes = Array.isArray( rows ) ? rows : [];
+						rr();
+					} )
+					.catch( () => {
+						if ( ! isCur() ) return;
+						m.notes = [];
+						rr();
+					} );
 			} )
 			.catch( ( e ) => {
 				if ( ! isCur() ) return;
@@ -7710,7 +7753,7 @@
 		}
 		let m = state.subPage;
 		if ( ! m || m.sub.id !== state.subPageId ) {
-			m = state.subPage = { type: 'subscription', page: true, sub: { id: state.subPageId, number: String( state.subPageId ) }, full: null, loading: true, relatedOrders: null };
+			m = state.subPage = { type: 'subscription', page: true, sub: { id: state.subPageId, number: String( state.subPageId ) }, full: null, loading: true, relatedOrders: null, notes: null };
 			loadSubscriptionDetail( m );
 		}
 		const s = m.full || m.sub;
@@ -7921,6 +7964,12 @@
 				openOrderModal( known || { id: oid, number: String( oid ) } );
 			} )
 		);
+		bindNotesComposer( {
+			prefix: 'minn-s',
+			host: view,
+			route: `wc/v3/subscriptions/${ ( m.full || m.sub || {} ).id }`,
+			onSaved: ( notes ) => { m.notes = notes; rerender(); },
+		} );
 		const fullPageBtn = $( '#minn-sub-fullpage' );
 		if ( fullPageBtn ) fullPageBtn.addEventListener( 'click', () => {
 			closeModal();
@@ -7938,6 +7987,7 @@
 			full: null,
 			loading: true,
 			relatedOrders: null,
+			notes: null,
 		};
 		renderOverlays();
 		loadSubscriptionDetail( m );
