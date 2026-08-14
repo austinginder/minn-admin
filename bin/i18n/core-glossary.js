@@ -84,6 +84,21 @@ function lookup( glossary, normIndex, msgid ) {
 	return { forms, exact: false };
 }
 
+/**
+ * Whether core's translation may be taken VERBATIM for this msgid.
+ *
+ * Only multi-word strings. A single English word can mean different things in
+ * different products, and core's catalog answers for core's meaning: Dutch
+ * core renders "Table" as "Tafel" (the furniture), "Order" as "Volgorde" (a
+ * sequence, not a purchase) and "Find" as "Vind". Applied blindly those are
+ * wrong in an admin that lists database tables and WooCommerce orders.
+ *
+ * Multi-word strings carry their own context and are safe. Single words still
+ * reach the translator, with core's rendering attached as a suggestion, so
+ * the shared vocabulary is kept where it fits and rejected where it does not.
+ */
+const coreMayAnswer = ( msgid ) => /\s/.test( String( msgid ).trim() );
+
 /** Build the normalized index once per locale. */
 function buildNormIndex( glossary ) {
 	const idx = new Map();
@@ -114,7 +129,7 @@ function download( url, dest ) {
 	} );
 }
 
-module.exports = { loadCoreGlossary, buildNormIndex, lookup, normKey, corePackUrl, download };
+module.exports = { loadCoreGlossary, buildNormIndex, lookup, normKey, coreMayAnswer, corePackUrl, download };
 
 if ( require.main === module ) {
 	const locale = process.argv[ 2 ];

@@ -13,7 +13,7 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 
 const { parsePo } = require( './po.js' );
-const { loadCoreGlossary, buildNormIndex, lookup } = require( './core-glossary.js' );
+const { loadCoreGlossary, buildNormIndex, lookup, coreMayAnswer } = require( './core-glossary.js' );
 const { byCode, nplurals } = require( './locales.js' );
 
 const ROOT = path.resolve( __dirname, '../..' );
@@ -33,21 +33,31 @@ const { entries } = parsePo( fs.readFileSync( POT, 'utf8' ) );
 const glossary = loadCoreGlossary( loc.code );
 const normIdx = buildNormIndex( glossary );
 
-// Carry forward anything a human already reviewed.
+// Carry forward anything a human already reviewed. With --missing-only,
+// carry forward everything already translated too, so a top-up pass asks
+// only for what is genuinely still absent.
+const missingOnly = process.argv.includes( '--missing-only' );
 const outPath = path.join( ROOT, 'languages', `${ loc.code }.po` );
 const reviewed = new Set();
+const already = new Set();
 if ( fs.existsSync( outPath ) ) {
 	for ( const e of parsePo( fs.readFileSync( outPath, 'utf8' ) ).entries ) {
 		if ( e.flags.includes( 'minn-reviewed' ) ) reviewed.add( e.msgid );
+		if ( e.msgstr.some( Boolean ) ) already.add( e.msgid );
 	}
 }
 
 const todo = [];
 for ( const e of entries ) {
 	if ( reviewed.has( e.msgid ) ) continue;
-	if ( e.msgidPlural == null && lookup( glossary, normIdx, e.msgid ) ) continue;
+	if ( missingOnly && already.has( e.msgid ) ) continue;
+	const core = e.msgidPlural == null ? lookup( glossary, normIdx, e.msgid ) : null;
+	if ( core && coreMayAnswer( e.msgid ) ) continue;
 	const item = { id: todo.length, source: e.msgid };
 	if ( e.msgidPlural != null ) item.plural_source = e.msgidPlural;
+	// A single word core also has: offered as a suggestion, not imposed.
+	// Core answers for core's meaning, and "Table" is furniture there.
+	if ( core && core.forms[ 0 ] ) item.core_suggestion = core.forms[ 0 ];
 	const note = e.comments.find( ( c ) => /^translators\s*:/i.test( c ) );
 	if ( note ) item.note = note.replace( /^translators\s*:\s*/i, '' );
 	todo.push( item );
