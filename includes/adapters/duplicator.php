@@ -220,7 +220,7 @@ add_action( 'rest_api_init', function () {
 				'rows'    => array(
 					array(
 						'label' => __( 'Newest package', 'minn-admin' ),
-						'value' => $newest ? $newest['name'] : 'None yet',
+						'value' => $newest ? $newest['name'] : __( 'None yet', 'minn-admin' ),
 						'hint'  => $newest ? trim( $when . ' · ' . $newest['size'], ' ·' ) : 'Packages are built manually from Duplicator\'s screen.',
 					),
 					array(

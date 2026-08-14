@@ -78,17 +78,25 @@ function minn_admin_flamingo_status_model() {
 	$forms  = count( minn_admin_flamingo_channels() );
 	$bits   = array();
 	if ( $spam ) {
-		$bits[] = number_format_i18n( $spam ) . ' spam';
+		$bits[] = sprintf(
+			/* translators: %s: number of spam messages. */
+			__( '%s spam', 'minn-admin' ),
+			number_format_i18n( $spam )
+		);
 	}
 	if ( $trash ) {
-		$bits[] = number_format_i18n( $trash ) . ' in trash';
+		$bits[] = sprintf(
+			/* translators: %s: number of messages in the trash. */
+			__( '%s in trash', 'minn-admin' ),
+			number_format_i18n( $trash )
+		);
 	}
 	return array(
 		'rows'    => array(
 			array(
 				'label' => __( 'Inbox messages', 'minn-admin' ),
 				'value' => number_format_i18n( $inbox ),
-				'hint'  => $bits ? implode( ', ', $bits ) : 'All stored messages',
+				'hint'  => $bits ? implode( ', ', $bits ) : __( 'All stored messages', 'minn-admin' ),
 			),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
@@ -124,7 +132,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'channel_id',
-				'allLabel' => 'All messages',
+				'allLabel' => __( 'All messages', 'minn-admin' ),
 			),
 			// flamingo-spam is exclude_from_search; trash is core trash — three buckets.
 			'filter'    => array(
@@ -347,8 +355,8 @@ add_action( 'rest_api_init', function () {
 				$status = 'trash' === $bucket ? 'trash' : minn_admin_flamingo_status( $msg );
 				$items[] = array(
 					'id'      => (int) $msg->id(),
-					'from'    => $msg->from_name ?: ( $msg->from_email ?: '(unknown sender)' ),
-					'subject' => $msg->subject ?: '(no subject)',
+					'from'    => $msg->from_name ?: ( $msg->from_email ?: __( '(unknown sender)', 'minn-admin' ) ),
+					'subject' => $msg->subject ?: __( '(no subject)', 'minn-admin' ),
 					'form'    => $channel_names[ (string) $msg->channel ] ?? (string) $msg->channel,
 					'status'  => $status,
 					'bucket'  => $bucket,
@@ -560,7 +568,7 @@ add_action( 'rest_api_init', function () {
 			foreach ( $query->posts as $post ) {
 				$items[] = array(
 					'id'        => (int) $post->ID,
-					'title'     => $post->post_title ?: '(untitled form)',
+					'title'     => $post->post_title ?: __( '(untitled form)', 'minn-admin' ),
 					'shortcode' => sprintf( '[contact-form-7 id="%d"]', $post->ID ),
 					'messages'  => $counts[ $post->post_name ] ?? 0,
 					'date'      => str_replace( ' ', 'T', $post->post_modified ),

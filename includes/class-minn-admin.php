@@ -967,12 +967,13 @@ class Minn_Admin {
 			'minn-admin',
 			function () {
 				printf(
-					'<script>window.location.href = %s;</script><p><a href="%s">Open Minn Admin</a></p>',
+					'<script>window.location.href = %s;</script><p><a href="%s">%s</a></p>',
 					// JSON_HEX_TAG or a home_url containing </script> closes the
 					// element and everything after it parses as HTML. Same flag
 					// set the app shell uses in template.php.
 					wp_json_encode( self::app_url(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ),
-					esc_url( self::app_url() )
+					esc_url( self::app_url() ),
+					esc_html__( 'Open Minn Admin', 'minn-admin' )
 				);
 			},
 			'dashicons-superhero-alt',
@@ -993,7 +994,10 @@ class Minn_Admin {
 		status_header( 503 );
 		header( 'Retry-After: 3600' );
 		$title = esc_html( get_bloginfo( 'name' ) );
-		echo "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>{$title} — Coming soon</title><style>body{font-family:system-ui,sans-serif;background:#0b0b0d;color:#ececed;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}div{text-align:center}h1{font-size:22px;letter-spacing:-0.3px}p{color:#9d9da7}</style></head><body><div><h1>{$title}</h1><p>We&rsquo;re making some improvements. Back soon.</p></div></body></html>";
+		/* translators: %s: the site title. */
+		$page_title = esc_html( sprintf( __( '%s — Coming soon', 'minn-admin' ), get_bloginfo( 'name' ) ) );
+		$message    = esc_html__( 'We’re making some improvements. Back soon.', 'minn-admin' );
+		echo "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>{$page_title}</title><style>body{font-family:system-ui,sans-serif;background:#0b0b0d;color:#ececed;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}div{text-align:center}h1{font-size:22px;letter-spacing:-0.3px}p{color:#9d9da7}</style></head><body><div><h1>{$title}</h1><p>{$message}</p></div></body></html>";
 		exit;
 	}
 

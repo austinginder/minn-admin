@@ -59,9 +59,12 @@ class Minn_Admin_CPT {
 			'labels'       => array(
 				'name'          => $plural,
 				'singular_name' => $singular,
-				'add_new_item'  => 'Add New ' . $singular,
-				'edit_item'     => 'Edit ' . $singular,
-				'not_found'     => 'No ' . strtolower( $plural ) . ' found.',
+				/* translators: %s: the post type's singular label. */
+				'add_new_item'  => sprintf( __( 'Add New %s', 'minn-admin' ), $singular ),
+				/* translators: %s: the post type's singular label. */
+				'edit_item'     => sprintf( __( 'Edit %s', 'minn-admin' ), $singular ),
+				/* translators: %s: the post type's lowercased plural label. */
+				'not_found'     => sprintf( __( 'No %s found.', 'minn-admin' ), strtolower( $plural ) ),
 			),
 			'description'  => (string) ( $def['description'] ?? '' ),
 			'public'       => ! empty( $def['public'] ),
@@ -99,8 +102,10 @@ class Minn_Admin_CPT {
 			'labels'            => array(
 				'name'          => $plural,
 				'singular_name' => $singular,
-				'add_new_item'  => 'Add New ' . $singular,
-				'edit_item'     => 'Edit ' . $singular,
+				/* translators: %s: the taxonomy's singular label. */
+				'add_new_item'  => sprintf( __( 'Add New %s', 'minn-admin' ), $singular ),
+				/* translators: %s: the taxonomy's singular label. */
+				'edit_item'     => sprintf( __( 'Edit %s', 'minn-admin' ), $singular ),
 			),
 			'public'            => ! empty( $def['public'] ),
 			'hierarchical'      => ! empty( $def['hierarchical'] ),

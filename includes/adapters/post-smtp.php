@@ -106,7 +106,10 @@ function minn_admin_post_smtp_status_model() {
 			array(
 				'label' => __( 'Logged emails', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
-				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
+				'hint'  => $failed
+					/* translators: %s: number of failed sends. */
+					? sprintf( _n( '%s failed', '%s failed', $failed, 'minn-admin' ), number_format_i18n( $failed ) )
+					: __( 'All logged sends', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Transport', 'minn-admin' ),
@@ -248,7 +251,7 @@ add_action( 'rest_api_init', function () {
 			$items = array_map( function ( $row ) {
 				return array(
 					'id'      => (int) $row->id,
-					'subject' => $row->original_subject ? $row->original_subject : '(no subject)',
+					'subject' => $row->original_subject ? $row->original_subject : __( '(no subject)', 'minn-admin' ),
 					'to'      => minn_admin_post_smtp_recipients( $row->original_to ?: $row->to_header ),
 					'status'  => minn_admin_post_smtp_status( $row->success ),
 					'date'    => minn_admin_post_smtp_iso( $row->time ),

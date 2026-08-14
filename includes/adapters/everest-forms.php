@@ -443,7 +443,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'form_id',
-				'allLabel' => 'All entries',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
@@ -679,7 +679,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$items[] = array(
 					'id'         => (int) $row->entry_id,
-					'summary'    => $parts ? implode( ' · ', $parts ) : '(empty entry)',
+					'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
 					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 					'status'     => (string) $row->status,
 					'date'       => str_replace( ' ', 'T', (string) $row->date_created ),
@@ -845,10 +845,10 @@ add_action( 'rest_api_init', function () {
 					$id
 				) );
 				$msgs = array(
-					'trash'   => 'Entry moved to trash.',
-					'restore' => 'Entry restored.',
-					'spam'    => 'Entry marked as spam.',
-					'unspam'  => 'Entry marked not spam.',
+					'trash'   => __( 'Entry moved to trash.', 'minn-admin' ),
+					'restore' => __( 'Entry restored.', 'minn-admin' ),
+					'spam'    => __( 'Entry marked as spam.', 'minn-admin' ),
+					'unspam'  => __( 'Entry marked not spam.', 'minn-admin' ),
 				);
 				return rest_ensure_response( array(
 					'ok'      => true,

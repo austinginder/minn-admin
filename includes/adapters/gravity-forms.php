@@ -78,7 +78,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'route'    => 'gf/v2/forms',
 				'valueKey' => 'id',
 				'labelKey' => 'title',
-				'allLabel' => 'All entries',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => '_summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'entry-summary' ),
@@ -301,7 +301,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'    => 'gf/v2/forms',
 					'valueKey' => 'id',
 					'labelKey' => 'title',
-					'allLabel' => 'All notifications',
+					'allLabel' => __( 'All notifications', 'minn-admin' ),
 				),
 				'columns'   => array(
 					array( 'key' => 'name', 'label' => __( 'Notification', 'minn-admin' ), 'format' => 'title' ),
@@ -368,7 +368,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'    => 'gf/v2/forms',
 					'valueKey' => 'id',
 					'labelKey' => 'title',
-					'allLabel' => 'All feeds',
+					'allLabel' => __( 'All feeds', 'minn-admin' ),
 				),
 				'columns'   => array(
 					array( 'key' => 'name', 'label' => __( 'Feed', 'minn-admin' ), 'format' => 'title' ),
@@ -583,14 +583,15 @@ add_action( 'rest_api_init', function () {
 			$to    = 'Field: ' . ( $field ? wp_strip_all_tags( GFCommon::get_label( $field ) ) : '#' . ( isset( $n['to'] ) ? $n['to'] : '?' ) );
 		} elseif ( 'routing' === $to_type ) {
 			$rules = isset( $n['routing'] ) && is_array( $n['routing'] ) ? count( $n['routing'] ) : 0;
-			$to    = sprintf( 'Routing (%d rule%s)', $rules, 1 === $rules ? '' : 's' );
+			/* translators: %d: number of routing rules on the notification. */
+			$to    = sprintf( _n( 'Routing (%d rule)', 'Routing (%d rules)', $rules, 'minn-admin' ), $rules );
 		} else {
 			$to = '—';
 		}
 		$events = array(
-			'form_submission'           => 'Form is submitted',
-			'form_saved'                => 'Draft is saved',
-			'form_save_email_requested' => 'Draft link is requested',
+			'form_submission'           => __( 'Form is submitted', 'minn-admin' ),
+			'form_saved'                => __( 'Draft is saved', 'minn-admin' ),
+			'form_save_email_requested' => __( 'Draft link is requested', 'minn-admin' ),
 		);
 		$event  = isset( $n['event'] ) && '' !== $n['event'] ? (string) $n['event'] : 'form_submission';
 		return array(
@@ -720,7 +721,8 @@ add_action( 'rest_api_init', function () {
 				// ({admin_email}, {Email:2}) in the To field.
 				foreach ( array_map( 'trim', explode( ',', $to ) ) as $piece ) {
 					if ( ! is_email( $piece ) && ! preg_match( '/^\{[^{}]+\}$/', $piece ) ) {
-						return new WP_Error( 'bad_to', '"' . $piece . '" is not an email address or merge tag.', array( 'status' => 400 ) );
+						/* translators: %s: the rejected send-to entry. */
+						return new WP_Error( 'bad_to', sprintf( __( '"%s" is not an email address or merge tag.', 'minn-admin' ), $piece ), array( 'status' => 400 ) );
 					}
 				}
 				$n['to'] = $to;
@@ -1200,7 +1202,8 @@ function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 				break;
 			case 'select':
 				if ( ! in_array( (string) $value, array_map( 'strval', $s['options'] ), true ) ) {
-					return new WP_Error( 'bad_choice', '"' . $value . '" is not one of the choices for ' . $key . '.', array( 'status' => 400 ) );
+					/* translators: 1: the rejected value, 2: the setting key. */
+					return new WP_Error( 'bad_choice', sprintf( __( '"%1$s" is not one of the choices for %2$s.', 'minn-admin' ), $value, $key ), array( 'status' => 400 ) );
 				}
 				$value = (string) $value;
 				break;

@@ -344,7 +344,7 @@ add_action( 'rest_api_init', function () {
 				foreach ( $decoded as $k => $v ) {
 					$label = ucfirst( trim( str_replace( array( '-', '_' ), ' ', (string) $k ) ) );
 					if ( is_bool( $v ) ) {
-						$context[] = array( 'label' => $label, 'value' => $v ? 'Yes' : 'No' );
+						$context[] = array( 'label' => $label, 'value' => $v ? __( 'Yes', 'minn-admin' ) : __( 'No', 'minn-admin' ) );
 					} elseif ( is_scalar( $v ) ) {
 						$val = (string) $v;
 						$context[] = array( 'label' => $label, 'value' => strlen( $val ) > 200 ? substr( $val, 0, 200 ) . '…' : $val );
@@ -403,13 +403,17 @@ add_action( 'rest_api_init', function () {
 				array(
 					'label' => __( 'Events (24h)', 'minn-admin' ),
 					'value' => number_format_i18n( $day ),
-					'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
+					'hint'  => sprintf(
+						/* translators: %s: number of events recorded in the last 7 days. */
+						__( '%s in the last 7 days', 'minn-admin' ),
+						number_format_i18n( $week )
+					),
 				),
 				array( 'label' => __( 'Events all-time', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
 				array(
 					'label' => __( 'Warnings (7d)', 'minn-admin' ),
 					'value' => number_format_i18n( $warn ),
-					'hint'  => $warn ? 'warning, error or fatal' : 'all clear',
+					'hint'  => $warn ? __( 'warning, error or fatal', 'minn-admin' ) : __( 'all clear', 'minn-admin' ),
 				),
 				array(
 					'label' => __( 'Failed logins (24h)', 'minn-admin' ),
@@ -418,17 +422,23 @@ add_action( 'rest_api_init', function () {
 				),
 				array(
 					'label' => __( 'Locked out now', 'minn-admin' ),
-					'value' => $posture['locked'] ? number_format_i18n( $posture['locked'] ) : 'Nobody',
-					'hint'  => $posture['locked'] ? 'temporary login lockdowns' : 'no active lockdowns',
+					'value' => $posture['locked'] ? number_format_i18n( $posture['locked'] ) : __( 'Nobody', 'minn-admin' ),
+					'hint'  => $posture['locked'] ? __( 'temporary login lockdowns', 'minn-admin' ) : __( 'no active lockdowns', 'minn-admin' ),
 				),
 				array(
 					'label' => __( 'Permanent blocks', 'minn-admin' ),
 					'value' => number_format_i18n( $posture['blocks'] ),
-					'hint'  => $posture['blocks'] ? 'blocked IPs' : 'none',
+					'hint'  => $posture['blocks'] ? __( 'blocked IPs', 'minn-admin' ) : __( 'none', 'minn-admin' ),
 				),
 				array(
 					'label' => __( 'Last event', 'minn-admin' ),
-					'value' => $last ? human_time_diff( (int) $last, time() ) . ' ago' : '—',
+					'value' => $last
+						? sprintf(
+							/* translators: %s: human-readable time since the last event. */
+							__( '%s ago', 'minn-admin' ),
+							human_time_diff( (int) $last, time() )
+						)
+						: '—',
 				),
 			);
 			$actions = array(

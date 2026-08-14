@@ -212,7 +212,7 @@ add_action( 'rest_api_init', function () {
 			$mapped = minn_admin_wpjm_mapped_fields();
 			return rest_ensure_response( array(
 				'groups' => array(
-					array( 'group' => 'Listing details', 'fields' => $mapped['fields'], 'locked' => $mapped['locked'] ),
+					array( 'group' => __( 'Listing details', 'minn-admin' ), 'fields' => $mapped['fields'], 'locked' => $mapped['locked'] ),
 				),
 			) );
 		},
@@ -239,7 +239,7 @@ add_action( 'rest_api_init', function () {
 				minn_admin_wpjm_write_values( $post->ID, $value );
 			},
 			'schema'          => array(
-				'description' => 'WP Job Manager listing fields for Minn Admin.',
+				'description' => __( 'WP Job Manager listing fields for Minn Admin.', 'minn-admin' ),
 				'type'        => 'object',
 				'context'     => array( 'edit' ),
 			),

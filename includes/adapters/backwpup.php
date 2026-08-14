@@ -150,14 +150,18 @@ function minn_admin_backwpup_status_model() {
 	}
 
 	if ( $running ) {
-		$last_value = 'Running now…';
-		$last_hint  = 'BackWPup is building a backup';
+		$last_value = __( 'Running now…', 'minn-admin' );
+		$last_hint  = __( 'BackWPup is building a backup', 'minn-admin' );
 	} elseif ( $last > 0 ) {
-		$last_value = human_time_diff( $last ) . ' ago';
-		$last_hint  = 'Last finished job run';
+		$last_value = sprintf(
+			/* translators: %s: human-readable time since the last finished job run. */
+			__( '%s ago', 'minn-admin' ),
+			human_time_diff( $last )
+		);
+		$last_hint  = __( 'Last finished job run', 'minn-admin' );
 	} else {
-		$last_value = 'Never';
-		$last_hint  = 'No finished job run recorded yet';
+		$last_value = __( 'Never', 'minn-admin' );
+		$last_hint  = __( 'No finished job run recorded yet', 'minn-admin' );
 	}
 
 	$actions = array();
@@ -188,7 +192,13 @@ function minn_admin_backwpup_status_model() {
 			array(
 				'label' => __( 'Local archives', 'minn-admin' ),
 				'value' => (string) count( $rows ),
-				'hint'  => $disk ? size_format( $disk ) . ' on disk' : 'Nothing in the local folder yet',
+				'hint'  => $disk
+					? sprintf(
+						/* translators: %s: total size of local backup archives. */
+						__( '%s on disk', 'minn-admin' ),
+						size_format( $disk )
+					)
+					: __( 'Nothing in the local folder yet', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Jobs (local folder)', 'minn-admin' ),

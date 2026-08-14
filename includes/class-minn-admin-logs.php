@@ -75,14 +75,14 @@ class Minn_Admin_Logs {
 		$sources = array();
 
 		$debug            = self::debug_log_path();
-		$sources['debug'] = self::file_source( 'Debug log', 'WordPress', $debug, true );
+		$sources['debug'] = self::file_source( __( 'Debug log', 'minn-admin' ), 'WordPress', $debug, true );
 
 		// The PHP error log, when it is a separate real file (not syslog,
 		// not already the debug path).
 		$ini = ini_get( 'error_log' );
 		if ( $ini && 'syslog' !== $ini && '/' === substr( $ini, 0, 1 ) && $ini !== $debug && file_exists( $ini )
 			&& self::site_owned( $ini ) ) {
-			$sources['php-error'] = self::file_source( 'PHP error log', 'Server', $ini, true );
+			$sources['php-error'] = self::file_source( __( 'PHP error log', 'minn-admin' ), __( 'Server', 'minn-admin' ), $ini, true );
 		}
 
 		// One source per WooCommerce log channel, via WC's own controller.

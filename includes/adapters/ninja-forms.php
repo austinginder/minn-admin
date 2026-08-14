@@ -158,7 +158,10 @@ function minn_admin_ninja_forms_status_model() {
 			array(
 				'label' => __( 'Submissions', 'minn-admin' ),
 				'value' => number_format_i18n( $subs ),
-				'hint'  => $trash ? number_format_i18n( $trash ) . ' in trash' : 'All stored submissions',
+				'hint'  => $trash
+					/* translators: %s: number of trashed submissions. */
+					? sprintf( _n( '%s in trash', '%s in trash', $trash, 'minn-admin' ), number_format_i18n( $trash ) )
+					: __( 'All stored submissions', 'minn-admin' ),
 			),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
@@ -193,7 +196,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'form_id',
-				'allLabel' => 'All entries',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
@@ -378,7 +381,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$items[] = array(
 					'id'         => (int) $post->ID,
-					'summary'    => $parts ? implode( ' · ', $parts ) : '(empty entry)',
+					'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
 					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 					'status'     => (string) $post->post_status,
 					'seq'        => (int) get_post_meta( $post->ID, '_seq_num', true ),

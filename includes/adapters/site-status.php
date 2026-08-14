@@ -173,7 +173,7 @@ function minn_admin_site_visibility() {
 	// Minn's own maintenance mode (class-minn-admin.php serves a 503 page).
 	if ( get_option( 'minn_admin_maintenance' ) ) {
 		$providers[] = array(
-			'name' => 'Minn maintenance mode',
+			'name' => __( 'Minn maintenance mode', 'minn-admin' ),
 			'kind' => 'maintenance',
 			'note' => __( 'Visitors get a 503 holding page', 'minn-admin' ),
 			'minn' => true, // toggled in Minn's own Settings, not a wp-admin screen
@@ -276,10 +276,10 @@ function minn_admin_site_visibility() {
 	if ( class_exists( 'WooCommerce' ) && 'yes' === get_option( 'woocommerce_coming_soon' ) ) {
 		$store_only  = 'yes' === get_option( 'woocommerce_store_pages_only' );
 		$providers[] = array(
-			'name'    => 'WooCommerce coming soon',
+			'name'    => __( 'WooCommerce coming soon', 'minn-admin' ),
 			'id'      => 'wc',
 			'kind'    => 'coming-soon',
-			'note'    => $store_only ? 'Only store pages are hidden; the rest of the site is public' : 'Visitors see the coming-soon page instead of the site',
+			'note'    => $store_only ? __( 'Only store pages are hidden; the rest of the site is public', 'minn-admin' ) : __( 'Visitors see the coming-soon page instead of the site', 'minn-admin' ),
 			'url'     => admin_url( 'admin.php?page=wc-settings&tab=site-visibility' ),
 			'partial' => $store_only,
 		);
@@ -291,7 +291,7 @@ function minn_admin_site_visibility() {
 		$el_mode = get_option( 'elementor_maintenance_mode_mode' );
 		if ( 'maintenance' === $el_mode || 'coming_soon' === $el_mode ) {
 			$providers[] = array(
-				'name' => 'Elementor maintenance mode',
+				'name' => __( 'Elementor maintenance mode', 'minn-admin' ),
 				'id'   => 'elementor',
 				'kind' => 'maintenance' === $el_mode ? 'maintenance' : 'coming-soon',
 				'url'  => admin_url( 'admin.php?page=elementor-tools#tab-maintenance_mode' ),

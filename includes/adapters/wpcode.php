@@ -209,16 +209,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 	$location_options = array(
 		array( 'everywhere', 'Everywhere' ),
-		array( 'frontend_only', 'Front-end only' ),
-		array( 'admin_only', 'Admin only' ),
-		array( 'site_wide_header', 'Site-wide header' ),
-		array( 'site_wide_body', 'Site-wide body' ),
-		array( 'site_wide_footer', 'Site-wide footer' ),
-		array( 'before_post', 'Before post' ),
-		array( 'after_post', 'After post' ),
-		array( 'before_content', 'Before content' ),
-		array( 'after_content', 'After content' ),
-		array( 'after_paragraph', 'After paragraph' ),
+		array( 'frontend_only', __( 'Front-end only', 'minn-admin' ) ),
+		array( 'admin_only', __( 'Admin only', 'minn-admin' ) ),
+		array( 'site_wide_header', __( 'Site-wide header', 'minn-admin' ) ),
+		array( 'site_wide_body', __( 'Site-wide body', 'minn-admin' ) ),
+		array( 'site_wide_footer', __( 'Site-wide footer', 'minn-admin' ) ),
+		array( 'before_post', __( 'Before post', 'minn-admin' ) ),
+		array( 'after_post', __( 'After post', 'minn-admin' ) ),
+		array( 'before_content', __( 'Before content', 'minn-admin' ) ),
+		array( 'after_content', __( 'After content', 'minn-admin' ) ),
+		array( 'after_paragraph', __( 'After paragraph', 'minn-admin' ) ),
 	);
 
 	$edit_fields = array(
@@ -633,7 +633,7 @@ add_action( 'rest_api_init', function () {
 				array(
 					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
-					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
+					'hint'  => $inactive ? $inactive . ' inactive' : __( 'nothing inactive', 'minn-admin' ),
 				),
 			);
 			$types = $wpdb->get_results(

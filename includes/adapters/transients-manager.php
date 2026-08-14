@@ -257,7 +257,8 @@ function minn_admin_tm_detail( $id ) {
 	}
 	if ( in_array( $item['type'], array( 'array', 'object', 'serialized' ), true ) ) {
 		// Opaque by design — length only, so Minn never materializes the payload.
-		$show = '(serialized ' . $item['type'] . ', ' . number_format_i18n( strlen( $raw ) ) . ' bytes — open Transients Manager to inspect)';
+		/* translators: 1: value type (array, object or serialized), 2: formatted byte count. */
+		$show = sprintf( __( '(serialized %1$s, %2$s bytes — open Transients Manager to inspect)', 'minn-admin' ), $item['type'], number_format_i18n( strlen( $raw ) ) );
 	}
 
 	$meta = array(
@@ -315,17 +316,17 @@ function minn_admin_tm_status_model() {
 			array(
 				'label' => __( 'Expired', 'minn-admin' ),
 				'value' => number_format_i18n( $expired ),
-				'hint'  => $expired ? 'Safe to purge' : 'None past due',
+				'hint'  => $expired ? __( 'Safe to purge', 'minn-admin' ) : __( 'None past due', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Auto-cleanup', 'minn-admin' ),
-				'value' => $next_cron ? gmdate( 'Y-m-d H:i', $next_cron ) . ' UTC' : 'Not scheduled',
+				'value' => $next_cron ? gmdate( 'Y-m-d H:i', $next_cron ) . ' UTC' : __( 'Not scheduled', 'minn-admin' ),
 				'hint'  => __( 'WordPress delete_expired_transients cron', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Writes', 'minn-admin' ),
 				'value' => $suspended ? 'Suspended' : 'Allowed',
-				'hint'  => $suspended ? 'Transients Manager is blocking sets' : 'Normal',
+				'hint'  => $suspended ? __( 'Transients Manager is blocking sets', 'minn-admin' ) : 'Normal',
 			),
 			array(
 				'label' => __( 'Transients Manager', 'minn-admin' ),
@@ -457,7 +458,7 @@ add_action( 'rest_api_init', function () {
 				// delete_* returns false when the key was already gone — still treat as done.
 				return rest_ensure_response( array(
 					'ok'      => true,
-					'message' => $ok ? 'Transient deleted.' : 'Transient removed (or was already gone).',
+					'message' => $ok ? __( 'Transient deleted.', 'minn-admin' ) : __( 'Transient removed (or was already gone).', 'minn-admin' ),
 				) );
 			},
 		),

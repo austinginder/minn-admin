@@ -31,13 +31,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// Free-tier scopes from Snippet::get_all_scopes(). Pro CSS/JS scopes still
 	// round-trip via preserve if present; the select covers the common set.
 	$scope_options = array(
-		array( 'global', 'Global (everywhere)' ),
-		array( 'admin', 'Admin only' ),
-		array( 'front-end', 'Front-end only' ),
-		array( 'single-use', 'Single use' ),
-		array( 'content', 'Content (shortcode)' ),
-		array( 'head-content', 'Site head' ),
-		array( 'footer-content', 'Site footer' ),
+		array( 'global', __( 'Global (everywhere)', 'minn-admin' ) ),
+		array( 'admin', __( 'Admin only', 'minn-admin' ) ),
+		array( 'front-end', __( 'Front-end only', 'minn-admin' ) ),
+		array( 'single-use', __( 'Single use', 'minn-admin' ) ),
+		array( 'content', __( 'Content (shortcode)', 'minn-admin' ) ),
+		array( 'head-content', __( 'Site head', 'minn-admin' ) ),
+		array( 'footer-content', __( 'Site footer', 'minn-admin' ) ),
 	);
 
 	$edit_fields = array(
@@ -230,16 +230,24 @@ add_action( 'rest_api_init', function () {
 			}
 			$hint = array();
 			if ( $inactive ) {
-				$hint[] = $inactive . ' inactive';
+				$hint[] = sprintf(
+					/* translators: %d: number of inactive snippets. */
+					__( '%d inactive', 'minn-admin' ),
+					$inactive
+				);
 			}
 			if ( $trashed ) {
-				$hint[] = $trashed . ' trashed';
+				$hint[] = sprintf(
+					/* translators: %d: number of trashed snippets. */
+					__( '%d trashed', 'minn-admin' ),
+					$trashed
+				);
 			}
 			$rows = array(
 				array(
 					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
-					'hint'  => $hint ? implode( ' · ', $hint ) : 'nothing inactive',
+					'hint'  => $hint ? implode( ' · ', $hint ) : __( 'nothing inactive', 'minn-admin' ),
 				),
 			);
 			$scopes = $wpdb->get_results( "SELECT scope, COUNT(*) AS c FROM {$table} WHERE active = 1 GROUP BY scope ORDER BY c DESC LIMIT 3" ); // phpcs:ignore
@@ -262,7 +270,7 @@ add_action( 'rest_api_init', function () {
 			if ( defined( 'CODE_SNIPPETS_SAFE_MODE' ) && CODE_SNIPPETS_SAFE_MODE ) {
 				$rows[] = array(
 					'label' => __( 'Safe mode', 'minn-admin' ),
-					'value' => 'On',
+					'value' => __( 'On', 'minn-admin' ),
 					'hint'  => __( 'No snippets are executing while safe mode is armed', 'minn-admin' ),
 				);
 			}

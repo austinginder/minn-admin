@@ -109,9 +109,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'tabs'      => array(
 				'param'    => 'kind',
 				'static'   => array(
-					array( 'locked', 'Locked out now' ),
+					array( 'locked', __( 'Locked out now', 'minn-admin' ) ),
 				),
-				'allLabel' => 'All lockouts',
+				'allLabel' => __( 'All lockouts', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
@@ -223,13 +223,13 @@ add_action( 'rest_api_init', function () {
 				$modules = array();
 			}
 			$names   = array(
-				'brute-force'         => 'Brute force',
-				'network-brute-force' => 'Network brute force',
-				'firewall'            => 'Firewall',
-				'two-factor'          => 'Two-factor',
-				'ban-users'           => 'Ban hosts',
-				'file-change'         => 'File change detection',
-				'malware-scheduling'  => 'Scheduled scans',
+				'brute-force'         => __( 'Brute force', 'minn-admin' ),
+				'network-brute-force' => __( 'Network brute force', 'minn-admin' ),
+				'firewall'            => __( 'Firewall', 'minn-admin' ),
+				'two-factor'          => __( 'Two-factor', 'minn-admin' ),
+				'ban-users'           => __( 'Ban hosts', 'minn-admin' ),
+				'file-change'         => __( 'File change detection', 'minn-admin' ),
+				'malware-scheduling'  => __( 'Scheduled scans', 'minn-admin' ),
 			);
 			$on = array();
 			foreach ( $names as $slug => $label ) {
@@ -253,7 +253,7 @@ add_action( 'rest_api_init', function () {
 					),
 					array(
 						'label' => __( 'Protection on', 'minn-admin' ),
-						'value' => $on ? implode( ' · ', $on ) : 'No protection modules active',
+						'value' => $on ? implode( ' · ', $on ) : __( 'No protection modules active', 'minn-admin' ),
 					),
 				),
 				'actions' => array(

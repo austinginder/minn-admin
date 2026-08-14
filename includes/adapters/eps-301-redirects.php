@@ -183,7 +183,7 @@ add_action( 'rest_api_init', function () {
 				array(
 					'label' => __( 'Redirect rules', 'minn-admin' ),
 					'value' => (string) $active,
-					'hint'  => $inactive ? $inactive . ' inactive' : 'all enabled',
+					'hint'  => $inactive ? $inactive . ' inactive' : __( 'all enabled', 'minn-admin' ),
 				),
 				array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( $hits ) ),
 			);

@@ -325,7 +325,10 @@ add_action( 'rest_api_init', function () {
 					array(
 						'label' => __( 'Logged emails', 'minn-admin' ),
 						'value' => number_format_i18n( $total ),
-						'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
+						'hint'  => $failed
+							/* translators: %s: number of failed emails. */
+							? sprintf( __( '%s failed', 'minn-admin' ), number_format_i18n( $failed ) )
+							: __( 'All logged sends', 'minn-admin' ),
 					),
 				),
 				'chart'   => array(

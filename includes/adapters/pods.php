@@ -466,7 +466,7 @@ add_action( 'rest_api_init', function () {
 					minn_admin_pods_write_values( $post->ID, $value );
 				},
 				'schema'          => array(
-					'description' => 'Pods simple field values for Minn Admin.',
+					'description' => __( 'Pods simple field values for Minn Admin.', 'minn-admin' ),
 					'type'        => 'object',
 					'context'     => array( 'edit' ),
 				),

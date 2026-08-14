@@ -75,7 +75,7 @@ function minn_admin_elementor_forms_item( $sub ) {
 
 	return array(
 		'id'        => (int) $sub['id'],
-		'summary'   => $parts ? implode( ' · ', $parts ) : '(empty submission)',
+		'summary'   => $parts ? implode( ' · ', $parts ) : __( '(empty submission)', 'minn-admin' ),
 		'form_name' => $form_name ?: 'Form',
 		'form_key'  => $form_key,
 		'status'    => $status,
@@ -113,7 +113,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'form',
-				'allLabel' => 'All entries',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
 			// Their Query filter_status: all (not trash) / unread / read / trash.
 			'filter'    => array(

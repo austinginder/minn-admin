@@ -338,7 +338,7 @@ add_action(
 				},
 				'schema'       => array(
 					'type'        => array( 'object', 'null' ),
-					'description' => 'Page builder that manages this post, if any.',
+					'description' => __( 'Page builder that manages this post, if any.', 'minn-admin' ),
 					'context'     => array( 'view', 'edit' ),
 				),
 			)

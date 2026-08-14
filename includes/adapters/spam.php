@@ -52,8 +52,9 @@ function minn_admin_spam_providers() {
 				return array(
 					'configured' => '' !== $key,
 					'note'       => '' !== $key
-						? 'API key set (' . substr( $key, 0, 4 ) . '…)'
-						: 'Needs an API key from akismet.com (free for personal sites)',
+						/* translators: %s: first characters of the API key. */
+						? sprintf( __( 'API key set (%s…)', 'minn-admin' ), substr( $key, 0, 4 ) )
+						: __( 'Needs an API key from akismet.com (free for personal sites)', 'minn-admin' ),
 					// Paste-a-key in place via the akismet connections
 					// provider — hidden when the key is supplied in code.
 					'keyProvider' => $predefined ? '' : 'akismet',
@@ -136,8 +137,9 @@ function minn_admin_spam_providers() {
 				return array(
 					'configured' => '' !== $key,
 					'note'       => '' !== $key
-						? 'Access key set (' . substr( $key, 0, 4 ) . '…)'
-						: 'Needs an access key: connect it on the CleanTalk screen',
+						/* translators: %s: first characters of the access key. */
+						? sprintf( __( 'Access key set (%s…)', 'minn-admin' ), substr( $key, 0, 4 ) )
+						: __( 'Needs an access key: connect it on the CleanTalk screen', 'minn-admin' ),
 					'blocked'    => isset( $counter['blocked'] ) ? (int) $counter['blocked'] : 0,
 					'toggles'    => array(), // config is cloud-side; keep read-only
 					'adminUrl'   => admin_url( 'options-general.php?page=cleantalk' ),

@@ -232,7 +232,7 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'groups' => array(
 					array(
-						'group'  => 'Episode (default channel)',
+						'group'  => __( 'Episode (default channel)', 'minn-admin' ),
 						'fields' => array(
 							array( 'name' => 'url', 'label' => __( 'Media file URL', 'minn-admin' ), 'type' => 'url', 'placeholder' => __( 'https://example.com/episode.mp3 — clearing this removes the episode', 'minn-admin' ) ),
 							array( 'name' => 'size', 'label' => __( 'File size (bytes)', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'Detected by PowerPress when blank', 'minn-admin' ) ),
@@ -245,7 +245,7 @@ add_action( 'rest_api_init', function () {
 								'name'    => 'episode_type',
 								'label'   => __( 'Episode type', 'minn-admin' ),
 								'type'    => 'select',
-								'choices' => array( '' => 'Full (default)', 'full' => 'Full Episode', 'trailer' => 'Trailer', 'bonus' => 'Bonus' ),
+								'choices' => array( '' => __( 'Full (default)', 'minn-admin' ), 'full' => __( 'Full Episode', 'minn-admin' ), 'trailer' => __( 'Trailer', 'minn-admin' ), 'bonus' => __( 'Bonus', 'minn-admin' ) ),
 							),
 						),
 						// Artwork, explicit/block, chapters, transcripts stay on
@@ -278,7 +278,7 @@ add_action( 'rest_api_init', function () {
 				minn_admin_powerpress_write_values( $post->ID, $value );
 			},
 			'schema'          => array(
-				'description' => 'PowerPress default-channel episode fields for Minn Admin.',
+				'description' => __( 'PowerPress default-channel episode fields for Minn Admin.', 'minn-admin' ),
 				'type'        => 'object',
 				'context'     => array( 'edit' ),
 			),

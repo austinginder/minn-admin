@@ -161,11 +161,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$location_options = array(
 		array( 'header', 'Header' ),
 		array( 'footer', 'Footer' ),
-		array( 'before_content', 'Before content' ),
-		array( 'after_content', 'After content' ),
+		array( 'before_content', __( 'Before content', 'minn-admin' ) ),
+		array( 'after_content', __( 'After content', 'minn-admin' ) ),
 	);
 	$device_options = array(
-		array( 'both', 'All devices' ),
+		array( 'both', __( 'All devices', 'minn-admin' ) ),
 		array( 'desktop', 'Desktop' ),
 		array( 'mobile', 'Mobile' ),
 	);
@@ -317,7 +317,7 @@ add_action( 'rest_api_init', function () {
 				array(
 					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
-					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
+					'hint'  => $inactive ? sprintf( /* translators: %d: number of inactive snippets. */ __( '%d inactive', 'minn-admin' ), $inactive ) : __( 'nothing inactive', 'minn-admin' ),
 				),
 			);
 			$types = $wpdb->get_results( "SELECT snippet_type AS t, COUNT(*) AS c FROM {$table} WHERE status = 'active' GROUP BY snippet_type ORDER BY c DESC LIMIT 3" ); // phpcs:ignore

@@ -145,7 +145,7 @@ function minn_admin_disembark_status_model() {
 			'hint'  => $bytes
 				/* translators: %s: number of Disembark scan sessions. */
 				? sprintf( _n( '%s scan session on disk', '%s scan sessions on disk', count( $sessions ), 'minn-admin' ), number_format_i18n( count( $sessions ) ) )
-				: 'Nothing left behind',
+				: __( 'Nothing left behind', 'minn-admin' ),
 		),
 	);
 
@@ -156,7 +156,8 @@ function minn_admin_disembark_status_model() {
 			'route'   => 'minn-admin/v1/disembark/cleanup',
 			'method'  => 'POST',
 			'confirm' => sprintf(
-				'Delete %s of Disembark working files (manifests, exports, zips)? Backups you already downloaded are unaffected.',
+				/* translators: %s: total size of Disembark working files on disk. */
+				__( 'Delete %s of Disembark working files (manifests, exports, zips)? Backups you already downloaded are unaffected.', 'minn-admin' ),
 				size_format( $bytes )
 			),
 			'danger'  => true,

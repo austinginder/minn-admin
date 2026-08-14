@@ -86,9 +86,9 @@ function minn_admin_ottokit_connection() {
 	$connected = $has_key && 'suretriggers_connection_error' !== $verify;
 	$note = '';
 	if ( ! $has_key ) {
-		$note = 'no account is connected yet';
+		$note = __( 'no account is connected yet', 'minn-admin' );
 	} elseif ( 'suretriggers_connection_error' === $verify ) {
-		$note = 'OttoKit reported a connection error';
+		$note = __( 'OttoKit reported a connection error', 'minn-admin' );
 	}
 	return array(
 		'connected' => $connected,
@@ -317,14 +317,14 @@ add_action( 'rest_api_init', function () {
 			$rows = array(
 				array(
 					'label' => __( 'Account', 'minn-admin' ),
-					'value' => $conn['connected'] ? ( $conn['email'] ? $conn['email'] : 'Connected' ) : 'Not connected',
+					'value' => $conn['connected'] ? ( $conn['email'] ? $conn['email'] : __( 'Connected', 'minn-admin' ) ) : __( 'Not connected', 'minn-admin' ),
 					'hint'  => $conn['note'],
 				),
 				array( 'label' => __( 'Outgoing requests', 'minn-admin' ), 'value' => (string) $counts['total'] ),
 				array(
 					'label' => __( 'Failed', 'minn-admin' ),
 					'value' => (string) $counts['failed'],
-					'hint'  => $counts['failed'] ? 'retry from the Failed tab' : '',
+					'hint'  => $counts['failed'] ? __( 'retry from the Failed tab', 'minn-admin' ) : '',
 				),
 			);
 

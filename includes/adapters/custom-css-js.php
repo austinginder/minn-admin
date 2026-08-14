@@ -303,8 +303,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'login', 'Login' ),
 	);
 	$link_options = array(
-		array( 'internal', 'Internal' ),
-		array( 'external', 'External file' ),
+		array( 'internal', __( 'Internal', 'minn-admin' ) ),
+		array( 'external', __( 'External file', 'minn-admin' ) ),
 	);
 
 	$edit_fields = array(
@@ -475,7 +475,13 @@ add_action( 'rest_api_init', function () {
 				array(
 					'label' => __( 'Active codes', 'minn-admin' ),
 					'value' => (string) $active,
-					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
+					'hint'  => $inactive
+						? sprintf(
+							/* translators: %d: number of inactive codes. */
+							__( '%d inactive', 'minn-admin' ),
+							$inactive
+						)
+						: __( 'nothing inactive', 'minn-admin' ),
 				),
 			);
 			if ( $langs ) {

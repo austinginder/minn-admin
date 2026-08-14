@@ -337,7 +337,7 @@ add_action( 'rest_api_init', function () {
 					minn_admin_meta_box_write_values( $post->ID, $value );
 				},
 				'schema'          => array(
-					'description' => 'Meta Box simple field values for Minn Admin.',
+					'description' => __( 'Meta Box simple field values for Minn Admin.', 'minn-admin' ),
 					'type'        => 'object',
 					'context'     => array( 'edit' ),
 				),

@@ -294,7 +294,7 @@ function minn_admin_network_user_row( $user, $site_counts = array(), $super_coun
 		'username'   => $user->user_login,
 		'sites'      => isset( $site_counts[ $id ] ) ? (int) $site_counts[ $id ] : 0,
 		'registered' => mysql_to_rfc3339( $user->user_registered ),
-		'status'     => $super ? 'network admin' : 'member',
+		'status'     => $super ? __( 'network admin', 'minn-admin' ) : __( 'member', 'minn-admin' ),
 		// Gates (the routes re-derive all of these):
 		// never grant twice, never revoke your own status (that is a
 		// self-lockout) and never revoke the last network administrator.

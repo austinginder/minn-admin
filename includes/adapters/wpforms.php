@@ -202,7 +202,7 @@ function minn_admin_wpforms_summary( $fields_json ) {
 	if ( strlen( $summary ) > 80 ) {
 		$summary = substr( $summary, 0, 80 ) . '…';
 	}
-	return $summary ?: '(empty entry)';
+	return $summary ?: __( '(empty entry)', 'minn-admin' );
 }
 
 /** Display status: spam/trash win outright, else read state from `viewed`. */
@@ -281,7 +281,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'form_id',
-				'allLabel' => 'All entries',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
