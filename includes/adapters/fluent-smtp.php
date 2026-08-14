@@ -737,7 +737,7 @@ add_action( 'rest_api_init', function () {
 						$rrows   = array();
 						$rrows[] = array(
 							'label' => 'Resent',
-							'value' => sprintf( _n( '%s time', '%s times', max( $count, count( $resends ) ), 'minn-admin' ), number_format_i18n( max( $count, count( $resends ) ) ) ),
+							'value' => sprintf( /* translators: %s: how many times the message was sent. */ _n( '%s time', '%s times', max( $count, count( $resends ) ), 'minn-admin' ), number_format_i18n( max( $count, count( $resends ) ) ) ),
 						);
 						// Newest first, last five; `at` is site-local
 						// current_time — emitted as stored, like created_at.

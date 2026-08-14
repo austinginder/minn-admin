@@ -880,7 +880,7 @@
 				${ scope( o.keepsLabel || __( 'Not touched' ), o.keeps ) }
 				${ o.typeToConfirm ? `
 				<div class="minn-confirm-type">
-					<div class="minn-confirm-type-label">${ sprintf( __( 'Type %s to confirm' ), `<b>${ esc( o.typeToConfirm ) }</b>` ) }</div>
+					<div class="minn-confirm-type-label">${ sprintf( /* translators: %s: the exact word the user must type, shown in bold. */ __( 'Type %s to confirm' ), `<b>${ esc( o.typeToConfirm ) }</b>` ) }</div>
 					<input class="minn-input" id="minn-confirm-input" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true">
 				</div>` : '' }
 				<div class="minn-confirm-actions">
@@ -2667,7 +2667,7 @@
 			<div class="minn-scheme-custom"${ opts.modes ? '' : ' id="minn-scheme-custom"' } data-scheme-mode="${ esc( m ) }">
 				${ opts.modes
 					? `<div class="minn-scheme-group-title" style="margin-bottom:8px;">${ m === 'light' ? esc( __( 'Light colors' ) ) : esc( __( 'Dark colors' ) ) }</div>`
-					: `<div class="minn-toggle-desc" style="margin-bottom:8px;">${ sprintf( __( 'Editing %s colors. Flip Theme below to tune the other mode.' ), `<strong>${ mode === 'light' ? esc( __( 'light' ) ) : esc( __( 'dark' ) ) }</strong>` ) }</div>` }
+					: `<div class="minn-toggle-desc" style="margin-bottom:8px;">${ sprintf( /* translators: %s: the colour mode being edited, "light" or "dark". */ __( 'Editing %s colors. Flip Theme below to tune the other mode.' ), `<strong>${ mode === 'light' ? esc( __( 'light' ) ) : esc( __( 'dark' ) ) }</strong>` ) }</div>` }
 				${ modeGroups( m ) }
 			</div>` ).join( '' ) : '';
 		return `
@@ -3499,7 +3499,7 @@
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
 				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }">
-					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }" aria-label="${ esc( sprintf( __( 'Select %s' ), p.title ) ) }"${ sel.has( p.id ) ? ' checked' : '' }></div>
+					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }" aria-label="${ esc( sprintf( /* translators: %s: the title or name of the row being selected. */ __( 'Select %s' ), p.title ) ) }"${ sel.has( p.id ) ? ' checked' : '' }></div>
 					<div class="minn-row-icon${ p.thumb ? ' has-thumb' : '' }">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
 						<div class="minn-row-title">${ esc( p.title ) }</div>
@@ -4317,7 +4317,7 @@
 		<div class="minn-dropzone" id="minn-dropzone">
 			${ icon( 'upload' ) }
 			<div class="minn-dropzone-title">${ esc( __( 'Drag & drop files here' ) ) }</div>
-			<div class="minn-dropzone-sub">${ sprintf( __( 'or %s' ), `<b>${ esc( __( 'browse your computer' ) ) }</b>` ) }</div>
+			<div class="minn-dropzone-sub">${ sprintf( /* translators: %s: a "browse your computer" link. */ __( 'or %s' ), `<b>${ esc( __( 'browse your computer' ) ) }</b>` ) }</div>
 		</div>` : '' }
 		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType || state.mediaUnattached || state.mediaMonth || state.mediaFolder != null ? __( 'No files match.' ) : __( 'The media library is empty. Drop files anywhere to upload.' ) }</div>` : state.mediaView === 'grid' ? `
 		<div class="minn-media-grid">
@@ -6792,7 +6792,7 @@
 					${ axes.map( ( a, ai ) => {
 						const hit = ( v.attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
 						const cur = ( hit && hit.option ) || '';
-						const anyLabel = sprintf( __( 'Any %s' ), a.name );
+						const anyLabel = sprintf( /* translators: %s: a product attribute name, for example Colour. */ __( 'Any %s' ), a.name );
 						return `<div class="minn-ac minn-pvar-axis" data-pvaraxis="${ i }:${ ai }">
 							<input class="minn-input minn-ac-input" value="${ esc( cur || anyLabel ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( a.name ) }">
 							<div class="minn-ac-panel" hidden></div>
@@ -6806,7 +6806,7 @@
 					<input class="minn-input minn-ac-input" value="${ esc( ( { instock: __( 'In stock' ), outofstock: __( 'Out of stock' ), onbackorder: __( 'On backorder' ) } )[ v.stock_status ] || __( 'In stock' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Stock status' ) ) }">
 					<div class="minn-ac-panel" hidden></div>
 				</div>
-				<button type="button" class="minn-pdl-x" data-pvarx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( sprintf( __( 'Remove variation %s' ), variationLabel( m, v ) ) ) }">×</button>
+				<button type="button" class="minn-pdl-x" data-pvarx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( sprintf( /* translators: %s: the variation label, for example "Large / Blue". */ __( 'Remove variation %s' ), variationLabel( m, v ) ) ) }">×</button>
 			</div>` ).join( '' );
 	}
 
@@ -6853,7 +6853,7 @@
 				const a = variationAxes( m )[ ai ];
 				if ( ! a ) return;
 				const hit = ( m.variations[ vi ].attributes || [] ).find( ( x ) => ( a.id ? x.id === a.id : x.name === a.name ) );
-				bindAutocomplete( wrap, [ { value: '', label: sprintf( __( 'Any %s' ), a.name ) } ]
+				bindAutocomplete( wrap, [ { value: '', label: sprintf( /* translators: %s: a product attribute name, for example Colour. */ __( 'Any %s' ), a.name ) } ]
 					.concat( a.options.map( ( o ) => ( { value: o, label: o } ) ) ), {
 					strict: true,
 					value: ( hit && hit.option ) || '',
@@ -6898,7 +6898,7 @@
 			} );
 			repaint();
 			toast( added
-				? sprintf( _n( '%d variation added. Save to keep it.', '%d variations added. Save to keep them.', added ), added )
+				? sprintf( /* translators: %d: how many variations were added. */ _n( '%d variation added. Save to keep it.', '%d variations added. Save to keep them.', added ), added )
 				: __( 'Every combination is already here.' ) );
 		} );
 	}
@@ -8337,7 +8337,7 @@
 			</div>
 			${ c.items.length ? c.items.map( ( p ) => `
 				<div class="minn-table-row minn-product-cols${ canBulk ? ' with-cb' : '' }" data-product="${ p.id }">
-					${ canBulk ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb" data-psel="${ p.id }" aria-label="${ esc( sprintf( __( 'Select %s' ), p.name ) ) }"${ psel.has( p.id ) ? ' checked' : '' }></div>` : '' }
+					${ canBulk ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb" data-psel="${ p.id }" aria-label="${ esc( sprintf( /* translators: %s: the title or name of the row being selected. */ __( 'Select %s' ), p.name ) ) }"${ psel.has( p.id ) ? ' checked' : '' }></div>` : '' }
 					<div class="minn-cell-clip minn-prod-name">
 						${ productThumb( p ) }
 						<div>
@@ -9403,7 +9403,7 @@
 		const editor = document.createElement( 'div' );
 		editor.className = 'minn-term-edit';
 		editor.innerHTML = `
-			<div class="minn-term-merge-copy">${ sprintf( __( 'Merge %1$s into another %2$s: its posts move over, then “%3$s” is deleted.' ), `<b>${ esc( t.name ) }</b>`, esc( tax.item ), esc( t.name ) ) }</div>
+			<div class="minn-term-merge-copy">${ sprintf( /* translators: 1: the term being merged, in bold. 2: the taxonomy item name, for example "category". 3: the term name again. */ __( 'Merge %1$s into another %2$s: its posts move over, then “%3$s” is deleted.' ), `<b>${ esc( t.name ) }</b>`, esc( tax.item ), esc( t.name ) ) }</div>
 			<div class="minn-term-edit-grid">
 				<label class="minn-term-field"><span>${ esc( __( 'Merge into' ) ) }</span>
 					<div class="minn-ac" data-mergecombo>
@@ -9664,7 +9664,7 @@
 			</div>
 			${ c.items.length ? c.items.map( ( u ) => `
 				<div class="minn-table-row minn-user-cols${ bulkUsers ? ' has-cb' : '' }${ userSel.has( u.id ) ? ' sel' : '' }" data-user="${ u.id }" data-uname="${ esc( u.name || '' ) }" data-uemail="${ esc( u.email || '' ) }" data-uroles="${ esc( ( u.roles || [] ).join( ',' ) ) }">
-					${ bulkUsers ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-user-cb" data-cbid="${ u.id }" aria-label="${ esc( sprintf( __( 'Select %s' ), u.name ) ) }"${ userSel.has( u.id ) ? ' checked' : '' }></div>` : '' }
+					${ bulkUsers ? `<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-user-cb" data-cbid="${ u.id }" aria-label="${ esc( sprintf( /* translators: %s: the title or name of the row being selected. */ __( 'Select %s' ), u.name ) ) }"${ userSel.has( u.id ) ? ' checked' : '' }></div>` : '' }
 					${ avatarTileHtml( u.name, u.avatar_urls && ( u.avatar_urls[ '48' ] || Object.values( u.avatar_urls )[ 0 ] ) ) }
 					<div class="minn-row-meta minn-user-id">#${ esc( String( u.id ) ) }</div>
 					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
@@ -16205,7 +16205,7 @@
 								</div>` ).join( '' ) }</div>` : '' }
 						</div>` ).join( '' );
 					const empty = sp.providers.length ? '' : `
-						<div class="minn-editor-locked-note">${ sprintf( __( 'No spam filter plugin is active. Install Akismet, Antispam Bee or CleanTalk from %s and it appears here. Core’s blocklist below still works on its own.' ), `<a href="#" id="minn-spam-ext">${ esc( __( 'Extensions' ) ) }</a>` ) }</div>`;
+						<div class="minn-editor-locked-note">${ sprintf( /* translators: %s: a link to the Extensions screen. */ __( 'No spam filter plugin is active. Install Akismet, Antispam Bee or CleanTalk from %s and it appears here. Core’s blocklist below still works on its own.' ), `<a href="#" id="minn-spam-ext">${ esc( __( 'Extensions' ) ) }</a>` ) }</div>`;
 					// The queue row follows the app's comments detection (Disable
 					// Comments and friends) — a Review button must never navigate
 					// to a route the nav itself hides.
@@ -22376,7 +22376,7 @@
 		const who = ed.lockHolder ? ed.lockHolder.name : __( 'Someone else' );
 		title.insertAdjacentHTML( 'afterend', `
 			<div class="minn-backup-note minn-lock-note" id="minn-lock-note" role="alert">
-				<span>${ sprintf( __( '%s took over editing. This copy is read-only and won\u2019t save.' ), `<b>${ esc( who ) }</b>` ) }</span>
+				<span>${ sprintf( /* translators: %s: the name of the user who took over, in bold. */ __( '%s took over editing. This copy is read-only and won\u2019t save.' ), `<b>${ esc( who ) }</b>` ) }</span>
 				<button class="minn-btn-soft" id="minn-lock-retake" type="button">${ esc( __( 'Take back' ) ) }</button>
 			</div>` );
 		$( '#minn-lock-retake' ).addEventListener( 'click', () => acquireLock( ed, true ) );
@@ -30652,8 +30652,8 @@
 					</div>
 					<div class="minn-help-body" style="border-bottom:0;">
 						${ m.done
-							? `<p>${ sprintf( __( '%1$s Heading to the classic dashboard… Reactivate Minn any time from %2$s, and everything here (content, settings, markup) is exactly as you left it.' ), `<b>${ esc( __( 'Done.' ) ) }</b>`, `<b>${ esc( __( 'Plugins' ) ) }</b>` ) }</p>`
-							: `<p>${ sprintf( __( 'This turns off the %s dashboard and returns you to the classic wp-admin.' ), '<b>/minn-admin/</b>' ) }</p>
+							? `<p>${ sprintf( /* translators: 1: the word "Done." in bold. 2: the word "Plugins" in bold. */ __( '%1$s Heading to the classic dashboard… Reactivate Minn any time from %2$s, and everything here (content, settings, markup) is exactly as you left it.' ), `<b>${ esc( __( 'Done.' ) ) }</b>`, `<b>${ esc( __( 'Plugins' ) ) }</b>` ) }</p>`
+							: `<p>${ sprintf( /* translators: %s: the /minn-admin/ path, in bold. */ __( 'This turns off the %s dashboard and returns you to the classic wp-admin.' ), '<b>/minn-admin/</b>' ) }</p>
 							<p>${ esc( __( 'Nothing is lost: Minn writes native WordPress content and options, and reactivating from the Plugins screen brings this dashboard straight back.' ) ) }</p>` }
 					</div>
 					${ m.done ? '' : `
@@ -30862,7 +30862,7 @@
 							<span class="minn-kbd">${ esc( __( 'Esc' ) ) }</span><span>${ esc( __( 'Close menus and dialogs' ) ) }</span>
 						</div>
 						<p class="minn-help-keys-note">${ esc( __( 'The word-count pill (bottom-right in the editor) shows total words, reading time, and words written this session. Click it to set or clear a word goal.' ) ) }</p>
-						<p class="minn-help-keys-note">${ sprintf( __( 'On Windows and Linux, use %1$s in place of %2$s.' ), `<span class="minn-kbd">${ esc( __( 'Ctrl' ) ) }</span>`, '<span class="minn-kbd">⌘</span>' ) }</p>
+						<p class="minn-help-keys-note">${ sprintf( /* translators: 1: the Ctrl key, styled as a key. 2: the Command key, styled as a key. */ __( 'On Windows and Linux, use %1$s in place of %2$s.' ), `<span class="minn-kbd">${ esc( __( 'Ctrl' ) ) }</span>`, '<span class="minn-kbd">⌘</span>' ) }</p>
 
 						<h4>${ esc( __( 'Deliberately minimal' ) ) }</h4>
 						<p>${ esc( __( 'Minn surfaces the settings people change day to day; the long tail stays in wp-admin on purpose. For plugin configuration Minn doesn\'t rebuild, open' ) ) } <b>${ esc( __( 'Your profile → AI Access' ) ) }</b>${ esc( __( ' and hand your AI agent a revocable credential to do the fiddly work over the REST API.' ) ) }</p>
@@ -30936,7 +30936,7 @@
 					<div class="minn-pi-body">
 						<div class="minn-dropzone compact" id="minn-pi-dropzone">
 							${ icon( 'upload' ) }
-							<div class="minn-dropzone-sub">${ sprintf( __( 'Drop a plugin %1$s here or %2$s' ), '<b>.zip</b>', `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
+							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a plugin %1$s here or %2$s' ), '<b>.zip</b>', `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
 							<input type="file" id="minn-pi-file" accept=".zip" hidden>
 						</div>
 						<input class="minn-input" id="minn-pi-search" placeholder="${ esc( __( 'Search the WordPress.org directory…' ) ) }" value="${ esc( m.q ) }" autocomplete="off">
@@ -30965,7 +30965,7 @@
 					<div class="minn-pi-body">
 						<div class="minn-dropzone compact" id="minn-ti-dropzone">
 							${ icon( 'upload' ) }
-							<div class="minn-dropzone-sub">${ sprintf( __( 'Drop a theme %1$s here or %2$s' ), '<b>.zip</b>', `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
+							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a theme %1$s here or %2$s' ), '<b>.zip</b>', `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
 							<input type="file" id="minn-ti-file" accept=".zip" hidden>
 						</div>
 						<input class="minn-input" id="minn-ti-search" placeholder="${ esc( __( 'Search the WordPress.org theme directory…' ) ) }" value="${ esc( m.q ) }" autocomplete="off">
@@ -31004,7 +31004,7 @@
 					${ B.caps.upload && ! any ? `
 					<div class="minn-picker-drop" id="minn-picker-drop">
 						${ icon( 'img' ) }
-						<span>${ sprintf( esc( __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) }${ m.multi ? '' : ' ' + esc( __( '(it’s used right away)' ) ) }</span>
+						<span>${ sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) }${ m.multi ? '' : ' ' + esc( __( '(it’s used right away)' ) ) }</span>
 						<input type="file" id="minn-picker-file" accept="image/*" hidden>
 					</div>` : '' }
 					${ items == null ? `<div class="minn-loading">Loading ${ any ? 'files' : 'images' }…</div>` : ! items.length ? `<div class="minn-empty">No ${ any ? 'files' : 'images' } in the library yet.</div>` : `
@@ -34213,7 +34213,7 @@
 						</div>
 						<div class="minn-pf-avatar">
 							${ avatarTileHtml( u.name, u.avatar_urls && u.avatar_urls[ '48' ] ) }
-							<div class="minn-toggle-desc">${ sprintf( __( 'Your profile picture comes from %s, matched to your email.' ), `<a href="https://gravatar.com/" target="_blank" rel="noopener">${ esc( __( 'Gravatar ↗' ) ) }</a>` ) }</div>
+							<div class="minn-toggle-desc">${ sprintf( /* translators: %s: a link to Gravatar. */ __( 'Your profile picture comes from %s, matched to your email.' ), `<a href="https://gravatar.com/" target="_blank" rel="noopener">${ esc( __( 'Gravatar ↗' ) ) }</a>` ) }</div>
 						</div>
 						<div><button class="minn-btn-primary" data-pf-save>${ esc( __( 'Save changes' ) ) }</button></div>
 					</div>
