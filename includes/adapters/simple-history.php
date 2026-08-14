@@ -118,7 +118,11 @@ function minn_admin_simple_history_status_model() {
 		try {
 			$dt = date_create( $last, wp_timezone() );
 			if ( $dt ) {
-				$last_label = human_time_diff( $dt->getTimestamp(), time() ) . ' ago';
+				$last_label = sprintf(
+					/* translators: %s: human-readable time since the last event. */
+					__( '%s ago', 'minn-admin' ),
+					human_time_diff( $dt->getTimestamp(), time() )
+				);
 			}
 		} catch ( \Throwable $e ) {
 			$last_label = (string) $last;

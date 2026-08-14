@@ -125,7 +125,11 @@ function minn_admin_stream_status_model() {
 	if ( $last ) {
 		$ts = strtotime( $last . ' UTC' );
 		if ( $ts ) {
-			$last_label = human_time_diff( $ts, time() ) . ' ago';
+			$last_label = sprintf(
+				/* translators: %s: human-readable time since the last event. */
+				__( '%s ago', 'minn-admin' ),
+				human_time_diff( $ts, time() )
+			);
 		}
 	}
 	$top_label = '—';

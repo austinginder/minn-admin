@@ -1015,8 +1015,13 @@ add_action( 'rest_api_init', function () {
 				$rows[]  = array(
 					'label' => __( 'Routing', 'minn-admin' ),
 					'value' => $all
-						? ( count( $all ) . ' rule' . ( 1 === count( $all ) ? '' : 's' ) . ' · ' . $on . ' on' )
-						: 'None',
+						? sprintf(
+							/* translators: 1: number of routing rules; 2: number of enabled rules. */
+							_n( '%1$d rule · %2$d on', '%1$d rules · %2$d on', count( $all ), 'minn-admin' ),
+							count( $all ),
+							$on
+						)
+						: __( 'None', 'minn-admin' ),
 					'hint'  => $hint,
 				);
 			}
@@ -1538,9 +1543,13 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
 	}
 
 	return array(
-		'title'     => __( 'Last ', 'minn-admin' ) . $days . ' days',
-		'primary'   => 'Sent',
-		'secondary' => 'Failed',
+		'title'     => sprintf(
+			/* translators: %d: number of days represented by the chart. */
+			_n( 'Last %d day', 'Last %d days', $days, 'minn-admin' ),
+			$days
+		),
+		'primary'   => __( 'Sent', 'minn-admin' ),
+		'secondary' => __( 'Failed', 'minn-admin' ),
 		'points'    => $points,
 	);
 }

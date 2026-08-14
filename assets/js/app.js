@@ -130,6 +130,10 @@
 			const i = pluralRule ? pluralRule( n ) : ( 1 === n ? 0 : 1 );
 			return t[ i ] != null && '' !== t[ i ] ? t[ i ] : ( t[ 0 ] || ( 1 === n ? single : plural ) );
 		}
+		// One-form locales (Japanese, Chinese, Vietnamese, Indonesian) have a
+		// single JED value. PHP deliberately flattens one-element arrays in the
+		// boot payload, so their plural translations arrive here as strings.
+		if ( typeof t === 'string' && '' !== t ) return t;
 		// No catalog: English source vocabulary, English rule.
 		return 1 === n ? __( single ) : plural;
 	};
@@ -547,8 +551,73 @@
 	// search beside it. Page position deliberately lives at the bottom with
 	// the pager (the control that changes it), not up here.
 	function metaLabel( count, noun ) {
-		const plural = /[^aeiou]y$/.test( noun ) ? noun.slice( 0, -1 ) + 'ies' : noun + 's';
-		return `${ count } ${ count === 1 ? noun : plural }`;
+		const n = Number( count ) || 0;
+		const formatted = n.toLocaleString( uiLocale() );
+		// Keep the finite shared-list vocabulary explicit so gettext can
+		// extract every plural. Building "item" + "s" made list counts
+		// permanently English even when the rest of the view was translated.
+		switch ( noun ) {
+			case 'comment':
+				/* translators: %s: localized number of comments. */
+				return sprintf( _n( '%s comment', '%s comments', n ), formatted );
+			case 'coupon':
+				/* translators: %s: localized number of coupons. */
+				return sprintf( _n( '%s coupon', '%s coupons', n ), formatted );
+			case 'customer':
+				/* translators: %s: localized number of customers. */
+				return sprintf( _n( '%s customer', '%s customers', n ), formatted );
+			case 'file':
+				/* translators: %s: localized number of files. */
+				return sprintf( _n( '%s file', '%s files', n ), formatted );
+			case 'order':
+				/* translators: %s: localized number of orders. */
+				return sprintf( _n( '%s order', '%s orders', n ), formatted );
+			case 'product':
+				/* translators: %s: localized number of products. */
+				return sprintf( _n( '%s product', '%s products', n ), formatted );
+			case 'subscription':
+				/* translators: %s: localized number of subscriptions. */
+				return sprintf( _n( '%s subscription', '%s subscriptions', n ), formatted );
+			case 'taxonomy':
+				/* translators: %s: localized number of taxonomies. */
+				return sprintf( _n( '%s taxonomy', '%s taxonomies', n ), formatted );
+			case 'user':
+				/* translators: %s: localized number of users. */
+				return sprintf( _n( '%s user', '%s users', n ), formatted );
+			default:
+				/* translators: %s: localized number of items. */
+				return sprintf( _n( '%s item', '%s items', n ), formatted );
+		}
+	}
+
+	// Adapters send display labels as data. Translate only the finite Minn
+	// chrome vocabulary here; arbitrary plugin/site content must remain intact.
+	function chromeLabel( value ) {
+		const raw = String( value == null ? '' : value );
+		const labels = {
+			All: __( 'All' ), Active: __( 'Active' ), Inactive: __( 'Inactive' ),
+			Published: __( 'Published' ), Draft: __( 'Draft' ), Private: __( 'Private' ),
+			Pending: __( 'Pending' ), Processing: __( 'Processing' ), Completed: __( 'Completed' ),
+			Cancelled: __( 'Cancelled' ), Refunded: __( 'Refunded' ), Failed: __( 'Failed' ),
+			Publish: __( 'Published' ), 'On Hold': __( 'On hold' ), 'Pending Cancel': __( 'Pending cancel' ),
+			Expired: __( 'Expired' ), Switched: __( 'Switched' ), Sent: __( 'Sent' ),
+			Sandboxed: __( 'Sandboxed' ), Filtered: __( 'Filtered' ), Received: __( 'Received' ),
+			Spam: __( 'Spam' ), Trash: __( 'Trash' ), Critical: __( 'Critical' ), High: __( 'High' ),
+			Medium: __( 'Medium' ), Low: __( 'Low' ), Info: __( 'Info' ), Settings: __( 'Settings' ),
+			Entries: __( 'Entries' ), Manage: __( 'Manage' ), Forms: __( 'Forms' ),
+			Background: __( 'Background' ), Session: __( 'Session' ), Pinned: __( 'Pinned' ),
+			Cron: __( 'Cron' ), General: __( 'General' ), Core: __( 'Core' ),
+			Site: __( 'Site' ), Visibility: __( 'Visibility' ), Homepage: __( 'Homepage' ),
+			Design: __( 'Design' ), Content: __( 'Content' ), Comments: __( 'Comments' ), Connectors: __( 'Connectors' ),
+			Administrator: __( 'Administrator' ), Editor: __( 'Editor' ), Author: __( 'Author' ),
+			Contributor: __( 'Contributor' ), Subscriber: __( 'Subscriber' ), Customer: __( 'Customer' ),
+		};
+		return Object.prototype.hasOwnProperty.call( labels, raw ) ? labels[ raw ] : raw;
+	}
+
+	function statusLabel( value ) {
+		const raw = String( value || '' ).replace( /-/g, ' ' );
+		return chromeLabel( raw.replace( /(^|\s)\S/g, ( c ) => c.toUpperCase() ) );
 	}
 
 	// ‹ 1 … 4 [5] 6 … 20 › — first, last and a window around the current page.
@@ -564,7 +633,7 @@
 			return gap + `<button class="minn-pager-btn${ p === page ? ' active' : '' }" data-pg="${ p }">${ p }</button>`;
 		} ).join( '' );
 		return `<div class="minn-pager" role="navigation" aria-label="${ esc( __( 'Pagination' ) ) }">
-			${ count != null ? `<div class="minn-pager-meta">${ metaLabel( count, noun ) } · page ${ page } of ${ totalPages }</div>` : '' }
+			${ count != null ? `<div class="minn-pager-meta">${ metaLabel( count, noun ) } · ${ sprintf( /* translators: 1: current page number; 2: total pages. */ __( 'page %1$s of %2$s' ), page, totalPages ) }</div>` : '' }
 			<button class="minn-pager-btn nav" data-pg="${ page - 1 }"${ page <= 1 ? ' disabled' : '' } aria-label="${ esc( __( 'Previous page' ) ) }">‹</button>
 			${ parts }
 			<button class="minn-pager-btn nav" data-pg="${ page + 1 }"${ page >= totalPages ? ' disabled' : '' } aria-label="${ esc( __( 'Next page' ) ) }">›</button>
@@ -2621,7 +2690,7 @@
 				subEl.appendChild( chip );
 			}
 		} else if ( state.route === 'settings' ) {
-			subEl.textContent = state.settingsSection || '';
+			subEl.textContent = chromeLabel( state.settingsSection || '' );
 		} else if ( state.route === 'content' ) {
 			subEl.textContent = contentTopbarSub();
 		} else if ( surface && surface.family && surfacesInFamily( surface.family ).length > 1 ) {
@@ -3604,13 +3673,13 @@
 		}
 	}
 
-	const STATUS_LABELS = { publish: 'Published', draft: 'Draft', future: 'Scheduled', pending: 'Pending', private: 'Private', trash: 'Trashed' };
+	const STATUS_LABELS = { publish: __( 'Published' ), draft: __( 'Draft' ), future: __( 'Scheduled' ), pending: __( 'Pending' ), private: __( 'Private' ), trash: __( 'Trashed' ) };
 
 	// Title and Date only — author and status are not useful sort keys here
 	// and status is not a WP REST orderby.
 	const CONTENT_SORT_COLS = {
-		title: { orderby: 'title', label: 'Title', defaultOrder: 'asc' },
-		date: { orderby: 'date', label: 'Date', defaultOrder: 'desc' },
+		title: { orderby: 'title', label: __( 'Title' ), defaultOrder: 'asc' },
+		date: { orderby: 'date', label: __( 'Date' ), defaultOrder: 'desc' },
 	};
 
 	function contentSortHead( key ) {
@@ -3657,8 +3726,8 @@
 		if ( ! c ) {
 			if ( softLoadPending( 'content' ) ) return; // a soft reload owns the view
 			// Cold paint: base type tabs (CPT tabs land when types resolve).
-			const coldTabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ],
-				...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
+			const coldTabs = [ [ 'all', __( 'All' ) ], [ 'posts', __( 'Posts' ) ],
+				...( B.caps.editPages ? [ [ 'pages', __( 'Pages' ) ] ] : [] ),
 				...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
 			view.innerHTML = `
 			<div class="minn-toolbar">
@@ -3694,8 +3763,8 @@
 		}
 		// Type tabs narrow the query server-side now — items arrive pre-filtered.
 		const filtered = c.items;
-		const tabs = [ [ 'all', 'All' ], [ 'posts', 'Posts' ],
-			...( B.caps.editPages ? [ [ 'pages', 'Pages' ] ] : [] ),
+		const tabs = [ [ 'all', __( 'All' ) ], [ 'posts', __( 'Posts' ) ],
+			...( B.caps.editPages ? [ [ 'pages', __( 'Pages' ) ] ] : [] ),
 			...( state.cache.types || [] ).map( ( t ) => [ t.restBase, t.name ] ) ];
 		// Featured image replaces the type glyph when set (products do the same
 		// with minn-prod-thumb). No image → post/page/CPT icon as before.
@@ -3709,8 +3778,8 @@
 		// and posts+pages share one list). Single-type tabs already name the
 		// type in the filter, so no chip there — not a full column.
 		const contentTypeLabel = ( p ) => {
-			if ( p.type === 'posts' ) return 'Post';
-			if ( p.type === 'pages' ) return 'Page';
+			if ( p.type === 'posts' ) return __( 'Post' );
+			if ( p.type === 'pages' ) return __( 'Page' );
 			const t = ( state.cache.types || [] ).find( ( x ) => x.restBase === p.type );
 			return t ? t.name : p.type;
 		};
@@ -3737,7 +3806,7 @@
 		const manyTypes = tabs.length > 6;
 		const typeActiveLabel = ( () => {
 			const hit = tabs.find( ( [ id ] ) => id === state.filter );
-			return hit ? hit[ 1 ] : 'All';
+			return hit ? hit[ 1 ] : __( 'All' );
 		} )();
 		const typeHtml = manyTypes ? `
 			<div class="minn-ac minn-tax-select minn-type-select" data-typecombo title="${ esc( __( 'Post type' ) ) }">
@@ -3754,7 +3823,7 @@
 		const trashHtml = `
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
 				${ ! state.contentTrash ? `<button class="minn-tab${ state.contentModified ? ' active' : '' }" id="minn-content-modified" title="${ esc( __( 'Only live content carrying unsaved edits' ) ) }">${ esc( __( 'Modified' ) ) }</button>` : '' }
-				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ esc( state.contentTrash ? __( 'Back to content' ) : __( 'View trash' ) ) }">${ icon( 'trash' ) } Trash</button>
+				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ esc( state.contentTrash ? __( 'Back to content' ) : __( 'View trash' ) ) }">${ icon( 'trash' ) } ${ esc( __( 'Trash' ) ) }</button>
 			</div>`;
 		const filtersHtml = `
 			${ showTax ? taxCombo( 'cat', __( 'All categories' ) ) : '' }
@@ -4199,7 +4268,7 @@
 	// SVG tab only when Safe SVG is active (boot B.safeSvg) — core blocks SVG
 	// uploads otherwise, so an empty SVG filter would read as broken.
 	const mediaTypesList = () => {
-		const base = [ [ '', 'All' ], [ 'image', 'Images' ], [ 'video', 'Video' ], [ 'audio', 'Audio' ], [ 'application', 'Docs' ] ];
+		const base = [ [ '', __( 'All' ) ], [ 'image', __( 'Images' ) ], [ 'video', __( 'Video' ) ], [ 'audio', __( 'Audio' ) ], [ 'application', __( 'Docs' ) ] ];
 		if ( B.safeSvg ) base.splice( 2, 0, [ 'svg', 'SVG' ] );
 		return base;
 	};
@@ -4501,7 +4570,7 @@
 	// Month key → "July 2026" for the date-filter combobox.
 	const mediaMonthLabel = ( ym ) => {
 		const [ y, m ] = ym.split( '-' ).map( Number );
-		return [ 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December' ][ m - 1 ] + ' ' + y;
+		return new Date( y, m - 1, 1 ).toLocaleDateString( uiLocale(), { month: 'long', year: 'numeric' } );
 	};
 
 	function renderMedia() {
@@ -4527,7 +4596,7 @@
 			? state.cache.mediaFoldersList.find( ( f ) => String( f.id ) === String( state.mediaFolder ) )
 			: null;
 		const mediaFolderComboHtml = B.mediaFolders ? `
-			<div class="minn-ac minn-tax-select" data-foldercombo title="Filter by ${ esc( B.mediaFolders.name ) } folder">
+			<div class="minn-ac minn-tax-select" data-foldercombo title="${ esc( sprintf( /* translators: %s: media-folder provider name. */ __( 'Filter by %s folder' ), B.mediaFolders.name ) ) }">
 				<input class="minn-input minn-ac-input" placeholder="${ esc( activeFolder ? activeFolder.label : __( 'All folders' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Filter by folder' ) ) }">
 				<div class="minn-ac-panel" hidden></div>
 			</div>` : '';
@@ -4592,7 +4661,7 @@
 			<input class="minn-input minn-toolbar-search" id="minn-media-search" placeholder="${ esc( __( 'Search files…' ) ) }" value="${ esc( state.mediaSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ countLabel }</div>
 			${ mediaViewTabsHtml }
-			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn">${ icon( 'upload' ) } Upload</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
+			${ B.caps.upload ? `<button class="minn-btn-soft" id="minn-upload-btn">${ icon( 'upload' ) } ${ esc( __( 'Upload' ) ) }</button><input type="file" id="minn-upload-input" multiple hidden>` : '' }
 		</div>
 		<div id="minn-media-bulk-slot"></div>
 		${ state.uploadOpen && B.caps.upload ? `
@@ -5311,14 +5380,14 @@
 	// Full WC status set so "All" + every tab can reach historical orders
 	// (pending/failed often dominate old catalogs; without tabs they look "missing").
 	const ORDER_TABS = [
-		[ 'any', 'All' ],
-		[ 'processing', 'Processing' ],
-		[ 'completed', 'Completed' ],
+		[ 'any', __( 'All' ) ],
+		[ 'processing', __( 'Processing' ) ],
+		[ 'completed', __( 'Completed' ) ],
 		[ 'on-hold', __( 'On hold' ) ],
-		[ 'pending', 'Pending' ],
-		[ 'cancelled', 'Cancelled' ],
-		[ 'refunded', 'Refunded' ],
-		[ 'failed', 'Failed' ],
+		[ 'pending', __( 'Pending' ) ],
+		[ 'cancelled', __( 'Cancelled' ) ],
+		[ 'refunded', __( 'Refunded' ) ],
+		[ 'failed', __( 'Failed' ) ],
 	];
 	const ORDER_STATUS_STYLE = {
 		processing: 'future', completed: 'publish', 'on-hold': 'private', pending: 'private',
@@ -5685,7 +5754,7 @@
 								: m.relatedSubs.map( ( sub ) => `
 								<button type="button" class="minn-sub-order-row" data-relsub="${ sub.id }">
 									<span>#${ esc( sub.number || sub.id ) }</span>
-									<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
+									<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( statusLabel( sub.status ) ) }</span>
 									<span>${ esc( subMoney( sub, sub.total ) ) }</span>
 								</button>` ).join( '' ) }
 						</div>` : '' }
@@ -5696,7 +5765,7 @@
 								: m.otherOrders.map( ( oo ) => `
 								<button type="button" class="minn-sub-order-row" data-relorder="${ oo.id }" data-relnum="${ esc( oo.number || oo.id ) }">
 									<span>#${ esc( oo.number || oo.id ) }</span>
-									<span class="minn-status ${ ORDER_STATUS_STYLE[ oo.status ] || 'draft' }">${ esc( ( oo.status || '' ).replace( /-/g, ' ' ) ) }</span>
+									<span class="minn-status ${ ORDER_STATUS_STYLE[ oo.status ] || 'draft' }">${ esc( statusLabel( oo.status ) ) }</span>
 									<span>${ esc( orderMoney( oo, oo.total ) ) }</span>
 									<span style="color:var(--text3); font-size:12.5px;">${ esc( timeAgo( oo.date_created ) ) }</span>
 								</button>` ).join( '' ) }
@@ -5726,7 +5795,7 @@
 							<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the order number. */ __( 'Order #%s' ) ), esc( o.number || listO.number || o.id ) ) }</div>
 							<div class="minn-modal-sub">${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }</div>
 						</div>
-						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( statusLabel( o.status ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading order…' ) ) }</div>` : '' }
@@ -5819,7 +5888,7 @@
 			const ocSeed = ( key, fallback ) => ( m.edits[ 'oc:' + key ] != null ? m.edits[ 'oc:' + key ] : fallback );
 			const statusWrap = ocWrap( 'status' );
 			if ( statusWrap ) bindAutocomplete( statusWrap,
-				Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => ( { value: st, label: st.replace( /-/g, ' ' ) } ) ),
+				Object.keys( ORDER_STATUS_STYLE ).map( ( st ) => ( { value: st, label: statusLabel( st ) } ) ),
 				{ strict: true, value: ocSeed( 'status', o.status || 'pending' ), onPick: ( v ) => { m.edits[ 'oc:status' ] = v; } } );
 			const payChoices = orderPayChoices( m, o );
 			const payWrap = ocWrap( 'paymethod' );
@@ -6329,7 +6398,7 @@
 					<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the order number. */ __( 'Order #%s' ) ), esc( o.number || o.id ) ) }</div>
 					<div class="minn-modal-sub">${ loading ? __( 'Loading…' ) : `${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }` }</div>
 				</div>
-				<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+				<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( statusLabel( o.status ) ) }</span>
 			</div>
 			<div class="minn-order-page-card">
 				${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading order…' ) ) }</div>` : '' }
@@ -6457,7 +6526,7 @@
 				<button class="minn-tab${ orderView === 'list' ? ' active' : '' }" data-oview="list">${ esc( __( 'Orders' ) ) }</button>
 				<button class="minn-tab${ orderView === 'analytics' ? ' active' : '' }" data-oview="analytics">${ esc( __( 'Analytics' ) ) }</button>
 			</div>
-			${ B.caps.orders && orderView === 'list' ? `<button class="minn-btn-soft" id="minn-order-add" style="margin-left:auto;">${ icon( 'plus' ) } New order</button>` : '' }
+			${ B.caps.orders && orderView === 'list' ? `<button class="minn-btn-soft" id="minn-order-add" style="margin-left:auto;">${ icon( 'plus' ) } ${ esc( __( 'New order' ) ) }</button>` : '' }
 		</div>`;
 
 		if ( orderView === 'analytics' ) {
@@ -6482,7 +6551,7 @@
 			const cards = [
 				[ __( 'Gross sales' ), loading ? '…' : money( tot.total_sales != null ? tot.total_sales : tot.gross_sales ) ],
 				[ __( 'Net revenue' ), loading ? '…' : money( tot.net_revenue ) ],
-				[ 'Orders', loading ? '…' : String( tot.orders_count ?? '—' ) ],
+				[ __( 'Orders' ), loading ? '…' : String( tot.orders_count ?? '—' ) ],
 				[ __( 'Items sold' ), loading ? '…' : String( tot.num_items_sold ?? '—' ) ],
 			];
 			const rangeLabel = orderAnalyticsRangeLabel( curRange );
@@ -6511,7 +6580,7 @@
 					chartData.length ? `
 				<div class="minn-chart" id="minn-wc-chart">
 					${ chartData.map( ( c, i ) => `
-						<div class="minn-chart-col" data-ci="${ i }" title="${ esc( c.label + ': ' + money( c.value ) + ' · ' + c.orders + ' orders' ) }">
+						<div class="minn-chart-col" data-ci="${ i }" title="${ esc( c.label + ': ' + money( c.value ) + ' · ' + sprintf( /* translators: %s: number of orders. */ _n( '%s order', '%s orders', c.orders ), c.orders ) ) }">
 							<div class="minn-chart-bar${ i === chartData.length - 1 ? ' last' : '' }" style="height:${ Math.max( 3, pct( c.value ) ) }%"></div>
 						</div>` ).join( '' ) }
 				</div>` : `<div class="minn-empty">${ esc( __( 'No sales in this range.' ) ) }</div>`
@@ -6585,9 +6654,9 @@
 		const summaryCards = [];
 		if ( s.month ) {
 			summaryCards.push( [ __( 'Orders this month' ), s.month.total_orders ?? '—', '' ] );
-			summaryCards.push( [ __( 'Revenue this month' ), sym + Number( s.month.total_sales || 0 ).toLocaleString( uiLocale() ), 'net ' + sym + Number( s.month.net_sales || 0 ).toLocaleString( uiLocale() ) ] );
+			summaryCards.push( [ __( 'Revenue this month' ), sym + Number( s.month.total_sales || 0 ).toLocaleString( uiLocale() ), sprintf( /* translators: %s: formatted net revenue. */ __( 'net %s' ), sym + Number( s.month.net_sales || 0 ).toLocaleString( uiLocale() ) ) ] );
 		}
-		if ( s.processing != null ) summaryCards.push( [ __( 'Awaiting fulfillment' ), s.processing, 'processing' ] );
+		if ( s.processing != null ) summaryCards.push( [ __( 'Awaiting fulfillment' ), s.processing, __( 'Processing' ) ] );
 
 		view.innerHTML = `
 		${ viewSwitch }
@@ -6620,7 +6689,7 @@
 						<div class="minn-row-slug">${ timeAgo( o.date_created ) }</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( o ) ) }</div>
-					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( o.status.replace( '-', ' ' ) ) }</span></div>
+					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( statusLabel( o.status ) ) }</span></div>
 					<div class="minn-row-meta">${ ( o.line_items || [] ).reduce( ( n, li ) => n + ( li.quantity || 0 ), 0 ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-qv="${ o.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
@@ -6756,14 +6825,14 @@
 	// Daily ops via wc/v3/subscriptions (extension REST). shop_subscription is
 	// fenced out of Content so recurring billing never opens the writing editor.
 	const SUB_TABS = [
-		[ 'any', 'All' ],
-		[ 'active', 'Active' ],
+		[ 'any', __( 'All' ) ],
+		[ 'active', __( 'Active' ) ],
 		[ 'on-hold', __( 'On hold' ) ],
-		[ 'pending', 'Pending' ],
+		[ 'pending', __( 'Pending' ) ],
 		[ 'pending-cancel', __( 'Pending cancel' ) ],
-		[ 'cancelled', 'Cancelled' ],
-		[ 'expired', 'Expired' ],
-		[ 'switched', 'Switched' ],
+		[ 'cancelled', __( 'Cancelled' ) ],
+		[ 'expired', __( 'Expired' ) ],
+		[ 'switched', __( 'Switched' ) ],
 	];
 	const SUB_STATUS_STYLE = {
 		active: 'publish',
@@ -6784,8 +6853,12 @@
 	function subPeriodLabel( s ) {
 		const interval = Math.max( 1, parseInt( s.billing_interval, 10 ) || 1 );
 		const period = ( s.billing_period || 'month' ).replace( /s$/, '' );
-		if ( interval === 1 ) return 'every ' + period;
-		return 'every ' + interval + ' ' + period + 's';
+		switch ( period ) {
+			case 'day': return interval === 1 ? __( 'every day' ) : sprintf( /* translators: %s: billing interval in days. */ _n( 'every %s day', 'every %s days', interval ), interval );
+			case 'week': return interval === 1 ? __( 'every week' ) : sprintf( /* translators: %s: billing interval in weeks. */ _n( 'every %s week', 'every %s weeks', interval ), interval );
+			case 'year': return interval === 1 ? __( 'every year' ) : sprintf( /* translators: %s: billing interval in years. */ _n( 'every %s year', 'every %s years', interval ), interval );
+			default: return interval === 1 ? __( 'every month' ) : sprintf( /* translators: %s: billing interval in months. */ _n( 'every %s month', 'every %s months', interval ), interval );
+		}
 	}
 
 	function subMoney( s, amount ) {
@@ -6942,10 +7015,10 @@
 				<div class="minn-table-row minn-sub-cols" data-sub="${ s.id }">
 					<div class="minn-cell-clip">
 						<div class="minn-row-title">#${ esc( s.number || s.id ) }</div>
-						<div class="minn-row-slug">${ esc( subPeriodLabel( s ) ) }${ s.parent_id ? ' · order #' + esc( String( s.parent_id ) ) : '' }</div>
+						<div class="minn-row-slug">${ esc( subPeriodLabel( s ) ) }${ s.parent_id ? ' · ' + sprintf( /* translators: %s: order number. */ esc( __( 'order #%s' ) ), esc( String( s.parent_id ) ) ) : '' }</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( s ) ) }</div>
-					<div><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( ( s.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
+					<div><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( statusLabel( s.status ) ) }</span></div>
 					<div class="minn-row-meta" title="${ esc( s.next_payment_date_gmt || '' ) }">${ esc( subNextLabel( s ) ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( subMoney( s, s.total ) ) }</div>
 					<div class="minn-row-arrow">›</div>
@@ -7015,11 +7088,11 @@
 	// Daily catalog ops via wc/v3 — not the writing editor. Content deliberately
 	// hides the product CPT so price/SKU/stock never land in the wrong tool.
 	const PRODUCT_TABS = [
-		[ 'any', 'All' ],
-		[ 'publish', 'Published' ],
-		[ 'draft', 'Draft' ],
-		[ 'private', 'Private' ],
-		[ 'pending', 'Pending' ],
+		[ 'any', __( 'All' ) ],
+		[ 'publish', __( 'Published' ) ],
+		[ 'draft', __( 'Draft' ) ],
+		[ 'private', __( 'Private' ) ],
+		[ 'pending', __( 'Pending' ) ],
 	];
 	const PRODUCT_STOCK_TABS = [
 		[ 'any', __( 'Any stock' ) ],
@@ -7393,7 +7466,8 @@
 	}
 
 	function productStockLabel( p ) {
-		const st = ( p.stock_status || 'instock' ).replace( /-/g, ' ' );
+		const labels = { instock: __( 'In stock' ), outofstock: __( 'Out of stock' ), onbackorder: __( 'On backorder' ) };
+		const st = labels[ p.stock_status ] || statusLabel( p.stock_status || 'instock' );
 		if ( p.manage_stock && p.stock_quantity != null ) return `${ st } (${ p.stock_quantity })`;
 		return st;
 	}
@@ -8535,7 +8609,7 @@
 					<div class="minn-modal-title">${ esc( p.name || 'Product' ) }</div>
 					<div class="minn-modal-sub">${ loading ? esc( __( 'Loading…' ) ) : esc( sub ) }</div>
 				</div>
-				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
+				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span>` : '' }
 			</div>
 			<div class="minn-order-page-card">
 				${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div>` : '' }
@@ -8616,7 +8690,7 @@
 				${ PRODUCT_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.productTab === id ? ' active' : '' }" data-ptab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
-			${ B.caps.products ? `<button class="minn-btn-soft" id="minn-product-add" style="margin-left:auto;">${ icon( 'plus' ) } Add product</button>` : '' }
+			${ B.caps.products ? `<button class="minn-btn-soft" id="minn-product-add" style="margin-left:auto;">${ icon( 'plus' ) } ${ esc( __( 'Add product' ) ) }</button>` : '' }
 		</div>
 		<div class="minn-toolbar">
 			<div class="minn-tabs minn-quiet-tabs">
@@ -8645,7 +8719,7 @@
 					<div class="minn-row-meta minn-cell-clip">${ esc( p.sku || '—' ) }</div>
 					<div><span class="minn-status ${ STOCK_STATUS_STYLE[ p.stock_status ] || 'draft' }">${ esc( productStockLabel( p ) ) }</span></div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ productPriceLabel( p ) }</div>
-					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
+					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span></div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-pqv="${ p.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.productSearch ? __( 'No products match “' ) + esc( state.productSearch ) + '”.' : ( state.productStock === 'low' ? __( 'No low-stock products.' ) : __( 'No products here.' ) ) }</div>` }
 		</div>
@@ -8861,9 +8935,9 @@
 	/* ===== Coupons (WooCommerce) ===== */
 
 	const COUPON_TABS = [
-		[ 'any', 'All' ],
-		[ 'publish', 'Published' ],
-		[ 'draft', 'Draft' ],
+		[ 'any', __( 'All' ) ],
+		[ 'publish', __( 'Published' ) ],
+		[ 'draft', __( 'Draft' ) ],
 	];
 	const COUPON_TYPES = [
 		[ 'percent', __( 'Percentage discount' ) ],
@@ -8893,7 +8967,7 @@
 	}
 
 	function couponExpiresLabel( c ) {
-		if ( ! c.date_expires ) return 'Never';
+		if ( ! c.date_expires ) return __( 'Never' );
 		return timeAgo( c.date_expires );
 	}
 
@@ -9012,7 +9086,7 @@
 				${ COUPON_TABS.map( ( [ id, label ] ) =>
 					`<button class="minn-tab${ state.couponTab === id ? ' active' : '' }" data-ctab="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
-			${ B.caps.coupons ? `<button class="minn-btn-soft" id="minn-coupon-add" style="margin-left:auto;">${ icon( 'plus' ) } Add coupon</button>` : '' }
+			${ B.caps.coupons ? `<button class="minn-btn-soft" id="minn-coupon-add" style="margin-left:auto;">${ icon( 'plus' ) } ${ esc( __( 'Add coupon' ) ) }</button>` : '' }
 		</div>
 		<div class="minn-toolbar">
 			<input class="minn-input minn-toolbar-search" id="minn-coupon-search" placeholder="${ esc( __( 'Search coupons (code, ID…)' ) ) }" value="${ esc( state.couponSearch || '' ) }">
@@ -9032,7 +9106,7 @@
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( couponAmountLabel( cp ) ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( couponUsageLabel( cp ) ) }</div>
 					<div class="minn-row-meta">${ esc( couponExpiresLabel( cp ) ) }</div>
-					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ cp.status ] || 'draft' }">${ esc( ( cp.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
+					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ cp.status ] || 'draft' }">${ esc( statusLabel( cp.status ) ) }</span></div>
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.couponSearch ? __( 'No coupons match “' ) + esc( state.couponSearch ) + '”.' : __( 'No coupons yet.' ) }</div>` }
 		</div>
@@ -9211,11 +9285,11 @@
 						${ cu.avatar_url ? `<img class="minn-prod-thumb" src="${ esc( cu.avatar_url ) }" alt="" loading="lazy">` : '' }
 						<div>
 							<div class="minn-row-title">${ esc( customerDisplayName( cu ) ) }</div>
-							<div class="minn-row-slug">${ esc( cu.username || '' ) }${ cu.is_paying_customer ? ' · paying' : '' }</div>
+							<div class="minn-row-slug">${ esc( cu.username || '' ) }${ cu.is_paying_customer ? ' · ' + esc( __( 'Paying customer' ) ) : '' }</div>
 						</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( cu.email || ( cu.billing && cu.billing.email ) || '—' ) }</div>
-					<div class="minn-row-meta">${ esc( cu.role || '—' ) }</div>
+					<div class="minn-row-meta">${ esc( cu.role ? statusLabel( cu.role ) : '—' ) }</div>
 					<div class="minn-row-meta">${ esc( cu.date_created ? timeAgo( cu.date_created ) : '—' ) }</div>
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.customerSearch ? __( 'No customers match “' ) + esc( state.customerSearch ) + '”.' : __( 'No customers yet.' ) }</div>` }
@@ -9380,8 +9454,8 @@
 
 	function structureTabsHtml( active ) {
 		const defs = [];
-		if ( B.caps.settings ) { defs.push( [ 'types', __( 'Post Types' ) ] ); defs.push( [ 'taxonomies', 'Taxonomies' ] ); }
-		if ( B.caps.terms ) defs.push( [ 'terms', 'Terms' ] );
+		if ( B.caps.settings ) { defs.push( [ 'types', __( 'Post Types' ) ] ); defs.push( [ 'taxonomies', __( 'Taxonomies' ) ] ); }
+		if ( B.caps.terms ) defs.push( [ 'terms', __( 'Terms' ) ] );
 		if ( defs.length < 2 ) return ''; // a single available tab needs no bar
 		return `<div class="minn-tabs">${ defs.map( ( [ id, label ] ) =>
 			`<button class="minn-tab${ active === id ? ' active' : '' }" data-structtab="${ id }">${ label }</button>` ).join( '' ) }</div>`;
@@ -9941,7 +10015,7 @@
 		}
 		// One searchable combobox, not a tab per role — real sites (Woo,
 		// memberships, LMS) carry 10+ roles and the tab row overflowed.
-		const roles = Object.entries( B.roles || {} );
+		const roles = Object.entries( B.roles || {} ).map( ( [ value, label ] ) => [ value, chromeLabel( label ) ] );
 		// Bulk role change is gated on edit-users; lower roles get no checkboxes.
 		const bulkUsers = !! B.caps.editUsers && roles.length > 0;
 		const userSel = state.userSel || ( state.userSel = new Set() );
@@ -9982,7 +10056,7 @@
 					<div class="minn-row-meta minn-user-id">#${ esc( String( u.id ) ) }</div>
 					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( u.email || '—' ) }</div>
-					<div class="minn-row-meta">${ esc( ( u.roles || [] ).map( ( r ) => ( B.roles && B.roles[ r ] ) || r ).join( ', ' ) || '—' ) }</div>
+					<div class="minn-row-meta">${ esc( ( u.roles || [] ).map( ( r ) => chromeLabel( ( B.roles && B.roles[ r ] ) || statusLabel( r ) ) ).join( ', ' ) || '—' ) }</div>
 					<div class="minn-row-meta">${ u.registered_date ? timeAgo( u.registered_date ) : '—' }</div>
 					<div class="minn-row-actions">
 						<button type="button" class="minn-row-more" title="${ esc( __( 'Actions' ) ) }" aria-label="${ esc( __( 'User actions' ) ) }">⋯</button>
@@ -10440,11 +10514,13 @@
 		// so in one quiet line instead (Gravity SMTP test mode:
 		// sandboxed sends never count as sent/failed).
 		if ( ! points.some( ( p ) => ( Number( p.value ) || 0 ) + ( Number( p.secondary ) || 0 ) > 0 ) ) {
-			const buckets = [ chart.primary, chart.secondary ].filter( Boolean ).map( ( b ) => String( b ).toLowerCase() ).join( ' or ' );
+			const buckets = [ chart.primary, chart.secondary ].filter( Boolean ).map( chromeLabel ).join( ' / ' );
 			return `
 			<div class="minn-sstat-chart">
 				${ chart.title ? `<div class="minn-sstat-label">${ esc( chart.title ) }</div>` : '' }
-				<div class="minn-sstat-hint">${ esc( buckets ? `No ${ buckets } entries in this window yet.` : __( 'No activity in this window yet.' ) ) }</div>
+				<div class="minn-sstat-hint">${ esc( buckets
+					? sprintf( /* translators: %s: slash-separated names of the chart series. */ __( 'No %s entries in this window yet.' ), buckets )
+					: __( 'No activity in this window yet.' ) ) }</div>
 			</div>`;
 		}
 		const dual = !! chart.secondary || points.some( ( p ) => p.secondary != null );
@@ -10480,8 +10556,8 @@
 		if ( ! chart || ! chart.points || ! chart.points.length ) return;
 		const el = $( '[data-sstat-chart]', view );
 		if ( ! el ) return;
-		const primary = chart.primary || 'Count';
-		const secondary = chart.secondary || '';
+		const primary = chromeLabel( chart.primary || 'Count' );
+		const secondary = chart.secondary ? chromeLabel( chart.secondary ) : '';
 		const dual = !! chart.secondary || chart.points.some( ( p ) => p.secondary != null );
 		const tip = chartTip();
 		let current = -1;
@@ -10504,7 +10580,7 @@
 					<div class="minn-chart-tip-date">${ esc( p.label ) }</div>
 					<div class="minn-chart-tip-stats">
 						<div><b>${ v.toLocaleString( uiLocale() ) }</b><span>${ esc( primary ) }</span></div>
-						${ dual ? `<div><b>${ s.toLocaleString( uiLocale() ) }</b><span>${ esc( secondary || 'Other' ) }</span></div>` : '' }
+						${ dual ? `<div><b>${ s.toLocaleString( uiLocale() ) }</b><span>${ esc( secondary || __( 'Other' ) ) }</span></div>` : '' }
 					</div>`;
 				$$( '.minn-chart-col.hover', el ).forEach( ( c ) => c.classList.remove( 'hover' ) );
 				col.classList.add( 'hover' );
@@ -10522,14 +10598,14 @@
 		if ( ! st ) return '';
 		const rows = ( st.rows || [] ).map( ( r ) => `
 			<div class="minn-sstat">
-				<div class="minn-sstat-label">${ esc( r.label ) }</div>
+				<div class="minn-sstat-label">${ esc( chromeLabel( r.label ) ) }</div>
 				<div class="minn-sstat-value">${ esc( r.value ) }</div>
 				${ r.hint ? `<div class="minn-sstat-hint">${ esc( r.hint ) }</div>` : '' }
 			</div>` ).join( '' );
 		const chart = surfaceChartHtml( st.chart );
 		const cmd = st.command ? `
 			<div class="minn-sstat-cmd">
-				${ st.command.label ? `<div class="minn-sstat-label">${ esc( st.command.label ) }</div>` : '' }
+				${ st.command.label ? `<div class="minn-sstat-label">${ esc( chromeLabel( st.command.label ) ) }</div>` : '' }
 				<button type="button" class="minn-sstat-cmd-box" id="minn-sstat-copy" title="${ esc( __( 'Copy command' ) ) }">
 					<code>${ esc( st.command.text ) }</code>${ icon( 'clipboard' ) }
 				</button>
@@ -10931,7 +11007,7 @@
 		if ( PILL_STYLES.green.includes( v ) ) cls = 'publish';
 		else if ( PILL_STYLES.red.includes( v ) ) cls = 'trash-status';
 		else if ( PILL_STYLES.amber.includes( v ) ) cls = 'private';
-		return `<span class="minn-status ${ cls }">${ esc( v || '—' ) }</span>`;
+		return `<span class="minn-status ${ cls }">${ esc( v ? statusLabel( v ) : '—' ) }</span>`;
 	}
 
 	// One sectionsRoute detail row. `type` picks the rendering: url/email
@@ -11425,10 +11501,10 @@
 		const homeView = s.manage ? 'manage' : 'main';
 		return `
 			<div class="minn-tabs minn-view-switch">
-				<button class="minn-tab${ ( ss.view !== 'manage' && ss.view !== 'settings' && ! /^x\d+$/.test( ss.view ) ) || ( inItem && homeView === 'main' ) ? ' active' : '' }" data-sview="main">${ esc( s.collection.viewLabel || 'Entries' ) }</button>
-				${ s.manage ? `<button class="minn-tab${ ss.view === 'manage' || ( inItem && homeView === 'manage' ) ? ' active' : '' }" data-sview="manage">${ esc( s.manage.viewLabel || 'Manage' ) }</button>` : '' }
-				${ extra.map( ( v, i ) => `<button class="minn-tab${ ss.view === 'x' + i ? ' active' : '' }" data-sview="x${ i }">${ esc( v.viewLabel ) }</button>` ).join( '' ) }
-				${ s.settings && ! itemScoped ? `<button class="minn-tab${ ss.view === 'settings' ? ' active' : '' }" data-sview="settings">${ esc( s.settings.label || 'Settings' ) }</button>` : '' }
+				<button class="minn-tab${ ( ss.view !== 'manage' && ss.view !== 'settings' && ! /^x\d+$/.test( ss.view ) ) || ( inItem && homeView === 'main' ) ? ' active' : '' }" data-sview="main">${ esc( chromeLabel( s.collection.viewLabel || 'Entries' ) ) }</button>
+				${ s.manage ? `<button class="minn-tab${ ss.view === 'manage' || ( inItem && homeView === 'manage' ) ? ' active' : '' }" data-sview="manage">${ esc( chromeLabel( s.manage.viewLabel || 'Manage' ) ) }</button>` : '' }
+				${ extra.map( ( v, i ) => `<button class="minn-tab${ ss.view === 'x' + i ? ' active' : '' }" data-sview="x${ i }">${ esc( chromeLabel( v.viewLabel ) ) }</button>` ).join( '' ) }
+				${ s.settings && ! itemScoped ? `<button class="minn-tab${ ss.view === 'settings' ? ' active' : '' }" data-sview="settings">${ esc( chromeLabel( s.settings.label || 'Settings' ) ) }</button>` : '' }
 			</div>`;
 	}
 
@@ -11555,12 +11631,12 @@
 		// switcher it is the row's primary control and keeps the box.
 		const tabsHtml = ss.tabs && ss.tabs.length > 1 ? ( manyTabs ? `
 			<div class="minn-ac minn-tax-select" data-stabcombo>
-				<input class="minn-input minn-ac-input" placeholder="${ esc( allTab ? allTab[ 1 ] : 'All' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( chromeLabel( allTab ? allTab[ 1 ] : 'All' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>` : `
 			<div class="minn-tabs${ switchHtml ? ' minn-quiet-tabs' : '' }">
 				${ ss.tabs.map( ( [ id, label ] ) =>
-					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
+					`<button class="minn-tab${ ss.tab === id ? ' active' : '' }" data-stab="${ esc( id ) }">${ esc( chromeLabel( label ) ) }</button>` ).join( '' ) }
 			</div>` ) : '';
 		// The filter is the SECOND strip on its row, so it wears the quiet
 		// text style (one boxed pill strip per row — the Extensions rule:
@@ -11568,10 +11644,10 @@
 		const filterHtml = coll.filter && coll.filter.options ? `
 			<div class="minn-tabs minn-quiet-tabs">
 				${ coll.filter.options.map( ( [ v, label ] ) =>
-					`<button class="minn-tab${ surfaceFilterValue( coll, ss ) === String( v ) ? ' active' : '' }" data-sfilter="${ esc( String( v ) ) }">${ esc( String( label ) ) }</button>` ).join( '' ) }
+					`<button class="minn-tab${ surfaceFilterValue( coll, ss ) === String( v ) ? ' active' : '' }" data-sfilter="${ esc( String( v ) ) }">${ esc( chromeLabel( label ) ) }</button>` ).join( '' ) }
 			</div>` : '';
-		const searchHtml = coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="Search ${ esc( ( coll.viewLabel || 'items' ).toLowerCase() ) }…" value="${ esc( ss.q || '' ) }">` : '';
-		const createHtml = coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( coll.create.label || 'Add' ) }</button>` : '';
+		const searchHtml = coll.search ? `<input class="minn-input minn-toolbar-search" id="minn-surface-search" placeholder="${ esc( sprintf( /* translators: %s: the localized name of the items being searched. */ __( 'Search %s…' ), chromeLabel( coll.viewLabel || __( 'items' ) ) ) ) }" value="${ esc( ss.q || '' ) }">` : '';
+		const createHtml = coll.create ? `<button class="minn-btn-soft" id="minn-surface-add">${ icon( 'plus' ) } ${ esc( chromeLabel( coll.create.label || __( 'Add' ) ) ) }</button>` : '';
 		const rowTwo = tabsHtml + filterHtml + searchHtml
 			+ `<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>` + createHtml;
 		// With a view switcher AND list controls, the toolbar splits into two
@@ -11597,10 +11673,11 @@
 						const active = ss.sortBy === col.sort;
 						const dir = ss.sortDir === 'desc' ? 'desc' : 'asc';
 						const mark = active ? ( dir === 'asc' ? ' ↑' : ' ↓' ) : '';
-						const label = sortButtonLabel( col.label, active, dir );
-						return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }><button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-ssort="${ esc( col.sort ) }" data-ssort-format="${ esc( col.format || '' ) }" data-ssort-label="${ esc( col.label ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ esc( col.label ) }${ mark }</button></div>`;
+						const translated = chromeLabel( col.label );
+						const label = sortButtonLabel( translated, active, dir );
+						return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }><button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-ssort="${ esc( col.sort ) }" data-ssort-format="${ esc( col.format || '' ) }" data-ssort-label="${ esc( translated ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ esc( translated ) }${ mark }</button></div>`;
 					}
-					return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }>${ esc( col.label ) }</div>`;
+					return `<div${ col.format === 'num' ? ' class="minn-num"' : '' }>${ esc( chromeLabel( col.label ) ) }</div>`;
 				} ).join( '' ) }<div></div>
 			</div>
 			${ c.items.length ? c.items.map( ( item, i ) => `
@@ -11658,7 +11735,7 @@
 		);
 		const tabCombo = view.querySelector( '[data-stabcombo]' );
 		if ( tabCombo ) bindAutocomplete( tabCombo,
-			ss.tabs.map( ( [ id, label ] ) => ( { value: id === '_all' ? '' : String( id ), label } ) ), {
+			ss.tabs.map( ( [ id, label ] ) => ( { value: id === '_all' ? '' : String( id ), label: chromeLabel( label ) } ) ), {
 				strict: true,
 				value: ss.tab !== '_all' ? String( ss.tab ) : '',
 				onPick: ( v ) => {
@@ -11738,7 +11815,8 @@
 						syncBulk();
 					} );
 				}
-				$( '.minn-bulk-count', slot ).textContent = ss.sel.size + ' selected';
+				/* translators: %s: number of selected rows. */
+				$( '.minn-bulk-count', slot ).textContent = sprintf( __( '%s selected' ), ss.sel.size );
 			};
 			syncBulk();
 			$$( '[data-scheck]', view ).forEach( ( cb ) =>
@@ -12112,7 +12190,7 @@
 					`<button class="minn-tab${ ms.sel === m.id ? ' active' : '' }" data-menu="${ m.id }">${ esc( m.name ) }</button>` ).join( '' ) }
 			</div>
 			${ metaHtml || '' }
-			<button class="minn-btn-soft" id="minn-menu-new">${ icon( 'plus' ) } New menu</button>
+			<button class="minn-btn-soft" id="minn-menu-new">${ icon( 'plus' ) } ${ esc( __( 'New menu' ) ) }</button>
 		</div>`;
 	}
 
@@ -12315,17 +12393,17 @@
 					<input class="minn-input minn-ac-input" placeholder="${ esc( ms.pick ? __( 'Find a page or post…' ) : __( 'Loading pages…' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 					<div class="minn-ac-panel" hidden></div>
 				</div>
-				<button class="minn-btn-soft" id="minn-menu-add-content">${ icon( 'plus' ) } Add</button>
+				<button class="minn-btn-soft" id="minn-menu-add-content">${ icon( 'plus' ) } ${ esc( __( 'Add' ) ) }</button>
 			</div>
 			<div class="minn-menu-add-row">
 				<input class="minn-input" id="minn-menu-link-label" placeholder="${ esc( __( 'Link label' ) ) }">
 				<input class="minn-input mono" id="minn-menu-link-url" placeholder="https://…">
-				<button class="minn-btn-soft" id="minn-menu-add-link">${ icon( 'plus' ) } Add link</button>
+				<button class="minn-btn-soft" id="minn-menu-add-link">${ icon( 'plus' ) } ${ esc( __( 'Add link' ) ) }</button>
 			</div>
 		</div>
 		<div class="minn-menu-manage">
-			<button class="minn-btn-soft" id="minn-menu-rename">Rename “${ esc( cur ? cur.name : '' ) }”</button>
-			<button class="minn-btn-soft danger" id="minn-menu-delete">${ icon( 'trash' ) } Delete menu</button>
+			<button class="minn-btn-soft" id="minn-menu-rename">${ sprintf( /* translators: %s: menu name. */ esc( __( 'Rename “%s”' ) ), esc( cur ? cur.name : '' ) ) }</button>
+			<button class="minn-btn-soft danger" id="minn-menu-delete">${ icon( 'trash' ) } ${ esc( __( 'Delete menu' ) ) }</button>
 		</div>` }`;
 
 		bindMenusTabChrome( view, ms );
@@ -12632,7 +12710,7 @@
 			<div class="minn-card minn-panel-pad minn-widget-area${ isInactive ? ' inactive' : '' }" data-sidebar="${ esc( s.id ) }">
 				<div class="minn-widget-area-head">
 					<div class="minn-panel-title">${ esc( s.name || s.id ) }</div>
-					${ isInactive ? '' : `<button class="minn-btn-soft" data-wadd="${ esc( s.id ) }">${ icon( 'plus' ) } Add</button>` }
+					${ isInactive ? '' : `<button class="minn-btn-soft" data-wadd="${ esc( s.id ) }">${ icon( 'plus' ) } ${ esc( __( 'Add' ) ) }</button>` }
 				</div>
 				${ s.description && ! isInactive ? `<div class="minn-toggle-desc" style="margin:-4px 0 10px;">${ esc( stripTags( s.description ) ) }</div>` : '' }
 				${ items.length ? items.map( ( w, i ) => `
@@ -15028,7 +15106,7 @@
 							</div>
 							${ c.locked
 		? `<span class="minn-sys-locked">${ esc( __( 'defined elsewhere' ) ) }</span>`
-		: `<button class="minn-switch${ c.value ? ' on' : '' }" data-const="${ esc( c.name ) }" role="switch" aria-checked="${ c.value }" aria-label="Toggle ${ esc( c.label ) }"><span class="minn-switch-knob"></span></button>` }
+		: `<button class="minn-switch${ c.value ? ' on' : '' }" data-const="${ esc( c.name ) }" role="switch" aria-checked="${ c.value }" aria-label="${ sprintf( /* translators: %s: setting label. */ esc( __( 'Toggle %s' ) ), esc( c.label ) ) }"><span class="minn-switch-knob"></span></button>` }
 						</div>` ).join( '' ) }
 				</div>` : '' }
 				${ logs.slice( 0, 5 ).map( ( l ) => `
@@ -15122,19 +15200,19 @@
 		view.innerHTML = `
 			<div class="minn-sys-topbar">
 				<div class="minn-sys-summary">
-					${ counts.fail ? `<span class="minn-sys-pill fail">${ counts.fail } failing</span>` : '' }
-					${ counts.warn ? `<span class="minn-sys-pill warn">${ counts.warn } to review</span>` : '' }
-					<span class="minn-sys-pill pass">${ counts.pass } healthy</span>
+					${ counts.fail ? `<span class="minn-sys-pill fail">${ sprintf( /* translators: %s: number of failing checks. */ __( '%s failing' ), counts.fail ) }</span>` : '' }
+					${ counts.warn ? `<span class="minn-sys-pill warn">${ sprintf( /* translators: %s: number of checks to review. */ __( '%s to review' ), counts.warn ) }</span>` : '' }
+					<span class="minn-sys-pill pass">${ sprintf( /* translators: %s: number of healthy checks. */ __( '%s healthy' ), counts.pass ) }</span>
 				</div>
-				<button class="minn-btn-soft" id="minn-sys-copy">${ icon( 'clipboard' ) } Copy report</button>
+				<button class="minn-btn-soft" id="minn-sys-copy">${ icon( 'clipboard' ) } ${ esc( __( 'Copy report' ) ) }</button>
 			</div>
 			<div class="minn-sys-jump" id="minn-sys-jump">
 				${ [
-					[ 'Health', 'minn-sys-sec-health' ],
-					debugCard ? [ 'Debug', 'minn-sys-debug' ] : null,
-					[ 'System', 'minn-sys-grid' ],
-					extCard ? [ 'Extensions', 'minn-sys-extensions' ] : null,
-					intCard ? [ 'Integrations', 'minn-sys-integrations' ] : null,
+					[ __( 'Health' ), 'minn-sys-sec-health' ],
+					debugCard ? [ __( 'Debug' ), 'minn-sys-debug' ] : null,
+					[ __( 'System' ), 'minn-sys-grid' ],
+					extCard ? [ __( 'Extensions' ), 'minn-sys-extensions' ] : null,
+					intCard ? [ __( 'Integrations' ), 'minn-sys-integrations' ] : null,
 				].filter( Boolean ).map( ( [ label, id ] ) => `<button data-jump="${ id }">${ label }</button>` ).join( '' ) }
 			</div>
 			<div class="minn-sys-checks" id="minn-sys-sec-health">
@@ -16068,10 +16146,10 @@
 	const PERMALINK_TAGS = '%year% %monthnum% %day% %postname% %post_id% %category% %author%';
 
 	const PERMALINK_PRESETS = [
-		[ '', 'Plain' ],
+		[ '', __( 'Plain' ) ],
 		[ '/%year%/%monthnum%/%day%/%postname%/', __( 'Day and name' ) ],
 		[ '/%year%/%monthnum%/%postname%/', __( 'Month and name' ) ],
-		[ '/archives/%post_id%', 'Numeric' ],
+		[ '/archives/%post_id%', __( 'Numeric' ) ],
 		[ '/%postname%/', __( 'Post name' ) ],
 	];
 
@@ -16365,9 +16443,9 @@
 				</div>
 			</div>`;
 		const subhead = ( label ) => `<div class="minn-fields-sub">${ label }</div>`;
-		const pageOptions = [ [ 0, '— Select —' ], ...cache.pages.map( ( p ) => [ p.id, decodeEntities( p.title.rendered ) ] ) ];
+		const pageOptions = [ [ 0, __( '— Select —' ) ], ...cache.pages.map( ( p ) => [ p.id, decodeEntities( p.title.rendered ) ] ) ];
 
-		const DAYS = [ 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' ];
+		const DAYS = [ __( 'Sunday' ), __( 'Monday' ), __( 'Tuesday' ), __( 'Wednesday' ), __( 'Thursday' ), __( 'Friday' ), __( 'Saturday' ) ];
 		const timezones = ( () => {
 			try {
 				const zones = Intl.supportedValuesOf( 'timeZone' );
@@ -16413,13 +16491,13 @@
 					</div>
 				</div>
 			</div>` : '';
-		const roleOptions = Object.entries( B.roles || {} );
+		const roleOptions = Object.entries( B.roles || {} ).map( ( [ value, label ] ) => [ value, chromeLabel( label ) ] );
 
 		switch ( section ) {
 			case 'Site': return {
 				sub: __( 'Your site’s identity, locale and admin.' ),
 				fields: text( 'title', __( 'Site title' ), s.title )
-					+ text( 'description', 'Tagline', s.description )
+					+ text( 'description', __( 'Tagline' ), s.description )
 					+ siteIconField
 					+ siteLogoField
 					+ text( 'url', __( 'Site address' ), s.url, true )
@@ -16476,7 +16554,7 @@
 					toggles: [
 						{ id: 'blog_public', label: __( 'Search engine visibility' ), desc: __( 'Allow search engines to index this site.' ), on: !! s.blog_public },
 						{ id: 'minn_admin_maintenance', label: __( 'Maintenance mode' ), desc: __( 'Show a coming-soon page to visitors instead of the site.' ), on: !! s.minn_admin_maintenance },
-						{ id: 'users_can_register', label: 'Membership', desc: __( 'Anyone can register an account (with the default role above).' ), on: !! s.users_can_register },
+						{ id: 'users_can_register', label: __( 'Membership' ), desc: __( 'Anyone can register an account (with the default role above).' ), on: !! s.users_can_register },
 					].map( toggle ).join( '' ),
 					after: posture,
 				};
@@ -16703,11 +16781,11 @@
 		<div class="minn-settings">
 			<div class="minn-settings-nav">
 				${ settingsSections().map( ( label ) =>
-					`<button class="minn-settings-nav-item${ label === state.settingsSection ? ' active' : '' }" data-section="${ label }">${ label }</button>` ).join( '' ) }
+					`<button class="minn-settings-nav-item${ label === state.settingsSection ? ' active' : '' }" data-section="${ label }">${ esc( chromeLabel( label ) ) }</button>` ).join( '' ) }
 			</div>
 			<div class="minn-settings-body">
 				<div>
-					<div class="minn-settings-title">${ state.settingsSection }</div>
+					<div class="minn-settings-title">${ esc( chromeLabel( state.settingsSection ) ) }</div>
 					<div class="minn-settings-sub">${ section.sub }</div>
 				</div>
 				${ section.fields ? `<div class="minn-fields">${ section.fields }</div>` : '' }
@@ -30246,10 +30324,10 @@
 				: it.kind === 'AUD' ? `<audio src="${ esc( it.url ) }" controls></audio>`
 				: `<div class="minn-modal-filecard" style="background:${ it.grad }">${ it.kind }</div>`;
 			const rows = [
-				[ 'Type', it.mime || it.kind ],
-				[ 'Dimensions', it.dims ],
-				[ 'Size', it.size ],
-				[ 'Uploaded', it.date ? timeAgo( it.date ) : '—' ],
+				[ __( 'Type' ), it.mime || it.kind ],
+				[ __( 'Dimensions' ), it.dims ],
+				[ __( 'Size' ), it.size ],
+				[ __( 'Uploaded' ), it.date ? timeAgo( it.date ) : '—' ],
 			];
 			// "Attached to" renders only when the fetch carried the field
 			// (undefined = media-picker context, which never asks for it).
@@ -30260,7 +30338,7 @@
 						? ( att.editable && att.rest_base
 							? `<button type="button" class="minn-side-link" id="minn-media-attached" title="${ esc( __( 'Open in the editor' ) ) }">${ esc( att.title ) }</button>`
 							: esc( att.title ) )
-						: 'Unattached'
+						: esc( __( 'Unattached' ) )
 				}</span></div>`;
 			const canEdit = it.kind === 'IMG' || it.kind === 'SVG';
 			// Safe SVG always sanitizes; SVG Support's sanitize-on-upload is a
@@ -30300,7 +30378,7 @@
 					</div>
 					<div class="minn-modal-actions">
 						${ canEdit ? `<button class="minn-btn-primary" id="minn-media-save">${ esc( __( 'Save' ) ) }</button>` : '' }
-						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
+						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } ${ esc( __( 'Copy URL' ) ) }</button>
 						<button class="minn-btn-soft" id="minn-media-open">↗ ${ esc( __( 'Open' ) ) }</button>
 						${ it.kind === 'IMG' ? `<button class="minn-btn-soft" id="minn-media-edit-image" type="button" title="${ esc( __( 'Rotate and crop — saved as a new copy' ) ) }">✎ ${ esc( __( 'Edit image' ) ) }</button>` : '' }
 						${ it.kind === 'IMG' && ( B.regenThumbs || B.frt ) ? `<button class="minn-btn-soft" id="minn-media-regen" type="button" title="Rebuild every registered thumbnail size from the original (${ B.regenThumbs ? __( 'Regenerate Thumbnails' ) : __( 'Force Regenerate Thumbnails' ) })">↻ ${ esc( __( 'Thumbnails' ) ) }</button>` : '' }
@@ -30308,7 +30386,7 @@
 						${ m.from === 'featured' && state.editor ? `
 						<button class="minn-btn-soft" id="minn-media-feat-replace" type="button">${ esc( __( 'Replace featured' ) ) }</button>
 						<button class="minn-btn-soft danger" id="minn-media-feat-remove" type="button">${ esc( __( 'Remove featured' ) ) }</button>` : '' }
-						<button class="minn-btn-soft danger" id="minn-media-delete">${ icon( 'trash' ) } Delete</button>
+						<button class="minn-btn-soft danger" id="minn-media-delete">${ icon( 'trash' ) } ${ esc( __( 'Delete' ) ) }</button>
 					</div>
 				</div>
 			</div>`;
@@ -30341,7 +30419,7 @@
 							<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the subscription number. */ __( 'Subscription #%s' ) ), esc( s.number || listS.number || s.id ) ) }</div>
 							<div class="minn-modal-sub">${ esc( subMoney( s, s.total ) ) } · ${ esc( subPeriodLabel( s ) ) }${ s.start_date_gmt ? ' · started ' + esc( timeAgo( s.start_date_gmt ) ) : '' }</div>
 						</div>
-						<span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( ( s.status || '' ).replace( /-/g, ' ' ) ) }</span>
+						<span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( statusLabel( s.status ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading subscription…' ) ) }</div>` : '' }
@@ -30392,7 +30470,7 @@
 									: relatedOnly.map( ( o ) => `
 									<button type="button" class="minn-sub-order-row" data-relorder="${ o.id }">
 										<span>#${ esc( o.number || o.id ) }</span>
-										<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+										<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( statusLabel( o.status ) ) }</span>
 										<span>${ esc( subMoney( s, o.total ) ) }</span>
 									</button>` ).join( '' ) }
 							</div>
@@ -30426,7 +30504,7 @@
 							<div class="minn-modal-title">${ esc( p.name || listP.name || 'Product' ) }</div>
 							<div class="minn-modal-sub">${ esc( sub ) }</div>
 						</div>
-						<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>
+						<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div>` : '' }
@@ -30451,7 +30529,7 @@
 							<div class="minn-modal-title">${ isNew ? esc( __( 'New coupon' ) ) : esc( c.code || listC.code || 'Coupon' ) }</div>
 							<div class="minn-modal-sub">${ isNew ? esc( __( 'Create a promo code' ) ) : ( couponTypeLabel( c.discount_type ) + ( c.id ? ' · #' + c.id : '' ) ) }</div>
 						</div>
-						${ ! isNew ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ c.status ] || 'draft' }">${ esc( ( c.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
+						${ ! isNew ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ c.status ] || 'draft' }">${ esc( statusLabel( c.status ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading coupon…' ) ) }</div>` : '' }
@@ -30580,7 +30658,7 @@
 									<button type="button" class="minn-order-note" data-open-order="${ o.id }" style="width:100%; text-align:left; cursor:pointer; background:var(--surface2,var(--panel)); border:1px solid var(--border); margin-bottom:8px;">
 										<div class="minn-order-note-meta">
 											<span>#${ esc( o.number || o.id ) }</span>
-											<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
+											<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( statusLabel( o.status ) ) }</span>
 											<span>${ esc( timeAgo( o.date_created ) ) }</span>
 										</div>
 										<div class="minn-order-note-body">${ esc( ( o.currency_symbol || '$' ) + o.total ) }</div>
@@ -30594,7 +30672,7 @@
 								( m.subscriptions.items || [] ).length ? ( m.subscriptions.items || [] ).map( ( sub ) => `
 									<button type="button" class="minn-sub-order-row" data-open-sub="${ sub.id }">
 										<span>#${ esc( sub.number || sub.id ) }</span>
-										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
+										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( statusLabel( sub.status ) ) }</span>
 										<span>${ esc( subMoney( sub, sub.total ) ) }</span>
 									</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No subscriptions for this customer.' ) ) }</div>`
 							) }

@@ -108,5 +108,24 @@ console.log( hostile ? `ok   hostile rule falls back (n=5 -> ${ hostile( 5 ) })`
 const missing = makeRule( '' );
 console.log( missing === null ? 'ok   empty rule -> null (English fallback path)' : 'FAIL empty rule should be null' );
 
+// PHP flattens a one-element JED array to a string in the boot payload.
+// One-form locales must still use that value for every count instead of
+// falling through to the English plural source.
+const nStart = src.indexOf( 'const _n = ( single, plural, n ) => {' );
+const nEnd = src.indexOf( '\n\t};', nStart ) + '\n\t};'.length;
+const nBody = src.slice( nStart, nEnd );
+// eslint-disable-next-line no-new-func
+const oneFormN = new Function( 'I18N', 'pluralRule', '__', nBody + '\nreturn _n;' )(
+	{ '%s item': '項目: %s' },
+	() => 0,
+	( value ) => value
+);
+if ( '項目: %s' === oneFormN( '%s item', '%s items', 3 ) ) {
+	console.log( 'ok   one-form string payload stays translated' );
+} else {
+	console.log( 'FAIL one-form string payload fell through to English' );
+	fail++;
+}
+
 console.log( `\nplural-forms: ${ pass }/${ pass + fail } locales correct` );
 process.exit( fail ? 1 : 0 );

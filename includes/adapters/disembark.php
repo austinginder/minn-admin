@@ -128,7 +128,11 @@ function minn_admin_disembark_status_model() {
 		array(
 			'label' => __( 'Last scan', 'minn-admin' ),
 			'value' => is_array( $scan ) && ! empty( $scan['timestamp'] )
-				? human_time_diff( (int) $scan['timestamp'] ) . ' ago'
+				? sprintf(
+					/* translators: %s: human-readable time since the last scan. */
+					__( '%s ago', 'minn-admin' ),
+					human_time_diff( (int) $scan['timestamp'] )
+				)
 				: 'Never',
 			'hint'  => is_array( $scan ) && ! empty( $scan['timestamp'] )
 				? number_format_i18n( (int) ( $scan['total_files'] ?? 0 ) ) . ' files · ' . size_format( (int) ( $scan['total_size'] ?? 0 ) )

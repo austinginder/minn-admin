@@ -99,7 +99,11 @@ function minn_admin_updraft_status_model() {
 		$last_value = __( 'Running now…', 'minn-admin' );
 		$last_hint  = __( 'UpdraftPlus is building or resuming a set', 'minn-admin' );
 	} elseif ( $last ) {
-		$last_value = human_time_diff( $last['time'] ) . ' ago';
+	$last_value = sprintf(
+		/* translators: %s: human-readable time since the last backup. */
+		__( '%s ago', 'minn-admin' ),
+		human_time_diff( $last['time'] )
+	);
 		$last_hint  = $last['success'] ? __( 'Completed successfully', 'minn-admin' ) : __( 'Finished with errors — check UpdraftPlus', 'minn-admin' );
 	} else {
 		$last_value = 'Never';
