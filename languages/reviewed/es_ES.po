@@ -1,0 +1,12 @@
+# Reviewed Spanish corrections. See reviewed/README.md.
+msgid ""
+msgstr ""
+"Language: es_ES\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# The source has no exclamation, and an opening ¡ with no closing ! is broken
+# Spanish either way.
+msgid "No activity yet."
+msgstr "Todavía no hay actividad."

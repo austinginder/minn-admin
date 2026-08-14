@@ -134,6 +134,27 @@ literal, so the app runs with zero tooling. The convention:
   closes over it — rebinding would leave every existing call site on the old
   language — and `pluralRule` is rebuilt from a factory because a locale's
   form COUNT changes with it.
+- **Numbers and dates format by the USER's locale, not the browser's.** Every
+  `toLocale*` call passes `uiLocale()` (app.js), which reads `B.locale` live so
+  a language switch applies on the next render. It appends `-u-nu-latn` to pin
+  Latin digits: Arabic and Persian default to Arabic-Indic numerals, while
+  PHP's `number_format_i18n` — rendering the server half of the same screens —
+  emits Latin, and one digit system per screen matters more than either choice.
+- **Language packs ship four files**, matching translate.wordpress.org:
+  `.mo`, `.l10n.php` (WP 6.5+ fast path), `.json` (JED) and **`.po`**. The `.po`
+  is not optional: `wp_get_installed_translations()` reads pack metadata from it
+  and skips any `.mo` with no `.po` beside it, so a `.mo`-only pack reports as
+  NOT INSTALLED and gets re-offered on every update check forever.
+- **Translation updates are offered BY VERSION.** `build-packs.sh` stamps
+  `Project-Id-Version: Minn Admin <version>` into the packed copy (never into
+  git — that would rewrite every catalog each release), and the updater parses
+  it and uses `version_compare`. Not `PO-Revision-Date`: the pipeline restamps
+  that on every run, so a no-op regeneration would re-offer every pack. A
+  translation-only fix is therefore a patch release.
+- **`bin/build-zip.sh` builds the release zip**, and owns the exclusion list so
+  it stops drifting in a runbook. `languages/*.po`/`*.pot` and `bin/` are
+  excluded — translation SOURCE and toolchain, never read at runtime. `docs/`
+  ships (the REST layer serves `docs/user-guide.md`).
 - **Guards:** `tests/i18n-static.test.js` (no browser, ~1s) fails on a new
   unwrapped literal, a `%s` string with no translators comment, anything routing
   off a translated label, and an `_n()` plural wrapped in `__()`.

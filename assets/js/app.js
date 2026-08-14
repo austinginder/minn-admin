@@ -134,6 +134,18 @@
 		return 1 === n ? __( single ) : plural;
 	};
 
+	// Numbers and dates format by LOCALE, and the browser's is not the user's:
+	// somebody running WordPress in German on an English browser was being
+	// shown 1,234 where German writes 1.234, and dates in the wrong order.
+	// Read live from B.locale so a language switch takes effect on the next
+	// render without a reload.
+	//
+	// -u-nu-latn pins LATIN DIGITS. Arabic and Persian default to Arabic-Indic
+	// numerals (١٢٣ / ۱۲۳), but PHP's number_format_i18n — which renders the
+	// server half of the very same screens — emits Latin. One digit system per
+	// screen matters more than either choice.
+	const uiLocale = () => String( B.locale || 'en_US' ).replace( '_', '-' ) + '-u-nu-latn';
+
 	// Writing direction, read from the document rather than the locale: the
 	// shell sets dir from is_rtl(), and a site can override it. Anything that
 	// positions a floating element in PIXELS has to consult this, because CSS
@@ -383,7 +395,7 @@
 	function formatListDate( d ) {
 		const opts = { month: 'short', day: 'numeric' };
 		if ( d.getFullYear() !== new Date().getFullYear() ) opts.year = 'numeric';
-		return d.toLocaleDateString( undefined, opts );
+		return d.toLocaleDateString( uiLocale(), opts );
 	}
 
 	function timeAgo( dateStr, opts ) {
@@ -2282,7 +2294,7 @@
 		if ( p.userRole !== undefined && B.user ) B.user.role = p.userRole;
 		for ( const k of [ 'roles', 'surfaces', 'editorPanels', 'hidden', 'menuRemoved',
 			'builders', 'designs', 'editorCommands', 'blockForms', 'insertBlocks',
-			'imageBlocks', 'postFormats', 'visibility', 'languages' ] ) {
+			'imageBlocks', 'postFormats', 'visibility', 'languages', 'appearanceSlots' ] ) {
 			if ( p[ k ] !== undefined ) B[ k ] = p[ k ];
 		}
 
@@ -3291,9 +3303,9 @@
 					<div class="minn-chart-tip-date">${ esc( c.label ) }</div>
 					<div class="minn-chart-tip-stats">
 						${ isTraffic ? `
-						<div><b>${ Number( c.value ).toLocaleString() }</b><span>${ esc( __( 'Visitors' ) ) }</span></div>
-						<div><b>${ Number( c.views || 0 ).toLocaleString() }</b><span>${ esc( __( 'Pageviews' ) ) }</span></div>` : `
-						<div><b>${ Number( c.value ).toLocaleString() }</b><span>Event${ c.value === 1 ? '' : 's' }</span></div>` }
+						<div><b>${ Number( c.value ).toLocaleString( uiLocale() ) }</b><span>${ esc( __( 'Visitors' ) ) }</span></div>
+						<div><b>${ Number( c.views || 0 ).toLocaleString( uiLocale() ) }</b><span>${ esc( __( 'Pageviews' ) ) }</span></div>` : `
+						<div><b>${ Number( c.value ).toLocaleString( uiLocale() ) }</b><span>Event${ c.value === 1 ? '' : 's' }</span></div>` }
 					</div>
 					${ ( isTraffic ? ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) : c.value > 0 )
 						? `<div class="minn-chart-tip-hint">${ esc( __( 'Click for details' ) ) }</div>` : '' }`;
@@ -3707,7 +3719,7 @@
 					</div>
 					<div class="minn-row-status"><span class="minn-status ${ esc( p.status ) }"${ p.unsaved ? ` title="${ esc( __( 'Unsaved edits: an autosave is newer than what the site is serving.' ) ) }"` : '' }>${ STATUS_LABELS[ p.status ] || esc( p.status ) }${ p.unsaved ? `<span class="minn-row-modified" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( __( 'Unsaved edits' ) ) }</span>` : '' }</span>${ p.lockedBy ? `<span class="minn-status editing" title="${ esc( p.lockedBy ) } has this open in an editor right now">${ esc( p.lockedBy ) } is editing</span>` : '' }</div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
-					<div class="minn-row-meta minn-row-date" title="${ esc( parseWpDate( p.date ).toLocaleString() ) }">${ timeAgo( p.date ) }</div>
+					<div class="minn-row-meta minn-row-date" title="${ esc( parseWpDate( p.date ).toLocaleString( uiLocale() ) ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
 					<div class="minn-row-actions">
 						<button class="minn-btn-soft" data-restore="${ p.id }">${ esc( __( 'Restore' ) ) }</button>
@@ -6375,7 +6387,7 @@
 			];
 			// Always paint chrome (Orders|Analytics + range tabs + card shells)
 			// so changing 7d/30d/… does not blank the headers while WC Analytics loads.
-			const money = ( n ) => '$' + Number( n || 0 ).toLocaleString( undefined, { maximumFractionDigits: 2 } );
+			const money = ( n ) => '$' + Number( n || 0 ).toLocaleString( uiLocale(), { maximumFractionDigits: 2 } );
 			const tot = ( ! loading && a && a.totals ) || {};
 			const chartData = ( ! loading && a && a.chart ) || [];
 			const topProducts = ( ! loading && a && a.topProducts ) || [];
@@ -6487,7 +6499,7 @@
 		const summaryCards = [];
 		if ( s.month ) {
 			summaryCards.push( [ __( 'Orders this month' ), s.month.total_orders ?? '—', '' ] );
-			summaryCards.push( [ __( 'Revenue this month' ), sym + Number( s.month.total_sales || 0 ).toLocaleString(), 'net ' + sym + Number( s.month.net_sales || 0 ).toLocaleString() ] );
+			summaryCards.push( [ __( 'Revenue this month' ), sym + Number( s.month.total_sales || 0 ).toLocaleString( uiLocale() ), 'net ' + sym + Number( s.month.net_sales || 0 ).toLocaleString( uiLocale() ) ] );
 		}
 		if ( s.processing != null ) summaryCards.push( [ __( 'Awaiting fulfillment' ), s.processing, 'processing' ] );
 
@@ -10372,8 +10384,8 @@
 				tip.innerHTML = `
 					<div class="minn-chart-tip-date">${ esc( p.label ) }</div>
 					<div class="minn-chart-tip-stats">
-						<div><b>${ v.toLocaleString() }</b><span>${ esc( primary ) }</span></div>
-						${ dual ? `<div><b>${ s.toLocaleString() }</b><span>${ esc( secondary || 'Other' ) }</span></div>` : '' }
+						<div><b>${ v.toLocaleString( uiLocale() ) }</b><span>${ esc( primary ) }</span></div>
+						${ dual ? `<div><b>${ s.toLocaleString( uiLocale() ) }</b><span>${ esc( secondary || 'Other' ) }</span></div>` : '' }
 					</div>`;
 				$$( '.minn-chart-col.hover', el ).forEach( ( c ) => c.classList.remove( 'hover' ) );
 				col.classList.add( 'hover' );
@@ -15521,7 +15533,7 @@
 				${ tables.map( ( t ) => `
 				<div class="minn-table-row minn-db-cols" data-dbtable="${ esc( t.name ) }">
 					<span class="mono minn-cell-clip">${ esc( t.name ) }</span>
-					<span class="num">${ esc( Number( t.rows ).toLocaleString() ) }</span>
+					<span class="num">${ esc( Number( t.rows ).toLocaleString( uiLocale() ) ) }</span>
 					<span class="num">${ esc( t.size_human ) }</span>
 					<span class="minn-db-dim">${ esc( t.engine ) }</span>
 				</div>` ).join( '' ) }
@@ -15577,7 +15589,7 @@
 		if ( h ) {
 			/* translators: %s: number of database health checks needing attention. */
 			summary = h.warnings
-				? sprintf( /* translators: %s: how many health checks need attention. */ _n( '%s check needs attention', '%s checks need attention', h.warnings ), Number( h.warnings ).toLocaleString() )
+				? sprintf( /* translators: %s: how many health checks need attention. */ _n( '%s check needs attention', '%s checks need attention', h.warnings ), Number( h.warnings ).toLocaleString( uiLocale() ) )
 				: __( 'Everything looks healthy' );
 		}
 		const head = `
@@ -15658,7 +15670,7 @@
 			loadDbRows( ds.page ).then( renderIfCurrent( 'database' ) ).catch( showErr );
 			return;
 		}
-		const totalLabel = ( d.approx ? '~' : '' ) + Number( d.total ).toLocaleString();
+		const totalLabel = ( d.approx ? '~' : '' ) + Number( d.total ).toLocaleString( uiLocale() );
 		const window_ = Math.min( d.total, d.window );
 		const totalPages = Math.max( 1, Math.ceil( window_ / d.per_page ) );
 		const arrow = ( name ) => ( d.orderby === name && ! d.sorted_default ? ( d.order === 'asc' ? ' ▴' : ' ▾' ) : '' );
@@ -15679,7 +15691,7 @@
 			${ d.fq ? `<button class="minn-btn-soft" id="minn-db-fclear">${ esc( __( 'Clear filter' ) ) }</button>` : '' }
 			${ d.total >= d.window ? `<div class="minn-toolbar-meta minn-db-window">${ esc( sprintf(
 				/* translators: %s: number of rows browsable per ordering (e.g. "10,000"). */
-				__( 'Browsing the first %s rows of this order; filter to reach the rest.' ), Number( d.window ).toLocaleString() ) ) }</div>` : '' }
+				__( 'Browsing the first %s rows of this order; filter to reach the rest.' ), Number( d.window ).toLocaleString( uiLocale() ) ) ) }</div>` : '' }
 		</div>
 		<div class="minn-card minn-db-card">
 			<div class="minn-db-scroll">
@@ -15755,7 +15767,7 @@
 			return;
 		}
 		/* translators: %s: estimated row count. */
-		const rowsLabel = sprintf( __( '~%s rows' ), Number( s.rows ).toLocaleString() );
+		const rowsLabel = sprintf( __( '~%s rows' ), Number( s.rows ).toLocaleString( uiLocale() ) );
 		const meta = [ rowsLabel, s.size_human, s.engine ];
 		if ( s.collation ) meta.push( s.collation );
 		if ( s.data_free > 0 ) {
@@ -15764,7 +15776,7 @@
 		}
 		if ( s.auto_increment !== null ) {
 			/* translators: %s: the next AUTO_INCREMENT value for this table. */
-			meta.push( sprintf( __( 'next id %s' ), Number( s.auto_increment ).toLocaleString() ) );
+			meta.push( sprintf( __( 'next id %s' ), Number( s.auto_increment ).toLocaleString( uiLocale() ) ) );
 		}
 		view.innerHTML = `
 		<div class="minn-toolbar">${ backBtn }
@@ -15810,7 +15822,7 @@
 				<span class="mono minn-cell-clip minn-db-dim">${ esc( i.columns.join( ', ' ) ) }</span>
 				<span>${ esc( i.unique ? __( 'Yes' ) : __( 'No' ) ) }</span>
 				<span class="minn-db-dim">${ esc( i.type ) }</span>
-				<span class="num minn-db-dim">${ esc( Number( i.cardinality ).toLocaleString() ) }</span>
+				<span class="num minn-db-dim">${ esc( Number( i.cardinality ).toLocaleString( uiLocale() ) ) }</span>
 			</div>` ).join( '' ) }
 		</div>` : `<div class="minn-card minn-empty">${ esc( __( 'This table has no indexes.' ) ) }</div>` }`;
 		$( '#minn-db-back' ).addEventListener( 'click', dbBackToTables );
@@ -20438,7 +20450,7 @@
 			setWritingGoal( Number.isFinite( n ) && n > 0 ? n : 0 );
 			closeWritingGoalPop();
 			updateEditorStats();
-			toast( n > 0 ? `Word goal set to ${ n.toLocaleString() }` : __( 'Word goal cleared' ) );
+			toast( n > 0 ? `Word goal set to ${ n.toLocaleString( uiLocale() ) }` : __( 'Word goal cleared' ) );
 		};
 		$( '#minn-stats-goal-save', pop ).addEventListener( 'click', save );
 		input.addEventListener( 'keydown', ( e ) => {
@@ -20480,26 +20492,26 @@
 		const mins = Math.max( 1, Math.round( words / 225 ) );
 		const goalCls = goal && words >= goal ? ' met' : '';
 		const goalPart = goal
-			? `&nbsp;/&nbsp;<b class="minn-stats-goal${ goalCls }">${ goal.toLocaleString() }</b>`
+			? `&nbsp;/&nbsp;<b class="minn-stats-goal${ goalCls }">${ goal.toLocaleString( uiLocale() ) }</b>`
 			: '';
 		const sessionPart = session
-			? '&nbsp;·&nbsp;' + sprintf( /* translators: %s: words written this session, signed and in bold. */ __( '%s session' ), `<b class="minn-stats-session${ session > 0 ? ' up' : ' down' }">${ session > 0 ? '+' : '' }${ session.toLocaleString() }</b>` )
+			? '&nbsp;·&nbsp;' + sprintf( /* translators: %s: words written this session, signed and in bold. */ __( '%s session' ), `<b class="minn-stats-session${ session > 0 ? ' up' : ' down' }">${ session > 0 ? '+' : '' }${ session.toLocaleString( uiLocale() ) }</b>` )
 			: '';
 		el.innerHTML = words || session
-			? sprintf( /* translators: %1$s: word count in bold, optionally followed by a goal. %2$s: reading time in minutes, in bold. */ __( '%1$s words&nbsp;·&nbsp;%2$s min' ), `<b>${ words.toLocaleString() }</b>${ goalPart }`, `<b>${ mins }</b>` ) + sessionPart
+			? sprintf( /* translators: %1$s: word count in bold, optionally followed by a goal. %2$s: reading time in minutes, in bold. */ __( '%1$s words&nbsp;·&nbsp;%2$s min' ), `<b>${ words.toLocaleString( uiLocale() ) }</b>${ goalPart }`, `<b>${ mins }</b>` ) + sessionPart
 			: sprintf( /* translators: %s: word count, in bold. */ __( '%s words' ), '<b>0</b>' );
 		el.title = goal
-			? sprintf( /* translators: %s: the word-count goal. */ __( 'Goal %s words · click to change' ), goal.toLocaleString() )
+			? sprintf( /* translators: %s: the word-count goal. */ __( 'Goal %s words · click to change' ), goal.toLocaleString( uiLocale() ) )
 			: __( 'Click to set a word goal' );
 		// aria-label carries the readable stats for screen readers (the pill
 		// is a button that opens the goal popover — not a live region, so
 		// counts don't chatter on every keystroke).
 		el.setAttribute( 'aria-label',
 			( words || session
-				? `${ words.toLocaleString() } words, ${ mins } minute read`
+				? `${ words.toLocaleString( uiLocale() ) } words, ${ mins } minute read`
 				: '0 words' )
-			+ ( goal ? `, goal ${ goal.toLocaleString() }` : '' )
-			+ ( session ? `, session ${ session > 0 ? '+' : '' }${ session.toLocaleString() }` : '' )
+			+ ( goal ? `, goal ${ goal.toLocaleString( uiLocale() ) }` : '' )
+			+ ( session ? `, session ${ session > 0 ? '+' : '' }${ session.toLocaleString( uiLocale() ) }` : '' )
 			+ '. Click to set a word goal' );
 		el.classList.toggle( 'has-goal', !! goal );
 		el.classList.toggle( 'goal-met', !!( goal && words >= goal ) );
@@ -21131,8 +21143,8 @@
 		if ( ! machine ) return '';
 		const d = new Date( machine );
 		if ( isNaN( d ) ) return '';
-		return d.toLocaleDateString( undefined, { month: 'short', day: 'numeric', year: 'numeric' } )
-			+ ' · ' + d.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } );
+		return d.toLocaleDateString( uiLocale(), { month: 'short', day: 'numeric', year: 'numeric' } )
+			+ ' · ' + d.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } );
 	}
 
 	// Lenient time parse: "7", "7:30", "7:30 pm", "19:30" → {h, m} (24h).
@@ -21267,7 +21279,7 @@
 				}
 				dpPop.innerHTML = `
 					<div class="minn-dp-head">
-						<span class="minn-dp-month">${ view.toLocaleDateString( undefined, { month: 'long', year: 'numeric' } ) }</span>
+						<span class="minn-dp-month">${ view.toLocaleDateString( uiLocale(), { month: 'long', year: 'numeric' } ) }</span>
 						<button type="button" class="minn-dp-nav" data-nav="-1" title="${ esc( __( 'Previous month' ) ) }">‹</button>
 						<button type="button" class="minn-dp-nav" data-nav="1" title="${ esc( __( 'Next month' ) ) }">›</button>
 					</div>
@@ -21278,7 +21290,7 @@
 					<div class="minn-dp-legend" data-dp-legend hidden>${ esc( restType === 'pages' ? __( 'Highlighted days already have other pages.' ) : __( 'Highlighted days already have other posts.' ) ) }</div>
 					<div class="minn-dp-time">
 						<span class="minn-side-key">${ esc( __( 'Time' ) ) }</span>
-						<input type="text" class="minn-input minn-dp-time-input" value="${ esc( seed.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } ) ) }" spellcheck="false" autocomplete="off">
+						<input type="text" class="minn-input minn-dp-time-input" value="${ esc( seed.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } ) ) }" spellcheck="false" autocomplete="off">
 					</div>
 					<div class="minn-dp-foot">
 						<button type="button" class="minn-btn-soft" data-dp-now>${ esc( __( 'Now' ) ) }</button>
@@ -21350,10 +21362,10 @@
 				const timeInput = $( '.minn-dp-time-input', dpPop );
 				timeInput.addEventListener( 'change', () => {
 					const t = dpParseTime( timeInput.value );
-					if ( ! t ) { timeInput.value = seed.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } ); return; }
+					if ( ! t ) { timeInput.value = seed.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } ); return; }
 					seed.setHours( t.h, t.m );
 					if ( input.dataset.dp ) commit( dpMachine( seed ) );
-					timeInput.value = seed.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } );
+					timeInput.value = seed.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } );
 				} );
 				timeInput.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) { e.preventDefault(); timeInput.blur(); } } );
 				$( '[data-dp-now]', dpPop ).addEventListener( 'click', () => {
@@ -29909,7 +29921,7 @@
 				<div class="minn-modal">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ esc( m.bucket.label ) }</div>
-						<span class="minn-modal-count">${ Number( m.bucket.value ).toLocaleString() } event${ m.bucket.value === 1 ? '' : 's' }</span>
+						<span class="minn-modal-count">${ Number( m.bucket.value ).toLocaleString( uiLocale() ) } event${ m.bucket.value === 1 ? '' : 's' }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ items == null ? `<div class="minn-loading">${ esc( __( 'Loading events…' ) ) }</div>`
@@ -29937,8 +29949,8 @@
 			const visitors = Number( m.bucket.value ) || 0;
 			const views = Number( m.bucket.views ) || 0;
 			const countLabel = visitors
-				? `${ visitors.toLocaleString() } visitor${ visitors === 1 ? '' : 's' } · ${ views.toLocaleString() } views`
-				: `${ views.toLocaleString() } pageview${ views === 1 ? '' : 's' }`;
+				? `${ visitors.toLocaleString( uiLocale() ) } visitor${ visitors === 1 ? '' : 's' } · ${ views.toLocaleString( uiLocale() ) } views`
+				: `${ views.toLocaleString( uiLocale() ) } pageview${ views === 1 ? '' : 's' }`;
 			const pages = d && d.pages ? d.pages : null;
 			const refs = d && d.referrers ? d.referrers : [];
 			const hasData = ( b ) => ( Number( b.value ) || 0 ) + ( Number( b.views ) || 0 ) > 0;
@@ -29970,8 +29982,8 @@
 									${ p.path && p.path !== p.title ? `<div class="minn-traf-path">${ esc( p.path ) }</div>` : '' }
 								</div>
 								<div class="minn-traf-nums">
-									${ p.visitors || ! p.pageviews ? `<span title="${ esc( __( 'Visitors' ) ) }">${ Number( p.visitors ).toLocaleString() } <em>${ esc( __( 'vis' ) ) }</em></span>` : '' }
-									${ p.pageviews ? `<span title="${ esc( __( 'Pageviews' ) ) }">${ Number( p.pageviews ).toLocaleString() } <em>${ esc( __( 'views' ) ) }</em></span>` : '' }
+									${ p.visitors || ! p.pageviews ? `<span title="${ esc( __( 'Visitors' ) ) }">${ Number( p.visitors ).toLocaleString( uiLocale() ) } <em>${ esc( __( 'vis' ) ) }</em></span>` : '' }
+									${ p.pageviews ? `<span title="${ esc( __( 'Pageviews' ) ) }">${ Number( p.pageviews ).toLocaleString( uiLocale() ) } <em>${ esc( __( 'views' ) ) }</em></span>` : '' }
 								</div>
 							</div>`;
 						} ).join( '' ) }` : '' }
@@ -29983,8 +29995,8 @@
 									<div class="minn-traf-title">${ esc( r.label ) }</div>
 								</div>
 								<div class="minn-traf-nums">
-									${ r.visitors || ! r.pageviews ? `<span title="${ esc( __( 'Visitors' ) ) }">${ Number( r.visitors ).toLocaleString() } <em>${ esc( __( 'vis' ) ) }</em></span>` : '' }
-									${ r.pageviews ? `<span title="${ esc( __( 'Pageviews' ) ) }">${ Number( r.pageviews ).toLocaleString() } <em>${ esc( __( 'views' ) ) }</em></span>` : '' }
+									${ r.visitors || ! r.pageviews ? `<span title="${ esc( __( 'Visitors' ) ) }">${ Number( r.visitors ).toLocaleString( uiLocale() ) } <em>${ esc( __( 'vis' ) ) }</em></span>` : '' }
+									${ r.pageviews ? `<span title="${ esc( __( 'Pageviews' ) ) }">${ Number( r.pageviews ).toLocaleString( uiLocale() ) } <em>${ esc( __( 'views' ) ) }</em></span>` : '' }
 								</div>
 							</div>` ).join( '' ) }` : '' }
 						${ d.adminUrl ? `<div class="minn-traf-foot"><a class="minn-link-btn" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a></div>` : '' }
@@ -30712,7 +30724,7 @@
 							<div class="minn-session-row">
 								<div class="minn-session-info">
 									<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ` <span class="minn-session-current">${ esc( __( 'this session' ) ) }</span>` : '' }</div>
-									<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+									<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 								</div>
 								<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 							</div>` ).join( '' ) }
@@ -31172,7 +31184,7 @@
 						${ p.icon ? `<img class="minn-pi-icon" src="${ esc( p.icon ) }" alt="">` : '<div class="minn-pi-icon"></div>' }
 						<div class="minn-pi-info">
 							<div class="minn-row-title" title="${ esc( p.name ) }">${ esc( cleanPluginName( p.name ) ) }</div>
-							<div class="minn-pi-meta">${ p.installs ? Number( p.installs ).toLocaleString() + '+ installs · ' : '' }v${ esc( p.version ) }</div>
+							<div class="minn-pi-meta">${ p.installs ? Number( p.installs ).toLocaleString( uiLocale() ) + '+ installs · ' : '' }v${ esc( p.version ) }</div>
 							<div class="minn-pi-desc">${ esc( p.description ) }</div>
 						</div>
 						<button class="minn-btn-soft" data-pi="${ i }" ${ stateLabel === 'Active' ? 'disabled' : '' }>${ stateLabel }</button>
@@ -31195,11 +31207,11 @@
 						${ m.q || m.results != null ? `
 						<div class="minn-pi-search-bar">
 							<button type="button" class="minn-btn-soft" id="minn-pi-back">← ${ esc( __( 'Catalog' ) ) }</button>
-							<span class="minn-pi-search-meta">${ m.searching ? __( 'Searching…' ) : ( m.results ? Number( m.total ).toLocaleString() + ' results for “' + esc( m.q ) + '”' : '' ) }</span>
+							<span class="minn-pi-search-meta">${ m.searching ? __( 'Searching…' ) : ( m.results ? Number( m.total ).toLocaleString( uiLocale() ) + ' results for “' + esc( m.q ) + '”' : '' ) }</span>
 						</div>` : '' }
 						<div class="minn-pi-results${ showCatalog ? ' is-catalog' : '' }">
 							${ showCatalog ? catalogHtml : resultsHtml }
-							${ m.results && m.results.length && m.page < m.pages ? `<button class="minn-load-more" id="minn-pi-more" style="margin:10px 0 4px;">Load more · showing ${ m.results.length } of ${ Number( m.total ).toLocaleString() }</button>` : '' }
+							${ m.results && m.results.length && m.page < m.pages ? `<button class="minn-load-more" id="minn-pi-more" style="margin:10px 0 4px;">Load more · showing ${ m.results.length } of ${ Number( m.total ).toLocaleString( uiLocale() ) }</button>` : '' }
 						</div>
 					</div>
 				</div>
@@ -31231,7 +31243,7 @@
 									<div class="minn-theme-shot"${ t.screenshot ? ` style="background-image:url('${ escCssUrl( t.screenshot ) }')"` : '' }></div>
 									<div class="minn-ti-info">
 										<div class="minn-row-title">${ esc( t.name ) }</div>
-										<div class="minn-pi-meta">${ t.installs ? Number( t.installs ).toLocaleString() + '+ installs · ' : '' }v${ esc( t.version ) }</div>
+										<div class="minn-pi-meta">${ t.installs ? Number( t.installs ).toLocaleString( uiLocale() ) + '+ installs · ' : '' }v${ esc( t.version ) }</div>
 										<button class="minn-btn-soft" data-ti="${ i }" ${ t.active ? 'disabled' : '' }>${ t.active ? 'Active' : t.installed ? 'Activate' : 'Install' }</button>
 									</div>
 								</div>` ).join( '' ) }
@@ -32768,7 +32780,7 @@
 					? ( info.installs / 1000000 ).toFixed( info.installs % 1000000 === 0 ? 0 : 1 ) + 'M+'
 					: ( info.installs >= 1000
 						? Math.round( info.installs / 1000 ) + 'k+'
-						: Number( info.installs ).toLocaleString() + '+' ) ) + ' installs'
+						: Number( info.installs ).toLocaleString( uiLocale() ) + '+' ) ) + ' installs'
 				: ( info.source === 'github' ? __( 'GitHub release' ) : '' );
 			const meta = [ info.author, installs, info.version ? 'v' + info.version : '' ]
 				.filter( Boolean ).join( ' · ' );
@@ -33230,7 +33242,7 @@
 		const d = parseWpDate( when );
 		if ( Number.isNaN( d.getTime() ) ) return timeAgo( when );
 		try {
-			return d.toLocaleString( undefined, {
+			return d.toLocaleString( uiLocale(), {
 				year: 'numeric', month: 'short', day: 'numeric',
 				hour: 'numeric', minute: '2-digit',
 			} );
@@ -33437,7 +33449,7 @@
 		if ( ! key ) return '';
 		const [ y, mo, d ] = key.split( '-' ).map( Number );
 		const dt = new Date( y, mo - 1, d );
-		return dt.toLocaleDateString( undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' } );
+		return dt.toLocaleDateString( uiLocale(), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' } );
 	}
 
 	/**
@@ -33514,7 +33526,7 @@
 			if ( ! hit ) return '<span class="minn-rev-heat-m" aria-hidden="true"></span>';
 			const [ y, mo ] = hit.key.split( '-' );
 			const dt = new Date( Number( y ), Number( mo ) - 1, 1 );
-			return `<span class="minn-rev-heat-m">${ esc( dt.toLocaleDateString( undefined, { month: 'short' } ) ) }</span>`;
+			return `<span class="minn-rev-heat-m">${ esc( dt.toLocaleDateString( uiLocale(), { month: 'short' } ) ) }</span>`;
 		} ).join( '' );
 		const cells = weeks.map( ( week ) => `
 			<div class="minn-rev-heat-week">
@@ -34142,7 +34154,7 @@
 						<div class="minn-session-row">
 							<div class="minn-session-info">
 								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }</div>
-								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 							</div>
 							<button class="minn-comment-action danger" data-ue-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 						</div>` ).join( '' ) }
@@ -34546,7 +34558,7 @@
 						<div class="minn-session-row">
 							<div class="minn-session-info">
 								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ` <span class="minn-session-current">${ esc( __( 'this session' ) ) }</span>` : '' }</div>
-								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 							</div>
 							<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 						</div>` ).join( '' ) }
