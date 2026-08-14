@@ -1,0 +1,12 @@
+{
+	"name": "minn-admin-i18n",
+	"private": true,
+	"description": "Translation pipeline for Minn Admin. Dev-time only; nothing here ships in the plugin zip.",
+	"scripts": {
+		"locales": "node locales.js",
+		"coverage": "node core-glossary.js"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.116.0"
+	}
+}
