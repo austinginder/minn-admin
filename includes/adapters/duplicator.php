@@ -214,7 +214,8 @@ add_action( 'rest_api_init', function () {
 			$when   = '';
 			if ( $newest && $newest['created'] ) {
 				$ts   = strtotime( $gmt ? $newest['created'] : get_gmt_from_date( $newest['created'] ) . 'Z' );
-				$when = $ts ? human_time_diff( $ts ) . ' ago' : '';
+				/* translators: %s: human-readable elapsed time. */
+				$when = $ts ? sprintf( __( '%s ago', 'minn-admin' ), human_time_diff( $ts ) ) : '';
 			}
 			return rest_ensure_response( array(
 				'rows'    => array(

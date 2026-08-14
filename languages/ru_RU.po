@@ -129,6 +129,7 @@ msgstr "Размер"
 #: includes/adapters/ai1wm.php:166 includes/adapters/backwpup.php:255
 #: includes/adapters/duplicator.php:123 includes/adapters/gravity-forms.php:247
 #: includes/adapters/network.php:201 includes/adapters/ninja-forms.php:274
+#: assets/js/app.js:629
 msgid "Created"
 msgstr "Создан"
 
@@ -431,6 +432,7 @@ msgid "All actions"
 msgstr "Все действия"
 
 #: includes/adapters/aryo-activity-log.php:162
+#: assets/js/app.js:610
 msgid "Action"
 msgstr "Действие"
 
@@ -725,6 +727,7 @@ msgstr "Последний завершённый запуск задания"
 
 #: includes/adapters/backwpup.php:163 assets/js/app.js:7846
 #: assets/js/app.js:8980
+#: includes/adapters/wpvivid.php:254
 msgid "Never"
 msgstr "Никогда"
 
@@ -1227,6 +1230,7 @@ msgstr "(пустая запись)"
 #: includes/adapters/ninja-forms.php:210 includes/adapters/ninja-forms.php:427
 #: includes/adapters/sureforms.php:128 includes/adapters/sureforms.php:294
 #: includes/adapters/wpforms.php:298 includes/adapters/wpforms.php:523
+#: assets/js/app.js:30920
 msgid "Entry"
 msgstr "Запись"
 
@@ -1511,6 +1515,7 @@ msgstr "Безопасный режим"
 #: includes/adapters/gravity-smtp.php:1000
 #: includes/adapters/simple-301-redirects.php:115
 #: includes/class-minn-admin-rest.php:5995
+#: includes/adapters/wpvivid.php:274
 msgid "On"
 msgstr "Вкл"
 
@@ -3004,6 +3009,7 @@ msgstr "Отправка через"
 #: includes/adapters/simple-301-redirects.php:115
 #: includes/class-minn-admin-rest.php:5996
 #: includes/class-minn-admin-rest.php:6236
+#: includes/adapters/wpvivid.php:274
 msgid "Off"
 msgstr "Выкл"
 
@@ -5833,6 +5839,7 @@ msgid "Backup"
 msgstr "Резервная копия"
 
 #: includes/adapters/updraftplus.php:174 includes/adapters/wpvivid.php:323
+#: assets/js/app.js:628
 msgid "Stored"
 msgstr "Сохранено"
 
@@ -6263,6 +6270,7 @@ msgid "Open WPvivid ↗"
 msgstr "Открыть WPvivid ↗"
 
 #: includes/adapters/wpvivid.php:325
+#: assets/js/app.js:629
 msgid "Lock"
 msgstr "Блокировка"
 
@@ -8145,6 +8153,7 @@ msgid "Active"
 msgstr "Активен"
 
 #: assets/js/app.js:598 assets/js/app.js:14177 assets/js/app.js:14248
+#: includes/adapters/wpvivid.php:279
 msgid "Inactive"
 msgstr "Неактивен"
 
@@ -16460,3 +16469,35 @@ msgstr "Прокрутить вкладки влево"
 #: assets/js/app.js:35285
 msgid "Scroll tabs right"
 msgstr "Прокрутить вкладки вправо"
+
+#: assets/js/app.js:615
+msgid "Available"
+msgstr "Доступно"
+
+#: assets/js/app.js:10235
+msgid "Access"
+msgstr "Доступ"
+
+#: assets/js/app.js:12738
+msgid "Inactive widgets"
+msgstr "Неактивные виджеты"
+
+#: assets/js/app.js:12746
+msgid "Block"
+msgstr "Блок"
+
+#. translators: %s: comma-separated cache provider names.
+#: assets/js/app.js:30008
+#, js-format
+msgid "Clear site cache (%s)"
+msgstr "Очистить кеш сайта (%s)"
+
+#. translators: %s: backup provider name.
+#: assets/js/app.js:30014
+#, js-format
+msgid "Back up site now (%s)"
+msgstr "Создать резервную копию сайта сейчас (%s)"
+
+#: assets/js/app.js:31004
+msgid "Password"
+msgstr "Пароль"

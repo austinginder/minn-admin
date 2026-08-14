@@ -607,12 +607,28 @@
 			Entries: __( 'Entries' ), Manage: __( 'Manage' ), Forms: __( 'Forms' ),
 			Background: __( 'Background' ), Session: __( 'Session' ), Pinned: __( 'Pinned' ),
 			Cron: __( 'Cron' ), General: __( 'General' ), Core: __( 'Core' ),
+			Action: __( 'Action' ), Nav: __( 'Navigation' ), Link: __( 'Link' ),
 			Site: __( 'Site' ), Visibility: __( 'Visibility' ), Homepage: __( 'Homepage' ),
 			Design: __( 'Design' ), Content: __( 'Content' ), Comments: __( 'Comments' ), Connectors: __( 'Connectors' ),
 			Administrator: __( 'Administrator' ), Editor: __( 'Editor' ), Author: __( 'Author' ),
 			Contributor: __( 'Contributor' ), Subscriber: __( 'Subscriber' ), Customer: __( 'Customer' ),
+			Available: __( 'Available' ), Installed: __( 'Installed' ), Manual: __( 'Manual' ),
 		};
 		return Object.prototype.hasOwnProperty.call( labels, raw ) ? labels[ raw ] : raw;
+	}
+
+	// Raw adapter detail objects use their field keys as fallback labels. The
+	// keys are finite Minn chrome even though their VALUES may be arbitrary
+	// plugin data, so translate only the known vocabulary and leave unknown
+	// keys untouched for diagnostics/integration authors.
+	function surfaceDetailLabel( key, supplied ) {
+		if ( supplied ) return supplied;
+		const labels = {
+			name: __( 'Name' ), slug: __( 'Slug' ), status: __( 'Status' ), status_label: __( 'Status' ),
+			size: __( 'Size' ), where: __( 'Stored' ), type: __( 'Type' ), date: __( 'Date' ),
+			owner: __( 'By' ), created: __( 'Created' ), locked: __( 'Lock' ),
+		};
+		return labels[ key ] || String( key || '' ).replace( /_/g, ' ' );
 	}
 
 	function statusLabel( value ) {
@@ -9564,9 +9580,9 @@
 				<input class="minn-input minn-ac-input" placeholder="${ esc( tax.label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>` : '' }
-			<input class="minn-input minn-toolbar-search" id="minn-term-search" placeholder="Search ${ esc( tax.label.toLowerCase() ) }…" value="${ esc( state.termSearch || '' ) }">
+			<input class="minn-input minn-toolbar-search" id="minn-term-search" placeholder="${ sprintf( /* translators: %s: the taxonomy's plural label. */ esc( __( 'Search %s…' ) ), esc( tax.label.toLowerCase() ) ) }" value="${ esc( state.termSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, tax.item ) }</div>
-			${ tax.canEdit ? `<button class="minn-btn-soft" id="minn-add-term" style="margin-left:0;">${ icon( 'plus' ) } Add ${ esc( tax.item ) }</button>` : '' }
+			${ tax.canEdit ? `<button class="minn-btn-soft" id="minn-add-term" style="margin-left:0;">${ icon( 'plus' ) } ${ sprintf( /* translators: %s: the taxonomy's singular label. */ esc( __( 'Add %s' ) ), esc( tax.item ) ) }</button>` : '' }
 		</div>
 		<div class="minn-card minn-table" id="minn-terms-table">
 			<div class="minn-table-head minn-term-cols">
@@ -9633,7 +9649,7 @@
 				...( t.link ? [ { label: __( 'Open archive ↗' ), href: t.link } ] : [] ),
 				...( tax.canDelete && tax.canEdit ? [ { label: __( 'Merge into…' ), run: () => openTermMerge( t ) } ] : [] ),
 				...( tax.canDelete ? [
-					{ heading: 'Danger' },
+					{ heading: __( 'Danger zone' ) },
 					/* translators: %s: the term type (e.g. "category"). */
 					{ label: sprintf( __( 'Delete %s…' ), tax.item ), danger: true, run: () => deleteTerm( t ) },
 				] : [] ),
@@ -10205,7 +10221,7 @@
 						catch ( err ) { toast( __( 'Could not copy' ), true ); }
 					},
 				} ] : [] ),
-				{ heading: 'Email' },
+				{ heading: __( 'Email' ) },
 				...( B.caps.editUsers ? [
 					{
 						label: __( 'Send password reset' ),
@@ -10216,7 +10232,7 @@
 						run: () => openUserEmailModal( u ),
 					},
 				] : [] ),
-				{ heading: 'Access' },
+				{ heading: __( 'Access' ) },
 				// User Switching's own nonce URL (adapters/user-switching.php) —
 				// same-tab navigation is the point: you become that user.
 				...( u.minn_switch_url ? [ {
@@ -10246,7 +10262,7 @@
 				// refuses user deletion on multisite outright. True deletion
 				// lives in Network Admin.
 				...( B.multisite && B.caps.removeUsers && ! isSelf && ! u.super ? [
-					{ heading: 'Danger' },
+					{ heading: __( 'Danger zone' ) },
 					{
 						label: __( 'Remove from this site…' ),
 						danger: true,
@@ -10276,7 +10292,7 @@
 					} ] : [] ),
 				] : [] ),
 				...( ! B.multisite && B.caps.deleteUsers && ! isSelf ? [
-					{ heading: 'Danger' },
+					{ heading: __( 'Danger zone' ) },
 					{
 						label: __( 'Delete user…' ),
 						danger: true,
@@ -10790,7 +10806,7 @@
 
 	function openSurfaceRowMenu( s, coll, item, x, y ) {
 		const entries = [
-			{ label: 'Open', run: () => openSurfaceDetail( s, item ) },
+			{ label: __( 'Open' ), run: () => openSurfaceDetail( s, item ) },
 		];
 		surfaceListMenuActions( coll, item ).forEach( ( { a } ) => {
 			if ( a.href ) {
@@ -12719,7 +12735,7 @@
 			return `
 			<div class="minn-card minn-panel-pad minn-widget-area${ isInactive ? ' inactive' : '' }" data-sidebar="${ esc( s.id ) }">
 				<div class="minn-widget-area-head">
-					<div class="minn-panel-title">${ esc( s.name || s.id ) }</div>
+					<div class="minn-panel-title">${ esc( isInactive ? __( 'Inactive widgets' ) : ( s.name || s.id ) ) }</div>
 					${ isInactive ? '' : `<button class="minn-btn-soft" data-wadd="${ esc( s.id ) }">${ icon( 'plus' ) } ${ esc( __( 'Add' ) ) }</button>` }
 				</div>
 				${ s.description && ! isInactive ? `<div class="minn-toggle-desc" style="margin:-4px 0 10px;">${ esc( stripTags( s.description ) ) }</div>` : '' }
@@ -12727,7 +12743,7 @@
 				<div class="minn-widget-row" data-widget="${ esc( w.id ) }">
 					${ items.length > 1 ? `<span class="minn-menu-grip" draggable="true" title="${ esc( __( 'Drag to reorder' ) ) }">${ icon( 'grip' ) }</span>` : '' }
 					<div class="minn-widget-info">
-						<span class="minn-row-title">${ esc( ws.types[ w.id_base ] || w.id_base ) }</span>
+						<span class="minn-row-title">${ esc( w.id_base === 'block' ? __( 'Block' ) : ( ws.types[ w.id_base ] || w.id_base ) ) }</span>
 						<span class="minn-row-slug minn-cell-clip">${ esc( widgetPreview( w ) || '—' ) }</span>
 					</div>
 					<div class="minn-menu-ctrls">
@@ -12735,7 +12751,7 @@
 						<button class="minn-icon-btn sm" data-wmove="down" title="${ esc( __( 'Move down' ) ) }"${ i === items.length - 1 ? ' disabled' : '' }>↓</button>
 						<select class="minn-input minn-widget-moveto" title="${ esc( __( 'Move to…' ) ) }">
 							<option value="">${ esc( __( 'Move to…' ) ) }</option>
-							${ moveTargets( s.id ).map( ( t ) => `<option value="${ esc( t.id ) }">${ esc( t.name || t.id ) }</option>` ).join( '' ) }
+							${ moveTargets( s.id ).map( ( t ) => `<option value="${ esc( t.id ) }">${ esc( t.id === 'wp_inactive_widgets' ? __( 'Inactive widgets' ) : ( t.name || t.id ) ) }</option>` ).join( '' ) }
 						</select>
 						${ WIDGET_EDITABLE[ w.id_base ] && w.instance && w.instance.raw ? `<button class="minn-btn-soft" data-wedit="${ esc( w.id ) }">${ esc( __( 'Edit' ) ) }</button>` : '' }
 						<button class="minn-icon-btn sm danger" data-wdel="${ esc( w.id ) }" title="${ esc( __( 'Delete widget' ) ) }">✕</button>
@@ -14862,7 +14878,7 @@
 	 * whichever manager owns each one (ACF / CPT UI / Minn's own store —
 	 * see class-minn-admin-cpt.php). Code-registered types are read-only. */
 
-	const CPT_SOURCE_LABEL = { core: 'WordPress', code: 'Code', acf: 'ACF', cptui: __( 'CPT UI' ), minn: 'Minn' };
+	const CPT_SOURCE_LABEL = { core: 'WordPress', code: __( 'Code' ), acf: 'ACF', cptui: __( 'CPT UI' ), minn: 'Minn' };
 	const CPT_SUPPORTS = [
 		[ 'title', 'Title' ], [ 'editor', 'Editor' ], [ 'thumbnail', __( 'Featured image' ) ],
 		[ 'excerpt', 'Excerpt' ], [ 'custom-fields', __( 'Custom fields' ) ], [ 'comments', 'Comments' ],
@@ -14899,7 +14915,7 @@
 			<div class="minn-toolbar">
 				${ tabs }
 				<div class="minn-toolbar-meta">${ metaLabel( tx.taxonomies.length, 'taxonomy' ) }</div>
-				<button class="minn-btn-soft" id="minn-add-tax">${ icon( 'plus' ) } Add taxonomy</button>
+				<button class="minn-btn-soft" id="minn-add-tax">${ icon( 'plus' ) } ${ esc( __( 'Add taxonomy' ) ) }</button>
 			</div>
 			<div class="minn-card minn-table">
 				<div class="minn-table-head minn-cpt-cols">
@@ -16596,7 +16612,7 @@
 				return {
 					sub: __( 'What visitors land on, and how much shows.' ),
 					fields: modeField
-						+ ( s.show_on_front === 'page' ? combo( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + combo( 'page_for_posts', __( 'Posts page' ), pageOptions, s.page_for_posts ) : '' )
+						+ ( s.show_on_front === 'page' ? combo( 'page_on_front', __( 'Homepage' ), pageOptions, s.page_on_front ) + combo( 'page_for_posts', __( 'Posts page' ), pageOptions, s.page_for_posts ) : '' )
 						+ text( 'posts_per_page', __( 'Blog pages show at most' ), s.posts_per_page ),
 					toggles: '',
 				};
@@ -29989,13 +30005,13 @@
 			{ label: __( 'Toggle light / dark' ), kind: 'action', icon: '◐', run: toggleTheme },
 			{ label: __( 'View notifications' ), kind: 'action', icon: '◔', run: () => { state.notifOpen = true; renderOverlays(); loadNotifications().then( () => state.notifOpen && renderOverlays() ); } },
 			...( ( B.cache || [] ).length ? [ {
-				label: `Clear site cache (${ B.cache.map( ( c ) => c.name ).join( ', ' ) })`,
+				label: sprintf( /* translators: %s: comma-separated cache provider names. */ __( 'Clear site cache (%s)' ), B.cache.map( ( c ) => c.name ).join( ', ' ) ),
 				kind: 'action',
 				icon: '⟳',
 				run: clearSiteCache,
 			} ] : [] ),
 			...( B.backup ? [ {
-				label: `Back up site now (${ B.backup.name })`,
+				label: sprintf( /* translators: %s: backup provider name. */ __( 'Back up site now (%s)' ), B.backup.name ),
 				kind: 'action',
 				icon: '⛁',
 				run: runBackupNow,
@@ -30138,7 +30154,7 @@
 			<div class="minn-palette-item${ i === state.paletteSel ? ' selected' : '' }" data-idx="${ i }">
 				<div class="minn-palette-icon">${ esc( c.icon ) }</div>
 				<div class="minn-palette-label">${ esc( c.label ) }</div>
-				<div class="minn-palette-kind">${ esc( c.kind ) }</div>
+				<div class="minn-palette-kind">${ esc( chromeLabel( String( c.kind || '' ).replace( /(^|\s)\S/g, ( ch ) => ch.toUpperCase() ) ) ) }</div>
 			</div>` );
 		if ( content.length ) {
 			rows.splice( cmds.length, 0, `<div class="minn-palette-sec">${ esc( __( 'Your content' ) ) }</div>` );
@@ -30842,7 +30858,8 @@
 			const labels = m.labels || {};
 			const rows = m.loading ? [] : Object.keys( it )
 				.filter( ( k ) => ! skip.has( k ) && k !== detail.messageKey && ! k.startsWith( '_' ) )
-				.map( ( k ) => [ labels[ k ] || k.replace( /_/g, ' ' ), it[ k ] ] )
+				.filter( ( k ) => ! ( k === 'status' && it.status_label ) )
+				.map( ( k ) => [ surfaceDetailLabel( k, labels[ k ] ), k === 'status' || k === 'status_label' ? statusLabel( it[ k ] ) : it[ k ] ] )
 				.filter( ( [ , v ] ) => v != null && v !== '' && typeof v !== 'object' )
 				.slice( 0, 24 );
 			const message = ! m.loading && detail.messageKey ? it[ detail.messageKey ] : null;
@@ -30900,8 +30917,8 @@
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">${ esc( headTitle ) }</div>
-							${ isEntry ? `<div class="minn-modal-sub">Entry #${ esc( String( it.id ) ) }</div>` : '' }
-							${ isActivity ? `<div class="minn-modal-sub">Event #${ esc( String( it.id ) ) }</div>` : '' }
+							${ isEntry ? `<div class="minn-modal-sub">${ esc( __( 'Entry' ) ) } #${ esc( String( it.id ) ) }</div>` : '' }
+							${ isActivity ? `<div class="minn-modal-sub">${ esc( __( 'Event' ) ) } #${ esc( String( it.id ) ) }</div>` : '' }
 						</div>
 						${ ! isCard ? `<span class="minn-modal-id-tag">#${ esc( String( it.id ) ) }</span>` : '' }
 						${ headStatus ? surfacePill( headStatus )
@@ -30914,7 +30931,7 @@
 					${ m.loading ? `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` : `
 					${ isEntry ? entryHtml : isActivity ? activityHtml : `
 					<div class="minn-modal-meta">
-						${ sec ? secRows : rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( stripTags( String( v ) ) ) }</span></div>` ).join( '' ) }
+						${ sec ? secRows : rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( chromeLabel( stripTags( String( v ) ) ) ) }</span></div>` ).join( '' ) }
 						${ editFields.length ? `<div class="minn-media-edit">
 							${ editFields.map( ( f, i ) => {
 								const val = surfaceValue( it, f.key );
@@ -30930,8 +30947,8 @@
 					<div class="minn-modal-actions">
 						${ edit ? `<button class="minn-btn-primary" id="minn-surface-save">${ esc( __( 'Save' ) ) }</button>` : '' }
 						${ message ? `<button class="minn-btn-soft" id="minn-surface-raw">↗ ${ esc( __( 'Open raw' ) ) }</button>` : '' }
-						${ sec && sec.adminUrl && ! isActivity ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'wp-admin' ) } ↗</a>` : '' }
-						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">Open in ${ esc( s.sub || 'log' ) } ↗</a>` : '' }
+						${ sec && sec.adminUrl && ! isActivity ? `<a class="minn-btn-soft" href="${ esc( sec.adminUrl ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: plugin or admin area name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'wp-admin' ) ) } ↗</a>` : '' }
+						${ isActivity && activityAdmin ? `<a class="minn-btn-soft" href="${ esc( activityAdmin ) }" target="_blank" rel="noopener">${ sprintf( /* translators: %s: activity log provider name. */ esc( __( 'Open %s' ) ), esc( s.sub || 'log' ) ) } ↗</a>` : '' }
 						${ activityLinks.map( ( l ) => `<a class="minn-btn-soft" href="${ esc( l.url ) }" target="_blank" rel="noopener">${ esc( hrefLabel( l.label, l.url ) ) }</a>` ).join( '' ) }
 						${ visibleActions.map( ( { a, i } ) => {
 							if ( ! a.href ) return `<button class="minn-btn-soft${ a.danger ? ' danger' : '' }" data-saction="${ i }">${ esc( a.label ) }</button>`;
@@ -30948,7 +30965,7 @@
 			// /minn-admin/profile route (openUserModal redirects self).
 			const u = m.user;
 			const isNew = ! m.userId;
-			const roles = Object.entries( B.roles || {} );
+			const roles = Object.entries( B.roles || {} ).map( ( [ value, label ] ) => [ value, chromeLabel( label ) ] );
 			if ( ! isNew && ! u ) {
 				return `<div class="minn-modal-overlay" id="minn-modal-overlay"><div class="minn-modal"><div class="minn-modal-head"><div class="minn-modal-title">${ esc( __( 'Edit user' ) ) }</div><span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span><button class="minn-x-btn" id="minn-modal-close">×</button></div><div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div></div></div>`;
 			}
@@ -30985,7 +31002,7 @@
 							<input class="minn-input" value="${ esc( role ) }" disabled>` }
 						</div>
 						<div>
-							<div class="minn-field-label">${ isNew ? 'Password' : esc( __( 'New password (leave blank to keep)' ) ) }</div>
+							<div class="minn-field-label">${ isNew ? esc( __( 'Password' ) ) : esc( __( 'New password (leave blank to keep)' ) ) }</div>
 							<div style="display:flex; gap:8px;">
 								<input class="minn-input mono" id="minn-uf-password" autocomplete="new-password">
 								<button class="minn-btn-soft" id="minn-uf-genpass" style="flex-shrink:0;">${ esc( __( 'Generate' ) ) }</button>
@@ -34186,7 +34203,7 @@
 		const roleAc = $( '#minn-uf-role-ac' );
 		if ( roleAc ) {
 			const current = m.user && m.user.roles && m.user.roles[ 0 ] ? m.user.roles[ 0 ] : 'subscriber';
-			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: l } ) ), {
+			bindAutocomplete( roleAc, Object.entries( B.roles || {} ).map( ( [ v, l ] ) => ( { value: v, label: chromeLabel( l ) } ) ), {
 				strict: true,
 				value: current,
 			} );

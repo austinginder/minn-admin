@@ -129,6 +129,7 @@ msgstr "Boyut"
 #: includes/adapters/ai1wm.php:166 includes/adapters/backwpup.php:255
 #: includes/adapters/duplicator.php:123 includes/adapters/gravity-forms.php:247
 #: includes/adapters/network.php:201 includes/adapters/ninja-forms.php:274
+#: assets/js/app.js:629
 msgid "Created"
 msgstr "Oluşturulma"
 
@@ -428,6 +429,7 @@ msgid "All actions"
 msgstr "Tüm işlemler"
 
 #: includes/adapters/aryo-activity-log.php:162
+#: assets/js/app.js:610
 msgid "Action"
 msgstr "İşlem"
 
@@ -722,6 +724,7 @@ msgstr "Son biten görev çalışması"
 
 #: includes/adapters/backwpup.php:163 assets/js/app.js:7846
 #: assets/js/app.js:8980
+#: includes/adapters/wpvivid.php:254
 msgid "Never"
 msgstr "Hiçbir zaman"
 
@@ -1223,6 +1226,7 @@ msgstr "(boş kayıt)"
 #: includes/adapters/ninja-forms.php:210 includes/adapters/ninja-forms.php:427
 #: includes/adapters/sureforms.php:128 includes/adapters/sureforms.php:294
 #: includes/adapters/wpforms.php:298 includes/adapters/wpforms.php:523
+#: assets/js/app.js:30920
 msgid "Entry"
 msgstr "Kayıt"
 
@@ -1507,6 +1511,7 @@ msgstr "Güvenli kip"
 #: includes/adapters/gravity-smtp.php:1000
 #: includes/adapters/simple-301-redirects.php:115
 #: includes/class-minn-admin-rest.php:5995
+#: includes/adapters/wpvivid.php:274
 msgid "On"
 msgstr "Açık"
 
@@ -2996,6 +3001,7 @@ msgstr "Gönderim yolu"
 #: includes/adapters/simple-301-redirects.php:115
 #: includes/class-minn-admin-rest.php:5996
 #: includes/class-minn-admin-rest.php:6236
+#: includes/adapters/wpvivid.php:274
 msgid "Off"
 msgstr "Kapalı"
 
@@ -5820,6 +5826,7 @@ msgid "Backup"
 msgstr "Yedek"
 
 #: includes/adapters/updraftplus.php:174 includes/adapters/wpvivid.php:323
+#: assets/js/app.js:628
 msgid "Stored"
 msgstr "Depolandı"
 
@@ -6249,6 +6256,7 @@ msgid "Open WPvivid ↗"
 msgstr "WPvivid'i aç ↗"
 
 #: includes/adapters/wpvivid.php:325
+#: assets/js/app.js:629
 msgid "Lock"
 msgstr "Kilit"
 
@@ -8114,6 +8122,7 @@ msgid "Active"
 msgstr "Etkin"
 
 #: assets/js/app.js:598 assets/js/app.js:14177 assets/js/app.js:14248
+#: includes/adapters/wpvivid.php:279
 msgid "Inactive"
 msgstr "Etkisiz"
 
@@ -16400,3 +16409,35 @@ msgstr "Sekmeleri sola kaydır"
 #: assets/js/app.js:35285
 msgid "Scroll tabs right"
 msgstr "Sekmeleri sağa kaydır"
+
+#: assets/js/app.js:615
+msgid "Available"
+msgstr "Kullanılabilir"
+
+#: assets/js/app.js:10235
+msgid "Access"
+msgstr "Erişim"
+
+#: assets/js/app.js:12738
+msgid "Inactive widgets"
+msgstr "Etkin olmayan bileşenler"
+
+#: assets/js/app.js:12746
+msgid "Block"
+msgstr "Blok"
+
+#. translators: %s: comma-separated cache provider names.
+#: assets/js/app.js:30008
+#, js-format
+msgid "Clear site cache (%s)"
+msgstr "Site önbelleğini temizle (%s)"
+
+#. translators: %s: backup provider name.
+#: assets/js/app.js:30014
+#, js-format
+msgid "Back up site now (%s)"
+msgstr "Siteyi şimdi yedekle (%s)"
+
+#: assets/js/app.js:31004
+msgid "Password"
+msgstr "Parola"
