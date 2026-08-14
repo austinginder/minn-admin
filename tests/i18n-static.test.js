@@ -221,7 +221,25 @@ const TEXT_ALLOW = new Set( [
 		if ( m[ 2 ] === 'Must-use' ) continue;
 		bad.push( `app.js:${ lineOf( m.index ) }  raw System section label: ${ m[ 2 ] }` );
 	}
-	check( 'System helper labels are translated', bad.length === 0, bad.slice( 0, 8 ).join( '\n      ' ) );
+check( 'System helper labels are translated', bad.length === 0, bad.slice( 0, 8 ).join( '\n      ' ) );
+}
+
+/* ---------------------------------------------------------------------------
+ * 6c. Shared action builders are easy to miss because their English lives
+ *     around a dynamic provider or taxonomy name, not in one text node.
+ * ------------------------------------------------------------------------ */
+{
+	const forbidden = [
+		[ /\{\s*label:\s*'Open'/g, "raw 'Open' menu action" ],
+		[ />Open in \$\{/g, "raw 'Open in …' adapter action" ],
+		[ />\$\{\s*icon\( 'plus' \)\s*\}\s+Add taxonomy</g, "raw 'Add taxonomy' action" ],
+	];
+	const bad = [];
+	for ( const [ re, label ] of forbidden ) {
+		let m;
+		while ( ( m = re.exec( src ) ) ) bad.push( `app.js:${ lineOf( m.index ) }  ${ label }` );
+	}
+	check( 'Shared dynamic actions are translated', bad.length === 0, bad.slice( 0, 8 ).join( '\n      ' ) );
 }
 
 /* ---------------------------------------------------------------------------

@@ -151,6 +151,7 @@ msgstr ""
 #: includes/adapters/gravity-forms.php:247
 #: includes/adapters/network.php:201
 #: includes/adapters/ninja-forms.php:274
+#: assets/js/app.js:629
 msgid "Created"
 msgstr ""
 
@@ -477,6 +478,7 @@ msgid "All actions"
 msgstr ""
 
 #: includes/adapters/aryo-activity-log.php:162
+#: assets/js/app.js:610
 msgid "Action"
 msgstr ""
 
@@ -782,6 +784,7 @@ msgstr ""
 #: includes/adapters/backwpup.php:163
 #: assets/js/app.js:7846
 #: assets/js/app.js:8980
+#: includes/adapters/wpvivid.php:254
 msgid "Never"
 msgstr ""
 
@@ -1392,6 +1395,7 @@ msgstr ""
 #: includes/adapters/sureforms.php:294
 #: includes/adapters/wpforms.php:298
 #: includes/adapters/wpforms.php:523
+#: assets/js/app.js:30920
 msgid "Entry"
 msgstr ""
 
@@ -1740,6 +1744,7 @@ msgstr ""
 #: includes/adapters/gravity-smtp.php:1000
 #: includes/adapters/simple-301-redirects.php:115
 #: includes/class-minn-admin-rest.php:5995
+#: includes/adapters/wpvivid.php:274
 msgid "On"
 msgstr ""
 
@@ -3359,6 +3364,7 @@ msgstr ""
 #: includes/adapters/simple-301-redirects.php:115
 #: includes/class-minn-admin-rest.php:5996
 #: includes/class-minn-admin-rest.php:6236
+#: includes/adapters/wpvivid.php:274
 msgid "Off"
 msgstr ""
 
@@ -6297,6 +6303,7 @@ msgstr ""
 
 #: includes/adapters/updraftplus.php:174
 #: includes/adapters/wpvivid.php:323
+#: assets/js/app.js:628
 msgid "Stored"
 msgstr ""
 
@@ -6736,6 +6743,7 @@ msgid "Open WPvivid ↗"
 msgstr ""
 
 #: includes/adapters/wpvivid.php:325
+#: assets/js/app.js:629
 msgid "Lock"
 msgstr ""
 
@@ -8699,6 +8707,7 @@ msgstr ""
 #: assets/js/app.js:598
 #: assets/js/app.js:14177
 #: assets/js/app.js:14248
+#: includes/adapters/wpvivid.php:279
 msgid "Inactive"
 msgstr ""
 
@@ -17770,4 +17779,36 @@ msgstr ""
 
 #: assets/js/app.js:35285
 msgid "Scroll tabs right"
+msgstr ""
+
+#: assets/js/app.js:615
+msgid "Available"
+msgstr ""
+
+#: assets/js/app.js:10235
+msgid "Access"
+msgstr ""
+
+#: assets/js/app.js:12738
+msgid "Inactive widgets"
+msgstr ""
+
+#: assets/js/app.js:12746
+msgid "Block"
+msgstr ""
+
+#. translators: %s: comma-separated cache provider names.
+#: assets/js/app.js:30008
+#, js-format
+msgid "Clear site cache (%s)"
+msgstr ""
+
+#. translators: %s: backup provider name.
+#: assets/js/app.js:30014
+#, js-format
+msgid "Back up site now (%s)"
+msgstr ""
+
+#: assets/js/app.js:31004
+msgid "Password"
 msgstr ""

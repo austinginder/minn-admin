@@ -153,7 +153,7 @@ function minn_admin_performance_lab_status() {
 		'rows'    => array(
 			array(
 				'label' => __( 'Active features', 'minn-admin' ),
-				'value' => $active . ' of ' . $total,
+				'value' => $active . ' / ' . $total,
 				'hint'  => __( 'Standalone plugins managed by Performance Lab', 'minn-admin' ),
 			),
 			array(
@@ -254,6 +254,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'name', 'label' => __( 'Feature', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'status_label', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '120px' ),
 				array( 'key' => 'slug', 'label' => __( 'Slug', 'minn-admin' ), 'width' => '180px' ),
+			),
+			'detail'    => array(
+				// Action gates and internal URLs are not useful user-facing metadata.
+				'skip' => array( 'can_activate', 'can_deactivate', 'experimental', 'has_settings', 'settings_url' ),
 			),
 			'actions'   => array(
 				array(

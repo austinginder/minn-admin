@@ -247,10 +247,11 @@ function minn_admin_wpvivid_status_model() {
 		$last_value = __( 'Running now…', 'minn-admin' );
 		$last_hint  = __( 'WPvivid is building a backup', 'minn-admin' );
 	} elseif ( $last ) {
-		$last_value = human_time_diff( $last['time'] ) . ' ago';
+		/* translators: %s: human-readable elapsed time. */
+		$last_value = sprintf( __( '%s ago', 'minn-admin' ), human_time_diff( $last['time'] ) );
 		$last_hint  = $last['success'] ? __( 'Completed successfully', 'minn-admin' ) : __( 'Finished with errors — check WPvivid', 'minn-admin' );
 	} else {
-		$last_value = 'Never';
+		$last_value = __( 'Never', 'minn-admin' );
 		$last_hint  = __( 'No finished backup recorded yet', 'minn-admin' );
 	}
 
@@ -270,12 +271,12 @@ function minn_admin_wpvivid_status_model() {
 			),
 			array(
 				'label' => __( 'Schedule', 'minn-admin' ),
-				'value' => $sched['enable'] ? 'On' : 'Off',
+				'value' => $sched['enable'] ? __( 'On', 'minn-admin' ) : __( 'Off', 'minn-admin' ),
 				'hint'  => $sched['label'],
 			),
 			array(
 				'label' => __( 'Status', 'minn-admin' ),
-				'value' => $running ? 'Running' : 'Idle',
+				'value' => $running ? __( 'Running now…', 'minn-admin' ) : __( 'Inactive', 'minn-admin' ),
 				'hint'  => __( 'Jobs run through WPvivid\'s own backup machinery', 'minn-admin' ),
 			),
 		),
