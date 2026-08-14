@@ -256,21 +256,21 @@ function minn_admin_tm_detail( $id ) {
 	}
 
 	$meta = array(
-		array( 'label' => 'Name', 'value' => $item['name'] ),
-		array( 'label' => 'Scope', 'value' => $item['scope'] ),
-		array( 'label' => 'Type', 'value' => $item['type'] ),
-		array( 'label' => 'Size', 'value' => $item['size'] ),
-		array( 'label' => 'Status', 'value' => $item['status'] ),
-		array( 'label' => 'Expires', 'value' => $item['date'] ? $item['date'] : 'Never (persistent)' ),
+		array( 'label' => __( 'Name', 'minn-admin' ), 'value' => $item['name'] ),
+		array( 'label' => __( 'Scope', 'minn-admin' ), 'value' => $item['scope'] ),
+		array( 'label' => __( 'Type', 'minn-admin' ), 'value' => $item['type'] ),
+		array( 'label' => __( 'Size', 'minn-admin' ), 'value' => $item['size'] ),
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $item['status'] ),
+		array( 'label' => __( 'Expires', 'minn-admin' ), 'value' => $item['date'] ? $item['date'] : 'Never (persistent)' ),
 		array( 'label' => __( 'Option key', 'minn-admin' ), 'value' => $row->option_name ),
-		array( 'label' => 'Value', 'value' => $show ),
+		array( 'label' => __( 'Value', 'minn-admin' ), 'value' => $show ),
 	);
 
 	return array(
 		'title'    => $item['name'],
 		'status'   => $item['status'],
 		'sections' => array(
-			array( 'title' => 'Transient', 'rows' => $meta ),
+			array( 'title' => __( 'Transient', 'minn-admin' ), 'rows' => $meta ),
 		),
 		'adminUrl' => minn_admin_tm_admin_url(),
 	);
@@ -303,22 +303,22 @@ function minn_admin_tm_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Transients',
+				'label' => __( 'Transients', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
 				'hint'  => __( 'In the options table (blog-level)', 'minn-admin' ),
 			),
 			array(
-				'label' => 'Expired',
+				'label' => __( 'Expired', 'minn-admin' ),
 				'value' => number_format_i18n( $expired ),
 				'hint'  => $expired ? 'Safe to purge' : 'None past due',
 			),
 			array(
-				'label' => 'Auto-cleanup',
+				'label' => __( 'Auto-cleanup', 'minn-admin' ),
 				'value' => $next_cron ? gmdate( 'Y-m-d H:i', $next_cron ) . ' UTC' : 'Not scheduled',
 				'hint'  => __( 'WordPress delete_expired_transients cron', 'minn-admin' ),
 			),
 			array(
-				'label' => 'Writes',
+				'label' => __( 'Writes', 'minn-admin' ),
 				'value' => $suspended ? 'Suspended' : 'Allowed',
 				'hint'  => $suspended ? 'Transients Manager is blocking sets' : 'Normal',
 			),
@@ -348,7 +348,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['transients-manager'] = array(
-		'label'      => 'Diagnostics',
+		'label'      => __( 'Diagnostics', 'minn-admin' ),
 		'sub'        => 'Transients',
 		'family'     => 'diagnostics',
 		'icon'       => 'activity',
@@ -356,7 +356,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'tools',
 		'status'     => array( 'route' => 'minn-admin/v1/transients/status' ),
 		'collection' => array(
-			'viewLabel' => 'Transients',
+			'viewLabel' => __( 'Transients', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/transients',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -372,19 +372,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'name', 'label' => 'Name', 'format' => 'title' ),
-				array( 'key' => 'type', 'label' => 'Type', 'format' => 'text' ),
-				array( 'key' => 'scope', 'label' => 'Scope', 'format' => 'text' ),
-				array( 'key' => 'size', 'label' => 'Size', 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => 'Expires', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'scope', 'label' => __( 'Scope', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'size', 'label' => __( 'Size', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date', 'label' => __( 'Expires', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/transients/{id}',
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/transients/{id}',
 					'confirm' => __( 'Delete this transient? Plugins may recreate it on the next request.', 'minn-admin' ),

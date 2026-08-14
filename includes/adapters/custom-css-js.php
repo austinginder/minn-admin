@@ -308,24 +308,24 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 
 	$edit_fields = array(
-		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => __( 'Site tweaks', 'minn-admin' ) ),
+		array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ), 'placeholder' => __( 'Site tweaks', 'minn-admin' ) ),
 		array(
 			'key'         => 'code',
-			'label'       => 'Code',
+			'label'       => __( 'Code', 'minn-admin' ),
 			'type'        => 'textarea',
 			'mono'        => true,
 			'rows'        => 14,
 			'placeholder' => __( '/* your CSS */', 'minn-admin' ),
 		),
-		array( 'key' => 'language', 'label' => 'Language', 'type' => 'select', 'options' => $lang_options ),
-		array( 'key' => 'type', 'label' => 'Where', 'type' => 'select', 'options' => $type_options ),
-		array( 'key' => 'side', 'label' => 'Side', 'type' => 'select', 'options' => $side_options ),
-		array( 'key' => 'linking', 'label' => 'Linking', 'type' => 'select', 'options' => $link_options ),
-		array( 'key' => 'priority', 'label' => 'Priority', 'type' => 'number' ),
+		array( 'key' => 'language', 'label' => __( 'Language', 'minn-admin' ), 'type' => 'select', 'options' => $lang_options ),
+		array( 'key' => 'type', 'label' => __( 'Where', 'minn-admin' ), 'type' => 'select', 'options' => $type_options ),
+		array( 'key' => 'side', 'label' => __( 'Side', 'minn-admin' ), 'type' => 'select', 'options' => $side_options ),
+		array( 'key' => 'linking', 'label' => __( 'Linking', 'minn-admin' ), 'type' => 'select', 'options' => $link_options ),
+		array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'type' => 'number' ),
 	);
 
 	$surfaces['custom-css-js'] = array(
-		'label'      => 'Snippets',
+		'label'      => __( 'Snippets', 'minn-admin' ),
 		'family'     => 'snippets',
 		'sub'        => 'Simple Custom CSS and JS',
 		'icon'       => 'code',
@@ -339,7 +339,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey'  => 'total',
 			'search'    => 'search={q}',
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'all', 'All' ),
 					array( '1', 'Active' ),
@@ -363,11 +363,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'fields'   => $edit_fields,
 			),
 			'columns'   => array(
-				array( 'key' => 'name', 'label' => 'Snippet', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'name', 'label' => __( 'Snippet', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
 				array( 'key' => 'scope', 'label' => __( 'Type · where', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
-				array( 'key' => 'active', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'priority', 'label' => 'Priority', 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'active', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
+				array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
+				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'detailRoute' => 'minn-admin/v1/ccj/snippets/{id}',
@@ -381,14 +381,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Activate',
+					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/ccj/snippets/{id}/active',
 					'body'   => array( 'active' => true ),
 					'when'   => array( 'key' => 'active', 'equals' => false ),
 				),
 				array(
-					'label'  => 'Deactivate',
+					'label'  => __( 'Deactivate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/ccj/snippets/{id}/active',
 					'body'   => array( 'active' => false ),
@@ -399,7 +399,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'href'  => admin_url( 'post.php?post={id}&action=edit' ),
 				),
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/ccj/snippets/{id}',
 					'confirm' => __( 'Delete this custom code permanently?', 'minn-admin' ),
@@ -408,21 +408,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'  => 'Activate',
+					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/ccj/snippets/{id}/active',
 					'body'   => array( 'active' => true ),
 					'when'   => array( 'key' => 'active', 'equals' => false ),
 				),
 				array(
-					'label'  => 'Deactivate',
+					'label'  => __( 'Deactivate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/ccj/snippets/{id}/active',
 					'body'   => array( 'active' => false ),
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/ccj/snippets/{id}',
 					'confirm' => __( 'Delete the selected codes permanently?', 'minn-admin' ),

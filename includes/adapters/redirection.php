@@ -18,7 +18,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['redirection'] = array(
-		'label'      => 'Redirects',
+		'label'      => __( 'Redirects', 'minn-admin' ),
 		'family'     => 'redirects',
 		'sub'        => 'Redirection',
 		'icon'       => 'shuffle',
@@ -107,10 +107,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 			'columns'   => array(
-				array( 'key' => 'url', 'label' => 'Source', 'format' => 'title', 'width' => 'minmax(0,1.4fr)', 'sort' => 'source' ),
-				array( 'key' => 'action_data.url', 'label' => 'Target', 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
-				array( 'key' => 'action_code', 'label' => 'Code', 'format' => 'mono', 'width' => '64px' ),
-				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '72px', 'sort' => 'last_count' ),
+				array( 'key' => 'url', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)', 'sort' => 'source' ),
+				array( 'key' => 'action_data.url', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
+				array( 'key' => 'action_code', 'label' => __( 'Code', 'minn-admin' ), 'format' => 'mono', 'width' => '64px' ),
+				array( 'key' => 'hits', 'label' => __( 'Hits', 'minn-admin' ), 'format' => 'num', 'width' => '72px', 'sort' => 'last_count' ),
 				// last_access is stored via gmdate (UTC, no zone).
 				array( 'key' => 'last_access', 'label' => __( 'Last hit', 'minn-admin' ), 'format' => 'ago', 'utc' => true, 'sort' => 'last_access' ),
 			),
@@ -131,12 +131,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Disable',
+					'label'  => __( 'Disable', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'redirection/v1/bulk/redirect/disable?items={id}',
 				),
 				array(
-					'label'  => 'Enable',
+					'label'  => __( 'Enable', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'redirection/v1/bulk/redirect/enable?items={id}',
 				),
@@ -152,17 +152,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			// already per-item under the hood.
 			'bulk'      => array(
 				array(
-					'label'  => 'Disable',
+					'label'  => __( 'Disable', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'redirection/v1/bulk/redirect/disable?items={id}',
 				),
 				array(
-					'label'  => 'Enable',
+					'label'  => __( 'Enable', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'redirection/v1/bulk/redirect/enable?items={id}',
 				),
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'redirection/v1/bulk/redirect/delete?items={id}',
 					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
@@ -176,10 +176,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// Daily options only (monitor + logging + IP). Schema served at
 		// request time; writes go through red_set_options (their sanitizer).
 		'settings'   => array(
-			'label' => 'Settings',
+			'label' => __( 'Settings', 'minn-admin' ),
 			'cap'   => apply_filters( 'redirection_role', 'manage_options' ),
 			'tabs'  => array(
-				array( 'id' => 'general', 'label' => 'General' ),
+				array( 'id' => 'general', 'label' => __( 'General', 'minn-admin' ) ),
 			),
 			'route' => 'minn-admin/v1/redirection/settings/{tab}',
 		),
@@ -252,7 +252,7 @@ add_action( 'rest_api_init', function () {
 				$rows[] = array( 'label' => __( 'Served, 7 days', 'minn-admin' ), 'value' => number_format_i18n( $served ) );
 			}
 			if ( null !== $missed ) {
-				$rows[] = array( 'label' => '404s, 7 days', 'value' => number_format_i18n( $missed ) );
+				$rows[] = array( 'label' => __( '404s, 7 days', 'minn-admin' ), 'value' => number_format_i18n( $missed ) );
 			}
 
 			$out = array( 'rows' => $rows );
@@ -324,7 +324,7 @@ add_action( 'rest_api_init', function () {
 							),
 						),
 						array(
-							'title'  => 'Logging',
+							'title'  => __( 'Logging', 'minn-admin' ),
 							'fields' => array(
 								array(
 									'key'   => 'log',

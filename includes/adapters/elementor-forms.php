@@ -95,14 +95,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['elementor-forms'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Elementor',
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gating above + in the shim.
 		'collection' => array(
-			'viewLabel' => 'Entries',
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/elementor/submissions',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -117,7 +117,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			// Their Query filter_status: all (not trash) / unread / read / trash.
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'all', 'Received' ),
 					array( 'unread', 'Unread' ),
@@ -127,10 +127,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'status={v}',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_name', 'label' => 'Form' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form_name', 'label' => __( 'Form', 'minn-admin' ) ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/elementor/submissions/{id}',
@@ -151,7 +151,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/elementor/submissions/{id}/restore',
 					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
@@ -171,7 +171,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Trash',
+					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/elementor/submissions/{id}/trash',
 					'confirm' => __( 'Move the selected submissions to trash?', 'minn-admin' ),
@@ -179,7 +179,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/elementor/submissions/{id}/restore',
 					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
@@ -322,17 +322,17 @@ add_action( 'rest_api_init', function () {
 
 				$meta   = array();
 				$meta[] = array(
-					'label' => 'Submitted',
+					'label' => __( 'Submitted', 'minn-admin' ),
 					'value' => ! empty( $sub['created_at'] )
 						? date_i18n( 'M j, Y g:i a', strtotime( $sub['created_at'] ) )
 						: '',
 				);
 				if ( ! empty( $sub['form']['name'] ) ) {
-					$meta[] = array( 'label' => 'Form', 'value' => $sub['form']['name'] );
+					$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => $sub['form']['name'] );
 				}
 				if ( ! empty( $sub['referer'] ) ) {
 					$meta[] = array(
-						'label' => 'Page',
+						'label' => __( 'Page', 'minn-admin' ),
 						'value' => ! empty( $sub['referer_title'] )
 							? $sub['referer_title'] . ' · ' . $sub['referer']
 							: $sub['referer'],
@@ -343,7 +343,7 @@ add_action( 'rest_api_init', function () {
 					$meta[] = array( 'label' => 'IP', 'value' => $sub['user_ip'] );
 				}
 				if ( ! empty( $sub['user_name'] ) ) {
-					$meta[] = array( 'label' => 'User', 'value' => $sub['user_name'] );
+					$meta[] = array( 'label' => __( 'User', 'minn-admin' ), 'value' => $sub['user_name'] );
 				}
 
 				$item = minn_admin_elementor_forms_item( $sub );
@@ -360,8 +360,8 @@ add_action( 'rest_api_init', function () {
 					'title'    => $item['form_name'] ?: 'Submission',
 					'status'   => $item['status'],
 					'sections' => array(
-						array( 'title' => 'Responses', 'rows' => $answers ),
-						array( 'title' => 'Submission', 'rows' => $meta ),
+						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
+						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=e-form-submissions#/form-submissions/' . (int) $sub['id'] ),
 				) );

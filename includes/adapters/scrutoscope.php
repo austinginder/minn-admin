@@ -234,22 +234,22 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 
 	$summary = isset( $data['summary'] ) && is_array( $data['summary'] ) ? $data['summary'] : array();
 	$meta    = array(
-		array( 'label' => 'Route', 'value' => (string) ( $data['route'] ?? '' ) ),
-		array( 'label' => 'Duration', 'value' => ( isset( $data['duration_ms'] ) ? $data['duration_ms'] . ' ms' : '—' ) ),
+		array( 'label' => __( 'Route', 'minn-admin' ), 'value' => (string) ( $data['route'] ?? '' ) ),
+		array( 'label' => __( 'Duration', 'minn-admin' ), 'value' => ( isset( $data['duration_ms'] ) ? $data['duration_ms'] . ' ms' : '—' ) ),
 		array( 'label' => __( 'Memory peak', 'minn-admin' ), 'value' => isset( $data['memory_peak_mb'] ) ? $data['memory_peak_mb'] . ' MB' : '—' ),
-		array( 'label' => 'Callbacks', 'value' => isset( $summary['total_callbacks'] ) ? (string) (int) $summary['total_callbacks'] : '—' ),
-		array( 'label' => 'Sources', 'value' => isset( $summary['total_sources'] ) ? (string) (int) $summary['total_sources'] : '—' ),
+		array( 'label' => __( 'Callbacks', 'minn-admin' ), 'value' => isset( $summary['total_callbacks'] ) ? (string) (int) $summary['total_callbacks'] : '—' ),
+		array( 'label' => __( 'Sources', 'minn-admin' ), 'value' => isset( $summary['total_sources'] ) ? (string) (int) $summary['total_sources'] : '—' ),
 		array(
-			'label' => 'Unattributed',
+			'label' => __( 'Unattributed', 'minn-admin' ),
 			'value' => ( isset( $summary['unattributed_ms'] ) && null !== $summary['unattributed_ms'] )
 				? $summary['unattributed_ms'] . ' ms'
 					. ( isset( $summary['unattributed_pct'] ) ? ' (' . $summary['unattributed_pct'] . '%)' : '' )
 				: '—',
 		),
-		array( 'label' => 'Captured', 'value' => (string) ( $data['captured_at'] ?? '' ) ),
-		array( 'label' => 'Pinned', 'value' => ! empty( $data['pinned'] ) ? 'Yes' : 'No' ),
-		array( 'label' => 'Note', 'value' => (string) ( $data['note'] ?? '' ) ),
-		array( 'label' => 'Tags', 'value' => ! empty( $data['tags'] ) && is_array( $data['tags'] ) ? implode( ', ', $data['tags'] ) : '' ),
+		array( 'label' => __( 'Captured', 'minn-admin' ), 'value' => (string) ( $data['captured_at'] ?? '' ) ),
+		array( 'label' => __( 'Pinned', 'minn-admin' ), 'value' => ! empty( $data['pinned'] ) ? 'Yes' : 'No' ),
+		array( 'label' => __( 'Note', 'minn-admin' ), 'value' => (string) ( $data['note'] ?? '' ) ),
+		array( 'label' => __( 'Tags', 'minn-admin' ), 'value' => ! empty( $data['tags'] ) && is_array( $data['tags'] ) ? implode( ', ', $data['tags'] ) : '' ),
 	);
 
 	$sources = array();
@@ -316,13 +316,13 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 
 	$sections = array_values( array_filter( array(
 		array(
-			'title' => 'Summary',
+			'title' => __( 'Summary', 'minn-admin' ),
 			'rows'  => array_values( array_filter( $meta, function ( $r ) {
 				return '' !== (string) $r['value'] && '—' !== (string) $r['value'];
 			} ) ),
 		),
 		$sources ? array( 'title' => __( 'Top sources', 'minn-admin' ), 'rows' => $sources ) : null,
-		$queries ? array( 'title' => 'Queries', 'rows' => $queries ) : null,
+		$queries ? array( 'title' => __( 'Queries', 'minn-admin' ), 'rows' => $queries ) : null,
 		$http ? array( 'title' => __( 'HTTP calls', 'minn-admin' ), 'rows' => $http ) : null,
 		$milestones ? array( 'title' => __( 'Timeline milestones', 'minn-admin' ), 'rows' => $milestones ) : null,
 	) ) );
@@ -433,7 +433,7 @@ function minn_admin_scrutoscope_status_model() {
 			'hint'  => $light ? 'Sources only (smaller profiles)' : 'Timeline + per-callback trace',
 		),
 		array(
-			'label' => 'Version',
+			'label' => __( 'Version', 'minn-admin' ),
 			'value' => defined( 'SCRUTOSCOPE_VERSION' ) ? (string) SCRUTOSCOPE_VERSION : '—',
 		),
 	);
@@ -701,7 +701,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$surfaces['scrutoscope'] = array(
 		// Family collapses profiler/cron (and future transient tools) into one
 		// Tools nav item so Dev tools don't each claim a top-level slot.
-		'label'      => 'Diagnostics',
+		'label'      => __( 'Diagnostics', 'minn-admin' ),
 		'sub'        => 'Scrutoscope',
 		'family'     => 'diagnostics',
 		'icon'       => 'activity',
@@ -709,7 +709,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'tools',
 		'status'     => array( 'route' => 'minn-admin/v1/scrutoscope/status' ),
 		'collection' => array(
-			'viewLabel' => 'Profiles',
+			'viewLabel' => __( 'Profiles', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/scrutoscope/profiles',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -728,14 +728,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All profiles',
 			),
 			'columns'   => array(
-				array( 'key' => 'route', 'label' => 'Route', 'format' => 'title' ),
-				array( 'key' => 'context', 'label' => 'Context', 'format' => 'text' ),
-				array( 'key' => 'duration', 'label' => 'Duration', 'format' => 'text' ),
-				array( 'key' => 'type', 'label' => 'Type', 'format' => 'text' ),
-				array( 'key' => 'role', 'label' => 'Role', 'format' => 'text' ),
+				array( 'key' => 'route', 'label' => __( 'Route', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'context', 'label' => __( 'Context', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'duration', 'label' => __( 'Duration', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'role', 'label' => __( 'Role', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'http', 'label' => 'HTTP', 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/scrutoscope/profiles/{id}',
@@ -770,10 +770,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'allLabel' => 'All events',
 				),
 				'columns'   => array(
-					array( 'key' => 'hook', 'label' => 'Hook', 'format' => 'title' ),
-					array( 'key' => 'schedule', 'label' => 'Schedule', 'format' => 'text' ),
-					array( 'key' => 'source', 'label' => 'Source', 'format' => 'text' ),
-					array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+					array( 'key' => 'hook', 'label' => __( 'Hook', 'minn-admin' ), 'format' => 'title' ),
+					array( 'key' => 'schedule', 'label' => __( 'Schedule', 'minn-admin' ), 'format' => 'text' ),
+					array( 'key' => 'source', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'text' ),
+					array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 					array( 'key' => 'date', 'label' => __( 'Next run', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 				),
 				// No detail modal for cron rows — inventory + row actions only.

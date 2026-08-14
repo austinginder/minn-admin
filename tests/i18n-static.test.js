@@ -149,7 +149,7 @@ const TEXT_ALLOW = new Set( [
 		scanForComments( path.relative( ROOT, f ), t, /\b(_n)\(\s*'(?:[^'\\]|\\.)*'\s*,\s*'((?:[^'\\]|\\.)*)'/g );
 	}
 	check( `Placeholder strings carry a translators comment`, bad.length === 0,
-		bad.length ? `${ bad.length } missing, first few:\n      ` + bad.slice( 0, 6 ).join( '\n      ' ) : '' );
+		bad.length ? `${ bad.length } missing, all:\n      ` + bad.slice( 0, 40 ).join( '\n      ' ) : '' );
 }
 
 /* ---------------------------------------------------------------------------

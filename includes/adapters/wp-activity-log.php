@@ -47,7 +47,7 @@ function minn_admin_wsal_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
+			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
 			'actions' => array( array( 'label' => __( 'Open WP Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_wsal_admin_url() ) ),
 		);
 	}
@@ -136,10 +136,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'message', 'label' => 'Event', 'format' => 'title' ),
-				array( 'key' => 'username', 'label' => 'Who' ),
-				array( 'key' => 'severity', 'label' => 'Severity', 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
+				array( 'key' => 'severity', 'label' => __( 'Severity', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/wsal/events/{id}',
@@ -257,12 +257,12 @@ add_action( 'rest_api_init', function () {
 			// phpcs:enable
 
 			$event = array(
-				array( 'label' => 'Event', 'value' => $alert_title( $row->alert_id ) . ' (' . (int) $row->alert_id . ')' ),
-				array( 'label' => 'When', 'value' => date_i18n( 'M j, Y g:i a', (int) $row->created_on + (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) ),
-				array( 'label' => 'Severity', 'value' => $severity_label( $row->severity ) ),
-				array( 'label' => 'Object', 'value' => $row->object ),
-				array( 'label' => 'Type', 'value' => $row->event_type ),
-				array( 'label' => 'User', 'value' => $row->username ?: 'System' ),
+				array( 'label' => __( 'Event', 'minn-admin' ), 'value' => $alert_title( $row->alert_id ) . ' (' . (int) $row->alert_id . ')' ),
+				array( 'label' => __( 'When', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', (int) $row->created_on + (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) ),
+				array( 'label' => __( 'Severity', 'minn-admin' ), 'value' => $severity_label( $row->severity ) ),
+				array( 'label' => __( 'Object', 'minn-admin' ), 'value' => $row->object ),
+				array( 'label' => __( 'Type', 'minn-admin' ), 'value' => $row->event_type ),
+				array( 'label' => __( 'User', 'minn-admin' ), 'value' => $row->username ?: 'System' ),
 				array( 'label' => 'IP', 'value' => $row->client_ip ),
 			);
 
@@ -280,8 +280,8 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'title'    => $alert_title( $row->alert_id ),
 				'sections' => array_filter( array(
-					array( 'title' => 'Event', 'rows' => array_values( array_filter( $event, function ( $r ) { return '' !== (string) $r['value']; } ) ) ),
-					$context ? array( 'title' => 'Context', 'rows' => $context ) : null,
+					array( 'title' => __( 'Event', 'minn-admin' ), 'rows' => array_values( array_filter( $event, function ( $r ) { return '' !== (string) $r['value']; } ) ) ),
+					$context ? array( 'title' => __( 'Context', 'minn-admin' ), 'rows' => $context ) : null,
 				) ),
 				'adminUrl' => admin_url( 'admin.php?page=wsal-auditlog' ),
 			) );

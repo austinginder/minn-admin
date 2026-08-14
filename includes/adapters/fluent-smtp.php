@@ -262,7 +262,7 @@ function minn_admin_fluent_smtp_status_model() {
 			'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
 		),
 		array(
-			'label' => 'Connections',
+			'label' => __( 'Connections', 'minn-admin' ),
 			'value' => (string) $connections,
 			'hint'  => $connections ? 'Configured in FluentSMTP' : 'No mailer connected yet',
 		),
@@ -312,7 +312,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['fluent-smtp'] = array(
-		'label'      => 'Email',
+		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'FluentSMTP',
 		'icon'       => 'send',
 		'cap'        => minn_admin_fluent_smtp_cap(),
@@ -323,7 +323,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// (per-provider credential forms) stays FluentSMTP's own app.
 		'settings'   => array(
 			'cap'   => minn_admin_fluent_smtp_cap(),
-			'tabs'  => array( array( 'id' => 'general', 'label' => 'General' ) ),
+			'tabs'  => array( array( 'id' => 'general', 'label' => __( 'General', 'minn-admin' ) ) ),
 			'route' => 'minn-admin/v1/fluent-smtp/settings/{tab}',
 		),
 		'collection' => array(
@@ -341,10 +341,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'subject', 'label' => 'Subject', 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => 'To', 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'created_at', 'label' => 'Date', 'format' => 'ago' ),
+				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'created_at', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				// v0.18.0: server-built sections (status pill, sandboxed HTML
@@ -353,7 +353,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Resend',
+					'label'   => __( 'Resend', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}/resend',
 					'method'  => 'POST',
 					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
@@ -375,7 +375,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					),
 				),
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}',
 					'method'  => 'DELETE',
 					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
@@ -384,7 +384,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}',
 					'method'  => 'DELETE',
 					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
@@ -473,7 +473,7 @@ function minn_admin_fluent_smtp_settings_shape() {
 
 	$groups = array(
 		array(
-			'title'  => 'Connections',
+			'title'  => __( 'Connections', 'minn-admin' ),
 			'fields' => array(
 				array(
 					'key'     => 'default_connection',
@@ -492,7 +492,7 @@ function minn_admin_fluent_smtp_settings_shape() {
 			),
 		),
 		array(
-			'title'  => 'Logging',
+			'title'  => __( 'Logging', 'minn-admin' ),
 			'fields' => array(
 				array(
 					'key'   => 'log_emails',
@@ -686,27 +686,27 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$delivery = array(
-				array( 'label' => 'Status', 'value' => $row->status, 'type' => 'pill' ),
-				array( 'label' => 'To', 'value' => minn_admin_fluent_smtp_recipients( $row->to ) ),
-				array( 'label' => 'From', 'value' => (string) $row->from ),
+				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $row->status, 'type' => 'pill' ),
+				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_fluent_smtp_recipients( $row->to ) ),
+				array( 'label' => __( 'From', 'minn-admin' ), 'value' => (string) $row->from ),
 			);
 			if ( '' !== (string) $row->source ) {
-				$delivery[] = array( 'label' => 'Source', 'value' => (string) $row->source );
+				$delivery[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => (string) $row->source );
 			}
 			if ( (int) $row->retries > 0 ) {
-				$delivery[] = array( 'label' => 'Retries', 'value' => (string) (int) $row->retries );
+				$delivery[] = array( 'label' => __( 'Retries', 'minn-admin' ), 'value' => (string) (int) $row->retries );
 			}
-			$delivery[] = array( 'label' => 'Date', 'value' => (string) $row->created_at );
+			$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => (string) $row->created_at );
 			$body     = (string) $row->body;
 			$sections = array(
-				array( 'title' => 'Delivery', 'rows' => $delivery ),
+				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
 				array(
-					'title' => 'Message',
+					'title' => __( 'Message', 'minn-admin' ),
 					'rows'  => array(
-						array( 'label' => 'Subject', 'value' => (string) $row->subject ),
+						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
 						preg_match( '/<\/?[a-z][^>]*>/i', $body )
-							? array( 'label' => 'Body', 'value' => $body, 'type' => 'html-preview' )
-							: array( 'label' => 'Body', 'value' => $body, 'type' => 'code' ),
+							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
+							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
 					),
 				),
 			);
@@ -721,7 +721,7 @@ add_action( 'rest_api_init', function () {
 			if ( '' !== $response ) {
 				$sections[] = array(
 					'title' => __( 'Provider reply', 'minn-admin' ),
-					'rows'  => array( array( 'label' => 'Response', 'value' => $response ) ),
+					'rows'  => array( array( 'label' => __( 'Response', 'minn-admin' ), 'value' => $response ) ),
 				);
 			}
 			// Resend trail (FluentSMTP 2.3.0+): read through their
@@ -736,7 +736,7 @@ add_action( 'rest_api_init', function () {
 					if ( $count > 0 || $resends ) {
 						$rrows   = array();
 						$rrows[] = array(
-							'label' => 'Resent',
+							'label' => __( 'Resent', 'minn-admin' ),
 							'value' => sprintf( /* translators: %s: how many times the message was sent. */ _n( '%s time', '%s times', max( $count, count( $resends ) ), 'minn-admin' ), number_format_i18n( max( $count, count( $resends ) ) ) ),
 						);
 						// Newest first, last five; `at` is site-local
@@ -755,7 +755,7 @@ add_action( 'rest_api_init', function () {
 								'value' => implode( ' — ', $bits ),
 							);
 						}
-						$sections[] = array( 'title' => 'Resends', 'rows' => $rrows );
+						$sections[] = array( 'title' => __( 'Resends', 'minn-admin' ), 'rows' => $rrows );
 					}
 				} catch ( \Throwable $e ) {
 					// The trail is a bonus; the detail renders without it.

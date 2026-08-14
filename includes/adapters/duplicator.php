@@ -104,7 +104,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['duplicator'] = array(
-		'label'      => 'Backups',
+		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'Duplicator',
 		'icon'       => 'database',
 		'cap'        => 'export',
@@ -116,11 +116,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'columns'   => array(
-				array( 'key' => 'name', 'label' => 'Package', 'format' => 'title' ),
-				array( 'key' => 'size', 'label' => 'Size', 'format' => 'text' ),
-				array( 'key' => 'owner', 'label' => 'By', 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'created', 'label' => 'Created', 'format' => 'ago' ),
+				array( 'key' => 'name', 'label' => __( 'Package', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'size', 'label' => __( 'Size', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'owner', 'label' => __( 'By', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'created', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'skip' => array( 'name' ),
@@ -224,7 +224,7 @@ add_action( 'rest_api_init', function () {
 						'hint'  => $newest ? trim( $when . ' · ' . $newest['size'], ' ·' ) : 'Packages are built manually from Duplicator\'s screen.',
 					),
 					array(
-						'label' => 'Packages',
+						'label' => __( 'Packages', 'minn-admin' ),
 						'value' => (string) count( $rows ),
 						'hint'  => __( 'Manual builds; Minn makes no freshness claims for Duplicator.', 'minn-admin' ),
 					),

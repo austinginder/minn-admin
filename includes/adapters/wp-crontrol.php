@@ -242,14 +242,14 @@ function minn_admin_crontrol_detail( $id ) {
 
 	$row     = minn_admin_crontrol_row( $ev );
 	$meta    = array(
-		array( 'label' => 'Hook', 'value' => $ev->hook ),
+		array( 'label' => __( 'Hook', 'minn-admin' ), 'value' => $ev->hook ),
 		array( 'label' => __( 'Next run (UTC)', 'minn-admin' ), 'value' => $ev->get_next_run_utc( 'Y-m-d H:i:s' ) . ' UTC' ),
 		array( 'label' => __( 'Next run (site)', 'minn-admin' ), 'value' => $ev->get_next_run_local( 'Y-m-d H:i:s' ) ),
-		array( 'label' => 'Schedule', 'value' => $row['schedule'] ),
-		array( 'label' => 'Interval', 'value' => $row['interval'] ),
-		array( 'label' => 'Status', 'value' => $row['status'] ),
-		array( 'label' => 'Arguments', 'value' => $row['args'] ?: '—' ),
-		array( 'label' => 'Signature', 'value' => $ev->sig ),
+		array( 'label' => __( 'Schedule', 'minn-admin' ), 'value' => $row['schedule'] ),
+		array( 'label' => __( 'Interval', 'minn-admin' ), 'value' => $row['interval'] ),
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $row['status'] ),
+		array( 'label' => __( 'Arguments', 'minn-admin' ), 'value' => $row['args'] ?: '—' ),
+		array( 'label' => __( 'Signature', 'minn-admin' ), 'value' => $ev->sig ),
 	);
 
 	$cb_rows = array();
@@ -274,10 +274,10 @@ function minn_admin_crontrol_detail( $id ) {
 	}
 
 	$sections = array_values( array_filter( array(
-		array( 'title' => 'Event', 'rows' => array_values( array_filter( $meta, function ( $r ) {
+		array( 'title' => __( 'Event', 'minn-admin' ), 'rows' => array_values( array_filter( $meta, function ( $r ) {
 			return '' !== (string) $r['value'];
 		} ) ) ),
-		$cb_rows ? array( 'title' => 'Callbacks', 'rows' => $cb_rows ) : null,
+		$cb_rows ? array( 'title' => __( 'Callbacks', 'minn-admin' ), 'rows' => $cb_rows ) : null,
 	) ) );
 
 	return array(
@@ -326,22 +326,22 @@ function minn_admin_crontrol_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Events',
+				'label' => __( 'Events', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
 				'hint'  => $once ? ( number_format_i18n( $once ) . ' one-off' ) : '',
 			),
 			array(
-				'label' => 'Overdue',
+				'label' => __( 'Overdue', 'minn-admin' ),
 				'value' => number_format_i18n( $overdue ),
 				'hint'  => $overdue ? 'Past next-run time' : 'None past due',
 			),
 			array(
-				'label' => 'Paused',
+				'label' => __( 'Paused', 'minn-admin' ),
 				'value' => number_format_i18n( $paused ),
 				'hint'  => __( 'Hook-level pause via WP Crontrol', 'minn-admin' ),
 			),
 			array(
-				'label' => 'WP-Cron spawn',
+				'label' => __( 'WP-Cron spawn', 'minn-admin' ),
 				'value' => $spawn,
 				'hint'  => __( 'Site uses page-load spawn unless disabled', 'minn-admin' ),
 			),
@@ -369,7 +369,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['wp-crontrol'] = array(
-		'label'      => 'Diagnostics',
+		'label'      => __( 'Diagnostics', 'minn-admin' ),
 		'sub'        => 'WP Crontrol',
 		'family'     => 'diagnostics',
 		'icon'       => 'activity',
@@ -377,7 +377,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'tools',
 		'status'     => array( 'route' => 'minn-admin/v1/crontrol/status' ),
 		'collection' => array(
-			'viewLabel' => 'Events',
+			'viewLabel' => __( 'Events', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/crontrol/events',
 			'pageQuery' => 'per_page=50&page={page}',
 			'search'    => 'search={q}',
@@ -394,10 +394,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All events',
 			),
 			'columns'   => array(
-				array( 'key' => 'hook', 'label' => 'Hook', 'format' => 'title' ),
-				array( 'key' => 'schedule', 'label' => 'Schedule', 'format' => 'text' ),
-				array( 'key' => 'interval', 'label' => 'Every', 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+				array( 'key' => 'hook', 'label' => __( 'Hook', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'schedule', 'label' => __( 'Schedule', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'interval', 'label' => __( 'Every', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 				array( 'key' => 'date', 'label' => __( 'Next run', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(

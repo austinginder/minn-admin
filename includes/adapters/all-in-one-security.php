@@ -221,11 +221,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'message', 'label' => 'Event', 'format' => 'title' ),
-				array( 'key' => 'username', 'label' => 'Who' ),
+				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
 				array( 'key' => 'ip', 'label' => 'IP', 'format' => 'mono', 'width' => '130px' ),
-				array( 'key' => 'level', 'label' => 'Level', 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'level', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/aios/events/{id}',
@@ -314,17 +314,17 @@ add_action( 'rest_api_init', function () {
 			}
 			$who   = (string) $row->username;
 			$event = array(
-				array( 'label' => 'Event', 'value' => minn_admin_aios_event_label( $row->event_type ) ),
-				array( 'label' => 'When', 'value' => date_i18n( 'M j, Y g:i a', (int) $row->created + (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) ),
-				array( 'label' => 'Level', 'value' => minn_admin_aios_level( $row->level ), 'type' => 'pill' ),
-				array( 'label' => 'User', 'value' => '' !== $who ? $who : 'System' ),
+				array( 'label' => __( 'Event', 'minn-admin' ), 'value' => minn_admin_aios_event_label( $row->event_type ) ),
+				array( 'label' => __( 'When', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', (int) $row->created + (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) ),
+				array( 'label' => __( 'Level', 'minn-admin' ), 'value' => minn_admin_aios_level( $row->level ), 'type' => 'pill' ),
+				array( 'label' => __( 'User', 'minn-admin' ), 'value' => '' !== $who ? $who : 'System' ),
 				array( 'label' => 'IP', 'value' => (string) $row->ip ),
 			);
 			if ( ! empty( $row->country_code ) ) {
-				$event[] = array( 'label' => 'Country', 'value' => (string) $row->country_code );
+				$event[] = array( 'label' => __( 'Country', 'minn-admin' ), 'value' => (string) $row->country_code );
 			}
 			$sections = array(
-				array( 'title' => 'Event', 'rows' => array_values( array_filter( $event, function ( $r ) {
+				array( 'title' => __( 'Event', 'minn-admin' ), 'rows' => array_values( array_filter( $event, function ( $r ) {
 					return '' !== (string) $r['value'];
 				} ) ) ),
 			);
@@ -355,7 +355,7 @@ add_action( 'rest_api_init', function () {
 					return '' !== (string) $r['value'];
 				} ) );
 				if ( $context ) {
-					$sections[] = array( 'title' => 'Context', 'rows' => $context );
+					$sections[] = array( 'title' => __( 'Context', 'minn-admin' ), 'rows' => $context );
 				}
 			}
 
@@ -380,7 +380,7 @@ add_action( 'rest_api_init', function () {
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Audit log table not found', 'minn-admin' ) ) ),
+					'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Audit log table not found', 'minn-admin' ) ) ),
 					'actions' => array( array( 'label' => __( 'Open All-In-One Security ↗', 'minn-admin' ), 'href' => minn_admin_aios_admin_url() ) ),
 				) );
 			}

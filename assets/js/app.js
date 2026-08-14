@@ -1142,7 +1142,7 @@
 				${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
 				<div class="minn-field-image-actions">
 					<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : __( 'Set image' ) }</button>
-					${ has ? '<button type="button" class="minn-btn-soft danger" data-img-clear>Remove</button>' : '' }
+					${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
 				</div>
 			</div>`;
 		}
@@ -2946,7 +2946,7 @@
 			<div class="minn-store-label">${ esc( __( 'Store' ) ) }</div>
 			${ buckets.length ? buckets.map( ( [ tab, n, label, style ] ) => `
 				<button class="minn-status ${ style } minn-store-chip" data-sotab="${ tab }">${ n } ${ label }</button>` ).join( '' )
-				: '<span class="minn-store-ok">All caught up. No orders need attention.</span>' }
+				: `<span class="minn-store-ok">${ esc( __( 'All caught up. No orders need attention.' ) ) }</span>` }
 			<button class="minn-btn-soft minn-store-view" id="minn-store-view">${ esc( __( 'View orders' ) ) }</button>
 		</div>`;
 	}
@@ -2955,7 +2955,7 @@
 		const view = $( '#minn-view' );
 		const o = state.cache.overview;
 		if ( ! o ) {
-			view.innerHTML = '<div class="minn-loading">Loading overview…</div>';
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading overview…' ) ) }</div>`;
 			loadOverview().then( renderIfCurrent( 'overview' ) ).catch( showErr );
 			return;
 		}
@@ -3032,7 +3032,7 @@
 								<div class="minn-activity-text">${ esc( a.text ) }</div>
 								<div class="minn-activity-time">${ esc( a.time ) }</div>
 							</div>
-						</div>` ).join( '' ) : '<div class="minn-empty">No activity yet.</div>' }
+						</div>` ).join( '' ) : `<div class="minn-empty">${ esc( __( 'No activity yet.' ) ) }</div>` }
 				</div>
 			</div>
 		</div>`;
@@ -3202,7 +3202,7 @@
 						<div><b>${ Number( c.value ).toLocaleString() }</b><span>Event${ c.value === 1 ? '' : 's' }</span></div>` }
 					</div>
 					${ ( isTraffic ? ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) : c.value > 0 )
-						? '<div class="minn-chart-tip-hint">Click for details</div>' : '' }`;
+						? `<div class="minn-chart-tip-hint">${ esc( __( 'Click for details' ) ) }</div>` : '' }`;
 				$$( '.minn-chart-col.hover', chart ).forEach( ( el ) => el.classList.remove( 'hover' ) );
 				col.classList.add( 'hover' );
 				tip.hidden = false;
@@ -3619,7 +3619,7 @@
 						<button class="minn-btn-soft" data-restore="${ p.id }">${ esc( __( 'Restore' ) ) }</button>
 						<button class="minn-btn-soft danger" data-fdelete="${ p.id }">${ esc( __( 'Delete' ) ) }</button>
 					</div>` : `<div class="minn-row-end"><button class="minn-row-more" data-more="${ p.id }" type="button" title="${ esc( __( 'Actions' ) ) }">⋯</button><span class="minn-row-arrow">›</span></div>` }
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? __( 'No matches for “' ) + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? __( 'Trash is empty.' ) : 'Nothing here yet. Hit <b>New</b> to write something.' ) }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? __( 'No matches for “' ) + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? __( 'Trash is empty.' ) : sprintf( /* translators: %s: the New button label, in bold. */ __( 'Nothing here yet. Hit %s to write something.' ), '<b>' + esc( __( 'New' ) ) + '</b>' ) ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
 
@@ -3762,11 +3762,11 @@
 				<button type="button" data-ract="open">${ esc( __( 'Open in Minn' ) ) }</button>
 				${ viewUrl ? `<a href="${ esc( viewUrl ) }" target="wp-preview-${ p.id }">${ p.status === 'publish' ? __( 'View on site' ) : __( 'Preview draft' ) } ↗</a>` : '' }
 				<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">${ esc( __( 'Edit in block editor ↗' ) ) }</a>
-				${ B.ppp && p.status !== 'publish' && p.status !== 'private' && p.status !== 'trash' ? '<button type="button" data-ract="ppp">Copy public preview link</button>' : '' }
+				${ B.ppp && p.status !== 'publish' && p.status !== 'private' && p.status !== 'trash' ? `<button type="button" data-ract="ppp">${ esc( __( 'Copy public preview link' ) ) }</button>` : '' }
 				<button type="button" data-ract="duplicate">${ esc( __( 'Duplicate' ) ) }</button>
 				<div class="minn-new-menu-label">${ esc( __( 'Status' ) ) }</div>
-				${ p.status !== 'publish' ? '<button type="button" data-ract="publish">Publish now</button>' : '' }
-				${ p.status !== 'draft' ? '<button type="button" data-ract="draft">Move to draft</button>' : '' }
+				${ p.status !== 'publish' ? `<button type="button" data-ract="publish">${ esc( __( 'Publish now' ) ) }</button>` : '' }
+				${ p.status !== 'draft' ? `<button type="button" data-ract="draft">${ esc( __( 'Move to draft' ) ) }</button>` : '' }
 				<button type="button" data-ract="trash" class="danger">${ esc( __( 'Move to trash' ) ) }</button>`;
 			document.body.appendChild( rowMenu );
 			rowMenu.style.left = menuLeftAt( x, rowMenu.offsetWidth ) + 'px';
@@ -4803,7 +4803,7 @@
 	function renderComments() {
 		const view = $( '#minn-view' );
 		if ( ! commentsAvailable() ) {
-			view.innerHTML = '<div class="minn-empty">Comments are disabled on this site.</div>';
+			view.innerHTML = `<div class="minn-empty">${ esc( __( 'Comments are disabled on this site.' ) ) }</div>`;
 			return;
 		}
 		const c = state.cache.comments;
@@ -5436,7 +5436,7 @@
 						</div>
 						<div class="minn-media-edit minn-order-payment">
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Payment' ) ) }</div>
-							${ payLoading ? '<div class="minn-loading" style="padding:8px;">Loading payment methods…</div>' : `
+							${ payLoading ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading payment methods…' ) ) }</div>` : `
 							<div class="minn-order-field-row">
 								<div style="flex:1;">
 									<div class="minn-field-label">${ esc( __( 'Payment method' ) ) }</div>
@@ -5459,7 +5459,7 @@
 						${ orderRefundCardHtml( m, o, refundable ) }
 						<div class="minn-media-edit minn-order-wcmail">
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'WooCommerce email' ) ) }</div>
-							${ emails == null ? '<div class="minn-loading" style="padding:8px;">Loading email types…</div>' : `
+							${ emails == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading email types…' ) ) }</div>` : `
 							<div style="display:flex; gap:8px; flex-wrap:wrap;">
 								<div style="flex:1; min-width:180px;">${ orderCombo( 'wcemail', __( 'Email type' ) ) }</div>
 								<button class="minn-btn-soft" id="minn-o-wcemail-send" type="button" ${ ( emails || [] ).length ? '' : 'disabled' }>${ icon( 'send' ) } Send</button>
@@ -5468,17 +5468,17 @@
 						</div>` : '' }
 						<div class="minn-media-edit minn-order-notes">
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Order notes' ) ) }</div>
-							${ m.notes == null ? '<div class="minn-loading" style="padding:8px;">Loading notes…</div>' : `
+							${ m.notes == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading notes…' ) ) }</div>` : `
 							<div class="minn-order-notes-list">
 								${ ( m.notes || [] ).length ? ( m.notes || [] ).map( ( n ) => `
 									<div class="minn-order-note${ n.customer_note ? ' customer' : '' }">
 										<div class="minn-order-note-meta">
 											<span>${ esc( n.author || 'System' ) }</span>
 											<span>${ esc( timeAgo( n.date_created_gmt || n.date_created ) ) }</span>
-											${ n.customer_note ? '<span class="minn-status future">Customer</span>' : '<span class="minn-status draft">Private</span>' }
+											${ n.customer_note ? `<span class="minn-status future">${ esc( __( 'Customer' ) ) }</span>` : `<span class="minn-status draft">${ esc( __( 'Private' ) ) }</span>` }
 										</div>
 										<div class="minn-order-note-body">${ esc( n.note || '' ) }</div>
-									</div>` ).join( '' ) : '<div class="minn-toggle-desc">No notes yet.</div>' }
+									</div>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No notes yet.' ) ) }</div>` }
 							</div>
 							${ canEdit ? `
 							<div class="minn-order-fields" style="margin-top:12px;">
@@ -5495,8 +5495,8 @@
 						${ B.wcs ? `
 						<div class="minn-media-edit minn-order-subs">
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Subscriptions' ) ) }</div>
-							${ m.relatedSubs == null ? '<div class="minn-loading" style="padding:8px;">Checking…</div>'
-								: ! m.relatedSubs.length ? '<div class="minn-toggle-desc">No related subscriptions on this order.</div>'
+							${ m.relatedSubs == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Checking…' ) ) }</div>`
+								: ! m.relatedSubs.length ? `<div class="minn-toggle-desc">${ esc( __( 'No related subscriptions on this order.' ) ) }</div>`
 								: m.relatedSubs.map( ( sub ) => `
 								<button type="button" class="minn-sub-order-row" data-relsub="${ sub.id }">
 									<span>#${ esc( sub.number || sub.id ) }</span>
@@ -5506,8 +5506,8 @@
 						</div>` : '' }
 						<div class="minn-media-edit minn-order-others">
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'More from this customer' ) ) }</div>
-							${ m.otherOrders == null ? '<div class="minn-loading" style="padding:8px;">Checking…</div>'
-								: ! m.otherOrders.length ? '<div class="minn-toggle-desc">No other orders from this customer.</div>'
+							${ m.otherOrders == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Checking…' ) ) }</div>`
+								: ! m.otherOrders.length ? `<div class="minn-toggle-desc">${ esc( __( 'No other orders from this customer.' ) ) }</div>`
 								: m.otherOrders.map( ( oo ) => `
 								<button type="button" class="minn-sub-order-row" data-relorder="${ oo.id }" data-relnum="${ esc( oo.number || oo.id ) }">
 									<span>#${ esc( oo.number || oo.id ) }</span>
@@ -5538,13 +5538,13 @@
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">Order #${ esc( o.number || listO.number || o.id ) }</div>
+							<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the order number. */ __( 'Order #%s' ) ), esc( o.number || listO.number || o.id ) ) }</div>
 							<div class="minn-modal-sub">${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }</div>
 						</div>
 						<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading order…</div>' : '' }
+					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading order…' ) ) }</div>` : '' }
 					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 					${ ! loading && ! m.loadError ? orderDetailInnerHtml( m ) : '' }
 				</div>
@@ -6123,7 +6123,7 @@
 	function renderOrderPage() {
 		const view = $( '#minn-view' );
 		if ( ! B.wc || ! B.caps.orders ) {
-			view.innerHTML = '<div class="minn-empty">You don\'t have access to orders on this site.</div>';
+			view.innerHTML = `<div class="minn-empty">${ esc( __( "You don't have access to orders on this site." ) ) }</div>`;
 			return;
 		}
 		let m = state.orderPage;
@@ -6138,13 +6138,13 @@
 			<div class="minn-order-page-head">
 				<button type="button" class="minn-btn-soft" id="minn-op-back">← ${ esc( __( 'Orders' ) ) }</button>
 				<div class="minn-modal-title-block">
-					<div class="minn-modal-title">Order #${ esc( o.number || o.id ) }</div>
+					<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the order number. */ __( 'Order #%s' ) ), esc( o.number || o.id ) ) }</div>
 					<div class="minn-modal-sub">${ loading ? __( 'Loading…' ) : `${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }` }</div>
 				</div>
 				<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
 			</div>
 			<div class="minn-order-page-card">
-				${ loading ? '<div class="minn-loading" style="padding:28px;">Loading order…</div>' : '' }
+				${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading order…' ) ) }</div>` : '' }
 				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 				${ ! loading && ! m.loadError ? orderDetailInnerHtml( m ) : '' }
 			</div>
@@ -6210,7 +6210,7 @@
 							</div>` : '' }
 							<div class="minn-order-field-row"${ lines.length ? ' style="margin-top:10px;"' : '' }>
 								<div style="flex:1;">
-									<div class="minn-field-label">Amount (max ${ esc( orderMoney( o, refundable ) ) })</div>
+									<div class="minn-field-label">${ sprintf( esc( /* translators: %s: the largest refundable amount, already formatted as money. */ __( 'Amount (max %s)' ) ), esc( orderMoney( o, refundable ) ) ) }</div>
 									<input class="minn-input" id="minn-o-refund-amt" type="number" step="0.01" min="0.01" max="${ refundable.toFixed( 2 ) }" value="${ refundable.toFixed( 2 ) }">
 								</div>
 							</div>
@@ -6315,21 +6315,21 @@
 				<div class="minn-chart-head">
 					<div class="minn-panel-title">${ esc( __( 'Revenue' ) ) } <span class="minn-panel-sub">${ esc( rangeLabel ) }</span></div>
 				</div>
-				${ loading ? '<div class="minn-loading" style="padding:28px 0;">Loading analytics…</div>' : (
+				${ loading ? `<div class="minn-loading" style="padding:28px 0;">${ esc( __( 'Loading analytics…' ) ) }</div>` : (
 					chartData.length ? `
 				<div class="minn-chart" id="minn-wc-chart">
 					${ chartData.map( ( c, i ) => `
 						<div class="minn-chart-col" data-ci="${ i }" title="${ esc( c.label + ': ' + money( c.value ) + ' · ' + c.orders + ' orders' ) }">
 							<div class="minn-chart-bar${ i === chartData.length - 1 ? ' last' : '' }" style="height:${ Math.max( 3, pct( c.value ) ) }%"></div>
 						</div>` ).join( '' ) }
-				</div>` : '<div class="minn-empty">No sales in this range.</div>'
+				</div>` : `<div class="minn-empty">${ esc( __( 'No sales in this range.' ) ) }</div>`
 				) }
 			</div>
 			<div class="minn-card minn-table" style="margin-top:14px;">
 				<div class="minn-table-head minn-wc-top-cols">
 					<div>${ esc( __( 'Top products' ) ) }</div><div>${ esc( __( 'Sold' ) ) }</div><div>${ esc( __( 'Net' ) ) }</div>
 				</div>
-				${ loading ? '<div class="minn-loading" style="padding:18px;">Loading…</div>' : (
+				${ loading ? `<div class="minn-loading" style="padding:18px;">${ esc( __( 'Loading…' ) ) }</div>` : (
 					topProducts.length ? topProducts.map( ( p ) => `
 					<div class="minn-table-row minn-wc-top-cols">
 						<div class="minn-cell-clip">
@@ -6337,7 +6337,7 @@
 						</div>
 						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( String( p.items_sold ?? '—' ) ) }</div>
 						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ money( p.net_revenue ) }</div>
-					</div>` ).join( '' ) : '<div class="minn-empty">No product sales in this range.</div>'
+					</div>` ).join( '' ) : `<div class="minn-empty">${ esc( __( 'No product sales in this range.' ) ) }</div>`
 				) }
 			</div>` }`;
 			$$( '[data-oview]', view ).forEach( ( btn ) =>
@@ -6375,7 +6375,7 @@
 		const c = state.cache.orders;
 		if ( ! c ) {
 			if ( softLoadPending( 'orders' ) ) return; // a soft reload owns the view
-			view.innerHTML = viewSwitch + '<div class="minn-loading">Loading orders…</div>';
+			view.innerHTML = viewSwitch + `<div class="minn-loading">${ esc( __( 'Loading orders…' ) ) }</div>`;
 			$$( '[data-oview]', view ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
 					state.orderView = btn.dataset.oview;
@@ -7549,7 +7549,7 @@
 											<span class="minn-slug-prefix">/</span>
 											<input class="minn-input minn-slug-input" id="minn-p-slug" value="${ esc( p.slug || '' ) }" placeholder="${ esc( __( 'set-on-save' ) ) }" autocomplete="off" spellcheck="false">
 										</div>
-										${ p.status === 'publish' ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
+										${ p.status === 'publish' ? `<div class="minn-slug-note">${ esc( __( 'Changing this breaks the current URL.' ) ) }</div>` : '' }
 									</div>
 									${ productToggleHtml( 'minn-p-featured', __( 'Featured product' ), p.featured ) }
 								</div>
@@ -8321,7 +8321,7 @@
 	function renderProductPage() {
 		const view = $( '#minn-view' );
 		if ( ! B.wc || ! B.caps.products ) {
-			view.innerHTML = '<div class="minn-empty">You don\'t have access to products on this site.</div>';
+			view.innerHTML = `<div class="minn-empty">${ esc( __( "You don't have access to products on this site." ) ) }</div>`;
 			return;
 		}
 		let m = state.productPage;
@@ -8343,7 +8343,7 @@
 				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
 			</div>
 			<div class="minn-order-page-card">
-				${ loading ? '<div class="minn-loading" style="padding:28px;">Loading product…</div>' : '' }
+				${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div>` : '' }
 				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 				${ ! loading && ! m.loadError ? productDetailInnerHtml( m ) : '' }
 			</div>
@@ -8773,7 +8773,7 @@
 		// exists but every list call 403s — hide the surface instead of that error.
 		if ( ! B.wc || ! B.caps.coupons ) {
 			view.innerHTML = `<div class="minn-card minn-empty">
-				Coupons are turned off in WooCommerce (Settings → General → Enable coupons), or you do not have permission to manage them.
+				${ esc( __( 'Coupons are turned off in WooCommerce (Settings → General → Enable coupons), or you do not have permission to manage them.' ) ) }
 				${ B.site && B.site.adminUrl ? ` <a href="${ esc( B.site.adminUrl ) }admin.php?page=wc-settings" target="_blank" rel="noopener">${ esc( __( 'Open WooCommerce settings ↗' ) ) }</a>` : '' }
 			</div>`;
 			return;
@@ -8996,7 +8996,7 @@
 		const c = state.cache.customers;
 		if ( ! c ) {
 			if ( softLoadPending( 'customers' ) ) return; // a soft reload owns the view
-			view.innerHTML = '<div class="minn-loading">Loading customers…</div>';
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading customers…' ) ) }</div>`;
 			loadCustomers().then( renderIfCurrent( 'customers' ) ).catch( showErr );
 			return;
 		}
@@ -9259,13 +9259,13 @@
 
 	function renderStructureTerms( view, tabsHtml ) {
 		if ( ! B.caps.terms ) {
-			view.innerHTML = '<div class="minn-empty">You need permission to manage terms.</div>';
+			view.innerHTML = `<div class="minn-empty">${ esc( __( 'You need permission to manage terms.' ) ) }</div>`;
 			return;
 		}
 		const c = state.cache.terms;
 		if ( ! c ) {
 			view.innerHTML = ( tabsHtml ? `<div class="minn-toolbar">${ tabsHtml }</div>` : '' )
-				+ '<div class="minn-loading">Loading terms…</div>';
+				+ `<div class="minn-loading">${ esc( __( 'Loading terms…' ) ) }</div>`;
 			loadTerms().then( () => { if ( onStructure() ) renderStructure(); } ).catch( showErr );
 			return;
 		}
@@ -9536,7 +9536,7 @@
 					const items = await api( `wp/v2/${ tax.rest }?search=${ encodeURIComponent( q ) }&exclude=${ t.id }&per_page=20&_fields=id,name,count` );
 					panel.innerHTML = items.length
 						? items.map( ( x ) => `<button type="button" class="minn-ac-item" data-mid="${ x.id }">${ esc( x.name ) } <span class="minn-ac-hint">${ x.count } post${ x.count === 1 ? '' : 's' }</span></button>` ).join( '' )
-						: '<div class="minn-ac-empty">No matches</div>';
+						: `<div class="minn-ac-empty">${ esc( __( 'No matches' ) ) }</div>`;
 					panel.hidden = false;
 					$$( '[data-mid]', panel ).forEach( ( b ) => b.addEventListener( 'mousedown', ( e ) => {
 						e.preventDefault();
@@ -11291,7 +11291,7 @@
 				} );
 				return;
 			}
-			view.innerHTML = '<div class="minn-loading">Loading…</div>';
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
 			Promise.all( [ loadSurfaceTabs( s ), loadSurfaceItems( s ), loadSurfaceStatus( s ) ] )
 				.then( renderIfCurrent( s.id ) )
 				.catch( showErr );
@@ -11377,7 +11377,7 @@
 					${ hasRowMenu
 						? `<div class="minn-row-end"><button type="button" class="minn-row-more" title="${ esc( __( 'Actions' ) ) }" aria-label="${ esc( __( 'Actions' ) ) }">⋯</button></div>`
 						: `<div class="minn-row-arrow">›</div>` }
-				</div>` ).join( '' ) : '<div class="minn-empty">Nothing here.</div>' }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ esc( __( 'Nothing here.' ) ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
 
@@ -11659,7 +11659,7 @@
 			);
 		};
 		if ( ! data ) {
-			view.innerHTML = head + '<div class="minn-loading">Loading…</div>';
+			view.innerHTML = head + `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
 			bindChrome();
 			api( routeFor( tab ) )
 				.then( ( r ) => {
@@ -11698,8 +11698,8 @@
 
 		view.innerHTML = head + `
 		<div class="minn-card minn-surface-settings">
-			${ groupHtml || '<div class="minn-empty">Nothing to configure here.</div>' }
-			${ ( data.groups || [] ).length ? '<div><button class="minn-btn-primary" id="minn-sset-save">Save changes</button></div>' : '' }
+			${ groupHtml || `<div class="minn-empty">${ esc( __( 'Nothing to configure here.' ) ) }</div>` }
+			${ ( data.groups || [] ).length ? `<div><button class="minn-btn-primary" id="minn-sset-save">${ esc( __( 'Save changes' ) ) }</button></div>` : '' }
 		</div>`;
 		bindChrome();
 
@@ -12008,10 +12008,10 @@
 			if ( softLoadPending( 'menus' ) ) return; // a soft reload owns the view
 			// Menus list known (switching tabs) → keep name tabs. Cold open → bare.
 			if ( ms.menus ) {
-				view.innerHTML = menusToolbarHtml( ms ) + '<div class="minn-loading">Loading menu…</div>';
+				view.innerHTML = menusToolbarHtml( ms ) + `<div class="minn-loading">${ esc( __( 'Loading menu…' ) ) }</div>`;
 				bindMenusTabChrome( view, ms );
 			} else {
-				view.innerHTML = '<div class="minn-loading">Loading menus…</div>';
+				view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading menus…' ) ) }</div>`;
 			}
 			// Single-flight: a re-render while loading must not start another
 			// chain (a resolved-promise .then( render ) here would loop forever).
@@ -12035,7 +12035,7 @@
 		const typeLabel = ( it ) => it.type === 'custom' ? 'Link' : ( it.type === 'taxonomy' ? ( it.object === 'category' ? 'Category' : it.object ) : ( it.object === 'page' ? 'Page' : it.object === 'post' ? 'Post' : it.object || it.type ) );
 		view.innerHTML = `
 		${ menusToolbarHtml( ms, `<div class="minn-toolbar-meta">${ metaLabel( flat.length, 'item' ) }</div>` ) }
-		${ ! ms.menus.length ? '<div class="minn-card minn-empty">No menus yet. Create one to build your site navigation.</div>' : `
+		${ ! ms.menus.length ? `<div class="minn-card minn-empty">${ esc( __( 'No menus yet. Create one to build your site navigation.' ) ) }</div>` : `
 		${ locations.length ? `
 		<div class="minn-card minn-menu-locations">
 			<div class="minn-panel-title">${ esc( __( 'Theme locations' ) ) }</div>
@@ -12072,7 +12072,7 @@
 					<button class="minn-icon-btn sm" data-mimove="in" title="${ esc( __( 'Make child of the item above' ) ) }">⇥</button>
 					<button class="minn-icon-btn sm danger" data-midel="${ it.id }" title="${ esc( __( 'Remove from menu' ) ) }">✕</button>
 				</div>
-			</div>` ).join( '' ) : '<div class="minn-empty">This menu is empty — add pages or links below.</div>' }
+			</div>` ).join( '' ) : `<div class="minn-empty">${ esc( __( 'This menu is empty — add pages or links below.' ) ) }</div>` }
 			${ ms.itemsTotal > 100 ? `<div class="minn-empty" style="padding:10px 0 2px;">Showing the first 100 of ${ ms.itemsTotal } items.</div>` : '' }
 		</div>
 		<div class="minn-card minn-panel-pad minn-menu-add">
@@ -12384,7 +12384,7 @@
 		const view = $( '#minn-view' );
 		const ws = widgetsState();
 		if ( ! ws.sidebars ) {
-			view.innerHTML = '<div class="minn-loading">Loading widgets…</div>';
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading widgets…' ) ) }</div>`;
 			loadWidgets().then( renderIfCurrent( 'widgets' ) ).catch( showErr );
 			return;
 		}
@@ -12424,7 +12424,7 @@
 		view.innerHTML = `
 		${ active.map( ( s ) => sidebarCard( s, false ) ).join( '' ) }
 		${ inactive && ( inactive.widgets || [] ).length ? sidebarCard( inactive, true ) : '' }
-		${ ! active.length ? '<div class="minn-card minn-empty">The active theme registers no widget areas.</div>' : '' }`;
+		${ ! active.length ? `<div class="minn-card minn-empty">${ esc( __( 'The active theme registers no widget areas.' ) ) }</div>` : '' }`;
 
 		$$( '[data-wadd]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
@@ -13020,7 +13020,7 @@
 		const can = it.can || [];
 		const controls = [
 			it.off && it.turnOn
-				? `<button class="lic-menu" data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ it.turnOn.startsWith( 'theme:' ) ? __( 'Switch the site to this theme' ) : __( 'Activate this plugin' ) }">Turn ${ it.turnOn.startsWith( 'theme:' ) ? 'theme' : 'plugin' } on</button>` : '',
+				? `<button class="lic-menu" data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ it.turnOn.startsWith( 'theme:' ) ? __( 'Switch the site to this theme' ) : __( 'Activate this plugin' ) }">${ esc( it.turnOn.startsWith( 'theme:' ) ? __( 'Turn theme on' ) : __( 'Turn plugin on' ) ) }</button>` : '',
 			can.includes( 'activate' ) && it.state !== 'valid'
 				? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || __( 'License key' ) ) }"${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>${ esc( __( 'Activate…' ) ) }</button>` : '',
 			// No link-out on off rows: the vendor's screen does not exist
@@ -13035,7 +13035,7 @@
 		const hasMenu = controls.includes( 'lic-menu' );
 		return `
 		<div class="minn-sys-ext-item minn-lic-item minn-lic-row${ it.off ? ' off' : '' }">
-			<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.kind === 'theme' ? ' <span class="minn-sys-ext-parent">theme</span>' : '' }${ it.category === 'key' ? ` <span class="minn-lic-cat">${ __( 'service key' ) }</span>` : it.category === 'connection' ? ` <span class="minn-lic-cat">${ __( 'connection' ) }</span>` : '' }
+			<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.kind === 'theme' ? ` <span class="minn-sys-ext-parent">${ esc( __( 'theme' ) ) }</span>` : '' }${ it.category === 'key' ? ` <span class="minn-lic-cat">${ __( 'service key' ) }</span>` : it.category === 'connection' ? ` <span class="minn-lic-cat">${ __( 'connection' ) }</span>` : '' }
 				${ meta ? `<div class="minn-sys-lic-meta">${ esc( meta ) }</div>` : '' }
 				${ controls ? `<div class="minn-lic-actions">${ controls }</div>` : '' }
 			</span>
@@ -13689,8 +13689,8 @@
 		return `
 		<div class="minn-card minn-core-banner">
 			<div class="minn-core-info">
-				<div class="minn-panel-title">WordPress ${ esc( core.update.version ) } is available</div>
-				<div class="minn-toggle-desc">You're on ${ esc( core.version ) }. The site enters maintenance mode for a few seconds while core updates.</div>
+				<div class="minn-panel-title">${ sprintf( esc( /* translators: %s: the WordPress version being offered. */ __( 'WordPress %s is available' ) ), esc( core.update.version ) ) }</div>
+				<div class="minn-toggle-desc">${ sprintf( esc( /* translators: %s: the WordPress version currently installed. */ __( 'You\'re on %s. The site enters maintenance mode for a few seconds while core updates.' ) ), esc( core.version ) ) }</div>
 			</div>
 			<button class="minn-btn-primary" id="minn-core-update">${ icon( 'refresh' ) } Update WordPress</button>
 		</div>`;
@@ -14265,7 +14265,7 @@
 							: `${ t.name } theme page` )
 					: '';
 				const shotInner = `
-					${ t.active ? '<span class="minn-status publish minn-theme-badge">Active</span>' : '' }
+					${ t.active ? `<span class="minn-status publish minn-theme-badge">${ esc( __( 'Active' ) ) }</span>` : '' }
 					${ t.update && ! B.caps.updateThemes ? `<span class="minn-badge-update minn-theme-badge-u">Update ${ esc( t.update ) }</span>` : '' }`;
 				const shot = hubHref
 					? `<a class="minn-theme-shot minn-theme-shot-link"${ t.screenshot ? ` style="background-image:url('${ escCssUrl( t.screenshot ) }')"` : '' } href="${ esc( hubHref ) }" target="_blank" rel="noopener" title="${ esc( hubTitle ) }">${ shotInner }</a>`
@@ -14529,7 +14529,7 @@
 		const tx = state.cache.taxonomies;
 		if ( ! c || ( taxTab && ! tx ) ) {
 			view.innerHTML = ( tabsHtml ? `<div class="minn-toolbar">${ tabsHtml }</div>` : '' )
-				+ '<div class="minn-loading">Loading…</div>';
+				+ `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
 			Promise.all( [ c ? null : loadPostTypes(), taxTab && ! tx ? loadTaxonomies() : null ] )
 				.then( () => { if ( onStructure() ) renderStructure(); } ).catch( showErr );
 			return;
@@ -14701,7 +14701,7 @@
 		const view = $( '#minn-view' );
 		const s = state.cache.system;
 		if ( ! s ) {
-			view.innerHTML = '<div class="minn-loading">Reading the system…</div>';
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Reading the system…' ) ) }</div>`;
 			loadSystem().then( renderIfCurrent( 'system' ) ).catch( showErr );
 			return;
 		}
@@ -14751,7 +14751,7 @@
 		const debugCard = showDebug ? `
 			<div class="minn-card minn-sys-debug" id="minn-sys-debug">
 				<div class="minn-sys-card-head">${ icon( 'bug' ) }<span>${ esc( __( 'Debug tools' ) ) }</span>
-					${ cfg.editable ? '<span class="minn-sys-debug-hint">writes wp-config.php</span>' : '' }
+					${ cfg.editable ? `<span class="minn-sys-debug-hint">${ esc( __( 'writes wp-config.php' ) ) }</span>` : '' }
 				</div>
 				${ cfg.editable ? `
 				<div class="minn-sys-toggles">
@@ -14762,7 +14762,7 @@
 								<div class="minn-sys-toggle-desc">${ esc( c.desc ) }</div>
 							</div>
 							${ c.locked
-		? '<span class="minn-sys-locked">defined elsewhere</span>'
+		? `<span class="minn-sys-locked">${ esc( __( 'defined elsewhere' ) ) }</span>`
 		: `<button class="minn-switch${ c.value ? ' on' : '' }" data-const="${ esc( c.name ) }" role="switch" aria-checked="${ c.value }" aria-label="Toggle ${ esc( c.label ) }"><span class="minn-switch-knob"></span></button>` }
 						</div>` ).join( '' ) }
 				</div>` : '' }
@@ -14785,7 +14785,7 @@
 		const ext = s.extensions;
 		const extItem = ( it, activeBadge ) => `
 			<div class="minn-sys-ext-item${ it.active ? '' : ' off' }">
-				<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.parent ? ` <span class="minn-sys-ext-parent">child of ${ esc( it.parent ) }</span>` : '' }${ activeBadge && it.active ? ' <span class="minn-sys-ext-active">active</span>' : '' }</span>
+				<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.parent ? ` <span class="minn-sys-ext-parent">child of ${ esc( it.parent ) }</span>` : '' }${ activeBadge && it.active ? ` <span class="minn-sys-ext-active">${ esc( __( 'active' ) ) }</span>` : '' }</span>
 				<span class="minn-sys-ext-ver mono">${ esc( it.version || '—' ) }</span>
 			</div>`;
 		const extSection = ( label, items, activeBadge ) => items.length ? `
@@ -14934,7 +14934,7 @@
 			</div>
 			${ extCard }
 			${ intCard }
-			<div class="minn-sys-foot">Generated ${ esc( timeAgo( s.generated ) ) }</div>`;
+			<div class="minn-sys-foot">${ sprintf( esc( /* translators: %s: how long ago the report was generated, e.g. "2 minutes ago". */ __( 'Generated %s' ) ), esc( timeAgo( s.generated ) ) ) }</div>`;
 
 		// Sticky jump bar: smooth-scroll to a section, scroll-spy highlights
 		// the one under the bar. The handler lives on the scroller (which
@@ -15062,7 +15062,7 @@
 	function renderSysDetailModal( m ) {
 		const d = m.data;
 		const isAuto = m.kind === 'autoload';
-		let body = '<div class="minn-loading">Loading…</div>';
+		let body = `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
 		if ( d && isAuto ) {
 			body = `
 			<div class="minn-sysd">
@@ -15160,7 +15160,7 @@
 		const paint = () => {
 			const body = $( '#minn-log-body', overlay );
 			if ( ! raw.trim() ) {
-				body.innerHTML = '<span class="minn-log-loading">The log is empty.</span>';
+				body.innerHTML = `<span class="minn-log-loading">${ esc( __( 'The log is empty.' ) ) }</span>`;
 				return;
 			}
 			body.textContent = collapsed ? collapseLogText( raw ) : raw;
@@ -15170,7 +15170,7 @@
 		const load = async () => {
 			const body = $( '#minn-log-body', overlay );
 			const meta = $( '#minn-log-meta', overlay );
-			body.innerHTML = '<span class="minn-log-loading">Reading log…</span>';
+			body.innerHTML = `<span class="minn-log-loading">${ esc( __( 'Reading log…' ) ) }</span>`;
 			try {
 				const r = await api( `minn-admin/v1/system/logs/${ cur }` );
 				raw = r.content || '';
@@ -15184,7 +15184,7 @@
 				paint();
 			} catch ( e ) {
 				raw = '';
-				body.innerHTML = `<span class="minn-log-loading">Couldn’t read the log: ${ esc( e.message ) }</span>`;
+				body.innerHTML = `<span class="minn-log-loading">${ sprintf( esc( /* translators: %s: the error message returned while reading the log. */ __( 'Couldn’t read the log: %s' ) ), esc( e.message ) ) }</span>`;
 			}
 		};
 
@@ -15575,7 +15575,7 @@
 			<div class="minn-db-scroll">
 				<table class="minn-db-grid">
 					<thead><tr>${ d.columns.map( ( c ) => `
-						<th data-dbcol="${ esc( c.name ) }" title="${ esc( c.type ) }">${ esc( c.name ) }${ arrow( c.name ) }${ c.key === 'PRI' ? ' <span class="minn-db-key">PK</span>' : '' }</th>` ).join( '' ) }
+						<th data-dbcol="${ esc( c.name ) }" title="${ esc( c.type ) }">${ esc( c.name ) }${ arrow( c.name ) }${ c.key === 'PRI' ? ` <span class="minn-db-key">${ esc( __( 'PK' ) ) }</span>` : '' }</th>` ).join( '' ) }
 					</tr></thead>
 					<tbody>
 						${ d.rows.length ? d.rows.map( ( r, i ) => `
@@ -15922,7 +15922,7 @@
 			idx = -1;
 			panel.innerHTML = ( matches.slice( 0, 500 ).map( ( o ) =>
 				`<div class="minn-ac-item${ isCurrent( o ) ? ' current' : '' }" data-acv="${ esc( o.value ) }">${ esc( o.label ) }</div>` ).join( '' )
-				|| '<div class="minn-ac-empty">No matches</div>' )
+				|| `<div class="minn-ac-empty">${ esc( __( 'No matches' ) ) }</div>` )
 				+ ( matches.length > 500 ? `<div class="minn-ac-empty">${ matches.length - 500 } more — keep typing…</div>` : '' );
 			panel.hidden = false;
 			openedAt = performance.now();
@@ -16237,7 +16237,7 @@
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Additional CSS' ) ) }</div>
 							<textarea class="minn-input mono minn-css-editor" id="minn-custom-css" rows="18" spellcheck="false" placeholder="${ esc( __( "/* CSS added here loads on every page, after the theme's own stylesheets. */" ) ) }">${ esc( cc.css || '' ) }</textarea>
-							<div class="minn-toggle-desc">The same stylesheet the Customizer's "Additional CSS" edits, loaded after the theme's own styles on every page. It belongs to the active theme (${ esc( cc.theme || '' ) }); switching themes keeps a separate one per theme.</div>
+							<div class="minn-toggle-desc">${ sprintf( esc( /* translators: %s: name of the active theme. */ __( 'The same stylesheet the Customizer\'s "Additional CSS" edits, loaded after the theme\'s own styles on every page. It belongs to the active theme (%s); switching themes keeps a separate one per theme.' ) ), esc( cc.theme || '' ) ) }</div>
 						</div>`
 						: `<div class="minn-editor-locked-note">${ esc( __( "Custom CSS couldn't be loaded." ) ) } <a href="${ esc( B.site.adminUrl ) }customize.php" target="_blank" rel="noopener">${ esc( __( 'Open the Customizer ↗' ) ) }</a></div>`,
 					toggles: '',
@@ -16362,7 +16362,7 @@
 					const TYPE_LABELS = { ai_provider: __( 'AI provider' ), spam_filtering: __( 'Spam filtering' ) };
 					cards = cn.connectors.map( ( c ) => {
 						const pill = c.source === 'none'
-							? '<span class="minn-spam-pill warn">Not connected</span>'
+							? `<span class="minn-spam-pill warn">${ esc( __( 'Not connected' ) ) }</span>`
 							: `<span class="minn-spam-pill ok">${ c.source === 'database' ? 'Connected' : ( c.source === 'constant' ? __( 'Key in wp-config' ) : __( 'Key in environment' ) ) }</span>`;
 						let controls = '';
 						if ( c.method !== 'api_key' ) {
@@ -16370,10 +16370,10 @@
 						} else if ( c.source === 'constant' || c.source === 'env' ) {
 							// Env/constant keys win over the database by core's
 							// precedence — honest lock, no controls.
-							controls = `<div class="minn-toggle-desc">The key is supplied by ${ c.source === 'constant' ? `the <code>${ esc( c.constantName ) }</code> constant in wp-config.php` : `the <code>${ esc( c.envVarName ) }</code> environment variable` }, so it can only be changed there.</div>`;
+							controls = `<div class="minn-toggle-desc">${ c.source === 'constant' ? sprintf( /* translators: %s: name of the PHP constant holding the key. */ __( 'The key is supplied by the <code>%s</code> constant in wp-config.php, so it can only be changed there.' ), esc( c.constantName ) ) : sprintf( /* translators: %s: name of the environment variable holding the key. */ __( 'The key is supplied by the <code>%s</code> environment variable, so it can only be changed there.' ), esc( c.envVarName ) ) }</div>`;
 						} else if ( c.plugin && ! c.plugin.installed ) {
 							controls = `<div class="minn-conn-row">
-								<span class="minn-toggle-desc">Needs the ${ esc( c.name ) } provider plugin before a key can be saved.</span>
+								<span class="minn-toggle-desc">${ sprintf( esc( /* translators: %s: name of the provider plugin. */ __( 'Needs the %s provider plugin before a key can be saved.' ) ), esc( c.name ) ) }</span>
 								${ c.plugin.canInstall ? `<button class="minn-btn-soft" data-conn-install="${ esc( c.plugin.slug ) }">${ esc( __( 'Install & activate' ) ) }</button>` : '' }
 							</div>`;
 						} else if ( c.plugin && ! c.plugin.active ) {
@@ -16382,7 +16382,7 @@
 								${ c.plugin.canActivate ? `<button class="minn-btn-soft" data-conn-activate="${ esc( c.plugin.file ) }">${ esc( __( 'Activate' ) ) }</button>` : '' }
 							</div>`;
 						} else if ( ! c.registered ) {
-							controls = '<div class="minn-toggle-desc">This connector’s key isn’t writable right now: its plugin registers the setting while active.</div>';
+							controls = `<div class="minn-toggle-desc">${ esc( __( 'This connector’s key isn’t writable right now: its plugin registers the setting while active.' ) ) }</div>`;
 						} else {
 							// Plain text + password-manager ignore attributes:
 							// API keys aren't login credentials and the value
@@ -16421,7 +16421,7 @@
 		const view = $( '#minn-view' );
 		const cache = state.cache.settings;
 		if ( ! cache ) {
-			view.innerHTML = '<div class="minn-loading">Loading settings…</div>';
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading settings…' ) ) }</div>`;
 			loadSettings().then( renderIfCurrent( 'settings' ) ).catch( showErr );
 			return;
 		}
@@ -16443,7 +16443,7 @@
 				${ section.fields && section.toggles ? '<div class="minn-divider"></div>' : '' }
 				${ section.toggles ? `<div class="minn-toggle-rows">${ section.toggles }</div>` : '' }
 				${ section.after ? `<div class="minn-divider"></div>${ section.after }` : '' }
-				${ section.noSave ? '' : '<div><button class="minn-btn-primary" id="minn-save-settings">Save changes</button></div>' }
+				${ section.noSave ? '' : `<div><button class="minn-btn-primary" id="minn-save-settings">${ esc( __( 'Save changes' ) ) }</button></div>` }
 			</div>
 		</div>`;
 
@@ -17654,7 +17654,7 @@
 			${ imgBadge ? `<button class="minn-imgtool-badge" type="button" data-imgbadge="1" tabindex="-1">${ esc( imgBadge ) }</button>` : '' }
 			${ ctedBadge ? `<button class="minn-imgtool-badge" type="button" data-ctedbadge="1" tabindex="-1">${ esc( ctedBadge ) }</button>` : '' }
 			${ patternRef ? `<button class="minn-pattern-cover" data-patternedit="${ esc( patternRef ) }" type="button" aria-label="${ esc( __( 'Edit this pattern' ) ) }"><span class="minn-pattern-badge">${ esc( __( 'Edit pattern' ) ) } ↗</span></button>` : '' }
-			<div class="minn-island-preview" data-preview="${ idx }">${ inner || '<div class="minn-island-empty">Dynamic block — rendered on the site</div>' }</div>
+			<div class="minn-island-preview" data-preview="${ idx }">${ inner || `<div class="minn-island-empty">${ esc( __( 'Dynamic block — rendered on the site' ) ) }</div>` }</div>
 		</div>`;
 	}
 
@@ -20360,13 +20360,13 @@
 			? `&nbsp;/&nbsp;<b class="minn-stats-goal${ goalCls }">${ goal.toLocaleString() }</b>`
 			: '';
 		const sessionPart = session
-			? `&nbsp;·&nbsp;<b class="minn-stats-session${ session > 0 ? ' up' : ' down' }">${ session > 0 ? '+' : '' }${ session.toLocaleString() }</b> session`
+			? '&nbsp;·&nbsp;' + sprintf( /* translators: %s: words written this session, signed and in bold. */ __( '%s session' ), `<b class="minn-stats-session${ session > 0 ? ' up' : ' down' }">${ session > 0 ? '+' : '' }${ session.toLocaleString() }</b>` )
 			: '';
 		el.innerHTML = words || session
-			? `<b>${ words.toLocaleString() }</b>${ goalPart } words&nbsp;·&nbsp;<b>${ mins }</b> min${ sessionPart }`
-			: '<b>0</b> words';
+			? sprintf( /* translators: %1$s: word count in bold, optionally followed by a goal. %2$s: reading time in minutes, in bold. */ __( '%1$s words&nbsp;·&nbsp;%2$s min' ), `<b>${ words.toLocaleString() }</b>${ goalPart }`, `<b>${ mins }</b>` ) + sessionPart
+			: sprintf( /* translators: %s: word count, in bold. */ __( '%s words' ), '<b>0</b>' );
 		el.title = goal
-			? `Goal ${ goal.toLocaleString() } words · click to change`
+			? sprintf( /* translators: %s: the word-count goal. */ __( 'Goal %s words · click to change' ), goal.toLocaleString() )
 			: __( 'Click to set a word goal' );
 		// aria-label carries the readable stats for screen readers (the pill
 		// is a button that opens the goal popover — not a live region, so
@@ -21152,7 +21152,7 @@
 						${ [ 'S', 'M', 'T', 'W', 'T', 'F', 'S' ].map( ( w ) => `<span class="minn-dp-wd">${ w }</span>` ).join( '' ) }
 						${ days }
 					</div>
-					<div class="minn-dp-legend" data-dp-legend hidden>Highlighted days already have other ${ restType === 'pages' ? 'pages' : 'posts' }.</div>
+					<div class="minn-dp-legend" data-dp-legend hidden>${ esc( restType === 'pages' ? __( 'Highlighted days already have other pages.' ) : __( 'Highlighted days already have other posts.' ) ) }</div>
 					<div class="minn-dp-time">
 						<span class="minn-side-key">${ esc( __( 'Time' ) ) }</span>
 						<input type="text" class="minn-input minn-dp-time-input" value="${ esc( seed.toLocaleTimeString( undefined, { hour: 'numeric', minute: '2-digit' } ) ) }" spellcheck="false" autocomplete="off">
@@ -21441,7 +21441,7 @@
 						<span class="minn-slug-prefix">/</span>
 						<input class="minn-input minn-slug-input" id="minn-slug-input" value="${ esc( ed.slugValue ) }" placeholder="${ ed.id ? 'post-slug' : 'set on first save' }" autocomplete="off" spellcheck="false"${ ed.id ? '' : ' disabled' }>
 					</div>
-					${ LIVE_STATUSES.includes( ed.status ) ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
+					${ LIVE_STATUSES.includes( ed.status ) ? `<div class="minn-slug-note">${ esc( __( 'Changing this breaks the current URL.' ) ) }</div>` : '' }
 				</div>
 				${ ed.supportsFormat ? `<div>${ esc( __( 'Format' ) ) }
 					<select class="minn-input" id="minn-post-format">
@@ -21449,7 +21449,7 @@
 					</select>
 				</div>` : '' }
 				${ ed.type === 'posts' ? `<div>${ esc( __( 'Categories' ) ) }<div class="minn-chips" id="minn-editor-cats">${
-					cats == null ? '<span class="minn-chip">Loading…</span>'
+					cats == null ? `<span class="minn-chip">${ esc( __( 'Loading…' ) ) }</span>`
 					: cats.map( ( c ) => `<button class="minn-chip pick${ ed.categoryIds.has( c.id ) ? ' sel' : '' }" data-cat="${ c.id }">${ esc( c.name ) }</button>` ).join( '' )
 				}</div></div>` : '' }
 				${ ed.type === 'posts' ? `<div>${ esc( __( 'Tags' ) ) }
@@ -21675,7 +21675,7 @@
 						${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
 						<div class="minn-field-image-actions">
 							<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : __( 'Set image' ) }</button>
-							${ has ? '<button type="button" class="minn-btn-soft danger" data-img-clear>Remove</button>' : '' }
+							${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
 						</div>`;
 					wire();
 				};
@@ -21833,7 +21833,7 @@
 
 	function tagChipsHtml( ed ) {
 		return ( ed.tags || [] ).map( ( t ) => `<button class="minn-chip sel" data-tagchip="${ t.id }" title="${ esc( __( 'Remove tag' ) ) }">${ esc( t.name ) } ×</button>` ).join( '' )
-			|| '<span class="minn-tag-empty">No tags yet</span>';
+			|| `<span class="minn-tag-empty">${ esc( __( 'No tags yet' ) ) }</span>`;
 	}
 
 	function refreshTagChips() {
@@ -22130,7 +22130,7 @@
 				<input type="text" readonly class="minn-input minn-dp-input" id="minn-schedule-input" data-dp="${ esc( dateValue ) }" value="${ esc( dpPretty( dateValue ) ) }" placeholder="${ esc( __( 'Immediately' ) ) }">
 			</div>
 			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
-			${ LIVE_STATUSES.includes( ed.status ) ? '' : '<button class="minn-btn-soft minn-save-draft" id="minn-save-draft-btn">Save draft</button>' }
+			${ LIVE_STATUSES.includes( ed.status ) ? '' : `<button class="minn-btn-soft minn-save-draft" id="minn-save-draft-btn">${ esc( __( 'Save draft' ) ) }</button>` }
 			${ ed.id && ed.link && ed.type !== 'blocks' ? `<a class="minn-side-viewlink" href="${ esc( ed.status === 'publish' ? ed.link : ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) }" target="wp-preview-${ ed.id }">${ ed.status === 'publish' ? __( 'View on site ↗' ) : __( 'Preview draft ↗' ) }</a>` : '' }
 			${ editorPppHtml( ed ) }
 		</div>
@@ -22142,7 +22142,7 @@
 			<div style="display:flex; gap:8px; margin-top:10px;">
 				<button class="minn-btn-soft" id="minn-featured-set">${ esc( __( 'Replace' ) ) }</button>
 				<button class="minn-btn-soft danger" id="minn-featured-remove">${ esc( __( 'Remove' ) ) }</button>
-			</div>` : ed.featuredMedia ? '<div class="minn-session-empty">Loading…</div>' : `
+			</div>` : ed.featuredMedia ? `<div class="minn-session-empty">${ esc( __( 'Loading…' ) ) }</div>` : `
 			<button class="minn-featured-empty" id="minn-featured-set">${ icon( 'img' ) } Set featured image</button>` }
 		</div>` : '' }
 		<div class="minn-side-doors">
@@ -22153,7 +22153,7 @@
 				: '' }
 			${ panelDoors }
 		</div>
-		${ ed.id ? '<button class="minn-trash-link" id="minn-trash-post">Move to trash</button>' : '' }
+		${ ed.id ? `<button class="minn-trash-link" id="minn-trash-post">${ esc( __( 'Move to trash' ) ) }</button>` : '' }
 		<div class="minn-side-card" id="minn-outline-card" hidden>
 			<div class="minn-side-title">${ esc( __( 'Outline' ) ) }</div>
 			<div id="minn-outline"></div>
@@ -22326,7 +22326,7 @@
 		if ( ! title ) return;
 		title.insertAdjacentHTML( 'afterend', `
 			<div class="minn-backup-note" id="minn-backup-note">
-				<span>A newer backup of this ${ esc( editorNoun( ed ).toLowerCase() ) } exists (${ esc( timeAgo( ed.backup.modified ) ) }) \u2014 likely unsaved changes from an earlier session.</span>
+				<span>${ sprintf( esc( /* translators: %1$s: the content type, lowercased, e.g. "post". %2$s: how long ago the backup was written. */ __( 'A newer backup of this %1$s exists (%2$s) — likely unsaved changes from an earlier session.' ) ), esc( editorNoun( ed ).toLowerCase() ), esc( timeAgo( ed.backup.modified ) ) ) }</span>
 				<button class="minn-btn-soft" id="minn-backup-restore" type="button">${ esc( __( 'Restore backup' ) ) }</button>
 				<button class="minn-x-btn" id="minn-backup-dismiss" type="button" title="${ esc( __( 'Dismiss' ) ) }">\u00d7</button>
 			</div>` );
@@ -22461,7 +22461,7 @@
 			<div class="minn-modal minn-lock-card">
 				${ ed.lockHolder.avatar ? `<img class="minn-lock-avatar" src="${ esc( ed.lockHolder.avatar ) }" alt="">` : '' }
 				<h3>${ esc( ed.lockHolder.name ) } is currently editing</h3>
-				<p>This ${ esc( editorNoun( ed ).toLowerCase() ) } is open in another editor session. Taking over will lock them out of saving until they take it back.</p>
+				<p>${ sprintf( esc( /* translators: %s: the content type, lowercased, e.g. "post". */ __( 'This %s is open in another editor session. Taking over will lock them out of saving until they take it back.' ) ), esc( editorNoun( ed ).toLowerCase() ) ) }</p>
 				<div class="minn-lock-actions">
 					<button class="minn-btn-soft" id="minn-lock-back" type="button">${ esc( __( '‹ Back to content' ) ) }</button>
 					<button class="minn-btn-primary" id="minn-lock-take" type="button">${ esc( __( 'Take over' ) ) }</button>
@@ -22569,7 +22569,7 @@
 		const who = ed.drift.who || __( 'Someone else' );
 		title.insertAdjacentHTML( 'afterend', `
 			<div class="minn-backup-note minn-drift-note" id="minn-drift-note" role="alert">
-				<span><b>${ esc( who ) }</b> saved a newer version while you were locked out (${ esc( timeAgo( ed.drift.modified ) ) }). Saving your copy would overwrite it.</span>
+				<span>${ sprintf( /* translators: %1$s: display name of the other editor. %2$s: how long ago they saved. */ __( '<b>%1$s</b> saved a newer version while you were locked out (%2$s). Saving your copy would overwrite it.' ), esc( who ), esc( timeAgo( ed.drift.modified ) ) ) }</span>
 				<button class="minn-btn-soft" id="minn-drift-load" type="button">${ esc( __( 'Load theirs' ) ) }</button>
 				<button class="minn-x-btn" id="minn-drift-keep" type="button" title="${ esc( __( 'Keep my copy' ) ) }">×</button>
 			</div>` );
@@ -22657,7 +22657,7 @@
 		if ( ! title ) return;
 		title.insertAdjacentHTML( 'afterend', `
 			<div class="minn-backup-note" id="minn-localnet-note">
-				<span>This browser has unsaved work on this ${ esc( editorNoun( ed ).toLowerCase() ) } from ${ esc( timeAgo( new Date( ed.localNet.t ).toISOString() ) ) } \u2014 a session ended before it reached the server.</span>
+				<span>${ sprintf( esc( /* translators: %1$s: the content type, lowercased, e.g. "post". %2$s: how long ago the work was left. */ __( 'This browser has unsaved work on this %1$s from %2$s — a session ended before it reached the server.' ) ), esc( editorNoun( ed ).toLowerCase() ), esc( timeAgo( new Date( ed.localNet.t ).toISOString() ) ) ) }</span>
 				<button class="minn-btn-soft" id="minn-localnet-restore" type="button">${ esc( __( 'Restore' ) ) }</button>
 				<button class="minn-x-btn" id="minn-localnet-dismiss" type="button" title="${ esc( __( 'Dismiss' ) ) }">\u00d7</button>
 			</div>` );
@@ -22701,7 +22701,7 @@
 		const view = $( '#minn-view' );
 		if ( ! state.editor || ( state.editorId && state.editor.id !== state.editorId ) || ( ! state.editorId && state.editor.id ) ) {
 			state.editor = null;
-			view.innerHTML = '<div class="minn-loading">Loading editor…</div>';
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading editor…' ) ) }</div>`;
 			loadEditor().then( renderIfCurrent( 'editor' ) ).catch( showErr );
 			return;
 		}
@@ -24455,7 +24455,7 @@
 				<div class="minn-imgedit-grid" id="minn-imgedit-grid"></div>
 				<div class="minn-imgedit-drop-veil" aria-hidden="true">${ esc( __( 'Drop images to add them here' ) ) }</div>
 				<div class="minn-imgedit-foot">
-					${ fixed ? '' : '<button type="button" class="minn-btn-soft" id="minn-imgedit-add">Add images…</button>' }
+					${ fixed ? '' : `<button type="button" class="minn-btn-soft" id="minn-imgedit-add">${ esc( __( 'Add images…' ) ) }</button>` }
 					<span style="flex:1"></span>
 					<button type="button" class="minn-btn-soft" id="minn-imgedit-cancel">${ esc( __( 'Cancel' ) ) }</button>
 					<button type="button" class="minn-btn-primary" id="minn-imgedit-apply">${ esc( __( 'Apply' ) ) }</button>
@@ -24471,7 +24471,7 @@
 				<div class="minn-imgedit-cell">
 				<div class="minn-imgedit-tile" draggable="true" data-i="${ i }" title="${ esc( __( 'Click to replace this image' ) ) }">
 					<img src="${ esc( it.thumb || '' ) }" alt="" loading="lazy">
-					${ it.attachment ? '<span class="minn-imgedit-new">new</span>' : '' }
+					${ it.attachment ? `<span class="minn-imgedit-new">${ esc( __( 'new' ) ) }</span>` : '' }
 					${ fixed ? '' : `<button type="button" class="minn-imgedit-x" data-x="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( __( 'Remove image' ) ) }">×</button>
 					<button type="button" class="minn-imgedit-dup" data-dup="${ i }" title="${ esc( __( 'Duplicate' ) ) }" aria-label="${ esc( __( 'Duplicate image' ) ) }">${ icon( 'copy' ) }</button>` }
 					<span class="minn-imgedit-moves">
@@ -24479,7 +24479,7 @@
 						<button type="button" data-mv="${ i }:1" title="${ esc( __( 'Move later' ) ) }" aria-label="${ esc( __( 'Move image later' ) ) }"${ i === list.length - 1 ? ' disabled' : '' }>›</button>
 					</span>
 				</div>${ canCaption ? `<input class="minn-imgedit-cap" type="text" data-cap="${ i }" value="${ esc( it.caption || '' ) }" placeholder="${ esc( __( 'Caption' ) ) }" aria-label="${ esc( __( 'Caption' ) ) }" spellcheck="true">` : '' }
-				</div>` ).join( '' ) || '<div class="minn-imgedit-empty">No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead.</div>';
+				</div>` ).join( '' ) || `<div class="minn-imgedit-empty">${ esc( __( 'No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead.' ) ) }</div>`;
 			const apply = $( '#minn-imgedit-apply', overlay );
 			if ( apply ) apply.disabled = ! list.length;
 			// Tiles for images that no longer exist say so instead of sitting
@@ -24869,8 +24869,7 @@
 				const panel = bodyEl.querySelector( `[data-inspmore-panel="${ moreBtn.dataset.inspmore }"]` );
 				if ( panel ) {
 					panel.hidden = ! panel.hidden;
-					/* translators: %d: number of collapsed settings fields */
-					moreBtn.textContent = panel.hidden ? sprintf( __( 'More settings (%d)' ), panel.querySelectorAll( '.minn-insp-row' ).length ) : __( 'Fewer settings' );
+					moreBtn.textContent = panel.hidden ? sprintf( /* translators: %d: number of additional settings hidden behind the button. */ __( 'More settings (%d)' ), panel.querySelectorAll( '.minn-insp-row' ).length ) : __( 'Fewer settings' );
 				}
 				return;
 			}
@@ -24997,7 +24996,7 @@
 		}
 		if ( ! rest.length ) return head.map( ( r ) => r.html ).join( '' );
 		return head.map( ( r ) => r.html ).join( '' )
-			+ `<button type="button" class="minn-btn-soft minn-insp-more-btn" data-inspmore="${ esc( prefix ) }">More settings (${ rest.length })</button>`
+			+ `<button type="button" class="minn-btn-soft minn-insp-more-btn" data-inspmore="${ esc( prefix ) }">${ sprintf( esc( /* translators: %d: number of additional settings hidden behind the button. */ __( 'More settings (%d)' ) ), rest.length ) }</button>`
 			+ `<div class="minn-insp-more" data-inspmore-panel="${ esc( prefix ) }" hidden>
 				<input class="minn-input minn-insp-filter" data-inspmore-filter placeholder="${ esc( __( 'Filter settings…' ) ) }">
 				${ rest.map( ( r ) => `<div class="minn-insp-row" data-fkey="${ esc( ( r.label + ' ' + r.key ).toLowerCase() ) }">${ r.html }</div>` ).join( '' ) }
@@ -25300,7 +25299,7 @@
 		const isSlot = insp.islandEl && insp.islandEl.classList && insp.islandEl.classList.contains( 'minn-slot-island' );
 		const imgSection = mediaRebuild || isSlot || ! ( insp.images || [] ).length ? ''
 			: insp.units
-				? `<div class="minn-field-label minn-insp-imghead">Images · ${ insp.units.units.length }${ imgEditBtn }</div>`
+				? `<div class="minn-field-label minn-insp-imghead">${ sprintf( esc( /* translators: %d: number of images in the gallery being inspected. */ __( 'Images · %d' ) ), insp.units.units.length ) }${ imgEditBtn }</div>`
 				: `<div class="minn-field-label">${ esc( __( 'Images' ) ) }</div>` + insp.images.map( ( u, i ) => `
 				<div class="minn-insp-img-row">
 					<img src="${ esc( u ) }" alt="" loading="lazy">
@@ -25359,7 +25358,7 @@
 						<button type="button" data-cdel="${ i }" title="${ esc( __( 'Remove' ) ) }">×</button>
 					</span>` : '' }
 				</div>
-				${ textRow + runRowsC + fields || '<div class="minn-insp-note">No editable settings.</div>' }
+				${ textRow + runRowsC + fields || `<div class="minn-insp-note">${ esc( __( 'No editable settings.' ) ) }</div>` }
 			</div>`;
 		} ).join( '' );
 		// "+ Add" only for types whose schema we can form-edit. Multi-child
@@ -25367,7 +25366,7 @@
 		const addable = structural && ! manyKids ? ( model.addTypes || [] ).filter( ( n ) => types[ n ] && types[ n ].attributes ) : [];
 		const addRow = addable.length ? `<div class="minn-insp-add-row">
 			${ addable.length > 1 ? `<select class="minn-input" id="minn-insp-add-type">${ addable.map( ( n ) => `<option value="${ esc( n ) }">${ esc( n.replace( /^core\//, '' ) ) }</option>` ).join( '' ) }</select>` : '' }
-			<button class="minn-btn-soft" type="button" id="minn-insp-add"${ addable.length === 1 ? ` data-add-type="${ esc( addable[ 0 ] ) }"` : '' }>+ Add ${ addable.length === 1 ? esc( addable[ 0 ].split( '/' ).pop() ) : 'block' }</button>
+			<button class="minn-btn-soft" type="button" id="minn-insp-add"${ addable.length === 1 ? ` data-add-type="${ esc( addable[ 0 ] ) }"` : '' }>${ sprintf( esc( /* translators: %s: name of the block type to add, or the word "block" when there is a choice. */ __( '+ Add %s' ) ), addable.length === 1 ? esc( addable[ 0 ].split( '/' ).pop() ) : esc( __( 'block' ) ) ) }</button>
 		</div>` : '';
 
 		// Embeds and galleries carry their content in saved HTML, so attribute
@@ -25402,7 +25401,7 @@
 					: __( 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' ) }</div>` }
 			</div>
 			<div class="minn-insp-actions">
-				${ editable ? '<button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button>' : '' }
+				${ editable ? `<button class="minn-btn-primary" id="minn-insp-apply" type="button">${ esc( __( 'Apply' ) ) }</button>` : '' }
 				${ state.editor ? `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="${ esc( __( 'Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there.' ) ) }">${ esc( __( 'Block editor ↗' ) ) }</button>` : '' }
 				<span class="minn-insp-move" role="group" aria-label="${ esc( __( 'Move block' ) ) }">
 					<button class="minn-btn-soft" id="minn-insp-move-up" type="button" title="${ esc( __( 'Move up' ) ) }" aria-label="${ esc( __( 'Move block up' ) ) }">${ icon( 'chevron-up' ) }</button>
@@ -25556,7 +25555,7 @@
 		islandEl.classList.add( 'minn-insp-target' );
 		inspectorEl = document.createElement( 'div' );
 		inspectorEl.className = 'minn-inspector';
-		inspectorEl.innerHTML = '<div class="minn-loading" style="padding:24px;">Loading block schema…</div>';
+		inspectorEl.innerHTML = `<div class="minn-loading" style="padding:24px;">${ esc( __( 'Loading block schema…' ) ) }</div>`;
 		document.body.appendChild( inspectorEl );
 		positionInspector( islandEl );
 		document.addEventListener( 'mousedown', inspectorAway, true );
@@ -26612,7 +26611,7 @@
 			</div>
 			<div class="minn-insp-actions">
 				<button class="minn-btn-primary" data-link-apply type="button">${ esc( __( 'Apply' ) ) }</button>
-				${ a ? '<button class="minn-btn-soft danger" data-link-remove type="button">Unlink</button>' : '' }
+				${ a ? `<button class="minn-btn-soft danger" data-link-remove type="button">${ esc( __( 'Unlink' ) ) }</button>` : '' }
 				${ a && href ? `<a class="minn-btn-soft" href="${ esc( href ) }" target="_blank" rel="noopener">${ esc( __( 'Open ↗' ) ) }</a>` : '' }
 			</div>`;
 		document.body.appendChild( linkPop );
@@ -28425,7 +28424,7 @@
 							<span class="minn-bp-label">${ esc( it.label ) }</span>
 							${ it.meta ? `<span class="minn-bp-meta">${ esc( it.meta ) }</span>` : '' }
 						</button>` ).join( '' ) }</div></section>`;
-			} ).join( '' ) || '<div class="minn-insp-note" style="padding:24px;">Nothing matches.</div>';
+			} ).join( '' ) || `<div class="minn-insp-note" style="padding:24px;">${ esc( __( 'Nothing matches.' ) ) }</div>`;
 		};
 		renderGroups( '' );
 		searchInput.addEventListener( 'input', () => renderGroups( searchInput.value ) );
@@ -28900,7 +28899,7 @@
 				<div class="minn-slash-item${ i === selIdx ? ' selected' : '' }" role="option" id="minn-slash-opt-${ i }" data-slash="${ idx }" aria-selected="${ i === selIdx ? 'true' : 'false' }">
 					<span class="minn-slash-icon" aria-hidden="true">${ items[ idx ][ 0 ] }</span>${ esc( items[ idx ][ 1 ] ) }${ items[ idx ][ 4 ] ? `<span class="minn-slash-ns">${ esc( items[ idx ][ 4 ] ) }</span>` : '' }
 				</div>` ).join( '' )
-				+ ( ! query ? `<div class="minn-slash-hint" data-browse role="option" id="minn-slash-browse">Browse all${ hidden ? ` — ${ hidden } more blocks…` : '…' }</div>` : '' );
+				+ ( ! query ? `<div class="minn-slash-hint" data-browse role="option" id="minn-slash-browse">${ hidden ? sprintf( esc( /* translators: %d: number of block types not shown in the shortlist. */ __( 'Browse all — %d more blocks…' ) ), hidden ) : esc( __( 'Browse all…' ) ) }</div>` : '' );
 			$$( '.minn-slash-item', menu ).forEach( ( el ) =>
 				el.addEventListener( 'mousedown', ( e ) => { e.preventDefault(); run( parseInt( el.dataset.slash, 10 ) ); } )
 			);
@@ -29406,7 +29405,7 @@
 					${ ! state.updatingAll ? `<div class="minn-update-all-sub">${ esc( updParts.map( ( p ) => p.label ).join( ' · ' ) ) }</div>` : '' }
 				</div>` : '' }
 				<div class="minn-notif-scroll">
-					${ items == null ? '<div class="minn-loading">Loading…</div>' : ! visible.length ? '<div class="minn-empty">You’re all caught up.</div>' : groups.map( ( g ) => `
+					${ items == null ? `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` : ! visible.length ? `<div class="minn-empty">${ esc( __( 'You’re all caught up.' ) ) }</div>` : groups.map( ( g ) => `
 						<div>
 							<div class="minn-notif-group-label">${ esc( g.label ) }</div>
 							${ g.items.map( ( n ) => `
@@ -29730,12 +29729,12 @@
 				<div class="minn-palette-kind">${ esc( c.kind ) }</div>
 			</div>` );
 		if ( content.length ) {
-			rows.splice( cmds.length, 0, '<div class="minn-palette-sec">Your content</div>' );
+			rows.splice( cmds.length, 0, `<div class="minn-palette-sec">${ esc( __( 'Your content' ) ) }</div>` );
 		}
 		list.innerHTML = filtered.length ? rows.join( '' )
 			: q.length >= 2 && paletteSearch.q !== q
-				? '<div class="minn-palette-empty">Searching your content…</div>'
-				: `<div class="minn-palette-empty">No results for “${ esc( query ) }”</div>`;
+				? `<div class="minn-palette-empty">${ esc( __( 'Searching your content…' ) ) }</div>`
+				: `<div class="minn-palette-empty">${ sprintf( esc( /* translators: %s: the search query. */ __( 'No results for “%s”' ) ), esc( query ) ) }</div>`;
 
 		$$( '.minn-palette-item', list ).forEach( ( el ) =>
 			el.addEventListener( 'click', () => runPaletteItem( parseInt( el.dataset.idx, 10 ) ) )
@@ -29790,8 +29789,8 @@
 						<span class="minn-modal-count">${ Number( m.bucket.value ).toLocaleString() } event${ m.bucket.value === 1 ? '' : 's' }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ items == null ? '<div class="minn-loading">Loading events…</div>'
-					: ! items.length ? '<div class="minn-empty">Nothing recorded in this period.</div>' : `
+					${ items == null ? `<div class="minn-loading">${ esc( __( 'Loading events…' ) ) }</div>`
+					: ! items.length ? `<div class="minn-empty">${ esc( __( 'Nothing recorded in this period.' ) ) }</div>` : `
 					<div class="minn-activity minn-modal-scroll">
 						${ items.map( ( a, i ) => {
 							const linked = a.kind === 'post' || ( a.kind === 'comment' && B.caps.moderate );
@@ -29833,7 +29832,7 @@
 						<button class="minn-icon-btn sm" id="minn-traf-next" title="${ esc( __( 'Next (→)' ) ) }"${ hasNext ? '' : ' disabled' }>›</button>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ d == null ? '<div class="minn-loading">Loading top pages…</div>'
+					${ d == null ? `<div class="minn-loading">${ esc( __( 'Loading top pages…' ) ) }</div>`
 					: ! pages.length && ! refs.length ? `
 					<div class="minn-empty">No page breakdown for this period.${ d.adminUrl ? ` <a class="minn-link-btn" href="${ esc( d.adminUrl ) }" target="_blank" rel="noopener">Open ${ esc( d.source || 'analytics' ) } ↗</a>` : '' }</div>` : `
 					<div class="minn-modal-scroll minn-traf-day">
@@ -29904,7 +29903,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal media wide">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">Edit image · ${ esc( it.name ) }</div>
+						<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: file name of the image being edited. */ __( 'Edit image · %s' ) ), esc( it.name ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-imged-bar">
@@ -30030,13 +30029,13 @@
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">Subscription #${ esc( s.number || listS.number || s.id ) }</div>
+							<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the subscription number. */ __( 'Subscription #%s' ) ), esc( s.number || listS.number || s.id ) ) }</div>
 							<div class="minn-modal-sub">${ esc( subMoney( s, s.total ) ) } · ${ esc( subPeriodLabel( s ) ) }${ s.start_date_gmt ? ' · started ' + esc( timeAgo( s.start_date_gmt ) ) : '' }</div>
 						</div>
 						<span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( ( s.status || '' ).replace( /-/g, ' ' ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading subscription…</div>' : '' }
+					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading subscription…' ) ) }</div>` : '' }
 					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 					${ ! loading && ! m.loadError ? `
 					<div class="minn-order-body">
@@ -30064,7 +30063,7 @@
 							<div class="minn-order-panel">
 								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Items' ) ) }</div>
 								<div class="minn-modal-meta" style="padding:0;">
-									${ items || '<div class="minn-session-empty">No line items.</div>' }
+									${ items || `<div class="minn-session-empty">${ esc( __( 'No line items.' ) ) }</div>` }
 									<div class="minn-side-row" style="margin-top:8px;font-weight:600;"><span class="minn-side-key">${ esc( __( 'Recurring total' ) ) }</span><span>${ esc( subMoney( s, s.total ) ) }</span></div>
 								</div>
 								${ canEdit ? `
@@ -30079,8 +30078,8 @@
 									<span>›</span>
 								</button>` : '' }
 								<div class="minn-side-title" style="margin:16px 0 8px;">${ esc( __( 'Related orders' ) ) }</div>
-								${ related == null ? '<div class="minn-session-empty">Loading…</div>'
-									: ! ( relatedOnly && relatedOnly.length ) ? '<div class="minn-session-empty">No renewal orders yet.</div>'
+								${ related == null ? `<div class="minn-session-empty">${ esc( __( 'Loading…' ) ) }</div>`
+									: ! ( relatedOnly && relatedOnly.length ) ? `<div class="minn-session-empty">${ esc( __( 'No renewal orders yet.' ) ) }</div>`
 									: relatedOnly.map( ( o ) => `
 									<button type="button" class="minn-sub-order-row" data-relorder="${ o.id }">
 										<span>#${ esc( o.number || o.id ) }</span>
@@ -30121,7 +30120,7 @@
 						<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading product…</div>' : '' }
+					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div>` : '' }
 					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 					${ ! loading && ! m.loadError ? productDetailInnerHtml( m ) : '' }
 				</div>
@@ -30146,7 +30145,7 @@
 						${ ! isNew ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ c.status ] || 'draft' }">${ esc( ( c.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading coupon…</div>' : '' }
+					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading coupon…' ) ) }</div>` : '' }
 					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 					${ ! loading && ! m.loadError ? `
 					<div class="minn-order-body">
@@ -30240,7 +30239,7 @@
 						</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ loading ? '<div class="minn-loading" style="padding:28px;">Loading customer…</div>' : '' }
+					${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading customer…' ) ) }</div>` : '' }
 					${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 					${ ! loading && ! m.loadError ? `
 					<div class="minn-order-body">
@@ -30267,7 +30266,7 @@
 						</div>
 						<div class="minn-media-edit">
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Recent orders' ) ) }</div>
-							${ ords == null ? '<div class="minn-loading" style="padding:8px;">Loading orders…</div>' : (
+							${ ords == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading orders…' ) ) }</div>` : (
 								( ords.items || [] ).length ? ( ords.items || [] ).map( ( o ) => `
 									<button type="button" class="minn-order-note" data-open-order="${ o.id }" style="width:100%; text-align:left; cursor:pointer; background:var(--surface2,var(--panel)); border:1px solid var(--border); margin-bottom:8px;">
 										<div class="minn-order-note-meta">
@@ -30276,19 +30275,19 @@
 											<span>${ esc( timeAgo( o.date_created ) ) }</span>
 										</div>
 										<div class="minn-order-note-body">${ esc( ( o.currency_symbol || '$' ) + o.total ) }</div>
-									</button>` ).join( '' ) : '<div class="minn-toggle-desc">No orders for this customer.</div>'
+									</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No orders for this customer.' ) ) }</div>`
 							) }
 						</div>
 						${ B.wcs ? `
 						<div class="minn-media-edit">
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Subscriptions' ) ) }</div>
-							${ m.subscriptions == null ? '<div class="minn-loading" style="padding:8px;">Loading subscriptions…</div>' : (
+							${ m.subscriptions == null ? `<div class="minn-loading" style="padding:8px;">${ esc( __( 'Loading subscriptions…' ) ) }</div>` : (
 								( m.subscriptions.items || [] ).length ? ( m.subscriptions.items || [] ).map( ( sub ) => `
 									<button type="button" class="minn-sub-order-row" data-open-sub="${ sub.id }">
 										<span>#${ esc( sub.number || sub.id ) }</span>
 										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
 										<span>${ esc( subMoney( sub, sub.total ) ) }</span>
-									</button>` ).join( '' ) : '<div class="minn-toggle-desc">No subscriptions for this customer.</div>'
+									</button>` ).join( '' ) : `<div class="minn-toggle-desc">${ esc( __( 'No subscriptions for this customer.' ) ) }</div>`
 							) }
 						</div>` : '' }
 					</div>
@@ -30374,7 +30373,7 @@
 											${ hits.map( ( p ) => `<button type="button" class="minn-ac-item" data-pick-prod="${ p.id }" style="display:block; width:100%; text-align:left;">${ esc( p.name ) }${ p.sku ? ' · ' + esc( p.sku ) : '' } · $${ esc( String( p.price || p.regular_price || '0' ) ) }</button>` ).join( '' ) }
 										</div>` : '' }
 									</div>
-									${ pick ? `<div class="minn-toggle-desc">${ esc( __( 'Selected:' ) ) } <strong>${ esc( pick.name ) }</strong> (#${ pick.id })</div>` : '<div class="minn-toggle-desc">Pick a published product to add.</div>' }
+									${ pick ? `<div class="minn-toggle-desc">${ esc( __( 'Selected:' ) ) } <strong>${ esc( pick.name ) }</strong> (#${ pick.id })</div>` : `<div class="minn-toggle-desc">${ esc( __( 'Pick a published product to add.' ) ) }</div>` }
 									<div><div class="minn-field-label">${ esc( __( 'Quantity' ) ) }</div><input class="minn-input" id="minn-on-qty" type="number" min="1" value="1"></div>
 								</div>
 							</div>
@@ -30500,7 +30499,7 @@
 						<button class="minn-modal-step" id="minn-surface-next" type="button" title="${ esc( __( 'Next (→)' ) ) }"${ sctx.idx >= sctx.items.length - 1 ? ' disabled' : '' }>›</button>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ m.loading ? '<div class="minn-loading">Loading…</div>' : `
+					${ m.loading ? `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>` : `
 					${ isEntry ? entryHtml : isActivity ? activityHtml : `
 					<div class="minn-modal-meta">
 						${ sec ? secRows : rows.map( ( [ k, v ] ) => `<div class="minn-side-row"><span class="minn-side-key">${ esc( k ) }</span><span class="minn-surface-val">${ esc( stripTags( String( v ) ) ) }</span></div>` ).join( '' ) }
@@ -30584,21 +30583,21 @@
 					${ ! isNew ? `
 					<div class="minn-sessions" id="minn-uf-sessions">
 						<div class="minn-side-title" style="margin:0 0 4px;">${ esc( __( 'Sessions' ) ) }</div>
-						${ m.sessions == null ? '<div class="minn-loading" style="padding:14px;">Loading sessions…</div>'
-							: ! m.sessions.length ? '<div class="minn-session-empty">No active sessions.</div>'
+						${ m.sessions == null ? `<div class="minn-loading" style="padding:14px;">${ esc( __( 'Loading sessions…' ) ) }</div>`
+							: ! m.sessions.length ? `<div class="minn-session-empty">${ esc( __( 'No active sessions.' ) ) }</div>`
 							: m.sessions.map( ( sess ) => `
 							<div class="minn-session-row">
 								<div class="minn-session-info">
-									<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ' <span class="minn-session-current">this session</span>' : '' }</div>
+									<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ` <span class="minn-session-current">${ esc( __( 'this session' ) ) }</span>` : '' }</div>
 									<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 								</div>
 								<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 							</div>` ).join( '' ) }
-						${ m.sessions && m.sessions.length ? '<button class="minn-comment-action danger" id="minn-uf-killall" style="margin:10px 0 0;">Sign out everywhere</button>' : '' }
+						${ m.sessions && m.sessions.length ? `<button class="minn-comment-action danger" id="minn-uf-killall" style="margin:10px 0 0;">${ esc( __( 'Sign out everywhere' ) ) }</button>` : '' }
 					</div>` : '' }
 					<div class="minn-modal-actions">
 						<button class="minn-btn-primary" id="minn-uf-save">${ isNew ? __( 'Create user' ) : __( 'Save changes' ) }</button>
-						${ ! isNew && B.caps.deleteUsers && u && u.id !== B.user.id ? '<button class="minn-btn-soft danger" id="minn-uf-delete">Delete user</button>' : '' }
+						${ ! isNew && B.caps.deleteUsers && u && u.id !== B.user.id ? `<button class="minn-btn-soft danger" id="minn-uf-delete">${ esc( __( 'Delete user' ) ) }</button>` : '' }
 					</div>
 				</div>
 			</div>`;
@@ -30612,7 +30611,7 @@
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">${ esc( __( 'Send email' ) ) }</div>
-							<div class="minn-modal-sub">To ${ esc( fmtUserLabel( u.name, u.email ) || 'user' ) }</div>
+							<div class="minn-modal-sub">${ sprintf( esc( /* translators: %s: name or email address the message was sent to. */ __( 'To %s' ) ), esc( fmtUserLabel( u.name, u.email ) || __( 'user' ) ) ) }</div>
 						</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -30726,7 +30725,7 @@
 					<div class="minn-modal-form" style="padding-top:0;">
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Reassign content to' ) ) }</div>
-							${ cands == null ? '<div class="minn-loading" style="padding:12px;">Loading users…</div>' : `
+							${ cands == null ? `<div class="minn-loading" style="padding:12px;">${ esc( __( 'Loading users…' ) ) }</div>` : `
 							<div class="minn-ac" id="minn-ud-reassign-ac">
 								<input class="minn-input minn-ac-input" id="minn-ud-reassign" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" placeholder="${ esc( __( 'Search users…' ) ) }">
 								<div class="minn-ac-panel" hidden></div>
@@ -30783,7 +30782,7 @@
 					<div class="minn-help-body" style="border-bottom:0;">
 						${ m.done
 							? `<p>${ sprintf( /* translators: 1: the word "Done." in bold. 2: the word "Plugins" in bold. */ __( '%1$s Heading to the classic dashboard… Reactivate Minn any time from %2$s, and everything here (content, settings, markup) is exactly as you left it.' ), `<b>${ esc( __( 'Done.' ) ) }</b>`, `<b>${ esc( __( 'Plugins' ) ) }</b>` ) }</p>`
-							: `<p>${ sprintf( /* translators: %s: the /minn-admin/ path, in bold. */ __( 'This turns off the %s dashboard and returns you to the classic wp-admin.' ), '<b>/minn-admin/</b>' ) }</p>
+							: `<p>${ sprintf( /* translators: %s: the /minn-admin/ path, in bold. */ __( 'This turns off the %s dashboard and returns you to the classic wp-admin.' ), `<b>${ esc( __( '/minn-admin/' ) ) }</b>` ) }</p>
 							<p>${ esc( __( 'Nothing is lost: Minn writes native WordPress content and options, and reactivating from the Plugins screen brings this dashboard straight back.' ) ) }</p>` }
 					</div>
 					${ m.done ? '' : `
@@ -30804,10 +30803,10 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide minn-cl-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">What's new · v${ esc( B.version ) }</div>
+						<div class="minn-modal-title">${ sprintf( esc( /* translators: %s: the Minn Admin version. */ __( 'What\'s new · v%s' ) ), esc( B.version ) ) }</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ m.md === null ? '<div class="minn-loading">Loading changelog…</div>'
+					${ m.md === null ? `<div class="minn-loading">${ esc( __( 'Loading changelog…' ) ) }</div>`
 						: `<div class="minn-cl-layout">
 						<nav class="minn-cl-rail" id="minn-cl-rail" aria-label="${ esc( __( 'Versions' ) ) }">
 							${ secs.map( ( s, i ) => `
@@ -31038,9 +31037,9 @@
 						${ cat.q ? `<button type="button" class="minn-pi-card-more" data-pi-more="${ esc( cat.id ) }">${ esc( __( 'Browse more on WordPress.org →' ) ) }</button>` : '' }
 					</div>` ).join( '' ) }
 				</div>` : '';
-			const resultsHtml = m.searching ? '<div class="minn-loading">Searching…</div>'
+			const resultsHtml = m.searching ? `<div class="minn-loading">${ esc( __( 'Searching…' ) ) }</div>`
 				: m.results == null ? ''
-				: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">No results for “${ esc( m.q ) }”.</div>`
+				: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">${ sprintf( esc( /* translators: %s: the search query. */ __( 'No results for “%s”.' ) ), esc( m.q ) ) }</div>`
 				: m.results.map( ( p, i ) => {
 					const local = installedNow( p.slug );
 					const stateLabel = local && ( local.status === 'active' || local.status === 'network-active' ) ? 'Active'
@@ -31066,7 +31065,7 @@
 					<div class="minn-pi-body">
 						<div class="minn-dropzone compact" id="minn-pi-dropzone">
 							${ icon( 'upload' ) }
-							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a plugin %1$s here or %2$s' ), '<b>.zip</b>', `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
+							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a plugin %1$s here or %2$s' ), `<b>${ esc( __( '.zip' ) ) }</b>`, `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
 							<input type="file" id="minn-pi-file" accept=".zip" hidden>
 						</div>
 						<input class="minn-input" id="minn-pi-search" placeholder="${ esc( __( 'Search the WordPress.org directory…' ) ) }" value="${ esc( m.q ) }" autocomplete="off">
@@ -31095,14 +31094,14 @@
 					<div class="minn-pi-body">
 						<div class="minn-dropzone compact" id="minn-ti-dropzone">
 							${ icon( 'upload' ) }
-							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a theme %1$s here or %2$s' ), '<b>.zip</b>', `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
+							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a theme %1$s here or %2$s' ), `<b>${ esc( __( '.zip' ) ) }</b>`, `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
 							<input type="file" id="minn-ti-file" accept=".zip" hidden>
 						</div>
 						<input class="minn-input" id="minn-ti-search" placeholder="${ esc( __( 'Search the WordPress.org theme directory…' ) ) }" value="${ esc( m.q ) }" autocomplete="off">
 						<div class="minn-pi-results">
-							${ m.searching ? '<div class="minn-loading">Searching…</div>'
-							: m.results == null ? '<div class="minn-empty" style="padding:20px;">Search for a theme, or drop a zip above.</div>'
-							: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">No results for “${ esc( m.q ) }”.</div>`
+							${ m.searching ? `<div class="minn-loading">${ esc( __( 'Searching…' ) ) }</div>`
+							: m.results == null ? `<div class="minn-empty" style="padding:20px;">${ esc( __( 'Search for a theme, or drop a zip above.' ) ) }</div>`
+							: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">${ sprintf( esc( /* translators: %s: the search query. */ __( 'No results for “%s”.' ) ), esc( m.q ) ) }</div>`
 							: `<div class="minn-ti-grid">
 								${ m.results.map( ( t, i ) => `
 								<div class="minn-ti-card">
@@ -31128,7 +31127,7 @@
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title">${ m.multi ? __( 'Build a gallery' ) : ( any ? __( 'Insert file' ) : __( 'Insert image' ) ) }</div>
-						${ m.multi ? '<span class="minn-modal-count" id="minn-picker-count">Pick images in order</span>' : '' }
+						${ m.multi ? `<span class="minn-modal-count" id="minn-picker-count">${ esc( __( 'Pick images in order' ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					${ B.caps.upload && ! any ? `
@@ -33176,7 +33175,7 @@
 			out.push( `<p>${ changelogInline( l ) }</p>` );
 		} );
 		flushList();
-		return out.join( '' ) || '<div class="minn-empty">No changelog found.</div>';
+		return out.join( '' ) || `<div class="minn-empty">${ esc( __( 'No changelog found.' ) ) }</div>`;
 	}
 
 	// Split the raw changelog into releases for the modal's version rail
@@ -33525,7 +33524,7 @@
 					</div>
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
-				${ loading ? '<div class="minn-loading" style="padding:28px;">Loading revisions…</div>' : `
+				${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading revisions…' ) ) }</div>` : `
 				${ heat.html }
 				<div class="minn-rev-list" id="minn-rev-list">
 					${ rows.length ? rows.map( ( r, i ) => `
@@ -33592,7 +33591,7 @@
 					<button class="minn-modal-step" id="minn-rev-next" type="button" title="${ esc( __( 'Older (→)' ) ) }"${ idx >= ids.length - 1 ? ' disabled' : '' }>›</button>` : '' }
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
-				${ ! rev ? '<div class="minn-loading">Loading revision…</div>' : bodyHtml }
+				${ ! rev ? `<div class="minn-loading">${ esc( __( 'Loading revision…' ) ) }</div>` : bodyHtml }
 			</div>
 		</div>`;
 	}
@@ -33610,7 +33609,7 @@
 		const preview = $( '#minn-revision-preview' );
 		if ( preview ) {
 			const raw = ( rev.content && ( rev.content.raw != null ? rev.content.raw : rev.content.rendered ) ) || '';
-			preview.innerHTML = stripBlockComments( raw ) || '<span style="color:var(--text3);">(empty)</span>';
+			preview.innerHTML = stripBlockComments( raw ) || `<span style="color:var(--text3);">${ esc( __( '(empty)' ) ) }</span>`;
 			highlightCodeBlocks( preview );
 		}
 		const restore = $( '#minn-restore-rev' );
@@ -34273,7 +34272,7 @@
 		// One paint once everything is here — a late slice re-rendering under
 		// a half-typed name field would wipe it.
 		if ( ! p.user || p.appPasswords == null || p.sessions == null || ! p.languages ) {
-			view.innerHTML = '<div class="minn-loading">Loading your profile…</div>';
+			view.innerHTML = `<div class="minn-loading">${ esc( __( 'Loading your profile…' ) ) }</div>`;
 			return;
 		}
 		const u = p.user;
@@ -34308,7 +34307,7 @@
 								<input class="minn-input minn-ac-input" id="minn-pf-lang" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 								<div class="minn-ac-panel" hidden></div>
 							</div>
-							${ p.languages.canInstall && p.languages.available.length ? '<div class="minn-toggle-desc" style="margin-top:6px;">Any language — ones not yet installed download automatically when you save.</div>' : '' }
+							${ p.languages.canInstall && p.languages.available.length ? `<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( 'Any language — ones not yet installed download automatically when you save.' ) ) }</div>` : '' }
 						</div>
 						<div>
 							<div class="minn-field-label">${ esc( __( 'New password (leave blank to keep)' ) ) }</div>
@@ -34360,7 +34359,7 @@
 							<button class="minn-btn-soft" id="minn-app-copy-curl">${ icon( 'copy' ) } Copy curl example</button>
 						</div>
 					</div>` : '' }
-					${ ! p.appPasswords.length ? '<div class="minn-session-empty">No application passwords yet.</div>'
+					${ ! p.appPasswords.length ? `<div class="minn-session-empty">${ esc( __( 'No application passwords yet.' ) ) }</div>`
 						: p.appPasswords.map( ( ap ) => `
 						<div class="minn-session-row">
 							<div class="minn-session-info">
@@ -34416,16 +34415,16 @@
 				</div>` : '' }
 				<div class="minn-card minn-panel-pad">
 					<div class="minn-panel-title">${ esc( __( 'Sessions' ) ) }</div>
-					${ ! p.sessions.length ? '<div class="minn-session-empty">No active sessions.</div>'
+					${ ! p.sessions.length ? `<div class="minn-session-empty">${ esc( __( 'No active sessions.' ) ) }</div>`
 						: p.sessions.map( ( sess ) => `
 						<div class="minn-session-row">
 							<div class="minn-session-info">
-								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ' <span class="minn-session-current">this session</span>' : '' }</div>
+								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ` <span class="minn-session-current">${ esc( __( 'this session' ) ) }</span>` : '' }</div>
 								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · signed in ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 							</div>
 							<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 						</div>` ).join( '' ) }
-					${ p.sessions.length ? '<button class="minn-comment-action danger" id="minn-pf-killall" style="margin:10px 0 0;">Sign out everywhere</button>' : '' }
+					${ p.sessions.length ? `<button class="minn-comment-action danger" id="minn-pf-killall" style="margin:10px 0 0;">${ esc( __( 'Sign out everywhere' ) ) }</button>` : '' }
 				</div>
 			</div>
 		</div>`;
@@ -34832,7 +34831,7 @@
 	}
 
 	function showErr( e ) {
-		$( '#minn-view' ).innerHTML = `<div class="minn-card minn-empty">Something went wrong: ${ esc( e.message ) }</div>`;
+		$( '#minn-view' ).innerHTML = `<div class="minn-card minn-empty">${ sprintf( esc( /* translators: %s: the error message. */ __( 'Something went wrong: %s' ) ), esc( e.message ) ) }</div>`;
 	}
 
 	// Wrap any not-yet-enhanced tab strip in a scroller with ‹ › buttons that

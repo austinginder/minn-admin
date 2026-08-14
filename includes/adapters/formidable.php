@@ -122,14 +122,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['formidable'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Formidable',
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gate is the filter above (their cap model)
 		'collection' => array(
-			'viewLabel' => 'Entries',
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/formidable/entries',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -143,10 +143,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All entries',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => 'Form' ),
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
 				// created_at is current_time( 'mysql', 1 ) — UTC.
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/formidable/entries/{id}',
@@ -171,11 +171,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 		'manage'     => array(
-			'viewLabel' => 'Forms',
+			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/formidable/forms?manage=1',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => 'Form', 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => 'Entries', 'format' => 'num' ),
+				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
 			),
 			'detail'    => array(),
 			'actions'   => array(
@@ -307,9 +307,9 @@ add_action( 'rest_api_init', function () {
 					}
 				}
 				$meta = array(
-					array( 'label' => 'Form', 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-					array( 'label' => 'Entry', 'value' => '#' . (int) $entry->id ),
-					array( 'label' => 'Submitted', 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $entry->created_at ) ) ) ),
+					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
+					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $entry->id ),
+					array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $entry->created_at ) ) ) ),
 				);
 				if ( ! empty( $entry->ip ) ) {
 					$meta[] = array( 'label' => 'IP', 'value' => (string) $entry->ip );
@@ -317,8 +317,8 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
 					'sections' => array(
-						array( 'title' => 'Answers', 'rows' => $rows ),
-						array( 'title' => 'Submission', 'rows' => $meta ),
+						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
+						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=formidable-entries&frm_action=show&id=' . (int) $entry->id ),
 				) );

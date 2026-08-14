@@ -78,11 +78,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All logins',
 			),
 			'columns'   => array(
-				array( 'key' => 'message', 'label' => 'Event', 'format' => 'title' ),
-				array( 'key' => 'who', 'label' => 'User' ),
+				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'who', 'label' => __( 'User', 'minn-admin' ) ),
 				array( 'key' => 'ip', 'label' => 'IP' ),
-				array( 'key' => 'result', 'label' => 'Result', 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'result', 'label' => __( 'Result', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'skip' => array( 'message' ),

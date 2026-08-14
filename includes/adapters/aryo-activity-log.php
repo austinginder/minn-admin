@@ -60,7 +60,7 @@ function minn_admin_aryo_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
+			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
 			'actions' => array( array( 'label' => __( 'Open Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_aryo_admin_url() ) ),
 		);
 	}
@@ -149,10 +149,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All actions',
 			),
 			'columns'   => array(
-				array( 'key' => 'message', 'label' => 'Event', 'format' => 'title' ),
-				array( 'key' => 'who', 'label' => 'Who' ),
-				array( 'key' => 'action', 'label' => 'Action', 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
+				array( 'key' => 'action', 'label' => __( 'Action', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'skip' => array( 'message' ),

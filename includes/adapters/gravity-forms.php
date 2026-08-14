@@ -38,7 +38,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$can_edit_forms = GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) );
 
 	$surfaces['gravity-forms'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		// Shared with Fluent Forms / Elementor / WPForms adapters when present;
 		// topbar becomes a provider switcher when family size > 1.
 		'family'     => 'forms',
@@ -49,7 +49,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'collection' => array(
-			'viewLabel' => 'Entries',
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'gf/v2/forms/{tab}/entries',
 			'allRoute'  => 'gf/v2/entries',
 			'query'     => 'sorting[key]=date_created&sorting[direction]=DESC',
@@ -65,7 +65,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			// inside the same JSON `search` criteria the search box uses, so
 			// the json form merges with it instead of clobbering the param.
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'active', 'Received' ),
 					array( 'spam', 'Spam' ),
@@ -81,10 +81,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All entries',
 			),
 			'columns'   => array(
-				array( 'key' => '_summary', 'label' => 'Entry', 'format' => 'entry-summary' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+				array( 'key' => '_summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'entry-summary' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 				// GF stores entry dates in UTC (MySQL, no zone).
-				array( 'key' => 'date_created', 'label' => 'Date', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'date_created', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				// The shim returns the whole display model: answers with the
@@ -99,14 +99,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			// until Minn grows a status filter dimension.
 			'actions'   => array(
 				array(
-					'label'  => 'Star',
+					'label'  => __( 'Star', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'gf/v2/entries/{id}/properties',
 					'body'   => array( 'is_starred' => 1 ),
 					'when'   => array( 'key' => 'is_starred', 'equals' => '0' ),
 				),
 				array(
-					'label'  => 'Unstar',
+					'label'  => __( 'Unstar', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'gf/v2/entries/{id}/properties',
 					'body'   => array( 'is_starred' => 0 ),
@@ -127,7 +127,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					// never exercises this route). GFAPI::add_note is reliable.
 					'route'  => 'minn-admin/v1/gf/entries/{id}/notes',
 					'fields' => array(
-						array( 'key' => 'value', 'label' => 'Note', 'type' => 'textarea', 'rows' => 3, 'placeholder' => __( 'Visible on the entry here and in Gravity Forms.', 'minn-admin' ) ),
+						array( 'key' => 'value', 'label' => __( 'Note', 'minn-admin' ), 'type' => 'textarea', 'rows' => 3, 'placeholder' => __( 'Visible on the entry here and in Gravity Forms.', 'minn-admin' ) ),
 					),
 				),
 				array(
@@ -147,7 +147,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'gf/v2/entries/{id}/properties',
 					'body'   => array( 'status' => 'active' ),
@@ -180,7 +180,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'  => 'Star',
+					'label'  => __( 'Star', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'gf/v2/entries/{id}/properties',
 					'body'   => array( 'is_starred' => 1 ),
@@ -194,7 +194,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'is_read', 'equals' => '0' ),
 				),
 				array(
-					'label'   => 'Spam',
+					'label'   => __( 'Spam', 'minn-admin' ),
 					'method'  => 'PUT',
 					'route'   => 'gf/v2/entries/{id}/properties',
 					'body'    => array( 'status' => 'spam' ),
@@ -210,14 +210,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'gf/v2/entries/{id}/properties',
 					'body'   => array( 'status' => 'active' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Trash',
+					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'gf/v2/entries/{id}',
 					'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ),
@@ -238,25 +238,25 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// builder — GF's editor (field types, conditional logic, feeds) is one
 		// click away; Minn covers the daily moves: see, toggle, jump.
 		'manage'     => array(
-			'viewLabel' => 'Forms',
+			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/gf/forms',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => 'Form', 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => 'Entries', 'format' => 'num' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'date_created', 'label' => 'Created', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date_created', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(),
 			'actions'   => array(
 				array(
-					'label'  => 'Deactivate',
+					'label'  => __( 'Deactivate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/gf/forms/{id}/active',
 					'body'   => array( 'active' => false ),
 					'when'   => array( 'key' => 'status', 'equals' => 'active' ),
 				),
 				array(
-					'label'  => 'Activate',
+					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/gf/forms/{id}/active',
 					'body'   => array( 'active' => true ),
@@ -291,7 +291,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		);
 		$surfaces['gravity-forms']['views'] = array(
 			array(
-				'viewLabel' => 'Notifications',
+				'viewLabel' => __( 'Notifications', 'minn-admin' ),
 				'route'     => 'minn-admin/v1/gf/forms/{tab}/notifications',
 				'allRoute'  => 'minn-admin/v1/gf/notifications',
 				'pageQuery' => 'per_page=25&page={page}',
@@ -304,34 +304,34 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'allLabel' => 'All notifications',
 				),
 				'columns'   => array(
-					array( 'key' => 'name', 'label' => 'Notification', 'format' => 'title' ),
-					array( 'key' => 'form', 'label' => 'Form' ),
-					array( 'key' => 'event', 'label' => 'Event' ),
-					array( 'key' => 'to', 'label' => 'To' ),
-					array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+					array( 'key' => 'name', 'label' => __( 'Notification', 'minn-admin' ), 'format' => 'title' ),
+					array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ) ),
+					array( 'key' => 'event', 'label' => __( 'Event', 'minn-admin' ) ),
+					array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ) ),
+					array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 				),
 				'detail'    => array(
 					'skip' => array( 'form_id', 'nid' ),
 					'edit' => array(
 						'route'  => 'minn-admin/v1/gf/notifications/{id}',
 						'fields' => array(
-							array( 'key' => 'name', 'label' => 'Name' ),
+							array( 'key' => 'name', 'label' => __( 'Name', 'minn-admin' ) ),
 							array( 'key' => 'to_email', 'label' => __( 'Send to', 'minn-admin' ), 'required' => false, 'placeholder' => __( 'address@example.com, {admin_email} — email-type notifications only', 'minn-admin' ) ),
-							array( 'key' => 'subject', 'label' => 'Subject' ),
-							array( 'key' => 'message', 'label' => 'Message', 'type' => 'textarea', 'rows' => 8 ),
+							array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ) ),
+							array( 'key' => 'message', 'label' => __( 'Message', 'minn-admin' ), 'type' => 'textarea', 'rows' => 8 ),
 						),
 					),
 				),
 				'actions'   => array(
 					array(
-						'label'  => 'Deactivate',
+						'label'  => __( 'Deactivate', 'minn-admin' ),
 						'method' => 'POST',
 						'route'  => 'minn-admin/v1/gf/notifications/{id}/active',
 						'body'   => array( 'active' => false ),
 						'when'   => array( 'key' => 'status', 'equals' => 'active' ),
 					),
 					array(
-						'label'  => 'Activate',
+						'label'  => __( 'Activate', 'minn-admin' ),
 						'method' => 'POST',
 						'route'  => 'minn-admin/v1/gf/notifications/{id}/active',
 						'body'   => array( 'active' => true ),
@@ -358,7 +358,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			}
 		) ) {
 			$surfaces['gravity-forms']['views'][] = array(
-				'viewLabel' => 'Feeds',
+				'viewLabel' => __( 'Feeds', 'minn-admin' ),
 				'route'     => 'minn-admin/v1/gf/forms/{tab}/feeds',
 				'allRoute'  => 'minn-admin/v1/gf/feeds',
 				'pageQuery' => 'per_page=25&page={page}',
@@ -371,31 +371,31 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'allLabel' => 'All feeds',
 				),
 				'columns'   => array(
-					array( 'key' => 'name', 'label' => 'Feed', 'format' => 'title' ),
-					array( 'key' => 'addon', 'label' => 'Add-on' ),
-					array( 'key' => 'form', 'label' => 'Form' ),
-					array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+					array( 'key' => 'name', 'label' => __( 'Feed', 'minn-admin' ), 'format' => 'title' ),
+					array( 'key' => 'addon', 'label' => __( 'Add-on', 'minn-admin' ) ),
+					array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ) ),
+					array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 				),
 				'detail'    => array(
 					'skip' => array( 'form_id', 'slug' ),
 				),
 				'actions'   => array(
 					array(
-						'label'  => 'Deactivate',
+						'label'  => __( 'Deactivate', 'minn-admin' ),
 						'method' => 'POST',
 						'route'  => 'minn-admin/v1/gf/feeds/{id}/active',
 						'body'   => array( 'active' => false ),
 						'when'   => array( 'key' => 'status', 'equals' => 'active' ),
 					),
 					array(
-						'label'  => 'Activate',
+						'label'  => __( 'Activate', 'minn-admin' ),
 						'method' => 'POST',
 						'route'  => 'minn-admin/v1/gf/feeds/{id}/active',
 						'body'   => array( 'active' => true ),
 						'when'   => array( 'key' => 'status', 'equals' => 'inactive' ),
 					),
 					array(
-						'label'   => 'Delete',
+						'label'   => __( 'Delete', 'minn-admin' ),
 						'method'  => 'DELETE',
 						'route'   => 'minn-admin/v1/gf/feeds/{id}',
 						'confirm' => __( 'Delete this feed permanently? The add-on stops running for its form.', 'minn-admin' ),
@@ -454,21 +454,21 @@ add_action( 'rest_api_init', function () {
 
 			$meta   = array();
 			$meta[] = array(
-				'label' => 'Submitted',
+				'label' => __( 'Submitted', 'minn-admin' ),
 				'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $entry['date_created'] ) ) ),
 			);
 			if ( ! empty( $entry['source_url'] ) ) {
-				$meta[] = array( 'label' => 'Source', 'value' => $entry['source_url'], 'type' => 'url' );
+				$meta[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => $entry['source_url'], 'type' => 'url' );
 			}
 			if ( ! empty( $entry['ip'] ) ) {
 				$meta[] = array( 'label' => 'IP', 'value' => $entry['ip'] );
 			}
 			if ( ! empty( $entry['created_by'] ) ) {
 				$user   = get_userdata( (int) $entry['created_by'] );
-				$meta[] = array( 'label' => 'User', 'value' => $user ? $user->display_name : '#' . $entry['created_by'] );
+				$meta[] = array( 'label' => __( 'User', 'minn-admin' ), 'value' => $user ? $user->display_name : '#' . $entry['created_by'] );
 			}
 			if ( ! empty( $entry['payment_status'] ) ) {
-				$meta[] = array( 'label' => 'Payment', 'value' => trim( $entry['payment_status'] . ' ' . rgar( $entry, 'payment_amount' ) ) );
+				$meta[] = array( 'label' => __( 'Payment', 'minn-admin' ), 'value' => trim( $entry['payment_status'] . ' ' . rgar( $entry, 'payment_amount' ) ) );
 			}
 
 			// Notes (admin + notification logs). Notification notes store raw
@@ -501,11 +501,11 @@ add_action( 'rest_api_init', function () {
 			}
 
 			$sections = array(
-				array( 'title' => 'Responses', 'rows' => $answers ),
-				array( 'title' => 'Submission', 'rows' => $meta ),
+				array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
+				array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 			);
 			if ( $note_rows ) {
-				$sections[] = array( 'title' => 'Notes', 'rows' => $note_rows );
+				$sections[] = array( 'title' => __( 'Notes', 'minn-admin' ), 'rows' => $note_rows );
 			}
 
 			return rest_ensure_response( array(
@@ -1106,7 +1106,7 @@ function minn_admin_gf_map_form_settings( $form ) {
 						$sname            = (string) $select['name'];
 						$options          = $options_of( isset( $select['choices'] ) ? $select['choices'] : array() );
 						if ( $options ) {
-							$outs = array( 'key' => $sname, 'label' => 'Period', 'type' => 'select', 'options' => $options );
+							$outs = array( 'key' => $sname, 'label' => __( 'Period', 'minn-admin' ), 'type' => 'select', 'options' => $options );
 							if ( $show ) {
 								$outs['showWhen'] = $show;
 							}

@@ -32,7 +32,7 @@ function minn_admin_kadence_active() {
 add_filter( 'minn_admin_design_sources', function ( $sources ) {
 	if ( minn_admin_kadence_active() ) {
 		$sources['kadence'] = array(
-			'label' => 'Kadence',
+			'label' => __( 'Kadence', 'minn-admin' ),
 			'route' => 'minn-admin/v1/kadence/designs',
 		);
 	}

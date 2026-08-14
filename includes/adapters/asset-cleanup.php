@@ -72,7 +72,7 @@ function minn_admin_asset_cleanup_option_key() {
 function minn_admin_asset_cleanup_schema() {
 	return array(
 		'optimize' => array(
-			'label'  => 'Optimize',
+			'label'  => __( 'Optimize', 'minn-admin' ),
 			'groups' => array(
 				array(
 					'title'  => 'CSS',
@@ -89,7 +89,7 @@ function minn_admin_asset_cleanup_schema() {
 					),
 				),
 				array(
-					'title'  => 'JavaScript',
+					'title'  => __( 'JavaScript', 'minn-admin' ),
 					'fields' => array(
 						array( 'key' => 'minify_loaded_js', 'label' => __( 'Minify loaded JavaScript', 'minn-admin' ), 'type' => 'toggle' ),
 						array( 'key' => 'combine_loaded_js', 'label' => __( 'Combine loaded JavaScript', 'minn-admin' ), 'type' => 'toggle' ),
@@ -104,7 +104,7 @@ function minn_admin_asset_cleanup_schema() {
 			),
 		),
 		'cleanup'  => array(
-			'label'  => 'Cleanup',
+			'label'  => __( 'Cleanup', 'minn-admin' ),
 			'groups' => array(
 				array(
 					'title'  => __( 'Site-wide cleanup', 'minn-admin' ),
@@ -123,7 +123,7 @@ function minn_admin_asset_cleanup_schema() {
 			),
 		),
 		'fonts'    => array(
-			'label'  => 'Fonts',
+			'label'  => __( 'Fonts', 'minn-admin' ),
 			'groups' => array(
 				array(
 					'title'  => __( 'Google Fonts', 'minn-admin' ),
@@ -136,7 +136,7 @@ function minn_admin_asset_cleanup_schema() {
 			),
 		),
 		'misc'     => array(
-			'label'  => 'Misc',
+			'label'  => __( 'Misc', 'minn-admin' ),
 			'groups' => array(
 				array(
 					'title'  => __( 'Plugin behaviour', 'minn-admin' ),
@@ -317,13 +317,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$tabs[] = array( 'id' => $id, 'label' => $tab['label'] );
 	}
 	$surfaces['asset-cleanup'] = array(
-		'label'    => 'Performance',
+		'label'    => __( 'Performance', 'minn-admin' ),
 		'sub'      => 'Asset CleanUp',
 		'family'   => 'performance',
 		'icon'     => 'gear',
 		'cap'      => 'manage_options',
 		'settings' => array(
-			'label' => 'Settings',
+			'label' => __( 'Settings', 'minn-admin' ),
 			'tabs'  => $tabs,
 			'route' => 'minn-admin/v1/asset-cleanup/settings/{tab}',
 		),

@@ -69,7 +69,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['wp-mail-logging'] = array(
-		'label'      => 'Email',
+		'label'      => __( 'Email', 'minn-admin' ),
 		'sub'        => 'WP Mail Logging',
 		'icon'       => 'send',
 		'family'     => 'mail',
@@ -92,10 +92,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All',
 			),
 			'columns'   => array(
-				array( 'key' => 'subject', 'label' => 'Subject', 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => 'To', 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
-				array( 'key' => 'timestamp', 'label' => 'Date', 'format' => 'ago' ),
+				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'timestamp', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				// v0.18.0: server-built sections (status pill, sandboxed HTML
@@ -104,13 +104,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Resend',
+					'label'   => __( 'Resend', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/wpml/emails/{id}/resend',
 					'method'  => 'POST',
 					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
 				),
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/wpml/emails/{id}',
 					'method'  => 'DELETE',
 					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
@@ -119,7 +119,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Delete',
+					'label'   => __( 'Delete', 'minn-admin' ),
 					'route'   => 'minn-admin/v1/wpml/emails/{id}',
 					'method'  => 'DELETE',
 					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
@@ -259,42 +259,42 @@ add_action( 'rest_api_init', function () {
 			}
 			$failed   = ! ( null === $row->error || '' === $row->error );
 			$delivery = array(
-				array( 'label' => 'Status', 'value' => $failed ? 'failed' : 'sent', 'type' => 'pill' ),
-				array( 'label' => 'To', 'value' => minn_admin_wpml_receivers( $row->receiver ) ),
+				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $failed ? 'failed' : 'sent', 'type' => 'pill' ),
+				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_wpml_receivers( $row->receiver ) ),
 			);
 			$host = '0' === (string) $row->host ? '' : (string) $row->host;
 			if ( '' !== $host ) {
-				$delivery[] = array( 'label' => 'Host', 'value' => $host );
+				$delivery[] = array( 'label' => __( 'Host', 'minn-admin' ), 'value' => $host );
 			}
 			$attachments = trim( (string) $row->attachments, "0 \n" );
 			if ( '' !== $attachments ) {
-				$delivery[] = array( 'label' => 'Attachments', 'value' => $attachments );
+				$delivery[] = array( 'label' => __( 'Attachments', 'minn-admin' ), 'value' => $attachments );
 			}
-			$delivery[] = array( 'label' => 'Date', 'value' => (string) $row->timestamp );
+			$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => (string) $row->timestamp );
 			$body     = (string) $row->message;
 			$sections = array(
-				array( 'title' => 'Delivery', 'rows' => $delivery ),
+				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
 				array(
-					'title' => 'Message',
+					'title' => __( 'Message', 'minn-admin' ),
 					'rows'  => array(
-						array( 'label' => 'Subject', 'value' => (string) $row->subject ),
+						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
 						preg_match( '/<\/?[a-z][^>]*>/i', $body )
-							? array( 'label' => 'Body', 'value' => $body, 'type' => 'html-preview' )
-							: array( 'label' => 'Body', 'value' => $body, 'type' => 'code' ),
+							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
+							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
 					),
 				),
 			);
 			$headers = trim( (string) $row->headers );
 			if ( '' !== $headers ) {
 				$sections[] = array(
-					'title' => 'Headers',
+					'title' => __( 'Headers', 'minn-admin' ),
 					'rows'  => array( array( 'label' => __( 'Raw headers', 'minn-admin' ), 'value' => $headers, 'type' => 'code' ) ),
 				);
 			}
 			if ( $failed ) {
 				$sections[] = array(
-					'title' => 'Failure',
-					'rows'  => array( array( 'label' => 'Error', 'value' => (string) $row->error, 'type' => 'code' ) ),
+					'title' => __( 'Failure', 'minn-admin' ),
+					'rows'  => array( array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $row->error, 'type' => 'code' ) ),
 				);
 			}
 			return rest_ensure_response( array( 'sections' => $sections ) );

@@ -234,13 +234,13 @@ add_action( 'rest_api_init', function () {
 					array(
 						'group'  => 'Episode (default channel)',
 						'fields' => array(
-							array( 'name' => 'url', 'label' => __( 'Media file URL', 'minn-admin' ), 'type' => 'url', 'placeholder' => 'https://example.com/episode.mp3 — clearing this removes the episode' ),
+							array( 'name' => 'url', 'label' => __( 'Media file URL', 'minn-admin' ), 'type' => 'url', 'placeholder' => __( 'https://example.com/episode.mp3 — clearing this removes the episode', 'minn-admin' ) ),
 							array( 'name' => 'size', 'label' => __( 'File size (bytes)', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'Detected by PowerPress when blank', 'minn-admin' ) ),
-							array( 'name' => 'duration', 'label' => 'Duration', 'type' => 'text', 'placeholder' => 'HH:MM:SS' ),
-							array( 'name' => 'subtitle', 'label' => 'Subtitle', 'type' => 'text' ),
+							array( 'name' => 'duration', 'label' => __( 'Duration', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'HH:MM:SS', 'minn-admin' ) ),
+							array( 'name' => 'subtitle', 'label' => __( 'Subtitle', 'minn-admin' ), 'type' => 'text' ),
 							array( 'name' => 'episode_title', 'label' => __( 'Episode title (Apple)', 'minn-admin' ), 'type' => 'text' ),
 							array( 'name' => 'episode_no', 'label' => __( 'Episode number', 'minn-admin' ), 'type' => 'number' ),
-							array( 'name' => 'season', 'label' => 'Season', 'type' => 'number' ),
+							array( 'name' => 'season', 'label' => __( 'Season', 'minn-admin' ), 'type' => 'number' ),
 							array(
 								'name'    => 'episode_type',
 								'label'   => __( 'Episode type', 'minn-admin' ),

@@ -156,11 +156,11 @@ function minn_admin_ninja_forms_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Submissions',
+				'label' => __( 'Submissions', 'minn-admin' ),
 				'value' => number_format_i18n( $subs ),
 				'hint'  => $trash ? number_format_i18n( $trash ) . ' in trash' : 'All stored submissions',
 			),
-			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
 		'actions' => array(
 			array( 'label' => __( 'Open Ninja Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=nf-submissions' ) ),
@@ -174,7 +174,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['ninja-forms'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Ninja Forms',
@@ -182,7 +182,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/ninja-forms/status' ),
 		'cap'        => 'read', // real gate is the filter above (their cap filter)
 		'collection' => array(
-			'viewLabel' => 'Entries',
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/ninja-forms/entries',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -196,7 +196,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All entries',
 			),
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'publish', 'Received' ),
 					array( 'trash', 'Trash' ),
@@ -204,11 +204,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'status={v}',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => 'Form' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '96px' ),
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
 				array( 'key' => 'seq', 'label' => '#', 'format' => 'num' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/ninja-forms/entries/{id}',
@@ -223,7 +223,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/ninja-forms/entries/{id}/restore',
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
@@ -239,7 +239,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Trash',
+					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}/trash',
 					'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ),
@@ -247,7 +247,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/ninja-forms/entries/{id}/restore',
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
@@ -263,12 +263,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 		'manage'     => array(
-			'viewLabel' => 'Forms',
+			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/ninja-forms/forms?manage=1',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => 'Form', 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => 'Entries', 'format' => 'num' ),
-				array( 'key' => 'date', 'label' => 'Created', 'format' => 'ago' ),
+				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
+				array( 'key' => 'date', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(),
 			'actions'   => array(
@@ -420,17 +420,17 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 			$meta = array(
-				array( 'label' => 'Form', 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-				array( 'label' => 'Entry', 'value' => '#' . (int) get_post_meta( $post->ID, '_seq_num', true ) ),
-				array( 'label' => 'Status', 'value' => (string) $post->post_status ),
-				array( 'label' => 'Submitted', 'value' => date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ) ),
+				array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
+				array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) get_post_meta( $post->ID, '_seq_num', true ) ),
+				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $post->post_status ),
+				array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ) ),
 			);
 			return rest_ensure_response( array(
 				'kind'     => 'entry',
 				'status'   => (string) $post->post_status,
 				'sections' => array(
-					array( 'title' => 'Answers', 'rows' => $rows ),
-					array( 'title' => 'Submission', 'rows' => $meta ),
+					array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
+					array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 				),
 				'adminUrl' => admin_url( 'admin.php?page=nf-submissions&form_id=' . $form_id ),
 			) );

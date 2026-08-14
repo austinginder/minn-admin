@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-14T03:16:31+00:00\n"
+"POT-Creation-Date: 2026-08-14T03:44:08+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 
@@ -43,7 +43,7 @@ msgstr ""
 #: includes/adapters/meta-box.php:257
 #: includes/adapters/pods.php:388
 #: assets/js/app.js:14515
-#: assets/js/app.js:32568
+#: assets/js/app.js:32567
 msgid "Custom fields"
 msgstr ""
 
@@ -78,6 +78,10 @@ msgstr ""
 msgid "Newest export"
 msgstr ""
 
+#: includes/adapters/ai1wm.php:115
+msgid "Exports"
+msgstr ""
+
 #: includes/adapters/ai1wm.php:117
 msgid "Manual exports; Minn makes no freshness claims for All-in-One WP Migration."
 msgstr ""
@@ -94,6 +98,41 @@ msgstr ""
 
 #: includes/adapters/ai1wm.php:131
 msgid "Open backups ↗"
+msgstr ""
+
+#: includes/adapters/ai1wm.php:147
+#: includes/adapters/backwpup.php:229
+#: includes/adapters/disembark.php:196
+#: includes/adapters/duplicator.php:107
+#: includes/adapters/updraftplus.php:147
+#: includes/adapters/wpvivid.php:309
+#: includes/class-minn-admin-rest.php:6275
+msgid "Backups"
+msgstr ""
+
+#: includes/adapters/ai1wm.php:159
+msgid "Export"
+msgstr ""
+
+#: includes/adapters/ai1wm.php:160
+#: includes/adapters/backwpup.php:243
+#: includes/adapters/duplicator.php:120
+#: includes/adapters/transients-manager.php:262
+#: includes/adapters/transients-manager.php:378
+#: includes/adapters/updraftplus.php:160
+#: includes/adapters/wpvivid.php:322
+#: assets/js/app.js:15070
+#: assets/js/app.js:15408
+msgid "Size"
+msgstr ""
+
+#: includes/adapters/ai1wm.php:161
+#: includes/adapters/backwpup.php:245
+#: includes/adapters/duplicator.php:123
+#: includes/adapters/gravity-forms.php:247
+#: includes/adapters/network.php:201
+#: includes/adapters/ninja-forms.php:271
+msgid "Created"
 msgstr ""
 
 #: includes/adapters/ai1wm.php:168
@@ -156,13 +195,102 @@ msgstr ""
 #: includes/adapters/stream.php:172
 #: includes/adapters/wordfence.php:59
 #: includes/adapters/wp-activity-log.php:115
-#: assets/js/app.js:30479
+#: assets/js/app.js:30478
 msgid "Activity Log"
+msgstr ""
+
+#: includes/adapters/all-in-one-security.php:224
+#: includes/adapters/all-in-one-security.php:317
+#: includes/adapters/all-in-one-security.php:327
+#: includes/adapters/aryo-activity-log.php:152
+#: includes/adapters/gravity-forms.php:309
+#: includes/adapters/limit-login-attempts.php:157
+#: includes/adapters/simple-history.php:189
+#: includes/adapters/solid-security.php:117
+#: includes/adapters/stream.php:193
+#: includes/adapters/wordfence.php:81
+#: includes/adapters/wp-activity-log.php:139
+#: includes/adapters/wp-activity-log.php:260
+#: includes/adapters/wp-activity-log.php:283
+#: includes/adapters/wp-crontrol.php:277
+#: includes/adapters/wp-mail-smtp.php:65
+#: assets/js/app.js:11020
+msgid "Event"
+msgstr ""
+
+#: includes/adapters/all-in-one-security.php:225
+#: includes/adapters/aryo-activity-log.php:153
+#: includes/adapters/simple-history.php:190
+#: includes/adapters/stream.php:194
+#: includes/adapters/wp-activity-log.php:140
+msgid "Who"
+msgstr ""
+
+#: includes/adapters/all-in-one-security.php:227
+#: includes/adapters/all-in-one-security.php:319
+#: includes/adapters/simple-history.php:191
+msgid "Level"
+msgstr ""
+
+#: includes/adapters/all-in-one-security.php:228
+#: includes/adapters/all-in-one-security.php:318
+#: includes/adapters/aryo-activity-log.php:155
+#: includes/adapters/cf7-flamingo.php:144
+#: includes/adapters/cfdb7.php:220
+#: includes/adapters/elementor-forms.php:133
+#: includes/adapters/everest-forms.php:453
+#: includes/adapters/fluent-forms.php:281
+#: includes/adapters/formidable.php:149
+#: includes/adapters/forminator.php:211
+#: includes/adapters/gravity-smtp.php:451
+#: includes/adapters/limit-login-attempts.php:162
+#: includes/adapters/ninja-forms.php:211
+#: includes/adapters/scrutoscope.php:738
+#: includes/adapters/simple-history.php:194
+#: includes/adapters/solid-security.php:121
+#: includes/adapters/stream.php:196
+#: includes/adapters/sureforms.php:131
+#: includes/adapters/wordfence.php:85
+#: includes/adapters/wp-activity-log.php:142
+#: includes/adapters/wp-activity-log.php:261
+#: includes/adapters/wpforms.php:302
+msgid "When"
 msgstr ""
 
 #: includes/adapters/all-in-one-security.php:313
 #: includes/adapters/wp-activity-log.php:252
 msgid "Event not found."
+msgstr ""
+
+#: includes/adapters/all-in-one-security.php:320
+#: includes/adapters/elementor-forms.php:346
+#: includes/adapters/gravity-forms.php:468
+#: includes/adapters/wordfence.php:82
+#: includes/adapters/wp-activity-log.php:265
+msgid "User"
+msgstr ""
+
+#: includes/adapters/all-in-one-security.php:324
+#: assets/js/app.js:5361
+#: assets/js/app.js:5382
+msgid "Country"
+msgstr ""
+
+#: includes/adapters/all-in-one-security.php:358
+#: includes/adapters/scrutoscope.php:732
+#: includes/adapters/wp-activity-log.php:284
+msgid "Context"
+msgstr ""
+
+#: includes/adapters/all-in-one-security.php:383
+#: includes/adapters/aryo-activity-log.php:63
+#: includes/adapters/simple-history.php:79
+#: includes/adapters/simple-history.php:91
+#: includes/adapters/stream.php:93
+#: includes/adapters/wp-activity-log.php:50
+#: includes/adapters/wp-crontrol.php:329
+#: includes/adapters/wp-crontrol.php:380
+msgid "Events"
 msgstr ""
 
 #: includes/adapters/all-in-one-security.php:383
@@ -243,6 +371,14 @@ msgstr ""
 msgid "Top action (7d)"
 msgstr ""
 
+#: includes/adapters/aryo-activity-log.php:154
+msgid "Action"
+msgstr ""
+
+#: includes/adapters/asset-cleanup.php:75
+msgid "Optimize"
+msgstr ""
+
 #: includes/adapters/asset-cleanup.php:80
 msgid "Minify loaded CSS"
 msgstr ""
@@ -259,6 +395,12 @@ msgstr ""
 msgid "Minify CSS exceptions"
 msgstr ""
 
+#: includes/adapters/asset-cleanup.php:92
+#: includes/adapters/autoptimize.php:35
+#: includes/adapters/perfmatters.php:30
+msgid "JavaScript"
+msgstr ""
+
 #: includes/adapters/asset-cleanup.php:94
 msgid "Minify loaded JavaScript"
 msgstr ""
@@ -269,6 +411,10 @@ msgstr ""
 
 #: includes/adapters/asset-cleanup.php:98
 msgid "Minify JS exceptions"
+msgstr ""
+
+#: includes/adapters/asset-cleanup.php:107
+msgid "Cleanup"
 msgstr ""
 
 #: includes/adapters/asset-cleanup.php:110
@@ -313,6 +459,11 @@ msgstr ""
 msgid "Disable XML-RPC"
 msgstr ""
 
+#: includes/adapters/asset-cleanup.php:126
+#: includes/adapters/perfmatters.php:35
+msgid "Fonts"
+msgstr ""
+
 #: includes/adapters/asset-cleanup.php:129
 msgid "Google Fonts"
 msgstr ""
@@ -327,6 +478,11 @@ msgstr ""
 
 #: includes/adapters/asset-cleanup.php:133
 msgid "Preconnect to fonts.gstatic.com"
+msgstr ""
+
+#: includes/adapters/asset-cleanup.php:139
+#: includes/adapters/autoptimize.php:95
+msgid "Misc"
 msgstr ""
 
 #: includes/adapters/asset-cleanup.php:142
@@ -359,6 +515,23 @@ msgstr ""
 
 #: includes/adapters/asset-cleanup.php:301
 msgid "Could not encode settings."
+msgstr ""
+
+#: includes/adapters/asset-cleanup.php:320
+#: includes/adapters/autoptimize.php:261
+#: includes/adapters/perfmatters.php:252
+#: includes/adapters/performance-lab.php:241
+msgid "Performance"
+msgstr ""
+
+#: includes/adapters/asset-cleanup.php:326
+#: includes/adapters/autoptimize.php:267
+#: includes/adapters/perfmatters.php:258
+#: includes/adapters/redirection.php:179
+#: includes/class-minn-admin-surfaces.php:256
+#: assets/js/app.js:859
+#: assets/js/app.js:1787
+msgid "Settings"
 msgstr ""
 
 #: includes/adapters/autoptimize.php:38
@@ -513,6 +686,95 @@ msgstr ""
 msgid "Only jobs that write to Website Server are listed"
 msgstr ""
 
+#: includes/adapters/backwpup.php:199
+#: includes/adapters/cf7-flamingo.php:131
+#: includes/adapters/cf7-flamingo.php:143
+#: includes/adapters/cfdb7.php:208
+#: includes/adapters/cfdb7.php:219
+#: includes/adapters/code-snippets.php:97
+#: includes/adapters/custom-css-js.php:342
+#: includes/adapters/custom-css-js.php:368
+#: includes/adapters/duplicator.php:122
+#: includes/adapters/elementor-forms.php:120
+#: includes/adapters/elementor-forms.php:132
+#: includes/adapters/eps-301-redirects.php:106
+#: includes/adapters/eps-301-redirects.php:116
+#: includes/adapters/eps-301-redirects.php:127
+#: includes/adapters/everest-forms.php:433
+#: includes/adapters/everest-forms.php:451
+#: includes/adapters/everest-forms.php:543
+#: includes/adapters/everest-forms.php:735
+#: includes/adapters/fluent-forms.php:269
+#: includes/adapters/fluent-forms.php:280
+#: includes/adapters/fluent-forms.php:390
+#: includes/adapters/fluent-smtp.php:346
+#: includes/adapters/fluent-smtp.php:689
+#: includes/adapters/fluent-snippets.php:132
+#: includes/adapters/fluent-snippets.php:157
+#: includes/adapters/forminator.php:200
+#: includes/adapters/forminator.php:210
+#: includes/adapters/forminator.php:263
+#: includes/adapters/gravity-forms.php:68
+#: includes/adapters/gravity-forms.php:85
+#: includes/adapters/gravity-forms.php:246
+#: includes/adapters/gravity-forms.php:311
+#: includes/adapters/gravity-forms.php:377
+#: includes/adapters/gravity-smtp.php:338
+#: includes/adapters/gravity-smtp.php:778
+#: includes/adapters/hfcm.php:203
+#: includes/adapters/hfcm.php:227
+#: includes/adapters/limit-login-attempts.php:161
+#: includes/adapters/network.php:202
+#: includes/adapters/network.php:584
+#: includes/adapters/ninja-forms.php:199
+#: includes/adapters/ninja-forms.php:209
+#: includes/adapters/ninja-forms.php:425
+#: includes/adapters/ottokit.php:143
+#: includes/adapters/ottokit.php:241
+#: includes/adapters/performance-lab.php:255
+#: includes/adapters/post-smtp.php:161
+#: includes/adapters/post-smtp.php:278
+#: includes/adapters/rewrite-rules-inspector.php:172
+#: includes/adapters/rewrite-rules-inspector.php:303
+#: includes/adapters/scrutoscope.php:737
+#: includes/adapters/scrutoscope.php:776
+#: includes/adapters/site-mailer.php:75
+#: includes/adapters/site-mailer.php:177
+#: includes/adapters/solid-security.php:120
+#: includes/adapters/sureforms.php:119
+#: includes/adapters/sureforms.php:130
+#: includes/adapters/sureforms.php:295
+#: includes/adapters/suremails.php:128
+#: includes/adapters/suremails.php:231
+#: includes/adapters/transients-manager.php:263
+#: includes/adapters/transients-manager.php:379
+#: includes/adapters/updraftplus.php:115
+#: includes/adapters/wp-crontrol.php:250
+#: includes/adapters/wp-crontrol.php:400
+#: includes/adapters/wp-mail-logging.php:97
+#: includes/adapters/wp-mail-logging.php:262
+#: includes/adapters/wpcode.php:233
+#: includes/adapters/wpcode.php:258
+#: includes/adapters/wpforms.php:287
+#: includes/adapters/wpforms.php:301
+#: includes/adapters/wpforms.php:524
+#: includes/adapters/wpvivid.php:277
+#: assets/js/app.js:3600
+#: assets/js/app.js:3767
+#: assets/js/app.js:5430
+#: assets/js/app.js:6422
+#: assets/js/app.js:6744
+#: assets/js/app.js:8438
+#: assets/js/app.js:8827
+#: assets/js/app.js:21566
+#: assets/js/app.js:22118
+#: assets/js/app.js:30070
+#: assets/js/app.js:30165
+#: assets/js/app.js:30318
+#: assets/js/app.js:30358
+msgid "Status"
+msgstr ""
+
 #: includes/adapters/backwpup.php:201
 msgid "Jobs run through BackWPup's own cron/auth machinery"
 msgstr ""
@@ -523,6 +785,14 @@ msgstr ""
 
 #: includes/adapters/backwpup.php:223
 msgid "Delete this backup archive from the local folder permanently?"
+msgstr ""
+
+#: includes/adapters/backwpup.php:242
+msgid "Archive"
+msgstr ""
+
+#: includes/adapters/backwpup.php:244
+msgid "Job"
 msgstr ""
 
 #: includes/adapters/backwpup.php:309
@@ -559,7 +829,7 @@ msgid "Backup job started in the background."
 msgstr ""
 
 #: includes/adapters/cache-purge.php:306
-#: assets/js/app.js:32495
+#: assets/js/app.js:32494
 msgid "Redis Object Cache"
 msgstr ""
 
@@ -567,8 +837,104 @@ msgstr ""
 msgid "Inbox messages"
 msgstr ""
 
+#: includes/adapters/cf7-flamingo.php:93
+#: includes/adapters/cf7-flamingo.php:108
+#: includes/adapters/cf7-flamingo.php:232
+#: includes/adapters/cfdb7.php:186
+#: includes/adapters/elementor-forms.php:98
+#: includes/adapters/everest-forms.php:298
+#: includes/adapters/everest-forms.php:325
+#: includes/adapters/everest-forms.php:417
+#: includes/adapters/everest-forms.php:538
+#: includes/adapters/fluent-forms.php:202
+#: includes/adapters/fluent-forms.php:229
+#: includes/adapters/fluent-forms.php:246
+#: includes/adapters/fluent-forms.php:385
+#: includes/adapters/formidable.php:125
+#: includes/adapters/formidable.php:174
+#: includes/adapters/forminator.php:163
+#: includes/adapters/forminator.php:177
+#: includes/adapters/forminator.php:258
+#: includes/adapters/gravity-forms.php:41
+#: includes/adapters/gravity-forms.php:241
+#: includes/adapters/ninja-forms.php:163
+#: includes/adapters/ninja-forms.php:177
+#: includes/adapters/ninja-forms.php:266
+#: includes/adapters/sureforms.php:97
+#: includes/adapters/sureforms.php:369
+#: includes/adapters/wpforms.php:231
+#: includes/adapters/wpforms.php:251
+#: includes/adapters/wpforms.php:265
+msgid "Forms"
+msgstr ""
+
 #: includes/adapters/cf7-flamingo.php:96
 msgid "Open Flamingo ↗"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:116
+#: includes/adapters/cf7-flamingo.php:239
+#: includes/adapters/cfdb7.php:193
+msgid "Messages"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:140
+#: includes/adapters/cf7-flamingo.php:415
+#: includes/adapters/fluent-smtp.php:691
+#: includes/adapters/post-smtp.php:280
+#: includes/adapters/suremails.php:233
+msgid "From"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:141
+#: includes/adapters/fluent-smtp.php:344
+#: includes/adapters/fluent-smtp.php:706
+#: includes/adapters/gravity-forms.php:320
+#: includes/adapters/gravity-smtp.php:336
+#: includes/adapters/gravity-smtp.php:810
+#: includes/adapters/post-smtp.php:159
+#: includes/adapters/post-smtp.php:292
+#: includes/adapters/site-mailer.php:73
+#: includes/adapters/site-mailer.php:193
+#: includes/adapters/suremails.php:126
+#: includes/adapters/suremails.php:248
+#: includes/adapters/wp-mail-logging.php:95
+#: includes/adapters/wp-mail-logging.php:280
+#: assets/js/app.js:30404
+#: assets/js/app.js:30620
+msgid "Subject"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:142
+#: includes/adapters/cf7-flamingo.php:237
+#: includes/adapters/cf7-flamingo.php:412
+#: includes/adapters/cfdb7.php:218
+#: includes/adapters/cfdb7.php:405
+#: includes/adapters/elementor-forms.php:131
+#: includes/adapters/elementor-forms.php:331
+#: includes/adapters/everest-forms.php:450
+#: includes/adapters/everest-forms.php:541
+#: includes/adapters/everest-forms.php:733
+#: includes/adapters/fluent-forms.php:279
+#: includes/adapters/fluent-forms.php:388
+#: includes/adapters/fluent-forms.php:628
+#: includes/adapters/formidable.php:147
+#: includes/adapters/formidable.php:177
+#: includes/adapters/formidable.php:310
+#: includes/adapters/forminator.php:209
+#: includes/adapters/forminator.php:261
+#: includes/adapters/forminator.php:422
+#: includes/adapters/gravity-forms.php:244
+#: includes/adapters/gravity-forms.php:308
+#: includes/adapters/gravity-forms.php:376
+#: includes/adapters/ninja-forms.php:208
+#: includes/adapters/ninja-forms.php:269
+#: includes/adapters/ninja-forms.php:423
+#: includes/adapters/sureforms.php:129
+#: includes/adapters/sureforms.php:293
+#: includes/adapters/wpforms.php:299
+#: includes/adapters/wpforms.php:522
+msgid "Form"
 msgstr ""
 
 #: includes/adapters/cf7-flamingo.php:151
@@ -602,6 +968,27 @@ msgstr ""
 
 #: includes/adapters/cf7-flamingo.php:166
 msgid "Move this message to trash?"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:171
+#: includes/adapters/cf7-flamingo.php:213
+#: includes/adapters/elementor-forms.php:154
+#: includes/adapters/elementor-forms.php:182
+#: includes/adapters/everest-forms.php:482
+#: includes/adapters/everest-forms.php:522
+#: includes/adapters/fluent-forms.php:320
+#: includes/adapters/fluent-forms.php:368
+#: includes/adapters/gravity-forms.php:150
+#: includes/adapters/gravity-forms.php:213
+#: includes/adapters/ninja-forms.php:226
+#: includes/adapters/ninja-forms.php:250
+#: includes/adapters/wpforms.php:358
+#: assets/js/app.js:3619
+#: assets/js/app.js:3924
+#: assets/js/app.js:22661
+#: assets/js/app.js:34012
+#: assets/js/app.js:34413
+msgid "Restore"
 msgstr ""
 
 #: includes/adapters/cf7-flamingo.php:177
@@ -642,12 +1029,36 @@ msgstr ""
 msgid "Open in Flamingo ↗"
 msgstr ""
 
+#: includes/adapters/cf7-flamingo.php:205
+#: includes/adapters/elementor-forms.php:174
+#: includes/adapters/everest-forms.php:514
+#: includes/adapters/fluent-forms.php:359
+#: includes/adapters/gravity-forms.php:220
+#: includes/adapters/ninja-forms.php:242
+#: includes/adapters/sureforms.php:152
+#: includes/adapters/sureforms.php:175
+#: includes/adapters/wpforms.php:351
+#: includes/adapters/wpforms.php:381
+#: assets/js/app.js:871
+msgid "Trash"
+msgstr ""
+
 #: includes/adapters/cf7-flamingo.php:208
 msgid "Move the selected messages to trash?"
 msgstr ""
 
 #: includes/adapters/cf7-flamingo.php:222
 msgid "Delete the selected messages permanently?"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:238
+#: assets/js/app.js:17577
+msgid "Shortcode"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:240
+#: includes/adapters/fluent-forms.php:391
+msgid "Updated"
 msgstr ""
 
 #: includes/adapters/cf7-flamingo.php:245
@@ -662,6 +1073,69 @@ msgstr ""
 msgid "Message not found."
 msgstr ""
 
+#: includes/adapters/cf7-flamingo.php:403
+#: includes/adapters/cfdb7.php:401
+#: includes/adapters/elementor-forms.php:325
+#: includes/adapters/everest-forms.php:736
+#: includes/adapters/fluent-forms.php:622
+#: includes/adapters/formidable.php:312
+#: includes/adapters/forminator.php:424
+#: includes/adapters/gravity-forms.php:457
+#: includes/adapters/ninja-forms.php:426
+#: includes/adapters/sureforms.php:299
+#: includes/adapters/wpforms.php:527
+msgid "Submitted"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:419
+#: includes/adapters/eps-301-redirects.php:104
+#: includes/adapters/fluent-forms.php:631
+#: includes/adapters/fluent-smtp.php:694
+#: includes/adapters/gravity-forms.php:461
+#: includes/adapters/redirection.php:110
+#: includes/adapters/rewrite-rules-inspector.php:170
+#: includes/adapters/rewrite-rules-inspector.php:302
+#: includes/adapters/safe-redirect-manager.php:84
+#: includes/adapters/scrutoscope.php:775
+#: includes/adapters/simple-301-redirects.php:48
+#: includes/adapters/site-mailer.php:181
+#: includes/adapters/stream.php:195
+msgid "Source"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:425
+#: includes/adapters/fluent-forms.php:638
+msgid "Client"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:434
+#: includes/adapters/gravity-forms.php:197
+#: includes/adapters/network.php:193
+msgid "Spam"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:442
+#: includes/adapters/cfdb7.php:415
+#: includes/adapters/elementor-forms.php:363
+#: includes/adapters/fluent-forms.php:648
+#: includes/adapters/gravity-forms.php:504
+msgid "Responses"
+msgstr ""
+
+#: includes/adapters/cf7-flamingo.php:443
+#: includes/adapters/cfdb7.php:416
+#: includes/adapters/elementor-forms.php:364
+#: includes/adapters/everest-forms.php:756
+#: includes/adapters/fluent-forms.php:649
+#: includes/adapters/formidable.php:321
+#: includes/adapters/forminator.php:430
+#: includes/adapters/gravity-forms.php:505
+#: includes/adapters/ninja-forms.php:433
+#: includes/adapters/sureforms.php:305
+#: includes/adapters/wpforms.php:539
+msgid "Submission"
+msgstr ""
+
 #: includes/adapters/cf7-flamingo.php:464
 msgid "Message deleted permanently."
 msgstr ""
@@ -673,12 +1147,35 @@ msgstr ""
 msgid "Moved to trash."
 msgstr ""
 
+#: includes/adapters/cf7-flamingo.php:489
+msgid "spam"
+msgstr ""
+
 #: includes/adapters/cf7-flamingo.php:523
 msgid "Only trashed messages can be restored."
 msgstr ""
 
 #: includes/adapters/cf7-flamingo.php:527
 msgid "Message restored."
+msgstr ""
+
+#: includes/adapters/cfdb7.php:217
+#: includes/adapters/elementor-forms.php:130
+#: includes/adapters/everest-forms.php:449
+#: includes/adapters/everest-forms.php:734
+#: includes/adapters/fluent-forms.php:278
+#: includes/adapters/formidable.php:146
+#: includes/adapters/formidable.php:311
+#: includes/adapters/forminator.php:208
+#: includes/adapters/forminator.php:423
+#: includes/adapters/gravity-forms.php:84
+#: includes/adapters/ninja-forms.php:207
+#: includes/adapters/ninja-forms.php:424
+#: includes/adapters/sureforms.php:128
+#: includes/adapters/sureforms.php:294
+#: includes/adapters/wpforms.php:298
+#: includes/adapters/wpforms.php:523
+msgid "Entry"
 msgstr ""
 
 #: includes/adapters/cfdb7.php:227
@@ -695,6 +1192,39 @@ msgstr ""
 
 #: includes/adapters/cfdb7.php:240
 msgid "Open in CFDB7 ↗"
+msgstr ""
+
+#: includes/adapters/cfdb7.php:246
+#: includes/adapters/code-snippets.php:168
+#: includes/adapters/custom-css-js.php:402
+#: includes/adapters/custom-css-js.php:425
+#: includes/adapters/eps-301-redirects.php:142
+#: includes/adapters/fluent-smtp.php:378
+#: includes/adapters/fluent-smtp.php:387
+#: includes/adapters/fluent-snippets.php:217
+#: includes/adapters/gravity-forms.php:398
+#: includes/adapters/gravity-smtp.php:357
+#: includes/adapters/gravity-smtp.php:366
+#: includes/adapters/hfcm.php:260
+#: includes/adapters/hfcm.php:283
+#: includes/adapters/post-smtp.php:177
+#: includes/adapters/post-smtp.php:186
+#: includes/adapters/redirection.php:165
+#: includes/adapters/safe-redirect-manager.php:123
+#: includes/adapters/simple-301-redirects.php:82
+#: includes/adapters/site-mailer.php:83
+#: includes/adapters/site-mailer.php:92
+#: includes/adapters/suremails.php:136
+#: includes/adapters/suremails.php:145
+#: includes/adapters/transients-manager.php:387
+#: includes/adapters/wp-mail-logging.php:113
+#: includes/adapters/wp-mail-logging.php:122
+#: includes/adapters/wpcode.php:318
+#: assets/js/app.js:3620
+#: assets/js/app.js:26228
+#: assets/js/app.js:26234
+#: assets/js/app.js:30211
+msgid "Delete"
 msgstr ""
 
 #: includes/adapters/cfdb7.php:249
@@ -729,8 +1259,90 @@ msgstr ""
 msgid "Marked as unread."
 msgstr ""
 
+#: includes/adapters/code-snippets.php:44
+#: includes/adapters/custom-css-js.php:311
+#: includes/adapters/fluent-snippets.php:101
+#: includes/adapters/gravity-forms.php:318
+#: includes/adapters/hfcm.php:174
+#: includes/adapters/network.php:580
+#: includes/adapters/transients-manager.php:259
+#: includes/adapters/transients-manager.php:375
+#: includes/adapters/wpcode.php:203
+#: assets/js/app.js:5364
+#: assets/js/app.js:7104
+#: assets/js/app.js:7454
+#: assets/js/app.js:7462
+#: assets/js/app.js:7818
+#: assets/js/app.js:9292
+#: assets/js/app.js:9421
+#: assets/js/app.js:14553
+#: assets/js/app.js:14597
+#: assets/js/app.js:30046
+#: assets/js/app.js:30260
+#: assets/js/app.js:30313
+msgid "Name"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:45
+#: includes/adapters/fluent-snippets.php:102
+#: assets/js/app.js:9425
+#: assets/js/app.js:29988
+#: assets/js/app.js:30172
+msgid "Description"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:48
+#: includes/adapters/custom-css-js.php:314
+#: includes/adapters/fluent-snippets.php:105
+#: includes/adapters/hfcm.php:177
+#: includes/adapters/ottokit.php:144
+#: includes/adapters/perfmatters.php:32
+#: includes/adapters/redirection.php:112
+#: includes/adapters/safe-redirect-manager.php:86
+#: includes/adapters/wpcode.php:207
+#: assets/js/app.js:8827
+#: assets/js/app.js:30157
+#: assets/js/app.js:30175
+msgid "Code"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:54
+#: includes/adapters/code-snippets.php:96
+#: includes/adapters/transients-manager.php:260
+#: includes/adapters/transients-manager.php:377
+msgid "Scope"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:55
+#: includes/adapters/code-snippets.php:98
+#: includes/adapters/custom-css-js.php:324
+#: includes/adapters/custom-css-js.php:369
+#: includes/adapters/fluent-snippets.php:113
+#: includes/adapters/fluent-snippets.php:158
+#: includes/adapters/gravity-smtp.php:432
+#: includes/adapters/wpcode.php:215
+#: includes/adapters/wpcode.php:259
+msgid "Priority"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:56
+#: includes/adapters/fluent-snippets.php:114
+#: includes/adapters/scrutoscope.php:252
+#: includes/adapters/wpcode.php:216
+#: assets/js/app.js:21455
+msgid "Tags"
+msgstr ""
+
 #: includes/adapters/code-snippets.php:56
 msgid "media, sample"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:67
+#: includes/adapters/custom-css-js.php:328
+#: includes/adapters/fluent-snippets.php:118
+#: includes/adapters/hfcm.php:189
+#: includes/adapters/wpcode.php:220
+msgid "Snippets"
 msgstr ""
 
 #: includes/adapters/code-snippets.php:83
@@ -738,6 +1350,61 @@ msgstr ""
 #: includes/adapters/hfcm.php:212
 #: includes/adapters/wpcode.php:242
 msgid "Add snippet"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:95
+#: includes/adapters/custom-css-js.php:366
+#: includes/adapters/fluent-snippets.php:155
+#: includes/adapters/hfcm.php:225
+#: includes/adapters/wpcode.php:256
+msgid "Snippet"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:100
+#: includes/adapters/custom-css-js.php:370
+#: includes/adapters/fluent-snippets.php:159
+#: includes/adapters/hfcm.php:228
+#: includes/adapters/wpcode.php:260
+#: assets/js/app.js:3580
+msgid "Modified"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:126
+#: includes/adapters/code-snippets.php:154
+#: includes/adapters/custom-css-js.php:384
+#: includes/adapters/custom-css-js.php:411
+#: includes/adapters/fluent-snippets.php:176
+#: includes/adapters/fluent-snippets.php:203
+#: includes/adapters/gravity-forms.php:259
+#: includes/adapters/gravity-forms.php:334
+#: includes/adapters/gravity-forms.php:391
+#: includes/adapters/hfcm.php:242
+#: includes/adapters/hfcm.php:269
+#: includes/adapters/performance-lab.php:260
+#: includes/adapters/wpcode.php:277
+#: includes/adapters/wpcode.php:304
+#: assets/js/app.js:13370
+#: assets/js/app.js:14284
+#: assets/js/app.js:16382
+msgid "Activate"
+msgstr ""
+
+#: includes/adapters/code-snippets.php:133
+#: includes/adapters/code-snippets.php:161
+#: includes/adapters/custom-css-js.php:391
+#: includes/adapters/custom-css-js.php:418
+#: includes/adapters/fluent-snippets.php:183
+#: includes/adapters/fluent-snippets.php:210
+#: includes/adapters/gravity-forms.php:252
+#: includes/adapters/gravity-forms.php:327
+#: includes/adapters/gravity-forms.php:384
+#: includes/adapters/hfcm.php:249
+#: includes/adapters/hfcm.php:276
+#: includes/adapters/performance-lab.php:266
+#: includes/adapters/wpcode.php:284
+#: includes/adapters/wpcode.php:311
+#: assets/js/app.js:13031
+msgid "Deactivate"
 msgstr ""
 
 #: includes/adapters/code-snippets.php:140
@@ -796,6 +1463,24 @@ msgstr ""
 msgid "/* your CSS */"
 msgstr ""
 
+#: includes/adapters/custom-css-js.php:320
+#: assets/js/app.js:33932
+#: assets/js/app.js:34305
+msgid "Language"
+msgstr ""
+
+#: includes/adapters/custom-css-js.php:321
+msgid "Where"
+msgstr ""
+
+#: includes/adapters/custom-css-js.php:322
+msgid "Side"
+msgstr ""
+
+#: includes/adapters/custom-css-js.php:323
+msgid "Linking"
+msgstr ""
+
 #: includes/adapters/custom-css-js.php:351
 msgid "Add code"
 msgstr ""
@@ -838,6 +1523,13 @@ msgstr ""
 
 #: includes/adapters/disembark.php:123
 msgid "Last scan"
+msgstr ""
+
+#: includes/adapters/disembark.php:132
+#: includes/class-minn-admin-rest.php:6400
+#: includes/class-minn-admin-surfaces.php:254
+#: assets/js/app.js:861
+msgid "Database"
 msgstr ""
 
 #: includes/adapters/disembark.php:134
@@ -892,6 +1584,14 @@ msgstr ""
 msgid "Scan session"
 msgstr ""
 
+#: includes/adapters/disembark.php:210
+msgid "Chunks"
+msgstr ""
+
+#: includes/adapters/disembark.php:212
+msgid "Scanned"
+msgstr ""
+
 #: includes/adapters/disembark.php:216
 msgid "Delete session files"
 msgstr ""
@@ -902,6 +1602,14 @@ msgstr ""
 
 #: includes/adapters/disembark.php:268
 msgid "No such session."
+msgstr ""
+
+#: includes/adapters/duplicator.php:119
+msgid "Package"
+msgstr ""
+
+#: includes/adapters/duplicator.php:121
+msgid "By"
 msgstr ""
 
 #: includes/adapters/duplicator.php:130
@@ -928,12 +1636,36 @@ msgstr ""
 msgid "Newest package"
 msgstr ""
 
+#: includes/adapters/duplicator.php:227
+msgid "Packages"
+msgstr ""
+
 #: includes/adapters/duplicator.php:229
 msgid "Manual builds; Minn makes no freshness claims for Duplicator."
 msgstr ""
 
 #: includes/adapters/duplicator.php:238
 msgid "Build a package ↗"
+msgstr ""
+
+#: includes/adapters/elementor-forms.php:105
+#: includes/adapters/everest-forms.php:425
+#: includes/adapters/everest-forms.php:542
+#: includes/adapters/fluent-forms.php:254
+#: includes/adapters/fluent-forms.php:389
+#: includes/adapters/formidable.php:132
+#: includes/adapters/formidable.php:178
+#: includes/adapters/forminator.php:159
+#: includes/adapters/forminator.php:185
+#: includes/adapters/forminator.php:262
+#: includes/adapters/gravity-forms.php:52
+#: includes/adapters/gravity-forms.php:245
+#: includes/adapters/ninja-forms.php:185
+#: includes/adapters/ninja-forms.php:270
+#: includes/adapters/sureforms.php:105
+#: includes/adapters/sureforms.php:353
+#: includes/adapters/wpforms.php:273
+msgid "Entries"
 msgstr ""
 
 #: includes/adapters/elementor-forms.php:140
@@ -971,6 +1703,11 @@ msgstr ""
 #: includes/adapters/elementor-forms.php:419
 #: includes/adapters/elementor-forms.php:437
 msgid "Submission not found."
+msgstr ""
+
+#: includes/adapters/elementor-forms.php:335
+#: assets/js/app.js:1494
+msgid "Page"
 msgstr ""
 
 #: includes/adapters/elementor-forms.php:382
@@ -1026,6 +1763,25 @@ msgstr ""
 #: includes/adapters/simple-301-redirects.php:157
 #: includes/adapters/simple-301-redirects.php:183
 msgid "Source and target are both required."
+msgstr ""
+
+#: includes/adapters/eps-301-redirects.php:91
+#: includes/adapters/redirection.php:21
+#: includes/adapters/safe-redirect-manager.php:71
+#: includes/adapters/simple-301-redirects.php:35
+msgid "Redirects"
+msgstr ""
+
+#: includes/adapters/eps-301-redirects.php:105
+#: includes/adapters/redirection.php:111
+#: includes/adapters/safe-redirect-manager.php:85
+#: includes/adapters/simple-301-redirects.php:49
+msgid "Target"
+msgstr ""
+
+#: includes/adapters/eps-301-redirects.php:107
+#: includes/adapters/redirection.php:113
+msgid "Hits"
 msgstr ""
 
 #: includes/adapters/eps-301-redirects.php:110
@@ -1106,6 +1862,10 @@ msgstr ""
 msgid "Top redirect"
 msgstr ""
 
+#: includes/adapters/eps-301-redirects.php:198
+msgid "404 log"
+msgstr ""
+
 #: includes/adapters/eps-301-redirects.php:256
 #: includes/adapters/safe-redirect-manager.php:37
 #: includes/adapters/simple-301-redirects.php:187
@@ -1133,6 +1893,11 @@ msgstr ""
 #: includes/adapters/wpforms.php:230
 #: includes/adapters/wpforms.php:250
 msgid "Unread entries"
+msgstr ""
+
+#: includes/adapters/everest-forms.php:297
+#: includes/adapters/fluent-forms.php:201
+msgid "0 total"
 msgstr ""
 
 #: includes/adapters/everest-forms.php:301
@@ -1223,6 +1988,15 @@ msgstr ""
 #: includes/adapters/wpforms.php:561
 #: includes/adapters/wpforms.php:595
 msgid "Entry not found"
+msgstr ""
+
+#: includes/adapters/everest-forms.php:755
+#: includes/adapters/formidable.php:320
+#: includes/adapters/forminator.php:429
+#: includes/adapters/ninja-forms.php:432
+#: includes/adapters/sureforms.php:304
+#: includes/adapters/wpforms.php:538
+msgid "Answers"
 msgstr ""
 
 #: includes/adapters/everest-forms.php:783
@@ -1330,6 +2104,11 @@ msgstr ""
 msgid "Logged emails"
 msgstr ""
 
+#: includes/adapters/fluent-smtp.php:265
+#: includes/adapters/fluent-smtp.php:476
+msgid "Connections"
+msgstr ""
+
 #: includes/adapters/fluent-smtp.php:282
 #: includes/adapters/post-smtp.php:118
 #: includes/adapters/redirection.php:291
@@ -1349,6 +2128,77 @@ msgstr ""
 #: includes/adapters/gravity-forms.php:319
 #: includes/adapters/gravity-smtp.php:1039
 msgid "Send to"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:315
+#: includes/adapters/gravity-smtp.php:313
+#: includes/adapters/gravity-smtp.php:385
+#: includes/adapters/network.php:581
+#: includes/adapters/post-smtp.php:138
+#: includes/adapters/site-mailer.php:52
+#: includes/adapters/suremails.php:105
+#: includes/adapters/wp-mail-logging.php:72
+#: includes/adapters/wp-mail-smtp.php:46
+#: assets/js/app.js:5350
+#: assets/js/app.js:5365
+#: assets/js/app.js:9010
+#: assets/js/app.js:30047
+#: assets/js/app.js:30261
+#: assets/js/app.js:30357
+#: assets/js/app.js:30563
+#: assets/js/app.js:33919
+#: assets/js/app.js:34292
+msgid "Email"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:326
+#: includes/adapters/gravity-smtp.php:488
+#: includes/adapters/perfmatters.php:29
+#: includes/adapters/redirection.php:182
+msgid "General"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:345
+#: includes/adapters/fluent-smtp.php:690
+#: includes/adapters/gravity-forms.php:310
+#: includes/adapters/gravity-smtp.php:337
+#: includes/adapters/gravity-smtp.php:779
+#: includes/adapters/post-smtp.php:160
+#: includes/adapters/post-smtp.php:279
+#: includes/adapters/site-mailer.php:74
+#: includes/adapters/site-mailer.php:178
+#: includes/adapters/suremails.php:127
+#: includes/adapters/suremails.php:232
+#: includes/adapters/wp-mail-logging.php:96
+#: includes/adapters/wp-mail-logging.php:263
+msgid "To"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:347
+#: includes/adapters/fluent-smtp.php:699
+#: includes/adapters/gravity-forms.php:87
+#: includes/adapters/gravity-smtp.php:340
+#: includes/adapters/gravity-smtp.php:434
+#: includes/adapters/gravity-smtp.php:802
+#: includes/adapters/post-smtp.php:162
+#: includes/adapters/post-smtp.php:285
+#: includes/adapters/site-mailer.php:76
+#: includes/adapters/site-mailer.php:185
+#: includes/adapters/suremails.php:129
+#: includes/adapters/suremails.php:240
+#: includes/adapters/updraftplus.php:162
+#: includes/adapters/wp-mail-logging.php:98
+#: includes/adapters/wp-mail-logging.php:273
+#: includes/adapters/wp-mail-smtp.php:68
+#: includes/adapters/wpvivid.php:326
+msgid "Date"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:356
+#: includes/adapters/gravity-smtp.php:350
+#: includes/adapters/post-smtp.php:171
+#: includes/adapters/wp-mail-logging.php:107
+msgid "Resend"
 msgstr ""
 
 #: includes/adapters/fluent-smtp.php:359
@@ -1390,6 +2240,11 @@ msgstr ""
 
 #: includes/adapters/fluent-smtp.php:487
 msgid "Fallback connection"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:495
+#: includes/adapters/redirection.php:327
+msgid "Logging"
 msgstr ""
 
 #: includes/adapters/fluent-smtp.php:499
@@ -1435,9 +2290,61 @@ msgstr ""
 msgid "Email not found"
 msgstr ""
 
+#: includes/adapters/fluent-smtp.php:697
+#: includes/adapters/ottokit.php:249
+msgid "Retries"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:702
+#: includes/adapters/gravity-smtp.php:806
+#: includes/adapters/post-smtp.php:288
+#: includes/adapters/site-mailer.php:189
+#: includes/adapters/suremails.php:244
+#: includes/adapters/wp-mail-logging.php:276
+msgid "Delivery"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:704
+#: includes/adapters/gravity-forms.php:321
+#: includes/adapters/gravity-smtp.php:191
+#: includes/adapters/gravity-smtp.php:431
+#: includes/adapters/gravity-smtp.php:808
+#: includes/adapters/post-smtp.php:290
+#: includes/adapters/site-mailer.php:191
+#: includes/adapters/suremails.php:246
+#: includes/adapters/wp-mail-logging.php:278
+#: assets/js/app.js:30408
+#: assets/js/app.js:30624
+msgid "Message"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:708
+#: includes/adapters/fluent-smtp.php:709
+#: includes/adapters/gravity-smtp.php:812
+#: includes/adapters/gravity-smtp.php:813
+#: includes/adapters/post-smtp.php:294
+#: includes/adapters/post-smtp.php:295
+#: includes/adapters/site-mailer.php:195
+#: includes/adapters/site-mailer.php:196
+#: includes/adapters/suremails.php:250
+#: includes/adapters/suremails.php:251
+#: includes/adapters/wp-mail-logging.php:282
+#: includes/adapters/wp-mail-logging.php:283
+msgid "Body"
+msgstr ""
+
 #: includes/adapters/fluent-smtp.php:723
 #: includes/adapters/suremails.php:258
 msgid "Provider reply"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:724
+#: includes/adapters/suremails.php:259
+msgid "Response"
+msgstr ""
+
+#: includes/adapters/fluent-smtp.php:739
+msgid "Resent"
 msgstr ""
 
 #. translators: %s: how many times the message was sent.
@@ -1447,6 +2354,10 @@ msgid "%s time"
 msgid_plural "%s times"
 msgstr[0] ""
 msgstr[1] ""
+
+#: includes/adapters/fluent-smtp.php:758
+msgid "Resends"
+msgstr ""
 
 #: includes/adapters/fluent-smtp.php:815
 #: includes/adapters/gravity-smtp.php:750
@@ -1499,6 +2410,24 @@ msgstr ""
 msgid "Test email sent to "
 msgstr ""
 
+#: includes/adapters/fluent-snippets.php:111
+#: includes/adapters/hfcm.php:183
+#: includes/adapters/scrutoscope.php:734
+#: includes/adapters/solid-security.php:119
+#: includes/adapters/transients-manager.php:261
+#: includes/adapters/transients-manager.php:376
+#: includes/adapters/wp-activity-log.php:264
+#: includes/adapters/wp-mail-smtp.php:67
+#: includes/adapters/wpcode.php:213
+#: includes/adapters/wpvivid.php:324
+#: assets/js/app.js:8827
+#: assets/js/app.js:14553
+#: assets/js/app.js:15670
+#: assets/js/app.js:15694
+#: assets/js/app.js:30177
+msgid "Type"
+msgstr ""
+
 #: includes/adapters/fluent-snippets.php:112
 msgid "Run at"
 msgstr ""
@@ -1509,6 +2438,10 @@ msgstr ""
 
 #: includes/adapters/fluent-snippets.php:190
 msgid "Edit in FluentSnippets ↗"
+msgstr ""
+
+#: includes/adapters/fluent-snippets.php:266
+msgid "Storage"
 msgstr ""
 
 #: includes/adapters/fluent-snippets.php:268
@@ -1554,10 +2487,25 @@ msgstr ""
 msgid "Forminator reported success but the entry still exists."
 msgstr ""
 
+#: includes/adapters/generateblocks.php:35
+msgid "GenerateBlocks"
+msgstr ""
+
 #: includes/adapters/generateblocks.php:156
 #: includes/adapters/kadence.php:111
 #: includes/adapters/stackable.php:130
 msgid "Design not found."
+msgstr ""
+
+#: includes/adapters/gravity-forms.php:102
+#: includes/adapters/gravity-forms.php:183
+#: includes/adapters/wpforms.php:323
+msgid "Star"
+msgstr ""
+
+#: includes/adapters/gravity-forms.php:109
+#: includes/adapters/wpforms.php:330
+msgid "Unstar"
 msgstr ""
 
 #: includes/adapters/gravity-forms.php:116
@@ -1571,6 +2519,13 @@ msgstr ""
 #: includes/adapters/gravity-forms.php:122
 #: assets/js/app.js:5492
 msgid "Add note"
+msgstr ""
+
+#: includes/adapters/gravity-forms.php:130
+#: includes/adapters/scrutoscope.php:251
+#: includes/adapters/wpcode.php:204
+#: assets/js/app.js:5387
+msgid "Note"
 msgstr ""
 
 #: includes/adapters/gravity-forms.php:130
@@ -1597,12 +2552,46 @@ msgstr ""
 msgid "Form settings"
 msgstr ""
 
+#: includes/adapters/gravity-forms.php:294
+#: assets/js/app.js:2309
+#: assets/js/app.js:29392
+msgid "Notifications"
+msgstr ""
+
+#: includes/adapters/gravity-forms.php:307
+msgid "Notification"
+msgstr ""
+
 #: includes/adapters/gravity-forms.php:319
 msgid "address@example.com, {admin_email} — email-type notifications only"
 msgstr ""
 
+#: includes/adapters/gravity-forms.php:361
+msgid "Feeds"
+msgstr ""
+
+#: includes/adapters/gravity-forms.php:374
+msgid "Feed"
+msgstr ""
+
+#: includes/adapters/gravity-forms.php:375
+msgid "Add-on"
+msgstr ""
+
 #: includes/adapters/gravity-forms.php:401
 msgid "Delete this feed permanently? The add-on stops running for its form."
+msgstr ""
+
+#: includes/adapters/gravity-forms.php:471
+#: assets/js/app.js:5438
+#: assets/js/app.js:30058
+msgid "Payment"
+msgstr ""
+
+#: includes/adapters/gravity-forms.php:508
+#: includes/adapters/gravity-smtp.php:387
+#: includes/adapters/gravity-smtp.php:397
+msgid "Notes"
 msgstr ""
 
 #: includes/adapters/gravity-forms.php:538
@@ -1645,12 +2634,34 @@ msgstr ""
 msgid "Gravity Forms refused the change."
 msgstr ""
 
+#: includes/adapters/gravity-forms.php:1109
+msgid "Period"
+msgstr ""
+
 #: includes/adapters/gravity-forms.php:1177
 msgid "Give the form a title."
 msgstr ""
 
 #: includes/adapters/gravity-forms.php:1181
 msgid "Another form already uses that title."
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:319
+#: assets/js/app.js:15134
+msgid "Log"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:378
+msgid "Suppressions"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:386
+#: assets/js/app.js:6217
+msgid "Reason"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:389
+msgid "Since"
 msgstr ""
 
 #: includes/adapters/gravity-smtp.php:393
@@ -1678,8 +2689,34 @@ msgstr ""
 msgid "Debug log"
 msgstr ""
 
+#: includes/adapters/gravity-smtp.php:441
+#: includes/adapters/gravity-smtp.php:1016
+msgid "Routing"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:449
+#: includes/adapters/rewrite-rules-inspector.php:183
+msgid "Rule"
+msgstr ""
+
 #: includes/adapters/gravity-smtp.php:450
 msgid "Send with"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:452
+msgid "Enabled"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:459
+#: includes/adapters/redirection.php:139
+#: includes/adapters/redirection.php:160
+msgid "Enable"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:465
+#: includes/adapters/redirection.php:134
+#: includes/adapters/redirection.php:155
+msgid "Disable"
 msgstr ""
 
 #: includes/adapters/gravity-smtp.php:471
@@ -1694,12 +2731,30 @@ msgstr ""
 msgid "Edit in Gravity SMTP ↗"
 msgstr ""
 
+#: includes/adapters/gravity-smtp.php:487
+msgid "Sending"
+msgstr ""
+
 #: includes/adapters/gravity-smtp.php:692
 #: includes/adapters/gravity-smtp.php:747
 #: includes/adapters/gravity-smtp.php:775
 #: includes/adapters/gravity-smtp.php:1389
 #: includes/adapters/wp-mail-smtp.php:143
 msgid "Event not found"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:795
+#: includes/adapters/wp-mail-logging.php:271
+msgid "Attachments"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:801
+msgid "Service"
+msgstr ""
+
+#: includes/adapters/gravity-smtp.php:832
+#: includes/adapters/wp-mail-logging.php:290
+msgid "Headers"
 msgstr ""
 
 #: includes/adapters/gravity-smtp.php:833
@@ -1796,6 +2851,15 @@ msgstr ""
 msgid "<!-- tracking snippet -->"
 msgstr ""
 
+#: includes/adapters/hfcm.php:184
+#: includes/adapters/wpcode.php:214
+msgid "Location"
+msgstr ""
+
+#: includes/adapters/hfcm.php:185
+msgid "Devices"
+msgstr ""
+
 #: includes/adapters/hfcm.php:226
 #: includes/adapters/wpcode.php:257
 msgid "Type · location"
@@ -1832,6 +2896,10 @@ msgstr ""
 
 #: includes/adapters/jetpack-tiled-gallery.php:41
 msgid "Tiled Gallery"
+msgstr ""
+
+#: includes/adapters/kadence.php:35
+msgid "Kadence"
 msgstr ""
 
 #: includes/adapters/licenses.php:579
@@ -2006,6 +3074,10 @@ msgstr ""
 msgid "No purchase code is stored."
 msgstr ""
 
+#: includes/adapters/licenses.php:2371
+msgid "exist"
+msgstr ""
+
 #: includes/adapters/licenses.php:2390
 msgid "The key validation service did not answer."
 msgstr ""
@@ -2016,6 +3088,10 @@ msgstr ""
 
 #: includes/adapters/licenses.php:2497
 msgid "The Kadence licensing service did not answer."
+msgstr ""
+
+#: includes/adapters/licenses.php:2504
+msgid "unreachable"
 msgstr ""
 
 #: includes/adapters/licenses.php:2694
@@ -2032,6 +3108,11 @@ msgstr ""
 #: includes/adapters/licenses.php:3060
 #: includes/adapters/licenses.php:3360
 msgid "No key stored"
+msgstr ""
+
+#: includes/adapters/licenses.php:2706
+#: assets/js/app.js:14788
+msgid "active"
 msgstr ""
 
 #: includes/adapters/licenses.php:2746
@@ -2245,6 +3326,14 @@ msgstr ""
 msgid "Locked out: "
 msgstr ""
 
+#: includes/adapters/limit-login-attempts.php:159
+msgid "Attempts"
+msgstr ""
+
+#: includes/adapters/limit-login-attempts.php:160
+msgid "Via"
+msgstr ""
+
 #: includes/adapters/limit-login-attempts.php:169
 msgid "Unlock IP"
 msgstr ""
@@ -2256,6 +3345,10 @@ msgstr ""
 #: includes/adapters/limit-login-attempts.php:236
 #: includes/adapters/solid-security.php:247
 msgid "Lockouts all-time"
+msgstr ""
+
+#: includes/adapters/limit-login-attempts.php:240
+msgid "Policy"
 msgstr ""
 
 #: includes/adapters/limit-login-attempts.php:245
@@ -2282,15 +3375,27 @@ msgstr ""
 msgid "Nothing to move."
 msgstr ""
 
+#: includes/adapters/media-folders.php:268
+msgid "Uncategorized"
+msgstr ""
+
 #: includes/adapters/media-folders.php:297
 #: includes/adapters/media-folders.php:306
 msgid "That folder belongs to another user."
+msgstr ""
+
+#: includes/adapters/media-folders.php:328
+msgid "Unorganized"
 msgstr ""
 
 #: includes/adapters/media-folders.php:347
 #: includes/adapters/media-folders.php:403
 #: includes/adapters/media-folders.php:420
 msgid "That folder no longer exists."
+msgstr ""
+
+#: includes/adapters/media-folders.php:378
+msgid "Unassigned"
 msgstr ""
 
 #: includes/adapters/network.php:148
@@ -2331,10 +3436,6 @@ msgstr ""
 msgid "Archived"
 msgstr ""
 
-#: includes/adapters/network.php:193
-msgid "Spam"
-msgstr ""
-
 #: includes/adapters/network.php:194
 msgid "Deleted"
 msgstr ""
@@ -2346,34 +3447,12 @@ msgstr ""
 
 #: includes/adapters/network.php:199
 #: includes/adapters/network.php:211
-#: assets/js/app.js:30264
+#: assets/js/app.js:30263
 msgid "Address"
 msgstr ""
 
 #: includes/adapters/network.php:200
 msgid "Members"
-msgstr ""
-
-#: includes/adapters/network.php:201
-msgid "Created"
-msgstr ""
-
-#: includes/adapters/network.php:202
-#: includes/adapters/network.php:584
-#: assets/js/app.js:3600
-#: assets/js/app.js:3767
-#: assets/js/app.js:5430
-#: assets/js/app.js:6422
-#: assets/js/app.js:6744
-#: assets/js/app.js:8438
-#: assets/js/app.js:8827
-#: assets/js/app.js:21566
-#: assets/js/app.js:22118
-#: assets/js/app.js:30071
-#: assets/js/app.js:30166
-#: assets/js/app.js:30319
-#: assets/js/app.js:30359
-msgid "Status"
 msgstr ""
 
 #: includes/adapters/network.php:205
@@ -2509,35 +3588,6 @@ msgstr ""
 
 #: includes/adapters/network.php:576
 msgid "Network admins"
-msgstr ""
-
-#: includes/adapters/network.php:580
-#: assets/js/app.js:5364
-#: assets/js/app.js:7104
-#: assets/js/app.js:7454
-#: assets/js/app.js:7462
-#: assets/js/app.js:7818
-#: assets/js/app.js:9292
-#: assets/js/app.js:9421
-#: assets/js/app.js:14553
-#: assets/js/app.js:14597
-#: assets/js/app.js:30047
-#: assets/js/app.js:30261
-#: assets/js/app.js:30314
-msgid "Name"
-msgstr ""
-
-#: includes/adapters/network.php:581
-#: assets/js/app.js:5350
-#: assets/js/app.js:5365
-#: assets/js/app.js:9010
-#: assets/js/app.js:30048
-#: assets/js/app.js:30262
-#: assets/js/app.js:30358
-#: assets/js/app.js:30564
-#: assets/js/app.js:33920
-#: assets/js/app.js:34293
-msgid "Email"
 msgstr ""
 
 #: includes/adapters/network.php:583
@@ -2701,6 +3751,10 @@ msgstr ""
 msgid "accounts and sites"
 msgstr ""
 
+#: includes/adapters/ninja-forms.php:159
+msgid "Submissions"
+msgstr ""
+
 #: includes/adapters/ninja-forms.php:166
 msgid "Open Ninja Forms ↗"
 msgstr ""
@@ -2745,9 +3799,30 @@ msgstr ""
 msgid "One Time Login could not generate a link."
 msgstr ""
 
+#: includes/adapters/ottokit.php:119
+msgid "Automation"
+msgstr ""
+
 #: includes/adapters/ottokit.php:132
 #: includes/adapters/ottokit.php:323
 msgid "Outgoing requests"
+msgstr ""
+
+#: includes/adapters/ottokit.php:142
+#: includes/adapters/ottokit.php:239
+msgid "Endpoint"
+msgstr ""
+
+#: includes/adapters/ottokit.php:145
+#: includes/adapters/ottokit.php:243
+msgid "Sent"
+msgstr ""
+
+#: includes/adapters/ottokit.php:152
+#: includes/adapters/ottokit.php:160
+#: assets/js/app.js:633
+#: assets/js/app.js:16359
+msgid "Retry"
 msgstr ""
 
 #: includes/adapters/ottokit.php:155
@@ -2759,8 +3834,30 @@ msgstr ""
 msgid "That request is gone."
 msgstr ""
 
+#: includes/adapters/ottokit.php:240
+msgid "Method"
+msgstr ""
+
 #: includes/adapters/ottokit.php:242
 msgid "Response code"
+msgstr ""
+
+#: includes/adapters/ottokit.php:246
+msgid "Processed"
+msgstr ""
+
+#: includes/adapters/ottokit.php:252
+#: includes/adapters/post-smtp.php:300
+#: includes/adapters/wp-mail-logging.php:297
+msgid "Error"
+msgstr ""
+
+#: includes/adapters/ottokit.php:254
+msgid "Request"
+msgstr ""
+
+#: includes/adapters/ottokit.php:264
+msgid "Payload"
 msgstr ""
 
 #: includes/adapters/ottokit.php:265
@@ -2769,6 +3866,17 @@ msgstr ""
 
 #: includes/adapters/ottokit.php:289
 msgid "OttoKit could not resend that request."
+msgstr ""
+
+#: includes/adapters/ottokit.php:319
+#: assets/js/app.js:863
+#: assets/js/app.js:33912
+#: assets/js/app.js:34285
+msgid "Account"
+msgstr ""
+
+#: includes/adapters/ottokit.php:325
+msgid "Failed"
 msgstr ""
 
 #: includes/adapters/ottokit.php:336
@@ -2791,8 +3899,17 @@ msgstr ""
 msgid "Untitled"
 msgstr ""
 
+#: includes/adapters/perfmatters.php:33
+msgid "Preload"
+msgstr ""
+
 #: includes/adapters/perfmatters.php:34
 msgid "Lazy Loading"
+msgstr ""
+
+#: includes/adapters/perfmatters.php:37
+#: assets/js/app.js:6266
+msgid "Analytics"
 msgstr ""
 
 #: includes/adapters/performance-lab.php:155
@@ -2804,7 +3921,7 @@ msgid "Standalone plugins managed by Performance Lab"
 msgstr ""
 
 #: includes/adapters/performance-lab.php:160
-#: assets/js/app.js:32504
+#: assets/js/app.js:32503
 msgid "Performance Lab"
 msgstr ""
 
@@ -2825,6 +3942,20 @@ msgstr ""
 msgid "That feature is not installed."
 msgstr ""
 
+#: includes/adapters/performance-lab.php:254
+msgid "Feature"
+msgstr ""
+
+#: includes/adapters/performance-lab.php:256
+#: assets/js/app.js:7547
+#: assets/js/app.js:9292
+#: assets/js/app.js:9422
+#: assets/js/app.js:14597
+#: assets/js/app.js:30862
+#: assets/js/app.js:30934
+msgid "Slug"
+msgstr ""
+
 #: includes/adapters/performance-lab.php:269
 msgid "Deactivate this Performance Lab feature?"
 msgstr ""
@@ -2842,12 +3973,22 @@ msgstr ""
 msgid "Open Post SMTP ↗"
 msgstr ""
 
+#: includes/adapters/post-smtp.php:112
+#: includes/adapters/post-smtp.php:283
+msgid "Transport"
+msgstr ""
+
 #: includes/adapters/post-smtp.php:114
 msgid "Configured in Post SMTP"
 msgstr ""
 
 #: includes/adapters/post-smtp.php:302
 msgid "Suggested fix"
+msgstr ""
+
+#: includes/adapters/post-smtp.php:304
+#: includes/adapters/wp-mail-logging.php:296
+msgid "Failure"
 msgstr ""
 
 #: includes/adapters/powerpress.php:197
@@ -2859,6 +4000,10 @@ msgstr ""
 msgid "Media file URL"
 msgstr ""
 
+#: includes/adapters/powerpress.php:237
+msgid "https://example.com/episode.mp3 — clearing this removes the episode"
+msgstr ""
+
 #: includes/adapters/powerpress.php:238
 msgid "File size (bytes)"
 msgstr ""
@@ -2867,12 +4012,30 @@ msgstr ""
 msgid "Detected by PowerPress when blank"
 msgstr ""
 
+#: includes/adapters/powerpress.php:239
+#: includes/adapters/scrutoscope.php:238
+#: includes/adapters/scrutoscope.php:733
+msgid "Duration"
+msgstr ""
+
+#: includes/adapters/powerpress.php:239
+msgid "HH:MM:SS"
+msgstr ""
+
+#: includes/adapters/powerpress.php:240
+msgid "Subtitle"
+msgstr ""
+
 #: includes/adapters/powerpress.php:241
 msgid "Episode title (Apple)"
 msgstr ""
 
 #: includes/adapters/powerpress.php:242
 msgid "Episode number"
+msgstr ""
+
+#: includes/adapters/powerpress.php:243
+msgid "Season"
 msgstr ""
 
 #: includes/adapters/powerpress.php:246
@@ -2933,6 +4096,10 @@ msgstr ""
 msgid "Served, 7 days"
 msgstr ""
 
+#: includes/adapters/redirection.php:255
+msgid "404s, 7 days"
+msgstr ""
+
 #: includes/adapters/redirection.php:316
 msgid "Permalink monitor"
 msgstr ""
@@ -2957,13 +4124,32 @@ msgstr ""
 msgid "Rewrite rule not found."
 msgstr ""
 
+#: includes/adapters/rewrite-rules-inspector.php:168
+#: includes/adapters/rewrite-rules-inspector.php:300
+msgid "Match"
+msgstr ""
+
+#: includes/adapters/rewrite-rules-inspector.php:169
+msgid "Rewrite"
+msgstr ""
+
+#: includes/adapters/rewrite-rules-inspector.php:209
+#: includes/adapters/rewrite-rules-inspector.php:282
+msgid "Rules"
+msgstr ""
+
+#: includes/adapters/rewrite-rules-inspector.php:214
+#: includes/class-minn-admin-db.php:802
+msgid "Missing"
+msgstr ""
+
 #: includes/adapters/rewrite-rules-inspector.php:219
 #: assets/js/app.js:16258
 msgid "Permalink structure"
 msgstr ""
 
 #: includes/adapters/rewrite-rules-inspector.php:224
-#: assets/js/app.js:32543
+#: assets/js/app.js:32542
 msgid "Rewrite Rules Inspector"
 msgstr ""
 
@@ -2992,6 +4178,18 @@ msgstr ""
 msgid "Open Rewrite Rules Inspector ↗"
 msgstr ""
 
+#: includes/adapters/rewrite-rules-inspector.php:274
+#: includes/adapters/scrutoscope.php:704
+#: includes/adapters/transients-manager.php:351
+#: includes/adapters/wp-crontrol.php:372
+#: assets/js/app.js:860
+msgid "Diagnostics"
+msgstr ""
+
+#: includes/adapters/rewrite-rules-inspector.php:301
+msgid "Query"
+msgstr ""
+
 #: includes/adapters/rewrite-rules-inspector.php:359
 msgid "Rewrite rule flushing is disabled."
 msgstr ""
@@ -3010,6 +4208,10 @@ msgstr ""
 
 #: includes/adapters/safe-redirect-manager.php:54
 msgid "Invalid status code."
+msgstr ""
+
+#: includes/adapters/safe-redirect-manager.php:87
+msgid "Regex"
 msgstr ""
 
 #: includes/adapters/safe-redirect-manager.php:165
@@ -3051,12 +4253,46 @@ msgstr ""
 msgid "Profile not found."
 msgstr ""
 
+#: includes/adapters/scrutoscope.php:237
+#: includes/adapters/scrutoscope.php:731
+msgid "Route"
+msgstr ""
+
 #: includes/adapters/scrutoscope.php:239
 msgid "Memory peak"
 msgstr ""
 
+#: includes/adapters/scrutoscope.php:240
+#: includes/adapters/wp-crontrol.php:280
+msgid "Callbacks"
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:241
+msgid "Sources"
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:243
+msgid "Unattributed"
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:249
+msgid "Captured"
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:250
+msgid "Pinned"
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:319
+msgid "Summary"
+msgstr ""
+
 #: includes/adapters/scrutoscope.php:324
 msgid "Top sources"
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:325
+msgid "Queries"
 msgstr ""
 
 #: includes/adapters/scrutoscope.php:326
@@ -3095,6 +4331,10 @@ msgstr ""
 msgid "Capture mode"
 msgstr ""
 
+#: includes/adapters/scrutoscope.php:436
+msgid "Version"
+msgstr ""
+
 #: includes/adapters/scrutoscope.php:449
 msgid "Routes covered"
 msgstr ""
@@ -3130,12 +4370,41 @@ msgstr ""
 msgid "Profiled “%s”. Open Profiles to inspect it."
 msgstr ""
 
+#: includes/adapters/scrutoscope.php:712
+msgid "Profiles"
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:735
+#: assets/js/app.js:9010
+#: assets/js/app.js:9763
+#: assets/js/app.js:30251
+#: assets/js/app.js:30567
+#: assets/js/app.js:33923
+#: assets/js/app.js:34296
+msgid "Role"
+msgstr ""
+
 #: includes/adapters/scrutoscope.php:749
 msgid "Delete profile"
 msgstr ""
 
 #: includes/adapters/scrutoscope.php:752
 msgid "Delete this profile permanently? Pinned profiles can be deleted too."
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:773
+#: includes/adapters/wp-crontrol.php:245
+#: includes/adapters/wp-crontrol.php:397
+#: assets/js/app.js:15082
+msgid "Hook"
+msgstr ""
+
+#: includes/adapters/scrutoscope.php:774
+#: includes/adapters/wp-crontrol.php:248
+#: includes/adapters/wp-crontrol.php:398
+#: includes/adapters/wpvivid.php:272
+#: assets/js/app.js:30051
+msgid "Schedule"
 msgstr ""
 
 #: includes/adapters/scrutoscope.php:777
@@ -3176,6 +4445,10 @@ msgstr ""
 msgid "You cannot edit SEO fields on this post."
 msgstr ""
 
+#: includes/adapters/simple-301-redirects.php:114
+msgid "Wildcards"
+msgstr ""
+
 #: includes/adapters/simple-history.php:79
 msgid "History table not found"
 msgstr ""
@@ -3201,6 +4474,10 @@ msgstr ""
 #: includes/adapters/site-mailer.php:227
 #: includes/adapters/site-mailer.php:279
 msgid "Open Site Mailer ↗"
+msgstr ""
+
+#: includes/adapters/site-mailer.php:268
+msgid "Delivered"
 msgstr ""
 
 #: includes/adapters/site-status.php:178
@@ -3281,7 +4558,7 @@ msgstr ""
 
 #: includes/adapters/solid-security.php:290
 #: includes/adapters/solid-security.php:297
-#: assets/js/app.js:32459
+#: assets/js/app.js:32458
 msgid "Solid Security"
 msgstr ""
 
@@ -3325,6 +4602,10 @@ msgstr ""
 msgid "Honeypot protection runs automatically on comments and supported forms"
 msgstr ""
 
+#: includes/adapters/stackable.php:47
+msgid "Stackable"
+msgstr ""
+
 #: includes/adapters/stream.php:93
 msgid "Stream table not found"
 msgstr ""
@@ -3366,6 +4647,10 @@ msgstr ""
 msgid "Open SureForms ↗"
 msgstr ""
 
+#: includes/adapters/suremails.php:236
+msgid "Connection"
+msgstr ""
+
 #: includes/adapters/suremails.php:288
 msgid "SureMails has not logged any sends yet"
 msgstr ""
@@ -3384,8 +4669,17 @@ msgid "You cannot edit this event."
 msgstr ""
 
 #: includes/adapters/the-events-calendar.php:104
+msgid "Starts"
+msgstr ""
+
+#: includes/adapters/the-events-calendar.php:104
 #: includes/adapters/the-events-calendar.php:105
 msgid "YYYY-MM-DD HH:MM"
+msgstr ""
+
+#: includes/adapters/the-events-calendar.php:105
+#: assets/js/app.js:30057
+msgid "Ends"
 msgstr ""
 
 #: includes/adapters/the-events-calendar.php:106
@@ -3393,11 +4687,23 @@ msgid "All-day event"
 msgstr ""
 
 #: includes/adapters/the-events-calendar.php:107
+msgid "Venue"
+msgstr ""
+
+#: includes/adapters/the-events-calendar.php:107
 msgid "Search venues…"
 msgstr ""
 
 #: includes/adapters/the-events-calendar.php:114
+msgid "Organizer"
+msgstr ""
+
+#: includes/adapters/the-events-calendar.php:114
 msgid "Search organizers…"
+msgstr ""
+
+#: includes/adapters/the-events-calendar.php:116
+msgid "Cost"
 msgstr ""
 
 #: includes/adapters/the-events-calendar.php:116
@@ -3417,20 +4723,54 @@ msgstr ""
 msgid "Transient not found."
 msgstr ""
 
+#: includes/adapters/transients-manager.php:264
+#: includes/adapters/transients-manager.php:380
+#: assets/js/app.js:8827
+#: assets/js/app.js:30190
+#: assets/js/app.js:30204
+msgid "Expires"
+msgstr ""
+
 #: includes/adapters/transients-manager.php:265
 msgid "Option key"
+msgstr ""
+
+#: includes/adapters/transients-manager.php:266
+msgid "Value"
+msgstr ""
+
+#: includes/adapters/transients-manager.php:273
+msgid "Transient"
+msgstr ""
+
+#: includes/adapters/transients-manager.php:306
+#: includes/adapters/transients-manager.php:359
+msgid "Transients"
 msgstr ""
 
 #: includes/adapters/transients-manager.php:308
 msgid "In the options table (blog-level)"
 msgstr ""
 
+#: includes/adapters/transients-manager.php:311
+#: assets/js/app.js:13002
+msgid "Expired"
+msgstr ""
+
+#: includes/adapters/transients-manager.php:316
+msgid "Auto-cleanup"
+msgstr ""
+
 #: includes/adapters/transients-manager.php:318
 msgid "WordPress delete_expired_transients cron"
 msgstr ""
 
+#: includes/adapters/transients-manager.php:321
+msgid "Writes"
+msgstr ""
+
 #: includes/adapters/transients-manager.php:326
-#: assets/js/app.js:32542
+#: assets/js/app.js:32541
 msgid "Transients Manager"
 msgstr ""
 
@@ -3491,6 +4831,20 @@ msgstr ""
 msgid "Open UpdraftPlus ↗"
 msgstr ""
 
+#: includes/adapters/updraftplus.php:159
+#: includes/adapters/wpvivid.php:321
+msgid "Backup"
+msgstr ""
+
+#: includes/adapters/updraftplus.php:161
+#: includes/adapters/wpvivid.php:323
+msgid "Stored"
+msgstr ""
+
+#: includes/adapters/wordfence.php:84
+msgid "Result"
+msgstr ""
+
 #: includes/adapters/wordfence.php:127
 msgid "Open Wordfence ↗"
 msgstr ""
@@ -3531,6 +4885,15 @@ msgstr ""
 msgid "High + critical (7d)"
 msgstr ""
 
+#: includes/adapters/wp-activity-log.php:141
+#: includes/adapters/wp-activity-log.php:262
+msgid "Severity"
+msgstr ""
+
+#: includes/adapters/wp-activity-log.php:263
+msgid "Object"
+msgstr ""
+
 #: includes/adapters/wp-crontrol.php:236
 #: includes/adapters/wp-crontrol.php:473
 #: includes/adapters/wp-crontrol.php:502
@@ -3555,18 +4918,42 @@ msgstr ""
 msgid "Next run (site)"
 msgstr ""
 
+#: includes/adapters/wp-crontrol.php:249
+msgid "Interval"
+msgstr ""
+
+#: includes/adapters/wp-crontrol.php:251
+msgid "Arguments"
+msgstr ""
+
+#: includes/adapters/wp-crontrol.php:252
+msgid "Signature"
+msgstr ""
+
 #: includes/adapters/wp-crontrol.php:268
 msgid "Priority "
 msgstr ""
 
 #: includes/adapters/wp-crontrol.php:294
 #: includes/adapters/wp-crontrol.php:349
-#: assets/js/app.js:32541
+#: assets/js/app.js:32540
 msgid "WP Crontrol"
+msgstr ""
+
+#: includes/adapters/wp-crontrol.php:334
+msgid "Overdue"
+msgstr ""
+
+#: includes/adapters/wp-crontrol.php:339
+msgid "Paused"
 msgstr ""
 
 #: includes/adapters/wp-crontrol.php:341
 msgid "Hook-level pause via WP Crontrol"
+msgstr ""
+
+#: includes/adapters/wp-crontrol.php:344
+msgid "WP-Cron spawn"
 msgstr ""
 
 #: includes/adapters/wp-crontrol.php:346
@@ -3580,6 +4967,10 @@ msgstr ""
 
 #: includes/adapters/wp-crontrol.php:359
 msgid "Add event ↗"
+msgstr ""
+
+#: includes/adapters/wp-crontrol.php:399
+msgid "Every"
 msgstr ""
 
 #: includes/adapters/wp-crontrol.php:408
@@ -3650,6 +5041,10 @@ msgstr ""
 msgid "Open WP Mail Logging ↗"
 msgstr ""
 
+#: includes/adapters/wp-mail-logging.php:267
+msgid "Host"
+msgstr ""
+
 #: includes/adapters/wp-mail-logging.php:291
 msgid "Raw headers"
 msgstr ""
@@ -3660,6 +5055,10 @@ msgstr ""
 
 #: includes/adapters/wp-mail-logging.php:375
 msgid "Handed back to the mailer — the new attempt appears as its own log entry."
+msgstr ""
+
+#: includes/adapters/wp-mail-smtp.php:66
+msgid "Initiator"
 msgstr ""
 
 #: includes/adapters/wpcode.php:120
@@ -3710,6 +5109,10 @@ msgstr ""
 msgid "IP address"
 msgstr ""
 
+#: includes/adapters/wpforms.php:533
+msgid "Starred"
+msgstr ""
+
 #: includes/adapters/wpforms.php:570
 msgid "WPForms could not delete this entry."
 msgstr ""
@@ -3730,6 +5133,10 @@ msgstr ""
 
 #: includes/adapters/wpvivid.php:297
 msgid "Open WPvivid ↗"
+msgstr ""
+
+#: includes/adapters/wpvivid.php:325
+msgid "Lock"
 msgstr ""
 
 #: includes/adapters/wpvivid.php:333
@@ -3935,10 +5342,6 @@ msgstr ""
 
 #: includes/class-minn-admin-db.php:802
 msgid "Present"
-msgstr ""
-
-#: includes/class-minn-admin-db.php:802
-msgid "Missing"
 msgstr ""
 
 #: includes/class-minn-admin-db.php:804
@@ -4234,8 +5637,8 @@ msgstr ""
 #: includes/class-minn-admin-surfaces.php:248
 #: assets/js/app.js:852
 #: assets/js/app.js:1765
-#: assets/js/app.js:30297
-#: assets/js/app.js:33904
+#: assets/js/app.js:30296
+#: assets/js/app.js:33903
 msgid "Users"
 msgstr ""
 
@@ -4280,8 +5683,8 @@ msgstr ""
 
 #: includes/class-minn-admin-rest.php:2664
 #: assets/js/app.js:3200
-#: assets/js/app.js:29851
-#: assets/js/app.js:29864
+#: assets/js/app.js:29850
+#: assets/js/app.js:29863
 msgid "Visitors"
 msgstr ""
 
@@ -4587,17 +5990,22 @@ msgstr ""
 msgid "Loopback requests"
 msgstr ""
 
-#: includes/class-minn-admin-rest.php:6235
-msgid "REST API self-check"
+#: includes/class-minn-admin-rest.php:6227
+#: includes/class-minn-admin-rest.php:6237
+msgid "good"
 msgstr ""
 
-#: includes/class-minn-admin-rest.php:6275
-msgid "Backups"
+#: includes/class-minn-admin-rest.php:6235
+msgid "REST API self-check"
 msgstr ""
 
 #: includes/class-minn-admin-rest.php:6374
 #: assets/js/app.js:12908
 msgid "Licenses"
+msgstr ""
+
+#: includes/class-minn-admin-rest.php:6401
+msgid "Server"
 msgstr ""
 
 #: includes/class-minn-admin-rest.php:6499
@@ -4685,7 +6093,7 @@ msgstr ""
 #: assets/js/app.js:1723
 #: assets/js/app.js:6139
 #: assets/js/app.js:6265
-#: assets/js/app.js:30254
+#: assets/js/app.js:30253
 msgid "Orders"
 msgstr ""
 
@@ -4693,7 +6101,7 @@ msgstr ""
 #: assets/js/app.js:847
 #: assets/js/app.js:1726
 #: assets/js/app.js:5497
-#: assets/js/app.js:30284
+#: assets/js/app.js:30283
 msgid "Subscriptions"
 msgstr ""
 
@@ -4750,22 +6158,11 @@ msgstr ""
 msgid "Extensions"
 msgstr ""
 
-#: includes/class-minn-admin-surfaces.php:254
-#: assets/js/app.js:861
-msgid "Database"
-msgstr ""
-
 #: includes/class-minn-admin-surfaces.php:255
 #: assets/js/app.js:860
 #: assets/js/app.js:1786
 #: assets/js/app.js:2505
 msgid "System"
-msgstr ""
-
-#: includes/class-minn-admin-surfaces.php:256
-#: assets/js/app.js:859
-#: assets/js/app.js:1787
-msgid "Settings"
 msgstr ""
 
 #: includes/class-minn-admin-updater.php:183
@@ -4860,11 +6257,6 @@ msgstr ""
 msgid "Couldn’t load this list."
 msgstr ""
 
-#: assets/js/app.js:633
-#: assets/js/app.js:16359
-msgid "Retry"
-msgstr ""
-
 #: assets/js/app.js:637
 msgid "Could not load. Try again."
 msgstr ""
@@ -4895,7 +6287,7 @@ msgstr ""
 
 #: assets/js/app.js:849
 #: assets/js/app.js:8438
-#: assets/js/app.js:30371
+#: assets/js/app.js:30370
 msgid "Product"
 msgstr ""
 
@@ -4905,7 +6297,7 @@ msgid "People"
 msgstr ""
 
 #: assets/js/app.js:853
-#: assets/js/app.js:30542
+#: assets/js/app.js:30541
 msgid "Edit user"
 msgstr ""
 
@@ -4929,10 +6321,6 @@ msgstr ""
 msgid "Post types, taxonomies & terms"
 msgstr ""
 
-#: assets/js/app.js:860
-msgid "Diagnostics"
-msgstr ""
-
 #: assets/js/app.js:861
 msgid "Read-only viewer"
 msgstr ""
@@ -4942,23 +6330,13 @@ msgid "Editor"
 msgstr ""
 
 #: assets/js/app.js:862
-#: assets/js/app.js:30169
-#: assets/js/app.js:30322
+#: assets/js/app.js:30168
+#: assets/js/app.js:30321
 msgid "Draft"
 msgstr ""
 
 #: assets/js/app.js:863
 msgid "Your profile"
-msgstr ""
-
-#: assets/js/app.js:863
-#: assets/js/app.js:33913
-#: assets/js/app.js:34286
-msgid "Account"
-msgstr ""
-
-#: assets/js/app.js:871
-msgid "Trash"
 msgstr ""
 
 #: assets/js/app.js:873
@@ -5007,13 +6385,13 @@ msgstr ""
 #: assets/js/app.js:13371
 #: assets/js/app.js:24460
 #: assets/js/app.js:24765
-#: assets/js/app.js:29924
-#: assets/js/app.js:30329
-#: assets/js/app.js:30384
-#: assets/js/app.js:30416
-#: assets/js/app.js:30632
-#: assets/js/app.js:30704
-#: assets/js/app.js:30738
+#: assets/js/app.js:29923
+#: assets/js/app.js:30328
+#: assets/js/app.js:30383
+#: assets/js/app.js:30415
+#: assets/js/app.js:30631
+#: assets/js/app.js:30703
+#: assets/js/app.js:30737
 msgid "Cancel"
 msgstr ""
 
@@ -5038,7 +6416,7 @@ msgid "The database, when this release ships a migration"
 msgstr ""
 
 #: assets/js/app.js:1043
-#: assets/js/app.js:29138
+#: assets/js/app.js:29137
 msgid "Your content, media and users"
 msgstr ""
 
@@ -5052,7 +6430,7 @@ msgstr ""
 
 #: assets/js/app.js:1045
 #: assets/js/app.js:13781
-#: assets/js/app.js:29255
+#: assets/js/app.js:29254
 msgid "Update WordPress"
 msgstr ""
 
@@ -5071,6 +6449,24 @@ msgstr ""
 msgid "Set image"
 msgstr ""
 
+#: assets/js/app.js:1145
+#: assets/js/app.js:6911
+#: assets/js/app.js:7106
+#: assets/js/app.js:7732
+#: assets/js/app.js:7829
+#: assets/js/app.js:7969
+#: assets/js/app.js:16121
+#: assets/js/app.js:16140
+#: assets/js/app.js:16393
+#: assets/js/app.js:21678
+#: assets/js/app.js:22144
+#: assets/js/app.js:24475
+#: assets/js/app.js:24807
+#: assets/js/app.js:25358
+#: assets/js/app.js:26472
+msgid "Remove"
+msgstr ""
+
 #: assets/js/app.js:1489
 msgid "Page in…"
 msgstr ""
@@ -5079,17 +6475,13 @@ msgstr ""
 msgid "Post"
 msgstr ""
 
-#: assets/js/app.js:1494
-msgid "Page"
-msgstr ""
-
 #: assets/js/app.js:1495
 msgid "Pattern"
 msgstr ""
 
 #: assets/js/app.js:2027
 #: assets/js/app.js:2265
-#: assets/js/app.js:30651
+#: assets/js/app.js:30650
 msgid "Switch site"
 msgstr ""
 
@@ -5098,7 +6490,9 @@ msgid "Search sites…"
 msgstr ""
 
 #: assets/js/app.js:2051
-#: assets/js/app.js:31076
+#: assets/js/app.js:31040
+#: assets/js/app.js:31075
+#: assets/js/app.js:31102
 msgid "Searching…"
 msgstr ""
 
@@ -5163,7 +6557,7 @@ msgid "WordPress admin (opens in a new tab)"
 msgstr ""
 
 #: assets/js/app.js:2292
-#: assets/js/app.js:29611
+#: assets/js/app.js:29610
 msgid "Log out"
 msgstr ""
 
@@ -5200,7 +6594,7 @@ msgid "View site (opens in a new tab)"
 msgstr ""
 
 #: assets/js/app.js:2307
-#: assets/js/app.js:30961
+#: assets/js/app.js:30960
 msgid "About Minn"
 msgstr ""
 
@@ -5212,16 +6606,12 @@ msgstr ""
 msgid "Color theme"
 msgstr ""
 
-#: assets/js/app.js:2309
-#: assets/js/app.js:29393
-msgid "Notifications"
-msgstr ""
-
 #: assets/js/app.js:2312
 msgid "New post"
 msgstr ""
 
 #: assets/js/app.js:2312
+#: assets/js/app.js:3622
 msgid "New"
 msgstr ""
 
@@ -5282,8 +6672,8 @@ msgid "dark"
 msgstr ""
 
 #: assets/js/app.js:2776
-#: assets/js/app.js:33980
-#: assets/js/app.js:34387
+#: assets/js/app.js:33979
+#: assets/js/app.js:34386
 msgid "Color scheme"
 msgstr ""
 
@@ -5328,9 +6718,17 @@ msgstr ""
 msgid "Store"
 msgstr ""
 
+#: assets/js/app.js:2949
+msgid "All caught up. No orders need attention."
+msgstr ""
+
 #: assets/js/app.js:2950
 #: assets/js/app.js:9076
 msgid "View orders"
+msgstr ""
+
+#: assets/js/app.js:2958
+msgid "Loading overview…"
 msgstr ""
 
 #: assets/js/app.js:2983
@@ -5341,10 +6739,18 @@ msgstr ""
 msgid "Recent activity"
 msgstr ""
 
+#: assets/js/app.js:3035
+msgid "No activity yet."
+msgstr ""
+
 #: assets/js/app.js:3201
-#: assets/js/app.js:29852
-#: assets/js/app.js:29865
+#: assets/js/app.js:29851
+#: assets/js/app.js:29864
 msgid "Pageviews"
+msgstr ""
+
+#: assets/js/app.js:3205
+msgid "Click for details"
 msgstr ""
 
 #: assets/js/app.js:3303
@@ -5354,7 +6760,7 @@ msgstr ""
 #: assets/js/app.js:3456
 #: assets/js/app.js:4786
 #: assets/js/app.js:9675
-#: assets/js/app.js:29065
+#: assets/js/app.js:29064
 msgid "Working…"
 msgstr ""
 
@@ -5370,10 +6776,6 @@ msgstr ""
 
 #: assets/js/app.js:3580
 msgid "Only live content carrying unsaved edits"
-msgstr ""
-
-#: assets/js/app.js:3580
-msgid "Modified"
 msgstr ""
 
 #: assets/js/app.js:3581
@@ -5422,21 +6824,6 @@ msgstr ""
 msgid "Unsaved edits"
 msgstr ""
 
-#: assets/js/app.js:3619
-#: assets/js/app.js:3924
-#: assets/js/app.js:22661
-#: assets/js/app.js:34013
-#: assets/js/app.js:34414
-msgid "Restore"
-msgstr ""
-
-#: assets/js/app.js:3620
-#: assets/js/app.js:26229
-#: assets/js/app.js:26235
-#: assets/js/app.js:30212
-msgid "Delete"
-msgstr ""
-
 #: assets/js/app.js:3621
 #: assets/js/app.js:9301
 #: assets/js/app.js:9777
@@ -5450,6 +6837,12 @@ msgstr ""
 
 #: assets/js/app.js:3622
 msgid "Trash is empty."
+msgstr ""
+
+#. translators: %s: the New button label, in bold.
+#: assets/js/app.js:3622
+#, js-format
+msgid "Nothing here yet. Hit %s to write something."
 msgstr ""
 
 #: assets/js/app.js:3762
@@ -5468,12 +6861,27 @@ msgstr ""
 msgid "Edit in block editor ↗"
 msgstr ""
 
+#: assets/js/app.js:3765
+msgid "Copy public preview link"
+msgstr ""
+
 #: assets/js/app.js:3766
 #: assets/js/app.js:24476
 msgid "Duplicate"
 msgstr ""
 
+#: assets/js/app.js:3768
+#: assets/js/app.js:8656
+msgid "Publish now"
+msgstr ""
+
+#: assets/js/app.js:3769
+#: assets/js/app.js:8656
+msgid "Move to draft"
+msgstr ""
+
 #: assets/js/app.js:3770
+#: assets/js/app.js:22156
 msgid "Move to trash"
 msgstr ""
 
@@ -5535,8 +6943,9 @@ msgstr ""
 #: assets/js/app.js:10030
 #: assets/js/app.js:24461
 #: assets/js/app.js:24766
-#: assets/js/app.js:26614
-#: assets/js/app.js:26792
+#: assets/js/app.js:25404
+#: assets/js/app.js:26613
+#: assets/js/app.js:26791
 msgid "Apply"
 msgstr ""
 
@@ -5560,14 +6969,14 @@ msgstr ""
 #: assets/js/app.js:4199
 #: assets/js/app.js:5775
 #: assets/js/app.js:8266
-#: assets/js/app.js:25447
-#: assets/js/app.js:31486
-#: assets/js/app.js:31630
-#: assets/js/app.js:31724
-#: assets/js/app.js:31796
-#: assets/js/app.js:31842
-#: assets/js/app.js:31872
-#: assets/js/app.js:32020
+#: assets/js/app.js:25446
+#: assets/js/app.js:31485
+#: assets/js/app.js:31629
+#: assets/js/app.js:31723
+#: assets/js/app.js:31795
+#: assets/js/app.js:31841
+#: assets/js/app.js:31871
+#: assets/js/app.js:32019
 msgid "Saving…"
 msgstr ""
 
@@ -5580,7 +6989,7 @@ msgid "Edited copy saved"
 msgstr ""
 
 #: assets/js/app.js:4226
-#: assets/js/app.js:29923
+#: assets/js/app.js:29922
 msgid "Save as copy"
 msgstr ""
 
@@ -5681,7 +7090,7 @@ msgid "Copy URL"
 msgstr ""
 
 #: assets/js/app.js:4561
-#: assets/js/app.js:31455
+#: assets/js/app.js:31454
 msgid "URL copied"
 msgstr ""
 
@@ -5690,19 +7099,19 @@ msgstr ""
 #: assets/js/app.js:9909
 #: assets/js/app.js:14091
 #: assets/js/app.js:14431
-#: assets/js/app.js:31457
-#: assets/js/app.js:34481
+#: assets/js/app.js:31456
+#: assets/js/app.js:34480
 msgid "Could not copy"
 msgstr ""
 
 #: assets/js/app.js:4564
 #: assets/js/app.js:16200
-#: assets/js/app.js:26616
+#: assets/js/app.js:26615
 msgid "Open ↗"
 msgstr ""
 
 #: assets/js/app.js:4565
-#: assets/js/app.js:29997
+#: assets/js/app.js:29996
 msgid "Edit image"
 msgstr ""
 
@@ -5722,6 +7131,10 @@ msgstr ""
 msgid "Moving…"
 msgstr ""
 
+#: assets/js/app.js:4806
+msgid "Comments are disabled on this site."
+msgstr ""
+
 #: assets/js/app.js:4819
 msgid "Loading comments…"
 msgstr ""
@@ -5736,7 +7149,7 @@ msgid "Select page"
 msgstr ""
 
 #: assets/js/app.js:4883
-#: assets/js/app.js:29953
+#: assets/js/app.js:29952
 msgid "Open in the editor"
 msgstr ""
 
@@ -5758,8 +7171,8 @@ msgstr ""
 
 #: assets/js/app.js:4909
 #: assets/js/app.js:12057
-#: assets/js/app.js:29994
-#: assets/js/app.js:30520
+#: assets/js/app.js:29993
+#: assets/js/app.js:30519
 msgid "Save"
 msgstr ""
 
@@ -5830,7 +7243,7 @@ msgstr ""
 
 #: assets/js/app.js:5133
 #: assets/js/app.js:6566
-#: assets/js/app.js:30363
+#: assets/js/app.js:30362
 msgid "On hold"
 msgstr ""
 
@@ -5839,30 +7252,31 @@ msgid "Could not load analytics"
 msgstr ""
 
 #: assets/js/app.js:5343
+#: assets/js/app.js:5478
 #: assets/js/app.js:6422
 #: assets/js/app.js:6744
 #: assets/js/app.js:9010
-#: assets/js/app.js:30045
-#: assets/js/app.js:30352
+#: assets/js/app.js:30044
+#: assets/js/app.js:30351
 msgid "Customer"
 msgstr ""
 
 #: assets/js/app.js:5347
-#: assets/js/app.js:30355
-#: assets/js/app.js:33954
-#: assets/js/app.js:34328
+#: assets/js/app.js:30354
+#: assets/js/app.js:33953
+#: assets/js/app.js:34327
 msgid "First name"
 msgstr ""
 
 #: assets/js/app.js:5348
-#: assets/js/app.js:30356
-#: assets/js/app.js:33958
-#: assets/js/app.js:34332
+#: assets/js/app.js:30355
+#: assets/js/app.js:33957
+#: assets/js/app.js:34331
 msgid "Last name"
 msgstr ""
 
 #: assets/js/app.js:5351
-#: assets/js/app.js:30263
+#: assets/js/app.js:30262
 msgid "Phone"
 msgstr ""
 
@@ -5895,14 +7309,9 @@ msgstr ""
 msgid "Postcode"
 msgstr ""
 
-#: assets/js/app.js:5361
-#: assets/js/app.js:5382
-msgid "Country"
-msgstr ""
-
 #: assets/js/app.js:5366
-#: assets/js/app.js:30054
-#: assets/js/app.js:30259
+#: assets/js/app.js:30053
+#: assets/js/app.js:30258
 msgid "Billing"
 msgstr ""
 
@@ -5926,10 +7335,6 @@ msgstr ""
 #: assets/js/app.js:5409
 #: assets/js/app.js:7527
 msgid "Shipping"
-msgstr ""
-
-#: assets/js/app.js:5387
-msgid "Note"
 msgstr ""
 
 #: assets/js/app.js:5391
@@ -5958,13 +7363,15 @@ msgstr ""
 #: assets/js/app.js:5798
 #: assets/js/app.js:7622
 #: assets/js/app.js:8312
-#: assets/js/app.js:30211
-#: assets/js/app.js:30600
-#: assets/js/app.js:31754
-#: assets/js/app.js:33946
-#: assets/js/app.js:33970
-#: assets/js/app.js:34320
-#: assets/js/app.js:34348
+#: assets/js/app.js:11702
+#: assets/js/app.js:16446
+#: assets/js/app.js:30210
+#: assets/js/app.js:30599
+#: assets/js/app.js:31753
+#: assets/js/app.js:33945
+#: assets/js/app.js:33969
+#: assets/js/app.js:34319
+#: assets/js/app.js:34347
 msgid "Save changes"
 msgstr ""
 
@@ -5972,9 +7379,8 @@ msgstr ""
 msgid "Saves status, payment details, customer details, shipping and the customer note."
 msgstr ""
 
-#: assets/js/app.js:5438
-#: assets/js/app.js:30059
-msgid "Payment"
+#: assets/js/app.js:5439
+msgid "Loading payment methods…"
 msgstr ""
 
 #: assets/js/app.js:5442
@@ -6011,6 +7417,10 @@ msgstr ""
 msgid "WooCommerce email"
 msgstr ""
 
+#: assets/js/app.js:5462
+msgid "Loading email types…"
+msgstr ""
+
 #: assets/js/app.js:5464
 msgid "Email type"
 msgstr ""
@@ -6021,6 +7431,18 @@ msgstr ""
 
 #: assets/js/app.js:5470
 msgid "Order notes"
+msgstr ""
+
+#: assets/js/app.js:5471
+msgid "Loading notes…"
+msgstr ""
+
+#: assets/js/app.js:5478
+msgid "Private"
+msgstr ""
+
+#: assets/js/app.js:5481
+msgid "No notes yet."
 msgstr ""
 
 #: assets/js/app.js:5485
@@ -6035,8 +7457,24 @@ msgstr ""
 msgid "Visible to the customer"
 msgstr ""
 
+#: assets/js/app.js:5498
+#: assets/js/app.js:5509
+#: assets/js/app.js:13213
+#: assets/js/app.js:13246
+#: assets/js/app.js:16616
+msgid "Checking…"
+msgstr ""
+
+#: assets/js/app.js:5499
+msgid "No related subscriptions on this order."
+msgstr ""
+
 #: assets/js/app.js:5508
 msgid "More from this customer"
+msgstr ""
+
+#: assets/js/app.js:5510
+msgid "No other orders from this customer."
 msgstr ""
 
 #: assets/js/app.js:5526
@@ -6045,9 +7483,21 @@ msgstr ""
 
 #: assets/js/app.js:5527
 #: assets/js/app.js:7629
-#: assets/js/app.js:30097
-#: assets/js/app.js:30218
+#: assets/js/app.js:30096
+#: assets/js/app.js:30217
 msgid "Edit in WooCommerce"
+msgstr ""
+
+#. translators: %s: the order number.
+#: assets/js/app.js:5541
+#: assets/js/app.js:6141
+#, js-format
+msgid "Order #%s"
+msgstr ""
+
+#: assets/js/app.js:5547
+#: assets/js/app.js:6147
+msgid "Loading order…"
 msgstr ""
 
 #: assets/js/app.js:5592
@@ -6104,8 +7554,8 @@ msgid "Refund deleted"
 msgstr ""
 
 #: assets/js/app.js:5944
-#: assets/js/app.js:30398
-#: assets/js/app.js:30614
+#: assets/js/app.js:30397
+#: assets/js/app.js:30613
 msgid "Send email"
 msgstr ""
 
@@ -6125,14 +7575,28 @@ msgstr ""
 msgid "Could not load order"
 msgstr ""
 
+#: assets/js/app.js:6126
+msgid "You don't have access to orders on this site."
+msgstr ""
+
 #: assets/js/app.js:6142
+#: assets/js/app.js:6332
 #: assets/js/app.js:8341
 #: assets/js/app.js:9237
+#: assets/js/app.js:11294
+#: assets/js/app.js:11662
+#: assets/js/app.js:14532
+#: assets/js/app.js:15065
 #: assets/js/app.js:16606
+#: assets/js/app.js:21452
 #: assets/js/app.js:21494
-#: assets/js/app.js:30542
-#: assets/js/app.js:32640
-#: assets/js/app.js:32890
+#: assets/js/app.js:22145
+#: assets/js/app.js:29408
+#: assets/js/app.js:30081
+#: assets/js/app.js:30502
+#: assets/js/app.js:30541
+#: assets/js/app.js:32639
+#: assets/js/app.js:32889
 msgid "Loading…"
 msgstr ""
 
@@ -6149,8 +7613,10 @@ msgstr ""
 msgid "Pick item quantities to refund, or enter an amount directly."
 msgstr ""
 
-#: assets/js/app.js:6217
-msgid "Reason"
+#. translators: %s: the largest refundable amount, already formatted as money.
+#: assets/js/app.js:6213
+#, js-format
+msgid "Amount (max %s)"
 msgstr ""
 
 #: assets/js/app.js:6218
@@ -6167,10 +7633,6 @@ msgstr ""
 
 #: assets/js/app.js:6247
 msgid "If you have any questions, just reply to this email."
-msgstr ""
-
-#: assets/js/app.js:6266
-msgid "Analytics"
 msgstr ""
 
 #: assets/js/app.js:6291
@@ -6193,6 +7655,14 @@ msgstr ""
 msgid "Revenue"
 msgstr ""
 
+#: assets/js/app.js:6318
+msgid "Loading analytics…"
+msgstr ""
+
+#: assets/js/app.js:6325
+msgid "No sales in this range."
+msgstr ""
+
 #: assets/js/app.js:6330
 msgid "Top products"
 msgstr ""
@@ -6207,6 +7677,15 @@ msgstr ""
 
 #: assets/js/app.js:6336
 msgid "Product #"
+msgstr ""
+
+#: assets/js/app.js:6340
+msgid "No product sales in this range."
+msgstr ""
+
+#: assets/js/app.js:6378
+#: assets/js/app.js:30269
+msgid "Loading orders…"
 msgstr ""
 
 #: assets/js/app.js:6395
@@ -6227,7 +7706,7 @@ msgstr ""
 
 #: assets/js/app.js:6422
 #: assets/js/app.js:14597
-#: assets/js/app.js:30065
+#: assets/js/app.js:30064
 msgid "Items"
 msgstr ""
 
@@ -6253,7 +7732,7 @@ msgstr ""
 #: assets/js/app.js:6530
 #: assets/js/app.js:6531
 #: assets/js/app.js:6532
-#: assets/js/app.js:31376
+#: assets/js/app.js:31375
 msgid "Order #"
 msgstr ""
 
@@ -6278,6 +7757,7 @@ msgid "Could not load subscription"
 msgstr ""
 
 #: assets/js/app.js:6702
+#: assets/js/app.js:30284
 msgid "Loading subscriptions…"
 msgstr ""
 
@@ -6294,7 +7774,7 @@ msgid "Subscription"
 msgstr ""
 
 #: assets/js/app.js:6744
-#: assets/js/app.js:30055
+#: assets/js/app.js:30054
 msgid "Next payment"
 msgstr ""
 
@@ -6357,7 +7837,7 @@ msgstr ""
 #: assets/js/app.js:7463
 #: assets/js/app.js:7509
 #: assets/js/app.js:8438
-#: assets/js/app.js:30317
+#: assets/js/app.js:30316
 msgid "SKU"
 msgstr ""
 
@@ -6373,7 +7853,7 @@ msgstr ""
 
 #: assets/js/app.js:6905
 #: assets/js/app.js:7472
-#: assets/js/app.js:30316
+#: assets/js/app.js:30315
 msgid "Regular price"
 msgstr ""
 
@@ -6389,22 +7869,6 @@ msgstr ""
 #: assets/js/app.js:6908
 #: assets/js/app.js:7651
 msgid "Stock status"
-msgstr ""
-
-#: assets/js/app.js:6911
-#: assets/js/app.js:7106
-#: assets/js/app.js:7732
-#: assets/js/app.js:7829
-#: assets/js/app.js:7969
-#: assets/js/app.js:16121
-#: assets/js/app.js:16140
-#: assets/js/app.js:16393
-#: assets/js/app.js:22144
-#: assets/js/app.js:24475
-#: assets/js/app.js:24807
-#: assets/js/app.js:25359
-#: assets/js/app.js:26473
-msgid "Remove"
 msgstr ""
 
 #. translators: %s: the variation label, for example "Large / Blue".
@@ -6506,7 +7970,7 @@ msgstr ""
 #: assets/js/app.js:7473
 #: assets/js/app.js:7509
 #: assets/js/app.js:7510
-#: assets/js/app.js:30317
+#: assets/js/app.js:30316
 msgid "Optional"
 msgstr ""
 
@@ -6552,11 +8016,12 @@ msgid "Stock"
 msgstr ""
 
 #: assets/js/app.js:7497
-#: assets/js/app.js:25304
+#: assets/js/app.js:25303
 msgid "Images"
 msgstr ""
 
 #: assets/js/app.js:7500
+#: assets/js/app.js:24458
 msgid "Add images…"
 msgstr ""
 
@@ -6577,7 +8042,7 @@ msgid "Track stock quantity"
 msgstr ""
 
 #: assets/js/app.js:7516
-#: assets/js/app.js:30378
+#: assets/js/app.js:30377
 msgid "Quantity"
 msgstr ""
 
@@ -6621,17 +8086,13 @@ msgstr ""
 msgid "Organization"
 msgstr ""
 
-#: assets/js/app.js:7547
-#: assets/js/app.js:9292
-#: assets/js/app.js:9422
-#: assets/js/app.js:14597
-#: assets/js/app.js:30863
-#: assets/js/app.js:30935
-msgid "Slug"
-msgstr ""
-
 #: assets/js/app.js:7550
 msgid "set-on-save"
+msgstr ""
+
+#: assets/js/app.js:7552
+#: assets/js/app.js:21444
+msgid "Changing this breaks the current URL."
 msgstr ""
 
 #: assets/js/app.js:7554
@@ -6655,8 +8116,8 @@ msgid "Download limit"
 msgstr ""
 
 #: assets/js/app.js:7566
+#: assets/js/app.js:30185
 #: assets/js/app.js:30186
-#: assets/js/app.js:30187
 msgid "Unlimited"
 msgstr ""
 
@@ -6816,7 +8277,7 @@ msgstr ""
 
 #: assets/js/app.js:7732
 #: assets/js/app.js:24475
-#: assets/js/app.js:26795
+#: assets/js/app.js:26794
 msgid "Remove image"
 msgstr ""
 
@@ -6888,12 +8349,14 @@ msgid "Remove attribute"
 msgstr ""
 
 #: assets/js/app.js:7900
-#: assets/js/app.js:30372
+#: assets/js/app.js:30371
 msgid "Search products…"
 msgstr ""
 
 #: assets/js/app.js:7944
 #: assets/js/app.js:8032
+#: assets/js/app.js:9539
+#: assets/js/app.js:15925
 msgid "No matches"
 msgstr ""
 
@@ -6906,12 +8369,21 @@ msgid "No matches. Press Enter to create it."
 msgstr ""
 
 #: assets/js/app.js:8261
-#: assets/js/app.js:31246
+#: assets/js/app.js:31245
 msgid "Name is required"
 msgstr ""
 
 #: assets/js/app.js:8305
 msgid "Product updated"
+msgstr ""
+
+#: assets/js/app.js:8324
+msgid "You don't have access to products on this site."
+msgstr ""
+
+#: assets/js/app.js:8346
+#: assets/js/app.js:30123
+msgid "Loading product…"
 msgstr ""
 
 #: assets/js/app.js:8375
@@ -6976,14 +8448,6 @@ msgstr ""
 msgid "Marked out of stock"
 msgstr ""
 
-#: assets/js/app.js:8656
-msgid "Move to draft"
-msgstr ""
-
-#: assets/js/app.js:8656
-msgid "Publish now"
-msgstr ""
-
 #: assets/js/app.js:8657
 msgid "Product published"
 msgstr ""
@@ -7004,6 +8468,10 @@ msgstr ""
 msgid "Could not load coupon"
 msgstr ""
 
+#: assets/js/app.js:8776
+msgid "Coupons are turned off in WooCommerce (Settings → General → Enable coupons), or you do not have permission to manage them."
+msgstr ""
+
 #: assets/js/app.js:8777
 msgid "Open WooCommerce settings ↗"
 msgstr ""
@@ -7017,34 +8485,14 @@ msgid "Search coupons (code, ID…)"
 msgstr ""
 
 #: assets/js/app.js:8827
-#: assets/js/app.js:30158
+#: assets/js/app.js:30164
 #: assets/js/app.js:30176
-msgid "Code"
-msgstr ""
-
-#: assets/js/app.js:8827
-#: assets/js/app.js:14553
-#: assets/js/app.js:15670
-#: assets/js/app.js:15694
-#: assets/js/app.js:30178
-msgid "Type"
-msgstr ""
-
-#: assets/js/app.js:8827
-#: assets/js/app.js:30165
-#: assets/js/app.js:30177
 msgid "Amount"
 msgstr ""
 
 #: assets/js/app.js:8827
-#: assets/js/app.js:30204
+#: assets/js/app.js:30203
 msgid "Usage"
-msgstr ""
-
-#: assets/js/app.js:8827
-#: assets/js/app.js:30191
-#: assets/js/app.js:30205
-msgid "Expires"
 msgstr ""
 
 #: assets/js/app.js:8841
@@ -7059,21 +8507,16 @@ msgstr ""
 msgid "Could not load customer"
 msgstr ""
 
+#: assets/js/app.js:8999
+msgid "Loading customers…"
+msgstr ""
+
 #: assets/js/app.js:9005
 msgid "Search customers (name, email, ID…)"
 msgstr ""
 
 #: assets/js/app.js:9010
-#: assets/js/app.js:9763
 #: assets/js/app.js:30252
-#: assets/js/app.js:30568
-#: assets/js/app.js:33924
-#: assets/js/app.js:34297
-msgid "Role"
-msgstr ""
-
-#: assets/js/app.js:9010
-#: assets/js/app.js:30253
 msgid "Registered"
 msgstr ""
 
@@ -7098,7 +8541,12 @@ msgid "Post Types"
 msgstr ""
 
 #: assets/js/app.js:9237
+#: assets/js/app.js:9268
 msgid "Loading terms…"
+msgstr ""
+
+#: assets/js/app.js:9262
+msgid "You need permission to manage terms."
 msgstr ""
 
 #: assets/js/app.js:9274
@@ -7141,12 +8589,6 @@ msgstr ""
 
 #: assets/js/app.js:9422
 msgid "auto from name"
-msgstr ""
-
-#: assets/js/app.js:9425
-#: assets/js/app.js:29989
-#: assets/js/app.js:30173
-msgid "Description"
 msgstr ""
 
 #. translators: 1: the term being merged, in bold. 2: the taxonomy item name, for example "category". 3: the term name again.
@@ -7203,7 +8645,7 @@ msgstr ""
 
 #: assets/js/app.js:9701
 #: assets/js/app.js:9744
-#: assets/js/app.js:30731
+#: assets/js/app.js:30730
 msgid "Search users…"
 msgstr ""
 
@@ -7213,6 +8655,7 @@ msgid "Session filter"
 msgstr ""
 
 #: assets/js/app.js:9709
+#: assets/js/app.js:30728
 msgid "Loading users…"
 msgstr ""
 
@@ -7367,7 +8810,7 @@ msgid "Copy command"
 msgstr ""
 
 #: assets/js/app.js:10515
-#: assets/js/app.js:31840
+#: assets/js/app.js:31839
 msgid "Fill in all fields first"
 msgstr ""
 
@@ -7386,10 +8829,6 @@ msgstr ""
 
 #: assets/js/app.js:10969
 msgid "Post ID"
-msgstr ""
-
-#: assets/js/app.js:11020
-msgid "Event"
 msgstr ""
 
 #: assets/js/app.js:11043
@@ -7421,9 +8860,17 @@ msgstr ""
 msgid "Select row"
 msgstr ""
 
+#: assets/js/app.js:11380
+msgid "Nothing here."
+msgstr ""
+
 #: assets/js/app.js:11696
 #: assets/js/app.js:21360
 msgid "edit in wp-admin ↗"
+msgstr ""
+
+#: assets/js/app.js:11701
+msgid "Nothing to configure here."
 msgstr ""
 
 #: assets/js/app.js:11749
@@ -7436,6 +8883,7 @@ msgid "Settings saved"
 msgstr ""
 
 #: assets/js/app.js:11907
+#: assets/js/app.js:12011
 msgid "Loading menu…"
 msgstr ""
 
@@ -7445,6 +8893,14 @@ msgstr ""
 
 #: assets/js/app.js:11921
 msgid "Menu created"
+msgstr ""
+
+#: assets/js/app.js:12014
+msgid "Loading menus…"
+msgstr ""
+
+#: assets/js/app.js:12038
+msgid "No menus yet. Create one to build your site navigation."
 msgstr ""
 
 #: assets/js/app.js:12041
@@ -7468,16 +8924,16 @@ msgstr ""
 #: assets/js/app.js:12069
 #: assets/js/app.js:12412
 #: assets/js/app.js:24805
-#: assets/js/app.js:25357
-#: assets/js/app.js:25408
+#: assets/js/app.js:25356
+#: assets/js/app.js:25407
 msgid "Move up"
 msgstr ""
 
 #: assets/js/app.js:12070
 #: assets/js/app.js:12413
 #: assets/js/app.js:24806
-#: assets/js/app.js:25358
-#: assets/js/app.js:25409
+#: assets/js/app.js:25357
+#: assets/js/app.js:25408
 msgid "Move down"
 msgstr ""
 
@@ -7491,6 +8947,10 @@ msgstr ""
 
 #: assets/js/app.js:12073
 msgid "Remove from menu"
+msgstr ""
+
+#: assets/js/app.js:12075
+msgid "This menu is empty — add pages or links below."
 msgstr ""
 
 #: assets/js/app.js:12079
@@ -7577,6 +9037,10 @@ msgstr ""
 msgid "Content (block markup or HTML)"
 msgstr ""
 
+#: assets/js/app.js:12387
+msgid "Loading widgets…"
+msgstr ""
+
 #: assets/js/app.js:12414
 #: assets/js/app.js:12415
 msgid "Move to…"
@@ -7597,6 +9061,10 @@ msgstr ""
 
 #: assets/js/app.js:12421
 msgid "No widgets in this area."
+msgstr ""
+
+#: assets/js/app.js:12427
+msgid "The active theme registers no widget areas."
 msgstr ""
 
 #: assets/js/app.js:12465
@@ -7624,7 +9092,7 @@ msgid "Could not load connectors"
 msgstr ""
 
 #: assets/js/app.js:12691
-#: assets/js/app.js:29289
+#: assets/js/app.js:29288
 msgid "Updating…"
 msgstr ""
 
@@ -7651,7 +9119,7 @@ msgid "Updated, but the plugin list could not refresh yet. Reload if badges look
 msgstr ""
 
 #: assets/js/app.js:12906
-#: assets/js/app.js:30785
+#: assets/js/app.js:30784
 msgid "Plugins"
 msgstr ""
 
@@ -7683,15 +9151,12 @@ msgstr ""
 msgid "Valid"
 msgstr ""
 
-#: assets/js/app.js:13002
-msgid "Expired"
-msgstr ""
-
 #: assets/js/app.js:13003
 msgid "Invalid"
 msgstr ""
 
 #: assets/js/app.js:13004
+#: assets/js/app.js:16365
 msgid "Not connected"
 msgstr ""
 
@@ -7715,6 +9180,14 @@ msgstr ""
 msgid "Activate this plugin"
 msgstr ""
 
+#: assets/js/app.js:13023
+msgid "Turn theme on"
+msgstr ""
+
+#: assets/js/app.js:13023
+msgid "Turn plugin on"
+msgstr ""
+
 #: assets/js/app.js:13025
 msgid "License key"
 msgstr ""
@@ -7731,12 +9204,12 @@ msgstr ""
 msgid "Activate ↗"
 msgstr ""
 
-#: assets/js/app.js:13031
-msgid "Deactivate"
-msgstr ""
-
 #: assets/js/app.js:13033
 msgid "Re-verify"
+msgstr ""
+
+#: assets/js/app.js:13038
+msgid "theme"
 msgstr ""
 
 #: assets/js/app.js:13038
@@ -7793,12 +9266,6 @@ msgstr ""
 msgid "No licenses or connected services detected."
 msgstr ""
 
-#: assets/js/app.js:13213
-#: assets/js/app.js:13246
-#: assets/js/app.js:16616
-msgid "Checking…"
-msgstr ""
-
 #: assets/js/app.js:13220
 #: assets/js/app.js:14464
 msgid "Everything is up to date"
@@ -7809,9 +9276,9 @@ msgid "Could not check for updates"
 msgstr ""
 
 #: assets/js/app.js:13246
-#: assets/js/app.js:32357
-#: assets/js/app.js:32776
-#: assets/js/app.js:32910
+#: assets/js/app.js:32356
+#: assets/js/app.js:32775
+#: assets/js/app.js:32909
 msgid "Activating…"
 msgstr ""
 
@@ -7867,12 +9334,6 @@ msgstr ""
 
 #: assets/js/app.js:13349
 msgid "Deactivate license"
-msgstr ""
-
-#: assets/js/app.js:13370
-#: assets/js/app.js:14284
-#: assets/js/app.js:16382
-msgid "Activate"
 msgstr ""
 
 #: assets/js/app.js:13517
@@ -7983,12 +9444,24 @@ msgstr ""
 msgid "The site is public, but \"Discourage search engines\" is on in Settings → Reading, so it asks not to be indexed."
 msgstr ""
 
+#. translators: %s: the WordPress version being offered.
+#: assets/js/app.js:13692
+#, js-format
+msgid "WordPress %s is available"
+msgstr ""
+
+#. translators: %s: the WordPress version currently installed.
+#: assets/js/app.js:13693
+#, js-format
+msgid "You're on %s. The site enters maintenance mode for a few seconds while core updates."
+msgstr ""
+
 #: assets/js/app.js:13734
 msgid "Still updating after 5 minutes. Give it a moment, then check Extensions."
 msgstr ""
 
 #: assets/js/app.js:13770
-#: assets/js/app.js:29207
+#: assets/js/app.js:29206
 msgid "Updating WordPress…"
 msgstr ""
 
@@ -8042,6 +9515,7 @@ msgid "Network active"
 msgstr ""
 
 #: assets/js/app.js:13908
+#: assets/js/app.js:14268
 msgid "Active"
 msgstr ""
 
@@ -8185,7 +9659,7 @@ msgid "Page attributes"
 msgstr ""
 
 #: assets/js/app.js:14553
-#: assets/js/app.js:29950
+#: assets/js/app.js:29949
 msgid "Attached to"
 msgstr ""
 
@@ -8208,6 +9682,10 @@ msgstr ""
 
 #: assets/js/app.js:14662
 msgid "Largest tables:"
+msgstr ""
+
+#: assets/js/app.js:14704
+msgid "Reading the system…"
 msgstr ""
 
 #: assets/js/app.js:14716
@@ -8240,6 +9718,14 @@ msgstr ""
 
 #: assets/js/app.js:14753
 msgid "Debug tools"
+msgstr ""
+
+#: assets/js/app.js:14754
+msgid "writes wp-config.php"
+msgstr ""
+
+#: assets/js/app.js:14765
+msgid "defined elsewhere"
 msgstr ""
 
 #: assets/js/app.js:14774
@@ -8338,6 +9824,12 @@ msgstr ""
 msgid "Handle a GDPR erasure request"
 msgstr ""
 
+#. translators: %s: how long ago the report was generated, e.g. "2 minutes ago".
+#: assets/js/app.js:14937
+#, js-format
+msgid "Generated %s"
+msgstr ""
+
 #: assets/js/app.js:15033
 #: assets/js/app.js:15040
 msgid "System report copied"
@@ -8346,7 +9838,7 @@ msgstr ""
 #: assets/js/app.js:15040
 #: assets/js/app.js:15214
 #: assets/js/app.js:15531
-#: assets/js/app.js:31210
+#: assets/js/app.js:31209
 msgid "Copy failed"
 msgstr ""
 
@@ -8355,16 +9847,7 @@ msgid "Option"
 msgstr ""
 
 #: assets/js/app.js:15070
-#: assets/js/app.js:15408
-msgid "Size"
-msgstr ""
-
-#: assets/js/app.js:15070
 msgid "Autoload"
-msgstr ""
-
-#: assets/js/app.js:15082
-msgid "Hook"
 msgstr ""
 
 #: assets/js/app.js:15082
@@ -8377,10 +9860,6 @@ msgstr ""
 
 #: assets/js/app.js:15095
 msgid "Scheduled cron events"
-msgstr ""
-
-#: assets/js/app.js:15134
-msgid "Log"
 msgstr ""
 
 #: assets/js/app.js:15134
@@ -8401,7 +9880,18 @@ msgid "Collapse repeated lines (digits ignored)"
 msgstr ""
 
 #: assets/js/app.js:15145
+#: assets/js/app.js:15173
 msgid "Reading log…"
+msgstr ""
+
+#: assets/js/app.js:15163
+msgid "The log is empty."
+msgstr ""
+
+#. translators: %s: the error message returned while reading the log.
+#: assets/js/app.js:15187
+#, js-format
+msgid "Couldn’t read the log: %s"
 msgstr ""
 
 #: assets/js/app.js:15214
@@ -8482,7 +9972,7 @@ msgid "Read-only by design"
 msgstr ""
 
 #: assets/js/app.js:15406
-#: assets/js/app.js:26221
+#: assets/js/app.js:26220
 msgid "Table"
 msgstr ""
 
@@ -8542,6 +10032,11 @@ msgstr ""
 msgid "Browsing the first %s rows of this order; filter to reach the rest."
 msgstr ""
 
+#: assets/js/app.js:15578
+#: assets/js/app.js:15678
+msgid "PK"
+msgstr ""
+
 #: assets/js/app.js:15586
 msgid "No rows match this filter."
 msgstr ""
@@ -8578,7 +10073,7 @@ msgid "Columns"
 msgstr ""
 
 #: assets/js/app.js:15669
-#: assets/js/app.js:26195
+#: assets/js/app.js:26194
 msgid "Column"
 msgstr ""
 
@@ -8592,10 +10087,6 @@ msgstr ""
 
 #: assets/js/app.js:15673
 msgid "Extra"
-msgstr ""
-
-#: assets/js/app.js:15678
-msgid "PK"
 msgstr ""
 
 #: assets/js/app.js:15682
@@ -8782,6 +10273,12 @@ msgstr ""
 msgid "/* CSS added here loads on every page, after the theme's own stylesheets. */"
 msgstr ""
 
+#. translators: %s: name of the active theme.
+#: assets/js/app.js:16240
+#, js-format
+msgid "The same stylesheet the Customizer's \"Additional CSS\" edits, loaded after the theme's own styles on every page. It belongs to the active theme (%s); switching themes keeps a separate one per theme."
+msgstr ""
+
 #: assets/js/app.js:16242
 msgid "Custom CSS couldn't be loaded."
 msgstr ""
@@ -8965,6 +10462,24 @@ msgstr ""
 msgid "Key in environment"
 msgstr ""
 
+#. translators: %s: name of the PHP constant holding the key.
+#: assets/js/app.js:16373
+#, js-format
+msgid "The key is supplied by the <code>%s</code> constant in wp-config.php, so it can only be changed there."
+msgstr ""
+
+#. translators: %s: name of the environment variable holding the key.
+#: assets/js/app.js:16373
+#, js-format
+msgid "The key is supplied by the <code>%s</code> environment variable, so it can only be changed there."
+msgstr ""
+
+#. translators: %s: name of the provider plugin.
+#: assets/js/app.js:16376
+#, js-format
+msgid "Needs the %s provider plugin before a key can be saved."
+msgstr ""
+
 #: assets/js/app.js:16377
 #: assets/js/app.js:16664
 msgid "Install & activate"
@@ -8972,6 +10487,10 @@ msgstr ""
 
 #: assets/js/app.js:16381
 msgid "The provider plugin is installed but not active."
+msgstr ""
+
+#: assets/js/app.js:16385
+msgid "This connector’s key isn’t writable right now: its plugin registers the setting while active."
 msgstr ""
 
 #: assets/js/app.js:16391
@@ -8984,6 +10503,10 @@ msgstr ""
 
 #: assets/js/app.js:16410
 msgid "External services WordPress can use: AI providers and other connected APIs. Keys are stored by core, validated on save, and never shown again once saved."
+msgstr ""
+
+#: assets/js/app.js:16424
+msgid "Loading settings…"
 msgstr ""
 
 #: assets/js/app.js:16524
@@ -9023,9 +10546,9 @@ msgid "Key removed"
 msgstr ""
 
 #: assets/js/app.js:16651
-#: assets/js/app.js:32357
-#: assets/js/app.js:32776
-#: assets/js/app.js:32910
+#: assets/js/app.js:32356
+#: assets/js/app.js:32775
+#: assets/js/app.js:32909
 msgid "Installing…"
 msgstr ""
 
@@ -9039,7 +10562,7 @@ msgstr ""
 
 #: assets/js/app.js:16711
 #: assets/js/app.js:16755
-#: assets/js/app.js:31944
+#: assets/js/app.js:31943
 msgid "Drop an image file"
 msgstr ""
 
@@ -9080,10 +10603,6 @@ msgstr ""
 
 #: assets/js/app.js:17576
 msgid "shortcode"
-msgstr ""
-
-#: assets/js/app.js:17577
-msgid "Shortcode"
 msgstr ""
 
 #: assets/js/app.js:17578
@@ -9148,6 +10667,10 @@ msgstr ""
 msgid "Edit pattern"
 msgstr ""
 
+#: assets/js/app.js:17657
+msgid "Dynamic block — rendered on the site"
+msgstr ""
+
 #: assets/js/app.js:18068
 msgid "Open in a new tab"
 msgstr ""
@@ -9180,7 +10703,7 @@ msgstr ""
 
 #. translators: toast after duplicating a block
 #: assets/js/app.js:18584
-#: assets/js/app.js:26064
+#: assets/js/app.js:26063
 msgid "Block duplicated"
 msgstr ""
 
@@ -9223,6 +10746,30 @@ msgstr ""
 #: assets/js/app.js:20318
 #: assets/js/app.js:20330
 msgid "Word goal cleared"
+msgstr ""
+
+#. translators: %s: words written this session, signed and in bold.
+#: assets/js/app.js:20363
+#, js-format
+msgid "%s session"
+msgstr ""
+
+#. translators: %1$s: word count in bold, optionally followed by a goal. %2$s: reading time in minutes, in bold.
+#: assets/js/app.js:20366
+#, js-format
+msgid "%1$s words&nbsp;·&nbsp;%2$s min"
+msgstr ""
+
+#. translators: %s: word count, in bold.
+#: assets/js/app.js:20367
+#, js-format
+msgid "%s words"
+msgstr ""
+
+#. translators: %s: the word-count goal.
+#: assets/js/app.js:20369
+#, js-format
+msgid "Goal %s words · click to change"
 msgstr ""
 
 #: assets/js/app.js:20370
@@ -9285,6 +10832,14 @@ msgstr ""
 msgid "Next month"
 msgstr ""
 
+#: assets/js/app.js:21155
+msgid "Highlighted days already have other pages."
+msgstr ""
+
+#: assets/js/app.js:21155
+msgid "Highlighted days already have other posts."
+msgstr ""
+
 #: assets/js/app.js:21157
 msgid "Time"
 msgstr ""
@@ -9303,10 +10858,6 @@ msgstr ""
 
 #: assets/js/app.js:21446
 msgid "Format"
-msgstr ""
-
-#: assets/js/app.js:21455
-msgid "Tags"
 msgstr ""
 
 #: assets/js/app.js:21462
@@ -9365,6 +10916,10 @@ msgstr ""
 
 #: assets/js/app.js:21835
 msgid "Remove tag"
+msgstr ""
+
+#: assets/js/app.js:21836
+msgid "No tags yet"
 msgstr ""
 
 #: assets/js/app.js:21988
@@ -9426,13 +10981,13 @@ msgid "Publish"
 msgstr ""
 
 #: assets/js/app.js:22119
-#: assets/js/app.js:33564
+#: assets/js/app.js:33563
 msgid "Saved"
 msgstr ""
 
 #: assets/js/app.js:22120
 #: assets/js/app.js:22122
-#: assets/js/app.js:30869
+#: assets/js/app.js:30868
 msgid "Visibility"
 msgstr ""
 
@@ -9452,6 +11007,10 @@ msgstr ""
 msgid "Immediately"
 msgstr ""
 
+#: assets/js/app.js:22133
+msgid "Save draft"
+msgstr ""
+
 #: assets/js/app.js:22134
 msgid "Preview draft ↗"
 msgstr ""
@@ -9465,8 +11024,14 @@ msgid "Could not load image"
 msgstr ""
 
 #: assets/js/app.js:22287
-#: assets/js/app.js:35218
+#: assets/js/app.js:35217
 msgid "Draft saved"
+msgstr ""
+
+#. translators: %1$s: the content type, lowercased, e.g. "post". %2$s: how long ago the backup was written.
+#: assets/js/app.js:22329
+#, js-format
+msgid "A newer backup of this %1$s exists (%2$s) — likely unsaved changes from an earlier session."
 msgstr ""
 
 #: assets/js/app.js:22330
@@ -9480,6 +11045,12 @@ msgstr ""
 
 #: assets/js/app.js:22360
 msgid "Backup restored — review, then Save or Update to apply"
+msgstr ""
+
+#. translators: %s: the content type, lowercased, e.g. "post".
+#: assets/js/app.js:22464
+#, js-format
+msgid "This %s is open in another editor session. Taking over will lock them out of saving until they take it back."
 msgstr ""
 
 #: assets/js/app.js:22466
@@ -9509,6 +11080,12 @@ msgstr ""
 msgid "Loaded the latest saved version"
 msgstr ""
 
+#. translators: %1$s: display name of the other editor. %2$s: how long ago they saved.
+#: assets/js/app.js:22572
+#, js-format
+msgid "<b>%1$s</b> saved a newer version while you were locked out (%2$s). Saving your copy would overwrite it."
+msgstr ""
+
 #: assets/js/app.js:22573
 msgid "Load theirs"
 msgstr ""
@@ -9517,14 +11094,24 @@ msgstr ""
 msgid "Keep my copy"
 msgstr ""
 
+#. translators: %1$s: the content type, lowercased, e.g. "post". %2$s: how long ago the work was left.
+#: assets/js/app.js:22660
+#, js-format
+msgid "This browser has unsaved work on this %1$s from %2$s — a session ended before it reached the server."
+msgstr ""
+
 #: assets/js/app.js:22697
 msgid "Recovered work restored — review, then save"
 msgstr ""
 
+#: assets/js/app.js:22704
+msgid "Loading editor…"
+msgstr ""
+
 #: assets/js/app.js:22725
-#: assets/js/app.js:29983
+#: assets/js/app.js:29982
+#: assets/js/app.js:33561
 #: assets/js/app.js:33562
-#: assets/js/app.js:33563
 msgid "Title"
 msgstr ""
 
@@ -9565,12 +11152,12 @@ msgid "Inline code"
 msgstr ""
 
 #: assets/js/app.js:22751
-#: assets/js/app.js:28179
+#: assets/js/app.js:28178
 msgid "Heading 2"
 msgstr ""
 
 #: assets/js/app.js:22752
-#: assets/js/app.js:28180
+#: assets/js/app.js:28179
 msgid "Heading 3"
 msgstr ""
 
@@ -9579,17 +11166,17 @@ msgid "Quote"
 msgstr ""
 
 #: assets/js/app.js:22754
-#: assets/js/app.js:26463
+#: assets/js/app.js:26462
 msgid "Code block"
 msgstr ""
 
 #: assets/js/app.js:22755
-#: assets/js/app.js:28187
+#: assets/js/app.js:28186
 msgid "Bulleted list"
 msgstr ""
 
 #: assets/js/app.js:22756
-#: assets/js/app.js:28188
+#: assets/js/app.js:28187
 msgid "Numbered list"
 msgstr ""
 
@@ -9614,12 +11201,12 @@ msgid "Link — or ⌘K"
 msgstr ""
 
 #: assets/js/app.js:22759
-#: assets/js/app.js:26599
+#: assets/js/app.js:26598
 msgid "Link"
 msgstr ""
 
 #: assets/js/app.js:22760
-#: assets/js/app.js:31130
+#: assets/js/app.js:31129
 msgid "Insert image"
 msgstr ""
 
@@ -9644,8 +11231,8 @@ msgid "Writing stats"
 msgstr ""
 
 #: assets/js/app.js:22939
-#: assets/js/app.js:25693
-#: assets/js/app.js:26911
+#: assets/js/app.js:25692
+#: assets/js/app.js:26910
 msgid "Image replaced"
 msgstr ""
 
@@ -9698,15 +11285,23 @@ msgstr ""
 msgid "Drop images to add them here"
 msgstr ""
 
+#: assets/js/app.js:24474
+msgid "new"
+msgstr ""
+
 #: assets/js/app.js:24476
-#: assets/js/app.js:26794
+#: assets/js/app.js:26793
 msgid "Duplicate image"
 msgstr ""
 
 #: assets/js/app.js:24481
-#: assets/js/app.js:26783
-#: assets/js/app.js:29987
+#: assets/js/app.js:26782
+#: assets/js/app.js:29986
 msgid "Caption"
+msgstr ""
+
+#: assets/js/app.js:24482
+msgid "No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead."
 msgstr ""
 
 #: assets/js/app.js:24498
@@ -9730,7 +11325,7 @@ msgid "Every image needs to be in the media library."
 msgstr ""
 
 #: assets/js/app.js:24644
-#: assets/js/app.js:25841
+#: assets/js/app.js:25840
 msgid "Applying…"
 msgstr ""
 
@@ -9752,6 +11347,7 @@ msgid "Text first; each block’s other settings are tucked below it. This block
 msgstr ""
 
 #: assets/js/app.js:24760
+#: assets/js/app.js:25558
 msgid "Loading block schema…"
 msgstr ""
 
@@ -9762,6 +11358,7 @@ msgid "Settings (%d)"
 msgstr ""
 
 #: assets/js/app.js:24811
+#: assets/js/app.js:25361
 msgid "No editable settings."
 msgstr ""
 
@@ -9770,472 +11367,504 @@ msgid "No blocks left. Add one, or Cancel and remove the whole block from its �
 msgstr ""
 
 #: assets/js/app.js:24824
+#: assets/js/app.js:25369
 msgid "block"
 msgstr ""
 
-#. translators: %d: number of collapsed settings fields
-#: assets/js/app.js:24873
+#. translators: %d: number of additional settings hidden behind the button.
+#: assets/js/app.js:24872
+#: assets/js/app.js:24999
 #, js-format
 msgid "More settings (%d)"
 msgstr ""
 
-#: assets/js/app.js:24873
-#: assets/js/app.js:25604
+#: assets/js/app.js:24872
+#: assets/js/app.js:25603
 msgid "Fewer settings"
 msgstr ""
 
-#: assets/js/app.js:24885
-#: assets/js/app.js:25505
-#: assets/js/app.js:25836
-#: assets/js/app.js:25874
+#: assets/js/app.js:24884
+#: assets/js/app.js:25504
+#: assets/js/app.js:25835
+#: assets/js/app.js:25873
 msgid "Block updated"
 msgstr ""
 
-#: assets/js/app.js:24885
-#: assets/js/app.js:25836
+#: assets/js/app.js:24884
+#: assets/js/app.js:25835
 msgid "This block could not be updated."
 msgstr ""
 
-#: assets/js/app.js:25002
+#: assets/js/app.js:25001
 msgid "Filter settings…"
 msgstr ""
 
-#: assets/js/app.js:25293
-#: assets/js/app.js:25381
+#: assets/js/app.js:25292
+#: assets/js/app.js:25380
 msgid "Edit images…"
 msgstr ""
 
-#: assets/js/app.js:25307
+#. translators: %d: number of images in the gallery being inspected.
+#: assets/js/app.js:25302
+#, js-format
+msgid "Images · %d"
+msgstr ""
+
+#: assets/js/app.js:25306
 msgid "Replace…"
 msgstr ""
 
-#: assets/js/app.js:25317
+#: assets/js/app.js:25316
 msgid "Link, size and lightbox options live in the block editor."
 msgstr ""
 
-#: assets/js/app.js:25322
+#: assets/js/app.js:25321
 msgid "Text"
 msgstr ""
 
 #. translators: %d: number of nested blocks
-#: assets/js/app.js:25334
+#: assets/js/app.js:25333
 #, js-format
 msgid "Content · %d block"
 msgid_plural "Content · %d blocks"
 msgstr[0] ""
 msgstr[1] ""
 
-#: assets/js/app.js:25336
+#: assets/js/app.js:25335
 msgid "Edit content…"
 msgstr ""
 
-#: assets/js/app.js:25346
-#: assets/js/app.js:25351
+#: assets/js/app.js:25345
+#: assets/js/app.js:25350
 msgid "text"
 msgstr ""
 
-#: assets/js/app.js:25378
+#. translators: %s: name of the block type to add, or the word "block" when there is a choice.
+#: assets/js/app.js:25369
+#, js-format
+msgid "+ Add %s"
+msgstr ""
+
+#: assets/js/app.js:25377
 msgid "Change URL…"
 msgstr ""
 
-#: assets/js/app.js:25379
+#: assets/js/app.js:25378
 msgid "Rebuilds the embed for the new URL."
 msgstr ""
 
-#: assets/js/app.js:25382
+#: assets/js/app.js:25381
 msgid "Reorder, remove or add images; captions and layout stay."
 msgstr ""
 
-#: assets/js/app.js:25383
+#: assets/js/app.js:25382
 msgid "Replace images…"
 msgstr ""
 
-#: assets/js/app.js:25384
+#: assets/js/app.js:25383
 msgid "Re-picks the gallery images; per-image captions and layout tweaks reset."
 msgstr ""
 
-#: assets/js/app.js:25401
+#: assets/js/app.js:25400
 msgid "This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is."
 msgstr ""
 
-#: assets/js/app.js:25402
+#: assets/js/app.js:25401
 msgid "This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is."
 msgstr ""
 
-#: assets/js/app.js:25406
+#: assets/js/app.js:25405
 msgid "Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there."
 msgstr ""
 
-#: assets/js/app.js:25406
+#: assets/js/app.js:25405
 msgid "Block editor ↗"
 msgstr ""
 
-#: assets/js/app.js:25407
+#: assets/js/app.js:25406
 msgid "Move block"
 msgstr ""
 
-#: assets/js/app.js:25408
+#: assets/js/app.js:25407
 msgid "Move block up"
 msgstr ""
 
-#: assets/js/app.js:25409
+#: assets/js/app.js:25408
 msgid "Move block down"
 msgstr ""
 
-#: assets/js/app.js:25411
+#: assets/js/app.js:25410
 msgid "Move to the previous column"
 msgstr ""
 
-#: assets/js/app.js:25411
+#: assets/js/app.js:25410
 msgid "Move block to the previous column"
 msgstr ""
 
-#: assets/js/app.js:25412
+#: assets/js/app.js:25411
 msgid "Move to the next column"
 msgstr ""
 
-#: assets/js/app.js:25412
+#: assets/js/app.js:25411
 msgid "Move block to the next column"
 msgstr ""
 
-#: assets/js/app.js:25414
+#: assets/js/app.js:25413
 msgid "Duplicate this block"
 msgstr ""
 
-#: assets/js/app.js:25415
+#: assets/js/app.js:25414
 msgid "Remove this block"
 msgstr ""
 
-#: assets/js/app.js:25427
+#: assets/js/app.js:25426
 msgid "Another session holds this post — take over before opening the block editor"
 msgstr ""
 
-#: assets/js/app.js:25553
+#: assets/js/app.js:25552
 msgid "This block’s markup can’t be parsed safely."
 msgstr ""
 
-#: assets/js/app.js:25563
-#: assets/js/app.js:25578
+#: assets/js/app.js:25562
+#: assets/js/app.js:25577
 msgid "Block settings"
 msgstr ""
 
-#: assets/js/app.js:25636
+#: assets/js/app.js:25635
 msgid "Embed URL (YouTube, tweet, audio…):"
 msgstr ""
 
-#: assets/js/app.js:25638
-#: assets/js/app.js:28741
+#: assets/js/app.js:25637
+#: assets/js/app.js:28740
 msgid "That doesn’t look like a URL"
 msgstr ""
 
-#: assets/js/app.js:25674
+#: assets/js/app.js:25673
 msgid "These images can’t be edited safely here."
 msgstr ""
 
-#: assets/js/app.js:26062
+#: assets/js/app.js:26061
 msgid "Block removed — ⌘Z restores it"
 msgstr ""
 
-#: assets/js/app.js:26083
+#: assets/js/app.js:26082
 msgid "Table — rows, columns, header"
 msgstr ""
 
-#: assets/js/app.js:26084
+#: assets/js/app.js:26083
 msgid "Code block — syntax highlighting"
 msgstr ""
 
-#: assets/js/app.js:26085
+#: assets/js/app.js:26084
 msgid "Image — alt, caption, replace"
 msgstr ""
 
-#: assets/js/app.js:26087
-#: assets/js/app.js:26250
+#: assets/js/app.js:26086
+#: assets/js/app.js:26249
 msgid "Table settings"
 msgstr ""
 
-#: assets/js/app.js:26089
-#: assets/js/app.js:26802
+#: assets/js/app.js:26088
+#: assets/js/app.js:26801
 msgid "Image settings"
 msgstr ""
 
-#: assets/js/app.js:26192
+#: assets/js/app.js:26191
 msgid "Add row above"
 msgstr ""
 
-#: assets/js/app.js:26193
+#: assets/js/app.js:26192
 msgid "Add row below"
 msgstr ""
 
-#: assets/js/app.js:26194
+#: assets/js/app.js:26193
 msgid "Delete row"
 msgstr ""
 
-#: assets/js/app.js:26196
+#: assets/js/app.js:26195
 msgid "Add column left"
 msgstr ""
 
-#: assets/js/app.js:26197
+#: assets/js/app.js:26196
 msgid "Add column right"
 msgstr ""
 
-#: assets/js/app.js:26198
+#: assets/js/app.js:26197
 msgid "Delete column"
 msgstr ""
 
-#: assets/js/app.js:26225
+#: assets/js/app.js:26224
 msgid "Row — at the caret"
 msgstr ""
 
-#: assets/js/app.js:26227
+#: assets/js/app.js:26226
 msgid "Above"
 msgstr ""
 
-#: assets/js/app.js:26228
+#: assets/js/app.js:26227
 msgid "Below"
 msgstr ""
 
-#: assets/js/app.js:26231
+#: assets/js/app.js:26230
 msgid "Column — at the caret"
 msgstr ""
 
-#: assets/js/app.js:26233
+#: assets/js/app.js:26232
 msgid "Left"
 msgstr ""
 
-#: assets/js/app.js:26234
+#: assets/js/app.js:26233
 msgid "Right"
 msgstr ""
 
-#: assets/js/app.js:26238
+#: assets/js/app.js:26237
 msgid "Remove header row"
 msgstr ""
 
-#: assets/js/app.js:26238
+#: assets/js/app.js:26237
 msgid "Make first row a header"
 msgstr ""
 
-#: assets/js/app.js:26239
+#: assets/js/app.js:26238
 msgid "Delete table"
 msgstr ""
 
-#: assets/js/app.js:26390
+#: assets/js/app.js:26389
 msgid "Table deleted. ⌘Z restores it"
 msgstr ""
 
-#: assets/js/app.js:26421
+#: assets/js/app.js:26420
 msgid "Row deleted. ⌘Z restores it"
 msgstr ""
 
-#: assets/js/app.js:26422
+#: assets/js/app.js:26421
 msgid "Column deleted. ⌘Z restores it"
 msgstr ""
 
-#: assets/js/app.js:26467
+#: assets/js/app.js:26466
 msgid "Syntax highlighting"
 msgstr ""
 
-#: assets/js/app.js:26469
+#: assets/js/app.js:26468
 msgid "Auto detect"
 msgstr ""
 
-#: assets/js/app.js:26473
+#: assets/js/app.js:26472
 msgid "Remove this code block"
 msgstr ""
 
-#: assets/js/app.js:26478
+#: assets/js/app.js:26477
 msgid "Code block settings"
 msgstr ""
 
-#: assets/js/app.js:26603
+#: assets/js/app.js:26602
 msgid "URL or search"
 msgstr ""
 
-#: assets/js/app.js:26604
+#: assets/js/app.js:26603
 msgid "https://… or search your content"
 msgstr ""
 
+#: assets/js/app.js:26607
 #: assets/js/app.js:26608
-#: assets/js/app.js:26609
-#: assets/js/app.js:26787
+#: assets/js/app.js:26786
 msgid "Open in new tab"
 msgstr ""
 
-#: assets/js/app.js:26777
+#: assets/js/app.js:26614
+msgid "Unlink"
+msgstr ""
+
+#: assets/js/app.js:26776
 msgid "Image"
+msgstr ""
+
+#: assets/js/app.js:26780
+#: assets/js/app.js:29984
+msgid "Alt text"
 msgstr ""
 
 #: assets/js/app.js:26781
 #: assets/js/app.js:29985
-msgid "Alt text"
-msgstr ""
-
-#: assets/js/app.js:26782
-#: assets/js/app.js:29986
 msgid "Describe this image…"
 msgstr ""
 
-#: assets/js/app.js:26784
+#: assets/js/app.js:26783
 msgid "Optional caption"
 msgstr ""
 
-#: assets/js/app.js:26785
+#: assets/js/app.js:26784
 msgid "Link URL"
 msgstr ""
 
-#: assets/js/app.js:26786
+#: assets/js/app.js:26785
 msgid "https://… (empty for no link)"
 msgstr ""
 
-#: assets/js/app.js:26788
+#: assets/js/app.js:26787
 msgid "Expand on click (lightbox)"
 msgstr ""
 
-#: assets/js/app.js:26789
+#: assets/js/app.js:26788
 msgid "A linked image can’t also open a lightbox — clear the link to use it."
 msgstr ""
 
-#: assets/js/app.js:26888
+#: assets/js/app.js:26887
 msgid "Image updated"
 msgstr ""
 
-#: assets/js/app.js:26921
+#: assets/js/app.js:26920
 msgid "Image duplicated"
 msgstr ""
 
-#: assets/js/app.js:26945
+#: assets/js/app.js:26944
 msgid "Image removed — ⌘Z restores it"
 msgstr ""
 
-#: assets/js/app.js:28103
+#: assets/js/app.js:28102
 msgid "(untitled pattern)"
 msgstr ""
 
-#: assets/js/app.js:28147
+#: assets/js/app.js:28146
 msgid "This pattern’s markup can’t be parsed safely"
 msgstr ""
 
-#: assets/js/app.js:28156
+#: assets/js/app.js:28155
 msgid "Nothing insertable in this pattern"
 msgstr ""
 
-#: assets/js/app.js:28192
+#: assets/js/app.js:28191
 msgid "Embed — YouTube, tweet, audio…"
 msgstr ""
 
-#: assets/js/app.js:28255
+#: assets/js/app.js:28254
 msgid "This layout is locked — open it in the block editor to add blocks"
 msgstr ""
 
-#: assets/js/app.js:28277
-#: assets/js/app.js:32564
+#: assets/js/app.js:28276
+#: assets/js/app.js:32563
 msgid "Essential Blocks"
 msgstr ""
 
-#: assets/js/app.js:28279
+#: assets/js/app.js:28278
 msgid "Anchor Blocks"
 msgstr ""
 
-#: assets/js/app.js:28305
+#: assets/js/app.js:28304
 msgid "Insert from the block library"
 msgstr ""
 
-#: assets/js/app.js:28307
+#: assets/js/app.js:28306
 msgid "Search blocks, designs and patterns…"
 msgstr ""
 
-#: assets/js/app.js:28310
+#: assets/js/app.js:28309
 msgid "Loading the library…"
 msgstr ""
 
-#: assets/js/app.js:28398
+#: assets/js/app.js:28397
 msgid "Your patterns"
 msgstr ""
 
-#: assets/js/app.js:28399
+#: assets/js/app.js:28398
 msgid "Synced"
 msgstr ""
 
-#: assets/js/app.js:28514
+#: assets/js/app.js:28427
+msgid "Nothing matches."
+msgstr ""
+
+#: assets/js/app.js:28513
 msgid "Building the gallery…"
 msgstr ""
 
-#: assets/js/app.js:28522
+#: assets/js/app.js:28521
 msgid "Build gallery"
 msgstr ""
 
-#: assets/js/app.js:28534
+#: assets/js/app.js:28533
 msgid "This block’s columns can’t be edited here."
 msgstr ""
 
-#: assets/js/app.js:28551
+#: assets/js/app.js:28550
 msgid "Inserting…"
 msgstr ""
 
-#: assets/js/app.js:28570
+#: assets/js/app.js:28569
 msgid "Command returned no content"
 msgstr ""
 
-#: assets/js/app.js:28590
+#: assets/js/app.js:28589
 msgid "Inserting design…"
 msgstr ""
 
-#: assets/js/app.js:28594
+#: assets/js/app.js:28593
 msgid "Design source unavailable"
 msgstr ""
 
-#: assets/js/app.js:28597
+#: assets/js/app.js:28596
 msgid "Design unavailable"
 msgstr ""
 
-#: assets/js/app.js:28632
-#: assets/js/app.js:28652
+#: assets/js/app.js:28631
+#: assets/js/app.js:28651
 msgid "Pattern unavailable"
 msgstr ""
 
-#: assets/js/app.js:28635
+#: assets/js/app.js:28634
 msgid "Pattern insert failed: "
 msgstr ""
 
-#: assets/js/app.js:28739
+#: assets/js/app.js:28738
 msgid "Paste the URL to embed (YouTube, tweet, audio…):"
 msgstr ""
 
-#: assets/js/app.js:28956
+#. translators: %d: number of block types not shown in the shortlist.
+#: assets/js/app.js:28902
+#, js-format
+msgid "Browse all — %d more blocks…"
+msgstr ""
+
+#: assets/js/app.js:28902
+msgid "Browse all…"
+msgstr ""
+
+#: assets/js/app.js:28955
 msgid "Insert block"
 msgstr ""
 
-#: assets/js/app.js:29099
+#: assets/js/app.js:29098
 msgid "No action available"
 msgstr ""
 
 #. translators: %d is a number of translations.
-#: assets/js/app.js:29123
-#: assets/js/app.js:29200
+#: assets/js/app.js:29122
+#: assets/js/app.js:29199
 #, js-format
 msgid "%d translation"
 msgid_plural "%d translations"
 msgstr[0] ""
 msgstr[1] ""
 
-#: assets/js/app.js:29136
+#: assets/js/app.js:29135
 msgid "Update everything?"
 msgstr ""
 
-#: assets/js/app.js:29138
+#: assets/js/app.js:29137
 msgid "Plugin and theme settings"
 msgstr ""
 
-#: assets/js/app.js:29138
+#: assets/js/app.js:29137
 msgid "Anything without a pending update"
 msgstr ""
 
-#: assets/js/app.js:29140
-#: assets/js/app.js:29405
+#: assets/js/app.js:29139
+#: assets/js/app.js:29404
 msgid "Update everything"
 msgstr ""
 
 #. translators: %s: number of plugins.
-#: assets/js/app.js:29156
+#: assets/js/app.js:29155
 #, js-format
 msgid "Updating %s plugin…"
 msgid_plural "Updating %s plugins…"
@@ -10243,1868 +11872,2008 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d is a number of translations.
-#: assets/js/app.js:29193
+#: assets/js/app.js:29192
 #, js-format
 msgid "Updating %d translation…"
 msgid_plural "Updating %d translations…"
 msgstr[0] ""
 msgstr[1] ""
 
-#: assets/js/app.js:29279
+#: assets/js/app.js:29278
 msgid "You cannot update plugins."
 msgstr ""
 
-#: assets/js/app.js:29281
+#: assets/js/app.js:29280
 msgid "Missing plugin file."
 msgstr ""
 
-#: assets/js/app.js:29284
+#: assets/js/app.js:29283
 msgid "You cannot update themes."
 msgstr ""
 
-#: assets/js/app.js:29286
+#: assets/js/app.js:29285
 msgid "Missing theme."
 msgstr ""
 
-#: assets/js/app.js:29303
+#: assets/js/app.js:29302
 msgid "You cannot update WordPress."
 msgstr ""
 
-#: assets/js/app.js:29325
+#: assets/js/app.js:29324
 msgid "Unknown update type."
 msgstr ""
 
-#: assets/js/app.js:29340
+#: assets/js/app.js:29339
 msgid "Update failed"
 msgstr ""
 
-#: assets/js/app.js:29384
+#: assets/js/app.js:29383
 msgid "Hide this notice from Minn"
 msgstr ""
 
-#: assets/js/app.js:29384
+#: assets/js/app.js:29383
 msgid "Hide"
 msgstr ""
 
-#: assets/js/app.js:29394
+#: assets/js/app.js:29393
 msgid "Mark all read"
 msgstr ""
 
-#: assets/js/app.js:29436
+#: assets/js/app.js:29408
+msgid "You’re all caught up."
+msgstr ""
+
+#: assets/js/app.js:29435
 msgid "Clearing cache…"
 msgstr ""
 
-#: assets/js/app.js:29479
+#: assets/js/app.js:29478
 msgid "Disembark backup command copied"
 msgstr ""
 
-#: assets/js/app.js:29481
+#: assets/js/app.js:29480
 msgid "Copy failed — the command is on the Backups page"
 msgstr ""
 
-#: assets/js/app.js:29492
+#: assets/js/app.js:29491
 msgid "Find & replace (⌘⇧F)"
 msgstr ""
 
-#: assets/js/app.js:29493
+#: assets/js/app.js:29492
 msgid "Toggle focus mode (⌘⇧D)"
 msgstr ""
 
-#: assets/js/app.js:29494
+#: assets/js/app.js:29493
 msgid "Toggle outline mode (⌘⇧O)"
 msgstr ""
 
-#: assets/js/app.js:29499
+#: assets/js/app.js:29498
 msgid "Edit in the block editor ↗"
 msgstr ""
 
-#: assets/js/app.js:29502
+#: assets/js/app.js:29501
 msgid "Go to Overview"
 msgstr ""
 
-#: assets/js/app.js:29503
+#: assets/js/app.js:29502
 msgid "Manage Content"
 msgstr ""
 
-#: assets/js/app.js:29504
+#: assets/js/app.js:29503
 msgid "Open Media Library"
 msgstr ""
 
-#: assets/js/app.js:29506
+#: assets/js/app.js:29505
 msgid "Review Comments"
 msgstr ""
 
-#: assets/js/app.js:29507
+#: assets/js/app.js:29506
 msgid "View Orders"
 msgstr ""
 
-#: assets/js/app.js:29508
+#: assets/js/app.js:29507
 msgid "View Subscriptions"
 msgstr ""
 
-#: assets/js/app.js:29509
+#: assets/js/app.js:29508
 msgid "View Products"
 msgstr ""
 
-#: assets/js/app.js:29510
+#: assets/js/app.js:29509
 msgid "View Coupons"
 msgstr ""
 
-#: assets/js/app.js:29511
+#: assets/js/app.js:29510
 msgid "View Customers"
 msgstr ""
 
-#: assets/js/app.js:29512
+#: assets/js/app.js:29511
 msgid "Browse Users"
 msgstr ""
 
-#: assets/js/app.js:29529
+#: assets/js/app.js:29528
 msgid "Edit Menus"
 msgstr ""
 
-#: assets/js/app.js:29530
+#: assets/js/app.js:29529
 msgid "Manage Widgets"
 msgstr ""
 
-#: assets/js/app.js:29532
+#: assets/js/app.js:29531
 msgid "Manage Extensions"
 msgstr ""
 
-#: assets/js/app.js:29533
+#: assets/js/app.js:29532
 msgid "Manage Post Types"
 msgstr ""
 
-#: assets/js/app.js:29534
+#: assets/js/app.js:29533
 msgid "Manage categories & tags"
 msgstr ""
 
-#: assets/js/app.js:29535
+#: assets/js/app.js:29534
 msgid "View System diagnostics"
 msgstr ""
 
-#: assets/js/app.js:29536
+#: assets/js/app.js:29535
 msgid "Browse database (read-only)"
 msgstr ""
 
-#: assets/js/app.js:29537
+#: assets/js/app.js:29536
 msgid "View site logs"
 msgstr ""
 
-#: assets/js/app.js:29538
+#: assets/js/app.js:29537
 msgid "Open Settings"
 msgstr ""
 
-#: assets/js/app.js:29550
+#: assets/js/app.js:29549
 msgid "Switch site…"
 msgstr ""
 
 #. translators: %s: site name.
-#: assets/js/app.js:29560
+#: assets/js/app.js:29559
 #, js-format
 msgid "Switch to %s"
 msgstr ""
 
-#: assets/js/app.js:29569
+#: assets/js/app.js:29568
 msgid "Open Network Admin ↗"
 msgstr ""
 
-#: assets/js/app.js:29576
+#: assets/js/app.js:29575
 msgid "Write new post"
 msgstr ""
 
-#: assets/js/app.js:29577
+#: assets/js/app.js:29576
 msgid "Create new page"
 msgstr ""
 
-#: assets/js/app.js:29578
+#: assets/js/app.js:29577
 msgid "Toggle light / dark"
 msgstr ""
 
-#: assets/js/app.js:29579
+#: assets/js/app.js:29578
 msgid "View notifications"
 msgstr ""
 
-#: assets/js/app.js:29593
+#: assets/js/app.js:29592
 msgid "Copy Disembark backup command"
 msgstr ""
 
-#: assets/js/app.js:29600
+#: assets/js/app.js:29599
 msgid "Check for updates"
 msgstr ""
 
-#: assets/js/app.js:29603
+#: assets/js/app.js:29602
 msgid "Update all plugins"
 msgstr ""
 
-#: assets/js/app.js:29606
+#: assets/js/app.js:29605
 msgid "Your profile — name, email, password"
 msgstr ""
 
-#: assets/js/app.js:29607
+#: assets/js/app.js:29606
 msgid "Open the user guide"
 msgstr ""
 
-#: assets/js/app.js:29608
+#: assets/js/app.js:29607
 msgid "About Minn — help & shortcuts"
 msgstr ""
 
-#: assets/js/app.js:29609
+#: assets/js/app.js:29608
 msgid "Visit site"
 msgstr ""
 
-#: assets/js/app.js:29610
+#: assets/js/app.js:29609
 msgid "Classic wp-admin"
 msgstr ""
 
-#: assets/js/app.js:29709
+#: assets/js/app.js:29708
 msgid "Search or run a command…"
+msgstr ""
+
+#: assets/js/app.js:29732
+msgid "Your content"
+msgstr ""
+
+#: assets/js/app.js:29736
+msgid "Searching your content…"
+msgstr ""
+
+#. translators: %s: the search query.
+#: assets/js/app.js:29737
+#, js-format
+msgid "No results for “%s”"
+msgstr ""
+
+#: assets/js/app.js:29792
+msgid "Loading events…"
+msgstr ""
+
+#: assets/js/app.js:29793
+msgid "Nothing recorded in this period."
+msgstr ""
+
+#: assets/js/app.js:29831
+#: assets/js/app.js:29972
+#: assets/js/app.js:30498
+msgid "Previous (←)"
 msgstr ""
 
 #: assets/js/app.js:29832
 #: assets/js/app.js:29973
 #: assets/js/app.js:30499
-msgid "Previous (←)"
-msgstr ""
-
-#: assets/js/app.js:29833
-#: assets/js/app.js:29974
-#: assets/js/app.js:30500
 msgid "Next (→)"
 msgstr ""
 
-#: assets/js/app.js:29841
+#: assets/js/app.js:29835
+msgid "Loading top pages…"
+msgstr ""
+
+#: assets/js/app.js:29840
 msgid "Top pages"
+msgstr ""
+
+#: assets/js/app.js:29850
+#: assets/js/app.js:29863
+msgid "vis"
 msgstr ""
 
 #: assets/js/app.js:29851
 #: assets/js/app.js:29864
-msgid "vis"
-msgstr ""
-
-#: assets/js/app.js:29852
-#: assets/js/app.js:29865
 msgid "views"
 msgstr ""
 
-#: assets/js/app.js:29857
+#: assets/js/app.js:29856
 msgid "Top referrers"
 msgstr ""
 
-#: assets/js/app.js:29895
+#: assets/js/app.js:29894
 msgid "Save widget"
 msgstr ""
 
-#: assets/js/app.js:29911
+#. translators: %s: file name of the image being edited.
+#: assets/js/app.js:29906
+#, js-format
+msgid "Edit image · %s"
+msgstr ""
+
+#: assets/js/app.js:29910
 msgid "Rotate left"
 msgstr ""
 
+#: assets/js/app.js:29910
 #: assets/js/app.js:29911
-#: assets/js/app.js:29912
 msgid "Rotate"
 msgstr ""
 
-#: assets/js/app.js:29912
+#: assets/js/app.js:29911
 msgid "Rotate right"
 msgstr ""
 
-#: assets/js/app.js:29913
+#: assets/js/app.js:29912
 msgid "Reset"
 msgstr ""
 
-#: assets/js/app.js:29914
+#: assets/js/app.js:29913
 msgid "Drag on the image to crop"
 msgstr ""
 
-#: assets/js/app.js:29961
+#: assets/js/app.js:29960
 msgid "Sanitized by Safe SVG"
 msgstr ""
 
-#: assets/js/app.js:29988
+#: assets/js/app.js:29987
 msgid "Shown beneath the image…"
 msgstr ""
 
-#: assets/js/app.js:29990
+#: assets/js/app.js:29989
 msgid "Longer detail, shown on the attachment page…"
 msgstr ""
 
-#: assets/js/app.js:29996
+#: assets/js/app.js:29995
 msgid "Open"
 msgstr ""
 
-#: assets/js/app.js:29997
+#: assets/js/app.js:29996
 msgid "Rotate and crop — saved as a new copy"
 msgstr ""
 
-#: assets/js/app.js:29998
-#: assets/js/app.js:32581
+#: assets/js/app.js:29997
+#: assets/js/app.js:32580
 msgid "Regenerate Thumbnails"
 msgstr ""
 
-#: assets/js/app.js:29998
+#: assets/js/app.js:29997
 msgid "Force Regenerate Thumbnails"
 msgstr ""
 
-#: assets/js/app.js:29998
+#: assets/js/app.js:29997
 msgid "Thumbnails"
 msgstr ""
 
-#: assets/js/app.js:29999
+#: assets/js/app.js:29998
 msgid "Upload a new file over this one — same name, same URL, every reference keeps working (Enable Media Replace)"
 msgstr ""
 
-#: assets/js/app.js:29999
+#: assets/js/app.js:29998
 msgid "Replace file"
 msgstr ""
 
-#: assets/js/app.js:30001
+#: assets/js/app.js:30000
 msgid "Replace featured"
 msgstr ""
 
-#: assets/js/app.js:30002
+#: assets/js/app.js:30001
 msgid "Remove featured"
 msgstr ""
 
-#: assets/js/app.js:30049
+#. translators: %s: the subscription number.
+#: assets/js/app.js:30032
+#, js-format
+msgid "Subscription #%s"
+msgstr ""
+
+#: assets/js/app.js:30038
+msgid "Loading subscription…"
+msgstr ""
+
+#: assets/js/app.js:30048
 msgid "Customer ID"
 msgstr ""
 
-#: assets/js/app.js:30051
-#: assets/js/app.js:30096
+#: assets/js/app.js:30050
+#: assets/js/app.js:30095
 msgid "View customer"
 msgstr ""
 
-#: assets/js/app.js:30052
-msgid "Schedule"
-msgstr ""
-
-#: assets/js/app.js:30056
+#: assets/js/app.js:30055
 msgid "Last payment"
 msgstr ""
 
-#: assets/js/app.js:30057
+#: assets/js/app.js:30056
 msgid "Trial ends"
 msgstr ""
 
-#: assets/js/app.js:30058
-msgid "Ends"
-msgstr ""
-
-#: assets/js/app.js:30060
+#: assets/js/app.js:30059
 msgid "Renewal"
 msgstr ""
 
-#: assets/js/app.js:30060
+#: assets/js/app.js:30059
 msgid "Manual"
 msgstr ""
 
-#: assets/js/app.js:30061
+#: assets/js/app.js:30060
 msgid "Suspensions"
 msgstr ""
 
-#: assets/js/app.js:30068
+#: assets/js/app.js:30066
+msgid "No line items."
+msgstr ""
+
+#: assets/js/app.js:30067
 msgid "Recurring total"
 msgstr ""
 
-#: assets/js/app.js:30073
+#: assets/js/app.js:30072
 msgid "Active, On hold and Cancelled cover daily work. Switched / Expired are usually set by WooCommerce Subscriptions itself."
 msgstr ""
 
-#: assets/js/app.js:30075
+#: assets/js/app.js:30074
 msgid "Parent order"
 msgstr ""
 
-#: assets/js/app.js:30076
+#: assets/js/app.js:30075
 msgid "Order that started this subscription"
 msgstr ""
 
-#: assets/js/app.js:30078
+#: assets/js/app.js:30077
 msgid "Initial"
 msgstr ""
 
-#: assets/js/app.js:30081
+#: assets/js/app.js:30080
 msgid "Related orders"
 msgstr ""
 
-#: assets/js/app.js:30094
-#: assets/js/app.js:31654
+#: assets/js/app.js:30082
+msgid "No renewal orders yet."
+msgstr ""
+
+#: assets/js/app.js:30093
+#: assets/js/app.js:31653
 msgid "Save status"
 msgstr ""
 
-#: assets/js/app.js:30095
+#: assets/js/app.js:30094
 msgid "Open parent order"
 msgstr ""
 
-#: assets/js/app.js:30098
+#: assets/js/app.js:30097
 msgid "Close"
 msgstr ""
 
-#: assets/js/app.js:30143
+#: assets/js/app.js:30142
 msgid "New coupon"
 msgstr ""
 
-#: assets/js/app.js:30144
+#: assets/js/app.js:30143
 msgid "Create a promo code"
 msgstr ""
 
-#: assets/js/app.js:30155
+#: assets/js/app.js:30148
+msgid "Loading coupon…"
+msgstr ""
+
+#: assets/js/app.js:30154
 msgid "Code & discount"
 msgstr ""
 
-#: assets/js/app.js:30158
+#: assets/js/app.js:30157
 msgid "e.g. SAVE10"
 msgstr ""
 
-#: assets/js/app.js:30159
+#: assets/js/app.js:30158
 msgid "Discount type"
 msgstr ""
 
-#: assets/js/app.js:30168
-#: assets/js/app.js:30321
+#: assets/js/app.js:30167
+#: assets/js/app.js:30320
 msgid "Published"
 msgstr ""
 
-#: assets/js/app.js:30173
+#: assets/js/app.js:30172
 msgid "Internal note"
 msgstr ""
 
-#: assets/js/app.js:30182
+#: assets/js/app.js:30181
 msgid "Limits & options"
 msgstr ""
 
-#: assets/js/app.js:30186
+#: assets/js/app.js:30185
 msgid "Usage limit"
 msgstr ""
 
-#: assets/js/app.js:30187
+#: assets/js/app.js:30186
 msgid "Per user"
 msgstr ""
 
-#: assets/js/app.js:30190
+#: assets/js/app.js:30189
 msgid "Minimum spend"
 msgstr ""
 
-#: assets/js/app.js:30190
+#: assets/js/app.js:30189
 msgid "None"
 msgstr ""
 
-#: assets/js/app.js:30195
+#: assets/js/app.js:30194
 msgid "Individual use only"
 msgstr ""
 
-#: assets/js/app.js:30199
+#: assets/js/app.js:30198
 msgid "Allow free shipping"
 msgstr ""
 
-#: assets/js/app.js:30211
-#: assets/js/app.js:31754
+#: assets/js/app.js:30210
+#: assets/js/app.js:31753
 msgid "Create coupon"
 msgstr ""
 
-#: assets/js/app.js:30213
+#: assets/js/app.js:30212
 msgid "Saves code, amount, limits and options through WooCommerce."
 msgstr ""
 
-#: assets/js/app.js:30249
+#: assets/js/app.js:30242
+msgid "Loading customer…"
+msgstr ""
+
+#: assets/js/app.js:30248
 msgid "Profile"
 msgstr ""
 
-#: assets/js/app.js:30251
-#: assets/js/app.js:30556
+#: assets/js/app.js:30250
+#: assets/js/app.js:30555
 msgid "Username"
 msgstr ""
 
-#: assets/js/app.js:30255
+#: assets/js/app.js:30254
 msgid "Recent total"
 msgstr ""
 
-#: assets/js/app.js:30269
+#: assets/js/app.js:30268
 msgid "Recent orders"
 msgstr ""
 
-#: assets/js/app.js:30296
+#: assets/js/app.js:30278
+msgid "No orders for this customer."
+msgstr ""
+
+#: assets/js/app.js:30290
+msgid "No subscriptions for this customer."
+msgstr ""
+
+#: assets/js/app.js:30295
 msgid "All subscriptions"
 msgstr ""
 
-#: assets/js/app.js:30298
+#: assets/js/app.js:30297
 msgid "Edit in WordPress"
 msgstr ""
 
-#: assets/js/app.js:30309
+#: assets/js/app.js:30308
 msgid "New product"
 msgstr ""
 
-#: assets/js/app.js:30314
+#: assets/js/app.js:30313
 msgid "Product name"
 msgstr ""
 
-#: assets/js/app.js:30325
+#: assets/js/app.js:30324
 msgid "Creates a simple product. Variations, gallery and long description stay in WooCommerce."
 msgstr ""
 
-#: assets/js/app.js:30330
-#: assets/js/app.js:31270
+#: assets/js/app.js:30329
+#: assets/js/app.js:31269
 msgid "Create product"
 msgstr ""
 
-#: assets/js/app.js:30344
+#: assets/js/app.js:30343
 msgid "New order"
 msgstr ""
 
-#: assets/js/app.js:30345
+#: assets/js/app.js:30344
 msgid "Simple draft or processing order with one line item"
 msgstr ""
 
-#: assets/js/app.js:30361
+#: assets/js/app.js:30360
 msgid "Pending payment"
 msgstr ""
 
-#: assets/js/app.js:30362
+#: assets/js/app.js:30361
 msgid "Processing"
 msgstr ""
 
-#: assets/js/app.js:30369
+#: assets/js/app.js:30368
 msgid "Line item"
 msgstr ""
 
-#: assets/js/app.js:30377
+#: assets/js/app.js:30376
 msgid "Selected:"
 msgstr ""
 
-#: assets/js/app.js:30385
-#: assets/js/app.js:31385
-msgid "Create order"
+#: assets/js/app.js:30376
+msgid "Pick a published product to add."
 msgstr ""
 
-#: assets/js/app.js:30405
-#: assets/js/app.js:30621
-msgid "Subject"
+#: assets/js/app.js:30384
+#: assets/js/app.js:31384
+msgid "Create order"
 msgstr ""
 
 #: assets/js/app.js:30409
 #: assets/js/app.js:30625
-msgid "Message"
-msgstr ""
-
-#: assets/js/app.js:30410
-#: assets/js/app.js:30626
 msgid "Write your message…"
 msgstr ""
 
-#: assets/js/app.js:30411
+#: assets/js/app.js:30410
 msgid "Styled Minn Admin HTML email to the order billing address. Blank lines become paragraphs. A button links to pay or view the order."
 msgstr ""
 
-#: assets/js/app.js:30516
+#: assets/js/app.js:30515
 msgid "Email preview"
 msgstr ""
 
-#: assets/js/app.js:30521
+#: assets/js/app.js:30520
 msgid "Open raw"
 msgstr ""
 
-#: assets/js/app.js:30549
+#: assets/js/app.js:30548
 msgid "Add user"
 msgstr ""
 
-#: assets/js/app.js:30560
-#: assets/js/app.js:33916
-#: assets/js/app.js:34289
+#: assets/js/app.js:30559
+#: assets/js/app.js:33915
+#: assets/js/app.js:34288
 msgid "Display name"
 msgstr ""
 
-#: assets/js/app.js:30577
-#: assets/js/app.js:33940
-#: assets/js/app.js:34314
+#: assets/js/app.js:30576
+#: assets/js/app.js:33939
+#: assets/js/app.js:34313
 msgid "New password (leave blank to keep)"
 msgstr ""
 
-#: assets/js/app.js:30580
-#: assets/js/app.js:33943
-#: assets/js/app.js:34317
+#: assets/js/app.js:30579
+#: assets/js/app.js:33942
+#: assets/js/app.js:34316
 msgid "Generate"
 msgstr ""
 
-#: assets/js/app.js:30586
-#: assets/js/app.js:34017
-#: assets/js/app.js:34418
+#: assets/js/app.js:30585
+#: assets/js/app.js:34016
+#: assets/js/app.js:34417
 msgid "Sessions"
 msgstr ""
 
-#: assets/js/app.js:30595
-#: assets/js/app.js:34025
-#: assets/js/app.js:34426
+#: assets/js/app.js:30586
+msgid "Loading sessions…"
+msgstr ""
+
+#: assets/js/app.js:30587
+#: assets/js/app.js:34017
+#: assets/js/app.js:34418
+msgid "No active sessions."
+msgstr ""
+
+#: assets/js/app.js:30591
+#: assets/js/app.js:34422
+msgid "this session"
+msgstr ""
+
+#: assets/js/app.js:30594
+#: assets/js/app.js:34024
+#: assets/js/app.js:34425
 msgid "Sign out"
 msgstr ""
 
-#: assets/js/app.js:30600
+#: assets/js/app.js:30596
+#: assets/js/app.js:34026
+#: assets/js/app.js:34427
+msgid "Sign out everywhere"
+msgstr ""
+
+#: assets/js/app.js:30599
 msgid "Create user"
 msgstr ""
 
-#: assets/js/app.js:30627
+#: assets/js/app.js:30600
+#: assets/js/app.js:30717
+#: assets/js/app.js:30736
+#: assets/js/app.js:32181
+#: assets/js/app.js:34032
+msgid "Delete user"
+msgstr ""
+
+#. translators: %s: name or email address the message was sent to.
+#: assets/js/app.js:30614
+#, js-format
+msgid "To %s"
+msgstr ""
+
+#: assets/js/app.js:30614
+msgid "user"
+msgstr ""
+
+#: assets/js/app.js:30626
 msgid "Sent as a styled Minn Admin HTML email from the site. Blank lines become paragraphs."
 msgstr ""
 
 #. translators: %d: number of sites.
-#: assets/js/app.js:30654
+#: assets/js/app.js:30653
 #, js-format
 msgid "You belong to %d sites"
 msgstr ""
 
-#: assets/js/app.js:30659
+#: assets/js/app.js:30658
 msgid "Search by name or address…"
 msgstr ""
 
-#: assets/js/app.js:30662
+#: assets/js/app.js:30661
 msgid "Loading sites…"
 msgstr ""
 
-#: assets/js/app.js:30663
-#: assets/js/app.js:30670
+#: assets/js/app.js:30662
+#: assets/js/app.js:30669
 msgid "No sites match that search."
 msgstr ""
 
-#: assets/js/app.js:30668
+#: assets/js/app.js:30667
 msgid "You are here"
 msgstr ""
 
-#: assets/js/app.js:30683
+#: assets/js/app.js:30682
 msgid "Add existing user"
 msgstr ""
 
-#: assets/js/app.js:30684
+#: assets/js/app.js:30683
 msgid "Attach a network account to this site"
 msgstr ""
 
-#: assets/js/app.js:30690
+#: assets/js/app.js:30689
 msgid "Email or username"
 msgstr ""
 
-#: assets/js/app.js:30691
+#: assets/js/app.js:30690
 msgid "person@example.com"
 msgstr ""
 
-#: assets/js/app.js:30692
+#: assets/js/app.js:30691
 msgid "The account must already exist on this network. Creating new accounts is a network administrator job."
 msgstr ""
 
-#: assets/js/app.js:30695
+#: assets/js/app.js:30694
 msgid "Role on this site"
 msgstr ""
 
-#: assets/js/app.js:30697
+#: assets/js/app.js:30696
 msgid "Pick a role…"
 msgstr ""
 
-#: assets/js/app.js:30718
-#: assets/js/app.js:30737
-#: assets/js/app.js:32182
-#: assets/js/app.js:34033
-msgid "Delete user"
-msgstr ""
-
-#: assets/js/app.js:30724
+#: assets/js/app.js:30723
 msgid "This permanently removes the account. Content they authored must be reassigned to another user."
 msgstr ""
 
-#: assets/js/app.js:30728
+#: assets/js/app.js:30727
 msgid "Reassign content to"
 msgstr ""
 
-#: assets/js/app.js:30780
+#: assets/js/app.js:30779
 msgid "Minn Admin is off"
 msgstr ""
 
-#: assets/js/app.js:30780
+#: assets/js/app.js:30779
 msgid "Deactivate Minn Admin?"
 msgstr ""
 
 #. translators: 1: the word "Done." in bold. 2: the word "Plugins" in bold.
-#: assets/js/app.js:30785
+#: assets/js/app.js:30784
 #, js-format
 msgid "%1$s Heading to the classic dashboard… Reactivate Minn any time from %2$s, and everything here (content, settings, markup) is exactly as you left it."
 msgstr ""
 
-#: assets/js/app.js:30785
+#: assets/js/app.js:30784
 msgid "Done."
 msgstr ""
 
 #. translators: %s: the /minn-admin/ path, in bold.
-#: assets/js/app.js:30786
+#: assets/js/app.js:30785
 #, js-format
 msgid "This turns off the %s dashboard and returns you to the classic wp-admin."
 msgstr ""
 
-#: assets/js/app.js:30787
+#: assets/js/app.js:30785
+msgid "/minn-admin/"
+msgstr ""
+
+#: assets/js/app.js:30786
 msgid "Nothing is lost: Minn writes native WordPress content and options, and reactivating from the Plugins screen brings this dashboard straight back."
 msgstr ""
 
-#: assets/js/app.js:30791
+#: assets/js/app.js:30790
 msgid "Deactivate and go to wp-admin"
 msgstr ""
 
-#: assets/js/app.js:30792
+#: assets/js/app.js:30791
 msgid "Keep Minn"
 msgstr ""
 
-#: assets/js/app.js:30812
+#. translators: %s: the Minn Admin version.
+#: assets/js/app.js:30806
+#, js-format
+msgid "What's new · v%s"
+msgstr ""
+
+#: assets/js/app.js:30809
+msgid "Loading changelog…"
+msgstr ""
+
+#: assets/js/app.js:30811
 msgid "Versions"
 msgstr ""
 
-#: assets/js/app.js:30821
+#: assets/js/app.js:30820
 msgid "View the full changelog with screenshots on minnadmin.com"
 msgstr ""
 
-#: assets/js/app.js:30831
-#: assets/js/app.js:31002
+#: assets/js/app.js:30830
+#: assets/js/app.js:31001
 msgid "User guide"
 msgstr ""
 
-#: assets/js/app.js:30834
+#: assets/js/app.js:30833
 msgid "Loading the guide…"
 msgstr ""
 
-#: assets/js/app.js:30853
+#: assets/js/app.js:30852
 msgid "Add post type"
 msgstr ""
 
-#: assets/js/app.js:30858
-#: assets/js/app.js:30930
+#: assets/js/app.js:30857
+#: assets/js/app.js:30929
 msgid "Built into WordPress — shown for reference."
 msgstr ""
 
-#: assets/js/app.js:30858
-#: assets/js/app.js:30930
+#: assets/js/app.js:30857
+#: assets/js/app.js:30929
 msgid "Registered in code by a theme or plugin — shown for reference, editable only where it’s defined."
 msgstr ""
 
-#: assets/js/app.js:30859
-#: assets/js/app.js:30931
+#: assets/js/app.js:30858
+#: assets/js/app.js:30930
 msgid "Plural label"
 msgstr ""
 
-#: assets/js/app.js:30860
+#: assets/js/app.js:30859
 msgid "Books"
 msgstr ""
 
-#: assets/js/app.js:30861
-#: assets/js/app.js:30933
+#: assets/js/app.js:30860
+#: assets/js/app.js:30932
 msgid "Singular label"
 msgstr ""
 
-#: assets/js/app.js:30862
+#: assets/js/app.js:30861
 msgid "Book"
 msgstr ""
 
-#: assets/js/app.js:30864
+#: assets/js/app.js:30863
 msgid "book"
 msgstr ""
 
-#: assets/js/app.js:30865
+#: assets/js/app.js:30864
 msgid "Description (optional)"
 msgstr ""
 
-#: assets/js/app.js:30867
-#: assets/js/app.js:30937
+#: assets/js/app.js:30866
+#: assets/js/app.js:30936
 msgid "Store definition in"
 msgstr ""
 
-#: assets/js/app.js:30871
+#: assets/js/app.js:30870
 msgid "Visible on the front end with its own URLs"
 msgstr ""
 
-#: assets/js/app.js:30872
+#: assets/js/app.js:30871
 msgid "Archive page"
 msgstr ""
 
-#: assets/js/app.js:30872
+#: assets/js/app.js:30871
 msgid "A listing page at /slug/"
 msgstr ""
 
-#: assets/js/app.js:30873
+#: assets/js/app.js:30872
 msgid "Like pages — items can have parents"
 msgstr ""
 
-#: assets/js/app.js:30874
-#: assets/js/app.js:30942
+#: assets/js/app.js:30873
+#: assets/js/app.js:30941
 msgid "Show in REST API"
 msgstr ""
 
-#: assets/js/app.js:30874
+#: assets/js/app.js:30873
 msgid "Required for Minn (and the block editor) to list and edit content"
 msgstr ""
 
-#: assets/js/app.js:30875
+#: assets/js/app.js:30874
 msgid "Supports"
 msgstr ""
 
-#: assets/js/app.js:30877
+#: assets/js/app.js:30876
 msgid "Taxonomies"
 msgstr ""
 
-#: assets/js/app.js:30883
-#: assets/js/app.js:31806
+#: assets/js/app.js:30882
+#: assets/js/app.js:31805
 msgid "Create post type"
 msgstr ""
 
-#: assets/js/app.js:30925
+#: assets/js/app.js:30924
 msgid "Add taxonomy"
 msgstr ""
 
-#: assets/js/app.js:30932
+#: assets/js/app.js:30931
 msgid "Genres"
 msgstr ""
 
-#: assets/js/app.js:30934
+#: assets/js/app.js:30933
 msgid "Genre"
 msgstr ""
 
-#: assets/js/app.js:30936
+#: assets/js/app.js:30935
 msgid "genre"
 msgstr ""
 
-#: assets/js/app.js:30939
+#: assets/js/app.js:30938
 msgid "Behavior"
 msgstr ""
 
-#: assets/js/app.js:30940
+#: assets/js/app.js:30939
 msgid "Hierarchical (like categories)"
 msgstr ""
 
-#: assets/js/app.js:30940
+#: assets/js/app.js:30939
 msgid "Terms can nest under parents; off behaves like tags"
 msgstr ""
 
-#: assets/js/app.js:30941
+#: assets/js/app.js:30940
 msgid "Visible on the front end with term archive URLs"
 msgstr ""
 
-#: assets/js/app.js:30942
+#: assets/js/app.js:30941
 msgid "Required for Minn and the block editor to assign terms"
 msgstr ""
 
-#: assets/js/app.js:30943
+#: assets/js/app.js:30942
 msgid "Attach to"
 msgstr ""
 
-#: assets/js/app.js:30949
-#: assets/js/app.js:31882
+#: assets/js/app.js:30948
+#: assets/js/app.js:31881
 msgid "Create taxonomy"
 msgstr ""
 
-#: assets/js/app.js:30966
+#: assets/js/app.js:30965
 msgid "Minn is a reimagined WordPress admin."
 msgstr ""
 
-#: assets/js/app.js:30966
+#: assets/js/app.js:30965
 msgid "A calm, fast surface for the work you do every day: writing, moderating, uploading, and keeping an eye on the site. Classic wp-admin stays fully available, one click away."
 msgstr ""
 
-#: assets/js/app.js:30968
+#: assets/js/app.js:30967
 msgid "Getting around"
 msgstr ""
 
-#: assets/js/app.js:30969
+#: assets/js/app.js:30968
 msgid "The sidebar has three groups: Workspace (the daily material), Tools (what your plugins add) and Manage (the site itself). The fastest way anywhere is the command palette:"
 msgstr ""
 
-#: assets/js/app.js:30969
+#: assets/js/app.js:30968
 msgid ", then start typing a view, a post or a command."
 msgstr ""
 
-#: assets/js/app.js:30971
+#: assets/js/app.js:30970
 msgid "Right-click almost anything"
 msgstr ""
 
-#: assets/js/app.js:30972
+#: assets/js/app.js:30971
 msgid "The least discoverable thing in Minn, so here it is in writing: rows in Content and Media, comments, the theme button, plugin entries in the sidebar and group headings in the block library all have right-click menus. When in doubt, try a right-click."
 msgstr ""
 
-#: assets/js/app.js:30974
+#: assets/js/app.js:30973
 msgid "Make it yours"
 msgstr ""
 
-#: assets/js/app.js:30975
+#: assets/js/app.js:30974
 msgid "Anything a plugin adds here can be hidden for you alone: right-click its sidebar entry or block-library heading and choose Hide. Everything hidden is listed on Your profile, where one click restores it."
 msgstr ""
 
-#: assets/js/app.js:30977
+#: assets/js/app.js:30976
 msgid "Keyboard shortcuts"
 msgstr ""
 
-#: assets/js/app.js:30979
+#: assets/js/app.js:30978
 msgid "Command palette · with text selected in the editor: link"
 msgstr ""
 
-#: assets/js/app.js:30980
+#: assets/js/app.js:30979
 msgid "Save, keeping the current status"
 msgstr ""
 
-#: assets/js/app.js:30981
+#: assets/js/app.js:30980
 msgid "Publish, Update or Schedule"
 msgstr ""
 
-#: assets/js/app.js:30982
+#: assets/js/app.js:30981
 msgid "Block library: browse every block, design and pattern"
 msgstr ""
 
-#: assets/js/app.js:30983
+#: assets/js/app.js:30982
 msgid "Find & replace in the post"
 msgstr ""
 
-#: assets/js/app.js:30984
+#: assets/js/app.js:30983
 msgid "Focus mode: fade all but the current paragraph"
 msgstr ""
 
-#: assets/js/app.js:30985
+#: assets/js/app.js:30984
 msgid "Outline mode: just the writing and the outline"
 msgstr ""
 
-#: assets/js/app.js:30986
+#: assets/js/app.js:30985
 msgid "Show or hide the navigation"
 msgstr ""
 
-#: assets/js/app.js:30987
+#: assets/js/app.js:30986
 msgid "A block's ⚙ handle: duplicate that block in place"
 msgstr ""
 
-#: assets/js/app.js:30988
+#: assets/js/app.js:30987
 msgid "A block's ⚙ handle: remove that block (⌘Z restores it)"
 msgstr ""
 
-#: assets/js/app.js:30989
+#: assets/js/app.js:30988
 msgid "The WordPress button (bottom left) while editing: open this post in the block editor"
 msgstr ""
 
-#: assets/js/app.js:30990
+#: assets/js/app.js:30989
 msgid "click"
 msgstr ""
 
-#: assets/js/app.js:30990
+#: assets/js/app.js:30989
 msgid "An image in a protected block: edit, reorder or replace its images"
 msgstr ""
 
-#: assets/js/app.js:30991
+#: assets/js/app.js:30990
 msgid "Previous / next item in a media or entry detail"
 msgstr ""
 
-#: assets/js/app.js:30992
+#: assets/js/app.js:30991
 msgid "Esc"
 msgstr ""
 
-#: assets/js/app.js:30992
+#: assets/js/app.js:30991
 msgid "Close menus and dialogs"
 msgstr ""
 
-#: assets/js/app.js:30994
+#: assets/js/app.js:30993
 msgid "The word-count pill (bottom-right in the editor) shows total words, reading time, and words written this session. Click it to set or clear a word goal."
 msgstr ""
 
 #. translators: 1: the Ctrl key, styled as a key. 2: the Command key, styled as a key.
-#: assets/js/app.js:30995
+#: assets/js/app.js:30994
 #, js-format
 msgid "On Windows and Linux, use %1$s in place of %2$s."
 msgstr ""
 
-#: assets/js/app.js:30995
+#: assets/js/app.js:30994
 msgid "Ctrl"
 msgstr ""
 
-#: assets/js/app.js:30997
+#: assets/js/app.js:30996
 msgid "Deliberately minimal"
 msgstr ""
 
-#: assets/js/app.js:30998
+#: assets/js/app.js:30997
 msgid "Minn surfaces the settings people change day to day; the long tail stays in wp-admin on purpose. For plugin configuration Minn doesn't rebuild, open"
 msgstr ""
 
-#: assets/js/app.js:30998
+#: assets/js/app.js:30997
 msgid "Your profile → AI Access"
 msgstr ""
 
-#: assets/js/app.js:30998
+#: assets/js/app.js:30997
 msgid " and hand your AI agent a revocable credential to do the fiddly work over the REST API."
 msgstr ""
 
-#: assets/js/app.js:30999
+#: assets/js/app.js:30998
 msgid "Everything Minn writes is native WordPress: real block markup, core options, core users. Deactivate the plugin and nothing is lost. Plugins extend Minn with one PHP filter, as plain data, which is why nothing here can nag you."
 msgstr ""
 
-#: assets/js/app.js:31003
+#: assets/js/app.js:31002
 msgid "minnadmin.com"
 msgstr ""
 
-#: assets/js/app.js:31004
+#: assets/js/app.js:31003
 msgid "GitHub"
 msgstr ""
 
-#: assets/js/app.js:31005
+#: assets/js/app.js:31004
 msgid "For plugin authors"
 msgstr ""
 
-#: assets/js/app.js:31026
+#: assets/js/app.js:31025
 msgid "Already active"
 msgstr ""
 
-#: assets/js/app.js:31027
+#: assets/js/app.js:31026
 msgid "Installed — click to activate"
 msgstr ""
 
-#: assets/js/app.js:31028
+#: assets/js/app.js:31027
 msgid "Install from GitHub release"
 msgstr ""
 
-#: assets/js/app.js:31028
+#: assets/js/app.js:31027
 msgid "Install from WordPress.org"
 msgstr ""
 
-#: assets/js/app.js:31038
+#: assets/js/app.js:31037
 msgid "Browse more on WordPress.org →"
 msgstr ""
 
-#: assets/js/app.js:31063
+#. translators: %s: the search query.
+#: assets/js/app.js:31042
+#: assets/js/app.js:31104
+#, js-format
+msgid "No results for “%s”."
+msgstr ""
+
+#: assets/js/app.js:31062
 msgid "Add plugin"
 msgstr ""
 
 #. translators: 1: the text ".zip" in bold. 2: a "browse" link.
-#: assets/js/app.js:31069
+#: assets/js/app.js:31068
 #, js-format
 msgid "Drop a plugin %1$s here or %2$s"
 msgstr ""
 
-#: assets/js/app.js:31069
-#: assets/js/app.js:31098
-#: assets/js/app.js:31137
+#: assets/js/app.js:31068
+#: assets/js/app.js:31097
+msgid ".zip"
+msgstr ""
+
+#: assets/js/app.js:31068
+#: assets/js/app.js:31097
+#: assets/js/app.js:31136
 msgid "browse"
 msgstr ""
 
-#: assets/js/app.js:31072
+#: assets/js/app.js:31071
 msgid "Search the WordPress.org directory…"
 msgstr ""
 
-#: assets/js/app.js:31075
+#: assets/js/app.js:31074
 msgid "Catalog"
 msgstr ""
 
-#: assets/js/app.js:31092
+#: assets/js/app.js:31091
 msgid "Add theme"
 msgstr ""
 
 #. translators: 1: the text ".zip" in bold. 2: a "browse" link.
-#: assets/js/app.js:31098
+#: assets/js/app.js:31097
 #, js-format
 msgid "Drop a theme %1$s here or %2$s"
 msgstr ""
 
-#: assets/js/app.js:31101
+#: assets/js/app.js:31100
 msgid "Search the WordPress.org theme directory…"
 msgstr ""
 
-#: assets/js/app.js:31130
+#: assets/js/app.js:31103
+msgid "Search for a theme, or drop a zip above."
+msgstr ""
+
+#: assets/js/app.js:31129
 msgid "Build a gallery"
 msgstr ""
 
-#: assets/js/app.js:31130
+#: assets/js/app.js:31129
 msgid "Insert file"
 msgstr ""
 
+#: assets/js/app.js:31130
+#: assets/js/app.js:31907
+msgid "Pick images in order"
+msgstr ""
+
 #. translators: %s: a "browse" link.
-#: assets/js/app.js:31137
+#: assets/js/app.js:31136
 #, js-format
 msgid "Drag & drop an image here, or %s"
 msgstr ""
 
-#: assets/js/app.js:31137
+#: assets/js/app.js:31136
 msgid "(it’s used right away)"
 msgstr ""
 
-#: assets/js/app.js:31149
-#: assets/js/app.js:31906
+#: assets/js/app.js:31148
+#: assets/js/app.js:31905
 msgid "Insert gallery"
 msgstr ""
 
-#: assets/js/app.js:31208
+#: assets/js/app.js:31207
 msgid "Copied (truncated value)"
 msgstr ""
 
-#: assets/js/app.js:31208
+#: assets/js/app.js:31207
 msgid "Value copied"
 msgstr ""
 
-#: assets/js/app.js:31256
-#: assets/js/app.js:31370
-#: assets/js/app.js:31724
+#: assets/js/app.js:31255
+#: assets/js/app.js:31369
+#: assets/js/app.js:31723
 msgid "Creating…"
 msgstr ""
 
-#: assets/js/app.js:31262
+#: assets/js/app.js:31261
 msgid "Product created"
 msgstr ""
 
-#: assets/js/app.js:31357
+#: assets/js/app.js:31356
 msgid "Pick a product"
 msgstr ""
 
-#: assets/js/app.js:31398
+#: assets/js/app.js:31397
 msgid "Widget saved"
 msgstr ""
 
-#: assets/js/app.js:31518
+#: assets/js/app.js:31517
 msgid "Featured image updated"
 msgstr ""
 
-#: assets/js/app.js:31531
+#: assets/js/app.js:31530
 msgid "Featured image removed"
 msgstr ""
 
-#: assets/js/app.js:31541
+#: assets/js/app.js:31540
 msgid "Regenerating…"
 msgstr ""
 
-#: assets/js/app.js:31550
+#: assets/js/app.js:31549
 msgid "Regenerate failed"
 msgstr ""
 
-#: assets/js/app.js:31551
+#: assets/js/app.js:31550
 msgid "Thumbnails rebuilt (Force Regenerate Thumbnails)"
 msgstr ""
 
-#: assets/js/app.js:31557
+#: assets/js/app.js:31556
 msgid "↻ Thumbnails"
 msgstr ""
 
-#: assets/js/app.js:31581
+#: assets/js/app.js:31580
 msgid "Replacing…"
 msgstr ""
 
-#: assets/js/app.js:31591
+#: assets/js/app.js:31590
 msgid "File replaced — same URL, new content"
 msgstr ""
 
-#: assets/js/app.js:31597
+#: assets/js/app.js:31596
 msgid "⇅ Replace file"
 msgstr ""
 
-#: assets/js/app.js:31636
+#: assets/js/app.js:31635
 msgid "Subscription #"
 msgstr ""
 
-#: assets/js/app.js:31680
-#: assets/js/app.js:32080
+#: assets/js/app.js:31679
+#: assets/js/app.js:32079
 msgid "Subject and message are required"
 msgstr ""
 
-#: assets/js/app.js:31689
-#: assets/js/app.js:32089
+#: assets/js/app.js:31688
+#: assets/js/app.js:32088
 msgid "Email sent"
 msgstr ""
 
-#: assets/js/app.js:31704
+#: assets/js/app.js:31703
 msgid "Code is required"
 msgstr ""
 
-#: assets/js/app.js:31706
+#: assets/js/app.js:31705
 msgid "Amount is required"
 msgstr ""
 
-#: assets/js/app.js:31732
+#: assets/js/app.js:31731
 msgid "Coupon created"
 msgstr ""
 
-#: assets/js/app.js:31739
+#: assets/js/app.js:31738
 msgid "Coupon updated"
 msgstr ""
 
-#: assets/js/app.js:31760
+#: assets/js/app.js:31759
 msgid "It is removed for good; orders that already used it keep their totals."
 msgstr ""
 
-#: assets/js/app.js:31760
+#: assets/js/app.js:31759
 msgid "Delete coupon"
 msgstr ""
 
-#: assets/js/app.js:31764
+#: assets/js/app.js:31763
 msgid "Coupon deleted"
 msgstr ""
 
-#: assets/js/app.js:31799
+#: assets/js/app.js:31798
 msgid "Post type updated"
 msgstr ""
 
-#: assets/js/app.js:31799
+#: assets/js/app.js:31798
 msgid "Post type created"
 msgstr ""
 
-#: assets/js/app.js:31814
+#: assets/js/app.js:31813
 msgid "Post type removed — content preserved"
 msgstr ""
 
-#: assets/js/app.js:31875
+#: assets/js/app.js:31874
 msgid "Taxonomy updated"
 msgstr ""
 
-#: assets/js/app.js:31875
+#: assets/js/app.js:31874
 msgid "Taxonomy created"
 msgstr ""
 
-#: assets/js/app.js:31890
+#: assets/js/app.js:31889
 msgid "Taxonomy removed — terms preserved"
 msgstr ""
 
-#: assets/js/app.js:31908
-msgid "Pick images in order"
-msgstr ""
-
-#: assets/js/app.js:31946
+#: assets/js/app.js:31945
 msgid "Uploading…"
 msgstr ""
 
-#: assets/js/app.js:31966
+#: assets/js/app.js:31965
 msgid "Image uploaded and selected"
 msgstr ""
 
-#: assets/js/app.js:31972
+#: assets/js/app.js:31971
 msgid "Image uploaded"
 msgstr ""
 
-#: assets/js/app.js:32138
+#: assets/js/app.js:32137
 msgid "Enter an email or username"
 msgstr ""
 
-#: assets/js/app.js:32142
+#: assets/js/app.js:32141
 msgid "Pick a role"
 msgstr ""
 
-#: assets/js/app.js:32179
+#: assets/js/app.js:32178
 msgid "Pick a user to reassign content to"
 msgstr ""
 
-#: assets/js/app.js:32182
+#: assets/js/app.js:32181
 msgid "The account is removed for good, and their content moves to the user you picked. There is no undo for this."
 msgstr ""
 
-#: assets/js/app.js:32186
+#: assets/js/app.js:32185
 msgid "User deleted"
 msgstr ""
 
-#: assets/js/app.js:32346
+#: assets/js/app.js:32345
 msgid "The server kept dropping the request. Give it a few seconds and try again."
 msgstr ""
 
-#: assets/js/app.js:32383
+#: assets/js/app.js:32382
 msgid "Theme uploads must be .zip files"
 msgstr ""
 
-#: assets/js/app.js:32392
+#: assets/js/app.js:32391
 msgid "Theme installed — activate it from the Themes tab"
 msgstr ""
 
-#: assets/js/app.js:32424
+#: assets/js/app.js:32423
 msgid "Titles, meta, sitemaps"
 msgstr ""
 
-#: assets/js/app.js:32426
+#: assets/js/app.js:32425
 msgid "Yoast SEO"
 msgstr ""
 
-#: assets/js/app.js:32427
+#: assets/js/app.js:32426
 msgid "Rank Math"
 msgstr ""
 
-#: assets/js/app.js:32428
+#: assets/js/app.js:32427
 msgid "All in One SEO"
 msgstr ""
 
-#: assets/js/app.js:32434
+#: assets/js/app.js:32433
 msgid "Contact forms & entries"
 msgstr ""
 
-#: assets/js/app.js:32436
+#: assets/js/app.js:32435
 msgid "Contact Form 7"
 msgstr ""
 
-#: assets/js/app.js:32438
+#: assets/js/app.js:32437
 msgid "Ninja Forms"
 msgstr ""
 
-#: assets/js/app.js:32439
+#: assets/js/app.js:32438
 msgid "Fluent Forms"
 msgstr ""
 
-#: assets/js/app.js:32442
+#: assets/js/app.js:32441
 msgid "Everest Forms"
 msgstr ""
 
-#: assets/js/app.js:32447
+#: assets/js/app.js:32446
 msgid "Store & payments"
 msgstr ""
 
-#: assets/js/app.js:32450
+#: assets/js/app.js:32449
 msgid "WooCommerce Subscriptions"
 msgstr ""
 
-#: assets/js/app.js:32450
+#: assets/js/app.js:32449
 msgid "Recurring billing for WooCommerce. In Minn: Workspace → Subscriptions (status, next payment, related orders)."
 msgstr ""
 
-#: assets/js/app.js:32452
+#: assets/js/app.js:32451
 msgid "Easy Digital Downloads"
 msgstr ""
 
-#: assets/js/app.js:32456
+#: assets/js/app.js:32455
 msgid "Firewall, login, SSL"
 msgstr ""
 
-#: assets/js/app.js:32460
+#: assets/js/app.js:32459
 msgid "Limit Login Attempts"
 msgstr ""
 
-#: assets/js/app.js:32461
+#: assets/js/app.js:32460
 msgid "Really Simple SSL"
 msgstr ""
 
-#: assets/js/app.js:32462
+#: assets/js/app.js:32461
 msgid "Sucuri Scanner"
 msgstr ""
 
-#: assets/js/app.js:32466
+#: assets/js/app.js:32465
 msgid "Sets, migrate, restore"
 msgstr ""
 
-#: assets/js/app.js:32472
+#: assets/js/app.js:32471
 msgid "All-in-One WP Migration"
 msgstr ""
 
-#: assets/js/app.js:32478
+#: assets/js/app.js:32477
 msgid "Privacy-friendly traffic"
 msgstr ""
 
-#: assets/js/app.js:32480
+#: assets/js/app.js:32479
 msgid "Koko Analytics"
 msgstr ""
 
-#: assets/js/app.js:32481
+#: assets/js/app.js:32480
 msgid "WP Statistics"
 msgstr ""
 
-#: assets/js/app.js:32483
+#: assets/js/app.js:32482
 msgid "Independent Analytics"
 msgstr ""
 
-#: assets/js/app.js:32484
+#: assets/js/app.js:32483
 msgid "Site Kit"
 msgstr ""
 
-#: assets/js/app.js:32488
+#: assets/js/app.js:32487
 msgid "Page & object cache"
 msgstr ""
 
-#: assets/js/app.js:32490
+#: assets/js/app.js:32489
 msgid "LiteSpeed Cache"
 msgstr ""
 
-#: assets/js/app.js:32491
+#: assets/js/app.js:32490
 msgid "WP Super Cache"
 msgstr ""
 
-#: assets/js/app.js:32492
+#: assets/js/app.js:32491
 msgid "W3 Total Cache"
 msgstr ""
 
-#: assets/js/app.js:32493
+#: assets/js/app.js:32492
 msgid "WP Fastest Cache"
 msgstr ""
 
-#: assets/js/app.js:32494
+#: assets/js/app.js:32493
 msgid "Cache Enabler"
 msgstr ""
 
-#: assets/js/app.js:32500
+#: assets/js/app.js:32499
 msgid "Minify, defer, unload"
 msgstr ""
 
-#: assets/js/app.js:32503
+#: assets/js/app.js:32502
 msgid "Asset CleanUp"
 msgstr ""
 
-#: assets/js/app.js:32510
+#: assets/js/app.js:32509
 msgid "Email / SMTP"
 msgstr ""
 
-#: assets/js/app.js:32510
+#: assets/js/app.js:32509
 msgid "Delivery & logs"
 msgstr ""
 
-#: assets/js/app.js:32513
+#: assets/js/app.js:32512
 msgid "WP Mail SMTP"
 msgstr ""
 
-#: assets/js/app.js:32514
+#: assets/js/app.js:32513
 msgid "Post SMTP"
 msgstr ""
 
-#: assets/js/app.js:32515
+#: assets/js/app.js:32514
 msgid "WP Mail Logging"
 msgstr ""
 
-#: assets/js/app.js:32522
+#: assets/js/app.js:32521
 msgid "Safe Redirect Manager"
 msgstr ""
 
-#: assets/js/app.js:32523
+#: assets/js/app.js:32522
 msgid "Simple 301 Redirects"
 msgstr ""
 
-#: assets/js/app.js:32528
+#: assets/js/app.js:32527
 msgid "Custom code, safely"
 msgstr ""
 
-#: assets/js/app.js:32530
+#: assets/js/app.js:32529
 msgid "Code Snippets"
 msgstr ""
 
-#: assets/js/app.js:32533
+#: assets/js/app.js:32532
 msgid "Simple Custom CSS and JS"
 msgstr ""
 
-#: assets/js/app.js:32534
+#: assets/js/app.js:32533
 msgid "Header Footer Code Manager"
 msgstr ""
 
-#: assets/js/app.js:32538
+#: assets/js/app.js:32537
 msgid "Dev tools"
 msgstr ""
 
-#: assets/js/app.js:32538
+#: assets/js/app.js:32537
 msgid "Debug & inspect"
 msgstr ""
 
-#: assets/js/app.js:32540
+#: assets/js/app.js:32539
 msgid "Query Monitor"
 msgstr ""
 
-#: assets/js/app.js:32544
+#: assets/js/app.js:32543
 msgid "Debug Bar"
 msgstr ""
 
-#: assets/js/app.js:32548
+#: assets/js/app.js:32547
 msgid "Comment & form spam"
 msgstr ""
 
-#: assets/js/app.js:32551
+#: assets/js/app.js:32550
 msgid "Antispam Bee"
 msgstr ""
 
-#: assets/js/app.js:32553
+#: assets/js/app.js:32552
 msgid "WP Armour"
 msgstr ""
 
-#: assets/js/app.js:32557
+#: assets/js/app.js:32556
 msgid "Block libraries & patterns"
 msgstr ""
 
-#: assets/js/app.js:32560
+#: assets/js/app.js:32559
 msgid "Kadence Blocks"
 msgstr ""
 
-#: assets/js/app.js:32568
+#: assets/js/app.js:32567
 msgid "Meta & field groups"
 msgstr ""
 
-#: assets/js/app.js:32570
+#: assets/js/app.js:32569
 msgid "Advanced Custom Fields"
 msgstr ""
 
-#: assets/js/app.js:32571
+#: assets/js/app.js:32570
 msgid "Meta Box"
 msgstr ""
 
-#: assets/js/app.js:32573
+#: assets/js/app.js:32572
 msgid "Custom Post Type UI"
 msgstr ""
 
-#: assets/js/app.js:32577
+#: assets/js/app.js:32576
 msgid "Little extras"
 msgstr ""
 
-#: assets/js/app.js:32577
+#: assets/js/app.js:32576
 msgid "Handy day-to-day tools"
 msgstr ""
 
-#: assets/js/app.js:32579
+#: assets/js/app.js:32578
 msgid "User Switching"
 msgstr ""
 
-#: assets/js/app.js:32580
+#: assets/js/app.js:32579
 msgid "Public Post Preview"
 msgstr ""
 
-#: assets/js/app.js:32582
+#: assets/js/app.js:32581
 msgid "Duplicate Post"
 msgstr ""
 
-#: assets/js/app.js:32583
+#: assets/js/app.js:32582
 msgid "Safe SVG"
 msgstr ""
 
-#: assets/js/app.js:32642
+#: assets/js/app.js:32641
 msgid "No details available."
 msgstr ""
 
-#: assets/js/app.js:32650
+#: assets/js/app.js:32649
 msgid "GitHub release"
 msgstr ""
 
-#: assets/js/app.js:32782
+#: assets/js/app.js:32781
 msgid "Could not find the installed plugin file."
 msgstr ""
 
-#: assets/js/app.js:32796
+#: assets/js/app.js:32795
 msgid "No install source for that plugin."
 msgstr ""
 
-#: assets/js/app.js:32940
+#: assets/js/app.js:32939
 msgid "Plugin uploads must be .zip files"
 msgstr ""
 
-#: assets/js/app.js:32949
+#: assets/js/app.js:32948
 msgid "Plugin installed — activate it from the list"
 msgstr ""
 
-#: assets/js/app.js:33288
+#: assets/js/app.js:33178
+msgid "No changelog found."
+msgstr ""
+
+#: assets/js/app.js:33287
 msgid "No guide found."
 msgstr ""
 
-#: assets/js/app.js:33415
+#: assets/js/app.js:33414
 msgid "Less"
 msgstr ""
 
-#: assets/js/app.js:33421
+#: assets/js/app.js:33420
 msgid "More"
 msgstr ""
 
-#: assets/js/app.js:33521
+#: assets/js/app.js:33520
 msgid "All revisions"
 msgstr ""
 
-#: assets/js/app.js:33524
+#: assets/js/app.js:33523
 msgid "Revision history"
 msgstr ""
 
-#: assets/js/app.js:33540
+#: assets/js/app.js:33527
+msgid "Loading revisions…"
+msgstr ""
+
+#: assets/js/app.js:33539
 msgid "No revisions on that day."
 msgstr ""
 
-#: assets/js/app.js:33540
+#: assets/js/app.js:33539
 msgid "No revisions yet."
 msgstr ""
 
-#: assets/js/app.js:33558
+#: assets/js/app.js:33557
 msgid "Identical to the current content"
 msgstr ""
 
-#: assets/js/app.js:33559
+#: assets/js/app.js:33558
 msgid "Post too large to diff — showing the revision as saved"
 msgstr ""
 
-#: assets/js/app.js:33565
+#: assets/js/app.js:33564
 msgid "Changes"
 msgstr ""
 
-#: assets/js/app.js:33569
+#: assets/js/app.js:33568
 msgid "This revision"
 msgstr ""
 
-#: assets/js/app.js:33569
+#: assets/js/app.js:33568
 msgid "Current"
 msgstr ""
 
-#: assets/js/app.js:33577
-#: assets/js/app.js:33638
+#: assets/js/app.js:33576
+#: assets/js/app.js:33637
 msgid "Restore this revision"
 msgstr ""
 
-#: assets/js/app.js:33591
+#: assets/js/app.js:33590
 msgid "Newer (←)"
 msgstr ""
 
-#: assets/js/app.js:33592
+#: assets/js/app.js:33591
 msgid "Older (→)"
 msgstr ""
 
-#: assets/js/app.js:33619
+#: assets/js/app.js:33594
+msgid "Loading revision…"
+msgstr ""
+
+#: assets/js/app.js:33612
+msgid "(empty)"
+msgstr ""
+
+#: assets/js/app.js:33618
 msgid "Replace the current content with this revision? The current state is saved as its own revision first."
 msgstr ""
 
-#: assets/js/app.js:33621
+#: assets/js/app.js:33620
 msgid "Restoring…"
 msgstr ""
 
-#: assets/js/app.js:33630
+#: assets/js/app.js:33629
 msgid "Revision restored"
 msgstr ""
 
-#: assets/js/app.js:33647
+#: assets/js/app.js:33646
 msgid "Unknown device"
 msgstr ""
 
-#: assets/js/app.js:33794
+#: assets/js/app.js:33793
 msgid "Username, email and password are required."
 msgstr ""
 
-#: assets/js/app.js:33797
+#: assets/js/app.js:33796
 msgid "User created"
 msgstr ""
 
-#: assets/js/app.js:33800
-#: assets/js/app.js:34090
+#: assets/js/app.js:33799
+#: assets/js/app.js:34089
 msgid "User updated"
 msgstr ""
 
-#: assets/js/app.js:33826
-#: assets/js/app.js:34125
-#: assets/js/app.js:34610
+#: assets/js/app.js:33825
+#: assets/js/app.js:34124
+#: assets/js/app.js:34609
 msgid "Session signed out"
 msgstr ""
 
-#: assets/js/app.js:33839
-#: assets/js/app.js:34136
+#: assets/js/app.js:33838
+#: assets/js/app.js:34135
 msgid "Sign this user out of all sessions?"
 msgstr ""
 
-#: assets/js/app.js:33843
-#: assets/js/app.js:34140
-#: assets/js/app.js:34625
+#: assets/js/app.js:33842
+#: assets/js/app.js:34139
+#: assets/js/app.js:34624
 msgid "Signed out everywhere"
 msgstr ""
 
-#: assets/js/app.js:33869
+#: assets/js/app.js:33868
 msgid "Could not load this user."
 msgstr ""
 
-#: assets/js/app.js:33896
+#: assets/js/app.js:33895
 msgid "Loading user…"
 msgstr ""
 
-#: assets/js/app.js:33933
-#: assets/js/app.js:34306
-msgid "Language"
-msgstr ""
-
-#: assets/js/app.js:33950
-#: assets/js/app.js:34324
+#: assets/js/app.js:33949
+#: assets/js/app.js:34323
 msgid "Public profile"
 msgstr ""
 
-#: assets/js/app.js:33950
-#: assets/js/app.js:34324
+#: assets/js/app.js:33949
+#: assets/js/app.js:34323
 msgid "author boxes & archives"
 msgstr ""
 
-#: assets/js/app.js:33963
-#: assets/js/app.js:34337
+#: assets/js/app.js:33962
+#: assets/js/app.js:34336
 msgid "Website"
 msgstr ""
 
-#: assets/js/app.js:33967
-#: assets/js/app.js:34341
+#: assets/js/app.js:33966
+#: assets/js/app.js:34340
 msgid "Bio"
 msgstr ""
 
-#: assets/js/app.js:33976
-#: assets/js/app.js:34384
+#: assets/js/app.js:33975
+#: assets/js/app.js:34383
 msgid "Appearance"
 msgstr ""
 
-#: assets/js/app.js:33976
+#: assets/js/app.js:33975
 msgid "what this user sees"
 msgstr ""
 
-#: assets/js/app.js:33977
+#: assets/js/app.js:33976
 msgid "Set their Minn palette now so it looks right before their first sign-in. Light or dark mode stays a device preference each person controls themselves."
 msgstr ""
 
-#: assets/js/app.js:33986
-#: assets/js/app.js:33988
+#: assets/js/app.js:33985
+#: assets/js/app.js:33987
 msgid "Minn is their default admin"
 msgstr ""
 
-#: assets/js/app.js:33989
+#: assets/js/app.js:33988
 msgid "After sign-in they land in Minn. Full wp-admin stays available."
 msgstr ""
 
-#: assets/js/app.js:33993
-#: assets/js/app.js:33995
-#: assets/js/app.js:34395
-#: assets/js/app.js:34397
+#: assets/js/app.js:33992
+#: assets/js/app.js:33994
+#: assets/js/app.js:34394
+#: assets/js/app.js:34396
 msgid "Show toolbar when viewing the site"
 msgstr ""
 
-#: assets/js/app.js:33996
+#: assets/js/app.js:33995
 msgid "The WordPress admin bar on the front end while they are signed in."
 msgstr ""
 
-#: assets/js/app.js:34005
+#: assets/js/app.js:34004
 msgid "Hidden for them"
 msgstr ""
 
-#: assets/js/app.js:34006
+#: assets/js/app.js:34005
 msgid "Items this user chose to hide from their own Minn. Restoring brings one back for them."
 msgstr ""
 
-#: assets/js/app.js:34011
-#: assets/js/app.js:34412
+#: assets/js/app.js:34010
+#: assets/js/app.js:34411
 msgid "Editor panel"
 msgstr ""
 
-#: assets/js/app.js:34011
-#: assets/js/app.js:34412
+#: assets/js/app.js:34010
+#: assets/js/app.js:34411
 msgid "Design library"
 msgstr ""
 
-#: assets/js/app.js:34011
-#: assets/js/app.js:34412
+#: assets/js/app.js:34010
+#: assets/js/app.js:34411
 msgid "Editor blocks and commands"
 msgstr ""
 
-#: assets/js/app.js:34011
-#: assets/js/app.js:34412
+#: assets/js/app.js:34010
+#: assets/js/app.js:34411
 msgid "Menu item"
 msgstr ""
 
-#: assets/js/app.js:34011
-#: assets/js/app.js:34412
+#: assets/js/app.js:34010
+#: assets/js/app.js:34411
 msgid "Sidebar surface"
 msgstr ""
 
-#: assets/js/app.js:34018
-msgid "No active sessions."
-msgstr ""
-
-#: assets/js/app.js:34023
+#: assets/js/app.js:34022
 msgid "signed in"
 msgstr ""
 
-#: assets/js/app.js:34027
-msgid "Sign out everywhere"
-msgstr ""
-
-#: assets/js/app.js:34031
+#: assets/js/app.js:34030
 msgid "Danger zone"
 msgstr ""
 
-#: assets/js/app.js:34032
+#: assets/js/app.js:34031
 msgid "Deleting a user asks what happens to their content first."
 msgstr ""
 
-#: assets/js/app.js:34088
+#: assets/js/app.js:34087
 msgid "language pack installed"
 msgstr ""
 
 #. translators: %s: name of the restored item.
-#: assets/js/app.js:34160
+#: assets/js/app.js:34159
 #, js-format
 msgid "%s restored for them"
 msgstr ""
 
-#: assets/js/app.js:34160
+#: assets/js/app.js:34159
 msgid "Item"
 msgstr ""
 
-#: assets/js/app.js:34248
+#: assets/js/app.js:34247
 msgid "Could not load your profile."
 msgstr ""
 
-#: assets/js/app.js:34342
+#: assets/js/app.js:34275
+msgid "Loading your profile…"
+msgstr ""
+
+#: assets/js/app.js:34310
+msgid "Any language — ones not yet installed download automatically when you save."
+msgstr ""
+
+#: assets/js/app.js:34341
 msgid "A couple of sentences about you — themes show this in author boxes."
 msgstr ""
 
 #. translators: %s: a link to Gravatar.
-#: assets/js/app.js:34346
+#: assets/js/app.js:34345
 #, js-format
 msgid "Your profile picture comes from %s, matched to your email."
 msgstr ""
 
-#: assets/js/app.js:34346
+#: assets/js/app.js:34345
 msgid "Gravatar ↗"
 msgstr ""
 
-#: assets/js/app.js:34352
+#: assets/js/app.js:34351
 msgid "AI Access"
 msgstr ""
 
-#: assets/js/app.js:34352
+#: assets/js/app.js:34351
 msgid "application passwords"
 msgstr ""
 
-#: assets/js/app.js:34353
+#: assets/js/app.js:34352
 msgid "Give an AI agent its own revocable credential instead of your login. It authenticates against the REST API with HTTP Basic auth."
 msgstr ""
 
-#: assets/js/app.js:34370
+#: assets/js/app.js:34362
+msgid "No application passwords yet."
+msgstr ""
+
+#: assets/js/app.js:34369
 msgid "Revoke"
 msgstr ""
 
-#: assets/js/app.js:34373
-#: assets/js/app.js:34548
+#: assets/js/app.js:34372
+#: assets/js/app.js:34547
 msgid "AI Agent"
 msgstr ""
 
-#: assets/js/app.js:34378
+#: assets/js/app.js:34377
 msgid "Download agent-guide.md"
 msgstr ""
 
-#: assets/js/app.js:34391
+#: assets/js/app.js:34390
 msgid "Theme"
 msgstr ""
 
-#: assets/js/app.js:34398
+#: assets/js/app.js:34397
 msgid "The WordPress admin bar on the front end while you're signed in. Applies only to you."
 msgstr ""
 
-#: assets/js/app.js:34407
+#: assets/js/app.js:34406
 msgid "Hidden for you"
 msgstr ""
 
-#: assets/js/app.js:34525
+#: assets/js/app.js:34524
 msgid "Password changed — refreshing…"
 msgstr ""
 
-#: assets/js/app.js:34529
+#: assets/js/app.js:34528
 msgid "Profile updated"
 msgstr ""
 
-#: assets/js/app.js:34565
+#: assets/js/app.js:34564
 msgid "Password copied"
 msgstr ""
 
-#: assets/js/app.js:34571
+#: assets/js/app.js:34570
 msgid "Revoke this application password? Anything using it loses access immediately."
 msgstr ""
 
-#: assets/js/app.js:34575
+#: assets/js/app.js:34574
 msgid "Application password revoked"
 msgstr ""
 
-#: assets/js/app.js:34585
+#: assets/js/app.js:34584
 msgid "Agent guide copied"
 msgstr ""
 
-#: assets/js/app.js:34621
+#: assets/js/app.js:34620
 msgid "Sign out of all other sessions?"
 msgstr ""
 
-#: assets/js/app.js:34709
+#: assets/js/app.js:34708
 msgid "All notifications marked read"
 msgstr ""
 
-#: assets/js/app.js:34768
+#: assets/js/app.js:34767
 msgid "Notice hidden"
 msgstr ""
 
-#: assets/js/app.js:34848
+#. translators: %s: the error message.
+#: assets/js/app.js:34834
+#, js-format
+msgid "Something went wrong: %s"
+msgstr ""
+
+#: assets/js/app.js:34847
 msgid "Scroll tabs left"
 msgstr ""
 
-#: assets/js/app.js:34850
+#: assets/js/app.js:34849
 msgid "Scroll tabs right"
 msgstr ""

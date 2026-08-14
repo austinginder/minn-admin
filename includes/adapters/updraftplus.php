@@ -112,7 +112,7 @@ function minn_admin_updraft_status_model() {
 					: 'Nothing on disk yet',
 			),
 			array(
-				'label' => 'Status',
+				'label' => __( 'Status', 'minn-admin' ),
 				'value' => $running ? 'Running' : 'Idle',
 				'hint'  => __( 'Jobs run through UpdraftPlus\'s own cron machinery', 'minn-admin' ),
 			),
@@ -144,7 +144,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		return $surfaces;
 	}
 	$surfaces['updraftplus'] = array(
-		'label'      => 'Backups',
+		'label'      => __( 'Backups', 'minn-admin' ),
 		'sub'        => 'UpdraftPlus',
 		'icon'       => 'database',
 		'cap'        => 'manage_options',
@@ -156,10 +156,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
 			'columns'   => array(
-				array( 'key' => 'components', 'label' => 'Backup', 'format' => 'title' ),
-				array( 'key' => 'size', 'label' => 'Size', 'format' => 'text' ),
-				array( 'key' => 'where', 'label' => 'Stored', 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => 'Date', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'components', 'label' => __( 'Backup', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'size', 'label' => __( 'Size', 'minn-admin' ), 'format' => 'text' ),
+				array( 'key' => 'where', 'label' => __( 'Stored', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 		),
 	);

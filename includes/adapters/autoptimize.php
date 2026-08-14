@@ -32,7 +32,7 @@ function minn_admin_autoptimize_active() {
 function minn_admin_autoptimize_schema() {
 	return array(
 		'js'   => array(
-			'label'  => 'JavaScript',
+			'label'  => __( 'JavaScript', 'minn-admin' ),
 			'groups' => array(
 				array(
 					'title'  => __( 'JavaScript options', 'minn-admin' ),
@@ -92,7 +92,7 @@ function minn_admin_autoptimize_schema() {
 			),
 		),
 		'misc' => array(
-			'label'  => 'Misc',
+			'label'  => __( 'Misc', 'minn-admin' ),
 			'groups' => array(
 				array(
 					'title'  => __( 'Misc options', 'minn-admin' ),
@@ -258,13 +258,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$tabs[] = array( 'id' => $id, 'label' => $tab['label'] );
 	}
 	$surfaces['autoptimize'] = array(
-		'label'    => 'Performance',
+		'label'    => __( 'Performance', 'minn-admin' ),
 		'sub'      => 'Autoptimize',
 		'family'   => 'performance',
 		'icon'     => 'gear',
 		'cap'      => 'manage_options',
 		'settings' => array(
-			'label' => 'Settings',
+			'label' => __( 'Settings', 'minn-admin' ),
 			'tabs'  => $tabs,
 			'route' => 'minn-admin/v1/autoptimize/settings/{tab}',
 		),

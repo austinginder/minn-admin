@@ -101,19 +101,19 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'rest_forbidden', __( 'You cannot edit this event.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			$fields = array(
-				array( 'name' => 'start', 'label' => 'Starts', 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
-				array( 'name' => 'end', 'label' => 'Ends', 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
+				array( 'name' => 'start', 'label' => __( 'Starts', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
+				array( 'name' => 'end', 'label' => __( 'Ends', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
 				array( 'name' => 'all_day', 'label' => __( 'All-day event', 'minn-admin' ), 'type' => 'true_false' ),
-				array( 'name' => 'venue', 'label' => 'Venue', 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => __( 'Search venues…', 'minn-admin' ) ),
+				array( 'name' => 'venue', 'label' => __( 'Venue', 'minn-admin' ), 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => __( 'Search venues…', 'minn-admin' ) ),
 			);
 			$locked = 0;
 			if ( $post_id && minn_admin_tec_multi_organizer( $post_id ) ) {
 				// Several organizers: single-pick would silently drop the rest.
 				$locked++;
 			} else {
-				$fields[] = array( 'name' => 'organizer', 'label' => 'Organizer', 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=organizer', 'placeholder' => __( 'Search organizers…', 'minn-admin' ) );
+				$fields[] = array( 'name' => 'organizer', 'label' => __( 'Organizer', 'minn-admin' ), 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=organizer', 'placeholder' => __( 'Search organizers…', 'minn-admin' ) );
 			}
-			$fields[] = array( 'name' => 'cost', 'label' => 'Cost', 'type' => 'text', 'placeholder' => __( 'e.g. 25 or Free', 'minn-admin' ) );
+			$fields[] = array( 'name' => 'cost', 'label' => __( 'Cost', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'e.g. 25 or Free', 'minn-admin' ) );
 			$fields[] = array( 'name' => 'website', 'label' => __( 'Event website', 'minn-admin' ), 'type' => 'url' );
 			// Recurrence / tickets / timezone stay TEC's (plus the organizer
 			// row when locked above).

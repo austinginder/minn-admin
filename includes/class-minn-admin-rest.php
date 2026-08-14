@@ -6224,7 +6224,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'key'    => 'loopback',
 				'label'  => __( 'Loopback requests', 'minn-admin' ),
 				'status' => $grade( $self['loopback']['status'] ),
-				'detail' => 'good' === $self['loopback']['status']
+				'detail' => __( 'good', 'minn-admin' ) === $self['loopback']['status']
 					? 'The site can reach itself (cron and scheduled posts depend on this)'
 					: ( $self['loopback']['message'] ? $self['loopback']['message'] : 'Loopback requests are failing' ),
 			);
@@ -6234,7 +6234,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'key'    => 'rest',
 				'label'  => __( 'REST API self-check', 'minn-admin' ),
 				'status' => $grade( $self['rest']['status'] ),
-				'detail' => 'good' === $self['rest']['status']
+				'detail' => __( 'good', 'minn-admin' ) === $self['rest']['status']
 					? 'The REST API answers external requests (Minn itself rides it)'
 					: ( $self['rest']['message'] ? $self['rest']['message'] : 'The REST API did not answer' ),
 			);
@@ -6397,8 +6397,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			array( 'title' => 'PHP', 'icon' => 'php', 'rows' => self::kv_rows( $php ) ),
 		);
 		if ( $network_owner ) {
-			$groups[] = array( 'title' => 'Database', 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables, 'autoload' => $autoload );
-			$groups[] = array( 'title' => 'Server', 'icon' => 'server', 'rows' => self::kv_rows( $server ) );
+			$groups[] = array( 'title' => __( 'Database', 'minn-admin' ), 'icon' => 'database', 'rows' => self::kv_rows( $database ), 'tables' => $top_tables, 'autoload' => $autoload );
+			$groups[] = array( 'title' => __( 'Server', 'minn-admin' ), 'icon' => 'server', 'rows' => self::kv_rows( $server ) );
 		}
 
 		return rest_ensure_response(

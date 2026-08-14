@@ -90,7 +90,7 @@ function minn_admin_stream_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Stream table not found', 'minn-admin' ) ) ),
+			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Stream table not found', 'minn-admin' ) ) ),
 			'actions' => array( array( 'label' => __( 'Open Stream ↗', 'minn-admin' ), 'href' => minn_admin_stream_admin_url() ) ),
 		);
 	}
@@ -190,10 +190,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All sources',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Event', 'format' => 'title' ),
-				array( 'key' => 'who', 'label' => 'Who' ),
-				array( 'key' => 'connector', 'label' => 'Source', 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago' ),
+				array( 'key' => 'summary', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
+				array( 'key' => 'connector', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'pill' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
 			'detail'    => array(
 				'skip' => array( 'summary' ),

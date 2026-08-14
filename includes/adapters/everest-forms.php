@@ -294,8 +294,8 @@ function minn_admin_everest_status_model() {
 		if ( ! $scope ) {
 			return array(
 				'rows'    => array(
-					array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0', 'hint' => '0 total' ),
-					array( 'label' => 'Forms', 'value' => '0' ),
+					array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0', 'hint' => __( '0 total', 'minn-admin' ) ),
+					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => '0' ),
 				),
 				'actions' => array(
 					array( 'label' => __( 'Open Everest Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=evf-entries' ) ),
@@ -322,7 +322,7 @@ function minn_admin_everest_status_model() {
 	return array(
 		'rows'    => array(
 			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
-			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
 		'actions' => array(
 			array( 'label' => __( 'Open Everest Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=evf-entries' ) ),
@@ -414,7 +414,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['everest-forms'] = array(
-		'label'      => 'Forms',
+		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
 		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
 		'sub'        => 'Everest Forms',
@@ -422,7 +422,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => 'read', // real gate is the filter above (their cap model)
 		'status'     => array( 'route' => 'minn-admin/v1/everest/status' ),
 		'collection' => array(
-			'viewLabel' => 'Entries',
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/everest/entries',
 			'pageQuery' => 'per_page=25&page={page}',
 			'search'    => 'search={q}',
@@ -430,7 +430,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'totalKey'  => 'total',
 			// Same three buckets as their entries screen.
 			'filter'    => array(
-				'label'   => 'Status',
+				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'publish', 'Received' ),
 					array( 'spam', 'Spam' ),
@@ -446,11 +446,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'allLabel' => 'All entries',
 			),
 			'columns'   => array(
-				array( 'key' => 'summary', 'label' => 'Entry', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => 'Form' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill', 'width' => '96px' ),
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
 				// date_created is current_time( 'mysql', true ) — UTC.
-				array( 'key' => 'date', 'label' => 'When', 'format' => 'ago', 'utc' => true ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/everest/entries/{id}',
@@ -479,7 +479,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/everest/entries/{id}/restore',
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
@@ -511,7 +511,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
 				),
 				array(
-					'label'   => 'Trash',
+					'label'   => __( 'Trash', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/everest/entries/{id}/trash',
 					'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ),
@@ -519,7 +519,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
 				),
 				array(
-					'label'  => 'Restore',
+					'label'  => __( 'Restore', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/everest/entries/{id}/restore',
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
@@ -535,12 +535,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 		'manage'     => array(
-			'viewLabel' => 'Forms',
+			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/everest/forms?manage=1',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => 'Form', 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => 'Entries', 'format' => 'num' ),
-				array( 'key' => 'status', 'label' => 'Status', 'format' => 'pill' ),
+				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
 			),
 			'detail'    => array(),
 			'actions'   => array(
@@ -730,10 +730,10 @@ add_action( 'rest_api_init', function () {
 				}
 				// date_created is UTC — format in site TZ for the meta card.
 				$meta = array(
-					array( 'label' => 'Form', 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-					array( 'label' => 'Entry', 'value' => '#' . (int) $row->entry_id ),
-					array( 'label' => 'Status', 'value' => (string) $row->status ),
-					array( 'label' => 'Submitted', 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $row->date_created ) ) ) ),
+					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
+					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->entry_id ),
+					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
+					array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $row->date_created ) ) ) ),
 				);
 				if ( ! empty( $row->user_ip_address ) ) {
 					$meta[] = array( 'label' => 'IP', 'value' => (string) $row->user_ip_address );
@@ -752,8 +752,8 @@ add_action( 'rest_api_init', function () {
 					'kind'     => 'entry',
 					'status'   => (string) $row->status,
 					'sections' => array(
-						array( 'title' => 'Answers', 'rows' => $rows ),
-						array( 'title' => 'Submission', 'rows' => $meta ),
+						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
+						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=evf-entries&form_id=' . $form_id . '&view-entry=' . (int) $row->entry_id ),
 				) );

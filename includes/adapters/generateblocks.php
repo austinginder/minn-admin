@@ -32,7 +32,7 @@ function minn_admin_generateblocks_active() {
 add_filter( 'minn_admin_design_sources', function ( $sources ) {
 	if ( minn_admin_generateblocks_active() ) {
 		$sources['generateblocks'] = array(
-			'label' => 'GenerateBlocks',
+			'label' => __( 'GenerateBlocks', 'minn-admin' ),
 			'route' => 'minn-admin/v1/generateblocks/designs',
 		);
 	}

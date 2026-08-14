@@ -26,15 +26,15 @@ defined( 'ABSPATH' ) || exit;
  */
 function minn_admin_perfmatters_tabs() {
 	return array(
-		'general'   => array( 'label' => 'General', 'sections' => array( 'perfmatters_options', 'login_url', 'perfmatters_woocommerce' ) ),
-		'js'        => array( 'label' => 'JavaScript', 'sections' => array( 'assets_js_defer', 'assets_js_delay', 'assets_js_minify' ) ),
+		'general'   => array( 'label' => __( 'General', 'minn-admin' ), 'sections' => array( 'perfmatters_options', 'login_url', 'perfmatters_woocommerce' ) ),
+		'js'        => array( 'label' => __( 'JavaScript', 'minn-admin' ), 'sections' => array( 'assets_js_defer', 'assets_js_delay', 'assets_js_minify' ) ),
 		'css'       => array( 'label' => 'CSS', 'sections' => array( 'assets_css', 'assets_css_minify' ) ),
-		'code'      => array( 'label' => 'Code', 'sections' => array( 'assets_code' ) ),
-		'preload'   => array( 'label' => 'Preload', 'sections' => array( 'preload', 'preload_speculative', 'preload_connection' ) ),
+		'code'      => array( 'label' => __( 'Code', 'minn-admin' ), 'sections' => array( 'assets_code' ) ),
+		'preload'   => array( 'label' => __( 'Preload', 'minn-admin' ), 'sections' => array( 'preload', 'preload_speculative', 'preload_connection' ) ),
 		'lazyload'  => array( 'label' => __( 'Lazy Loading', 'minn-admin' ), 'sections' => array( 'lazyload', 'lazyload_css_background_images', 'lazyload_elements' ) ),
-		'fonts'     => array( 'label' => 'Fonts', 'sections' => array( 'perfmatters_fonts' ) ),
+		'fonts'     => array( 'label' => __( 'Fonts', 'minn-admin' ), 'sections' => array( 'perfmatters_fonts' ) ),
 		'cdn'       => array( 'label' => 'CDN', 'sections' => array( 'perfmatters_cdn' ) ),
-		'analytics' => array( 'label' => 'Analytics', 'sections' => array( 'perfmatters_analytics' ) ),
+		'analytics' => array( 'label' => __( 'Analytics', 'minn-admin' ), 'sections' => array( 'perfmatters_analytics' ) ),
 	);
 }
 
@@ -249,13 +249,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$tabs[] = array( 'id' => $id, 'label' => $tab['label'] );
 	}
 	$surfaces['perfmatters'] = array(
-		'label'    => 'Performance',
+		'label'    => __( 'Performance', 'minn-admin' ),
 		'sub'      => 'Perfmatters',
 		'family'   => 'performance',
 		'icon'     => 'gear',
 		'cap'      => 'manage_options',
 		'settings' => array(
-			'label' => 'Settings',
+			'label' => __( 'Settings', 'minn-admin' ),
 			'tabs'  => $tabs,
 			'route' => 'minn-admin/v1/perfmatters/settings/{tab}',
 		),
