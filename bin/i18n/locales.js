@@ -29,7 +29,9 @@ const LOCALES = [
 
 	// --- wave 2 -----------------------------------------------------------
 	{ code: 'vi',    name: 'Vietnamese',           share: 1.16, wave: 2, rtl: false, plural: 'nplurals=1; plural=0;' },
-	{ code: 'id_ID', name: 'Indonesian',           share: 1.02, wave: 2, rtl: false, plural: 'nplurals=1; plural=0;' },
+	// Indonesian is one form in CLDR but WordPress ships nplurals=2 (n > 1),
+	// and the pack has to agree with the ecosystem it lives in.
+	{ code: 'id_ID', name: 'Indonesian',           share: 1.02, wave: 2, rtl: false, plural: 'nplurals=2; plural=n > 1;' },
 	{ code: 'cs_CZ', name: 'Czech',                share: 0.60, wave: 2, rtl: false, plural: 'nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;' },
 	{ code: 'sv_SE', name: 'Swedish',              share: 0.59, wave: 2, rtl: false, plural: 'nplurals=2; plural=n != 1;' },
 	{ code: 'zh_CN', name: 'Chinese (China)',      share: 0.57, wave: 2, rtl: false, plural: 'nplurals=1; plural=0;' },
