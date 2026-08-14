@@ -71,6 +71,15 @@ done
 echo "    all catalogs compile"
 
 echo
+echo "==> 4b. quality report"
+# Not a gate. This is the read-before-you-ship pass: coverage per locale,
+# placeholder integrity, plural form counts, and the signature of a batch
+# that quietly came back in English.
+for locale in $LOCALES; do
+	node bin/i18n/qa.js "$locale" | sed 's/^/    /'
+done
+
+echo
 echo "==> 5. building packs"
 ./bin/i18n/build-packs.sh
 

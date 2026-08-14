@@ -42,17 +42,28 @@ if ( fs.existsSync( outPath ) ) {
 	}
 }
 
-// Rebuild the same todo ordering the exporter used, so ids line up.
-const todo = [];
-for ( const e of potEntries ) {
-	if ( reviewed.has( e.msgid ) ) continue;
-	if ( e.msgidPlural == null && lookup( glossary, normIdx, e.msgid ) ) continue;
-	todo.push( e );
+// Resolve ids through the EXPORT files, never by recomputing the ordering.
+// An id is only meaningful next to the export that issued it: change
+// anything upstream (a glossary rule, a new string) and a re-derived list
+// shifts, silently pairing every translation with its neighbour's source.
+// That happened once and produced a catalog where "Custom fields" was
+// translated as "Post not found."
+const idToSource = new Map();
+let inputFiles = 0;
+for ( const f of fs.readdirSync( OUT ).sort() ) {
+	if ( ! f.startsWith( `${ loc.code }.` ) || ! f.endsWith( '.json' ) || f.endsWith( '.done.json' ) ) continue;
+	inputFiles++;
+	const data = JSON.parse( fs.readFileSync( path.join( OUT, f ), 'utf8' ) );
+	for ( const e of data.entries || [] ) idToSource.set( e.id, e.source );
+}
+if ( ! inputFiles ) {
+	console.error( `no export files for ${ loc.code } in ${ OUT }; re-run export-batch.js` );
+	process.exit( 1 );
 }
 
-// Collect the translated chunks.
+// Collect the translated chunks, keyed by SOURCE STRING.
 const translated = new Map();
-let files = 0;
+let files = 0, orphaned = 0;
 for ( const f of fs.readdirSync( OUT ).sort() ) {
 	if ( ! f.startsWith( `${ loc.code }.` ) || ! f.endsWith( '.done.json' ) ) continue;
 	files++;
@@ -63,14 +74,15 @@ for ( const f of fs.readdirSync( OUT ).sort() ) {
 		if ( typeof t.id !== 'number' ) continue;
 		const forms = Array.isArray( t.forms ) ? t.forms : ( typeof t.translation === 'string' ? [ t.translation ] : null );
 		if ( ! forms ) continue;
-		translated.set( t.id, forms );
+		const source = idToSource.get( t.id );
+		if ( source == null ) { orphaned++; continue; }
+		translated.set( source, forms );
 	}
 }
 
 // Assemble the catalog: reviewed, then core, then translated.
 const out = [];
-let nReviewed = 0, nCore = 0, nNew = 0;
-let i = 0;
+let nReviewed = 0, nCore = 0, nNew = 0, nSelf = 0;
 for ( const e of potEntries ) {
 	const entry = {
 		msgid: e.msgid, msgidPlural: e.msgidPlural, msgctxt: e.msgctxt,
@@ -88,9 +100,17 @@ for ( const e of potEntries ) {
 			out.push( entry ); nCore++; continue;
 		}
 	}
-	const forms = translated.get( i );
-	i++;
-	if ( forms && forms.some( Boolean ) ) { entry.msgstr = forms; nNew++; }
+	const forms = translated.get( e.msgid );
+	if ( forms && forms.some( Boolean ) ) { entry.msgstr = forms; nNew++; out.push( entry ); continue; }
+
+	// An English variant that needs no spelling change IS translated: to
+	// itself. Filling these in rather than leaving them blank costs nothing
+	// at runtime (a blank falls through to the same text) and keeps the
+	// coverage figure honest instead of reporting a hole that isn't one.
+	if ( /^en_/.test( loc.code ) ) {
+		entry.msgstr = e.msgidPlural != null ? [ e.msgid, e.msgidPlural ] : [ e.msgid ];
+		nSelf++;
+	}
 	out.push( entry );
 }
 
@@ -116,7 +136,8 @@ fs.writeFileSync( outPath, writePo( header, kept ) );
 
 const pct = ( kept.length / potEntries.length * 100 ).toFixed( 1 );
 console.log( `${ loc.code }: ${ files } chunk file(s), ${ translated.size } translations read` );
-console.log( `  reviewed ${ nReviewed } | core ${ nCore } | new ${ nNew }` );
+if ( orphaned ) console.log( `  ${ orphaned } translation(s) carried an id no export issued, ignored` );
+console.log( `  reviewed ${ nReviewed } | core ${ nCore } | new ${ nNew }${ nSelf ? ` | unchanged ${ nSelf }` : '' }` );
 console.log( `  kept ${ kept.length } (${ pct }%), dropped ${ dropped.length }` );
 for ( const d of dropped.slice( 0, 8 ) ) {
 	console.log( `    DROP ${ JSON.stringify( d.entry.msgid.slice( 0, 44 ) ) }: ${ d.reason }` );
