@@ -76,6 +76,18 @@ order replaces the subscription in it, the same way a related subscription behav
 order side. The two buttons are siblings, never nested: a button inside a button is invalid
 and browsers drop the inner one.
 
+**The timeline is the order's card, pointed at the subscription.** WooCommerce gives both
+records the same note shape (`{ note, customer_note }`) under their own route, so the
+composer, the private/customer split and the list are one helper used twice. What is not
+shared is the ids: an order quick view can stack over a subscription page, putting two
+timelines in one document, and a shared id would let one host's binder drive the other's
+composer — the page's, since it comes first in the DOM. Orders keep `minn-o-*`,
+subscriptions take `minn-s-*`, and the subscription's binder is scoped to its own view.
+
+Notes arrive on their own request, like renewal orders: a failure leaves the card empty
+instead of breaking the detail. WooCommerce writes its own notes into the same timeline
+(status changes, renewal results), which is the point of showing it here at all.
+
 **Back follows the trail, not the record type.** An order reached from a subscription says
 `← Subscription #123` and returns there; the same order reached from the orders list says
 `← Orders`. The trail is left at the click and spent when the order page reads it, so it
@@ -107,8 +119,9 @@ is never hidden.
 `tests/subscription-page.test.js` covers the page: the deep link, the two columns and
 their stacking, the attribution card, the status save, items editing asserted against what
 WooCommerce stored, schedule editing asserted as GMT against the site's own offset, the
-themed picker, related-order navigation, the quick view that opens an order without
-leaving the subscription, and the modal as Quick view.
+themed picker, related-order navigation with the Back trail it leaves, the quick view that
+opens an order without leaving the subscription, notes asserted as WooCommerce stored them
+(private and customer-visible), and the modal as Quick view.
 `tests/subscription-filters.test.js` covers the list: each filter against the rows and the
 query string, the URL round trip, the start date column, and the GMT reading of a start
 date. `tests/wcs-subscriptions.test.js` covers the integration underneath both.
