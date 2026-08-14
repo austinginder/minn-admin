@@ -74,10 +74,19 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		};
 
 		// Comboboxes (rule-70): click the input to open, click the option.
+		// The detail's late async fetches each rerender the whole host, which
+		// closes an open panel mid-pick — reopen and retry when that race lands.
 		const pickCombo = async ( key, value ) => {
-			await page.click( `[data-oc="${ key }"] .minn-ac-input` );
-			await page.waitForSelector( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]`, { timeout: 8000 } );
-			await page.click( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]` );
+			for ( let tries = 0; ; tries++ ) {
+				await page.click( `[data-oc="${ key }"] .minn-ac-input` );
+				try {
+					await page.waitForSelector( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]`, { timeout: 8000 } );
+					await page.click( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]`, { timeout: 8000 } );
+					return;
+				} catch ( e ) {
+					if ( tries >= 2 ) throw e;
+				}
+			}
 		};
 
 		// ---- Order A: unpaid → payment card offers Record payment ----

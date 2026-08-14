@@ -17,6 +17,14 @@ MINN_TEST_PASS=<admin password> node media-flow.test.js # paste/drop image files
 MINN_TEST_PASS=<admin password> node editor-sidebar.test.js # slug, discussion, visibility, sticky (~20s)
 MINN_TEST_PASS=<admin password> node system.test.js     # diagnostics endpoint + page + copy-report
 MINN_TEST_PASS=<admin password> node undo-toast.test.js # structural-deletion Undo (islands, tables)
+MINN_TEST_PASS=<admin password> node order-layout.test.js # order detail layout: columns, dialogs, items editing
+
+# lab seeders (NOT suites: they leave what they create behind, so point them
+# at a throwaway site). seed-gateways enables cheque/bacs/cod so the payment
+# picker has entries on a fresh WooCommerce; seed-orders creates one order per
+# status for walking the order detail by hand.
+MINN_TEST_PASS=<admin password> node seed-gateways.js
+MINN_TEST_PASS=<admin password> node seed-orders.js
 
 # multisite (network) — runs against a SEPARATE subdomain-multisite lab, not
 # minnadmin. SKIPs (exit 0) with no MINN_MS_SUPER_PASS or no lab, so run-all is
