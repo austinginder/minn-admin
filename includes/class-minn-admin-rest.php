@@ -2739,10 +2739,19 @@ class Minn_Admin_REST {
 				continue;
 			}
 			$author = get_the_author_meta( 'display_name', $p->post_author );
-			$verb   = 'publish' === $p->post_status ? 'published' : ( 'future' === $p->post_status ? 'scheduled' : 'drafted' );
+			if ( 'publish' === $p->post_status ) {
+				/* translators: 1: author display name, 2: post title. */
+				$tpl = __( '%1$s published “%2$s”', 'minn-admin' );
+			} elseif ( 'future' === $p->post_status ) {
+				/* translators: 1: author display name, 2: post title. */
+				$tpl = __( '%1$s scheduled “%2$s”', 'minn-admin' );
+			} else {
+				/* translators: 1: author display name, 2: post title. */
+				$tpl = __( '%1$s drafted “%2$s”', 'minn-admin' );
+			}
 			$pto    = get_post_type_object( $p->post_type );
 			$activity[] = array(
-				'text'  => sprintf( '%s %s “%s”', $author, $verb, self::plain_title( $p ) ),
+				'text'  => sprintf( $tpl, $author, self::plain_title( $p ) ),
 				'time'  => $time,
 				'color' => 'publish' === $p->post_status ? 'green' : ( 'future' === $p->post_status ? 'blue' : 'accent' ),
 				// Rows are clickable: land in the editor. The
@@ -2788,7 +2797,7 @@ class Minn_Admin_REST {
 		// 4 rows keeps the Recent activity card the same height as the chart card.
 		$activity = array_slice( $activity, 0, 4 );
 		foreach ( $activity as &$item ) {
-			$item['time'] = sprintf( '%s ago', human_time_diff( $item['time'] ) );
+			$item['time'] = sprintf( /* translators: %s: human-readable time difference (e.g. "5 mins"). */ __( '%s ago', 'minn-admin' ), human_time_diff( $item['time'] ) );
 		}
 
 		// Store needs-attention counts: the day-to-day order buckets a store
@@ -2916,12 +2925,13 @@ class Minn_Admin_REST {
 		foreach ( $posts as $p ) {
 			$author  = get_the_author_meta( 'display_name', (int) $p->post_author );
 			// Titles carry HTML entities; the client escapes, so decode here.
-			$title   = html_entity_decode( $p->post_title ?: '(no title)', ENT_QUOTES );
+			$title   = html_entity_decode( $p->post_title ?: __( '(no title)', 'minn-admin' ), ENT_QUOTES );
 			$items[] = array(
 				'kind'  => 'post',
 				'id'    => (int) $p->ID,
 				'type'  => 'page' === $p->post_type ? 'pages' : 'posts',
-				'text'  => sprintf( '%s published “%s”', $author ?: 'Someone', $title ),
+				/* translators: 1: author display name, 2: post title. */
+				'text'  => sprintf( __( '%1$s published “%2$s”', 'minn-admin' ), $author ?: __( 'Someone', 'minn-admin' ), $title ),
 				'time'  => strtotime( $p->post_date_gmt . ' UTC' ),
 				'color' => 'green',
 			);
@@ -2964,7 +2974,7 @@ class Minn_Admin_REST {
 		} );
 		$items = array_slice( $items, 0, 100 );
 		foreach ( $items as &$item ) {
-			$item['ago'] = sprintf( '%s ago', human_time_diff( $item['time'] ) );
+			$item['ago'] = sprintf( /* translators: %s: human-readable time difference (e.g. "5 mins"). */ __( '%s ago', 'minn-admin' ), human_time_diff( $item['time'] ) );
 		}
 
 		return rest_ensure_response( array( 'items' => $items ) );
@@ -3138,12 +3148,12 @@ class Minn_Admin_REST {
 	private static function greeting() {
 		$hour = (int) current_time( 'G' );
 		if ( $hour < 12 ) {
-			return 'Good morning';
+			return __( 'Good morning', 'minn-admin' );
 		}
 		if ( $hour < 17 ) {
-			return 'Good afternoon';
+			return __( 'Good afternoon', 'minn-admin' );
 		}
-		return 'Good evening';
+		return __( 'Good evening', 'minn-admin' );
 	}
 
 	/**
@@ -3461,8 +3471,8 @@ class Minn_Admin_REST {
 		$today = strtotime( 'today', current_time( 'timestamp' ) ) - (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
 		foreach ( $items as &$item ) {
 			$item['unread'] = $item['time'] > $read_at && ! in_array( $item['id'], $read_ids, true );
-			$item['group']  = $item['time'] >= $today ? 'Today' : 'Earlier';
-			$item['ago']    = sprintf( '%s ago', human_time_diff( $item['time'] ) );
+			$item['group']  = $item['time'] >= $today ? __( 'Today', 'minn-admin' ) : __( 'Earlier', 'minn-admin' );
+			$item['ago']    = sprintf( /* translators: %s: human-readable time difference (e.g. "5 mins"). */ __( '%s ago', 'minn-admin' ), human_time_diff( $item['time'] ) );
 		}
 
 		return rest_ensure_response( array( 'items' => $items ) );
