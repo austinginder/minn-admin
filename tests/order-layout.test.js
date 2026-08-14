@@ -36,7 +36,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	const suffix = Date.now().toString( 36 );
 	const email = `minn-layout-${ suffix }@example.com`;
-	let pid = null, oid = null, eid = null, mediaId = null;
+	let pid = null, oid = null, eid = null, mediaId = null, couponId = null;
 
 	try {
 		const prod = await api( 'wc/v3/products', {
@@ -280,6 +280,53 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'removed line leaves the order and totals restore',
 			ei.body.line_items.length === 1 && parseFloat( ei.body.total ) === 60,
 			JSON.stringify( { lines: ei.body.line_items.length, total: ei.body.total } ) );
+		// ---- Coupons: WooCommerce owns the arithmetic, we only send the set ----
+		const cpRes = await api( 'wc/v3/coupons', {
+			method: 'POST',
+			body: JSON.stringify( { code: 'minnlayout' + suffix, discount_type: 'percent', amount: '10' } ),
+		} );
+		couponId = cpRes.body && cpRes.body.id;
+		const code = cpRes.body && cpRes.body.code;
+		await page.reload( { waitUntil: 'domcontentloaded' } );
+		await pageReady();
+		await page.click( '[data-oedit="coupons"]' );
+		await page.waitForSelector( '.minn-order-submodal #minn-ec-code', { timeout: 8000 } );
+		await page.fill( '#minn-ec-code', code );
+		await page.click( '#minn-ec-add' );
+		await page.waitForSelector( `.minn-order-submodal [data-ecdel="${ code }"]`, { timeout: 8000 } );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
+		let cou = await api( `wc/v3/orders/${ eid }?_fields=coupon_lines,discount_total,total` );
+		t.check( 'the coupon lands and WooCommerce recalculates the order',
+			( cou.body.coupon_lines || [] ).length === 1
+				&& cou.body.coupon_lines[ 0 ].code === code
+				&& parseFloat( cou.body.discount_total ) === 6
+				&& parseFloat( cou.body.total ) === 54,
+			JSON.stringify( { lines: ( cou.body.coupon_lines || [] ).map( ( c ) => c.code ), discount: cou.body.discount_total, total: cou.body.total } ) );
+
+		// Dropping it restores the totals, because the set is what is sent.
+		await page.click( '[data-oedit="coupons"]' );
+		await page.waitForSelector( `.minn-order-submodal [data-ecdel="${ code }"]`, { timeout: 8000 } );
+		await page.click( `.minn-order-submodal [data-ecdel="${ code }"]` );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
+		cou = await api( `wc/v3/orders/${ eid }?_fields=coupon_lines,discount_total,total` );
+		t.check( 'dropping the coupon restores the totals',
+			( cou.body.coupon_lines || [] ).length === 0 && parseFloat( cou.body.total ) === 60,
+			JSON.stringify( { lines: ( cou.body.coupon_lines || [] ).length, total: cou.body.total } ) );
+
+		// A code WooCommerce refuses must say so, not fail silently.
+		await page.click( '[data-oedit="coupons"]' );
+		await page.waitForSelector( '.minn-order-submodal #minn-ec-code', { timeout: 8000 } );
+		await page.fill( '#minn-ec-code', 'no-such-coupon-' + suffix );
+		await page.click( '#minn-ec-add' );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForSelector( '.minn-toast', { timeout: 15000 } );
+		t.check( 'a rejected coupon surfaces WooCommerce\'s own reason',
+			/does not exist/i.test( await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ) ),
+			await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ) );
+		await page.keyboard.press( 'Escape' );
+
 		await page.goto( `${ BASE }/minn-admin/orders/${ oid }`, { waitUntil: 'domcontentloaded' } );
 		await pageReady();
 
@@ -310,6 +357,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		if ( oid ) await api( `wc/v3/orders/${ oid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( pid ) await api( `wc/v3/products/${ pid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( mediaId ) await api( `wp/v2/media/${ mediaId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( couponId ) await api( `wc/v3/coupons/${ couponId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 	}
 
 	await t.done( browser, errors );

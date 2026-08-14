@@ -37,6 +37,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const suffix = Date.now().toString( 36 );
 	const email = `minn-subpage-${ suffix }@example.com`;
 	let pid = null, subId = null, orderId = null;
+	let flatCoupon = null, recCoupon = null, recProd = null, recSub = null;
 
 	const pageReady = async () => {
 		await page.waitForSelector( '.minn-sub-page .minn-order-main', { timeout: 25000 } );
@@ -206,6 +207,81 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			sched.body && String( sched.body.billing_interval ) === '2',
 			JSON.stringify( { interval: sched.body && sched.body.billing_interval, period: sched.body && sched.body.billing_period } ) );
 
+		// ---- Coupons: only recurring ones, and WooCommerce says so itself ----
+		// This subscription's line is a plain product, which is exactly the
+		// case WooCommerce refuses — assert the refusal reaches the user.
+		const flat = await api( 'wc/v3/coupons', {
+			method: 'POST',
+			body: JSON.stringify( { code: 'subflat' + suffix, discount_type: 'percent', amount: '10' } ),
+		} );
+		flatCoupon = flat.body && flat.body.id;
+		await page.click( '[data-soedit="coupons"]' );
+		await page.waitForSelector( '.minn-order-submodal #minn-ec-code', { timeout: 10000 } );
+		await page.fill( '#minn-ec-code', flat.body.code );
+		await page.click( '#minn-ec-add' );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForSelector( '.minn-toast', { timeout: 15000 } );
+		const refusal = await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' );
+		t.check( 'a non-recurring coupon is refused in WooCommerce\'s own words',
+			/recurring/i.test( refusal ), refusal.trim().slice( 0, 120 ) );
+		const untouched = await api( `wc/v3/subscriptions/${ subId }?_fields=coupon_lines,total` );
+		t.check( 'the refused coupon changed nothing',
+			( untouched.body.coupon_lines || [] ).length === 0, JSON.stringify( untouched.body ) );
+		await page.keyboard.press( 'Escape' );
+
+		// A real subscription product with a recurring coupon: the path that
+		// works, asserted on what WooCommerce stored, not on the card.
+		const subProd = await api( 'wc/v3/products', {
+			method: 'POST',
+			body: JSON.stringify( {
+				name: 'Recurring Widget ' + suffix, type: 'subscription', regular_price: '50.00', status: 'publish',
+				meta_data: [
+					{ key: '_subscription_price', value: '50.00' },
+					{ key: '_subscription_period', value: 'month' },
+					{ key: '_subscription_period_interval', value: '1' },
+				],
+			} ),
+		} );
+		recProd = subProd.body && subProd.body.id;
+		const rec = await api( 'wc/v3/coupons', {
+			method: 'POST',
+			body: JSON.stringify( { code: 'subrec' + suffix, discount_type: 'recurring_percent', amount: '20' } ),
+		} );
+		recCoupon = rec.body && rec.body.id;
+		const rsub = await api( 'wc/v3/subscriptions', {
+			method: 'POST',
+			body: JSON.stringify( { status: 'active', billing, billing_period: 'month', billing_interval: 1, line_items: [ { product_id: recProd, quantity: 1 } ] } ),
+		} );
+		recSub = rsub.body && rsub.body.id;
+		await page.goto( `${ BASE }/minn-admin/subscriptions/${ recSub }`, { waitUntil: 'domcontentloaded' } );
+		await pageReady();
+		await page.click( '[data-soedit="coupons"]' );
+		await page.waitForSelector( '.minn-order-submodal #minn-ec-code', { timeout: 10000 } );
+		await page.fill( '#minn-ec-code', rec.body.code );
+		await page.click( '#minn-ec-add' );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
+		let rc = await api( `wc/v3/subscriptions/${ recSub }?_fields=coupon_lines,discount_total,total` );
+		t.check( 'a recurring coupon applies and WooCommerce recalculates',
+			( rc.body.coupon_lines || [] ).length === 1 && parseFloat( rc.body.total ) === 40 && parseFloat( rc.body.discount_total ) === 10,
+			JSON.stringify( { lines: ( rc.body.coupon_lines || [] ).map( ( c ) => c.code ), total: rc.body.total, discount: rc.body.discount_total } ) );
+		t.check( 'the card names the discount instead of just shrinking the total',
+			await page.evaluate( ( c ) => {
+				const items = document.querySelector( '.minn-sub-page .minn-order-items' );
+				return !! items && items.textContent.indexOf( c ) !== -1 && /Discount/i.test( items.textContent );
+			}, rec.body.code ), '' );
+		await page.click( '[data-soedit="coupons"]' );
+		await page.waitForSelector( `.minn-order-submodal [data-ecdel="${ rec.body.code }"]`, { timeout: 10000 } );
+		await page.click( `.minn-order-submodal [data-ecdel="${ rec.body.code }"]` );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
+		rc = await api( `wc/v3/subscriptions/${ recSub }?_fields=coupon_lines,total` );
+		t.check( 'dropping it restores the recurring total',
+			( rc.body.coupon_lines || [] ).length === 0 && parseFloat( rc.body.total ) === 50,
+			JSON.stringify( { lines: ( rc.body.coupon_lines || [] ).length, total: rc.body.total } ) );
+		await page.goto( `${ BASE }/minn-admin/subscriptions/${ subId }`, { waitUntil: 'domcontentloaded' } );
+		await pageReady();
+
 		// ---- The timeline takes notes, private and customer-visible ----
 		await page.waitForSelector( '.minn-sub-page .minn-sub-notes', { timeout: 20000 } );
 		await page.fill( '#minn-s-new-note', 'Called about the card on file.' );
@@ -319,7 +395,11 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	} finally {
 		if ( subId ) await api( `wc/v3/subscriptions/${ subId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( orderId ) await api( `wc/v3/orders/${ orderId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( recSub ) await api( `wc/v3/subscriptions/${ recSub }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( pid ) await api( `wc/v3/products/${ pid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( recProd ) await api( `wc/v3/products/${ recProd }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( flatCoupon ) await api( `wc/v3/coupons/${ flatCoupon }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( recCoupon ) await api( `wc/v3/coupons/${ recCoupon }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 	}
 
 	await t.done( browser, errors );

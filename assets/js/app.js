@@ -5651,7 +5651,7 @@
 		return ( ( b.first_name || '' ) + ' ' + ( b.last_name || '' ) ).trim() || b.email || 'Guest';
 	}
 
-	const ORDER_DETAIL_FIELDS = 'id,number,status,total,total_tax,discount_total,shipping_total,currency,currency_symbol,date_created,date_paid,billing,shipping,line_items,refunds,payment_url,needs_payment,payment_method,payment_method_title,transaction_id,customer_note,customer_id,is_editable,meta_data';
+	const ORDER_DETAIL_FIELDS = 'id,number,status,total,total_tax,discount_total,shipping_total,currency,currency_symbol,date_created,date_paid,billing,shipping,line_items,coupon_lines,refunds,payment_url,needs_payment,payment_method,payment_method_title,transaction_id,customer_note,customer_id,is_editable,meta_data';
 
 	const ORDER_RELATED_FIELDS = 'id,number,status,total,currency,currency_symbol,date_created';
 
@@ -5938,11 +5938,114 @@
 			</div>`;
 	}
 
+	/**
+	 * The coupons dialog, shared by orders and subscriptions. It edits the SET,
+	 * not one coupon: WooCommerce's `coupon_lines` is declarative — whatever
+	 * array you PUT replaces every coupon on the record, and sending an
+	 * existing line's `id` is refused outright (coupon_item_id_readonly). So
+	 * the dialog collects codes and sends codes.
+	 *
+	 * Totals are WooCommerce's to compute and it does compute them: applying a
+	 * code rewrites discount_total, the order total and the line totals, and
+	 * dropping one puts them back. Nothing here does arithmetic.
+	 */
+	function couponsFormHtml( entity, money ) {
+		const lines = entity.coupon_lines || [];
+		return `
+			<div class="minn-order-fields">
+				<div class="minn-ei-lines" id="minn-ec-lines">
+					${ lines.map( ( c ) => `
+					<div class="minn-ei-line" data-ecline="${ esc( c.code ) }">
+						<span class="minn-cell-clip">${ esc( c.code ) }</span>
+						<span class="minn-ei-unit">−${ esc( money( c.discount ) ) }</span>
+						<button type="button" class="minn-pdl-x" data-ecdel="${ esc( c.code ) }" title="${ esc( __( 'Remove coupon' ) ) }">×</button>
+					</div>` ).join( '' ) }
+				</div>
+				<div><div class="minn-field-label">${ __( 'Add coupon' ) }</div>
+					<div style="display:flex; gap:8px;">
+						<input class="minn-input" id="minn-ec-code" placeholder="${ esc( __( 'Coupon code' ) ) }" autocomplete="off" style="flex:1; min-width:0;">
+						<button type="button" class="minn-btn-soft" id="minn-ec-add">${ __( 'Add' ) }</button>
+					</div>
+				</div>
+				<div class="minn-toggle-desc">${ __( 'WooCommerce recalculates the totals when the coupon is saved, and refuses a code it does not accept.' ) }</div>
+			</div>`;
+	}
+
+	/**
+	 * ctx: { entity(), route, fields, onSaved( full ) } — the same shape the
+	 * items dialog takes, for the same reason: both hosts PUT an identical
+	 * coupon_lines and differ only in route.
+	 */
+	function bindCouponsDialog( sub, sv, ctx ) {
+		const cur = ctx.entity() || {};
+		const codes = ( cur.coupon_lines || [] ).map( ( c ) => c.code );
+		const host = $( '#minn-ec-lines', sub.overlay );
+		const input = $( '#minn-ec-code', sub.overlay );
+		const drop = ( code ) => {
+			const i = codes.indexOf( code );
+			if ( i >= 0 ) codes.splice( i, 1 );
+			const row = $( `[data-ecline="${ code }"]`, sub.overlay );
+			if ( row ) row.remove();
+		};
+		const bindRow = ( row ) => {
+			const x = $( '[data-ecdel]', row );
+			if ( x ) x.addEventListener( 'click', () => drop( x.dataset.ecdel ) );
+		};
+		$$( '.minn-ei-line', host ).forEach( bindRow );
+		const add = () => {
+			const code = ( ( input && input.value ) || '' ).trim().toLowerCase();
+			if ( ! code ) return;
+			// WooCommerce stores codes lowercased, so a duplicate is a
+			// duplicate whatever the user typed.
+			if ( codes.indexOf( code ) !== -1 ) { toast( __( 'That coupon is already on this order' ), true ); return; }
+			codes.push( code );
+			const row = document.createElement( 'div' );
+			row.className = 'minn-ei-line';
+			row.dataset.ecline = code;
+			row.innerHTML = `<span class="minn-cell-clip">${ esc( code ) }</span><span class="minn-ei-unit">${ esc( __( 'On save' ) ) }</span><button type="button" class="minn-pdl-x" data-ecdel="${ esc( code ) }" title="${ esc( __( 'Remove coupon' ) ) }">×</button>`;
+			host.appendChild( row );
+			bindRow( row );
+			input.value = '';
+			input.focus();
+		};
+		const addBtn = $( '#minn-ec-add', sub.overlay );
+		if ( addBtn ) addBtn.addEventListener( 'click', add );
+		if ( input ) input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key !== 'Enter' ) return;
+			e.preventDefault(); // the dialog would otherwise submit nothing
+			add();
+		} );
+		if ( sv ) sv.addEventListener( 'click', async () => {
+			const was = ( cur.coupon_lines || [] ).map( ( c ) => c.code );
+			if ( codes.length === was.length && codes.every( ( c, i ) => c === was[ i ] ) ) { sub.close(); return; }
+			sv.disabled = true;
+			sv.textContent = __( 'Saving…' );
+			try {
+				await api( `${ ctx.route }/${ cur.id }`, {
+					method: 'PUT',
+					body: JSON.stringify( { coupon_lines: codes.map( ( code ) => ( { code } ) ) } ),
+				} );
+				const full = await api( `${ ctx.route }/${ cur.id }?_fields=${ ctx.fields }` );
+				ctx.onSaved( full );
+				toast( __( 'Coupons updated' ) );
+				sub.close();
+			} catch ( e ) {
+				// WooCommerce's refusals name the reason ("only recurring
+				// coupons can be applied to subscriptions", "does not exist").
+				// Passing them through beats inventing our own.
+				toast( e.message, true );
+				sv.disabled = false;
+				sv.textContent = __( 'Save' );
+			}
+		} );
+	}
+
 	function orderEditFormHtml( m, kind ) {
 		const o = m.full || m.order || {};
 		const b = o.billing || {};
 		const s = o.shipping || {};
 		if ( kind === 'items' ) return itemsFormHtml( o, ( v ) => orderMoney( o, v ) );
+		if ( kind === 'coupons' ) return couponsFormHtml( o, ( v ) => orderMoney( o, v ) );
 		if ( kind === 'note' ) return `
 			<div class="minn-order-fields">
 				<textarea class="minn-input" id="minn-o-note" rows="4" placeholder="Note from the customer…">${ esc( o.customer_note || '' ) }</textarea>
@@ -6152,7 +6255,7 @@
 	/** The order surface's edit dialogs, by kind. */
 	function openOrderSubModal( m, kind ) {
 		const o = m.full || m.order || {};
-		const titles = { refund: __( 'Refund' ), customer: __( 'Customer' ), shipping: __( 'Shipping address' ), note: __( 'Notes' ), items: __( 'Items' ) };
+		const titles = { refund: __( 'Refund' ), customer: __( 'Customer' ), shipping: __( 'Shipping address' ), note: __( 'Notes' ), items: __( 'Items' ), coupons: __( 'Coupons' ) };
 		const isEdit = kind !== 'refund';
 		return openEditDialog(
 			titles[ kind ] || '',
@@ -6199,12 +6302,15 @@
 			? `<span class="minn-status publish">${ __( 'Paid' ) }</span>`
 			: `<span class="minn-status private">${ __( 'Pending' ) }</span>`;
 		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		// A tag, not a second pencil: two identical pencils in one card head
+		// say "edit something" twice and leave the user to guess which.
+		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
 		return `
 					<div class="minn-order-body">
 						<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec minn-order-itemscard">
-								<div class="minn-order-card-head">${ statusChip }<span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ canEdit && o.is_editable ? pencil( 'items', __( 'Edit items' ) ) : '' }</div>
+								<div class="minn-order-card-head">${ statusChip }<span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ canEdit && o.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div>
 								<div class="minn-order-items">
 									${ ( o.line_items || [] ).map( ( li ) => `
 										<div class="minn-order-item">
@@ -6214,7 +6320,7 @@
 										</div>` ).join( '' ) }
 									<div class="minn-order-item"><span></span><span>${ __( 'Subtotal' ) } · ${ esc( countLabel ) }</span><span class="minn-order-line-total">${ esc( orderMoney( o, itemsSubtotal ) ) }</span></div>
 									${ o.discount_total && parseFloat( o.discount_total ) > 0 ? `
-										<div class="minn-order-item"><span></span><span>Discount</span><span class="minn-order-line-total">−${ esc( orderMoney( o, o.discount_total ) ) }</span></div>` : '' }
+										<div class="minn-order-item"><span></span><span class="minn-cell-clip">${ __( 'Discount' ) }${ ( o.coupon_lines || [] ).length ? ' · ' + esc( ( o.coupon_lines || [] ).map( ( c ) => c.code ).join( ', ' ) ) : '' }</span><span class="minn-order-line-total">−${ esc( orderMoney( o, o.discount_total ) ) }</span></div>` : '' }
 									${ o.shipping_total && parseFloat( o.shipping_total ) > 0 ? `
 										<div class="minn-order-item"><span></span><span>Shipping</span><span class="minn-order-line-total">${ esc( orderMoney( o, o.shipping_total ) ) }</span></div>` : '' }
 									${ o.total_tax && parseFloat( o.total_tax ) > 0 ? `
@@ -6451,6 +6557,22 @@
 					const sv = $( '[data-esave]', sub.overlay );
 					if ( kind === 'items' ) {
 						bindItemsDialog( sub, sv, {
+							entity: () => m.full || m.order || {},
+							route: 'wc/v3/orders',
+							fields: ORDER_DETAIL_FIELDS,
+							onSaved: ( full ) => {
+								m.full = full;
+								m.order = Object.assign( {}, m.order, { status: full.status, total: full.total, line_items: full.line_items } );
+								state.cache.orders = null;
+								state.cache.orderSummary = null;
+								if ( state.route === 'orders' ) renderOrders();
+								rerender();
+							},
+						} );
+						return;
+					}
+					if ( kind === 'coupons' ) {
+						bindCouponsDialog( sub, sv, {
 							entity: () => m.full || m.order || {},
 							route: 'wc/v3/orders',
 							fields: ORDER_DETAIL_FIELDS,
@@ -7439,7 +7561,7 @@
 	// WCS 9.x REST is the same shape as 5.x for these fields; 9.x also
 	// exposes requires_manual_renewal + suspension_count on detail reads.
 	const SUB_LIST_FIELDS = 'id,number,status,total,currency,date_created,billing,line_items,billing_period,billing_interval,next_payment_date_gmt,start_date_gmt,customer_id,parent_id';
-	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,requires_manual_renewal,suspension_count,meta_data,is_editable';
+	const SUB_DETAIL_FIELDS = SUB_LIST_FIELDS + ',trial_end_date_gmt,last_payment_date_gmt,end_date_gmt,cancelled_date_gmt,payment_method_title,customer_note,requires_manual_renewal,suspension_count,meta_data,is_editable,coupon_lines,discount_total';
 
 	const subCtx = () => JSON.stringify( orderFilters( LIST_FILTER_SPECS.subscriptions ) ) + '|' + ( state.subSearch || '' );
 
@@ -7587,6 +7709,7 @@
 		// queries [data-oedit] across the whole document, so sharing the name
 		// would let an order host bind pencils that are not its own.
 		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
 		// An order reference stays navigation, as it is everywhere else; the eye
 		// beside it opens the quick view, so glancing at a renewal does not cost
 		// the subscription you are reading. Siblings, never nested: a button
@@ -7601,7 +7724,7 @@
 						<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec minn-order-itemscard">
-								<div class="minn-order-card-head"><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span><span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ s.is_editable ? pencil( 'items', __( 'Edit items' ) ) : '' }</div>
+								<div class="minn-order-card-head"><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span><span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ s.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div>
 								<div class="minn-order-items">
 									${ ( s.line_items || [] ).map( ( li ) => `
 										<div class="minn-order-item">
@@ -7609,6 +7732,8 @@
 											<span class="minn-cell-clip">${ esc( li.name || 'Item' ) }</span>
 											<span class="minn-order-line-total">${ esc( subMoney( s, li.total ) ) }</span>
 										</div>` ).join( '' ) || `<div class="minn-toggle-desc">${ __( 'No line items.' ) }</div>` }
+									${ parseFloat( s.discount_total ) > 0 ? `
+										<div class="minn-order-item"><span></span><span class="minn-cell-clip">${ __( 'Discount' ) }${ ( s.coupon_lines || [] ).length ? ' · ' + esc( ( s.coupon_lines || [] ).map( ( c ) => c.code ).join( ', ' ) ) : '' }</span><span class="minn-order-line-total">−${ esc( subMoney( s, s.discount_total ) ) }</span></div>` : '' }
 									<div class="minn-order-item total">
 										<span></span><span>${ __( 'Recurring total' ) }</span>
 										<span class="minn-order-line-total">${ esc( subMoney( s, s.total ) ) } / ${ esc( subPeriodLabel( s ) ) }</span>
@@ -7879,6 +8004,22 @@
 				const kind = btn.dataset.soedit;
 				const cur = m.full || m.sub || {};
 				if ( kind === 'schedule' ) { openScheduleDialog( cur ); return; }
+				if ( kind === 'coupons' ) {
+					const cd = openEditDialog( __( 'Coupons' ), couponsFormHtml( cur, ( v ) => subMoney( cur, v ) ), true );
+					bindCouponsDialog( cd, $( '[data-esave]', cd.overlay ), {
+						entity: () => m.full || m.sub || {},
+						route: 'wc/v3/subscriptions',
+						fields: SUB_DETAIL_FIELDS,
+						onSaved: ( full ) => {
+							m.full = full;
+							m.sub = Object.assign( {}, m.sub, { status: full.status, total: full.total, line_items: full.line_items } );
+							state.cache.subscriptions = null;
+							if ( state.route === 'subscriptions' ) renderSubscriptions();
+							rerender();
+						},
+					} );
+					return;
+				}
 				if ( kind !== 'items' ) return;
 				const dlg = openEditDialog( __( 'Items' ), itemsFormHtml( cur, ( v ) => subMoney( cur, v ) ), true );
 				bindItemsDialog( dlg, $( '[data-esave]', dlg.overlay ), {
