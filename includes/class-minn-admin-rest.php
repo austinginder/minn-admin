@@ -3885,6 +3885,7 @@ class Minn_Admin_REST {
 			$locale = '';
 		}
 		update_option( 'WPLANG', $locale );
+		self::install_component_translations( $locale );
 		return rest_ensure_response(
 			array(
 				'ok'        => true,
@@ -3892,6 +3893,47 @@ class Minn_Admin_REST {
 				'installed' => $downloaded,
 			)
 		);
+	}
+
+	/**
+	 * Install plugin and theme translation packs for one locale. Core's
+	 * wp_download_language_pack() fetches CORE only; wp-admin completes the
+	 * job from its Updates screen, so a language switched from Minn used to
+	 * leave every plugin's strings (WooCommerce's order statuses, most
+	 * visibly) in English until someone visited wp-admin. Runs on every
+	 * switch, not only after a download: the core pack being installed says
+	 * nothing about the plugins'. Failures are swallowed — the switch itself
+	 * already succeeded, and a missing plugin pack only means English
+	 * fallbacks.
+	 */
+	private static function install_component_translations( $locale ) {
+		if ( '' === $locale || 'en_US' === $locale ) {
+			return;
+		}
+		if ( ! current_user_can( 'install_languages' ) || ! wp_is_file_mod_allowed( 'download_language_pack' ) ) {
+			return;
+		}
+		try {
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+			// The update transients only list translations for languages that
+			// were installed when the check ran — recompute now.
+			wp_clean_update_cache();
+			wp_update_plugins();
+			wp_update_themes();
+			$updates = array_values( array_filter(
+				wp_get_translation_updates(),
+				function ( $u ) use ( $locale ) {
+					return isset( $u->language ) && $u->language === $locale;
+				}
+			) );
+			if ( ! $updates ) {
+				return;
+			}
+			$upgrader = new Language_Pack_Upgrader( new Automatic_Upgrader_Skin() );
+			$upgrader->bulk_upgrade( $updates );
+		} catch ( \Throwable $e ) {
+			// English fallback is the worst case; never fail the switch.
+		}
 	}
 
 	/**
@@ -3924,6 +3966,7 @@ class Minn_Admin_REST {
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
+		self::install_component_translations( $locale );
 		return rest_ensure_response(
 			array(
 				'ok'        => true,
