@@ -1090,6 +1090,12 @@ class Minn_Admin {
 			// SPA translation map for the client's __()/_n() (empty for
 			// English; object cast so an empty map serializes as {}).
 			'i18n'     => (object) self::js_translations(),
+			// The locale's Plural-Forms rule, verbatim from the catalog. The
+			// client evaluates it: "n != 1" is right for English and wrong
+			// for most of the world (Japanese has one form, Russian and
+			// Polish three, Arabic six), so a hardcoded rule silently prints
+			// the wrong plural in the majority of shipped locales.
+			'i18nPlural' => self::js_plural_forms(),
 			// Installed admin languages for Your profile's Language picker.
 			'languages' => self::available_languages(),
 			'caps'     => array(
@@ -1792,6 +1798,45 @@ class Minn_Admin {
 		 * @param string $locale The user locale being served.
 		 */
 		return apply_filters( 'minn_admin_js_translations', $map, $locale );
+	}
+
+	/**
+	 * The locale's Plural-Forms expression, read from the same JED files
+	 * js_translations() uses. JED keeps it on the reserved '' entry, which
+	 * that method skips because it carries no message.
+	 *
+	 * Returned verbatim (for example
+	 * "nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : …);") and evaluated on
+	 * the client by a small parser, never by eval: a catalog is a
+	 * supply-chain input like any other download.
+	 *
+	 * @return string Empty when the locale has no catalog (English falls
+	 *                through to the source strings anyway).
+	 */
+	public static function js_plural_forms() {
+		$locale = get_user_locale();
+		$rule   = '';
+		if ( 'en_US' === $locale ) {
+			return apply_filters( 'minn_admin_js_plural_forms', $rule, $locale );
+		}
+		foreach ( array( MINN_ADMIN_DIR . 'languages', WP_LANG_DIR . '/plugins' ) as $dir ) {
+			foreach ( glob( $dir . '/minn-admin-' . $locale . '-*.json' ) ?: array() as $file ) {
+				$jed  = json_decode( (string) file_get_contents( $file ), true );
+				$head = $jed['locale_data']['messages'][''] ?? array();
+				if ( ! empty( $head['plural-forms'] ) ) {
+					$rule = (string) $head['plural-forms'];
+				} elseif ( ! empty( $head['plural_forms'] ) ) {
+					$rule = (string) $head['plural_forms'];
+				}
+			}
+		}
+		/**
+		 * Filter the SPA plural-forms rule.
+		 *
+		 * @param string $rule   The gettext Plural-Forms expression.
+		 * @param string $locale The user locale being served.
+		 */
+		return apply_filters( 'minn_admin_js_plural_forms', $rule, $locale );
 	}
 
 	public static function comments_enabled() {
