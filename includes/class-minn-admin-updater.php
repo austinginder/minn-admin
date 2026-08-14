@@ -20,6 +20,18 @@ class Minn_Admin_Updater {
 	/** Hosts the update package may legitimately come from. */
 	const PACKAGE_HOSTS = array( 'github.com', 'objects.githubusercontent.com', 'codeload.github.com' );
 
+	/**
+	 * Repository paths packages may live under, as an ALLOWLIST rather than
+	 * one hardcoded prefix. Language packs are published alongside the plugin
+	 * today; if they ever move to their own repository, that is one more
+	 * entry here plus a manifest URL, not a rewrite of the download gate.
+	 *
+	 * Each entry is matched ANCHORED at the start of the URL path. Unanchored,
+	 * anyone could satisfy it with a repository of their own containing that
+	 * directory path.
+	 */
+	const PACKAGE_PATHS = array( '/austinginder/minn-admin/' );
+
 	public function __construct() {
 		// Test the VALUE, not just the definition: define( 'MINN_ADMIN_DEV_MODE',
 		// false ) is the natural way to switch a dev flag off and used to leave
@@ -91,7 +103,45 @@ class Minn_Admin_Updater {
 		// objects.githubusercontent.com is only ever reached as a redirect
 		// target inside download_url(), never as a manifest download_url, so it
 		// does not carry the owner/repo pair and legitimately never matches.
-		return 0 === strpos( (string) ( $parts['path'] ?? '' ), '/austinginder/minn-admin/' );
+		$path = (string) ( $parts['path'] ?? '' );
+		foreach ( self::PACKAGE_PATHS as $prefix ) {
+			if ( 0 === strpos( $path, $prefix ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The sha256 the manifest publishes for a given package URL.
+	 *
+	 * Three-state on purpose:
+	 *   null  the manifest does not claim this URL at all, so it is not ours
+	 *         to verify and the download passes through untouched.
+	 *   ''    the manifest claims it but publishes no hash. That is a refusal,
+	 *         not a pass: treating "no sha256" as "verification not required"
+	 *         makes integrity opt-out for whoever serves the manifest, and
+	 *         degrades silently if a release script forgets the field.
+	 *   hash  verify against this.
+	 *
+	 * @param object|null $remote  Decoded manifest.
+	 * @param string      $package Package URL being downloaded.
+	 * @return string|null
+	 */
+	public function hash_for_package( $remote, $package ) {
+		if ( ! is_object( $remote ) ) {
+			return null;
+		}
+		if ( ! empty( $remote->download_url ) && $package === $remote->download_url ) {
+			return isset( $remote->sha256 ) ? (string) $remote->sha256 : '';
+		}
+		foreach ( (array) ( $remote->translations ?? array() ) as $pack ) {
+			$pack = (object) $pack;
+			if ( ! empty( $pack->package ) && $package === $pack->package ) {
+				return isset( $pack->sha256 ) ? (string) $pack->sha256 : '';
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -119,14 +169,15 @@ class Minn_Admin_Updater {
 			return $reply;
 		}
 		$remote = $this->request();
-		if ( empty( $remote->download_url ) || $package !== $remote->download_url ) {
+		// Look the hash up BY PACKAGE URL. The manifest publishes one for the
+		// plugin zip and one for every language pack, and a translation
+		// package is a downloaded file like any other: skipping the check for
+		// it would make integrity opt-out for whoever serves the manifest.
+		$expected = $this->hash_for_package( $remote, $package );
+		if ( null === $expected ) {
 			return $reply;
 		}
-		// The hash is MANDATORY for our own package. Treating "manifest has no
-		// sha256" as "verification not required" makes integrity opt-out for
-		// whoever serves the manifest, and silently degrades if a release
-		// script ever forgets the field.
-		if ( empty( $remote->sha256 ) ) {
+		if ( '' === $expected ) {
 			return new WP_Error(
 				'minn_admin_missing_package_hash',
 				__( 'Minn Admin update rejected: the release manifest does not publish a sha256 for this package.', 'minn-admin' )
@@ -140,7 +191,7 @@ class Minn_Admin_Updater {
 			return $file;
 		}
 		$hash = (string) hash_file( 'sha256', $file );
-		if ( ! hash_equals( strtolower( (string) $remote->sha256 ), $hash ) ) {
+		if ( ! hash_equals( strtolower( $expected ), $hash ) ) {
 			wp_delete_file( $file );
 			return new WP_Error(
 				'minn_admin_bad_package_hash',
@@ -254,7 +305,118 @@ class Minn_Admin_Updater {
 
 			$transient->response[ $response->plugin ] = $response;
 		}
+
+		$this->offer_translations( $transient, $remote );
 		return $transient;
+	}
+
+	/**
+	 * Offer language packs through core's own translation-update path.
+	 *
+	 * WordPress reads pending translation updates from the same transient it
+	 * reads plugin updates from, and Language_Pack_Upgrader::async_upgrade()
+	 * is already hooked to upgrader_process_complete: updating the plugin
+	 * installs its packs straight after, with no code from us. They also show
+	 * up under Dashboard, Updates, and they land in WP_LANG_DIR/plugins/,
+	 * which core checks BEFORE the plugin's own languages/ directory and
+	 * which survives a plugin reinstall.
+	 *
+	 * Only locales the site actually uses are offered. A site running one
+	 * language has no reason to download thirteen.
+	 *
+	 * @param object      $transient The update_plugins transient.
+	 * @param object|null $remote    Decoded manifest.
+	 */
+	protected function offer_translations( $transient, $remote ) {
+		if ( ! is_object( $remote ) || empty( $remote->translations ) ) {
+			return;
+		}
+		$wanted = $this->wanted_locales();
+		if ( ! $wanted ) {
+			return;
+		}
+		if ( ! isset( $transient->translations ) || ! is_array( $transient->translations ) ) {
+			$transient->translations = array();
+		}
+		$installed = $this->installed_translations();
+
+		foreach ( (array) $remote->translations as $pack ) {
+			$pack = (object) $pack;
+			if ( empty( $pack->language ) || empty( $pack->package ) ) {
+				continue;
+			}
+			if ( ! in_array( $pack->language, $wanted, true ) ) {
+				continue;
+			}
+			// Same refusal as the plugin package: never OFFER something we
+			// would refuse to install.
+			if ( ! $this->is_our_package_url( $pack->package ) || empty( $pack->sha256 ) ) {
+				continue;
+			}
+			// Skip a pack the site already has. The comparison is by DATE, not
+			// by version: what a site has on disk is a catalog with a
+			// PO-Revision-Date, and the plugin version it happened to ship
+			// alongside says nothing about whether the strings changed.
+			$have = $installed[ $pack->language ] ?? null;
+			$updated = isset( $pack->updated ) ? (string) $pack->updated : '';
+			if ( $have && $updated && strtotime( $have ) >= strtotime( $updated ) ) {
+				continue;
+			}
+			$transient->translations[] = array(
+				'type'       => 'plugin',
+				'slug'       => $this->plugin_slug,
+				'language'   => $pack->language,
+				'version'    => isset( $pack->version ) ? $pack->version : $this->version,
+				'updated'    => isset( $pack->updated ) ? $pack->updated : gmdate( 'Y-m-d H:i:s' ),
+				'package'    => $pack->package,
+				'autoupdate' => true,
+			);
+		}
+	}
+
+	/**
+	 * Locales this site could actually display: the site language, every
+	 * language a user has chosen, and whatever else is installed.
+	 *
+	 * @return string[]
+	 */
+	protected function wanted_locales() {
+		$locales = get_available_languages();
+		$locales[] = get_locale();
+		if ( function_exists( 'get_user_locale' ) ) {
+			$locales[] = get_user_locale();
+		}
+		/**
+		 * Filter the locales language packs are offered for.
+		 *
+		 * @param string[] $locales Locale codes.
+		 */
+		$locales = apply_filters( 'minn_admin_translation_locales', $locales );
+		return array_values( array_unique( array_filter( array_map( 'strval', (array) $locales ) ) ) );
+	}
+
+	/**
+	 * PO-Revision-Date of each language pack already on disk, keyed by locale.
+	 * That header is what core itself compares against when deciding whether a
+	 * translation update is pending.
+	 *
+	 * @return array<string,string>
+	 */
+	protected function installed_translations() {
+		$out = array();
+		if ( ! function_exists( 'wp_get_installed_translations' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/translation-install.php';
+		}
+		if ( ! function_exists( 'wp_get_installed_translations' ) ) {
+			return $out;
+		}
+		$installed = wp_get_installed_translations( 'plugins' );
+		foreach ( (array) ( $installed[ $this->plugin_slug ] ?? array() ) as $locale => $data ) {
+			if ( ! empty( $data['PO-Revision-Date'] ) ) {
+				$out[ $locale ] = $data['PO-Revision-Date'];
+			}
+		}
+		return $out;
 	}
 
 	public function purge( $upgrader, $options ) {
