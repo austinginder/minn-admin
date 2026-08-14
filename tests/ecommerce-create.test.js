@@ -206,11 +206,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		JSON.stringify( chromeWhileLoad ) );
 
 	await page.click( '[data-oview="list"]' );
-	await page.waitForSelector( '#minn-order-search, [data-otab]', { timeout: 15000 } );
+	await page.waitForSelector( '#minn-order-preset', { timeout: 15000 } );
+	// The status tabs are a dropdown on the filter bar now.
+	await page.click( '#minn-order-preset' );
+	await page.waitForSelector( '.minn-of-pop [data-opreset]', { timeout: 8000 } );
 	const tabs = await page.evaluate( () =>
-		Array.from( document.querySelectorAll( '[data-otab]' ) ).map( ( b ) => b.dataset.otab )
+		Array.from( document.querySelectorAll( '.minn-of-pop [data-opreset]' ) ).map( ( b ) => b.dataset.opreset )
 	);
-	t.check( 'Orders list has pending/cancelled/failed tabs',
+	await page.keyboard.press( 'Escape' );
+	t.check( 'Orders list has pending/cancelled/failed presets',
 		[ 'any', 'pending', 'cancelled', 'failed', 'completed' ].every( ( id ) => tabs.includes( id ) ),
 		JSON.stringify( tabs ) );
 

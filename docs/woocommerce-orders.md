@@ -64,6 +64,43 @@ Removing a line is `quantity: 0`, which is WooCommerce's own idiom for it. Taxes
 shipping are not recalculated, and the dialog says so rather than quietly leaving a wrong
 number on screen.
 
+## The list: filters over native parameters
+
+The list used to offer one status tab strip and a search box. The strip could not
+express two statuses at once, though WooCommerce's REST has always accepted an array
+there, and everything else the collection can narrow by was unreachable.
+
+The toolbar is one row now: a status dropdown, the search box, and Add filter, with the
+active filters as chips beneath. The filters are status (multi), a date window, customer
+and product. Each is a **native WooCommerce collection parameter**
+(`status[]`, `after`, `customer`, `product`), which is the whole point:
+
+> Filtering in the browser would be a lie the moment the list paginates. Page 2 of an
+> unfiltered query is not page 2 of a filtered one, and the count would describe neither.
+
+The suite asserts the query string alongside the rows for exactly that reason.
+
+**The tabs did not simply die.** They live inside the dropdown, so the common one-click
+triage ("show me Processing") did not get slower in the name of a nicer bar.
+
+**Filters live in the URL**, so a filtered list survives a reload and can be pasted to
+someone else. Only Minn's own keys are touched, because with plain permalinks the app
+itself rides on a query argument. Everything read back is validated: a status has to be
+one WooCommerce registered, ids have to be positive integers, dates have to look like
+dates. A URL can only carry an id, so a restored customer or product filter fetches its
+name and paints it into the chip.
+
+**Subscriptions wears the same bar.** The two lists are the same shape in two
+vocabularies, so the machinery is parameterized by a spec (status vocabulary, state slot,
+loader, renderer) and the active list comes from the route. Subscriptions offers its own
+statuses (active, pending-cancel, expired, switched), and each list keeps its own filters.
+
+Not here yet: channel (`created_via` accepts an array but has no enum, so the store's
+actual values need a server-side lookup), a custom date range (the themed picker carries
+editor-specific chrome today), and payment status, which is not a WooCommerce collection
+parameter at all: it lives in `date_paid`, so it would need Minn's own endpoint and a meta
+query.
+
 ## Status labels belong to WooCommerce
 
 Badges, the status picker and the list tabs read `wc_get_order_statuses()`, shipped in the
@@ -87,7 +124,11 @@ click and is never hidden.
 
 ## Tests
 
-`tests/order-layout.test.js` covers the layout contract: the two columns on desktop and
+`tests/order-filters.test.js` covers the filter bar: each filter against the rows AND the
+query string, the multi-status chip, chip removal, clear all, the URL round trip through a
+reload, junk in the URL being ignored, the picker's loading state and its thumbnails.
+`tests/subscription-filters.test.js` does the same for subscriptions and proves the two
+lists do not share filters. `tests/order-layout.test.js` covers the detail layout: the two columns on desktop and
 their stacking on a narrow viewport and in the modal, the header's badges and actions,
 the read-first sidebar and its dialogs, the copy-from-billing button, refund as a header
 action, items editing (quantity, add, remove) against the saved order, the attribution

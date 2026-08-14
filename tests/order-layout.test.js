@@ -36,7 +36,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	const suffix = Date.now().toString( 36 );
 	const email = `minn-layout-${ suffix }@example.com`;
-	let pid = null, oid = null, eid = null;
+	let pid = null, oid = null, eid = null, mediaId = null, couponId = null;
 
 	try {
 		const prod = await api( 'wc/v3/products', {
@@ -44,6 +44,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			body: JSON.stringify( { name: 'Minn Layout Test ' + suffix, type: 'simple', regular_price: '20.00', status: 'publish' } ),
 		} );
 		pid = prod.body && prod.body.id;
+		// A real attachment on the product: the add-product picker's thumbnail
+		// is only proven by a product that actually has one.
+		mediaId = await page.evaluate( async ( s ) => {
+			const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+			const bin = atob( png );
+			const bytes = new Uint8Array( bin.length );
+			for ( let i = 0; i < bin.length; i++ ) bytes[ i ] = bin.charCodeAt( i );
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/media', {
+				method: 'POST',
+				headers: { 'X-WP-Nonce': window.MINN.nonce, 'Content-Type': 'image/png', 'Content-Disposition': `attachment; filename="layout-${ s }.png"` },
+				credentials: 'same-origin',
+				body: bytes,
+			} );
+			const j = await r.json();
+			return j && j.id;
+		}, suffix );
+		if ( mediaId ) await api( `wc/v3/products/${ pid }`, { method: 'PUT', body: JSON.stringify( { images: [ { id: mediaId } ] } ) } );
 		const o = await api( 'wc/v3/orders', {
 			method: 'POST',
 			body: JSON.stringify( {
@@ -230,6 +247,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-order-submodal [data-ei-pick]', { timeout: 10000 } );
 		t.check( 'loading state clears once hits land',
 			await page.evaluate( () => ! document.querySelector( '.minn-ei-searching' ) ), '' );
+		const pickShape = await page.evaluate( () => {
+			const item = document.querySelector( '.minn-order-submodal [data-ei-pick]' );
+			const thumb = item && item.querySelector( '.minn-of-thumb' );
+			const img = thumb && thumb.querySelector( 'img' );
+			const box = thumb ? thumb.getBoundingClientRect() : { width: 0, height: 0 };
+			return { thumbSlot: !! thumb, src: img ? img.getAttribute( 'src' ) : '', w: Math.round( box.width ), h: Math.round( box.height ) };
+		} );
+		t.check( 'the add-product picker carries the product image',
+			pickShape.thumbSlot && /\.(png|jpe?g|gif|webp)/i.test( pickShape.src ), JSON.stringify( pickShape ) );
+		// Same trap the filter picker hit: the shared button.minn-ac-item rule
+		// sets display:block, and an inline style beats the flex rule outright,
+		// which leaves the thumb inline where width and height are ignored.
+		t.check( 'the thumbnail is actually laid out, not inline',
+			pickShape.w >= 20 && pickShape.h >= 20, JSON.stringify( pickShape ) );
 		await page.click( '.minn-order-submodal [data-ei-pick]' );
 		await page.click( '.minn-order-submodal [data-esave]' );
 		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 15000 } );
@@ -249,6 +280,88 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'removed line leaves the order and totals restore',
 			ei.body.line_items.length === 1 && parseFloat( ei.body.total ) === 60,
 			JSON.stringify( { lines: ei.body.line_items.length, total: ei.body.total } ) );
+		// ---- The card head's meta and actions ride together on the right ----
+		const headShape = await page.evaluate( () => {
+			const head = document.querySelector( '.minn-order-itemscard .minn-order-card-head' );
+			const acts = head && head.querySelector( '.minn-order-card-actions' );
+			if ( ! acts ) return { wrapped: false };
+			const hb = head.getBoundingClientRect(), ab = acts.getBoundingClientRect();
+			const btns = [ ...acts.querySelectorAll( '.minn-order-editpen' ) ];
+			const gaps = btns.slice( 1 ).map( ( b, i ) => Math.round( b.getBoundingClientRect().x - ( btns[ i ].getBoundingClientRect().x + btns[ i ].getBoundingClientRect().width ) ) );
+			return {
+				wrapped: true,
+				metaInside: !! acts.querySelector( '.minn-order-card-meta' ),
+				buttons: btns.length,
+				flushRight: Math.round( hb.x + hb.width - ( ab.x + ab.width ) ) <= 1,
+				gaps,
+			};
+		} );
+		t.check( 'meta and actions share one right-aligned wrapper',
+			headShape.wrapped && headShape.metaInside && headShape.buttons === 2 && headShape.flushRight,
+			JSON.stringify( headShape ) );
+		// Two buttons that each claimed margin-left:auto pushed each other
+		// apart; inside the wrapper they sit a gap apart, not a void.
+		t.check( 'the two actions sit side by side, not spread across the head',
+			( headShape.gaps || [] ).length >= 1 && headShape.gaps.every( ( g ) => g >= 0 && g <= 12 ),
+			JSON.stringify( headShape.gaps ) );
+
+		const tip = await page.evaluate( () => {
+			const b = document.querySelector( '.minn-order-card-actions [data-oedit="coupons"]' );
+			if ( ! b ) return { found: false };
+			const before = getComputedStyle( b, '::after' );
+			return { found: true, label: b.getAttribute( 'aria-label' ) || '', content: before.content, opacity: before.opacity };
+		} );
+		t.check( 'each action carries a tooltip naming what it does',
+			tip.found && /coupon/i.test( tip.label ) && tip.content.indexOf( tip.label ) !== -1,
+			JSON.stringify( tip ) );
+
+		// ---- Coupons: WooCommerce owns the arithmetic, we only send the set ----
+		const cpRes = await api( 'wc/v3/coupons', {
+			method: 'POST',
+			body: JSON.stringify( { code: 'minnlayout' + suffix, discount_type: 'percent', amount: '10' } ),
+		} );
+		couponId = cpRes.body && cpRes.body.id;
+		const code = cpRes.body && cpRes.body.code;
+		await page.reload( { waitUntil: 'domcontentloaded' } );
+		await pageReady();
+		await page.click( '[data-oedit="coupons"]' );
+		await page.waitForSelector( '.minn-order-submodal #minn-ec-code', { timeout: 8000 } );
+		await page.fill( '#minn-ec-code', code );
+		await page.click( '#minn-ec-add' );
+		await page.waitForSelector( `.minn-order-submodal [data-ecdel="${ code }"]`, { timeout: 8000 } );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
+		let cou = await api( `wc/v3/orders/${ eid }?_fields=coupon_lines,discount_total,total` );
+		t.check( 'the coupon lands and WooCommerce recalculates the order',
+			( cou.body.coupon_lines || [] ).length === 1
+				&& cou.body.coupon_lines[ 0 ].code === code
+				&& parseFloat( cou.body.discount_total ) === 6
+				&& parseFloat( cou.body.total ) === 54,
+			JSON.stringify( { lines: ( cou.body.coupon_lines || [] ).map( ( c ) => c.code ), discount: cou.body.discount_total, total: cou.body.total } ) );
+
+		// Dropping it restores the totals, because the set is what is sent.
+		await page.click( '[data-oedit="coupons"]' );
+		await page.waitForSelector( `.minn-order-submodal [data-ecdel="${ code }"]`, { timeout: 8000 } );
+		await page.click( `.minn-order-submodal [data-ecdel="${ code }"]` );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
+		cou = await api( `wc/v3/orders/${ eid }?_fields=coupon_lines,discount_total,total` );
+		t.check( 'dropping the coupon restores the totals',
+			( cou.body.coupon_lines || [] ).length === 0 && parseFloat( cou.body.total ) === 60,
+			JSON.stringify( { lines: ( cou.body.coupon_lines || [] ).length, total: cou.body.total } ) );
+
+		// A code WooCommerce refuses must say so, not fail silently.
+		await page.click( '[data-oedit="coupons"]' );
+		await page.waitForSelector( '.minn-order-submodal #minn-ec-code', { timeout: 8000 } );
+		await page.fill( '#minn-ec-code', 'no-such-coupon-' + suffix );
+		await page.click( '#minn-ec-add' );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForSelector( '.minn-toast', { timeout: 15000 } );
+		t.check( 'a rejected coupon surfaces WooCommerce\'s own reason',
+			/does not exist/i.test( await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ) ),
+			await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ) );
+		await page.keyboard.press( 'Escape' );
+
 		await page.goto( `${ BASE }/minn-admin/orders/${ oid }`, { waitUntil: 'domcontentloaded' } );
 		await pageReady();
 
@@ -278,6 +391,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		if ( eid ) await api( `wc/v3/orders/${ eid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( oid ) await api( `wc/v3/orders/${ oid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( pid ) await api( `wc/v3/products/${ pid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( mediaId ) await api( `wp/v2/media/${ mediaId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( couponId ) await api( `wc/v3/coupons/${ couponId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 	}
 
 	await t.done( browser, errors );

@@ -18,6 +18,9 @@ MINN_TEST_PASS=<admin password> node editor-sidebar.test.js # slug, discussion, 
 MINN_TEST_PASS=<admin password> node system.test.js     # diagnostics endpoint + page + copy-report
 MINN_TEST_PASS=<admin password> node undo-toast.test.js # structural-deletion Undo (islands, tables)
 MINN_TEST_PASS=<admin password> node order-layout.test.js # order detail layout: columns, dialogs, items editing
+MINN_TEST_PASS=<admin password> node order-filters.test.js # list filter bar: chips, server-side query, URL round trip
+MINN_TEST_PASS=<admin password> node subscription-filters.test.js # the same bar on subscriptions (SKIPs without WCS)
+MINN_TEST_PASS=<admin password> node subscription-page.test.js # /subscriptions/{id}: items + schedule editing, GMT dates
 
 # lab seeders (NOT suites: they leave what they create behind, so point them
 # at a throwaway site). seed-gateways enables cheque/bacs/cod so the payment

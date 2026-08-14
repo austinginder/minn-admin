@@ -2593,8 +2593,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 }
 
 /* ===== Orders ===== */
-.minn-order-cols { grid-template-columns: 120px 1fr 130px 60px 100px 40px; }
-.minn-sub-cols { grid-template-columns: 130px 1fr 120px 120px 100px 40px; }
+.minn-order-cols { grid-template-columns: 120px 1fr 130px minmax(0,150px) 100px 40px; }
+.minn-sub-cols { grid-template-columns: 130px 1fr minmax(0,150px) 110px 110px 120px 100px 40px; }
 .minn-sub-order-row {
 	display: flex;
 	align-items: center;
@@ -2612,6 +2612,31 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 	text-align: start;
 }
 .minn-sub-order-row:hover { background: var(--hover, rgba(127,127,127,.08)); }
+/* The reference and its eye sit side by side. The eye follows the list's
+   reveal-on-hover idiom, and :focus-within is not optional here: revealed by
+   hover alone, a keyboard user tabs into a control at opacity 0. */
+.minn-sub-order-line { display: flex; align-items: center; gap: 6px; }
+.minn-sub-order-line > .minn-sub-order-row { flex: 1; min-width: 0; }
+.minn-sub-order-line:hover .minn-row-more,
+.minn-sub-order-line:focus-within .minn-row-more { opacity: 1; }
+/* An order that belongs to a subscription. It rides beside the order number
+   rather than taking a column: most stores have none of these, and a column
+   would be empty on every row to serve a few. */
+.minn-subrel {
+	display: inline-flex; align-items: center; justify-content: center;
+	vertical-align: middle; flex: none;
+	margin-inline-start: 6px; width: 20px; height: 20px; border-radius: 6px; cursor: pointer;
+	border: 1px solid var(--border2); background: var(--panel2); color: var(--text3);
+}
+.minn-subrel svg { width: 12px; height: 12px; }
+.minn-subrel:hover, .minn-subrel:focus-visible { color: var(--text); border-color: var(--accent); outline: none; }
+/* The first order reads as the stronger of the two: it is the one that
+   started the subscription, and there is only ever one. */
+.minn-subrel-parent { color: var(--accent2); border-color: var(--accent-soft); background: var(--accent-soft); }
+.minn-subrel-pop { min-width: 250px; padding: 10px 12px 12px; display: block; }
+.minn-subrel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.minn-subrel-pop .minn-side-row { font-size: 12.5px; }
+.minn-subrel-pop .minn-btn-soft { width: 100%; justify-content: center; }
 .minn-product-cols { grid-template-columns: 1.6fr 100px 140px 100px 100px 40px; }
 .minn-product-cols.with-cb { grid-template-columns: 36px 1.6fr 100px 140px 100px 100px 40px; }
 .minn-coupon-cols { grid-template-columns: 1.4fr 1fr 90px 80px 100px 100px 40px; }
@@ -2731,11 +2756,97 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-editpen { margin-inline-start: auto; display: inline-flex; align-items: center; background: none; border: none; color: var(--text3); cursor: pointer; padding: 4px; border-radius: 7px; }
 .minn-order-editpen:hover { color: var(--text); background: var(--hover); }
 .minn-order-editpen svg { width: 15px; height: 15px; }
+/* Meta and actions travel together on the right. One wrapper claims the space
+   once: with margin-inline-start:auto on each child, the first pushed the meta away
+   and every button after it opened another void of its own. */
+.minn-order-card-actions { margin-inline-start: auto; display: flex; align-items: center; gap: 6px; }
+.minn-order-card-actions > * { margin-inline-start: 0; }
+/* Icon-only actions say what they do. The native title waits about a second
+   and never shows on keyboard focus, which is where a user who cannot see the
+   icon most needs it. aria-label is the source, so the visible text and the
+   accessible name cannot drift apart. */
+.minn-order-editpen { position: relative; }
+.minn-order-editpen::after {
+	content: attr(aria-label);
+	position: absolute; top: calc(100% + 6px); inset-inline-end: 0; z-index: 30;
+	padding: 4px 8px; border-radius: 6px; white-space: nowrap;
+	background: var(--panel); border: 1px solid var(--border2); box-shadow: var(--shadow);
+	color: var(--text2); font-size: 12px; font-weight: 500;
+	opacity: 0; pointer-events: none; transition: opacity 0.12s ease;
+}
+.minn-order-editpen:hover::after, .minn-order-editpen:focus-visible::after { opacity: 1; }
 .minn-order-read { font-size: 13.5px; color: var(--text2); display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .minn-order-read-name { font-weight: 600; color: var(--text); }
 .minn-order-read-sub { font-weight: 600; font-size: 12px; color: var(--text); margin-top: 8px; }
 .minn-order-read-empty { color: var(--text3); }
 .minn-order-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+/* The Items cell: the first line item by name, the rest one hover away. */
+.minn-items-cell {
+	display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%;
+	background: none; border: none; padding: 0; font: inherit; color: inherit;
+	text-align: start; cursor: pointer;
+}
+.minn-items-cell:hover .minn-cell-clip { color: var(--text); }
+.minn-items-more {
+	flex: none; font-size: 11.5px; font-weight: 600; color: var(--text3);
+	background: var(--panel2); border: 1px solid var(--border);
+	border-radius: 999px; padding: 1px 6px;
+}
+.minn-items-pop { min-width: 240px; max-width: 380px; padding: 8px; }
+.minn-items-row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 3px 2px; }
+.minn-items-row > .minn-cell-clip { flex: 1; min-width: 0; }
+/* Orders list filters: one row (status dropdown · search · add filter), the
+   active filters as chips beneath it, and one popover that both picks which
+   filter to add and picks its value. */
+.minn-order-bar { gap: 8px; }
+.minn-order-bar .minn-toolbar-search { flex: 1; min-width: 0; }
+.minn-of-drop { display: inline-flex; align-items: center; gap: 6px; flex: none; white-space: nowrap; }
+.minn-of-drop svg { width: 13px; height: 13px; opacity: .7; }
+@media (max-width: 720px) {
+  .minn-order-bar { flex-wrap: wrap; }
+  .minn-order-bar .minn-toolbar-search { flex-basis: 100%; order: -1; }
+}
+.minn-of-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -4px 0 12px; }
+.minn-of-chip {
+	display: inline-flex; align-items: center; background: var(--panel2);
+	border: 1px solid var(--border); border-radius: 999px; overflow: hidden;
+	font-size: 13px; color: var(--text2);
+}
+.minn-of-chip-body { background: none; border: none; color: inherit; font: inherit; cursor: pointer; padding: 5px 4px 5px 12px; }
+.minn-of-chip-body b { color: var(--text); font-weight: 600; }
+.minn-of-x { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 15px; line-height: 1; padding: 5px 10px 6px 6px; }
+.minn-of-x:hover { color: var(--red); }
+.minn-of-pop {
+	position: fixed; z-index: 60; min-width: 210px; max-width: 320px; padding: 6px;
+	background: var(--panel); border: 1px solid var(--border2); border-radius: 12px;
+	box-shadow: 0 12px 34px rgba(0,0,0,.28);
+}
+.minn-of-row {
+	display: block; width: 100%; text-align: start; background: none; border: none;
+	color: var(--text2); font: inherit; font-size: 13.5px; padding: 7px 10px;
+	border-radius: 8px; cursor: pointer;
+}
+.minn-of-row:hover { background: var(--hover); color: var(--text); }
+.minn-of-row.is-on { color: var(--accent2); background: var(--accent-soft); }
+.minn-of-foot { display: flex; justify-content: flex-end; padding: 6px 4px 2px; margin-top: 4px; border-top: 1px solid var(--border); }
+/* The picker panel sits in the popover's flow, not over the page. */
+.minn-of-search { padding: 2px; }
+.minn-of-search .minn-ac-panel { position: relative; margin-top: 6px; max-height: 190px; overflow-y: auto; }
+.minn-of-searching { padding: 8px 2px 2px; font-size: 12.5px; }
+/* Product rows carry the product's own picture, with the slot reserved so a
+   product without one still lines up. Shared by both product pickers: the
+   filter bar's and the items dialog's. The button selector matters: the
+   shared `button.minn-ac-item` rule sets display:block, and losing to it
+   left the thumb inline, where width and height simply do not apply. */
+button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px; }
+.minn-of-thumb {
+	display: inline-flex; align-items: center; justify-content: center;
+	flex: none; width: 26px; height: 26px; border-radius: 6px; overflow: hidden;
+	background: var(--panel2); border: 1px solid var(--border); color: var(--text3);
+}
+/* A product with no picture keeps the slot, with a quiet placeholder mark. */
+.minn-of-thumb:empty::after { content: ""; width: 10px; height: 10px; border-radius: 2px; border: 1.5px solid currentColor; opacity: .5; }
+.minn-of-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* Items edit dialog: name · unit price · qty · remove, per line. */
 .minn-ei-lines { display: flex; flex-direction: column; gap: 7px; }
 .minn-ei-line { display: flex; gap: 8px; align-items: center; }
@@ -3809,7 +3920,8 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-order-cols > :nth-child(6) { display: none; }
   .minn-sub-cols { grid-template-columns: 86px 1fr 84px; }
   .minn-sub-cols > :nth-child(3), .minn-sub-cols > :nth-child(4),
-  .minn-sub-cols > :nth-child(6) { display: none; }
+  .minn-sub-cols > :nth-child(5), .minn-sub-cols > :nth-child(6),
+  .minn-sub-cols > :nth-child(8) { display: none; }
   .minn-product-cols { grid-template-columns: 1fr 72px 40px; }
   .minn-product-cols.with-cb { grid-template-columns: 36px 1fr 72px 40px; }
   .minn-product-cols > :nth-child(2), .minn-product-cols > :nth-child(3),
@@ -3858,6 +3970,9 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-table-row[style] > .minn-row-end,
   .minn-table-row[style] > .minn-row-arrow { order: -1; flex: none; }
   .minn-table-row[style] .minn-row-more { opacity: 1; }
+  /* Same reason on the subscription's order rows: there is no hover to
+     reveal the eye with on a touch screen. */
+  .minn-sub-order-line .minn-row-more { opacity: 1; }
   .minn-table-row[style] > .minn-row-meta { font-size: 12.5px; color: var(--text3); max-width: 100%; }
   .minn-table-row[style] > .minn-row-meta.minn-num { text-align: start; padding-inline-end: 0; }
   /* A primary cell that is itself a pill/meta column keeps its own look. */
