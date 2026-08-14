@@ -9075,6 +9075,9 @@
 		const repaint = () => {
 			list.innerHTML = productDownloadsHtml( m.downloads );
 			bindRows();
+			// Files can arrive from the media picker, which is a modal over
+			// the page: same blind spot as the images grid.
+			if ( m.syncDirty ) m.syncDirty();
 		};
 		const bindRows = () => {
 			$$( '[data-pdlname]', list ).forEach( ( el ) => el.addEventListener( 'input', () => {
@@ -9358,6 +9361,13 @@
 				if ( ! isCur() ) return;
 				m.full = full;
 				m.loading = false;
+				// Discard needs the product as it arrived, and m.full is not
+				// that: flipping the type harvests the form into it, on
+				// purpose. So keep a copy nobody writes to, plus the two
+				// side-loads the seeds need to rebuild from it.
+				m.loaded = JSON.parse( JSON.stringify( full ) );
+				m.loadedVariations = variationRows;
+				m.linkNames = names;
 				seedProductTerms( m );
 				seedProductImages( m );
 				seedProductDownloads( m );
@@ -9403,9 +9413,6 @@
 		const priceOk = productPriceEditable( p );
 		const cats = ( p.categories || [] ).map( ( c ) => c.name ).filter( Boolean ).join( ', ' );
 		const thumb = p.images && p.images[ 0 ] ? ( p.images[ 0 ].src || p.images[ 0 ].thumbnail || '' ) : '';
-		const stockOpts = [ [ 'instock', __( 'In stock' ) ], [ 'outofstock', __( 'Out of stock' ) ], [ 'onbackorder', __( 'On backorder' ) ] ];
-		const visOpts = [ [ 'visible', __( 'Shop and search results' ) ], [ 'catalog', __( 'Shop only' ) ], [ 'search', __( 'Search results only' ) ], [ 'hidden', 'Hidden' ] ];
-		const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', __( 'Pending review' ) ] ];
 		const combos = productComboSpecs( p );
 		const combo = ( id ) => productComboHtml( combos.find( ( c ) => c.id === id ) );
 		const dims = p.dimensions || {};
@@ -9416,29 +9423,43 @@
 		const isExternal = ( p.type || 'simple' ) === 'external';
 		// A downloadable product carries its files; nothing else does.
 		const isDownloadable = !! p.downloadable;
-		return `
-					<div class="minn-order-body">
-						<div class="minn-order-grid minn-grid-rows">
-							<div class="minn-order-panel">
+		// Shopify's split, and the reason it reads well: the main column is what
+		// the product IS (name, pictures, price, stock, size), the sidebar is
+		// what it is FILED UNDER (published or not, type, taxonomies, links).
+		// Both are one flat list of cards. The two-column grid belongs to the
+		// PAGE's stylesheet, so the quick-view modal takes this same markup and
+		// stacks it — one body, two hosts, as on an order.
+		// data-pcard names a card so a test can assert where it is drawn rather
+		// than where it sits in the markup.
+		const card = ( key, title, inner ) => `
+							<div class="minn-order-sec" data-pcard="${ esc( key ) }">
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( title ) }</div></div>
+								${ inner }
+							</div>`;
+		const main = `
+							${ card( 'basics', __( 'Basics' ), `
 								${ canEdit ? '' : ( thumb ? `<div class="minn-prod-modal-img"><img src="${ esc( thumb ) }" alt=""></div>` : '' ) }
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Basics' ) ) }</div>
 								${ canEdit ? `
 								<div class="minn-order-fields">
 									<div><div class="minn-field-label">${ esc( __( 'Name' ) ) }</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
-									${ combo( 'minn-p-type' ) }
-									${ productToggleHtml( 'minn-p-virtual', __( 'Virtual' ), !! p.virtual ) }
-									${ productToggleHtml( 'minn-p-downloadable', __( 'Downloadable' ), !! p.downloadable ) }
-									${ combo( 'minn-p-status' ) }
-									${ combo( 'minn-p-vis' ) }
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Short description' ) ) }</div>
+										<textarea class="minn-input" id="minn-p-short" rows="3" placeholder="${ esc( __( 'Shown near the price in the shop…' ) ) }">${ esc( wcPlainText( p.short_description ) ) }</textarea>
+										<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( "Plain text summary. The full description, with blocks and images, opens in Minn's editor." ) ) }</div>
+									</div>
 								</div>` : `
 								<div class="minn-modal-meta" style="padding:0;">
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Name' ) ) }</span><span>${ esc( p.name || '' ) }</span></div>
 									${ p.sku ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'SKU' ) ) }</span><span>${ esc( p.sku ) }</span></div>` : '' }
 									${ cats ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Categories' ) ) }</span><span>${ esc( cats ) }</span></div>` : '' }
-								</div>` }
-							</div>
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Pricing' ) ) }</div>
+								</div>` }` ) }
+							${ canEdit ? card( 'media', __( 'Images' ), `
+								<div class="minn-imgedit-grid minn-pimg-grid" id="minn-p-images">${ productImagesGridHtml( m.images || [] ) }</div>
+								<div class="minn-pimg-foot">
+									<button type="button" class="minn-btn-soft" id="minn-p-img-add">${ esc( __( 'Add images…' ) ) }</button>
+									<span class="minn-toggle-desc">${ esc( __( 'The first image is the product image, the rest are the gallery. Drag a tile to reorder, click one to replace it.' ) ) }</span>
+								</div>` ) : '' }
+							${ card( 'pricing', __( 'Pricing' ), `
 								${ canEdit && priceOk ? `
 								<div class="minn-order-fields">
 									<div class="minn-order-field-row">
@@ -9463,20 +9484,8 @@
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Price' ) ) }</span><span>${ productPriceLabel( p ) }</span></div>
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Stock' ) ) }</span><span>${ esc( productStockLabel( p ) ) }</span></div>
 									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">${ p.type ? sprintf( /* translators: %s: the localized product type (e.g. "Variable product"). */ esc( __( 'Price and stock for %s products are managed in WooCommerce (variations or grouped children).' ) ), esc( productTypeLabel( p.type ) ) ) : esc( __( 'Price and stock for this type of product are managed in WooCommerce (variations or grouped children).' ) ) }</div>` : '' }
-								</div>` }
-							</div>
-							${ canEdit ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Images' ) ) }</div>
-								<div class="minn-imgedit-grid minn-pimg-grid" id="minn-p-images">${ productImagesGridHtml( m.images || [] ) }</div>
-								<div class="minn-pimg-foot">
-									<button type="button" class="minn-btn-soft" id="minn-p-img-add">${ esc( __( 'Add images…' ) ) }</button>
-									<span class="minn-toggle-desc">${ esc( __( 'The first image is the product image, the rest are the gallery. Drag a tile to reorder, click one to replace it.' ) ) }</span>
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Inventory' ) ) }</div>
+								</div>` }` ) }
+							${ canEdit ? card( 'inventory', __( 'Inventory' ), `
 								<div class="minn-order-fields">
 									<div class="minn-order-field-row">
 										<div><div class="minn-field-label">${ esc( __( 'SKU' ) ) }</div><input class="minn-input" id="minn-p-sku" value="${ esc( p.sku || '' ) }" placeholder="${ esc( __( 'Optional' ) ) }"></div>
@@ -9493,11 +9502,8 @@
 									</div>
 									${ combo( 'minn-p-stock' ) }` : '' }
 									${ productToggleHtml( 'minn-p-solo', __( 'Limit purchases to 1 item per order' ), p.sold_individually ) }
-								</div>
-							</div>` : '' }
-							${ canEdit && shipOk ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Shipping' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit && shipOk ? card( 'shipping', __( 'Shipping' ), `
 								<div class="minn-order-fields">
 									<div><div class="minn-field-label">${ esc( __( 'Weight' ) ) }</div><input class="minn-input" id="minn-p-weight" type="text" inputmode="decimal" value="${ esc( p.weight || '' ) }" placeholder="0"></div>
 									<div>
@@ -9510,26 +9516,8 @@
 									</div>
 									${ combo( 'minn-p-shipclass' ) }
 									<div class="minn-toggle-desc">${ esc( __( 'Units come from your WooCommerce store settings.' ) ) }</div>
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Organization' ) ) }</div>
-								<div class="minn-order-fields">
-									${ PRODUCT_TERM_FIELDS.map( ( t ) => productTermFieldHtml( m, t ) ).join( '' ) }
-									<div><div class="minn-field-label">${ esc( __( 'Slug' ) ) }</div>
-										<div class="minn-slug-field">
-											<span class="minn-slug-prefix">/</span>
-											<input class="minn-input minn-slug-input" id="minn-p-slug" value="${ esc( p.slug || '' ) }" placeholder="${ esc( __( 'set-on-save' ) ) }" autocomplete="off" spellcheck="false">
-										</div>
-										${ p.status === 'publish' ? `<div class="minn-slug-note">${ esc( __( 'Changing this breaks the current URL.' ) ) }</div>` : '' }
-									</div>
-									${ productToggleHtml( 'minn-p-featured', __( 'Featured product' ), p.featured ) }
-								</div>
-							</div>` : '' }
-							${ canEdit && isDownloadable ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Downloads' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit && isDownloadable ? card( 'downloads', __( 'Downloads' ), `
 								<div class="minn-pdl-list" id="minn-p-downloads">${ productDownloadsHtml( m.downloads || [] ) }</div>
 								<div class="minn-pimg-foot">
 									<button type="button" class="minn-btn-soft" id="minn-p-dl-add">${ esc( __( 'Add file' ) ) }</button>
@@ -9538,23 +9526,8 @@
 								<div class="minn-order-field-row" style="margin-top:12px;">
 									<div><div class="minn-field-label">${ esc( __( 'Download limit' ) ) }</div><input class="minn-input" id="minn-p-dllimit" type="number" step="1" min="-1" value="${ p.download_limit != null && p.download_limit >= 0 ? esc( String( p.download_limit ) ) : '' }" placeholder="${ esc( __( 'Unlimited' ) ) }"></div>
 									<div><div class="minn-field-label">${ esc( __( 'Expires after (days)' ) ) }</div><input class="minn-input" id="minn-p-dlexpiry" type="number" step="1" min="-1" value="${ p.download_expiry != null && p.download_expiry >= 0 ? esc( String( p.download_expiry ) ) : '' }" placeholder="${ esc( __( 'Never' ) ) }"></div>
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Advanced' ) ) }</div>
-								<div class="minn-order-fields">
-									<div>
-										<div class="minn-field-label">${ esc( __( 'Purchase note' ) ) }</div>
-										<textarea class="minn-input" id="minn-p-note" rows="3" placeholder="${ esc( __( 'Sent to the customer after they buy this…' ) ) }">${ esc( wcPlainText( p.purchase_note ) ) }</textarea>
-									</div>
-									<div><div class="minn-field-label">${ esc( __( 'Menu order' ) ) }</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
-									${ productToggleHtml( 'minn-p-reviews', __( 'Enable reviews' ), p.reviews_allowed ) }
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Attributes' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit ? card( 'attributes', __( 'Attributes' ), `
 								<div class="minn-pattr-list" id="minn-p-attrs">${ productAttributesHtml( m ) }</div>
 								<div class="minn-pimg-foot">
 									<button type="button" class="minn-btn-soft" id="minn-p-attr-add">${ esc( __( 'Add attribute' ) ) }</button>
@@ -9564,33 +9537,63 @@
 										<div class="minn-ac-panel" hidden></div>
 									</div>` : '' }
 									<span class="minn-toggle-desc">${ esc( __( 'Values are separated by commas. Turn on Variations to vary a variable product by an attribute.' ) ) }</span>
-								</div>
-							</div>` : '' }
-							${ canEdit && ( p.type || 'simple' ) === 'variable' ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Variations' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit && ( p.type || 'simple' ) === 'variable' ? card( 'variations', __( 'Variations' ), `
 								<div class="minn-pvar-list" id="minn-p-variations">${ productVariationsHtml( m ) }</div>
 								<div class="minn-pimg-foot">
 									<button type="button" class="minn-btn-soft" id="minn-p-var-gen">${ esc( __( 'Generate from attributes' ) ) }</button>
 									<button type="button" class="minn-btn-soft" id="minn-p-var-add">${ esc( __( 'Add variation' ) ) }</button>
 									<span class="minn-toggle-desc">${ esc( __( 'Variations save with the rest of the page.' ) ) }</span>
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Linked products' ) ) }</div>
+								</div>` ) : '' }
+							${ canEdit ? card( 'advanced', __( 'Advanced' ), `
+								<div class="minn-order-fields">
+									<div>
+										<div class="minn-field-label">${ esc( __( 'Purchase note' ) ) }</div>
+										<textarea class="minn-input" id="minn-p-note" rows="3" placeholder="${ esc( __( 'Sent to the customer after they buy this…' ) ) }">${ esc( wcPlainText( p.purchase_note ) ) }</textarea>
+									</div>
+									<div><div class="minn-field-label">${ esc( __( 'Menu order' ) ) }</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
+									${ productToggleHtml( 'minn-p-reviews', __( 'Enable reviews' ), p.reviews_allowed ) }
+								</div>` ) : '' }`;
+		// The sidebar is editing-only: with no capability the page is a summary,
+		// and an empty 340px column beside it would be a hole in the layout.
+		const side = ! canEdit ? '' : `
+							${ card( 'status', __( 'Status' ), `
+								<div class="minn-order-fields">
+									${ combo( 'minn-p-status' ) }
+									${ combo( 'minn-p-vis' ) }
+									${ productToggleHtml( 'minn-p-featured', __( 'Featured product' ), p.featured ) }
+								</div>` ) }
+							${ card( 'organization', __( 'Organization' ), `
+								<div class="minn-order-fields">
+									${ combo( 'minn-p-type' ) }
+									${ productToggleHtml( 'minn-p-virtual', __( 'Virtual' ), !! p.virtual ) }
+									${ productToggleHtml( 'minn-p-downloadable', __( 'Downloadable' ), !! p.downloadable ) }
+									${ PRODUCT_TERM_FIELDS.map( ( t ) => productTermFieldHtml( m, t ) ).join( '' ) }
+									<div><div class="minn-field-label">${ esc( __( 'Slug' ) ) }</div>
+										<div class="minn-slug-field">
+											<span class="minn-slug-prefix">/</span>
+											<input class="minn-input minn-slug-input" id="minn-p-slug" value="${ esc( p.slug || '' ) }" placeholder="${ esc( __( 'set-on-save' ) ) }" autocomplete="off" spellcheck="false">
+										</div>
+										${ p.status === 'publish' ? `<div class="minn-slug-note">${ esc( __( 'Changing this breaks the current URL.' ) ) }</div>` : '' }
+									</div>
+								</div>` ) }
+							${ card( 'linked', __( 'Linked products' ), `
 								<div class="minn-order-fields">
 									${ PRODUCT_LINK_FIELDS.map( ( f ) => productLinkFieldHtml( m, f ) ).join( '' ) }
-								</div>
-							</div>` : '' }
-							${ canEdit ? `
-							<div class="minn-order-panel wide">
-								<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'Short description' ) ) }</div>
-								<textarea class="minn-input" id="minn-p-short" rows="3" placeholder="${ esc( __( 'Shown near the price in the shop…' ) ) }">${ esc( wcPlainText( p.short_description ) ) }</textarea>
-								<div class="minn-toggle-desc" style="margin-top:6px;">${ esc( __( "Plain text summary. The full description, with blocks and images, opens in Minn's editor." ) ) }</div>
-							</div>` : '' }
+								</div>` ) }`;
+		return `
+					<div class="minn-order-body">
+						<div class="minn-order-layout${ side ? '' : ' minn-order-layout-solo' }">
+							<div class="minn-order-main">${ main }</div>
+							${ side ? `<div class="minn-order-side">${ side }</div>` : '' }
 						</div>
-						${ canEdit ? `
+						${ canEdit && m.page ? `
+						<div class="minn-psavebar" id="minn-p-savebar" hidden>
+							<span class="minn-psavebar-note">${ esc( __( 'Unsaved changes' ) ) }</span>
+							<button class="minn-btn-soft" id="minn-p-discard" type="button">${ esc( __( 'Discard' ) ) }</button>
+							<button class="minn-btn-primary" id="minn-product-save" type="button">${ esc( __( 'Save changes' ) ) }</button>
+						</div>` : '' }
+						${ canEdit && ! m.page ? `
 						<div class="minn-media-edit minn-order-status">
 							<button class="minn-btn-primary" id="minn-product-save" type="button">${ esc( __( 'Save changes' ) ) }</button>
 							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Saves the fields on this page and the short description.' ) ) }</div>
@@ -9723,6 +9726,10 @@
 		const repaint = () => {
 			grid.innerHTML = productImagesGridHtml( m.images );
 			bindTiles();
+			// The media picker is a modal over the page, so the click that
+			// changed this never bubbled through the body the save bar
+			// watches. Tell it directly.
+			if ( m.syncDirty ) m.syncDirty();
 		};
 		const bindTiles = () => {
 			$$( '[data-pimgx]', grid ).forEach( ( b ) => b.addEventListener( 'click', ( e ) => {
@@ -10142,6 +10149,19 @@
 	}
 
 	/**
+	 * What the page would save, as one string. The save bar rides this rather
+	 * than a dirty flag per control: buildProductPayload already reads every
+	 * field on screen, so what it produces IS the answer to "did anything
+	 * change", and it cannot drift from the save the way a second reader would.
+	 * Opening a picker and cancelling leaves it untouched; a chip, a dragged
+	 * image tile or a flipped switch does not, and none of those fire an input
+	 * event. Variations ride along because they save with the page.
+	 */
+	function productFingerprint( m ) {
+		return JSON.stringify( [ buildProductPayload( m, m.full || m.product ), m.variations || [] ] );
+	}
+
+	/**
 	 * Type, Virtual and Downloadable decide which cards exist, so changing one
 	 * has to repaint the page. Everything on screen is read back into the model
 	 * FIRST: a repaint rebuilds the form from m.full, and without this the
@@ -10157,6 +10177,51 @@
 		PRODUCT_LINK_FIELDS.forEach( ( f ) => delete payload[ f.key ] );
 		delete payload.attributes;
 		m.full = Object.assign( {}, m.full, payload );
+	}
+
+	/**
+	 * The page's save bar: hidden until the form stops matching the product as
+	 * it loaded, and hidden again the moment it matches once more, because
+	 * typing an edit and typing it back really is no change.
+	 *
+	 * It watches clicks as well as input, since half of this page is not
+	 * typing: switches, chips, image tiles and combobox picks all move the
+	 * payload without ever firing an input event. The click check is deferred a
+	 * tick so the handler behind it has already mutated the model. Controls
+	 * that live OUTSIDE this body — the media picker, the date picker — call
+	 * m.syncDirty() themselves, because their clicks never reach here.
+	 */
+	function bindProductDirtyBar( m ) {
+		const bar = $( '#minn-p-savebar' );
+		if ( ! bar ) return;
+		// The line is drawn here rather than at load time: every vocabulary the
+		// form needs is fetched BEFORE the first paint (loadProductDetail waits
+		// on all of them), so the first bind sees the product exactly as it
+		// arrived and no late render can move the line under it.
+		if ( m.clean == null ) m.clean = productFingerprint( m );
+		const sync = () => { bar.hidden = productFingerprint( m ) === m.clean; };
+		m.syncDirty = sync;
+		sync();
+		const body = bar.parentElement;
+		if ( body ) {
+			[ 'input', 'change' ].forEach( ( ev ) => body.addEventListener( ev, sync ) );
+			body.addEventListener( 'click', () => setTimeout( sync, 0 ) );
+		}
+		const discard = $( '#minn-p-discard' );
+		if ( discard ) discard.addEventListener( 'click', () => {
+			if ( ! m.loaded ) return;
+			// Rebuild from the untouched copy, not from m.full: a type flip
+			// harvests the form into m.full, so by now it can hold the very
+			// edits being discarded.
+			m.full = JSON.parse( JSON.stringify( m.loaded ) );
+			seedProductTerms( m );
+			seedProductImages( m );
+			seedProductDownloads( m );
+			seedProductVariations( m, m.loadedVariations || [] );
+			seedProductLinks( m, m.linkNames || {} );
+			seedProductAttributes( m );
+			renderProductPage();
+		} );
 	}
 
 	/**
@@ -10215,6 +10280,7 @@
 		// revisions (docs/woocommerce-products.md).
 		const edBtn = $( '#minn-p-editor' );
 		if ( edBtn ) edBtn.addEventListener( 'click', () => go( 'editor/product/' + p.id ) );
+		bindProductDirtyBar( m );
 		bindProductTermFields( m );
 		bindProductLinkFields( m, p );
 		bindProductAttributes( m );
@@ -10225,7 +10291,9 @@
 		// styled); the value it commits lands on the input's dataset.
 		[ '#minn-p-salefrom', '#minn-p-saleto' ].forEach( ( sel ) => {
 			const el = $( sel );
-			if ( el ) bindDatePicker( el, () => {} );
+			// The picker's popover is not inside the body either, so a date
+			// commits without the save bar seeing a thing.
+			if ( el ) bindDatePicker( el, () => { if ( m.syncDirty ) m.syncDirty(); } );
 		} );
 		const saveBtn = $( '#minn-product-save' );
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
@@ -10255,6 +10323,12 @@
 				}
 				if ( isCur() ) {
 					m.full = full || updated;
+					// The saved product is the new baseline, for the save bar
+					// and for Discard alike; m.clean is rebuilt on the repaint
+					// that follows, from the form this paints.
+					m.loaded = JSON.parse( JSON.stringify( m.full ) );
+					m.loadedVariations = freshVariations;
+					m.clean = null;
 					seedProductTerms( m );
 					seedProductImages( m );
 					seedProductDownloads( m );
@@ -10305,8 +10379,12 @@
 		const p = m.full || m.product;
 		const loading = !! m.loading && ! m.full;
 		const sub = `${ productTypeLabel( p.type ) }${ p.sku ? ' · SKU ' + p.sku : '' }${ p.id ? ' · #' + p.id : '' }`;
+		// Wide, and no card wrapper around the body: the sections are cards
+		// themselves now, and an overflow:hidden wrapper would also become the
+		// containing block for the sticky save bar, which would then stick to
+		// nothing. Same shell as renderOrderPage.
 		view.innerHTML = `
-		<div class="minn-order-page">
+		<div class="minn-order-page minn-order-page-wide">
 			<div class="minn-order-page-head">
 				<button type="button" class="minn-btn-soft" id="minn-pp-back">← ${ esc( __( 'Products' ) ) }</button>
 				<div class="minn-modal-title-block">
@@ -10315,8 +10393,8 @@
 				</div>
 				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span>` : '' }
 			</div>
-			<div class="minn-order-page-card">
-				${ loading ? `<div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div>` : '' }
+			<div class="minn-order-page-body">
+				${ loading ? `<div class="minn-order-sec"><div class="minn-loading" style="padding:28px;">${ esc( __( 'Loading product…' ) ) }</div></div>` : '' }
 				${ m.loadError ? `<div class="minn-empty" style="padding:20px;">${ esc( m.loadError ) }</div>` : '' }
 				${ ! loading && ! m.loadError ? productDetailInnerHtml( m ) : '' }
 			</div>

@@ -55,7 +55,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '[data-plac="upsell_ids"]', { timeout: 20000 } );
 
 		const card = await page.evaluate( () => ( {
-			titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			up: !! document.querySelector( '[data-plac="upsell_ids"]' ),
 			cross: !! document.querySelector( '[data-plac="cross_sell_ids"]' ),
 		} ) );

@@ -81,7 +81,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '#minn-p-images', { timeout: 20000 } );
 
 		const card = await page.evaluate( () => ( {
-			titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			tiles: document.querySelectorAll( '#minn-p-images [data-pimg]' ).length,
 			badge: ( ( document.querySelector( '#minn-p-images .minn-imgedit-new' ) || {} ).textContent || '' ).trim(),
 			firstBadged: !! document.querySelector( '#minn-p-images [data-pimg="0"] .minn-imgedit-new' ),

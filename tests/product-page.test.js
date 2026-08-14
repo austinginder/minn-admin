@@ -68,7 +68,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		} ) );
 		t.check( 'deep link renders the page, not a modal', head.page && ! head.modal, JSON.stringify( head ) );
 		t.check( 'page names the product', /Product page fixture/.test( head.title ), head.title );
-		t.check( 'page sub carries type, SKU and id', /simple/.test( head.sub ) && head.sub.includes( '#' + id ), head.sub );
+		// The type reads as its label ("Simple product"), not as the slug.
+		t.check( 'page sub carries type, SKU and id', /simple/i.test( head.sub ) && head.sub.includes( '#' + id ), head.sub );
 		t.check( 'page has the shared detail fields', head.save && head.sku && head.price, JSON.stringify( head ) );
 
 		// 2. Every choice on the page is a Minn combobox. A native select drops
@@ -84,6 +85,88 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			return !! btn && btn.classList.contains( 'active' );
 		} );
 		t.check( 'Products nav stays active on the detail page', navLit, '' );
+
+		// 4. The Shopify shape, measured rather than queried: a main column with
+		// a sidebar beside it, each section its own card. Asserting on drawn
+		// boxes is the point — the markup can carry both class names and still
+		// paint as one slab if the CSS never lands.
+		const boxes = () => page.evaluate( () => {
+			const box = ( el ) => {
+				if ( ! el ) return null;
+				const r = el.getBoundingClientRect();
+				return { x: Math.round( r.x ), y: Math.round( r.y ), w: Math.round( r.width ), right: Math.round( r.right ), bottom: Math.round( r.bottom ) };
+			};
+			const q = ( s ) => box( document.querySelector( s ) );
+			return {
+				main: q( '.minn-order-page .minn-order-main' ),
+				side: q( '.minn-order-page .minn-order-side' ),
+				pricing: q( '.minn-order-page [data-pcard="pricing"]' ),
+				status: q( '.minn-order-page [data-pcard="status"]' ),
+				org: q( '.minn-order-page [data-pcard="organization"]' ),
+				cards: document.querySelectorAll( '.minn-order-page .minn-order-sec' ).length,
+				slab: !! document.querySelector( '.minn-order-page .minn-order-grid' ),
+			};
+		} );
+		const lay = await boxes();
+		t.check( 'the page lays out a main column and a sidebar',
+			!! lay.main && !! lay.side && lay.side.w >= 300 && lay.side.w <= 380 && lay.main.w > lay.side.w,
+			JSON.stringify( { main: lay.main, side: lay.side } ) );
+		t.check( 'the sidebar sits beside the main column, not under it',
+			!! lay.main && !! lay.side && lay.side.x >= lay.main.right - 2 && Math.abs( lay.side.y - lay.main.y ) <= 8,
+			JSON.stringify( { main: lay.main, side: lay.side } ) );
+		t.check( 'Status and Organization ride in the sidebar',
+			!! lay.side && !! lay.status && !! lay.org
+				&& lay.status.x >= lay.side.x - 2 && lay.status.right <= lay.side.right + 2
+				&& lay.org.x >= lay.side.x - 2 && lay.org.right <= lay.side.right + 2,
+			JSON.stringify( { side: lay.side, status: lay.status, org: lay.org } ) );
+		t.check( 'Pricing rides in the main column',
+			!! lay.main && !! lay.pricing && lay.pricing.x >= lay.main.x - 2 && lay.pricing.right <= lay.main.right + 2,
+			JSON.stringify( { main: lay.main, pricing: lay.pricing } ) );
+		t.check( 'each section is its own card, not one slab',
+			lay.cards >= 6 && ! lay.slab, JSON.stringify( { cards: lay.cards, slab: lay.slab } ) );
+
+		// 5. The save bar: absent until something actually changes, reachable
+		// without scrolling once it is up, and able to put the page back.
+		const barState = () => page.evaluate( () => {
+			const bar = document.querySelector( '#minn-p-savebar' );
+			if ( ! bar ) return { present: false };
+			const r = bar.getBoundingClientRect();
+			return {
+				present: true,
+				shown: ! bar.hidden && r.height > 0 && bar.offsetParent !== null,
+				top: Math.round( r.top ), bottom: Math.round( r.bottom ), vh: window.innerHeight,
+				save: !! bar.querySelector( '#minn-product-save' ),
+				discard: !! bar.querySelector( '#minn-p-discard' ),
+			};
+		} );
+		const loadedName = await page.evaluate( () => ( document.querySelector( '#minn-p-name' ) || {} ).value || '' );
+		const barClean = await barState();
+		t.check( 'a page with no edits shows no save bar',
+			barClean.present && ! barClean.shown, JSON.stringify( barClean ) );
+		await page.fill( '#minn-p-name', loadedName + ' edited' );
+		await page.waitForTimeout( 200 );
+		const barDirty = await barState();
+		t.check( 'editing a field raises the save bar',
+			barDirty.shown && barDirty.save && barDirty.discard, JSON.stringify( barDirty ) );
+		t.check( 'the save bar is reachable without scrolling',
+			barDirty.shown && barDirty.bottom <= barDirty.vh + 2 && barDirty.top >= 0,
+			JSON.stringify( barDirty ) );
+		await page.click( '#minn-p-discard' );
+		await page.waitForTimeout( 300 );
+		const afterDiscard = await page.evaluate( () => ( document.querySelector( '#minn-p-name' ) || {} ).value || '' );
+		const barAfterDiscard = await barState();
+		t.check( 'discarding restores the loaded values and lowers the bar',
+			afterDiscard === loadedName && ! barAfterDiscard.shown,
+			JSON.stringify( { afterDiscard, bar: barAfterDiscard } ) );
+		// A switch is not typing: the change never fires an input event, so a
+		// listener that only watches inputs would miss it entirely.
+		await page.click( '#minn-p-featured' );
+		await page.waitForTimeout( 250 );
+		const barSwitch = await barState();
+		t.check( 'flipping a switch counts as a change too',
+			barSwitch.shown, JSON.stringify( barSwitch ) );
+		await page.click( '#minn-p-discard' );
+		await page.waitForTimeout( 300 );
 
 		// 3. Saving from the page persists and repaints the page (not a modal).
 		const newName = 'Product page renamed ' + suffix;
@@ -108,6 +191,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'save repaints the page in place',
 			stillPage.page && ! stillPage.modal && /renamed/.test( stillPage.title ),
 			JSON.stringify( stillPage ) );
+		const barSaved = await barState();
+		t.check( 'saving lowers the save bar', barSaved.present && ! barSaved.shown, JSON.stringify( barSaved ) );
 
 		// 4. Back goes to the list.
 		await page.click( '#minn-pp-back' );
@@ -134,6 +219,28 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				} ) );
 				t.check( 'eye opens the quick view without navigating',
 					qv.modal && /\/products$/.test( qv.path ), JSON.stringify( qv ) );
+				// One body, two hosts: the two-column grid is the page's, so the
+				// modal gets the same markup stacked in one column, and the save
+				// bar belongs to the page alone. The modal paints its chrome
+				// before the detail lands, so wait for a field, not the overlay.
+				await page.waitForSelector( '.minn-modal-overlay #minn-p-name', { timeout: 20000 } ).catch( () => null );
+				const qvShape = await page.evaluate( () => {
+					const m = document.querySelector( '.minn-modal-overlay .minn-order-main' );
+					const s = document.querySelector( '.minn-modal-overlay .minn-order-side' );
+					if ( ! m || ! s ) return null;
+					const a = m.getBoundingClientRect(), b = s.getBoundingClientRect();
+					return {
+						mx: Math.round( a.x ), sx: Math.round( b.x ),
+						sy: Math.round( b.y ), mb: Math.round( a.bottom ),
+						bar: !! document.querySelector( '.minn-modal-overlay #minn-p-savebar' ),
+						save: !! document.querySelector( '.minn-modal-overlay #minn-product-save' ),
+					};
+				} );
+				t.check( 'the quick view stacks the same body in one column',
+					!! qvShape && Math.abs( qvShape.mx - qvShape.sx ) <= 2 && qvShape.sy >= qvShape.mb - 2,
+					JSON.stringify( qvShape ) );
+				t.check( 'the quick view keeps its own Save, not the page bar',
+					!! qvShape && qvShape.save && ! qvShape.bar, JSON.stringify( qvShape ) );
 				await page.keyboard.press( 'Escape' );
 				await page.waitForTimeout( 300 );
 			}
@@ -168,6 +275,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '#minn-p-name', { timeout: 20000 } );
 		const revisit = await page.evaluate( () => ( ( document.querySelector( '#minn-p-name' ) || {} ).value || '' ) );
 		t.check( 'revisiting refetches the product', /renamed/.test( revisit ), revisit );
+
+		// 8. Narrow: the sidebar drops under the main column rather than being
+		// squeezed beside it.
+		await page.setViewportSize( { width: 900, height: 800 } );
+		await page.waitForTimeout( 300 );
+		const narrow = await boxes();
+		t.check( 'a narrow viewport stacks the sidebar under the main column',
+			!! narrow.main && !! narrow.side
+				&& Math.abs( narrow.side.x - narrow.main.x ) <= 2
+				&& narrow.side.y >= narrow.main.bottom - 2,
+			JSON.stringify( { main: narrow.main, side: narrow.side } ) );
+		await page.setViewportSize( { width: 1280, height: 720 } );
 	} finally {
 		if ( id ) await api( `wc/v3/products/${ id }?force=true`, { method: 'DELETE' } ).catch( () => null );
 	}
