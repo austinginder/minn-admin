@@ -22,8 +22,12 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	} );
 
 	const writes = [];
+	const writeDetails = [];
 	page.on( 'request', ( r ) => {
-		if ( r.method() === 'POST' && r.url().includes( '/wp-json/wp/v2/' ) ) writes.push( r.url() );
+		if ( r.method() === 'POST' && r.url().includes( '/wp-json/wp/v2/' ) ) {
+			writes.push( r.url() );
+			writeDetails.push( { at: Date.now(), url: r.url(), body: r.postData() } );
+		}
 	} );
 
 	/* ===== Draft: explicit saves + calm autosave ===== */
@@ -46,7 +50,11 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	// also flaky in headless — Control+s is accepted by the same handler).
 	const waitPost = () => page.waitForRequest(
 		( r ) => r.method() === 'POST' && r.url().includes( `/posts/${ draftId }` ) && ! r.url().includes( 'autosaves' ),
-		{ timeout: 4000 }
+		// saveEditor serializes behind any earlier save. On a plugin-heavy lab a
+		// queued request can legitimately take several seconds to START; falling
+		// back too early queues a second explicit save and makes both look like an
+		// eager autosave in the calm-window assertion below.
+		{ timeout: 15000 }
 	).catch( () => null );
 	let sawSave = waitPost();
 	await page.keyboard.press( 'Meta+s' );
@@ -83,11 +91,13 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	page.off( 'requestfinished', bumpEnd );
 	page.off( 'requestfailed', bumpEnd );
 	writes.length = 0;
+	const calmStart = Date.now();
 	await page.click( '#minn-editor-body p' );
 	await page.keyboard.press( 'End' );
 	await page.keyboard.type( ' typing along' );
 	await page.waitForTimeout( 5000 );
-	t.check( 'No autosave within 5s of typing', writes.length === 0, writes.join() );
+	t.check( 'No autosave within 5s of typing', writes.length === 0,
+		JSON.stringify( writeDetails.filter( ( w ) => w.at >= calmStart ).map( ( w ) => ( { ms: w.at - calmStart, url: w.url, body: w.body } ) ) ) );
 	await page.waitForTimeout( 12000 );
 	t.check( 'Autosave fires after the idle window', writes.some( ( u ) => u.includes( `/posts/${ draftId }` ) ), writes.join() );
 
