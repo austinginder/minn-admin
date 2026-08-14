@@ -5458,7 +5458,6 @@
 	 *  say something no single preset can (two statuses, say). */
 	const orderPresetActive = () => {
 		const f = orderFilters();
-		// eslint-disable-next-line no-unused-vars
 		if ( ! f.status.length ) return 'any';
 		return f.status.length === 1 ? f.status[ 0 ] : '';
 	};
@@ -8656,7 +8655,7 @@
 				<button type="button" class="minn-btn-soft minn-of-drop" id="minn-order-preset">${ esc( orderPresetLabel() ) } ${ icon( 'chevron-down' ) }</button>
 				<input class="minn-input minn-toolbar-search" id="minn-order-search" placeholder="${ esc( __( 'Search subscriptions (ID, name, email…)' ) ) }" value="${ esc( state.subSearch || '' ) }">
 				<button type="button" class="minn-btn-soft" id="minn-order-addfilter">${ icon( 'plus' ) } ${ __( 'Add filter' ) }</button>
-				<div class="minn-toolbar-meta">${ c ? metaLabel( c.total, 'subscription' ) : '' }</div>
+				<div class="minn-toolbar-meta"></div>
 			</div>
 			${ orderFilterChipsHtml() }
 			<div class="minn-loading">${ esc( __( 'Loading subscriptions…' ) ) }</div>`;
