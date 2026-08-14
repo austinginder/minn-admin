@@ -391,28 +391,32 @@ function minn_admin_visibility_check() {
 
 	if ( 'hidden' === $v['state'] ) {
 		return array(
-			'label'  => 'Site visibility',
+			'key'    => 'visibility',
+			'label'  => __( 'Site visibility', 'minn-admin' ),
 			'status' => 'warn',
 			'detail' => 'Hidden from the public by ' . implode( ', ', $names ) . ' — visitors cannot see the site',
 		);
 	}
 	if ( 'password' === $v['state'] ) {
 		return array(
-			'label'  => 'Site visibility',
+			'key'    => 'visibility',
+			'label'  => __( 'Site visibility', 'minn-admin' ),
 			'status' => 'warn',
 			'detail' => 'The whole site is password-protected (' . implode( ', ', $names ) . ')',
 		);
 	}
 	if ( 'partial' === $v['state'] ) {
 		return array(
-			'label'  => 'Site visibility',
+			'key'    => 'visibility',
+			'label'  => __( 'Site visibility', 'minn-admin' ),
 			'status' => 'warn',
 			'detail' => 'Part of the site is hidden by ' . implode( ', ', $names ) . ' — some pages show a coming-soon page',
 		);
 	}
 	if ( 'search-discouraged' === $v['state'] ) {
 		return array(
-			'label'  => 'Site visibility',
+			'key'    => 'visibility',
+			'label'  => __( 'Site visibility', 'minn-admin' ),
 			'status' => 'warn',
 			'detail' => 'Search engines are discouraged (Settings → Reading) — the site is public but asks not to be indexed',
 		);
