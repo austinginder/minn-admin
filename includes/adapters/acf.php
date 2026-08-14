@@ -63,6 +63,28 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 
+			// Authorize against the resolved target, the way the Pods and Meta
+			// Box panels do. The permission callback can only see edit_posts and
+			// the post id; with no post id its second clause short-circuits true,
+			// which let a Contributor name any post type and read its private
+			// field schema. A field group describes the site's data model, and
+			// internal naming and credential field ids live in it.
+			if ( $post_id ) {
+				$post = get_post( $post_id );
+				if ( ! $post ) {
+					return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+				}
+				if ( ! current_user_can( 'edit_post', $post_id ) ) {
+					return new WP_Error( 'rest_forbidden', 'You cannot edit this post.', array( 'status' => 403 ) );
+				}
+				$post_type = $post->post_type;
+			} else {
+				$type_obj = get_post_type_object( $post_type );
+				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
+					return new WP_Error( 'rest_forbidden', 'You cannot edit that post type.', array( 'status' => 403 ) );
+				}
+			}
+
 			$groups = acf_get_field_groups( $post_id ? array( 'post_id' => $post_id ) : array( 'post_type' => $post_type ) );
 			$out    = array();
 
