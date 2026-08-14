@@ -1,13 +1,13 @@
 'use strict';
 /**
  * Plural-Forms evaluator, checked against the real gettext rules for every
- * wave-1 locale. English's "n != 1" is the exception: Japanese has one form,
+ * shipped locale. English's "n != 1" is the exception: Japanese has one form,
  * Russian and Polish three, Arabic six, so a hardcoded rule is wrong in most
  * shipped locales. Also asserts a hostile rule cannot execute (the evaluator
  * parses, it never eval()s a downloaded catalog).
  *
  * Extracts the pluralRule IIFE from app.js and checks it against the real
- * gettext Plural-Forms rules for every wave-1 locale, using CLDR-derived
+ * gettext Plural-Forms rules for every shipped locale, using CLDR-derived
  * expected form indexes.
  */
 const fs = require( 'fs' );
@@ -47,6 +47,19 @@ const LOCALES = {
 	ru_RU: 'nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);',
 	pl_PL: 'nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);',
 	ar: 'nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);',
+	// Wave 2, headers exactly as the wp.org core packs ship them.
+	vi: 'nplurals=1; plural=0;',
+	// Indonesian is one form in CLDR but WordPress ships two (n > 1); the
+	// pack has to agree with the ecosystem it lives in.
+	id_ID: 'nplurals=2; plural=n > 1;',
+	cs_CZ: 'nplurals=3; plural=(n == 1) ? 0 : ((n >= 2 && n <= 4) ? 1 : 2);',
+	sv_SE: 'nplurals=2; plural=n != 1;',
+	zh_CN: 'nplurals=1; plural=0;',
+	pt_PT: 'nplurals=2; plural=n != 1;',
+	hu_HU: 'nplurals=2; plural=n != 1;',
+	es_MX: 'nplurals=2; plural=n != 1;',
+	da_DK: 'nplurals=2; plural=n != 1;',
+	he_IL: 'nplurals=2; plural=n != 1;',
 };
 
 // n => expected form index
@@ -64,6 +77,16 @@ const EXPECT = {
 	ru_RU: { 1: 0, 2: 1, 5: 2, 11: 2, 21: 0, 22: 1, 25: 2, 101: 0, 111: 2 },
 	pl_PL: { 1: 0, 2: 1, 5: 2, 12: 2, 22: 1, 25: 2 },
 	ar: { 0: 0, 1: 1, 2: 2, 3: 3, 10: 3, 11: 4, 99: 4, 100: 5, 102: 5 },
+	vi: { 0: 0, 1: 0, 2: 0, 99: 0 },
+	id_ID: { 0: 0, 1: 0, 2: 1, 100: 1 },
+	cs_CZ: { 0: 2, 1: 0, 2: 1, 3: 1, 4: 1, 5: 2, 100: 2 },
+	sv_SE: { 0: 1, 1: 0, 5: 1 },
+	zh_CN: { 0: 0, 1: 0, 2: 0, 99: 0 },
+	pt_PT: { 1: 0, 2: 1 },
+	hu_HU: { 1: 0, 2: 1 },
+	es_MX: { 1: 0, 2: 1 },
+	da_DK: { 1: 0, 2: 1 },
+	he_IL: { 0: 1, 1: 0, 2: 1 },
 };
 
 let pass = 0, fail = 0;
