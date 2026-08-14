@@ -6818,7 +6818,6 @@
 		const addrKeys = [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ];
 		const shipEmpty = addrKeys.every( ( k ) => ! ( s[ k ] || '' ) );
 		const shipSameAsBilling = ! shipEmpty && addrKeys.every( ( k ) => ( s[ k ] || '' ) === ( b[ k ] || '' ) );
-		const statusChip = `<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span>`;
 		const paidChip = o.date_paid
 			? `<span class="minn-status publish">${ __( 'Paid' ) }</span>`
 			: `<span class="minn-status private">${ __( 'Pending' ) }</span>`;
@@ -6831,7 +6830,7 @@
 						<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec minn-order-itemscard">
-								<div class="minn-order-card-head">${ statusChip }<div class="minn-order-card-actions"><span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ canEdit && o.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div></div>
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( countLabel ) }</div><div class="minn-order-card-actions">${ canEdit && o.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div></div>
 								<div class="minn-order-items">
 									${ ( o.line_items || [] ).map( ( li ) => `
 										<div class="minn-order-item">
@@ -8264,7 +8263,7 @@
 						<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec minn-order-itemscard">
-								<div class="minn-order-card-head"><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span><div class="minn-order-card-actions"><span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ s.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div></div>
+								<div class="minn-order-card-head"><div class="minn-side-title">${ esc( countLabel ) }</div><div class="minn-order-card-actions">${ s.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div></div>
 								<div class="minn-order-items">
 									${ ( s.line_items || [] ).map( ( li ) => `
 										<div class="minn-order-item">

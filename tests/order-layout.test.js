@@ -280,7 +280,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'removed line leaves the order and totals restore',
 			ei.body.line_items.length === 1 && parseFloat( ei.body.total ) === 60,
 			JSON.stringify( { lines: ei.body.line_items.length, total: ei.body.total } ) );
-		// ---- The card head's meta and actions ride together on the right ----
+		// ---- The card head: count as the title, actions on the right, and no
+		// status chip (the page header and the Status card already carry it).
 		const headShape = await page.evaluate( () => {
 			const head = document.querySelector( '.minn-order-itemscard .minn-order-card-head' );
 			const acts = head && head.querySelector( '.minn-order-card-actions' );
@@ -288,16 +289,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			const hb = head.getBoundingClientRect(), ab = acts.getBoundingClientRect();
 			const btns = [ ...acts.querySelectorAll( '.minn-order-editpen' ) ];
 			const gaps = btns.slice( 1 ).map( ( b, i ) => Math.round( b.getBoundingClientRect().x - ( btns[ i ].getBoundingClientRect().x + btns[ i ].getBoundingClientRect().width ) ) );
+			const title = head.querySelector( '.minn-side-title' );
 			return {
 				wrapped: true,
-				metaInside: !! acts.querySelector( '.minn-order-card-meta' ),
+				countTitle: !! title && /\d+\s*item/i.test( title.textContent ),
+				noChip: ! head.querySelector( '.minn-status' ),
 				buttons: btns.length,
 				flushRight: Math.round( hb.x + hb.width - ( ab.x + ab.width ) ) <= 1,
 				gaps,
 			};
 		} );
-		t.check( 'meta and actions share one right-aligned wrapper',
-			headShape.wrapped && headShape.metaInside && headShape.buttons === 2 && headShape.flushRight,
+		t.check( 'the head shows the count once and no duplicate status chip',
+			headShape.wrapped && headShape.countTitle && headShape.noChip && headShape.buttons === 2 && headShape.flushRight,
 			JSON.stringify( headShape ) );
 		// Two buttons that each claimed margin-left:auto pushed each other
 		// apart; inside the wrapper they sit a gap apart, not a void.
