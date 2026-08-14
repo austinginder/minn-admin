@@ -6427,7 +6427,7 @@
 									: m.relatedSubs.map( ( sub ) => `
 									<button type="button" class="minn-sub-order-row" data-relsub="${ sub.id }">
 										<span>#${ esc( sub.number || sub.id ) }</span>
-										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
+										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( subStatusLabel( sub.status ) ) }</span>
 										<span>${ esc( subMoney( sub, sub.total ) ) }</span>
 									</button>` ).join( '' ) }
 							</div>` : '' }
@@ -7443,7 +7443,7 @@
 						<div class="minn-row-slug">${ timeAgo( o.date_created ) }</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( customerName( o ) ) }</div>
-					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( o.status.replace( '-', ' ' ) ) }</span></div>
+					<div><span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( orderStatusLabel( o.status ) ) }</span></div>
 					${ itemsCellHtml( o.line_items ) }
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-qv="${ o.id }" type="button" title="Quick view">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
@@ -31585,7 +31585,7 @@
 								( m.subscriptions.items || [] ).length ? ( m.subscriptions.items || [] ).map( ( sub ) => `
 									<button type="button" class="minn-sub-order-row" data-open-sub="${ sub.id }">
 										<span>#${ esc( sub.number || sub.id ) }</span>
-										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( ( sub.status || '' ).replace( /-/g, ' ' ) ) }</span>
+										<span class="minn-status ${ SUB_STATUS_STYLE[ sub.status ] || 'draft' }">${ esc( subStatusLabel( sub.status ) ) }</span>
 										<span>${ esc( subMoney( sub, sub.total ) ) }</span>
 									</button>` ).join( '' ) : '<div class="minn-toggle-desc">No subscriptions for this customer.</div>'
 							) }
