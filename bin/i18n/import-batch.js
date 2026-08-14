@@ -68,7 +68,7 @@ if ( ! inputFiles ) {
 
 // Collect the translated chunks, keyed by SOURCE STRING.
 const translated = new Map();
-let files = 0, orphaned = 0;
+let files = 0, orphaned = 0, overSupplied = 0;
 for ( const f of fs.readdirSync( OUT ).sort() ) {
 	if ( ! f.startsWith( `${ loc.code }.` ) || ! f.endsWith( '.done.json' ) ) continue;
 	files++;
@@ -77,8 +77,14 @@ for ( const f of fs.readdirSync( OUT ).sort() ) {
 	catch ( e ) { console.error( `  unparseable: ${ f } (${ e.message })` ); continue; }
 	for ( const t of data.entries || [] ) {
 		if ( typeof t.id !== 'number' ) continue;
-		const forms = Array.isArray( t.forms ) ? t.forms : ( typeof t.translation === 'string' ? [ t.translation ] : null );
+		let forms = Array.isArray( t.forms ) ? t.forms : ( typeof t.translation === 'string' ? [ t.translation ] : null );
 		if ( ! forms ) continue;
+		// Too MANY forms is a miscount, not a mistranslation: gettext reads
+		// only 0..nplurals-1, and form 0 is the one this locale uses. Japanese
+		// has a single form, and a translator handing back the English
+		// singular/plural pair cost 20 entries to a drop that was discarding a
+		// correct translation. Too FEW still fails — nothing can be invented.
+		if ( forms.length > np ) { forms = forms.slice( 0, np ); overSupplied++; }
 		const source = idToSource.get( t.id );
 		if ( source == null ) { orphaned++; continue; }
 		translated.set( source, forms );
@@ -146,6 +152,7 @@ fs.writeFileSync( outPath, writePo( header, kept ) );
 const pct = ( kept.length / potEntries.length * 100 ).toFixed( 1 );
 console.log( `${ loc.code }: ${ files } chunk file(s), ${ translated.size } translations read` );
 if ( orphaned ) console.log( `  ${ orphaned } translation(s) carried an id no export issued, ignored` );
+if ( overSupplied ) console.log( `  ${ overSupplied } translation(s) had more plural forms than ${ loc.code } uses, trimmed to ${ np }` );
 console.log( `  reviewed ${ nReviewed } | core ${ nCore } | new ${ nNew }${ nKept ? ` | carried ${ nKept }` : '' }${ nSelf ? ` | unchanged ${ nSelf }` : '' }` );
 console.log( `  kept ${ kept.length } (${ pct }%), dropped ${ dropped.length }` );
 for ( const d of dropped.slice( 0, 8 ) ) {

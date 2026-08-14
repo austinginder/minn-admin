@@ -9,20 +9,22 @@ catalogs, right to left layout, delivery, and upkeep.
 
 ## Status
 
-Phases 0 through 5 are built and verified in development. What remains is
-generation coverage, which needs an API key. See "What is left" at the end.
+Phases 0 through 5 are built and verified in development, and a full source
+audit has closed the last three categories the sweeps missed. See "The audit"
+and "What is left" at the end.
 
 | | Before | Now |
 |---|---|---|
-| `.pot` entries | 341, stamped 0.25.0 | **2,712**, current, 0 extractor warnings |
+| `.pot` entries | 341, stamped 0.25.0 | **2,978**, current, 0 extractor warnings |
 | Plural entries | 0 usable | 20, with a real Plural-Forms evaluator |
-| Translator notes | 0 | 84 |
+| Translator notes | 0 | 110 |
 | Unwrapped attribute literals in `app.js` | 265 | **0** |
 | Unwrapped visible text nodes in `app.js` | ~600 | **0** |
 | Untranslated display strings in PHP | ~1,200 | **0** |
 | Logical CSS properties | 0 | 183 declarations, plus 24 offsets |
 | Locales with a catalog | 0 | 13 |
-| Decay guards | none | 4 static checks + 3 suites |
+| Sentences split across an interpolation | 33 | **0** |
+| Decay guards | none | 7 static checks + 3 suites |
 
 ### Measured before the sweep, for the record
 
@@ -410,7 +412,7 @@ maintainer.
 
 ## What was found along the way
 
-Four defects the work surfaced that were not on the plan, each of which would
+Five defects the work surfaced that were not on the plan, each of which would
 have shipped a translated build that looked fine and behaved wrong:
 
 **Cards stopped being doors.** The overview stats and the System health checks
@@ -438,23 +440,50 @@ end. Picking German in Your profile gave a German app with English PHP, and
 `is_rtl()` never became true for that user, so no amount of choosing Persian
 produced a right-to-left layout.
 
+**Sentences split across an interpolation were invisible to the sweep.** A
+scan that looks for visible text runs finds `Loading orders…` and reports the
+file clean, because `Order #${ id }` is not one run — it is the fragment
+`Order #` next to an expression. Wrapping the fragment would have been worse
+than leaving it: a translator handed `"Order #"` and `"is available"` as
+separate strings cannot reorder them, and word order is exactly what differs
+between languages. Every one is now a single `sprintf()` format.
+
+## The audit
+
+Three sweeps ran, and each one was blind to the next one's category. That is
+the finding worth keeping: "the scanner reports zero" means zero *of what it
+models*, not zero remaining.
+
+| Pass | Modelled | Missed, and why |
+|---|---|---|
+| Text nodes in template literals | `>Text<` inside `` ` `` | Quoted strings — no `${}`, so the sweep never looked |
+| Quoted-string markup | `'<div>Text</div>'` | Fragments beside an interpolation — not a complete run |
+| Fragments | text adjacent to `${ }` | — |
+
+The final audit (`A` text runs, `B` fragments, `C` attributes, `D` quoted
+markup, `E` PHP display strings) reports 0 in every category except the
+deliberate exclusions below.
+
+**Left in English on purpose.** Not everything unwrapped is a bug:
+
+- Acronyms — SEO, CSS, HTML, CDN, HTTP, IP, PHP, WordPress
+- Keyboard glyphs — `esc`, `Aa`, `⌥click`, `⇧⌥click`
+- Example values in placeholders — `https://example.com/file.pdf`
+- The `wp:file` block's Download label. That is **stored post content**, not
+  interface text; translating it would make saved HTML differ by whichever
+  locale the author happened to be using.
+
 ## What is left
 
-**Generation coverage.** Each locale currently carries the WordPress-core pass
-only: 327 entries, 12% coverage, every one a community-reviewed core
-translation. The remaining ~2,385 strings per locale need
-`ANTHROPIC_API_KEY=… node bin/i18n/translate.js <locale>`, which is a single
-command per locale and the reason the pipeline exists.
-
-Until then the catalogs are deliberately **not** wired into `manifest.json`.
-Shipping them now would be worse than shipping nothing: a half-translated
-admin reads worse than an English one, which is the whole reason the sweep
-came before the locales.
-
 **A first human review per locale.** Generated entries are replaceable;
-marking one `minn-reviewed` in the `.po` makes it permanent. That is the path
-from generated to maintained, and it is what a native speaker's pull request
-should touch.
+marking one `minn-reviewed` in the `.po` makes it permanent, and a re-import
+will not overwrite it. That is the path from generated to maintained, and it
+is what a native speaker's pull request should touch.
 
 **Wave 2** takes the list to twenty and waits until wave 1 has been through a
 release cycle.
+
+**Working translations need a build.** `dist/` is gitignored, so a fresh
+checkout has `.po` sources and no `.mo`/`.json` — WordPress reads the compiled
+pair, not the source. Run `bin/i18n/build-packs.sh` before expecting a local
+checkout to show any language but English.

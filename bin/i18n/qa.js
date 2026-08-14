@@ -36,7 +36,7 @@ const potCount = parsePo( fs.readFileSync( path.join( ROOT, 'languages/minn-admi
 const np = nplurals( loc );
 const isEnglishVariant = /^en_/.test( loc.code );
 
-const same = [], suspicious = [], longer = [], pluralIssues = [];
+const same = [], suspicious = [], longer = [], pluralIssues = [], punctuation = [];
 let translated = 0;
 
 for ( const e of entries ) {
@@ -63,6 +63,30 @@ for ( const e of entries ) {
 	if ( e.msgidPlural != null && e.msgstr.filter( Boolean ).length !== np ) {
 		pluralIssues.push( e.msgid.slice( 0, 40 ) );
 	}
+
+	// Punctuation slips a reader sees immediately and a placeholder check
+	// never will. Two real ones shipped: Japanese "…ません。." carrying both a
+	// full stop and a Latin period, and Spanish "¡Todavía no hay actividad."
+	// opening an exclamation the source never had and never closing it.
+	for ( const form of e.msgstr ) {
+		if ( ! form ) continue;
+		if ( /[。．！？]\s*[.!?]|[.!?]\s*[。．！？]/.test( form ) ) {
+			punctuation.push( `double sentence stop: ${ JSON.stringify( form.slice( 0, 44 ) ) }` );
+		}
+		// Two Arabic short vowels on one letter is always a typo. Shadda
+		// (U+0651) legitimately precedes a vowel — مُحدَّث is correct — so it is
+		// excluded. This caught "Enable" arriving as يُمكَِن, carrying both
+		// fatha and kasra, which WordPress CORE ships that way: an upstream
+		// typo the glossary would otherwise propagate into every release.
+		if ( /[\u064B-\u0650\u0652][\u064B-\u0650\u0652]/.test( form ) ) {
+			punctuation.push( `stacked Arabic diacritics: ${ JSON.stringify( form.slice( 0, 44 ) ) }` );
+		}
+		const opens = ( form.match( /[¡¿]/g ) || [] ).length;
+		const closes = ( form.match( /[!?]/g ) || [] ).length;
+		if ( opens > closes ) {
+			punctuation.push( `unclosed ¡ or ¿: ${ JSON.stringify( form.slice( 0, 44 ) ) }` );
+		}
+	}
 }
 
 // Placeholder-bearing entries are the ones a mistake actually breaks.
@@ -83,6 +107,7 @@ console.log( `  plural forms    ${ pluralIssues.length ? pluralIssues.length + '
 console.log( `  identical to English  ${ same.length }${ isEnglishVariant ? '  (expected for an English variant)' : '' }` );
 if ( suspicious.length ) console.log( `  LOOKS UNTRANSLATED    ${ suspicious.length }` );
 if ( longer.length ) console.log( `  much longer than source  ${ longer.length }` );
+if ( punctuation.length ) console.log( `  PUNCTUATION           ${ punctuation.length }` );
 
 if ( verbose ) {
 	const show = ( label, list ) => {
@@ -95,4 +120,5 @@ if ( verbose ) {
 	show( 'looks untranslated', suspicious );
 	show( 'much longer than source', longer );
 	show( 'wrong plural form count', pluralIssues );
+	show( 'punctuation', punctuation );
 }
