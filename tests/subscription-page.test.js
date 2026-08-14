@@ -220,10 +220,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.fill( '#minn-ec-code', flat.body.code );
 		await page.click( '#minn-ec-add' );
 		await page.click( '.minn-order-submodal [data-esave]' );
-		await page.waitForSelector( '.minn-toast', { timeout: 15000 } );
+		// A toast from the previous save can still be up (toasts live 2.6s),
+		// so waiting for any .minn-toast reads the stale one. Wait for the
+		// toast that carries the refusal itself.
+		const refused = await page.waitForFunction(
+			() => /recurring/i.test( ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ),
+			null, { timeout: 15000 } ).then( () => true ).catch( () => false );
 		const refusal = await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' );
 		t.check( 'a non-recurring coupon is refused in WooCommerce\'s own words',
-			/recurring/i.test( refusal ), refusal.trim().slice( 0, 120 ) );
+			refused, refusal.trim().slice( 0, 120 ) );
 		const untouched = await api( `wc/v3/subscriptions/${ subId }?_fields=coupon_lines,total` );
 		t.check( 'the refused coupon changed nothing',
 			( untouched.body.coupon_lines || [] ).length === 0, JSON.stringify( untouched.body ) );

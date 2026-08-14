@@ -356,9 +356,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.fill( '#minn-ec-code', 'no-such-coupon-' + suffix );
 		await page.click( '#minn-ec-add' );
 		await page.click( '.minn-order-submodal [data-esave]' );
-		await page.waitForSelector( '.minn-toast', { timeout: 15000 } );
-		t.check( 'a rejected coupon surfaces WooCommerce\'s own reason',
-			/does not exist/i.test( await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ) ),
+		// The previous save's success toast can still be up (toasts live 2.6s),
+		// so waiting for any .minn-toast reads the stale one and the real
+		// rejection arrives after the failing PUT's round trip. Wait for the
+		// toast that carries the rejection itself.
+		const rejected = await page.waitForFunction(
+			() => /does not exist/i.test( ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ),
+			null, { timeout: 15000 } ).then( () => true ).catch( () => false );
+		t.check( 'a rejected coupon surfaces WooCommerce\'s own reason', rejected,
 			await page.evaluate( () => ( document.querySelector( '.minn-toast' ) || {} ).textContent || '' ) );
 		await page.keyboard.press( 'Escape' );
 
