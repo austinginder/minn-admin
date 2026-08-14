@@ -248,7 +248,7 @@
 			const fresh = ( await res.text() ).trim();
 			// admin-ajax answers unauthenticated/unknown actions with "0"/"-1".
 			if ( ! res.ok || ! /^[a-f0-9]{8,12}$/i.test( fresh ) ) {
-				throw new Error( 'not signed in' );
+				throw new Error( __( 'not signed in' ) );
 			}
 			B.nonce = fresh;
 		} )();
@@ -1073,8 +1073,10 @@
 
 	function confirmCoreUpdate( version ) {
 		return minnConfirm( {
-			title: `Update WordPress to ${ version }?`,
-			changes: [ `WordPress core files${ B.site && B.site.version ? ` (${ B.site.version } to ${ version })` : '' }`, __( 'The database, when this release ships a migration' ) ],
+			/* translators: %s: the WordPress version being installed. */
+			title: version ? sprintf( __( 'Update WordPress to %s?' ), version ) : __( 'Update WordPress to the latest version?' ),
+			/* translators: 1: the current WordPress version. 2: the new WordPress version. */
+			changes: [ B.site && B.site.version && version ? sprintf( __( 'WordPress core files (%1$s to %2$s)' ), B.site.version, version ) : __( 'WordPress core files' ), __( 'The database, when this release ships a migration' ) ],
 			keeps: [ __( 'Your content, media and users' ), __( 'Plugins, themes and their settings' ) ],
 			body: __( 'Visitors see a maintenance notice for a few seconds while files are replaced.' ),
 			confirmLabel: __( 'Update WordPress' ),
@@ -1545,7 +1547,8 @@
 				// Name from the registry, not button textContent — that would
 				// drag the row-icon glyph into the toast.
 				const reg = ( B.builders || [] ).find( ( x ) => x.id === b.dataset.newbuilder );
-				toast( `Creating page in ${ reg ? reg.name : 'builder' }…` );
+				/* translators: %s: the page builder's name. */
+				toast( reg ? sprintf( __( 'Creating page in %s…' ), reg.name ) : __( 'Creating page in builder…' ) );
 				try {
 					const r = await api( 'minn-admin/v1/builders/new', {
 						method: 'POST',
@@ -1895,17 +1898,21 @@
 		} );
 		applyIntegrationState( r, id );
 		if ( hide ) {
-			toastAction( `${ label } hidden for you`, 'Undo', () =>
+			/* translators: %s: the hidden panel or integration's name. */
+			toastAction( sprintf( __( '%s hidden for you' ), label ), __( 'Undo' ), () =>
 				setIntegrationHidden( id, false, label ).catch( ( e ) => toast( e.message, true ) ) );
 		} else if ( id.indexOf( 'panel:' ) === 0 && state.route === 'editor' ) {
 			// Live re-add would need the post payload; be honest instead.
-			toast( `${ label || 'Panel' } restored. It returns the next time a post is opened.` );
+			/* translators: %s: the restored panel's name. */
+			toast( label ? sprintf( __( '%s restored. It returns the next time a post is opened.' ), label ) : __( 'Panel restored. It returns the next time a post is opened.' ) );
 		} else if ( ( id.indexOf( 'slash:' ) === 0 || id.indexOf( 'design:' ) === 0 ) && state.route === 'editor' ) {
 			// The block picker reads B.* fresh on every open; the inline
 			// slash menu's items rebuild when the editor next renders.
-			toast( `${ label || 'Integration' } restored. The block picker has it now; the slash menu picks it up the next time the editor opens.` );
+			/* translators: %s: the restored integration's name. */
+			toast( label ? sprintf( __( '%s restored. The block picker has it now; the slash menu picks it up the next time the editor opens.' ), label ) : __( 'Integration restored. The block picker has it now; the slash menu picks it up the next time the editor opens.' ) );
 		} else {
-			toast( `${ label || 'Integration' } restored` );
+			/* translators: %s: the restored integration's name. */
+			toast( label ? sprintf( __( '%s restored' ), label ) : __( 'Integration restored' ) );
 		}
 	}
 
@@ -3119,7 +3126,7 @@
 					<div class="minn-chart-head-actions">
 						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="${ isTraffic ? __( 'Show Activity' ) : __( 'Show Traffic' ) }">⇄</button>` : '' }
 						<div class="minn-range-tabs">
-							${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ d }d</button>` ).join( '' ) }
+							${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ sprintf( /* translators: %s: number of days; "d" abbreviates days. */ esc( __( '%sd' ) ), d ) }</button>` ).join( '' ) }
 						</div>
 					</div>
 				</div>
@@ -3898,11 +3905,12 @@
 							state.cache.cptContent = {};
 							await ( currentCpt() ? loadCpt() : loadContent() ).catch( () => {} );
 							if ( state.route === 'content' ) renderContent();
-							toastAction( `Duplicated as draft “${ r.title }”`, 'Open', () => go( `editor/${ p.type }/${ r.id }` ) );
+							/* translators: %s: the new draft's title. */
+							toastAction( sprintf( __( 'Duplicated as draft “%s”' ), r.title ), __( 'Open' ), () => go( `editor/${ p.type }/${ r.id }` ) );
 						} )
 						.catch( ( e ) => toast( e.message, true ) );
 				}
-				else if ( act === 'publish' ) rowQuick( p, { status: 'publish' }, 'Published' );
+				else if ( act === 'publish' ) rowQuick( p, { status: 'publish' }, __( 'Published' ) );
 				else if ( act === 'draft' ) rowQuick( p, { status: 'draft' }, __( 'Moved to draft' ) );
 				else if ( act === 'trash' ) rowQuick( p, null, __( 'Moved to trash' ), 'DELETE' );
 			} ) );
@@ -3988,7 +3996,8 @@
 				btn.textContent = '…';
 				try {
 					const r = await restoreOne( row.dataset.type, row.dataset.id );
-					toast( `Restored as ${ STATUS_LABELS[ r.status ] ? STATUS_LABELS[ r.status ].toLowerCase() : r.status }` );
+					/* translators: %s: the restored post's status (e.g. "draft"). */
+					toast( sprintf( __( 'Restored as %s' ), STATUS_LABELS[ r.status ] ? STATUS_LABELS[ r.status ].toLowerCase() : r.status ) );
 					sel.delete( parseInt( row.dataset.id, 10 ) );
 					state.cache.content = null;
 					state.cache.cptContent = {};
@@ -4413,7 +4422,8 @@
 	async function uploadFiles( files ) {
 		if ( ! files.length ) return;
 		let done = 0;
-		toast( `Uploading ${ files.length } file${ files.length === 1 ? '' : 's' }…` );
+		/* translators: %s: how many files are uploading. */
+		toast( sprintf( _n( 'Uploading %s file…', 'Uploading %s files…', files.length ), files.length ) );
 		for ( const file of files ) {
 			const fd = new FormData();
 			fd.append( 'file', file );
@@ -4424,7 +4434,8 @@
 				toast( `${ file.name }: ${ e.message }`, true );
 			}
 		}
-		if ( done ) toast( `Uploaded ${ done } file${ done === 1 ? '' : 's' }` );
+		/* translators: %s: how many files uploaded. */
+		if ( done ) toast( sprintf( _n( 'Uploaded %s file', 'Uploaded %s files', done ), done ) );
 		state.cache.media = null;
 		state.uploadOpen = false;
 		if ( state.route === 'media' ) renderMedia();
@@ -4738,12 +4749,13 @@
 								state.mediaLastIdx = null;
 								state.cache.media = null;
 								state.cache.mediaFoldersList = null; // counts changed
-								toast( `Moved ${ r.moved } file${ r.moved === 1 ? '' : 's' }` );
+								/* translators: %s: how many files moved. */
+								toast( sprintf( _n( 'Moved %s file', 'Moved %s files', r.moved ), r.moved ) );
 								if ( state.route === 'media' ) renderMedia();
 							} catch ( e ) {
 								toast( e.message, true );
 								moveBtn.disabled = false;
-								moveBtn.textContent = 'Move';
+								moveBtn.textContent = __( 'Move' );
 							}
 						} );
 					}
@@ -4851,17 +4863,20 @@
 	// address land in the trash. Undo removes exactly what the block added.
 	async function blockCommenter( cm ) {
 		const who = cm.author_email || cm.author_ip;
-		if ( ! confirm( `Block ${ who }? The address joins the disallowed list (Settings → Comments) and future comments from it go straight to the trash.` ) ) return;
+		/* translators: %s: the commenter's email address or IP. */
+		if ( ! confirm( sprintf( __( 'Block %s? The address joins the disallowed list (Settings → Comments) and future comments from it go straight to the trash.' ), who ) ) ) return;
 		try {
 			const r = await api( `minn-admin/v1/comments/${ cm.id }/block`, { method: 'POST' } );
 			if ( r.already ) {
-				toast( `${ who } is already on the disallowed list` );
+				/* translators: %s: the commenter's email address or IP. */
+				toast( sprintf( __( '%s is already on the disallowed list' ), who ) );
 				return;
 			}
-			toastAction( `Blocked ${ who }`, 'Undo', async () => {
+			/* translators: %s: the commenter's email address or IP. */
+			toastAction( sprintf( __( 'Blocked %s' ), who ), __( 'Undo' ), async () => {
 				try {
 					await api( 'minn-admin/v1/comments/block-undo', { method: 'POST', body: JSON.stringify( { lines: r.added } ) } );
-					toast( 'Unblocked' );
+					toast( __( 'Unblocked' ) );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -4997,13 +5012,13 @@
 						</div>
 						<div class="minn-comment-text">${ esc( r.excerpt ) }</div>
 						<div class="minn-comment-actions">
-							${ [ 'hold', 'approve' ].includes( state.commentTab ) ? `<button class="minn-comment-action" data-creply="${ r.id }">${ state.commentReply === r.id ? 'Close' : 'Reply' }</button><button class="minn-comment-action" data-cmedit="${ r.id }">${ state.commentEdit === r.id ? 'Close' : 'Edit' }</button>` : '' }
+							${ [ 'hold', 'approve' ].includes( state.commentTab ) ? `<button class="minn-comment-action" data-creply="${ r.id }">${ state.commentReply === r.id ? esc( __( 'Close' ) ) : esc( __( 'Reply' ) ) }</button><button class="minn-comment-action" data-cmedit="${ r.id }">${ state.commentEdit === r.id ? esc( __( 'Close' ) ) : esc( __( 'Edit' ) ) }</button>` : '' }
 							${ actionsFor().map( ( [ st, label ] ) =>
 								`<button class="minn-comment-action${ st === 'trash' || st === 'delete' ? ' danger' : '' }" data-cid="${ r.id }" data-cstatus="${ st }">${ label }</button>` ).join( '' ) }
 						</div>
 						${ state.commentReply === r.id ? `
 						<div class="minn-comment-replybox">
-							<textarea class="minn-input" id="minn-reply-text" rows="3" placeholder="Reply as ${ esc( B.user.name ) }…"></textarea>
+							<textarea class="minn-input" id="minn-reply-text" rows="3" placeholder="${ sprintf( /* translators: %s: the signed-in user's display name. */ esc( __( 'Reply as %s…' ) ), esc( B.user.name ) ) }"></textarea>
 							<div style="display:flex; gap:8px; margin-top:8px;">
 								<button class="minn-btn-primary" id="minn-reply-send" data-post="${ r.postId }" data-parent="${ r.id }">${ state.commentTab === 'hold' ? __( 'Reply & approve' ) : 'Reply' }</button>
 								<button class="minn-btn-soft" id="minn-reply-cancel">${ esc( __( 'Cancel' ) ) }</button>
@@ -5332,10 +5347,11 @@
 	}
 
 	function orderAnalyticsRangeLabel( range ) {
-		if ( range === 'all' ) return 'all time';
+		if ( range === 'all' ) return __( 'all time' );
 		const n = Number( range ) || 30;
-		if ( n === 365 ) return 'last 12 months';
-		return 'last ' + n + ' days';
+		if ( n === 365 ) return __( 'last 12 months' );
+		/* translators: %s: number of days. */
+		return sprintf( _n( 'last %s day', 'last %s days', n ), n );
 	}
 
 	async function loadOrderAnalytics( days ) {
@@ -5968,13 +5984,15 @@
 				const amt = parseFloat( ( $( '#minn-o-refund-amt' ) || {} ).value );
 				const reason = ( ( $( '#minn-o-refund-reason' ) || {} ).value || '' ).trim();
 				if ( ! amt || amt <= 0 || amt > max + 0.001 ) {
-					toast( `Enter an amount between 0.01 and ${ max.toFixed( 2 ) }`, true );
+					/* translators: %s: the maximum refundable amount. */
+					toast( sprintf( __( 'Enter an amount between 0.01 and %s' ), max.toFixed( 2 ) ), true );
 					return;
 				}
 				const lineSel = refundLineSelections();
 				const viaGateway = !! ( $( '#minn-o-refund-api' ) || {} ).checked;
 				if ( ! await minnConfirm( {
-					title: `Refund ${ orderMoney( o, amt ) } on order #${ o.number || o.id }?`,
+					/* translators: 1: the refund amount. 2: the order number. */
+					title: sprintf( __( 'Refund %1$s on order #%2$s?' ), orderMoney( o, amt ), o.number || o.id ),
 					body: viaGateway
 						? __( 'The gateway is asked to send the money back to the customer. A refund already sent cannot be recalled.' )
 						: __( 'This records the refund on the order; the money itself moves outside the site.' ),
@@ -6002,7 +6020,8 @@
 						status: full.status,
 						total: full.total,
 					} );
-					toast( `Refunded ${ orderMoney( o, amt ) }` );
+					/* translators: %s: the refunded amount. */
+					toast( sprintf( __( 'Refunded %s' ), orderMoney( o, amt ) ) );
 					state.cache.orders = null;
 					state.cache.orderSummary = null;
 					if ( state.route === 'orders' ) renderOrders();
@@ -6337,9 +6356,9 @@
 							${ gw && gw.can_refund ? `
 							<label class="minn-check" style="margin-top:10px; display:flex; gap:8px; align-items:center; font-size:13px;">
 								<input type="checkbox" id="minn-o-refund-api" checked>
-								<span>Also refund via ${ esc( gw.title ) }</span>
+								<span>${ sprintf( /* translators: %s: the payment gateway's name. */ esc( __( 'Also refund via %s' ) ), esc( gw.title ) ) }</span>
 							</label>` : `
-							<div class="minn-toggle-desc" style="margin-top:10px;">${ gw ? esc( gw.title ) + ' cannot send money back itself: this records the refund, and the money moves back outside the site.' : __( 'This records the refund; the money moves back outside the site.' ) }</div>` }
+							<div class="minn-toggle-desc" style="margin-top:10px;">${ gw ? sprintf( /* translators: %s: the payment gateway's name. */ esc( __( '%s cannot send money back itself: this records the refund, and the money moves back outside the site.' ) ), esc( gw.title ) ) : __( 'This records the refund; the money moves back outside the site.' ) }</div>` }
 							<button class="minn-btn-soft danger" id="minn-o-refund" type="button" style="margin-top:10px;">${ esc( __( 'Issue refund' ) ) }</button>
 						</div>`;
 	}
@@ -6350,18 +6369,22 @@
 		const pay = o.payment_url || '';
 		const view = ( B.site && B.site.url ? B.site.url.replace( /\/$/, '' ) : '' ) + '/my-account/view-order/' + o.id + '/';
 		const lines = [
-			`Regarding order #${ o.number || o.id }.`,
+			/* translators: %s: the order number. */
+			sprintf( __( 'Regarding order #%s.' ), o.number || o.id ),
 			'',
 			o.needs_payment && pay
-				? `You can pay for this order here:\n${ pay }`
-				: `You can view this order here:\n${ view }`,
+				/* translators: %s: the payment URL, on its own line. */
+				? sprintf( __( 'You can pay for this order here:\n%s' ), pay )
+				/* translators: %s: the order URL, on its own line. */
+				: sprintf( __( 'You can view this order here:\n%s' ), view ),
 			'',
 			__( 'If you have any questions, just reply to this email.' ),
 		];
 		state.modal = {
 			type: 'order-email',
 			order: o,
-			subject: `Order #${ o.number || o.id } — ${ B.site.name || 'your order' }`,
+			/* translators: 1: the order number. 2: the site's name. */
+			subject: B.site.name ? sprintf( __( 'Order #%1$s — %2$s' ), o.number || o.id, B.site.name ) : sprintf( __( 'Order #%s — your order' ), o.number || o.id ),
 			message: lines.join( '\n' ),
 			to: b.email || '',
 		};
@@ -6385,11 +6408,11 @@
 			const a = state.cache.orderAnalytics;
 			const loading = ! a || a.range !== curRange;
 			const rangeOpts = [
-				[ 7, '7d' ],
-				[ 30, '30d' ],
-				[ 90, '90d' ],
-				[ 365, '1y' ],
-				[ 'all', 'All' ],
+				[ 7, __( '7d' ) ],
+				[ 30, __( '30d' ) ],
+				[ 90, __( '90d' ) ],
+				[ 365, __( '1y' ) ],
+				[ 'all', __( 'All' ) ],
 			];
 			// Always paint chrome (Orders|Analytics + range tabs + card shells)
 			// so changing 7d/30d/… does not blank the headers while WC Analytics loads.
@@ -6639,9 +6662,12 @@
 				if ( ! o ) return;
 				e.preventDefault();
 				const moves = [
-					[ 'processing', __( 'Mark processing' ), __( 'Order #' ) + o.number + ' marked processing' ],
-					[ 'completed', __( 'Mark completed' ), __( 'Order #' ) + o.number + ' completed' ],
-					[ 'on-hold', __( 'Put on hold' ), __( 'Order #' ) + o.number + ' put on hold' ],
+					/* translators: %s: the order number. */
+					[ 'processing', __( 'Mark processing' ), sprintf( __( 'Order #%s marked processing' ), o.number ) ],
+					/* translators: %s: the order number. */
+					[ 'completed', __( 'Mark completed' ), sprintf( __( 'Order #%s completed' ), o.number ) ],
+					/* translators: %s: the order number. */
+					[ 'on-hold', __( 'Put on hold' ), sprintf( __( 'Order #%s put on hold' ), o.number ) ],
 				].filter( ( [ st ] ) => st !== o.status );
 				openMinnMenu( e.clientX, e.clientY, [
 					{ label: __( 'Quick view' ), run: () => openOrderModal( o ) },
@@ -7601,7 +7627,7 @@
 								<div class="minn-modal-meta" style="padding:0;">
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Price' ) ) }</span><span>${ productPriceLabel( p ) }</span></div>
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Stock' ) ) }</span><span>${ esc( productStockLabel( p ) ) }</span></div>
-									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">Price and stock for ${ esc( p.type || 'this type' ) } products are managed in WooCommerce (variations or grouped children).</div>` : '' }
+									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">${ p.type ? sprintf( /* translators: %s: the product type (e.g. "variable"). */ esc( __( 'Price and stock for %s products are managed in WooCommerce (variations or grouped children).' ) ), esc( p.type ) ) : esc( __( 'Price and stock for this type of product are managed in WooCommerce (variations or grouped children).' ) ) }</div>` : '' }
 								</div>` }
 							</div>
 							${ canEdit ? `
@@ -8693,7 +8719,8 @@
 							method: 'POST',
 							body: JSON.stringify( { update } ),
 						} );
-						toast( `Updated ${ ids.length } product${ ids.length === 1 ? '' : 's' }` );
+						/* translators: %s: how many products changed. */
+						toast( sprintf( _n( 'Updated %s product', 'Updated %s products', ids.length ), ids.length ) );
 						psel.clear();
 						state.cache.products = null;
 						await loadProducts( c.page ).catch( showErr );
@@ -9183,7 +9210,8 @@
 				openMinnMenu( e.clientX, e.clientY, [
 					{ label: __( 'Open customer' ), run: () => openCustomerModal( cu ) },
 					...( cu.email ? [
-						{ label: 'Email ' + cu.email, href: 'mailto:' + cu.email },
+						/* translators: %s: the customer's email address. */
+						{ label: sprintf( __( 'Email %s' ), cu.email ), href: 'mailto:' + cu.email },
 						...( B.caps.orders ? [ {
 							label: __( 'View orders' ),
 							run: () => {
@@ -9412,7 +9440,7 @@
 					<div class="minn-row-actions">
 						<button type="button" class="minn-row-more" title="${ esc( __( 'Actions' ) ) }" aria-label="${ esc( __( 'Term actions' ) ) }">⋯</button>
 					</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.termSearch ? __( 'No matches.' ) : 'No ' + esc( tax.label.toLowerCase() ) + ' yet.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.termSearch ? __( 'No matches.' ) : sprintf( /* translators: %s: the taxonomy's plural name, lowercase. */ esc( __( 'No %s yet.' ) ), esc( tax.label.toLowerCase() ) ) }</div>` }
 		</div>
 		${ c.tree ? '' : pagerHtml( c.page, c.totalPages, c.total, tax.item ) }`;
 
@@ -9458,13 +9486,15 @@
 		};
 		const openTermMenu = ( x, y, t ) => {
 			openMinnMenu( x, y, [
-				...( tax.canEdit ? [ { label: 'Edit ' + tax.item, run: () => openTermEditor( t ) } ] : [] ),
+				/* translators: %s: the term type (e.g. "category"). */
+				...( tax.canEdit ? [ { label: sprintf( __( 'Edit %s' ), tax.item ), run: () => openTermEditor( t ) } ] : [] ),
 				...( linkable && t.count ? [ { label: __( 'View posts' ), run: () => viewPosts( t ) } ] : [] ),
 				...( t.link ? [ { label: __( 'Open archive ↗' ), href: t.link } ] : [] ),
 				...( tax.canDelete && tax.canEdit ? [ { label: __( 'Merge into…' ), run: () => openTermMerge( t ) } ] : [] ),
 				...( tax.canDelete ? [
 					{ heading: 'Danger' },
-					{ label: 'Delete ' + tax.item + '…', danger: true, run: () => deleteTerm( t ) },
+					/* translators: %s: the term type (e.g. "category"). */
+					{ label: sprintf( __( 'Delete %s…' ), tax.item ), danger: true, run: () => deleteTerm( t ) },
 				] : [] ),
 			] );
 		};
@@ -9536,7 +9566,7 @@
 			</div>
 			<label class="minn-term-field"><span>${ esc( __( 'Description' ) ) }</span><textarea class="minn-input" data-tf="description" rows="2">${ esc( term && term.description ? term.description : '' ) }</textarea></label>
 			<div class="minn-term-edit-actions">
-				<button type="button" class="minn-btn-primary" data-tsave>${ term ? 'Save' : 'Add ' + esc( tax.item ) }</button>
+				<button type="button" class="minn-btn-primary" data-tsave>${ term ? esc( __( 'Save' ) ) : sprintf( /* translators: %s: the term type (e.g. "category"). */ esc( __( 'Add %s' ) ), esc( tax.item ) ) }</button>
 				<button type="button" class="minn-btn-soft" data-tcancel>${ esc( __( 'Cancel' ) ) }</button>
 			</div>`;
 		const slot = term ? $( `[data-term="${ term.id }"]` ) : $( '#minn-term-create-slot' );
@@ -9571,7 +9601,8 @@
 			if ( pWrap ) body.parent = parentVal;
 			try {
 				await api( `wp/v2/${ tax.rest }${ term ? '/' + term.id : '' }`, { method: 'POST', body: JSON.stringify( body ) } );
-				toast( term ? 'Saved' : `Added “${ name }”` );
+				/* translators: %s: the new term's name. */
+				toast( term ? __( 'Saved' ) : sprintf( __( 'Added “%s”' ), name ) );
 				await reloadTerms( c.page );
 			} catch ( e ) {
 				toast( e.message, true );
@@ -9590,16 +9621,21 @@
 		const tax = currentTermTax();
 		if ( ! tax ) return;
 		if ( ! await minnConfirm( {
-			title: `Delete “${ t.name }”?`,
+			/* translators: %s: the term's name. */
+			title: sprintf( __( 'Delete “%s”?' ), t.name ),
 			body: tax.hierarchical
-				? `Any children move up a level, and posts keep their other ${ tax.label.toLowerCase() }.`
-				: `It is removed from ${ t.count } post${ t.count === 1 ? '' : 's' }.`,
+				/* translators: %s: the taxonomy's plural name, lowercase. */
+				? sprintf( __( 'Any children move up a level, and posts keep their other %s.' ), tax.label.toLowerCase() )
+				/* translators: %s: how many posts the term is removed from. */
+				: sprintf( _n( 'It is removed from %s post.', 'It is removed from %s posts.', t.count ), t.count ),
 			danger: true,
-			confirmLabel: 'Delete ' + ( tax.item || 'term' ),
+			/* translators: %s: the term type (e.g. "category"). */
+			confirmLabel: tax.item ? sprintf( __( 'Delete %s' ), tax.item ) : __( 'Delete term' ),
 		} ) ) return;
 		try {
 			await api( `wp/v2/${ tax.rest }/${ t.id }?force=true`, { method: 'DELETE' } );
-			toast( `Deleted “${ t.name }”` );
+			/* translators: %s: the deleted term's name. */
+			toast( sprintf( __( 'Deleted “%s”' ), t.name ) );
 			await reloadTerms( ( state.cache.terms || {} ).page );
 		} catch ( e ) {
 			toast( e.message, true );
@@ -9676,12 +9712,13 @@
 					method: 'POST',
 					body: JSON.stringify( { taxonomy: tax.slug, from: t.id, into: target.id } ),
 				} );
-				toast( `Merged into “${ res.into }” — ${ res.moved } post${ res.moved === 1 ? '' : 's' } moved` );
+				/* translators: 1: the surviving term's name. 2: how many posts moved. */
+				toast( sprintf( _n( 'Merged into “%1$s” — %2$s post moved', 'Merged into “%1$s” — %2$s posts moved', res.moved ), res.into, res.moved ) );
 				await reloadTerms( ( state.cache.terms || {} ).page );
 			} catch ( e ) {
 				toast( e.message, true );
 				mergeBtn.disabled = false;
-				mergeBtn.textContent = 'Merge';
+				mergeBtn.textContent = __( 'Merge' );
 			}
 		} );
 		editor.querySelector( '[data-tcancel]' ).addEventListener( 'click', () => editor.remove() );
@@ -9793,12 +9830,16 @@
 		state.userSel.clear();
 		state.userLastIdx = null;
 		state.cache.users = null;
-		const skipBits = [
-			skippedSelf ? 'your own account' : '',
-			skippedSuper ? 'network administrators' : '',
-		].filter( Boolean );
-		const tail = skipBits.length ? ` (${ skipBits.join( ' and ' ) } skipped)` : '';
-		toast( fail ? `Set ${ roleLabel }: ${ ok } done, ${ fail } failed${ tail }` : `Set ${ ok } user${ ok === 1 ? '' : 's' } to ${ roleLabel }${ tail }`, fail > 0 && ok === 0 );
+		// Each parenthetical is a complete phrase so translations never glue
+		// fragments together.
+		const skipTail = skippedSelf && skippedSuper ? __( '(your own account and network administrators skipped)' )
+			: skippedSelf ? __( '(your own account skipped)' )
+				: skippedSuper ? __( '(network administrators skipped)' ) : '';
+		/* translators: 1: the role's name. 2: how many users changed. 3: how many failed. */
+		const main = fail ? sprintf( __( 'Set %1$s: %2$s done, %3$s failed' ), roleLabel, ok, fail )
+			/* translators: 1: how many users changed. 2: the role's name. */
+			: sprintf( _n( 'Set %1$s user to %2$s', 'Set %1$s users to %2$s', ok ), ok, roleLabel );
+		toast( main + ( skipTail ? ' ' + skipTail : '' ), fail > 0 && ok === 0 );
 		if ( state.route === 'users' ) renderUsers();
 	}
 
@@ -10005,7 +10046,8 @@
 							if ( ( u.roles || [] ).includes( key ) ) return;
 							try {
 								await api( `wp/v2/users/${ u.id }`, { method: 'POST', body: JSON.stringify( { roles: [ key ] } ) } );
-								toast( `${ u.name || 'User' } set to ${ label }` );
+								/* translators: 1: the user's name. 2: the role's name. */
+								toast( u.name ? sprintf( __( '%1$s set to %2$s' ), u.name, label ) : sprintf( __( 'User set to %s' ), label ) );
 								state.cache.users = null;
 								if ( state.route === 'users' ) renderUsers();
 							} catch ( err ) {
@@ -10068,7 +10110,8 @@
 						danger: true,
 						run: async () => {
 							const okRm = await minnConfirm( {
-								title: `Remove ${ u.name || 'this user' } from this site?`,
+								/* translators: %s: the user's name. */
+								title: u.name ? sprintf( __( 'Remove %s from this site?' ), u.name ) : __( 'Remove this user from this site?' ),
 								body: __( 'Their account and any other site memberships stay; they just lose access here. Content they wrote here keeps their name.' ),
 								danger: true,
 								confirmLabel: __( 'Remove from site' ),
@@ -10076,7 +10119,8 @@
 							if ( ! okRm ) return;
 							try {
 								await api( `minn-admin/v1/users/${ u.id }/remove`, { method: 'POST' } );
-								toast( `${ u.name || 'User' } removed from this site` );
+								/* translators: %s: the user's name. */
+								toast( u.name ? sprintf( __( '%s removed from this site' ), u.name ) : __( 'User removed from this site' ) );
 								state.cache.users = null;
 								if ( state.route === 'users' ) renderUsers();
 							} catch ( err ) {
@@ -10200,10 +10244,19 @@
 
 	async function sendUserPasswordReset( u ) {
 		if ( ! u || ! u.id ) return;
-		if ( ! confirm( `Send a password-reset email to ${ u.name || 'this user' }${ u.email ? ' (' + u.email + ')' : '' }?` ) ) return;
+		// Every branch is one full sentence; "this user" never interpolates.
+		/* translators: 1: the user's name. 2: their email address. */
+		const askReset = u.name && u.email ? sprintf( __( 'Send a password-reset email to %1$s (%2$s)?' ), u.name, u.email )
+			/* translators: %s: the user's name. */
+			: u.name ? sprintf( __( 'Send a password-reset email to %s?' ), u.name )
+				/* translators: %s: the user's email address. */
+				: u.email ? sprintf( __( 'Send a password-reset email to this user (%s)?' ), u.email )
+					: __( 'Send a password-reset email to this user?' );
+		if ( ! confirm( askReset ) ) return;
 		try {
 			const r = await api( `minn-admin/v1/users/${ u.id }/reset-password`, { method: 'POST', body: '{}' } );
-			toast( __( 'Reset email sent' ) + ( r && r.email ? ' to ' + r.email : '' ) );
+			/* translators: %s: the email address the reset went to. */
+			toast( r && r.email ? sprintf( __( 'Reset email sent to %s' ), r.email ) : __( 'Reset email sent' ) );
 		} catch ( e ) {
 			toast( e.message, true );
 		}
@@ -10221,7 +10274,8 @@
 			if ( ! r || ! r.url ) throw new Error( __( 'No link returned' ) );
 			try {
 				await navigator.clipboard.writeText( r.url );
-				toast( `One-time login link for ${ r.name } copied — it signs its holder in once, then expires.` );
+				/* translators: %s: the user's name. */
+				toast( sprintf( __( 'One-time login link for %s copied — it signs its holder in once, then expires.' ), r.name ) );
 			} catch ( err ) {
 				// Clipboard denied (permissions/focus): show the link so it's
 				// still usable rather than silently losing the minted token.
@@ -10237,7 +10291,8 @@
 		const isSelf = u.id === B.user.id;
 		const msg = isSelf
 			? __( 'Sign out of every other browser and device? This session stays signed in.' )
-			: `Sign ${ u.name || 'this user' } out of every active session?`;
+			/* translators: %s: the user's name. */
+			: ( u.name ? sprintf( __( 'Sign %s out of every active session?' ), u.name ) : __( 'Sign this user out of every active session?' ) );
 		if ( ! confirm( msg ) ) return;
 		try {
 			await api( `minn-admin/v1/users/${ u.id }/sessions`, { method: 'DELETE' } );
@@ -11146,7 +11201,8 @@
 		// (when / IP only; no redundant open link).
 		const metaBits = [];
 		if ( whenLabel ) metaBits.push( `<span class="minn-entry-meta-chip" title="${ esc( String( when ) ) }">${ esc( whenLabel ) }</span>` );
-		if ( ip ) metaBits.push( `<span class="minn-entry-meta-chip">${ esc( 'IP ' + ip ) }</span>` );
+		/* translators: %s: an IP address. */
+		if ( ip ) metaBits.push( `<span class="minn-entry-meta-chip">${ esc( sprintf( __( 'IP %s' ), ip ) ) }</span>` );
 		const metaHtml = metaBits.length
 			? `<div class="minn-entry-meta">${ metaBits.join( '<span class="minn-entry-meta-dot">·</span>' ) }</div>`
 			: '';
@@ -11278,7 +11334,8 @@
 					method: 'POST',
 					body: JSON.stringify( { choices } ),
 				} );
-				toast( `${ s.sub || s.label } is set up.` );
+				/* translators: %s: the surface's name. */
+				toast( sprintf( __( '%s is set up.' ), s.sub || s.label ) );
 				await refreshSurfaces();
 				renderView();
 			} catch ( e ) {
@@ -11811,7 +11868,7 @@
 			} ).join( '' );
 			return `${ g.title ? `<div class="minn-fields-sub">${ esc( g.title ) }</div>` : '' }
 				<div class="minn-fields">${ rows }</div>
-				${ g.locked ? `<div class="minn-panel-locked">${ g.locked } advanced setting${ g.locked === 1 ? '' : 's' } — ${ data.adminUrl ? `<a href="${ esc( data.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'edit in wp-admin ↗' ) ) }</a>` : 'edit in wp-admin' }</div>` : '' }`;
+				${ g.locked ? `<div class="minn-panel-locked">${ sprintf( /* translators: %s: how many settings are hidden here. */ _n( '%s advanced setting', '%s advanced settings', g.locked ), g.locked ) } — ${ data.adminUrl ? `<a href="${ esc( data.adminUrl ) }" target="_blank" rel="noopener">${ esc( __( 'edit in wp-admin ↗' ) ) }</a>` : esc( __( 'edit in wp-admin' ) ) }</div>` : '' }`;
 		} ).join( '<div class="minn-divider"></div>' );
 
 		view.innerHTML = head + `
@@ -12332,7 +12389,8 @@
 				const id = parseInt( btn.dataset.midel, 10 );
 				const it = findItem( id );
 				const kids = ms.items.filter( ( x ) => x.parent === id );
-				if ( ! confirm( `Remove “${ it.label }” from the menu?${ kids.length ? ' Its sub-items move up a level.' : '' }` ) ) return;
+				/* translators: %s: the menu item's label. */
+				if ( ! confirm( sprintf( __( 'Remove “%s” from the menu?' ), it.label ) + ( kids.length ? ' ' + __( 'Its sub-items move up a level.' ) : '' ) ) ) return;
 				btn.disabled = true;
 				try {
 					// Reparent children first so they don't orphan to the root randomly.
@@ -12829,7 +12887,8 @@
 				? __( 'Update in progress' )
 				: stillPending
 					? __( 'Queued — updates run one at a time' )
-					: ( offered ? 'Update to ' + offered : 'Update' );
+					/* translators: %s: the version on offer. */
+					: ( offered ? sprintf( __( 'Update to %s' ), offered ) : __( 'Update' ) );
 		}
 	}
 
@@ -12963,7 +13022,8 @@
 				const version = ( r && r.version ) || offered || '';
 				applyPluginUpdateOptimistic( file, version );
 				succeeded = true;
-				toast( `${ name } updated${ version ? ' to v' + version : '' }` );
+				/* translators: 1: the plugin's name. 2: the new version. */
+				toast( version ? sprintf( __( '%1$s updated to v%2$s' ), name, version ) : sprintf( __( '%s updated' ), name ) );
 			} catch ( e ) {
 				// One more settle + offer check before blaming the user.
 				if ( isFetchDrop( e ) ) {
@@ -12976,12 +13036,15 @@
 						if ( ! map[ file + '.php' ] ) {
 							applyPluginUpdateOptimistic( file, offered );
 							succeeded = true;
-							toast( `${ name } updated${ offered ? ' to v' + offered : '' }` );
+							/* translators: 1: the plugin's name. 2: the new version. */
+							toast( offered ? sprintf( __( '%1$s updated to v%2$s' ), name, offered ) : sprintf( __( '%s updated' ), name ) );
 						} else {
-							toast( `Could not update ${ name } — connection dropped mid-upgrade. Try again.`, true );
+							/* translators: %s: the plugin's name. */
+							toast( sprintf( __( 'Could not update %s — connection dropped mid-upgrade. Try again.' ), name ), true );
 						}
 					} catch ( e2 ) {
-						toast( `Could not update ${ name }: ${ e.message || esc( __( 'Failed to fetch' ) ) }. Try again in a moment.`, true );
+						/* translators: 1: the plugin's name. 2: the error message. */
+						toast( sprintf( __( 'Could not update %1$s: %2$s. Try again in a moment.' ), name, e.message || esc( __( 'Failed to fetch' ) ) ), true );
 					}
 				} else {
 					toast( e.message || `Could not update ${ name }`, true );
@@ -13125,10 +13188,11 @@
 
 	function licenseRowHtml( it ) {
 		const meta = [
-			it.off ? 'not active' : '',
+			it.off ? __( 'not active' ) : '',
 			it.note,
-			it.expires === 'lifetime' ? 'lifetime license' : ( it.expires ? ( it.state === 'expired' ? 'expired ' : 'renews ' ) + it.expires : '' ),
-			it.stale ? 'may be stale' : '',
+			/* translators: %s: the expiry or renewal date. */
+			it.expires === 'lifetime' ? __( 'lifetime license' ) : ( it.expires ? sprintf( it.state === 'expired' ? __( 'expired %s' ) : __( 'renews %s' ), it.expires ) : '' ),
+			it.stale ? __( 'may be stale' ) : '',
 		].filter( Boolean ).join( ' · ' );
 		// Phase-1 controls, only for actions the provider's ACTIVE vendor
 		// code declared. Paste-to-activate: the key rides one request and
@@ -13441,7 +13505,8 @@
 				} else {
 					await setPluginStatus( component.replace( /\.php$/, '' ), 'active' );
 				}
-				toast( `${ btn.dataset.name } turned on` );
+				/* translators: %s: the plugin or theme's name. */
+				toast( sprintf( __( '%s turned on' ), btn.dataset.name ) );
 				await refreshAfterPluginChange();
 				await refresh();
 			} catch ( e ) {
@@ -13893,7 +13958,8 @@
 			btn.textContent = __( 'Updating WordPress…' );
 			try {
 				const version = await runCoreUpdate( core.update.version );
-				toast( `WordPress updated to ${ version }` );
+				/* translators: %s: the new WordPress version. */
+				toast( sprintf( __( 'WordPress updated to %s' ), version ) );
 				state.cache.notifications = null;
 				updateCoreChip();
 				if ( state.route === 'extensions' ) renderExtensions();
@@ -14009,10 +14075,11 @@
 					? __( 'Update in progress' )
 					: isUpdating
 						? __( 'Queued — updates run one at a time' )
-						: ( offered ? 'Update to ' + offered : 'Update' );
+						/* translators: %s: the version on offer. */
+						: ( offered ? sprintf( __( 'Update to %s' ), offered ) : __( 'Update' ) );
 				return `
 				<div class="minn-card minn-plugin${ isUpdating ? ' minn-busy' : '' }${ isCurrent ? ' minn-plugin-updating' : '' }${ isUpdating && ! isCurrent ? ' minn-plugin-queued' : '' }" data-plugin="${ esc( p.plugin ) }">
-					${ meta && meta.url ? `<a class="minn-plugin-icon-link" href="${ esc( meta.url ) }" target="_blank" rel="noopener" title="${ /wordpress\.org/.test( meta.url ) ? `View ${ esc( name ) } on WordPress.org` : `${ esc( name ) } plugin page` }">${ tile }</a>` : tile }
+					${ meta && meta.url ? `<a class="minn-plugin-icon-link" href="${ esc( meta.url ) }" target="_blank" rel="noopener" title="${ /wordpress\.org/.test( meta.url ) ? sprintf( /* translators: %s: the plugin's name. */ esc( __( 'View %s on WordPress.org' ) ), esc( name ) ) : sprintf( /* translators: %s: the plugin's name. */ esc( __( '%s plugin page' ) ), esc( name ) ) }">${ tile }</a>` : tile }
 					<div class="minn-plugin-body">
 						<div class="minn-plugin-head">
 							<div class="minn-plugin-name">${ esc( name ) }</div>
@@ -14063,11 +14130,13 @@
 			const btn = card && card.querySelector( '[data-toggle]' );
 			if ( btn ) btn.disabled = true;
 			if ( card ) card.classList.add( 'minn-busy' );
-			toast( `${ activating ? 'Activating' : 'Deactivating' } ${ pluginDisplayName( plugin.name ) }…` );
+			/* translators: %s: the plugin's name. */
+			toast( sprintf( activating ? __( 'Activating %s…' ) : __( 'Deactivating %s…' ), pluginDisplayName( plugin.name ) ) );
 			try {
 				await setPluginStatus( file, activating ? 'active' : 'inactive' );
 				plugin.status = activating ? 'active' : 'inactive';
-				toast( pluginDisplayName( plugin.name ) + ( activating ? ' activated' : ' deactivated' ) );
+				/* translators: %s: the plugin's name. */
+				toast( sprintf( activating ? __( '%s activated' ) : __( '%s deactivated' ), pluginDisplayName( plugin.name ) ) );
 				if ( file === 'minn-admin/minn-admin' && ! activating ) {
 					window.location.href = B.site.adminUrl;
 					return;
@@ -14099,7 +14168,8 @@
 				} );
 				if ( ! okNet ) return;
 			}
-			toast( `${ on ? 'Activating' : 'Deactivating' } ${ name } across the network…` );
+			/* translators: %s: the plugin's name. */
+			toast( sprintf( on ? __( 'Activating %s across the network…' ) : __( 'Deactivating %s across the network…' ), name ) );
 			try {
 				await api( 'minn-admin/v1/network/plugins/activate', {
 					method: 'POST',
@@ -14130,10 +14200,12 @@
 			if ( ! okDel ) return;
 			const card = document.querySelector( `.minn-plugin[data-plugin="${ CSS.escape( file ) }"]` );
 			if ( card ) card.classList.add( 'minn-busy' );
-			toast( `Deleting ${ name }…` );
+			/* translators: %s: the plugin's name. */
+			toast( sprintf( __( 'Deleting %s…' ), name ) );
 			try {
 				await api( 'wp/v2/plugins/' + file, { method: 'DELETE' } );
-				toast( name + ' deleted' );
+				/* translators: %s: the plugin's name. */
+				toast( sprintf( __( '%s deleted' ), name ) );
 				state.cache.plugins = null;
 				state.cache.overview = null;
 				bustTypeCaches();
@@ -14157,7 +14229,7 @@
 			const entries = [];
 			if ( ! net ) {
 				entries.push( {
-					label: on ? 'Deactivate' : 'Activate',
+					label: on ? __( 'Deactivate' ) : __( 'Activate' ),
 					run: () => togglePluginByFile( file ),
 				} );
 			}
@@ -14437,7 +14509,8 @@
 		}
 		// Multisite: add or remove a theme from the network's allowed list.
 		const setNetworkTheme = async ( t, on ) => {
-			toast( `${ on ? 'Offering' : 'Withdrawing' } ${ t.name }…` );
+			/* translators: %s: the theme's name. */
+			toast( sprintf( on ? __( 'Offering %s…' ) : __( 'Withdrawing %s…' ), t.name ) );
 			try {
 				await api( 'minn-admin/v1/network/themes/enable', {
 					method: 'POST',
@@ -14468,14 +14541,16 @@
 			const card = document.querySelector( `.minn-theme[data-stylesheet="${ CSS.escape( t.stylesheet ) }"]` )
 				|| ( btn && btn.closest( '.minn-theme' ) );
 			if ( card ) card.classList.add( 'minn-busy' );
-			const verbs = { activate: 'Activating', delete: 'Deleting', update: 'Updating' };
-			toast( `${ verbs[ action ] } ${ t.name }…` );
+			/* translators: %s: the theme's name. */
+			const verbs = { activate: __( 'Activating %s…' ), delete: __( 'Deleting %s…' ), update: __( 'Updating %s…' ) };
+			toast( sprintf( verbs[ action ], t.name ) );
 			try {
 				const r = await api( 'minn-admin/v1/themes/' + action, {
 					method: 'POST',
 					body: JSON.stringify( { stylesheet: t.stylesheet } ),
 				} );
-				const done = { activate: `${ t.name } is now the active theme`, delete: `${ t.name } deleted`, update: `${ t.name } updated${ r.version ? ' to v' + r.version : '' }` };
+				/* translators: 1: the theme's name. 2: the new version. */
+				const done = { activate: sprintf( __( '%s is now the active theme' ), t.name ), delete: sprintf( __( '%s deleted' ), t.name ), update: r.version ? sprintf( __( '%1$s updated to v%2$s' ), t.name, r.version ) : sprintf( __( '%s updated' ), t.name ) };
 				toast( done[ action ] );
 				// Bricks and Divi are THEMES — a theme switch can add or
 				// remove a builder. Theme patterns + block styles also
@@ -14684,7 +14759,7 @@
 					<div class="minn-row-meta minn-cell-clip">${ esc( t.object_types.map( typeLabel ).join( ', ' ) || '—' ) }</div>
 					<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
 					<div class="minn-row-meta">${ B.caps.terms && t.count ? `<button type="button" class="minn-term-count" data-managetax="${ esc( t.slug ) }" title="${ esc( __( 'Manage terms' ) ) }">${ t.count }</button>` : t.count }</div>
-					<div class="minn-row-meta">${ t.hierarchical ? 'Categories' : 'Tags' }</div>
+					<div class="minn-row-meta">${ t.hierarchical ? esc( __( 'Categories' ) ) : esc( __( 'Tags' ) ) }</div>
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) }
 			</div>`;
@@ -14712,8 +14787,8 @@
 			view.innerHTML = `
 			<div class="minn-toolbar">
 				${ tabs }
-				<div class="minn-toolbar-meta">${ metaLabel( c.types.length, 'post type' ) }</div>
-				<button class="minn-btn-soft" id="minn-add-cpt">${ icon( 'plus' ) } Add post type</button>
+				<div class="minn-toolbar-meta">${ sprintf( /* translators: %s: how many post types exist. */ _n( '%s post type', '%s post types', c.types.length ), c.types.length ) }</div>
+				<button class="minn-btn-soft" id="minn-add-cpt">${ icon( 'plus' ) } ${ esc( __( 'Add post type' ) ) }</button>
 			</div>
 			<div class="minn-card minn-table">
 				<div class="minn-table-head minn-cpt-cols">
@@ -15102,7 +15177,8 @@
 				const c = cfg.constants.find( ( x ) => x.name === name );
 				if ( c ) c.value = next;
 				state.cache.system = null; // re-read fresh next visit
-				toast( `${ name } ${ next ? 'enabled' : 'disabled' } — applies on the next page load` );
+				/* translators: %s: the configuration constant's name. */
+				toast( sprintf( next ? __( '%s enabled — applies on the next page load' ) : __( '%s disabled — applies on the next page load' ), name ) );
 			} catch ( e ) {
 				toast( e.message, true );
 			}
@@ -15304,8 +15380,8 @@
 				raw = r.content || '';
 				const bits = [];
 				if ( r.path ) bits.push( r.path );
-				bits.push( r.exists ? r.size_human : 'empty' );
-				if ( r.truncated ) bits.push( 'showing last 256 KB' );
+				bits.push( r.exists ? r.size_human : __( 'empty' ) );
+				if ( r.truncated ) bits.push( __( 'showing last 256 KB' ) );
 				meta.textContent = bits.join( ' · ' );
 				meta.title = r.note || '';
 				$( '#minn-log-clear', overlay ).hidden = ! r.clearable;
@@ -16997,7 +17073,8 @@
 					try { zones = zones.concat( Intl.supportedValuesOf( 'timeZone' ) ); } catch ( e2 ) {}
 					const match = zones.find( ( z ) => z && ( z === payload.timezone || z.toLowerCase() === payload.timezone.toLowerCase().replace( / /g, '_' ) ) );
 					if ( ! match ) {
-						toast( `“${ payload.timezone }” isn’t a timezone — pick one from the suggestions.`, true );
+						/* translators: %s: what the user typed. */
+						toast( sprintf( __( '“%s” isn’t a timezone — pick one from the suggestions.' ), payload.timezone ), true );
 						saveBtn.disabled = false;
 						return;
 					}
@@ -21109,7 +21186,8 @@
 		}
 		scheduleAutosave();
 		findRefresh();
-		toast( `Replaced ${ list.length } match${ list.length === 1 ? '' : 'es' }` );
+		/* translators: %s: how many matches were replaced. */
+		toast( sprintf( _n( 'Replaced %s match', 'Replaced %s matches', list.length ), list.length ) );
 		if ( focused && focused.closest && focused.closest( '#minn-find-bar' ) ) focused.focus( { preventScroll: true } );
 	}
 
@@ -21216,8 +21294,9 @@
 	function dpMarkTip( list ) {
 		if ( ! list || ! list.length ) return '';
 		const lines = list.slice( 0, 6 ).map( ( x ) =>
-			( x.status === 'future' ? 'Scheduled' : 'Published' ) + ' · ' + x.title );
-		if ( list.length > 6 ) lines.push( '…and ' + ( list.length - 6 ) + ' more' );
+			( x.status === 'future' ? __( 'Scheduled' ) : __( 'Published' ) ) + ' · ' + x.title );
+		/* translators: %s: how many more posts the tip omits. */
+		if ( list.length > 6 ) lines.push( sprintf( __( '…and %s more' ), list.length - 6 ) );
 		return lines.join( '\n' );
 	}
 
@@ -21580,7 +21659,7 @@
 				<div>${ esc( __( 'Permalink' ) ) }
 					<div class="minn-slug-field">
 						<span class="minn-slug-prefix">/</span>
-						<input class="minn-input minn-slug-input" id="minn-slug-input" value="${ esc( ed.slugValue ) }" placeholder="${ ed.id ? 'post-slug' : 'set on first save' }" autocomplete="off" spellcheck="false"${ ed.id ? '' : ' disabled' }>
+						<input class="minn-input minn-slug-input" id="minn-slug-input" value="${ esc( ed.slugValue ) }" placeholder="${ ed.id ? 'post-slug' : esc( __( 'set on first save' ) ) }" autocomplete="off" spellcheck="false"${ ed.id ? '' : ' disabled' }>
 					</div>
 					${ LIVE_STATUSES.includes( ed.status ) ? `<div class="minn-slug-note">${ esc( __( 'Changing this breaks the current URL.' ) ) }</div>` : '' }
 				</div>
@@ -21688,7 +21767,8 @@
 			const t = ed.templates.find( ( x ) => x.file === ed.template );
 			bits.push( t ? t.name : ed.template );
 		}
-		if ( ed.supportsOrder && ed.menuOrder ) bits.push( 'Order ' + ed.menuOrder );
+		/* translators: %s: the page's menu-order number. */
+		if ( ed.supportsOrder && ed.menuOrder ) bits.push( sprintf( __( 'Order %s' ), ed.menuOrder ) );
 		return bits.join( ' · ' ) || __( 'Parent, template, order' );
 	}
 
@@ -22353,13 +22433,12 @@
 		const trashBtn = $( '#minn-trash-post', el );
 		if ( trashBtn ) {
 			trashBtn.addEventListener( 'click', async () => {
-				const noun = ed.type === 'pages' ? 'page' : 'post';
-				if ( ! confirm( `Move this ${ noun } to trash?` ) ) return;
+				if ( ! confirm( ed.type === 'pages' ? __( 'Move this page to trash?' ) : __( 'Move this post to trash?' ) ) ) return;
 				trashBtn.disabled = true;
 				clearAutosaveTimers();
 				try {
 					await api( `wp/v2/${ ed.type }/${ ed.id }`, { method: 'DELETE' } );
-					toast( `Moved to trash` );
+					toast( __( 'Moved to trash' ) );
 					state.cache.content = null;
 					state.editor = null;
 					go( 'content' );
@@ -22445,11 +22524,11 @@
 			}
 			await saveEditor( extra );
 			btn.disabled = false;
-			const noun = state.editor && state.editor.type === 'pages' ? 'Page' : 'Post';
+			const isPage = state.editor && state.editor.type === 'pages';
 			if ( state.editor && state.editor.status === 'future' ) {
-				toast( `${ noun } scheduled` );
+				toast( isPage ? __( 'Page scheduled' ) : __( 'Post scheduled' ) );
 			} else if ( state.editor && state.editor.status === 'publish' ) {
-				toast( `${ noun } published` );
+				toast( isPage ? __( 'Page published' ) : __( 'Post published' ) );
 			}
 		} );
 	}
@@ -24657,7 +24736,8 @@
 					};
 					// The modal can be closed mid-upload; the attachment is
 					// still in the library, so say so rather than losing it.
-					if ( imgEditEl !== overlay ) { toast( `${ it.url.split( '/' ).pop() } uploaded to the media library.` ); continue; }
+					/* translators: %s: the uploaded file's name. */
+					if ( imgEditEl !== overlay ) { toast( sprintf( __( '%s uploaded to the media library.' ), it.url.split( '/' ).pop() ) ); continue; }
 					list.push( { unit: null, orig: -1, id: it.id, thumb: it.thumb, attachment: it } );
 					added++;
 					renderGrid();
@@ -25552,7 +25632,7 @@
 					<button class="minn-btn-soft" id="minn-insp-move-next" type="button" title="${ esc( __( 'Move to the next column' ) ) }" aria-label="${ esc( __( 'Move block to the next column' ) ) }">${ icon( 'chevron-right' ) }</button>` : '' }
 				</span>
 				<button class="minn-btn-soft" id="minn-insp-duplicate" type="button" title="${ esc( __( 'Duplicate this block' ) ) }" aria-label="${ esc( __( 'Duplicate this block' ) ) }">${ icon( 'copy' ) }</button>
-				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="${ esc( __( 'Remove this block' ) ) }">${ icon( 'trash' ) }${ editable ? '' : ' Remove block' }</button>
+				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="${ esc( __( 'Remove this block' ) ) }">${ icon( 'trash' ) }${ editable ? '' : ' ' + esc( __( 'Remove block' ) ) }</button>
 			</div>`;
 		positionInspector( insp.islandEl );
 	}
@@ -28168,7 +28248,8 @@
 				URL.revokeObjectURL( blobUrl );
 				const fig = document.querySelector( `figure[data-minn-upload="${ key }"]` );
 				if ( fig ) fig.remove();
-				toast( `Upload failed: ${ err.message }`, true );
+				/* translators: %s: the error message. */
+				toast( sprintf( __( 'Upload failed: %s' ), err.message ), true );
 				scheduleAutosave();
 			} );
 		} );
@@ -28710,7 +28791,8 @@
 						throw new Error( __( 'Command returned no content' ) );
 					}
 				} )
-				.catch( ( e ) => toast( 'Insert failed: ' + e.message, true ) );
+				/* translators: %s: the error message. */
+				.catch( ( e ) => toast( sprintf( __( 'Insert failed: %s' ), e.message ), true ) );
 			return;
 		}
 		if ( action && action.design ) {
@@ -28742,7 +28824,8 @@
 					// (content editor for multi-child designs).
 					if ( islandEl ) openIslandTooling( islandEl );
 				} )
-				.catch( ( e ) => toast( 'Design insert failed: ' + e.message, true ) );
+				/* translators: %s: the error message. */
+				.catch( ( e ) => toast( sprintf( __( 'Design insert failed: %s' ), e.message ), true ) );
 			return;
 		}
 		if ( action && action.userPattern ) {
@@ -28792,7 +28875,8 @@
 					if ( ! r || ! r.content ) throw new Error( __( 'Pattern unavailable' ) );
 					insertPatternIslands( p, r.content );
 				} )
-				.catch( ( e ) => toast( 'Pattern insert failed: ' + e.message, true ) );
+				/* translators: %s: the error message. */
+				.catch( ( e ) => toast( sprintf( __( 'Pattern insert failed: %s' ), e.message ), true ) );
 			return;
 		}
 		if ( action && action.block ) {
@@ -28928,7 +29012,7 @@
 		}
 		// Only inside a Columns block, where it is the one structural thing the
 		// slash menu could not do: item[6] is a predicate over the caret block.
-		items.unshift( [ icon( 'columns' ), 'Column', { addColumn: true }, false, '', [ 'columns', 'add column' ],
+		items.unshift( [ icon( 'columns' ), __( 'Column' ), { addColumn: true }, false, '', [ 'columns', 'add column' ],
 			( el ) => !! ( el && el.closest && el.closest( '.minn-cols-island' ) ) ] );
 		liveSlashItems = items; // per-user hide prunes this array in place
 		// Attention budget (v1.0 gate G3): a namespace holds at most 3 slots
@@ -29241,7 +29325,8 @@
 			state.cache.notifications = null;
 			await loadNotifications();
 			if ( state.notifOpen ) renderOverlays();
-			toast( `Done: ${ link.text }` );
+			/* translators: %s: the completed action's label. */
+			toast( sprintf( __( 'Done: %s' ), link.text ) );
 		} catch ( e ) {
 			toast( e.message, true );
 			if ( btn ) { btn.disabled = false; btn.textContent = link.text; }
@@ -29276,7 +29361,9 @@
 			title: __( 'Update everything?' ),
 			changes: parts.map( ( p ) => p.label ),
 			keeps: [ __( 'Your content, media and users' ), __( 'Plugin and theme settings' ), __( 'Anything without a pending update' ) ],
-			body: `Each update runs its author's own upgrade routine. Plugins first, then themes${ hasCore ? ', then WordPress core last (visitors see a maintenance notice for a few seconds)' : '' }.`,
+			body: hasCore
+				? __( "Each update runs its author's own upgrade routine. Plugins first, then themes, then WordPress core last (visitors see a maintenance notice for a few seconds)." )
+				: __( "Each update runs its author's own upgrade routine. Plugins first, then themes." ),
 			confirmLabel: __( 'Update everything' ),
 		} );
 		if ( ! okAll ) return;
@@ -29349,7 +29436,8 @@
 				const version = await runCoreUpdate( state.cache.core.update.version );
 				doneBits.push( `WordPress ${ version }` );
 			} catch ( e ) {
-				failures.push( 'WordPress: ' + e.message );
+				/* translators: %s: the error message. */
+				failures.push( sprintf( __( 'WordPress: %s' ), e.message ) );
 			}
 		}
 		state.updatingAll = null;
@@ -29375,26 +29463,30 @@
 		] );
 		renderOverlays();
 		if ( state.route === 'extensions' ) renderExtensions();
-		if ( failures.length ) toast( `Some updates failed — ${ failures.join( ' · ' ) }`, true );
-		else toast( `Updated ${ doneBits.join( ', ' ) }. Everything is current.` );
+		/* translators: %s: the list of failures. */
+		if ( failures.length ) toast( sprintf( __( 'Some updates failed — %s' ), failures.join( ' · ' ) ), true );
+		/* translators: %s: the list of updated components. */
+		else toast( sprintf( __( 'Updated %s. Everything is current.' ), doneBits.join( ', ' ) ) );
 	}
 
 	// Label for an in-row Update button on a notification (mirrors Extensions
 	// badges so queue state reads the same).
 	function notifUpdateLabel( n ) {
 		const u = n && n.update;
-		if ( ! u ) return 'Update';
+		if ( ! u ) return __( 'Update' );
 		if ( u.type === 'plugin' ) {
 			const file = String( u.plugin || '' ).replace( /\.php$/, '' );
 			return pluginUpdateBadgeLabel( file, u.version || '' );
 		}
 		if ( u.type === 'theme' ) {
-			return u.version ? `Update → ${ u.version }` : 'Update';
+			/* translators: %s: the version on offer. */
+			return u.version ? sprintf( __( 'Update → %s' ), u.version ) : __( 'Update' );
 		}
 		if ( u.type === 'core' ) {
-			return u.version ? `Update to ${ u.version }` : __( 'Update WordPress' );
+			/* translators: %s: the version on offer. */
+			return u.version ? sprintf( __( 'Update to %s' ), u.version ) : __( 'Update WordPress' );
 		}
-		return 'Update';
+		return __( 'Update' );
 	}
 
 	function notifUpdateBusy( n ) {
@@ -29425,7 +29517,8 @@
 				const stylesheet = u.stylesheet;
 				if ( ! stylesheet ) throw new Error( __( 'Missing theme.' ) );
 				const name = u.name || stylesheet;
-				toast( `Updating ${ name }…` );
+				/* translators: %s: the theme's name. */
+				toast( sprintf( __( 'Updating %s…' ), name ) );
 				if ( btn ) btn.textContent = __( 'Updating…' );
 				await api( 'minn-admin/v1/themes/update', {
 					method: 'POST',
@@ -29436,21 +29529,23 @@
 					const t = state.cache.themes.find( ( x ) => x.stylesheet === stylesheet );
 					if ( t && u.version ) { t.version = u.version; t.update = ''; }
 				}
-				toast( `${ name } updated${ u.version ? ' to v' + u.version : '' }` );
+				/* translators: 1: the theme's name. 2: the new version. */
+				toast( u.version ? sprintf( __( '%1$s updated to v%2$s' ), name, u.version ) : sprintf( __( '%s updated' ), name ) );
 				state.cache.notifications = null;
 				await loadNotifications();
 			} else if ( u.type === 'core' ) {
 				if ( ! B.caps.core ) throw new Error( __( 'You cannot update WordPress.' ) );
-				if ( ! await confirmCoreUpdate( u.version || 'the latest version' ) ) {
+				if ( ! await confirmCoreUpdate( u.version || '' ) ) {
 					if ( btn ) { btn.disabled = false; btn.textContent = notifUpdateLabel( item ); }
 					return;
 				}
-				state.updatingAll = `Updating WordPress…`;
+				state.updatingAll = __( 'Updating WordPress…' );
 				renderOverlays();
 				updateUpdChip();
 				try {
 					const version = await runCoreUpdate( u.version );
-					toast( `WordPress updated to ${ version }` );
+					/* translators: %s: the new WordPress version. */
+					toast( sprintf( __( 'WordPress updated to %s' ), version ) );
 				} finally {
 					state.updatingAll = null;
 					updateUpdChip();
@@ -29594,8 +29689,10 @@
 				}
 			}
 		}
-		if ( failed.length ) toast( `Cache cleared (${ purged.join( ', ' ) }); failed: ${ failed.join( ', ' ) }`, true );
-		else toast( `Cache cleared (${ purged.join( ', ' ) })` );
+		/* translators: 1: the providers that cleared. 2: the providers that failed. */
+		if ( failed.length ) toast( sprintf( __( 'Cache cleared (%1$s); failed: %2$s' ), purged.join( ', ' ), failed.join( ', ' ) ), true );
+		/* translators: %s: the providers that cleared. */
+		else toast( sprintf( __( 'Cache cleared (%s)' ), purged.join( ', ' ) ) );
 	}
 
 	// Start a backup through the provider's own background machinery; the
@@ -29603,7 +29700,8 @@
 	async function runBackupNow() {
 		try {
 			await api( B.backup.route, { method: 'POST', body: '{}' } );
-			toast( `Backup started. ${ B.backup.name } is working in the background.` );
+			/* translators: %s: the backup provider's name. */
+			toast( sprintf( __( 'Backup started. %s is working in the background.' ), B.backup.name ) );
 		} catch ( e ) {
 			toast( e.message, true );
 		}
@@ -29656,10 +29754,12 @@
 			const full = surfaceById( s.id ) || s;
 			const n = surfacesInFamily( s.family || '' ).length;
 			const badge = n > 1
-				? ` (${ full.sub || full.id } · ${ n } providers)`
+				/* translators: %s: how many providers share this surface. */
+				? ` (${ full.sub || full.id } · ${ sprintf( _n( '%s provider', '%s providers', n ), n ) })`
 				: ( full.sub ? ' (' + full.sub + ')' : '' );
 			cmds.push( {
-				label: 'Open ' + full.label + badge,
+				/* translators: %s: the surface's name. */
+				label: sprintf( __( 'Open %s' ), full.label ) + badge,
 				kind: 'nav',
 				icon: '❖',
 				run: () => go( preferredSurfaceId( s.family ) || s.id ),
@@ -30098,7 +30198,7 @@
 			// Safe SVG always sanitizes; SVG Support's sanitize-on-upload is a
 			// setting, so its note claims only what's certain.
 			const svgNote = it.kind === 'SVG' && B.safeSvg
-				? `<div class="minn-media-svg-note">${ B.svgProvider === 'Safe SVG' ? __( 'Sanitized by Safe SVG' ) : `SVG uploads enabled by ${ esc( B.svgProvider || 'a plugin' ) }` }</div>`
+				? `<div class="minn-media-svg-note">${ B.svgProvider === 'Safe SVG' ? __( 'Sanitized by Safe SVG' ) : ( B.svgProvider ? sprintf( /* translators: %s: the plugin's name. */ esc( __( 'SVG uploads enabled by %s' ) ), esc( B.svgProvider ) ) : esc( __( 'SVG uploads enabled by a plugin' ) ) ) }</div>`
 				: '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
@@ -30536,7 +30636,7 @@
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
 							<div class="minn-modal-title">${ esc( __( 'Send email' ) ) }</div>
-							<div class="minn-modal-sub">Order #${ esc( o.number || o.id ) } → ${ esc( m.to || 'billing email' ) }</div>
+							<div class="minn-modal-sub">${ m.to ? sprintf( /* translators: 1: the order number. 2: the recipient's email address. */ esc( __( 'Order #%1$s → %2$s' ) ), esc( o.number || o.id ), esc( m.to ) ) : sprintf( /* translators: %s: the order number. */ esc( __( 'Order #%s → billing email' ) ), esc( o.number || o.id ) ) }</div>
 						</div>
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -30686,7 +30786,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? esc( __( 'Add user' ) ) : 'Edit ' + esc( u.name ) }</div>
+						<div class="minn-modal-title">${ isNew ? esc( __( 'Add user' ) ) : sprintf( /* translators: %s: the user's name. */ esc( __( 'Edit %s' ) ), esc( u.name ) ) }</div>
 						${ ! isNew ? `<span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -30759,7 +30859,7 @@
 					<div class="minn-modal-form">
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Subject' ) ) }</div>
-							<input class="minn-input" id="minn-ue-subject" value="${ esc( m.subject || '' ) }" placeholder="A note from ${ esc( B.site.name || 'the site' ) }" autocomplete="off">
+							<input class="minn-input" id="minn-ue-subject" value="${ esc( m.subject || '' ) }" placeholder="${ B.site.name ? sprintf( /* translators: %s: the site's name. */ esc( __( 'A note from %s' ) ), esc( B.site.name ) ) : esc( __( 'A note from the site' ) ) }" autocomplete="off">
 						</div>
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Message' ) ) }</div>
@@ -31183,8 +31283,10 @@
 				: ! m.results.length ? `<div class="minn-empty" style="padding:20px;">${ sprintf( esc( /* translators: %s: the search query. */ __( 'No results for “%s”.' ) ), esc( m.q ) ) }</div>`
 				: m.results.map( ( p, i ) => {
 					const local = installedNow( p.slug );
-					const stateLabel = local && ( local.status === 'active' || local.status === 'network-active' ) ? 'Active'
-						: ( local || p.installed ) ? 'Activate' : 'Install';
+					// Routing reads the flag, never the translated label.
+					const isActive = !! ( local && ( local.status === 'active' || local.status === 'network-active' ) );
+					const stateLabel = isActive ? __( 'Active' )
+						: ( local || p.installed ) ? __( 'Activate' ) : __( 'Install' );
 					return `
 					<div class="minn-pi-row">
 						${ p.icon ? `<img class="minn-pi-icon" src="${ esc( p.icon ) }" alt="">` : '<div class="minn-pi-icon"></div>' }
@@ -31193,7 +31295,7 @@
 							<div class="minn-pi-meta">${ p.installs ? Number( p.installs ).toLocaleString( uiLocale() ) + '+ installs · ' : '' }v${ esc( p.version ) }</div>
 							<div class="minn-pi-desc">${ esc( p.description ) }</div>
 						</div>
-						<button class="minn-btn-soft" data-pi="${ i }" ${ stateLabel === 'Active' ? 'disabled' : '' }>${ stateLabel }</button>
+						<button class="minn-btn-soft" data-pi="${ i }" ${ isActive ? 'disabled' : '' }>${ esc( stateLabel ) }</button>
 					</div>`;
 				} ).join( '' );
 			return `
@@ -31250,7 +31352,7 @@
 									<div class="minn-ti-info">
 										<div class="minn-row-title">${ esc( t.name ) }</div>
 										<div class="minn-pi-meta">${ t.installs ? Number( t.installs ).toLocaleString( uiLocale() ) + '+ installs · ' : '' }v${ esc( t.version ) }</div>
-										<button class="minn-btn-soft" data-ti="${ i }" ${ t.active ? 'disabled' : '' }>${ t.active ? 'Active' : t.installed ? 'Activate' : 'Install' }</button>
+										<button class="minn-btn-soft" data-ti="${ i }" ${ t.active ? 'disabled' : '' }>${ t.active ? esc( __( 'Active' ) ) : t.installed ? esc( __( 'Activate' ) ) : esc( __( 'Install' ) ) }</button>
 									</div>
 								</div>` ).join( '' ) }
 							</div>` }
@@ -31682,7 +31784,8 @@
 				try {
 					if ( B.regenThumbs ) {
 						const r = await api( `minn-admin/v1/media/${ it.id }/regenerate`, { method: 'POST' } );
-						toast( `Regenerated ${ r.sizes } thumbnail size${ r.sizes === 1 ? '' : 's' }` );
+						/* translators: %s: how many thumbnail sizes were rebuilt. */
+						toast( sprintf( _n( 'Regenerated %s thumbnail size', 'Regenerated %s thumbnail sizes', r.sizes ), r.sizes ) );
 					} else {
 						const body = new URLSearchParams( { action: 'regeneratethumbnail', id: String( it.id ), frt_wpnonce: B.frt.nonce } );
 						const res = await fetch( B.frt.ajax, { method: 'POST', credentials: 'same-origin', body } );
@@ -32288,7 +32391,8 @@
 						method: 'POST',
 						body: JSON.stringify( { user, role } ),
 					} );
-					toast( ( r && r.name ? r.name : 'User' ) + ' added to this site' );
+					/* translators: %s: the user's name. */
+					toast( r && r.name ? sprintf( __( '%s added to this site' ), r.name ) : __( 'User added to this site' ) );
 					closeModal();
 					state.cache.users = null;
 					if ( state.route === 'users' ) renderUsers();
@@ -32319,7 +32423,8 @@
 					toast( __( 'Pick a user to reassign content to' ), true );
 					return;
 				}
-				if ( ! await minnConfirm( { title: `Permanently delete ${ m.user.name || 'this user' }?`, body: __( 'The account is removed for good, and their content moves to the user you picked. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete user' ) } ) ) return;
+				/* translators: %s: the user's name. */
+				if ( ! await minnConfirm( { title: m.user.name ? sprintf( __( 'Permanently delete %s?' ), m.user.name ) : __( 'Permanently delete this user?' ), body: __( 'The account is removed for good, and their content moves to the user you picked. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete user' ) } ) ) return;
 				confirmBtn.disabled = true;
 				try {
 					await api( `wp/v2/users/${ m.user.id }?force=true&reassign=${ encodeURIComponent( reassign ) }`, { method: 'DELETE' } );
@@ -32498,11 +32603,13 @@
 				try {
 					if ( activating ) {
 						await themeActionWithRecovery( 'minn-admin/v1/themes/activate', { stylesheet: t.slug }, ( list ) => list.some( ( x ) => x.stylesheet === t.slug && x.active ) );
-						toast( `${ t.name } is now the active theme` );
+						/* translators: %s: the theme's name. */
+						toast( sprintf( __( '%s is now the active theme' ), t.name ) );
 						t.active = true;
 					} else {
 						await themeActionWithRecovery( 'minn-admin/v1/themes/install', { slug: t.slug }, ( list ) => list.some( ( x ) => x.stylesheet === t.slug ) );
-						toast( `${ t.name } installed` );
+						/* translators: %s: the theme's name. */
+						toast( sprintf( __( '%s installed' ), t.name ) );
 						t.installed = true;
 					}
 					state.cache.themes = null;
@@ -32524,7 +32631,8 @@
 				return;
 			}
 			zone.classList.add( 'minn-busy' );
-			toast( `Installing ${ f.name }…` );
+			/* translators: %s: the uploaded file's name. */
+			toast( sprintf( __( 'Installing %s…' ), f.name ) );
 			const fd = new FormData();
 			fd.append( 'file', f );
 			try {
@@ -32561,7 +32669,7 @@
 	// `slug` is the plugin directory (matches installed plugin path prefix).
 	const PLUGIN_CATALOG = [
 		{
-			id: 'seo', label: 'SEO', hint: __( 'Titles, meta, sitemaps' ), q: 'SEO',
+			id: 'seo', label: __( 'SEO' ), hint: __( 'Titles, meta, sitemaps' ), q: 'SEO',
 			plugins: [
 				{ name: __( 'Yoast SEO' ), slug: 'wordpress-seo' },
 				{ name: __( 'Rank Math' ), slug: 'seo-by-rank-math' },
@@ -32571,7 +32679,7 @@
 			],
 		},
 		{
-			id: 'forms', label: 'Forms', hint: __( 'Contact forms & entries' ), q: 'contact form',
+			id: 'forms', label: __( 'Forms' ), hint: __( 'Contact forms & entries' ), q: 'contact form',
 			plugins: [
 				{ name: __( 'Contact Form 7' ), slug: 'contact-form-7' },
 				{ name: 'Flamingo', slug: 'flamingo' },
@@ -32584,7 +32692,7 @@
 			],
 		},
 		{
-			id: 'ecommerce', label: 'Ecommerce', hint: __( 'Store & payments' ), q: 'ecommerce',
+			id: 'ecommerce', label: __( 'Ecommerce' ), hint: __( 'Store & payments' ), q: 'ecommerce',
 			plugins: [
 				{ name: 'WooCommerce', slug: 'woocommerce' },
 				{ name: __( 'WooCommerce Subscriptions' ), slug: 'woocommerce-subscriptions', tip: __( 'Recurring billing for WooCommerce. In Minn: Workspace → Subscriptions (status, next payment, related orders).' ) },
@@ -32593,7 +32701,7 @@
 			],
 		},
 		{
-			id: 'security', label: 'Security', hint: __( 'Firewall, login, SSL' ), q: 'security',
+			id: 'security', label: __( 'Security' ), hint: __( 'Firewall, login, SSL' ), q: 'security',
 			plugins: [
 				{ name: 'Wordfence', slug: 'wordfence' },
 				{ name: __( 'Solid Security' ), slug: 'better-wp-security' },
@@ -32603,7 +32711,7 @@
 			],
 		},
 		{
-			id: 'backup', label: 'Backup', hint: __( 'Sets, migrate, restore' ), q: 'backup',
+			id: 'backup', label: __( 'Backup' ), hint: __( 'Sets, migrate, restore' ), q: 'backup',
 			plugins: [
 				{ name: 'UpdraftPlus', slug: 'updraftplus' },
 				{ name: 'WPvivid', slug: 'wpvivid-backuprestore' },
@@ -32615,7 +32723,7 @@
 			],
 		},
 		{
-			id: 'analytics', label: 'Analytics', hint: __( 'Privacy-friendly traffic' ), q: 'analytics',
+			id: 'analytics', label: __( 'Analytics' ), hint: __( 'Privacy-friendly traffic' ), q: 'analytics',
 			plugins: [
 				{ name: __( 'Koko Analytics' ), slug: 'koko-analytics' },
 				{ name: __( 'WP Statistics' ), slug: 'wp-statistics' },
@@ -32625,7 +32733,7 @@
 			],
 		},
 		{
-			id: 'cache', label: 'Cache', hint: __( 'Page & object cache' ), q: 'cache',
+			id: 'cache', label: __( 'Cache' ), hint: __( 'Page & object cache' ), q: 'cache',
 			plugins: [
 				{ name: __( 'LiteSpeed Cache' ), slug: 'litespeed-cache' },
 				{ name: __( 'WP Super Cache' ), slug: 'wp-super-cache' },
@@ -32637,7 +32745,7 @@
 			],
 		},
 		{
-			id: 'performance', label: 'Performance', hint: __( 'Minify, defer, unload' ), q: 'performance',
+			id: 'performance', label: __( 'Performance' ), hint: __( 'Minify, defer, unload' ), q: 'performance',
 			plugins: [
 				{ name: 'Autoptimize', slug: 'autoptimize' },
 				{ name: __( 'Asset CleanUp' ), slug: 'wp-asset-clean-up' },
@@ -32656,7 +32764,7 @@
 			],
 		},
 		{
-			id: 'redirects', label: 'Redirects', hint: '301s & aliases', q: 'redirect',
+			id: 'redirects', label: __( 'Redirects' ), hint: __( '301s & aliases' ), q: 'redirect',
 			plugins: [
 				{ name: 'Redirection', slug: 'redirection' },
 				{ name: __( 'Safe Redirect Manager' ), slug: 'safe-redirect-manager' },
@@ -32665,7 +32773,7 @@
 			],
 		},
 		{
-			id: 'snippets', label: 'Snippets', hint: __( 'Custom code, safely' ), q: 'code snippets',
+			id: 'snippets', label: __( 'Snippets' ), hint: __( 'Custom code, safely' ), q: 'code snippets',
 			plugins: [
 				{ name: __( 'Code Snippets' ), slug: 'code-snippets' },
 				{ name: 'WPCode', slug: 'insert-headers-and-footers' },
@@ -32685,7 +32793,7 @@
 			],
 		},
 		{
-			id: 'spam', label: 'Spam', hint: __( 'Comment & form spam' ), q: 'antispam',
+			id: 'spam', label: __( 'Spam' ), hint: __( 'Comment & form spam' ), q: 'antispam',
 			plugins: [
 				{ name: 'Akismet', slug: 'akismet' },
 				{ name: __( 'Antispam Bee' ), slug: 'antispam-bee' },
@@ -32694,7 +32802,7 @@
 			],
 		},
 		{
-			id: 'blocks', label: 'Blocks', hint: __( 'Block libraries & patterns' ), q: 'gutenberg blocks',
+			id: 'blocks', label: __( 'Blocks' ), hint: __( 'Block libraries & patterns' ), q: 'gutenberg blocks',
 			plugins: [
 				{ name: 'Stackable', slug: 'stackable-ultimate-gutenberg-blocks' },
 				{ name: __( 'Kadence Blocks' ), slug: 'kadence-blocks' },
@@ -32921,17 +33029,20 @@
 				const file = local ? local.plugin.replace( /\.php$/, '' ) : null;
 				if ( ! file ) throw new Error( __( 'Could not find the installed plugin file.' ) );
 				await setPluginStatus( file, 'active' );
-				toast( label + ' activated' );
+				/* translators: %s: the plugin's name. */
+				toast( sprintf( __( '%s activated' ), label ) );
 				await refreshAfterPluginChange();
 			} else if ( entry.github ) {
 				await api( 'minn-admin/v1/plugins/install-url', {
 					method: 'POST',
 					body: JSON.stringify( { github: entry.github, asset: entry.asset || '' } ),
 				} );
-				toast( label + ' installed' );
+				/* translators: %s: the plugin's name. */
+				toast( sprintf( __( '%s installed' ), label ) );
 			} else if ( entry.slug ) {
 				await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: entry.slug } ) } );
-				toast( label + ' installed' );
+				/* translators: %s: the plugin's name. */
+				toast( sprintf( __( '%s installed' ), label ) );
 			} else {
 				throw new Error( __( 'No install source for that plugin.' ) );
 			}
@@ -33053,11 +33164,13 @@
 						const local = ( state.cache.plugins || [] ).find( ( x ) => x.plugin.split( '/' )[ 0 ] === p.slug );
 						const file = local ? local.plugin : ( p.installed ? p.installed.replace( /\.php$/, '' ) : null );
 						await setPluginStatus( file, 'active' );
-						toast( p.name + ' activated' );
+						/* translators: %s: the plugin's name. */
+						toast( sprintf( __( '%s activated' ), p.name ) );
 						await refreshAfterPluginChange();
 					} else {
 						await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: p.slug } ) } );
-						toast( p.name + ' installed' );
+						/* translators: %s: the plugin's name. */
+						toast( sprintf( __( '%s installed' ), p.name ) );
 					}
 					state.cache.plugins = null;
 					state.cache.overview = null;
@@ -33081,7 +33194,8 @@
 				return;
 			}
 			zone.classList.add( 'minn-busy' );
-			toast( `Installing ${ f.name }…` );
+			/* translators: %s: the uploaded file's name. */
+			toast( sprintf( __( 'Installing %s…' ), f.name ) );
 			const fd = new FormData();
 			fd.append( 'file', f );
 			try {
@@ -33537,7 +33651,10 @@
 		const cells = weeks.map( ( week ) => `
 			<div class="minn-rev-heat-week">
 				${ week.map( ( c ) => {
-					const tip = revisionDayLabel( c.key ) + ( c.n ? `: ${ c.n } revision${ c.n === 1 ? '' : 's' }` : ': no revisions' );
+					/* translators: 1: the day. 2: how many revisions that day. */
+					const tip = c.n ? sprintf( _n( '%1$s: %2$s revision', '%1$s: %2$s revisions', c.n ), revisionDayLabel( c.key ), c.n )
+						/* translators: %s: the day. */
+						: sprintf( __( '%s: no revisions' ), revisionDayLabel( c.key ) );
 					return `
 				<button type="button" class="minn-rev-heat-cell l${ c.level }${ c.future ? ' future' : '' }"
 					data-revday="${ esc( c.key ) }"
@@ -33786,7 +33903,7 @@
 	function uaSummary( ua ) {
 		if ( ! ua ) return __( 'Unknown device' );
 		const browser = /Edg\//.test( ua ) ? 'Edge' : /OPR\//.test( ua ) ? 'Opera' : /Chrome\//.test( ua ) ? 'Chrome'
-			: /Safari\//.test( ua ) && /Version\//.test( ua ) ? 'Safari' : /Firefox\//.test( ua ) ? 'Firefox' : 'Browser';
+			: /Safari\//.test( ua ) && /Version\//.test( ua ) ? 'Safari' : /Firefox\//.test( ua ) ? 'Firefox' : __( 'Browser' );
 		const os = /Windows/.test( ua ) ? 'Windows' : /iPhone|iPad/.test( ua ) ? 'iOS' : /Android/.test( ua ) ? 'Android'
 			: /Mac OS X/.test( ua ) ? 'macOS' : /Linux/.test( ua ) ? 'Linux' : '';
 		return browser + ( os ? ' · ' + os : '' );
@@ -34508,7 +34625,7 @@
 						<div class="minn-session-row">
 							<div class="minn-session-info">
 								<div class="minn-session-ua">${ esc( ap.name ) }</div>
-								<div class="minn-session-meta">created ${ ap.created ? timeAgo( ap.created ) : '—' } · ${ ap.last_used ? 'last used ' + timeAgo( ap.last_used ) : 'never used' }</div>
+								<div class="minn-session-meta">${ sprintf( /* translators: %s: when the password was created. */ esc( __( 'created %s' ) ), ap.created ? timeAgo( ap.created ) : '—' ) } · ${ ap.last_used ? sprintf( /* translators: %s: when the password was last used. */ esc( __( 'last used %s' ) ), timeAgo( ap.last_used ) ) : esc( __( 'never used' ) ) }</div>
 							</div>
 							<button class="minn-comment-action danger" data-appdel="${ esc( ap.uuid ) }">${ esc( __( 'Revoke' ) ) }</button>
 						</div>` ).join( '' ) }
@@ -34655,11 +34772,11 @@
 			const langChanged = langPicked !== undefined && langPicked !== ( p.languages.current || '' );
 			try {
 				await api( `wp/v2/users/${ B.user.id }`, { method: 'POST', body: JSON.stringify( payload ) } );
-				let langNote = '';
+				let langPackInstalled = false;
 				if ( langChanged ) {
 					const lr = await api( 'minn-admin/v1/me/language', { method: 'POST', body: JSON.stringify( { locale: langPicked } ) } );
 					p.languages.current = lr.locale;
-					if ( lr.installed ) langNote = ' — language pack installed';
+					if ( lr.installed ) langPackInstalled = true;
 				}
 				// Changing your own password rotates the session token, which
 				// invalidates the REST nonce baked into this page — reload to
@@ -34669,7 +34786,7 @@
 					setTimeout( () => location.reload(), 600 );
 					return;
 				}
-				toast( __( 'Profile updated' ) + langNote );
+				toast( langPackInstalled ? __( 'Profile updated — language pack installed' ) : __( 'Profile updated' ) );
 				// Repaint in the new language rather than asking for a
 				// reload. This re-renders the profile view, so it has to come
 				// after the toast and before the local copies below are read.
@@ -34712,7 +34829,7 @@
 		if ( copyBtn ) copyBtn.addEventListener( 'click', () => copyText( p.newAppPassword.password, __( 'Password copied' ) ) );
 		const curlBtn = $( '#minn-app-copy-curl', view );
 		if ( curlBtn ) curlBtn.addEventListener( 'click', () => copyText(
-			`curl -u '${ B.user.login }:${ p.newAppPassword.password }' '${ B.restUrl }wp/v2/posts?per_page=5'`, 'curl example copied' ) );
+			`curl -u '${ B.user.login }:${ p.newAppPassword.password }' '${ B.restUrl }wp/v2/posts?per_page=5'`, __( 'curl example copied' ) ) );
 		$$( '[data-appdel]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				if ( ! confirm( __( 'Revoke this application password? Anything using it loses access immediately.' ) ) ) return;
