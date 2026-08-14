@@ -43,7 +43,7 @@ function minn_admin_wsal_admin_url() {
  */
 function minn_admin_wsal_status_model() {
 	global $wpdb;
-	$table = $wpdb->prefix . 'wsal_occurrences';
+	$table = $wpdb->base_prefix . 'wsal_occurrences';
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
@@ -176,7 +176,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_wsal_can_view',
 		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title ) {
 			global $wpdb;
-			$table    = $wpdb->prefix . 'wsal_occurrences';
+			$table    = $wpdb->base_prefix . 'wsal_occurrences';
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
 			$where    = array( 'site_id IN (0, %d)' );
@@ -233,8 +233,8 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_wsal_can_view',
 		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title ) {
 			global $wpdb;
-			$occ  = $wpdb->prefix . 'wsal_occurrences';
-			$meta = $wpdb->prefix . 'wsal_metadata';
+			$occ  = $wpdb->base_prefix . 'wsal_occurrences';
+			$meta = $wpdb->base_prefix . 'wsal_metadata';
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			// Scope to this site, exactly like the list route above. Without
 			// it, a subsite administrator on a network-activated install can

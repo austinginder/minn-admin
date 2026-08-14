@@ -223,6 +223,12 @@ add_action( 'rest_api_init', function () {
  * @return array[] of { label, status, detail }
  */
 function minn_admin_wordfence_checks() {
+	// The System page reads this directly at manage_options, which is per
+	// site on multisite. Firewall mode, scan age and unresolved-issue counts
+	// describe the network, so gate here rather than at the call site.
+	if ( ! Minn_Admin::network_owner() ) {
+		return array();
+	}
 	if ( ! defined( 'WORDFENCE_VERSION' ) ) {
 		return array();
 	}
