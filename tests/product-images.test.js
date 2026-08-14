@@ -188,6 +188,14 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			return f ? f.multiple : null;
 		} );
 		t.check( 'the picker browse input takes more than one file', takesMany === true, String( takesMany ) );
+		// A slow answer on purpose: an upload to a local server is over before
+		// a human could see it, and what is being checked is that the wait is
+		// legible while it lasts.
+		await page.route( '**/wp/v2/media**', async ( route ) => {
+			if ( route.request().method() !== 'POST' ) { await route.continue(); return; }
+			await new Promise( ( r ) => setTimeout( r, 1500 ) );
+			await route.continue();
+		} );
 		await page.evaluate( async ( name ) => {
 			const mk = async ( n, colour ) => {
 				const c = document.createElement( 'canvas' );
@@ -206,9 +214,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			Object.defineProperty( ev, 'dataTransfer', { value: dt } );
 			document.querySelector( '#minn-picker-drop' ).dispatchEvent( ev );
 		}, 'minnmulti-' + suffix );
+		await page.waitForSelector( '#minn-picker-upl', { timeout: 20000 } );
+		const progress = await page.evaluate( () => {
+			const el = document.querySelector( '#minn-picker-upl' );
+			return {
+				text: el ? el.textContent.replace( /\s+/g, ' ' ).trim() : '',
+				bar: !! document.querySelector( '#minn-picker-upl-fill' ),
+			};
+		} );
+		t.check( 'the picker names the file it is uploading, with a percentage',
+			/minnmulti/.test( progress.text ) && /%/.test( progress.text ) && progress.bar,
+			JSON.stringify( progress ) );
+		t.check( 'and counts the file against the batch', /\b2\b/.test( progress.text ), progress.text );
 		await page.waitForFunction(
 			() => document.querySelectorAll( '.minn-picker-item.sel' ).length >= 2,
 			null, { timeout: 40000 } ).catch( () => null );
+		await page.unroute( '**/wp/v2/media**' );
+		t.check( 'the readout goes away when the batch is done',
+			! ( await page.$( '#minn-picker-upl' ) ), '' );
 		const selCount = await page.evaluate( () => document.querySelectorAll( '.minn-picker-item.sel' ).length );
 		t.check( 'both dropped files upload and come back selected', selCount === 2, String( selCount ) );
 		await page.click( '#minn-picker-done' );

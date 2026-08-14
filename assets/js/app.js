@@ -33357,6 +33357,18 @@
 							: sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) + ' ' + esc( __( '(it’s used right away)' ) ) }</span>
 						<input type="file" id="minn-picker-file" accept="image/*"${ m.multi ? ' multiple' : '' } hidden>
 					</div>` : '' }
+					${ m.upload ? `
+					<div class="minn-upl" id="minn-picker-upl">
+						<div class="minn-upl-row">
+							<span class="minn-cell-clip" id="minn-picker-upl-name">${ esc( m.upload.name ) }</span>
+							<span class="minn-upl-pct" id="minn-picker-upl-pct">${ esc( percentLabel( m.upload.pct ) ) }</span>
+						</div>
+						<div class="minn-upl-bar"><span id="minn-picker-upl-fill" style="width:${ Math.max( 2, m.upload.pct || 0 ) }%"></span></div>
+						${ m.upload.total > 1 ? `<div class="minn-upl-count">${ sprintf(
+			/* translators: 1: the file being uploaded, 2: how many files in all. */
+			esc( __( 'File %1$s of %2$s' ) ), esc( formattedNumber( m.upload.index ) ), esc( formattedNumber( m.upload.total ) )
+		) }</div>` : '' }
+					</div>` : '' }
 					${ items == null ? `<div class="minn-loading">${ esc( any ? __( 'Loading files…' ) : __( 'Loading images…' ) ) }</div>` : ! items.length ? `<div class="minn-empty">${ esc( any ? __( 'No files in the library yet.' ) : __( 'No images in the library yet.' ) ) }</div>` : `
 					<div class="minn-picker-grid${ any ? ' any' : '' }">
 						${ items.map( ( it, i ) => it.thumb
@@ -34103,10 +34115,23 @@
 			const drop = $( '#minn-picker-drop' );
 			if ( drop ) {
 				const fileInput = $( '#minn-picker-file' );
-				const uploadOne = async ( file ) => {
-					const fd = new FormData();
-					fd.append( 'file', file );
-					const up = await api( 'wp/v2/media', { method: 'POST', body: fd } );
+				// Progress patches the readout in place. A re-render per
+				// percent would rebuild the whole modal (and lose the grid's
+				// scroll) sixty times a file; renderOverlays runs only when
+				// the readout is not on screen yet.
+				const showProgress = ( name, index, total, pct ) => {
+					m.upload = { name, index, total, pct };
+					const fill = $( '#minn-picker-upl-fill' );
+					const pctEl = $( '#minn-picker-upl-pct' );
+					const nameEl = $( '#minn-picker-upl-name' );
+					if ( ! fill || ! pctEl || ! nameEl ) { renderOverlays(); return; }
+					fill.style.width = Math.max( 2, pct ) + '%';
+					pctEl.textContent = percentLabel( pct );
+					nameEl.textContent = name;
+				};
+				const uploadOne = async ( file, index, total ) => {
+					showProgress( file.name, index, total, 0 );
+					const up = await uploadMedia( file, ( pct ) => showProgress( file.name, index, total, pct ) );
 					state.cache.media = null; // library changed
 					const sizes = up.media_details && up.media_details.sizes;
 					return {
@@ -34133,7 +34158,7 @@
 					toast( __( 'Uploading…' ) );
 					try {
 						if ( ! m.multi ) {
-							const it = await uploadOne( list[ 0 ] );
+							const it = await uploadOne( list[ 0 ], 1, 1 );
 							const cb = m.callback;
 							closeModal();
 							if ( cb ) cb( it );
@@ -34142,12 +34167,16 @@
 						}
 						let done = 0;
 						for ( const file of list ) {
-							const it = await uploadOne( file );
+							const it = await uploadOne( file, done + 1, list.length );
 							// Newest first, and picked, so the gallery grows in
 							// the order the files were handed over.
 							m.items.unshift( it );
 							m.picked.push( it.id );
 							done++;
+							// The readout stays up between files: the batch is
+							// not finished, and a gap would read as one.
+							if ( done < list.length ) m.upload = { name: file.name, index: done + 1, total: list.length, pct: 0 };
+							else m.upload = null;
 							renderOverlays();
 							// The re-render replaced the zone, so the busy mark
 							// goes back on the new one while files remain.
@@ -34159,6 +34188,9 @@
 					} catch ( e ) {
 						toast( e.message, true );
 						drop.classList.remove( 'minn-busy' );
+					} finally {
+						// However it ended, nothing is uploading now.
+						if ( m.upload ) { m.upload = null; renderOverlays(); }
 					}
 				};
 				drop.addEventListener( 'click', () => fileInput.click() );
@@ -36838,6 +36870,62 @@
 				killAll.disabled = false;
 			}
 		} );
+	}
+
+	/**
+	 * Upload one file to the media library, reporting how much of it has gone
+	 * out. This is the one place in the app that uses XMLHttpRequest rather
+	 * than fetch, and the reason is exactly that: fetch cannot report REQUEST
+	 * progress, so a fetch upload can only say "working" and never "62%".
+	 *
+	 * It carries the same nonce api() does, and on a stale one it refreshes and
+	 * retries once, matching apiRes rather than failing a session that is fine.
+	 */
+	function uploadMedia( file, onProgress, retried ) {
+		return new Promise( ( resolve, reject ) => {
+			const fd = new FormData();
+			fd.append( 'file', file );
+			const xhr = new XMLHttpRequest();
+			xhr.open( 'POST', B.restUrl + 'wp/v2/media' );
+			xhr.setRequestHeader( 'X-WP-Nonce', B.nonce );
+			xhr.withCredentials = true;
+			xhr.upload.addEventListener( 'progress', ( e ) => {
+				if ( ! e.lengthComputable || ! onProgress ) return;
+				onProgress( Math.min( 100, Math.round( ( e.loaded / e.total ) * 100 ) ) );
+			} );
+			// The bytes are out but WordPress is still cutting thumbnails, so
+			// the bar rests at 100 while it works instead of stalling at 99.
+			xhr.upload.addEventListener( 'load', () => { if ( onProgress ) onProgress( 100 ); } );
+			xhr.addEventListener( 'load', async () => {
+				let body = null;
+				try { body = JSON.parse( xhr.responseText ); } catch ( e ) { /* not JSON */ }
+				if ( xhr.status >= 200 && xhr.status < 300 ) { resolve( body ); return; }
+				if ( body && body.code === 'rest_cookie_invalid_nonce' && ! retried && B.ajaxUrl ) {
+					try {
+						await refreshRestNonce();
+					} catch ( e ) {
+						sessionExpiredReload();
+						reject( new Error( __( 'Your session expired.' ) ) );
+						return;
+					}
+					uploadMedia( file, onProgress, true ).then( resolve, reject );
+					return;
+				}
+				reject( new Error( body && body.message ? stripTags( body.message ) : xhr.status + ' ' + xhr.statusText ) );
+			} );
+			xhr.addEventListener( 'error', () => reject( new Error( __( 'Upload failed' ) ) ) );
+			xhr.send( fd );
+		} );
+	}
+
+	// A percentage in the user's locale: the sign is not always trailing, and
+	// this is read while a bar fills, so it has to be a number they recognise.
+	function percentLabel( pct ) {
+		try {
+			return new Intl.NumberFormat( uiLocale(), { style: 'percent' } ).format( ( pct || 0 ) / 100 );
+		} catch ( e ) {
+			return ( pct || 0 ) + '%';
+		}
 	}
 
 	function openMediaPicker( callback, opts = {} ) {

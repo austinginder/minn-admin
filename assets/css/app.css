@@ -1573,6 +1573,16 @@ button.minn-ac-item.minn-ac-check { display: flex; align-items: center; gap: 9px
 .minn-ac-foot { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
 button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; color: var(--accent2); font-weight: 600; }
 .minn-ac-add svg { width: 14px; height: 14px; }
+/* Upload readout: which file, how far, and where it sits in the batch. Outside
+   the drop zone on purpose — the zone dims while it is busy, and the one thing
+   worth reading must not dim with it. */
+.minn-upl { margin: 0 0 10px; padding: 9px 12px; border: 1px solid var(--border2); border-radius: 10px; background: var(--panel2); }
+.minn-upl-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text2); }
+.minn-upl-row > .minn-cell-clip { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.minn-upl-pct { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
+.minn-upl-bar { margin-top: 7px; height: 4px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.minn-upl-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.15s ease; }
+.minn-upl-count { margin-top: 6px; font-size: 12px; color: var(--text3); }
 /* A field waiting on the server says so where its chevron sits: the same
    16px slot, so nothing moves when the answer lands. */
 .minn-ac.is-loading > .minn-ac-input { background-image: none; }
