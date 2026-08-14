@@ -7331,8 +7331,8 @@
 	// Linked products are stored as bare ids, so the names have to be looked
 	// up separately before anything can be drawn.
 	const PRODUCT_LINK_FIELDS = [
-		{ key: 'upsell_ids', label: 'Upsells', hint: __( 'Shown on this product’s page as something to consider instead.' ) },
-		{ key: 'cross_sell_ids', label: 'Cross-sells', hint: __( 'Offered in the cart alongside this product.' ) },
+		{ key: 'upsell_ids', label: __( 'Upsells' ), hint: __( 'Shown on this product’s page as something to consider instead.' ) },
+		{ key: 'cross_sell_ids', label: __( 'Cross-sells' ), hint: __( 'Offered in the cart alongside this product.' ) },
 	];
 
 	function seedProductLinks( m, names ) {
@@ -7349,9 +7349,9 @@
 	// The Organization card's taxonomies. A store without brands answers with
 	// no `brands` key at all, which is how that field knows to stay away.
 	const PRODUCT_TERM_FIELDS = [
-		{ key: 'categories', label: 'Categories', route: 'products/categories', create: false, placeholder: __( 'Search categories…' ) },
-		{ key: 'tags', label: 'Tags', route: 'products/tags', create: true, placeholder: __( 'Add a tag, press Enter' ) },
-		{ key: 'brands', label: 'Brands', route: 'products/brands', create: true, placeholder: __( 'Add a brand, press Enter' ) },
+		{ key: 'categories', label: __( 'Categories' ), route: 'products/categories', create: false, placeholder: __( 'Search categories…' ) },
+		{ key: 'tags', label: __( 'Tags' ), route: 'products/tags', create: true, placeholder: __( 'Add a tag, press Enter' ) },
+		{ key: 'brands', label: __( 'Brands' ), route: 'products/brands', create: true, placeholder: __( 'Add a brand, press Enter' ) },
 	];
 
 	// Downloadable files ride the model too. WooCommerce mints the id for a new
@@ -7470,6 +7470,16 @@
 		const st = labels[ p.stock_status ] || statusLabel( p.stock_status || 'instock' );
 		if ( p.manage_stock && p.stock_quantity != null ) return `${ st } (${ p.stock_quantity })`;
 		return st;
+	}
+
+	function productTypeLabel( type ) {
+		const labels = {
+			simple: __( 'Simple product' ), grouped: __( 'Grouped product' ),
+			external: __( 'External or affiliate product' ), variable: __( 'Variable product' ),
+			subscription: __( 'Subscription' ),
+			'variable-subscription': `${ __( 'Variable product' ) } · ${ __( 'Subscription' ) }`,
+		};
+		return labels[ type ] || type || labels.simple;
 	}
 
 	function productMatchesFilters( p ) {
@@ -7722,8 +7732,8 @@
 								<div class="minn-order-fields">
 									<div><div class="minn-field-label">${ esc( __( 'Name' ) ) }</div><input class="minn-input" id="minn-p-name" value="${ esc( p.name || '' ) }"></div>
 									${ combo( 'minn-p-type' ) }
-									${ productToggleHtml( 'minn-p-virtual', 'Virtual', !! p.virtual ) }
-									${ productToggleHtml( 'minn-p-downloadable', 'Downloadable', !! p.downloadable ) }
+									${ productToggleHtml( 'minn-p-virtual', __( 'Virtual' ), !! p.virtual ) }
+									${ productToggleHtml( 'minn-p-downloadable', __( 'Downloadable' ), !! p.downloadable ) }
 									${ combo( 'minn-p-status' ) }
 									${ combo( 'minn-p-vis' ) }
 								</div>` : `
@@ -7758,7 +7768,7 @@
 								<div class="minn-modal-meta" style="padding:0;">
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Price' ) ) }</span><span>${ productPriceLabel( p ) }</span></div>
 									<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Stock' ) ) }</span><span>${ esc( productStockLabel( p ) ) }</span></div>
-									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">${ p.type ? sprintf( /* translators: %s: the product type (e.g. "variable"). */ esc( __( 'Price and stock for %s products are managed in WooCommerce (variations or grouped children).' ) ), esc( p.type ) ) : esc( __( 'Price and stock for this type of product are managed in WooCommerce (variations or grouped children).' ) ) }</div>` : '' }
+									${ ! priceOk ? `<div class="minn-toggle-desc" style="margin-top:8px;">${ p.type ? sprintf( /* translators: %s: the localized product type (e.g. "Variable product"). */ esc( __( 'Price and stock for %s products are managed in WooCommerce (variations or grouped children).' ) ), esc( productTypeLabel( p.type ) ) ) : esc( __( 'Price and stock for this type of product are managed in WooCommerce (variations or grouped children).' ) ) }</div>` : '' }
 								</div>` }
 							</div>
 							${ canEdit ? `
@@ -7889,12 +7899,12 @@
 						${ canEdit ? `
 						<div class="minn-media-edit minn-order-status">
 							<button class="minn-btn-primary" id="minn-product-save" type="button">${ esc( __( 'Save changes' ) ) }</button>
-							<div class="minn-toggle-desc" style="margin-top:8px;">Saves basics, inventory${ priceOk ? ', pricing' : '' }${ shipOk ? ', shipping' : '' } and the short description.</div>
+							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Saves the fields on this page and the short description.' ) ) }</div>
 						</div>` : '' }
 					</div>
 					<div class="minn-modal-actions">
 						${ p.permalink ? `<a class="minn-btn-soft" href="${ esc( p.permalink ) }" target="_blank" rel="noopener">↗ ${ esc( __( 'View product' ) ) }</a>` : '' }
-						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } Edit description</button>` : '' }
+						${ B.caps.products ? `<button class="minn-btn-soft" type="button" id="minn-p-editor">${ icon( 'pilcrow' ) } ${ esc( __( 'Edit description' ) ) }</button>` : '' }
 						<a class="minn-btn-soft" href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">↗ ${ esc( __( 'Edit in WooCommerce' ) ) }</a>
 					</div>`;
 	}
@@ -7913,16 +7923,16 @@
 			{ id: 'minn-p-type', label: __( 'Product type' ), value: p.type || 'simple', options: [
 				[ 'simple', __( 'Simple product' ) ], [ 'grouped', __( 'Grouped product' ) ],
 				[ 'external', __( 'External or affiliate product' ) ], [ 'variable', __( 'Variable product' ) ] ] },
-			{ id: 'minn-p-status', label: 'Status', value: p.status || 'publish', options: [
-				[ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', __( 'Pending review' ) ] ] },
+			{ id: 'minn-p-status', label: __( 'Status' ), value: p.status || 'publish', options: [
+				[ 'publish', __( 'Published' ) ], [ 'draft', __( 'Draft' ) ], [ 'private', __( 'Private' ) ], [ 'pending', __( 'Pending review' ) ] ] },
 			{ id: 'minn-p-vis', label: __( 'Catalog visibility' ), value: p.catalog_visibility || 'visible', options: [
-				[ 'visible', __( 'Shop and search results' ) ], [ 'catalog', __( 'Shop only' ) ], [ 'search', __( 'Search results only' ) ], [ 'hidden', 'Hidden' ] ] },
+				[ 'visible', __( 'Shop and search results' ) ], [ 'catalog', __( 'Shop only' ) ], [ 'search', __( 'Search results only' ) ], [ 'hidden', __( 'Hidden' ) ] ] },
 			{ id: 'minn-p-stock', label: __( 'Stock status' ), value: p.stock_status || 'instock', options: [
 				[ 'instock', __( 'In stock' ) ], [ 'outofstock', __( 'Out of stock' ) ], [ 'onbackorder', __( 'On backorder' ) ] ] },
-			{ id: 'minn-p-backorders', label: 'Backorders', value: p.backorders || 'no', options: [
-				[ 'no', __( 'Do not allow' ) ], [ 'notify', __( 'Allow, but notify customer' ) ], [ 'yes', 'Allow' ] ] },
+			{ id: 'minn-p-backorders', label: __( 'Backorders' ), value: p.backorders || 'no', options: [
+				[ 'no', __( 'Do not allow' ) ], [ 'notify', __( 'Allow, but notify customer' ) ], [ 'yes', __( 'Allow' ) ] ] },
 			{ id: 'minn-p-taxstatus', label: __( 'Tax status' ), value: p.tax_status || 'taxable', options: [
-				[ 'taxable', 'Taxable' ], [ 'shipping', __( 'Shipping only' ) ], [ 'none', 'None' ] ] },
+				[ 'taxable', __( 'Taxable' ) ], [ 'shipping', __( 'Shipping only' ) ], [ 'none', __( 'None' ) ] ] },
 			// WooCommerce stores the standard tax class as an empty string.
 			{ id: 'minn-p-taxclass', label: __( 'Tax class' ), value: p.tax_class || '', options:
 				taxClasses.map( ( tc ) => [ tc.slug === 'standard' ? '' : tc.slug, tc.name ] ) },
@@ -8600,13 +8610,13 @@
 		}
 		const p = m.full || m.product;
 		const loading = !! m.loading && ! m.full;
-		const sub = `${ p.type || 'simple' }${ p.sku ? ' · SKU ' + p.sku : '' }${ p.id ? ' · #' + p.id : '' }`;
+		const sub = `${ productTypeLabel( p.type ) }${ p.sku ? ' · SKU ' + p.sku : '' }${ p.id ? ' · #' + p.id : '' }`;
 		view.innerHTML = `
 		<div class="minn-order-page">
 			<div class="minn-order-page-head">
 				<button type="button" class="minn-btn-soft" id="minn-pp-back">← ${ esc( __( 'Products' ) ) }</button>
 				<div class="minn-modal-title-block">
-					<div class="minn-modal-title">${ esc( p.name || 'Product' ) }</div>
+					<div class="minn-modal-title">${ esc( p.name || __( 'Product' ) ) }</div>
 					<div class="minn-modal-sub">${ loading ? esc( __( 'Loading…' ) ) : esc( sub ) }</div>
 				</div>
 				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span>` : '' }
@@ -8713,7 +8723,7 @@
 						${ productThumb( p ) }
 						<div>
 							<div class="minn-row-title">${ esc( p.name || 'Untitled' ) }</div>
-							<div class="minn-row-slug">${ esc( p.type || 'simple' ) }${ p.categories && p.categories[ 0 ] ? ' · ' + esc( p.categories[ 0 ].name ) : '' }</div>
+							<div class="minn-row-slug">${ esc( productTypeLabel( p.type ) ) }${ p.categories && p.categories[ 0 ] ? ' · ' + esc( p.categories[ 0 ].name ) : '' }</div>
 						</div>
 					</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( p.sku || '—' ) }</div>
@@ -30495,13 +30505,13 @@
 			const listP = m.product || {};
 			const p = m.full || listP;
 			const loading = !! m.loading && ! m.full;
-			const sub = `${ p.type || 'simple' }${ p.sku ? ' · SKU ' + p.sku : '' }${ p.id ? ' · #' + p.id : '' }`;
+			const sub = `${ productTypeLabel( p.type ) }${ p.sku ? ' · SKU ' + p.sku : '' }${ p.id ? ' · #' + p.id : '' }`;
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">${ esc( p.name || listP.name || 'Product' ) }</div>
+							<div class="minn-modal-title">${ esc( p.name || listP.name || __( 'Product' ) ) }</div>
 							<div class="minn-modal-sub">${ esc( sub ) }</div>
 						</div>
 						<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( statusLabel( p.status ) ) }</span>
