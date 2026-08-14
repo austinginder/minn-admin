@@ -871,7 +871,10 @@
 		},
 	};
 
-	const TITLES = {
+	// Built on each call so a language switch without a reload picks up
+	// the new catalog. A const map would keep the first paint's language
+	// in the topbar forever (Account / Your profile, Users / People).
+	const titles = () => ( {
 		overview: [ __( 'Overview' ), __( 'Dashboard' ) ],
 		// Sub is dynamic — contentTopbarSub() names the active filter / type set.
 		content: [ __( 'Content' ), '' ],
@@ -896,7 +899,7 @@
 		database: [ __( 'Database' ), __( 'Read-only viewer' ) ],
 		editor: [ __( 'Editor' ), __( 'Draft' ) ],
 		profile: [ __( 'Your profile' ), __( 'Account' ) ],
-	};
+	} );
 
 	// Topbar badge for Content: names the active type filter (or Trash), and
 	// when "All" is selected it reflects the real roster (posts + pages +
@@ -1475,7 +1478,7 @@
 		// If the open view is a surface that just vanished, leave it.
 		const stillThere = !! surfaceById( state.route );
 		const wasSurface = prevIds.has( state.route )
-			|| ( ! TITLES[ state.route ] && state.route !== 'editor' && ! String( state.route ).startsWith( 'editor/' ) );
+			|| ( ! titles()[ state.route ] && state.route !== 'editor' && ! String( state.route ).startsWith( 'editor/' ) );
 		if ( wasSurface && ! stillThere && state.route !== 'extensions' ) {
 			// Prefer staying in Extensions if the user just toggled from there;
 			// otherwise drop to Overview rather than a blank/error view.
@@ -1531,10 +1534,18 @@
 			<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( __( 'Page' ) ) }</button>
 			<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ esc( __( 'Pattern' ) ) }</button>
 			${ builderRows }`;
-		const r = btn.getBoundingClientRect();
-		menu.style.top = ( r.bottom + 6 ) + 'px';
-		menu.style.right = Math.max( 8, window.innerWidth - r.right ) + 'px';
 		document.body.appendChild( menu );
+		const r = btn.getBoundingClientRect();
+		const width = Math.max( menu.offsetWidth, 150 );
+		// The New button lives at the inline-end of the topbar, so it sits
+		// on the right in LTR and the left in RTL. Pin the menu to that
+		// outer edge and let it grow inward; aligning to inline-start
+		// overflows the viewport once the button itself has flipped.
+		const pinToRight = r.left + r.width / 2 > window.innerWidth / 2;
+		menu.style.top = ( r.bottom + 6 ) + 'px';
+		menu.style.left = ( pinToRight
+			? Math.max( 10, Math.min( r.right - width, window.innerWidth - width - 10 ) )
+			: Math.max( 10, Math.min( r.left, window.innerWidth - width - 10 ) ) ) + 'px';
 		$$( 'button[data-newtype]', menu ).forEach( ( b ) =>
 			b.addEventListener( 'click', () => {
 				menu.remove();
@@ -1604,7 +1615,7 @@
 			// /users/123 — the full-page user editor (GH #8).
 			state.userEditId = parseInt( parts[ 1 ], 10 );
 			state.route = 'useredit';
-		} else if ( TITLES[ route ] || surfaceById( route ) ) {
+		} else if ( titles()[ route ] || surfaceById( route ) ) {
 			state.route = route;
 		} else {
 			state.route = 'overview';
@@ -2251,6 +2262,30 @@
 	// Rebuild all nav groups from the current B.surfaces without wiping
 	// #minn-view — used after plugin activate/deactivate. Empty groups keep
 	// their (hidden) wrapper so a later toggle has somewhere to land.
+	// Chrome painted once at boot (Search, New, a handful of titles) is not
+	// rebuilt by renderView. Refresh those nodes from the live catalog so a
+	// language switch does not leave an English shell around a translated page.
+	function refreshShellI18n() {
+		const search = document.querySelector( '#minn-open-palette span:not(.minn-kbd)' );
+		if ( search ) search.textContent = __( 'Search…' );
+		const newBtn = $( '#minn-new-btn' );
+		if ( newBtn ) {
+			newBtn.setAttribute( 'aria-label', __( 'New post' ) );
+			newBtn.innerHTML = `${ icon( 'plus' ) } ${ esc( __( 'New' ) ) }`;
+		}
+		const logo = $( '#minn-logo-home' );
+		if ( logo ) logo.title = __( 'Overview' );
+		const siteSwitch = $( '#minn-site-switch' );
+		if ( siteSwitch ) {
+			siteSwitch.title = __( 'Switch site' );
+			siteSwitch.setAttribute( 'aria-label', __( 'Switch site' ) );
+		}
+		const nav = document.querySelector( '.minn-nav-scroll' );
+		if ( nav ) nav.setAttribute( 'aria-label', __( 'Main navigation' ) );
+		const userArea = $( '#minn-user-area' );
+		if ( userArea ) userArea.title = __( 'Your account' );
+	}
+
 	/**
 	 * Repaint the whole app in a language the user just chose, without a
 	 * reload.
@@ -2296,6 +2331,7 @@
 		B.rtl    = !! p.rtl;
 
 		applyCatalog( p.i18n, p.i18nPlural );
+		refreshShellI18n();
 
 		const root = document.documentElement;
 		root.setAttribute( 'lang', String( p.locale || '' ).replace( '_', '-' ) );
@@ -2334,6 +2370,19 @@
 			ordersHidden: $( '#minn-orders-count' )?.hidden,
 			dotHidden: $( '#minn-plugin-dot' )?.hidden,
 		};
+		const groupLabels = {
+			workspace: __( 'Workspace' ),
+			tools: __( 'Tools' ),
+			manage: __( 'Manage' ),
+			network: __( 'Network' ),
+		};
+		Object.keys( groupLabels ).forEach( ( key ) => {
+			const btn = document.querySelector( '[data-navgroup="' + key + '"]' );
+			if ( ! btn ) return;
+			const chev = btn.querySelector( 'svg' );
+			btn.textContent = groupLabels[ key ];
+			if ( chev ) btn.appendChild( chev );
+		} );
 		[ [ 'workspace', workspaceNavItems() ], [ 'tools', toolsNavItems() ], [ 'manage', manageNavItems() ], [ 'network', networkNavItems() ] ].forEach( ( [ key, items ] ) => {
 			const body = $( '#minn-nav-' + key );
 			if ( ! body ) return;
@@ -2537,7 +2586,7 @@
 
 	function renderTopbar() {
 		const surface = surfaceById( state.route );
-		const [ title, sub ] = surface ? [ surface.label, surface.sub || '' ] : ( TITLES[ state.route ] || [ 'minn', '' ] );
+		const [ title, sub ] = surface ? [ surface.label, surface.sub || '' ] : ( titles()[ state.route ] || [ 'minn', '' ] );
 		$( '#minn-title' ).textContent = title;
 		updateVisChip();
 		const subEl = $( '#minn-sub' );
@@ -9732,17 +9781,17 @@
 	// WP REST users orderby enum: id, name, email, registered_date, slug, url…
 	// Role is not sortable server-side (WP_User_Query has no roles orderby).
 	const USER_SORT_COLS = {
-		id: { orderby: 'id', label: 'ID', defaultOrder: 'asc' },
-		name: { orderby: 'name', label: 'Name', defaultOrder: 'asc' },
-		email: { orderby: 'email', label: 'Email', defaultOrder: 'asc' },
-		registered: { orderby: 'registered_date', label: 'Registered', defaultOrder: 'desc' },
+		id: { orderby: 'id', label: () => __( 'ID' ), defaultOrder: 'asc' },
+		name: { orderby: 'name', label: () => __( 'Name' ), defaultOrder: 'asc' },
+		email: { orderby: 'email', label: () => __( 'Email' ), defaultOrder: 'asc' },
+		registered: { orderby: 'registered_date', label: () => __( 'Registered' ), defaultOrder: 'desc' },
 	};
 
 	// Session status from session_tokens meta (server classifies non-expired vs
 	// all-expired vs empty). Core wp/v2/users can't filter this; Minn's
 	// /users endpoint does when session !== all.
-	const USER_SESSION_TABS = [
-		[ 'all', 'All' ],
+	const USER_SESSION_TABS = () => [
+		[ 'all', __( 'All' ) ],
 		[ 'active', __( 'Active session' ) ],
 		[ 'expired', __( 'Expired session' ) ],
 		[ 'never', __( 'Never signed in' ) ],
@@ -9797,8 +9846,9 @@
 		const mark = active ? ( order === 'asc' ? ' ↑' : ' ↓' ) : '';
 		// aria-sort only belongs on real columnheaders; these grid headers
 		// carry the sort state in the button's accessible name instead.
-		const label = sortButtonLabel( col.label, active, order );
-		return `<button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-usort="${ esc( key ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ esc( col.label ) }${ mark }</button>`;
+		const colLabel = typeof col.label === 'function' ? col.label() : col.label;
+		const label = sortButtonLabel( colLabel, active, order );
+		return `<button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-usort="${ esc( key ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ esc( colLabel ) }${ mark }</button>`;
 	}
 
 	let userSearchTimer = null;
@@ -9855,7 +9905,7 @@
 			</div>
 			<div class="minn-toolbar minn-toolbar-filters">
 				<div class="minn-tabs minn-ext-filters" role="group" aria-label="${ esc( __( 'Session filter' ) ) }">
-					${ USER_SESSION_TABS.map( ( [ id, label ] ) =>
+					${ USER_SESSION_TABS().map( ( [ id, label ] ) =>
 						`<button type="button" class="minn-tab${ userSessionEarly === id ? ' active' : '' }" data-usess="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 				</div>
 			</div>
@@ -9896,12 +9946,12 @@
 			</div>` : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-user-search" placeholder="${ esc( __( 'Search users…' ) ) }" value="${ esc( state.userSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'user' ) }</div>
-			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } Add user</button>` : '' }
-			${ B.multisite && B.caps.promoteUsers ? `<button class="minn-btn-soft" id="minn-add-existing-user" style="margin-left:0;" title="${ esc( __( 'Attach an account that already exists on this network' ) ) }">${ icon( 'plus' ) } Add existing user</button>` : '' }
+			${ B.caps.createUsers ? `<button class="minn-btn-soft" id="minn-add-user" style="margin-left:0;">${ icon( 'plus' ) } ${ esc( __( 'Add user' ) ) }</button>` : '' }
+			${ B.multisite && B.caps.promoteUsers ? `<button class="minn-btn-soft" id="minn-add-existing-user" style="margin-left:0;" title="${ esc( __( 'Attach an account that already exists on this network' ) ) }">${ icon( 'plus' ) } ${ esc( __( 'Add existing user' ) ) }</button>` : '' }
 		</div>
 		<div class="minn-toolbar minn-toolbar-filters">
 			<div class="minn-tabs minn-ext-filters" role="group" aria-label="${ esc( __( 'Session filter' ) ) }">
-				${ USER_SESSION_TABS.map( ( [ id, label ] ) =>
+				${ USER_SESSION_TABS().map( ( [ id, label ] ) =>
 					`<button type="button" class="minn-tab${ userSession === id ? ' active' : '' }" data-usess="${ esc( id ) }">${ esc( label ) }</button>` ).join( '' ) }
 			</div>
 		</div>
@@ -9924,7 +9974,7 @@
 					<div class="minn-row-meta minn-user-id">#${ esc( String( u.id ) ) }</div>
 					<div class="minn-row-title minn-cell-clip">${ esc( u.name ) }</div>
 					<div class="minn-row-meta minn-cell-clip">${ esc( u.email || '—' ) }</div>
-					<div class="minn-row-meta">${ esc( ( u.roles || [] ).map( ( r ) => r.charAt( 0 ).toUpperCase() + r.slice( 1 ) ).join( ', ' ) || '—' ) }</div>
+					<div class="minn-row-meta">${ esc( ( u.roles || [] ).map( ( r ) => ( B.roles && B.roles[ r ] ) || r ).join( ', ' ) || '—' ) }</div>
 					<div class="minn-row-meta">${ u.registered_date ? timeAgo( u.registered_date ) : '—' }</div>
 					<div class="minn-row-actions">
 						<button type="button" class="minn-row-more" title="${ esc( __( 'Actions' ) ) }" aria-label="${ esc( __( 'User actions' ) ) }">⋯</button>

@@ -57,9 +57,17 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-nav-btn', { timeout: 15000 } );
 		let s = await shellState();
-		t.check( 'Empty catalog serves as {}', s.i18nKeys === 0 );
-		t.check( 'Baseline nav is English', /Overview/.test( s.overview ) && /Content/.test( s.content ) );
-		t.check( 'Baseline group + search are English', /Workspace/.test( s.group ) && /Search…/.test( s.search ) );
+		const locale = await page.evaluate( () => window.MINN.locale || 'en_US' );
+		const realCatalog = locale !== 'en_US';
+		t.check( realCatalog ? `User catalog is loaded (${ locale })` : 'Empty catalog serves as {}',
+			realCatalog ? s.i18nKeys > 0 : s.i18nKeys === 0 );
+		if ( ! realCatalog ) {
+			t.check( 'Baseline nav is English', /Overview/.test( s.overview ) && /Content/.test( s.content ) );
+			t.check( 'Baseline group + search are English', /Workspace/.test( s.group ) && /Search…/.test( s.search ) );
+		} else {
+			t.check( 'Baseline nav is present', !! s.overview && !! s.content );
+			t.check( 'Baseline group + search are present', !! s.group && !! s.search );
+		}
 
 		// Armed: fixture strings flow through the filter into the shell.
 		t.check( 'Fixture option armed', await setOpt( '1' ) );
@@ -70,6 +78,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Nav labels translate', /Übersicht/.test( s.overview ) && /Inhalte/.test( s.content ) );
 		t.check( 'Group label translates', /Arbeitsbereich/.test( s.group ) );
 		t.check( 'Search placeholder translates', /Suchen…/.test( s.search ) );
+		t.check( 'New button translates', await page.evaluate(
+			() => /Neu/.test( ( document.querySelector( '#minn-new-btn' ) || {} ).textContent || '' )
+		) );
 		t.check( 'Topbar title translates (TITLES map)', await page.evaluate(
 			() => /Übersicht/.test( ( document.querySelector( '#minn-title' ) || {} ).textContent || '' )
 		) );
@@ -87,6 +98,40 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Plural entry renders via _n + sprintf', await page.evaluate(
 			() => /\d+ Typen/.test( ( document.querySelector( '#minn-sub' ) || {} ).textContent || '' )
 		) );
+
+		await page.click( '.minn-nav-btn[data-nav="users"]' );
+		await page.waitForSelector( '#minn-add-user, .minn-user-cols', { timeout: 20000 } );
+		t.check( 'Users topbar title translates', await page.evaluate(
+			() => /Benutzer/.test( ( document.querySelector( '#minn-title' ) || {} ).textContent || '' )
+				&& /Personen/.test( ( document.querySelector( '#minn-sub' ) || {} ).textContent || '' )
+		) );
+		t.check( 'Add user and column headers translate', await page.evaluate( () => {
+			const add = ( document.querySelector( '#minn-add-user' ) || {} ).textContent || '';
+			const head = ( document.querySelector( '.minn-user-cols' ) || {} ).textContent || '';
+			return /Benutzer hinzufügen/.test( add ) && /Registriert/.test( head ) && /E-Mail/.test( head );
+		} ) );
+
+		// The New menu must sit under the button in RTL. The old path set
+		// style.right from the button's distance to the right edge, which
+		// parked the menu on the opposite side of the screen.
+		await page.evaluate( () => document.documentElement.setAttribute( 'dir', 'rtl' ) );
+		await page.click( '#minn-new-btn' );
+		await page.waitForSelector( '#minn-new-menu', { timeout: 5000 } );
+		t.check( 'New menu anchors to the button in RTL', await page.evaluate( () => {
+			const btn = document.querySelector( '#minn-new-btn' );
+			const menu = document.querySelector( '#minn-new-menu' );
+			if ( ! btn || ! menu ) return false;
+			const b = btn.getBoundingClientRect();
+			const m = menu.getBoundingClientRect();
+			const pinToRight = b.left + b.width / 2 > window.innerWidth / 2;
+			const aligned = pinToRight ? Math.abs( m.right - b.right ) < 24 : Math.abs( m.left - b.left ) < 24;
+			return aligned && m.top >= b.bottom - 2;
+		} ) );
+		await page.evaluate( () => {
+			document.documentElement.setAttribute( 'dir', 'ltr' );
+			const menu = document.querySelector( '#minn-new-menu' );
+			if ( menu ) menu.remove();
+		} );
 	} finally {
 		await setOpt( '' ).catch( () => {} );
 	}
@@ -95,7 +140,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '.minn-nav-btn', { timeout: 15000 } );
 	const s2 = await shellState();
-	t.check( 'Disarmed shell is English again', /Overview/.test( s2.overview ) && s2.i18nKeys === 0 );
+	const locale2 = await page.evaluate( () => window.MINN.locale || 'en_US' );
+	t.check( locale2 !== 'en_US' ? 'Disarmed fixture leaves the user catalog' : 'Disarmed shell is English again',
+		locale2 !== 'en_US' ? s2.i18nKeys > 0 : ( /Overview/.test( s2.overview ) && s2.i18nKeys === 0 ) );
 
 	await t.done( browser, errors );
 } )().catch( ( e ) => {
