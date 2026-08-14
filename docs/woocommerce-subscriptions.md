@@ -60,6 +60,25 @@ never validates a date the user did not open the dialog for. It enforces the ord
 `trial end ≤ next payment ≤ end` and rejects anything else with a 400, which surfaces as
 the error toast rather than as a silent no-op.
 
+**Coupons edit the set, not one coupon.** WooCommerce's `coupon_lines` is declarative: the
+array you PUT replaces every coupon on the record, sending an existing line's `id` is
+refused outright (`coupon_item_id_readonly`), and an empty array removes them all. The
+dialog therefore collects codes and sends codes, which is also why removal needs no
+special call.
+
+Nothing here does arithmetic. WooCommerce recalculates `discount_total`, the record total
+and the line totals on apply, and puts them back on removal; the dialog re-reads the record
+and repaints. It also owns the refusals, and they are better than anything we would write:
+*"only recurring coupons can be applied to subscriptions"*, *"not applicable to selected
+products"*, *"does not exist"*. They reach the user verbatim.
+
+The consequence worth knowing: a subscription takes recurring coupon types only
+(`recurring_percent`, `recurring_fee`), and only over products that are actually
+subscription products. A plain percent coupon is refused, correctly.
+
+Like items, the button appears only when WooCommerce says `is_editable`. That matches
+wp-admin, which hides its own Apply coupon on an order that is no longer editable.
+
 **Start date is deliberately read only.** Moving a live subscription's start rewrites the
 billing history hanging off it. It is shown in the dialog for reference and cannot be
 changed there. Making it editable is a decision to take on purpose, not a gap to fill.
@@ -121,7 +140,9 @@ their stacking, the attribution card, the status save, items editing asserted ag
 WooCommerce stored, schedule editing asserted as GMT against the site's own offset, the
 themed picker, related-order navigation with the Back trail it leaves, the quick view that
 opens an order without leaving the subscription, notes asserted as WooCommerce stored them
-(private and customer-visible), and the modal as Quick view.
+(private and customer-visible), coupons both ways (a recurring one applied over a real
+subscription product, a plain one refused in WooCommerce's words), and the modal as Quick
+view.
 `tests/subscription-filters.test.js` covers the list: each filter against the rows and the
 query string, the URL round trip, the start date column, and the GMT reading of a start
 date. `tests/wcs-subscriptions.test.js` covers the integration underneath both.
