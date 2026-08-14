@@ -2500,17 +2500,25 @@ class Minn_Admin_REST {
 		$traffic     = $can_traffic ? apply_filters( 'minn_admin_traffic', null, $days ) : null;
 		$traffic_out = null;
 
+		// Every stat carries a STABLE `key` alongside its label. The client
+		// used to map a card to its view by matching the label text, which
+		// works only while the label is English: the moment a locale ships,
+		// every overview card stops being a door. The key is what the client
+		// routes on; the label is free to be translated.
 		$stats = array(
 			array(
-				'label' => 'Published posts',
+				'key'   => 'posts',
+				'label' => __( 'Published posts', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $posts->publish ),
-				'delta' => (int) $posts->draft . ' draft' . ( 1 === (int) $posts->draft ? '' : 's' ),
+				/* translators: %s: number of draft posts. */
+				'delta' => sprintf( _n( '%s draft', '%s drafts', (int) $posts->draft, 'minn-admin' ), number_format_i18n( (int) $posts->draft ) ),
 				'up'    => null,
 			),
 			array(
-				'label' => 'Pages',
+				'key'   => 'pages',
+				'label' => __( 'Pages', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $pages->publish ),
-				'delta' => 'published',
+				'delta' => __( 'published', 'minn-admin' ),
 				'up'    => null,
 			),
 			// Many sites never use comments — an eternal zero is dead weight,
@@ -2521,20 +2529,25 @@ class Minn_Admin_REST {
 			// comments on the site should not learn the size of the user base,
 			// so fall back to the Comments card for them instead.
 			( 0 === (int) $comments->approved && 0 === (int) $comments->moderated && current_user_can( 'list_users' ) ) ? array(
-				'label' => 'Users',
+				'key'   => 'users',
+				'label' => __( 'Users', 'minn-admin' ),
 				'value' => number_format_i18n( self::user_count() ),
-				'delta' => 'registered',
+				'delta' => __( 'registered', 'minn-admin' ),
 				'up'    => null,
 			) : array(
-				'label' => 'Comments',
+				'key'   => 'comments',
+				'label' => __( 'Comments', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $comments->approved ),
-				'delta' => (int) $comments->moderated . ' pending',
+				/* translators: %s: number of comments awaiting moderation. */
+				'delta' => sprintf( __( '%s pending', 'minn-admin' ), number_format_i18n( (int) $comments->moderated ) ),
 				'up'    => (int) $comments->moderated > 0 ? 'warn' : null,
 			),
 			array(
-				'label' => 'Media files',
+				'key'   => 'media',
+				'label' => __( 'Media files', 'minn-admin' ),
 				'value' => number_format_i18n( (int) $media->inherit ),
-				'delta' => size_format( self::uploads_size(), 1 ) . ' used',
+				/* translators: %s: disk space used by uploads, already formatted. */
+				'delta' => sprintf( __( '%s used', 'minn-admin' ), size_format( self::uploads_size(), 1 ) ),
 				'up'    => null,
 			),
 		);
@@ -2638,14 +2651,17 @@ class Minn_Admin_REST {
 			$delta = $prev > 0 ? round( ( $visitors - $prev ) / $prev * 100, 1 ) : null;
 			// Always surface pageviews on the card; when a period delta exists
 			// it leads, with pageviews as a quiet second clause.
-			$views_bit = $compact( $pageviews ) . ' pageviews';
+			/* translators: %s: page-view count, already formatted. */
+			$views_bit = sprintf( __( '%s pageviews', 'minn-admin' ), $compact( $pageviews ) );
 			$delta_bit = null !== $delta
-				? ( $delta >= 0 ? '↑ ' : '↓ ' ) . abs( $delta ) . '% vs prior ' . $days . 'd · ' . $views_bit
+				/* translators: 1: up or down arrow, 2: percentage change, 3: number of days, 4: pageviews clause. */
+				? sprintf( __( '%1$s %2$s%% vs prior %3$sd · %4$s', 'minn-admin' ), $delta >= 0 ? '↑' : '↓', abs( $delta ), $days, $views_bit )
 				: $views_bit;
 			array_unshift(
 				$stats,
 				array(
-					'label' => 'Visitors',
+					'key'   => 'visitors',
+					'label' => __( 'Visitors', 'minn-admin' ),
 					'value' => $compact( $visitors ),
 					'delta' => $delta_bit,
 					'up'    => null !== $delta ? ( $delta >= 0 ? true : 'down' ) : null,
@@ -6100,49 +6116,58 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			? $core_t->updates[0]->version : '';
 		$checks    = array(
 			array(
-				'label'  => 'WordPress version',
+				'key'    => 'core',
+				'label'  => __( 'WordPress version', 'minn-admin' ),
 				'status' => $core_offer ? 'warn' : 'pass',
 				'detail' => $core_offer
 					? get_bloginfo( 'version' ) . ' installed — WordPress ' . $core_offer . ' is available'
 					: get_bloginfo( 'version' ) . ' is current',
 			),
 			array(
-				'label'  => 'PHP version',
+				'key'    => 'php',
+				'label'  => __( 'PHP version', 'minn-admin' ),
 				'status' => $php_ok ? 'pass' : ( $php_warn ? 'warn' : 'fail' ),
 				'detail' => $php_ok ? PHP_VERSION . ' is current' : PHP_VERSION . ' is past its supported life — upgrade to 8.2+',
 			),
 			array(
-				'label'  => 'HTTPS',
+				'key'    => 'https',
+				'label'  => __( 'HTTPS', 'minn-admin' ),
 				'status' => is_ssl() ? 'pass' : 'warn',
 				'detail' => is_ssl() ? 'Served over TLS' : 'This request is not over HTTPS',
 			),
 			array(
-				'label'  => 'Persistent object cache',
+				'key'    => 'object-cache',
+				'label'  => __( 'Persistent object cache', 'minn-admin' ),
 				'status' => wp_using_ext_object_cache() ? 'pass' : 'warn',
 				'detail' => wp_using_ext_object_cache() ? 'A drop-in is active' : 'Redis/Memcached would speed up repeat queries',
 			),
 			array(
-				'label'  => 'Memory limit',
+				'key'    => 'memory',
+				'label'  => __( 'Memory limit', 'minn-admin' ),
 				'status' => ( $mem_bytes < 0 || $mem_bytes >= 256 * 1024 * 1024 ) ? 'pass' : ( $mem_bytes >= 128 * 1024 * 1024 ? 'warn' : 'fail' ),
 				'detail' => ini_get( 'memory_limit' ) . ' available to PHP',
 			),
 			array(
-				'label'  => 'OPcache',
+				'key'    => 'opcache',
+				'label'  => __( 'OPcache', 'minn-admin' ),
 				'status' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'pass' : 'warn',
 				'detail' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'Bytecode caching is on' : 'Not enabled — pages recompile each request',
 			),
 			array(
-				'label'  => 'Debug mode',
+				'key'    => 'debug',
+				'label'  => __( 'Debug mode', 'minn-admin' ),
 				'status' => ( $debug_on && 'production' === $env ) ? 'warn' : 'pass',
 				'detail' => ( $debug_on && 'production' === $env ) ? 'WP_DEBUG is on in a production environment' : ( $debug_on ? 'On (fine for ' . $env . ')' : 'Off' ),
 			),
 			array(
-				'label'  => 'Uploads writable',
+				'key'    => 'uploads',
+				'label'  => __( 'Uploads writable', 'minn-admin' ),
 				'status' => $uploads_writable ? 'pass' : 'fail',
 				'detail' => $uploads_writable ? 'The uploads directory accepts writes' : 'Uploads directory is not writable',
 			),
 			array(
-				'label'  => 'Autoload size',
+				'key'    => 'autoload',
+				'label'  => __( 'Autoload size', 'minn-admin' ),
 				// The usual guidance: under ~800 KB is healthy, past a few MB
 				// every request pays a real tax.
 				'status' => $autoload_size < 800 * 1024 ? 'pass' : ( $autoload_size < 3 * 1024 * 1024 ? 'warn' : 'fail' ),
@@ -6150,7 +6175,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 					. ( $autoload_size < 800 * 1024 ? ' — healthy' : ' loads on every request — see the top offenders in the Database card' ),
 			),
 			array(
-				'label'  => 'Cron',
+				'key'    => 'cron',
+				'label'  => __( 'Cron', 'minn-admin' ),
 				'status' => $cron_overdue > 0 ? 'warn' : 'pass',
 				'detail' => $cron_overdue > 0
 					? $cron_overdue . ' overdue event' . ( 1 === $cron_overdue ? '' : 's' ) . ' — cron may be stalled' . ( $cron_disabled ? ' (WP-Cron is disabled; is the system cron running?)' : '' )
@@ -6195,7 +6221,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		};
 		if ( isset( $self['loopback'] ) ) {
 			$checks[] = array(
-				'label'  => 'Loopback requests',
+				'key'    => 'loopback',
+				'label'  => __( 'Loopback requests', 'minn-admin' ),
 				'status' => $grade( $self['loopback']['status'] ),
 				'detail' => 'good' === $self['loopback']['status']
 					? 'The site can reach itself (cron and scheduled posts depend on this)'
@@ -6204,7 +6231,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 		if ( isset( $self['rest'] ) ) {
 			$checks[] = array(
-				'label'  => 'REST API self-check',
+				'key'    => 'rest',
+				'label'  => __( 'REST API self-check', 'minn-admin' ),
 				'status' => $grade( $self['rest']['status'] ),
 				'detail' => 'good' === $self['rest']['status']
 					? 'The REST API answers external requests (Minn itself rides it)'
@@ -6243,7 +6271,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$bk_detail = 'Last backup was ' . human_time_diff( $bk['time'] ) . ' ago';
 			}
 			array_splice( $checks, 1, 0, array( array(
-				'label'  => 'Backups',
+				'key'    => 'backups',
+				'label'  => __( 'Backups', 'minn-admin' ),
 				'status' => $bk_status,
 				'detail' => $bk_detail,
 			) ) );
@@ -6341,7 +6370,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			// design (an AI provider with no key must not tip this check).
 			$lic_total = array_sum( $sum );
 			$checks[]  = array(
-				'label'  => 'Licenses',
+				'key'    => 'licenses',
+				'label'  => __( 'Licenses', 'minn-admin' ),
 				'goto'   => 'licenses',
 				'status' => $bad ? 'fail' : ( $soft ? 'warn' : 'pass' ),
 				'detail' => $bits

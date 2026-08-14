@@ -128,7 +128,7 @@
 	}
 
 	function sessionExpiredReload() {
-		toast( 'Your session expired. Reloading…', true );
+		toast( __( 'Your session expired. Reloading…' ), true );
 		setTimeout( () => location.reload(), 1400 );
 	}
 
@@ -154,7 +154,7 @@
 					await refreshRestNonce();
 				} catch ( e ) {
 					sessionExpiredReload();
-					const dead = new Error( 'Your session expired.' );
+					const dead = new Error( __( 'Your session expired.' ) );
 					dead.code = code;
 					throw dead;
 				}
@@ -365,15 +365,15 @@
 		const isOrg = /wordpress\.org\/(?:plugins|themes)\//i.test( h );
 		if ( role === 'author' ) {
 			if ( isGithub ) {
-				return name ? `Author on GitHub (${ name }) ↗` : 'Author on GitHub ↗';
+				return name ? `Author on GitHub (${ name }) ↗` : __( 'Author on GitHub ↗' );
 			}
-			return name ? `Author (${ name }) ↗` : 'Author website ↗';
+			return name ? `Author (${ name }) ↗` : __( 'Author website ↗' );
 		}
-		if ( isGithub ) return 'Open on GitHub ↗';
-		if ( isOrg ) return 'Open on WordPress.org ↗';
-		if ( role === 'theme' ) return 'Theme website ↗';
-		if ( role === 'directory' ) return 'Plugin page ↗';
-		return 'Plugin website ↗';
+		if ( isGithub ) return __( 'Open on GitHub ↗' );
+		if ( isOrg ) return __( 'Open on WordPress.org ↗' );
+		if ( role === 'theme' ) return __( 'Theme website ↗' );
+		if ( role === 'directory' ) return __( 'Plugin page ↗' );
+		return __( 'Plugin website ↗' );
 	}
 	// items: [{ href, role, name? }] — de-duped, host-aware labels.
 	// Known hubs (wp.org / GitHub) sort first so they stay one glance away.
@@ -532,7 +532,7 @@
 					const btn = body.querySelector( '[data-soft-retry]' );
 					if ( btn ) btn.addEventListener( 'click', () => { softListReload( opts ); } );
 				} else if ( hasChrome ) {
-					toast( e && e.message ? e.message : 'Could not load. Try again.', true );
+					toast( e && e.message ? e.message : __( 'Could not load. Try again.' ), true );
 				} else {
 					showErr( e );
 				}
@@ -874,10 +874,10 @@
 				</div>` : '';
 			overlay.innerHTML = `
 			<div class="minn-modal minn-confirm-modal" role="alertdialog" aria-modal="true" aria-label="${ esc( o.title || 'Confirm' ) }">
-				<div class="minn-confirm-title">${ esc( o.title || 'Are you sure?' ) }</div>
+				<div class="minn-confirm-title">${ esc( o.title || __( 'Are you sure?' ) ) }</div>
 				${ o.body ? `<div class="minn-confirm-body">${ esc( o.body ) }</div>` : '' }
-				${ scope( o.changesLabel || 'What this changes', o.changes ) }
-				${ scope( o.keepsLabel || 'Not touched', o.keeps ) }
+				${ scope( o.changesLabel || __( 'What this changes' ), o.changes ) }
+				${ scope( o.keepsLabel || __( 'Not touched' ), o.keeps ) }
 				${ o.typeToConfirm ? `
 				<div class="minn-confirm-type">
 					<div class="minn-confirm-type-label">${ sprintf( __( 'Type %s to confirm' ), `<b>${ esc( o.typeToConfirm ) }</b>` ) }</div>
@@ -928,19 +928,19 @@
 	function confirmThemeActivate( name ) {
 		return minnConfirm( {
 			title: `Switch the site's theme to ${ name }?`,
-			changes: [ 'How the whole site looks to visitors, right away' ],
-			keeps: [ 'The current theme stays installed; switch back anytime', 'Your content, media and settings' ],
-			confirmLabel: 'Activate theme',
+			changes: [ __( 'How the whole site looks to visitors, right away' ) ],
+			keeps: [ __( 'The current theme stays installed; switch back anytime' ), __( 'Your content, media and settings' ) ],
+			confirmLabel: __( 'Activate theme' ),
 		} );
 	}
 
 	function confirmCoreUpdate( version ) {
 		return minnConfirm( {
 			title: `Update WordPress to ${ version }?`,
-			changes: [ `WordPress core files${ B.site && B.site.version ? ` (${ B.site.version } to ${ version })` : '' }`, 'The database, when this release ships a migration' ],
-			keeps: [ 'Your content, media and users', 'Plugins, themes and their settings' ],
-			body: 'Visitors see a maintenance notice for a few seconds while files are replaced.',
-			confirmLabel: 'Update WordPress',
+			changes: [ `WordPress core files${ B.site && B.site.version ? ` (${ B.site.version } to ${ version })` : '' }`, __( 'The database, when this release ships a migration' ) ],
+			keeps: [ __( 'Your content, media and users' ), __( 'Plugins, themes and their settings' ) ],
+			body: __( 'Visitors see a maintenance notice for a few seconds while files are replaced.' ),
+			confirmLabel: __( 'Update WordPress' ),
 		} );
 	}
 
@@ -1010,7 +1010,7 @@
 			// is fetched with &q= as the user types (bindSuggestField).
 			const pick = ( v && typeof v === 'object' ) ? v : null;
 			return `<div class="minn-ac" ${ attr }="${ esc( id ) }" data-ftype="suggest" data-sgval="${ pick ? esc( String( pick.value ) ) : '' }" data-sgroute="${ esc( f.route || '' ) }">
-				<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || 'Type to search…' ) }" value="${ pick && pick.label ? esc( String( pick.label ) ) : '' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || __( 'Type to search…' ) ) }" value="${ pick && pick.label ? esc( String( pick.label ) ) : '' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 				<div class="minn-ac-panel" hidden></div>
 			</div>`;
 		}
@@ -1039,7 +1039,7 @@
 			return `<div class="minn-field-image" ${ attr }="${ esc( id ) }" data-ftype="image" data-img-id="${ has ? esc( String( img.id ) ) : '' }" data-img-url="${ esc( url ) }">
 				${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
 				<div class="minn-field-image-actions">
-					<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : 'Set image' }</button>
+					<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : __( 'Set image' ) }</button>
 					${ has ? '<button type="button" class="minn-btn-soft danger" data-img-clear>Remove</button>' : '' }
 				</div>
 			</div>`;
@@ -2337,7 +2337,7 @@
 				chip.type = 'button';
 				chip.id = 'minn-mode-chip';
 				chip.className = 'minn-mode-chip';
-				chip.title = 'Focus' === mode ? 'Exit focus mode (⌘⇧D)' : 'Exit outline mode (⌘⇧O)';
+				chip.title = 'Focus' === mode ? __( 'Exit focus mode (⌘⇧D)' ) : __( 'Exit outline mode (⌘⇧O)' );
 				chip.innerHTML = `${ mode } mode <span class="minn-mode-chip-x">✕</span>`;
 				chip.addEventListener( 'click', () => ( 'Focus' === mode ? toggleFocusMode() : toggleOutlineMode() ) );
 				subEl.appendChild( chip );
@@ -2590,7 +2590,7 @@
 			} catch ( e ) {
 				if ( seq !== appearanceSaveSeq ) return;
 				// Keep the painted scheme; only warn. Next successful pick re-saves.
-				toast( e.message || 'Could not save scheme to your profile', true );
+				toast( e.message || __( 'Could not save scheme to your profile' ), true );
 			}
 		}, 180 );
 	}
@@ -2684,9 +2684,9 @@
 	function themeModeHtml() {
 		const cur = themePref();
 		const opts = [
-			{ id: 'system', label: 'System', desc: 'Match the device setting' },
-			{ id: 'light', label: 'Light', desc: 'Always light' },
-			{ id: 'dark', label: 'Dark', desc: 'Always dark' },
+			{ id: 'system', label: 'System', desc: __( 'Match the device setting' ) },
+			{ id: 'light', label: 'Light', desc: __( 'Always light' ) },
+			{ id: 'dark', label: 'Dark', desc: __( 'Always dark' ) },
 		];
 		const ap = appearanceOf( B.user && B.user.appearance );
 		const defOn = !! ap.defaultAdmin;
@@ -2886,7 +2886,9 @@
 		<div class="minn-stats">
 			${ o.stats.map( ( s ) => {
 				// Each stat is a door to its view, not just a number.
-				const goto = { 'Published posts': 'content:posts', 'Pages': 'content:pages', 'Comments': 'comments', 'Media files': 'media', 'Users': 'users' }[ s.label ] || '';
+				// Route on the server's STABLE key, never the label: a translated
+				// label matches nothing and every card silently stops being a door.
+				const goto = { posts: 'content:posts', pages: 'content:pages', comments: 'comments', media: 'media', users: 'users' }[ s.key ] || '';
 				return `
 				<div class="minn-card minn-stat${ goto ? ' clickable' : '' }"${ goto ? ` data-goto="${ esc( goto ) }" role="link" tabindex="0"` : '' }>
 					<div class="minn-stat-label">${ esc( s.label ) }</div>
@@ -3349,7 +3351,7 @@
 		const entries = Array.from( sel.entries() );
 		if ( ! entries.length ) return;
 		btn.disabled = true;
-		btn.textContent = 'Working…';
+		btn.textContent = __( 'Working…' );
 		let ok = 0, fail = 0;
 		for ( const [ id, type ] of entries ) {
 			try { await op( type, id ); ok++; }
@@ -3474,11 +3476,11 @@
 		const trashHtml = `
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
 				${ ! state.contentTrash ? `<button class="minn-tab${ state.contentModified ? ' active' : '' }" id="minn-content-modified" title="${ esc( __( 'Only live content carrying unsaved edits' ) ) }">${ esc( __( 'Modified' ) ) }</button>` : '' }
-				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? 'Back to content' : 'View trash' }">${ icon( 'trash' ) } Trash</button>
+				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? __( 'Back to content' ) : __( 'View trash' ) }">${ icon( 'trash' ) } Trash</button>
 			</div>`;
 		const filtersHtml = `
-			${ showTax ? taxCombo( 'cat', 'All categories' ) : '' }
-			${ showTax ? taxCombo( 'tag', 'All tags' ) : '' }
+			${ showTax ? taxCombo( 'cat', __( 'All categories' ) ) : '' }
+			${ showTax ? taxCombo( 'tag', __( 'All tags' ) ) : '' }
 			<input class="minn-input minn-toolbar-search" id="minn-content-search" placeholder="${ esc( __( 'Search content…' ) ) }" value="${ esc( state.contentSearch || '' ) }">
 			<div class="minn-toolbar-meta">${ metaLabel( c.total, 'item' ) }</div>`;
 		view.innerHTML = `
@@ -3515,7 +3517,7 @@
 						<button class="minn-btn-soft" data-restore="${ p.id }">${ esc( __( 'Restore' ) ) }</button>
 						<button class="minn-btn-soft danger" data-fdelete="${ p.id }">${ esc( __( 'Delete' ) ) }</button>
 					</div>` : `<div class="minn-row-end"><button class="minn-row-more" data-more="${ p.id }" type="button" title="${ esc( __( 'Actions' ) ) }">⋯</button><span class="minn-row-arrow">›</span></div>` }
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? 'No matches for “' + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? 'Trash is empty.' : 'Nothing here yet. Hit <b>New</b> to write something.' ) }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? __( 'No matches for “' ) + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? __( 'Trash is empty.' ) : 'Nothing here yet. Hit <b>New</b> to write something.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
 
@@ -3587,12 +3589,12 @@
 			} )
 		);
 		const catWrap = view.querySelector( '[data-taxcombo="cat"]' );
-		if ( catWrap ) bindAutocomplete( catWrap, taxComboOptions( 'All categories', terms.categories ), {
+		if ( catWrap ) bindAutocomplete( catWrap, taxComboOptions( __( 'All categories' ), terms.categories ), {
 			strict: true, value: state.contentCat || '',
 			onPick: ( v ) => { state.contentCat = v || null; reloadContent(); },
 		} );
 		const tagWrap = view.querySelector( '[data-taxcombo="tag"]' );
-		if ( tagWrap ) bindAutocomplete( tagWrap, taxComboOptions( 'All tags', terms.tags ), {
+		if ( tagWrap ) bindAutocomplete( tagWrap, taxComboOptions( __( 'All tags' ), terms.tags ), {
 			strict: true, value: state.contentTag || '',
 			onPick: ( v ) => { state.contentTag = v || null; reloadContent(); },
 		} );
@@ -3656,7 +3658,7 @@
 			rowMenu.className = 'minn-new-menu minn-row-menu';
 			rowMenu.innerHTML = `
 				<button type="button" data-ract="open">${ esc( __( 'Open in Minn' ) ) }</button>
-				${ viewUrl ? `<a href="${ esc( viewUrl ) }" target="wp-preview-${ p.id }">${ p.status === 'publish' ? 'View on site' : 'Preview draft' } ↗</a>` : '' }
+				${ viewUrl ? `<a href="${ esc( viewUrl ) }" target="wp-preview-${ p.id }">${ p.status === 'publish' ? __( 'View on site' ) : __( 'Preview draft' ) } ↗</a>` : '' }
 				<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">${ esc( __( 'Edit in block editor ↗' ) ) }</a>
 				${ B.ppp && p.status !== 'publish' && p.status !== 'private' && p.status !== 'trash' ? '<button type="button" data-ract="ppp">Copy public preview link</button>' : '' }
 				<button type="button" data-ract="duplicate">${ esc( __( 'Duplicate' ) ) }</button>
@@ -3672,7 +3674,7 @@
 				if ( act === 'open' ) { hideRowMenu(); go( `editor/${ p.type }/${ p.id }` ); }
 				else if ( act === 'ppp' ) {
 					hideRowMenu();
-					copyPublicPreviewLink( p.id ).catch( ( e ) => toast( e.message || 'Could not copy preview link', true ) );
+					copyPublicPreviewLink( p.id ).catch( ( e ) => toast( e.message || __( 'Could not copy preview link' ), true ) );
 				}
 				else if ( act === 'duplicate' ) {
 					hideRowMenu();
@@ -3687,8 +3689,8 @@
 						.catch( ( e ) => toast( e.message, true ) );
 				}
 				else if ( act === 'publish' ) rowQuick( p, { status: 'publish' }, 'Published' );
-				else if ( act === 'draft' ) rowQuick( p, { status: 'draft' }, 'Moved to draft' );
-				else if ( act === 'trash' ) rowQuick( p, null, 'Moved to trash', 'DELETE' );
+				else if ( act === 'draft' ) rowQuick( p, { status: 'draft' }, __( 'Moved to draft' ) );
+				else if ( act === 'trash' ) rowQuick( p, null, __( 'Moved to trash' ), 'DELETE' );
 			} ) );
 			$$( 'a', rowMenu ).forEach( ( a ) => a.addEventListener( 'click', hideRowMenu ) );
 			document.addEventListener( 'mousedown', rowMenuAway, true );
@@ -3789,12 +3791,12 @@
 			btn.addEventListener( 'click', async ( e ) => {
 				e.stopPropagation();
 				const row = btn.closest( '.minn-table-row' );
-				if ( ! await minnConfirm( { title: 'Delete this item permanently?', body: 'It is removed for good. There is no undo for this.', danger: true, confirmLabel: 'Delete permanently' } ) ) return;
+				if ( ! await minnConfirm( { title: __( 'Delete this item permanently?' ), body: __( 'It is removed for good. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete permanently' ) } ) ) return;
 				btn.disabled = true;
 				btn.textContent = '…';
 				try {
 					await deleteOne( row.dataset.type, row.dataset.id );
-					toast( 'Deleted permanently' );
+					toast( __( 'Deleted permanently' ) );
 					sel.delete( parseInt( row.dataset.id, 10 ) );
 					state.cache.content = null;
 					state.cache.cptContent = {};
@@ -3839,14 +3841,14 @@
 				if ( bulkDelete ) bulkDelete.addEventListener( 'click', async ( e ) => {
 					const n = sel.size;
 					const bulkBtn = e.currentTarget;
-					if ( ! await minnConfirm( { title: `Delete ${ n } item${ n === 1 ? '' : 's' } permanently?`, body: 'They are removed for good. There is no undo for this.', danger: true, confirmLabel: 'Delete permanently' } ) ) return;
-					runBulk( sel, bulkBtn, deleteOne, 'Deleted permanently' );
+					if ( ! await minnConfirm( { title: `Delete ${ n } item${ n === 1 ? '' : 's' } permanently?`, body: __( 'They are removed for good. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete permanently' ) } ) ) return;
+					runBulk( sel, bulkBtn, deleteOne, __( 'Deleted permanently' ) );
 				} );
 				// Themed combobox (users bulk role pattern) — native <select>
 				// was the last OS-drawn control on this bar.
 				const statusWrap = $( '[data-bulkstatus]', slot );
 				const statusOpts = [
-					{ value: '', label: 'Set status…' },
+					{ value: '', label: __( 'Set status…' ) },
 					{ value: 'publish', label: 'Published' },
 					{ value: 'draft', label: 'Draft' },
 					{ value: 'pending', label: 'Pending' },
@@ -3857,13 +3859,13 @@
 				if ( bulkApply ) bulkApply.addEventListener( 'click', ( e ) => {
 					const acInput = statusWrap && $( '.minn-ac-input', statusWrap );
 					const status = acInput ? acInput.dataset.acValue : '';
-					if ( ! status ) { toast( 'Pick a status first', true ); return; }
-					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'POST', body: JSON.stringify( { status } ) } ), 'Status updated' );
+					if ( ! status ) { toast( __( 'Pick a status first' ), true ); return; }
+					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'POST', body: JSON.stringify( { status } ) } ), __( 'Status updated' ) );
 				} );
 				const bulkTrash = $( '#minn-bulk-trash', slot );
 				if ( bulkTrash ) bulkTrash.addEventListener( 'click', ( e ) => {
 					if ( ! confirm( `Move ${ sel.size } item${ sel.size === 1 ? '' : 's' } to trash?` ) ) return;
-					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'DELETE' } ), 'Moved to trash' );
+					runBulk( sel, e.currentTarget, ( type, id ) => api( `wp/v2/${ type }/${ id }`, { method: 'DELETE' } ), __( 'Moved to trash' ) );
 				} );
 				$( '#minn-bulk-clear', slot ).addEventListener( 'click', () => {
 					sel.clear();
@@ -4089,10 +4091,10 @@
 			const modifiers = [];
 			if ( m.rot ) modifiers.push( { type: 'rotate', args: { angle: m.rot } } );
 			if ( m.crop ) modifiers.push( { type: 'crop', args: { left: m.crop.x, top: m.crop.y, width: m.crop.w, height: m.crop.h } } );
-			if ( ! modifiers.length ) { toast( 'Nothing to save — rotate or crop first', true ); return; }
+			if ( ! modifiers.length ) { toast( __( 'Nothing to save — rotate or crop first' ), true ); return; }
 			const btn = e.currentTarget;
 			btn.disabled = true;
-			btn.textContent = 'Saving…';
+			btn.textContent = __( 'Saving…' );
 			try {
 				const fresh = await api( `wp/v2/media/${ it.id }/edit`, {
 					method: 'POST',
@@ -4107,9 +4109,9 @@
 					state.editor.featuredDirty = true;
 					renderEditorSide();
 					if ( state.editor.id ) scheduleAutosave();
-					toast( 'Edited copy saved · set as featured image' );
+					toast( __( 'Edited copy saved · set as featured image' ) );
 				} else {
-					toast( 'Edited copy saved' );
+					toast( __( 'Edited copy saved' ) );
 				}
 				state.cache.media = null;
 				if ( state.route === 'media' ) renderMedia();
@@ -4119,7 +4121,7 @@
 			} catch ( err ) {
 				toast( err.message, true );
 				btn.disabled = false;
-				btn.textContent = 'Save as copy';
+				btn.textContent = __( 'Save as copy' );
 			}
 		} );
 	}
@@ -4130,9 +4132,9 @@
 	async function bulkDeleteMedia( btn ) {
 		const ids = Array.from( state.mediaSel || [] );
 		if ( ! ids.length ) return;
-		if ( ! await minnConfirm( { title: `Delete ${ ids.length } file${ ids.length === 1 ? '' : 's' } permanently?`, body: 'The files and their thumbnails are removed from the server. Posts that use them keep broken references.', danger: true, confirmLabel: 'Delete permanently' } ) ) return;
+		if ( ! await minnConfirm( { title: `Delete ${ ids.length } file${ ids.length === 1 ? '' : 's' } permanently?`, body: __( 'The files and their thumbnails are removed from the server. Posts that use them keep broken references.' ), danger: true, confirmLabel: __( 'Delete permanently' ) } ) ) return;
 		btn.disabled = true;
-		btn.textContent = 'Deleting…';
+		btn.textContent = __( 'Deleting…' );
 		let ok = 0, fail = 0;
 		for ( const id of ids ) {
 			try { await api( `wp/v2/media/${ id }?force=true`, { method: 'DELETE' } ); ok++; }
@@ -4147,10 +4149,10 @@
 
 	// Shared by the preview modal's Delete and the grid context menu.
 	async function deleteMediaItem( it ) {
-		if ( ! await minnConfirm( { title: `Delete “${ it.name }” permanently?`, body: 'The file and its thumbnails are removed from the server. Posts that use it keep broken references.', danger: true, confirmLabel: 'Delete file' } ) ) return;
+		if ( ! await minnConfirm( { title: `Delete “${ it.name }” permanently?`, body: __( 'The file and its thumbnails are removed from the server. Posts that use it keep broken references.' ), danger: true, confirmLabel: __( 'Delete file' ) } ) ) return;
 		try {
 			await api( `wp/v2/media/${ it.id }?force=true`, { method: 'DELETE' } );
-			toast( 'File deleted' );
+			toast( __( 'File deleted' ) );
 			// If this was the current featured image, clear it so the sidebar
 			// doesn't keep a broken thumb.
 			if ( state.editor && state.editor.featuredMedia === it.id ) {
@@ -4235,7 +4237,7 @@
 			</div>`;
 		const mediaMonthComboHtml = `
 			<div class="minn-ac minn-tax-select" data-monthcombo title="${ esc( __( 'Filter by upload month' ) ) }">
-				<input class="minn-input minn-ac-input" placeholder="${ esc( state.mediaMonth ? mediaMonthLabel( state.mediaMonth ) : 'All dates' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Filter by upload month' ) ) }">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( state.mediaMonth ? mediaMonthLabel( state.mediaMonth ) : __( 'All dates' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Filter by upload month' ) ) }">
 				<div class="minn-ac-panel" hidden></div>
 			</div>`;
 		// Folder combobox only with a provider (FileBird et al) on board.
@@ -4244,7 +4246,7 @@
 			: null;
 		const mediaFolderComboHtml = B.mediaFolders ? `
 			<div class="minn-ac minn-tax-select" data-foldercombo title="Filter by ${ esc( B.mediaFolders.name ) } folder">
-				<input class="minn-input minn-ac-input" placeholder="${ esc( activeFolder ? activeFolder.label : 'All folders' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Filter by folder' ) ) }">
+				<input class="minn-input minn-ac-input" placeholder="${ esc( activeFolder ? activeFolder.label : __( 'All folders' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Filter by folder' ) ) }">
 				<div class="minn-ac-panel" hidden></div>
 			</div>` : '';
 		const mediaViewTabsHtml = `
@@ -4317,7 +4319,7 @@
 			<div class="minn-dropzone-title">${ esc( __( 'Drag & drop files here' ) ) }</div>
 			<div class="minn-dropzone-sub">${ sprintf( __( 'or %s' ), `<b>${ esc( __( 'browse your computer' ) ) }</b>` ) }</div>
 		</div>` : '' }
-		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType || state.mediaUnattached || state.mediaMonth || state.mediaFolder != null ? 'No files match.' : 'The media library is empty. Drop files anywhere to upload.' }</div>` : state.mediaView === 'grid' ? `
+		${ ! mapped.length ? `<div class="minn-card minn-empty">${ state.mediaSearch || state.mediaType || state.mediaUnattached || state.mediaMonth || state.mediaFolder != null ? __( 'No files match.' ) : __( 'The media library is empty. Drop files anywhere to upload.' ) }</div>` : state.mediaView === 'grid' ? `
 		<div class="minn-media-grid">
 			${ mapped.map( ( m ) => `
 				<div class="minn-media-card" data-media="${ m.id }">
@@ -4398,7 +4400,7 @@
 		}
 		const folderWrap = view.querySelector( '[data-foldercombo]' );
 		if ( folderWrap && state.cache.mediaFoldersList ) bindAutocomplete( folderWrap,
-			[ { value: '', label: 'All folders' } ].concat( state.cache.mediaFoldersList.map( ( f ) => ( {
+			[ { value: '', label: __( 'All folders' ) } ].concat( state.cache.mediaFoldersList.map( ( f ) => ( {
 				value: String( f.id ),
 				// U+2003 em-space indent: a plain space would collapse in the panel HTML.
 				label: ' '.repeat( f.depth || 0 ) + f.label + ( f.count != null ? ` (${ f.count })` : '' ),
@@ -4414,7 +4416,7 @@
 			} );
 		const monthWrap = view.querySelector( '[data-monthcombo]' );
 		if ( monthWrap && state.cache.mediaMonths ) bindAutocomplete( monthWrap,
-			[ { value: '', label: 'All dates' } ].concat( state.cache.mediaMonths.map( ( m ) => ( {
+			[ { value: '', label: __( 'All dates' ) } ].concat( state.cache.mediaMonths.map( ( m ) => ( {
 				value: m.value, label: `${ mediaMonthLabel( m.value ) } (${ m.count })`,
 			} ) ) ), {
 				strict: true,
@@ -4453,12 +4455,12 @@
 				e.preventDefault();
 				openMinnMenu( e.clientX, e.clientY, [
 					{ label: 'Preview', run: () => { state.modal = { type: 'media', item: m }; renderOverlays(); } },
-					{ label: 'Copy URL', run: async () => {
-						try { await navigator.clipboard.writeText( m.url ); toast( 'URL copied' ); }
-						catch ( err ) { toast( 'Could not copy', true ); }
+					{ label: __( 'Copy URL' ), run: async () => {
+						try { await navigator.clipboard.writeText( m.url ); toast( __( 'URL copied' ) ); }
+						catch ( err ) { toast( __( 'Could not copy' ), true ); }
 					} },
-					{ label: 'Open ↗', href: m.url },
-					...( m.kind === 'IMG' ? [ { label: 'Edit image', run: () => { state.modal = { type: 'media', item: m, editing: true }; renderOverlays(); } } ] : [] ),
+					{ label: __( 'Open ↗' ), href: m.url },
+					...( m.kind === 'IMG' ? [ { label: __( 'Edit image' ), run: () => { state.modal = { type: 'media', item: m, editing: true }; renderOverlays(); } } ] : [] ),
 					{ label: 'Delete', danger: true, run: () => deleteMediaItem( m ) },
 				] );
 			} );
@@ -4512,7 +4514,7 @@
 							if ( moveTarget === null || ! msel.size ) return;
 							const ids = Array.from( msel );
 							moveBtn.disabled = true;
-							moveBtn.textContent = 'Moving…';
+							moveBtn.textContent = __( 'Moving…' );
 							try {
 								const r = await api( 'minn-admin/v1/media/folders/move', {
 									method: 'POST',
@@ -4677,9 +4679,9 @@
 	async function runCommentBulk( status, label, btn ) {
 		const ids = Array.from( state.commentSel || [] );
 		if ( ! ids.length ) return;
-		if ( 'delete' === status && ! await minnConfirm( { title: `Delete ${ ids.length } comment${ ids.length === 1 ? '' : 's' } permanently?`, body: 'They are removed for good. There is no undo for this.', danger: true, confirmLabel: 'Delete permanently' } ) ) return;
+		if ( 'delete' === status && ! await minnConfirm( { title: `Delete ${ ids.length } comment${ ids.length === 1 ? '' : 's' } permanently?`, body: __( 'They are removed for good. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete permanently' ) } ) ) return;
 		btn.disabled = true;
-		btn.textContent = 'Working…';
+		btn.textContent = __( 'Working…' );
 		let ok = 0, fail = 0;
 		for ( const id of ids ) {
 			try {
@@ -4754,8 +4756,8 @@
 			switch ( state.commentTab ) {
 				case 'hold': return [ [ 'approved', 'Approve' ], [ 'spam', 'Spam' ], [ 'trash', 'Trash' ] ];
 				case 'approve': return [ [ 'hold', 'Unapprove' ], [ 'spam', 'Spam' ], [ 'trash', 'Trash' ] ];
-				case 'spam': return [ [ 'hold', 'Not spam' ], [ 'trash', 'Trash' ] ];
-				default: return [ [ 'hold', 'Restore' ], [ 'delete', 'Delete forever' ] ];
+				case 'spam': return [ [ 'hold', __( 'Not spam' ) ], [ 'trash', 'Trash' ] ];
+				default: return [ [ 'hold', 'Restore' ], [ 'delete', __( 'Delete forever' ) ] ];
 			}
 		};
 		view.innerHTML = `
@@ -4789,7 +4791,7 @@
 						<div class="minn-comment-replybox">
 							<textarea class="minn-input" id="minn-reply-text" rows="3" placeholder="Reply as ${ esc( B.user.name ) }…"></textarea>
 							<div style="display:flex; gap:8px; margin-top:8px;">
-								<button class="minn-btn-primary" id="minn-reply-send" data-post="${ r.postId }" data-parent="${ r.id }">${ state.commentTab === 'hold' ? 'Reply & approve' : 'Reply' }</button>
+								<button class="minn-btn-primary" id="minn-reply-send" data-post="${ r.postId }" data-parent="${ r.id }">${ state.commentTab === 'hold' ? __( 'Reply & approve' ) : 'Reply' }</button>
 								<button class="minn-btn-soft" id="minn-reply-cancel">${ esc( __( 'Cancel' ) ) }</button>
 							</div>
 						</div>` : '' }
@@ -4847,11 +4849,11 @@
 				const entries = [];
 				const postBtn = $( '[data-cedit]', row );
 				const viewLink = $( '.minn-comment-postview', row );
-				if ( postBtn ) entries.push( { label: 'Open post in editor', run: () => postBtn.click() } );
-				if ( viewLink ) entries.push( { label: 'View post', href: viewLink.href } );
+				if ( postBtn ) entries.push( { label: __( 'Open post in editor' ), run: () => postBtn.click() } );
+				if ( viewLink ) entries.push( { label: __( 'View post' ), href: viewLink.href } );
 				const cm = ( ( state.cache.comments || {} ).items || [] ).find( ( x ) => x.id === parseInt( row.dataset.crow, 10 ) );
 				if ( B.caps.settings && cm && ( cm.author_email || cm.author_ip ) ) {
-					entries.push( { label: 'Block commenter', danger: true, run: () => blockCommenter( cm ) } );
+					entries.push( { label: __( 'Block commenter' ), danger: true, run: () => blockCommenter( cm ) } );
 				}
 				openMinnMenu( e.clientX, e.clientY, entries.concat( btns.map( ( b ) => ( {
 					label: b.textContent.trim(),
@@ -4863,8 +4865,8 @@
 		$$( '[data-cstatus]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const st = btn.dataset.cstatus;
-				if ( st === 'delete' && ! await minnConfirm( { title: 'Delete this comment permanently?', body: 'It is removed for good. There is no undo for this.', danger: true, confirmLabel: 'Delete comment' } ) ) return;
-				const labels = { approved: 'Comment approved', hold: state.commentTab === 'hold' ? 'Comment held' : 'Comment restored', spam: 'Marked as spam', trash: 'Moved to trash', delete: 'Comment deleted' };
+				if ( st === 'delete' && ! await minnConfirm( { title: __( 'Delete this comment permanently?' ), body: __( 'It is removed for good. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete comment' ) } ) ) return;
+				const labels = { approved: __( 'Comment approved' ), hold: state.commentTab === 'hold' ? __( 'Comment held' ) : __( 'Comment restored' ), spam: __( 'Marked as spam' ), trash: __( 'Moved to trash' ), delete: __( 'Comment deleted' ) };
 				setCommentStatus( parseInt( btn.dataset.cid, 10 ), st, labels[ st ] );
 			} )
 		);
@@ -4882,7 +4884,7 @@
 			const id = parseInt( ceditSave.dataset.cid, 10 );
 			const content = ( ( $( '#minn-cedit-text' ) || {} ).value || '' ).trim();
 			if ( ! content ) {
-				toast( 'A comment needs some text', true );
+				toast( __( 'A comment needs some text' ), true );
 				return;
 			}
 			ceditSave.disabled = true;
@@ -4895,7 +4897,7 @@
 			if ( emailEl ) payload.author_email = emailEl.value.trim();
 			try {
 				await api( `wp/v2/comments/${ id }`, { method: 'POST', body: JSON.stringify( payload ) } );
-				toast( 'Comment updated' );
+				toast( __( 'Comment updated' ) );
 				state.commentEdit = null;
 				state.cache.comments = null;
 				renderComments();
@@ -4923,7 +4925,7 @@
 		// select-page, a bar in the slot updated in place). Bar verbs are the
 		// tab's own actions, so the same labels/toasts apply.
 		const csel = state.commentSel || ( state.commentSel = new Set() );
-		const bulkLabels = { approved: 'Approved', hold: state.commentTab === 'hold' ? 'Held' : ( state.commentTab === 'spam' ? 'Marked not spam' : 'Restored' ), spam: 'Marked as spam', trash: 'Trashed', delete: 'Deleted' };
+		const bulkLabels = { approved: 'Approved', hold: state.commentTab === 'hold' ? 'Held' : ( state.commentTab === 'spam' ? __( 'Marked not spam' ) : 'Restored' ), spam: __( 'Marked as spam' ), trash: 'Trashed', delete: 'Deleted' };
 		const syncCommentBulk = () => {
 			const slot = $( '#minn-comment-bulk-slot', view );
 			if ( ! slot ) return;
@@ -4984,7 +4986,7 @@
 		if ( replySend ) replySend.addEventListener( 'click', async () => {
 			const text = ( $( '#minn-reply-text' ) || {} ).value || '';
 			if ( ! text.trim() ) {
-				toast( 'Write a reply first', true );
+				toast( __( 'Write a reply first' ), true );
 				return;
 			}
 			replySend.disabled = true;
@@ -5000,7 +5002,7 @@
 				if ( wasPending ) {
 					await api( `wp/v2/comments/${ parent }`, { method: 'POST', body: JSON.stringify( { status: 'approved' } ) } ).catch( () => {} );
 				}
-				toast( wasPending ? 'Reply posted, comment approved' : 'Reply posted' );
+				toast( wasPending ? __( 'Reply posted, comment approved' ) : __( 'Reply posted' ) );
 				state.commentReply = null;
 				state.cache.comments = null;
 				refreshCommentBadge();
@@ -5026,7 +5028,7 @@
 		[ 'any', 'All' ],
 		[ 'processing', 'Processing' ],
 		[ 'completed', 'Completed' ],
-		[ 'on-hold', 'On hold' ],
+		[ 'on-hold', __( 'On hold' ) ],
 		[ 'pending', 'Pending' ],
 		[ 'cancelled', 'Cancelled' ],
 		[ 'refunded', 'Refunded' ],
@@ -5149,7 +5151,7 @@
 			} );
 			out.topProducts = Array.isArray( prods ) ? prods : [];
 		} catch ( e ) {
-			out.error = e.message || 'Could not load analytics';
+			out.error = e.message || __( 'Could not load analytics' );
 		}
 		state.cache.orderAnalytics = out;
 		return out;
@@ -5336,7 +5338,7 @@
 							<div class="minn-order-field-row">
 								<div style="flex:1;">
 									<div class="minn-field-label">${ esc( __( 'Payment method' ) ) }</div>
-									${ orderCombo( 'paymethod', 'Payment method' ) }
+									${ orderCombo( 'paymethod', __( 'Payment method' ) ) }
 								</div>
 								<div style="flex:1;">
 									<div class="minn-field-label">${ esc( __( 'Transaction ID' ) ) }</div>
@@ -5357,7 +5359,7 @@
 							<div class="minn-side-title" style="margin:0 0 8px;">${ esc( __( 'WooCommerce email' ) ) }</div>
 							${ emails == null ? '<div class="minn-loading" style="padding:8px;">Loading email types…</div>' : `
 							<div style="display:flex; gap:8px; flex-wrap:wrap;">
-								<div style="flex:1; min-width:180px;">${ orderCombo( 'wcemail', 'Email type' ) }</div>
+								<div style="flex:1; min-width:180px;">${ orderCombo( 'wcemail', __( 'Email type' ) ) }</div>
 								<button class="minn-btn-soft" id="minn-o-wcemail-send" type="button" ${ ( emails || [] ).length ? '' : 'disabled' }>${ icon( 'send' ) } Send</button>
 							</div>
 							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Resends a transactional email through WooCommerce (invoice, processing, completed, …).' ) ) }</div>` }
@@ -5485,9 +5487,9 @@
 			}
 			const copyPay = async () => {
 				const url = ( m.full && m.full.payment_url ) || o.payment_url || '';
-				if ( ! url ) { toast( 'No payment URL on this order', true ); return; }
-				try { await navigator.clipboard.writeText( url ); toast( 'Payment URL copied' ); }
-				catch ( err ) { toast( 'Could not copy', true ); }
+				if ( ! url ) { toast( __( 'No payment URL on this order' ), true ); return; }
+				try { await navigator.clipboard.writeText( url ); toast( __( 'Payment URL copied' ) ); }
+				catch ( err ) { toast( __( 'Could not copy' ), true ); }
 			};
 			$$( '[data-relsub]' ).forEach( ( row ) =>
 				row.addEventListener( 'click', () => {
@@ -5594,13 +5596,13 @@
 					body.status = 'processing';
 				}
 				recordBtn.disabled = true;
-				recordBtn.textContent = 'Recording…';
+				recordBtn.textContent = __( 'Recording…' );
 				try {
 					await api( `wc/v3/orders/${ o.id }`, { method: 'PUT', body: JSON.stringify( body ) } );
 					const full = await api( `wc/v3/orders/${ o.id }?_fields=${ ORDER_DETAIL_FIELDS }` );
 					m.full = full;
 					m.order = Object.assign( {}, m.order, { status: full.status, total: full.total } );
-					toast( 'Payment recorded' );
+					toast( __( 'Payment recorded' ) );
 					m.edits = {};
 					state.cache.orders = null;
 					if ( state.route === 'orders' ) renderOrders();
@@ -5608,7 +5610,7 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					recordBtn.disabled = false;
-					recordBtn.textContent = 'Record payment';
+					recordBtn.textContent = __( 'Record payment' );
 				}
 			} );
 			const copyBtn = $( '#minn-o-copy-pay' );
@@ -5668,7 +5670,7 @@
 					}
 				}
 				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
+				saveBtn.textContent = __( 'Saving…' );
 				try {
 					const updated = await api( `wc/v3/orders/${ o.id }`, {
 						method: 'PUT',
@@ -5683,7 +5685,7 @@
 						billing: full.billing,
 						line_items: full.line_items,
 					} );
-					toast( 'Order updated' );
+					toast( __( 'Order updated' ) );
 					m.edits = {};
 					state.cache.orders = null;
 					if ( state.route === 'orders' ) renderOrders();
@@ -5691,7 +5693,7 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					saveBtn.disabled = false;
-					saveBtn.textContent = 'Save changes';
+					saveBtn.textContent = __( 'Save changes' );
 				}
 			} );
 
@@ -5760,12 +5762,12 @@
 				if ( ! await minnConfirm( {
 					title: `Refund ${ orderMoney( o, amt ) } on order #${ o.number || o.id }?`,
 					body: viaGateway
-						? 'The gateway is asked to send the money back to the customer. A refund already sent cannot be recalled.'
-						: 'This records the refund on the order; the money itself moves outside the site.',
+						? __( 'The gateway is asked to send the money back to the customer. A refund already sent cannot be recalled.' )
+						: __( 'This records the refund on the order; the money itself moves outside the site.' ),
 					confirmLabel: 'Refund',
 				} ) ) return;
 				refundBtn.disabled = true;
-				refundBtn.textContent = 'Refunding…';
+				refundBtn.textContent = __( 'Refunding…' );
 				try {
 					// Explicit booleans: the server defaults BOTH api_refund and
 					// api_restock to true when the key is absent.
@@ -5795,7 +5797,7 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					refundBtn.disabled = false;
-					refundBtn.textContent = 'Issue refund';
+					refundBtn.textContent = __( 'Issue refund' );
 				}
 			} );
 
@@ -5803,7 +5805,7 @@
 			// totals; it never pulls back money a gateway already sent.
 			$$( '[data-rdel]' ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
-					if ( ! await minnConfirm( { title: 'Delete this refund record?', body: 'Its amount is restored to the order totals. Money already sent back through the gateway is not pulled back.', danger: true, confirmLabel: 'Delete refund' } ) ) return;
+					if ( ! await minnConfirm( { title: __( 'Delete this refund record?' ), body: __( 'Its amount is restored to the order totals. Money already sent back through the gateway is not pulled back.' ), danger: true, confirmLabel: __( 'Delete refund' ) } ) ) return;
 					btn.disabled = true;
 					try {
 						await api( `wc/v3/orders/${ o.id }/refunds/${ btn.dataset.rdel }?force=true`, { method: 'DELETE' } );
@@ -5813,7 +5815,7 @@
 							status: full.status,
 							total: full.total,
 						} );
-						toast( 'Refund deleted' );
+						toast( __( 'Refund deleted' ) );
 						state.cache.orders = null;
 						state.cache.orderSummary = null;
 						if ( state.route === 'orders' ) renderOrders();
@@ -5837,7 +5839,7 @@
 				if ( ! emailId ) return;
 				const mailInput = mailWrap && $( '.minn-ac-input', mailWrap );
 				const label = mailInput ? mailInput.value : emailId;
-				if ( ! await minnConfirm( { title: `Send “${ label.split( ' · ' )[ 0 ] }”?`, body: `WooCommerce sends it for order #${ o.number || o.id } right away.`, confirmLabel: 'Send email' } ) ) return;
+				if ( ! await minnConfirm( { title: `Send “${ label.split( ' · ' )[ 0 ] }”?`, body: `WooCommerce sends it for order #${ o.number || o.id } right away.`, confirmLabel: __( 'Send email' ) } ) ) return;
 				wcSend.disabled = true;
 				try {
 					const r = await api( `minn-admin/v1/orders/${ o.id }/emails`, {
@@ -5855,7 +5857,7 @@
 			if ( noteAdd ) noteAdd.addEventListener( 'click', async () => {
 				const ta = $( '#minn-o-new-note' );
 				const note = ( ta && ta.value || '' ).trim();
-				if ( ! note ) { toast( 'Write a note first', true ); return; }
+				if ( ! note ) { toast( __( 'Write a note first' ), true ); return; }
 				const customer = !!( $( '#minn-o-note-customer' ) || {} ).checked;
 				noteAdd.disabled = true;
 				try {
@@ -5865,7 +5867,7 @@
 					} );
 					const notes = await api( `wc/v3/orders/${ o.id }/notes?per_page=50` );
 					m.notes = Array.isArray( notes ) ? notes : [];
-					toast( customer ? 'Customer note added' : 'Private note added' );
+					toast( customer ? __( 'Customer note added' ) : __( 'Private note added' ) );
 					rerender();
 				} catch ( e ) {
 					toast( e.message, true );
@@ -5968,7 +5970,7 @@
 			.catch( ( e ) => {
 				if ( ! isCur() ) return;
 				m.loading = false;
-				m.loadError = e.message || 'Could not load order';
+				m.loadError = e.message || __( 'Could not load order' );
 				rr();
 			} );
 		// Prefetch resendable WC emails in the background.
@@ -6035,7 +6037,7 @@
 				<button type="button" class="minn-btn-soft" id="minn-op-back">← ${ esc( __( 'Orders' ) ) }</button>
 				<div class="minn-modal-title-block">
 					<div class="minn-modal-title">Order #${ esc( o.number || o.id ) }</div>
-					<div class="minn-modal-sub">${ loading ? 'Loading…' : `${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }` }</div>
+					<div class="minn-modal-sub">${ loading ? __( 'Loading…' ) : `${ esc( orderMoney( o, o.total ) ) } · ${ esc( timeAgo( o.date_created ) ) }${ o.payment_method_title ? ' · ' + esc( o.payment_method_title ) : '' }` }</div>
 				</div>
 				<span class="minn-status ${ ORDER_STATUS_STYLE[ o.status ] || 'draft' }">${ esc( ( o.status || '' ).replace( /-/g, ' ' ) ) }</span>
 			</div>
@@ -6123,7 +6125,7 @@
 								<input type="checkbox" id="minn-o-refund-api" checked>
 								<span>Also refund via ${ esc( gw.title ) }</span>
 							</label>` : `
-							<div class="minn-toggle-desc" style="margin-top:10px;">${ gw ? esc( gw.title ) + ' cannot send money back itself: this records the refund, and the money moves back outside the site.' : 'This records the refund; the money moves back outside the site.' }</div>` }
+							<div class="minn-toggle-desc" style="margin-top:10px;">${ gw ? esc( gw.title ) + ' cannot send money back itself: this records the refund, and the money moves back outside the site.' : __( 'This records the refund; the money moves back outside the site.' ) }</div>` }
 							<button class="minn-btn-soft danger" id="minn-o-refund" type="button" style="margin-top:10px;">${ esc( __( 'Issue refund' ) ) }</button>
 						</div>`;
 	}
@@ -6140,7 +6142,7 @@
 				? `You can pay for this order here:\n${ pay }`
 				: `You can view this order here:\n${ view }`,
 			'',
-			'If you have any questions, just reply to this email.',
+			__( 'If you have any questions, just reply to this email.' ),
 		];
 		state.modal = {
 			type: 'order-email',
@@ -6184,10 +6186,10 @@
 			const max = Math.max( 1, ...chartData.map( ( c ) => c.value ) );
 			const pct = ( n ) => Math.max( n > 0 ? 2 : 0, Math.round( ( n / max ) * 100 ) );
 			const cards = [
-				[ 'Gross sales', loading ? '…' : money( tot.total_sales != null ? tot.total_sales : tot.gross_sales ) ],
-				[ 'Net revenue', loading ? '…' : money( tot.net_revenue ) ],
+				[ __( 'Gross sales' ), loading ? '…' : money( tot.total_sales != null ? tot.total_sales : tot.gross_sales ) ],
+				[ __( 'Net revenue' ), loading ? '…' : money( tot.net_revenue ) ],
 				[ 'Orders', loading ? '…' : String( tot.orders_count ?? '—' ) ],
-				[ 'Items sold', loading ? '…' : String( tot.num_items_sold ?? '—' ) ],
+				[ __( 'Items sold' ), loading ? '…' : String( tot.num_items_sold ?? '—' ) ],
 			];
 			const rangeLabel = orderAnalyticsRangeLabel( curRange );
 			view.innerHTML = `
@@ -6229,7 +6231,7 @@
 					topProducts.length ? topProducts.map( ( p ) => `
 					<div class="minn-table-row minn-wc-top-cols">
 						<div class="minn-cell-clip">
-							<div class="minn-row-title">${ esc( p.name || ( p.extended_info && p.extended_info.name ) || ( 'Product #' + ( p.product_id || p.id ) ) ) }</div>
+							<div class="minn-row-title">${ esc( p.name || ( p.extended_info && p.extended_info.name ) || ( __( 'Product #' ) + ( p.product_id || p.id ) ) ) }</div>
 						</div>
 						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( String( p.items_sold ?? '—' ) ) }</div>
 						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ money( p.net_revenue ) }</div>
@@ -6288,10 +6290,10 @@
 		const sym = ( c.items[ 0 ] && c.items[ 0 ].currency_symbol ) || '$';
 		const summaryCards = [];
 		if ( s.month ) {
-			summaryCards.push( [ 'Orders this month', s.month.total_orders ?? '—', '' ] );
-			summaryCards.push( [ 'Revenue this month', sym + Number( s.month.total_sales || 0 ).toLocaleString(), 'net ' + sym + Number( s.month.net_sales || 0 ).toLocaleString() ] );
+			summaryCards.push( [ __( 'Orders this month' ), s.month.total_orders ?? '—', '' ] );
+			summaryCards.push( [ __( 'Revenue this month' ), sym + Number( s.month.total_sales || 0 ).toLocaleString(), 'net ' + sym + Number( s.month.net_sales || 0 ).toLocaleString() ] );
 		}
-		if ( s.processing != null ) summaryCards.push( [ 'Awaiting fulfillment', s.processing, 'processing' ] );
+		if ( s.processing != null ) summaryCards.push( [ __( 'Awaiting fulfillment' ), s.processing, 'processing' ] );
 
 		view.innerHTML = `
 		${ viewSwitch }
@@ -6328,7 +6330,7 @@
 					<div class="minn-row-meta">${ ( o.line_items || [] ).reduce( ( n, li ) => n + ( li.quantity || 0 ), 0 ) }</div>
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-qv="${ o.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? 'No orders match “' + esc( state.orderSearch ) + '”.' : 'No orders here.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? __( 'No orders match “' ) + esc( state.orderSearch ) + '”.' : __( 'No orders here.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'order' ) }`;
 
@@ -6423,12 +6425,12 @@
 				if ( ! o ) return;
 				e.preventDefault();
 				const moves = [
-					[ 'processing', 'Mark processing', 'Order #' + o.number + ' marked processing' ],
-					[ 'completed', 'Mark completed', 'Order #' + o.number + ' completed' ],
-					[ 'on-hold', 'Put on hold', 'Order #' + o.number + ' put on hold' ],
+					[ 'processing', __( 'Mark processing' ), __( 'Order #' ) + o.number + ' marked processing' ],
+					[ 'completed', __( 'Mark completed' ), __( 'Order #' ) + o.number + ' completed' ],
+					[ 'on-hold', __( 'Put on hold' ), __( 'Order #' ) + o.number + ' put on hold' ],
 				].filter( ( [ st ] ) => st !== o.status );
 				openMinnMenu( e.clientX, e.clientY, [
-					{ label: 'Quick view', run: () => openOrderModal( o ) },
+					{ label: __( 'Quick view' ), run: () => openOrderModal( o ) },
 					...moves.map( ( [ st, label, done ] ) => ( { label, run: () => quickOrderStatus( o, st, done ) } ) ),
 				] );
 			} )
@@ -6459,9 +6461,9 @@
 	const SUB_TABS = [
 		[ 'any', 'All' ],
 		[ 'active', 'Active' ],
-		[ 'on-hold', 'On hold' ],
+		[ 'on-hold', __( 'On hold' ) ],
 		[ 'pending', 'Pending' ],
-		[ 'pending-cancel', 'Pending cancel' ],
+		[ 'pending-cancel', __( 'Pending cancel' ) ],
 		[ 'cancelled', 'Cancelled' ],
 		[ 'expired', 'Expired' ],
 		[ 'switched', 'Switched' ],
@@ -6502,7 +6504,7 @@
 		const next = s.next_payment_date_gmt;
 		if ( ! next ) {
 			if ( s.status === 'cancelled' || s.status === 'expired' || s.status === 'pending-cancel' ) return '—';
-			return 'None scheduled';
+			return __( 'None scheduled' );
 		}
 		return timeAgo( next );
 	}
@@ -6564,7 +6566,7 @@
 			.catch( ( e ) => {
 				if ( ! state.modal || state.modal.type !== 'subscription' ) return;
 				state.modal.loading = false;
-				state.modal.loadError = e.message || 'Could not load subscription';
+				state.modal.loadError = e.message || __( 'Could not load subscription' );
 				renderOverlays();
 			} );
 		api( `wc/v3/subscriptions/${ id }/orders?per_page=10&_fields=id,number,status,total,date_created,currency` )
@@ -6623,7 +6625,7 @@
 			? `No subscriptions match “${ esc( state.subSearch ) }”.`
 			: subTab !== 'any'
 				? `No ${ esc( ( subTabLabel || subTab ).toLowerCase() ) } subscriptions.`
-				: 'No subscriptions yet. When a customer buys a subscription product, it shows up here with status, next payment and related orders.';
+				: __( 'No subscriptions yet. When a customer buys a subscription product, it shows up here with status, next payment and related orders.' );
 		view.innerHTML = `
 		<div class="minn-toolbar minn-toolbar-views">
 			<div class="minn-tabs">
@@ -6723,11 +6725,11 @@
 		[ 'pending', 'Pending' ],
 	];
 	const PRODUCT_STOCK_TABS = [
-		[ 'any', 'Any stock' ],
-		[ 'instock', 'In stock' ],
-		[ 'outofstock', 'Out of stock' ],
-		[ 'onbackorder', 'On backorder' ],
-		[ 'low', 'Low stock' ],
+		[ 'any', __( 'Any stock' ) ],
+		[ 'instock', __( 'In stock' ) ],
+		[ 'outofstock', __( 'Out of stock' ) ],
+		[ 'onbackorder', __( 'On backorder' ) ],
+		[ 'low', __( 'Low stock' ) ],
 	];
 	const PRODUCT_STATUS_STYLE = {
 		publish: 'publish', draft: 'draft', private: 'private', pending: 'private',
@@ -6801,7 +6803,7 @@
 				<input class="minn-input minn-pvar-price" data-pvarreg="${ i }" value="${ esc( v.regular_price ) }" inputmode="decimal" placeholder="${ esc( __( 'Price' ) ) }" aria-label="${ esc( __( 'Regular price' ) ) }">
 				<input class="minn-input minn-pvar-price" data-pvarsale="${ i }" value="${ esc( v.sale_price ) }" inputmode="decimal" placeholder="${ esc( __( 'Sale' ) ) }" aria-label="${ esc( __( 'Sale price' ) ) }">
 				<div class="minn-ac minn-pvar-stock" data-pvarstock="${ i }">
-					<input class="minn-input minn-ac-input" value="${ esc( ( { instock: 'In stock', outofstock: 'Out of stock', onbackorder: 'On backorder' } )[ v.stock_status ] || 'In stock' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Stock status' ) ) }">
+					<input class="minn-input minn-ac-input" value="${ esc( ( { instock: __( 'In stock' ), outofstock: __( 'Out of stock' ), onbackorder: __( 'On backorder' ) } )[ v.stock_status ] || __( 'In stock' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( __( 'Stock status' ) ) }">
 					<div class="minn-ac-panel" hidden></div>
 				</div>
 				<button type="button" class="minn-pdl-x" data-pvarx="${ i }" title="${ esc( __( 'Remove' ) ) }" aria-label="${ esc( sprintf( __( 'Remove variation %s' ), variationLabel( m, v ) ) ) }">×</button>
@@ -6959,8 +6961,8 @@
 	// Linked products are stored as bare ids, so the names have to be looked
 	// up separately before anything can be drawn.
 	const PRODUCT_LINK_FIELDS = [
-		{ key: 'upsell_ids', label: 'Upsells', hint: 'Shown on this product’s page as something to consider instead.' },
-		{ key: 'cross_sell_ids', label: 'Cross-sells', hint: 'Offered in the cart alongside this product.' },
+		{ key: 'upsell_ids', label: 'Upsells', hint: __( 'Shown on this product’s page as something to consider instead.' ) },
+		{ key: 'cross_sell_ids', label: 'Cross-sells', hint: __( 'Offered in the cart alongside this product.' ) },
 	];
 
 	function seedProductLinks( m, names ) {
@@ -6977,9 +6979,9 @@
 	// The Organization card's taxonomies. A store without brands answers with
 	// no `brands` key at all, which is how that field knows to stay away.
 	const PRODUCT_TERM_FIELDS = [
-		{ key: 'categories', label: 'Categories', route: 'products/categories', create: false, placeholder: 'Search categories…' },
-		{ key: 'tags', label: 'Tags', route: 'products/tags', create: true, placeholder: 'Add a tag, press Enter' },
-		{ key: 'brands', label: 'Brands', route: 'products/brands', create: true, placeholder: 'Add a brand, press Enter' },
+		{ key: 'categories', label: 'Categories', route: 'products/categories', create: false, placeholder: __( 'Search categories…' ) },
+		{ key: 'tags', label: 'Tags', route: 'products/tags', create: true, placeholder: __( 'Add a tag, press Enter' ) },
+		{ key: 'brands', label: 'Brands', route: 'products/brands', create: true, placeholder: __( 'Add a brand, press Enter' ) },
 	];
 
 	// Downloadable files ride the model too. WooCommerce mints the id for a new
@@ -7309,7 +7311,7 @@
 			.catch( ( e ) => {
 				if ( ! isCur() ) return;
 				m.loading = false;
-				m.loadError = e.message || 'Could not load product';
+				m.loadError = e.message || __( 'Could not load product' );
 				repaint();
 			} );
 	}
@@ -7326,9 +7328,9 @@
 		const priceOk = productPriceEditable( p );
 		const cats = ( p.categories || [] ).map( ( c ) => c.name ).filter( Boolean ).join( ', ' );
 		const thumb = p.images && p.images[ 0 ] ? ( p.images[ 0 ].src || p.images[ 0 ].thumbnail || '' ) : '';
-		const stockOpts = [ [ 'instock', 'In stock' ], [ 'outofstock', 'Out of stock' ], [ 'onbackorder', 'On backorder' ] ];
-		const visOpts = [ [ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ];
-		const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ];
+		const stockOpts = [ [ 'instock', __( 'In stock' ) ], [ 'outofstock', __( 'Out of stock' ) ], [ 'onbackorder', __( 'On backorder' ) ] ];
+		const visOpts = [ [ 'visible', __( 'Shop and search results' ) ], [ 'catalog', __( 'Shop only' ) ], [ 'search', __( 'Search results only' ) ], [ 'hidden', 'Hidden' ] ];
+		const statusOpts = [ [ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', __( 'Pending review' ) ] ];
 		const combos = productComboSpecs( p );
 		const combo = ( id ) => productComboHtml( combos.find( ( c ) => c.id === id ) );
 		const dims = p.dimensions || {};
@@ -7406,7 +7408,7 @@
 										<div><div class="minn-field-label">${ esc( __( 'GTIN, UPC, EAN or ISBN' ) ) }</div><input class="minn-input" id="minn-p-gtin" value="${ esc( p.global_unique_id || '' ) }" placeholder="${ esc( __( 'Optional' ) ) }"></div>
 									</div>
 									${ priceOk ? `
-									${ productToggleHtml( 'minn-p-manage', 'Track stock quantity', p.manage_stock ) }
+									${ productToggleHtml( 'minn-p-manage', __( 'Track stock quantity' ), p.manage_stock ) }
 									<div id="minn-p-stock-row" ${ p.manage_stock ? '' : 'style="display:none;"' }>
 										<div class="minn-order-field-row">
 											<div><div class="minn-field-label">${ esc( __( 'Quantity' ) ) }</div><input class="minn-input" id="minn-p-qty" type="number" step="1" value="${ p.stock_quantity != null ? esc( String( p.stock_quantity ) ) : '' }"></div>
@@ -7415,7 +7417,7 @@
 										<div style="margin-top:8px;">${ combo( 'minn-p-backorders' ) }</div>
 									</div>
 									${ combo( 'minn-p-stock' ) }` : '' }
-									${ productToggleHtml( 'minn-p-solo', 'Limit purchases to 1 item per order', p.sold_individually ) }
+									${ productToggleHtml( 'minn-p-solo', __( 'Limit purchases to 1 item per order' ), p.sold_individually ) }
 								</div>
 							</div>` : '' }
 							${ canEdit && shipOk ? `
@@ -7447,7 +7449,7 @@
 										</div>
 										${ p.status === 'publish' ? '<div class="minn-slug-note">Changing this breaks the current URL.</div>' : '' }
 									</div>
-									${ productToggleHtml( 'minn-p-featured', 'Featured product', p.featured ) }
+									${ productToggleHtml( 'minn-p-featured', __( 'Featured product' ), p.featured ) }
 								</div>
 							</div>` : '' }
 							${ canEdit && isDownloadable ? `
@@ -7472,7 +7474,7 @@
 										<textarea class="minn-input" id="minn-p-note" rows="3" placeholder="${ esc( __( 'Sent to the customer after they buy this…' ) ) }">${ esc( wcPlainText( p.purchase_note ) ) }</textarea>
 									</div>
 									<div><div class="minn-field-label">${ esc( __( 'Menu order' ) ) }</div><input class="minn-input" id="minn-p-menuorder" type="number" step="1" value="${ esc( String( p.menu_order != null ? p.menu_order : 0 ) ) }"></div>
-									${ productToggleHtml( 'minn-p-reviews', 'Enable reviews', p.reviews_allowed ) }
+									${ productToggleHtml( 'minn-p-reviews', __( 'Enable reviews' ), p.reviews_allowed ) }
 								</div>
 							</div>` : '' }
 							${ canEdit ? `
@@ -7534,27 +7536,27 @@
 	 * drift over what the options are.
 	 */
 	function productComboSpecs( p ) {
-		const taxClasses = state.cache.taxClasses || [ { slug: 'standard', name: 'Standard rate' } ];
+		const taxClasses = state.cache.taxClasses || [ { slug: 'standard', name: __( 'Standard rate' ) } ];
 		const shipClasses = state.cache.shippingClasses || [];
 		return [
-			{ id: 'minn-p-type', label: 'Product type', value: p.type || 'simple', options: [
-				[ 'simple', 'Simple product' ], [ 'grouped', 'Grouped product' ],
-				[ 'external', 'External or affiliate product' ], [ 'variable', 'Variable product' ] ] },
+			{ id: 'minn-p-type', label: __( 'Product type' ), value: p.type || 'simple', options: [
+				[ 'simple', __( 'Simple product' ) ], [ 'grouped', __( 'Grouped product' ) ],
+				[ 'external', __( 'External or affiliate product' ) ], [ 'variable', __( 'Variable product' ) ] ] },
 			{ id: 'minn-p-status', label: 'Status', value: p.status || 'publish', options: [
-				[ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', 'Pending review' ] ] },
-			{ id: 'minn-p-vis', label: 'Catalog visibility', value: p.catalog_visibility || 'visible', options: [
-				[ 'visible', 'Shop and search results' ], [ 'catalog', 'Shop only' ], [ 'search', 'Search results only' ], [ 'hidden', 'Hidden' ] ] },
-			{ id: 'minn-p-stock', label: 'Stock status', value: p.stock_status || 'instock', options: [
-				[ 'instock', 'In stock' ], [ 'outofstock', 'Out of stock' ], [ 'onbackorder', 'On backorder' ] ] },
+				[ 'publish', 'Published' ], [ 'draft', 'Draft' ], [ 'private', 'Private' ], [ 'pending', __( 'Pending review' ) ] ] },
+			{ id: 'minn-p-vis', label: __( 'Catalog visibility' ), value: p.catalog_visibility || 'visible', options: [
+				[ 'visible', __( 'Shop and search results' ) ], [ 'catalog', __( 'Shop only' ) ], [ 'search', __( 'Search results only' ) ], [ 'hidden', 'Hidden' ] ] },
+			{ id: 'minn-p-stock', label: __( 'Stock status' ), value: p.stock_status || 'instock', options: [
+				[ 'instock', __( 'In stock' ) ], [ 'outofstock', __( 'Out of stock' ) ], [ 'onbackorder', __( 'On backorder' ) ] ] },
 			{ id: 'minn-p-backorders', label: 'Backorders', value: p.backorders || 'no', options: [
-				[ 'no', 'Do not allow' ], [ 'notify', 'Allow, but notify customer' ], [ 'yes', 'Allow' ] ] },
-			{ id: 'minn-p-taxstatus', label: 'Tax status', value: p.tax_status || 'taxable', options: [
-				[ 'taxable', 'Taxable' ], [ 'shipping', 'Shipping only' ], [ 'none', 'None' ] ] },
+				[ 'no', __( 'Do not allow' ) ], [ 'notify', __( 'Allow, but notify customer' ) ], [ 'yes', 'Allow' ] ] },
+			{ id: 'minn-p-taxstatus', label: __( 'Tax status' ), value: p.tax_status || 'taxable', options: [
+				[ 'taxable', 'Taxable' ], [ 'shipping', __( 'Shipping only' ) ], [ 'none', 'None' ] ] },
 			// WooCommerce stores the standard tax class as an empty string.
-			{ id: 'minn-p-taxclass', label: 'Tax class', value: p.tax_class || '', options:
+			{ id: 'minn-p-taxclass', label: __( 'Tax class' ), value: p.tax_class || '', options:
 				taxClasses.map( ( tc ) => [ tc.slug === 'standard' ? '' : tc.slug, tc.name ] ) },
-			{ id: 'minn-p-shipclass', label: 'Shipping class', value: p.shipping_class || '', options:
-				[ [ '', 'No shipping class' ] ].concat( shipClasses.map( ( sc ) => [ sc.slug, sc.name ] ) ) },
+			{ id: 'minn-p-shipclass', label: __( 'Shipping class' ), value: p.shipping_class || '', options:
+				[ [ '', __( 'No shipping class' ) ] ].concat( shipClasses.map( ( sc ) => [ sc.slug, sc.name ] ) ) },
 		];
 	}
 
@@ -8154,12 +8156,12 @@
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 			const name = ( ( $( '#minn-p-name' ) || {} ).value || '' ).trim();
 			if ( ! name ) {
-				toast( 'Name is required', true );
+				toast( __( 'Name is required' ), true );
 				return;
 			}
 			const payload = buildProductPayload( m, p );
 			saveBtn.disabled = true;
-			saveBtn.textContent = 'Saving…';
+			saveBtn.textContent = __( 'Saving…' );
 			try {
 				const updated = await api( `wc/v3/products/${ p.id }`, {
 					method: 'PUT',
@@ -8198,14 +8200,14 @@
 						catalog_visibility: full.catalog_visibility,
 					} );
 				}
-				toast( 'Product updated' );
+				toast( __( 'Product updated' ) );
 				state.cache.products = null;
 				if ( state.route === 'products' ) renderProducts();
 				repaint();
 			} catch ( e ) {
 				toast( e.message, true );
 				saveBtn.disabled = false;
-				saveBtn.textContent = 'Save changes';
+				saveBtn.textContent = __( 'Save changes' );
 			}
 		} );
 	}
@@ -8234,7 +8236,7 @@
 				<button type="button" class="minn-btn-soft" id="minn-pp-back">← ${ esc( __( 'Products' ) ) }</button>
 				<div class="minn-modal-title-block">
 					<div class="minn-modal-title">${ esc( p.name || 'Product' ) }</div>
-					<div class="minn-modal-sub">${ loading ? 'Loading…' : esc( sub ) }</div>
+					<div class="minn-modal-sub">${ loading ? __( 'Loading…' ) : esc( sub ) }</div>
 				</div>
 				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
 			</div>
@@ -8348,7 +8350,7 @@
 					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ productPriceLabel( p ) }</div>
 					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-pqv="${ p.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.productSearch ? 'No products match “' + esc( state.productSearch ) + '”.' : ( state.productStock === 'low' ? 'No low-stock products.' : 'No products here.' ) }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.productSearch ? __( 'No products match “' ) + esc( state.productSearch ) + '”.' : ( state.productStock === 'low' ? __( 'No low-stock products.' ) : __( 'No products here.' ) ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'product' ) }`;
 
@@ -8446,16 +8448,16 @@
 				const stWrap = $( '[data-prod-bulk-status]', slot );
 				const skWrap = $( '[data-prod-bulk-stock]', slot );
 				if ( stWrap ) bindAutocomplete( stWrap, [
-					{ value: '', label: 'Set status…' },
+					{ value: '', label: __( 'Set status…' ) },
 					{ value: 'publish', label: 'Published' },
 					{ value: 'draft', label: 'Draft' },
 					{ value: 'private', label: 'Private' },
 				], { strict: true, value: '' } );
 				if ( skWrap ) bindAutocomplete( skWrap, [
-					{ value: '', label: 'Set stock…' },
-					{ value: 'instock', label: 'In stock' },
-					{ value: 'outofstock', label: 'Out of stock' },
-					{ value: 'onbackorder', label: 'On backorder' },
+					{ value: '', label: __( 'Set stock…' ) },
+					{ value: 'instock', label: __( 'In stock' ) },
+					{ value: 'outofstock', label: __( 'Out of stock' ) },
+					{ value: 'onbackorder', label: __( 'On backorder' ) },
 				], { strict: true, value: '' } );
 				$( '#minn-prod-bulk-clear', slot ).addEventListener( 'click', () => {
 					psel.clear();
@@ -8464,7 +8466,7 @@
 				$( '#minn-prod-bulk-apply', slot ).addEventListener( 'click', async () => {
 					const st = stWrap && $( '.minn-ac-input', stWrap ) ? $( '.minn-ac-input', stWrap ).dataset.acValue : '';
 					const sk = skWrap && $( '.minn-ac-input', skWrap ) ? $( '.minn-ac-input', skWrap ).dataset.acValue : '';
-					if ( ! st && ! sk ) { toast( 'Pick a status or stock change', true ); return; }
+					if ( ! st && ! sk ) { toast( __( 'Pick a status or stock change' ), true ); return; }
 					const ids = [ ...psel ];
 					const update = ids.map( ( id ) => {
 						const row = { id };
@@ -8540,17 +8542,17 @@
 				e.preventDefault();
 				const out = p.stock_status === 'outofstock';
 				openMinnMenu( e.clientX, e.clientY, [
-					{ label: 'Open product', run: () => go( 'products/' + p.id ) },
-					{ label: 'Quick view', run: () => openProductModal( p ) },
-					...( p.permalink && p.status === 'publish' ? [ { label: 'View on site ↗', href: p.permalink } ] : [] ),
+					{ label: __( 'Open product' ), run: () => go( 'products/' + p.id ) },
+					{ label: __( 'Quick view' ), run: () => openProductModal( p ) },
+					...( p.permalink && p.status === 'publish' ? [ { label: __( 'View on site ↗' ), href: p.permalink } ] : [] ),
 					// Managed-stock products derive stock_status from quantity — edit those in the modal.
 					...( B.caps.products && ! p.manage_stock ? [ {
-						label: out ? 'Mark in stock' : 'Mark out of stock',
-						run: () => quickProduct( p, { stock_status: out ? 'instock' : 'outofstock' }, out ? 'Back in stock' : 'Marked out of stock' ),
+						label: out ? __( 'Mark in stock' ) : __( 'Mark out of stock' ),
+						run: () => quickProduct( p, { stock_status: out ? 'instock' : 'outofstock' }, out ? __( 'Back in stock' ) : __( 'Marked out of stock' ) ),
 					} ] : [] ),
 					...( B.caps.products ? [ {
-						label: p.status === 'publish' ? 'Move to draft' : 'Publish now',
-						run: () => quickProduct( p, { status: p.status === 'publish' ? 'draft' : 'publish' }, p.status === 'publish' ? 'Moved to draft' : 'Product published' ),
+						label: p.status === 'publish' ? __( 'Move to draft' ) : __( 'Publish now' ),
+						run: () => quickProduct( p, { status: p.status === 'publish' ? 'draft' : 'publish' }, p.status === 'publish' ? __( 'Moved to draft' ) : __( 'Product published' ) ),
 					} ] : [] ),
 				] );
 			} )
@@ -8566,9 +8568,9 @@
 		[ 'draft', 'Draft' ],
 	];
 	const COUPON_TYPES = [
-		[ 'percent', 'Percentage discount' ],
-		[ 'fixed_cart', 'Fixed cart discount' ],
-		[ 'fixed_product', 'Fixed product discount' ],
+		[ 'percent', __( 'Percentage discount' ) ],
+		[ 'fixed_cart', __( 'Fixed cart discount' ) ],
+		[ 'fixed_product', __( 'Fixed product discount' ) ],
 	];
 	const COUPON_LIST_FIELDS = 'id,code,amount,status,discount_type,description,date_expires,usage_count,usage_limit,usage_limit_per_user,individual_use,free_shipping,minimum_amount,maximum_amount,date_created';
 	const COUPON_DETAIL_FIELDS = COUPON_LIST_FIELDS + ',exclude_sale_items,date_expires_gmt';
@@ -8658,7 +8660,7 @@
 			.catch( ( e ) => {
 				if ( ! state.modal || state.modal.type !== 'coupon' ) return;
 				state.modal.loading = false;
-				state.modal.loadError = e.message || 'Could not load coupon';
+				state.modal.loadError = e.message || __( 'Could not load coupon' );
 				renderOverlays();
 			} );
 	}
@@ -8734,7 +8736,7 @@
 					<div class="minn-row-meta">${ esc( couponExpiresLabel( cp ) ) }</div>
 					<div><span class="minn-status ${ PRODUCT_STATUS_STYLE[ cp.status ] || 'draft' }">${ esc( ( cp.status || '' ).replace( /-/g, ' ' ) ) }</span></div>
 					<div class="minn-row-arrow">›</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.couponSearch ? 'No coupons match “' + esc( state.couponSearch ) + '”.' : 'No coupons yet.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.couponSearch ? __( 'No coupons match “' ) + esc( state.couponSearch ) + '”.' : __( 'No coupons yet.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'coupon' ) }`;
 
@@ -8854,7 +8856,7 @@
 			.catch( ( e ) => {
 				if ( ! state.modal || state.modal.type !== 'customer' ) return;
 				state.modal.loading = false;
-				state.modal.loadError = e.message || 'Could not load customer';
+				state.modal.loadError = e.message || __( 'Could not load customer' );
 				renderOverlays();
 			} );
 		apiPaged( `wc/v3/orders?customer=${ id }&per_page=10&orderby=date&order=desc&_fields=id,number,status,total,currency_symbol,date_created` )
@@ -8918,7 +8920,7 @@
 					<div class="minn-row-meta">${ esc( cu.role || '—' ) }</div>
 					<div class="minn-row-meta">${ esc( cu.date_created ? timeAgo( cu.date_created ) : '—' ) }</div>
 					<div class="minn-row-arrow">›</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.customerSearch ? 'No customers match “' + esc( state.customerSearch ) + '”.' : 'No customers yet.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.customerSearch ? __( 'No customers match “' ) + esc( state.customerSearch ) + '”.' : __( 'No customers yet.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'customer' ) }`;
 
@@ -8965,11 +8967,11 @@
 				if ( ! cu ) return;
 				e.preventDefault();
 				openMinnMenu( e.clientX, e.clientY, [
-					{ label: 'Open customer', run: () => openCustomerModal( cu ) },
+					{ label: __( 'Open customer' ), run: () => openCustomerModal( cu ) },
 					...( cu.email ? [
 						{ label: 'Email ' + cu.email, href: 'mailto:' + cu.email },
 						...( B.caps.orders ? [ {
-							label: 'View orders',
+							label: __( 'View orders' ),
 							run: () => {
 								state.orderView = 'list';
 								state.orderSearch = cu.email;
@@ -8978,7 +8980,7 @@
 							},
 						} ] : [] ),
 					] : [] ),
-					...( cu.id && B.caps.users ? [ { label: 'Edit user in wp-admin ↗', href: B.site.adminUrl + 'user-edit.php?user_id=' + cu.id } ] : [] ),
+					...( cu.id && B.caps.users ? [ { label: __( 'Edit user in wp-admin ↗' ), href: B.site.adminUrl + 'user-edit.php?user_id=' + cu.id } ] : [] ),
 				] );
 			} )
 		);
@@ -9079,7 +9081,7 @@
 
 	function structureTabsHtml( active ) {
 		const defs = [];
-		if ( B.caps.settings ) { defs.push( [ 'types', 'Post Types' ] ); defs.push( [ 'taxonomies', 'Taxonomies' ] ); }
+		if ( B.caps.settings ) { defs.push( [ 'types', __( 'Post Types' ) ] ); defs.push( [ 'taxonomies', 'Taxonomies' ] ); }
 		if ( B.caps.terms ) defs.push( [ 'terms', 'Terms' ] );
 		if ( defs.length < 2 ) return ''; // a single available tab needs no bar
 		return `<div class="minn-tabs">${ defs.map( ( [ id, label ] ) =>
@@ -9130,7 +9132,7 @@
 						} );
 						const loading = document.createElement( 'div' );
 						loading.className = 'minn-loading';
-						loading.textContent = next === 'terms' ? 'Loading terms…' : 'Loading…';
+						loading.textContent = next === 'terms' ? __( 'Loading terms…' ) : __( 'Loading…' );
 						view.appendChild( loading );
 					},
 					load: () => {
@@ -9196,7 +9198,7 @@
 					<div class="minn-row-actions">
 						<button type="button" class="minn-row-more" title="${ esc( __( 'Actions' ) ) }" aria-label="${ esc( __( 'Term actions' ) ) }">⋯</button>
 					</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.termSearch ? 'No matches.' : 'No ' + esc( tax.label.toLowerCase() ) + ' yet.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.termSearch ? __( 'No matches.' ) : 'No ' + esc( tax.label.toLowerCase() ) + ' yet.' }</div>` }
 		</div>
 		${ c.tree ? '' : pagerHtml( c.page, c.totalPages, c.total, tax.item ) }`;
 
@@ -9243,9 +9245,9 @@
 		const openTermMenu = ( x, y, t ) => {
 			openMinnMenu( x, y, [
 				...( tax.canEdit ? [ { label: 'Edit ' + tax.item, run: () => openTermEditor( t ) } ] : [] ),
-				...( linkable && t.count ? [ { label: 'View posts', run: () => viewPosts( t ) } ] : [] ),
-				...( t.link ? [ { label: 'Open archive ↗', href: t.link } ] : [] ),
-				...( tax.canDelete && tax.canEdit ? [ { label: 'Merge into…', run: () => openTermMerge( t ) } ] : [] ),
+				...( linkable && t.count ? [ { label: __( 'View posts' ), run: () => viewPosts( t ) } ] : [] ),
+				...( t.link ? [ { label: __( 'Open archive ↗' ), href: t.link } ] : [] ),
+				...( tax.canDelete && tax.canEdit ? [ { label: __( 'Merge into…' ), run: () => openTermMerge( t ) } ] : [] ),
 				...( tax.canDelete ? [
 					{ heading: 'Danger' },
 					{ label: 'Delete ' + tax.item + '…', danger: true, run: () => deleteTerm( t ) },
@@ -9331,7 +9333,7 @@
 		let parentVal = term ? term.parent || 0 : 0;
 		const pWrap = editor.querySelector( '[data-parentcombo]' );
 		if ( pWrap ) bindAutocomplete( pWrap,
-			[ { value: '0', label: 'None (top level)' } ].concat(
+			[ { value: '0', label: __( 'None (top level)' ) } ].concat(
 				c.items.filter( ( t ) => ! excluded.has( t.id ) )
 					.map( ( t ) => ( { value: String( t.id ), label: `${ ' '.repeat( t.depth * 2 ) }${ t.name }` } ) ) ), {
 				strict: true,
@@ -9449,12 +9451,12 @@
 			if ( ! await minnConfirm( {
 				title: `Merge “${ t.name }” into “${ target.name }”?`,
 				changes: [ `Everything in “${ t.name }” moves to “${ target.name }”`, `“${ t.name }” is deleted` ],
-				body: 'There is no undo for this.',
+				body: __( 'There is no undo for this.' ),
 				danger: true,
 				confirmLabel: 'Merge',
 			} ) ) return;
 			mergeBtn.disabled = true;
-			mergeBtn.textContent = 'Merging…';
+			mergeBtn.textContent = __( 'Merging…' );
 			try {
 				const res = await api( 'minn-admin/v1/terms/merge', {
 					method: 'POST',
@@ -9490,9 +9492,9 @@
 	// /users endpoint does when session !== all.
 	const USER_SESSION_TABS = [
 		[ 'all', 'All' ],
-		[ 'active', 'Active session' ],
-		[ 'expired', 'Expired session' ],
-		[ 'never', 'Never signed in' ],
+		[ 'active', __( 'Active session' ) ],
+		[ 'expired', __( 'Expired session' ) ],
+		[ 'never', __( 'Never signed in' ) ],
 	];
 
 	const usersCtx = () => [ state.userSearch || '', state.userRole || '_all', state.userSession || 'all', state.userOrderby || 'registered_date', state.userOrder || 'desc' ].join( '|' );
@@ -9564,11 +9566,11 @@
 		const skippedSelf = ids.includes( B.user.id );
 		const skippedSuper = ids.some( ( id ) => isSuper( id ) && id !== B.user.id );
 		if ( ! targets.length ) {
-			toast( 'Pick users other than yourself or network administrators to change roles in bulk.', true );
+			toast( __( 'Pick users other than yourself or network administrators to change roles in bulk.' ), true );
 			return;
 		}
 		btn.disabled = true;
-		btn.textContent = 'Working…';
+		btn.textContent = __( 'Working…' );
 		let ok = 0, fail = 0;
 		for ( const id of targets ) {
 			try { await api( `wp/v2/users/${ id }`, { method: 'POST', body: JSON.stringify( { roles: [ role ] } ) } ); ok++; }
@@ -9672,10 +9674,10 @@
 					<div class="minn-row-actions">
 						<button type="button" class="minn-row-more" title="${ esc( __( 'Actions' ) ) }" aria-label="${ esc( __( 'User actions' ) ) }">⋯</button>
 					</div>
-				</div>` ).join( '' ) : `<div class="minn-empty">${ userSession === 'active' ? 'No users with an active session.'
-					: userSession === 'expired' ? 'No users with only expired sessions.'
-					: userSession === 'never' ? 'No users who have never signed in.'
-					: 'No users found.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ userSession === 'active' ? __( 'No users with an active session.' )
+					: userSession === 'expired' ? __( 'No users with only expired sessions.' )
+					: userSession === 'never' ? __( 'No users who have never signed in.' )
+					: __( 'No users found.' ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'user' ) }`;
 
@@ -9718,7 +9720,7 @@
 
 		const roleWrap = view.querySelector( '[data-rolecombo]' );
 		if ( roleWrap ) bindAutocomplete( roleWrap,
-			[ { value: '', label: 'All roles' } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label } ) ) ), {
+			[ { value: '', label: __( 'All roles' ) } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label } ) ) ), {
 				strict: true,
 				value: state.userRole && state.userRole !== '_all' ? state.userRole : '',
 				onPick: async ( v ) => {
@@ -9778,11 +9780,11 @@
 				// The user modal reads context=edit — without edit_users the
 				// fetch 403s, so the entry only renders when it can work
 				// (multisite subsite admins manage role + membership instead).
-				...( B.caps.editUsers || isSelf ? [ { label: 'View user', run: () => openUserModal( u.id ) } ] : [] ),
+				...( B.caps.editUsers || isSelf ? [ { label: __( 'View user' ), run: () => openUserModal( u.id ) } ] : [] ),
 				// wp-admin's per-row tool for promote-but-not-edit admins:
 				// role changes ride promote_users and work per-site.
 				...( ! B.caps.editUsers && B.caps.promoteUsers && ! isSelf && ! u.super ? [
-					{ heading: 'Set role' },
+					{ heading: __( 'Set role' ) },
 					...Object.entries( B.roles || {} ).map( ( [ key, label ] ) => ( {
 						label: ( u.roles || [] ).includes( key ) ? label + ' ✓' : label,
 						run: async () => {
@@ -9799,20 +9801,20 @@
 					} ) ),
 				] : [] ),
 				...( u.email ? [ {
-					label: 'Copy email',
+					label: __( 'Copy email' ),
 					run: async () => {
-						try { await navigator.clipboard.writeText( u.email ); toast( 'Email copied' ); }
-						catch ( err ) { toast( 'Could not copy', true ); }
+						try { await navigator.clipboard.writeText( u.email ); toast( __( 'Email copied' ) ); }
+						catch ( err ) { toast( __( 'Could not copy' ), true ); }
 					},
 				} ] : [] ),
 				{ heading: 'Email' },
 				...( B.caps.editUsers ? [
 					{
-						label: 'Send password reset',
+						label: __( 'Send password reset' ),
 						run: () => sendUserPasswordReset( u ),
 					},
 					{
-						label: 'Send email…',
+						label: __( 'Send email…' ),
 						run: () => openUserEmailModal( u ),
 					},
 				] : [] ),
@@ -9820,7 +9822,7 @@
 				// User Switching's own nonce URL (adapters/user-switching.php) —
 				// same-tab navigation is the point: you become that user.
 				...( u.minn_switch_url ? [ {
-					label: 'Switch to this user',
+					label: __( 'Switch to this user' ),
 					run: () => { window.location.href = u.minn_switch_url; },
 				} ] : [] ),
 				// One Time Login (adapters/one-time-login.php): mint a
@@ -9828,17 +9830,17 @@
 				// gates on edit_user for this account; a 403 surfaces as a
 				// toast. Menu gated on B.otl + editUsers to match.
 				...( B.otl && B.caps.editUsers ? [ {
-					label: 'Copy one-time login link',
+					label: __( 'Copy one-time login link' ),
 					run: () => copyOtlLink( u ),
 				} ] : [] ),
 				...( B.caps.editUsers || isSelf ? [ {
-					label: isSelf ? 'Sign out other sessions' : 'Sign out all sessions',
+					label: isSelf ? __( 'Sign out other sessions' ) : __( 'Sign out all sessions' ),
 					run: () => killUserSessions( u ),
 				} ] : [] ),
 				// Without edit_users the wp-admin screen refuses too (edit_user
 				// maps to manage_network_users on multisite) — no dead links.
 				...( B.caps.editUsers || isSelf ? [ {
-					label: 'Edit in wp-admin ↗',
+					label: __( 'Edit in wp-admin ↗' ),
 					href: B.site.adminUrl + 'user-edit.php?user_id=' + u.id,
 				} ] : [] ),
 				// Multisite: accounts are network-shared, so the per-site
@@ -9848,14 +9850,14 @@
 				...( B.multisite && B.caps.removeUsers && ! isSelf && ! u.super ? [
 					{ heading: 'Danger' },
 					{
-						label: 'Remove from this site…',
+						label: __( 'Remove from this site…' ),
 						danger: true,
 						run: async () => {
 							const okRm = await minnConfirm( {
 								title: `Remove ${ u.name || 'this user' } from this site?`,
-								body: 'Their account and any other site memberships stay; they just lose access here. Content they wrote here keeps their name.',
+								body: __( 'Their account and any other site memberships stay; they just lose access here. Content they wrote here keeps their name.' ),
 								danger: true,
-								confirmLabel: 'Remove from site',
+								confirmLabel: __( 'Remove from site' ),
 							} );
 							if ( ! okRm ) return;
 							try {
@@ -9869,14 +9871,14 @@
 						},
 					},
 					...( B.site.networkAdminUrl ? [ {
-						label: 'Delete network-wide ↗',
+						label: __( 'Delete network-wide ↗' ),
 						href: B.site.networkAdminUrl + 'users.php',
 					} ] : [] ),
 				] : [] ),
 				...( ! B.multisite && B.caps.deleteUsers && ! isSelf ? [
 					{ heading: 'Danger' },
 					{
-						label: 'Delete user…',
+						label: __( 'Delete user…' ),
 						danger: true,
 						run: () => openUserDeleteModal( u ),
 					},
@@ -9930,12 +9932,12 @@
 					// the picked slug rides input.dataset.acValue, blank until chosen.
 					const roleWrap = $( '[data-userbulkrole]', slot );
 					bindAutocomplete( roleWrap,
-						[ { value: '', label: 'Choose a role…' } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label } ) ) ),
+						[ { value: '', label: __( 'Choose a role…' ) } ].concat( roles.map( ( [ slug, label ] ) => ( { value: slug, label } ) ) ),
 						{ strict: true, value: '' } );
 					$( '#minn-user-bulk-apply', slot ).addEventListener( 'click', ( e ) => {
 						const acInput = $( '.minn-ac-input', roleWrap );
 						const role = acInput ? acInput.dataset.acValue : '';
-						if ( ! role ) { toast( 'Choose a role first', true ); return; }
+						if ( ! role ) { toast( __( 'Choose a role first' ), true ); return; }
 						const entry = roles.find( ( r ) => r[ 0 ] === role );
 						runUserBulkRole( role, entry ? entry[ 1 ] : role, e.currentTarget );
 					} );
@@ -9987,7 +9989,7 @@
 		if ( ! confirm( `Send a password-reset email to ${ u.name || 'this user' }${ u.email ? ' (' + u.email + ')' : '' }?` ) ) return;
 		try {
 			const r = await api( `minn-admin/v1/users/${ u.id }/reset-password`, { method: 'POST', body: '{}' } );
-			toast( 'Reset email sent' + ( r && r.email ? ' to ' + r.email : '' ) );
+			toast( __( 'Reset email sent' ) + ( r && r.email ? ' to ' + r.email : '' ) );
 		} catch ( e ) {
 			toast( e.message, true );
 		}
@@ -10002,17 +10004,17 @@
 		if ( ! u || ! u.id ) return;
 		try {
 			const r = await api( `minn-admin/v1/otl/${ u.id }`, { method: 'POST', body: '{}' } );
-			if ( ! r || ! r.url ) throw new Error( 'No link returned' );
+			if ( ! r || ! r.url ) throw new Error( __( 'No link returned' ) );
 			try {
 				await navigator.clipboard.writeText( r.url );
 				toast( `One-time login link for ${ r.name } copied — it signs its holder in once, then expires.` );
 			} catch ( err ) {
 				// Clipboard denied (permissions/focus): show the link so it's
 				// still usable rather than silently losing the minted token.
-				prompt( 'One-time login link (copy it now):', r.url );
+				prompt( __( 'One-time login link (copy it now):' ), r.url );
 			}
 		} catch ( e ) {
-			toast( e.message || 'Could not generate a login link', true );
+			toast( e.message || __( 'Could not generate a login link' ), true );
 		}
 	}
 
@@ -10020,12 +10022,12 @@
 		if ( ! u || ! u.id ) return;
 		const isSelf = u.id === B.user.id;
 		const msg = isSelf
-			? 'Sign out of every other browser and device? This session stays signed in.'
+			? __( 'Sign out of every other browser and device? This session stays signed in.' )
 			: `Sign ${ u.name || 'this user' } out of every active session?`;
 		if ( ! confirm( msg ) ) return;
 		try {
 			await api( `minn-admin/v1/users/${ u.id }/sessions`, { method: 'DELETE' } );
-			toast( isSelf ? 'Other sessions signed out' : 'All sessions signed out' );
+			toast( isSelf ? __( 'Other sessions signed out' ) : __( 'All sessions signed out' ) );
 		} catch ( e ) {
 			toast( e.message, true );
 		}
@@ -10115,7 +10117,7 @@
 			return `
 			<div class="minn-sstat-chart">
 				${ chart.title ? `<div class="minn-sstat-label">${ esc( chart.title ) }</div>` : '' }
-				<div class="minn-sstat-hint">${ esc( buckets ? `No ${ buckets } entries in this window yet.` : 'No activity in this window yet.' ) }</div>
+				<div class="minn-sstat-hint">${ esc( buckets ? `No ${ buckets } entries in this window yet.` : __( 'No activity in this window yet.' ) ) }</div>
 			</div>`;
 		}
 		const dual = !! chart.secondary || points.some( ( p ) => p.secondary != null );
@@ -10408,7 +10410,7 @@
 		$( '[data-actgo]', rowEl ).addEventListener( 'click', async () => {
 			const { body, missing } = collectActionFields( rowEl, action );
 			if ( missing ) {
-				toast( 'Fill in all fields first', true );
+				toast( __( 'Fill in all fields first' ), true );
 				return;
 			}
 			if ( action.confirm && ! confirm( action.confirm ) ) return;
@@ -10432,9 +10434,9 @@
 		if ( copy && st.command ) copy.addEventListener( 'click', async () => {
 			try {
 				await navigator.clipboard.writeText( st.command.text );
-				toast( 'Command copied' );
+				toast( __( 'Command copied' ) );
 			} catch ( e ) {
-				toast( 'Copy failed — select the text instead', true );
+				toast( __( 'Copy failed — select the text instead' ), true );
 			}
 		} );
 		$$( '[data-sstatact]', view ).forEach( ( btn ) =>
@@ -10861,8 +10863,8 @@
 		if ( ctx ) {
 			const keep = {
 				post_title: 'Post',
-				post_type: 'Post type',
-				post_id: 'Post ID',
+				post_type: __( 'Post type' ),
+				post_id: __( 'Post ID' ),
 				plugin_slug: 'Plugin',
 				plugin_name: 'Plugin',
 				theme_name: 'Theme',
@@ -11052,7 +11054,7 @@
 		const run = $( '#minn-setup-run', view );
 		if ( run ) run.addEventListener( 'click', async () => {
 			run.disabled = true;
-			run.textContent = 'Setting up…';
+			run.textContent = __( 'Setting up…' );
 			const choices = {};
 			$$( '[data-setupopt]', view ).forEach( ( sw ) => {
 				choices[ sw.dataset.setupopt ] = sw.classList.contains( 'on' );
@@ -11066,9 +11068,9 @@
 				await refreshSurfaces();
 				renderView();
 			} catch ( e ) {
-				toast( e.message || 'Setup failed.', true );
+				toast( e.message || __( 'Setup failed.' ), true );
 				run.disabled = false;
-				run.textContent = 'Set up now';
+				run.textContent = __( 'Set up now' );
 			}
 		} );
 	}
@@ -11642,14 +11644,14 @@
 				if ( dirty[ input.dataset.sset ] ) payload[ input.dataset.sset ] = formControlValue( input );
 			} );
 			if ( ! Object.keys( payload ).length ) {
-				toast( 'Nothing changed yet' );
+				toast( __( 'Nothing changed yet' ) );
 				return;
 			}
 			saveBtn.disabled = true;
 			try {
 				const r = await api( routeFor( tab ), { method: 'POST', body: JSON.stringify( { values: payload } ) } );
 				ss.settingsCache[ cacheKey ] = r || { groups: [] };
-				toast( 'Settings saved' );
+				toast( __( 'Settings saved' ) );
 				renderSurface( s );
 			} catch ( e ) {
 				toast( e.message, true );
@@ -11800,7 +11802,7 @@
 						} );
 						const loading = document.createElement( 'div' );
 						loading.className = 'minn-loading';
-						loading.textContent = 'Loading menu…';
+						loading.textContent = __( 'Loading menu…' );
 						view.appendChild( loading );
 					},
 					load: () => loadMenuItems(),
@@ -11810,11 +11812,11 @@
 		);
 		const newBtn = $( '#minn-menu-new', view );
 		if ( newBtn ) newBtn.addEventListener( 'click', async () => {
-			const name = prompt( 'Name for the new menu:' );
+			const name = prompt( __( 'Name for the new menu:' ) );
 			if ( ! name || ! name.trim() ) return;
 			try {
 				const m = await api( 'wp/v2/menus', { method: 'POST', body: JSON.stringify( { name: name.trim() } ) } );
-				toast( 'Menu created' );
+				toast( __( 'Menu created' ) );
 				ms.menus = null;
 				ms.sel = m.id;
 				ms.items = null;
@@ -11975,7 +11977,7 @@
 			<div class="minn-panel-title" style="margin-bottom:10px;">${ esc( __( 'Add to menu' ) ) }</div>
 			<div class="minn-menu-add-row">
 				<div class="minn-ac" id="minn-menu-pick">
-					<input class="minn-input minn-ac-input" placeholder="${ ms.pick ? 'Find a page or post…' : 'Loading pages…' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<input class="minn-input minn-ac-input" placeholder="${ ms.pick ? __( 'Find a page or post…' ) : __( 'Loading pages…' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 					<div class="minn-ac-panel" hidden></div>
 				</div>
 				<button class="minn-btn-soft" id="minn-menu-add-content">${ icon( 'plus' ) } Add</button>
@@ -12012,7 +12014,7 @@
 							} else if ( holder ) {
 								await api( `wp/v2/menus/${ holder.id }`, { method: 'POST', body: JSON.stringify( { locations: ( holder.locations || [] ).filter( ( l ) => l !== slug ) } ) } );
 							}
-							toast( 'Location updated' );
+							toast( __( 'Location updated' ) );
 							ms.menus = null;
 							renderMenus();
 						} catch ( e ) {
@@ -12036,19 +12038,19 @@
 						const sibs = flatNow.filter( ( f ) => f.it.parent === it.parent ).map( ( f ) => f.it );
 						const i = sibs.indexOf( it );
 						const j = i + ( dirKey === 'up' ? -1 : 1 );
-						if ( j < 0 || j >= sibs.length ) throw new Error( 'Already at the edge.' );
+						if ( j < 0 || j >= sibs.length ) throw new Error( __( 'Already at the edge.' ) );
 						const tmp = sibs[ i ].order;
 						sibs[ i ].order = sibs[ j ].order;
 						sibs[ j ].order = tmp;
 					} else if ( dirKey === 'in' ) {
 						// New parent = the item visually above, one level shallower or equal.
 						const above = flatNow.slice( 0, idx ).reverse().find( ( f ) => f.it.parent === it.parent && f.it.id !== it.id );
-						if ( ! above ) throw new Error( 'Nothing above to nest under.' );
+						if ( ! above ) throw new Error( __( 'Nothing above to nest under.' ) );
 						it.parent = above.it.id;
 						it.order = 9999;
 					} else if ( dirKey === 'out' ) {
 						const p = findItem( it.parent );
-						if ( ! p ) throw new Error( 'Already top-level.' );
+						if ( ! p ) throw new Error( __( 'Already top-level.' ) );
 						it.parent = p.parent;
 						it.order = p.order + 0.5;
 					}
@@ -12097,7 +12099,7 @@
 					const target = findItem( targetId );
 					// A parent can't become its own descendant's sibling.
 					for ( let p = target; p; p = findItem( p.parent ) ) {
-						if ( p.id === it.id ) throw new Error( 'Can’t drop an item inside itself.' );
+						if ( p.id === it.id ) throw new Error( __( 'Can’t drop an item inside itself.' ) );
 					}
 					it.parent = target.parent;
 					it.order = target.order + ( below ? 0.5 : -0.5 );
@@ -12118,7 +12120,7 @@
 						await api( `wp/v2/menu-items/${ kid.id }`, { method: 'POST', body: JSON.stringify( { parent: it.parent } ) } );
 					}
 					await api( `wp/v2/menu-items/${ id }?force=true`, { method: 'DELETE' } );
-					toast( 'Removed from menu' );
+					toast( __( 'Removed from menu' ) );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -12140,7 +12142,7 @@
 			row.addEventListener( 'contextmenu', ( e ) => {
 				e.preventDefault();
 				const entries = [ {
-					label: 'Edit label…',
+					label: __( 'Edit label…' ),
 					run: () => { ms.editing = parseInt( row.dataset.mi, 10 ); renderMenus(); },
 				} ];
 				$$( '.minn-menu-ctrls button', row ).forEach( ( b ) => {
@@ -12161,7 +12163,7 @@
 			miSave.disabled = true;
 			try {
 				await api( `wp/v2/menu-items/${ id }`, { method: 'POST', body: JSON.stringify( payload ) } );
-				toast( 'Item updated' );
+				toast( __( 'Item updated' ) );
 				ms.editing = null;
 				await loadMenuItems();
 			} catch ( e ) {
@@ -12179,7 +12181,7 @@
 					menu_order: ( ms.items.length ? Math.max( ...ms.items.map( ( x ) => x.order ) ) : 0 ) + 1,
 					...payload,
 				} ) } );
-				toast( 'Added to menu' );
+				toast( __( 'Added to menu' ) );
 				await loadMenuItems();
 			} catch ( e ) {
 				toast( e.message, true );
@@ -12193,23 +12195,23 @@
 		$( '#minn-menu-add-content' ).addEventListener( 'click', ( e ) => {
 			const key = pickWrap && $( '.minn-ac-input', pickWrap ).dataset.acValue;
 			const p = ( ms.pick || [] ).find( ( x ) => x.key === key );
-			if ( ! p ) { toast( 'Pick a page or post first', true ); return; }
+			if ( ! p ) { toast( __( 'Pick a page or post first' ), true ); return; }
 			// No title: WP then tracks the post's own title automatically.
 			addItem( { type: 'post_type', object: p.object, object_id: p.id }, e.currentTarget );
 		} );
 		$( '#minn-menu-add-link' ).addEventListener( 'click', ( e ) => {
 			const label = $( '#minn-menu-link-label' ).value.trim();
 			const url = $( '#minn-menu-link-url' ).value.trim();
-			if ( ! label || ! url ) { toast( 'A label and URL are both needed', true ); return; }
+			if ( ! label || ! url ) { toast( __( 'A label and URL are both needed' ), true ); return; }
 			addItem( { type: 'custom', title: label, url }, e.currentTarget );
 		} );
 
 		$( '#minn-menu-rename' ).addEventListener( 'click', async () => {
-			const name = prompt( 'New name for this menu:', cur ? cur.name : '' );
+			const name = prompt( __( 'New name for this menu:' ), cur ? cur.name : '' );
 			if ( ! name || ! name.trim() || ( cur && name.trim() === cur.name ) ) return;
 			try {
 				await api( `wp/v2/menus/${ ms.sel }`, { method: 'POST', body: JSON.stringify( { name: name.trim() } ) } );
-				toast( 'Menu renamed' );
+				toast( __( 'Menu renamed' ) );
 				ms.menus = null;
 				renderMenus();
 			} catch ( e ) {
@@ -12217,10 +12219,10 @@
 			}
 		} );
 		$( '#minn-menu-delete' ).addEventListener( 'click', async () => {
-			if ( ! await minnConfirm( { title: `Delete the menu “${ cur ? cur.name : '' }”?`, body: 'Every item in it is deleted too. There is no undo for this.', danger: true, confirmLabel: 'Delete menu' } ) ) return;
+			if ( ! await minnConfirm( { title: `Delete the menu “${ cur ? cur.name : '' }”?`, body: __( 'Every item in it is deleted too. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete menu' ) } ) ) return;
 			try {
 				await api( `wp/v2/menus/${ ms.sel }?force=true`, { method: 'DELETE' } );
-				toast( 'Menu deleted' );
+				toast( __( 'Menu deleted' ) );
 				ms.menus = null;
 				ms.sel = null;
 				ms.items = null;
@@ -12235,7 +12237,7 @@
 
 	// Widget types Minn can edit in place: instance.raw fields per id_base.
 	const WIDGET_EDITABLE = {
-		block: [ { key: 'content', label: 'Content (block markup or HTML)', tall: true } ],
+		block: [ { key: 'content', label: __( 'Content (block markup or HTML)' ), tall: true } ],
 		text: [ { key: 'title', label: 'Title' }, { key: 'text', label: 'Text', tall: true } ],
 		custom_html: [ { key: 'title', label: 'Title' }, { key: 'content', label: 'HTML', tall: true } ],
 	};
@@ -12314,7 +12316,7 @@
 						${ WIDGET_EDITABLE[ w.id_base ] && w.instance && w.instance.raw ? `<button class="minn-btn-soft" data-wedit="${ esc( w.id ) }">${ esc( __( 'Edit' ) ) }</button>` : '' }
 						<button class="minn-icon-btn sm danger" data-wdel="${ esc( w.id ) }" title="${ esc( __( 'Delete widget' ) ) }">✕</button>
 					</div>
-				</div>` ).join( '' ) : `<div class="minn-empty" style="padding:14px 0;">${ isInactive ? 'Nothing parked here.' : 'No widgets in this area.' }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty" style="padding:14px 0;">${ isInactive ? __( 'Nothing parked here.' ) : __( 'No widgets in this area.' ) }</div>` }
 			</div>`;
 		};
 		view.innerHTML = `
@@ -12358,11 +12360,11 @@
 		);
 		$$( '[data-wdel]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
-				if ( ! await minnConfirm( { title: 'Delete this widget?', body: 'Its settings are lost. There is no undo for this.', danger: true, confirmLabel: 'Delete widget' } ) ) return;
+				if ( ! await minnConfirm( { title: __( 'Delete this widget?' ), body: __( 'Its settings are lost. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete widget' ) } ) ) return;
 				btn.disabled = true;
 				try {
 					await api( `wp/v2/widgets/${ btn.dataset.wdel }?force=true`, { method: 'DELETE' } );
-					toast( 'Widget deleted' );
+					toast( __( 'Widget deleted' ) );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -12450,7 +12452,7 @@
 				const wid = sel.closest( '[data-widget]' ).dataset.widget;
 				try {
 					await api( `wp/v2/widgets/${ wid }`, { method: 'POST', body: JSON.stringify( { sidebar: sel.value } ) } );
-					toast( 'Widget moved' );
+					toast( __( 'Widget moved' ) );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -12551,7 +12553,7 @@
 				else await new Promise( ( r ) => setTimeout( r, 700 + i * 500 ) );
 			}
 		}
-		throw lastErr || new Error( 'Could not reload plugins' );
+		throw lastErr || new Error( __( 'Could not reload plugins' ) );
 	}
 
 	// Settings → Connectors list. After Install & activate the PHP worker often
@@ -12569,7 +12571,7 @@
 				else await new Promise( ( r ) => setTimeout( r, 500 + i * 400 ) );
 			}
 		}
-		throw lastErr || new Error( 'Could not load connectors' );
+		throw lastErr || new Error( __( 'Could not load connectors' ) );
 	}
 
 	// Single-plugin updates MUST run one at a time. Concurrent
@@ -12584,8 +12586,8 @@
 	let pluginUpdateChain = Promise.resolve();
 
 	function pluginUpdateBadgeLabel( file, offeredVersion ) {
-		if ( pluginUpdateCurrent === file ) return 'Updating…';
-		if ( pluginUpdatePending.has( file ) ) return 'Queued…';
+		if ( pluginUpdateCurrent === file ) return __( 'Updating…' );
+		if ( pluginUpdatePending.has( file ) ) return __( 'Queued…' );
 		return offeredVersion ? `Update → ${ offeredVersion }` : 'Update';
 	}
 
@@ -12604,9 +12606,9 @@
 			btn.disabled = stillPending || !! busy;
 			btn.textContent = pluginUpdateBadgeLabel( file, offered );
 			btn.title = pluginUpdateCurrent === file
-				? 'Update in progress'
+				? __( 'Update in progress' )
 				: stillPending
-					? 'Queued — updates run one at a time'
+					? __( 'Queued — updates run one at a time' )
 					: ( offered ? 'Update to ' + offered : 'Update' );
 		}
 	}
@@ -12759,7 +12761,7 @@
 							toast( `Could not update ${ name } — connection dropped mid-upgrade. Try again.`, true );
 						}
 					} catch ( e2 ) {
-						toast( `Could not update ${ name }: ${ e.message || 'Failed to fetch' }. Try again in a moment.`, true );
+						toast( `Could not update ${ name }: ${ e.message || __( 'Failed to fetch' ) }. Try again in a moment.`, true );
 					}
 				} else {
 					toast( e.message || `Could not update ${ name }`, true );
@@ -12787,7 +12789,7 @@
 			} catch ( e ) {
 				if ( prev ) state.cache.plugins = prev;
 				if ( prevUpd ) state.cache.pluginUpdates = prevUpd;
-				toast( 'Updated, but the plugin list could not refresh yet. Reload if badges look stale.', true );
+				toast( __( 'Updated, but the plugin list could not refresh yet. Reload if badges look stale.' ), true );
 			}
 			if ( state.route === 'extensions' && state.extTab === 'plugins' ) {
 				renderExtensions();
@@ -12806,9 +12808,9 @@
 
 	/** Loading shell that keeps Plugins/Themes/Licenses tabs painted. */
 	function extTabLoadingHtml( tab ) {
-		const msg = tab === 'themes' ? 'Loading themes…'
-			: tab === 'licenses' ? 'Loading licenses…'
-			: 'Loading extensions…';
+		const msg = tab === 'themes' ? __( 'Loading themes…' )
+			: tab === 'licenses' ? __( 'Loading licenses…' )
+			: __( 'Loading extensions…' );
 		return `<div class="minn-toolbar minn-toolbar-views">${ extTabsHtml() }</div><div class="minn-loading">${ msg }</div>`;
 	}
 
@@ -12829,9 +12831,9 @@
 		} else {
 			view.innerHTML = `<div class="minn-toolbar minn-toolbar-views">${ extTabsHtml() }</div>`;
 		}
-		const msg = tab === 'themes' ? 'Loading themes…'
-			: tab === 'licenses' ? 'Loading licenses…'
-			: 'Loading extensions…';
+		const msg = tab === 'themes' ? __( 'Loading themes…' )
+			: tab === 'licenses' ? __( 'Loading licenses…' )
+			: __( 'Loading extensions…' );
 		const loading = document.createElement( 'div' );
 		loading.className = 'minn-loading';
 		loading.textContent = msg;
@@ -12916,9 +12918,9 @@
 		const can = it.can || [];
 		const controls = [
 			it.off && it.turnOn
-				? `<button class="lic-menu" data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ it.turnOn.startsWith( 'theme:' ) ? 'Switch the site to this theme' : 'Activate this plugin' }">Turn ${ it.turnOn.startsWith( 'theme:' ) ? 'theme' : 'plugin' } on</button>` : '',
+				? `<button class="lic-menu" data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ it.turnOn.startsWith( 'theme:' ) ? __( 'Switch the site to this theme' ) : __( 'Activate this plugin' ) }">Turn ${ it.turnOn.startsWith( 'theme:' ) ? 'theme' : 'plugin' } on</button>` : '',
 			can.includes( 'activate' ) && it.state !== 'valid'
-				? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || 'License key' ) }"${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>${ esc( __( 'Activate…' ) ) }</button>` : '',
+				? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || __( 'License key' ) ) }"${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>${ esc( __( 'Activate…' ) ) }</button>` : '',
 			// No link-out on off rows: the vendor's screen does not exist
 			// while its plugin is inactive (Turn on is the affordance).
 			! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid' && ! it.off
@@ -13106,14 +13108,14 @@
 	/** Explicit "Check for updates" (Extensions toolbar + ⌘K). */
 	async function checkForUpdates( btn ) {
 		const label = btn ? btn.textContent : '';
-		if ( btn ) { btn.disabled = true; btn.textContent = 'Checking…'; }
+		if ( btn ) { btn.disabled = true; btn.textContent = __( 'Checking…' ); }
 		try {
 			const res = await api( 'minn-admin/v1/check-updates', { method: 'POST', body: '{}' } );
 			const applied = applyForcedUpdateCheck( res );
 			const n = ( applied?.plugins || 0 ) + ( applied?.themes || 0 );
 			toast( n
 				? `${ n } update${ n === 1 ? '' : 's' } available`
-				: 'Everything is up to date' );
+				: __( 'Everything is up to date' ) );
 			// Re-render Extensions so Update-all / per-card badges refresh
 			// without a full plugin list refetch.
 			if ( state.route === 'extensions' ) {
@@ -13121,7 +13123,7 @@
 				else if ( state.extTab === 'themes' ) renderThemes();
 			}
 		} catch ( e ) {
-			toast( e.message || 'Could not check for updates', true );
+			toast( e.message || __( 'Could not check for updates' ), true );
 		} finally {
 			if ( btn ) { btn.disabled = false; btn.textContent = label; }
 		}
@@ -13139,7 +13141,7 @@
 		const licRun = async ( provider, action, payload, btn ) => {
 			const label = btn.textContent;
 			btn.disabled = true;
-			btn.textContent = action === 'activate' ? 'Activating…' : action === 'deactivate' ? 'Deactivating…' : 'Checking…';
+			btn.textContent = action === 'activate' ? __( 'Activating…' ) : action === 'deactivate' ? __( 'Deactivating…' ) : __( 'Checking…' );
 			const keepForm = () => {
 				btn.disabled = false;
 				btn.textContent = label;
@@ -13175,23 +13177,23 @@
 						? applyForcedUpdateCheck( res, { refetch: true } )
 						: null;
 					if ( action === 'deactivate' ) {
-						toast( 'License deactivated' );
+						toast( __( 'License deactivated' ) );
 					} else if ( applied && applied.update ) {
 						const u = applied.update;
 						toastAction(
-							`${ action === 'activate' ? 'License activated' : 'License re-verified' } · ${ u.name } ${ u.version } is available`,
-							'View updates',
+							`${ action === 'activate' ? __( 'License activated' ) : __( 'License re-verified' ) } · ${ u.name } ${ u.version } is available`,
+							__( 'View updates' ),
 							() => { state.extTab = 'plugins'; state.extFilter = 'updates'; go( 'extensions' ); }
 						);
 					} else if ( action === 'activate' ) {
-						toast( res.updates_checked ? 'License activated · checked for updates' : 'License activated' );
+						toast( res.updates_checked ? __( 'License activated · checked for updates' ) : __( 'License activated' ) );
 					} else {
-						toast( res.updates_checked ? 'License re-verified · checked for updates' : 'License re-verified' );
+						toast( res.updates_checked ? __( 'License re-verified · checked for updates' ) : __( 'License re-verified' ) );
 					}
 				} else if ( res.code === 'site_limit' ) {
-					toast( 'No activations left on this license. Free a seat with the vendor first — Minn never retries an activation.', true );
+					toast( __( 'No activations left on this license. Free a seat with the vendor first — Minn never retries an activation.' ), true );
 				} else {
-					toast( res.message || ( action === 'activate' ? 'Activation failed — check the key' : 'The vendor reported a problem' ), true );
+					toast( res.message || ( action === 'activate' ? __( 'Activation failed — check the key' ) : __( 'The vendor reported a problem' ) ), true );
 				}
 				if ( 'activate' === action && ! res.ok ) {
 					keepForm();
@@ -13212,7 +13214,7 @@
 			const component = btn.dataset.component;
 			const orig = btn.innerHTML;
 			btn.disabled = true;
-			btn.textContent = 'Turning on…';
+			btn.textContent = __( 'Turning on…' );
 			try {
 				if ( component.startsWith( 'theme:' ) ) {
 					await api( 'minn-admin/v1/themes/activate', { method: 'POST', body: JSON.stringify( { stylesheet: component.slice( 6 ) } ) } );
@@ -13242,7 +13244,7 @@
 				return;
 			}
 			if ( 'deactivate' === action ) {
-				if ( ! await minnConfirm( { title: `Deactivate the ${ btn.dataset.name } license on this site?`, body: 'The seat frees up for another site, and the plugin may stop receiving updates until a license is activated again.', confirmLabel: 'Deactivate license' } ) ) return;
+				if ( ! await minnConfirm( { title: `Deactivate the ${ btn.dataset.name } license on this site?`, body: __( 'The seat frees up for another site, and the plugin may stop receiving updates until a license is activated again.' ), confirmLabel: __( 'Deactivate license' ) } ) ) return;
 				licRun( provider, 'deactivate', null, btn );
 				return;
 			}
@@ -13410,10 +13412,10 @@
 		const hide = ! v || v.public;
 		chip.hidden = hide;
 		if ( hide ) { closeVisPopover(); return; }
-		const label = 'hidden' === v.state ? 'Site hidden'
-			: 'password' === v.state ? 'Password gated'
-			: 'partial' === v.state ? 'Partly hidden'
-			: 'Not indexed';
+		const label = 'hidden' === v.state ? __( 'Site hidden' )
+			: 'password' === v.state ? __( 'Password gated' )
+			: 'partial' === v.state ? __( 'Partly hidden' )
+			: __( 'Not indexed' );
 		$( '#minn-vis-chip-text' ).textContent = label;
 	}
 
@@ -13428,7 +13430,7 @@
 		const out = [];
 		( v.providers || [] ).forEach( ( p ) => {
 			if ( p.minn ) {
-				out.push( { type: 'toggle', label: 'Maintenance mode', setting: 'minn_admin_maintenance', on: true } );
+				out.push( { type: 'toggle', label: __( 'Maintenance mode' ), setting: 'minn_admin_maintenance', on: true } );
 			} else if ( p.can ) {
 				out.push( { type: 'toggle', label: p.name, provider: p, on: true } );
 			} else {
@@ -13436,7 +13438,7 @@
 			}
 		} );
 		if ( v.searchDiscouraged ) {
-			out.push( { type: 'toggle', label: 'Search engine visibility', setting: 'blog_public', on: false } );
+			out.push( { type: 'toggle', label: __( 'Search engine visibility' ), setting: 'blog_public', on: false } );
 		}
 		return out;
 	}
@@ -13486,8 +13488,8 @@
 			}
 			await refreshVisibility();
 			toast( 'minn_admin_maintenance' === c.setting
-				? ( next ? 'Maintenance mode on' : 'Maintenance mode off — the site is public' )
-				: ( next ? 'Search engines can index the site' : 'Search engines discouraged' ) );
+				? ( next ? __( 'Maintenance mode on' ) : __( 'Maintenance mode off — the site is public' ) )
+				: ( next ? __( 'Search engines can index the site' ) : __( 'Search engines discouraged' ) ) );
 			// If the site is now fully public, the popover has nothing left to
 			// show; otherwise refresh its controls in place.
 			if ( visState().public ) closeVisPopover();
@@ -13509,14 +13511,14 @@
 	}
 	function visPopInnerHtml() {
 		const v = visState();
-		const title = 'password' === v.state ? 'Site password-protected'
-			: 'search-discouraged' === v.state ? 'Search engines discouraged'
-			: 'partial' === v.state ? 'Part of the site is hidden'
-			: 'Site hidden from the public';
-		const sub = 'hidden' === v.state ? 'Visitors see a maintenance or coming-soon page.'
-			: 'password' === v.state ? 'Visitors must enter a password to see any page.'
-			: 'partial' === v.state ? 'Some pages show a coming-soon page instead of their content.'
-			: 'The site is public but asks search engines not to index it.';
+		const title = 'password' === v.state ? __( 'Site password-protected' )
+			: 'search-discouraged' === v.state ? __( 'Search engines discouraged' )
+			: 'partial' === v.state ? __( 'Part of the site is hidden' )
+			: __( 'Site hidden from the public' );
+		const sub = 'hidden' === v.state ? __( 'Visitors see a maintenance or coming-soon page.' )
+			: 'password' === v.state ? __( 'Visitors must enter a password to see any page.' )
+			: 'partial' === v.state ? __( 'Some pages show a coming-soon page instead of their content.' )
+			: __( 'The site is public but asks search engines not to index it.' );
 		return `<div class="minn-vis-pop-title">${ esc( title ) }</div>
 			<div class="minn-vis-pop-sub">${ esc( sub ) }</div>
 			${ visibilityFixControls().map( visControlHtml ).join( '' ) }`;
@@ -13555,19 +13557,19 @@
 		const names = ( v.providers || [] ).map( ( p ) => p.name );
 		let title, desc;
 		if ( 'hidden' === v.state ) {
-			title = 'Your site is hidden from the public';
+			title = __( 'Your site is hidden from the public' );
 			desc = `Visitors can't see the site — ${ names.join( ', ' ) } ${ names.length === 1 ? 'is' : 'are' } showing a maintenance or coming-soon page instead.`;
 		} else if ( 'password' === v.state ) {
-			title = 'Your site is password-protected';
+			title = __( 'Your site is password-protected' );
 			desc = `The whole site is behind a password (${ names.join( ', ' ) }). Visitors must enter it before seeing any page.`;
 		} else if ( 'partial' === v.state ) {
 			// Provider notes say WHICH part (WooCommerce: "Only store pages…").
 			const notes = ( v.providers || [] ).map( ( p ) => p.note ).filter( Boolean );
-			title = 'Part of your site is hidden';
+			title = __( 'Part of your site is hidden' );
 			desc = `${ names.join( ', ' ) } ${ names.length === 1 ? 'is' : 'are' } showing a coming-soon page on some pages${ notes.length ? ': ' + notes.join( '; ' ).toLowerCase() : '' }.`;
 		} else {
-			title = 'Search engines are discouraged';
-			desc = 'The site is public, but "Discourage search engines" is on in Settings → Reading, so it asks not to be indexed.';
+			title = __( 'Search engines are discouraged' );
+			desc = __( 'The site is public, but "Discourage search engines" is on in Settings → Reading, so it asks not to be indexed.' );
 		}
 		return `
 		<div class="minn-card minn-vis-banner block">
@@ -13627,7 +13629,7 @@
 			const poll = setInterval( async () => {
 				if ( settled ) return;
 				if ( Date.now() - started > 5 * 60 * 1000 ) {
-					fail( 'Still updating after 5 minutes. Give it a moment, then check Extensions.' );
+					fail( __( 'Still updating after 5 minutes. Give it a moment, then check Extensions.' ) );
 					return;
 				}
 				try {
@@ -13663,7 +13665,7 @@
 			const okCore = await confirmCoreUpdate( core.update.version );
 			if ( ! okCore ) return;
 			btn.disabled = true;
-			btn.textContent = 'Updating WordPress…';
+			btn.textContent = __( 'Updating WordPress…' );
 			try {
 				const version = await runCoreUpdate( core.update.version );
 				toast( `WordPress updated to ${ version }` );
@@ -13674,7 +13676,7 @@
 			} catch ( e ) {
 				toast( e.message, true );
 				btn.disabled = false;
-				btn.textContent = 'Update WordPress';
+				btn.textContent = __( 'Update WordPress' );
 			}
 		} );
 	}
@@ -13737,14 +13739,14 @@
 		if ( B.caps.update ) filterDefs.push( [ 'updates', 'Updates' ] );
 		const counts = { all: plugins.length, active, inactive: plugins.length - active, updates: updatesFilterCount };
 		const emptyMsg = q
-			? 'No plugins match “' + esc( state.extSearch.trim() ) + '”.'
+			? __( 'No plugins match “' ) + esc( state.extSearch.trim() ) + '”.'
 			: state.extFilter === 'updates'
-				? 'No plugins need updates.'
+				? __( 'No plugins need updates.' )
 				: state.extFilter === 'active'
-					? 'No active plugins.'
+					? __( 'No active plugins.' )
 					: state.extFilter === 'inactive'
-						? 'No inactive plugins.'
-						: 'No plugins.';
+						? __( 'No inactive plugins.' )
+						: __( 'No plugins.' );
 
 		view.innerHTML = `
 		${ coreBannerHtml() }
@@ -13754,13 +13756,13 @@
 				<span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
 					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }"${ bulkBusy ? ' disabled' : '' }>${ icon( 'refresh' ) } Check for updates</button>
 					${ updateCount || bulkBusy ? `
-					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ bulkBusy ? 'Updates run one at a time' : 'Update every plugin with a pending offer' }">
+					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ bulkBusy ? __( 'Updates run one at a time' ) : __( 'Update every plugin with a pending offer' ) }">
 						${ icon( 'refresh' ) } ${ bulkBusy ? `Updating… (${ queueCount })` : `Update all (${ updateCount })` }
 					</button>` : '' }
 				</span>` : '' }
 		</div>
 		<div class="minn-toolbar">
-			${ extFilterBarHtml( filterDefs, counts, 'Search plugins…' ) }
+			${ extFilterBarHtml( filterDefs, counts, __( 'Search plugins…' ) ) }
 			${ B.caps.install ? `
 				<button class="minn-btn-soft" id="minn-add-plugin">${ icon( 'plus' ) } Add plugin</button>` : '' }
 		</div>
@@ -13779,9 +13781,9 @@
 				const tile = `<div class="minn-plugin-icon" style="background:${ colorFor( name ) }">${ esc( name.charAt( 0 ) ) }${ meta && meta.icon ? `<img src="${ esc( meta.icon ) }" alt="" loading="lazy">` : '' }</div>`;
 				const badgeLabel = pluginUpdateBadgeLabel( p.plugin, offered );
 				const badgeTitle = isCurrent
-					? 'Update in progress'
+					? __( 'Update in progress' )
 					: isUpdating
-						? 'Queued — updates run one at a time'
+						? __( 'Queued — updates run one at a time' )
 						: ( offered ? 'Update to ' + offered : 'Update' );
 				return `
 				<div class="minn-card minn-plugin${ isUpdating ? ' minn-busy' : '' }${ isCurrent ? ' minn-plugin-updating' : '' }${ isUpdating && ! isCurrent ? ' minn-plugin-queued' : '' }" data-plugin="${ esc( p.plugin ) }">
@@ -13866,9 +13868,9 @@
 			if ( ! on ) {
 				const okNet = await minnConfirm( {
 					title: `Deactivate ${ name } across the network?`,
-					body: 'Sites that turned it on for themselves keep it. Everywhere else it stops running.',
+					body: __( 'Sites that turned it on for themselves keep it. Everywhere else it stops running.' ),
 					danger: true,
-					confirmLabel: 'Deactivate network-wide',
+					confirmLabel: __( 'Deactivate network-wide' ),
 				} );
 				if ( ! okNet ) return;
 			}
@@ -13896,9 +13898,9 @@
 			const name = pluginDisplayName( plugin.name );
 			const okDel = await minnConfirm( {
 				title: `Delete ${ name }?`,
-				body: 'Its files are removed from the server, and a plugin may take its stored data with it. There is no trash for this. Deactivating instead keeps everything.',
+				body: __( 'Its files are removed from the server, and a plugin may take its stored data with it. There is no trash for this. Deactivating instead keeps everything.' ),
 				danger: true,
-				confirmLabel: 'Delete plugin',
+				confirmLabel: __( 'Delete plugin' ),
 			} );
 			if ( ! okDel ) return;
 			const card = document.querySelector( `.minn-plugin[data-plugin="${ CSS.escape( file ) }"]` );
@@ -13961,7 +13963,7 @@
 			}
 			if ( ! on && ! net && B.caps.delete ) {
 				entries.push( {
-					label: 'Delete plugin',
+					label: __( 'Delete plugin' ),
 					danger: true,
 					run: () => deletePluginByFile( file ),
 				} );
@@ -13978,13 +13980,13 @@
 				links.forEach( ( l ) => entries.push( l ) );
 			}
 			entries.push( {
-				label: 'Copy plugin file',
+				label: __( 'Copy plugin file' ),
 				run: async () => {
 					try {
 						await navigator.clipboard.writeText( file + '.php' );
-						toast( 'Plugin file copied' );
+						toast( __( 'Plugin file copied' ) );
 					} catch ( err ) {
-						toast( 'Could not copy', true );
+						toast( __( 'Could not copy' ), true );
 					}
 				},
 			} );
@@ -14140,7 +14142,7 @@
 				<button class="minn-btn-soft" id="minn-check-updates" style="margin-left:auto;" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }">${ icon( 'refresh' ) } Check for updates</button>` : '' }
 		</div>
 		<div class="minn-toolbar">
-			${ extFilterBarHtml( filterDefs, counts, 'Search themes…' ) }
+			${ extFilterBarHtml( filterDefs, counts, __( 'Search themes…' ) ) }
 			${ B.caps.installThemes ? `<button class="minn-btn-soft" id="minn-add-theme">${ icon( 'plus' ) } Add theme</button>` : '' }
 		</div>
 		${ visible.length ? `
@@ -14187,12 +14189,12 @@
 				</div>`;
 			} ).join( '' ) }
 		</div>` : `<div class="minn-card minn-empty">${ q
-			? 'No themes match “' + esc( state.extSearch.trim() ) + '”.'
+			? __( 'No themes match “' ) + esc( state.extSearch.trim() ) + '”.'
 			: state.extFilter === 'updates'
-				? 'No themes need updates.'
+				? __( 'No themes need updates.' )
 				: state.extFilter === 'active'
-					? 'No active theme.'
-					: 'No themes.' }</div>` }`;
+					? __( 'No active theme.' )
+					: __( 'No themes.' ) }</div>` }`;
 
 		bindExtTabs( view );
 		bindExtFilterBar( view );
@@ -14231,9 +14233,9 @@
 			if ( action === 'delete' ) {
 				const okDel = await minnConfirm( {
 					title: `Delete the ${ t.name } theme?`,
-					body: 'Its files are removed from the server. There is no trash for this.',
+					body: __( 'Its files are removed from the server. There is no trash for this.' ),
 					danger: true,
-					confirmLabel: 'Delete theme',
+					confirmLabel: __( 'Delete theme' ),
 				} );
 				if ( ! okDel ) return;
 			}
@@ -14301,7 +14303,7 @@
 					: { label: __( 'Offer to every site' ), run: () => setNetworkTheme( t, true ) } );
 			}
 			if ( ! t.active && B.caps.deleteThemes ) {
-				entries.push( { label: 'Delete theme', danger: true, run: () => runThemeAction( 'delete', t ) } );
+				entries.push( { label: __( 'Delete theme' ), danger: true, run: () => runThemeAction( 'delete', t ) } );
 			}
 			const links = extMenuLinks( [
 				t.theme_uri && { href: t.theme_uri, role: 'theme' },
@@ -14318,13 +14320,13 @@
 				links.forEach( ( l ) => entries.push( l ) );
 			}
 			entries.push( {
-				label: 'Copy stylesheet',
+				label: __( 'Copy stylesheet' ),
 				run: async () => {
 					try {
 						await navigator.clipboard.writeText( t.stylesheet );
-						toast( 'Stylesheet copied' );
+						toast( __( 'Stylesheet copied' ) );
 					} catch ( err ) {
-						toast( 'Could not copy', true );
+						toast( __( 'Could not copy' ), true );
 					}
 				},
 			} );
@@ -14355,9 +14357,9 @@
 			.filter( ( file ) => ! pluginUpdatePending.has( file ) );
 		if ( ! files.length ) {
 			if ( pluginUpdatePending.size ) {
-				toast( 'Updates are already running — watch the cards for progress.', true );
+				toast( __( 'Updates are already running — watch the cards for progress.' ), true );
 			} else {
-				toast( 'Everything is up to date' );
+				toast( __( 'Everything is up to date' ) );
 			}
 			return;
 		}
@@ -14395,7 +14397,7 @@
 	function reloadAfterMinnSelfUpdate( version ) {
 		toast( version
 			? `Minn Admin updated to v${ version } — reloading…`
-			: 'Minn Admin updated — reloading…' );
+			: __( 'Minn Admin updated — reloading…' ) );
 		// Brief beat so the toast paints before navigation tears the SPA down.
 		setTimeout( () => { window.location.reload(); }, 700 );
 	}
@@ -14405,11 +14407,11 @@
 	 * whichever manager owns each one (ACF / CPT UI / Minn's own store —
 	 * see class-minn-admin-cpt.php). Code-registered types are read-only. */
 
-	const CPT_SOURCE_LABEL = { core: 'WordPress', code: 'Code', acf: 'ACF', cptui: 'CPT UI', minn: 'Minn' };
+	const CPT_SOURCE_LABEL = { core: 'WordPress', code: 'Code', acf: 'ACF', cptui: __( 'CPT UI' ), minn: 'Minn' };
 	const CPT_SUPPORTS = [
-		[ 'title', 'Title' ], [ 'editor', 'Editor' ], [ 'thumbnail', 'Featured image' ],
-		[ 'excerpt', 'Excerpt' ], [ 'custom-fields', 'Custom fields' ], [ 'comments', 'Comments' ],
-		[ 'revisions', 'Revisions' ], [ 'page-attributes', 'Page attributes' ], [ 'author', 'Author' ],
+		[ 'title', 'Title' ], [ 'editor', 'Editor' ], [ 'thumbnail', __( 'Featured image' ) ],
+		[ 'excerpt', 'Excerpt' ], [ 'custom-fields', __( 'Custom fields' ) ], [ 'comments', 'Comments' ],
+		[ 'revisions', 'Revisions' ], [ 'page-attributes', __( 'Page attributes' ) ], [ 'author', 'Author' ],
 	];
 
 	async function loadPostTypes() {
@@ -14501,7 +14503,7 @@
 					<div class="minn-row-meta"><span class="minn-permalink">${ esc( t.slug ) }</span></div>
 					<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
 					<div class="minn-row-meta">${ t.count }</div>
-					<div class="minn-row-meta" title="${ t.show_in_rest ? 'Available over the REST API (editable in Minn)' : 'Not exposed over REST — Minn can’t list or edit its content' }">${ t.show_in_rest ? '✓' : '—' }</div>
+					<div class="minn-row-meta" title="${ t.show_in_rest ? __( 'Available over the REST API (editable in Minn)' ) : __( 'Not exposed over REST — Minn can’t list or edit its content' ) }">${ t.show_in_rest ? '✓' : '—' }</div>
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) }
 			</div>`;
@@ -14555,7 +14557,7 @@
 			lines.push( '', `## ${ g.title }` );
 			g.rows.forEach( ( r ) => lines.push( `- ${ r.key }: ${ r.value || '—' }` ) );
 			if ( g.tables && g.tables.length ) {
-				lines.push( '', 'Largest tables:' );
+				lines.push( '', __( 'Largest tables:' ) );
 				g.tables.forEach( ( t ) => lines.push( `- ${ t.name } — ${ t.size } (${ t.rows } rows)` ) );
 			}
 			if ( g.autoload ) {
@@ -14740,14 +14742,14 @@
 					<span class="minn-sys-debug-hint">${ intg.surfaces.length } surfaces · ${ intg.panels.length } panels · ${ intg.designs.length } design sources${ intProblems ? ` · <span class="minn-sys-int-warn">${ intProblems } problem${ intProblems === 1 ? '' : 's' }</span>` : '' }</span>
 				</div>
 				${ intSection( 'Surfaces', intg.surfaces, ( r ) => [ r.family ? 'family: ' + r.family : '', 'cap: ' + r.cap ].filter( Boolean ).join( ' · ' ) ) }
-				${ intSection( 'Editor panels', intg.panels, ( r ) => 'cap: ' + r.cap ) }
-				${ intSection( 'Design sources', intg.designs ) }
-				${ intSection( 'Cache purgers', intg.cache ) }
-				${ intSection( 'Spam filters', intg.spam || [] ) }
-				${ intSection( 'License readers', intg.licenses || [] ) }
-				${ intSection( 'Page builders', intg.builders ) }
-				${ intPlain( 'Block inspector forms', intg.blockForms.map( ( r ) => ( { a: r.owner, b: r.count + ' block' + ( r.count === 1 ? '' : 's' ) } ) ) ) }
-				${ intPlain( 'Hook listeners', intg.listeners.map( ( l ) => ( { a: l.hook, b: l.owners.join( ', ' ), mono: true } ) ) ) }
+				${ intSection( __( 'Editor panels' ), intg.panels, ( r ) => 'cap: ' + r.cap ) }
+				${ intSection( __( 'Design sources' ), intg.designs ) }
+				${ intSection( __( 'Cache purgers' ), intg.cache ) }
+				${ intSection( __( 'Spam filters' ), intg.spam || [] ) }
+				${ intSection( __( 'License readers' ), intg.licenses || [] ) }
+				${ intSection( __( 'Page builders' ), intg.builders ) }
+				${ intPlain( __( 'Block inspector forms' ), intg.blockForms.map( ( r ) => ( { a: r.owner, b: r.count + ' block' + ( r.count === 1 ? '' : 's' ) } ) ) ) }
+				${ intPlain( __( 'Hook listeners' ), intg.listeners.map( ( l ) => ( { a: l.hook, b: l.owners.join( ', ' ), mono: true } ) ) ) }
 			</div>` : '';
 
 		view.innerHTML = `
@@ -14773,7 +14775,7 @@
 					// The Autoload size + Cron health cards open the same
 					// detail modals as the grid rows below (the
 					// CARDS are what you reach for first).
-					const detail = c.label === 'Autoload size' ? 'autoload' : ( c.label === 'Cron' ? 'cron' : '' );
+					const detail = c.key === 'autoload' ? 'autoload' : ( c.key === 'cron' ? 'cron' : '' );
 					// A card with the arrow always goes somewhere you can act:
 					// Licenses/Backups/pending-core → the page with the fix,
 					// Debug mode → the Debug tools card below, visibility →
@@ -14782,14 +14784,16 @@
 					// trains people to stop clicking the live ones. Adapter
 					// checks may carry `href` (Wordfence, Solid Security):
 					// those open the plugin's own wp-admin screen.
-					// Server-provided goto wins (label matching below is legacy
-					// and breaks under translation).
+					// Routes off the check's STABLE key, never its label. Label
+					// matching worked only in English: a translated "Backups"
+					// matched nothing, so every actionable card quietly lost
+					// its destination. Server-provided goto still wins.
 					const goto = c.goto ? c.goto
-						: c.label === 'Licenses' ? 'licenses'
-						: ( c.label === 'Debug mode' && showDebug ) ? 'debug'
-						: c.label === 'Backups' ? 'backups'
-						: c.label === 'Site visibility' ? 'visibility'
-						: ( c.label === 'WordPress version' && 'pass' !== c.status ) ? 'core'
+						: c.key === 'licenses' ? 'licenses'
+						: ( c.key === 'debug' && showDebug ) ? 'debug'
+						: c.key === 'backups' ? 'backups'
+						: c.key === 'visibility' ? 'visibility'
+						: ( c.key === 'core' && 'pass' !== c.status ) ? 'core'
 						: '';
 					const clickable = detail || goto || c.href;
 					return `
@@ -14813,11 +14817,11 @@
 					</div>
 					<div class="minn-sys-rows">
 						${ [
-		[ 'Site Health', 'site-health.php', "Core's full test suite and status" ],
-		[ 'Export content', 'export.php', 'Download a WXR of posts, pages and media' ],
-		[ 'Import content', 'import.php', 'Bring content in from another site' ],
-		[ 'Export personal data', 'export-personal-data.php', 'Answer a GDPR data request' ],
-		[ 'Erase personal data', 'erase-personal-data.php', 'Handle a GDPR erasure request' ],
+		[ __( 'Site Health' ), 'site-health.php', __( "Core's full test suite and status" ) ],
+		[ __( 'Export content' ), 'export.php', __( 'Download a WXR of posts, pages and media' ) ],
+		[ __( 'Import content' ), 'import.php', __( 'Bring content in from another site' ) ],
+		[ __( 'Export personal data' ), 'export-personal-data.php', __( 'Answer a GDPR data request' ) ],
+		[ __( 'Erase personal data' ), 'erase-personal-data.php', __( 'Handle a GDPR erasure request' ) ],
 	].map( ( [ label, path, hint ] ) => `
 						<a class="minn-sys-row minn-sys-tool" href="${ esc( B.site.adminUrl + path ) }" target="_blank" rel="noopener">
 							<span class="minn-sys-key">${ esc( label ) } ↗</span>
@@ -14924,14 +14928,14 @@
 			const text = systemReportText( s );
 			try {
 				await navigator.clipboard.writeText( text );
-				toast( 'System report copied' );
+				toast( __( 'System report copied' ) );
 			} catch ( e ) {
 				// execCommand fallback for non-secure contexts.
 				const ta = document.createElement( 'textarea' );
 				ta.value = text;
 				document.body.appendChild( ta );
 				ta.select();
-				try { document.execCommand( 'copy' ); toast( 'System report copied' ); } catch ( e2 ) { toast( 'Copy failed', true ); }
+				try { document.execCommand( 'copy' ); toast( __( 'System report copied' ) ); } catch ( e2 ) { toast( __( 'Copy failed' ), true ); }
 				ta.remove();
 			}
 		} );
@@ -14986,7 +14990,7 @@
 		<div class="minn-modal-overlay" id="minn-modal-overlay">
 			<div class="minn-modal wide">
 				<div class="minn-modal-head">
-					<div class="minn-modal-title">${ isAuto ? 'Autoloaded options' : 'Scheduled cron events' }</div>
+					<div class="minn-modal-title">${ isAuto ? __( 'Autoloaded options' ) : __( 'Scheduled cron events' ) }</div>
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
 				${ body }
@@ -15105,7 +15109,7 @@
 
 		$( '#minn-log-refresh', overlay ).addEventListener( 'click', load );
 		$( '#minn-log-copy', overlay ).addEventListener( 'click', async () => {
-			try { await navigator.clipboard.writeText( raw ); toast( 'Log copied' ); } catch ( e ) { toast( 'Copy failed', true ); }
+			try { await navigator.clipboard.writeText( raw ); toast( __( 'Log copied' ) ); } catch ( e ) { toast( __( 'Copy failed' ), true ); }
 		} );
 		const collapseBtn = $( '#minn-log-collapse', overlay );
 		collapseBtn.addEventListener( 'click', () => {
@@ -15115,11 +15119,11 @@
 			paint();
 		} );
 		$( '#minn-log-clear', overlay ).addEventListener( 'click', async () => {
-			if ( ! await minnConfirm( { title: 'Empty this log?', body: 'Its entries are deleted from the server. There is no undo for this.', danger: true, confirmLabel: 'Empty log' } ) ) return;
+			if ( ! await minnConfirm( { title: __( 'Empty this log?' ), body: __( 'Its entries are deleted from the server. There is no undo for this.' ), danger: true, confirmLabel: __( 'Empty log' ) } ) ) return;
 			try {
 				await api( `minn-admin/v1/system/logs/${ cur }`, { method: 'DELETE' } );
 				state.cache.system = null; // sizes changed
-				toast( 'Log cleared' );
+				toast( __( 'Log cleared' ) );
 				load();
 			} catch ( e ) {
 				toast( e.message, true );
@@ -15686,10 +15690,10 @@
 	const POST_FORMATS = [ 'standard', 'aside', 'chat', 'gallery', 'link', 'image', 'quote', 'status', 'video', 'audio' ];
 	const PERMALINK_PRESETS = [
 		[ '', 'Plain' ],
-		[ '/%year%/%monthnum%/%day%/%postname%/', 'Day and name' ],
-		[ '/%year%/%monthnum%/%postname%/', 'Month and name' ],
+		[ '/%year%/%monthnum%/%day%/%postname%/', __( 'Day and name' ) ],
+		[ '/%year%/%monthnum%/%postname%/', __( 'Month and name' ) ],
 		[ '/archives/%post_id%', 'Numeric' ],
-		[ '/%postname%/', 'Post name' ],
+		[ '/%postname%/', __( 'Post name' ) ],
 	];
 
 	async function loadSettings() {
@@ -16034,13 +16038,13 @@
 
 		switch ( section ) {
 			case 'Site': return {
-				sub: 'Your site’s identity, locale and admin.',
-				fields: text( 'title', 'Site title', s.title )
+				sub: __( 'Your site’s identity, locale and admin.' ),
+				fields: text( 'title', __( 'Site title' ), s.title )
 					+ text( 'description', 'Tagline', s.description )
 					+ siteIconField
 					+ siteLogoField
-					+ text( 'url', 'Site address', s.url, true )
-					+ text( 'email', 'Administration email', s.email, true )
+					+ text( 'url', __( 'Site address' ), s.url, true )
+					+ text( 'email', __( 'Administration email' ), s.email, true )
 					// Custom autocomplete, not a select or datalist — 400+ zones need
 					// type-to-filter, and the native datalist popup positions itself
 					// erratically and vanishes once the value is complete. The panel
@@ -16053,9 +16057,9 @@
 							<div class="minn-ac-panel" hidden></div>
 						</div>
 					</div>`
-					+ text( 'date_format', 'Date format', s.date_format, true )
-					+ text( 'time_format', 'Time format', s.time_format, true )
-					+ combo( 'start_of_week', 'Week starts on', DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week )
+					+ text( 'date_format', __( 'Date format' ), s.date_format, true )
+					+ text( 'time_format', __( 'Time format' ), s.time_format, true )
+					+ combo( 'start_of_week', __( 'Week starts on' ), DAYS.map( ( d, i ) => [ i, d ] ), s.start_of_week )
 					// Site default language (options-general's Site Language).
 					// Saved through minn-admin/v1/site/language — never the
 					// wp/v2/settings sweep — so an uninstalled pick can
@@ -16063,8 +16067,8 @@
 					// Your profile.
 					+ ( cache.languages ? combo(
 						'minn_language',
-						'Site language',
-						[ [ '', 'English (United States)' ], ...( cache.languages.installed || [] ).filter( ( p ) => p[ 0 ] !== 'en_US' ), ...( cache.languages.canInstall ? cache.languages.available || [] : [] ) ],
+						__( 'Site language' ),
+						[ [ '', __( 'English (United States)' ) ], ...( cache.languages.installed || [] ).filter( ( p ) => p[ 0 ] !== 'en_US' ), ...( cache.languages.canInstall ? cache.languages.available || [] : [] ) ],
 						cache.languages.site || ''
 					) : '' ),
 				// "Minn is the default admin" lives on Your profile now (per-user).
@@ -16078,28 +16082,28 @@
 				// list it here so the section tells the whole truth.
 				const v = visState();
 				const others = v && ! v.public ? ( v.providers || [] ).filter( ( p ) => ! p.minn ) : [];
-				const posture = others.length ? subhead( 'Also limiting visibility' ) + others.map( ( p ) => `
+				const posture = others.length ? subhead( __( 'Also limiting visibility' ) ) + others.map( ( p ) => `
 					<div class="minn-toggle-row">
 						<div class="minn-toggle-info">
 							<div class="minn-toggle-label">${ esc( p.name ) }</div>
-							<div class="minn-toggle-desc">${ esc( p.note || ( 'password' === p.kind ? 'The site is behind a password.' : 'Visitors see a maintenance or coming-soon page.' ) ) }</div>
+							<div class="minn-toggle-desc">${ esc( p.note || ( 'password' === p.kind ? __( 'The site is behind a password.' ) : __( 'Visitors see a maintenance or coming-soon page.' ) ) ) }</div>
 						</div>
 						${ p.can ? `<button class="minn-btn-soft" data-visoff="${ esc( p.id ) }">${ esc( __( 'Turn off' ) ) }</button>` : '' }
 						${ p.url ? `<a class="minn-btn-soft" href="${ esc( p.url ) }" target="_blank" rel="noopener">${ esc( __( 'Open ↗' ) ) }</a>` : '' }
 					</div>` ).join( '' ) : '';
 				return {
-					sub: 'Who can see, index and join your site.',
-					fields: roleOptions.length ? combo( 'default_role', 'New user default role', roleOptions, s.default_role || 'subscriber' ) : '',
+					sub: __( 'Who can see, index and join your site.' ),
+					fields: roleOptions.length ? combo( 'default_role', __( 'New user default role' ), roleOptions, s.default_role || 'subscriber' ) : '',
 					toggles: [
-						{ id: 'blog_public', label: 'Search engine visibility', desc: 'Allow search engines to index this site.', on: !! s.blog_public },
-						{ id: 'minn_admin_maintenance', label: 'Maintenance mode', desc: 'Show a coming-soon page to visitors instead of the site.', on: !! s.minn_admin_maintenance },
-						{ id: 'users_can_register', label: 'Membership', desc: 'Anyone can register an account (with the default role above).', on: !! s.users_can_register },
+						{ id: 'blog_public', label: __( 'Search engine visibility' ), desc: __( 'Allow search engines to index this site.' ), on: !! s.blog_public },
+						{ id: 'minn_admin_maintenance', label: __( 'Maintenance mode' ), desc: __( 'Show a coming-soon page to visitors instead of the site.' ), on: !! s.minn_admin_maintenance },
+						{ id: 'users_can_register', label: 'Membership', desc: __( 'Anyone can register an account (with the default role above).' ), on: !! s.users_can_register },
 					].map( toggle ).join( '' ),
 					after: posture,
 				};
 			}
 			case 'Homepage': {
-				const modeField = combo( 'show_on_front', 'Your homepage displays', [ [ 'posts', 'Latest posts' ], [ 'page', 'A static page' ] ], s.show_on_front );
+				const modeField = combo( 'show_on_front', __( 'Your homepage displays' ), [ [ 'posts', __( 'Latest posts' ) ], [ 'page', __( 'A static page' ) ] ], s.show_on_front );
 				// Re-render when the mode flips so the page pickers appear —
 				// a strict combobox pick fires no change event, only onPick.
 				settingsCombos.show_on_front.onPick = ( v ) => {
@@ -16108,10 +16112,10 @@
 					renderSettings();
 				};
 				return {
-					sub: 'What visitors land on, and how much shows.',
+					sub: __( 'What visitors land on, and how much shows.' ),
 					fields: modeField
-						+ ( s.show_on_front === 'page' ? combo( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + combo( 'page_for_posts', 'Posts page', pageOptions, s.page_for_posts ) : '' )
-						+ text( 'posts_per_page', 'Blog pages show at most', s.posts_per_page ),
+						+ ( s.show_on_front === 'page' ? combo( 'page_on_front', 'Homepage', pageOptions, s.page_on_front ) + combo( 'page_for_posts', __( 'Posts page' ), pageOptions, s.page_for_posts ) : '' )
+						+ text( 'posts_per_page', __( 'Blog pages show at most' ), s.posts_per_page ),
 					toggles: '',
 				};
 			}
@@ -16120,7 +16124,7 @@
 				// "Additional CSS", the last daily Customizer gap.
 				const cc = cache.customCss;
 				return {
-					sub: 'Site-wide CSS on top of the active theme.',
+					sub: __( 'Site-wide CSS on top of the active theme.' ),
 					fields: cc ? `
 						<div>
 							<div class="minn-field-label">${ esc( __( 'Additional CSS' ) ) }</div>
@@ -16143,18 +16147,18 @@
 					const isPreset = PERMALINK_PRESETS.some( ( [ v ] ) => v === pl.structure );
 					perma = subhead( 'URLs' )
 						+ `<div class="minn-fields">`
-						+ permaCombo( '_preset', 'Permalink structure', isPreset ? pl.structure : '_custom' )
-						+ permaText( 'structure', 'Custom structure', pl.structure, true )
+						+ permaCombo( '_preset', __( 'Permalink structure' ), isPreset ? pl.structure : '_custom' )
+						+ permaText( 'structure', __( 'Custom structure' ), pl.structure, true )
 						+ `<div class="minn-toggle-desc">${ esc( __( 'Tags: %year% %monthnum% %day% %postname% %post_id% %category% %author%. With Plain permalinks, Minn itself moves from /minn-admin/ to ?minn_admin=1 and reloads after saving.' ) ) }</div>`
-						+ permaText( 'category_base', 'Category base (optional)', pl.category_base, true )
-						+ permaText( 'tag_base', 'Tag base (optional)', pl.tag_base, true )
+						+ permaText( 'category_base', __( 'Category base (optional)' ), pl.category_base, true )
+						+ permaText( 'tag_base', __( 'Tag base (optional)' ), pl.tag_base, true )
 						+ `</div>`;
 				}
 				return {
-					sub: 'Defaults for new content, and the URL structure.',
-					fields: combo( 'default_category', 'Default post category', cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
-						+ combo( 'default_post_format', 'Default post format', POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
-					toggles: [ { id: 'use_smilies', label: 'Convert emoticons', desc: 'Turn :-) and :-P into graphics when displayed.', on: !! s.use_smilies } ].map( toggle ).join( '' ),
+					sub: __( 'Defaults for new content, and the URL structure.' ),
+					fields: combo( 'default_category', __( 'Default post category' ), cache.categories.map( ( c ) => [ c.id, decodeEntities( c.name ) ] ), s.default_category )
+						+ combo( 'default_post_format', __( 'Default post format' ), POST_FORMATS.map( ( f ) => [ f, f.charAt( 0 ).toUpperCase() + f.slice( 1 ) ] ), s.default_post_format || 'standard' ),
+					toggles: [ { id: 'use_smilies', label: __( 'Convert emoticons' ), desc: __( 'Turn :-) and :-P into graphics when displayed.' ), on: !! s.use_smilies } ].map( toggle ).join( '' ),
 					after: perma,
 				};
 			}
@@ -16164,11 +16168,11 @@
 				// blocklist) renders after the toggles and saves through the
 				// spam endpoint; see the composable save handler.
 				const commentToggles = [
-					{ id: 'default_comment_status', label: 'Allow comments', desc: 'Let readers respond to new posts.', on: s.default_comment_status === 'open' },
-					{ id: 'default_ping_status', label: 'Allow pingbacks & trackbacks', desc: 'Accept link notifications from other blogs on new posts.', on: s.default_ping_status === 'open' },
-					{ id: 'comment_moderation', label: 'Moderate all comments', desc: 'Every comment must be manually approved before it appears.', on: !! s.comment_moderation },
-					{ id: 'comment_registration', label: 'Registered users only', desc: 'Users must be registered and logged in to comment.', on: !! s.comment_registration },
-					{ id: 'show_avatars', label: 'Show avatars', desc: 'Display profile pictures next to comments.', on: !! s.show_avatars },
+					{ id: 'default_comment_status', label: __( 'Allow comments' ), desc: __( 'Let readers respond to new posts.' ), on: s.default_comment_status === 'open' },
+					{ id: 'default_ping_status', label: __( 'Allow pingbacks & trackbacks' ), desc: __( 'Accept link notifications from other blogs on new posts.' ), on: s.default_ping_status === 'open' },
+					{ id: 'comment_moderation', label: __( 'Moderate all comments' ), desc: __( 'Every comment must be manually approved before it appears.' ), on: !! s.comment_moderation },
+					{ id: 'comment_registration', label: __( 'Registered users only' ), desc: __( 'Users must be registered and logged in to comment.' ), on: !! s.comment_registration },
+					{ id: 'show_avatars', label: __( 'Show avatars' ), desc: __( 'Display profile pictures next to comments.' ), on: !! s.show_avatars },
 				].map( toggle ).join( '' );
 				const sp = cache.spam;
 				let spamHtml;
@@ -16179,7 +16183,7 @@
 						<div class="minn-spam-provider">
 							<div class="minn-spam-head">
 								<span class="minn-spam-name">${ esc( p.name ) }</span>
-								<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : 'Needs setup' }</span>
+								<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : __( 'Needs setup' ) }</span>
 								${ p.blocked ? `<span class="minn-spam-blocked">${ esc( String( p.blocked ) ) } blocked all-time</span>` : '' }
 								${ p.keyProvider && p.configured ? `<button class="minn-spam-link" type="button" data-spamkeychange="${ esc( p.id ) }">${ esc( __( 'Change key…' ) ) }</button>` : '' }
 								${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( p.adminUrl ) }" target="_blank" rel="noopener"${ p.keyProvider && p.configured ? ' style="margin-left:0"' : '' }>${ esc( __( 'Full settings ↗' ) ) }</a>` : '' }
@@ -16187,7 +16191,7 @@
 							<div class="minn-toggle-desc">${ esc( p.note ) }</div>
 							${ p.keyProvider ? `
 							<div class="minn-conn-row" data-spamkeyrow="${ esc( p.id ) }"${ p.configured ? ' hidden' : '' }>
-								<input class="minn-input mono" data-1p-ignore data-lpignore="true" data-bwignore placeholder="${ p.configured ? 'Paste the replacement key' : 'Paste your API key' }">
+								<input class="minn-input mono" data-1p-ignore data-lpignore="true" data-bwignore placeholder="${ p.configured ? __( 'Paste the replacement key' ) : __( 'Paste your API key' ) }">
 								<button class="minn-btn-soft" data-spamkeysave="${ esc( p.keyProvider ) }" data-spamkeycard="${ esc( p.id ) }">${ esc( __( 'Save key' ) ) }</button>
 							</div>
 							<div class="minn-toggle-desc minn-spam-keyerr" data-spamkeyerr="${ esc( p.id ) }" hidden></div>` : '' }
@@ -16221,7 +16225,7 @@
 						</div>`;
 				}
 				return {
-					sub: 'How comments behave, and how spam is handled.',
+					sub: __( 'How comments behave, and how spam is handled.' ),
 					fields: '',
 					toggles: commentToggles,
 					after: spamHtml,
@@ -16243,11 +16247,11 @@
 						<button type="button" class="minn-btn-soft" data-conn-retry>${ esc( __( 'Retry' ) ) }</button>
 					</div>`;
 				} else {
-					const TYPE_LABELS = { ai_provider: 'AI provider', spam_filtering: 'Spam filtering' };
+					const TYPE_LABELS = { ai_provider: __( 'AI provider' ), spam_filtering: __( 'Spam filtering' ) };
 					cards = cn.connectors.map( ( c ) => {
 						const pill = c.source === 'none'
 							? '<span class="minn-spam-pill warn">Not connected</span>'
-							: `<span class="minn-spam-pill ok">${ c.source === 'database' ? 'Connected' : ( c.source === 'constant' ? 'Key in wp-config' : 'Key in environment' ) }</span>`;
+							: `<span class="minn-spam-pill ok">${ c.source === 'database' ? 'Connected' : ( c.source === 'constant' ? __( 'Key in wp-config' ) : __( 'Key in environment' ) ) }</span>`;
 						let controls = '';
 						if ( c.method !== 'api_key' ) {
 							controls = '';
@@ -16272,7 +16276,7 @@
 							// API keys aren't login credentials and the value
 							// rides exactly one request (the licenses rule).
 							controls = `<div class="minn-conn-row">
-								<input class="minn-input mono" data-conn-key="${ esc( c.settingName ) }" placeholder="${ c.keyTail ? `Replace the saved key (ends in ${ esc( c.keyTail ) })` : 'Paste an API key' }" data-1p-ignore data-lpignore="true" data-bwignore>
+								<input class="minn-input mono" data-conn-key="${ esc( c.settingName ) }" placeholder="${ c.keyTail ? `Replace the saved key (ends in ${ esc( c.keyTail ) })` : __( 'Paste an API key' ) }" data-1p-ignore data-lpignore="true" data-bwignore>
 								<button class="minn-btn-soft" data-conn-save="${ esc( c.id ) }">${ esc( __( 'Save key' ) ) }</button>
 								${ c.source === 'database' ? `<button class="minn-btn-soft danger" data-conn-clear="${ esc( c.id ) }">${ esc( __( 'Remove' ) ) }</button>` : '' }
 							</div>`;
@@ -16291,7 +16295,7 @@
 					} ).join( '' );
 				}
 				return {
-					sub: 'External services WordPress can use: AI providers and other connected APIs. Keys are stored by core, validated on save, and never shown again once saved.',
+					sub: __( 'External services WordPress can use: AI providers and other connected APIs. Keys are stored by core, validated on save, and never shown again once saved.' ),
 					fields: cards,
 					toggles: '',
 					noSave: true,
@@ -16461,7 +16465,7 @@
 			} catch ( e ) {
 				// Keep the previous list when we have one (save/clear path).
 				if ( cache.connectors && cache.connectors.supported ) {
-					toast( 'Could not refresh connectors — try again in a moment.', true );
+					toast( __( 'Could not refresh connectors — try again in a moment.' ), true );
 					renderSettings();
 					return;
 				}
@@ -16487,7 +16491,7 @@
 		const connRetry = $( '[data-conn-retry]', view );
 		if ( connRetry ) connRetry.addEventListener( 'click', async () => {
 			connRetry.disabled = true;
-			connRetry.textContent = 'Loading…';
+			connRetry.textContent = __( 'Loading…' );
 			await connRefresh();
 		} );
 		$$( '[data-conn-save]', view ).forEach( ( btn ) =>
@@ -16495,36 +16499,36 @@
 				const input = $( '[data-conn-key]', btn.closest( '[data-conn-card]' ) );
 				const setting = input.dataset.connKey;
 				const key = input.value.trim();
-				if ( ! key ) { toast( 'Paste a key first', true ); input.focus(); return; }
+				if ( ! key ) { toast( __( 'Paste a key first' ), true ); input.focus(); return; }
 				btn.disabled = true;
-				btn.textContent = 'Checking…';
+				btn.textContent = __( 'Checking…' );
 				try {
 					const res = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { [ setting ]: key } ) } );
 					if ( ! String( res[ setting ] || '' ) ) {
-						toast( 'The provider rejected that key.', true );
+						toast( __( 'The provider rejected that key.' ), true );
 						btn.disabled = false;
-						btn.textContent = 'Save key';
+						btn.textContent = __( 'Save key' );
 						input.focus( { preventScroll: true } );
 						input.select();
 						return;
 					}
-					toast( 'Key saved' );
+					toast( __( 'Key saved' ) );
 					await connRefresh();
 				} catch ( e ) {
 					toast( e.message, true );
 					btn.disabled = false;
-					btn.textContent = 'Save key';
+					btn.textContent = __( 'Save key' );
 				}
 			} )
 		);
 		$$( '[data-conn-clear]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
-				if ( ! confirm( 'Remove the saved key?' ) ) return;
+				if ( ! confirm( __( 'Remove the saved key?' ) ) ) return;
 				const input = $( '[data-conn-key]', btn.closest( '[data-conn-card]' ) );
 				btn.disabled = true;
 				try {
 					await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( { [ input.dataset.connKey ]: '' } ) } );
-					toast( 'Key removed' );
+					toast( __( 'Key removed' ) );
 					await connRefresh();
 				} catch ( e ) { toast( e.message, true ); btn.disabled = false; }
 			} )
@@ -16532,7 +16536,7 @@
 		$$( '[data-conn-install]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				btn.disabled = true;
-				btn.textContent = 'Installing…';
+				btn.textContent = __( 'Installing…' );
 				try {
 					try {
 						await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: btn.dataset.connInstall, status: 'active' } ) } );
@@ -16540,12 +16544,12 @@
 						// Install often succeeds; the reply dies with the worker.
 						if ( ! isFetchDrop( e ) ) throw e;
 					}
-					toast( 'Provider plugin installed' );
+					toast( __( 'Provider plugin installed' ) );
 					await connAfterPluginChange();
 				} catch ( e ) {
 					toast( e.message, true );
 					btn.disabled = false;
-					btn.textContent = 'Install & activate';
+					btn.textContent = __( 'Install & activate' );
 				}
 			} )
 		);
@@ -16558,7 +16562,7 @@
 					} catch ( e ) {
 						if ( ! isFetchDrop( e ) ) throw e;
 					}
-					toast( 'Provider plugin activated' );
+					toast( __( 'Provider plugin activated' ) );
 					await connAfterPluginChange();
 				} catch ( e ) { toast( e.message, true ); btn.disabled = false; }
 			} )
@@ -16592,7 +16596,7 @@
 			$( '#minn-icon-pick', view ).addEventListener( 'click', () => openMediaPicker( ( it ) => setIcon( it.id, it.thumb || it.url ) ) );
 			$( '#minn-icon-remove', view ).addEventListener( 'click', () => setIcon( 0, null ) );
 			const uploadIcon = async ( file ) => {
-				if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( 'Drop an image file', true ); return; }
+				if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( __( 'Drop an image file' ), true ); return; }
 				iconDrop.classList.add( 'minn-busy' );
 				try {
 					const fd = new FormData();
@@ -16600,7 +16604,7 @@
 					const m = await api( 'wp/v2/media', { method: 'POST', body: fd } );
 					const sizes = m.media_details && m.media_details.sizes;
 					setIcon( m.id, ( sizes && sizes.thumbnail && sizes.thumbnail.source_url ) || m.source_url );
-					toast( 'Icon uploaded — save to apply' );
+					toast( __( 'Icon uploaded — save to apply' ) );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -16636,7 +16640,7 @@
 			$( '#minn-logo-pick', view ).addEventListener( 'click', () => openMediaPicker( ( it ) => setLogo( it.id, it.thumb || it.url ) ) );
 			$( '#minn-logo-remove', view ).addEventListener( 'click', () => setLogo( 0, null ) );
 			const uploadLogo = async ( file ) => {
-				if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( 'Drop an image file', true ); return; }
+				if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( __( 'Drop an image file' ), true ); return; }
 				logoDrop.classList.add( 'minn-busy' );
 				try {
 					const fd = new FormData();
@@ -16644,7 +16648,7 @@
 					const m = await api( 'wp/v2/media', { method: 'POST', body: fd } );
 					const sizes = m.media_details && m.media_details.sizes;
 					setLogo( m.id, ( sizes && sizes.thumbnail && sizes.thumbnail.source_url ) || m.source_url );
-					toast( 'Logo uploaded — save to apply' );
+					toast( __( 'Logo uploaded — save to apply' ) );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -16685,7 +16689,7 @@
 		if ( presetWrap ) {
 			const structInput = $( '[data-permakey="structure"]', view );
 			bindAutocomplete( presetWrap,
-				[ ...PERMALINK_PRESETS, [ '_custom', 'Custom structure' ] ].map( ( [ v, l ] ) => ( { value: v, label: l } ) ),
+				[ ...PERMALINK_PRESETS, [ '_custom', __( 'Custom structure' ) ] ].map( ( [ v, l ] ) => ( { value: v, label: l } ) ),
 				{
 					strict: true,
 					value: presetWrap.dataset.pcValue,
@@ -16738,7 +16742,7 @@
 						try {
 							const lr = await api( 'minn-admin/v1/site/language', { method: 'POST', body: JSON.stringify( { locale: langPick } ) } );
 							cache.languages.site = lr.locale;
-							if ( lr.installed ) toast( 'Language pack installed' );
+							if ( lr.installed ) toast( __( 'Language pack installed' ) );
 						} catch ( err ) { toast( err.message, true ); okAll = false; }
 					}
 				}
@@ -16809,14 +16813,14 @@
 						cache.permalinks = r;
 						if ( r.pretty !== !! B.pretty ) {
 							// Routing mode flipped (path ↔ ?minn_admin=1) — reload at the app's new home.
-							toast( 'Settings saved — reloading…' );
+							toast( __( 'Settings saved — reloading…' ) );
 							setTimeout( () => { window.location.href = r.app_url + ( r.pretty ? 'settings' : '#/settings' ); }, 700 );
 							return;
 						}
 					} catch ( err ) { toast( err.message, true ); okAll = false; }
 				}
 
-				if ( okAll ) toast( 'Settings saved' );
+				if ( okAll ) toast( __( 'Settings saved' ) );
 				renderSettings();
 				saveBtn.disabled = false;
 			} );
@@ -17370,7 +17374,7 @@
 		if ( op === 'remove' ) {
 			// The last column would leave an empty Columns block behind; remove
 			// the whole block from its ⚙ instead, which offers Undo.
-			if ( cols.length < 2 ) { toast( 'A columns block keeps at least one column.', true ); return null; }
+			if ( cols.length < 2 ) { toast( __( 'A columns block keeps at least one column.' ), true ); return null; }
 			const cut = cols[ i ];
 			// Swallow one separator so the remaining columns stay evenly joined.
 			const from = i > 0 ? cols[ i - 1 ].end : cut.start;
@@ -17385,7 +17389,7 @@
 			scheduleAutosave();
 			// Structural deletion is the one thing Blink's undo can't restore
 			// (rule: island removal offers a toast instead).
-			toastAction( 'Column removed', 'Undo', () => {
+			toastAction( __( 'Column removed' ), 'Undo', () => {
 				const back = slotParseContent( String( ed.islands[ idx ] ), 'columns' );
 				if ( ! back ) return;
 				const marks = tokenizeBlocks( back.inner );
@@ -17513,7 +17517,7 @@
 		// The count matters on sliders: the preview shows one slide, so the
 		// overlay is where "there are six of these" gets said.
 		/* translators: %d: number of images in the block */
-		const imgBadge = imgTool === 'edit' ? sprintf( _n( 'Edit image · %d', 'Edit images · %d', imgUnits.units.length ), imgUnits.units.length )
+		const imgBadge = imgTool === 'edit' ? sprintf( _n( 'Edit image · %d', __( 'Edit images · %d' ), imgUnits.units.length ), imgUnits.units.length )
 			/* translators: overlay on a single-image block's image */
 			: imgTool ? __( 'Replace image' ) : '';
 		// A synced pattern is a REFERENCE to a wp_block post — its content
@@ -18435,7 +18439,7 @@
 		stampSlotDirtyFor( parent );
 		updateEditorStats();
 		if ( ed && ed.id ) scheduleAutosave();
-		toastAction( 'Block removed · ⌘Z', 'Undo', () => {
+		toastAction( __( 'Block removed · ⌘Z' ), 'Undo', () => {
 			if ( ! parent.isConnected ) return;
 			if ( ed && ed.islands && template != null ) ed.islands[ idx ] = template;
 			parent.insertBefore( island, next && next.isConnected && next.parentNode === parent ? next : null );
@@ -18528,7 +18532,7 @@
 		stampSlotDirtyFor( parent );
 		updateEditorStats();
 		scheduleAutosave();
-		toastAction( 'Block removed · ⌘Z', 'Undo', () => {
+		toastAction( __( 'Block removed · ⌘Z' ), 'Undo', () => {
 			if ( ! parent.isConnected ) return;
 			parent.insertBefore( el, next && next.isConnected && next.parentNode === parent ? next : null );
 			stampSlotDirtyFor( parent );
@@ -19960,7 +19964,7 @@
 				if ( state.route === 'editor' ) renderEditorSide();
 			} )
 			.catch( ( e ) => {
-				toast( e.message || 'Could not load revisions', true );
+				toast( e.message || __( 'Could not load revisions' ), true );
 				closeModal();
 			} );
 	}
@@ -20070,11 +20074,11 @@
 			// Live posts whose latest edits made it into an autosave revision
 			// are crash-safe even though the live copy hasn't changed — say so.
 			return ed.autosavedAt && ed.autosavedAt >= ( ed.editedAt || 0 )
-				? { text: 'Unsaved · backed up', cls: 'amber' }
-				: { text: 'Unsaved changes', cls: 'amber' };
+				? { text: __( 'Unsaved · backed up' ), cls: 'amber' }
+				: { text: __( 'Unsaved changes' ), cls: 'amber' };
 		}
 		if ( ed.savedAt ) return { text: timeAgo( new Date( ed.savedAt ).toISOString() ), cls: 'green' };
-		return { text: ed.id ? '—' : 'Not yet', cls: 'green' };
+		return { text: ed.id ? '—' : __( 'Not yet' ), cls: 'green' };
 	}
 
 	function updateSavedRow() {
@@ -20199,7 +20203,7 @@
 			setWritingGoal( Number.isFinite( n ) && n > 0 ? n : 0 );
 			closeWritingGoalPop();
 			updateEditorStats();
-			toast( n > 0 ? `Word goal set to ${ n.toLocaleString() }` : 'Word goal cleared' );
+			toast( n > 0 ? `Word goal set to ${ n.toLocaleString() }` : __( 'Word goal cleared' ) );
 		};
 		$( '#minn-stats-goal-save', pop ).addEventListener( 'click', save );
 		input.addEventListener( 'keydown', ( e ) => {
@@ -20211,7 +20215,7 @@
 			setWritingGoal( 0 );
 			closeWritingGoalPop();
 			updateEditorStats();
-			toast( 'Word goal cleared' );
+			toast( __( 'Word goal cleared' ) );
 		} );
 		// Next tick so the opening click doesn't immediately dismiss.
 		setTimeout( () => document.addEventListener( 'mousedown', writingGoalPopAway, true ), 0 );
@@ -20251,7 +20255,7 @@
 			: '<b>0</b> words';
 		el.title = goal
 			? `Goal ${ goal.toLocaleString() } words · click to change`
-			: 'Click to set a word goal';
+			: __( 'Click to set a word goal' );
 		// aria-label carries the readable stats for screen readers (the pill
 		// is a button that opens the goal popover — not a live region, so
 		// counts don't chatter on every keystroke).
@@ -20440,7 +20444,7 @@
 			try { localStorage.setItem( 'minn-outline-mode', '' ); } catch ( e ) { /* private mode */ }
 			removeOutlineMode();
 		}
-		toast( ed.focus ? 'Focus mode on — ⌘⇧D to leave' : 'Focus mode off' );
+		toast( ed.focus ? __( 'Focus mode on — ⌘⇧D to leave' ) : __( 'Focus mode off' ) );
 		if ( ed.focus ) {
 			// Zen: collapse the nav and the editor sidebar — nothing but the
 			// writing. The toolbar (with this toggle) and ⌘S stay.
@@ -20520,7 +20524,7 @@
 			try { localStorage.setItem( 'minn-focus', '' ); } catch ( e ) { /* private mode */ }
 			removeFocusDim();
 		}
-		toast( ed.outlineMode ? 'Outline mode on — ⌘⇧O to leave' : 'Outline mode off' );
+		toast( ed.outlineMode ? __( 'Outline mode on — ⌘⇧O to leave' ) : __( 'Outline mode off' ) );
 		document.body.classList.toggle( 'minn-outline-mode', ed.outlineMode );
 		renderTopbar(); // the exit chip tracks the mode
 	}
@@ -21375,7 +21379,7 @@
 			<div class="minn-editor-door-fields" style="display:flex; flex-direction:column; gap:14px; font-size:13.5px; color:var(--text2);">
 				${ ed.supportsParent ? `<div>${ esc( __( 'Parent' ) ) }
 					<div class="minn-ac" id="minn-parent-ac" style="margin-top:5px;">
-						<input class="minn-input minn-ac-input" placeholder="${ ed.parentPick ? '— none —' : 'Loading…' }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+						<input class="minn-input minn-ac-input" placeholder="${ ed.parentPick ? '— none —' : __( 'Loading…' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 						<div class="minn-ac-panel" hidden></div>
 					</div>
 				</div>` : '' }
@@ -21418,7 +21422,7 @@
 		if ( ed.supportsFormat && ed.format && ed.format !== 'standard' && B.postFormats && B.postFormats[ ed.format ] ) {
 			bits.push( B.postFormats[ ed.format ] );
 		}
-		return bits.join( ' · ' ) || 'Permalink, taxonomies, discussion…';
+		return bits.join( ' · ' ) || __( 'Permalink, taxonomies, discussion…' );
 	}
 
 	function editorAttrsSummary( ed ) {
@@ -21432,12 +21436,12 @@
 			bits.push( t ? t.name : ed.template );
 		}
 		if ( ed.supportsOrder && ed.menuOrder ) bits.push( 'Order ' + ed.menuOrder );
-		return bits.join( ' · ' ) || 'Parent, template, order';
+		return bits.join( ' · ' ) || __( 'Parent, template, order' );
 	}
 
 	function editorHistorySummary( ed ) {
 		const rows = historyRowsFor( ed );
-		if ( ! rows.length ) return 'No revisions yet';
+		if ( ! rows.length ) return __( 'No revisions yet' );
 		const total = ed.revisionsTotal || rows.length;
 		const last = rows[ 0 ];
 		return ( total > 1 ? `${ total } revisions · ` : '' ) + timeAgo( last.when ) + ( last.author ? ' · ' + last.author : '' );
@@ -21460,13 +21464,13 @@
 		if ( p.desc.id === 'seo' ) {
 			if ( values.focus_keyword ) return values.focus_keyword;
 			if ( values.title ) return values.title;
-			return filled.length ? `${ filled.length } set` : 'Title, description, keyword…';
+			return filled.length ? `${ filled.length } set` : __( 'Title, description, keyword…' );
 		}
 		const bits = [];
 		if ( fields.length ) bits.push( fields.length === 1 ? '1 field' : `${ fields.length } fields` );
 		if ( filled.length ) bits.push( `${ filled.length } set` );
 		if ( locked ) bits.push( `${ locked } advanced` );
-		return bits.join( ' · ' ) || 'Edit fields';
+		return bits.join( ' · ' ) || __( 'Edit fields' );
 	}
 
 	function openEditorSideDoor( doorId ) {
@@ -21493,7 +21497,7 @@
 		}
 		if ( doorId === 'attrs' ) {
 			return {
-				title: 'Page attributes',
+				title: __( 'Page attributes' ),
 				sub: '',
 				body: editorAttrsFieldsHtml( ed ),
 				bind: ( root ) => bindEditorAttrsFields( root, ed ),
@@ -21558,7 +21562,7 @@
 					wrap.innerHTML = `
 						${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
 						<div class="minn-field-image-actions">
-							<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : 'Set image' }</button>
+							<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : __( 'Set image' ) }</button>
 							${ has ? '<button type="button" class="minn-btn-soft danger" data-img-clear>Remove</button>' : '' }
 						</div>`;
 					wire();
@@ -21695,7 +21699,7 @@
 		const tplWrap = $( '#minn-template-ac', root );
 		if ( tplWrap ) {
 			bindAutocomplete( tplWrap,
-				[ { value: '', label: 'Default template' }, ...( ed.templates || [] ).map( ( t ) => ( { value: t.file, label: t.name } ) ) ],
+				[ { value: '', label: __( 'Default template' ) }, ...( ed.templates || [] ).map( ( t ) => ( { value: t.file, label: t.name } ) ) ],
 				{
 					strict: true,
 					value: ed.template || '',
@@ -21913,16 +21917,16 @@
 						if ( r.enabled && r.url ) {
 							try {
 								await navigator.clipboard.writeText( r.url );
-								toast( 'Public preview on · link copied' );
+								toast( __( 'Public preview on · link copied' ) );
 							} catch ( e2 ) {
-								toast( 'Public preview enabled' );
+								toast( __( 'Public preview enabled' ) );
 							}
 						} else {
-							toast( 'Public preview off' );
+							toast( __( 'Public preview off' ) );
 						}
 					}
 				} catch ( e ) {
-					toast( e.message || 'Could not update public preview', true );
+					toast( e.message || __( 'Could not update public preview' ), true );
 					box.classList.toggle( 'on', ! next );
 					box.setAttribute( 'aria-checked', next ? 'false' : 'true' );
 					box.disabled = false;
@@ -21936,11 +21940,11 @@
 				if ( ! url ) return;
 				try {
 					await navigator.clipboard.writeText( url );
-					toast( 'Public preview link copied' );
+					toast( __( 'Public preview link copied' ) );
 				} catch ( e ) {
 					const input = $( '#minn-ppp-url', el );
 					if ( input ) { input.focus(); input.select(); }
-					toast( 'Select the link and copy it', true );
+					toast( __( 'Select the link and copy it' ), true );
 				}
 			} );
 		}
@@ -21949,19 +21953,19 @@
 	// Content row menu / ad-hoc: enable if needed, then copy the share URL.
 	async function copyPublicPreviewLink( postId ) {
 		let r = await api( `minn-admin/v1/ppp/${ postId }` );
-		if ( ! r.eligible ) throw new Error( r.reason || 'Public preview is not available for this post.' );
+		if ( ! r.eligible ) throw new Error( r.reason || __( 'Public preview is not available for this post.' ) );
 		if ( ! r.enabled ) {
 			r = await api( `minn-admin/v1/ppp/${ postId }`, {
 				method: 'POST',
 				body: JSON.stringify( { enabled: true } ),
 			} );
 		}
-		if ( ! r.url ) throw new Error( 'No preview link returned.' );
+		if ( ! r.url ) throw new Error( __( 'No preview link returned.' ) );
 		try {
 			await navigator.clipboard.writeText( r.url );
-			toast( r.enabled ? 'Public preview link copied' : 'Public preview enabled · link copied' );
+			toast( r.enabled ? __( 'Public preview link copied' ) : __( 'Public preview enabled · link copied' ) );
 		} catch ( e ) {
-			prompt( 'Public preview link (copy it now):', r.url );
+			prompt( __( 'Public preview link (copy it now):' ), r.url );
 		}
 		// Keep the open editor's sidebar in sync if this is the same post.
 		const ed = state.editor;
@@ -22010,12 +22014,12 @@
 			</div>
 			${ ed.visibility === 'password' ? `<input type="text" class="minn-input minn-vis-extra" id="minn-password-input" placeholder="${ esc( __( 'Enter a password' ) ) }" value="${ esc( ed.password ) }" autocomplete="off">` : '' }
 			<div class="minn-schedule">
-				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? 'Scheduled for' : 'Publish time' }</div>
+				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? __( 'Scheduled for' ) : __( 'Publish time' ) }</div>
 				<input type="text" readonly class="minn-input minn-dp-input" id="minn-schedule-input" data-dp="${ esc( dateValue ) }" value="${ esc( dpPretty( dateValue ) ) }" placeholder="${ esc( __( 'Immediately' ) ) }">
 			</div>
 			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
 			${ LIVE_STATUSES.includes( ed.status ) ? '' : '<button class="minn-btn-soft minn-save-draft" id="minn-save-draft-btn">Save draft</button>' }
-			${ ed.id && ed.link && ed.type !== 'blocks' ? `<a class="minn-side-viewlink" href="${ esc( ed.status === 'publish' ? ed.link : ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) }" target="wp-preview-${ ed.id }">${ ed.status === 'publish' ? 'View on site ↗' : 'Preview draft ↗' }</a>` : '' }
+			${ ed.id && ed.link && ed.type !== 'blocks' ? `<a class="minn-side-viewlink" href="${ esc( ed.status === 'publish' ? ed.link : ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) }" target="wp-preview-${ ed.id }">${ ed.status === 'publish' ? __( 'View on site ↗' ) : __( 'Preview draft ↗' ) }</a>` : '' }
 			${ editorPppHtml( ed ) }
 		</div>
 		${ ed.supportsThumb ? `
@@ -22031,7 +22035,7 @@
 		</div>` : '' }
 		<div class="minn-side-doors">
 			${ editorDoorHtml( { id: 'settings', title: 'Settings', summary: editorSettingsSummary( ed ) } ) }
-			${ showAttrs ? editorDoorHtml( { id: 'attrs', title: 'Page attributes', summary: editorAttrsSummary( ed ) } ) : '' }
+			${ showAttrs ? editorDoorHtml( { id: 'attrs', title: __( 'Page attributes' ), summary: editorAttrsSummary( ed ) } ) : '' }
 			${ historyRows.length || ( ed.revisionsTotal && ed.revisionsTotal > 0 )
 				? editorDoorHtml( { id: 'history', title: 'History', summary: editorHistorySummary( ed ) } )
 				: '' }
@@ -22147,7 +22151,7 @@
 					state.modal = { type: 'media', item: mapMediaItem( raw ), from: 'featured' };
 					renderOverlays();
 				} catch ( e ) {
-					toast( e.message || 'Could not load image', true );
+					toast( e.message || __( 'Could not load image' ), true );
 				} finally {
 					featPrev.disabled = false;
 					featPrev.classList.remove( 'loading' );
@@ -22168,7 +22172,7 @@
 				clearAutosaveTimers();
 				await saveEditor( { _explicit: true } );
 				saveDraftBtn.disabled = false;
-				if ( state.editor && ! state.editor.dirty ) toast( 'Draft saved' );
+				if ( state.editor && ! state.editor.dirty ) toast( __( 'Draft saved' ) );
 			} );
 		}
 
@@ -22241,7 +22245,7 @@
 			ed.dirty = false;
 			renderEditor();
 			scheduleAutosave();
-			toast( 'Backup restored \u2014 review, then Save or Update to apply' );
+			toast( __( 'Backup restored \u2014 review, then Save or Update to apply' ) );
 		} catch ( e ) {
 			toast( e.message, true );
 		}
@@ -22369,7 +22373,7 @@
 		if ( ! ed || ed.lockState !== 'taken' ) return;
 		const title = $( '#minn-editor-title' );
 		if ( ! title ) return;
-		const who = ed.lockHolder ? ed.lockHolder.name : 'Someone else';
+		const who = ed.lockHolder ? ed.lockHolder.name : __( 'Someone else' );
 		title.insertAdjacentHTML( 'afterend', `
 			<div class="minn-backup-note minn-lock-note" id="minn-lock-note" role="alert">
 				<span>${ sprintf( __( '%s took over editing. This copy is read-only and won\u2019t save.' ), `<b>${ esc( who ) }</b>` ) }</span>
@@ -22439,7 +22443,7 @@
 		}
 		renderEditor();
 		renderEditorSide();
-		toast( 'Loaded the latest saved version' );
+		toast( __( 'Loaded the latest saved version' ) );
 	}
 
 	// Amber banner (backup-notice pattern): their save vs our unsaved edits.
@@ -22450,7 +22454,7 @@
 		if ( ! ed || ! ed.drift ) return;
 		const title = $( '#minn-editor-title' );
 		if ( ! title ) return;
-		const who = ed.drift.who || 'Someone else';
+		const who = ed.drift.who || __( 'Someone else' );
 		title.insertAdjacentHTML( 'afterend', `
 			<div class="minn-backup-note minn-drift-note" id="minn-drift-note" role="alert">
 				<span><b>${ esc( who ) }</b> saved a newer version while you were locked out (${ esc( timeAgo( ed.drift.modified ) ) }). Saving your copy would overwrite it.</span>
@@ -22578,7 +22582,7 @@
 		// Marks dirty AND re-snapshots within LOCAL_NET_DELAY \u2014 the removed
 		// key is re-covered before a crash could lose the restored work.
 		scheduleAutosave();
-		toast( 'Recovered work restored \u2014 review, then save' );
+		toast( __( 'Recovered work restored \u2014 review, then save' ) );
 	}
 
 	function renderEditor() {
@@ -22820,7 +22824,7 @@
 			openMediaPicker( ( it ) => {
 				if ( ! it || ! it.url ) return;
 				replaceIsland( idx, island, swapIslandImage( raw, oldUrl, it ) );
-				toast( 'Image replaced' );
+				toast( __( 'Image replaced' ) );
 			} );
 		} );
 		body.addEventListener( 'click', ( e ) => {
@@ -23383,12 +23387,12 @@
 				e.stopPropagation();
 				document.body.classList.remove( 'minn-dragging' );
 				if ( ! B.caps.upload ) {
-					toast( 'You aren’t allowed to upload files', true );
+					toast( __( 'You aren’t allowed to upload files' ), true );
 					return;
 				}
 				const files = all.filter( ( f ) => /^image\//.test( f.type ) );
 				if ( ! files.length ) {
-					toast( 'Only images can be dropped into the editor', true );
+					toast( __( 'Only images can be dropped into the editor' ), true );
 					return;
 				}
 				if ( document.caretRangeFromPoint ) {
@@ -24330,10 +24334,10 @@
 				<div class="minn-imgedit-head">
 					<strong>${ esc( __( 'Edit images' ) ) }</strong>
 					<span class="minn-imgedit-hint">${ fixed
-						? 'Drag to reorder · click a tile to replace · this block\'s layout has a fixed number of images'
+						? __( "Drag to reorder · click a tile to replace · this block\'s layout has a fixed number of images" )
 						: ( canUpload
-							? 'Drag to reorder · click a tile to replace · × removes · drop images to add'
-							: 'Drag to reorder · click a tile to replace · × removes' ) }</span>
+							? __( 'Drag to reorder · click a tile to replace · × removes · drop images to add' )
+							: __( 'Drag to reorder · click a tile to replace · × removes' ) ) }</span>
 					<button type="button" class="minn-x-btn" id="minn-imgedit-close">×</button>
 				</div>
 				<div class="minn-imgedit-grid" id="minn-imgedit-grid"></div>
@@ -24379,10 +24383,10 @@
 		const addDroppedFiles = async ( files ) => {
 			const imgs = files.filter( ( f ) => /^image\//.test( f.type || '' ) );
 			if ( ! imgs.length ) {
-				toast( 'Only image files can be dropped here.', true );
+				toast( __( 'Only image files can be dropped here.' ), true );
 				return;
 			}
-			toast( imgs.length === 1 ? 'Uploading image…' : `Uploading ${ imgs.length } images…` );
+			toast( imgs.length === 1 ? __( 'Uploading image…' ) : `Uploading ${ imgs.length } images…` );
 			let added = 0;
 			for ( const file of imgs ) {
 				try {
@@ -24410,7 +24414,7 @@
 			}
 			if ( added ) {
 				state.cache.media = null;
-				toast( added === 1 ? 'Image added — Apply to save it into the block.' : `${ added } images added — Apply to save them into the block.` );
+				toast( added === 1 ? __( 'Image added — Apply to save it into the block.' ) : `${ added } images added — Apply to save them into the block.` );
 			}
 		};
 		if ( canUpload && ! fixed ) {
@@ -24485,7 +24489,7 @@
 						if ( p && p.url ) list.push( { unit: null, orig: -1, id: p.id, thumb: p.thumb || p.url, attachment: p } );
 					} );
 					renderGrid();
-				}, { multi: true, doneLabel: 'Add to block' } );
+				}, { multi: true, doneLabel: __( 'Add to block' ) } );
 				return;
 			}
 			// Clicking the tile itself (not its controls) replaces that image.
@@ -24523,9 +24527,9 @@
 				// so send the images in order and take back whole markup.
 				if ( rebuilder ) {
 					const ids = list.map( ( it ) => ( it.attachment ? it.attachment.id : it.id ) ).filter( Boolean );
-					if ( ids.length !== list.length ) { toast( 'Every image needs to be in the media library.', true ); return; }
+					if ( ids.length !== list.length ) { toast( __( 'Every image needs to be in the media library.' ), true ); return; }
 					const applyBtn = $( '#minn-imgedit-apply', overlay );
-					if ( applyBtn ) { applyBtn.disabled = true; applyBtn.textContent = 'Applying…'; }
+					if ( applyBtn ) { applyBtn.disabled = true; applyBtn.textContent = __( 'Applying…' ); }
 					api( 'minn-admin/v1/image-block', {
 						method: 'POST',
 						body: JSON.stringify( { block: islandEl.dataset.block, ids, raw: baseRaw } ),
@@ -25202,7 +25206,7 @@
 		// Structural add/reorder live in the modal too.
 		const manyKids = ! mediaRebuild && model.children.length >= 2;
 		/* translators: %d: number of nested blocks */
-		const kidsLabel = manyKids ? sprintf( _n( 'Content · %d block', 'Content · %d blocks', model.children.length ), model.children.length ) : '';
+		const kidsLabel = manyKids ? sprintf( _n( 'Content · %d block', __( 'Content · %d blocks' ), model.children.length ), model.children.length ) : '';
 		const kidsSummary = manyKids
 			? `<div class="minn-field-label minn-insp-imghead">${ esc( kidsLabel ) }<button class="minn-btn-soft" type="button" id="minn-insp-cted">${ esc( __( 'Edit content…' ) ) }</button></div>`
 			: '';
@@ -25269,8 +25273,8 @@
 				${ childSections }
 				${ addRow }
 				${ editable || special || imgSection || kidsSummary ? '' : `<div class="minn-insp-note">${ ownType
-					? 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.'
-					: 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' }</div>` }
+					? __( 'This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is.' )
+					: __( 'This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is.' ) }</div>` }
 			</div>
 			<div class="minn-insp-actions">
 				${ editable ? '<button class="minn-btn-primary" id="minn-insp-apply" type="button">Apply</button>' : '' }
@@ -25295,7 +25299,7 @@
 		const ed = state.editor;
 		if ( ! ed ) return;
 		if ( ed.lockState === 'taken' || ed.lockState === 'blocked' ) {
-			toast( 'Another session holds this post — take over before opening the block editor', true );
+			toast( __( 'Another session holds this post — take over before opening the block editor' ), true );
 			return;
 		}
 		// Fold pending inspector field edits into the island so they ride the save
@@ -25315,7 +25319,7 @@
 		const setBusy = ( on ) => {
 			if ( ! triggerEl ) return;
 			triggerEl.disabled = !! on;
-			if ( on ) triggerEl.textContent = 'Saving…';
+			if ( on ) triggerEl.textContent = __( 'Saving…' );
 			else if ( label ) triggerEl.textContent = label;
 		};
 		const go = ( id ) => {
@@ -25373,7 +25377,7 @@
 				updateEditorStats();
 			} )
 			.catch( () => {} );
-		toast( 'Block updated' );
+		toast( __( 'Block updated' ) );
 		scheduleAutosave();
 	}
 
@@ -25421,7 +25425,7 @@
 		const raw = ed.islands && ed.islands[ idx ];
 		if ( raw == null ) return;
 		const model = inspectorModel( raw );
-		if ( ! model ) { toast( 'This block’s markup can’t be parsed safely.', true ); return; }
+		if ( ! model ) { toast( __( 'This block’s markup can’t be parsed safely.' ), true ); return; }
 
 		// Placeholder while schemas load.
 		islandEl.classList.add( 'minn-insp-target' );
@@ -25431,7 +25435,7 @@
 		document.body.appendChild( inspectorEl );
 		positionInspector( islandEl );
 		document.addEventListener( 'mousedown', inspectorAway, true );
-		armBlockPopA11y( inspectorEl, { label: 'Block settings', onClose: closeInspector } );
+		armBlockPopA11y( inspectorEl, { label: __( 'Block settings' ), onClose: closeInspector } );
 		// Track the island while the editor scrolls under the fixed popover.
 		inspectorScrollFn = () => positionInspector( islandEl );
 		const scroller = document.querySelector( '.minn-scroll' );
@@ -25446,7 +25450,7 @@
 		renderInspectorBody();
 		// Re-apply dialog attrs after the body swap (innerHTML rebuild).
 		armBlockPopA11y( inspectorEl, {
-			label: 'Block settings',
+			label: __( 'Block settings' ),
 			onClose: closeInspector,
 			focus: 'input:not([type="hidden"]), textarea, select, button:not([data-close]):not(.minn-x-btn)',
 		} );
@@ -25472,7 +25476,7 @@
 					panel.hidden = ! panel.hidden;
 					moreBtn.textContent = panel.hidden
 						? `More settings (${ panel.querySelectorAll( '.minn-insp-row' ).length })`
-						: 'Fewer settings';
+						: __( 'Fewer settings' );
 				}
 				return;
 			}
@@ -25504,9 +25508,9 @@
 			}
 			if ( e.target.closest( '#minn-insp-embed-url' ) ) {
 				const current = ( insp.model.ownAttrs && insp.model.ownAttrs.url ) || '';
-				const url = ( prompt( 'Embed URL (YouTube, tweet, audio…):', current ) || '' ).trim();
+				const url = ( prompt( __( 'Embed URL (YouTube, tweet, audio…):' ), current ) || '' ).trim();
 				if ( ! url || url === current ) return;
-				if ( ! /^https?:\/\/\S+$/.test( url ) ) { toast( 'That doesn’t look like a URL', true ); return; }
+				if ( ! /^https?:\/\/\S+$/.test( url ) ) { toast( __( 'That doesn’t look like a URL' ), true ); return; }
 				const { idx, islandEl: el } = insp;
 				closeInspector();
 				replaceIsland( idx, el, embedTemplate( url ) );
@@ -25542,7 +25546,7 @@
 				const base = buildInspectorRaw( insp );
 				const info = imageUnitsOf( base );
 				const { idx, islandEl: el } = insp;
-				if ( ! info ) { toast( 'These images can’t be edited safely here.', true ); return; }
+				if ( ! info ) { toast( __( 'These images can’t be edited safely here.' ), true ); return; }
 				closeInspector();
 				openImagesEditor( idx, el, base, info );
 				return;
@@ -25561,7 +25565,7 @@
 				openMediaPicker( ( it ) => {
 					if ( ! it || ! it.url ) return;
 					replaceIsland( idx, el, swapIslandImage( base, oldUrl, it ) );
-					toast( 'Image replaced' );
+					toast( __( 'Image replaced' ) );
 				} );
 				return;
 			}
@@ -25709,7 +25713,7 @@
 		}
 
 		btn.disabled = true;
-		btn.textContent = 'Applying…';
+		btn.textContent = __( 'Applying…' );
 		ed.islands[ insp.idx ] = newRaw;
 
 		// Refresh the preview with a real server render; tolerate failure
@@ -25742,7 +25746,7 @@
 				if ( inner2 ) previewEl.innerHTML = inner2;
 			}
 		}
-		toast( 'Block updated' );
+		toast( __( 'Block updated' ) );
 		closeInspector();
 		if ( ed.id ) scheduleAutosave();
 	}
@@ -25930,9 +25934,9 @@
 					if ( ev.altKey ) {
 						const node = chip._kind === 'image' ? ( chip._target.closest( 'figure' ) || chip._target ) : chip._target;
 						if ( ev.shiftKey ) {
-							if ( removeEditableNode( node ) ) toast( 'Block removed — ⌘Z restores it' );
+							if ( removeEditableNode( node ) ) toast( __( 'Block removed — ⌘Z restores it' ) );
 						} else if ( duplicateEditableNode( node ) ) {
-							toast( 'Block duplicated' );
+							toast( __( 'Block duplicated' ) );
 						}
 						return;
 					}
@@ -25951,13 +25955,13 @@
 				? ( codeLangOf( t.el ) === 'auto' ? 'code' : codeLangOf( t.el ) )
 				: t.kind;
 			chip.textContent = '\u2699 ' + chipText;
-			chip.title = t.kind === 'table' ? 'Table \u2014 rows, columns, header'
-				: t.kind === 'code' ? 'Code block \u2014 syntax highlighting'
-				: 'Image \u2014 alt, caption, replace';
+			chip.title = t.kind === 'table' ? __( 'Table \u2014 rows, columns, header' )
+				: t.kind === 'code' ? __( 'Code block \u2014 syntax highlighting' )
+				: __( 'Image \u2014 alt, caption, replace' );
 			chip.setAttribute( 'aria-label',
-				t.kind === 'table' ? 'Table settings'
+				t.kind === 'table' ? __( 'Table settings' )
 				: t.kind === 'code' ? `Code block settings${ chipText !== 'code' ? ', ' + chipText : '' }`
-				: 'Image settings' );
+				: __( 'Image settings' ) );
 			const box = t.el.closest( 'figure' ) || t.el;
 			const rect = box.getBoundingClientRect();
 			// Content coordinates: rect is viewport-relative, the chip's home
@@ -26101,7 +26105,7 @@
 					<button class="minn-btn-soft danger" data-op="col-del" type="button">${ esc( __( 'Delete' ) ) }</button>
 				</div>
 				<div class="minn-table-ops">
-					<button class="minn-btn-soft" data-op="header" type="button">${ table.tHead ? 'Remove header row' : 'Make first row a header' }</button>
+					<button class="minn-btn-soft" data-op="header" type="button">${ table.tHead ? __( 'Remove header row' ) : __( 'Make first row a header' ) }</button>
 					<button class="minn-btn-soft danger" data-op="table-del" type="button">${ esc( __( 'Delete table' ) ) }</button>
 				</div>
 			</div>`;
@@ -26113,7 +26117,7 @@
 			b.addEventListener( 'click', () => tableOp( table, b.dataset.op ) );
 		} );
 		document.addEventListener( 'mousedown', tablePopAway, true );
-		armBlockPopA11y( tablePop, { label: 'Table settings', onClose: hideTablePop, focus: '[data-op]' } );
+		armBlockPopA11y( tablePop, { label: __( 'Table settings' ), onClose: hideTablePop, focus: '[data-op]' } );
 	}
 
 	// Apply a structural table mutation to a (detached) table. Returns
@@ -26253,7 +26257,7 @@
 			const landing = tableRoot.querySelector( 'p, h1, h2, h3, h4, h5, h6, td, th' )
 				|| tableRoot.firstElementChild || editorBody.firstElementChild;
 			if ( landing ) setCaret( landing, 0 );
-			toast( 'Table deleted. ⌘Z restores it' );
+			toast( __( 'Table deleted. ⌘Z restores it' ) );
 		} else {
 			// Figure shell stays; swap its inner HTML. Bare table swaps outer.
 			const marker = 'minn-tbl-' + Date.now().toString( 36 );
@@ -26284,8 +26288,8 @@
 				hideTablePop();
 			}
 			const destructiveMsg = {
-				'row-del': 'Row deleted. ⌘Z restores it',
-				'col-del': 'Column deleted. ⌘Z restores it',
+				'row-del': __( 'Row deleted. ⌘Z restores it' ),
+				'col-del': __( 'Column deleted. ⌘Z restores it' ),
 			}[ op ];
 			if ( destructiveMsg ) toast( destructiveMsg );
 		}
@@ -26332,7 +26336,7 @@
 			<div class="minn-insp-body">
 				<div class="minn-field-label">${ esc( __( 'Syntax highlighting' ) ) }</div>
 				<select class="minn-input" data-lang>
-					${ CODE_LANGS.map( ( l ) => `<option value="${ l }"${ l === codeLangOf( pre ) ? ' selected' : '' }>${ l === 'auto' ? 'Auto detect' : l }</option>` ).join( '' ) }
+					${ CODE_LANGS.map( ( l ) => `<option value="${ l }"${ l === codeLangOf( pre ) ? ' selected' : '' }>${ l === 'auto' ? __( 'Auto detect' ) : l }</option>` ).join( '' ) }
 				</select>
 			</div>
 			<div class="minn-insp-actions">
@@ -26341,7 +26345,7 @@
 		document.body.appendChild( codePop );
 		positionBlockPop( codePop, pre );
 		codePop.querySelector( '[data-close]' ).addEventListener( 'click', hideCodePop );
-		armBlockPopA11y( codePop, { label: 'Code block settings', onClose: hideCodePop, focus: '[data-lang]' } );
+		armBlockPopA11y( codePop, { label: __( 'Code block settings' ), onClose: hideCodePop, focus: '[data-lang]' } );
 		codePop.querySelector( '[data-lang]' ).addEventListener( 'change', ( e ) => {
 			setCodeLang( pre, e.target.value );
 			syncTableChips(); // refresh the chip's language label
@@ -26665,7 +26669,7 @@
 		document.addEventListener( 'mousedown', imgPopAway, true );
 
 		imgPop.querySelector( '[data-close]' ).addEventListener( 'click', hideImgPop );
-		armBlockPopA11y( imgPop, { label: 'Image settings', onClose: hideImgPop, focus: '[data-img-alt]' } );
+		armBlockPopA11y( imgPop, { label: __( 'Image settings' ), onClose: hideImgPop, focus: '[data-img-alt]' } );
 
 		// Link and lightbox are mutually exclusive (core's own rule: the
 		// lightbox only arms when the image has no link destination).
@@ -26751,7 +26755,7 @@
 			}
 			stampSlotDirtyFor( img );
 			scheduleAutosave();
-			toast( 'Image updated' );
+			toast( __( 'Image updated' ) );
 			hideImgPop();
 		} );
 
@@ -26774,7 +26778,7 @@
 				}
 				stampSlotDirtyFor( img );
 				scheduleAutosave();
-				toast( 'Image replaced' );
+				toast( __( 'Image replaced' ) );
 			} );
 		} );
 
@@ -26784,7 +26788,7 @@
 		// travel — serialization re-reads the DOM, so nothing else to do
 		// beyond stamping the slot dirty.
 		imgPop.querySelector( '[data-img-dup]' ).addEventListener( 'click', () => {
-			if ( duplicateEditableNode( img.closest( 'figure' ) || img ) ) toast( 'Image duplicated' );
+			if ( duplicateEditableNode( img.closest( 'figure' ) || img ) ) toast( __( 'Image duplicated' ) );
 			hideImgPop();
 		} );
 
@@ -26808,7 +26812,7 @@
 			sel.addRange( r );
 			document.execCommand( 'delete', false, null );
 			scheduleAutosave();
-			toast( 'Image removed — ⌘Z restores it' );
+			toast( __( 'Image removed — ⌘Z restores it' ) );
 			hideImgPop();
 		} );
 	}
@@ -28010,7 +28014,7 @@
 		const ed = state.editor;
 		if ( ! body || ! ed || ! anchor.isConnected ) return;
 		const segs = tokenizeBlocks( content.trim() );
-		if ( ! segs ) { toast( 'This pattern’s markup can’t be parsed safely', true ); return; }
+		if ( ! segs ) { toast( __( 'This pattern’s markup can’t be parsed safely' ), true ); return; }
 		if ( ! ed.islands ) ed.islands = [];
 		let count = 0;
 		segs.forEach( ( seg ) => {
@@ -28019,7 +28023,7 @@
 			anchor.insertAdjacentHTML( 'beforebegin', islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw, ed ) );
 			count++;
 		} );
-		if ( ! count ) { toast( 'Nothing insertable in this pattern', true ); return; }
+		if ( ! count ) { toast( __( 'Nothing insertable in this pattern' ), true ); return; }
 		stampSlotDirtyFor( anchor );
 		renderIslandPreviews( body, ed );
 		updateEditorStats();
@@ -28042,20 +28046,20 @@
 		// classic → blocks via ensureBlocksMode() instead.
 		void blocksMode;
 		return [
-			[ icon( 'h2' ), 'Heading 2', () => document.execCommand( 'formatBlock', false, 'h2' ) ],
-			[ icon( 'h3' ), 'Heading 3', () => document.execCommand( 'formatBlock', false, 'h3' ) ],
+			[ icon( 'h2' ), __( 'Heading 2' ), () => document.execCommand( 'formatBlock', false, 'h2' ) ],
+			[ icon( 'h3' ), __( 'Heading 3' ), () => document.execCommand( 'formatBlock', false, 'h3' ) ],
 			[ icon( 'quote' ), 'Quote', () => document.execCommand( 'formatBlock', false, 'blockquote' ) ],
 			// Pullquote is prose-class; details is an island (contenteditable
 			// <details> traps the caret and blocks typing after it in Blink).
 			[ icon( 'quote' ), 'Pullquote', { html: '<figure class="wp-block-pullquote"><blockquote><p><br></p></blockquote></figure>' } ],
 			[ icon( 'list' ), 'Details', { block: 'core/details', template: detailsTemplate( 'Details', '' ) } ],
 			[ icon( 'braces' ), 'Code', () => document.execCommand( 'formatBlock', false, 'pre' ) ],
-			[ icon( 'list' ), 'Bulleted list', () => document.execCommand( 'insertUnorderedList', false, null ) ],
-			[ icon( 'olist' ), 'Numbered list', () => document.execCommand( 'insertOrderedList', false, null ) ],
+			[ icon( 'list' ), __( 'Bulleted list' ), () => document.execCommand( 'insertUnorderedList', false, null ) ],
+			[ icon( 'olist' ), __( 'Numbered list' ), () => document.execCommand( 'insertOrderedList', false, null ) ],
 			[ icon( 'img' ), 'Image', 'image' ],
 			[ icon( 'table' ), 'Table', { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
 			[ icon( 'minus' ), 'Divider', { html: '<hr>' } ],
-			[ icon( 'play' ), 'Embed — YouTube, tweet, audio…', 'embed' ],
+			[ icon( 'play' ), __( 'Embed — YouTube, tweet, audio…' ), 'embed' ],
 			[ icon( 'gallery' ), 'Gallery', 'gallery' ],
 			[ icon( 'minus' ), 'Spacer', 'spacer' ],
 			[ icon( 'file' ), 'File', 'file' ],
@@ -28118,7 +28122,7 @@
 		if ( ! ed ) return false;
 		if ( ed.mode === 'blocks' ) return true;
 		if ( ed.mode === 'locked' ) {
-			toast( 'This layout is locked — open it in the block editor to add blocks', true );
+			toast( __( 'This layout is locked — open it in the block editor to add blocks' ), true );
 			return false;
 		}
 		ed.mode = 'blocks';
@@ -28140,9 +28144,9 @@
 
 	const prettyNs = ( ns ) => ( {
 		woocommerce: 'WooCommerce', uagb: 'Spectra', 'themeisle-blocks': 'Otter',
-		'essential-blocks': 'Essential Blocks', generateblocks: 'GenerateBlocks',
+		'essential-blocks': __( 'Essential Blocks' ), generateblocks: 'GenerateBlocks',
 		kadence: 'Kadence', stackable: 'Stackable', 'otter-blocks': 'Otter',
-		core: 'WordPress', anchor: 'Anchor Blocks',
+		core: 'WordPress', anchor: __( 'Anchor Blocks' ),
 	}[ ns ] || ns.charAt( 0 ).toUpperCase() + ns.slice( 1 ) );
 
 	async function openBlockPicker( targetBlock ) {
@@ -28377,7 +28381,7 @@
 				const ids = ( picks || [] ).map( ( p ) => p && p.id ).filter( Boolean );
 				if ( ! ids.length ) return;
 				ensureBlocksMode();
-				toast( 'Building the gallery…' );
+				toast( __( 'Building the gallery…' ) );
 				api( 'minn-admin/v1/image-block', {
 					method: 'POST',
 					body: JSON.stringify( { block: action.imageBlock, ids, raw: '' } ),
@@ -28385,7 +28389,7 @@
 					if ( ! r || ! r.markup ) return;
 					insertIsland( target, action.imageBlock, r.markup );
 				} ).catch( ( err ) => toast( err.message, true ) );
-			}, { multi: true, doneLabel: 'Build gallery' } );
+			}, { multi: true, doneLabel: __( 'Build gallery' ) } );
 			return;
 		}
 		// A new column joins the Columns block the caret is in (the menu only
@@ -28397,7 +28401,7 @@
 			target.innerHTML = '<br>';
 			const here = target.closest( '.minn-slot' );
 			if ( ! columnOp( cols, 'after', here ? here.parentElement : null ) ) {
-				toast( 'This block’s columns can’t be edited here.', true );
+				toast( __( 'This block’s columns can’t be edited here.' ), true );
 			}
 			return;
 		}
@@ -28414,7 +28418,7 @@
 			const sel = window.getSelection();
 			sel.removeAllRanges();
 			sel.addRange( range );
-			toast( 'Inserting…' );
+			toast( __( 'Inserting…' ) );
 			const opts = { method: action.method || 'POST' };
 			if ( opts.method !== 'GET' && action.body && typeof action.body === 'object' ) {
 				opts.body = JSON.stringify( action.body );
@@ -28433,7 +28437,7 @@
 						// Leave the empty p as the caret landing (already focused).
 						scheduleAutosave();
 					} else {
-						throw new Error( 'Command returned no content' );
+						throw new Error( __( 'Command returned no content' ) );
 					}
 				} )
 				.catch( ( e ) => toast( 'Insert failed: ' + e.message, true ) );
@@ -28453,14 +28457,14 @@
 			const sel = window.getSelection();
 			sel.removeAllRanges();
 			sel.addRange( range );
-			toast( 'Inserting design…' );
+			toast( __( 'Inserting design…' ) );
 			// Sources are looked up by id (not index) — the list can rebuild
 			// between menu render and click (editor-blocks re-poll).
 			const source = designSources().find( ( s ) => s.id === action.src );
-			if ( ! source ) { toast( 'Design source unavailable', true ); return; }
+			if ( ! source ) { toast( __( 'Design source unavailable' ), true ); return; }
 			api( source.route + '/' + encodeURIComponent( action.design ), { method: 'POST' } )
 				.then( ( r ) => {
-					if ( ! r || ! r.template ) throw new Error( 'Design unavailable' );
+					if ( ! r || ! r.template ) throw new Error( __( 'Design unavailable' ) );
 					if ( ! p.isConnected || ! state.editor ) return;
 					const islandEl = insertIsland( p, r.block || 'core/group', r.template );
 					// The text fields are how the design's placeholder copy
@@ -28515,7 +28519,7 @@
 			sel.addRange( range );
 			api( 'minn-admin/v1/pattern?name=' + encodeURIComponent( action.pattern ) )
 				.then( ( r ) => {
-					if ( ! r || ! r.content ) throw new Error( 'Pattern unavailable' );
+					if ( ! r || ! r.content ) throw new Error( __( 'Pattern unavailable' ) );
 					insertPatternIslands( p, r.content );
 				} )
 				.catch( ( e ) => toast( 'Pattern insert failed: ' + e.message, true ) );
@@ -28602,9 +28606,9 @@
 		if ( action === 'image' ) insertImage();
 		else if ( action === 'embed' ) {
 			if ( ! ensureBlocksMode() ) return;
-			const url = ( prompt( 'Paste the URL to embed (YouTube, tweet, audio…):' ) || '' ).trim();
+			const url = ( prompt( __( 'Paste the URL to embed (YouTube, tweet, audio…):' ) ) || '' ).trim();
 			if ( /^https?:\/\/\S+$/.test( url ) ) insertIsland( target.isConnected ? target : null, 'core/embed', embedTemplate( url ) );
-			else if ( url ) toast( 'That doesn’t look like a URL', true );
+			else if ( url ) toast( __( 'That doesn’t look like a URL' ), true );
 		} else if ( action === 'gallery' ) {
 			if ( ! ensureBlocksMode() ) return;
 			const anchor = target;
@@ -28819,7 +28823,7 @@
 			menu = document.createElement( 'div' );
 			menu.className = 'minn-slash-menu';
 			menu.setAttribute( 'role', 'listbox' );
-			menu.setAttribute( 'aria-label', 'Insert block' );
+			menu.setAttribute( 'aria-label', __( 'Insert block' ) );
 			document.body.appendChild( menu );
 		};
 
@@ -28928,7 +28932,7 @@
 	// Three shapes: (1) real admin URL with capture piggyback, (2) whitelisted
 	// ajax for href="#" buttons (Everest "No, Thanks"), (3) plain button → hide.
 	async function runNoticeAction( link, btn ) {
-		if ( btn ) { btn.disabled = true; btn.textContent = 'Working…'; }
+		if ( btn ) { btn.disabled = true; btn.textContent = __( 'Working…' ); }
 		const noticeId = btn && btn.dataset.nid ? btn.dataset.nid.replace( /^notice-/, '' ) : '';
 		try {
 			if ( link.ajax && link.ajax.action ) {
@@ -28962,7 +28966,7 @@
 					body: JSON.stringify( { id: noticeId } ),
 				} );
 			} else {
-				throw new Error( 'No action available' );
+				throw new Error( __( 'No action available' ) );
 			}
 			state.cache.notifications = null;
 			await loadNotifications();
@@ -28999,11 +29003,11 @@
 		if ( ! parts.length ) return;
 		const hasCore = parts.some( ( p ) => p.kind === 'core' );
 		const okAll = await minnConfirm( {
-			title: 'Update everything?',
+			title: __( 'Update everything?' ),
 			changes: parts.map( ( p ) => p.label ),
-			keeps: [ 'Your content, media and users', 'Plugin and theme settings', 'Anything without a pending update' ],
+			keeps: [ __( 'Your content, media and users' ), __( 'Plugin and theme settings' ), __( 'Anything without a pending update' ) ],
 			body: `Each update runs its author's own upgrade routine. Plugins first, then themes${ hasCore ? ', then WordPress core last (visitors see a maintenance notice for a few seconds)' : '' }.`,
-			confirmLabel: 'Update everything',
+			confirmLabel: __( 'Update everything' ),
 		} );
 		if ( ! okAll ) return;
 		const setPhase = ( label ) => { state.updatingAll = label; renderOverlays(); updateUpdChip(); };
@@ -29019,7 +29023,7 @@
 			// updates down for per-item progress); the chip shows the count.
 			const np = ( parts.find( ( p ) => p.kind === 'plugins' ) || {} ).n || 0;
 			/* translators: %s: number of plugins. */
-			setPhase( sprintf( _n( 'Updating %s plugin…', 'Updating %s plugins…', np ), np ) );
+			setPhase( sprintf( _n( 'Updating %s plugin…', __( 'Updating %s plugins…' ), np ), np ) );
 			try {
 				const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
 				const updated = r.updated || [];
@@ -29056,7 +29060,7 @@
 		if ( parts.some( ( p ) => p.kind === 'translations' ) ) {
 			const nl = parts.find( ( p ) => p.kind === 'translations' ).n;
 			/* translators: %d is a number of translations. */
-			setPhase( sprintf( _n( 'Updating %d translation…', 'Updating %d translations…', nl ), nl ) );
+			setPhase( sprintf( _n( 'Updating %d translation…', __( 'Updating %d translations…' ), nl ), nl ) );
 			try {
 				const r = await api( 'minn-admin/v1/translations/update', { method: 'POST' } );
 				const did = ( r && r.updated ) || 0;
@@ -29070,7 +29074,7 @@
 			}
 		}
 		if ( hasCore ) {
-			setPhase( 'Updating WordPress…' );
+			setPhase( __( 'Updating WordPress…' ) );
 			try {
 				const version = await runCoreUpdate( state.cache.core.update.version );
 				doneBits.push( `WordPress ${ version }` );
@@ -29118,7 +29122,7 @@
 			return u.version ? `Update → ${ u.version }` : 'Update';
 		}
 		if ( u.type === 'core' ) {
-			return u.version ? `Update to ${ u.version }` : 'Update WordPress';
+			return u.version ? `Update to ${ u.version }` : __( 'Update WordPress' );
 		}
 		return 'Update';
 	}
@@ -29142,17 +29146,17 @@
 		if ( btn ) { btn.disabled = true; btn.textContent = notifUpdateLabel( item ); }
 		try {
 			if ( u.type === 'plugin' ) {
-				if ( ! B.caps.update ) throw new Error( 'You cannot update plugins.' );
+				if ( ! B.caps.update ) throw new Error( __( 'You cannot update plugins.' ) );
 				const file = String( u.plugin || '' ).replace( /\.php$/, '' );
-				if ( ! file ) throw new Error( 'Missing plugin file.' );
+				if ( ! file ) throw new Error( __( 'Missing plugin file.' ) );
 				await queuePluginUpdate( file, u.name || file );
 			} else if ( u.type === 'theme' ) {
-				if ( ! B.caps.updateThemes ) throw new Error( 'You cannot update themes.' );
+				if ( ! B.caps.updateThemes ) throw new Error( __( 'You cannot update themes.' ) );
 				const stylesheet = u.stylesheet;
-				if ( ! stylesheet ) throw new Error( 'Missing theme.' );
+				if ( ! stylesheet ) throw new Error( __( 'Missing theme.' ) );
 				const name = u.name || stylesheet;
 				toast( `Updating ${ name }…` );
-				if ( btn ) btn.textContent = 'Updating…';
+				if ( btn ) btn.textContent = __( 'Updating…' );
 				await api( 'minn-admin/v1/themes/update', {
 					method: 'POST',
 					body: JSON.stringify( { stylesheet } ),
@@ -29166,7 +29170,7 @@
 				state.cache.notifications = null;
 				await loadNotifications();
 			} else if ( u.type === 'core' ) {
-				if ( ! B.caps.core ) throw new Error( 'You cannot update WordPress.' );
+				if ( ! B.caps.core ) throw new Error( __( 'You cannot update WordPress.' ) );
 				if ( ! await confirmCoreUpdate( u.version || 'the latest version' ) ) {
 					if ( btn ) { btn.disabled = false; btn.textContent = notifUpdateLabel( item ); }
 					return;
@@ -29188,7 +29192,7 @@
 					loadNotifications(),
 				] );
 			} else {
-				throw new Error( 'Unknown update type.' );
+				throw new Error( __( 'Unknown update type.' ) );
 			}
 			// Mark the row read so the blue dot clears when the item stays
 			// briefly while the list refreshes.
@@ -29203,7 +29207,7 @@
 			if ( state.notifOpen ) renderOverlays();
 			if ( state.route === 'extensions' ) renderExtensions();
 		} catch ( e ) {
-			toast( e.message || 'Update failed', true );
+			toast( e.message || __( 'Update failed' ), true );
 			if ( btn && document.body.contains( btn ) ) {
 				btn.disabled = false;
 				btn.textContent = notifUpdateLabel( item );
@@ -29268,7 +29272,7 @@
 				</div>
 				${ updParts.length || state.updatingAll ? `
 				<div class="minn-update-all-row">
-					<button class="minn-btn-primary" id="minn-update-all"${ state.updatingAll ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( state.updatingAll || 'Update everything' ) }</button>
+					<button class="minn-btn-primary" id="minn-update-all"${ state.updatingAll ? ' disabled' : '' }>${ icon( 'refresh' ) } ${ esc( state.updatingAll || __( 'Update everything' ) ) }</button>
 					${ ! state.updatingAll ? `<div class="minn-update-all-sub">${ esc( updParts.map( ( p ) => p.label ).join( ' · ' ) ) }</div>` : '' }
 				</div>` : '' }
 				<div class="minn-notif-scroll">
@@ -29299,7 +29303,7 @@
 	async function clearSiteCache() {
 		const providers = B.cache || [];
 		if ( ! providers.length ) return;
-		toast( 'Clearing cache…' );
+		toast( __( 'Clearing cache…' ) );
 		const purged = [];
 		const failed = [];
 		for ( const p of providers ) {
@@ -29342,9 +29346,9 @@
 		try {
 			const st = await api( 'minn-admin/v1/disembark/status' );
 			await navigator.clipboard.writeText( st.command.text );
-			toast( 'Disembark backup command copied' );
+			toast( __( 'Disembark backup command copied' ) );
 		} catch ( e ) {
-			toast( 'Copy failed — the command is on the Backups page', true );
+			toast( __( 'Copy failed — the command is on the Backups page' ), true );
 		}
 	}
 
@@ -29355,27 +29359,27 @@
 		// View modes are palette commands, not toolbar buttons — the toolbar
 		// is for formatting; focus/outline are how you LOOK at the document.
 		if ( state.route === 'editor' && state.editor ) {
-			if ( state.editor.mode !== 'locked' ) cmds.push( { label: 'Find & replace (⌘⇧F)', kind: 'view', icon: '⌕', run: () => openFindBar() } );
-			cmds.push( { label: 'Toggle focus mode (⌘⇧D)', kind: 'view', icon: '◎', run: () => toggleFocusMode() } );
-			cmds.push( { label: 'Toggle outline mode (⌘⇧O)', kind: 'view', icon: '☰', run: () => toggleOutlineMode() } );
+			if ( state.editor.mode !== 'locked' ) cmds.push( { label: __( 'Find & replace (⌘⇧F)' ), kind: 'view', icon: '⌕', run: () => openFindBar() } );
+			cmds.push( { label: __( 'Toggle focus mode (⌘⇧D)' ), kind: 'view', icon: '◎', run: () => toggleFocusMode() } );
+			cmds.push( { label: __( 'Toggle outline mode (⌘⇧O)' ), kind: 'view', icon: '☰', run: () => toggleOutlineMode() } );
 			// The escape hatch without new chrome: this post in wp-admin's own
 			// editor. Saves first (openInBlockEditor), so unsaved islands are
 			// there when it opens. ⌥-clicking the sidebar's WordPress button
 			// does the same thing.
-			cmds.push( { label: 'Edit in the block editor ↗', kind: 'action', icon: '↗', run: () => openInBlockEditor() } );
+			cmds.push( { label: __( 'Edit in the block editor ↗' ), kind: 'action', icon: '↗', run: () => openInBlockEditor() } );
 		}
 		cmds.push(
-			{ label: 'Go to Overview', kind: 'nav', icon: '▦', run: () => go( 'overview' ) },
-			{ label: 'Manage Content', kind: 'nav', icon: '¶', run: () => go( 'content' ) },
-			{ label: 'Open Media Library', kind: 'nav', icon: '▣', run: () => go( 'media' ) }
+			{ label: __( 'Go to Overview' ), kind: 'nav', icon: '▦', run: () => go( 'overview' ) },
+			{ label: __( 'Manage Content' ), kind: 'nav', icon: '¶', run: () => go( 'content' ) },
+			{ label: __( 'Open Media Library' ), kind: 'nav', icon: '▣', run: () => go( 'media' ) }
 		);
-		if ( commentsAvailable() ) cmds.push( { label: 'Review Comments', kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
-		if ( B.wc && B.caps.orders ) cmds.push( { label: 'View Orders', kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
-		if ( B.wcs && B.caps.subscriptions ) cmds.push( { label: 'View Subscriptions', kind: 'nav', icon: '↻', run: () => go( 'subscriptions' ) } );
-		if ( B.wc && B.caps.products ) cmds.push( { label: 'View Products', kind: 'nav', icon: '🏷', run: () => go( 'products' ) } );
-		if ( B.wc && B.caps.coupons ) cmds.push( { label: 'View Coupons', kind: 'nav', icon: '🔑', run: () => go( 'coupons' ) } );
-		if ( B.wc && B.caps.customers ) cmds.push( { label: 'View Customers', kind: 'nav', icon: '◉', run: () => go( 'customers' ) } );
-		if ( B.caps.users ) cmds.push( { label: 'Browse Users', kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
+		if ( commentsAvailable() ) cmds.push( { label: __( 'Review Comments' ), kind: 'nav', icon: '💬', run: () => go( 'comments' ) } );
+		if ( B.wc && B.caps.orders ) cmds.push( { label: __( 'View Orders' ), kind: 'nav', icon: '⬡', run: () => go( 'orders' ) } );
+		if ( B.wcs && B.caps.subscriptions ) cmds.push( { label: __( 'View Subscriptions' ), kind: 'nav', icon: '↻', run: () => go( 'subscriptions' ) } );
+		if ( B.wc && B.caps.products ) cmds.push( { label: __( 'View Products' ), kind: 'nav', icon: '🏷', run: () => go( 'products' ) } );
+		if ( B.wc && B.caps.coupons ) cmds.push( { label: __( 'View Coupons' ), kind: 'nav', icon: '🔑', run: () => go( 'coupons' ) } );
+		if ( B.wc && B.caps.customers ) cmds.push( { label: __( 'View Customers' ), kind: 'nav', icon: '◉', run: () => go( 'customers' ) } );
+		if ( B.caps.users ) cmds.push( { label: __( 'Browse Users' ), kind: 'nav', icon: '◉', run: () => go( 'users' ) } );
 		// One palette entry per surface family (preferred member); ungrouped
 		// surfaces keep a single entry as before.
 		surfaceNavItems().forEach( ( s ) => {
@@ -29392,16 +29396,16 @@
 			} );
 		} );
 		if ( B.caps.themeOptions && ! B.site.blockTheme ) {
-			cmds.push( { label: 'Edit Menus', kind: 'nav', icon: '☰', run: () => go( 'menus' ) } );
-			if ( B.site.hasSidebars ) cmds.push( { label: 'Manage Widgets', kind: 'nav', icon: '▥', run: () => go( 'widgets' ) } );
+			cmds.push( { label: __( 'Edit Menus' ), kind: 'nav', icon: '☰', run: () => go( 'menus' ) } );
+			if ( B.site.hasSidebars ) cmds.push( { label: __( 'Manage Widgets' ), kind: 'nav', icon: '▥', run: () => go( 'widgets' ) } );
 		}
-		if ( B.caps.plugins ) cmds.push( { label: 'Manage Extensions', kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
-		if ( B.caps.settings ) cmds.push( { label: 'Manage Post Types', kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
-		if ( B.caps.terms ) cmds.push( { label: 'Manage categories & tags', kind: 'nav', icon: '#', run: () => goTerms() } );
-		if ( B.caps.settings ) cmds.push( { label: 'View System diagnostics', kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
+		if ( B.caps.plugins ) cmds.push( { label: __( 'Manage Extensions' ), kind: 'nav', icon: '✦', run: () => go( 'extensions' ) } );
+		if ( B.caps.settings ) cmds.push( { label: __( 'Manage Post Types' ), kind: 'nav', icon: '▦', run: () => go( 'posttypes' ) } );
+		if ( B.caps.terms ) cmds.push( { label: __( 'Manage categories & tags' ), kind: 'nav', icon: '#', run: () => goTerms() } );
+		if ( B.caps.settings ) cmds.push( { label: __( 'View System diagnostics' ), kind: 'nav', icon: '❤', run: () => go( 'system' ) } );
 		if ( B.caps.settings ) cmds.push( { label: __( 'Browse database (read-only)' ), kind: 'nav', icon: '⛁', run: () => go( 'database' ) } );
-		if ( B.caps.settings ) cmds.push( { label: 'View site logs', kind: 'nav', icon: '📄', run: () => openLogViewer() } );
-		if ( B.caps.settings ) cmds.push( { label: 'Open Settings', kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
+		if ( B.caps.settings ) cmds.push( { label: __( 'View site logs' ), kind: 'nav', icon: '📄', run: () => openLogViewer() } );
+		if ( B.caps.settings ) cmds.push( { label: __( 'Open Settings' ), kind: 'nav', icon: '⚙', run: () => go( 'settings' ) } );
 		// Multisite: one entry PER SITE (not a single "Switch site…" that
 		// opens a second picker), so typing a site's name reaches it in one
 		// step. The palette matches a contiguous substring of the label, so
@@ -29439,10 +29443,10 @@
 			} );
 		}
 		cmds.push(
-			{ label: 'Write new post', kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
-			...( B.caps.editPages ? [ { label: 'Create new page', kind: 'action', icon: '▭', run: () => newContent( 'pages' ) } ] : [] ),
-			{ label: 'Toggle light / dark', kind: 'action', icon: '◐', run: toggleTheme },
-			{ label: 'View notifications', kind: 'action', icon: '◔', run: () => { state.notifOpen = true; renderOverlays(); loadNotifications().then( () => state.notifOpen && renderOverlays() ); } },
+			{ label: __( 'Write new post' ), kind: 'action', icon: '✎', run: () => newContent( 'posts' ) },
+			...( B.caps.editPages ? [ { label: __( 'Create new page' ), kind: 'action', icon: '▭', run: () => newContent( 'pages' ) } ] : [] ),
+			{ label: __( 'Toggle light / dark' ), kind: 'action', icon: '◐', run: toggleTheme },
+			{ label: __( 'View notifications' ), kind: 'action', icon: '◔', run: () => { state.notifOpen = true; renderOverlays(); loadNotifications().then( () => state.notifOpen && renderOverlays() ); } },
 			...( ( B.cache || [] ).length ? [ {
 				label: `Clear site cache (${ B.cache.map( ( c ) => c.name ).join( ', ' ) })`,
 				kind: 'action',
@@ -29456,25 +29460,25 @@
 				run: runBackupNow,
 			} ] : [] ),
 			...( B.disembark ? [ {
-				label: 'Copy Disembark backup command',
+				label: __( 'Copy Disembark backup command' ),
 				kind: 'action',
 				icon: '⛁',
 				run: copyDisembarkCommand,
 			} ] : [] ),
 		);
 		if ( B.caps.update || B.caps.updateThemes ) {
-			cmds.push( { label: 'Check for updates', kind: 'action', icon: '⟳', run: () => checkForUpdates( null ) } );
+			cmds.push( { label: __( 'Check for updates' ), kind: 'action', icon: '⟳', run: () => checkForUpdates( null ) } );
 		}
 		if ( B.caps.update && Object.keys( state.cache.pluginUpdates || {} ).length ) {
-			cmds.push( { label: 'Update all plugins', kind: 'action', icon: '⟳', run: () => updateAllPlugins( null ) } );
+			cmds.push( { label: __( 'Update all plugins' ), kind: 'action', icon: '⟳', run: () => updateAllPlugins( null ) } );
 		}
 		cmds.push(
-			{ label: 'Your profile — name, email, password', kind: 'link', icon: '@', run: () => go( 'profile' ) },
+			{ label: __( 'Your profile — name, email, password' ), kind: 'link', icon: '@', run: () => go( 'profile' ) },
 			{ label: __( 'Open the user guide' ), kind: 'link', icon: '📖', run: openGuide },
-			{ label: 'About Minn — help & shortcuts', kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
-			{ label: 'Visit site', kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank' ) },
-			{ label: 'Classic wp-admin', kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank' ) },
-			{ label: 'Log out', kind: 'link', icon: '⎋', run: () => { window.location.href = B.site.logout; } },
+			{ label: __( 'About Minn — help & shortcuts' ), kind: 'link', icon: '?', run: () => { state.modal = { type: 'help' }; renderOverlays(); } },
+			{ label: __( 'Visit site' ), kind: 'link', icon: '↗', run: () => window.open( B.site.url, '_blank' ) },
+			{ label: __( 'Classic wp-admin' ), kind: 'link', icon: 'W', run: () => window.open( B.site.adminUrl, '_blank' ) },
+			{ label: __( 'Log out' ), kind: 'link', icon: '⎋', run: () => { window.location.href = B.site.logout; } },
 		);
 		return cmds;
 	}
@@ -29824,7 +29828,7 @@
 			// Safe SVG always sanitizes; SVG Support's sanitize-on-upload is a
 			// setting, so its note claims only what's certain.
 			const svgNote = it.kind === 'SVG' && B.safeSvg
-				? `<div class="minn-media-svg-note">${ B.svgProvider === 'Safe SVG' ? 'Sanitized by Safe SVG' : `SVG uploads enabled by ${ esc( B.svgProvider || 'a plugin' ) }` }</div>`
+				? `<div class="minn-media-svg-note">${ B.svgProvider === 'Safe SVG' ? __( 'Sanitized by Safe SVG' ) : `SVG uploads enabled by ${ esc( B.svgProvider || 'a plugin' ) }` }</div>`
 				: '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
@@ -29861,7 +29865,7 @@
 						<button class="minn-btn-soft" id="minn-media-copy">${ icon( 'copy' ) } Copy URL</button>
 						<button class="minn-btn-soft" id="minn-media-open">↗ ${ esc( __( 'Open' ) ) }</button>
 						${ it.kind === 'IMG' ? `<button class="minn-btn-soft" id="minn-media-edit-image" type="button" title="${ esc( __( 'Rotate and crop — saved as a new copy' ) ) }">✎ ${ esc( __( 'Edit image' ) ) }</button>` : '' }
-						${ it.kind === 'IMG' && ( B.regenThumbs || B.frt ) ? `<button class="minn-btn-soft" id="minn-media-regen" type="button" title="Rebuild every registered thumbnail size from the original (${ B.regenThumbs ? 'Regenerate Thumbnails' : 'Force Regenerate Thumbnails' })">↻ ${ esc( __( 'Thumbnails' ) ) }</button>` : '' }
+						${ it.kind === 'IMG' && ( B.regenThumbs || B.frt ) ? `<button class="minn-btn-soft" id="minn-media-regen" type="button" title="Rebuild every registered thumbnail size from the original (${ B.regenThumbs ? __( 'Regenerate Thumbnails' ) : __( 'Force Regenerate Thumbnails' ) })">↻ ${ esc( __( 'Thumbnails' ) ) }</button>` : '' }
 						${ B.mediaReplace ? `<button class="minn-btn-soft" id="minn-media-replace" type="button" title="${ esc( __( 'Upload a new file over this one — same name, same URL, every reference keeps working (Enable Media Replace)' ) ) }">⇅ ${ esc( __( 'Replace file' ) ) }</button>` : '' }
 						${ m.from === 'featured' && state.editor ? `
 						<button class="minn-btn-soft" id="minn-media-feat-replace" type="button">${ esc( __( 'Replace featured' ) ) }</button>
@@ -30006,8 +30010,8 @@
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">${ isNew ? 'New coupon' : esc( c.code || listC.code || 'Coupon' ) }</div>
-							<div class="minn-modal-sub">${ isNew ? 'Create a promo code' : ( couponTypeLabel( c.discount_type ) + ( c.id ? ' · #' + c.id : '' ) ) }</div>
+							<div class="minn-modal-title">${ isNew ? __( 'New coupon' ) : esc( c.code || listC.code || 'Coupon' ) }</div>
+							<div class="minn-modal-sub">${ isNew ? __( 'Create a promo code' ) : ( couponTypeLabel( c.discount_type ) + ( c.id ? ' · #' + c.id : '' ) ) }</div>
 						</div>
 						${ ! isNew ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ c.status ] || 'draft' }">${ esc( ( c.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
@@ -30074,7 +30078,7 @@
 						</div>
 						${ canEdit ? `
 						<div class="minn-media-edit minn-order-status">
-							<button class="minn-btn-primary" id="minn-coupon-save" type="button">${ isNew ? 'Create coupon' : 'Save changes' }</button>
+							<button class="minn-btn-primary" id="minn-coupon-save" type="button">${ isNew ? __( 'Create coupon' ) : __( 'Save changes' ) }</button>
 							${ ! isNew ? `<button class="minn-btn-soft danger" id="minn-coupon-delete" type="button" style="margin-left:8px;">${ esc( __( 'Delete' ) ) }</button>` : '' }
 							<div class="minn-toggle-desc" style="margin-top:8px;">${ esc( __( 'Saves code, amount, limits and options through WooCommerce.' ) ) }</div>
 						</div>` : '' }
@@ -30342,7 +30346,7 @@
 				( g.rows || [] ).some( ( r ) => r.type === 'html-preview' ) ) ) );
 			// Entry title = form name; activity keeps the surface label (message is body).
 			const headTitle = isActivity
-				? ( s.label || 'Activity Log' )
+				? ( s.label || __( 'Activity Log' ) )
 				: ( sec && sec.title
 					? sec.title
 					: ( isEntry && it.form_name ? it.form_name : ( isEntry && it.form_title ? it.form_title : s.label ) ) );
@@ -30412,7 +30416,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? 'Add user' : 'Edit ' + esc( u.name ) }</div>
+						<div class="minn-modal-title">${ isNew ? __( 'Add user' ) : 'Edit ' + esc( u.name ) }</div>
 						${ ! isNew ? `<span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -30440,7 +30444,7 @@
 							<input class="minn-input" value="${ esc( role ) }" disabled>` }
 						</div>
 						<div>
-							<div class="minn-field-label">${ isNew ? 'Password' : 'New password (leave blank to keep)' }</div>
+							<div class="minn-field-label">${ isNew ? 'Password' : __( 'New password (leave blank to keep)' ) }</div>
 							<div style="display:flex; gap:8px;">
 								<input class="minn-input mono" id="minn-uf-password" autocomplete="new-password">
 								<button class="minn-btn-soft" id="minn-uf-genpass" style="flex-shrink:0;">${ esc( __( 'Generate' ) ) }</button>
@@ -30463,7 +30467,7 @@
 						${ m.sessions && m.sessions.length ? '<button class="minn-comment-action danger" id="minn-uf-killall" style="margin:10px 0 0;">Sign out everywhere</button>' : '' }
 					</div>` : '' }
 					<div class="minn-modal-actions">
-						<button class="minn-btn-primary" id="minn-uf-save">${ isNew ? 'Create user' : 'Save changes' }</button>
+						<button class="minn-btn-primary" id="minn-uf-save">${ isNew ? __( 'Create user' ) : __( 'Save changes' ) }</button>
 						${ ! isNew && B.caps.deleteUsers && u && u.id !== B.user.id ? '<button class="minn-btn-soft danger" id="minn-uf-delete">Delete user</button>' : '' }
 					</div>
 				</div>
@@ -30643,7 +30647,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ m.done ? 'Minn Admin is off' : 'Deactivate Minn Admin?' }</div>
+						<div class="minn-modal-title">${ m.done ? __( 'Minn Admin is off' ) : __( 'Deactivate Minn Admin?' ) }</div>
 						${ m.done ? '' : '<button class="minn-x-btn" id="minn-modal-close">×</button>' }
 					</div>
 					<div class="minn-help-body" style="border-bottom:0;">
@@ -30716,12 +30720,12 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? 'Add post type' : esc( t.plural ) }</div>
+						<div class="minn-modal-title">${ isNew ? __( 'Add post type' ) : esc( t.plural ) }</div>
 						${ isNew ? '' : `<span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span>` }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-modal-form">
-						${ editable ? '' : `<div class="minn-editor-locked-note">${ t && t.source === 'core' ? 'Built into WordPress — shown for reference.' : 'Registered in code by a theme or plugin — shown for reference, editable only where it’s defined.' }</div>` }
+						${ editable ? '' : `<div class="minn-editor-locked-note">${ t && t.source === 'core' ? __( 'Built into WordPress — shown for reference.' ) : __( 'Registered in code by a theme or plugin — shown for reference, editable only where it’s defined.' ) }</div>` }
 						<div><div class="minn-field-label">${ esc( __( 'Plural label' ) ) }</div>
 						<input class="minn-input" data-cptfield="plural" value="${ esc( t ? t.plural : '' ) }" placeholder="${ esc( __( 'Books' ) ) }"${ dis }></div>
 						<div><div class="minn-field-label">${ esc( __( 'Singular label' ) ) }</div>
@@ -30734,10 +30738,10 @@
 						${ formControlHtml( { key: 'backend', type: 'combobox' }, m.backends[ 0 ], 'data-cptbackend' ) }</div>` : '' }
 						<div><div class="minn-field-label">${ esc( __( 'Visibility' ) ) }</div>
 						<div class="minn-cpt-checks">
-						${ flag( 'public', 'Public', 'Visible on the front end with its own URLs', t ? t.public : true ) }
-						${ flag( 'has_archive', 'Archive page', 'A listing page at /slug/', t ? t.has_archive : false ) }
-						${ flag( 'hierarchical', 'Hierarchical', 'Like pages — items can have parents', t ? t.hierarchical : false ) }
-						${ flag( 'show_in_rest', 'Show in REST API', 'Required for Minn (and the block editor) to list and edit content', t ? t.show_in_rest : true ) }</div></div>
+						${ flag( 'public', 'Public', __( 'Visible on the front end with its own URLs' ), t ? t.public : true ) }
+						${ flag( 'has_archive', __( 'Archive page' ), __( 'A listing page at /slug/' ), t ? t.has_archive : false ) }
+						${ flag( 'hierarchical', 'Hierarchical', __( 'Like pages — items can have parents' ), t ? t.hierarchical : false ) }
+						${ flag( 'show_in_rest', __( 'Show in REST API' ), __( 'Required for Minn (and the block editor) to list and edit content' ), t ? t.show_in_rest : true ) }</div></div>
 						<div><div class="minn-field-label">${ esc( __( 'Supports' ) ) }</div>
 						<div class="minn-cpt-checks">${ CPT_SUPPORTS.map( ( [ id, label ] ) => sw( 'data-cptsupport', id, label, supports.has( id ) ) ).join( '' ) }</div></div>
 						<div><div class="minn-field-label">${ esc( __( 'Taxonomies' ) ) }</div>
@@ -30746,7 +30750,7 @@
 						</div></div>
 					</div>
 					<div class="minn-modal-actions">
-						${ editable ? `<button class="minn-btn-primary" id="minn-cpt-save">${ isNew ? 'Create post type' : 'Save' }</button>` : '' }
+						${ editable ? `<button class="minn-btn-primary" id="minn-cpt-save">${ isNew ? __( 'Create post type' ) : 'Save' }</button>` : '' }
 						${ ! isNew && editable ? `<button class="minn-btn-soft danger" id="minn-cpt-delete">${ icon( 'trash' ) } Remove</button>` : '' }
 					</div>
 				</div>
@@ -30788,12 +30792,12 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? 'Add taxonomy' : esc( t.plural ) }</div>
+						<div class="minn-modal-title">${ isNew ? __( 'Add taxonomy' ) : esc( t.plural ) }</div>
 						${ isNew ? '' : `<span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span>` }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
 					<div class="minn-modal-form">
-						${ editable ? '' : `<div class="minn-editor-locked-note">${ t && t.source === 'core' ? 'Built into WordPress — shown for reference.' : 'Registered in code by a theme or plugin — shown for reference, editable only where it’s defined.' }</div>` }
+						${ editable ? '' : `<div class="minn-editor-locked-note">${ t && t.source === 'core' ? __( 'Built into WordPress — shown for reference.' ) : __( 'Registered in code by a theme or plugin — shown for reference, editable only where it’s defined.' ) }</div>` }
 						<div><div class="minn-field-label">${ esc( __( 'Plural label' ) ) }</div>
 						<input class="minn-input" data-taxfield="plural" value="${ esc( t ? t.plural : '' ) }" placeholder="${ esc( __( 'Genres' ) ) }"${ dis }></div>
 						<div><div class="minn-field-label">${ esc( __( 'Singular label' ) ) }</div>
@@ -30803,16 +30807,16 @@
 						${ isNew && m.backends.length > 1 ? `<div><div class="minn-field-label">${ esc( __( 'Store definition in' ) ) }</div>
 						${ formControlHtml( { key: 'backend', type: 'combobox' }, m.backends[ 0 ], 'data-taxbackend' ) }</div>` : '' }
 						<div><div class="minn-field-label">${ esc( __( 'Behavior' ) ) }</div>
-						${ flag( 'hierarchical', 'Hierarchical (like categories)', 'Terms can nest under parents; off behaves like tags', t ? t.hierarchical : false ) }
-						${ flag( 'public', 'Public', 'Visible on the front end with term archive URLs', t ? t.public : true ) }
-						${ flag( 'show_in_rest', 'Show in REST API', 'Required for Minn and the block editor to assign terms', t ? t.show_in_rest : true ) }</div>
+						${ flag( 'hierarchical', __( 'Hierarchical (like categories)' ), __( 'Terms can nest under parents; off behaves like tags' ), t ? t.hierarchical : false ) }
+						${ flag( 'public', 'Public', __( 'Visible on the front end with term archive URLs' ), t ? t.public : true ) }
+						${ flag( 'show_in_rest', __( 'Show in REST API' ), __( 'Required for Minn and the block editor to assign terms' ), t ? t.show_in_rest : true ) }</div>
 						<div><div class="minn-field-label">${ esc( __( 'Attach to' ) ) }</div>
 						<div class="minn-cpt-checks">
 							${ ( m.types || [] ).map( ( pt ) => sw( 'data-taxtype', pt.slug, pt.plural, attached.has( pt.slug ) ) ).join( '' ) }
 						</div></div>
 					</div>
 					<div class="minn-modal-actions">
-						${ editable ? `<button class="minn-btn-primary" id="minn-tax-save">${ isNew ? 'Create taxonomy' : 'Save' }</button>` : '' }
+						${ editable ? `<button class="minn-btn-primary" id="minn-tax-save">${ isNew ? __( 'Create taxonomy' ) : 'Save' }</button>` : '' }
 						${ ! isNew && editable ? `<button class="minn-btn-soft danger" id="minn-tax-delete">${ icon( 'trash' ) } Remove</button>` : '' }
 					</div>
 				</div>
@@ -30889,9 +30893,9 @@
 							${ cat.plugins.map( ( entry, i ) => {
 								const st = catalogChipState( entry );
 								// Native title is a fallback; the rich tip replaces it on hover.
-								const title = st === 'active' ? 'Already active'
-									: st === 'activate' ? 'Installed — click to activate'
-									: ( entry.github ? 'Install from GitHub release' : 'Install from WordPress.org' );
+								const title = st === 'active' ? __( 'Already active' )
+									: st === 'activate' ? __( 'Installed — click to activate' )
+									: ( entry.github ? __( 'Install from GitHub release' ) : __( 'Install from WordPress.org' ) );
 								return `<button type="button" class="minn-pi-chip${ st === 'active' ? ' is-active' : '' }${ st === 'activate' ? ' is-installed' : '' }"
 									data-pi-chip="${ i }" data-cat="${ esc( cat.id ) }" data-slug="${ esc( entry.slug || '' ) }"
 									aria-label="${ esc( entry.name + ( st === 'active' ? ' (active)' : '' ) ) }"
@@ -30939,7 +30943,7 @@
 						${ m.q || m.results != null ? `
 						<div class="minn-pi-search-bar">
 							<button type="button" class="minn-btn-soft" id="minn-pi-back">← ${ esc( __( 'Catalog' ) ) }</button>
-							<span class="minn-pi-search-meta">${ m.searching ? 'Searching…' : ( m.results ? Number( m.total ).toLocaleString() + ' results for “' + esc( m.q ) + '”' : '' ) }</span>
+							<span class="minn-pi-search-meta">${ m.searching ? __( 'Searching…' ) : ( m.results ? Number( m.total ).toLocaleString() + ' results for “' + esc( m.q ) + '”' : '' ) }</span>
 						</div>` : '' }
 						<div class="minn-pi-results${ showCatalog ? ' is-catalog' : '' }">
 							${ showCatalog ? catalogHtml : resultsHtml }
@@ -30993,7 +30997,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ m.multi ? 'Build a gallery' : ( any ? 'Insert file' : 'Insert image' ) }</div>
+						<div class="minn-modal-title">${ m.multi ? __( 'Build a gallery' ) : ( any ? __( 'Insert file' ) : __( 'Insert image' ) ) }</div>
 						${ m.multi ? '<span class="minn-modal-count" id="minn-picker-count">Pick images in order</span>' : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -31012,7 +31016,7 @@
 					</div>` }
 					${ m.multi ? `
 					<div class="minn-modal-actions">
-						<button class="minn-btn-primary" id="minn-picker-done" disabled>${ esc( m.doneLabel || 'Insert gallery' ) }</button>
+						<button class="minn-btn-primary" id="minn-picker-done" disabled>${ esc( m.doneLabel || __( 'Insert gallery' ) ) }</button>
 					</div>` : '' }
 				</div>
 			</div>`;
@@ -31109,7 +31113,7 @@
 			const createBtn = $( '#minn-pn-create' );
 			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
 				const name = ( ( $( '#minn-pn-name' ) || {} ).value || '' ).trim();
-				if ( ! name ) { toast( 'Name is required', true ); return; }
+				if ( ! name ) { toast( __( 'Name is required' ), true ); return; }
 				const price = ( ( $( '#minn-pn-price' ) || {} ).value || '' ).trim();
 				const payload = {
 					name,
@@ -31119,13 +31123,13 @@
 					sku: ( ( $( '#minn-pn-sku' ) || {} ).value || '' ).trim(),
 				};
 				createBtn.disabled = true;
-				createBtn.textContent = 'Creating…';
+				createBtn.textContent = __( 'Creating…' );
 				try {
 					const created = await api( 'wc/v3/products', {
 						method: 'POST',
 						body: JSON.stringify( payload ),
 					} );
-					toast( 'Product created' );
+					toast( __( 'Product created' ) );
 					state.cache.products = null;
 					closeModal();
 					if ( state.route === 'products' ) renderProducts();
@@ -31133,7 +31137,7 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					createBtn.disabled = false;
-					createBtn.textContent = 'Create product';
+					createBtn.textContent = __( 'Create product' );
 				}
 			} );
 		}
@@ -31220,7 +31224,7 @@
 			const createBtn = $( '#minn-on-create' );
 			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
 				const pick = m.productPick;
-				if ( ! pick ) { toast( 'Pick a product', true ); return; }
+				if ( ! pick ) { toast( __( 'Pick a product' ), true ); return; }
 				const email = ( ( $( '#minn-on-email' ) || {} ).value || '' ).trim();
 				const qty = parseInt( ( ( $( '#minn-on-qty' ) || {} ).value || '1' ), 10 ) || 1;
 				const payload = {
@@ -31233,13 +31237,13 @@
 					line_items: [ { product_id: pick.id, quantity: qty } ],
 				};
 				createBtn.disabled = true;
-				createBtn.textContent = 'Creating…';
+				createBtn.textContent = __( 'Creating…' );
 				try {
 					const created = await api( 'wc/v3/orders', {
 						method: 'POST',
 						body: JSON.stringify( payload ),
 					} );
-					toast( 'Order #' + ( created.number || created.id ) + ' created' );
+					toast( __( 'Order #' ) + ( created.number || created.id ) + ' created' );
 					state.cache.orders = null;
 					state.cache.orderSummary = null;
 					closeModal();
@@ -31248,7 +31252,7 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					createBtn.disabled = false;
-					createBtn.textContent = 'Create order';
+					createBtn.textContent = __( 'Create order' );
 				}
 			} );
 		}
@@ -31261,7 +31265,7 @@
 				$$( '[data-wfield]' ).forEach( ( input ) => { raw[ input.dataset.wfield ] = input.value; } );
 				try {
 					await api( `wp/v2/widgets/${ m.widget.id }`, { method: 'POST', body: JSON.stringify( { instance: { raw } } ) } );
-					toast( 'Widget saved' );
+					toast( __( 'Widget saved' ) );
 					closeModal();
 					reloadWidgets();
 				} catch ( err ) {
@@ -31318,9 +31322,9 @@
 			$( '#minn-media-copy' ).addEventListener( 'click', async () => {
 				try {
 					await navigator.clipboard.writeText( it.url );
-					toast( 'URL copied' );
+					toast( __( 'URL copied' ) );
 				} catch ( e ) {
-					toast( 'Could not copy', true );
+					toast( __( 'Could not copy' ), true );
 				}
 			} );
 			$( '#minn-media-open' ).addEventListener( 'click', () => window.open( it.url, '_blank' ) );
@@ -31349,7 +31353,7 @@
 				const caption = capEl ? capEl.value : '';
 				const description = descEl ? descEl.value : '';
 				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
+				saveBtn.textContent = __( 'Saving…' );
 				try {
 					await api( `wp/v2/media/${ it.id }`, { method: 'POST', body: JSON.stringify( { title, alt_text: alt, caption, description } ) } );
 					it.name = title || it.name;
@@ -31381,7 +31385,7 @@
 					ed.featuredDirty = true;
 					renderEditorSide();
 					if ( ed.id ) scheduleAutosave();
-					toast( 'Featured image updated' );
+					toast( __( 'Featured image updated' ) );
 				} );
 			} );
 			const featRm = $( '#minn-media-feat-remove' );
@@ -31394,7 +31398,7 @@
 				closeModal();
 				renderEditorSide();
 				if ( ed.id ) scheduleAutosave();
-				toast( 'Featured image removed' );
+				toast( __( 'Featured image removed' ) );
 			} );
 			// Regenerate Thumbnails: the plugin's regenerator runs server-side
 			// (adapters/regenerate-thumbnails.php); the modal stays open.
@@ -31404,7 +31408,7 @@
 			const regenBtn = $( '#minn-media-regen' );
 			if ( regenBtn ) regenBtn.addEventListener( 'click', async () => {
 				regenBtn.disabled = true;
-				regenBtn.textContent = 'Regenerating…';
+				regenBtn.textContent = __( 'Regenerating…' );
 				try {
 					if ( B.regenThumbs ) {
 						const r = await api( `minn-admin/v1/media/${ it.id }/regenerate`, { method: 'POST' } );
@@ -31413,14 +31417,14 @@
 						const body = new URLSearchParams( { action: 'regeneratethumbnail', id: String( it.id ), frt_wpnonce: B.frt.nonce } );
 						const res = await fetch( B.frt.ajax, { method: 'POST', credentials: 'same-origin', body } );
 						const out = await res.json();
-						if ( out && out.error ) throw new Error( out.error.replace( /<[^>]*>/g, '' ).trim() || 'Regenerate failed' );
-						toast( 'Thumbnails rebuilt (Force Regenerate Thumbnails)' );
+						if ( out && out.error ) throw new Error( out.error.replace( /<[^>]*>/g, '' ).trim() || __( 'Regenerate failed' ) );
+						toast( __( 'Thumbnails rebuilt (Force Regenerate Thumbnails)' ) );
 					}
 				} catch ( e ) {
 					toast( e.message, true );
 				}
 				regenBtn.disabled = false;
-				regenBtn.textContent = '↻ Thumbnails';
+				regenBtn.textContent = __( '↻ Thumbnails' );
 			} );
 			// Attached to → jump straight into the parent post's editor.
 			const attBtn = $( '#minn-media-attached' );
@@ -31444,7 +31448,7 @@
 					const file = input.files && input.files[ 0 ];
 					if ( ! file ) return;
 					replaceBtn.disabled = true;
-					replaceBtn.textContent = 'Replacing…';
+					replaceBtn.textContent = __( 'Replacing…' );
 					try {
 						const fd = new FormData();
 						fd.append( 'file', file );
@@ -31454,13 +31458,13 @@
 						it._bust = Date.now();
 						it.thumb = it.url; // old size files may be gone; full URL is the safe thumb now
 						state.cache.media = null;
-						toast( 'File replaced — same URL, new content' );
+						toast( __( 'File replaced — same URL, new content' ) );
 						if ( state.route === 'media' ) renderMedia();
 						renderOverlays();
 					} catch ( e ) {
 						toast( e.message, true );
 						replaceBtn.disabled = false;
-						replaceBtn.textContent = '⇅ Replace file';
+						replaceBtn.textContent = __( '⇅ Replace file' );
 					}
 				} );
 				input.click();
@@ -31493,13 +31497,13 @@
 				const status = ( $( '#minn-sub-status' ) || {} ).value;
 				if ( ! status ) return;
 				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
+				saveBtn.textContent = __( 'Saving…' );
 				try {
 					const updated = await api( `wc/v3/subscriptions/${ m.sub.id }`, {
 						method: 'PUT',
 						body: JSON.stringify( { status } ),
 					} );
-					toast( 'Subscription #' + ( updated.number || updated.id ) + ' updated' );
+					toast( __( 'Subscription #' ) + ( updated.number || updated.id ) + ' updated' );
 					state.modal.full = Object.assign( {}, m.full || m.sub, updated );
 					state.modal.sub = Object.assign( {}, m.sub, { status: updated.status, total: updated.total } );
 					if ( state.cache.subscriptions && state.cache.subscriptions.items ) {
@@ -31517,7 +31521,7 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					saveBtn.disabled = false;
-					saveBtn.textContent = 'Save status';
+					saveBtn.textContent = __( 'Save status' );
 				}
 			} );
 			$$( '[data-relorder]' ).forEach( ( row ) =>
@@ -31543,7 +31547,7 @@
 				const subject = ( sub && sub.value || '' ).trim();
 				const message = ( msg && msg.value || '' ).trim();
 				if ( ! subject || ! message ) {
-					toast( 'Subject and message are required', true );
+					toast( __( 'Subject and message are required' ), true );
 					return;
 				}
 				sendBtn.disabled = true;
@@ -31552,7 +31556,7 @@
 						method: 'POST',
 						body: JSON.stringify( { subject, message } ),
 					} );
-					toast( 'Email sent' + ( r && r.email ? ' to ' + r.email : '' ) );
+					toast( __( 'Email sent' ) + ( r && r.email ? ' to ' + r.email : '' ) );
 					closeModal();
 				} catch ( err ) {
 					toast( err.message, true );
@@ -31567,9 +31571,9 @@
 			const saveBtn = $( '#minn-coupon-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 				const code = ( ( $( '#minn-c-code' ) || {} ).value || '' ).trim();
-				if ( ! code ) { toast( 'Code is required', true ); return; }
+				if ( ! code ) { toast( __( 'Code is required' ), true ); return; }
 				const amount = ( ( $( '#minn-c-amount' ) || {} ).value || '' ).trim();
-				if ( amount === '' ) { toast( 'Amount is required', true ); return; }
+				if ( amount === '' ) { toast( __( 'Amount is required' ), true ); return; }
 				const limRaw = ( ( $( '#minn-c-limit' ) || {} ).value || '' ).trim();
 				const limUserRaw = ( ( $( '#minn-c-limit-user' ) || {} ).value || '' ).trim();
 				const expRaw = ( ( $( '#minn-c-expires' ) || {} ).value || '' ).trim();
@@ -31587,7 +31591,7 @@
 					date_expires: expRaw || null,
 				};
 				saveBtn.disabled = true;
-				saveBtn.textContent = isNew ? 'Creating…' : 'Saving…';
+				saveBtn.textContent = isNew ? __( 'Creating…' ) : __( 'Saving…' );
 				try {
 					let full;
 					if ( isNew ) {
@@ -31595,14 +31599,14 @@
 							method: 'POST',
 							body: JSON.stringify( payload ),
 						} );
-						toast( 'Coupon created' );
+						toast( __( 'Coupon created' ) );
 					} else {
 						await api( `wc/v3/coupons/${ c.id }`, {
 							method: 'PUT',
 							body: JSON.stringify( payload ),
 						} );
 						full = await api( `wc/v3/coupons/${ c.id }?_fields=${ COUPON_DETAIL_FIELDS }` );
-						toast( 'Coupon updated' );
+						toast( __( 'Coupon updated' ) );
 					}
 					state.cache.coupons = null;
 					if ( state.route === 'coupons' ) renderCoupons();
@@ -31617,17 +31621,17 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					saveBtn.disabled = false;
-					saveBtn.textContent = isNew ? 'Create coupon' : 'Save changes';
+					saveBtn.textContent = isNew ? __( 'Create coupon' ) : __( 'Save changes' );
 				}
 			} );
 			const delBtn = $( '#minn-coupon-delete' );
 			if ( delBtn ) delBtn.addEventListener( 'click', async () => {
 				if ( ! c.id ) return;
-				if ( ! await minnConfirm( { title: `Delete coupon “${ c.code || c.id }”?`, body: 'It is removed for good; orders that already used it keep their totals.', danger: true, confirmLabel: 'Delete coupon' } ) ) return;
+				if ( ! await minnConfirm( { title: `Delete coupon “${ c.code || c.id }”?`, body: __( 'It is removed for good; orders that already used it keep their totals.' ), danger: true, confirmLabel: __( 'Delete coupon' ) } ) ) return;
 				delBtn.disabled = true;
 				try {
 					await api( `wc/v3/coupons/${ c.id }?force=true`, { method: 'DELETE' } );
-					toast( 'Coupon deleted' );
+					toast( __( 'Coupon deleted' ) );
 					closeModal();
 					state.cache.coupons = null;
 					if ( state.route === 'coupons' ) renderCoupons();
@@ -31659,17 +31663,17 @@
 				const backendEl = $( '[data-cptbackend]', modal );
 				if ( backendEl ) payload.backend = formControlValue( backendEl );
 				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
+				saveBtn.textContent = __( 'Saving…' );
 				try {
 					await api( 'minn-admin/v1/post-types' + ( m.item ? '/' + m.item.slug : '' ), { method: 'POST', body: JSON.stringify( payload ) } );
-					toast( m.item ? 'Post type updated' : 'Post type created' );
+					toast( m.item ? __( 'Post type updated' ) : __( 'Post type created' ) );
 					bustTypeCaches();
 					closeModal();
 					if ( onStructure() ) renderStructure();
 				} catch ( e ) {
 					toast( e.message, true );
 					saveBtn.disabled = false;
-					saveBtn.textContent = m.item ? 'Save' : 'Create post type';
+					saveBtn.textContent = m.item ? 'Save' : __( 'Create post type' );
 				}
 			} );
 			const delBtn = $( '#minn-cpt-delete' );
@@ -31677,7 +31681,7 @@
 				if ( ! confirm( `Remove the “${ m.item.plural }” post type? Existing content stays in the database.` ) ) return;
 				try {
 					await api( 'minn-admin/v1/post-types/' + m.item.slug, { method: 'DELETE' } );
-					toast( 'Post type removed — content preserved' );
+					toast( __( 'Post type removed — content preserved' ) );
 					bustTypeCaches();
 					closeModal();
 					if ( onStructure() ) renderStructure();
@@ -31703,9 +31707,9 @@
 					if ( empty && ( ! field || field.required !== false ) && input.dataset.ftype !== 'number' ) missing = true;
 					setDeepPath( body, input.dataset.createfield, v );
 				} );
-				if ( missing ) { toast( 'Fill in all fields first', true ); return; }
+				if ( missing ) { toast( __( 'Fill in all fields first' ), true ); return; }
 				createBtn.disabled = true;
-				createBtn.textContent = 'Saving…';
+				createBtn.textContent = __( 'Saving…' );
 				try {
 					await api( cr.route, { method: cr.method || 'POST', body: JSON.stringify( body ) } );
 					toast( ( m.surface.label || 'Item' ) + ' added' );
@@ -31735,17 +31739,17 @@
 				const backendEl = $( '[data-taxbackend]', modal );
 				if ( backendEl ) payload.backend = formControlValue( backendEl );
 				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
+				saveBtn.textContent = __( 'Saving…' );
 				try {
 					await api( 'minn-admin/v1/taxonomies' + ( m.item ? '/' + m.item.slug : '' ), { method: 'POST', body: JSON.stringify( payload ) } );
-					toast( m.item ? 'Taxonomy updated' : 'Taxonomy created' );
+					toast( m.item ? __( 'Taxonomy updated' ) : __( 'Taxonomy created' ) );
 					bustTypeCaches();
 					closeModal();
 					if ( onStructure() ) renderStructure();
 				} catch ( e ) {
 					toast( e.message, true );
 					saveBtn.disabled = false;
-					saveBtn.textContent = m.item ? 'Save' : 'Create taxonomy';
+					saveBtn.textContent = m.item ? 'Save' : __( 'Create taxonomy' );
 				}
 			} );
 			const delBtn = $( '#minn-tax-delete' );
@@ -31753,7 +31757,7 @@
 				if ( ! confirm( `Remove the “${ m.item.plural }” taxonomy? Existing terms stay in the database.` ) ) return;
 				try {
 					await api( 'minn-admin/v1/taxonomies/' + m.item.slug, { method: 'DELETE' } );
-					toast( 'Taxonomy removed — terms preserved' );
+					toast( __( 'Taxonomy removed — terms preserved' ) );
 					bustTypeCaches();
 					closeModal();
 					if ( onStructure() ) renderStructure();
@@ -31769,9 +31773,9 @@
 				const count = $( '#minn-picker-count' );
 				if ( done ) {
 					done.disabled = ! m.picked.length;
-					done.textContent = m.picked.length ? `Insert gallery (${ m.picked.length })` : 'Insert gallery';
+					done.textContent = m.picked.length ? `Insert gallery (${ m.picked.length })` : __( 'Insert gallery' );
 				}
-				if ( count ) count.textContent = m.picked.length ? `${ m.picked.length } selected — in click order` : 'Pick images in order';
+				if ( count ) count.textContent = m.picked.length ? `${ m.picked.length } selected — in click order` : __( 'Pick images in order' );
 			};
 			$$( '[data-pick]' ).forEach( ( el ) =>
 				el.addEventListener( 'click', () => {
@@ -31807,9 +31811,9 @@
 			if ( drop ) {
 				const fileInput = $( '#minn-picker-file' );
 				const uploadAndUse = async ( file ) => {
-					if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( 'Drop an image file', true ); return; }
+					if ( ! file || ! file.type.startsWith( 'image/' ) ) { toast( __( 'Drop an image file' ), true ); return; }
 					drop.classList.add( 'minn-busy' );
-					toast( 'Uploading…' );
+					toast( __( 'Uploading…' ) );
 					try {
 						const fd = new FormData();
 						fd.append( 'file', file );
@@ -31829,13 +31833,13 @@
 							m.items.unshift( it );
 							m.picked.push( it.id );
 							renderOverlays();
-							toast( 'Image uploaded and selected' );
+							toast( __( 'Image uploaded and selected' ) );
 							return;
 						}
 						const cb = m.callback;
 						closeModal();
 						if ( cb ) cb( it );
-						toast( 'Image uploaded' );
+						toast( __( 'Image uploaded' ) );
 					} catch ( e ) {
 						toast( e.message, true );
 						drop.classList.remove( 'minn-busy' );
@@ -31883,7 +31887,7 @@
 					setDeepPath( body, input.dataset.editfield, surfaceFieldValue( input ) );
 				} );
 				saveBtn.disabled = true;
-				saveBtn.textContent = 'Saving…';
+				saveBtn.textContent = __( 'Saving…' );
 				try {
 					await api( edit.route.replace( '{id}', m.item.id ), { method: edit.method || 'POST', body: JSON.stringify( body ) } );
 					toast( 'Saved' );
@@ -31943,7 +31947,7 @@
 				const subject = ( sub && sub.value || '' ).trim();
 				const message = ( msg && msg.value || '' ).trim();
 				if ( ! subject || ! message ) {
-					toast( 'Subject and message are required', true );
+					toast( __( 'Subject and message are required' ), true );
 					return;
 				}
 				btn.disabled = true;
@@ -31952,7 +31956,7 @@
 						method: 'POST',
 						body: JSON.stringify( { subject, message } ),
 					} );
-					toast( 'Email sent' + ( r && r.email ? ' to ' + r.email : '' ) );
+					toast( __( 'Email sent' ) + ( r && r.email ? ' to ' + r.email : '' ) );
 					closeModal();
 				} catch ( err ) {
 					toast( err.message, true );
@@ -32001,11 +32005,11 @@
 				const user = ( who && who.value || '' ).trim();
 				const role = ( roleInput && roleInput.dataset.acValue ) || '';
 				if ( ! user ) {
-					toast( 'Enter an email or username', true );
+					toast( __( 'Enter an email or username' ), true );
 					return;
 				}
 				if ( ! role ) {
-					toast( 'Pick a role', true );
+					toast( __( 'Pick a role' ), true );
 					return;
 				}
 				btn.disabled = true;
@@ -32042,14 +32046,14 @@
 				const input = $( '#minn-ud-reassign' );
 				const reassign = ( input && input.dataset.acValue ) || m.reassign || String( B.user.id );
 				if ( ! reassign ) {
-					toast( 'Pick a user to reassign content to', true );
+					toast( __( 'Pick a user to reassign content to' ), true );
 					return;
 				}
-				if ( ! await minnConfirm( { title: `Permanently delete ${ m.user.name || 'this user' }?`, body: 'The account is removed for good, and their content moves to the user you picked. There is no undo for this.', danger: true, confirmLabel: 'Delete user' } ) ) return;
+				if ( ! await minnConfirm( { title: `Permanently delete ${ m.user.name || 'this user' }?`, body: __( 'The account is removed for good, and their content moves to the user you picked. There is no undo for this.' ), danger: true, confirmLabel: __( 'Delete user' ) } ) ) return;
 				confirmBtn.disabled = true;
 				try {
 					await api( `wp/v2/users/${ m.user.id }?force=true&reassign=${ encodeURIComponent( reassign ) }`, { method: 'DELETE' } );
-					toast( 'User deleted' );
+					toast( __( 'User deleted' ) );
 					closeModal();
 					state.cache.users = null;
 					if ( state.route === 'users' ) renderUsers();
@@ -32209,7 +32213,7 @@
 					if ( ! isFetchDrop( e ) ) throw e;
 					await waitForRestAlive();
 					if ( await truth() ) return;
-					if ( attempt >= 1 ) throw new Error( 'The server kept dropping the request. Give it a few seconds and try again.' );
+					if ( attempt >= 1 ) throw new Error( __( 'The server kept dropping the request. Give it a few seconds and try again.' ) );
 				}
 			}
 		};
@@ -32220,7 +32224,7 @@
 				const activating = btn.textContent.trim() === 'Activate';
 				if ( activating && ! await confirmThemeActivate( t.name ) ) return;
 				btn.disabled = true;
-				btn.textContent = activating ? 'Activating…' : 'Installing…';
+				btn.textContent = activating ? __( 'Activating…' ) : __( 'Installing…' );
 				try {
 					if ( activating ) {
 						await themeActionWithRecovery( 'minn-admin/v1/themes/activate', { stylesheet: t.slug }, ( list ) => list.some( ( x ) => x.stylesheet === t.slug && x.active ) );
@@ -32246,7 +32250,7 @@
 		const uploadZip = async ( f ) => {
 			if ( ! f ) return;
 			if ( ! /\.zip$/i.test( f.name ) ) {
-				toast( 'Theme uploads must be .zip files', true );
+				toast( __( 'Theme uploads must be .zip files' ), true );
 				return;
 			}
 			zone.classList.add( 'minn-busy' );
@@ -32255,7 +32259,7 @@
 			fd.append( 'file', f );
 			try {
 				await api( 'minn-admin/v1/themes/upload', { method: 'POST', body: fd } );
-				toast( 'Theme installed — activate it from the Themes tab' );
+				toast( __( 'Theme installed — activate it from the Themes tab' ) );
 				state.cache.themes = null;
 				closeModal();
 				if ( state.route === 'extensions' ) renderExtensions();
@@ -32287,166 +32291,166 @@
 	// `slug` is the plugin directory (matches installed plugin path prefix).
 	const PLUGIN_CATALOG = [
 		{
-			id: 'seo', label: 'SEO', hint: 'Titles, meta, sitemaps', q: 'SEO',
+			id: 'seo', label: 'SEO', hint: __( 'Titles, meta, sitemaps' ), q: 'SEO',
 			plugins: [
-				{ name: 'Yoast SEO', slug: 'wordpress-seo' },
-				{ name: 'Rank Math', slug: 'seo-by-rank-math' },
-				{ name: 'All in One SEO', slug: 'all-in-one-seo-pack' },
+				{ name: __( 'Yoast SEO' ), slug: 'wordpress-seo' },
+				{ name: __( 'Rank Math' ), slug: 'seo-by-rank-math' },
+				{ name: __( 'All in One SEO' ), slug: 'all-in-one-seo-pack' },
 				{ name: 'SEOPress', slug: 'wp-seopress' },
 				{ name: 'SiteSEO', slug: 'siteseo' },
 			],
 		},
 		{
-			id: 'forms', label: 'Forms', hint: 'Contact forms & entries', q: 'contact form',
+			id: 'forms', label: 'Forms', hint: __( 'Contact forms & entries' ), q: 'contact form',
 			plugins: [
-				{ name: 'Contact Form 7', slug: 'contact-form-7' },
+				{ name: __( 'Contact Form 7' ), slug: 'contact-form-7' },
 				{ name: 'Flamingo', slug: 'flamingo' },
-				{ name: 'Ninja Forms', slug: 'ninja-forms' },
-				{ name: 'Fluent Forms', slug: 'fluentform' },
+				{ name: __( 'Ninja Forms' ), slug: 'ninja-forms' },
+				{ name: __( 'Fluent Forms' ), slug: 'fluentform' },
 				{ name: 'Forminator', slug: 'forminator' },
 				{ name: 'Formidable', slug: 'formidable' },
-				{ name: 'Everest Forms', slug: 'everest-forms' },
+				{ name: __( 'Everest Forms' ), slug: 'everest-forms' },
 				{ name: 'CFDB7', slug: 'contact-form-cfdb7' },
 			],
 		},
 		{
-			id: 'ecommerce', label: 'Ecommerce', hint: 'Store & payments', q: 'ecommerce',
+			id: 'ecommerce', label: 'Ecommerce', hint: __( 'Store & payments' ), q: 'ecommerce',
 			plugins: [
 				{ name: 'WooCommerce', slug: 'woocommerce' },
-				{ name: 'WooCommerce Subscriptions', slug: 'woocommerce-subscriptions', tip: 'Recurring billing for WooCommerce. In Minn: Workspace → Subscriptions (status, next payment, related orders).' },
+				{ name: __( 'WooCommerce Subscriptions' ), slug: 'woocommerce-subscriptions', tip: __( 'Recurring billing for WooCommerce. In Minn: Workspace → Subscriptions (status, next payment, related orders).' ) },
 				{ name: 'SureCart', slug: 'surecart' },
-				{ name: 'Easy Digital Downloads', slug: 'easy-digital-downloads' },
+				{ name: __( 'Easy Digital Downloads' ), slug: 'easy-digital-downloads' },
 			],
 		},
 		{
-			id: 'security', label: 'Security', hint: 'Firewall, login, SSL', q: 'security',
+			id: 'security', label: 'Security', hint: __( 'Firewall, login, SSL' ), q: 'security',
 			plugins: [
 				{ name: 'Wordfence', slug: 'wordfence' },
-				{ name: 'Solid Security', slug: 'better-wp-security' },
-				{ name: 'Limit Login Attempts', slug: 'limit-login-attempts-reloaded' },
-				{ name: 'Really Simple SSL', slug: 'really-simple-ssl' },
-				{ name: 'Sucuri Scanner', slug: 'sucuri-scanner' },
+				{ name: __( 'Solid Security' ), slug: 'better-wp-security' },
+				{ name: __( 'Limit Login Attempts' ), slug: 'limit-login-attempts-reloaded' },
+				{ name: __( 'Really Simple SSL' ), slug: 'really-simple-ssl' },
+				{ name: __( 'Sucuri Scanner' ), slug: 'sucuri-scanner' },
 			],
 		},
 		{
-			id: 'backup', label: 'Backup', hint: 'Sets, migrate, restore', q: 'backup',
+			id: 'backup', label: 'Backup', hint: __( 'Sets, migrate, restore' ), q: 'backup',
 			plugins: [
 				{ name: 'UpdraftPlus', slug: 'updraftplus' },
 				{ name: 'WPvivid', slug: 'wpvivid-backuprestore' },
 				{ name: 'BackWPup', slug: 'backwpup' },
 				{ name: 'Duplicator', slug: 'duplicator' },
-				{ name: 'All-in-One WP Migration', slug: 'all-in-one-wp-migration' },
+				{ name: __( 'All-in-One WP Migration' ), slug: 'all-in-one-wp-migration' },
 				// GitHub release (not on wp.org).
 				{ name: 'Disembark', slug: 'disembark', github: 'DisembarkHost/disembark', asset: 'disembark.zip', badge: 'GitHub' },
 			],
 		},
 		{
-			id: 'analytics', label: 'Analytics', hint: 'Privacy-friendly traffic', q: 'analytics',
+			id: 'analytics', label: 'Analytics', hint: __( 'Privacy-friendly traffic' ), q: 'analytics',
 			plugins: [
-				{ name: 'Koko Analytics', slug: 'koko-analytics' },
-				{ name: 'WP Statistics', slug: 'wp-statistics' },
+				{ name: __( 'Koko Analytics' ), slug: 'koko-analytics' },
+				{ name: __( 'WP Statistics' ), slug: 'wp-statistics' },
 				{ name: 'Burst', slug: 'burst-statistics' },
-				{ name: 'Independent Analytics', slug: 'independent-analytics' },
-				{ name: 'Site Kit', slug: 'google-site-kit' },
+				{ name: __( 'Independent Analytics' ), slug: 'independent-analytics' },
+				{ name: __( 'Site Kit' ), slug: 'google-site-kit' },
 			],
 		},
 		{
-			id: 'cache', label: 'Cache', hint: 'Page & object cache', q: 'cache',
+			id: 'cache', label: 'Cache', hint: __( 'Page & object cache' ), q: 'cache',
 			plugins: [
-				{ name: 'LiteSpeed Cache', slug: 'litespeed-cache' },
-				{ name: 'WP Super Cache', slug: 'wp-super-cache' },
-				{ name: 'W3 Total Cache', slug: 'w3-total-cache' },
-				{ name: 'WP Fastest Cache', slug: 'wp-fastest-cache' },
-				{ name: 'Cache Enabler', slug: 'cache-enabler' },
-				{ name: 'Redis Object Cache', slug: 'redis-cache' },
+				{ name: __( 'LiteSpeed Cache' ), slug: 'litespeed-cache' },
+				{ name: __( 'WP Super Cache' ), slug: 'wp-super-cache' },
+				{ name: __( 'W3 Total Cache' ), slug: 'w3-total-cache' },
+				{ name: __( 'WP Fastest Cache' ), slug: 'wp-fastest-cache' },
+				{ name: __( 'Cache Enabler' ), slug: 'cache-enabler' },
+				{ name: __( 'Redis Object Cache' ), slug: 'redis-cache' },
 				{ name: 'SpeedyCache', slug: 'speedycache' },
 			],
 		},
 		{
-			id: 'performance', label: 'Performance', hint: 'Minify, defer, unload', q: 'performance',
+			id: 'performance', label: 'Performance', hint: __( 'Minify, defer, unload' ), q: 'performance',
 			plugins: [
 				{ name: 'Autoptimize', slug: 'autoptimize' },
-				{ name: 'Asset CleanUp', slug: 'wp-asset-clean-up' },
-				{ name: 'Performance Lab', slug: 'performance-lab' },
+				{ name: __( 'Asset CleanUp' ), slug: 'wp-asset-clean-up' },
+				{ name: __( 'Performance Lab' ), slug: 'performance-lab' },
 				{ name: 'WP-Optimize', slug: 'wp-optimize' },
 				{ name: 'Hummingbird', slug: 'hummingbird-performance' },
 			],
 		},
 		{
-			id: 'email', label: 'Email / SMTP', hint: 'Delivery & logs', q: 'SMTP',
+			id: 'email', label: __( 'Email / SMTP' ), hint: __( 'Delivery & logs' ), q: 'SMTP',
 			plugins: [
 				{ name: 'FluentSMTP', slug: 'fluent-smtp' },
-				{ name: 'WP Mail SMTP', slug: 'wp-mail-smtp' },
-				{ name: 'Post SMTP', slug: 'post-smtp' },
-				{ name: 'WP Mail Logging', slug: 'wp-mail-logging' },
+				{ name: __( 'WP Mail SMTP' ), slug: 'wp-mail-smtp' },
+				{ name: __( 'Post SMTP' ), slug: 'post-smtp' },
+				{ name: __( 'WP Mail Logging' ), slug: 'wp-mail-logging' },
 			],
 		},
 		{
 			id: 'redirects', label: 'Redirects', hint: '301s & aliases', q: 'redirect',
 			plugins: [
 				{ name: 'Redirection', slug: 'redirection' },
-				{ name: 'Safe Redirect Manager', slug: 'safe-redirect-manager' },
-				{ name: 'Simple 301 Redirects', slug: 'simple-301-redirects' },
+				{ name: __( 'Safe Redirect Manager' ), slug: 'safe-redirect-manager' },
+				{ name: __( 'Simple 301 Redirects' ), slug: 'simple-301-redirects' },
 				{ name: '301 Redirects', slug: 'eps-301-redirects' },
 			],
 		},
 		{
-			id: 'snippets', label: 'Snippets', hint: 'Custom code, safely', q: 'code snippets',
+			id: 'snippets', label: 'Snippets', hint: __( 'Custom code, safely' ), q: 'code snippets',
 			plugins: [
-				{ name: 'Code Snippets', slug: 'code-snippets' },
+				{ name: __( 'Code Snippets' ), slug: 'code-snippets' },
 				{ name: 'WPCode', slug: 'insert-headers-and-footers' },
 				{ name: 'FluentSnippets', slug: 'easy-code-manager' },
-				{ name: 'Simple Custom CSS and JS', slug: 'custom-css-js' },
-				{ name: 'Header Footer Code Manager', slug: 'header-footer-code-manager' },
+				{ name: __( 'Simple Custom CSS and JS' ), slug: 'custom-css-js' },
+				{ name: __( 'Header Footer Code Manager' ), slug: 'header-footer-code-manager' },
 			],
 		},
 		{
-			id: 'devtools', label: 'Dev tools', hint: 'Debug & inspect', q: 'developer',
+			id: 'devtools', label: __( 'Dev tools' ), hint: __( 'Debug & inspect' ), q: 'developer',
 			plugins: [
-				{ name: 'Query Monitor', slug: 'query-monitor' },
-				{ name: 'WP Crontrol', slug: 'wp-crontrol' },
-				{ name: 'Transients Manager', slug: 'transients-manager' },
-				{ name: 'Rewrite Rules Inspector', slug: 'rewrite-rules-inspector' },
-				{ name: 'Debug Bar', slug: 'debug-bar' },
+				{ name: __( 'Query Monitor' ), slug: 'query-monitor' },
+				{ name: __( 'WP Crontrol' ), slug: 'wp-crontrol' },
+				{ name: __( 'Transients Manager' ), slug: 'transients-manager' },
+				{ name: __( 'Rewrite Rules Inspector' ), slug: 'rewrite-rules-inspector' },
+				{ name: __( 'Debug Bar' ), slug: 'debug-bar' },
 			],
 		},
 		{
-			id: 'spam', label: 'Spam', hint: 'Comment & form spam', q: 'antispam',
+			id: 'spam', label: 'Spam', hint: __( 'Comment & form spam' ), q: 'antispam',
 			plugins: [
 				{ name: 'Akismet', slug: 'akismet' },
-				{ name: 'Antispam Bee', slug: 'antispam-bee' },
+				{ name: __( 'Antispam Bee' ), slug: 'antispam-bee' },
 				{ name: 'CleanTalk', slug: 'cleantalk-spam-protect' },
-				{ name: 'WP Armour', slug: 'honeypot' },
+				{ name: __( 'WP Armour' ), slug: 'honeypot' },
 			],
 		},
 		{
-			id: 'blocks', label: 'Blocks', hint: 'Block libraries & patterns', q: 'gutenberg blocks',
+			id: 'blocks', label: 'Blocks', hint: __( 'Block libraries & patterns' ), q: 'gutenberg blocks',
 			plugins: [
 				{ name: 'Stackable', slug: 'stackable-ultimate-gutenberg-blocks' },
-				{ name: 'Kadence Blocks', slug: 'kadence-blocks' },
+				{ name: __( 'Kadence Blocks' ), slug: 'kadence-blocks' },
 				{ name: 'GenerateBlocks', slug: 'generateblocks' },
 				{ name: 'Otter', slug: 'otter-blocks' },
 				{ name: 'Spectra', slug: 'ultimate-addons-for-gutenberg' },
-				{ name: 'Essential Blocks', slug: 'essential-blocks' },
+				{ name: __( 'Essential Blocks' ), slug: 'essential-blocks' },
 			],
 		},
 		{
-			id: 'fields', label: 'Custom fields', hint: 'Meta & field groups', q: 'custom fields',
+			id: 'fields', label: __( 'Custom fields' ), hint: __( 'Meta & field groups' ), q: 'custom fields',
 			plugins: [
-				{ name: 'Advanced Custom Fields', slug: 'advanced-custom-fields' },
-				{ name: 'Meta Box', slug: 'meta-box' },
+				{ name: __( 'Advanced Custom Fields' ), slug: 'advanced-custom-fields' },
+				{ name: __( 'Meta Box' ), slug: 'meta-box' },
 				{ name: 'Pods', slug: 'pods' },
-				{ name: 'Custom Post Type UI', slug: 'custom-post-type-ui' },
+				{ name: __( 'Custom Post Type UI' ), slug: 'custom-post-type-ui' },
 			],
 		},
 		{
-			id: 'extras', label: 'Little extras', hint: 'Handy day-to-day tools', q: '',
+			id: 'extras', label: __( 'Little extras' ), hint: __( 'Handy day-to-day tools' ), q: '',
 			plugins: [
-				{ name: 'User Switching', slug: 'user-switching' },
-				{ name: 'Public Post Preview', slug: 'public-post-preview' },
-				{ name: 'Regenerate Thumbnails', slug: 'regenerate-thumbnails' },
-				{ name: 'Duplicate Post', slug: 'duplicate-post' },
-				{ name: 'Safe SVG', slug: 'safe-svg' },
+				{ name: __( 'User Switching' ), slug: 'user-switching' },
+				{ name: __( 'Public Post Preview' ), slug: 'public-post-preview' },
+				{ name: __( 'Regenerate Thumbnails' ), slug: 'regenerate-thumbnails' },
+				{ name: __( 'Duplicate Post' ), slug: 'duplicate-post' },
+				{ name: __( 'Safe SVG' ), slug: 'safe-svg' },
 			],
 		},
 	];
@@ -32513,7 +32517,7 @@
 					: ( info.installs >= 1000
 						? Math.round( info.installs / 1000 ) + 'k+'
 						: Number( info.installs ).toLocaleString() + '+' ) ) + ' installs'
-				: ( info.source === 'github' ? 'GitHub release' : '' );
+				: ( info.source === 'github' ? __( 'GitHub release' ) : '' );
 			const meta = [ info.author, installs, info.version ? 'v' + info.version : '' ]
 				.filter( Boolean ).join( ' · ' );
 			const letter = ( info.name || '?' ).replace( /[^A-Za-z0-9]/g, '' ).charAt( 0 ).toUpperCase() || '?';
@@ -32639,13 +32643,13 @@
 		if ( btn ) {
 			btn.disabled = true;
 			btn.classList.add( 'busy' );
-			btn.textContent = st === 'activate' ? 'Activating…' : 'Installing…';
+			btn.textContent = st === 'activate' ? __( 'Activating…' ) : __( 'Installing…' );
 		}
 		try {
 			if ( st === 'activate' ) {
 				const local = catalogLocal( entry );
 				const file = local ? local.plugin.replace( /\.php$/, '' ) : null;
-				if ( ! file ) throw new Error( 'Could not find the installed plugin file.' );
+				if ( ! file ) throw new Error( __( 'Could not find the installed plugin file.' ) );
 				await setPluginStatus( file, 'active' );
 				toast( label + ' activated' );
 				await refreshAfterPluginChange();
@@ -32659,7 +32663,7 @@
 				await api( 'wp/v2/plugins', { method: 'POST', body: JSON.stringify( { slug: entry.slug } ) } );
 				toast( label + ' installed' );
 			} else {
-				throw new Error( 'No install source for that plugin.' );
+				throw new Error( __( 'No install source for that plugin.' ) );
 			}
 			state.cache.plugins = null;
 			state.cache.overview = null;
@@ -32753,7 +32757,7 @@
 		const more = $( '#minn-pi-more' );
 		if ( more ) more.addEventListener( 'click', async () => {
 			more.disabled = true;
-			more.textContent = 'Loading…';
+			more.textContent = __( 'Loading…' );
 			try {
 				const next = await fetchPluginPage( m, m.page + 1 );
 				if ( next === null ) return;
@@ -32773,7 +32777,7 @@
 				if ( ! p ) return;
 				btn.disabled = true;
 				const activating = btn.textContent.trim() === 'Activate';
-				btn.textContent = activating ? 'Activating…' : 'Installing…';
+				btn.textContent = activating ? __( 'Activating…' ) : __( 'Installing…' );
 				try {
 					if ( activating ) {
 						const local = ( state.cache.plugins || [] ).find( ( x ) => x.plugin.split( '/' )[ 0 ] === p.slug );
@@ -32803,7 +32807,7 @@
 		const uploadZip = async ( f ) => {
 			if ( ! f ) return;
 			if ( ! /\.zip$/i.test( f.name ) ) {
-				toast( 'Plugin uploads must be .zip files', true );
+				toast( __( 'Plugin uploads must be .zip files' ), true );
 				return;
 			}
 			zone.classList.add( 'minn-busy' );
@@ -32812,7 +32816,7 @@
 			fd.append( 'file', f );
 			try {
 				await api( 'minn-admin/v1/plugins/upload', { method: 'POST', body: fd } );
-				toast( 'Plugin installed — activate it from the list' );
+				toast( __( 'Plugin installed — activate it from the list' ) );
 				state.cache.plugins = null;
 				await loadPlugins().catch( () => {} );
 				closeModal();
@@ -33387,7 +33391,7 @@
 						<div class="minn-modal-title">${ esc( __( 'All revisions' ) ) }</div>
 						<div class="minn-modal-sub">${ day
 							? `<span>${ dayCount } on ${ esc( revisionDayLabel( day ) ) }</span><button type="button" class="minn-rev-day-clear" id="minn-rev-day-clear">Show all ${ total }</button>`
-							: ( total ? total + ' version' + ( total === 1 ? '' : 's' ) : 'Revision history' ) }</div>
+							: ( total ? total + ' version' + ( total === 1 ? '' : 's' ) : __( 'Revision history' ) ) }</div>
 					</div>
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
@@ -33403,7 +33407,7 @@
 							</span>
 							<span class="minn-rev-list-who">${ esc( r.author || '—' ) }</span>
 							<span class="minn-row-arrow">›</span>
-						</button>` ).join( '' ) : `<div class="minn-empty">${ day ? 'No revisions on that day.' : 'No revisions yet.' }</div>` }
+						</button>` ).join( '' ) : `<div class="minn-empty">${ day ? __( 'No revisions on that day.' ) : __( 'No revisions yet.' ) }</div>` }
 				</div>` }
 			</div>
 		</div>`;
@@ -33421,8 +33425,8 @@
 				? diffWords( revTitle || '(no title)', m.currentTitle || '(no title)' )
 				: null;
 			const summary = rows
-				? ( changed || titleDiff ? `${ changed } block${ changed === 1 ? '' : 's' } differ${ changed === 1 ? 's' : '' } from the current content${ titleDiff ? ' · title changed' : '' }` : 'Identical to the current content' )
-				: 'Post too large to diff — showing the revision as saved';
+				? ( changed || titleDiff ? `${ changed } block${ changed === 1 ? '' : 's' } differ${ changed === 1 ? 's' : '' } from the current content${ titleDiff ? ' · title changed' : '' }` : __( 'Identical to the current content' ) )
+				: __( 'Post too large to diff — showing the revision as saved' );
 			bodyHtml = `
 				<div class="minn-modal-meta">
 					${ titleDiff ? `<div class="minn-side-row"><span class="minn-side-key">${ esc( __( 'Title' ) ) }</span><span class="minn-diff-inline">${ titleDiff.left } → ${ titleDiff.right }</span></div>`
@@ -33482,9 +33486,9 @@
 		const restore = $( '#minn-restore-rev' );
 		if ( restore ) {
 			restore.addEventListener( 'click', async () => {
-				if ( ! confirm( 'Replace the current content with this revision? The current state is saved as its own revision first.' ) ) return;
+				if ( ! confirm( __( 'Replace the current content with this revision? The current state is saved as its own revision first.' ) ) ) return;
 				restore.disabled = true;
-				restore.textContent = 'Restoring…';
+				restore.textContent = __( 'Restoring…' );
 				try {
 					await api( `wp/v2/${ m.ed.type }/${ m.ed.id }`, {
 						method: 'POST',
@@ -33493,7 +33497,7 @@
 							content: ( rev.content && rev.content.raw ) || '',
 						} ),
 					} );
-					toast( 'Revision restored' );
+					toast( __( 'Revision restored' ) );
 					closeModal();
 					state.cache.content = null;
 					state.editor = null; // reload the editor with the restored content
@@ -33501,7 +33505,7 @@
 				} catch ( e ) {
 					toast( e.message, true );
 					restore.disabled = false;
-					restore.textContent = 'Restore this revision';
+					restore.textContent = __( 'Restore this revision' );
 				}
 			} );
 		}
@@ -33510,7 +33514,7 @@
 	/* ===== User modal (create / edit / sessions) ===== */
 
 	function uaSummary( ua ) {
-		if ( ! ua ) return 'Unknown device';
+		if ( ! ua ) return __( 'Unknown device' );
 		const browser = /Edg\//.test( ua ) ? 'Edge' : /OPR\//.test( ua ) ? 'Opera' : /Chrome\//.test( ua ) ? 'Chrome'
 			: /Safari\//.test( ua ) && /Version\//.test( ua ) ? 'Safari' : /Firefox\//.test( ua ) ? 'Firefox' : 'Browser';
 		const os = /Windows/.test( ua ) ? 'Windows' : /iPhone|iPad/.test( ua ) ? 'iOS' : /Android/.test( ua ) ? 'Android'
@@ -33657,13 +33661,13 @@
 				if ( isNew ) {
 					payload.username = $( '#minn-uf-username' ).value.trim();
 					if ( ! payload.username || ! payload.email || ! password ) {
-						throw new Error( 'Username, email and password are required.' );
+						throw new Error( __( 'Username, email and password are required.' ) );
 					}
 					await api( 'wp/v2/users', { method: 'POST', body: JSON.stringify( payload ) } );
-					toast( 'User created' );
+					toast( __( 'User created' ) );
 				} else {
 					await api( `wp/v2/users/${ m.userId }`, { method: 'POST', body: JSON.stringify( payload ) } );
-					toast( 'User updated' );
+					toast( __( 'User updated' ) );
 				}
 				closeModal();
 				state.cache.users = null;
@@ -33689,7 +33693,7 @@
 				btn.disabled = true;
 				try {
 					await api( `minn-admin/v1/users/${ m.userId }/sessions/${ btn.dataset.kill }`, { method: 'DELETE' } );
-					toast( 'Session signed out' );
+					toast( __( 'Session signed out' ) );
 					m.sessions = m.sessions.filter( ( sess ) => sess.verifier !== btn.dataset.kill );
 					renderOverlays();
 				} catch ( err ) {
@@ -33702,11 +33706,11 @@
 		const killAll = $( '#minn-uf-killall' );
 		if ( killAll ) {
 			killAll.addEventListener( 'click', async () => {
-				if ( ! confirm( 'Sign this user out of all sessions?' ) ) return;
+				if ( ! confirm( __( 'Sign this user out of all sessions?' ) ) ) return;
 				killAll.disabled = true;
 				try {
 					await api( `minn-admin/v1/users/${ m.userId }/sessions`, { method: 'DELETE' } );
-					toast( 'Signed out everywhere' );
+					toast( __( 'Signed out everywhere' ) );
 					m.sessions = m.sessions.filter( ( sess ) => sess.current );
 					renderOverlays();
 				} catch ( err ) {
@@ -33874,7 +33878,7 @@
 					<div class="minn-session-row">
 						<div class="minn-session-info">
 							<div class="minn-session-ua">${ esc( h.kind === 'slash' ? prettyNs( h.label ) : h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
-							<div class="minn-session-meta">${ { panel: 'Editor panel', design: 'Design library', slash: 'Editor blocks and commands', core: 'Menu item' }[ h.kind ] || 'Sidebar surface' }</div>
+							<div class="minn-session-meta">${ { panel: __( 'Editor panel' ), design: __( 'Design library' ), slash: __( 'Editor blocks and commands' ), core: __( 'Menu item' ) }[ h.kind ] || __( 'Sidebar surface' ) }</div>
 						</div>
 						<button class="minn-comment-action" data-ue-unhide="${ esc( h.id ) }">${ esc( __( 'Restore' ) ) }</button>
 					</div>` ).join( '' ) }
@@ -34111,7 +34115,7 @@
 		const paint = () => { if ( mine() && state.route === 'profile' ) renderProfile(); };
 		api( `wp/v2/users/${ B.user.id }?context=edit&_fields=id,name,email,roles,username,first_name,last_name,url,description,avatar_urls,locale,meta` )
 			.then( ( u ) => { if ( mine() ) { p.user = u; paint(); } } )
-			.catch( ( e ) => { if ( mine() ) { p.error = e.message || 'Could not load your profile.'; paint(); } } );
+			.catch( ( e ) => { if ( mine() ) { p.error = e.message || __( 'Could not load your profile.' ); paint(); } } );
 		api( 'wp/v2/users/me/application-passwords' )
 			.then( ( list ) => { if ( mine() ) { p.appPasswords = list; paint(); } } )
 			.catch( () => { if ( mine() ) { p.appPasswords = []; paint(); } } );
@@ -34275,7 +34279,7 @@
 					<div class="minn-session-row">
 						<div class="minn-session-info">
 							<div class="minn-session-ua">${ esc( h.kind === 'slash' ? prettyNs( h.label ) : h.label ) }${ h.sub ? ` <span class="minn-panel-sub">${ esc( h.sub ) }</span>` : '' }</div>
-							<div class="minn-session-meta">${ { panel: 'Editor panel', design: 'Design library', slash: 'Editor blocks and commands', core: 'Menu item' }[ h.kind ] || 'Sidebar surface' }</div>
+							<div class="minn-session-meta">${ { panel: __( 'Editor panel' ), design: __( 'Design library' ), slash: __( 'Editor blocks and commands' ), core: __( 'Menu item' ) }[ h.kind ] || __( 'Sidebar surface' ) }</div>
 						</div>
 						<button class="minn-comment-action" data-unhide="${ esc( h.id ) }">${ esc( __( 'Restore' ) ) }</button>
 					</div>` ).join( '' ) }
@@ -34344,7 +34348,7 @@
 				await navigator.clipboard.writeText( text );
 				toast( label );
 			} catch ( e ) {
-				toast( 'Could not copy', true );
+				toast( __( 'Could not copy' ), true );
 			}
 		};
 
@@ -34388,11 +34392,11 @@
 				// invalidates the REST nonce baked into this page — reload to
 				// pick up fresh credentials before the next request 403s.
 				if ( password ) {
-					toast( 'Password changed — refreshing…' );
+					toast( __( 'Password changed — refreshing…' ) );
 					setTimeout( () => location.reload(), 600 );
 					return;
 				}
-				toast( 'Profile updated' + langNote );
+				toast( __( 'Profile updated' ) + langNote );
 				p.user = Object.assign( {}, p.user, payload );
 				// Keep the sidebar's name in sync with a display-name edit.
 				if ( payload.name ) {
@@ -34411,7 +34415,7 @@
 		const createBtn = $( '#minn-app-create', view );
 		if ( createBtn ) createBtn.addEventListener( 'click', async () => {
 			createBtn.disabled = true;
-			const name = $( '#minn-app-name', view ).value.trim() || 'AI Agent';
+			const name = $( '#minn-app-name', view ).value.trim() || __( 'AI Agent' );
 			try {
 				const ap = await api( 'wp/v2/users/me/application-passwords', { method: 'POST', body: JSON.stringify( { name } ) } );
 				p.newAppPassword = { name: ap.name, password: ap.password };
@@ -34428,17 +34432,17 @@
 			}
 		} );
 		const copyBtn = $( '#minn-app-copy', view );
-		if ( copyBtn ) copyBtn.addEventListener( 'click', () => copyText( p.newAppPassword.password, 'Password copied' ) );
+		if ( copyBtn ) copyBtn.addEventListener( 'click', () => copyText( p.newAppPassword.password, __( 'Password copied' ) ) );
 		const curlBtn = $( '#minn-app-copy-curl', view );
 		if ( curlBtn ) curlBtn.addEventListener( 'click', () => copyText(
 			`curl -u '${ B.user.login }:${ p.newAppPassword.password }' '${ B.restUrl }wp/v2/posts?per_page=5'`, 'curl example copied' ) );
 		$$( '[data-appdel]', view ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
-				if ( ! confirm( 'Revoke this application password? Anything using it loses access immediately.' ) ) return;
+				if ( ! confirm( __( 'Revoke this application password? Anything using it loses access immediately.' ) ) ) return;
 				btn.disabled = true;
 				try {
 					await api( 'wp/v2/users/me/application-passwords/' + btn.dataset.appdel, { method: 'DELETE' } );
-					toast( 'Application password revoked' );
+					toast( __( 'Application password revoked' ) );
 					p.appPasswords = p.appPasswords.filter( ( ap ) => ap.uuid !== btn.dataset.appdel );
 					if ( state.route === 'profile' ) renderProfile();
 				} catch ( e ) {
@@ -34448,7 +34452,7 @@
 			} )
 		);
 		const guideCopy = $( '#minn-guide-copy', view );
-		if ( guideCopy ) guideCopy.addEventListener( 'click', () => copyText( buildAgentGuide(), 'Agent guide copied' ) );
+		if ( guideCopy ) guideCopy.addEventListener( 'click', () => copyText( buildAgentGuide(), __( 'Agent guide copied' ) ) );
 		const guideDl = $( '#minn-guide-download', view );
 		if ( guideDl ) guideDl.addEventListener( 'click', () => {
 			const blob = new Blob( [ buildAgentGuide() ], { type: 'text/markdown' } );
@@ -34473,7 +34477,7 @@
 				btn.disabled = true;
 				try {
 					await api( `minn-admin/v1/users/${ B.user.id }/sessions/${ btn.dataset.kill }`, { method: 'DELETE' } );
-					toast( 'Session signed out' );
+					toast( __( 'Session signed out' ) );
 					p.sessions = p.sessions.filter( ( sess ) => sess.verifier !== btn.dataset.kill );
 					if ( state.route === 'profile' ) renderProfile();
 				} catch ( err ) {
@@ -34484,11 +34488,11 @@
 		);
 		const killAll = $( '#minn-pf-killall', view );
 		if ( killAll ) killAll.addEventListener( 'click', async () => {
-			if ( ! confirm( 'Sign out of all other sessions?' ) ) return;
+			if ( ! confirm( __( 'Sign out of all other sessions?' ) ) ) return;
 			killAll.disabled = true;
 			try {
 				await api( `minn-admin/v1/users/${ B.user.id }/sessions`, { method: 'DELETE' } );
-				toast( 'Signed out everywhere' );
+				toast( __( 'Signed out everywhere' ) );
 				p.sessions = p.sessions.filter( ( sess ) => sess.current );
 				if ( state.route === 'profile' ) renderProfile();
 			} catch ( err ) {
@@ -34572,7 +34576,7 @@
 					( state.cache.notifications || [] ).forEach( ( n ) => ( n.unread = false ) );
 					updateUnreadDot();
 					renderOverlays();
-					toast( 'All notifications marked read' );
+					toast( __( 'All notifications marked read' ) );
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -34631,7 +34635,7 @@
 					updateUnreadDot();
 					try {
 						await api( 'minn-admin/v1/notices/hide', { method: 'POST', body: JSON.stringify( { id: hash } ) } );
-						toastAction( 'Notice hidden', 'Undo', async () => {
+						toastAction( __( 'Notice hidden' ), 'Undo', async () => {
 							await api( 'minn-admin/v1/notices/unhide', { method: 'POST', body: JSON.stringify( { id: hash } ) } ).catch( () => {} );
 							state.cache.notifications = null;
 							await loadNotifications();
@@ -34711,9 +34715,9 @@
 			const wrap = document.createElement( 'div' );
 			wrap.className = 'minn-tabscroll';
 			const prev = document.createElement( 'button' );
-			prev.type = 'button'; prev.className = 'minn-tabscroll-btn prev'; prev.textContent = '‹'; prev.setAttribute( 'aria-label', 'Scroll tabs left' );
+			prev.type = 'button'; prev.className = 'minn-tabscroll-btn prev'; prev.textContent = '‹'; prev.setAttribute( 'aria-label', __( 'Scroll tabs left' ) );
 			const next = document.createElement( 'button' );
-			next.type = 'button'; next.className = 'minn-tabscroll-btn next'; next.textContent = '›'; next.setAttribute( 'aria-label', 'Scroll tabs right' );
+			next.type = 'button'; next.className = 'minn-tabscroll-btn next'; next.textContent = '›'; next.setAttribute( 'aria-label', __( 'Scroll tabs right' ) );
 			tabs.parentNode.insertBefore( wrap, tabs );
 			wrap.appendChild( prev );
 			wrap.appendChild( tabs );
@@ -35081,7 +35085,7 @@
 				}
 				saveEditor( { _explicit: true } ).then( () => {
 					if ( state.editor === ed && ! ed.dirty ) {
-						toast( LIVE_STATUSES.includes( ed.status ) ? 'Updated' : 'Draft saved' );
+						toast( LIVE_STATUSES.includes( ed.status ) ? 'Updated' : __( 'Draft saved' ) );
 					}
 				} );
 			}
