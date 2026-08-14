@@ -1555,6 +1555,33 @@ select.minn-input {
 .minn-ac-item:hover, .minn-ac-item.active { background: var(--hover); }
 .minn-ac-item.current { color: var(--accent2); font-weight: 600; }
 .minn-ac-empty { padding: 7px 10px; color: var(--text3); font-size: 13px; }
+/* A row that toggles rather than picks: the tick box says whether the record
+   is already in that term, so the list is the state and not just a menu. */
+button.minn-ac-item.minn-ac-check { display: flex; align-items: center; gap: 9px; }
+.minn-check {
+  flex: none; width: 15px; height: 15px; border-radius: 4px;
+  border: 1.5px solid var(--border2); background: var(--panel2);
+  position: relative; transition: background 0.12s, border-color 0.12s;
+}
+.minn-ac-check[aria-selected="true"] .minn-check { background: var(--accent); border-color: var(--accent); }
+.minn-ac-check[aria-selected="true"] .minn-check::after {
+  content: ""; position: absolute; inset-inline-start: 4px; top: 1px;
+  width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+/* Add new sits under a divider so it reads as an action, not another row. */
+.minn-ac-foot { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; color: var(--accent2); font-weight: 600; }
+.minn-ac-add svg { width: 14px; height: 14px; }
+/* A field waiting on the server says so where its chevron sits: the same
+   16px slot, so nothing moves when the answer lands. */
+.minn-ac.is-loading > .minn-ac-input { background-image: none; }
+.minn-ac.is-loading::after {
+  content: ""; position: absolute; top: 50%; inset-inline-end: 10px; margin-top: -7px;
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--border2); border-top-color: var(--accent);
+  animation: minnSpin 0.7s linear infinite; pointer-events: none;
+}
 /* Site icon field: preview + dropzone. */
 .minn-icon-drop {
   display: flex; align-items: center; gap: 14px; padding: 12px;
