@@ -407,16 +407,22 @@
 		// Future dates (scheduled posts) mirror the past buckets as "in …".
 		if ( diff < -30 ) {
 			const f = -diff;
-			if ( f < 3600 ) return 'in ' + Math.max( 1, Math.round( f / 60 ) ) + ' min';
-			if ( f < 86400 ) return 'in ' + Math.round( f / 3600 ) + 'h';
-			if ( f < 86400 * 7 ) return 'in ' + Math.round( f / 86400 ) + 'd';
+			/* translators: %s: number of minutes. Compact "due in" form. */
+			if ( f < 3600 ) return sprintf( __( 'in %s min' ), Math.max( 1, Math.round( f / 60 ) ) );
+			/* translators: %s: number of hours. Compact "due in" form. */
+			if ( f < 86400 ) return sprintf( __( 'in %sh' ), Math.round( f / 3600 ) );
+			/* translators: %s: number of days. Compact "due in" form. */
+			if ( f < 86400 * 7 ) return sprintf( __( 'in %sd' ), Math.round( f / 86400 ) );
 			return formatListDate( d );
 		}
 		const sec = Math.max( 1, diff );
-		if ( sec < 60 ) return 'just now';
-		if ( sec < 3600 ) return Math.round( sec / 60 ) + ' min ago';
-		if ( sec < 86400 ) return Math.round( sec / 3600 ) + 'h ago';
-		if ( sec < 86400 * 7 ) return Math.round( sec / 86400 ) + 'd ago';
+		if ( sec < 60 ) return __( 'just now' );
+		/* translators: %s: number of minutes. Compact relative time. */
+		if ( sec < 3600 ) return sprintf( __( '%s min ago' ), Math.round( sec / 60 ) );
+		/* translators: %s: number of hours. Compact relative time. */
+		if ( sec < 86400 ) return sprintf( __( '%sh ago' ), Math.round( sec / 3600 ) );
+		/* translators: %s: number of days. Compact relative time. */
+		if ( sec < 86400 * 7 ) return sprintf( __( '%sd ago' ), Math.round( sec / 86400 ) );
 		return formatListDate( d );
 	}
 
@@ -3042,10 +3048,10 @@
 	function storeStripHtml( o ) {
 		if ( ! o.store || ! B.wc || ! B.caps.orders ) return '';
 		const buckets = [
-			[ 'pending', o.store.pending, 'awaiting payment', 'private' ],
-			[ 'on-hold', o.store.onhold, 'on hold', 'private' ],
-			[ 'processing', o.store.processing, 'to fulfill', 'future' ],
-			[ 'failed', o.store.failed, 'failed', 'trash-status' ],
+			[ 'pending', o.store.pending, __( 'awaiting payment' ), 'private' ],
+			[ 'on-hold', o.store.onhold, __( 'on hold' ), 'private' ],
+			[ 'processing', o.store.processing, __( 'to fulfill' ), 'future' ],
+			[ 'failed', o.store.failed, __( 'failed' ), 'trash-status' ],
 		].filter( ( [ , n ] ) => n > 0 );
 		return `
 		<div class="minn-card minn-store-strip">
@@ -3109,9 +3115,9 @@
 		<div class="minn-dash-grid">
 			<div class="minn-card minn-panel-pad">
 				<div class="minn-chart-head">
-					<div class="minn-panel-title">${ isTraffic ? 'Traffic' : 'Activity' }${ isTraffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }</div>
+					<div class="minn-panel-title">${ isTraffic ? __( 'Traffic' ) : __( 'Activity' ) }${ isTraffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }</div>
 					<div class="minn-chart-head-actions">
-						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="Show ${ isTraffic ? 'Activity' : 'Traffic' }">⇄</button>` : '' }
+						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="${ isTraffic ? __( 'Show Activity' ) : __( 'Show Traffic' ) }">⇄</button>` : '' }
 						<div class="minn-range-tabs">
 							${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ d }d</button>` ).join( '' ) }
 						</div>
