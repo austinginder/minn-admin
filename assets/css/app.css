@@ -2789,7 +2789,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-of-search .minn-ac-panel { position: relative; margin-top: 6px; max-height: 190px; overflow-y: auto; }
 .minn-of-searching { padding: 8px 2px 2px; font-size: 12.5px; }
 /* Product rows carry the product's own picture, with the slot reserved so a
-   product without one still lines up. The button selector matters: the
+   product without one still lines up. Shared by both product pickers: the
+   filter bar's and the items dialog's. The button selector matters: the
    shared `button.minn-ac-item` rule sets display:block, and losing to it
    left the thumb inline, where width and height simply do not apply. */
 button.minn-ac-item.minn-of-item { display: flex; align-items: center; gap: 8px; }

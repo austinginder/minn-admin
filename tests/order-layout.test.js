@@ -36,7 +36,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 	const suffix = Date.now().toString( 36 );
 	const email = `minn-layout-${ suffix }@example.com`;
-	let pid = null, oid = null, eid = null;
+	let pid = null, oid = null, eid = null, mediaId = null;
 
 	try {
 		const prod = await api( 'wc/v3/products', {
@@ -44,6 +44,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			body: JSON.stringify( { name: 'Minn Layout Test ' + suffix, type: 'simple', regular_price: '20.00', status: 'publish' } ),
 		} );
 		pid = prod.body && prod.body.id;
+		// A real attachment on the product: the add-product picker's thumbnail
+		// is only proven by a product that actually has one.
+		mediaId = await page.evaluate( async ( s ) => {
+			const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+			const bin = atob( png );
+			const bytes = new Uint8Array( bin.length );
+			for ( let i = 0; i < bin.length; i++ ) bytes[ i ] = bin.charCodeAt( i );
+			const r = await fetch( window.MINN.restUrl + 'wp/v2/media', {
+				method: 'POST',
+				headers: { 'X-WP-Nonce': window.MINN.nonce, 'Content-Type': 'image/png', 'Content-Disposition': `attachment; filename="layout-${ s }.png"` },
+				credentials: 'same-origin',
+				body: bytes,
+			} );
+			const j = await r.json();
+			return j && j.id;
+		}, suffix );
+		if ( mediaId ) await api( `wc/v3/products/${ pid }`, { method: 'PUT', body: JSON.stringify( { images: [ { id: mediaId } ] } ) } );
 		const o = await api( 'wc/v3/orders', {
 			method: 'POST',
 			body: JSON.stringify( {
@@ -230,6 +247,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '.minn-order-submodal [data-ei-pick]', { timeout: 10000 } );
 		t.check( 'loading state clears once hits land',
 			await page.evaluate( () => ! document.querySelector( '.minn-ei-searching' ) ), '' );
+		const pickShape = await page.evaluate( () => {
+			const item = document.querySelector( '.minn-order-submodal [data-ei-pick]' );
+			const thumb = item && item.querySelector( '.minn-of-thumb' );
+			const img = thumb && thumb.querySelector( 'img' );
+			const box = thumb ? thumb.getBoundingClientRect() : { width: 0, height: 0 };
+			return { thumbSlot: !! thumb, src: img ? img.getAttribute( 'src' ) : '', w: Math.round( box.width ), h: Math.round( box.height ) };
+		} );
+		t.check( 'the add-product picker carries the product image',
+			pickShape.thumbSlot && /\.(png|jpe?g|gif|webp)/i.test( pickShape.src ), JSON.stringify( pickShape ) );
+		// Same trap the filter picker hit: the shared button.minn-ac-item rule
+		// sets display:block, and an inline style beats the flex rule outright,
+		// which leaves the thumb inline where width and height are ignored.
+		t.check( 'the thumbnail is actually laid out, not inline',
+			pickShape.w >= 20 && pickShape.h >= 20, JSON.stringify( pickShape ) );
 		await page.click( '.minn-order-submodal [data-ei-pick]' );
 		await page.click( '.minn-order-submodal [data-esave]' );
 		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 15000 } );
@@ -278,6 +309,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		if ( eid ) await api( `wc/v3/orders/${ eid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( oid ) await api( `wc/v3/orders/${ oid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( pid ) await api( `wc/v3/products/${ pid }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		if ( mediaId ) await api( `wp/v2/media/${ mediaId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 	}
 
 	await t.done( browser, errors );

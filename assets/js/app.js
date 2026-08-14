@@ -6000,15 +6000,22 @@
 				if ( ! q ) { setSearching( false ); return; }
 				const mine = ++seq;
 				try {
-					const hits = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,price,regular_price` );
+					const hits = await api( `wc/v3/products?search=${ encodeURIComponent( q ) }&per_page=8&status=publish&_fields=id,name,sku,price,regular_price,images` );
 					if ( mine !== seq || ! sub.overlay.isConnected ) return;
 					setSearching( false );
 					if ( ! Array.isArray( hits ) || ! hits.length ) return;
 					panel = document.createElement( 'div' );
 					panel.className = 'minn-ac-panel';
 					panel.style.cssText = 'position:relative; display:block; margin-top:6px; max-height:160px; overflow:auto;';
-					panel.innerHTML = hits.map( ( p ) =>
-						`<button type="button" class="minn-ac-item" data-ei-pick="${ p.id }" style="display:block; width:100%; text-align:left;">${ esc( p.name ) }${ p.sku ? ' · ' + esc( p.sku ) : '' } · $${ esc( String( p.price || p.regular_price || '0' ) ) }</button>` ).join( '' );
+					// Rows wear the same shape as the filter bar's product
+					// picker: picture, then the label. No inline style here —
+					// an inline display:block would beat .minn-of-item's flex
+					// and leave the thumb inline, where its size is ignored.
+					panel.innerHTML = hits.map( ( p ) => {
+						const thumb = ( ( p.images || [] )[ 0 ] || {} ).src || '';
+						const label = esc( p.name ) + ( p.sku ? ' · ' + esc( p.sku ) : '' ) + ' · $' + esc( String( p.price || p.regular_price || '0' ) );
+						return `<button type="button" class="minn-ac-item minn-of-item" data-ei-pick="${ p.id }"><span class="minn-of-thumb">${ thumb ? `<img src="${ esc( thumb ) }" alt="" loading="lazy">` : '' }</span><span class="minn-cell-clip">${ label }</span></button>`;
+					} ).join( '' );
 					search.parentNode.appendChild( panel );
 					$$( '[data-ei-pick]', panel ).forEach( ( bn ) =>
 						bn.addEventListener( 'click', () => {
