@@ -35391,8 +35391,7 @@
 				${ week.map( ( c ) => {
 					/* translators: 1: the day. 2: how many revisions that day. */
 					const tip = c.n ? sprintf( _n( '%1$s: %2$s revision', '%1$s: %2$s revisions', c.n ), revisionDayLabel( c.key ), c.n )
-						/* translators: %s: the day. */
-						: sprintf( __( '%s: no revisions' ), revisionDayLabel( c.key ) );
+						: sprintf( /* translators: %s: the day. */ __( '%s: no revisions' ), revisionDayLabel( c.key ) );
 					return `
 				<button type="button" class="minn-rev-heat-cell l${ c.level }${ c.future ? ' future' : '' }"
 					data-revday="${ esc( c.key ) }"
