@@ -12,11 +12,6 @@
 # escapes at its own boundary is fine and is detected as such.
 import re, sys
 
-# msgids that carry markup by contract: sprintf formats whose arguments are HTML
-# fragments. These cannot be esc()'d without breaking them.
-ALLOW_LINES = { 1002, 2858, 4508, 9594, 13184, 16406, 16483, 20462, 22590, 22695,
-                29025, 30907, 30908, 31117, 31191, 31220, 34471 }
-
 src = open( sys.argv[1] if len( sys.argv ) > 1 else 'assets/js/app.js' ).read()
 call = re.compile( r'\b(__|_n)\s*\(' )
 bad, i = [], 0
@@ -73,8 +68,7 @@ while True:
             if enclosing and enclosing not in ( 'sprintf', '__', '_n' ):
                 continue
             ln = src.count( '\n', 0, i ) + 1
-            if ln not in ALLOW_LINES:
-                bad.append( ( ln, expr.strip()[ :110 ].replace( '\n', ' ' ) ) )
+            bad.append( ( ln, expr.strip()[ :110 ].replace( '\n', ' ' ) ) )
             break
     i = j + 1
 
