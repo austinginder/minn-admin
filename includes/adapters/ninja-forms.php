@@ -33,8 +33,18 @@ function minn_admin_ninja_forms_active() {
 }
 
 function minn_admin_ninja_forms_can() {
-	$cap = apply_filters( 'ninja_forms_admin_menu_capabilities', 'manage_options' );
-	$cap = apply_filters( 'ninja_forms_admin_submissions_capabilities', $cap );
+	// Resolve this the way Ninja Forms resolves it: seed the submissions
+	// filter with the literal manage_options, exactly as their own
+	// blocks/bootstrap.php does when deciding who may see submission data.
+	//
+	// Chaining ninja_forms_admin_menu_capabilities into it first was wrong.
+	// That filter governs one hidden options.php-parented Processing page and
+	// nothing else, but its name makes it the obvious one to reach for when
+	// opening the Ninja Forms menu to editors. A site that had done so was
+	// handing the lower role every submission's answers plus trash, restore
+	// and permanent delete here, while Ninja Forms' own Submissions screen
+	// still asked for manage_options.
+	$cap = apply_filters( 'ninja_forms_admin_submissions_capabilities', 'manage_options' );
 	return current_user_can( $cap );
 }
 
