@@ -81,8 +81,13 @@ function minn_admin_tm_type( $raw ) {
 		return 'serialized';
 	}
 	$trim = trim( $raw );
-	if ( ( '{' === $trim[0] || '[' === $trim[0] ) && null !== json_decode( $trim ) ) {
-		return 'json';
+	// A whitespace-only value survives the empty check above but trims to '',
+	// and indexing offset 0 of that warns on PHP 8. With display_errors on
+	// that warning prepends to the REST body and breaks the JSON parse.
+	if ( 0 === strpos( $trim, '{' ) || 0 === strpos( $trim, '[' ) ) {
+		if ( null !== json_decode( $trim ) ) {
+			return 'json';
+		}
 	}
 	if ( is_numeric( $raw ) ) {
 		if ( 10 === strlen( $raw ) && (int) $raw > 1000000000 ) {

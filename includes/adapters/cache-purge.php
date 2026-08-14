@@ -52,6 +52,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'litespeed',
 			'name'  => 'LiteSpeed Cache',
+			'network' => true,
 			'purge' => function () {
 				do_action( 'litespeed_purge_all' );
 			},
@@ -62,6 +63,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'wp-super-cache',
 			'name'  => 'WP Super Cache',
+			'network' => true,
 			'purge' => function () {
 				wp_cache_clear_cache();
 			},
@@ -72,6 +74,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'w3-total-cache',
 			'name'  => 'W3 Total Cache',
+			'network' => true,
 			'purge' => function () {
 				w3tc_flush_all();
 			},
@@ -95,6 +98,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'wp-fastest-cache',
 			'name'  => 'WP Fastest Cache',
+			'network' => true,
 			'purge' => function () {
 				$GLOBALS['wp_fastest_cache']->deleteCache( true );
 			},
@@ -105,6 +109,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'sg-optimizer',
 			'name'  => 'SiteGround Optimizer',
+			'network' => true,
 			'purge' => function () {
 				sg_cachepress_purge_everything();
 			},
@@ -113,6 +118,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'sg-optimizer',
 			'name'  => 'SiteGround Optimizer',
+			'network' => true,
 			'purge' => function () {
 				sg_cachepress_purge_cache();
 			},
@@ -123,6 +129,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'autoptimize',
 			'name'  => 'Autoptimize',
+			'network' => true,
 			'purge' => function () {
 				autoptimizeCache::clearall();
 			},
@@ -133,6 +140,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'wp-optimize',
 			'name'  => 'WP-Optimize',
+			'network' => true,
 			'purge' => function () {
 				wpo_cache_flush();
 			},
@@ -143,6 +151,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'cache-enabler',
 			'name'  => 'Cache Enabler',
+			'network' => true,
 			'purge' => function () {
 				do_action( 'cache_enabler_clear_complete_cache' );
 			},
@@ -153,6 +162,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'hummingbird',
 			'name'  => 'Hummingbird',
+			'network' => true,
 			'purge' => function () {
 				do_action( 'wphb_clear_page_cache' );
 			},
@@ -181,6 +191,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'speedycache',
 			'name'  => 'SpeedyCache',
+			'network' => true,
 			'purge' => function () {
 				\SpeedyCache\Delete::run( array( 'minified' => true ) );
 			},
@@ -220,6 +231,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'breeze',
 			'name'  => 'Breeze',
+			'network' => true,
 			'purge' => function () {
 				do_action( 'breeze_clear_all_cache' );
 			},
@@ -232,6 +244,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'nginx-helper',
 			'name'  => 'Nginx Helper',
+			'network' => true,
 			'purge' => function () {
 				do_action( 'rt_nginx_helper_purge_all' );
 			},
@@ -246,6 +259,7 @@ function minn_admin_cache_purgers() {
 		$purgers[] = array(
 			'id'    => 'cloudflare',
 			'name'  => 'Cloudflare',
+			'network' => true,
 			'purge' => function () {
 				$hooks = new \Cloudflare\APO\WordPress\Hooks();
 				$hooks->purgeCacheEverything();

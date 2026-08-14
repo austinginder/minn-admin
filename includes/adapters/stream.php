@@ -86,7 +86,7 @@ function minn_admin_stream_admin_url() {
  */
 function minn_admin_stream_status_model() {
 	global $wpdb;
-	$table = $wpdb->prefix . 'stream';
+	$table = $wpdb->base_prefix . 'stream';
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
@@ -221,7 +221,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_stream_can',
 		'callback'            => function () {
 			global $wpdb;
-			$table = $wpdb->prefix . 'stream';
+			$table = $wpdb->base_prefix . 'stream';
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$cols = $wpdb->get_col( $wpdb->prepare(
 				"SELECT DISTINCT connector FROM {$table} WHERE blog_id = %d AND connector != '' ORDER BY connector ASC",
@@ -243,7 +243,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => 'minn_admin_stream_can',
 		'callback'            => function ( WP_REST_Request $request ) {
 			global $wpdb;
-			$table    = $wpdb->prefix . 'stream';
+			$table    = $wpdb->base_prefix . 'stream';
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
 			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
 			$where    = array( 'blog_id = %d' );

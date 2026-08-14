@@ -272,6 +272,12 @@ add_action( 'rest_api_init', function () {
  * @return array[] of { label, status, detail }
  */
 function minn_admin_solid_security_checks() {
+	// The System page reads this directly at manage_options, which is per
+	// site on multisite. Firewall mode, scan age and unresolved-issue counts
+	// describe the network, so gate here rather than at the call site.
+	if ( ! Minn_Admin::network_owner() ) {
+		return array();
+	}
 	if ( ! class_exists( 'ITSEC_Core' ) || ! class_exists( 'ITSEC_Modules' ) ) {
 		return array();
 	}

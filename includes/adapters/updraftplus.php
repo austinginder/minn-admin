@@ -15,6 +15,15 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_updraftplus_active() {
+	// UpdraftPlus free has no multisite awareness: its get_table_prefix()
+	// returns the BASE prefix and its backup walks a bare SHOW TABLES, so a
+	// "back up everything" started from any subsite dumps wp_users, wp_usermeta
+	// and every neighbouring subsite's tables to the network owner's remote
+	// storage. The plugin says so itself, in an error-level notice on its own
+	// screen that Minn does not reproduce. Same rule as every sibling here.
+	if ( ! Minn_Admin::network_owner() ) {
+		return false;
+	}
 	return class_exists( 'UpdraftPlus_Options' ) && class_exists( 'UpdraftPlus_Backup_History' );
 }
 
@@ -171,7 +180,8 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 	$perm = function () {
-		return current_user_can( 'manage_options' );
+		// Network-shared archives (see minn_admin_updraftplus_active).
+		return current_user_can( 'manage_options' ) && Minn_Admin::network_owner();
 	};
 
 	register_rest_route( 'minn-admin/v1', '/updraft/backups', array(
