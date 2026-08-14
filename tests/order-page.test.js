@@ -60,10 +60,19 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				return card && ! card.querySelector( '.minn-loading' );
 			}, null, { timeout: 20000 } );
 		};
+		// The detail's late async fetches each rerender the whole host, which
+		// closes an open panel mid-pick — reopen and retry when that race lands.
 		const pickCombo = async ( key, value ) => {
-			await page.click( `[data-oc="${ key }"] .minn-ac-input` );
-			await page.waitForSelector( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]`, { timeout: 8000 } );
-			await page.click( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]` );
+			for ( let tries = 0; ; tries++ ) {
+				await page.click( `[data-oc="${ key }"] .minn-ac-input` );
+				try {
+					await page.waitForSelector( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]`, { timeout: 8000 } );
+					await page.click( `[data-oc="${ key }"] .minn-ac-item[data-acv="${ value }"]`, { timeout: 8000 } );
+					return;
+				} catch ( e ) {
+					if ( tries >= 2 ) throw e;
+				}
+			}
 		};
 
 		// ---- Deep link renders the page ----
@@ -91,7 +100,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const aAfter = await api( `wc/v3/orders/${ aId }?_fields=status,payment_method,transaction_id,date_paid` );
 		t.check( 'page Record payment persists through WC', aAfter.body.status === 'processing' && aAfter.body.payment_method === 'cheque' && aAfter.body.transaction_id === 'PCHK-' + suffix && !! aAfter.body.date_paid, JSON.stringify( aAfter.body ) );
 		const headPill = await page.evaluate( () => document.querySelector( '.minn-order-page-head .minn-status' ).textContent.trim() );
-		t.check( 'page header pill follows the status', headPill === 'processing', headPill );
+		// The pill carries WooCommerce's label for the slug, not the slug.
+		t.check( 'page header pill follows the status', headPill === 'Processing', headPill );
 
 		// ---- Related order navigates with a real URL ----
 		await page.waitForFunction( () => {

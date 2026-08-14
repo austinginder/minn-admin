@@ -75,8 +75,10 @@ const { BASE, launch, login, reporter, autoConfirm } = require( './helpers' );
 		t.check( 'refund-state serves lines + gateway', rs0.status === 200 && rs0.body.lines && rs0.body.lines[ lineItemId ] && rs0.body.lines[ lineItemId ].qty_refunded === 0, JSON.stringify( rs0.body ) );
 		t.check( 'check gateway cannot refund itself', !! ( rs0.body.gateway && rs0.body.gateway.can_refund === false ), JSON.stringify( rs0.body.gateway ) );
 
-		// The order page's refund card.
+		// The refund controls live behind the header's Refund action now.
 		await page.goto( `${ BASE }/minn-admin/orders/${ orderId }`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-o-refund-open', { timeout: 20000 } );
+		await page.click( '#minn-o-refund-open' );
 		await page.waitForSelector( '.minn-refund-qty', { timeout: 20000 } );
 		t.check( 'per-line stepper renders', true, '' );
 		const stepperMax = await page.evaluate( () => document.querySelector( '.minn-refund-qty' ).max );
@@ -99,6 +101,8 @@ const { BASE, launch, login, reporter, autoConfirm } = require( './helpers' );
 
 		await page.fill( '#minn-o-refund-reason', 'Suite refund' );
 		await page.click( '#minn-o-refund' );
+		// A successful refund closes the dialog and rerenders the host.
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
 		await page.waitForSelector( '[data-rdel]', { timeout: 20000 } );
 		t.check( 'refund row appears with delete affordance', true, '' );
 
@@ -118,11 +122,15 @@ const { BASE, launch, login, reporter, autoConfirm } = require( './helpers' );
 			return rows.some( ( r ) => /Refund · /.test( r.textContent ) && / by /.test( r.textContent ) );
 		}, null, { timeout: 20000 } );
 		t.check( 'refund row carries when and who', true, '' );
+		// Reopen the dialog — the accounting now shows the refunded line.
+		await page.click( '#minn-o-refund-open' );
 		await page.waitForFunction( () => {
 			const meta = document.querySelector( '.minn-refund-line-meta' );
 			return meta && meta.textContent.includes( '1 of 3 refunded' );
 		}, null, { timeout: 20000 } );
 		t.check( 'stepper line shows 1 of 3 refunded', true, '' );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 5000 } );
 
 		// Delete the refund record — totals restore, row goes away.
 		await page.click( '[data-rdel]' );

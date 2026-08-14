@@ -2642,9 +2642,18 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* The /orders/{id} page hosts the same detail body as the modal, full height:
    the route's scroller does the scrolling, never an inner box. */
 .minn-order-page { max-width: 860px; }
+/* The order page runs wider than the product page: its Shopify-style
+   two-column layout (main + sidebar) needs the room. */
+.minn-order-page-wide { max-width: 1160px; }
 .minn-order-page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .minn-order-page-head .minn-modal-title-block { min-width: 0; }
 .minn-order-page-head .minn-status { margin-inline-start: auto; }
+/* Order head: number + status/paid chips inline with the title; actions
+   (email, payment URL, PDFs, WC escape) sit on the right, Shopify-style. */
+.minn-order-head-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.minn-order-head-row .minn-status { margin-inline-start: 0; }
+.minn-order-head-actions { margin-inline-start: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.minn-order-page-body { min-width: 0; }
 .minn-order-page-card {
 	background: var(--panel); border: 1px solid var(--border2); border-radius: 14px;
 	overflow: hidden;
@@ -2708,6 +2717,45 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-status,
 .minn-order-refund,
 .minn-order-wcmail { /* class hooks for tests / future tweaks */ }
+/* Order detail sections: a flat, border-separated stack inside the quick-view
+   modal; the /orders/{id} page (rules below) restyles the SAME sections as
+   standalone cards on a two-column grid. */
+.minn-order-sec { padding: 14px 18px 16px; }
+.minn-modal .minn-order-sec + .minn-order-sec { border-top: 1px solid var(--border); }
+.minn-modal .minn-order-side > .minn-order-sec:first-child { border-top: 1px solid var(--border); }
+.minn-order-sec .minn-order-items { padding: 0; border-bottom: none; }
+.minn-order-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.minn-order-card-head .minn-side-title { margin-bottom: 0; }
+.minn-order-card-meta { margin-inline-start: auto; color: var(--text3); font-size: 12.5px; }
+.minn-order-card-head > .minn-status:not(:first-child) { margin-inline-start: auto; }
+.minn-order-editpen { margin-inline-start: auto; display: inline-flex; align-items: center; background: none; border: none; color: var(--text3); cursor: pointer; padding: 4px; border-radius: 7px; }
+.minn-order-editpen:hover { color: var(--text); background: var(--hover); }
+.minn-order-editpen svg { width: 15px; height: 15px; }
+.minn-order-read { font-size: 13.5px; color: var(--text2); display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.minn-order-read-name { font-weight: 600; color: var(--text); }
+.minn-order-read-sub { font-weight: 600; font-size: 12px; color: var(--text); margin-top: 8px; }
+.minn-order-read-empty { color: var(--text3); }
+.minn-order-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+/* Items edit dialog: name · unit price · qty · remove, per line. */
+.minn-ei-lines { display: flex; flex-direction: column; gap: 7px; }
+.minn-ei-line { display: flex; gap: 8px; align-items: center; }
+.minn-ei-line > .minn-cell-clip { flex: 1; min-width: 0; }
+.minn-ei-unit { color: var(--text3); font-size: 12.5px; font-variant-numeric: tabular-nums; flex: none; }
+.minn-ei-qty { flex: 0 0 72px; }
+.minn-ei-line.removed > .minn-cell-clip, .minn-ei-line.removed .minn-ei-unit { text-decoration: line-through; opacity: 0.55; }
+.minn-ei-searching { padding: 8px 0 2px; font-size: 12.5px; }
+/* Order sub-dialogs (refund, sidebar card edits): a compact modal stacked
+   over either host, minnConfirm-style. */
+.minn-order-submodal .minn-modal { width: min(92vw, 560px); }
+.minn-order-submodal-body { padding: 4px 18px 16px; max-height: 65vh; overflow-y: auto; }
+/* The page: same sections, now cards on a main + 340px sidebar grid. */
+.minn-order-page .minn-order-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.minn-order-page .minn-order-main, .minn-order-page .minn-order-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.minn-order-page .minn-order-sec { background: var(--panel); border: 1px solid var(--border2); border-radius: 14px; }
+.minn-order-page .minn-order-notes-list { max-height: 420px; }
+@media (max-width: 1020px) {
+  .minn-order-page .minn-order-layout { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 720px) {
   .minn-order-grid { grid-template-columns: 1fr; }
   .minn-order-panel { border-inline-end: none; border-bottom: 1px solid var(--border); }

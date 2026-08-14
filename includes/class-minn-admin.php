@@ -1209,6 +1209,21 @@ class Minn_Admin {
 			'wc'       => class_exists( 'WooCommerce' ),
 			// WooCommerce Subscriptions extension (wc/v3/subscriptions REST).
 			'wcs'      => class_exists( 'WooCommerce' ) && class_exists( 'WC_Subscriptions' ),
+			// Order status labels keyed by REST slug (WC stores them 'wc-'
+			// prefixed). WC owns this vocabulary, translations and all, and
+			// plugins register their own statuses into it — badges and the
+			// status picker read it instead of humanizing the slug.
+			'wcOrderStatuses' => function_exists( 'wc_get_order_statuses' )
+				? (object) array_combine(
+					array_map(
+						static function ( $slug ) {
+							return preg_replace( '/^wc-/', '', $slug );
+						},
+						array_keys( wc_get_order_statuses() )
+					),
+					array_values( wc_get_order_statuses() )
+				)
+				: (object) array(),
 			// WooCommerce low-stock threshold (Settings → Products → Inventory).
 			// Used by the Products "Low stock" filter fallback when Analytics
 			// lookup tables lag a fresh write.

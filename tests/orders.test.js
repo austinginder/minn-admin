@@ -192,7 +192,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				hasWcMail: !! document.querySelector( '[data-oc="wcemail"]' ),
 				hasPayCopy: !! document.querySelector( '#minn-o-copy-pay, #minn-o-copy-pay2' ),
 				hasWcEdit: /Edit in WooCommerce/.test( text ),
-				hasBilling: !! document.querySelector( '#minn-ob-email' ),
+				// Billing edits live behind the Customer card's pencil dialog now.
+				hasBilling: !! document.querySelector( '.minn-order-customer [data-oedit="customer"]' ),
 			};
 		} );
 		t.check( 'order row opens the full order page',
