@@ -140,7 +140,7 @@ add_action( 'rest_api_init', function () {
 				(int) $request['id']
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Event not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Event not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			return rest_ensure_response( array(
 				'id'         => (int) $row->id,

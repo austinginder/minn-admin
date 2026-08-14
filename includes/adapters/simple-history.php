@@ -76,8 +76,8 @@ function minn_admin_simple_history_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'History table not found' ) ),
-			'actions' => array( array( 'label' => 'Open Simple History ↗', 'href' => minn_admin_simple_history_admin_url() ) ),
+			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'History table not found', 'minn-admin' ) ) ),
+			'actions' => array( array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ) ),
 		);
 	}
 	// Count only what this caller is allowed to read, exactly as their own
@@ -88,8 +88,8 @@ function minn_admin_simple_history_status_model() {
 	$scope = minn_admin_simple_history_logger_scope();
 	if ( null === $scope ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'Cannot determine which loggers you may read' ) ),
-			'actions' => array( array( 'label' => 'Open Simple History ↗', 'href' => minn_admin_simple_history_admin_url() ) ),
+			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Cannot determine which loggers you may read', 'minn-admin' ) ) ),
+			'actions' => array( array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ) ),
 		);
 	}
 	$readable = " AND logger IN {$scope}";
@@ -136,25 +136,25 @@ function minn_admin_simple_history_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Events (24h)',
+				'label' => __( 'Events (24h)', 'minn-admin' ),
 				'value' => number_format_i18n( $day ),
 				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
 			),
 			array(
-				'label' => 'Events all-time',
+				'label' => __( 'Events all-time', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
 			),
 			array(
-				'label' => 'Last event',
+				'label' => __( 'Last event', 'minn-admin' ),
 				'value' => $last_label,
 			),
 			array(
-				'label' => 'Severity (7d)',
+				'label' => __( 'Severity (7d)', 'minn-admin' ),
 				'value' => $mix ? implode( ' · ', $mix ) : 'No errors or warnings',
 			),
 		),
 		'actions' => array(
-			array( 'label' => 'Open Simple History ↗', 'href' => minn_admin_simple_history_admin_url() ),
+			array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ),
 		),
 	);
 }
@@ -165,7 +165,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['simple-history'] = array(
-		'label'      => 'Activity Log',
+		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Simple History',
 		'icon'       => 'clock',

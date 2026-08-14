@@ -47,8 +47,8 @@ function minn_admin_wsal_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'Log table not found' ) ),
-			'actions' => array( array( 'label' => 'Open WP Activity Log ↗', 'href' => minn_admin_wsal_admin_url() ) ),
+			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
+			'actions' => array( array( 'label' => __( 'Open WP Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_wsal_admin_url() ) ),
 		);
 	}
 	$now     = time();
@@ -80,25 +80,25 @@ function minn_admin_wsal_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Events (24h)',
+				'label' => __( 'Events (24h)', 'minn-admin' ),
 				'value' => number_format_i18n( $day ),
 				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
 			),
 			array(
-				'label' => 'Events all-time',
+				'label' => __( 'Events all-time', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
 			),
 			array(
-				'label' => 'Last event',
+				'label' => __( 'Last event', 'minn-admin' ),
 				'value' => $last_label,
 			),
 			array(
-				'label' => 'High + critical (7d)',
+				'label' => __( 'High + critical (7d)', 'minn-admin' ),
 				'value' => number_format_i18n( $hot ),
 			),
 		),
 		'actions' => array(
-			array( 'label' => 'Open WP Activity Log ↗', 'href' => minn_admin_wsal_admin_url() ),
+			array( 'label' => __( 'Open WP Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_wsal_admin_url() ),
 		),
 	);
 }
@@ -112,7 +112,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['wp-activity-log'] = array(
-		'label'      => 'Activity Log',
+		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'WP Activity Log',
 		'icon'       => 'clock',
@@ -249,7 +249,7 @@ add_action( 'rest_api_init', function () {
 				get_current_blog_id()
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Event not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Event not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$pairs = $wpdb->get_results( $wpdb->prepare(
 				"SELECT name, value FROM {$meta} WHERE occurrence_id = %d ORDER BY name", (int) $request['id']

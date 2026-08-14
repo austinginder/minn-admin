@@ -31,7 +31,7 @@
  *                   'state'   => 'valid', // valid|expired|invalid|missing|unknown
  *                   'key'     => true,    // a license key/secret is stored
  *                   'expires' => '2027-01-01', // or 'lifetime' or ''
- *                   'note'    => 'Optional one-line detail',
+ *                   'note'    => __( 'Optional one-line detail', 'minn-admin' ),
  *               ) );
  *           },
  *       );
@@ -576,7 +576,7 @@ function minn_admin_acp_container() {
  */
 function minn_admin_smash_classify( $remote ) {
 	if ( ! $remote ) {
-		return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach smashballoon.com' );
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach smashballoon.com', 'minn-admin' ) );
 	}
 	$word  = isset( $remote['license'] ) ? strtolower( (string) $remote['license'] ) : '';
 	$error = isset( $remote['error'] ) ? strtolower( (string) $remote['error'] ) : '';
@@ -591,7 +591,7 @@ function minn_admin_smash_classify( $remote ) {
 		return array( 'ok' => false, 'code' => 'site_limit', 'message' => $msg );
 	}
 	if ( 'expired' === $word || 'expired' === $error ) {
-		return array( 'ok' => false, 'code' => 'expired', 'message' => 'This Smash Balloon license has expired' );
+		return array( 'ok' => false, 'code' => 'expired', 'message' => __( 'This Smash Balloon license has expired', 'minn-admin' ) );
 	}
 	$msg = isset( $remote['errorMsg'] ) ? wp_strip_all_tags( (string) $remote['errorMsg'] ) : '';
 	if ( ! $msg && $error ) {
@@ -771,7 +771,7 @@ function minn_admin_bsf_message_code( $message ) {
 function minn_admin_bsf_activate( $product_id, $secret ) {
 	$mgr = minn_admin_bsf_manager();
 	if ( ! $mgr ) {
-		return array( 'ok' => false, 'code' => 'error', 'message' => 'Brainstorm Force licensing is not loaded on this site.' );
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Brainstorm Force licensing is not loaded on this site.', 'minn-admin' ) );
 	}
 	minn_admin_bsf_sync();
 	$before = minn_admin_bsf_raw_row( $product_id );
@@ -806,7 +806,7 @@ function minn_admin_bsf_activate( $product_id, $secret ) {
 function minn_admin_bsf_deactivate( $product_id ) {
 	$mgr = minn_admin_bsf_manager();
 	if ( ! $mgr ) {
-		return array( 'ok' => false, 'code' => 'error', 'message' => 'Brainstorm Force licensing is not loaded on this site.' );
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Brainstorm Force licensing is not loaded on this site.', 'minn-admin' ) );
 	}
 	$res = $mgr->process_license_deactivation( $product_id );
 	$ok  = is_array( $res ) && ! empty( $res['success'] ) && 'false' !== $res['success'];
@@ -830,17 +830,17 @@ function minn_admin_bsf_deactivate( $product_id ) {
 function minn_admin_bsf_verify( $product_id ) {
 	$mgr = minn_admin_bsf_manager();
 	if ( ! $mgr ) {
-		return array( 'ok' => false, 'code' => 'error', 'message' => 'Brainstorm Force licensing is not loaded on this site.' );
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Brainstorm Force licensing is not loaded on this site.', 'minn-admin' ) );
 	}
 	$row = minn_admin_bsf_raw_row( $product_id );
 	$key = is_array( $row ) && ! empty( $row['row']['purchase_key'] ) ? (string) $row['row']['purchase_key'] : '';
 	if ( '' === $key ) {
-		return array( 'ok' => false, 'code' => 'error', 'message' => 'No license key is stored for this product.' );
+		return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No license key is stored for this product.', 'minn-admin' ) );
 	}
 	delete_transient( $product_id . '_license_status' );
 	$ok = (bool) $mgr->get_remote_license_status( $key, $product_id );
 	if ( $ok ) {
-		return array( 'ok' => true, 'code' => '', 'message' => 'Brainstorm Force confirmed this license is active.' );
+		return array( 'ok' => true, 'code' => '', 'message' => __( 'Brainstorm Force confirmed this license is active.', 'minn-admin' ) );
 	}
 	// Their status call answers a bare boolean, but it stores the expiry
 	// alongside it — an elapsed date is the difference between a lapsed
@@ -848,9 +848,9 @@ function minn_admin_bsf_verify( $product_id ) {
 	$after   = minn_admin_bsf_raw_row( $product_id );
 	$expires = minn_admin_license_expiry( is_array( $after ) ? ( $after['row']['expires'] ?? '' ) : '' );
 	if ( minn_admin_license_expired( $expires ) ) {
-		return array( 'ok' => false, 'code' => 'expired', 'message' => 'This license expired on ' . $expires . '.' );
+		return array( 'ok' => false, 'code' => 'expired', 'message' => __( 'This license expired on ', 'minn-admin' ) . $expires . '.' );
 	}
-	return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Brainstorm Force reports this license is not active on this site.' );
+	return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Brainstorm Force reports this license is not active on this site.', 'minn-admin' ) );
 }
 
 function minn_admin_license_fingerprints() {
@@ -1010,7 +1010,7 @@ function minn_admin_license_default_providers() {
 				$data = $read_data( '_elementor_pro_license_v2_data_fallback' );
 			}
 			if ( ! $data ) {
-				return array( $item( array( 'name' => 'Elementor Pro', 'key' => true, 'note' => 'Key stored; Elementor has not recorded a status yet' ) ) );
+				return array( $item( array( 'name' => 'Elementor Pro', 'key' => true, 'note' => __( 'Key stored; Elementor has not recorded a status yet', 'minn-admin' ) ) ) );
 			}
 			$v       = $data['value'];
 			// Elementor stamps timeout with current_time() (site-local).
@@ -1421,7 +1421,7 @@ function minn_admin_license_default_providers() {
 		'read'      => function () use ( $item ) {
 			$key = ( defined( 'WPMUDEV_APIKEY' ) && WPMUDEV_APIKEY ) ? WPMUDEV_APIKEY : get_site_option( 'wpmudev_apikey' );
 			if ( ! $key ) {
-				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'missing', 'note' => 'licensed through the WPMU DEV Dashboard key' ) ) );
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'missing', 'note' => __( 'licensed through the WPMU DEV Dashboard key', 'minn-admin' ) ) ) );
 			}
 			$auth = get_site_option( 'wp_smush_api_auth' );
 			$rec  = ( is_array( $auth ) && isset( $auth[ $key ] ) && is_array( $auth[ $key ] ) ) ? $auth[ $key ] : null;
@@ -1435,15 +1435,15 @@ function minn_admin_license_default_providers() {
 			// membership does not, so that stays unconfirmed.
 			$m = minn_admin_wpmudev_membership();
 			if ( in_array( $m['type'], array( 'full', 'unit', 'single' ), true ) ) {
-				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'valid', 'key' => true, 'note' => 'covered by the WPMU DEV membership' ) ) );
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'valid', 'key' => true, 'note' => __( 'covered by the WPMU DEV membership', 'minn-admin' ) ) ) );
 			}
 			if ( 'expired' === $m['state'] ) {
-				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'expired', 'key' => true, 'note' => 'the WPMU DEV membership has expired' ) ) );
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'expired', 'key' => true, 'note' => __( 'the WPMU DEV membership has expired', 'minn-admin' ) ) ) );
 			}
 			if ( 'invalid' === $m['state'] ) {
-				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'invalid', 'key' => true, 'note' => 'the WPMU DEV membership is paused' ) ) );
+				return array( $item( array( 'name' => 'Smush Pro', 'state' => 'invalid', 'key' => true, 'note' => __( 'the WPMU DEV membership is paused', 'minn-admin' ) ) ) );
 			}
-			return array( $item( array( 'name' => 'Smush Pro', 'state' => 'unknown', 'key' => true, 'note' => 'Dashboard key present; Smush has not validated it yet' ) ) );
+			return array( $item( array( 'name' => 'Smush Pro', 'state' => 'unknown', 'key' => true, 'note' => __( 'Dashboard key present; Smush has not validated it yet', 'minn-admin' ) ) ) );
 		},
 	);
 
@@ -1491,7 +1491,7 @@ function minn_admin_license_default_providers() {
 			global $wpdb;
 			$table = $wpdb->prefix . 'search_filter_options';
 			if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
-				return array( $item( array( 'name' => 'Search & Filter Pro', 'state' => 'missing', 'note' => 'no license store yet; the plugin has not run' ) ) );
+				return array( $item( array( 'name' => 'Search & Filter Pro', 'state' => 'missing', 'note' => __( 'no license store yet; the plugin has not run', 'minn-admin' ) ) ) );
 			}
 			$raw = $wpdb->get_var( $wpdb->prepare( "SELECT value FROM {$table} WHERE name = %s", 'license-data' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-scoped table name.
 			$lic = $raw ? json_decode( $raw, true ) : null;
@@ -1589,7 +1589,7 @@ function minn_admin_license_default_providers() {
 				$predefined = $predefined || ( defined( 'WPCOM_API_KEY' ) && WPCOM_API_KEY );
 			}
 			if ( '' === $key ) {
-				return array( $item( array( 'name' => 'Akismet', 'state' => 'missing', 'note' => 'service key (free tier exists)' ) ) );
+				return array( $item( array( 'name' => 'Akismet', 'state' => 'missing', 'note' => __( 'service key (free tier exists)', 'minn-admin' ) ) ) );
 			}
 			$alert = (int) get_option( 'akismet_alert_code', 0 );
 			$state = $alert > 0 ? 'invalid' : 'valid';
@@ -1634,7 +1634,7 @@ function minn_admin_license_default_providers() {
 			$data = is_array( $data ) ? $data : array();
 			$auth = isset( $data['auth'] ) && is_array( $data['auth'] ) ? $data['auth'] : array();
 			if ( empty( $auth['access_token'] ) ) {
-				return array( $item( array( 'name' => 'WooCommerce.com', 'state' => 'missing', 'note' => 'not connected; official extension subscriptions and updates ride this link' ) ) );
+				return array( $item( array( 'name' => 'WooCommerce.com', 'state' => 'missing', 'note' => __( 'not connected; official extension subscriptions and updates ride this link', 'minn-admin' ) ) ) );
 			}
 			$email = isset( $data['auth_user_data']['email'] ) ? (string) $data['auth_user_data']['email'] : '';
 			$subs  = get_transient( '_woocommerce_helper_subscriptions' );
@@ -1668,14 +1668,14 @@ function minn_admin_license_default_providers() {
 				return array( $item( array(
 					'name'  => 'SureCart',
 					'state' => 'missing',
-					'note'  => 'store not connected; orders, customers and products all live in SureCart',
+					'note'  => __( 'store not connected; orders, customers and products all live in SureCart', 'minn-admin' ),
 				) ) );
 			}
 			return array( $item( array(
 				'name'  => 'SureCart',
 				'state' => 'valid',
 				'key'   => true,
-				'note'  => 'store connected',
+				'note'  => __( 'store connected', 'minn-admin' ),
 			) ) );
 		},
 	);
@@ -1696,12 +1696,12 @@ function minn_admin_license_default_providers() {
 		'read'         => function () use ( $item ) {
 			$creds = get_option( 'googlesitekit_credentials' );
 			if ( empty( $creds ) ) {
-				return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'missing', 'note' => 'not set up; connect on the Site Kit screen' ) ) );
+				return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'missing', 'note' => __( 'not set up; connect on the Site Kit screen', 'minn-admin' ) ) ) );
 			}
 			if ( ! get_option( 'googlesitekit_has_connected_admins' ) ) {
-				return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'unknown', 'key' => true, 'note' => 'site credentials stored; no admin has finished connecting a Google account' ) ) );
+				return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'unknown', 'key' => true, 'note' => __( 'site credentials stored; no admin has finished connecting a Google account', 'minn-admin' ) ) ) );
 			}
-			return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'valid', 'key' => true, 'note' => 'Google account connected' ) ) );
+			return array( $item( array( 'name' => 'Site Kit by Google', 'state' => 'valid', 'key' => true, 'note' => __( 'Google account connected', 'minn-admin' ) ) ) );
 		},
 	);
 
@@ -1724,7 +1724,7 @@ function minn_admin_license_default_providers() {
 			$private = get_option( 'jetpack_private_options' );
 			$private = is_array( $private ) ? $private : array();
 			if ( empty( $private['blog_token'] ) || empty( $opts['id'] ) ) {
-				return array( $item( array( 'name' => 'Jetpack', 'state' => 'missing', 'note' => 'not connected to WordPress.com' ) ) );
+				return array( $item( array( 'name' => 'Jetpack', 'state' => 'missing', 'note' => __( 'not connected to WordPress.com', 'minn-admin' ) ) ) );
 			}
 			$note = 'connected to WordPress.com (site ID ' . (int) $opts['id'] . ')';
 			if ( ! empty( $opts['master_user'] ) ) {
@@ -1765,7 +1765,7 @@ function minn_admin_license_default_providers() {
 			$details     = $get( 'acp_subscription_details' );
 			$details_key = (string) $get( 'acp_subscription_details_key' );
 			if ( ! is_array( $details ) || $details_key !== $token || empty( $details['status'] ) ) {
-				return array( $item( array( 'name' => 'Admin Columns Pro', 'state' => 'unknown', 'key' => true, 'stale' => true, 'note' => 'key stored; no subscription details recorded yet' ) ) );
+				return array( $item( array( 'name' => 'Admin Columns Pro', 'state' => 'unknown', 'key' => true, 'stale' => true, 'note' => __( 'key stored; no subscription details recorded yet', 'minn-admin' ) ) ) );
 			}
 			$status  = strtolower( (string) $details['status'] );
 			$ts      = isset( $details['expiry_date'] ) ? $details['expiry_date'] : null;
@@ -1808,7 +1808,7 @@ function minn_admin_license_default_providers() {
 			$ver  = defined( 'GRAVITY_PERKS_VERSION' ) ? GRAVITY_PERKS_VERSION : ( isset( $plugins['gravityperks/gravityperks.php']['Version'] ) ? $plugins['gravityperks/gravityperks.php']['Version'] : '' );
 			$data = $ver ? get_site_transient( 'gwp_license_data_' . $ver ) : false;
 			if ( ! is_array( $data ) || ! isset( $data['valid'] ) ) {
-				return array( $item( array( 'name' => 'Gravity Perks', 'state' => 'unknown', 'key' => true, 'stale' => true, 'note' => 'Gravity Perks re-checks every 12 hours; no cached status' ) ) );
+				return array( $item( array( 'name' => 'Gravity Perks', 'state' => 'unknown', 'key' => true, 'stale' => true, 'note' => __( 'Gravity Perks re-checks every 12 hours; no cached status', 'minn-admin' ) ) ) );
 			}
 			$expires = minn_admin_license_expiry( isset( $data['expires'] ) ? $data['expires'] : '' );
 			if ( ! empty( $data['valid'] ) ) {
@@ -1836,10 +1836,10 @@ function minn_admin_license_default_providers() {
 		'read'      => function () use ( $item ) {
 			$d = get_option( 'rank_math_connect_data' );
 			if ( ! is_array( $d ) || empty( $d['api_key'] ) || empty( $d['username'] ) ) {
-				return array( $item( array( 'name' => 'Rank Math SEO PRO', 'state' => 'missing', 'note' => 'connects through a rankmath.com account' ) ) );
+				return array( $item( array( 'name' => 'Rank Math SEO PRO', 'state' => 'missing', 'note' => __( 'connects through a rankmath.com account', 'minn-admin' ) ) ) );
 			}
 			$plan = ! empty( $d['plan'] ) ? (string) $d['plan'] : 'pro';
-			return array( $item( array( 'name' => 'Rank Math SEO PRO', 'state' => 'valid', 'key' => true, 'note' => 'connected; plan: ' . $plan ) ) );
+			return array( $item( array( 'name' => 'Rank Math SEO PRO', 'state' => 'valid', 'key' => true, 'note' => __( 'connected; plan: ', 'minn-admin' ) . $plan ) ) );
 		},
 	);
 
@@ -1859,7 +1859,7 @@ function minn_admin_license_default_providers() {
 				return array( $item( array(
 					'name'  => 'Yoast SEO Premium',
 					'state' => 'missing',
-					'note'  => 'requires free Yoast SEO (wordpress-seo)',
+					'note'  => __( 'requires free Yoast SEO (wordpress-seo)', 'minn-admin' ),
 				) ) );
 			}
 			if ( ! class_exists( 'WPSEO_Addon_Manager' ) ) {
@@ -1867,7 +1867,7 @@ function minn_admin_license_default_providers() {
 				return array( $item( array(
 					'name'  => 'Yoast SEO Premium',
 					'state' => 'unknown',
-					'note'  => 'activate free Yoast SEO to read MyYoast subscription state',
+					'note'  => __( 'activate free Yoast SEO to read MyYoast subscription state', 'minn-admin' ),
 				) ) );
 			}
 			try {
@@ -1878,7 +1878,7 @@ function minn_admin_license_default_providers() {
 					return array( $item( array(
 						'name'  => 'Yoast SEO Premium',
 						'state' => 'missing',
-						'note'  => 'activate the subscription on MyYoast',
+						'note'  => __( 'activate the subscription on MyYoast', 'minn-admin' ),
 					) ) );
 				}
 				// map_subscription() stores expiry as expiry_date (from API expiryDate).
@@ -1892,7 +1892,7 @@ function minn_admin_license_default_providers() {
 						'state'   => 'valid',
 						'key'     => true,
 						'expires' => $expires,
-						'note'    => 'MyYoast subscription',
+						'note'    => __( 'MyYoast subscription', 'minn-admin' ),
 					) ) );
 				}
 				$state = minn_admin_license_expired( $expires ) ? 'expired' : 'invalid';
@@ -1901,13 +1901,13 @@ function minn_admin_license_default_providers() {
 					'state'   => $state,
 					'key'     => true,
 					'expires' => $expires,
-					'note'    => 'MyYoast subscription inactive or expired',
+					'note'    => __( 'MyYoast subscription inactive or expired', 'minn-admin' ),
 				) ) );
 			} catch ( \Throwable $e ) {
 				return array( $item( array(
 					'name'  => 'Yoast SEO Premium',
 					'state' => 'unknown',
-					'note'  => 'could not read MyYoast subscription state',
+					'note'  => __( 'could not read MyYoast subscription state', 'minn-admin' ),
 				) ) );
 			}
 		},
@@ -2059,7 +2059,7 @@ function minn_admin_license_default_providers() {
 			$items = ( ! empty( $o['items'] ) && is_array( $o['items'] ) ) ? $o['items'] : array();
 			$rows  = array();
 			if ( empty( $o['token'] ) && ! $items ) {
-				return array( $item( array( 'name' => 'Envato Market', 'state' => 'missing', 'note' => 'no account token or item tokens stored' ) ) );
+				return array( $item( array( 'name' => 'Envato Market', 'state' => 'missing', 'note' => __( 'no account token or item tokens stored', 'minn-admin' ) ) ) );
 			}
 			if ( ! empty( $o['token'] ) ) {
 				$counts = array();
@@ -2078,7 +2078,7 @@ function minn_admin_license_default_providers() {
 				}
 				$auth  = isset( $it['authorized'] ) ? (string) $it['authorized'] : '';
 				$state = 'success' === $auth ? 'valid' : ( 'failed' === $auth ? 'invalid' : 'unknown' );
-				$rows[] = $item( array( 'name' => (string) $it['name'], 'kind' => ( isset( $it['type'] ) && 'theme' === $it['type'] ) ? 'theme' : 'plugin', 'state' => $state, 'key' => ! empty( $it['token'] ), 'note' => 'Envato single-item token' ) );
+				$rows[] = $item( array( 'name' => (string) $it['name'], 'kind' => ( isset( $it['type'] ) && 'theme' === $it['type'] ) ? 'theme' : 'plugin', 'state' => $state, 'key' => ! empty( $it['token'] ), 'note' => __( 'Envato single-item token', 'minn-admin' ) ) );
 			}
 			return $rows;
 		},
@@ -2101,7 +2101,7 @@ function minn_admin_license_default_providers() {
 				return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'missing' ) ) );
 			}
 			if ( true === ( isset( $a['is_valid'] ) ? $a['is_valid'] : false ) ) {
-				return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'valid', 'key' => true, 'note' => 'covers the bundled Avada plugins' ) ) );
+				return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'valid', 'key' => true, 'note' => __( 'covers the bundled Avada plugins', 'minn-admin' ) ) ) );
 			}
 			$err = ! empty( $a['errors'] ) ? wp_strip_all_tags( (string) $a['errors'] ) : '';
 			return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'invalid', 'key' => true, 'note' => $err ? substr( $err, 0, 120 ) : '' ) ) );
@@ -2329,38 +2329,38 @@ function minn_admin_license_default_providers() {
 		$providers['revslider']['activate']     = function ( $secret ) use ( $revslider_license ) {
 			$lic = $revslider_license();
 			if ( ! $lic ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Slider Revolution\'s license class could not be loaded.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Slider Revolution\'s license class could not be loaded.', 'minn-admin' ) );
 			}
 			$res = $lic->activate_plugin( trim( (string) $secret ) );
 			if ( true === $res ) {
 				return array( 'ok' => true, 'code' => '', 'message' => '' );
 			}
 			if ( 'exist' === $res ) {
-				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'This purchase code is already registered to another site. Deregister it there (or in your ThemePunch account) first.' );
+				return array( 'ok' => false, 'code' => 'site_limit', 'message' => __( 'This purchase code is already registered to another site. Deregister it there (or in your ThemePunch account) first.', 'minn-admin' ) );
 			}
 			if ( 'banned' === $res ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'ThemePunch reports this purchase code as banned.' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'ThemePunch reports this purchase code as banned.', 'minn-admin' ) );
 			}
-			return array( 'ok' => false, 'code' => 'invalid', 'message' => 'ThemePunch did not accept this purchase code.' );
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'ThemePunch did not accept this purchase code.', 'minn-admin' ) );
 		};
 		$providers['revslider']['deactivate']   = function () use ( $revslider_license ) {
 			$lic = $revslider_license();
 			if ( ! $lic ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Slider Revolution\'s license class could not be loaded.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Slider Revolution\'s license class could not be loaded.', 'minn-admin' ) );
 			}
 			// Their own deregistration flow: frees the seat server-side.
 			return (bool) $lic->deactivate_plugin()
-				? array( 'ok' => true, 'code' => '', 'message' => 'The purchase code was deregistered with ThemePunch and the seat freed.' )
-				: array( 'ok' => false, 'code' => 'error', 'message' => 'ThemePunch did not confirm the deregistration.' );
+				? array( 'ok' => true, 'code' => '', 'message' => __( 'The purchase code was deregistered with ThemePunch and the seat freed.', 'minn-admin' ) )
+				: array( 'ok' => false, 'code' => 'error', 'message' => __( 'ThemePunch did not confirm the deregistration.', 'minn-admin' ) );
 		};
 		$providers['revslider']['verify']       = function () use ( $revslider_license ) {
 			$code = trim( (string) get_option( 'revslider-code', '' ) );
 			if ( '' === $code ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'No purchase code is stored.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No purchase code is stored.', 'minn-admin' ) );
 			}
 			$lic = $revslider_license();
 			if ( ! $lic ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Slider Revolution\'s license class could not be loaded.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Slider Revolution\'s license class could not be loaded.', 'minn-admin' ) );
 			}
 			// Re-activating the stored code is their own revalidation path;
 			// 'exist' here means the registration moved to another site.
@@ -2387,7 +2387,7 @@ function minn_admin_license_default_providers() {
 		};
 		$tec_classify = function ( $res ) {
 			if ( ! is_array( $res ) || empty( $res ) ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'The key validation service did not answer.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key validation service did not answer.', 'minn-admin' ) );
 			}
 			$msg = isset( $res['message'] ) ? trim( wp_strip_all_tags( (string) $res['message'] ) ) : '';
 			if ( ! empty( $res['status'] ) ) {
@@ -2458,7 +2458,7 @@ function minn_admin_license_default_providers() {
 				$checker = $tec_checker( $tp );
 				$key     = (string) $checker->get_key();
 				if ( '' === $key ) {
-					return array( 'ok' => false, 'code' => 'error', 'message' => 'No key is stored for this product.' );
+					return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No key is stored for this product.', 'minn-admin' ) );
 				}
 				return $tec_classify( $checker->validate_key( $key ) );
 			};
@@ -2494,7 +2494,7 @@ function minn_admin_license_default_providers() {
 		};
 		$kbp_classify = function ( $res ) {
 			if ( ! $res ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'The Kadence licensing service did not answer.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The Kadence licensing service did not answer.', 'minn-admin' ) );
 			}
 			if ( $res->is_valid() ) {
 				return array( 'ok' => true, 'code' => '', 'message' => '' );
@@ -2691,14 +2691,14 @@ function minn_admin_license_default_providers() {
 				return array( 'ok' => true );
 			}
 			if ( 'error_remote' === $status ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'The Bricks license server is temporarily unavailable' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The Bricks license server is temporarily unavailable', 'minn-admin' ) );
 			}
 			return array( 'ok' => false, 'code' => 'invalid', 'message' => $status ? 'Bricks returned status: ' . $status : 'Bricks did not recognize that key' );
 		};
 		$providers['bricks']['verify'] = function () {
 			$key = get_option( 'bricks_license_key' );
 			if ( ! $key ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			delete_transient( 'bricks_license_status' );
 			\Bricks\License::$license_key = $key;
@@ -2743,8 +2743,8 @@ function minn_admin_license_default_providers() {
 			return array( 'ok' => false, 'code' => $code, 'message' => isset( $msgs[ $status ] ) ? $msgs[ $status ] : str_replace( '_', ' ', $status ) );
 		};
 		$providers['divi']['secret_fields'] = array(
-			array( 'id' => 'username', 'label' => 'Elegant Themes username' ),
-			array( 'id' => 'api_key', 'label' => 'API key' ),
+			array( 'id' => 'username', 'label' => __( 'Elegant Themes username', 'minn-admin' ) ),
+			array( 'id' => 'api_key', 'label' => __( 'API key', 'minn-admin' ) ),
 		);
 		$providers['divi']['activate'] = function ( $secrets ) use ( $divi_check ) {
 			// Their checker reads the option, so it must be written before
@@ -2774,7 +2774,7 @@ function minn_admin_license_default_providers() {
 			update_site_option( 'et_automatic_updates_options', array() );
 			delete_site_option( 'et_account_status' );
 			delete_site_transient( 'et_update_themes' );
-			return array( 'ok' => true, 'message' => 'Credentials removed; Elegant Themes has no per-site seats to release' );
+			return array( 'ok' => true, 'message' => __( 'Credentials removed; Elegant Themes has no per-site seats to release', 'minn-admin' ) );
 		};
 	}
 
@@ -2801,7 +2801,7 @@ function minn_admin_license_default_providers() {
 			if ( get_option( 'rg_gforms_key' ) !== md5( trim( $secret ) ) ) {
 				// Their own revert fired: the key was rejected outright.
 				GFCommon::get_version_info( false );
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Gravity Forms did not accept that key' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Gravity Forms did not accept that key', 'minn-admin' ) );
 			}
 			$res = $gf_status();
 			if ( empty( $res['ok'] ) ) {
@@ -2821,7 +2821,7 @@ function minn_admin_license_default_providers() {
 		$providers['gravityforms']['deactivate'] = function () {
 			GFFormsModel::save_key( '' ); // unlinks the site with Gravity's server
 			GFCommon::get_version_info( false );
-			return array( 'ok' => true, 'message' => 'Site unlinked from the license' );
+			return array( 'ok' => true, 'message' => __( 'Site unlinked from the license', 'minn-admin' ) );
 		};
 		$providers['gravityforms']['verify'] = $gf_status;
 	}
@@ -2866,7 +2866,7 @@ function minn_admin_license_default_providers() {
 			$cfg = json_decode( (string) get_option( 'gravitysmtp_config' ), true );
 			$key = is_array( $cfg ) && isset( $cfg['license_key'] ) ? (string) $cfg['license_key'] : '';
 			if ( '' === $key ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			return $smtp_check( $key );
 		};
@@ -2884,10 +2884,10 @@ function minn_admin_license_default_providers() {
 			$res = WPMUDEV_Dashboard::$api->hub_sync( false, true );
 			if ( false === $res ) {
 				WPMUDEV_Dashboard::$api->set_key( '' ); // the rollback their own endpoint does
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach the WPMU DEV Hub' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach the WPMU DEV Hub', 'minn-admin' ) );
 			}
 			if ( empty( $res['membership'] ) ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'The Hub did not recognize that API key' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'The Hub did not recognize that API key', 'minn-admin' ) );
 			}
 			return array( 'ok' => true );
 		};
@@ -2897,7 +2897,7 @@ function minn_admin_license_default_providers() {
 		};
 		$providers['wpmudev']['verify'] = function () {
 			if ( ! WPMUDEV_Dashboard::$api->has_key() ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			$res = WPMUDEV_Dashboard::$api->hub_sync( false, true );
 			$ok  = is_array( $res ) && ! empty( $res['membership'] );
@@ -2923,7 +2923,7 @@ function minn_admin_license_default_providers() {
 			$lic = get_option( 'searchwp_license' );
 			$key = ( is_array( $lic ) && ! empty( $lic['key'] ) ) ? (string) $lic['key'] : '';
 			if ( '' === $key ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			$res = \SearchWP\License::deactivate( $key );
 			$ok  = is_array( $res ) && ! empty( $res['success'] );
@@ -2967,11 +2967,11 @@ function minn_admin_license_default_providers() {
 		};
 		$providers['wpforms']['deactivate'] = function () use ( $wpf_license ) {
 			if ( defined( 'WPFORMS_LICENSE_KEY' ) && WPFORMS_LICENSE_KEY ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'The key is defined in wp-config (WPFORMS_LICENSE_KEY); remove the constant to deactivate.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key is defined in wp-config (WPFORMS_LICENSE_KEY); remove the constant to deactivate.', 'minn-admin' ) );
 			}
 			$lic = $wpf_license();
 			if ( '' === $lic->get() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			$lic->deactivate_key( false );
 			if ( ! empty( $lic->errors ) ) {
@@ -2983,11 +2983,11 @@ function minn_admin_license_default_providers() {
 			$lic = $wpf_license();
 			$key = $lic->get();
 			if ( '' === $key ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			$status = $lic->validate_key( $key, false, false, true );
 			if ( false === $status ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach the WPForms license API' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach the WPForms license API', 'minn-admin' ) );
 			}
 			$ok   = in_array( $status, array( 'valid', 'flagged' ), true );
 			$code = $ok ? '' : ( 'expired' === $status ? 'expired' : ( 'limit_reached' === $status ? 'site_limit' : 'invalid' ) );
@@ -3016,14 +3016,14 @@ function minn_admin_license_default_providers() {
 		$providers['akismet']['secret_label'] = 'Akismet API key';
 		$providers['akismet']['activate']     = function ( $secret ) use ( $akismet_admin ) {
 			if ( Akismet::predefined_api_key() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'The key is supplied in code (WPCOM_API_KEY or a filter); it cannot be changed here.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key is supplied in code (WPCOM_API_KEY or a filter); it cannot be changed here.', 'minn-admin' ) );
 			}
 			$key = preg_replace( '/[^a-f0-9]/i', '', (string) $secret );
 			if ( '' === $key ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'That does not look like an Akismet key (12 characters, letters a-f and digits).' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'That does not look like an Akismet key (12 characters, letters a-f and digits).', 'minn-admin' ) );
 			}
 			if ( ! $akismet_admin() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Akismet admin machinery unavailable.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Akismet admin machinery unavailable.', 'minn-admin' ) );
 			}
 			Akismet_Admin::save_key( $key );
 			if ( Akismet::get_api_key() === $key ) {
@@ -3031,20 +3031,20 @@ function minn_admin_license_default_providers() {
 			}
 			$v = Akismet::verify_key( $key );
 			if ( 'valid' === $v ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'The key is real but its Akismet plan is not active (missing, cancelled or suspended subscription).' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'The key is real but its Akismet plan is not active (missing, cancelled or suspended subscription).', 'minn-admin' ) );
 			}
 			if ( 'invalid' === $v ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Akismet did not recognize that key.' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Akismet did not recognize that key.', 'minn-admin' ) );
 			}
-			return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach the Akismet API. Please try again.' );
+			return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach the Akismet API. Please try again.', 'minn-admin' ) );
 		};
 		$providers['akismet']['deactivate'] = function () {
 			if ( Akismet::predefined_api_key() ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'The key is supplied in code (WPCOM_API_KEY or a filter); remove it there.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'The key is supplied in code (WPCOM_API_KEY or a filter); remove it there.', 'minn-admin' ) );
 			}
 			$key = (string) Akismet::get_api_key();
 			if ( '' === $key ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			try {
 				Akismet::deactivate_key( $key );
@@ -3052,21 +3052,21 @@ function minn_admin_license_default_providers() {
 			delete_option( 'wordpress_api_key' );
 			delete_option( 'akismet_alert_code' );
 			delete_option( 'akismet_alert_msg' );
-			return array( 'ok' => true, 'message' => 'Key removed from this site.' );
+			return array( 'ok' => true, 'message' => __( 'Key removed from this site.', 'minn-admin' ) );
 		};
 		$providers['akismet']['verify'] = function () {
 			$key = (string) Akismet::get_api_key();
 			if ( '' === $key ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			$v = Akismet::verify_key( $key );
 			if ( 'valid' === $v ) {
 				return array( 'ok' => true );
 			}
 			if ( 'invalid' === $v ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Akismet reports this key as invalid.' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Akismet reports this key as invalid.', 'minn-admin' ) );
 			}
-			return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach the Akismet API.' );
+			return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach the Akismet API.', 'minn-admin' ) );
 		};
 	}
 
@@ -3087,16 +3087,16 @@ function minn_admin_license_default_providers() {
 				return array( 'ok' => true, 'code' => '', 'message' => '' );
 			}
 			if ( 'no_activations_left' === $error ) {
-				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'This license has reached its activation limit. Free a seat on searchandfilter.com first.' );
+				return array( 'ok' => false, 'code' => 'site_limit', 'message' => __( 'This license has reached its activation limit. Free a seat on searchandfilter.com first.', 'minn-admin' ) );
 			}
 			if ( 'expired' === $status || 'expired' === $error ) {
-				return array( 'ok' => false, 'code' => 'expired', 'message' => 'This Search & Filter license has expired.' );
+				return array( 'ok' => false, 'code' => 'expired', 'message' => __( 'This Search & Filter license has expired.', 'minn-admin' ) );
 			}
 			if ( $msg ) {
 				return array( 'ok' => false, 'code' => 'error', 'message' => wp_strip_all_tags( $msg ) );
 			}
 			if ( in_array( $error, array( 'missing', 'key_mismatch', 'item_name_mismatch' ), true ) ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'searchandfilter.com does not recognize that key.' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'searchandfilter.com does not recognize that key.', 'minn-admin' ) );
 			}
 			return array( 'ok' => false, 'code' => 'invalid', 'message' => $error ? str_replace( '_', ' ', $error ) : 'searchandfilter.com did not accept that key.' );
 		};
@@ -3116,7 +3116,7 @@ function minn_admin_license_default_providers() {
 			$res  = \Search_Filter_Pro\License\Rest_API::disconnect();
 			$data = $res instanceof \WP_REST_Response ? $res->get_data() : array();
 			if ( is_array( $data ) && 'disconnected' === ( $data['status'] ?? '' ) ) {
-				return array( 'ok' => true, 'code' => '', 'message' => 'The license was disconnected and the seat freed.' );
+				return array( 'ok' => true, 'code' => '', 'message' => __( 'The license was disconnected and the seat freed.', 'minn-admin' ) );
 			}
 			$msg = is_array( $data ) && ! empty( $data['errorMessage'] ) ? (string) $data['errorMessage'] : 'Search & Filter could not disconnect the license.';
 			return array( 'ok' => false, 'code' => 'error', 'message' => wp_strip_all_tags( $msg ) );
@@ -3124,7 +3124,7 @@ function minn_admin_license_default_providers() {
 		$providers['search-filter-pro']['verify']       = function () use ( $sfp_classify ) {
 			$stored = \Search_Filter_Pro\Core\License_Server::get_license_data();
 			if ( empty( $stored['license'] ) ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'No license key is stored.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No license key is stored.', 'minn-admin' ) );
 			}
 			// Their own revalidation pass: re-checks the stored key against
 			// the license server and updates status + expiry in place.
@@ -3160,7 +3160,7 @@ function minn_admin_license_default_providers() {
 			try {
 				$license_key = new \ACP\Type\LicenseKey( trim( (string) $secret ) );
 			} catch ( \Throwable $e ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'That does not look like an Admin Columns key (they are long and contain a dash).' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'That does not look like an Admin Columns key (they are long and contain a dash).', 'minn-admin' ) );
 			}
 			$response = $acp->get( \ACP\ApiFactory::class )->create()->dispatch(
 				new \ACP\API\Request\Activate( $license_key, $acp->get( \ACP\Type\SiteUrl::class ) )
@@ -3176,7 +3176,7 @@ function minn_admin_license_default_providers() {
 			try {
 				$activation_key = new \ACP\Type\Activation\Key( (string) $response->get( 'activation_key' ) );
 			} catch ( \Throwable $e ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'admincolumns.com accepted the key but returned an invalid activation token.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'admincolumns.com accepted the key but returned an invalid activation token.', 'minn-admin' ) );
 			}
 			$acp->get( \ACP\Access\ActivationKeyStorage::class )->save( $activation_key );
 			$acp->get( \ACP\Access\ActivationUpdater::class )->update( $activation_key );
@@ -3195,7 +3195,7 @@ function minn_admin_license_default_providers() {
 			$acp->get( \ACP\Access\ActivationStorage::class )->delete();
 			$acp->get( \ACP\Access\PermissionCheckerFactory::class )->create()->apply();
 			if ( ! $token ) {
-				return array( 'ok' => true, 'code' => '', 'message' => 'No activation was stored; local license state cleared.' );
+				return array( 'ok' => true, 'code' => '', 'message' => __( 'No activation was stored; local license state cleared.', 'minn-admin' ) );
 			}
 			$response = $acp->get( \ACP\ApiFactory::class )->create()->dispatch(
 				new \ACP\API\Request\Deactivate( $token, $acp->get( \ACP\Type\SiteUrl::class ) )
@@ -3212,12 +3212,12 @@ function minn_admin_license_default_providers() {
 			$acp->get( \ACP\Updates\PluginDataUpdater::class )->update( $token );
 			wp_clean_plugins_cache();
 			wp_update_plugins();
-			return array( 'ok' => true, 'code' => '', 'message' => 'The license was deactivated and the seat freed.' );
+			return array( 'ok' => true, 'code' => '', 'message' => __( 'The license was deactivated and the seat freed.', 'minn-admin' ) );
 		};
 		$providers['admin-columns-pro']['verify']       = function () use ( $acp, $acp_classify_error ) {
 			$token = $acp->get( \ACP\ActivationTokenFactory::class )->create();
 			if ( ! $token ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'No license key is stored.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No license key is stored.', 'minn-admin' ) );
 			}
 			// Their own refresh: re-fetches subscription details and stores
 			// status + expiry (also self-cleans a revoked activation).
@@ -3255,9 +3255,9 @@ function minn_admin_license_default_providers() {
 			$gwp_save_key( $prev ); // restore — do not retain the rejected key
 			GWPerks::flush_license( true );
 			if ( is_array( $data ) && isset( $data['activations_left'] ) && 0 === (int) $data['activations_left'] ) {
-				return array( 'ok' => false, 'code' => 'site_limit', 'message' => 'That key has reached its site limit' );
+				return array( 'ok' => false, 'code' => 'site_limit', 'message' => __( 'That key has reached its site limit', 'minn-admin' ) );
 			}
-			return array( 'ok' => false, 'code' => 'invalid', 'message' => 'Gravity Wiz did not validate that key' );
+			return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'Gravity Wiz did not validate that key', 'minn-admin' ) );
 		};
 		$providers['gravityperks']['deactivate'] = function () use ( $gwp_save_key ) {
 			GravityPerks::get_api()->deactivate_license();
@@ -3357,7 +3357,7 @@ function minn_admin_license_default_providers() {
 		};
 		$providers['gp-premium']['verify'] = function () use ( $gpp_route ) {
 			if ( ! get_option( 'gen_premium_license_key' ) ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key stored' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key stored', 'minn-admin' ) );
 			}
 			return $gpp_route( '***' );
 		};
@@ -3396,7 +3396,7 @@ function minn_admin_license_default_providers() {
 		$providers['wp-all-export']['verify'] = function () use ( $pmxe_result ) {
 			$word = ( new \Wpae\App\Service\License\LicenseActivator() )->checkLicense( PMXE_Plugin::getEddName(), PMXE_Plugin::getInstance()->getOption(), \Wpae\App\Service\License\LicenseActivator::CONTEXT_PMXE );
 			if ( false === $word ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not reach wpallimport.com (or no key is stored)' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not reach wpallimport.com (or no key is stored)', 'minn-admin' ) );
 			}
 			PMXE_Plugin::getInstance()->updateOption( 'license_status', (string) $word );
 			return $pmxe_result( $word );
@@ -3410,7 +3410,7 @@ function minn_admin_license_default_providers() {
 			// button only flips local state on a 'deactivated' word the
 			// service never sends for these licenses).
 			PMXE_Plugin::getInstance()->updateOption( array( 'license' => '', 'license_status' => '' ) );
-			return array( 'ok' => true, 'code' => '', 'message' => 'The key was removed from this site. Soflyy licenses have no per-site seats to free.' );
+			return array( 'ok' => true, 'code' => '', 'message' => __( 'The key was removed from this site. Soflyy licenses have no per-site seats to free.', 'minn-admin' ) );
 		};
 	}
 
@@ -3457,7 +3457,7 @@ function minn_admin_license_default_providers() {
 			unset( $o['licenses']['PMXI_Plugin'] );
 			$o['statuses']['PMXI_Plugin'] = '';
 			PMXI_Plugin::getInstance()->updateOption( $o );
-			return array( 'ok' => true, 'code' => '', 'message' => 'The key was removed from this site. Soflyy licenses have no per-site seats to free.' );
+			return array( 'ok' => true, 'code' => '', 'message' => __( 'The key was removed from this site. Soflyy licenses have no per-site seats to free.', 'minn-admin' ) );
 		};
 		$providers['wp-all-import']['verify'] = function () use ( $pmxi_word ) {
 			// NOT their PMXI_Admin_License::check_license static: it sends
@@ -3467,7 +3467,7 @@ function minn_admin_license_default_providers() {
 			$o   = PMXI_Plugin::getInstance()->getOption();
 			$key = PMXI_Plugin::decode( isset( $o['licenses']['PMXI_Plugin'] ) ? (string) $o['licenses']['PMXI_Plugin'] : '' );
 			if ( '' === $key ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'No key is stored.' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'No key is stored.', 'minn-admin' ) );
 			}
 			$word = minn_admin_soflyy_edd( 'check_license', $key, PMXI_Plugin::getEddName(), isset( $o['info_api_url_new'] ) ? (string) $o['info_api_url_new'] : '' );
 			$out  = $pmxi_word( $word );
@@ -3501,7 +3501,7 @@ function minn_admin_license_default_providers() {
 		$providers['layerslider']['verify']       = function () use ( $ls_activate ) {
 			$code = get_option( 'layerslider-purchase-code', '' );
 			if ( '' === $code ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No license key stored' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No license key stored', 'minn-admin' ) );
 			}
 			return $ls_activate( $code );
 		};
@@ -3524,7 +3524,7 @@ function minn_admin_license_default_providers() {
 			$secret = trim( (string) $secret );
 			$item   = minn_admin_smash_item_name( $sp );
 			if ( '' === $secret || '' === $item ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Missing license key or product name' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Missing license key or product name', 'minn-admin' ) );
 			}
 			$snap = minn_admin_smash_read_store( $sp );
 			$remote = minn_admin_smash_edd( 'activate_license', $secret, $item );
@@ -3570,17 +3570,17 @@ function minn_admin_license_default_providers() {
 			$item  = minn_admin_smash_item_name( $sp );
 			if ( '' === $store['key'] || '' === $item ) {
 				minn_admin_smash_clear_store( $sp );
-				return array( 'ok' => true, 'message' => 'No active Smash Balloon license on this product' );
+				return array( 'ok' => true, 'message' => __( 'No active Smash Balloon license on this product', 'minn-admin' ) );
 			}
 			$remote = minn_admin_smash_edd( 'deactivate_license', $store['key'], $item );
 			minn_admin_smash_clear_store( $sp, $remote );
-			return array( 'ok' => true, 'message' => 'License deactivated for ' . $sp['name'] );
+			return array( 'ok' => true, 'message' => __( 'License deactivated for ', 'minn-admin' ) . $sp['name'] );
 		};
 		$providers[ $pid ]['verify'] = function () use ( $sp ) {
 			$store = minn_admin_smash_read_store( $sp );
 			$item  = minn_admin_smash_item_name( $sp );
 			if ( '' === $store['key'] || '' === $item ) {
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'No key is stored' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'No key is stored', 'minn-admin' ) );
 			}
 			$remote = minn_admin_smash_edd( 'check_license', $store['key'], $item );
 			$out    = minn_admin_smash_classify( $remote );
@@ -3640,15 +3640,15 @@ function minn_admin_license_default_providers() {
 					$mgr->get_myyoast_site_information();
 				}
 				if ( $mgr->has_valid_subscription( $slug ) ) {
-					return array( 'ok' => true, 'message' => 'MyYoast reports a valid Premium subscription' );
+					return array( 'ok' => true, 'message' => __( 'MyYoast reports a valid Premium subscription', 'minn-admin' ) );
 				}
 				$sub = $mgr->get_subscription( $slug );
 				if ( ! $sub ) {
-					return array( 'ok' => false, 'code' => 'missing', 'message' => 'No Premium subscription linked to this site on MyYoast' );
+					return array( 'ok' => false, 'code' => 'missing', 'message' => __( 'No Premium subscription linked to this site on MyYoast', 'minn-admin' ) );
 				}
-				return array( 'ok' => false, 'code' => 'invalid', 'message' => 'MyYoast reports the Premium subscription is inactive or expired' );
+				return array( 'ok' => false, 'code' => 'invalid', 'message' => __( 'MyYoast reports the Premium subscription is inactive or expired', 'minn-admin' ) );
 			} catch ( \Throwable $e ) {
-				return array( 'ok' => false, 'code' => 'error', 'message' => 'Could not refresh MyYoast subscription state' );
+				return array( 'ok' => false, 'code' => 'error', 'message' => __( 'Could not refresh MyYoast subscription state', 'minn-admin' ) );
 			}
 		};
 	}
@@ -3684,7 +3684,7 @@ function minn_admin_licenses_freemius( $fingerprints ) {
 				'kind'      => $fp['kind'],
 				'state'     => 'unknown',
 				'key'       => false,
-				'note'      => 'Freemius-powered; no account state recorded yet',
+				'note'      => __( 'Freemius-powered; no account state recorded yet', 'minn-admin' ),
 				'component' => $fp['component'],
 			);
 		}
@@ -3719,7 +3719,7 @@ function minn_admin_licenses_freemius( $fingerprints ) {
 			continue; // Free product: nothing to license.
 		}
 		if ( ! $license_id ) {
-			$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => 'missing', 'key' => false, 'note' => 'Premium install with no license attached', 'component' => $fp['component'] );
+			$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => 'missing', 'key' => false, 'note' => __( 'Premium install with no license attached', 'minn-admin' ), 'component' => $fp['component'] );
 			continue;
 		}
 		$module_id = (string) minn_admin_license_prop( $site, 'plugin_id', '' );
@@ -3731,7 +3731,7 @@ function minn_admin_licenses_freemius( $fingerprints ) {
 			}
 		}
 		if ( ! $license ) {
-			$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => 'unknown', 'key' => true, 'note' => 'License attached but not readable locally', 'component' => $fp['component'] );
+			$out[] = array( 'name' => $fp['name'], 'kind' => $fp['kind'], 'state' => 'unknown', 'key' => true, 'note' => __( 'License attached but not readable locally', 'minn-admin' ), 'component' => $fp['component'] );
 			continue;
 		}
 		$raw_exp = minn_admin_license_prop( $license, 'expiration', '' );
@@ -4057,7 +4057,7 @@ function minn_admin_licenses() {
 					'state'    => 'none' !== $source ? 'valid' : 'missing',
 					'key'      => 'none' !== $source,
 					'expires'  => '',
-					'note'     => 'core connector' . ( 'database' === $source || 'none' === $source ? '' : '; key from ' . ( 'env' === $source ? 'the server environment' : 'a constant' ) ),
+					'note'     => __( 'core connector', 'minn-admin' ) . ( 'database' === $source || 'none' === $source ? '' : '; key from ' . ( 'env' === $source ? 'the server environment' : 'a constant' ) ),
 					'stale'    => false,
 					'id'       => sanitize_key( 'core-connector-' . $cid ),
 					'source'   => 'core-connectors',
@@ -4304,12 +4304,12 @@ add_action( 'rest_api_init', function () {
 				// logged or echoed back.
 				$secret = trim( (string) $req->get_param( 'secret' ) );
 				if ( ! in_array( $action, array( 'activate', 'deactivate', 'verify' ), true ) ) {
-					return new WP_Error( 'bad_action', 'Unknown action.', array( 'status' => 400 ) );
+					return new WP_Error( 'bad_action', __( 'Unknown action.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				$providers = apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
 				$p         = isset( $providers[ $provider_id ] ) ? $providers[ $provider_id ] : null;
 				if ( ! $p || empty( $p[ $action ] ) || ! is_callable( $p[ $action ] ) ) {
-					return new WP_Error( 'no_provider', 'No such action for this provider.', array( 'status' => 404 ) );
+					return new WP_Error( 'no_provider', __( 'No such action for this provider.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Multi-secret providers (Divi's username + API key) declare
 				// secret_fields and receive an id-keyed array; single-secret
@@ -4323,12 +4323,12 @@ add_action( 'rest_api_init', function () {
 						$fid = sanitize_key( $f['id'] );
 						$val = is_array( $secrets ) && isset( $secrets[ $fid ] ) ? trim( (string) $secrets[ $fid ] ) : '';
 						if ( '' === $val ) {
-							return new WP_Error( 'no_secret', 'Fill in every field first.', array( 'status' => 400 ) );
+							return new WP_Error( 'no_secret', __( 'Fill in every field first.', 'minn-admin' ), array( 'status' => 400 ) );
 						}
 						$payload[ $fid ] = $val;
 					}
 				} elseif ( 'activate' === $action && '' === $secret ) {
-					return new WP_Error( 'no_secret', 'Paste a key first.', array( 'status' => 400 ) );
+					return new WP_Error( 'no_secret', __( 'Paste a key first.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				try {
 					$raw = ( 'activate' === $action )
@@ -4409,7 +4409,7 @@ add_action( 'rest_api_init', function () {
 				try {
 					$checked = minn_admin_force_update_check( '' );
 				} catch ( \Throwable $e ) {
-					return new WP_Error( 'check_failed', 'Could not check for updates.', array( 'status' => 500 ) );
+					return new WP_Error( 'check_failed', __( 'Could not check for updates.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 				return rest_ensure_response( array(
 					'ok'             => true,

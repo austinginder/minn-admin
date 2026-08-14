@@ -107,13 +107,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Resend',
 					'route'   => 'minn-admin/v1/wpml/emails/{id}/resend',
 					'method'  => 'POST',
-					'confirm' => 'Resend this email to the original recipients?',
+					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
 				),
 				array(
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/wpml/emails/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete this log entry permanently? There is no trash.',
+					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -122,7 +122,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/wpml/emails/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete the selected log entries permanently?',
+					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -138,7 +138,7 @@ function minn_admin_wpml_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Email log', 'value' => 'Not ready', 'hint' => 'WP Mail Logging has not created its table yet' ) ),
+			'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => 'Not ready', 'hint' => __( 'WP Mail Logging has not created its table yet', 'minn-admin' ) ) ),
 			'actions' => array(),
 		);
 	}
@@ -170,19 +170,19 @@ function minn_admin_wpml_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Logged emails',
+				'label' => __( 'Logged emails', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
 				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
 			),
 		),
 		'chart'   => array(
-			'title'     => 'Last 14 days',
+			'title'     => __( 'Last 14 days', 'minn-admin' ),
 			'primary'   => 'Sent',
 			'secondary' => 'Failed',
 			'points'    => array_values( $by_day ),
 		),
 		'actions' => array(
-			array( 'label' => 'Open WP Mail Logging ↗', 'href' => admin_url( 'admin.php?page=wpml_plugin_log' ) ),
+			array( 'label' => __( 'Open WP Mail Logging ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=wpml_plugin_log' ) ),
 		),
 	);
 }
@@ -255,7 +255,7 @@ add_action( 'rest_api_init', function () {
 				(int) $request['id']
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$failed   = ! ( null === $row->error || '' === $row->error );
 			$delivery = array(
@@ -288,7 +288,7 @@ add_action( 'rest_api_init', function () {
 			if ( '' !== $headers ) {
 				$sections[] = array(
 					'title' => 'Headers',
-					'rows'  => array( array( 'label' => 'Raw headers', 'value' => $headers, 'type' => 'code' ) ),
+					'rows'  => array( array( 'label' => __( 'Raw headers', 'minn-admin' ), 'value' => $headers, 'type' => 'code' ) ),
 				);
 			}
 			if ( $failed ) {
@@ -312,7 +312,7 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				return rest_ensure_response( array(
 					'id'          => (int) $row->mail_id,
@@ -339,9 +339,9 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $deleted ) {
-					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				return rest_ensure_response( array( 'deleted' => true, 'message' => 'Log entry deleted.' ) );
+				return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Log entry deleted.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -364,15 +364,15 @@ add_action( 'rest_api_init', function () {
 			try {
 				$mail = \No3x\WPML\Model\WPML_Mail::find_one( (int) $request['id'] );
 				if ( ! $mail ) {
-					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				\No3x\WPML\WPML_Init::getInstance()->getService( 'emailResender' )->resendMail( $mail );
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'resend_failed', 'WP Mail Logging could not resend: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'resend_failed', __( 'WP Mail Logging could not resend: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array(
 				'resent'  => true,
-				'message' => 'Handed back to the mailer — the new attempt appears as its own log entry.',
+				'message' => __( 'Handed back to the mailer — the new attempt appears as its own log entry.', 'minn-admin' ),
 			) );
 		},
 	) );

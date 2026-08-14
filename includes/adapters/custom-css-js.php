@@ -308,14 +308,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 
 	$edit_fields = array(
-		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => 'Site tweaks' ),
+		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => __( 'Site tweaks', 'minn-admin' ) ),
 		array(
 			'key'         => 'code',
 			'label'       => 'Code',
 			'type'        => 'textarea',
 			'mono'        => true,
 			'rows'        => 14,
-			'placeholder' => '/* your CSS */',
+			'placeholder' => __( '/* your CSS */', 'minn-admin' ),
 		),
 		array( 'key' => 'language', 'label' => 'Language', 'type' => 'select', 'options' => $lang_options ),
 		array( 'key' => 'type', 'label' => 'Where', 'type' => 'select', 'options' => $type_options ),
@@ -348,7 +348,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'active={v}',
 			),
 			'create'    => array(
-				'label'    => 'Add code',
+				'label'    => __( 'Add code', 'minn-admin' ),
 				'route'    => 'minn-admin/v1/ccj/snippets',
 				'method'   => 'POST',
 				'defaults' => array(
@@ -364,7 +364,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'columns'   => array(
 				array( 'key' => 'name', 'label' => 'Snippet', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => 'Type · where', 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
+				array( 'key' => 'scope', 'label' => __( 'Type · where', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
 				array( 'key' => 'active', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
 				array( 'key' => 'priority', 'label' => 'Priority', 'format' => 'num', 'width' => '80px' ),
 				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago', 'utc' => true ),
@@ -395,14 +395,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
-					'label' => 'Edit in Simple Custom CSS and JS ↗',
+					'label' => __( 'Edit in Simple Custom CSS and JS ↗', 'minn-admin' ),
 					'href'  => admin_url( 'post.php?post={id}&action=edit' ),
 				),
 				array(
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/ccj/snippets/{id}',
-					'confirm' => 'Delete this custom code permanently?',
+					'confirm' => __( 'Delete this custom code permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -425,7 +425,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/ccj/snippets/{id}',
-					'confirm' => 'Delete the selected codes permanently?',
+					'confirm' => __( 'Delete the selected codes permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -473,7 +473,7 @@ add_action( 'rest_api_init', function () {
 			}
 			$rows = array(
 				array(
-					'label' => 'Active codes',
+					'label' => __( 'Active codes', 'minn-admin' ),
 					'value' => (string) $active,
 					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
 				),
@@ -481,7 +481,7 @@ add_action( 'rest_api_init', function () {
 			if ( $langs ) {
 				arsort( $langs );
 				$rows[] = array(
-					'label' => 'Running languages',
+					'label' => __( 'Running languages', 'minn-admin' ),
 					'value' => implode( ' · ', array_map( function ( $c, $l ) {
 						return $c . ' ' . $l;
 					}, $langs, array_keys( $langs ) ) ),
@@ -523,7 +523,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$name = isset( $body['name'] ) ? sanitize_text_field( $body['name'] ) : '';
 				if ( ! $name ) {
-					return new WP_Error( 'missing_name', 'Name is required.', array( 'status' => 400 ) );
+					return new WP_Error( 'missing_name', __( 'Name is required.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				$code = isset( $body['code'] ) ? (string) $body['code'] : '';
 				$opts = minn_admin_ccj_normalize_options( $body );
@@ -559,7 +559,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$item = minn_admin_ccj_item( (int) $request['id'] );
 				if ( ! $item ) {
-					return new WP_Error( 'not_found', 'Code not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				return rest_ensure_response( $item );
 			},
@@ -571,7 +571,7 @@ add_action( 'rest_api_init', function () {
 				$id   = (int) $request['id'];
 				$post = get_post( $id );
 				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
-					return new WP_Error( 'not_found', 'Code not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$body = $request->get_json_params();
 				if ( ! is_array( $body ) ) {
@@ -616,7 +616,7 @@ add_action( 'rest_api_init', function () {
 				$id   = (int) $request['id'];
 				$post = get_post( $id );
 				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
-					return new WP_Error( 'not_found', 'Code not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Deleting is a write to the same store, and it takes the file
 				// in CCJ_UPLOAD_DIR with it.
@@ -637,7 +637,7 @@ add_action( 'rest_api_init', function () {
 			$id   = (int) $request['id'];
 			$post = get_post( $id );
 			if ( ! $post || 'custom-css-js' !== $post->post_type ) {
-				return new WP_Error( 'not_found', 'Code not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$body   = $request->get_json_params();
 			$active = is_array( $body ) ? ! empty( $body['active'] ) : true;

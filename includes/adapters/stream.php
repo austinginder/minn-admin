@@ -90,8 +90,8 @@ function minn_admin_stream_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => 'Stream table not found' ) ),
-			'actions' => array( array( 'label' => 'Open Stream ↗', 'href' => minn_admin_stream_admin_url() ) ),
+			'rows'    => array( array( 'label' => 'Events', 'value' => '—', 'hint' => __( 'Stream table not found', 'minn-admin' ) ) ),
+			'actions' => array( array( 'label' => __( 'Open Stream ↗', 'minn-admin' ), 'href' => minn_admin_stream_admin_url() ) ),
 		);
 	}
 	$blog      = get_current_blog_id();
@@ -137,25 +137,25 @@ function minn_admin_stream_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Events (24h)',
+				'label' => __( 'Events (24h)', 'minn-admin' ),
 				'value' => number_format_i18n( $day ),
 				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
 			),
 			array(
-				'label' => 'Events all-time',
+				'label' => __( 'Events all-time', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
 			),
 			array(
-				'label' => 'Last event',
+				'label' => __( 'Last event', 'minn-admin' ),
 				'value' => $last_label,
 			),
 			array(
-				'label' => 'Top source (7d)',
+				'label' => __( 'Top source (7d)', 'minn-admin' ),
 				'value' => $top_label,
 			),
 		),
 		'actions' => array(
-			array( 'label' => 'Open Stream ↗', 'href' => minn_admin_stream_admin_url() ),
+			array( 'label' => __( 'Open Stream ↗', 'minn-admin' ), 'href' => minn_admin_stream_admin_url() ),
 		),
 	);
 }
@@ -169,7 +169,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['stream'] = array(
-		'label'      => 'Activity Log',
+		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Stream',
 		'icon'       => 'clock',

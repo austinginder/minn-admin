@@ -86,14 +86,14 @@ function minn_admin_flamingo_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Inbox messages',
+				'label' => __( 'Inbox messages', 'minn-admin' ),
 				'value' => number_format_i18n( $inbox ),
 				'hint'  => $bits ? implode( ', ', $bits ) : 'All stored messages',
 			),
 			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
 		),
 		'actions' => array(
-			array( 'label' => 'Open Flamingo ↗', 'href' => admin_url( 'admin.php?page=flamingo_inbound' ) ),
+			array( 'label' => __( 'Open Flamingo ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=flamingo_inbound' ) ),
 		),
 	);
 }
@@ -148,22 +148,22 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Mark as spam',
+					'label'  => __( 'Mark as spam', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/cf7/messages/{id}/spam',
 					'when'   => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
 				array(
-					'label'  => 'Not spam',
+					'label'  => __( 'Not spam', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/cf7/messages/{id}/unspam',
 					'when'   => array( 'key' => 'bucket', 'equals' => 'spam' ),
 				),
 				array(
-					'label'   => 'Trash message',
+					'label'   => __( 'Trash message', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/cf7/messages/{id}/trash',
-					'confirm' => 'Move this message to trash?',
+					'confirm' => __( 'Move this message to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
@@ -174,29 +174,29 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/cf7/messages/{id}?force=1',
-					'confirm' => 'Delete this message permanently? There is no undo.',
+					'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/cf7/messages/{id}?force=1',
-					'confirm' => 'Delete this message permanently? There is no undo.',
+					'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'spam' ),
 				),
 				array(
-					'label' => 'Open in Flamingo ↗',
+					'label' => __( 'Open in Flamingo ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=flamingo_inbound&post={id}&action=edit' ),
 				),
 			),
 			'bulk'      => array(
 				array(
-					'label'  => 'Mark as spam',
+					'label'  => __( 'Mark as spam', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/cf7/messages/{id}/spam',
 					'when'   => array( 'key' => 'bucket', 'equals' => 'inbox' ),
@@ -205,7 +205,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Trash',
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/cf7/messages/{id}/trash',
-					'confirm' => 'Move the selected messages to trash?',
+					'confirm' => __( 'Move the selected messages to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
@@ -216,10 +216,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/cf7/messages/{id}?force=1',
-					'confirm' => 'Delete the selected messages permanently?',
+					'confirm' => __( 'Delete the selected messages permanently?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
@@ -242,7 +242,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(),
 			'actions'   => array(
 				array(
-					'label' => 'Edit in Contact Form 7 ↗',
+					'label' => __( 'Edit in Contact Form 7 ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=wpcf7&post={id}&action=edit' ),
 				),
 			),
@@ -373,7 +373,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$post = get_post( (int) $request['id'] );
 				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-					return new WP_Error( 'not_found', 'Message not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$msg = new Flamingo_Inbound_Message( $post );
 
@@ -454,17 +454,17 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$post = get_post( (int) $request['id'] );
 				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-					return new WP_Error( 'not_found', 'Message not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$msg   = new Flamingo_Inbound_Message( $post );
 				$force = ! empty( $request['force'] ) || 'trash' === $post->post_status || ! empty( $msg->spam );
 				if ( $force ) {
 					// Permanent delete (their delete() / force-delete post).
 					$msg->delete();
-					return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true, 'message' => 'Message deleted permanently.' ) );
+					return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true, 'message' => __( 'Message deleted permanently.', 'minn-admin' ) ) );
 				}
 				$msg->trash();
-				return rest_ensure_response( array( 'id' => (int) $request['id'], 'trashed' => true, 'message' => 'Moved to trash.' ) );
+				return rest_ensure_response( array( 'id' => (int) $request['id'], 'trashed' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -478,7 +478,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) use ( $op ) {
 				$post = get_post( (int) $request['id'] );
 				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-					return new WP_Error( 'not_found', 'Message not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$msg = new Flamingo_Inbound_Message( $post );
 				// Their own handlers (Akismet submit rides along like their UI).
@@ -500,11 +500,11 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) $request['id'] );
 			if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-				return new WP_Error( 'not_found', 'Message not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$msg = new Flamingo_Inbound_Message( $post );
 			$msg->trash();
-			return rest_ensure_response( array( 'id' => (int) $request['id'], 'ok' => true, 'message' => 'Moved to trash.' ) );
+			return rest_ensure_response( array( 'id' => (int) $request['id'], 'ok' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
 		},
 	) );
 
@@ -517,14 +517,14 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) $request['id'] );
 			if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-				return new WP_Error( 'not_found', 'Message not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			if ( 'trash' !== $post->post_status ) {
-				return new WP_Error( 'not_trashed', 'Only trashed messages can be restored.', array( 'status' => 400 ) );
+				return new WP_Error( 'not_trashed', __( 'Only trashed messages can be restored.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			$msg = new Flamingo_Inbound_Message( $post );
 			$msg->untrash();
-			return rest_ensure_response( array( 'id' => (int) $request['id'], 'ok' => true, 'message' => 'Message restored.' ) );
+			return rest_ensure_response( array( 'id' => (int) $request['id'], 'ok' => true, 'message' => __( 'Message restored.', 'minn-admin' ) ) );
 		},
 	) );
 

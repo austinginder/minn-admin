@@ -120,7 +120,7 @@ function minn_admin_disembark_status_model() {
 
 	$rows = array(
 		array(
-			'label' => 'Last scan',
+			'label' => __( 'Last scan', 'minn-admin' ),
 			'value' => is_array( $scan ) && ! empty( $scan['timestamp'] )
 				? human_time_diff( (int) $scan['timestamp'] ) . ' ago'
 				: 'Never',
@@ -131,10 +131,10 @@ function minn_admin_disembark_status_model() {
 		array(
 			'label' => 'Database',
 			'value' => $db ? size_format( $db ) : '—',
-			'hint'  => 'exported with every backup',
+			'hint'  => __( 'exported with every backup', 'minn-admin' ),
 		),
 		array(
-			'label' => 'Working files',
+			'label' => __( 'Working files', 'minn-admin' ),
 			'value' => $bytes ? size_format( $bytes ) : 'None',
 			'hint'  => $bytes
 				/* translators: %s: number of Disembark scan sessions. */
@@ -146,7 +146,7 @@ function minn_admin_disembark_status_model() {
 	$actions = array();
 	if ( $bytes ) {
 		$actions[] = array(
-			'label'   => 'Clean up working files',
+			'label'   => __( 'Clean up working files', 'minn-admin' ),
 			'route'   => 'minn-admin/v1/disembark/cleanup',
 			'method'  => 'POST',
 			'confirm' => sprintf(
@@ -157,10 +157,10 @@ function minn_admin_disembark_status_model() {
 		);
 	}
 	$actions[] = array(
-		'label'   => 'Regenerate token',
+		'label'   => __( 'Regenerate token', 'minn-admin' ),
 		'route'   => 'minn-admin/v1/disembark/regenerate-token',
 		'method'  => 'POST',
-		'confirm' => 'Regenerate the site token? The current CLI command and any saved connections stop working.',
+		'confirm' => __( 'Regenerate the site token? The current CLI command and any saved connections stop working.', 'minn-admin' ),
 	);
 	// Disembark 2.8+ dashboard restore (upload zip or pull from a live site).
 	// Same Tools page as Open Disembark — the Restore button is the first
@@ -168,21 +168,21 @@ function minn_admin_disembark_status_model() {
 	if ( class_exists( '\\Disembark\\Import' ) ) {
 		$actions[] = array(
 			// ↗ is in the label (same-host Tools link — hrefLabel only marks off-site).
-			'label' => 'Restore a backup ↗',
+			'label' => __( 'Restore a backup ↗', 'minn-admin' ),
 			'href'  => admin_url( 'tools.php?page=disembark' ),
 		);
 	}
 	$actions[] = array(
-		'label' => 'Open Disembark ↗',
+		'label' => __( 'Open Disembark ↗', 'minn-admin' ),
 		'href'  => admin_url( 'tools.php?page=disembark' ),
 	);
 
 	return array(
 		'rows'    => $rows,
 		'command' => array(
-			'label' => 'Back up from any terminal',
+			'label' => __( 'Back up from any terminal', 'minn-admin' ),
 			'text'  => minn_admin_disembark_command(),
-			'hint'  => 'Requires the Disembark CLI; disembark.host runs the same flow from a browser.',
+			'hint'  => __( 'Requires the Disembark CLI; disembark.host runs the same flow from a browser.', 'minn-admin' ),
 		),
 		'actions' => $actions,
 	);
@@ -204,19 +204,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'pageQuery' => 'per_page=25&page={page}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
-			'viewLabel' => 'Scan sessions',
+			'viewLabel' => __( 'Scan sessions', 'minn-admin' ),
 			'columns'   => array(
-				array( 'key' => 'name', 'label' => 'Scan session', 'format' => 'title' ),
+				array( 'key' => 'name', 'label' => __( 'Scan session', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'chunks', 'label' => 'Chunks', 'format' => 'num' ),
-				array( 'key' => 'size', 'label' => 'On disk', 'format' => 'text' ),
+				array( 'key' => 'size', 'label' => __( 'On disk', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'date', 'label' => 'Scanned', 'format' => 'ago', 'utc' => true ),
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Delete session files',
+					'label'   => __( 'Delete session files', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/disembark/sessions/{id}/delete',
-					'confirm' => 'Delete this scan session\'s files from the server?',
+					'confirm' => __( 'Delete this scan session\'s files from the server?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -265,7 +265,7 @@ add_action( 'rest_api_init', function () {
 			$dir  = realpath( $base . $request['id'] );
 			$root = realpath( $base );
 			if ( ! $dir || ! $root || 0 !== strpos( $dir, $root . DIRECTORY_SEPARATOR ) || ! is_dir( $dir ) ) {
-				return new WP_Error( 'not_found', 'No such session.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'No such session.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			minn_admin_disembark_rm_contents( $dir );
 			@rmdir( $dir );

@@ -75,7 +75,7 @@ function minn_admin_solid_security_row( $r ) {
 	}
 	return array(
 		'id'      => (int) $r->lockout_id,
-		'message' => 'Locked out: ' . ( $who ? $who : ( $r->lockout_host ? $r->lockout_host : 'unknown' ) ),
+		'message' => __( 'Locked out: ', 'minn-admin' ) . ( $who ? $who : ( $r->lockout_host ? $r->lockout_host : 'unknown' ) ),
 		'type'    => (string) $r->lockout_type,
 		'who'     => $who ? $who : '—',
 		'ip'      => $r->lockout_host ? (string) $r->lockout_host : '—',
@@ -92,7 +92,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['solid-security'] = array(
-		'label'      => 'Activity Log',
+		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Solid Security',
 		'icon'       => 'shield',
@@ -125,7 +125,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Release lockout',
+					'label'  => __( 'Release lockout', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/solid-security/lockouts/{id}/release',
 					'when'   => array( 'key' => 'locked', 'equals' => true ),
@@ -187,18 +187,18 @@ add_action( 'rest_api_init', function () {
 			global $itsec_lockout, $wpdb;
 			$id = (int) $request['id'];
 			if ( ! $itsec_lockout || ! method_exists( $itsec_lockout, 'release_lockout' ) ) {
-				return new WP_Error( 'no_api', 'Solid Security\'s lockout API is not available.', array( 'status' => 500 ) );
+				return new WP_Error( 'no_api', __( 'Solid Security\'s lockout API is not available.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			$row = $wpdb->get_row( $wpdb->prepare(
 				"SELECT * FROM {$wpdb->base_prefix}itsec_lockouts WHERE lockout_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$id
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Lockout not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Lockout not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$itsec_lockout->release_lockout( $id );
 			$freed = minn_admin_solid_security_row( $row );
-			return rest_ensure_response( array( 'ok' => true, 'message' => 'Released ' . ( '—' !== $freed['who'] ? $freed['who'] : $freed['ip'] ) ) );
+			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Released ', 'minn-admin' ) . ( '—' !== $freed['who'] ? $freed['who'] : $freed['ip'] ) ) );
 		},
 	) );
 
@@ -240,24 +240,24 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
-						'label' => 'Locked out now',
+						'label' => __( 'Locked out now', 'minn-admin' ),
 						'value' => $active ? (string) $active : 'Nobody',
 					),
 					array(
-						'label' => 'Lockouts all-time',
+						'label' => __( 'Lockouts all-time', 'minn-admin' ),
 						'value' => (string) $total,
 					),
 					array(
-						'label' => 'Banned hosts',
+						'label' => __( 'Banned hosts', 'minn-admin' ),
 						'value' => (string) $bans,
 					),
 					array(
-						'label' => 'Protection on',
+						'label' => __( 'Protection on', 'minn-admin' ),
 						'value' => $on ? implode( ' · ', $on ) : 'No protection modules active',
 					),
 				),
 				'actions' => array(
-					array( 'label' => 'Open Solid Security ↗', 'href' => minn_admin_solid_security_admin_url() ),
+					array( 'label' => __( 'Open Solid Security ↗', 'minn-admin' ), 'href' => minn_admin_solid_security_admin_url() ),
 				),
 			) );
 		},
@@ -287,16 +287,16 @@ function minn_admin_solid_security_checks() {
 				$extra[] = 'two-factor';
 			}
 			$rows[] = array(
-				'label'  => 'Solid Security',
+				'label'  => __( 'Solid Security', 'minn-admin' ),
 				'status' => 'pass',
-				'detail' => 'Brute force protection is on' . ( $extra ? ' (with ' . implode( ' and ', $extra ) . ')' : '' ),
+				'detail' => __( 'Brute force protection is on', 'minn-admin' ) . ( $extra ? ' (with ' . implode( ' and ', $extra ) . ')' : '' ),
 				'href'   => minn_admin_solid_security_admin_url(),
 			);
 		} else {
 			$rows[] = array(
-				'label'  => 'Solid Security',
+				'label'  => __( 'Solid Security', 'minn-admin' ),
 				'status' => 'warn',
-				'detail' => 'Brute force protection is turned off',
+				'detail' => __( 'Brute force protection is turned off', 'minn-admin' ),
 				'href'   => minn_admin_solid_security_admin_url(),
 			);
 		}

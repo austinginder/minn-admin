@@ -153,19 +153,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/formidable/entries/{id}',
-					'confirm' => 'Delete this entry permanently? Formidable has no entry trash — there is no undo.',
+					'confirm' => __( 'Delete this entry permanently? Formidable has no entry trash — there is no undo.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/formidable/entries/{id}',
-					'confirm' => 'Delete the selected entries permanently? There is no undo.',
+					'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -180,7 +180,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(),
 			'actions'   => array(
 				array(
-					'label' => 'Edit in Formidable ↗',
+					'label' => __( 'Edit in Formidable ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=formidable&frm_action=edit&id={id}' ),
 				),
 			),
@@ -284,7 +284,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$entry = FrmEntry::getOne( (int) $request['id'], true );
 				if ( ! $entry ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$form_id = (int) $entry->form_id;
 				$fields  = minn_admin_formidable_fields( $form_id );
@@ -301,7 +301,7 @@ add_action( 'rest_api_init', function () {
 				foreach ( $answers as $fid => $value ) {
 					if ( ! isset( $fields[ $fid ] ) && '' !== $value ) {
 						$rows[] = array(
-							'label' => 'Field ' . $fid,
+							'label' => __( 'Field ', 'minn-admin' ) . $fid,
 							'value' => $value,
 						);
 					}
@@ -332,14 +332,14 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$id = (int) $request['id'];
 				if ( ! FrmEntry::getOne( $id ) ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Their complete flow: metas deleted, their hooks fire.
 				$result = FrmEntry::destroy( $id );
 				if ( ! $result ) {
-					return new WP_Error( 'delete_failed', 'Formidable could not delete the entry.', array( 'status' => 500 ) );
+					return new WP_Error( 'delete_failed', __( 'Formidable could not delete the entry.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
-				return rest_ensure_response( array( 'ok' => true, 'message' => 'Entry deleted permanently.' ) );
+				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
 			},
 		),
 	) );

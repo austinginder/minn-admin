@@ -98,7 +98,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 
 	$edit_fields = array(
-		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => 'Disable emojis' ),
+		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => __( 'Disable emojis', 'minn-admin' ) ),
 		array( 'key' => 'desc', 'label' => 'Description', 'type' => 'textarea', 'rows' => 2, 'required' => false ),
 		array(
 			'key'         => 'code',
@@ -109,7 +109,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'placeholder' => "add_filter( '…', '…' );",
 		),
 		array( 'key' => 'type', 'label' => 'Type', 'type' => 'select', 'options' => $type_options ),
-		array( 'key' => 'run_at', 'label' => 'Run at', 'type' => 'select', 'options' => $run_options ),
+		array( 'key' => 'run_at', 'label' => __( 'Run at', 'minn-admin' ), 'type' => 'select', 'options' => $run_options ),
 		array( 'key' => 'priority', 'label' => 'Priority', 'type' => 'number' ),
 		array( 'key' => 'tags', 'label' => 'Tags', 'type' => 'tags', 'required' => false ),
 	);
@@ -138,7 +138,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'active={v}',
 			),
 			'create'    => array(
-				'label'    => 'Add snippet',
+				'label'    => __( 'Add snippet', 'minn-admin' ),
 				'route'    => 'minn-admin/v1/fluent-snippets',
 				'method'   => 'POST',
 				'defaults' => array(
@@ -153,7 +153,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'columns'   => array(
 				array( 'key' => 'name', 'label' => 'Snippet', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => 'Type · run at', 'format' => 'mono', 'width' => 'minmax(0,1fr)' ),
+				array( 'key' => 'scope', 'label' => __( 'Type · run at', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1fr)' ),
 				array( 'key' => 'active', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
 				array( 'key' => 'priority', 'label' => 'Priority', 'format' => 'num', 'width' => '80px' ),
 				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago' ),
@@ -187,14 +187,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
-					'label' => 'Edit in FluentSnippets ↗',
+					'label' => __( 'Edit in FluentSnippets ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=fluent-snippets' ),
 				),
 				array(
-					'label'   => 'Delete snippet',
+					'label'   => __( 'Delete snippet', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/fluent-snippets/{id}',
-					'confirm' => 'Delete this snippet permanently? Its code will be gone.',
+					'confirm' => __( 'Delete this snippet permanently? Its code will be gone.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -217,7 +217,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/fluent-snippets/{id}',
-					'confirm' => 'Delete the selected snippets permanently?',
+					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -258,14 +258,14 @@ add_action( 'rest_api_init', function () {
 			$inactive = count( $items ) - $active;
 			$rows = array(
 				array(
-					'label' => 'Active snippets',
+					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
 					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
 				),
 				array(
 					'label' => 'Storage',
 					'value' => 'Standalone files',
-					'hint'  => 'FluentSnippets runs snippets from files, not the database',
+					'hint'  => __( 'FluentSnippets runs snippets from files, not the database', 'minn-admin' ),
 				),
 			);
 			return rest_ensure_response( array( 'rows' => $rows ) );

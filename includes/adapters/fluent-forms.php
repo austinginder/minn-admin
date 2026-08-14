@@ -88,10 +88,10 @@ function minn_admin_fluent_forms_entry_form_id( $entry_id ) {
 function minn_admin_fluent_forms_guard_entry( $entry_id, $permission = 'fluentform_entries_viewer' ) {
 	$form_id = minn_admin_fluent_forms_entry_form_id( $entry_id );
 	if ( ! $form_id ) {
-		return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+		return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	if ( ! minn_admin_fluent_forms_can_form( $form_id, $permission ) ) {
-		return new WP_Error( 'forbidden', 'You cannot access entries for that form.', array( 'status' => 403 ) );
+		return new WP_Error( 'forbidden', __( 'You cannot access entries for that form.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	return $form_id;
 }
@@ -198,11 +198,11 @@ function minn_admin_fluent_forms_status_model() {
 		if ( ! $scope ) {
 			return array(
 				'rows'    => array(
-					array( 'label' => 'Unread entries', 'value' => '0', 'hint' => '0 total' ),
+					array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0', 'hint' => '0 total' ),
 					array( 'label' => 'Forms', 'value' => '0' ),
 				),
 				'actions' => array(
-					array( 'label' => 'Open Fluent Forms ↗', 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
+					array( 'label' => __( 'Open Fluent Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
 				),
 			);
 		}
@@ -225,11 +225,11 @@ function minn_admin_fluent_forms_status_model() {
 	}
 	return array(
 		'rows'    => array(
-			array( 'label' => 'Unread entries', 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
+			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
 			array( 'label' => 'Forms', 'value' => number_format_i18n( $nforms ) ),
 		),
 		'actions' => array(
-			array( 'label' => 'Open Fluent Forms ↗', 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
+			array( 'label' => __( 'Open Fluent Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) ),
 		),
 	);
 }
@@ -285,34 +285,34 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Mark as read',
+					'label'  => __( 'Mark as read', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'   => array( 'status' => 'read' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'unread' ),
 				),
 				array(
-					'label'   => 'Mark as spam',
+					'label'   => __( 'Mark as spam', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'    => array( 'status' => 'spam' ),
-					'confirm' => 'Mark this entry as spam? Find it under the Spam filter.',
+					'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
 				array(
-					'label'  => 'Not spam',
+					'label'  => __( 'Not spam', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'   => array( 'status' => 'unread' ),
 					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
-					'label'   => 'Trash entry',
+					'label'   => __( 'Trash entry', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'    => array( 'status' => 'trashed' ),
-					'confirm' => 'Move this entry to trash?',
+					'confirm' => __( 'Move this entry to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
@@ -324,34 +324,34 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'trashed' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}',
-					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trashed' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}',
-					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
-					'label' => 'Open in Fluent Forms ↗',
+					'label' => __( 'Open in Fluent Forms ↗', 'minn-admin' ),
 					// Detail modal also carries adminUrl with the form-scoped entry deep link.
 					'href'  => admin_url( 'admin.php?page=fluent_forms&route=entries#/entries/{id}' ),
 				),
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Mark as spam',
+					'label'   => __( 'Mark as spam', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'    => array( 'status' => 'spam' ),
-					'confirm' => 'Mark the selected entries as spam?',
+					'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
@@ -360,7 +360,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}/status',
 					'body'    => array( 'status' => 'trashed' ),
-					'confirm' => 'Move the selected entries to trash?',
+					'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
@@ -372,10 +372,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'trashed' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/fluent-forms/entries/{id}',
-					'confirm' => 'Delete the selected entries permanently?',
+					'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trashed' ),
 				),
@@ -393,7 +393,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(),
 			'actions'   => array(
 				array(
-					'label' => 'Edit in Fluent Forms ↗',
+					'label' => __( 'Edit in Fluent Forms ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=fluent_forms&route=editor&form_id={id}' ),
 				),
 			),
@@ -498,7 +498,7 @@ add_action( 'rest_api_init', function () {
 			if ( $request['form_id'] ) {
 				$form_id = (int) $request['form_id'];
 				if ( ! minn_admin_fluent_forms_can_form( $form_id ) ) {
-					return new WP_Error( 'forbidden', 'You cannot access entries for that form.', array( 'status' => 403 ) );
+					return new WP_Error( 'forbidden', __( 'You cannot access entries for that form.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 				$where[] = 's.form_id = %d';
 				$args[]  = $form_id;
@@ -579,7 +579,7 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 
 				// Opening a detail marks unread → read (Fluent Forms' own screen semantics).
@@ -677,11 +677,11 @@ add_action( 'rest_api_init', function () {
 					$id
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Permanent delete is for trash/spam only (Received → Trash first).
 				if ( ! in_array( (string) $row->status, array( 'trashed', 'spam' ), true ) ) {
-					return new WP_Error( 'not_trashed', 'Move the entry to trash (or spam) before deleting permanently.', array( 'status' => 400 ) );
+					return new WP_Error( 'not_trashed', __( 'Move the entry to trash (or spam) before deleting permanently.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 
 				// Delete through Fluent Forms' own service. A submission is more
@@ -699,7 +699,7 @@ add_action( 'rest_api_init', function () {
 					try {
 						( new \FluentForm\App\Services\Submission\SubmissionService() )
 							->deleteEntries( array( $id ), $form_id );
-						return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => 'Entry deleted permanently.' ) );
+						return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
 					} catch ( \Throwable $e ) {
 						// Fall through to the manual path below rather than
 						// leaving the entry half-deleted.
@@ -721,7 +721,7 @@ add_action( 'rest_api_init', function () {
 				$wpdb->delete( $subs_table, array( 'id' => $id ), array( '%d' ) );
 				// phpcs:enable
 				do_action( 'fluentform/after_deleting_submissions', array( $id ), $form_id );
-				return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => 'Entry deleted permanently.' ) );
+				return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -744,7 +744,7 @@ add_action( 'rest_api_init', function () {
 			$allowed    = array( 'unread', 'read', 'spam', 'trashed' );
 			$subs_table = $wpdb->prefix . 'fluentform_submissions';
 			if ( ! in_array( $status, $allowed, true ) ) {
-				return new WP_Error( 'bad_status', 'Unknown status.', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_status', __( 'Unknown status.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$exists = $wpdb->get_var( $wpdb->prepare(
@@ -752,7 +752,7 @@ add_action( 'rest_api_init', function () {
 				$id
 			) );
 			if ( ! $exists ) {
-				return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$wpdb->update(
 				$subs_table,

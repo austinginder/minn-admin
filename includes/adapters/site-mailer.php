@@ -83,7 +83,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/site-mailer/emails/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete this log entry permanently? There is no trash.',
+					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -92,7 +92,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/site-mailer/emails/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete the selected log entries permanently?',
+					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -171,7 +171,7 @@ add_action( 'rest_api_init', function () {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $request['id'] ) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$delivery = array(
 				array( 'label' => 'Status', 'value' => minn_admin_site_mailer_status( $row->status ), 'type' => 'pill' ),
@@ -210,9 +210,9 @@ add_action( 'rest_api_init', function () {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id = %d", (int) $request['id'] ) );
 			if ( ! $deleted ) {
-				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			return rest_ensure_response( array( 'deleted' => true, 'message' => 'Log entry deleted.' ) );
+			return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Log entry deleted.', 'minn-admin' ) ) );
 		},
 	) );
 
@@ -223,8 +223,8 @@ add_action( 'rest_api_init', function () {
 			$admin_url = admin_url( 'admin.php?page=site-mailer' );
 			if ( ! $has_table() ) {
 				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => 'Email log', 'value' => '—', 'hint' => 'Site Mailer has not logged any sends yet' ) ),
-					'actions' => array( array( 'label' => 'Open Site Mailer ↗', 'href' => $admin_url ) ),
+					'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Site Mailer has not logged any sends yet', 'minn-admin' ) ) ),
+					'actions' => array( array( 'label' => __( 'Open Site Mailer ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 				) );
 			}
 			global $wpdb;
@@ -260,7 +260,7 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
-						'label' => 'Logged emails',
+						'label' => __( 'Logged emails', 'minn-admin' ),
 						'value' => number_format_i18n( $total ),
 						'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All delivered',
 					),
@@ -271,12 +271,12 @@ add_action( 'rest_api_init', function () {
 					),
 				),
 				'chart'   => array(
-					'title'     => 'Last 14 days',
+					'title'     => __( 'Last 14 days', 'minn-admin' ),
 					'primary'   => 'Delivered',
 					'secondary' => 'Failed',
 					'points'    => array_values( $byday ),
 				),
-				'actions' => array( array( 'label' => 'Open Site Mailer ↗', 'href' => $admin_url ) ),
+				'actions' => array( array( 'label' => __( 'Open Site Mailer ↗', 'minn-admin' ), 'href' => $admin_url ) ),
 			) );
 		},
 	) );

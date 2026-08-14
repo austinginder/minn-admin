@@ -166,39 +166,39 @@ function minn_admin_backwpup_status_model() {
 	// otherwise the card advertises a button the route will refuse.
 	if ( $jobs && ( current_user_can( 'backwpup_jobs_start' ) || current_user_can( 'manage_options' ) ) ) {
 		$actions[] = array(
-			'label'   => 'Run first job now',
+			'label'   => __( 'Run first job now', 'minn-admin' ),
 			'route'   => 'minn-admin/v1/backwpup/run',
 			'method'  => 'POST',
 			'body'    => array( 'jobid' => $jobs[0] ),
-			'confirm' => 'Start the BackWPup job now? It runs in the background through BackWPup\'s own runner.',
+			'confirm' => __( 'Start the BackWPup job now? It runs in the background through BackWPup\'s own runner.', 'minn-admin' ),
 		);
 	}
 	$actions[] = array(
-		'label' => 'Open BackWPup ↗',
+		'label' => __( 'Open BackWPup ↗', 'minn-admin' ),
 		'href'  => admin_url( 'admin.php?page=backwpup' ),
 	);
 
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Last run',
+				'label' => __( 'Last run', 'minn-admin' ),
 				'value' => $last_value,
 				'hint'  => $last_hint,
 			),
 			array(
-				'label' => 'Local archives',
+				'label' => __( 'Local archives', 'minn-admin' ),
 				'value' => (string) count( $rows ),
 				'hint'  => $disk ? size_format( $disk ) . ' on disk' : 'Nothing in the local folder yet',
 			),
 			array(
-				'label' => 'Jobs (local folder)',
+				'label' => __( 'Jobs (local folder)', 'minn-admin' ),
 				'value' => (string) count( $jobs ),
-				'hint'  => 'Only jobs that write to Website Server are listed',
+				'hint'  => __( 'Only jobs that write to Website Server are listed', 'minn-admin' ),
 			),
 			array(
 				'label' => 'Status',
 				'value' => $running ? 'Running' : 'Idle',
-				'hint'  => 'Jobs run through BackWPup\'s own cron/auth machinery',
+				'hint'  => __( 'Jobs run through BackWPup\'s own cron/auth machinery', 'minn-admin' ),
 			),
 		),
 		'actions' => $actions,
@@ -217,10 +217,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	$actions    = array();
 	if ( $can_delete ) {
 		$actions[] = array(
-			'label'   => 'Delete archive',
+			'label'   => __( 'Delete archive', 'minn-admin' ),
 			'method'  => 'DELETE',
 			'route'   => 'minn-admin/v1/backwpup/backups/{id}',
-			'confirm' => 'Delete this backup archive from the local folder permanently?',
+			'confirm' => __( 'Delete this backup archive from the local folder permanently?', 'minn-admin' ),
 			'danger'  => true,
 		);
 	}
@@ -306,26 +306,26 @@ add_action( 'rest_api_init', function () {
 			$raw = rawurldecode( (string) $request['id'] );
 			$pos = strpos( $raw, ':' );
 			if ( false === $pos ) {
-				return new WP_Error( 'bad_id', 'Invalid backup id.', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_id', __( 'Invalid backup id.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			$jobid    = (int) substr( $raw, 0, $pos );
 			$filename = substr( $raw, $pos + 1 );
 			if ( $jobid < 1 || '' === $filename || false !== strpos( $filename, '..' ) || false !== strpos( $filename, '/' ) || false !== strpos( $filename, '\\' ) ) {
-				return new WP_Error( 'bad_id', 'Invalid backup id.', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_id', __( 'Invalid backup id.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			try {
 				$dest = BackWPup::get_destination( 'FOLDER' );
 				if ( ! $dest || ! method_exists( $dest, 'file_delete' ) ) {
-					return new WP_Error( 'no_dest', 'BackWPup folder destination unavailable.', array( 'status' => 500 ) );
+					return new WP_Error( 'no_dest', __( 'BackWPup folder destination unavailable.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 				$dest->file_delete( $jobid . '_FOLDER', $filename );
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'delete_failed', 'BackWPup could not delete: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'delete_failed', __( 'BackWPup could not delete: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			// Confirm gone from the list.
 			foreach ( minn_admin_backwpup_rows() as $r ) {
 				if ( $r['id'] === $jobid . ':' . $filename ) {
-					return new WP_Error( 'delete_failed', 'BackWPup reported success but the archive is still listed.', array( 'status' => 500 ) );
+					return new WP_Error( 'delete_failed', __( 'BackWPup reported success but the archive is still listed.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 			}
 			return rest_ensure_response( array( 'deleted' => true ) );
@@ -350,23 +350,23 @@ add_action( 'rest_api_init', function () {
 				$jobid = $jobs ? $jobs[0] : 0;
 			}
 			if ( ! in_array( $jobid, $jobs, true ) ) {
-				return new WP_Error( 'bad_job', 'Unknown or non-folder BackWPup job.', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_job', __( 'Unknown or non-folder BackWPup job.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			if ( minn_admin_backwpup_running() ) {
 				return rest_ensure_response( array(
 					'ok'      => true,
-					'message' => 'A BackWPup job is already running.',
+					'message' => __( 'A BackWPup job is already running.', 'minn-admin' ),
 				) );
 			}
 			try {
 				// Same kick their Jobs screen uses for "run now".
 				BackWPup_Job::get_jobrun_url( 'runnow', $jobid );
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'run_failed', 'BackWPup could not start the job: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'run_failed', __( 'BackWPup could not start the job: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array(
 				'ok'      => true,
-				'message' => 'Backup job started in the background.',
+				'message' => __( 'Backup job started in the background.', 'minn-admin' ),
 			) );
 		},
 	) );

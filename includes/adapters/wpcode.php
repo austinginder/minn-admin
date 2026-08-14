@@ -117,7 +117,7 @@ function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0 ) {
 	if ( 'html' === (string) $code_type && ! current_user_can( 'unfiltered_html' ) ) {
 		return new WP_Error(
 			'forbidden',
-			'HTML snippets run as raw markup on every page, so they need the unfiltered_html capability.',
+			__( 'HTML snippets run as raw markup on every page, so they need the unfiltered_html capability.', 'minn-admin' ),
 			array( 'status' => 403 )
 		);
 	}
@@ -127,19 +127,19 @@ function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0 ) {
 	if ( minn_admin_wpcode_type_executes( $code_type ) && class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
 		return new WP_Error(
 			'forbidden',
-			'This site disallows editing code from the dashboard, so PHP snippets cannot be created or changed here.',
+			__( 'This site disallows editing code from the dashboard, so PHP snippets cannot be created or changed here.', 'minn-admin' ),
 			array( 'status' => 403 )
 		);
 	}
 	if ( ! minn_admin_wpcode_can_type( $code_type ) ) {
 		return new WP_Error(
 			'forbidden',
-			'You cannot create snippets of that type on this site.',
+			__( 'You cannot create snippets of that type on this site.', 'minn-admin' ),
 			array( 'status' => 403 )
 		);
 	}
 	if ( $snippet_id && ! current_user_can( 'edit_post', (int) $snippet_id ) ) {
-		return new WP_Error( 'forbidden', 'You cannot edit that snippet.', array( 'status' => 403 ) );
+		return new WP_Error( 'forbidden', __( 'You cannot edit that snippet.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	return true;
 }
@@ -200,7 +200,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	);
 
 	$edit_fields = array(
-		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => 'Disable comments' ),
+		array( 'key' => 'name', 'label' => 'Name', 'placeholder' => __( 'Disable comments', 'minn-admin' ) ),
 		array( 'key' => 'desc', 'label' => 'Note', 'type' => 'textarea', 'rows' => 2, 'required' => false ),
 		array(
 			'key'         => 'code',
@@ -239,7 +239,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'query'   => 'active={v}',
 			),
 			'create'    => array(
-				'label'    => 'Add snippet',
+				'label'    => __( 'Add snippet', 'minn-admin' ),
 				'route'    => 'minn-admin/v1/wpcode/snippets',
 				'method'   => 'POST',
 				'defaults' => array(
@@ -254,7 +254,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'columns'   => array(
 				array( 'key' => 'name', 'label' => 'Snippet', 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => 'Type · location', 'format' => 'mono', 'width' => 'minmax(0,1fr)' ),
+				array( 'key' => 'scope', 'label' => __( 'Type · location', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1fr)' ),
 				array( 'key' => 'active', 'label' => 'Status', 'format' => 'pill', 'width' => '100px' ),
 				array( 'key' => 'priority', 'label' => 'Priority', 'format' => 'num', 'width' => '80px' ),
 				array( 'key' => 'modified', 'label' => 'Modified', 'format' => 'ago' ),
@@ -288,14 +288,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
-					'label' => 'Edit in WPCode ↗',
+					'label' => __( 'Edit in WPCode ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=wpcode-snippet-manager&snippet_id={id}' ),
 				),
 				array(
-					'label'   => 'Delete snippet',
+					'label'   => __( 'Delete snippet', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/wpcode/snippets/{id}',
-					'confirm' => 'Delete this snippet permanently? Its code will be gone.',
+					'confirm' => __( 'Delete this snippet permanently? Its code will be gone.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -318,7 +318,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/wpcode/snippets/{id}',
-					'confirm' => 'Delete the selected snippets permanently?',
+					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -406,7 +406,7 @@ add_action( 'rest_api_init', function () {
 					);
 					$id = $snippet->save();
 					if ( ! $id ) {
-						return new WP_Error( 'wpcode_save_failed', 'Could not create the snippet.', array( 'status' => 500 ) );
+						return new WP_Error( 'wpcode_save_failed', __( 'Could not create the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
 					return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) $id ) ) );
 				},
@@ -424,7 +424,7 @@ add_action( 'rest_api_init', function () {
 				'callback'            => function ( WP_REST_Request $request ) {
 					$snippet = new WPCode_Snippet( (int) $request['id'] );
 					if ( ! $snippet->get_id() ) {
-						return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
 					return rest_ensure_response( minn_admin_wpcode_item( $snippet ) );
 				},
@@ -435,7 +435,7 @@ add_action( 'rest_api_init', function () {
 				'callback'            => function ( WP_REST_Request $request ) {
 					$snippet = new WPCode_Snippet( (int) $request['id'] );
 					if ( ! $snippet->get_id() ) {
-						return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
 					// The STORED type gates the edit, and when the payload
 					// carries a new code_type that type must be allowed too —
@@ -512,7 +512,7 @@ add_action( 'rest_api_init', function () {
 					}
 					$snippet->load_from_array( $patch );
 					if ( ! $snippet->save() ) {
-						return new WP_Error( 'wpcode_save_failed', 'Could not save the snippet.', array( 'status' => 500 ) );
+						return new WP_Error( 'wpcode_save_failed', __( 'Could not save the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
 					return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) $request['id'] ) ) );
 				},
@@ -524,7 +524,7 @@ add_action( 'rest_api_init', function () {
 					$id = (int) $request['id'];
 					$post = get_post( $id );
 					if ( ! $post || 'wpcode' !== $post->post_type ) {
-						return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 					}
 					// Destroying a snippet needs the same bar as editing it: the
 					// stored code type's tier AND edit_post on this snippet.
@@ -535,11 +535,11 @@ add_action( 'rest_api_init', function () {
 						return $guard;
 					}
 					if ( ! current_user_can( 'delete_post', $id ) ) {
-						return new WP_Error( 'forbidden', 'You cannot delete that snippet.', array( 'status' => 403 ) );
+						return new WP_Error( 'forbidden', __( 'You cannot delete that snippet.', 'minn-admin' ), array( 'status' => 403 ) );
 					}
 					$ok = wp_delete_post( $id, true );
 					if ( ! $ok ) {
-						return new WP_Error( 'wpcode_delete_failed', 'Could not delete the snippet.', array( 'status' => 500 ) );
+						return new WP_Error( 'wpcode_delete_failed', __( 'Could not delete the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
 					return new WP_REST_Response( null, 204 );
 				},
@@ -556,7 +556,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$snippet = new WPCode_Snippet( (int) $request['id'] );
 				if ( ! $snippet->get_id() ) {
-					return new WP_Error( 'not_found', 'Snippet not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Publishing a snippet runs its code, so the stored type's tier
 				// gates this too — a text-tier user must not be able to activate
@@ -601,7 +601,7 @@ add_action( 'rest_api_init', function () {
 			}
 			$rows = array(
 				array(
-					'label' => 'Active snippets',
+					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
 					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
 				),
@@ -614,7 +614,7 @@ add_action( 'rest_api_init', function () {
 			);
 			if ( $types ) {
 				$rows[] = array(
-					'label' => 'Running types',
+					'label' => __( 'Running types', 'minn-admin' ),
 					'value' => implode( ' · ', array_map( function ( $t ) {
 						return $t->c . ' ' . $t->t;
 					}, $types ) ),
@@ -627,7 +627,7 @@ add_action( 'rest_api_init', function () {
 			);
 			if ( $last ) {
 				$rows[] = array(
-					'label' => 'Last change',
+					'label' => __( 'Last change', 'minn-admin' ),
 					'value' => (string) $last->post_title,
 					'hint'  => substr( (string) $last->post_modified, 0, 10 ),
 				);

@@ -608,7 +608,7 @@ class Minn_Admin_Notices {
 	public static function run_ajax( $action, $args = array() ) {
 		$map = self::ajax_whitelist();
 		if ( ! isset( $map[ $action ] ) || ! is_callable( $map[ $action ]['run'] ) ) {
-			return new WP_Error( 'unknown_action', 'That notice action is not supported.', array( 'status' => 400 ) );
+			return new WP_Error( 'unknown_action', __( 'That notice action is not supported.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$def = $map[ $action ];
 		// Every entry must declare the capability its handler needs, and the
@@ -618,10 +618,10 @@ class Minn_Admin_Notices {
 		// admin-ajax handler and forgets its own check would hand a
 		// contributor a privileged option write.
 		if ( empty( $def['cap'] ) || ! is_string( $def['cap'] ) ) {
-			return new WP_Error( 'no_cap', 'That notice action does not declare a capability.', array( 'status' => 500 ) );
+			return new WP_Error( 'no_cap', __( 'That notice action does not declare a capability.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		if ( ! current_user_can( $def['cap'] ) ) {
-			return new WP_Error( 'forbidden', 'You cannot run that notice action.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You cannot run that notice action.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$safe = array();
 		foreach ( (array) ( $def['args'] ?? array() ) as $key => $allowed ) {
@@ -641,7 +641,7 @@ class Minn_Admin_Notices {
 	/** Everest Forms allow-usage notice — mirrors allow_usage_dismiss without wp_die(). */
 	public static function run_everest_allow_usage( $args ) {
 		if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'manage_everest_forms' ) ) {
-			return new WP_Error( 'forbidden', 'You cannot dismiss this notice.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You cannot dismiss this notice.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		update_option( 'everest_forms_allow_usage_notice_shown', true );
 		if ( isset( $args['allow_usage_tracking'] ) && 'true' === $args['allow_usage_tracking'] ) {
@@ -660,7 +660,7 @@ class Minn_Admin_Notices {
 		$cap = current_user_can( 'manage_instagram_feed_options' ) ? 'manage_instagram_feed_options' : 'manage_options';
 		$cap = apply_filters( 'sbi_settings_pages_capability', $cap );
 		if ( ! current_user_can( $cap ) ) {
-			return new WP_Error( 'forbidden', 'You cannot answer this notice.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You cannot answer this notice.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$consent = ( isset( $args['consent'] ) && 'yes' === $args['consent'] ) ? 'yes' : 'no';
 		update_option( 'sbi_review_consent', $consent );

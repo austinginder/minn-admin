@@ -85,7 +85,7 @@ function minn_admin_llar_rows() {
 			$locked   = ! $unlocked && isset( $lockouts[ $ip ] ) && (int) $lockouts[ $ip ] > time();
 			$rows[]   = array(
 				'id'       => md5( $ip . '|' . $user ),
-				'message'  => 'Locked out: ' . $user,
+				'message'  => __( 'Locked out: ', 'minn-admin' ) . $user,
 				'who'      => (string) $user,
 				'ip'       => (string) $ip,
 				'attempts' => isset( $data['counter'] ) ? (int) $data['counter'] : 1,
@@ -132,7 +132,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$surfaces['limit-login-attempts'] = array(
-		'label'      => 'Activity Log',
+		'label'      => __( 'Activity Log', 'minn-admin' ),
 		'family'     => 'activity-log',
 		'sub'        => 'Limit Login Attempts',
 		'icon'       => 'shield',
@@ -166,7 +166,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Unlock IP',
+					'label'  => __( 'Unlock IP', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/llar/log/{id}/unlock',
 					'when'   => array( 'key' => 'locked', 'equals' => true ),
@@ -224,16 +224,16 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
-						'label' => 'Locked out now',
+						'label' => __( 'Locked out now', 'minn-admin' ),
 						'value' => $active ? count( $active ) . ' IP' . ( 1 === count( $active ) ? '' : 's' ) : 'Nobody',
 						'hint'  => $active ? implode( ' · ', array_slice( $active, 0, 3 ) ) . ( count( $active ) > 3 ? ' …' : '' ) : '',
 					),
 					array(
-						'label' => 'Failed attempts (24h)',
+						'label' => __( 'Failed attempts (24h)', 'minn-admin' ),
 						'value' => (string) minn_admin_llar_retries_last_day(),
 					),
 					array(
-						'label' => 'Lockouts all-time',
+						'label' => __( 'Lockouts all-time', 'minn-admin' ),
 						'value' => (string) $total,
 					),
 					array(
@@ -242,7 +242,7 @@ add_action( 'rest_api_init', function () {
 					),
 				),
 				'actions' => array(
-					array( 'label' => 'Open Limit Login Attempts ↗', 'href' => minn_admin_llar_admin_url() ),
+					array( 'label' => __( 'Open Limit Login Attempts ↗', 'minn-admin' ), 'href' => minn_admin_llar_admin_url() ),
 				),
 			) );
 		},
@@ -255,7 +255,7 @@ add_action( 'rest_api_init', function () {
 			$id  = (string) $request['id'];
 			$log = \LLAR\Core\Config::get( 'logged' );
 			if ( ! is_array( $log ) ) {
-				return new WP_Error( 'minn_llar_missing', 'No lockout log.', array( 'status' => 404 ) );
+				return new WP_Error( 'minn_llar_missing', __( 'No lockout log.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			foreach ( $log as $ip => $users ) {
 				foreach ( (array) $users as $user => $data ) {
@@ -274,10 +274,10 @@ add_action( 'rest_api_init', function () {
 					}
 					$log[ $ip ][ $user ]['unlocked'] = true;
 					\LLAR\Core\Config::update( 'logged', $log );
-					return rest_ensure_response( array( 'ok' => true, 'message' => 'Unlocked ' . $ip ) );
+					return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Unlocked ', 'minn-admin' ) . $ip ) );
 				}
 			}
-			return new WP_Error( 'minn_llar_missing', 'That lockout is no longer in the log.', array( 'status' => 404 ) );
+			return new WP_Error( 'minn_llar_missing', __( 'That lockout is no longer in the log.', 'minn-admin' ), array( 'status' => 404 ) );
 		},
 	) );
 } );

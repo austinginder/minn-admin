@@ -163,7 +163,7 @@ function minn_admin_ninja_forms_status_model() {
 			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
 		),
 		'actions' => array(
-			array( 'label' => 'Open Ninja Forms ↗', 'href' => admin_url( 'admin.php?page=nf-submissions' ) ),
+			array( 'label' => __( 'Open Ninja Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=nf-submissions' ) ),
 		),
 	);
 }
@@ -215,10 +215,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Trash entry',
+					'label'   => __( 'Trash entry', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}/trash',
-					'confirm' => 'Move this entry to trash?',
+					'confirm' => __( 'Move this entry to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
 				),
@@ -229,10 +229,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}',
-					'confirm' => 'Delete this entry permanently? There is no undo.',
+					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
@@ -242,7 +242,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Trash',
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}/trash',
-					'confirm' => 'Move the selected entries to trash?',
+					'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
 				),
@@ -253,10 +253,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}',
-					'confirm' => 'Delete the selected entries permanently?',
+					'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
 				),
@@ -273,7 +273,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(),
 			'actions'   => array(
 				array(
-					'label' => 'Edit in Ninja Forms ↗',
+					'label' => __( 'Edit in Ninja Forms ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=ninja-forms&form_id={id}' ),
 				),
 			),
@@ -396,7 +396,7 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) $request['id'] );
 			if ( ! $post || 'nf_sub' !== $post->post_type ) {
-				return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$form_id = (int) get_post_meta( $post->ID, '_form_id', true );
 			$fields  = minn_admin_ninja_forms_fields( $form_id );
@@ -414,7 +414,7 @@ add_action( 'rest_api_init', function () {
 			foreach ( $answers as $fid => $value ) {
 				if ( ! isset( $fields[ $fid ] ) && '' !== $value ) {
 					$rows[] = array(
-						'label' => 'Field ' . $fid,
+						'label' => __( 'Field ', 'minn-admin' ) . $fid,
 						'value' => $value,
 					);
 				}
@@ -443,18 +443,18 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) $request['id'] );
 			if ( ! $post || 'nf_sub' !== $post->post_type ) {
-				return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			// Their own model's trash (their screen's semantics).
 			try {
 				Ninja_Forms()->form()->sub( $post->ID )->get()->trash();
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'trash_failed', 'Ninja Forms could not trash: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'trash_failed', __( 'Ninja Forms could not trash: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			if ( 'trash' !== get_post_status( $post->ID ) ) {
-				return new WP_Error( 'trash_failed', 'Ninja Forms reported success but the entry is not in the trash.', array( 'status' => 500 ) );
+				return new WP_Error( 'trash_failed', __( 'Ninja Forms reported success but the entry is not in the trash.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( array( 'ok' => true, 'status' => 'trash', 'message' => 'Moved to trash.' ) );
+			return rest_ensure_response( array( 'ok' => true, 'status' => 'trash', 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
 		},
 	) );
 
@@ -464,17 +464,17 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) $request['id'] );
 			if ( ! $post || 'nf_sub' !== $post->post_type ) {
-				return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			if ( 'trash' !== $post->post_status ) {
-				return new WP_Error( 'not_trashed', 'Only trashed entries can be restored.', array( 'status' => 400 ) );
+				return new WP_Error( 'not_trashed', __( 'Only trashed entries can be restored.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			// Ninja has no restore helper — wp_untrash_post matches core trash.
 			$result = wp_untrash_post( $post->ID );
 			if ( ! $result ) {
-				return new WP_Error( 'restore_failed', 'Could not restore the entry.', array( 'status' => 500 ) );
+				return new WP_Error( 'restore_failed', __( 'Could not restore the entry.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( array( 'ok' => true, 'status' => 'publish', 'message' => 'Entry restored.' ) );
+			return rest_ensure_response( array( 'ok' => true, 'status' => 'publish', 'message' => __( 'Entry restored.', 'minn-admin' ) ) );
 		},
 	) );
 
@@ -484,20 +484,20 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) $request['id'] );
 			if ( ! $post || 'nf_sub' !== $post->post_type ) {
-				return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			if ( 'trash' !== $post->post_status ) {
-				return new WP_Error( 'not_trashed', 'Move the entry to trash before deleting permanently.', array( 'status' => 400 ) );
+				return new WP_Error( 'not_trashed', __( 'Move the entry to trash before deleting permanently.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			try {
 				Ninja_Forms()->form()->sub( $post->ID )->get()->delete();
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'delete_failed', 'Ninja Forms could not delete: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'delete_failed', __( 'Ninja Forms could not delete: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			if ( get_post( $post->ID ) ) {
-				return new WP_Error( 'delete_failed', 'Entry still exists after delete.', array( 'status' => 500 ) );
+				return new WP_Error( 'delete_failed', __( 'Entry still exists after delete.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( array( 'ok' => true, 'message' => 'Entry deleted permanently.' ) );
+			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
 		},
 	) );
 } );

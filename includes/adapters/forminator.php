@@ -163,7 +163,7 @@ function minn_admin_forminator_status_model() {
 			array( 'label' => 'Forms', 'value' => number_format_i18n( $forms ) ),
 		),
 		'actions' => array(
-			array( 'label' => 'Open Forminator ↗', 'href' => admin_url( 'admin.php?page=forminator-entries' ) ),
+			array( 'label' => __( 'Open Forminator ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=forminator-entries' ) ),
 		),
 	);
 }
@@ -215,41 +215,41 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Mark as spam',
+					'label'   => __( 'Mark as spam', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/forminator/entries/{id}/spam',
-					'confirm' => 'Mark this entry as spam? Find it under the Spam filter.',
+					'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'received' ),
 				),
 				array(
-					'label'  => 'Not spam',
+					'label'  => __( 'Not spam', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/forminator/entries/{id}/unspam',
 					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/forminator/entries/{id}',
-					'confirm' => 'Delete this entry permanently? Forminator has no entry trash — there is no undo.',
+					'confirm' => __( 'Delete this entry permanently? Forminator has no entry trash — there is no undo.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Mark as spam',
+					'label'   => __( 'Mark as spam', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/forminator/entries/{id}/spam',
-					'confirm' => 'Mark the selected entries as spam?',
+					'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'status', 'equals' => 'received' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/forminator/entries/{id}',
-					'confirm' => 'Delete the selected entries permanently? There is no undo.',
+					'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -265,7 +265,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(),
 			'actions'   => array(
 				array(
-					'label' => 'Edit in Forminator ↗',
+					'label' => __( 'Edit in Forminator ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=forminator-cform-wizard&id={id}' ),
 				),
 			),
@@ -395,7 +395,7 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$form_id = (int) $row->form_id;
 				$fields  = minn_admin_forminator_fields( $form_id );
@@ -444,7 +444,7 @@ add_action( 'rest_api_init', function () {
 					$id
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Their complete cleanup (meta and upload bookkeeping go too).
 				$result = Forminator_API::delete_entry( (int) $row->form_id, $id );
@@ -454,9 +454,9 @@ add_action( 'rest_api_init', function () {
 				}
 				$still = $wpdb->get_var( $wpdb->prepare( "SELECT entry_id FROM {$wpdb->prefix}frmt_form_entry WHERE entry_id = %d", $id ) ); // phpcs:ignore
 				if ( $still ) {
-					return new WP_Error( 'delete_failed', 'Forminator reported success but the entry still exists.', array( 'status' => 500 ) );
+					return new WP_Error( 'delete_failed', __( 'Forminator reported success but the entry still exists.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
-				return rest_ensure_response( array( 'ok' => true, 'message' => 'Entry deleted permanently.' ) );
+				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -477,7 +477,7 @@ add_action( 'rest_api_init', function () {
 					$id
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Entry not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Their entry table owns is_spam + status (same columns their model writes).
 				$wpdb->update(

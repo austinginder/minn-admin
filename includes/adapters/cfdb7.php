@@ -224,20 +224,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Mark as unread',
+					'label'  => __( 'Mark as unread', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/cfdb7/entries/{id}/unread',
 					'when'   => array( 'key' => 'status', 'equals' => 'read' ),
 				),
 				array(
-					'label'   => 'Delete entry',
+					'label'   => __( 'Delete entry', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/cfdb7/entries/{id}',
-					'confirm' => 'Delete this entry permanently? CFDB7 has no trash.',
+					'confirm' => __( 'Delete this entry permanently? CFDB7 has no trash.', 'minn-admin' ),
 					'danger'  => true,
 				),
 				array(
-					'label' => 'Open in CFDB7 ↗',
+					'label' => __( 'Open in CFDB7 ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=cfdb7-list.php&fid={form_post_id}&ufid={id}' ),
 				),
 			),
@@ -246,7 +246,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/cfdb7/entries/{id}',
-					'confirm' => 'Delete the selected entries permanently? CFDB7 has no trash.',
+					'confirm' => __( 'Delete the selected entries permanently? CFDB7 has no trash.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -360,7 +360,7 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$values = minn_admin_cfdb7_values( (string) $row->form_value );
 
@@ -431,7 +431,7 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $exists ) {
-					return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Remove the files the entry uploaded before the row that names
 				// them, exactly as CFDB7's own bulk delete does: the values whose
@@ -456,7 +456,7 @@ add_action( 'rest_api_init', function () {
 				}
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->delete( $table, array( 'form_id' => (int) $request['id'] ), array( '%d' ) );
-				return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true, 'message' => 'Entry deleted permanently.' ) );
+				return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -474,14 +474,14 @@ add_action( 'rest_api_init', function () {
 				(int) $request['id']
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$patched = minn_admin_cfdb7_set_status( $row->form_value, 'unread' );
 			if ( null !== $patched ) {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) );
 			}
-			return rest_ensure_response( array( 'id' => (int) $row->form_id, 'status' => 'unread', 'message' => 'Marked as unread.' ) );
+			return rest_ensure_response( array( 'id' => (int) $row->form_id, 'status' => 'unread', 'message' => __( 'Marked as unread.', 'minn-admin' ) ) );
 		},
 	) );
 } );

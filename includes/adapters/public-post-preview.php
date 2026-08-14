@@ -52,19 +52,19 @@ function minn_admin_ppp_ids() {
  */
 function minn_admin_ppp_eligible( $post ) {
 	if ( ! ( $post instanceof WP_Post ) ) {
-		return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+		return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 	$blocked = apply_filters( 'ppp_published_statuses', array( 'publish', 'private' ) );
 	$blocked = array_merge( (array) $blocked, array( 'trash', 'auto-draft' ) );
 	if ( in_array( $post->post_status, $blocked, true ) ) {
 		return new WP_Error(
 			'invalid_status',
-			'Public preview is only available for unpublished drafts (not publish or private).',
+			__( 'Public preview is only available for unpublished drafts (not publish or private).', 'minn-admin' ),
 			array( 'status' => 400 )
 		);
 	}
 	if ( ! is_post_type_viewable( $post->post_type ) ) {
-		return new WP_Error( 'invalid_type', 'This post type is not viewable on the front end.', array( 'status' => 400 ) );
+		return new WP_Error( 'invalid_type', __( 'This post type is not viewable on the front end.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
 	return true;
 }
@@ -138,10 +138,10 @@ function minn_admin_ppp_set( $post_id, $on ) {
 		// Race: re-read and compare membership only.
 		$now = minn_admin_ppp_ids();
 		if ( $on && ! in_array( $post_id, $now, true ) ) {
-			return new WP_Error( 'not_saved', 'Could not save public preview state.', array( 'status' => 500 ) );
+			return new WP_Error( 'not_saved', __( 'Could not save public preview state.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		if ( ! $on && in_array( $post_id, $now, true ) ) {
-			return new WP_Error( 'not_saved', 'Could not save public preview state.', array( 'status' => 500 ) );
+			return new WP_Error( 'not_saved', __( 'Could not save public preview state.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 	}
 	return true;
@@ -164,7 +164,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$post = get_post( (int) $request['id'] );
 				if ( ! $post ) {
-					return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				return rest_ensure_response( minn_admin_ppp_state( $post ) );
 			},
@@ -175,7 +175,7 @@ add_action( 'rest_api_init', function () {
 			'callback'            => function ( WP_REST_Request $request ) {
 				$post = get_post( (int) $request['id'] );
 				if ( ! $post ) {
-					return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$eligible = minn_admin_ppp_eligible( $post );
 				if ( is_wp_error( $eligible ) ) {

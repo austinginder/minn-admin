@@ -216,15 +216,15 @@ function minn_admin_wpvivid_last() {
 /** Schedule summary for the status card. */
 function minn_admin_wpvivid_schedule_hint() {
 	if ( ! class_exists( 'WPvivid_Schedule' ) ) {
-		return array( 'enable' => false, 'label' => 'Not scheduled' );
+		return array( 'enable' => false, 'label' => __( 'Not scheduled', 'minn-admin' ) );
 	}
 	try {
 		$s = WPvivid_Schedule::get_schedule();
 	} catch ( \Throwable $e ) {
-		return array( 'enable' => false, 'label' => 'Not scheduled' );
+		return array( 'enable' => false, 'label' => __( 'Not scheduled', 'minn-admin' ) );
 	}
 	if ( empty( $s['enable'] ) ) {
-		return array( 'enable' => false, 'label' => 'Not scheduled' );
+		return array( 'enable' => false, 'label' => __( 'Not scheduled', 'minn-admin' ) );
 	}
 	$rec = isset( $s['recurrence'] ) ? (string) $s['recurrence'] : '';
 	$next = ! empty( $s['next_start'] ) ? (int) $s['next_start'] : 0;
@@ -257,12 +257,12 @@ function minn_admin_wpvivid_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Last backup',
+				'label' => __( 'Last backup', 'minn-admin' ),
 				'value' => $last_value,
 				'hint'  => $last_hint,
 			),
 			array(
-				'label' => 'Sets kept',
+				'label' => __( 'Sets kept', 'minn-admin' ),
 				'value' => (string) $count,
 				'hint'  => $count
 					? 'Newest first in the list below (retention may prune older sets)'
@@ -276,25 +276,25 @@ function minn_admin_wpvivid_status_model() {
 			array(
 				'label' => 'Status',
 				'value' => $running ? 'Running' : 'Idle',
-				'hint'  => 'Jobs run through WPvivid\'s own backup machinery',
+				'hint'  => __( 'Jobs run through WPvivid\'s own backup machinery', 'minn-admin' ),
 			),
 		),
 		'actions' => array(
 			array(
-				'label'   => 'Back up everything now',
+				'label'   => __( 'Back up everything now', 'minn-admin' ),
 				'route'   => 'minn-admin/v1/wpvivid/backup-now',
 				'method'  => 'POST',
 				'body'    => array( 'what' => 'all' ),
-				'confirm' => 'Start a full backup now? WPvivid will run it in the background.',
+				'confirm' => __( 'Start a full backup now? WPvivid will run it in the background.', 'minn-admin' ),
 			),
 			array(
-				'label'  => 'Database only',
+				'label'  => __( 'Database only', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/wpvivid/backup-now',
 				'method' => 'POST',
 				'body'   => array( 'what' => 'db' ),
 			),
 			array(
-				'label' => 'Open WPvivid ↗',
+				'label' => __( 'Open WPvivid ↗', 'minn-admin' ),
 				'href'  => admin_url( 'admin.php?page=WPvivid' ),
 			),
 		),
@@ -330,10 +330,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Delete backup',
+					'label'   => __( 'Delete backup', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/wpvivid/backups/{id}',
-					'confirm' => 'Delete this backup and its archive files permanently?',
+					'confirm' => __( 'Delete this backup and its archive files permanently?', 'minn-admin' ),
 					'danger'  => true,
 					// locked is '' on free rows, 'locked' when pinned.
 					'when'    => array( 'key' => 'locked', 'equals' => '' ),
@@ -396,19 +396,19 @@ add_action( 'rest_api_init', function () {
 			global $wpvivid_plugin;
 			$id = sanitize_key( (string) $request['id'] );
 			if ( ! $id ) {
-				return new WP_Error( 'invalid_id', 'Backup id is required.', array( 'status' => 400 ) );
+				return new WP_Error( 'invalid_id', __( 'Backup id is required.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			if ( ! WPvivid_Backuplist::get_backup_by_id( $id ) ) {
-				return new WP_Error( 'not_found', 'Backup not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Backup not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			if ( ! $wpvivid_plugin || ! method_exists( $wpvivid_plugin, 'delete_backup_by_id' ) ) {
-				return new WP_Error( 'unavailable', 'WPvivid is not ready to delete backups.', array( 'status' => 500 ) );
+				return new WP_Error( 'unavailable', __( 'WPvivid is not ready to delete backups.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			try {
 				// force=0 honors their lock; locked sets refuse with their message.
 				$ret = $wpvivid_plugin->delete_backup_by_id( $id, 0 );
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'delete_failed', 'WPvivid could not delete: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'delete_failed', __( 'WPvivid could not delete: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			if ( empty( $ret['result'] ) || 'success' !== $ret['result'] ) {
 				return new WP_Error(
@@ -428,7 +428,7 @@ add_action( 'rest_api_init', function () {
 			if ( minn_admin_wpvivid_running() ) {
 				return new WP_Error(
 					'already_running',
-					'A WPvivid backup is already running. Wait for it to finish.',
+					__( 'A WPvivid backup is already running. Wait for it to finish.', 'minn-admin' ),
 					array( 'status' => 409 )
 				);
 			}
@@ -444,13 +444,13 @@ add_action( 'rest_api_init', function () {
 				'action'       => 'backup',
 			);
 			if ( ! class_exists( 'WPvivid_Public_Interface' ) ) {
-				return new WP_Error( 'unavailable', 'WPvivid public interface is not loaded.', array( 'status' => 500 ) );
+				return new WP_Error( 'unavailable', __( 'WPvivid public interface is not loaded.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			try {
 				$iface = new WPvivid_Public_Interface();
 				$ret   = $iface->prepare_backup( $options );
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'prepare_failed', 'WPvivid could not prepare: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'prepare_failed', __( 'WPvivid could not prepare: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			if ( empty( $ret['result'] ) || 'success' !== $ret['result'] || empty( $ret['task_id'] ) ) {
 				return new WP_Error(

@@ -127,10 +127,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Delete package',
+					'label'   => __( 'Delete package', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/duplicator/packages/{id}',
-					'confirm' => 'Delete this package and its archive files permanently?',
+					'confirm' => __( 'Delete this package and its archive files permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -177,16 +177,16 @@ add_action( 'rest_api_init', function () {
 			try {
 				$package = DUP_Package::getByID( $id );
 				if ( ! $package ) {
-					return new WP_Error( 'not_found', 'Package not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Package not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$package->ID = $id;
 				$package->delete();
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'delete_failed', 'Duplicator could not delete: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'delete_failed', __( 'Duplicator could not delete: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			$table = $wpdb->base_prefix . 'duplicator_packages';
 			if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				return new WP_Error( 'delete_failed', 'Duplicator reported success but the package row is still there.', array( 'status' => 500 ) );
+				return new WP_Error( 'delete_failed', __( 'Duplicator reported success but the package row is still there.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array( 'deleted' => true ) );
 		},
@@ -219,23 +219,23 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'rows'    => array(
 					array(
-						'label' => 'Newest package',
+						'label' => __( 'Newest package', 'minn-admin' ),
 						'value' => $newest ? $newest['name'] : 'None yet',
 						'hint'  => $newest ? trim( $when . ' · ' . $newest['size'], ' ·' ) : 'Packages are built manually from Duplicator\'s screen.',
 					),
 					array(
 						'label' => 'Packages',
 						'value' => (string) count( $rows ),
-						'hint'  => 'Manual builds; Minn makes no freshness claims for Duplicator.',
+						'hint'  => __( 'Manual builds; Minn makes no freshness claims for Duplicator.', 'minn-admin' ),
 					),
 					array(
-						'label' => 'On disk',
+						'label' => __( 'On disk', 'minn-admin' ),
 						'value' => $disk ? size_format( $disk ) : '0 B',
 						'hint'  => basename( $dir ),
 					),
 				),
 				'actions' => array(
-					array( 'label' => 'Build a package ↗', 'href' => admin_url( 'admin.php?page=duplicator' ) ),
+					array( 'label' => __( 'Build a package ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=duplicator' ) ),
 				),
 			) );
 		},

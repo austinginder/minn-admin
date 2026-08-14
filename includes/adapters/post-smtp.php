@@ -56,9 +56,9 @@ function minn_admin_post_smtp_status_model() {
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 		return array(
-			'rows'    => array( array( 'label' => 'Email log', 'value' => 'Not ready', 'hint' => 'Post SMTP has not created its log table yet' ) ),
+			'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => 'Not ready', 'hint' => __( 'Post SMTP has not created its log table yet', 'minn-admin' ) ) ),
 			'actions' => array(
-				array( 'label' => 'Open Post SMTP ↗', 'href' => admin_url( 'admin.php?page=postman_email_log' ) ),
+				array( 'label' => __( 'Open Post SMTP ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=postman_email_log' ) ),
 			),
 		);
 	}
@@ -104,25 +104,25 @@ function minn_admin_post_smtp_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Logged emails',
+				'label' => __( 'Logged emails', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
 				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
 			),
 			array(
 				'label' => 'Transport',
 				'value' => $transport ? $transport : '—',
-				'hint'  => 'Configured in Post SMTP',
+				'hint'  => __( 'Configured in Post SMTP', 'minn-admin' ),
 			),
 		),
 		'chart'   => array(
-			'title'     => 'Last 14 days',
+			'title'     => __( 'Last 14 days', 'minn-admin' ),
 			'primary'   => 'Sent',
 			'secondary' => 'Failed',
 			'points'    => array_values( $by_day ),
 		),
 		'actions' => array(
 			array(
-				'label' => 'Open Post SMTP ↗',
+				'label' => __( 'Open Post SMTP ↗', 'minn-admin' ),
 				'href'  => admin_url( 'admin.php?page=postman' ),
 			),
 		),
@@ -171,13 +171,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Resend',
 					'route'   => 'minn-admin/v1/post-smtp/emails/{id}/resend',
 					'method'  => 'POST',
-					'confirm' => 'Resend this email to the original recipients?',
+					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
 				),
 				array(
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/post-smtp/emails/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete this log entry permanently? There is no trash.',
+					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -186,7 +186,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'route'   => 'minn-admin/v1/post-smtp/emails/{id}',
 					'method'  => 'DELETE',
-					'confirm' => 'Delete the selected log entries permanently?',
+					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -271,7 +271,7 @@ add_action( 'rest_api_init', function () {
 				(int) $request['id']
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$status   = minn_admin_post_smtp_status( $row->success );
 			$delivery = array(
@@ -299,7 +299,7 @@ add_action( 'rest_api_init', function () {
 			if ( 'failed' === $status ) {
 				$fail = array( array( 'label' => 'Error', 'value' => (string) $row->success, 'type' => 'code' ) );
 				if ( '' !== (string) $row->solution ) {
-					$fail[] = array( 'label' => 'Suggested fix', 'value' => (string) $row->solution );
+					$fail[] = array( 'label' => __( 'Suggested fix', 'minn-admin' ), 'value' => (string) $row->solution );
 				}
 				$sections[] = array( 'title' => 'Failure', 'rows' => $fail );
 			}
@@ -318,7 +318,7 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$status = minn_admin_post_smtp_status( $row->success );
 				return rest_ensure_response( array(
@@ -347,9 +347,9 @@ add_action( 'rest_api_init', function () {
 					(int) $request['id']
 				) );
 				if ( ! $deleted ) {
-					return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 				}
-				return rest_ensure_response( array( 'deleted' => true, 'message' => 'Log entry deleted.' ) );
+				return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Log entry deleted.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -364,11 +364,11 @@ add_action( 'rest_api_init', function () {
 				(int) $request['id']
 			) );
 			if ( ! $row ) {
-				return new WP_Error( 'not_found', 'Email not found', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			// Addresses only — never unserialize their recipient blobs.
 			if ( ! preg_match_all( '/[\w.+\-]+@[\w.\-]+\.[A-Za-z]{2,}/', (string) ( $row->original_to ?: $row->to_header ), $m ) ) {
-				return new WP_Error( 'no_recipients', 'No recipient address on record for this email.', array( 'status' => 422 ) );
+				return new WP_Error( 'no_recipients', __( 'No recipient address on record for this email.', 'minn-admin' ), array( 'status' => 422 ) );
 			}
 			$to      = array_values( array_unique( array_filter( $m[0], 'is_email' ) ) );
 			$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $row->original_message );
@@ -380,7 +380,7 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'resent'  => true,
 				'to'      => implode( ', ', $to ),
-				'message' => 'Resent to ' . implode( ', ', $to ),
+				'message' => __( 'Resent to ', 'minn-admin' ) . implode( ', ', $to ),
 			) );
 		},
 	) );

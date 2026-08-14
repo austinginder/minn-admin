@@ -324,7 +324,7 @@ class Minn_Admin_REST {
 							return rest_ensure_response( array( 'ok' => true, 'cleared' => true ) );
 						}
 						if ( ! preg_match( '/^[a-f0-9]{12}$/', $id ) ) {
-							return new WP_Error( 'bad_id', 'Invalid notice id.', array( 'status' => 400 ) );
+							return new WP_Error( 'bad_id', __( 'Invalid notice id.', 'minn-admin' ), array( 'status' => 400 ) );
 						}
 						Minn_Admin_Notices::$op( $id );
 						return rest_ensure_response( array( 'ok' => true ) );
@@ -1842,14 +1842,14 @@ class Minn_Admin_REST {
 	public static function comment_block( WP_REST_Request $request ) {
 		$comment = get_comment( (int) $request['id'] );
 		if ( ! $comment ) {
-			return new WP_Error( 'not_found', 'Comment not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Comment not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$candidate = trim( (string) $comment->comment_author_email );
 		if ( '' === $candidate ) {
 			$candidate = trim( (string) $comment->comment_author_IP );
 		}
 		if ( '' === $candidate ) {
-			return new WP_Error( 'no_identity', 'This comment carries no email or IP to block.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_identity', __( 'This comment carries no email or IP to block.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$lines = array_filter( array_map( 'trim', explode( "\n", (string) get_option( 'disallowed_keys', '' ) ) ) );
 		$added = array();
@@ -1998,11 +1998,11 @@ class Minn_Admin_REST {
 			return rest_ensure_response( array( 'cleared' => true ) );
 		}
 		if ( ! wp_is_writable( $path ) ) {
-			return new WP_Error( 'not_writable', 'The debug log is not writable.', array( 'status' => 400 ) );
+			return new WP_Error( 'not_writable', __( 'The debug log is not writable.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$fh = @fopen( $path, 'w' );
 		if ( ! $fh ) {
-			return new WP_Error( 'clear_failed', 'Could not clear the debug log.', array( 'status' => 500 ) );
+			return new WP_Error( 'clear_failed', __( 'Could not clear the debug log.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		fclose( $fh );
 		return rest_ensure_response( array( 'cleared' => true ) );
@@ -2063,7 +2063,7 @@ class Minn_Admin_REST {
 	public static function render_blocks( WP_REST_Request $request ) {
 		$blocks = $request['blocks'];
 		if ( ! is_array( $blocks ) ) {
-			return new WP_Error( 'invalid_blocks', 'Expected an array of block markup strings.', array( 'status' => 400 ) );
+			return new WP_Error( 'invalid_blocks', __( 'Expected an array of block markup strings.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		// The post these islands belong to, when the client knows it — some
 		// plugins cache per-post generated CSS the styles filter below can
@@ -2285,15 +2285,15 @@ class Minn_Admin_REST {
 			}
 		}
 		if ( ! $surface || empty( $surface['setup'] ) || ! is_array( $surface['setup'] ) ) {
-			return new WP_Error( 'no_setup', 'That surface has no setup to run.', array( 'status' => 404 ) );
+			return new WP_Error( 'no_setup', __( 'That surface has no setup to run.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$cap = isset( $surface['cap'] ) ? $surface['cap'] : 'manage_options';
 		if ( ! current_user_can( $cap ) ) {
-			return new WP_Error( 'forbidden', 'You cannot set up this plugin.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You cannot set up this plugin.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$setup = $surface['setup'];
 		if ( empty( $setup['run'] ) || ! is_callable( $setup['run'] ) ) {
-			return new WP_Error( 'no_setup', 'This setup runs on the plugin\'s own screen.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_setup', __( 'This setup runs on the plugin\'s own screen.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		if ( isset( $setup['needed'] ) && is_callable( $setup['needed'] ) && ! call_user_func( $setup['needed'] ) ) {
 			return rest_ensure_response( array( 'ok' => true, 'already' => true ) );
@@ -2404,7 +2404,7 @@ class Minn_Admin_REST {
 		if ( '' !== $structure && ! preg_match( '/%[^\/%]+%/', $structure ) ) {
 			return new WP_Error(
 				'invalid_structure',
-				'A custom structure needs at least one tag, e.g. %postname%.',
+				__( 'A custom structure needs at least one tag, e.g. %postname%.', 'minn-admin' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -2458,11 +2458,11 @@ class Minn_Admin_REST {
 		);
 		foreach ( $balance as $pair ) {
 			if ( substr_count( $css, $pair[0] ) !== substr_count( $css, $pair[1] ) ) {
-				return new WP_Error( 'invalid_css', 'That CSS has unbalanced ' . $pair[2] . '. Fix it and save again; nothing was changed.', array( 'status' => 400 ) );
+				return new WP_Error( 'invalid_css', __( 'That CSS has unbalanced ', 'minn-admin' ) . $pair[2] . '. Fix it and save again; nothing was changed.', array( 'status' => 400 ) );
 			}
 		}
 		if ( substr_count( $css, '/*' ) !== substr_count( $css, '*/' ) ) {
-			return new WP_Error( 'invalid_css', 'That CSS has an unclosed comment. Fix it and save again; nothing was changed.', array( 'status' => 400 ) );
+			return new WP_Error( 'invalid_css', __( 'That CSS has an unclosed comment. Fix it and save again; nothing was changed.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		$result = wp_update_custom_css_post( $css );
@@ -2811,12 +2811,12 @@ class Minn_Admin_REST {
 		$from = $request['from'];
 		$to   = $request['to'];
 		if ( $from > $to ) {
-			return new WP_Error( 'bad_range', 'from must be on or before to.', array( 'status' => 400 ) );
+			return new WP_Error( 'bad_range', __( 'from must be on or before to.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		// Cap the window so a bad client can't ask for years of aggregation.
 		$span = (int) ( ( strtotime( $to . ' UTC' ) - strtotime( $from . ' UTC' ) ) / DAY_IN_SECONDS ) + 1;
 		if ( $span > 31 ) {
-			return new WP_Error( 'range_too_long', 'Pick a window of 31 days or fewer.', array( 'status' => 400 ) );
+			return new WP_Error( 'range_too_long', __( 'Pick a window of 31 days or fewer.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		/**
@@ -2978,17 +2978,17 @@ class Minn_Admin_REST {
 		$id   = (int) $request['id'];
 		$post = get_post( $id );
 		if ( ! $post ) {
-			return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( 'trash' !== $post->post_status ) {
-			return new WP_Error( 'not_trashed', 'That post is not in the trash.', array( 'status' => 400 ) );
+			return new WP_Error( 'not_trashed', __( 'That post is not in the trash.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		// Same capability wp-admin's own untrash link requires.
 		if ( ! current_user_can( 'delete_post', $id ) ) {
-			return new WP_Error( 'forbidden', 'You are not allowed to restore this item.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You are not allowed to restore this item.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		if ( ! wp_untrash_post( $id ) ) {
-			return new WP_Error( 'restore_failed', 'Could not restore the item.', array( 'status' => 500 ) );
+			return new WP_Error( 'restore_failed', __( 'Could not restore the item.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		return rest_ensure_response(
 			array(
@@ -3069,10 +3069,10 @@ class Minn_Admin_REST {
 		$id   = (int) $request['id'];
 		$post = get_post( $id );
 		if ( ! $post ) {
-			return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error( 'forbidden', 'You are not allowed to edit this item.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You are not allowed to edit this item.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		require_once ABSPATH . 'wp-admin/includes/post.php';
 		$other = wp_check_post_lock( $id );
@@ -3102,10 +3102,10 @@ class Minn_Admin_REST {
 		$id   = (int) $request['id'];
 		$post = get_post( $id );
 		if ( ! $post ) {
-			return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error( 'forbidden', 'You are not allowed to edit this item.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You are not allowed to edit this item.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$lock  = (string) get_post_meta( $id, '_edit_lock', true );
 		$parts = explode( ':', $lock );
@@ -3783,12 +3783,12 @@ class Minn_Admin_REST {
 	 */
 	public static function set_site_logo( WP_REST_Request $request ) {
 		if ( ! current_theme_supports( 'custom-logo' ) ) {
-			return new WP_Error( 'minn_no_logo_support', 'The active theme does not support a custom logo.', array( 'status' => 400 ) );
+			return new WP_Error( 'minn_no_logo_support', __( 'The active theme does not support a custom logo.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$id = (int) $request->get_param( 'id' );
 		if ( $id > 0 ) {
 			if ( ! wp_attachment_is_image( $id ) ) {
-				return new WP_Error( 'minn_bad_logo', 'That attachment is not an image.', array( 'status' => 400 ) );
+				return new WP_Error( 'minn_bad_logo', __( 'That attachment is not an image.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			set_theme_mod( 'custom_logo', $id );
 		} else {
@@ -3808,13 +3808,13 @@ class Minn_Admin_REST {
 		$downloaded = false;
 		if ( '' !== $locale && 'en_US' !== $locale && ! in_array( $locale, get_available_languages(), true ) ) {
 			if ( ! current_user_can( 'install_languages' ) || ! wp_is_file_mod_allowed( 'download_language_pack' ) ) {
-				return new WP_Error( 'minn_language_install', 'That language is not installed, and you cannot install languages on this site.', array( 'status' => 403 ) );
+				return new WP_Error( 'minn_language_install', __( 'That language is not installed, and you cannot install languages on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			require_once ABSPATH . 'wp-admin/includes/translation-install.php';
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 			$result = wp_download_language_pack( $locale );
 			if ( ! $result ) {
-				return new WP_Error( 'minn_language_install', 'The language pack could not be downloaded. Check the site can reach wordpress.org and try again.', array( 'status' => 500 ) );
+				return new WP_Error( 'minn_language_install', __( 'The language pack could not be downloaded. Check the site can reach wordpress.org and try again.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			$locale     = $result; // the API echoes the canonical code
 			$downloaded = true;
@@ -3842,13 +3842,13 @@ class Minn_Admin_REST {
 		$downloaded = false;
 		if ( '' !== $locale && 'en_US' !== $locale && ! in_array( $locale, get_available_languages(), true ) ) {
 			if ( ! current_user_can( 'install_languages' ) || ! wp_is_file_mod_allowed( 'download_language_pack' ) ) {
-				return new WP_Error( 'minn_language_install', 'That language is not installed, and you cannot install languages on this site.', array( 'status' => 403 ) );
+				return new WP_Error( 'minn_language_install', __( 'That language is not installed, and you cannot install languages on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 			}
 			require_once ABSPATH . 'wp-admin/includes/translation-install.php';
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 			$downloaded = wp_download_language_pack( $locale );
 			if ( ! $downloaded ) {
-				return new WP_Error( 'minn_language_install', 'The language pack could not be downloaded. Check the site can reach wordpress.org and try again.', array( 'status' => 500 ) );
+				return new WP_Error( 'minn_language_install', __( 'The language pack could not be downloaded. Check the site can reach wordpress.org and try again.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			$locale = $downloaded; // the API echoes the canonical code
 			$downloaded = true;
@@ -3880,7 +3880,7 @@ class Minn_Admin_REST {
 	public static function hide_integration( WP_REST_Request $request ) {
 		$id = (string) $request->get_param( 'id' );
 		if ( ! Minn_Admin_Surfaces::hide_integration( $id ) ) {
-			return new WP_Error( 'minn_unknown_integration', 'That integration is not registered.', array( 'status' => 400 ) );
+			return new WP_Error( 'minn_unknown_integration', __( 'That integration is not registered.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		return rest_ensure_response( self::integration_state() );
 	}
@@ -4274,7 +4274,7 @@ class Minn_Admin_REST {
 		$verifier = $request['verifier'];
 		$tokens   = get_user_meta( $uid, 'session_tokens', true );
 		if ( ! is_array( $tokens ) || ! isset( $tokens[ $verifier ] ) ) {
-			return new WP_Error( 'not_found', 'Session not found', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Session not found', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		unset( $tokens[ $verifier ] );
 		update_user_meta( $uid, 'session_tokens', $tokens );
@@ -4287,11 +4287,11 @@ class Minn_Admin_REST {
 	public static function user_reset_password( WP_REST_Request $request ) {
 		$user = get_userdata( self::target_user_id( $request ) );
 		if ( ! $user ) {
-			return new WP_Error( 'not_found', 'User not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'User not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		// Super admins on multisite need network-level rights.
 		if ( is_multisite() && is_super_admin( $user->ID ) && ! current_user_can( 'manage_network_users' ) ) {
-			return new WP_Error( 'forbidden', 'You cannot reset a super admin password.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You cannot reset a super admin password.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$result = retrieve_password( $user->user_login );
 		if ( true !== $result ) {
@@ -4310,15 +4310,15 @@ class Minn_Admin_REST {
 	public static function user_send_email( WP_REST_Request $request ) {
 		$user = get_userdata( self::target_user_id( $request ) );
 		if ( ! $user ) {
-			return new WP_Error( 'not_found', 'User not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'User not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$subject = trim( (string) $request['subject'] );
 		$message = trim( (string) $request['message'] );
 		if ( '' === $subject || '' === $message ) {
-			return new WP_Error( 'invalid', 'Subject and message are required.', array( 'status' => 400 ) );
+			return new WP_Error( 'invalid', __( 'Subject and message are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		if ( ! is_email( $user->user_email ) ) {
-			return new WP_Error( 'invalid_email', 'This user has no valid email address.', array( 'status' => 400 ) );
+			return new WP_Error( 'invalid_email', __( 'This user has no valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		$who  = $user->display_name ? $user->display_name : $user->user_login;
@@ -4338,20 +4338,20 @@ class Minn_Admin_REST {
 	 */
 	public static function order_send_email( WP_REST_Request $request ) {
 		if ( ! function_exists( 'wc_get_order' ) ) {
-			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$order = wc_get_order( (int) $request['id'] );
 		if ( ! $order ) {
-			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$to = $order->get_billing_email();
 		if ( ! is_email( $to ) ) {
-			return new WP_Error( 'invalid_email', 'This order has no valid billing email.', array( 'status' => 400 ) );
+			return new WP_Error( 'invalid_email', __( 'This order has no valid billing email.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$subject = trim( (string) $request['subject'] );
 		$message = trim( (string) $request['message'] );
 		if ( '' === $subject || '' === $message ) {
-			return new WP_Error( 'invalid', 'Subject and message are required.', array( 'status' => 400 ) );
+			return new WP_Error( 'invalid', __( 'Subject and message are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		$who = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
@@ -4422,11 +4422,11 @@ class Minn_Admin_REST {
 	 */
 	public static function wc_order_refund_state( WP_REST_Request $request ) {
 		if ( ! function_exists( 'wc_get_order' ) ) {
-			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$order = wc_get_order( (int) $request['id'] );
 		if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
-			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 
 		$refunds = array();
@@ -4518,11 +4518,11 @@ class Minn_Admin_REST {
 
 	public static function order_list_emails( WP_REST_Request $request ) {
 		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
-			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$order = wc_get_order( (int) $request['id'] );
 		if ( ! $order ) {
-			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$allow = self::order_email_allowlist();
 		$out = array();
@@ -4554,15 +4554,15 @@ class Minn_Admin_REST {
 	 */
 	public static function order_trigger_email( WP_REST_Request $request ) {
 		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
-			return new WP_Error( 'no_wc', 'WooCommerce is not available.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$order = wc_get_order( (int) $request['id'] );
 		if ( ! $order ) {
-			return new WP_Error( 'not_found', 'Order not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Order not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$email_id = (string) $request['email_id'];
 		if ( ! in_array( $email_id, self::order_email_allowlist(), true ) ) {
-			return new WP_Error( 'unknown_email', 'That email type is not available.', array( 'status' => 400 ) );
+			return new WP_Error( 'unknown_email', __( 'That email type is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$found    = null;
 		foreach ( WC()->mailer()->get_emails() as $email ) {
@@ -4572,7 +4572,7 @@ class Minn_Admin_REST {
 			}
 		}
 		if ( ! $found || ! is_callable( array( $found, 'trigger' ) ) ) {
-			return new WP_Error( 'unknown_email', 'That email type is not available.', array( 'status' => 400 ) );
+			return new WP_Error( 'unknown_email', __( 'That email type is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		// Force-send even if the email is disabled in settings (admin intent).
 		// WC_Email::trigger checks is_enabled(); temporarily enable via filter.
@@ -4747,7 +4747,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$stylesheet = sanitize_text_field( $request['stylesheet'] );
 		$theme      = self::get_valid_theme( $stylesheet );
 		if ( ! $theme ) {
-			return new WP_Error( 'not_found', 'Theme not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Theme not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		// switch_theme() checks version floors but never the network allowlist,
 		// so this is the only enforcement point — wp-admin/themes.php refuses
@@ -4769,10 +4769,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	public static function theme_delete( WP_REST_Request $request ) {
 		$stylesheet = sanitize_text_field( $request['stylesheet'] );
 		if ( ! self::get_valid_theme( $stylesheet ) ) {
-			return new WP_Error( 'not_found', 'Theme not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Theme not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( get_stylesheet() === $stylesheet || get_template() === $stylesheet ) {
-			return new WP_Error( 'theme_in_use', 'The active theme (or its parent) cannot be deleted.', array( 'status' => 400 ) );
+			return new WP_Error( 'theme_in_use', __( 'The active theme (or its parent) cannot be deleted.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		require_once ABSPATH . 'wp-admin/includes/theme.php';
 		require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -4841,7 +4841,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$updates = get_site_transient( 'update_themes' );
 		}
 		if ( ! $updates || empty( $updates->response[ $stylesheet ] ) ) {
-			return new WP_Error( 'no_update', 'No update available for that theme.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_update', __( 'No update available for that theme.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		// Snapshot every pending offer — upgrade() wipes the transient.
@@ -4928,18 +4928,18 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		$tax = get_taxonomy( $taxonomy );
 		if ( ! $tax || ! $tax->show_in_rest ) {
-			return new WP_Error( 'bad_taxonomy', 'Unknown taxonomy.', array( 'status' => 404 ) );
+			return new WP_Error( 'bad_taxonomy', __( 'Unknown taxonomy.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		if ( ! current_user_can( $tax->cap->delete_terms ) || ! current_user_can( $tax->cap->edit_terms ) ) {
-			return new WP_Error( 'forbidden', 'You cannot manage terms in this taxonomy.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'You cannot manage terms in this taxonomy.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		if ( $from_id === $into_id ) {
-			return new WP_Error( 'same_term', 'Pick a different term to merge into.', array( 'status' => 400 ) );
+			return new WP_Error( 'same_term', __( 'Pick a different term to merge into.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$from = get_term( $from_id, $taxonomy );
 		$into = get_term( $into_id, $taxonomy );
 		if ( ! $from || is_wp_error( $from ) || ! $into || is_wp_error( $into ) ) {
-			return new WP_Error( 'bad_term', 'Both terms must exist in this taxonomy.', array( 'status' => 404 ) );
+			return new WP_Error( 'bad_term', __( 'Both terms must exist in this taxonomy.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 
 		// Term counts only include published posts; count real assignments.
@@ -4953,7 +4953,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return $result;
 		}
 		if ( true !== $result ) {
-			return new WP_Error( 'merge_failed', 'The merge did not complete.', array( 'status' => 500 ) );
+			return new WP_Error( 'merge_failed', __( 'The merge did not complete.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		clean_term_cache( $into_id, $taxonomy );
 		return rest_ensure_response( array(
@@ -5041,10 +5041,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	public static function upload_theme( WP_REST_Request $request ) {
 		$files = $request->get_file_params();
 		if ( empty( $files['file'] ) || empty( $files['file']['tmp_name'] ) ) {
-			return new WP_Error( 'no_file', 'No file uploaded.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_file', __( 'No file uploaded.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		if ( ! preg_match( '/\.zip$/i', $files['file']['name'] ) ) {
-			return new WP_Error( 'not_zip', 'Theme uploads must be .zip files.', array( 'status' => 400 ) );
+			return new WP_Error( 'not_zip', __( 'Theme uploads must be .zip files.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
@@ -5054,7 +5054,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		$package = wp_tempnam( $files['file']['name'] );
 		if ( ! $package || ! move_uploaded_file( $files['file']['tmp_name'], $package ) ) {
-			return new WP_Error( 'move_failed', 'Could not store the upload.', array( 'status' => 500 ) );
+			return new WP_Error( 'move_failed', __( 'Could not store the upload.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		$skin     = new WP_Ajax_Upgrader_Skin();
@@ -5137,7 +5137,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	public static function plugin_info( WP_REST_Request $request ) {
 		$slug = sanitize_title( (string) $request['slug'] );
 		if ( ! $slug ) {
-			return new WP_Error( 'no_slug', 'Plugin slug is required.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_slug', __( 'Plugin slug is required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		// Non-wp.org catalog entries (GitHub-only) answer from a small local map
@@ -5230,10 +5230,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	public static function upload_plugin( WP_REST_Request $request ) {
 		$files = $request->get_file_params();
 		if ( empty( $files['file'] ) || empty( $files['file']['tmp_name'] ) ) {
-			return new WP_Error( 'no_file', 'No file uploaded.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_file', __( 'No file uploaded.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		if ( ! preg_match( '/\.zip$/i', $files['file']['name'] ) ) {
-			return new WP_Error( 'not_zip', 'Plugin uploads must be .zip files.', array( 'status' => 400 ) );
+			return new WP_Error( 'not_zip', __( 'Plugin uploads must be .zip files.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
@@ -5243,7 +5243,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		$package = wp_tempnam( $files['file']['name'] );
 		if ( ! $package || ! move_uploaded_file( $files['file']['tmp_name'], $package ) ) {
-			return new WP_Error( 'move_failed', 'Could not store the upload.', array( 'status' => 500 ) );
+			return new WP_Error( 'move_failed', __( 'Could not store the upload.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		$skin     = new WP_Ajax_Upgrader_Skin();
@@ -5287,7 +5287,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 
 		if ( ! $url ) {
-			return new WP_Error( 'no_source', 'Provide a zip URL or a github owner/repo.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_source', __( 'Provide a zip URL or a github owner/repo.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		$allowed = self::plugin_install_url_allowed( $url );
@@ -5329,7 +5329,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 */
 	private static function github_release_zip_url( $repo, $asset = '' ) {
 		if ( ! preg_match( '#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', $repo ) ) {
-			return new WP_Error( 'bad_github', 'Invalid GitHub repository.', array( 'status' => 400 ) );
+			return new WP_Error( 'bad_github', __( 'Invalid GitHub repository.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$api = 'https://api.github.com/repos/' . $repo . '/releases/latest';
 		$res = wp_remote_get(
@@ -5348,7 +5348,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$code = (int) wp_remote_retrieve_response_code( $res );
 		$body = json_decode( (string) wp_remote_retrieve_body( $res ), true );
 		if ( 200 !== $code || ! is_array( $body ) ) {
-			return new WP_Error( 'github_api', 'Could not read the latest GitHub release.', array( 'status' => 502 ) );
+			return new WP_Error( 'github_api', __( 'Could not read the latest GitHub release.', 'minn-admin' ), array( 'status' => 502 ) );
 		}
 		$assets = isset( $body['assets'] ) && is_array( $body['assets'] ) ? $body['assets'] : array();
 		$pick   = null;
@@ -5369,7 +5369,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 		if ( ! $pick ) {
-			return new WP_Error( 'github_no_zip', 'That release has no zip asset.', array( 'status' => 404 ) );
+			return new WP_Error( 'github_no_zip', __( 'That release has no zip asset.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		return $pick;
 	}
@@ -5383,7 +5383,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	private static function plugin_install_url_allowed( $url ) {
 		$parts = wp_parse_url( $url );
 		if ( empty( $parts['scheme'] ) || 'https' !== strtolower( $parts['scheme'] ) ) {
-			return new WP_Error( 'bad_url', 'Install URL must be HTTPS.', array( 'status' => 400 ) );
+			return new WP_Error( 'bad_url', __( 'Install URL must be HTTPS.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$host = isset( $parts['host'] ) ? strtolower( $parts['host'] ) : '';
 		$ok   = array(
@@ -5395,13 +5395,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'downloads.w.org',
 		);
 		if ( ! in_array( $host, $ok, true ) ) {
-			return new WP_Error( 'host_not_allowed', 'That download host is not allowed.', array( 'status' => 400 ) );
+			return new WP_Error( 'host_not_allowed', __( 'That download host is not allowed.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		// GitHub release assets: /…/releases/download/…/*.zip
 		// wp.org packages: /plugin/*.zip
 		$path = isset( $parts['path'] ) ? $parts['path'] : '';
 		if ( ! preg_match( '/\.zip$/i', $path ) ) {
-			return new WP_Error( 'not_zip', 'Install URL must point at a .zip file.', array( 'status' => 400 ) );
+			return new WP_Error( 'not_zip', __( 'Install URL must point at a .zip file.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		return true;
 	}
@@ -5478,7 +5478,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$updates = get_site_transient( 'update_plugins' );
 		}
 		if ( ! $updates || empty( $updates->response[ $file ] ) ) {
-			return new WP_Error( 'no_update', 'No update available for that plugin.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_update', __( 'No update available for that plugin.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		// Snapshot every pending offer — bulk_upgrade wipes the transient.
@@ -5571,7 +5571,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$offers = get_core_updates();
 		$offer  = is_array( $offers ) && $offers && 'upgrade' === $offers[0]->response ? $offers[0] : null;
 		if ( ! $offer ) {
-			return new WP_Error( 'no_update', 'WordPress is already up to date.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_update', __( 'WordPress is already up to date.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 
 		$skin     = new WP_Ajax_Upgrader_Skin();
@@ -5699,7 +5699,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 		if ( ! $matched ) {
-			return new WP_Error( 'no_cache', 'No cache layer detected on this site.', array( 'status' => 400 ) );
+			return new WP_Error( 'no_cache', __( 'No cache layer detected on this site.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		return rest_ensure_response(
 			array(
@@ -5808,7 +5808,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	public static function duplicate_post( WP_REST_Request $request ) {
 		$post = get_post( (int) $request['id'] );
 		if ( ! $post || 'trash' === $post->post_status ) {
-			return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+			return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$new_id = wp_insert_post(
 			array(
@@ -6496,11 +6496,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 */
 	private static function debug_constants() {
 		return array(
-			'WP_DEBUG'         => array( 'label' => 'Debug mode', 'desc' => 'Master switch for WordPress debugging.' ),
-			'WP_DEBUG_LOG'     => array( 'label' => 'Log to file', 'desc' => 'Write notices and errors to wp-content/debug.log.' ),
-			'WP_DEBUG_DISPLAY' => array( 'label' => 'Show errors on screen', 'desc' => 'Render errors in the page. Leave off in production and read the log instead.' ),
-			'SCRIPT_DEBUG'     => array( 'label' => 'Unminified assets', 'desc' => 'Load the full-length core and plugin JS/CSS.' ),
-			'SAVEQUERIES'      => array( 'label' => 'Log database queries', 'desc' => 'Record every query for inspection — a real performance cost; turn off when done.' ),
+			'WP_DEBUG'         => array( 'label' => __( 'Debug mode', 'minn-admin' ), 'desc' => __( 'Master switch for WordPress debugging.', 'minn-admin' ) ),
+			'WP_DEBUG_LOG'     => array( 'label' => __( 'Log to file', 'minn-admin' ), 'desc' => __( 'Write notices and errors to wp-content/debug.log.', 'minn-admin' ) ),
+			'WP_DEBUG_DISPLAY' => array( 'label' => __( 'Show errors on screen', 'minn-admin' ), 'desc' => __( 'Render errors in the page. Leave off in production and read the log instead.', 'minn-admin' ) ),
+			'SCRIPT_DEBUG'     => array( 'label' => __( 'Unminified assets', 'minn-admin' ), 'desc' => __( 'Load the full-length core and plugin JS/CSS.', 'minn-admin' ) ),
+			'SAVEQUERIES'      => array( 'label' => __( 'Log database queries', 'minn-admin' ), 'desc' => __( 'Record every query for inspection — a real performance cost; turn off when done.', 'minn-admin' ) ),
 		);
 	}
 
@@ -6650,10 +6650,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		$consts = self::debug_constants();
 		if ( ! isset( $consts[ $name ] ) ) {
-			return new WP_Error( 'bad_constant', 'That constant is not editable.', array( 'status' => 400 ) );
+			return new WP_Error( 'bad_constant', __( 'That constant is not editable.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		if ( ! Minn_Admin::code_edits_allowed() || ( is_multisite() && ! is_super_admin() ) ) {
-			return new WP_Error( 'forbidden', 'File modifications are disabled on this site.', array( 'status' => 403 ) );
+			return new WP_Error( 'forbidden', __( 'File modifications are disabled on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$path = self::wpconfig_path();
 		if ( ! $path || ! wp_is_writable( $path ) ) {
@@ -6661,7 +6661,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 		$contents = file_get_contents( $path );
 		if ( false === $contents ) {
-			return new WP_Error( 'read_failed', 'Could not read wp-config.php.', array( 'status' => 500 ) );
+			return new WP_Error( 'read_failed', __( 'Could not read wp-config.php.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		$line    = "define( '" . $name . "', " . ( $value ? 'true' : 'false' ) . " );";
@@ -6681,11 +6681,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$new = preg_replace( "/(require_once\\s*\\(?\\s*ABSPATH\\s*\\.\\s*['\"]wp-settings\\.php['\"])/", $line . "\n\n\$1", $contents, 1 );
 			}
 			if ( null === $new || $new === $contents ) {
-				return new WP_Error( 'place_failed', 'Could not find a safe place to add the constant.', array( 'status' => 500 ) );
+				return new WP_Error( 'place_failed', __( 'Could not find a safe place to add the constant.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 		}
 		if ( null === $new ) {
-			return new WP_Error( 'edit_failed', 'The edit could not be applied.', array( 'status' => 500 ) );
+			return new WP_Error( 'edit_failed', __( 'The edit could not be applied.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		// Validate the transformed file parses BEFORE writing it. TOKEN_PARSE
@@ -6693,7 +6693,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		try {
 			token_get_all( $new, TOKEN_PARSE );
 		} catch ( \ParseError $e ) {
-			return new WP_Error( 'parse_error', 'The change would break wp-config.php, so it was not saved.', array( 'status' => 500 ) );
+			return new WP_Error( 'parse_error', __( 'The change would break wp-config.php, so it was not saved.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		// Honour the backup's return value: a write that proceeds without a
@@ -6702,13 +6702,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( '' === $backup ) {
 			return new WP_Error(
 				'minn_backup_failed',
-				'Could not write a rollback copy of wp-config.php, so the change was not made.',
+				__( 'Could not write a rollback copy of wp-config.php, so the change was not made.', 'minn-admin' ),
 				array( 'status' => 500 )
 			);
 		}
 		if ( false === file_put_contents( $path, $new ) ) {
 			self::drop_wpconfig_backup( $path );
-			return new WP_Error( 'write_failed', 'Could not write wp-config.php.', array( 'status' => 500 ) );
+			return new WP_Error( 'write_failed', __( 'Could not write wp-config.php.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		// The write landed and was syntax-checked before it went out, so the

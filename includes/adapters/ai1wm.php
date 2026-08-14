@@ -105,7 +105,7 @@ function minn_admin_ai1wm_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Newest export',
+				'label' => __( 'Newest export', 'minn-admin' ),
 				'value' => $newest ? $newest['title'] : 'None yet',
 				'hint'  => $newest && $newest['ts']
 					? human_time_diff( $newest['ts'] ) . ' ago · ' . $newest['size']
@@ -114,21 +114,21 @@ function minn_admin_ai1wm_status_model() {
 			array(
 				'label' => 'Exports',
 				'value' => (string) count( $rows ),
-				'hint'  => 'Manual exports; Minn makes no freshness claims for All-in-One WP Migration.',
+				'hint'  => __( 'Manual exports; Minn makes no freshness claims for All-in-One WP Migration.', 'minn-admin' ),
 			),
 			array(
-				'label' => 'On disk',
+				'label' => __( 'On disk', 'minn-admin' ),
 				'value' => $disk ? size_format( $disk ) : '0 B',
 				'hint'  => $hint,
 			),
 		),
 		'actions' => array(
 			array(
-				'label' => 'Export site ↗',
+				'label' => __( 'Export site ↗', 'minn-admin' ),
 				'href'  => admin_url( 'admin.php?page=ai1wm_export' ),
 			),
 			array(
-				'label' => 'Open backups ↗',
+				'label' => __( 'Open backups ↗', 'minn-admin' ),
 				'href'  => admin_url( 'admin.php?page=ai1wm_backups' ),
 			),
 		),
@@ -165,10 +165,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'   => 'Delete export',
+					'label'   => __( 'Delete export', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/ai1wm/exports/{id}',
-					'confirm' => 'Delete this .wpress export permanently?',
+					'confirm' => __( 'Delete this .wpress export permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -213,7 +213,7 @@ add_action( 'rest_api_init', function () {
 				|| false !== strpos( $filename, '..' )
 				|| ( function_exists( 'ai1wm_is_filename_supported' ) && ! ai1wm_is_filename_supported( $filename ) )
 			) {
-				return new WP_Error( 'bad_id', 'Invalid export id.', array( 'status' => 400 ) );
+				return new WP_Error( 'bad_id', __( 'Invalid export id.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			try {
 				$ok = Ai1wm_Backups::delete_file( $filename );
@@ -221,13 +221,13 @@ add_action( 'rest_api_init', function () {
 					Ai1wm_Backups::delete_label( $filename );
 				}
 			} catch ( \Throwable $e ) {
-				return new WP_Error( 'delete_failed', 'All-in-One WP Migration could not delete: ' . $e->getMessage(), array( 'status' => 500 ) );
+				return new WP_Error( 'delete_failed', __( 'All-in-One WP Migration could not delete: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
 			if ( ! $ok ) {
 				// Already gone counts as success (idempotent).
 				foreach ( minn_admin_ai1wm_rows() as $r ) {
 					if ( $r['filename'] === $filename ) {
-						return new WP_Error( 'delete_failed', 'Could not delete the export.', array( 'status' => 500 ) );
+						return new WP_Error( 'delete_failed', __( 'Could not delete the export.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
 				}
 			}

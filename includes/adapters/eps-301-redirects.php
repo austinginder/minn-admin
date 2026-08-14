@@ -60,7 +60,7 @@ function minn_admin_eps301_payload( WP_REST_Request $request ) {
 	$to     = trim( (string) $request['to'] );
 	$status = trim( (string) $request['status'] );
 	if ( '' === $from || '' === $to ) {
-		return new WP_Error( 'invalid', 'Source and target are both required.', array( 'status' => 400 ) );
+		return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
 	if ( ! in_array( $status, array( '301', '302', '307', 'inactive' ), true ) ) {
 		$status = '301';
@@ -107,12 +107,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'hits', 'label' => 'Hits', 'format' => 'num', 'width' => '70px' ),
 			),
 			'create'   => array(
-				'label'  => 'Add redirect',
+				'label'  => __( 'Add redirect', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/eps301/redirects',
 				'method' => 'POST',
 				'fields' => array(
-					array( 'key' => 'from', 'label' => 'Source URL', 'mono' => true, 'placeholder' => '/old-page' ),
-					array( 'key' => 'to', 'label' => 'Target URL', 'mono' => true, 'placeholder' => '/new-page, https://… or a post ID' ),
+					array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ),
+					array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page, https://… or a post ID', 'minn-admin' ) ),
 					array( 'key' => 'status', 'label' => 'Status', 'type' => 'select', 'options' => $status_options ),
 				),
 			),
@@ -122,18 +122,18 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'  => 'minn-admin/v1/eps301/redirects/{id}',
 					'method' => 'PUT',
 					'fields' => array(
-						array( 'key' => 'from', 'label' => 'Source URL', 'mono' => true ),
-						array( 'key' => 'to', 'label' => 'Target URL', 'mono' => true ),
+						array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
+						array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
 						array( 'key' => 'status', 'label' => 'Status', 'type' => 'select', 'options' => $status_options ),
 					),
 				),
 			),
 			'actions'  => array(
 				array(
-					'label'   => 'Delete redirect',
+					'label'   => __( 'Delete redirect', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/eps301/redirects/{id}',
-					'confirm' => 'Delete this redirect permanently?',
+					'confirm' => __( 'Delete this redirect permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -142,7 +142,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/eps301/redirects/{id}',
-					'confirm' => 'Delete the selected redirects permanently?',
+					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
@@ -181,16 +181,16 @@ add_action( 'rest_api_init', function () {
 			$misses   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = '404'" ); // phpcs:ignore
 			$rows     = array(
 				array(
-					'label' => 'Redirect rules',
+					'label' => __( 'Redirect rules', 'minn-admin' ),
 					'value' => (string) $active,
 					'hint'  => $inactive ? $inactive . ' inactive' : 'all enabled',
 				),
-				array( 'label' => 'Hits, all time', 'value' => number_format_i18n( $hits ) ),
+				array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( $hits ) ),
 			);
 			$top = $wpdb->get_row( "SELECT url_from, count FROM {$t} WHERE status IN ('301','302','307') AND count > 0 ORDER BY count DESC LIMIT 1" ); // phpcs:ignore
 			if ( $top ) {
 				$rows[] = array(
-					'label' => 'Top redirect',
+					'label' => __( 'Top redirect', 'minn-admin' ),
 					'value' => '/' . ltrim( (string) $top->url_from, '/' ),
 					'hint'  => number_format_i18n( (int) $top->count ) . ' hits',
 				);
@@ -253,7 +253,7 @@ add_action( 'rest_api_init', function () {
 				$id  = (int) $request['id'];
 				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $table() . ' WHERE id = %d', $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL
 				if ( ! $row ) {
-					return new WP_Error( 'not_found', 'Redirect not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$data = minn_admin_eps301_payload( $request );
 				if ( is_wp_error( $data ) ) {

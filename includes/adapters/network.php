@@ -405,7 +405,7 @@ function minn_admin_network_settings_spec() {
 					'store'       => 'types',
 					'rows'        => 4,
 					'mono'        => true,
-					'placeholder' => 'jpg jpeg png gif pdf',
+					'placeholder' => __( 'jpg jpeg png gif pdf', 'minn-admin' ),
 				),
 			),
 		),

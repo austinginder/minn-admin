@@ -303,7 +303,7 @@ function minn_admin_redis_object_cache_checks() {
 	return array(
 		array(
 			'id'     => 'redis-object-cache',
-			'label'  => 'Redis Object Cache',
+			'label'  => __( 'Redis Object Cache', 'minn-admin' ),
 			'status' => $status,
 			'detail' => $detail . ' · v' . WP_REDIS_VERSION,
 		),

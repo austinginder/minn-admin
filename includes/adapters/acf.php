@@ -21,7 +21,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 		return $panels;
 	}
 	$panels['acf'] = array(
-		'label'       => 'Custom fields',
+		'label'       => __( 'Custom fields', 'minn-admin' ),
 		'sub'         => 'ACF',
 		'cap'         => 'edit_posts',
 		'fieldsRoute' => 'minn-admin/v1/acf/fields?post_id={id}&post_type={type}',
@@ -72,16 +72,16 @@ add_action( 'rest_api_init', function () {
 			if ( $post_id ) {
 				$post = get_post( $post_id );
 				if ( ! $post ) {
-					return new WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				if ( ! current_user_can( 'edit_post', $post_id ) ) {
-					return new WP_Error( 'rest_forbidden', 'You cannot edit this post.', array( 'status' => 403 ) );
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this post.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 				$post_type = $post->post_type;
 			} else {
 				$type_obj = get_post_type_object( $post_type );
 				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
-					return new WP_Error( 'rest_forbidden', 'You cannot edit that post type.', array( 'status' => 403 ) );
+					return new WP_Error( 'rest_forbidden', __( 'You cannot edit that post type.', 'minn-admin' ), array( 'status' => 403 ) );
 				}
 			}
 

@@ -100,12 +100,12 @@ function minn_admin_updraft_status_model() {
 	return array(
 		'rows'    => array(
 			array(
-				'label' => 'Last backup',
+				'label' => __( 'Last backup', 'minn-admin' ),
 				'value' => $last_value,
 				'hint'  => $last_hint,
 			),
 			array(
-				'label' => 'Sets kept',
+				'label' => __( 'Sets kept', 'minn-admin' ),
 				'value' => (string) $count,
 				'hint'  => $count
 					? 'Newest first in the list below (retention may prune older sets)'
@@ -114,25 +114,25 @@ function minn_admin_updraft_status_model() {
 			array(
 				'label' => 'Status',
 				'value' => $running ? 'Running' : 'Idle',
-				'hint'  => 'Jobs run through UpdraftPlus\'s own cron machinery',
+				'hint'  => __( 'Jobs run through UpdraftPlus\'s own cron machinery', 'minn-admin' ),
 			),
 		),
 		'actions' => array(
 			array(
-				'label'   => 'Back up everything now',
+				'label'   => __( 'Back up everything now', 'minn-admin' ),
 				'route'   => 'minn-admin/v1/updraft/backup-now',
 				'method'  => 'POST',
 				'body'    => array( 'what' => 'all' ),
-				'confirm' => 'Start a full backup now? UpdraftPlus will run it in the background.',
+				'confirm' => __( 'Start a full backup now? UpdraftPlus will run it in the background.', 'minn-admin' ),
 			),
 			array(
-				'label'  => 'Database only',
+				'label'  => __( 'Database only', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/updraft/backup-now',
 				'method' => 'POST',
 				'body'   => array( 'what' => 'db' ),
 			),
 			array(
-				'label' => 'Open UpdraftPlus ↗',
+				'label' => __( 'Open UpdraftPlus ↗', 'minn-admin' ),
 				'href'  => admin_url( 'options-general.php?page=updraftplus' ),
 			),
 		),

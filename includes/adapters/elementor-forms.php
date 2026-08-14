@@ -137,16 +137,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'actions'   => array(
 				array(
-					'label'  => 'Mark as read',
+					'label'  => __( 'Mark as read', 'minn-admin' ),
 					'method' => 'POST',
 					'route'  => 'minn-admin/v1/elementor/submissions/{id}/read',
 					'when'   => array( 'key' => 'status', 'equals' => 'unread' ),
 				),
 				array(
-					'label'   => 'Trash submission',
+					'label'   => __( 'Trash submission', 'minn-admin' ),
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/elementor/submissions/{id}/trash',
-					'confirm' => 'Move this submission to trash?',
+					'confirm' => __( 'Move this submission to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
@@ -157,15 +157,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/elementor/submissions/{id}',
-					'confirm' => 'Delete this submission permanently? There is no undo.',
+					'confirm' => __( 'Delete this submission permanently? There is no undo.', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
 				array(
-					'label' => 'Open in Elementor ↗',
+					'label' => __( 'Open in Elementor ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=e-form-submissions#/form-submissions/{id}' ),
 				),
 			),
@@ -174,7 +174,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Trash',
 					'method'  => 'POST',
 					'route'   => 'minn-admin/v1/elementor/submissions/{id}/trash',
-					'confirm' => 'Move the selected submissions to trash?',
+					'confirm' => __( 'Move the selected submissions to trash?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
 				),
@@ -185,10 +185,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
 				array(
-					'label'   => 'Delete permanently',
+					'label'   => __( 'Delete permanently', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/elementor/submissions/{id}',
-					'confirm' => 'Delete the selected submissions permanently?',
+					'confirm' => __( 'Delete the selected submissions permanently?', 'minn-admin' ),
 					'danger'  => true,
 					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
 				),
@@ -287,7 +287,7 @@ add_action( 'rest_api_init', function () {
 				$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
 				$raw   = $query->get_submission( (int) $request['id'] );
 				if ( ! $raw || empty( $raw['data'] ) ) {
-					return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$sub = $raw['data'];
 
@@ -375,17 +375,17 @@ add_action( 'rest_api_init', function () {
 				$id    = (int) $request['id'];
 				$raw   = $query->get_submission( $id );
 				if ( ! $raw || empty( $raw['data'] ) ) {
-					return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				// Permanent delete only for trashed rows (Received → Trash first).
 				if ( empty( $raw['data']['status'] ) || 'trash' !== $raw['data']['status'] ) {
-					return new WP_Error( 'not_trashed', 'Move the submission to trash before deleting permanently.', array( 'status' => 400 ) );
+					return new WP_Error( 'not_trashed', __( 'Move the submission to trash before deleting permanently.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				$ok = $query->delete_submission( $id );
 				if ( false === $ok ) {
-					return new WP_Error( 'delete_failed', 'Could not delete submission.', array( 'status' => 500 ) );
+					return new WP_Error( 'delete_failed', __( 'Could not delete submission.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
-				return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => 'Submission deleted permanently.' ) );
+				return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => __( 'Submission deleted permanently.', 'minn-admin' ) ) );
 			},
 		),
 	) );
@@ -398,13 +398,13 @@ add_action( 'rest_api_init', function () {
 			$id    = (int) $request['id'];
 			$raw   = $query->get_submission( $id );
 			if ( ! $raw || empty( $raw['data'] ) ) {
-				return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$ok = $query->move_to_trash_submission( $id );
 			if ( false === $ok ) {
-				return new WP_Error( 'trash_failed', 'Could not trash submission.', array( 'status' => 500 ) );
+				return new WP_Error( 'trash_failed', __( 'Could not trash submission.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( array( 'id' => $id, 'status' => 'trash', 'message' => 'Moved to trash.' ) );
+			return rest_ensure_response( array( 'id' => $id, 'status' => 'trash', 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
 		},
 	) );
 
@@ -416,13 +416,13 @@ add_action( 'rest_api_init', function () {
 			$id    = (int) $request['id'];
 			$raw   = $query->get_submission( $id );
 			if ( ! $raw || empty( $raw['data'] ) ) {
-				return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$ok = $query->restore( $id );
 			if ( false === $ok ) {
-				return new WP_Error( 'restore_failed', 'Could not restore submission.', array( 'status' => 500 ) );
+				return new WP_Error( 'restore_failed', __( 'Could not restore submission.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( array( 'id' => $id, 'status' => 'unread', 'message' => 'Submission restored.' ) );
+			return rest_ensure_response( array( 'id' => $id, 'status' => 'unread', 'message' => __( 'Submission restored.', 'minn-admin' ) ) );
 		},
 	) );
 
@@ -434,10 +434,10 @@ add_action( 'rest_api_init', function () {
 			$id    = (int) $request['id'];
 			$raw   = $query->get_submission( $id );
 			if ( ! $raw || empty( $raw['data'] ) ) {
-				return new WP_Error( 'not_found', 'Submission not found.', array( 'status' => 404 ) );
+				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			$query->update_submission( $id, array( 'is_read' => 1 ) );
-			return rest_ensure_response( array( 'id' => $id, 'status' => 'read', 'message' => 'Marked as read.' ) );
+			return rest_ensure_response( array( 'id' => $id, 'status' => 'read', 'message' => __( 'Marked as read.', 'minn-admin' ) ) );
 		},
 	) );
 } );

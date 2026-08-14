@@ -238,7 +238,7 @@ function minn_admin_tm_detail( $id ) {
 		(int) $id
 	) );
 	if ( ! $row || false === strpos( $row->option_name, '_transient_' ) || false !== strpos( $row->option_name, '_timeout_' ) ) {
-		return new WP_Error( 'not_found', 'Transient not found.', array( 'status' => 404 ) );
+		return new WP_Error( 'not_found', __( 'Transient not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
 
 	$now     = time();
@@ -262,7 +262,7 @@ function minn_admin_tm_detail( $id ) {
 		array( 'label' => 'Size', 'value' => $item['size'] ),
 		array( 'label' => 'Status', 'value' => $item['status'] ),
 		array( 'label' => 'Expires', 'value' => $item['date'] ? $item['date'] : 'Never (persistent)' ),
-		array( 'label' => 'Option key', 'value' => $row->option_name ),
+		array( 'label' => __( 'Option key', 'minn-admin' ), 'value' => $row->option_name ),
 		array( 'label' => 'Value', 'value' => $show ),
 	);
 
@@ -305,7 +305,7 @@ function minn_admin_tm_status_model() {
 			array(
 				'label' => 'Transients',
 				'value' => number_format_i18n( $total ),
-				'hint'  => 'In the options table (blog-level)',
+				'hint'  => __( 'In the options table (blog-level)', 'minn-admin' ),
 			),
 			array(
 				'label' => 'Expired',
@@ -315,7 +315,7 @@ function minn_admin_tm_status_model() {
 			array(
 				'label' => 'Auto-cleanup',
 				'value' => $next_cron ? gmdate( 'Y-m-d H:i', $next_cron ) . ' UTC' : 'Not scheduled',
-				'hint'  => 'WordPress delete_expired_transients cron',
+				'hint'  => __( 'WordPress delete_expired_transients cron', 'minn-admin' ),
 			),
 			array(
 				'label' => 'Writes',
@@ -323,19 +323,19 @@ function minn_admin_tm_status_model() {
 				'hint'  => $suspended ? 'Transients Manager is blocking sets' : 'Normal',
 			),
 			array(
-				'label' => 'Transients Manager',
+				'label' => __( 'Transients Manager', 'minn-admin' ),
 				'value' => (string) $ver,
 			),
 		),
 		'actions' => array(
 			array(
-				'label'   => 'Delete expired',
+				'label'   => __( 'Delete expired', 'minn-admin' ),
 				'method'  => 'POST',
 				'route'   => 'minn-admin/v1/transients/delete-expired',
-				'confirm' => 'Delete all expired transients? Active ones are kept.',
+				'confirm' => __( 'Delete all expired transients? Active ones are kept.', 'minn-admin' ),
 			),
 			array(
-				'label' => 'Open Transients Manager ↗',
+				'label' => __( 'Open Transients Manager ↗', 'minn-admin' ),
 				'href'  => minn_admin_tm_admin_url(),
 			),
 		),
@@ -387,17 +387,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'label'   => 'Delete',
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/transients/{id}',
-					'confirm' => 'Delete this transient? Plugins may recreate it on the next request.',
+					'confirm' => __( 'Delete this transient? Plugins may recreate it on the next request.', 'minn-admin' ),
 					'danger'  => true,
 				),
 				array(
-					'label' => 'Open Transients Manager ↗',
+					'label' => __( 'Open Transients Manager ↗', 'minn-admin' ),
 					'href'  => minn_admin_tm_admin_url(),
 				),
 			),
 			'bulk'      => array(
 				array(
-					'label'   => 'Delete selected',
+					'label'   => __( 'Delete selected', 'minn-admin' ),
 					'method'  => 'DELETE',
 					'route'   => 'minn-admin/v1/transients/{id}',
 					'danger'  => true,
@@ -443,7 +443,7 @@ add_action( 'rest_api_init', function () {
 					$id
 				) );
 				if ( ! $row || false === strpos( $row->option_name, '_transient_' ) || false !== strpos( $row->option_name, '_timeout_' ) ) {
-					return new WP_Error( 'not_found', 'Transient not found.', array( 'status' => 404 ) );
+					return new WP_Error( 'not_found', __( 'Transient not found.', 'minn-admin' ), array( 'status' => 404 ) );
 				}
 				$name = minn_admin_tm_name( $row->option_name );
 				$ok   = minn_admin_tm_is_site( $row->option_name )
@@ -479,7 +479,7 @@ add_action( 'rest_api_init', function () {
 			$tm->delete_expired_transients();
 			return rest_ensure_response( array(
 				'ok'      => true,
-				'message' => 'Expired transients deleted.',
+				'message' => __( 'Expired transients deleted.', 'minn-admin' ),
 			) );
 		},
 	) );
