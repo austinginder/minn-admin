@@ -1014,6 +1014,23 @@ class Minn_Admin {
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex' );
 
+		$boot = self::boot_payload();
+
+		include MINN_ADMIN_DIR . 'includes/template.php';
+		exit;
+	}
+
+	/**
+	 * The `window.MINN` boot payload.
+	 *
+	 * Extracted from maybe_render_app() so the locale slice can be rebuilt on
+	 * demand: switching language without a reload means re-deriving exactly
+	 * what the server rendered the first time, and a second hand-maintained
+	 * copy of these keys would drift the moment either side gained one.
+	 *
+	 * @return array
+	 */
+	public static function boot_payload() {
 		$user  = wp_get_current_user();
 		$roles = array_values( $user->roles );
 		$role  = $roles ? wp_roles()->role_names[ $roles[0] ] ?? $roles[0] : '';
@@ -1090,6 +1107,13 @@ class Minn_Admin {
 			'gmtOffset' => (float) get_option( 'gmt_offset' ),
 			// SPA translation map for the client's __()/_n() (empty for
 			// English; object cast so an empty map serializes as {}).
+			// The reader's effective locale and writing direction. The client
+			// keeps these to tell whether a language save actually changed
+			// anything FOR THEM — a site-language change leaves a user with a
+			// personal override exactly where they were, and repainting the
+			// app in that case would be a visible no-op with a real cost.
+			'locale'   => get_user_locale(),
+			'rtl'      => (bool) is_rtl(),
 			'i18n'     => (object) self::js_translations(),
 			// The locale's Plural-Forms rule, verbatim from the catalog. The
 			// client evaluates it: "n != 1" is right for English and wrong
@@ -1337,8 +1361,42 @@ class Minn_Admin {
 				: null,
 		);
 
-		include MINN_ADMIN_DIR . 'includes/template.php';
-		exit;
+		return $boot;
+	}
+
+	/**
+	 * The subset of the boot payload that changes with the reader's locale.
+	 *
+	 * Everything here is text the SERVER translated: the JED catalog the app
+	 * itself renders from, plus labels other code already resolved through
+	 * __() before the payload was built (role names, surface descriptors,
+	 * post formats). None of it re-translates on the client, so a language
+	 * switch has to fetch it again or the nav keeps the old language while
+	 * the views change.
+	 *
+	 * Served by GET minn-admin/v1/boot-locale, which route_locale() has
+	 * already scoped to the user's language — so simply building the payload
+	 * in that request yields the new locale.
+	 *
+	 * @return array
+	 */
+	public static function locale_payload() {
+		$boot = self::boot_payload();
+		$keys = array(
+			'i18n', 'i18nPlural', 'roles', 'surfaces', 'editorPanels', 'hidden',
+			'menuRemoved', 'builders', 'designs', 'editorCommands', 'blockForms',
+			'insertBlocks', 'imageBlocks', 'postFormats', 'visibility', 'languages',
+		);
+		$out = array_intersect_key( $boot, array_flip( $keys ) );
+
+		// Only the ROLE is taken from the user block. Sending the whole thing
+		// would also send appearance, which the client may have changed since
+		// boot, and patching it back would silently revert their colour scheme.
+		$out['userRole'] = isset( $boot['user']['role'] ) ? $boot['user']['role'] : '';
+		$out['locale']   = get_user_locale();
+		$out['rtl']      = (bool) is_rtl();
+
+		return $out;
 	}
 
 	/**

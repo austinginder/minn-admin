@@ -121,6 +121,19 @@ literal, so the app runs with zero tooling. The convention:
   positioning a floating element in PIXELS must consult `isRtl()` — CSS logical
   properties cannot reach a value computed in JS; use the shared `menuLeftAt()`
   and `panelLeftFor()` helpers.
+- **Changing language does NOT reload.** `switchLanguage()` (app.js) fetches
+  `minn-admin/v1/boot-locale` — the locale slice of the boot payload, built by
+  `Minn_Admin::locale_payload()` — and repaints. Three things go stale on a
+  language change and only the first is obvious: the JED catalog, text the
+  SERVER already translated before it reached the boot payload (role names,
+  surface labels, post formats — none of it re-translates on the client), and
+  writing direction, which the shell only sets on the initial render. It is
+  self-guarding: when the new locale matches `B.locale` it does nothing, so a
+  site-language save by a user with a personal override is not a pointless
+  repaint. The catalog is REPLACED IN PLACE (`applyCatalog`) because `__()`
+  closes over it — rebinding would leave every existing call site on the old
+  language — and `pluralRule` is rebuilt from a factory because a locale's
+  form COUNT changes with it.
 - **Guards:** `tests/i18n-static.test.js` (no browser, ~1s) fails on a new
   unwrapped literal, a `%s` string with no translators comment, anything routing
   off a translated label, and an `_n()` plural wrapped in `__()`.

@@ -15,15 +15,21 @@ const path = require( 'path' );
 const APP = path.resolve( __dirname, '../assets/js/app.js' );
 const src = fs.readFileSync( APP, 'utf8' );
 
-const start = src.indexOf( 'const pluralRule = ( () => {' );
-const endMark = '\t} )();';
+// The rule is a FACTORY rather than a boot-time IIFE, because changing
+// language without a reload has to rebuild it: a locale's form COUNT changes
+// with the locale, and the old parser is bound to the old expression.
+const start = src.indexOf( 'const makePluralRule = ( expression ) => {' );
+if ( start < 0 ) {
+	console.log( 'FAIL  makePluralRule not found in app.js — did the factory get renamed?' );
+	process.exit( 1 );
+}
+const endMark = '\n\t};';
 const end = src.indexOf( endMark, start ) + endMark.length;
 const body = src.slice( start, end );
 
 const makeRule = ( expr ) => {
-	const B = { i18nPlural: expr };
 	// eslint-disable-next-line no-new-func
-	return new Function( 'B', body + '\n return pluralRule;' )( B );
+	return new Function( body + '\n return makePluralRule;' )()( expr );
 };
 
 // Real Plural-Forms headers as WordPress/gettext ship them.

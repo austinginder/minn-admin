@@ -17,7 +17,11 @@
 	 * string is written as __( '…' ) / _n() / sprintf(); existing literals
 	 * convert opportunistically, view by view. */
 
-	const I18N = B.i18n || {};
+	// A COPY, and replaced in place rather than rebound. __()/_n() close over
+	// this object, so assigning a new one would leave every existing call
+	// site reading the old language forever — which is what made a language
+	// change need a full page reload.
+	const I18N = Object.assign( {}, B.i18n || {} );
 
 	const __ = ( text ) => {
 		const t = I18N[ text ];
@@ -38,8 +42,8 @@
 	 * whoever served it a script-execution primitive inside the admin.
 	 * Supported grammar is the gettext subset: ?: || && | & == != < > <= >=
 	 * + - * / % ! parentheses, the variable n, and integer literals. */
-	const pluralRule = ( () => {
-		const expr = String( B.i18nPlural || '' );
+	const makePluralRule = ( expression ) => {
+		const expr = String( expression || '' );
 		const m = /plural\s*=\s*([^;]+)/.exec( expr );
 		if ( ! m ) return null;
 		const srcExpr = m[ 1 ];
@@ -104,7 +108,20 @@
 				return 1 === n ? 0 : 1;
 			}
 		};
-	} )();
+	};
+
+	let pluralRule = makePluralRule( B.i18nPlural );
+
+	// Swap the whole language at runtime. The catalog object keeps its
+	// identity so existing closures see the new strings; the plural rule is
+	// rebuilt because a locale's form COUNT changes with it (one form in
+	// Japanese, six in Arabic) and the old parser is bound to the old
+	// expression.
+	const applyCatalog = ( map, pluralExpr ) => {
+		for ( const k of Object.keys( I18N ) ) delete I18N[ k ];
+		Object.assign( I18N, map || {} );
+		pluralRule = makePluralRule( pluralExpr );
+	};
 
 	// JED plural entries are [form0, form1, …] in the locale's own order.
 	const _n = ( single, plural, n ) => {
@@ -2201,6 +2218,75 @@
 	// Rebuild all nav groups from the current B.surfaces without wiping
 	// #minn-view — used after plugin activate/deactivate. Empty groups keep
 	// their (hidden) wrapper so a later toggle has somewhere to land.
+	/**
+	 * Repaint the whole app in a language the user just chose, without a
+	 * reload.
+	 *
+	 * Three things go stale at once and only one of them is the catalog:
+	 *
+	 * - The JED map and the plural rule the client renders from.
+	 * - Text the SERVER already translated before it reached the boot
+	 *   payload — role names, surface labels, post formats. None of that
+	 *   re-translates on the client, so leaving it alone gives a half-switched
+	 *   admin with an English sidebar next to a German page.
+	 * - Writing direction. The shell only sets `dir` on the initial render, so
+	 *   switching to Persian or Arabic has to set it here or the layout stays
+	 *   left-to-right until a reload.
+	 *
+	 * Everything else re-fetches naturally, because route_locale() serves this
+	 * namespace in the user's language and every view refetches on render.
+	 *
+	 * @param {boolean} silent Skip the confirmation toast (the caller shows
+	 *                         its own).
+	 */
+	async function switchLanguage( silent ) {
+		let p;
+		try {
+			p = await api( 'minn-admin/v1/boot-locale' );
+		} catch ( e ) {
+			// The language DID change server-side; only the repaint failed.
+			// Say so, because the alternative is an admin that looks like the
+			// setting was ignored.
+			toastAction(
+				__( 'Language saved, but the page could not be repainted.' ),
+				__( 'Reload' ),
+				() => location.reload()
+			);
+			return false;
+		}
+
+		// A site-language save leaves a user with a personal override exactly
+		// where they were. Repainting then is a visible no-op that throws away
+		// whatever the current view had on screen, so check first.
+		if ( p.locale === B.locale && !! p.rtl === !! B.rtl ) return false;
+		B.locale = p.locale;
+		B.rtl    = !! p.rtl;
+
+		applyCatalog( p.i18n, p.i18nPlural );
+
+		const root = document.documentElement;
+		root.setAttribute( 'lang', String( p.locale || '' ).replace( '_', '-' ) );
+		root.setAttribute( 'dir', p.rtl ? 'rtl' : 'ltr' );
+
+		// Server-translated payload. Only the role is taken from the user
+		// block: appearance lives there too and the client may have changed
+		// it since boot.
+		if ( p.userRole !== undefined && B.user ) B.user.role = p.userRole;
+		for ( const k of [ 'roles', 'surfaces', 'editorPanels', 'hidden', 'menuRemoved',
+			'builders', 'designs', 'editorCommands', 'blockForms', 'insertBlocks',
+			'imageBlocks', 'postFormats', 'visibility', 'languages' ] ) {
+			if ( p[ k ] !== undefined ) B[ k ] = p[ k ];
+		}
+
+		renderNavWorkspace();
+		renderTopbar();
+		renderView();
+		const roleEl = $( '.minn-user-role' );
+		if ( roleEl && B.user ) roleEl.textContent = B.user.role;
+		if ( ! silent ) toast( __( 'Language updated' ) );
+		return true;
+	}
+
 	function renderNavWorkspace() {
 		const ws = $( '#minn-nav-workspace' );
 		if ( ! ws ) return;
@@ -16822,6 +16908,7 @@
 				// by the elements present, not the tab name. Permalinks go LAST
 				// because a routing-mode flip reloads the page.
 				let okAll = true;
+				let siteLangChanged = false;
 
 				// --- Core settings (wp/v2/settings): [data-setting] toggles +
 				// [data-key] fields. Permalink fields carry data-permakey, so
@@ -16855,6 +16942,10 @@
 							const lr = await api( 'minn-admin/v1/site/language', { method: 'POST', body: JSON.stringify( { locale: langPick } ) } );
 							cache.languages.site = lr.locale;
 							if ( lr.installed ) toast( __( 'Language pack installed' ) );
+							// Repaint at the END of the save, not here: this
+							// is one branch of a bulk save and the rest of the
+							// form still has to reach the server.
+							siteLangChanged = true;
 						} catch ( err ) { toast( err.message, true ); okAll = false; }
 					}
 				}
@@ -16933,6 +17024,14 @@
 				}
 
 				if ( okAll ) toast( __( 'Settings saved' ) );
+				// A site-language change only moves THIS reader when they have
+				// no personal override; switchLanguage() checks and does
+				// nothing when it would be a no-op. Its repaint replaces the
+				// renderSettings() below.
+				if ( siteLangChanged && await switchLanguage( true ) ) {
+					saveBtn.disabled = false;
+					return;
+				}
 				renderSettings();
 				saveBtn.disabled = false;
 			} );
@@ -34087,6 +34186,9 @@
 					if ( lr.installed ) langNote = ' — ' + __( 'language pack installed' );
 				}
 				toast( __( 'User updated' ) + langNote );
+				// Only when an admin changed their OWN language from this
+				// screen; editing somebody else's must not repaint this one.
+				if ( langChanged && u.id === B.user.id && await switchLanguage( true ) ) return;
 				ue.user = Object.assign( {}, ue.user, payload );
 				state.cache.users = null;
 				btn.disabled = false;
@@ -34526,6 +34628,10 @@
 					return;
 				}
 				toast( __( 'Profile updated' ) + langNote );
+				// Repaint in the new language rather than asking for a
+				// reload. This re-renders the profile view, so it has to come
+				// after the toast and before the local copies below are read.
+				if ( langChanged && await switchLanguage( true ) ) return;
 				p.user = Object.assign( {}, p.user, payload );
 				// Keep the sidebar's name in sync with a display-name edit.
 				if ( payload.name ) {

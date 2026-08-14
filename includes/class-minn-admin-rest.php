@@ -281,6 +281,26 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// The locale-dependent slice of the boot payload, so changing
+		// language can repaint the app instead of demanding a reload. GET,
+		// because it reads: the language was already switched by the POST
+		// that preceded it, and route_locale() has this namespace serving the
+		// user's language, so simply building the payload here yields the new
+		// one.
+		register_rest_route(
+			self::NS,
+			'/boot-locale',
+			array(
+				'methods'             => 'GET',
+				'callback'            => function () {
+					return rest_ensure_response( Minn_Admin::locale_payload() );
+				},
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/notifications/read',
