@@ -32,6 +32,12 @@ class Minn_Admin_Updater {
 	 */
 	const PACKAGE_PATHS = array( '/austinginder/minn-admin/' );
 
+	/**
+	 * Distinct user locales, cached a day. The query is cheap but it runs on
+	 * an update check, and update checks run on a schedule nobody asked for.
+	 */
+	const USER_LOCALES_KEY = 'minn_admin_user_locales';
+
 	public function __construct() {
 		// Test the VALUE, not just the definition: define( 'MINN_ADMIN_DEV_MODE',
 		// false ) is the natural way to switch a dev flag off and used to leave
@@ -353,13 +359,21 @@ class Minn_Admin_Updater {
 			if ( ! $this->is_our_package_url( $pack->package ) || empty( $pack->sha256 ) ) {
 				continue;
 			}
-			// Skip a pack the site already has. The comparison is by DATE, not
-			// by version: what a site has on disk is a catalog with a
-			// PO-Revision-Date, and the plugin version it happened to ship
-			// alongside says nothing about whether the strings changed.
-			$have = $installed[ $pack->language ] ?? null;
-			$updated = isset( $pack->updated ) ? (string) $pack->updated : '';
-			if ( $have && $updated && strtotime( $have ) >= strtotime( $updated ) ) {
+			// Skip a pack the site already has, comparing VERSIONS.
+			//
+			// PO-Revision-Date looks like the better key and is not: the
+			// catalog pipeline restamps that header on every run, so a
+			// regeneration that changed no strings would still re-offer
+			// thirteen packs. Packs ship with releases, one set per version,
+			// so the version is the honest question — and a translation-only
+			// fix is a patch release, which answers it.
+			//
+			// A pack with NO readable version is one installed before this
+			// shipped a .po to read it from; offering it replaces it with one
+			// that has the headers, which is what we want.
+			$have = $installed[ $pack->language ] ?? '';
+			$offered = isset( $pack->version ) ? (string) $pack->version : $this->version;
+			if ( '' !== $have && version_compare( $have, $offered, '>=' ) ) {
 				continue;
 			}
 			$transient->translations[] = array(
@@ -375,17 +389,23 @@ class Minn_Admin_Updater {
 	}
 
 	/**
-	 * Locales this site could actually display: the site language, every
-	 * language a user has chosen, and whatever else is installed.
+	 * Locales this site actually READS Minn Admin in.
+	 *
+	 * Deliberately narrower than get_available_languages(), which is every
+	 * language installed on the site: a site that once installed five core
+	 * languages and uses one has no business downloading five Minn catalogs at
+	 * ~250KB each. What qualifies is the site language, a language some user
+	 * actually chose, and any Minn pack already on disk (so an installed
+	 * translation keeps getting updates even if nobody currently has it set).
 	 *
 	 * @return string[]
 	 */
 	protected function wanted_locales() {
-		$locales = get_available_languages();
-		$locales[] = get_locale();
+		$locales = array( get_locale() );
 		if ( function_exists( 'get_user_locale' ) ) {
 			$locales[] = get_user_locale();
 		}
+		$locales = array_merge( $locales, $this->user_locales(), array_keys( $this->installed_translations() ) );
 		/**
 		 * Filter the locales language packs are offered for.
 		 *
@@ -396,11 +416,47 @@ class Minn_Admin_Updater {
 	}
 
 	/**
-	 * PO-Revision-Date of each language pack already on disk, keyed by locale.
-	 * That header is what core itself compares against when deciding whether a
-	 * translation update is pending.
+	 * Every locale a user on this site has actually picked.
 	 *
-	 * @return array<string,string>
+	 * One meta query rather than a user enumeration: on a site with thousands
+	 * of users, walking them to read one meta key each is not worth a
+	 * translation check. Distinct values only, and only ones that are really
+	 * installed — a stale meta value naming a language nobody has cannot pull
+	 * a pack down.
+	 *
+	 * @return string[]
+	 */
+	protected function user_locales() {
+		global $wpdb;
+		$cached = get_transient( self::USER_LOCALES_KEY );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		$found = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value != '' LIMIT 50",
+				'locale'
+			)
+		);
+		$available = get_available_languages();
+		$out = array_values( array_intersect( (array) $found, $available ) );
+		set_transient( self::USER_LOCALES_KEY, $out, DAY_IN_SECONDS );
+		return $out;
+	}
+
+	/**
+	 * Version of each language pack already on disk, keyed by locale.
+	 *
+	 * Read out of Project-Id-Version ("Minn Admin 0.30.0"), the only one of
+	 * the four headers core surfaces that can carry a version at all
+	 * (wp_get_pomo_file_data). build-packs.sh stamps it.
+	 *
+	 * This depends on packs shipping their .po. wp_get_installed_translations()
+	 * reads headers from the .po and skips any .mo with no .po beside it, so a
+	 * .mo-only pack reports as NOT INSTALLED and gets re-offered on every
+	 * check for the life of the site.
+	 *
+	 * @return array<string,string> Locale => version, '' when unreadable.
 	 */
 	protected function installed_translations() {
 		$out = array();
@@ -412,11 +468,26 @@ class Minn_Admin_Updater {
 		}
 		$installed = wp_get_installed_translations( 'plugins' );
 		foreach ( (array) ( $installed[ $this->plugin_slug ] ?? array() ) as $locale => $data ) {
-			if ( ! empty( $data['PO-Revision-Date'] ) ) {
-				$out[ $locale ] = $data['PO-Revision-Date'];
-			}
+			$out[ $locale ] = self::version_from_project_id( $data['Project-Id-Version'] ?? '' );
 		}
 		return $out;
+	}
+
+	/**
+	 * The version out of a gettext Project-Id-Version header.
+	 *
+	 * The convention is "<project> <version>", so take the last whitespace
+	 * separated run that looks like one. Returns '' when there is none, which
+	 * the caller treats as "unknown, offer it".
+	 *
+	 * @param string $header Raw header value.
+	 * @return string
+	 */
+	protected static function version_from_project_id( $header ) {
+		if ( ! preg_match( '/([0-9]+(?:\.[0-9]+)*(?:[-+][0-9A-Za-z.]+)?)\s*$/', trim( (string) $header ), $m ) ) {
+			return '';
+		}
+		return $m[1];
 	}
 
 	public function purge( $upgrader, $options ) {

@@ -1059,20 +1059,22 @@ class Minn_Admin {
 			// Scheme slot metadata for the profile custom editor (key + CSS var + label).
 			'appearanceSlots' => array_map(
 				function ( $css, $key ) {
+					// Shown in Your profile's colour-scheme editor, one label
+					// per swatch, so they are interface text like any other.
 					$labels = array(
-						'bg'       => 'Background',
-						'bg2'      => 'Background elevated',
-						'panel'    => 'Panel',
-						'panel2'   => 'Panel elevated',
-						'hover'    => 'Hover',
-						'border'   => 'Border',
-						'border2'  => 'Border strong',
-						'text'     => 'Text',
-						'text2'    => 'Text secondary',
-						'text3'    => 'Text muted',
-						'accent'   => 'Accent',
-						'accent2'  => 'Accent hover / links',
-						'accentFg' => 'Text on accent',
+						'bg'       => __( 'Background', 'minn-admin' ),
+						'bg2'      => __( 'Background elevated', 'minn-admin' ),
+						'panel'    => __( 'Panel', 'minn-admin' ),
+						'panel2'   => __( 'Panel elevated', 'minn-admin' ),
+						'hover'    => __( 'Hover', 'minn-admin' ),
+						'border'   => __( 'Border', 'minn-admin' ),
+						'border2'  => __( 'Border strong', 'minn-admin' ),
+						'text'     => __( 'Text', 'minn-admin' ),
+						'text2'    => __( 'Text secondary', 'minn-admin' ),
+						'text3'    => __( 'Text muted', 'minn-admin' ),
+						'accent'   => __( 'Accent', 'minn-admin' ),
+						'accent2'  => __( 'Accent hover / links', 'minn-admin' ),
+						'accentFg' => __( 'Text on accent', 'minn-admin' ),
 					);
 					return array(
 						'key'   => $key,
@@ -1386,6 +1388,7 @@ class Minn_Admin {
 			'i18n', 'i18nPlural', 'roles', 'surfaces', 'editorPanels', 'hidden',
 			'menuRemoved', 'builders', 'designs', 'editorCommands', 'blockForms',
 			'insertBlocks', 'imageBlocks', 'postFormats', 'visibility', 'languages',
+			'appearanceSlots',
 		);
 		$out = array_intersect_key( $boot, array_flip( $keys ) );
 

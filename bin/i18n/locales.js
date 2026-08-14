@@ -47,7 +47,26 @@ const nplurals = ( locale ) => {
 	return m ? parseInt( m[ 1 ], 10 ) : 2;
 };
 
-module.exports = { LOCALES, byCode, wave, nplurals };
+/**
+ * Locales served by ANOTHER locale's catalog, byte for byte.
+ *
+ * en_GB is a spelling pass — colour, customise, licence — and Australian,
+ * Canadian, New Zealand and South African English take the same spellings.
+ * Emitting the same catalog under their codes costs one zip each and reaches
+ * another ~1.5% of installs, where translating them separately would mean
+ * four identical files to keep in step.
+ *
+ * Nothing else belongs here. pt_PT and es_MX differ from pt_BR and es_ES in
+ * vocabulary, not just orthography, and get their own catalogs in wave 2.
+ */
+const ALIASES = {
+	en_GB: [ 'en_AU', 'en_CA', 'en_NZ', 'en_ZA' ],
+};
+
+/** Every locale a given catalog should be packed for, itself first. */
+const packedAs = ( code ) => [ code, ...( ALIASES[ code ] || [] ) ];
+
+module.exports = { LOCALES, byCode, wave, nplurals, ALIASES, packedAs };
 
 if ( require.main === module ) {
 	const w = process.argv[ 2 ] ? Number( process.argv[ 2 ] ) : null;

@@ -1,0 +1,12 @@
+# Reviewed Arabic corrections. See reviewed/README.md.
+msgid ""
+msgstr ""
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# WordPress core itself ships this as يُمكَِن, with fatha and kasra stacked on one
+# letter. تفعيل is already "Activate", so Enable takes تمكين.
+msgid "Enable"
+msgstr "تمكين"

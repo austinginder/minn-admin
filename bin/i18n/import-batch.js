@@ -35,14 +35,33 @@ const glossary = loadCoreGlossary( loc.code );
 const normIdx = buildNormIndex( glossary );
 
 const outPath = path.join( ROOT, 'languages', `${ loc.code }.po` );
+
+// Human-reviewed translations live in their OWN file, outside the generated
+// catalog, and win over everything.
+//
+// They used to be a `minn-reviewed` flag inside the generated .po, which
+// survives a normal re-import and does NOT survive `rm languages/xx.po` — and
+// that is a completely ordinary thing to do when regenerating. Three fixes
+// were lost that way in one afternoon: a Spanish "¡" with no closing "!", a
+// Japanese sentence carrying both "。" and ".", and an Arabic label with two
+// short vowels stacked on one letter. A native speaker's correction has to be
+// harder to destroy than the thing it corrects.
+//
+// languages/reviewed/<locale>.po is a plain .po. Anything in it is final.
 const reviewed = new Map();
+const reviewedPath = path.join( ROOT, 'languages/reviewed', `${ loc.code }.po` );
+if ( fs.existsSync( reviewedPath ) ) {
+	for ( const e of parsePo( fs.readFileSync( reviewedPath, 'utf8' ) ).entries ) {
+		if ( e.msgid && e.msgstr.some( Boolean ) ) reviewed.set( e.msgid, e );
+	}
+}
 // Everything already in the catalog is a base layer. A top-up pass covers
 // only the strings that were missing, so without this an import would throw
 // away every translation the previous pass produced.
 const existing = new Map();
 if ( fs.existsSync( outPath ) ) {
 	for ( const e of parsePo( fs.readFileSync( outPath, 'utf8' ) ).entries ) {
-		if ( e.flags.includes( 'minn-reviewed' ) ) reviewed.set( e.msgid, e );
+		if ( e.flags.includes( 'minn-reviewed' ) ) { if ( ! reviewed.has( e.msgid ) ) reviewed.set( e.msgid, e ); }
 		else if ( e.msgstr.some( Boolean ) ) existing.set( e.msgid, e.msgstr );
 	}
 }

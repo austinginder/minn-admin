@@ -15,14 +15,16 @@ and "What is left" at the end.
 
 | | Before | Now |
 |---|---|---|
-| `.pot` entries | 341, stamped 0.25.0 | **2,978**, current, 0 extractor warnings |
+| `.pot` entries | 341, stamped 0.25.0 | **2,994**, current, 0 extractor warnings |
 | Plural entries | 0 usable | 20, with a real Plural-Forms evaluator |
 | Translator notes | 0 | 110 |
 | Unwrapped attribute literals in `app.js` | 265 | **0** |
 | Unwrapped visible text nodes in `app.js` | ~600 | **0** |
 | Untranslated display strings in PHP | ~1,200 | **0** |
 | Logical CSS properties | 0 | 183 declarations, plus 24 offsets |
-| Locales with a catalog | 0 | 13 |
+| Locales with a catalog | 0 | 13 (packed as 17, with the English variants) |
+| `toLocale*` calls using the reader's locale | 0 of 48 | **48 of 48** |
+| Plugin zip | 3.86MB | **2.02MB** |
 | Sentences split across an interpolation | 33 | **0** |
 | Decay guards | none | 7 static checks + 3 suites |
 
@@ -89,14 +91,72 @@ user in every locale. Language packs are strictly better here.
 ### What the packs contain
 
 One zip per locale, files at the zip root, extracted directly into
-`wp-content/languages/plugins/`:
+`wp-content/languages/plugins/` — the same four files a translate.wordpress.org
+pack ships:
 
 ```
-minn-admin-de_DE.mo
-minn-admin-de_DE-<md5 of assets/js/app.js>.json
+minn-admin-de_DE.mo                              PHP, WP < 6.5
+minn-admin-de_DE.l10n.php                        PHP, WP 6.5+ fast path
+minn-admin-de_DE.po                              source AND metadata
+minn-admin-de_DE-<md5 of assets/js/app.js>.json  SPA, JED
 ```
 
-The `.po` stays in git as the source and is not shipped. Nothing else goes in.
+**The `.po` is not optional**, however dead it looks at runtime. This page used
+to say "the `.po` stays in git as the source and is not shipped", and that was
+a bug with a long fuse. `wp_get_installed_translations()` — what WordPress uses
+to decide whether a translation update is pending — reads its headers from the
+`.po` and `continue`s past any `.mo` with no `.po` beside it. Ship without it
+and the site reports NOTHING installed, so every pack is offered again on every
+update check, for the life of the site: thirteen translation updates that
+reinstall and come straight back. It is also the only place a version can live
+(see below).
+
+`.l10n.php` is the WP 6.5+ format `load_textdomain()` prefers over parsing a
+`.mo`. `wp i18n make-php` generates it.
+
+Some catalogs are packed under more than one locale code. `en_GB` is a spelling
+pass, and Australian, Canadian, New Zealand and South African English take the
+same spellings, so the same bytes ship as `en_AU`, `en_CA`, `en_NZ` and `en_ZA`
+— another ~1.5% of installs for one zip each (`ALIASES` in `bin/i18n/locales.js`).
+Nothing where the difference is vocabulary rather than orthography belongs
+there: `pt_PT` and `es_MX` get their own catalogs in wave 2.
+
+### When an update is offered
+
+**By version, not by date.** Each packed `.po` carries
+`Project-Id-Version: Minn Admin <version>`, stamped at build time — of the four
+headers core surfaces (`wp_get_pomo_file_data`), it is the only one that can
+hold a version at all. The updater parses it and compares with
+`version_compare`.
+
+`PO-Revision-Date` looks like the better key and is not: the catalog pipeline
+restamps that header on every run, so regenerating a catalog whose strings
+never changed would re-offer every pack. Packs ship with releases, one set per
+version, so the version is the honest question — and a translation-only fix is
+a patch release, which answers it.
+
+The version stamp is applied to the packed COPY. The `.po` in git stays
+version-less on purpose: stamping there would rewrite thirteen catalogs on
+every release for a header nobody reads until it is packed.
+
+### Which locales get offered
+
+`wanted_locales()` is deliberately narrower than `get_available_languages()`.
+That function returns every language installed on the site, and a site that
+once installed five core languages and uses one has no business downloading
+five Minn catalogs at ~250KB each. What qualifies: the site language, a
+language some user actually chose (one cached `DISTINCT meta_value` query, not
+a user enumeration), and any Minn pack already on disk, so an installed
+translation keeps updating even if nobody currently has it set.
+
+### What does NOT ship in the plugin zip
+
+`bin/build-zip.sh` owns the exclusion list, because the release runbook's copy
+had already drifted. `languages/*.po` and `languages/*.pot` are excluded — 5.3MB
+of translation SOURCE that WordPress never reads, once shipped to every user in
+every locale — along with `bin/`, `tests/`, `dist/`, `CLAUDE.md` and repository
+plumbing. `docs/` ships: the REST layer serves `docs/user-guide.md`. The zip
+went from 3.86MB to 2.02MB.
 
 ### Security: hash the packs like the plugin
 
@@ -475,6 +535,13 @@ deliberate exclusions below.
 
 ## What is left
 
+**A reply to issue #19.** Hossein proposed all of this, built a working
+`fa_IR`/RTL fork against 0.27.0, offered to split it into four PRs, and asked
+three direct questions — including which of bundled, language packs or separate
+this project wanted. He has had no answer while essentially his whole proposal
+shipped. Deferred deliberately until the work is finished and verified, not
+forgotten.
+
 **A first human review per locale.** Generated entries are replaceable;
 marking one `minn-reviewed` in the `.po` makes it permanent, and a re-import
 will not overwrite it. That is the path from generated to maintained, and it
@@ -482,6 +549,13 @@ is what a native speaker's pull request should touch.
 
 **Wave 2** takes the list to twenty and waits until wave 1 has been through a
 release cycle.
+
+**If Minn Admin ever moves to WordPress.org, most of this becomes dead code.**
+`bin/i18n/` and the pack-hosting half of the updater exist because the plugin
+is distributed from GitHub. On w.org, translate.wordpress.org does all of it:
+GlotPress, community translators, real language packs, and none of this
+code. The thirteen catalogs would become a seed import rather than the system.
+Worth knowing before investing further in the pipeline itself.
 
 **Working translations need a build.** `dist/` is gitignored, so a fresh
 checkout has `.po` sources and no `.mo`/`.json` — WordPress reads the compiled

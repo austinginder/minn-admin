@@ -77,13 +77,50 @@ $check( 'Does not offer locales the site cannot display', ! in_array( 'it_IT', $
 $first = $transient->translations[0] ?? array();
 $check( 'Entry is shaped the way core reads it', 'plugin' === ( $first['type'] ?? '' ) && 'minn-admin' === ( $first['slug'] ?? '' ) && true === ( $first['autoupdate'] ?? null ) );
 
-/* --- already-installed packs are skipped by DATE, not version ------------- */
-$transient2               = new stdClass();
-$transient2->translations = array();
-add_filter( 'pre_option_minn_dummy', '__return_false' ); // no-op, keeps the filter list honest
+/* --- already-installed packs are skipped by VERSION ------------------------ */
 $reflect = new ReflectionMethod( $updater, 'installed_translations' );
 $reflect->setAccessible( true );
 $check( 'installed_translations() returns an array', is_array( $reflect->invoke( $updater ) ) );
+
+// The version can only be read when packs ship their .po: core's
+// wp_get_installed_translations() takes headers from the .po and skips any
+// .mo with no .po beside it. A .mo-only pack reports as not installed, and
+// every pack is then re-offered on every check for the life of the site.
+$parse = new ReflectionMethod( $updater, 'version_from_project_id' );
+$parse->setAccessible( true );
+$check( 'Reads a version out of Project-Id-Version', '0.29.0' === $parse->invoke( null, 'Minn Admin 0.29.0' ) );
+$check( 'Reads a prerelease version', '1.0.0-beta.2' === $parse->invoke( null, 'Minn Admin 1.0.0-beta.2' ) );
+$check( 'An unstamped header parses to empty, not garbage', '' === $parse->invoke( null, 'Minn Admin' ) );
+
+$offer = new ReflectionMethod( $updater, 'offer_translations' );
+$offer->setAccessible( true );
+$mkPack = function ( $version ) {
+	return (object) array(
+		'language' => 'de_DE',
+		'version'  => $version,
+		'updated'  => '2026-08-14 00:00:00',
+		'package'  => "https://github.com/austinginder/minn-admin/releases/download/v$version/minn-admin-de_DE.zip",
+		'sha256'   => str_repeat( 'a', 64 ),
+	);
+};
+$countFor = function ( $version ) use ( $offer, $updater, $mkPack ) {
+	$t = new stdClass();
+	$t->translations = array();
+	$offer->invoke( $updater, $t, (object) array( 'translations' => array( $mkPack( $version ) ) ) );
+	return count( $t->translations );
+};
+
+$haveDe = $reflect->invoke( $updater );
+if ( ! empty( $haveDe['de_DE'] ) ) {
+	$installedVersion = $haveDe['de_DE'];
+	$older = '0.0.1';
+	$newer = '999.0.0';
+	$check( 'A pack at the installed version is not re-offered', 0 === $countFor( $installedVersion ) );
+	$check( 'An older pack is not offered', 0 === $countFor( $older ) );
+	$check( 'A newer pack IS offered', 1 === $countFor( $newer ) );
+} else {
+	echo "SKIP  version gating (no de_DE pack installed in wp-content/languages/plugins)\n";
+}
 
 $failed = count( array_filter( $results, function ( $r ) { return ! $r; } ) );
 printf( "\nlanguage-packs: %d/%d passed\n", count( $results ) - $failed, count( $results ) );
