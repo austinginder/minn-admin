@@ -76,6 +76,13 @@ order replaces the subscription in it, the same way a related subscription behav
 order side. The two buttons are siblings, never nested: a button inside a button is invalid
 and browsers drop the inner one.
 
+**Back follows the trail, not the record type.** An order reached from a subscription says
+`← Subscription #123` and returns there; the same order reached from the orders list says
+`← Orders`. The trail is left at the click and spent when the order page reads it, so it
+cannot outlive the visit that set it, and a reload leaves none, which is why a deep link
+falls back to the list. Landing on the orders list after opening a renewal stranded you
+somewhere you had never been.
+
 ## The list
 
 Subscriptions run the same filter machinery as orders, with their own vocabulary: their

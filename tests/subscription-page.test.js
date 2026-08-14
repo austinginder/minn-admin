@@ -227,6 +227,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForFunction( ( id ) => location.pathname.indexOf( '/orders/' + id ) !== -1, orderId, { timeout: 15000 } );
 		t.check( 'the parent order opens on its own page', true, await page.evaluate( () => location.pathname ) );
 
+		// ---- …and Back returns to the subscription, not to the orders list ----
+		const backLabel = await page.evaluate( () => {
+			const b = document.getElementById( 'minn-op-back' );
+			return b ? b.textContent.trim() : '';
+		} );
+		t.check( 'the order page offers the subscription as its way back',
+			backLabel.indexOf( 'Subscription' ) !== -1 && backLabel.indexOf( String( subId ) ) !== -1, backLabel );
+		await page.click( '#minn-op-back' );
+		await page.waitForFunction( ( id ) => location.pathname.indexOf( '/subscriptions/' + id ) !== -1, subId, { timeout: 15000 } );
+		t.check( 'Back lands on the subscription it came from', true, await page.evaluate( () => location.pathname ) );
+		await pageReady();
+		// Reached on its own, the order page keeps its own list as Back: the
+		// return is the trail this visit left, never a leftover from the last.
+		await page.goto( `${ BASE }/minn-admin/orders/${ orderId }`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-op-back', { timeout: 25000 } );
+		t.check( 'an order opened directly still goes back to Orders',
+			( await page.evaluate( () => document.getElementById( 'minn-op-back' ).textContent.trim() ) ).indexOf( 'Subscription' ) === -1, '' );
+
 		// ---- Back to the list, and the row navigates ----
 		await page.goto( `${ BASE }/minn-admin/subscriptions`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( `.minn-table-row[data-sub="${ subId }"]`, { timeout: 25000 } );
