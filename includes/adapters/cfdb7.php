@@ -433,6 +433,27 @@ add_action( 'rest_api_init', function () {
 				if ( ! $exists ) {
 					return new WP_Error( 'not_found', 'Entry not found.', array( 'status' => 404 ) );
 				}
+				// Remove the files the entry uploaded before the row that names
+				// them, exactly as CFDB7's own bulk delete does: the values whose
+				// key carries the cfdb7_file marker are filenames under
+				// uploads/cfdb7_uploads. Dropping only the row would strand a
+				// resume or ID scan on disk at a guessable URL with nothing left
+				// pointing at it. Values come from the byte-length scanner rather
+				// than unserialize(), per this adapter's rule about their blob.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$blob = (string) $wpdb->get_var( $wpdb->prepare( "SELECT form_value FROM {$table} WHERE form_id = %d", (int) $request['id'] ) );
+				$dir  = wp_upload_dir()['basedir'] . '/cfdb7_uploads/';
+				foreach ( minn_admin_cfdb7_values( $blob ) as $key => $value ) {
+					if ( false === strpos( $key, 'cfdb7_file' ) || '' === trim( (string) $value ) ) {
+						continue;
+					}
+					// basename() so a traversal-shaped value can never reach out
+					// of the uploads directory.
+					$file = $dir . basename( (string) $value );
+					if ( is_readable( $file ) && ! is_dir( $file ) ) {
+						wp_delete_file( $file );
+					}
+				}
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->delete( $table, array( 'form_id' => (int) $request['id'] ), array( '%d' ) );
 				return rest_ensure_response( array( 'id' => (int) $request['id'], 'deleted' => true, 'message' => 'Entry deleted permanently.' ) );

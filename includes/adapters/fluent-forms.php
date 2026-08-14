@@ -673,7 +673,7 @@ add_action( 'rest_api_init', function () {
 				$det_table  = $wpdb->prefix . 'fluentform_entry_details';
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$row = $wpdb->get_row( $wpdb->prepare(
-					"SELECT id, status FROM `{$subs_table}` WHERE id = %d",
+					"SELECT id, status, form_id FROM `{$subs_table}` WHERE id = %d",
 					$id
 				) );
 				if ( ! $row ) {
@@ -683,10 +683,44 @@ add_action( 'rest_api_init', function () {
 				if ( ! in_array( (string) $row->status, array( 'trashed', 'spam' ), true ) ) {
 					return new WP_Error( 'not_trashed', 'Move the entry to trash (or spam) before deleting permanently.', array( 'status' => 400 ) );
 				}
+
+				// Delete through Fluent Forms' own service. A submission is more
+				// than its two obvious tables: their deleteEntries() removes the
+				// files the entry uploaded, clears submission meta, the activity
+				// log (which holds rendered notification bodies and recipient
+				// addresses) and any order, transaction, subscription and
+				// scheduled-action rows, and fires the hooks add-ons use to drop
+				// their own copies. Deleting the two tables by hand answered
+				// "deleted permanently" while the uploaded file was still being
+				// served from the URL the detail view had just linked, which is
+				// the wrong answer to give someone honouring an erasure request.
+				$form_id = (int) $row->form_id;
+				if ( class_exists( '\FluentForm\App\Services\Submission\SubmissionService' ) ) {
+					try {
+						( new \FluentForm\App\Services\Submission\SubmissionService() )
+							->deleteEntries( array( $id ), $form_id );
+						return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => 'Entry deleted permanently.' ) );
+					} catch ( \Throwable $e ) {
+						// Fall through to the manual path below rather than
+						// leaving the entry half-deleted.
+					}
+				}
+
+				// Last resort when their service is absent: cover the same
+				// ground by hand and still fire their hooks, so add-on cleanup
+				// runs even here.
+				do_action( 'fluentform/before_deleting_entries', array( $id ), $form_id );
 				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->delete( $wpdb->prefix . 'fluentform_submission_meta', array( 'response_id' => $id ), array( '%d' ) );
+				$wpdb->delete(
+					$wpdb->prefix . 'fluentform_logs',
+					array( 'source_id' => $id, 'source_type' => 'submission_item' ),
+					array( '%d', '%s' )
+				);
 				$wpdb->delete( $det_table, array( 'submission_id' => $id ), array( '%d' ) );
 				$wpdb->delete( $subs_table, array( 'id' => $id ), array( '%d' ) );
 				// phpcs:enable
+				do_action( 'fluentform/after_deleting_submissions', array( $id ), $form_id );
 				return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => 'Entry deleted permanently.' ) );
 			},
 		),
