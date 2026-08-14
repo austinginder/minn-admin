@@ -15283,8 +15283,8 @@
 				__( '%1$s tables · %2$s' ), String( c.tables.length ), c.total_size_human ) ) }</div>
 			${ c.foreign > 0 ? `<button class="minn-btn-soft${ ds.all ? ' active' : '' }" id="minn-db-all">${ esc( ds.all
 				/* translators: %d: number of tables outside this install's prefix. */
-				? sprintf( __( 'Hide %d other-prefix tables' ), c.foreign )
-				: sprintf( __( 'Show %d other-prefix tables' ), c.foreign ) ) }</button>` : '' }
+				? sprintf( /* translators: %d: how many tables use a different table prefix. */ __( 'Hide %d other-prefix tables' ), c.foreign )
+				: sprintf( /* translators: %d: how many tables use a different table prefix. */ __( 'Show %d other-prefix tables' ), c.foreign ) ) }</button>` : '' }
 			<span class="minn-db-ro">${ icon( 'lock' ) } ${ esc( __( 'Read-only by design' ) ) }</span>
 		</div>
 		<div id="minn-db-list"></div>`;
@@ -15365,7 +15365,7 @@
 		if ( h ) {
 			/* translators: %s: number of database health checks needing attention. */
 			summary = h.warnings
-				? sprintf( _n( '%s check needs attention', '%s checks need attention', h.warnings ), Number( h.warnings ).toLocaleString() )
+				? sprintf( /* translators: %s: how many health checks need attention. */ _n( '%s check needs attention', '%s checks need attention', h.warnings ), Number( h.warnings ).toLocaleString() )
 				: __( 'Everything looks healthy' );
 		}
 		const head = `
@@ -16149,7 +16149,7 @@
 						+ `<div class="minn-fields">`
 						+ permaCombo( '_preset', __( 'Permalink structure' ), isPreset ? pl.structure : '_custom' )
 						+ permaText( 'structure', __( 'Custom structure' ), pl.structure, true )
-						+ `<div class="minn-toggle-desc">${ esc( __( 'Tags: %year% %monthnum% %day% %postname% %post_id% %category% %author%. With Plain permalinks, Minn itself moves from /minn-admin/ to ?minn_admin=1 and reloads after saving.' ) ) }</div>`
+						+ `<div class="minn-toggle-desc">${ esc( /* translators: the %tag% names are WordPress permalink structure tags and must NOT be translated. */ __( 'Tags: %year% %monthnum% %day% %postname% %post_id% %category% %author%. With Plain permalinks, Minn itself moves from /minn-admin/ to ?minn_admin=1 and reloads after saving.' ) ) }</div>`
 						+ permaText( 'category_base', __( 'Category base (optional)' ), pl.category_base, true )
 						+ permaText( 'tag_base', __( 'Tag base (optional)' ), pl.tag_base, true )
 						+ `</div>`;
@@ -17517,7 +17517,7 @@
 		// The count matters on sliders: the preview shows one slide, so the
 		// overlay is where "there are six of these" gets said.
 		/* translators: %d: number of images in the block */
-		const imgBadge = imgTool === 'edit' ? sprintf( _n( 'Edit image · %d', __( 'Edit images · %d' ), imgUnits.units.length ), imgUnits.units.length )
+		const imgBadge = imgTool === 'edit' ? sprintf( /* translators: %d: how many images the block holds. */ _n( 'Edit image · %d', 'Edit images · %d', imgUnits.units.length ), imgUnits.units.length )
 			/* translators: overlay on a single-image block's image */
 			: imgTool ? __( 'Replace image' ) : '';
 		// A synced pattern is a REFERENCE to a wp_block post — its content
@@ -25206,7 +25206,7 @@
 		// Structural add/reorder live in the modal too.
 		const manyKids = ! mediaRebuild && model.children.length >= 2;
 		/* translators: %d: number of nested blocks */
-		const kidsLabel = manyKids ? sprintf( _n( 'Content · %d block', __( 'Content · %d blocks' ), model.children.length ), model.children.length ) : '';
+		const kidsLabel = manyKids ? sprintf( /* translators: %d: how many blocks the container holds. */ _n( 'Content · %d block', 'Content · %d blocks', model.children.length ), model.children.length ) : '';
 		const kidsSummary = manyKids
 			? `<div class="minn-field-label minn-insp-imghead">${ esc( kidsLabel ) }<button class="minn-btn-soft" type="button" id="minn-insp-cted">${ esc( __( 'Edit content…' ) ) }</button></div>`
 			: '';
@@ -29023,7 +29023,7 @@
 			// updates down for per-item progress); the chip shows the count.
 			const np = ( parts.find( ( p ) => p.kind === 'plugins' ) || {} ).n || 0;
 			/* translators: %s: number of plugins. */
-			setPhase( sprintf( _n( 'Updating %s plugin…', __( 'Updating %s plugins…' ), np ), np ) );
+			setPhase( sprintf( /* translators: %s: how many plugins are being updated. */ _n( 'Updating %s plugin…', 'Updating %s plugins…', np ), np ) );
 			try {
 				const r = await api( 'minn-admin/v1/plugins/update-all', { method: 'POST', body: '{}' } );
 				const updated = r.updated || [];
@@ -29060,7 +29060,7 @@
 		if ( parts.some( ( p ) => p.kind === 'translations' ) ) {
 			const nl = parts.find( ( p ) => p.kind === 'translations' ).n;
 			/* translators: %d is a number of translations. */
-			setPhase( sprintf( _n( 'Updating %d translation…', __( 'Updating %d translations…' ), nl ), nl ) );
+			setPhase( sprintf( /* translators: %d: how many translation packs are being updated. */ _n( 'Updating %d translation…', 'Updating %d translations…', nl ), nl ) );
 			try {
 				const r = await api( 'minn-admin/v1/translations/update', { method: 'POST' } );
 				const did = ( r && r.updated ) || 0;
