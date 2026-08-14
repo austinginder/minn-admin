@@ -81,6 +81,38 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				parseFloat( rtl.borderLeft ) > 0 && parseFloat( rtl.borderRight ) === 0,
 				`left=${ rtl.borderLeft } right=${ rtl.borderRight }` );
 
+			const storeLabels = await page.evaluate( () => {
+				const strip = document.querySelector( '.minn-store-strip' );
+				const catalog = window.MINN.i18n || {};
+				const translated = ( id ) => Array.isArray( catalog[ id ] ) ? catalog[ id ][ 0 ] : catalog[ id ];
+				return {
+					rendered: strip ? strip.textContent.replace( /\s+/g, ' ' ).trim() : '',
+					pending: translated( 'awaiting payment' ) || '',
+					fulfill: translated( 'to fulfill' ) || '',
+				};
+			} );
+			t.check( 'Store attention labels use the Persian catalog',
+				/در انتظار پرداخت/.test( storeLabels.pending ) && /برای تکمیل/.test( storeLabels.fulfill )
+					&& ! /awaiting payment|to fulfill/i.test( storeLabels.rendered ),
+				JSON.stringify( storeLabels ) );
+
+			// Force the activity chart, then use a real mouse movement so the
+			// translated singular/plural label is exercised in its hover card.
+			await page.evaluate( () => localStorage.setItem( 'minn-chart-source', 'activity' ) );
+			await page.reload( { waitUntil: 'domcontentloaded' } );
+			await page.waitForSelector( '.minn-chart-col', { timeout: 10000 } );
+			const activityCol = page.locator( '.minn-chart-col' ).last();
+			const activityBox = await activityCol.boundingBox();
+			if ( activityBox ) {
+				await page.mouse.move( activityBox.x + activityBox.width / 2, activityBox.y + Math.max( 4, activityBox.height - 8 ) );
+			}
+			const activityTip = await page.evaluate( () => {
+				const tip = document.querySelector( '#minn-chart-tip' );
+				return tip && ! tip.hidden ? tip.textContent.replace( /\s+/g, ' ' ).trim() : '';
+			} );
+			t.check( 'Activity hover uses a translated event label',
+				/رویداد/.test( activityTip ) && ! /\bEvents?\b/.test( activityTip ), activityTip );
+
 			// Technical values must stay readable inside an RTL run.
 			const iso = await page.evaluate( () => {
 				const el = document.createElement( 'code' );
@@ -103,6 +135,37 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			} );
 			t.check( 'Crop handles stay physical (left/right, not logical)',
 				! /inset-inline/.test( crop ) && /left|right/.test( crop ) );
+
+			// The notification panel anchors to inline-end, which is the left in
+			// RTL, and its entrance must come from that same physical edge.
+			await page.click( '#minn-notif-btn' );
+			await page.waitForSelector( '.minn-notif-panel', { timeout: 5000 } );
+			await page.waitForTimeout( 250 );
+			const notif = await page.evaluate( () => {
+				const panel = document.querySelector( '.minn-notif-panel' );
+				const rules = [ ...document.styleSheets ].flatMap( ( sheet ) => {
+					try { return [ ...sheet.cssRules ]; } catch ( e ) { return []; }
+				} );
+				const rtlKeyframes = rules.find( ( rule ) => rule.name === 'minnSlideInRtl' );
+				const rect = panel && panel.getBoundingClientRect();
+				return {
+					left: rect ? rect.left : -1,
+					right: rect ? rect.right : -1,
+					width: window.innerWidth,
+					name: panel ? getComputedStyle( panel ).animationName : '',
+					keyframes: rtlKeyframes ? rtlKeyframes.cssText : '',
+					tabs: [ ...document.querySelectorAll( '.minn-notif-tab' ) ].map( ( el ) => el.textContent.trim() ),
+				};
+			} );
+			t.check( 'RTL notification panel anchors on the left', notif.left < notif.width / 2 && notif.right <= notif.width / 2,
+				`left=${ Math.round( notif.left ) } right=${ Math.round( notif.right ) } width=${ notif.width }` );
+			t.check( 'RTL notification panel enters from the left', notif.name === 'minnSlideInRtl'
+				&& /translateX\(-100%\)/.test( notif.keyframes ),
+				`${ notif.name }: ${ notif.keyframes }` );
+			t.check( 'Notification tabs use the Persian catalog',
+				notif.tabs.length > 0 && ! notif.tabs.some( ( label ) => /\b(?:All|Comments|Updates|Notices|System)\b/.test( label ) ),
+				notif.tabs.join( ' | ' ) );
+			await page.click( '#minn-notif-close' );
 		}
 
 		// --- restore -------------------------------------------------------
