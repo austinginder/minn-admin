@@ -55,7 +55,11 @@ const missingFor = ( loc ) => {
 if ( process.argv[ 2 ] === '--all' ) {
 	let worst = 0;
 	for ( const loc of LOCALES ) {
-		if ( ! fs.existsSync( path.join( ROOT, 'languages', `${ loc.code }.po` ) ) ) continue;
+		if ( ! fs.existsSync( path.join( ROOT, 'languages', `${ loc.code }.po` ) ) ) {
+			console.log( `${ loc.code.padEnd( 6 ) } MISSING CATALOG` );
+			worst = Math.max( worst, 1 );
+			continue;
+		}
 		const n = missingFor( loc );
 		worst = Math.max( worst, n );
 		console.log( `${ loc.code.padEnd( 6 ) } ${ n }` );
