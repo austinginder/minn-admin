@@ -198,7 +198,7 @@ a { color: var(--accent2); text-decoration: none; }
 
 /* ===== Sidebar ===== */
 .minn-sidebar {
-  width: 240px; flex-shrink: 0; background: var(--bg2); border-right: 1px solid var(--border);
+  width: 240px; flex-shrink: 0; background: var(--bg2); border-inline-end: 1px solid var(--border);
   display: flex; flex-direction: column; padding: 14px 12px; gap: 2px;
 }
 .minn-logo { display: flex; align-items: center; gap: 10px; padding: 8px 8px 16px; }
@@ -249,7 +249,7 @@ a { color: var(--accent2); text-decoration: none; }
 /* Site picker (networks with more sites than the switcher menu holds). */
 .minn-sp-list { max-height: 52vh; overflow-y: auto; padding: 0 10px 12px; }
 .minn-sp-row {
-  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: start;
   padding: 9px 11px; border: none; border-radius: 9px; background: none;
   color: var(--text); cursor: pointer;
 }
@@ -257,7 +257,7 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-sp-row:disabled { cursor: default; }
 .minn-sp-name { font-weight: 600; font-size: 14px; }
 .minn-sp-url { color: var(--text3); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.minn-sp-here { margin-left: auto; color: var(--accent2); font-size: 11.5px; font-weight: 600; flex: none; }
+.minn-sp-here { margin-inline-start: auto; color: var(--accent2); font-size: 11.5px; font-weight: 600; flex: none; }
 /* Version + changelog live in the topbar actions (GH #5: a badge beside the
    logo truncated longer site names, so it moved up beside the view-site
    button). Sized to sit flush with the .minn-icon-btn row. */
@@ -270,8 +270,8 @@ a { color: var(--accent2); text-decoration: none; }
    beside one release at a time; the rail becomes a horizontal chip strip on
    small screens, scrolling in its OWN overflow so the modal never widens. */
 .minn-cl-layout { display: grid; grid-template-columns: 172px minmax(0, 1fr); min-height: 0; }
-.minn-cl-rail { border-right: 1px solid var(--border); max-height: 64vh; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
-.minn-cl-ver { text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 7px 10px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+.minn-cl-rail { border-inline-end: 1px solid var(--border); max-height: 64vh; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.minn-cl-ver { text-align: start; background: none; border: 1px solid transparent; border-radius: 8px; padding: 7px 10px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
 .minn-cl-ver-v { display: block; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text); }
 .minn-cl-ver-d { display: block; font-size: 11.5px; color: var(--text3); margin-top: 1px; }
 .minn-cl-ver:hover { background: var(--hover); }
@@ -279,7 +279,7 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-cl-ver.sel .minn-cl-ver-v { color: var(--accent2); }
 @media (max-width: 640px) {
   .minn-cl-layout { display: flex; flex-direction: column; }
-  .minn-cl-rail { flex-direction: row; overflow-x: auto; overflow-y: hidden; max-height: none; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; gap: 6px; }
+  .minn-cl-rail { flex-direction: row; overflow-x: auto; overflow-y: hidden; max-height: none; border-inline-end: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; gap: 6px; }
   .minn-cl-ver { padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; }
   .minn-cl-ver.sel { border-color: var(--accent); }
   .minn-cl-ver-d { display: none; }
@@ -289,14 +289,14 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-changelog h3:first-child { margin-top: 6px; padding-top: 0; border-top: 0; }
 /* The user-guide modal shares the changelog reader shell, plus the guide's
    richer vocabulary: ordered lists, italics and the shortcuts table. */
-.minn-guide ol, .minn-guide ul { margin: 8px 0 12px; padding-left: 22px; }
+.minn-guide ol, .minn-guide ul { margin: 8px 0 12px; padding-inline-start: 22px; }
 .minn-guide li { margin: 4px 0; }
 .minn-guide i { color: var(--text2); }
 .minn-guide table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; }
-.minn-guide th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); border-bottom: 1px solid var(--border2); padding: 4px 10px 4px 0; }
+.minn-guide th { text-align: start; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); border-bottom: 1px solid var(--border2); padding: 4px 10px 4px 0; }
 .minn-guide td { border-bottom: 1px solid var(--border); padding: 6px 10px 6px 0; vertical-align: top; }
 .minn-changelog h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin: 14px 0 4px; }
-.minn-changelog ul { margin: 4px 0 10px; padding-left: 20px; }
+.minn-changelog ul { margin: 4px 0 10px; padding-inline-start: 20px; }
 .minn-changelog li { margin: 4px 0; }
 .minn-changelog code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .minn-changelog a { color: var(--accent2); }
@@ -310,7 +310,7 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .minn-search-btn:hover { border-color: var(--border2); color: var(--text2); }
 .minn-kbd {
-  margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg);
+  margin-inline-start: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg);
   border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px;
 }
 
@@ -319,19 +319,19 @@ a { color: var(--accent2); text-decoration: none; }
 .minn-nav-label { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; padding: 8px 10px 4px; }
 .minn-nav-label + .minn-nav-label, .minn-nav-label.later { padding-top: 14px; }
 /* Group labels are collapse toggles (Workspace / Tools / Manage). */
-button.minn-nav-label { display: flex; align-items: center; width: 100%; background: none; border: 0; cursor: pointer; font-family: inherit; text-align: left; }
-button.minn-nav-label svg { width: 12px; height: 12px; margin-left: auto; opacity: 0; transition: transform 0.15s ease, opacity 0.15s ease; }
+button.minn-nav-label { display: flex; align-items: center; width: 100%; background: none; border: 0; cursor: pointer; font-family: inherit; text-align: start; }
+button.minn-nav-label svg { width: 12px; height: 12px; margin-inline-start: auto; opacity: 0; transition: transform 0.15s ease, opacity 0.15s ease; }
 button.minn-nav-label:hover svg, button.minn-nav-label.collapsed svg { opacity: 0.7; }
 button.minn-nav-label.collapsed svg { transform: rotate(-90deg); }
 button.minn-nav-label:hover { color: var(--text2); }
 .minn-nav-btn {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent;
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: start; background: transparent;
   color: var(--text2); border: none; padding: 8px 10px; border-radius: 9px; cursor: pointer; font-size: 14.5px; font-weight: 500;
 }
 .minn-nav-btn:hover { background: var(--hover); color: var(--text); }
 .minn-nav-btn.active { background: var(--accent-soft); color: var(--accent2); font-weight: 600; }
-.minn-nav-count { margin-left: auto; font-size: 12px; color: var(--text3); background: var(--panel); padding: 1px 7px; border-radius: 20px; }
-.minn-nav-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+.minn-nav-count { margin-inline-start: auto; font-size: 12px; color: var(--text3); background: var(--panel); padding: 1px 7px; border-radius: 20px; }
+.minn-nav-dot { margin-inline-start: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
 
 /* Notice action links — buttons inside the row; ↗ ones open a new tab. */
 .minn-notif-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
@@ -365,9 +365,9 @@ button.minn-nav-label:hover { color: var(--text2); }
    rows · copyable command · action buttons). Disembark is the reference. */
 .minn-surface-status { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; margin-bottom: 14px; }
 .minn-sstat-head { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; }
-.minn-sstat-head .minn-sstat-actions { flex: none; margin-left: auto; }
+.minn-sstat-head .minn-sstat-actions { flex: none; margin-inline-start: auto; }
 /* An armed inline action form (Send a test email) needs the full row. */
-.minn-sstat-head .minn-sstat-actions:has(.minn-action-fields) { flex: 1 1 100%; margin-left: 0; }
+.minn-sstat-head .minn-sstat-actions:has(.minn-action-fields) { flex: 1 1 100%; margin-inline-start: 0; }
 .minn-sstat-rows { display: flex; flex-wrap: wrap; gap: 10px 36px; }
 .minn-sstat { min-width: 130px; }
 .minn-sstat-label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text3); margin-bottom: 3px; }
@@ -390,7 +390,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-sstat-chart .minn-chart { height: 88px; gap: 3px; }
 .minn-sstat-cmd { min-width: 0; }
 .minn-sstat-cmd-box {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: start;
   font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text);
   background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
   padding: 9px 12px; cursor: pointer;
@@ -460,7 +460,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 /* Account actions: WordPress admin (a quiet, discoverable exit — the
    escape is deliberately here beside logout, never a prominent topbar
    button; the palette carries it too) then Log out. */
-.minn-user-acts { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+.minn-user-acts { margin-inline-start: auto; display: flex; align-items: center; gap: 2px; }
 .minn-user-logout { color: var(--text3); background: none; border: none; cursor: pointer; padding: 6px; border-radius: 7px; display: flex; }
 .minn-user-logout:hover { background: var(--hover); color: var(--text); }
 
@@ -493,9 +493,9 @@ button.minn-nav-label:hover { color: var(--text2); }
   border-color: var(--accent); color: var(--text); outline: none;
 }
 .minn-surface-switch .minn-ac-panel {
-  min-width: 180px; right: 0; left: auto;
+  min-width: 180px; inset-inline-end: 0; inset-inline-start: auto;
 }
-.minn-topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.minn-topbar-actions { margin-inline-start: auto; display: flex; align-items: center; gap: 6px; }
 .minn-icon-btn {
   position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid var(--border); border-radius: 9px; color: var(--text2); cursor: pointer;
@@ -510,7 +510,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-new-menu button {
   display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px;
   background: none; border: none; border-radius: 8px; color: var(--text);
-  font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
+  font-size: 14px; font-weight: 500; cursor: pointer; text-align: start;
 }
 .minn-new-menu button:hover { background: var(--hover); }
 .minn-new-menu button.danger { color: var(--red); }
@@ -554,7 +554,7 @@ button.minn-nav-label:hover { color: var(--text2); }
   display: flex; align-items: center; flex-wrap: wrap; gap: 10px 28px;
   padding: 13px 20px; margin-bottom: 16px;
 }
-.minn-menu-locations .minn-panel-title { font-size: 14.5px; margin-right: 4px; }
+.minn-menu-locations .minn-panel-title { font-size: 14.5px; margin-inline-end: 4px; }
 .minn-loc-group { display: flex; align-items: center; gap: 9px; }
 .minn-loc-group .minn-side-key { white-space: nowrap; }
 .minn-loc-ac { width: 200px; }
@@ -638,14 +638,14 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-vis-pop .minn-btn-soft { align-self: flex-start; }
 .minn-comment-replybox { margin-top: 10px; }
 .minn-comment-replybox textarea { resize: vertical; font-size: 13.5px; }
-.minn-unread-dot { position: absolute; top: 6px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--bg); }
+.minn-unread-dot { position: absolute; top: 6px; inset-inline-end: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--bg); }
 .minn-btn-primary {
   display: flex; align-items: center; gap: 7px; background: var(--accent); color: var(--accent-fg); border: none;
   padding: 8px 14px; border-radius: 9px; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap;
 }
 .minn-btn-primary:hover { background: var(--accent2); }
 .minn-btn-primary:disabled { opacity: 0.6; cursor: default; }
-.minn-topbar .minn-btn-primary { margin-left: 6px; }
+.minn-topbar .minn-btn-primary { margin-inline-start: 6px; }
 
 /* ===== Cards / panels ===== */
 .minn-card { background: var(--panel); border: 1px solid var(--border); border-radius: 13px; }
@@ -669,11 +669,11 @@ button.minn-nav-label:hover { color: var(--text2); }
 
 /* Store needs-attention strip (Overview, WooCommerce only) */
 .minn-store-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 17px; margin-bottom: 20px; }
-.minn-store-label { font-size: 13.5px; font-weight: 600; color: var(--text2); margin-right: 4px; }
+.minn-store-label { font-size: 13.5px; font-weight: 600; color: var(--text2); margin-inline-end: 4px; }
 .minn-store-chip { border: 0; cursor: pointer; font-family: inherit; transition: filter 0.15s ease; }
 .minn-store-chip:hover, .minn-store-chip:focus-visible { filter: brightness(1.15); }
 .minn-store-ok { color: var(--text3); font-size: 13px; }
-.minn-store-view { margin-left: auto; }
+.minn-store-view { margin-inline-start: auto; }
 
 .minn-dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
 .minn-panel-pad { padding: 18px 20px; }
@@ -729,7 +729,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-traf-title { font-size: 14px; font-weight: 550; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .minn-traf-path { font-size: 12px; color: var(--text3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, ui-monospace, monospace); }
 .minn-traf-nums { display: flex; gap: 12px; flex: none; font-size: 13px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-.minn-traf-nums em { font-style: normal; font-weight: 500; font-size: 11px; color: var(--text3); margin-left: 2px; }
+.minn-traf-nums em { font-style: normal; font-weight: 500; font-size: 11px; color: var(--text3); margin-inline-start: 2px; }
 .minn-traf-foot { padding: 12px 0 2px; }
 .minn-activity { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
 .minn-modal .minn-activity { margin: 0; padding: 8px 18px 14px; }
@@ -753,7 +753,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-toolbar-views .minn-type-select { flex: 0 1 220px; max-width: 260px; }
 /* Aux strip (Content's Trash): pinned to the row's right edge — a stretching
    flex child floated it mid-row. Icon + a step brighter than the quiet tabs. */
-.minn-toolbar > .minn-tabs.minn-tabs-aux { flex: 0 0 auto; margin-left: auto; }
+.minn-toolbar > .minn-tabs.minn-tabs-aux { flex: 0 0 auto; margin-inline-start: auto; }
 .minn-tabs-aux .minn-tab { display: flex; align-items: center; gap: 6px; color: var(--text2); }
 .minn-tabs-aux .minn-tab svg { width: 13px; height: 13px; }
 /* Filters row carries the bottom gap to the table (views row is tighter). */
@@ -765,8 +765,8 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-ext-filters .minn-tab:hover, .minn-quiet-tabs .minn-tab:hover { color: var(--text2); }
 .minn-ext-filters .minn-tab.active, .minn-quiet-tabs .minn-tab.active { color: var(--text); font-weight: 600; background: none; box-shadow: none; }
 .minn-ext-filters .minn-tab.active .minn-tab-count { color: var(--accent2); }
-.minn-ext-filters .minn-tab .minn-tab-count { background: none; border: none; padding: 0; margin-left: 3px; }
-.minn-toolbar-meta { margin-left: auto; color: var(--text3); font-size: 14px; white-space: nowrap; flex-shrink: 0; }
+.minn-ext-filters .minn-tab .minn-tab-count { background: none; border: none; padding: 0; margin-inline-start: 3px; }
+.minn-toolbar-meta { margin-inline-start: auto; color: var(--text3); font-size: 14px; white-space: nowrap; flex-shrink: 0; }
 .minn-media-svg-note {
 	margin: 8px 0 0;
 	padding: 7px 10px;
@@ -793,7 +793,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-tabs::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 .minn-tab { background: transparent; color: var(--text3); border: none; padding: 5px 13px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
 .minn-tab.active { background: var(--panel2); color: var(--text); font-weight: 600; }
-.minn-tab-count { display: inline-block; margin-left: 5px; padding: 0 6px; border-radius: 999px; background: var(--panel2); color: var(--text3); font-size: 12px; font-weight: 600; line-height: 18px; vertical-align: 1px; }
+.minn-tab-count { display: inline-block; margin-inline-start: 5px; padding: 0 6px; border-radius: 999px; background: var(--panel2); color: var(--text3); font-size: 12px; font-weight: 600; line-height: 18px; vertical-align: 1px; }
 .minn-tab.active .minn-tab-count { background: var(--bg); color: var(--text2); }
 /* Quiet in-place loading: keep the toolbar, dim only the table while data refreshes. */
 .minn-busy { opacity: 0.45; pointer-events: none; transition: opacity 0.12s ease; }
@@ -810,7 +810,7 @@ button.minn-nav-label:hover { color: var(--text2); }
   margin: 0; padding: 0; border: 0; background: none;
   font: inherit; font-size: inherit; font-weight: inherit;
   color: inherit; letter-spacing: inherit; text-transform: inherit;
-  cursor: pointer; text-align: left;
+  cursor: pointer; text-align: start;
 }
 .minn-th-sort:hover { color: var(--text); }
 .minn-th-sort.is-active { color: var(--text2); }
@@ -832,8 +832,8 @@ button.minn-nav-label:hover { color: var(--text2); }
 /* Surface table cells: single line, ellipsis — long URLs shouldn't wrap to three rows. */
 .minn-row-meta.minn-cell-clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .minn-row-meta.mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-.minn-row-meta.minn-num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 8px; }
-.minn-table-head .minn-num { text-align: right; padding-right: 8px; }
+.minn-row-meta.minn-num { text-align: end; font-variant-numeric: tabular-nums; padding-inline-end: 8px; }
+.minn-table-head .minn-num { text-align: end; padding-inline-end: 8px; }
 .minn-row-arrow { color: var(--text3); text-align: center; }
 .minn-cell-clip { min-width: 0; }
 
@@ -844,7 +844,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-status.private { color: var(--amber-text); background: rgba(224,164,88,0.14); }
 
 /* ===== Media ===== */
-.minn-view-tabs { margin-left: auto; display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
+.minn-view-tabs { margin-inline-start: auto; display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
 .minn-view-tab { width: 30px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; color: var(--text3); border: none; border-radius: 6px; cursor: pointer; }
 .minn-view-tab.active { background: var(--panel2); color: var(--text); }
 .minn-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
@@ -856,7 +856,7 @@ button.minn-nav-label:hover { color: var(--text2); }
    top-right (appears on hover / when selected). Opposite corners so hover
    never covers the kind label. List view keeps the checkbox leading. */
 .minn-media-check {
-  position: absolute; top: 7px; right: 7px; z-index: 2; display: flex;
+  position: absolute; top: 7px; inset-inline-end: 7px; z-index: 2; display: flex;
   padding: 3px; border-radius: 6px; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);
   opacity: 0; transition: opacity 0.12s;
 }
@@ -866,7 +866,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-media-check input { cursor: pointer; width: 15px; height: 15px; accent-color: var(--accent); margin: 0; }
 .minn-media-thumb { height: 110px; position: relative; display: flex; align-items: flex-start; background-size: cover; background-position: center; }
 .minn-media-badge {
-  position: absolute; top: 8px; left: 8px; margin: 0;
+  position: absolute; top: 8px; inset-inline-start: 8px; margin: 0;
   font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: #fff;
   background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); padding: 2px 7px; border-radius: 5px;
   z-index: 1; pointer-events: none;
@@ -881,7 +881,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-media-thumb-sm { width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0; background-size: cover; background-position: center; }
 .minn-media-col { flex: 1; min-width: 0; }
 .minn-media-dims { font-size: 13.5px; color: var(--text2); width: 90px; }
-.minn-media-size { font-size: 13.5px; color: var(--text2); width: 70px; text-align: right; }
+.minn-media-size { font-size: 13.5px; color: var(--text2); width: 70px; text-align: end; }
 
 /* ===== Extensions ===== */
 .minn-btn-soft {
@@ -938,7 +938,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-state-label { font-size: 13px; font-weight: 600; color: var(--text3); }
 .minn-state-label.on { color: var(--green); }
 .minn-plugin-delete {
-  margin-left: auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  margin-inline-start: auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
   background: transparent; border: none; border-radius: 7px; color: var(--text3); cursor: pointer;
 }
 .minn-plugin-delete:hover { background: rgba(228,107,107,0.12); color: var(--red); }
@@ -990,17 +990,17 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-trash-link:hover { color: var(--red); }
 .minn-trash-link:disabled { opacity: 0.5; }
 .minn-history-row {
-  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: none;
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: start; background: none;
   border: none; border-bottom: 1px solid var(--border); padding: 6px 0; cursor: pointer;
   color: var(--text2); font-size: 13px;
 }
 .minn-history-row:hover { color: var(--text); }
 .minn-history-when { font-weight: 600; color: var(--text); }
-.minn-history-who { margin-left: auto; color: var(--text3); font-size: 12px; }
+.minn-history-who { margin-inline-start: auto; color: var(--text3); font-size: 12px; }
 .minn-history-more {
   display: block; width: 100%; margin-top: 4px; padding: 9px 0 2px;
   background: none; border: none; color: var(--accent2); font-size: 12.5px; font-weight: 600;
-  text-align: left; cursor: pointer;
+  text-align: start; cursor: pointer;
 }
 .minn-history-more:hover { color: var(--accent); }
 
@@ -1102,7 +1102,7 @@ button.minn-nav-label:hover { color: var(--text2); }
 }
 .minn-rev-list-row {
   display: grid; grid-template-columns: 36px 1fr auto 20px; gap: 10px; align-items: center;
-  width: 100%; text-align: left; background: none; border: none;
+  width: 100%; text-align: start; background: none; border: none;
   border-bottom: 1px solid var(--border); padding: 11px 18px; cursor: pointer; color: var(--text2); font: inherit;
 }
 .minn-rev-list-row:hover { background: var(--bg2); color: var(--text); }
@@ -1115,12 +1115,12 @@ button.minn-nav-label:hover { color: var(--text2); }
 /* Internal link picker — results under the link popover's URL field. */
 .minn-link-results { margin-top: 7px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden auto; max-height: 190px; }
 .minn-link-result {
-  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: start;
   background: none; border: 0; cursor: pointer; padding: 7px 10px; color: var(--text2); font: inherit; font-size: 13px;
 }
 .minn-link-result:hover, .minn-link-result.active { background: var(--bg2); color: var(--text); }
 .minn-link-result-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.minn-link-result-type { margin-left: auto; flex-shrink: 0; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); }
+.minn-link-result-type { margin-inline-start: auto; flex-shrink: 0; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); }
 
 /* Focus mode — two fixed overlays fade everything above/below the caret
    block. z-30 keeps the toolbar (35), stats pill (40) and chips (69+) crisp.
@@ -1140,14 +1140,14 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-sidebar { transition: width 0.25s ease, padding 0.25s ease, opacity 0.2s ease; }
 body.minn-focus-zen .minn-sidebar,
 body.minn-nav-hidden .minn-sidebar,
-body.minn-outline-mode .minn-sidebar { width: 0; min-width: 0; padding-left: 0; padding-right: 0; opacity: 0; overflow: hidden; border-right: 0; }
+body.minn-outline-mode .minn-sidebar { width: 0; min-width: 0; padding-inline-start: 0; padding-inline-end: 0; opacity: 0; overflow: hidden; border-inline-end: 0; }
 
 /* Outline mode — nav gone, every sidebar card gone except the Outline. */
 body.minn-outline-mode .minn-editor-side > :not(#minn-outline-card) { display: none !important; }
 
 /* Nav show/hide — a topbar .minn-icon-btn now (was a left-edge tab). While
    the nav is hidden the icon dims less so the way back stays discoverable. */
-#minn-nav-tab { flex-shrink: 0; margin-left: -6px; }
+#minn-nav-tab { flex-shrink: 0; margin-inline-start: -6px; }
 body.minn-nav-hidden #minn-nav-tab { color: var(--text); }
 .minn-editor { transition: grid-template-columns 0.25s ease, gap 0.25s ease; }
 body.minn-focus-zen .minn-editor { grid-template-columns: minmax(0, 1fr) 0px; gap: 0; }
@@ -1156,7 +1156,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 
 /* Image editor — canvas preview + drag crop box; pixels stay server-side. */
 .minn-imged-bar { display: flex; align-items: center; gap: 8px; padding: 12px 18px 0; }
-.minn-imged-hint { margin-left: auto; font-size: 12.5px; color: var(--text3); }
+.minn-imged-hint { margin-inline-start: auto; font-size: 12.5px; color: var(--text3); }
 .minn-imged-stage {
   position: relative; display: flex; align-items: center; justify-content: center;
   margin: 14px 18px; min-height: 300px; background: var(--bg2);
@@ -1186,7 +1186,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   box-shadow: var(--shadow); animation: minnScaleIn 0.12s ease;
 }
 .minn-dp-head { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
-.minn-dp-month { font-weight: 700; font-size: 13.5px; margin-right: auto; padding-left: 4px; }
+.minn-dp-month { font-weight: 700; font-size: 13.5px; margin-inline-end: auto; padding-inline-start: 4px; }
 .minn-dp-nav {
   width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 7px;
   background: none; color: var(--text2); cursor: pointer; font-size: 15px; line-height: 1;
@@ -1214,7 +1214,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   content: '';
   position: absolute;
   left: 50%; bottom: 2px;
-  width: 5px; height: 5px; margin-left: -2.5px;
+  width: 5px; height: 5px; margin-inline-start: -2.5px;
   border-radius: 50%;
   background: var(--accent);
   pointer-events: none;
@@ -1245,8 +1245,8 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
    Collapsed hides everything but the title; per-card state persists. */
 .minn-side-card.collapsible > .minn-side-title { cursor: pointer; user-select: none; display: flex; align-items: center; }
 .minn-side-card.collapsible > .minn-side-title::after {
-  content: '';  margin-left: auto; width: 8px; height: 8px; flex-shrink: 0;
-  border-right: 1.8px solid var(--text3); border-bottom: 1.8px solid var(--text3);
+  content: '';  margin-inline-start: auto; width: 8px; height: 8px; flex-shrink: 0;
+  border-inline-end: 1.8px solid var(--text3); border-bottom: 1.8px solid var(--text3);
   transform: rotate(45deg) translate(-2px, -2px); transition: transform 0.15s ease;
 }
 .minn-side-card.collapsed > .minn-side-title { margin-bottom: 0; }
@@ -1265,7 +1265,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 #minn-outline-card { position: sticky; top: 14px; transform: translateZ(0); }
 #minn-outline { max-height: calc(100vh - 92px); overflow-y: auto; }
 .minn-outline-row {
-  display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+  display: block; width: 100%; text-align: start; background: none; border: 0; cursor: pointer;
   padding: 5px 8px 5px calc(8px + var(--olvl, 0) * 14px); border-radius: 7px;
   color: var(--text2); font: inherit; font-size: 13px; line-height: 1.35;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1296,7 +1296,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   background: var(--bg2); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px;
 }
 .minn-find-row input:focus { outline: none; border-color: var(--accent); }
-#minn-find-count { font-size: 11.5px; color: var(--text3); min-width: 30px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#minn-find-count { font-size: 11.5px; color: var(--text3); min-width: 30px; text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .minn-find-btn {
   width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center;
   font-size: 13px; color: var(--text2); background: transparent; border: 1px solid transparent;
@@ -1309,7 +1309,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; cursor: pointer;
 }
 .minn-find-act:hover { border-color: var(--accent); color: var(--text); }
-#minn-find-marks { position: absolute; top: 0; left: 0; width: 100%; height: 0; pointer-events: none; }
+#minn-find-marks { position: absolute; top: 0; inset-inline-start: 0; width: 100%; height: 0; pointer-events: none; }
 .minn-find-mark {
   position: absolute; border-radius: 3px;
   background: color-mix(in srgb, var(--accent) 22%, transparent);
@@ -1344,11 +1344,11 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3);
 }
 .minn-diff-headrow > div { padding: 8px 14px; }
-.minn-diff-headrow > div + div { border-left: 1px solid var(--border); }
+.minn-diff-headrow > div + div { border-inline-start: 1px solid var(--border); }
 .minn-diff-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); }
 .minn-diff-row:last-child { border-bottom: 0; }
 .minn-diff-cell { padding: 8px 14px; min-width: 0; overflow-wrap: break-word; }
-.minn-diff-cell + .minn-diff-cell { border-left: 1px solid var(--border); }
+.minn-diff-cell + .minn-diff-cell { border-inline-start: 1px solid var(--border); }
 .minn-diff-cell.empty { background: repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--border) 45%, transparent) 6px, color-mix(in srgb, var(--border) 45%, transparent) 7px); }
 .minn-diff-row.same .minn-diff-cell { color: var(--text3); }
 .minn-diff-row.same img { max-width: 100%; height: auto; opacity: 0.6; border-radius: 6px; }
@@ -1373,12 +1373,12 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   aspect-ratio: 4 / 3; background: var(--panel2); background-size: cover; background-position: top center;
   position: relative; border-bottom: 1px solid var(--border);
 }
-.minn-theme-badge { position: absolute; top: 9px; left: 9px; }
-.minn-theme-badge-u { position: absolute; top: 9px; right: 9px; }
+.minn-theme-badge { position: absolute; top: 9px; inset-inline-start: 9px; }
+.minn-theme-badge-u { position: absolute; top: 9px; inset-inline-end: 9px; }
 .minn-theme-info { padding: 12px 14px 13px; }
 .minn-theme-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; min-height: 28px; }
 /* Extensions cards: ⋯ is always visible (cards have no row-hover affordance). */
-.minn-ext-more { opacity: 1; margin-left: auto; flex-shrink: 0; }
+.minn-ext-more { opacity: 1; margin-inline-start: auto; flex-shrink: 0; }
 .minn-theme-shot-link { display: block; text-decoration: none; color: inherit; cursor: pointer; }
 .minn-theme-shot-link:hover { opacity: 0.92; box-shadow: inset 0 0 0 2px var(--accent); }
 .minn-theme-author { color: var(--text2); text-decoration: none; border-bottom: 1px solid var(--border2); }
@@ -1398,7 +1398,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);
 }
 .minn-scheme-swatch-dot {
-  position: absolute; right: 3px; bottom: 3px; width: 11px; height: 11px;
+  position: absolute; inset-inline-end: 3px; bottom: 3px; width: 11px; height: 11px;
   border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.55);
   box-shadow: 0 1px 2px rgba(0,0,0,0.25);
 }
@@ -1446,10 +1446,10 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 }
 .minn-switch.on { background: var(--accent); }
 .minn-switch-knob {
-  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  position: absolute; top: 2px; inset-inline-start: 2px; width: 16px; height: 16px; border-radius: 50%;
   background: #fff; transition: left 0.18s; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
-.minn-switch.on .minn-switch-knob { left: 16px; }
+.minn-switch.on .minn-switch-knob { inset-inline-start: 16px; }
 .minn-switch:disabled { opacity: 0.5; cursor: default; }
 
 /* ===== Settings ===== */
@@ -1458,7 +1458,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
    (Site, Comments). align-self:start keeps it from stretching the grid row;
    the list is short + non-scrollable, so no sticky-compositor wiggle. */
 .minn-settings-nav { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 8px; align-self: start; }
-.minn-settings-nav-item { padding: 7px 11px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; color: var(--text2); background: transparent; border: none; text-align: left; }
+.minn-settings-nav-item { padding: 7px 11px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; color: var(--text2); background: transparent; border: none; text-align: start; }
 .minn-settings-nav-item.active { background: var(--panel2); color: var(--text); font-weight: 600; }
 .minn-settings-body { max-width: 560px; display: flex; flex-direction: column; gap: 26px; }
 .minn-settings-title { font-weight: 700; font-size: 17px; margin-bottom: 3px; }
@@ -1474,7 +1474,7 @@ body.minn-focus-zen .minn-editor-side { opacity: 0; overflow: hidden; pointer-ev
 .minn-spam-pill.ok { color: var(--green); background: rgba(70,184,129,0.12); }
 .minn-spam-pill.warn { color: var(--amber); background: rgba(224,164,88,0.12); }
 .minn-spam-blocked { font-size: 11.5px; color: var(--text3); }
-.minn-spam-link { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.minn-spam-link { margin-inline-start: auto; font-size: 12px; white-space: nowrap; }
 /* Change key… renders as a link but is a button (spam-card keyProvider). */
 button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent2); font-family: inherit; }
 .minn-spam-keyerr { color: var(--red); margin-top: 7px; }
@@ -1483,7 +1483,7 @@ button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer
 .minn-lic-cat {
   font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--text3); background: var(--panel2); border: 1px solid var(--border);
-  padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px;
+  padding: 1px 6px; border-radius: 4px; margin-inline-start: 6px; vertical-align: 1px;
 }
 .minn-lic-connlink { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent2); font: inherit; }
 .minn-spam-provider .minn-toggle-rows { margin-top: 12px; }
@@ -1502,7 +1502,7 @@ button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer
    figure cutout (:has(img)) still matches through it. */
 .minn-editor-body .wp-block-image > a { display: contents; }
 /* Focus/outline exit chip (topbar, beside the editor status badge) */
-.minn-mode-chip { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg2); color: var(--text2); font-size: 11px; font-weight: 650; cursor: pointer; vertical-align: middle; }
+.minn-mode-chip { display: inline-flex; align-items: center; gap: 5px; margin-inline-start: 8px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg2); color: var(--text2); font-size: 11px; font-weight: 650; cursor: pointer; vertical-align: middle; }
 .minn-mode-chip:hover { color: var(--text); border-color: var(--text3); }
 .minn-mode-chip-x { opacity: 0.7; }
 /* Parameterized action inline form (detail modal + status card) */
@@ -1511,7 +1511,7 @@ button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer
 /* Surface settings view (adapter-served schema forms) */
 .minn-surface-settings { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 16px; max-width: 720px; }
 .minn-spam-queue { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--text2); }
-.minn-spam-queue .minn-btn-soft { margin-left: auto; white-space: nowrap; }
+.minn-spam-queue .minn-btn-soft { margin-inline-start: auto; white-space: nowrap; }
 
 /* Settings → Design: the Additional CSS editor. pre + horizontal scroll so
    long selectors don't soft-wrap into unreadable stair-steps. color-scheme
@@ -1526,7 +1526,7 @@ button.minn-spam-link { background: none; border: 0; padding: 0; cursor: pointer
 textarea.minn-input { font-family: inherit; line-height: 1.5; resize: vertical; min-height: 38px; }
 .minn-input.mono { font-family: 'JetBrains Mono', monospace; font-size: 14px; }
 select.minn-input {
-  -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 32px;
+  -webkit-appearance: none; appearance: none; cursor: pointer; padding-inline-end: 32px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239d9da7' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 11px center;
 }
@@ -1540,7 +1540,7 @@ select.minn-input {
    while typing, unlike the native datalist popup. */
 .minn-ac { position: relative; }
 .minn-ac-input {
-  padding-right: 32px;
+  padding-inline-end: 32px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239d9da7' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 11px center;
 }
@@ -1665,7 +1665,7 @@ select.minn-input {
 .minn-editor-body iframe, .minn-editor-body video { max-width: 100%; }
 .minn-editor-body p { margin: 0 0 16px; }
 .minn-editor-body h1, .minn-editor-body h2 { letter-spacing: -0.4px; }
-.minn-editor-body blockquote { border-left: 3px solid var(--accent); margin: 0 0 16px; padding: 2px 0 2px 16px; color: var(--text2); }
+.minn-editor-body blockquote { border-inline-start: 3px solid var(--accent); margin: 0 0 16px; padding: 2px 0 2px 16px; color: var(--text2); }
 .minn-editor-body pre, .minn-editor-body code { font-family: 'JetBrains Mono', monospace; font-size: 14px; background: var(--panel2); border-radius: 5px; }
 .minn-editor-body pre { padding: 12px 14px; overflow-x: auto; }
 .minn-editor-body code { padding: 1px 6px; }
@@ -1676,9 +1676,9 @@ select.minn-input {
 .minn-editor-body.locked:empty::before { content: 'Nothing to preview here. This content renders dynamically on the site.'; }
 /* Gutenberg alignment classes — the serializer emits them, the front end
    styles them; the editor must preview them too. */
-.minn-editor-body .has-text-align-left { text-align: left; }
+.minn-editor-body .has-text-align-left { text-align: start; }
 .minn-editor-body .has-text-align-center { text-align: center; }
-.minn-editor-body .has-text-align-right { text-align: right; }
+.minn-editor-body .has-text-align-right { text-align: end; }
 /* Word count / reading time / session / goal — fixed bottom-right. Click
    opens the goal popover. Below chips (69) but under modals (55+ wait —
    z 40 sits under modal 55; goal pop is 70 so it can clear the pill).
@@ -1687,7 +1687,7 @@ select.minn-input {
    notched phones (viewport-fit=cover). */
 .minn-editor-stats {
   position: fixed;
-  right: calc(22px + env(safe-area-inset-right, 0px));
+  inset-inline-end: calc(22px + env(safe-area-inset-right, 0px));
   bottom: calc(18px + env(safe-area-inset-bottom, 0px) + var(--minn-kb-inset, 0px));
   z-index: 40;
   display: inline-flex; align-items: baseline; gap: 4px; padding: 8px 15px;
@@ -1718,7 +1718,7 @@ select.minn-input {
 .minn-side-title { font-weight: 700; font-size: 14px; margin-bottom: 12px; }
 /* Secondary meta as quiet doors → large modal (Settings, custom fields, SEO…). */
 .minn-side-door {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: start;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
   padding: 13px 15px; cursor: pointer; color: inherit; font: inherit;
   transition: border-color 0.12s, background 0.12s;
@@ -1753,12 +1753,12 @@ select.minn-input {
 /* Inline jump inside a side row (media "Attached to" → editor). */
 .minn-side-link {
   background: none; border: none; padding: 0; font: inherit; cursor: pointer;
-  color: var(--accent); text-align: right;
+  color: var(--accent); text-align: end;
 }
 .minn-side-link:hover { text-decoration: underline; }
 /* Sectioned surface detail (e.g. form entries): long/multiline answers stack. */
 .minn-side-row.multi { flex-direction: column; align-items: flex-start; gap: 3px; }
-.minn-surface-val.multi { white-space: pre-wrap; text-align: left; max-height: 200px; overflow-y: auto; }
+.minn-surface-val.multi { white-space: pre-wrap; text-align: start; max-height: 200px; overflow-y: auto; }
 /* Block row types (code / html-preview / kv-table): full-width content. */
 .minn-side-row.block > pre, .minn-side-row.block > iframe, .minn-side-row.block > table { width: 100%; }
 .minn-detail-code {
@@ -1770,7 +1770,7 @@ select.minn-input {
 [data-theme="light"] .minn-detail-code { color-scheme: light; }
 .minn-detail-frame { height: 380px; margin: 0; width: 100%; resize: vertical; overflow: auto; }
 .minn-detail-kv { border-collapse: collapse; font-size: 13px; }
-.minn-detail-kv th, .minn-detail-kv td { text-align: left; padding: 5px 10px; border: 1px solid var(--border); vertical-align: top; }
+.minn-detail-kv th, .minn-detail-kv td { text-align: start; padding: 5px 10px; border: 1px solid var(--border); vertical-align: top; }
 .minn-detail-kv th { color: var(--text3); font-weight: 500; white-space: nowrap; width: 1%; }
 .minn-detail-kv td { word-break: break-word; }
 
@@ -1842,7 +1842,7 @@ a.minn-entry-meta-chip:hover { color: var(--accent); text-decoration: underline;
 @media (max-width: 560px) {
   .minn-entry-fields { grid-template-columns: 1fr; }
 }
-.minn-view-switch { flex-shrink: 0; padding-right: 10px; margin-right: 4px; border-right: 1px solid var(--border); }
+.minn-view-switch { flex-shrink: 0; padding-inline-end: 10px; margin-inline-end: 4px; border-inline-end: 1px solid var(--border); }
 .minn-side-val.green { color: var(--green); }
 .minn-side-card .minn-btn-primary { width: 100%; margin-top: 14px; justify-content: center; }
 .minn-side-card .minn-save-draft { width: 100%; margin-top: 8px; justify-content: center; }
@@ -1890,7 +1890,7 @@ button.minn-chip.sel:hover { background: var(--accent); color: #fff; border-colo
 .minn-load-more:hover { background: var(--hover); color: var(--text); border-color: var(--border2); }
 .minn-load-more:disabled { opacity: 0.6; cursor: default; }
 .minn-pager { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 16px auto 0; flex-wrap: wrap; }
-.minn-pager-meta { margin-right: auto; color: var(--text3); font-size: 13.5px; white-space: nowrap; padding-right: 12px; }
+.minn-pager-meta { margin-inline-end: auto; color: var(--text3); font-size: 13.5px; white-space: nowrap; padding-inline-end: 12px; }
 .minn-pager-btn {
   min-width: 34px; height: 34px; padding: 0 8px; display: flex; align-items: center; justify-content: center;
   background: var(--panel); border: 1px solid var(--border); border-radius: 9px;
@@ -1901,8 +1901,8 @@ button.minn-chip.sel:hover { background: var(--accent); color: #fff; border-colo
 .minn-pager-btn:disabled { opacity: 0.35; cursor: default; }
 .minn-pager-btn.nav { font-size: 16px; }
 .minn-pager-gap { color: var(--text3); padding: 0 3px; font-size: 13px; }
-.minn-toolbar-search { width: 220px; margin-left: auto; }
-.minn-toolbar-search + .minn-toolbar-meta { margin-left: 0; }
+.minn-toolbar-search { width: 220px; margin-inline-start: auto; }
+.minn-toolbar-search + .minn-toolbar-meta { margin-inline-start: 0; }
 
 /* ===== Comments ===== */
 .minn-comment-row { display: flex; gap: 13px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
@@ -1923,7 +1923,7 @@ button.minn-chip.sel:hover { background: var(--accent); color: #fff; border-colo
 .minn-comment-postview:hover { color: var(--accent); }
 .minn-comment-edit-meta { display: flex; gap: 8px; margin-bottom: 8px; }
 .minn-comment-edit-meta .minn-input { flex: 1; min-width: 0; }
-.minn-comment-time { font-size: 12.5px; color: var(--text3); margin-left: auto; }
+.minn-comment-time { font-size: 12.5px; color: var(--text3); margin-inline-start: auto; }
 .minn-comment-text { font-size: 14px; color: var(--text2); line-height: 1.5; margin-top: 4px; }
 .minn-comment-actions { display: flex; gap: 4px; margin-top: 8px; }
 .minn-comment-action {
@@ -2012,7 +2012,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-island-preview .wp-block-embed.wp-embed-aspect-9-16 .wp-block-embed__wrapper::before { padding-top: 177.77%; }
 .minn-island-preview .wp-block-embed.wp-embed-aspect-1-2 .wp-block-embed__wrapper::before { padding-top: 200%; }
 .minn-island-preview .wp-block-embed.wp-has-aspect-ratio .wp-block-embed__wrapper > iframe {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0;
+  position: absolute; top: 0; inset-inline-start: 0; width: 100%; height: 100%; margin: 0;
 }
 /* Providers without a declared aspect (tweets, generic oEmbed) simply use
    the full width they are given rather than their raw oEmbed pixel width. */
@@ -2214,19 +2214,19 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-block-island[data-cted].minn-island-covered:hover::after { opacity: 0; }
 .minn-imgedit-tile img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .minn-imgedit-x {
-  position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
+  position: absolute; top: 6px; inset-inline-end: 6px; width: 24px; height: 24px;
   border-radius: 50%; border: none; background: rgba(0,0,0,0.55); color: #fff;
   font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 0.12s;
 }
 .minn-imgedit-dup {
-  position: absolute; top: 6px; right: 34px; width: 24px; height: 24px;
+  position: absolute; top: 6px; inset-inline-end: 34px; width: 24px; height: 24px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 50%; border: none; background: rgba(0,0,0,0.55); color: #fff;
   cursor: pointer; opacity: 0; transition: opacity 0.12s; padding: 0;
 }
 .minn-imgedit-dup svg { width: 13px; height: 13px; }
 .minn-imgedit-moves {
-  position: absolute; bottom: 6px; left: 6px; right: 6px;
+  position: absolute; bottom: 6px; inset-inline-start: 6px; inset-inline-end: 6px;
   display: flex; justify-content: space-between; opacity: 0; transition: opacity 0.12s;
 }
 .minn-imgedit-moves button {
@@ -2241,7 +2241,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 .minn-imgedit-tile:focus-within .minn-imgedit-dup,
 .minn-imgedit-tile:focus-within .minn-imgedit-moves { opacity: 1; }
 .minn-imgedit-new {
-  position: absolute; top: 6px; left: 6px; padding: 2px 7px; border-radius: 6px;
+  position: absolute; top: 6px; inset-inline-start: 6px; padding: 2px 7px; border-radius: 6px;
   background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
 }
 .minn-imgedit-empty { grid-column: 1 / -1; color: var(--text2); font-size: 14px; padding: 20px 4px; }
@@ -2354,7 +2354,7 @@ a.minn-builder-note:hover .minn-builder-open { background: var(--accent2); color
 a.minn-btn-soft { text-decoration: none; }
 
 .minn-modal-form { padding: 16px 18px; display: flex; flex-direction: column; gap: 13px; border-bottom: 1px solid var(--border); }
-.minn-surface-val { max-width: 60%; text-align: right; overflow-wrap: anywhere; }
+.minn-surface-val { max-width: 60%; text-align: end; overflow-wrap: anywhere; }
 .minn-surface-message {
   margin: 0 18px 14px; padding: 12px 14px; background: var(--bg2); border: 1px solid var(--border);
   border-radius: 10px; font-size: 13px; line-height: 1.6; color: var(--text2);
@@ -2409,7 +2409,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-session-row:last-of-type { border-bottom: none; }
 .minn-session-info { flex: 1; min-width: 0; }
 .minn-session-ua { font-size: 13.5px; font-weight: 600; }
-.minn-session-current { font-size: 11px; font-weight: 600; color: var(--accent2); background: var(--accent-soft); padding: 1px 7px; border-radius: 5px; margin-left: 4px; }
+.minn-session-current { font-size: 11px; font-weight: 600; color: var(--accent2); background: var(--accent-soft); padding: 1px 7px; border-radius: 5px; margin-inline-start: 4px; }
 .minn-session-meta { font-size: 12px; color: var(--text3); margin-top: 1px; }
 .minn-session-empty { font-size: 13px; color: var(--text3); padding: 6px 0; }
 /* ===== Plugin install modal ===== */
@@ -2475,7 +2475,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-pi-card-more {
   appearance: none; border: 0; background: none; padding: 0;
   font: inherit; font-size: 11.5px; font-weight: 600; color: var(--accent2);
-  cursor: pointer; text-align: left; margin-top: 1px;
+  cursor: pointer; text-align: start; margin-top: 1px;
 }
 .minn-pi-card-more:hover { text-decoration: underline; }
 
@@ -2573,7 +2573,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-picker-item:hover { border-color: var(--accent); }
 .minn-picker-item.sel { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -2px; position: relative; }
 .minn-picker-item.sel::after {
-  content: '✓'; position: absolute; top: 6px; right: 6px; width: 22px; height: 22px;
+  content: '✓'; position: absolute; top: 6px; inset-inline-end: 6px; width: 22px; height: 22px;
   display: flex; align-items: center; justify-content: center; border-radius: 50%;
   background: var(--accent); color: var(--accent-fg); font-size: 13px; font-weight: 700;
 }
@@ -2608,7 +2608,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 	color: inherit;
 	font: inherit;
 	cursor: pointer;
-	text-align: left;
+	text-align: start;
 }
 .minn-sub-order-row:hover { background: var(--hover, rgba(127,127,127,.08)); }
 .minn-product-cols { grid-template-columns: 1.6fr 100px 140px 100px 100px 40px; }
@@ -2633,7 +2633,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 }
 .minn-order-note-body { font-size: 13.5px; color: var(--text2); white-space: pre-wrap; word-break: break-word; }
 .minn-prod-thumb { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--surface2); }
-.minn-prod-was { text-decoration: line-through; color: var(--text3); margin-left: 4px; font-size: 12px; }
+.minn-prod-was { text-decoration: line-through; color: var(--text3); margin-inline-start: 4px; font-size: 12px; }
 .minn-prod-modal-img { margin: 0 0 12px; }
 .minn-prod-modal-img img { max-width: 100%; max-height: 160px; border-radius: 8px; object-fit: cover; }
 .minn-order-body { max-height: min(70vh, 720px); overflow-y: auto; }
@@ -2643,15 +2643,15 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-page { max-width: 860px; }
 .minn-order-page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .minn-order-page-head .minn-modal-title-block { min-width: 0; }
-.minn-order-page-head .minn-status { margin-left: auto; }
+.minn-order-page-head .minn-status { margin-inline-start: auto; }
 .minn-order-page-card {
 	background: var(--panel); border: 1px solid var(--border2); border-radius: 14px;
 	overflow: hidden;
 }
 .minn-order-page .minn-order-body { max-height: none; overflow-y: visible; }
 .minn-order-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--border); }
-.minn-order-panel { padding: 14px 18px 16px; border-right: 1px solid var(--border); }
-.minn-order-panel:last-child { border-right: none; }
+.minn-order-panel { padding: 14px 18px 16px; border-inline-end: 1px solid var(--border); }
+.minn-order-panel:last-child { border-inline-end: none; }
 /* The product body runs to four panels. The two-panel order body needed no
    rule between rows; a wrapped grid does, or row two floats. */
 .minn-grid-rows > .minn-order-panel:nth-child(n+3) { border-top: 1px solid var(--border); }
@@ -2688,7 +2688,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 @media (max-width: 720px) { .minn-pvar-axes, .minn-pvar-sku, .minn-pvar-stock { flex-basis: 100%; } }
 .minn-pimg-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* A group with nothing to sit beside (the short description) takes the row. */
-.minn-order-panel.wide { grid-column: 1 / -1; border-right: none; }
+.minn-order-panel.wide { grid-column: 1 / -1; border-inline-end: none; }
 @media (max-width: 720px) { .minn-order-panel.wide { grid-column: auto; } }
 .minn-order-fields { display: flex; flex-direction: column; gap: 8px; }
 .minn-order-field-row { display: flex; gap: 8px; }
@@ -2709,7 +2709,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-wcmail { /* class hooks for tests / future tweaks */ }
 @media (max-width: 720px) {
   .minn-order-grid { grid-template-columns: 1fr; }
-  .minn-order-panel { border-right: none; border-bottom: 1px solid var(--border); }
+  .minn-order-panel { border-inline-end: none; border-bottom: 1px solid var(--border); }
 }
 
 /* System page: summary rows + health cards that expand to a detail modal
@@ -2729,7 +2729,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 /* Database viewer (read-only by design) */
 .minn-db-cols { grid-template-columns: minmax(0,1fr) 120px 100px 90px; }
 .minn-db-cols .mono, .minn-db-tname, .minn-dbd-col .mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-.minn-db-cols .num { text-align: right; font-variant-numeric: tabular-nums; }
+.minn-db-cols .num { text-align: end; font-variant-numeric: tabular-nums; }
 .minn-db-cols.minn-table-row { cursor: pointer; }
 .minn-db-dim { color: var(--text3); }
 .minn-db-tabs { flex-shrink: 0; overflow: visible; }
@@ -2755,20 +2755,20 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-db-struct-cols { grid-template-columns: minmax(0,1.2fr) minmax(0,1.3fr) 62px minmax(0,1fr) 130px; }
 .minn-db-idx-cols { grid-template-columns: minmax(0,1fr) minmax(0,1.6fr) 70px 90px 110px; }
 .minn-db-struct-cols .mono, .minn-db-idx-cols .mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-.minn-db-struct-cols .num, .minn-db-idx-cols .num { text-align: right; font-variant-numeric: tabular-nums; }
+.minn-db-struct-cols .num, .minn-db-idx-cols .num { text-align: end; font-variant-numeric: tabular-nums; }
 .minn-db-sort { cursor: pointer; user-select: none; white-space: nowrap; }
 .minn-db-sort:hover { color: var(--text); }
 .minn-db-tname { font-weight: 600; }
-.minn-db-ro { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text3); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.minn-db-ro { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text3); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 .minn-db-ro svg { width: 13px; height: 13px; }
-.minn-toolbar .minn-db-ro ~ .minn-toolbar-meta, .minn-toolbar .minn-toolbar-meta ~ .minn-db-ro { margin-left: 14px; }
+.minn-toolbar .minn-db-ro ~ .minn-toolbar-meta, .minn-toolbar .minn-toolbar-meta ~ .minn-db-ro { margin-inline-start: 14px; }
 .minn-db-fcol { width: auto; max-width: 220px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; flex-shrink: 0; }
 .minn-db-window { font-size: 12px; white-space: normal; }
 .minn-db-card { padding: 0; overflow: hidden; }
 .minn-db-scroll { overflow-x: auto; }
 .minn-db-grid { border-collapse: collapse; width: 100%; font-size: 12.5px; font-family: 'JetBrains Mono', monospace; }
 .minn-db-grid th {
-	text-align: left; padding: 9px 12px; color: var(--text3); font-size: 11px;
+	text-align: start; padding: 9px 12px; color: var(--text3); font-size: 11px;
 	font-family: 'Hanken Grotesk', system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.06em;
 	border-bottom: 1px solid var(--border2); white-space: nowrap; cursor: pointer; user-select: none;
 	position: sticky; top: 0; background: var(--panel); z-index: 1;
@@ -2789,7 +2789,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-dbd-row:last-child { border-bottom: none; }
 .minn-dbd-col { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
 .minn-dbd-type { color: var(--text3); font-size: 11.5px; }
-.minn-dbd-copy { margin-left: auto; padding: 2px 9px; font-size: 11.5px; }
+.minn-dbd-copy { margin-inline-start: auto; padding: 2px 9px; font-size: 11.5px; }
 .minn-dbd-val {
 	font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.55;
 	white-space: pre-wrap; word-break: break-word; color: var(--text);
@@ -2813,7 +2813,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-confirm-body { font-size: 13.5px; color: var(--text2); line-height: 1.55; }
 .minn-confirm-scope { margin-top: 12px; }
 .minn-confirm-scope-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); margin-bottom: 4px; }
-.minn-confirm-scope ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--text2); }
+.minn-confirm-scope ul { margin: 0; padding-inline-start: 18px; font-size: 13.5px; color: var(--text2); }
 .minn-confirm-scope li { margin: 2px 0; }
 .minn-confirm-type { margin-top: 14px; }
 .minn-confirm-type-label { font-size: 13px; color: var(--text2); margin-bottom: 6px; }
@@ -2839,7 +2839,7 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-row-modified {
   display: inline-block; vertical-align: middle;
   width: 6px; height: 6px; border-radius: 50%;
-  background: var(--amber); margin-left: 6px;
+  background: var(--amber); margin-inline-start: 6px;
 }
 .minn-status.editing { color: var(--blue-text); background: rgba(91,155,224,0.14); }
 
@@ -2859,8 +2859,8 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-term-field > span { font-size: 11.5px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; }
 .minn-term-edit-actions { display: flex; gap: 8px; }
 .minn-term-merge-copy { font-size: 13px; color: var(--text2); }
-.minn-ac-hint { color: var(--text3); font-size: 12px; margin-left: 6px; }
-button.minn-ac-item { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; }
+.minn-ac-hint { color: var(--text3); font-size: 12px; margin-inline-start: 6px; }
+button.minn-ac-item { display: block; width: 100%; text-align: start; background: none; border: 0; color: inherit; font: inherit; }
 button.minn-ac-item:hover { background: var(--hover); }
 @media (max-width: 720px) {
   .minn-term-cols { grid-template-columns: 1fr 80px 40px; }
@@ -2895,7 +2895,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-user-row-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
 /* ===== Editor extras ===== */
-.minn-tool-hint { margin-left: auto; align-self: center; font-size: 12px; color: var(--text3); }
+.minn-tool-hint { margin-inline-start: auto; align-self: center; font-size: 12px; color: var(--text3); }
 .minn-schedule { margin-top: 12px; }
 .minn-schedule input { font-size: 13px; padding: 7px 10px; color-scheme: dark; }
 [data-theme="light"] .minn-schedule input { color-scheme: light; }
@@ -2919,7 +2919,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 }
 /* Plugin namespace on auto-registered block entries ("Featured Product · woocommerce"). */
 .minn-slash-ns {
-  margin-left: auto; padding-left: 8px; font-size: 10.5px; font-weight: 500; color: var(--text2);
+  margin-inline-start: auto; padding-inline-start: 8px; font-size: 10.5px; font-weight: 500; color: var(--text2);
   opacity: 0.7; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Footer row on the unfiltered menu — the door to the full block picker. */
@@ -2948,7 +2948,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-bp-group h3 span { color: var(--text2); opacity: 0.6; font-weight: 500; }
 .minn-bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
 .minn-bp-item {
-  display: flex; align-items: center; gap: 10px; padding: 10px 12px; text-align: left;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; text-align: start;
   background: var(--panel2); border: 1px solid var(--border2); border-radius: 10px;
   color: var(--text); font-size: 13.5px; font-weight: 500; cursor: pointer;
 }
@@ -2985,7 +2985,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 	border-color: var(--red);
 }
 .minn-island-chip {
-  position: absolute; top: -10px; right: 12px; font-size: 10.5px; font-weight: 600;
+  position: absolute; top: -10px; inset-inline-end: 12px; font-size: 10.5px; font-weight: 600;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; cursor: pointer; line-height: 1.4;
   touch-action: manipulation; user-select: none;
@@ -2995,7 +2995,7 @@ button.minn-ac-item:hover { background: var(--hover); }
    edits live. Revealed on hover/selection only; pointer-events none so it never
    competes with the chip; hidden while armed for delete (red state is louder). */
 .minn-island-hint {
-  position: absolute; top: -10px; left: 12px; font-size: 10.5px; font-weight: 500;
+  position: absolute; top: -10px; inset-inline-start: 12px; font-size: 10.5px; font-weight: 500;
   font-family: 'JetBrains Mono', monospace; color: var(--text3); background: var(--panel);
   border: 1px solid var(--border); padding: 2px 9px; border-radius: 5px; line-height: 1.4;
   pointer-events: none; user-select: none; opacity: 0; transition: opacity 0.15s;
@@ -3100,7 +3100,7 @@ button.minn-ac-item:hover { background: var(--hover); }
    still applies. A faint divider marks each column's editable region. */
 .minn-cols-island .wp-block-columns { display: flex; gap: 22px; align-items: flex-start; }
 .minn-cols-island .wp-block-column { flex: 1; min-width: 0; }
-.minn-cols-island .wp-block-column + .wp-block-column { border-left: 1px dashed var(--line); padding-left: 22px; }
+.minn-cols-island .wp-block-column + .wp-block-column { border-inline-start: 1px dashed var(--line); padding-inline-start: 22px; }
 /* Shortcode island — type the shortcode in place (no browser prompt). */
 .minn-shortcode-island {
   user-select: text;
@@ -3161,7 +3161,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 }
 .minn-details-edit > .minn-details-sum-row::-webkit-details-marker {
   color: var(--text2);
-  margin-right: 8px;
+  margin-inline-end: 8px;
 }
 .minn-details-edit > .minn-details-sum-row::marker {
   color: var(--text2);
@@ -3320,7 +3320,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   background: var(--panel2) !important;
   color: var(--text3) !important;
   border: 1px solid var(--border) !important;
-  border-left: 3px solid #1d9bf0 !important;
+  border-inline-start: 3px solid #1d9bf0 !important;
   border-radius: 12px !important;
   padding: 14px 16px 12px !important;
   margin: 0 !important;
@@ -3379,7 +3379,7 @@ button.minn-ac-item:hover { background: var(--hover); }
    made them wiggle, drift past their line and snap back
    (the outline-ping rule). z-index stays below the sticky toolbar (35) so
    sliding under it is natural occlusion, not a JS visibility clamp. */
-#minn-table-chips { position: absolute; top: 0; left: 0; z-index: 30; }
+#minn-table-chips { position: absolute; top: 0; inset-inline-start: 0; z-index: 30; }
 .minn-code-chip {
   /* nowrap is load-bearing: the chips' containing block is a zero-size
      anchor box, and absolute shrink-to-fit against it wraps "⚙ table"
@@ -3432,7 +3432,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* Apply · Replace · duplicate · remove read as one row (they wrapped the
    trash button onto a second line at the old width). */
 .minn-img-pop .minn-insp-actions { flex-wrap: nowrap; align-items: center; }
-.minn-img-pop .minn-insp-actions .minn-btn-soft { padding-left: 10px; padding-right: 10px; }
+.minn-img-pop .minn-insp-actions .minn-btn-soft { padding-inline-start: 10px; padding-inline-end: 10px; }
 .minn-insp-note { color: var(--text3); font-size: 13px; line-height: 1.5; }
 /* "More settings" collapse for huge block schemas (300+ attr design suites). */
 .minn-insp-more-btn { width: 100%; justify-content: center; margin: 10px 0 2px; }
@@ -3445,11 +3445,11 @@ button.minn-ac-item:hover { background: var(--hover); }
   width: 64px; height: 44px; object-fit: cover; border-radius: 7px;
   border: 1px solid var(--border2); background: var(--panel2); flex-shrink: 0;
 }
-.minn-insp-img-row button { margin-left: auto; }
+.minn-insp-img-row button { margin-inline-start: auto; }
 .minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
 /* Compact move cluster: tight icon buttons reading as one control. */
 .minn-insp-move { display: inline-flex; gap: 3px; }
-.minn-insp-move .minn-btn-soft { padding-left: 8px; padding-right: 8px; }
+.minn-insp-move .minn-btn-soft { padding-inline-start: 8px; padding-inline-end: 8px; }
 .minn-insp-move .minn-btn-soft svg { width: 14px; height: 14px; }
 .minn-insp-actions .minn-btn-primary { flex: 1; justify-content: center; }
 .minn-insp-actions .minn-btn-soft.danger:only-child { flex: 1; justify-content: center; }
@@ -3457,7 +3457,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* ===== System (developer diagnostics) ===== */
 .minn-sys-topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 .minn-sys-summary { display: flex; gap: 8px; flex-wrap: wrap; }
-.minn-sys-topbar #minn-sys-copy { margin-left: auto; }
+.minn-sys-topbar #minn-sys-copy { margin-inline-start: auto; }
 .minn-sys-pill { font-size: 12.5px; font-weight: 600; padding: 4px 12px; border-radius: 999px; border: 1px solid; }
 .minn-sys-pill.pass { color: var(--green-text); background: rgba(70,184,129,0.1); border-color: rgba(70,184,129,0.25); }
 .minn-sys-pill.warn { color: var(--amber-text); background: rgba(224,164,88,0.1); border-color: rgba(224,164,88,0.25); }
@@ -3474,7 +3474,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-sys-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-bottom: 22px; }
 .minn-sys-check { display: flex; gap: 11px; padding: 13px 15px; background: var(--panel); border: 1px solid var(--border); border-radius: 11px; align-items: flex-start; position: relative; }
 /* the corner expand icon marks a check card that opens a detail modal */
-.minn-sys-check-open { position: absolute; top: 10px; right: 11px; color: var(--text3); line-height: 0; }
+.minn-sys-check-open { position: absolute; top: 10px; inset-inline-end: 11px; color: var(--text3); line-height: 0; }
 .minn-sys-check-open svg { width: 13px; height: 13px; }
 .minn-sys-check.minn-sys-link:hover .minn-sys-check-open { color: var(--accent); }
 .minn-sys-dot { flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
@@ -3493,19 +3493,19 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-sys-row { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
 .minn-sys-row:last-child { border-bottom: none; }
 .minn-sys-key { color: var(--text3); font-size: 13px; flex-shrink: 0; width: 42%; }
-.minn-sys-val { font-size: 12.5px; color: var(--text); text-align: right; margin-left: auto; word-break: break-word; }
+.minn-sys-val { font-size: 12.5px; color: var(--text); text-align: end; margin-inline-start: auto; word-break: break-word; }
 .minn-sys-tables { padding: 11px 17px 15px; background: var(--bg2); border-top: 1px solid var(--border); }
 .minn-sys-tables-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 8px; }
 .minn-sys-trow { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; font-size: 12.5px; }
 .minn-sys-tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); }
 .minn-sys-tsize { color: var(--text); }
-.minn-sys-trows { color: var(--text3); width: 90px; text-align: right; flex-shrink: 0; }
+.minn-sys-trows { color: var(--text3); width: 90px; text-align: end; flex-shrink: 0; }
 .minn-sys-foot { margin-top: 18px; text-align: center; color: var(--text3); font-size: 12.5px; }
 
 /* Debug tools card — live wp-config toggles. */
 .minn-sys-debug { padding: 0; margin-top: 14px; margin-bottom: 14px; overflow: hidden; }
 .minn-sys-debug .minn-sys-card-head svg { color: var(--amber); }
-.minn-sys-debug-hint { margin-left: auto; font-size: 11.5px; font-weight: 500; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+.minn-sys-debug-hint { margin-inline-start: auto; font-size: 11.5px; font-weight: 500; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
 .minn-sys-toggles { padding: 4px 17px 8px; }
 .minn-sys-toggle { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .minn-sys-toggle:last-child { border-bottom: none; }
@@ -3516,12 +3516,12 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-sys-toggle .minn-switch { flex-shrink: 0; }
 .minn-sys-locked { flex-shrink: 0; font-size: 11.5px; color: var(--text3); font-style: italic; }
 /* Debug-log row (opens the viewer) + the viewer overlay. */
-.minn-sys-logrow { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 17px; background: var(--bg2); border: none; border-top: 1px solid var(--border); color: var(--text2); cursor: pointer; font-size: 13px; text-align: left; }
+.minn-sys-logrow { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 17px; background: var(--bg2); border: none; border-top: 1px solid var(--border); color: var(--text2); cursor: pointer; font-size: 13px; text-align: start; }
 .minn-sys-logrow:hover { background: var(--hover); }
 .minn-sys-logrow svg { width: 15px; height: 15px; color: var(--text3); flex-shrink: 0; }
 .minn-sys-logpath { color: var(--text); font-size: 12.5px; }
 .minn-sys-logsize { color: var(--text3); font-size: 12px; }
-.minn-sys-logopen { margin-left: auto; color: var(--accent2); font-weight: 600; font-size: 12.5px; }
+.minn-sys-logopen { margin-inline-start: auto; color: var(--accent2); font-weight: 600; font-size: 12.5px; }
 .minn-log-modal { width: 920px; max-width: 94vw; height: 80vh; display: flex; flex-direction: column; }
 .minn-log-modal .minn-modal-head { align-items: center; }
 .minn-log-title { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
@@ -3529,10 +3529,10 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-log-src .minn-ac-input { height: 31px; font-size: 13px; }
 #minn-log-collapse { font-variant-numeric: tabular-nums; }
 #minn-log-collapse.on { color: var(--accent); border-color: var(--accent); }
-.minn-log-meta { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 400; color: var(--text3); margin-left: 8px; }
+.minn-log-meta { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 400; color: var(--text3); margin-inline-start: 8px; }
 .minn-log-actions { display: flex; align-items: center; gap: 7px; }
 .minn-log-actions .minn-btn-soft { padding: 6px 9px; }
-.minn-log-body { flex: 1; margin: 0; overflow: auto; padding: 14px 18px; background: var(--bg); font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: var(--text2); white-space: pre-wrap; word-break: break-word; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
+.minn-log-body { flex: 1; margin: 0; overflow: auto; padding: 14px 18px; background: var(--bg); font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: var(--text2); white-space: pre-wrap; word-break: break-word; border-end-start-radius: 14px; border-end-end-radius: 14px; }
 .minn-log-loading { color: var(--text3); font-family: 'Inter', sans-serif; }
 
 /* Extensions manifest — installed plugins / mu-plugins / themes with versions. */
@@ -3546,7 +3546,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-sys-ext-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text); }
 .minn-sys-ext-item.off .minn-sys-ext-name { color: var(--text2); }
 .minn-sys-ext-ver { font-size: 11.5px; color: var(--text3); flex-shrink: 0; }
-.minn-sys-ext-active { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--green); background: rgba(70,184,129,0.12); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+.minn-sys-ext-active { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--green); background: rgba(70,184,129,0.12); padding: 1px 6px; border-radius: 4px; margin-inline-start: 4px; }
 .minn-sys-ext-parent { font-size: 11px; color: var(--text3); font-style: italic; }
 
 /* Licenses card — read-only state pills (adapters/licenses.php) */
@@ -3561,7 +3561,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-lic-actions button:hover { color: var(--text); border-color: var(--text3); }
 .minn-lic-actions button:disabled { opacity: 0.6; cursor: default; }
 /* icon() emits 17px svgs; inside these small buttons (Turn on) shrink inline */
-.minn-lic-actions button svg { width: 11px; height: 11px; vertical-align: -1.5px; margin-right: 2px; }
+.minn-lic-actions button svg { width: 11px; height: 11px; vertical-align: -1.5px; margin-inline-end: 2px; }
 /* Dim inactive license rows by COLOR, not row opacity: children can never
    exceed a parent's opacity, and the Turn on button lives inside the dimmed
    name span — it must render full-strength to read as clickable. */
@@ -3604,7 +3604,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-sys-int-offsite, .minn-sys-int-note { color: var(--text2); }
 
 @media (max-width: 640px) {
-  .minn-inspector { width: calc(100vw - 20px); left: 10px !important; }
+  .minn-inspector { width: calc(100vw - 20px); inset-inline-start: 10px !important; }
 }
 
 /* ===== Code syntax highlighting =====
@@ -3626,7 +3626,7 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* ===== Editor panels (ACF etc.) ===== */
 .minn-panel-sub {
   font-size: 11px; font-weight: 600; color: var(--text3); background: var(--panel2);
-  padding: 1px 7px; border-radius: 5px; margin-left: 6px; vertical-align: 1px;
+  padding: 1px 7px; border-radius: 5px; margin-inline-start: 6px; vertical-align: 1px;
 }
 .minn-panel-fields { display: flex; flex-direction: column; gap: 11px; }
 .minn-panel-group { font-size: 11.5px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
@@ -3640,13 +3640,13 @@ button.minn-ac-item:hover { background: var(--hover); }
 /* ===== Notifications slide-over ===== */
 .minn-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40; }
 .minn-notif-panel {
-  position: absolute; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw; background: var(--bg2);
-  border-left: 1px solid var(--border); box-shadow: var(--shadow); display: flex; flex-direction: column;
+  position: absolute; top: 0; inset-inline-end: 0; bottom: 0; width: 400px; max-width: 92vw; background: var(--bg2);
+  border-inline-start: 1px solid var(--border); box-shadow: var(--shadow); display: flex; flex-direction: column;
   animation: minnSlideIn 0.28s cubic-bezier(0.16,1,0.3,1);
 }
 .minn-notif-head { height: 56px; flex-shrink: 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 18px; gap: 10px; }
 .minn-notif-title { font-weight: 700; font-size: 16px; }
-.minn-link-btn { margin-left: auto; background: transparent; border: none; color: var(--accent2); font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.minn-link-btn { margin-inline-start: auto; background: transparent; border: none; color: var(--accent2); font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .minn-x-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--text3); cursor: pointer; font-size: 18px; }
 /* Wraps rather than clips — a fifth tab (Notices + a provider kind) was
    unreachable past the panel edge (the System jump-bar rule: wrap, never
@@ -3701,8 +3701,8 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-toast-icon { width: 22px; height: 22px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .minn-toast-icon.err { background: var(--red); }
 .minn-toast-msg { font-size: 14.5px; font-weight: 500; }
-.minn-toast-action { padding-right: 8px; }
-.minn-toast-btn { margin-left: 6px; background: var(--accent-soft); color: var(--accent2); border: 1px solid var(--accent-soft); border-radius: 8px; padding: 5px 12px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.minn-toast-action { padding-inline-end: 8px; }
+.minn-toast-btn { margin-inline-start: 6px; background: var(--accent-soft); color: var(--accent2); border: 1px solid var(--accent-soft); border-radius: 8px; padding: 5px 12px; font-size: 13px; font-weight: 700; cursor: pointer; }
 .minn-toast-btn:hover { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
 /* ===== Responsive ===== */
@@ -3740,7 +3740,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-tabscroll, .minn-toolbar > .minn-tabs { flex: 1 1 100%; }
   .minn-toolbar > .minn-tabs.minn-tabs-aux { flex: 0 0 auto; }
   .minn-toolbar-views .minn-type-select { flex: 1 1 auto; max-width: none; }
-  .minn-toolbar-search { flex: 1 1 140px; width: auto; margin-left: 0; }
+  .minn-toolbar-search { flex: 1 1 140px; width: auto; margin-inline-start: 0; }
   .minn-toolbar-meta { display: none; }
   .minn-tax-select { flex: 1 1 40%; max-width: none; }
   .minn-bulkbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
@@ -3809,7 +3809,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   .minn-table-row[style] > .minn-row-arrow { order: -1; flex: none; }
   .minn-table-row[style] .minn-row-more { opacity: 1; }
   .minn-table-row[style] > .minn-row-meta { font-size: 12.5px; color: var(--text3); max-width: 100%; }
-  .minn-table-row[style] > .minn-row-meta.minn-num { text-align: left; padding-right: 0; }
+  .minn-table-row[style] > .minn-row-meta.minn-num { text-align: start; padding-inline-end: 0; }
   /* A primary cell that is itself a pill/meta column keeps its own look. */
   .minn-table-row[style] > [data-primary].minn-row-meta { color: var(--text); font-weight: 600; }
   /* Status cards: stats go 2-up instead of one tall column, and the chart
@@ -3835,7 +3835,7 @@ button.minn-ac-item:hover { background: var(--hover); }
   /* Room under the last block so the stats pill doesn't cover typing. */
   .minn-editor-body { padding-bottom: 72px; }
   .minn-editor-stats {
-    right: calc(12px + env(safe-area-inset-right, 0px));
+    inset-inline-end: calc(12px + env(safe-area-inset-right, 0px));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--minn-kb-inset, 0px));
     font-size: 12.5px; padding: 9px 14px;
   }
@@ -3896,3 +3896,55 @@ body.minn-kb-open .minn-editor-stats .minn-stats-session { display: none; }
     scroll-behavior: auto !important;
   }
 }
+
+/* ===== Bidirectional layout =====
+ * The layout above uses logical properties, so it mirrors on its own when the
+ * document is dir="rtl" (includes/template.php sets that from is_rtl()).
+ * What is left is the part mirroring alone gets wrong.
+ *
+ * Deliberately NOT mirrored, because these are physical rather than
+ * sequential: image-crop handle coordinates (they map to real pixels and pair
+ * with directional resize cursors), centering offsets, symmetric stretches,
+ * and previous/next controls. Those keep left/right on purpose. */
+
+/* Technical values read left to right in every language. Without isolation a
+ * URL, a file path, a version number or a plugin slug renders scrambled inside
+ * an RTL run: punctuation migrates to the wrong end and the whole string reads
+ * backwards. `isolate` keeps each value its own bidi context so it cannot
+ * disturb the sentence around it either. */
+[dir="rtl"] .minn-mono,
+[dir="rtl"] .minn-code,
+[dir="rtl"] .minn-kbd,
+[dir="rtl"] code,
+[dir="rtl"] pre,
+[dir="rtl"] samp,
+[dir="rtl"] kbd,
+[dir="rtl"] .minn-slug-field,
+[dir="rtl"] .minn-slug-input,
+[dir="rtl"] .minn-sys-row-value,
+[dir="rtl"] input[type="url"],
+[dir="rtl"] input[type="email"],
+[dir="rtl"] input[type="tel"] {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: start;
+}
+
+/* Progress and meter fills grow from the inline start, not from the left. */
+[dir="rtl"] .minn-progress-fill,
+[dir="rtl"] .minn-meter-fill {
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+}
+
+/* Arrow glyphs are drawn, not laid out, so nothing mirrors them automatically.
+ * A back arrow that still points left in an RTL interface points away from
+ * where "back" is. */
+[dir="rtl"] .minn-back-arrow,
+[dir="rtl"] .minn-nav-arrow {
+  transform: scaleX(-1);
+}
+
+/* The switch knob travels toward the inline end when on. */
+[dir="rtl"] .minn-switch-knob { inset-inline-start: auto; inset-inline-end: 2px; }
+[dir="rtl"] .minn-switch.on .minn-switch-knob { inset-inline-end: 16px; }

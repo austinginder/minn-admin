@@ -12,6 +12,7 @@ class Minn_Admin {
 	const QUERY_VAR = 'minn_admin';
 
 	public static function init() {
+		add_filter( 'determine_locale', array( __CLASS__, 'route_locale' ) );
 		add_action( 'init', array( __CLASS__, 'load_textdomain' ) );
 		add_action( 'init', array( __CLASS__, 'register_route' ) );
 		add_action( 'wp_loaded', array( __CLASS__, 'maybe_heal_rewrites' ), 20 );
@@ -1741,6 +1742,56 @@ class Minn_Admin {
 	 *
 	 * @return bool
 	 */
+	/**
+	 * Serve Minn's own route in the USER's language.
+	 *
+	 * core's determine_locale() uses the user's language only when
+	 * is_admin(), and Minn deliberately is not wp-admin: it renders at
+	 * /minn-admin/ on the front end. Without this the two halves of the same
+	 * screen disagree. Someone who picks German in Your profile on an English
+	 * site gets a German app (js_translations() reads get_user_locale()) with
+	 * every PHP string still in English, and is_rtl() never becomes true for
+	 * them, so a Persian or Arabic user never gets a right-to-left layout no
+	 * matter what they choose.
+	 *
+	 * Scoped to Minn's own requests. Widening it would change the language of
+	 * the front end for everybody.
+	 *
+	 * @param string $locale Locale core determined.
+	 * @return string
+	 */
+	public static function route_locale( $locale ) {
+		// This filter runs during locale setup, long before the query is
+		// parsed and possibly before pluggable functions exist, so the route
+		// is matched on the request URI and every dependency is guarded.
+		if ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return $locale;
+		}
+		if ( ! function_exists( 'wp_get_current_user' ) || ! function_exists( 'get_user_locale' ) ) {
+			return $locale;
+		}
+		$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+		if ( '' === $uri ) {
+			return $locale;
+		}
+		$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
+		$route = isset( $_GET['rest_route'] ) ? (string) wp_unslash( $_GET['rest_route'] ) : '';
+		// Minn's app route and Minn's OWN REST namespace only. Widening this
+		// to every /wp-json/ request would re-language other plugins'
+		// endpoints on this site, which is not Minn's call to make.
+		$is_app = (bool) preg_match( '#(^|/)minn-admin(/|$)#', $path );
+		$is_rest = false !== strpos( $path, '/wp-json/minn-admin/' )
+			|| 0 === strpos( $route, '/minn-admin/' );
+		if ( ! $is_app && ! $is_rest ) {
+			return $locale;
+		}
+		if ( ! is_user_logged_in() ) {
+			return $locale;
+		}
+		$user_locale = get_user_locale();
+		return $user_locale ? $user_locale : $locale;
+	}
+
 	public static function load_textdomain() {
 		load_plugin_textdomain( 'minn-admin', false, dirname( plugin_basename( MINN_ADMIN_FILE ) ) . '/languages' );
 	}
