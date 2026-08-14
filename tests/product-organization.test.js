@@ -66,7 +66,7 @@ const { BASE, launch, login, reporter, setSwitch } = require( './helpers' );
 		await page.waitForSelector( '#minn-p-slug', { timeout: 20000 } );
 
 		const card = await page.evaluate( () => ( {
-			titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			cats: !! document.querySelector( '[data-ptac="categories"]' ),
 			tags: !! document.querySelector( '[data-ptac="tags"]' ),
 			brands: !! document.querySelector( '[data-ptac="brands"]' ),

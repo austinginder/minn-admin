@@ -76,7 +76,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.waitForSelector( '#minn-p-variations', { timeout: 20000 } );
 
 		const card = await page.evaluate( () => ( {
-			titles: Array.from( document.querySelectorAll( '.minn-order-panel .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
+			titles: Array.from( document.querySelectorAll( '.minn-order-sec .minn-side-title' ) ).map( ( e ) => e.textContent.trim() ),
 			empty: /No variations yet/.test( ( document.querySelector( '#minn-p-variations' ) || {} ).textContent || '' ),
 			gen: !! document.querySelector( '#minn-p-var-gen' ),
 			add: !! document.querySelector( '#minn-p-var-add' ),
@@ -111,6 +111,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			JSON.stringify( list.map( ( v ) => v.attributes ) ) );
 
 		// Saving twice must not duplicate: created rows come back with ids.
+		// The second save needs a real edit to reach: the page's save bar is
+		// down while the form matches what was stored, which is also the point
+		// of the check — the rows that come back carry ids, so this updates.
+		await page.fill( '[data-pvarreg="0"]', '19.50' );
 		await save();
 		const again = await api( `wc/v3/products/${ id }/variations?per_page=100&_fields=id` );
 		t.check( 'saving twice does not duplicate the variations',

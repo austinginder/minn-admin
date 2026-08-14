@@ -2687,9 +2687,25 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--border); }
 .minn-order-panel { padding: 14px 18px 16px; border-inline-end: 1px solid var(--border); }
 .minn-order-panel:last-child { border-inline-end: none; }
-/* The product body runs to four panels. The two-panel order body needed no
-   rule between rows; a wrapped grid does, or row two floats. */
-.minn-grid-rows > .minn-order-panel:nth-child(n+3) { border-top: 1px solid var(--border); }
+/* A product with nothing for the sidebar (no edit capability: the page is a
+   summary) drops the second track rather than leaving a 340px hole. */
+.minn-order-page .minn-order-layout-solo { grid-template-columns: minmax(0, 1fr); }
+/* The product page's save bar. Absent until an edit, then pinned to the bottom
+   of the scrollport, because this page runs several screens and a button at
+   the end of it asks for a scroll before every save. sticky, not fixed: fixed
+   would leave the page's column and float over the nav. It also has to stay
+   OUT of any overflow:hidden wrapper — that wrapper would become its scroll
+   container and the bar would stick to nothing (see renderProductPage). */
+.minn-psavebar {
+	position: sticky; bottom: 0; z-index: 5;
+	display: flex; align-items: center; gap: 10px;
+	margin-top: 14px; padding: 10px 14px;
+	background: var(--panel); border: 1px solid var(--border2); border-radius: 12px;
+	box-shadow: var(--shadow);
+}
+/* display:flex would beat the hidden attribute on its own. */
+.minn-psavebar[hidden] { display: none; }
+.minn-psavebar-note { font-size: 13px; color: var(--text2); margin-inline-end: auto; }
 /* The product Images card reuses the island tile grid, inline instead of in a
    modal: the page has the room, and it saves with the rest of the form. */
 .minn-pimg-grid { margin-bottom: 10px; }
