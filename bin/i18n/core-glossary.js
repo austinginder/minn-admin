@@ -69,7 +69,19 @@ function lookup( glossary, normIndex, msgid ) {
 	if ( ! near ) return null;
 	const tail = /([\s.:…!?]+)$/u.exec( msgid );
 	const suffix = tail ? tail[ 1 ] : '';
-	return { forms: near.map( ( f ) => f.replace( /[\s.:…!?]+$/u, '' ) + suffix ), exact: false };
+	const forms = near.map( ( f ) => f.replace( /[\s.:…!?]+$/u, '' ) + suffix );
+
+	// A "translation" that differs from the source only in CASE is not a
+	// translation, it is core's house style. Minn writes labels in sentence
+	// case ("All sites"); core writes several of them in title case ("All
+	// Sites"). Taking core's casing here silently retitled the interface for
+	// the English variants, where the normalized match is the only kind that
+	// ever fires. Keep the source and let the translator decide.
+	if ( forms[ 0 ] && normKey( forms[ 0 ] ).toLowerCase() === normKey( msgid ).toLowerCase()
+		&& forms[ 0 ] !== msgid ) {
+		return null;
+	}
+	return { forms, exact: false };
 }
 
 /** Build the normalized index once per locale. */
