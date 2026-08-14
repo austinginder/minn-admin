@@ -1550,7 +1550,7 @@ function minn_admin_gsmtp_send_chart( $days = 14 ) {
  * unserializing it (PHP object injection would be a vulnerability here).
  */
 function minn_admin_gravity_smtp_recipients( $extra ) {
-	$emails = minn_admin_gravity_smtp_to_addresses( $extra );
+	$emails = minn_admin_gravity_smtp_display_addresses( $extra );
 	if ( ! $emails ) {
 		return '';
 	}
@@ -1562,29 +1562,76 @@ function minn_admin_gravity_smtp_recipients( $extra ) {
 }
 
 /**
- * The full To list from `extra`, scoped to the `to` Recipient_Collection so
- * cc/bcc/reply-to addresses are never treated as To recipients (Resend would
- * otherwise expose them in the To header).
+ * The To list from `extra`, scoped to the `to` key and nothing else.
+ *
+ * FAILS CLOSED: when the `to` scope cannot be located this returns an empty
+ * array, never "every address in the blob". A scope-extraction helper that
+ * guesses is worse than one that gives up, because the caller here is Resend,
+ * which puts what it returns into a real To header. Falling back to a blanket
+ * scan meant resending a message that had used bcc to keep its recipient list
+ * private republished that whole list to everyone on it, along with whatever
+ * the original body carried, which for a mail log is routinely a live
+ * password-reset or one-time-login link.
+ *
+ * Never unserializes: PHP object injection would be a vulnerability here.
+ *
+ * @param string $extra Serialized `extra` column.
+ * @return array Addresses in the `to` scope, empty when it cannot be resolved.
  */
 function minn_admin_gravity_smtp_to_addresses( $extra ) {
 	if ( ! $extra ) {
 		return array();
 	}
-	// The `to` collection ends at the first `}}}` (recipient → array → collection).
-	if ( preg_match( '/s:2:"to";O:\d+:"[^"]*Recipient_Collection":\d+:\{.*?\}\}\}/s', $extra, $m ) ) {
-		if ( preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', $m[0], $mm ) ) {
-			return array_values( array_unique( $mm[1] ) );
-		}
+	$extra = (string) $extra;
+
+	// Some write paths store `to` as a plain address string rather than a
+	// Recipient_Collection (Event_Model::create keeps whatever the caller
+	// passed). Accept that shape, including a multi-address string.
+	if ( preg_match( '/s:2:"to";s:\d+:"([^"]*)"/', $extra, $m ) ) {
+		$parts = array_filter( array_map( 'trim', explode( ',', $m[1] ) ), 'is_email' );
+		return array_values( array_unique( $parts ) );
+	}
+
+	$start = strpos( $extra, 's:2:"to";' );
+	if ( false === $start ) {
 		return array();
 	}
-	// Some write paths store `to` as a plain address string instead of a
-	// Recipient_Collection (Event_Model::create keeps whatever the caller
-	// passed) — accept that shape too.
-	if ( preg_match( '/s:2:"to";s:\d+:"([^"]+)"/', $extra, $m ) && is_email( $m[1] ) ) {
-		return array( $m[1] );
+	// Bound the window at the next sibling key rather than at the first `}}}`.
+	// That terminator has no relationship to serialized structure, so an empty
+	// or differently shaped `to` collection let the span run on into the cc and
+	// bcc keys that follow it.
+	$end = strlen( $extra );
+	foreach ( array( 's:2:"cc";', 's:3:"bcc";', 's:8:"reply_to";', 's:4:"from";', 's:7:"headers";', 's:11:"attachments";' ) as $sibling ) {
+		$at = strpos( $extra, $sibling, $start + 1 );
+		if ( false !== $at && $at < $end ) {
+			$end = $at;
+		}
 	}
-	if ( preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', $extra, $m ) ) {
-		return array_values( array_unique( $m[1] ) );
+	$window = substr( $extra, $start, $end - $start );
+
+	if ( preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', $window, $mm ) ) {
+		return array_values( array_unique( array_filter( $mm[1], 'is_email' ) ) );
+	}
+	return array();
+}
+
+/**
+ * Best-effort recipient addresses for DISPLAY only.
+ *
+ * The list column just needs something human to show, so a blanket scan is
+ * acceptable here in a way it never is on the send path. Keep the two apart:
+ * this must not be wired into Resend.
+ *
+ * @param string $extra Serialized `extra` column.
+ * @return array
+ */
+function minn_admin_gravity_smtp_display_addresses( $extra ) {
+	$scoped = minn_admin_gravity_smtp_to_addresses( $extra );
+	if ( $scoped ) {
+		return $scoped;
+	}
+	if ( $extra && preg_match_all( '/s:5:"email";s:\d+:"([^"]+)"/', (string) $extra, $m ) ) {
+		return array_values( array_unique( array_filter( $m[1], 'is_email' ) ) );
 	}
 	return array();
 }
