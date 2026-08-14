@@ -115,6 +115,30 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		await page.goto( `${ BASE }/minn-admin/subscriptions`, { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-table-row[data-sub]', { timeout: 25000 } );
 
+		// ---- Start date: WooCommerce's own list carries it, so this one does ----
+		const startCol = await page.evaluate( ( id ) => {
+			const heads = Array.from( document.querySelectorAll( '.minn-table-head.minn-sub-cols > div' ) )
+				.map( ( h ) => h.textContent.trim() );
+			const row = document.querySelector( `.minn-table-row[data-sub="${ id }"]` );
+			const cell = row && row.querySelector( '[data-substart]' );
+			return {
+				heads,
+				text: cell ? cell.textContent.trim() : null,
+				title: cell ? cell.getAttribute( 'title' ) : null,
+				offset: window.MINN.gmtOffset,
+			};
+		}, made.active );
+		t.check( 'the list has a Start date column, ahead of Next payment',
+			startCol.heads.indexOf( 'Start date' ) > 0 &&
+			startCol.heads.indexOf( 'Start date' ) < startCol.heads.indexOf( 'Next payment' ),
+			JSON.stringify( startCol.heads ) );
+		// start_date_gmt is GMT and must be read as GMT. Parsed as site-local on
+		// a site at UTC-5 this same fixture renders "in 5h" — a subscription that
+		// has not started yet. The check only discriminates when gmtOffset != 0.
+		t.check( 'the start date is read as GMT, not site-local',
+			startCol.text === 'just now',
+			JSON.stringify( { text: startCol.text, title: startCol.title, gmtOffset: startCol.offset } ) );
+
 		// ---- The bar is here, with the SUBSCRIPTION vocabulary ----
 		const presets = await page.evaluate( async () => {
 			document.querySelector( '#minn-order-preset' ).click();

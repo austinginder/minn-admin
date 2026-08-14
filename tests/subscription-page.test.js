@@ -140,6 +140,72 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const saved = await api( `wc/v3/subscriptions/${ subId }?_fields=status` );
 		t.check( 'page status save persists through WC', saved.body && saved.body.status === 'on-hold', JSON.stringify( saved.body ) );
 
+		// ---- Items are editable, and the money follows the quantity ----
+		await page.click( '[data-soedit="items"]' );
+		await page.waitForSelector( '.minn-order-submodal [data-eiqty]', { timeout: 10000 } );
+		const qtyInput = '.minn-order-submodal [data-eiqty]';
+		await page.fill( qtyInput, '3' );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
+		// What the card shows is not the point; what WooCommerce stored is.
+		const savedItems = await api( `wc/v3/subscriptions/${ subId }?_fields=line_items,total` );
+		const li = ( savedItems.body && savedItems.body.line_items || [] )[ 0 ] || {};
+		t.check( 'the items dialog saves the quantity through WC',
+			li.quantity === 3, JSON.stringify( { quantity: li.quantity, total: li.total } ) );
+		// 2 x 11.00 became 3 x 11.00: the line money is rescaled from the unit
+		// price, because WC's REST keeps the old totals otherwise.
+		t.check( 'the line money is rescaled with the quantity',
+			parseFloat( li.total ) === 33, JSON.stringify( { total: li.total, subtotal: li.subtotal } ) );
+		t.check( 'the card repaints with the new total',
+			await page.evaluate( () => /33\.00/.test( document.querySelector( '.minn-order-main' ).textContent ) ), '' );
+
+		// ---- The schedule is editable, and the timezone survives the trip ----
+		// WooCommerce Subscriptions READS dates as *_date_gmt and WRITES them
+		// without the suffix, interpreting the value as GMT. The dialog shows
+		// site time like every other date here, so a correct save is the only
+		// way both conversions can be right.
+		// A day late in the current month grid: future, and reachable without
+		// paging the calendar. The expected GMT is computed from the site's own
+		// offset, so the check means something on any timezone.
+		const want = await page.evaluate( () => {
+			const off = window.MINN.gmtOffset || 0;
+			const d = new Date();
+			d.setDate( d.getDate() + 12 );
+			const p = ( n ) => String( n ).padStart( 2, '0' );
+			const day = `${ d.getFullYear() }-${ p( d.getMonth() + 1 ) }-${ p( d.getDate() ) }`;
+			const asUtc = new Date( day + 'T10:20:00Z' ).getTime() - off * 3600000;
+			return { day, gmt: new Date( asUtc ).toISOString().slice( 0, 19 ), off };
+		} );
+		await page.click( '[data-soedit="schedule"]' );
+		await page.waitForSelector( '#minn-ss-next', { timeout: 10000 } );
+		const startReadOnly = await page.evaluate( () => ! document.querySelector( '#minn-ss-start' ) );
+		t.check( 'the schedule dialog leaves the start date alone', startReadOnly, '' );
+		t.check( 'the date field is the themed picker, not an OS control',
+			await page.$eval( '#minn-ss-next', ( i ) => i.readOnly && i.type === 'text' && i.classList.contains( 'minn-dp-input' ) ), '' );
+		await page.click( '#minn-ss-next' );
+		await page.waitForSelector( '.minn-dp-pop', { timeout: 8000 } );
+		// The popover repaints once its month marks land, replacing the day
+		// buttons; clicking into that repaint races it.
+		await page.waitForTimeout( 350 );
+		await page.click( `.minn-dp-day[data-day="${ want.day }"]` );
+		await page.fill( '.minn-dp-time-input', '10:20 am' );
+		// Done commits and closes. Enter only commits: the popover would stay
+		// open over the rest of the dialog and swallow the next field's clicks.
+		await page.click( '[data-dp-done]' );
+		await page.waitForFunction( ( d ) => ! document.querySelector( '.minn-dp-pop' ) &&
+			( document.querySelector( '#minn-ss-next' ).dataset.dp || '' ) === d + 'T10:20',
+		want.day, { timeout: 8000 } );
+		await page.fill( '#minn-ss-interval', '2' );
+		await page.click( '.minn-order-submodal [data-esave]' );
+		await page.waitForFunction( () => ! document.querySelector( '.minn-order-submodal' ), null, { timeout: 20000 } );
+		const sched = await api( `wc/v3/subscriptions/${ subId }?_fields=next_payment_date_gmt,billing_interval,billing_period` );
+		t.check( 'the next payment date saves as GMT, not as site time',
+			sched.body && sched.body.next_payment_date_gmt === want.gmt,
+			JSON.stringify( { got: sched.body && sched.body.next_payment_date_gmt, want: want.gmt, gmtOffset: want.off } ) );
+		t.check( 'the billing interval saves with it',
+			sched.body && String( sched.body.billing_interval ) === '2',
+			JSON.stringify( { interval: sched.body && sched.body.billing_interval, period: sched.body && sched.body.billing_period } ) );
+
 		// ---- Related order navigation is a real URL ----
 		await page.click( `[data-relorder="${ orderId }"]` );
 		await page.waitForFunction( ( id ) => location.pathname.indexOf( '/orders/' + id ) !== -1, orderId, { timeout: 15000 } );
