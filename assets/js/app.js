@@ -15082,12 +15082,17 @@
 						<div class="minn-sys-trow minn-sys-link" data-sysdb="${ esc( t.name ) }" role="button" tabindex="0" title="${ esc( __( 'Open this table in the read-only database viewer' ) ) }">
 							<span class="minn-sys-tname mono">${ esc( t.name ) }</span>
 							<span class="minn-sys-tsize mono">${ esc( t.size ) }</span>
-							<span class="minn-sys-trows">${ esc( t.rows ) } rows <span class="minn-sys-more">›</span></span>
+							<span class="minn-sys-trows">${ esc( t.rows ) } ${ esc( __( 'Entries' ) ) } <span class="minn-sys-more">›</span></span>
 						</div>` ).join( '' ) }
 				</div>` : '' }
 				${ g.autoload ? `
 				<div class="minn-sys-tables">
-					<div class="minn-sys-tables-head minn-sys-link" data-sysdetail="autoload" role="button" tabindex="0" title="${ esc( __( 'View every autoloaded option' ) ) }">Autoloaded options — ${ esc( String( g.autoload.count ) ) } options · ${ esc( g.autoload.size_human ) } on every request <span class="minn-sys-more">${ esc( __( 'view all ›' ) ) }</span></div>
+					<div class="minn-sys-tables-head minn-sys-link" data-sysdetail="autoload" role="button" tabindex="0" title="${ esc( __( 'View every autoloaded option' ) ) }">${ esc( sprintf(
+						/* translators: 1: total autoloaded size, 2: number of autoloaded options. */
+						__( '%1$s across %2$s options loads on every request — see the top offenders in the Database card' ),
+						g.autoload.size_human,
+						String( g.autoload.count )
+					) ) } <span class="minn-sys-more">${ esc( __( 'view all ›' ) ) }</span></div>
 					${ g.autoload.top.map( ( t ) => `
 						<div class="minn-sys-trow">
 							<span class="minn-sys-tname mono">${ esc( t.name ) }</span>
@@ -15129,16 +15134,21 @@
 				${ logs.length > 5 ? `
 				<button class="minn-sys-logrow" data-logsrc="${ esc( logs[ 5 ].id ) }">
 					${ icon( 'file' ) }
-					<span class="minn-sys-logpath">${ logs.length - 5 } more log source${ logs.length - 5 === 1 ? '' : 's' }</span>
+					<span class="minn-sys-logpath">${ Number( logs.length - 5 ).toLocaleString( uiLocale() ) } ${ esc( __( 'Log source' ) ) }</span>
 					<span class="minn-sys-logopen">${ esc( __( 'Browse →' ) ) }</span>
 				</button>` : '' }
 			</div>` : '';
 
 		// Installed extensions manifest — plugins (active first), must-use, themes.
 		const ext = s.extensions;
+		const extensionParentLabel = ( parent ) => {
+			/* translators: %s: parent theme name. */
+			return sprintf( __( 'child of %s' ), parent );
+		};
+		const summaryPart = ( count, label ) => `${ Number( count ).toLocaleString( uiLocale() ) } ${ esc( label ) }`;
 		const extItem = ( it, activeBadge ) => `
 			<div class="minn-sys-ext-item${ it.active ? '' : ' off' }">
-				<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.parent ? ` <span class="minn-sys-ext-parent">child of ${ esc( it.parent ) }</span>` : '' }${ activeBadge && it.active ? ` <span class="minn-sys-ext-active">${ esc( __( 'active' ) ) }</span>` : '' }</span>
+				<span class="minn-sys-ext-name">${ esc( it.name ) }${ it.parent ? ` <span class="minn-sys-ext-parent">${ esc( extensionParentLabel( it.parent ) ) }</span>` : '' }${ activeBadge && it.active ? ` <span class="minn-sys-ext-active">${ esc( __( 'active' ) ) }</span>` : '' }</span>
 				<span class="minn-sys-ext-ver mono">${ esc( it.version || '—' ) }</span>
 			</div>`;
 		const extSection = ( label, items, activeBadge ) => items.length ? `
@@ -15149,11 +15159,11 @@
 		const extCard = ext ? `
 			<div class="minn-card minn-sys-ext" id="minn-sys-extensions">
 				<div class="minn-sys-card-head">${ icon( 'plug' ) }<span>${ esc( __( 'Extensions' ) ) }</span>
-					<span class="minn-sys-debug-hint">${ ext.active_plugins } active · ${ ext.plugins.length } plugins · ${ ext.themes.length } themes</span>
+					<span class="minn-sys-debug-hint">${ summaryPart( ext.active_plugins, __( 'Active' ) ) } · ${ summaryPart( ext.plugins.length, __( 'Plugins' ) ) } · ${ summaryPart( ext.themes.length, __( 'Themes' ) ) }</span>
 				</div>
-				${ extSection( 'Plugins', ext.plugins, false ) }
+				${ extSection( __( 'Plugins' ), ext.plugins, false ) }
 				${ extSection( 'Must-use', ext.mu_plugins, false ) }
-				${ extSection( 'Themes', ext.themes, true ) }
+				${ extSection( __( 'Themes' ), ext.themes, true ) }
 			</div>` : '';
 
 		// Licenses — read-only visibility over every paid component's stored
@@ -15194,16 +15204,16 @@
 		const intCard = intg ? `
 			<div class="minn-card minn-sys-ext" id="minn-sys-integrations">
 				<div class="minn-sys-card-head">${ icon( 'grid' ) }<span>${ esc( __( 'Integrations' ) ) }</span>
-					<span class="minn-sys-debug-hint">${ intg.surfaces.length } surfaces · ${ intg.panels.length } panels · ${ intg.designs.length } design sources${ intProblems ? ` · <span class="minn-sys-int-warn">${ intProblems } problem${ intProblems === 1 ? '' : 's' }</span>` : '' }</span>
+					<span class="minn-sys-debug-hint">${ summaryPart( intg.surfaces.length, __( 'Surfaces' ) ) } · ${ summaryPart( intg.panels.length, __( 'Editor panels' ) ) } · ${ summaryPart( intg.designs.length, __( 'Design sources' ) ) }${ intProblems ? ` · <span class="minn-sys-int-warn">${ summaryPart( intProblems, __( 'Needs attention' ) ) }</span>` : '' }</span>
 				</div>
-				${ intSection( 'Surfaces', intg.surfaces, ( r ) => [ r.family ? 'family: ' + r.family : '', 'cap: ' + r.cap ].filter( Boolean ).join( ' · ' ) ) }
+				${ intSection( __( 'Surfaces' ), intg.surfaces, ( r ) => [ r.family ? 'family: ' + r.family : '', 'cap: ' + r.cap ].filter( Boolean ).join( ' · ' ) ) }
 				${ intSection( __( 'Editor panels' ), intg.panels, ( r ) => 'cap: ' + r.cap ) }
 				${ intSection( __( 'Design sources' ), intg.designs ) }
 				${ intSection( __( 'Cache purgers' ), intg.cache ) }
 				${ intSection( __( 'Spam filters' ), intg.spam || [] ) }
 				${ intSection( __( 'License readers' ), intg.licenses || [] ) }
 				${ intSection( __( 'Page builders' ), intg.builders ) }
-				${ intPlain( __( 'Block inspector forms' ), intg.blockForms.map( ( r ) => ( { a: r.owner, b: r.count + ' block' + ( r.count === 1 ? '' : 's' ) } ) ) ) }
+				${ intPlain( __( 'Block inspector forms' ), intg.blockForms.map( ( r ) => ( { a: r.owner, b: summaryPart( r.count, __( 'Blocks' ) ) } ) ) ) }
 				${ intPlain( __( 'Hook listeners' ), intg.listeners.map( ( l ) => ( { a: l.hook, b: l.owners.join( ', ' ), mono: true } ) ) ) }
 			</div>` : '';
 
@@ -15425,7 +15435,12 @@
 		if ( d && isAuto ) {
 			body = `
 			<div class="minn-sysd">
-				<div class="minn-sysd-sub">${ esc( String( d.count ) ) } autoloaded options load on every request (${ esc( d.size_human ) } total)${ d.count > d.shown ? `; showing the ${ esc( String( d.shown ) ) } largest` : '' }.</div>
+				<div class="minn-sysd-sub">${ esc( sprintf(
+					/* translators: 1: total autoloaded size, 2: number of autoloaded options. */
+					__( '%1$s across %2$s options loads on every request — see the top offenders in the Database card' ),
+					d.size_human,
+					String( d.count )
+				) ) }</div>
 				<div class="minn-sysd-row head"><span>${ esc( __( 'Option' ) ) }</span><span>${ esc( __( 'Size' ) ) }</span><span>${ esc( __( 'Autoload' ) ) }</span></div>
 				${ d.items.map( ( it ) => `
 				<div class="minn-sysd-row">
@@ -15437,12 +15452,12 @@
 		} else if ( d ) {
 			body = `
 			<div class="minn-sysd">
-				<div class="minn-sysd-sub">${ esc( String( d.items.length ) ) } scheduled event${ d.items.length === 1 ? '' : 's' }.${ d.disabled ? ' WP-Cron is disabled (DISABLE_WP_CRON); a system cron is expected to run these.' : '' }</div>
+				<div class="minn-sysd-sub">${ esc( __( 'Scheduled cron events' ) ) }: ${ esc( metaLabel( d.items.length ) ) }${ d.disabled ? ` · ${ esc( __( 'WP-Cron disabled (system cron expected)' ) ) }` : '' }</div>
 				<div class="minn-sysd-row head"><span>${ esc( __( 'Hook' ) ) }</span><span>${ esc( __( 'Next run' ) ) }</span><span>${ esc( __( 'Recurrence' ) ) }</span></div>
 				${ d.items.map( ( it ) => `
 				<div class="minn-sysd-row">
 					<span class="mono minn-cell-clip" title="${ esc( it.hook ) }">${ esc( it.hook ) }</span>
-					<span class="${ it.overdue ? 'minn-sysd-overdue' : '' }">${ it.overdue ? 'overdue · ' : '' }${ esc( timeAgo( new Date( it.next * 1000 ).toISOString() ) ) }</span>
+					<span class="${ it.overdue ? 'minn-sysd-overdue' : '' }">${ it.overdue ? esc( __( 'Overdue' ) ) + ' · ' : '' }${ esc( timeAgo( new Date( it.next * 1000 ).toISOString() ) ) }</span>
 					<span class="minn-sysd-dim">${ esc( it.recurrence ) }</span>
 				</div>` ).join( '' ) }
 			</div>`;

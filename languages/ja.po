@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-08-14 16:44+0000\n"
+"PO-Revision-Date: 2026-08-14 16:56+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Japanese\n"
 "MIME-Version: 1.0\n"
@@ -42,7 +42,7 @@ msgstr "https://austinginder.com"
 #: includes/adapters/meta-box.php:257
 #: includes/adapters/pods.php:388
 #: assets/js/app.js:14868
-#: assets/js/app.js:32972
+#: assets/js/app.js:32987
 msgid "Custom fields"
 msgstr "カスタムフィールド"
 
@@ -137,9 +137,9 @@ msgstr "エクスポート"
 #: includes/adapters/updraftplus.php:173
 #: includes/adapters/wpvivid.php:322
 #: includes/class-minn-admin-rest.php:6145
-#: assets/js/app.js:15429
-#: assets/js/app.js:15767
-#: assets/js/app.js:30339
+#: assets/js/app.js:15444
+#: assets/js/app.js:15782
+#: assets/js/app.js:30354
 msgid "Size"
 msgstr "サイズ"
 
@@ -206,7 +206,7 @@ msgstr "All-In-One Security"
 #: includes/adapters/stream.php:177
 #: includes/adapters/wordfence.php:59
 #: includes/adapters/wp-activity-log.php:120
-#: assets/js/app.js:30875
+#: assets/js/app.js:30890
 msgid "Activity Log"
 msgstr "アクティビティログ"
 
@@ -291,8 +291,8 @@ msgstr "国"
 #: includes/adapters/all-in-one-security.php:347
 #: includes/class-minn-admin-rest.php:6161
 #: includes/class-minn-admin-rest.php:6165
-#: assets/js/app.js:16041
-#: assets/js/app.js:16060
+#: assets/js/app.js:16056
+#: assets/js/app.js:16075
 msgid "Yes"
 msgstr "はい"
 
@@ -300,8 +300,8 @@ msgstr "はい"
 #: includes/class-minn-admin-rest.php:5990
 #: includes/class-minn-admin-rest.php:6161
 #: includes/class-minn-admin-rest.php:6165
-#: assets/js/app.js:16041
-#: assets/js/app.js:16060
+#: assets/js/app.js:16056
+#: assets/js/app.js:16075
 msgid "No"
 msgstr "いいえ"
 
@@ -616,7 +616,7 @@ msgstr "設定をエンコードできませんでした。"
 #: includes/adapters/autoptimize.php:261
 #: includes/adapters/perfmatters.php:305
 #: includes/adapters/performance-lab.php:241
-#: assets/js/app.js:32904
+#: assets/js/app.js:32919
 msgid "Performance"
 msgstr "パフォーマンス"
 
@@ -897,12 +897,12 @@ msgstr "Website Server に書き出すジョブのみ表示されます"
 #: assets/js/app.js:7926
 #: assets/js/app.js:8717
 #: assets/js/app.js:9107
-#: assets/js/app.js:21942
-#: assets/js/app.js:22494
-#: assets/js/app.js:30467
-#: assets/js/app.js:30562
-#: assets/js/app.js:30715
-#: assets/js/app.js:30755
+#: assets/js/app.js:21957
+#: assets/js/app.js:22509
+#: assets/js/app.js:30482
+#: assets/js/app.js:30577
+#: assets/js/app.js:30730
+#: assets/js/app.js:30770
 msgid "Status"
 msgstr "ステータス"
 
@@ -977,7 +977,7 @@ msgid "Drop-in present but Redis is not connected"
 msgstr "ドロップインはありますが、Redis に接続されていません"
 
 #: includes/adapters/cache-purge.php:324
-#: assets/js/app.js:32899
+#: assets/js/app.js:32914
 msgid "Redis Object Cache"
 msgstr "Redis Object Cache"
 
@@ -1031,7 +1031,7 @@ msgstr "保存済みのすべてのメッセージ"
 #: includes/adapters/wpforms.php:251
 #: includes/adapters/wpforms.php:265
 #: assets/js/app.js:607
-#: assets/js/app.js:32838
+#: assets/js/app.js:32853
 msgid "Forms"
 msgstr "フォーム"
 
@@ -1072,8 +1072,8 @@ msgstr "送信元"
 #: includes/adapters/suremails.php:248
 #: includes/adapters/wp-mail-logging.php:95
 #: includes/adapters/wp-mail-logging.php:280
-#: assets/js/app.js:30801
-#: assets/js/app.js:31017
+#: assets/js/app.js:30816
+#: assets/js/app.js:31032
 msgid "Subject"
 msgstr "件名"
 
@@ -1157,9 +1157,9 @@ msgstr "このメッセージをゴミ箱に移動しますか ?"
 #: includes/adapters/wpforms.php:358
 #: assets/js/app.js:3864
 #: assets/js/app.js:4171
-#: assets/js/app.js:23036
-#: assets/js/app.js:34426
-#: assets/js/app.js:34830
+#: assets/js/app.js:23051
+#: assets/js/app.js:34441
+#: assets/js/app.js:34845
 msgid "Restore"
 msgstr "復元"
 
@@ -1226,7 +1226,7 @@ msgid "Delete the selected messages permanently?"
 msgstr "選択したメッセージを完全に削除しますか ?"
 
 #: includes/adapters/cf7-flamingo.php:246
-#: assets/js/app.js:17950
+#: assets/js/app.js:17965
 msgid "Shortcode"
 msgstr "ショートコード"
 
@@ -1296,7 +1296,7 @@ msgstr "クライアント"
 #: includes/adapters/gravity-forms.php:197
 #: includes/adapters/network.php:193
 #: assets/js/app.js:605
-#: assets/js/app.js:32952
+#: assets/js/app.js:32967
 msgid "Spam"
 msgstr "スパム"
 
@@ -1423,10 +1423,10 @@ msgstr "CFDB7 で開く ↗"
 #: includes/adapters/wp-mail-logging.php:122
 #: includes/adapters/wpcode.php:340
 #: assets/js/app.js:3865
-#: assets/js/app.js:26604
-#: assets/js/app.js:26610
-#: assets/js/app.js:30399
-#: assets/js/app.js:30608
+#: assets/js/app.js:26619
+#: assets/js/app.js:26625
+#: assets/js/app.js:30414
+#: assets/js/app.js:30623
 msgid "Delete"
 msgstr "削除"
 
@@ -1515,17 +1515,17 @@ msgstr "サイトフッター"
 #: assets/js/app.js:9877
 #: assets/js/app.js:14906
 #: assets/js/app.js:14950
-#: assets/js/app.js:30443
-#: assets/js/app.js:30657
-#: assets/js/app.js:30710
+#: assets/js/app.js:30458
+#: assets/js/app.js:30672
+#: assets/js/app.js:30725
 msgid "Name"
 msgstr "名前"
 
 #: includes/adapters/code-snippets.php:45
 #: includes/adapters/fluent-snippets.php:102
 #: assets/js/app.js:9708
-#: assets/js/app.js:30385
-#: assets/js/app.js:30569
+#: assets/js/app.js:30400
+#: assets/js/app.js:30584
 msgid "Description"
 msgstr "説明"
 
@@ -1539,8 +1539,8 @@ msgstr "説明"
 #: includes/adapters/safe-redirect-manager.php:86
 #: includes/adapters/wpcode.php:229
 #: assets/js/app.js:9107
-#: assets/js/app.js:30554
-#: assets/js/app.js:30572
+#: assets/js/app.js:30569
+#: assets/js/app.js:30587
 msgid "Code"
 msgstr "コード"
 
@@ -1569,7 +1569,7 @@ msgstr "優先順位"
 #: includes/adapters/wpcode.php:238
 #: assets/js/app.js:7353
 #: assets/js/app.js:14917
-#: assets/js/app.js:21830
+#: assets/js/app.js:21845
 msgid "Tags"
 msgstr "タグ"
 
@@ -1582,7 +1582,7 @@ msgstr "メディア, サンプル"
 #: includes/adapters/fluent-snippets.php:118
 #: includes/adapters/hfcm.php:189
 #: includes/adapters/wpcode.php:242
-#: assets/js/app.js:32932
+#: assets/js/app.js:32947
 msgid "Snippets"
 msgstr "スニペット"
 
@@ -1628,9 +1628,9 @@ msgstr "更新日"
 #: assets/js/app.js:14382
 #: assets/js/app.js:14633
 #: assets/js/app.js:14746
-#: assets/js/app.js:16741
-#: assets/js/app.js:31445
-#: assets/js/app.js:31511
+#: assets/js/app.js:16756
+#: assets/js/app.js:31460
+#: assets/js/app.js:31526
 msgid "Activate"
 msgstr "有効化"
 
@@ -1748,8 +1748,8 @@ msgstr "/* your CSS */"
 
 #: includes/adapters/custom-css-js.php:320
 #: includes/class-minn-admin-rest.php:5991
-#: assets/js/app.js:34346
-#: assets/js/app.js:34722
+#: assets/js/app.js:34361
+#: assets/js/app.js:34737
 msgid "Language"
 msgstr "言語"
 
@@ -1962,6 +1962,7 @@ msgstr "(空の送信)"
 #: includes/adapters/sureforms.php:353
 #: includes/adapters/wpforms.php:273
 #: assets/js/app.js:607
+#: assets/js/app.js:15085
 msgid "Entries"
 msgstr "エントリー"
 
@@ -2085,7 +2086,7 @@ msgstr "転送元と転送先の両方が必要です。"
 #: includes/adapters/redirection.php:21
 #: includes/adapters/safe-redirect-manager.php:71
 #: includes/adapters/simple-301-redirects.php:35
-#: assets/js/app.js:32923
+#: assets/js/app.js:32938
 msgid "Redirects"
 msgstr "リダイレクト"
 
@@ -2512,12 +2513,12 @@ msgstr "送信先"
 #: assets/js/app.js:5619
 #: assets/js/app.js:9290
 #: assets/js/app.js:9878
-#: assets/js/app.js:30444
-#: assets/js/app.js:30658
-#: assets/js/app.js:30754
-#: assets/js/app.js:30960
-#: assets/js/app.js:34333
-#: assets/js/app.js:34709
+#: assets/js/app.js:30459
+#: assets/js/app.js:30673
+#: assets/js/app.js:30769
+#: assets/js/app.js:30975
+#: assets/js/app.js:34348
+#: assets/js/app.js:34724
 msgid "Email"
 msgstr "メール"
 
@@ -2705,8 +2706,8 @@ msgstr "配信"
 #: includes/adapters/site-mailer.php:191
 #: includes/adapters/suremails.php:246
 #: includes/adapters/wp-mail-logging.php:278
-#: assets/js/app.js:30805
-#: assets/js/app.js:31021
+#: assets/js/app.js:30820
+#: assets/js/app.js:31036
 msgid "Message"
 msgstr "メッセージ"
 
@@ -2862,10 +2863,10 @@ msgstr "管理画面フッター"
 #: includes/adapters/wpvivid.php:324
 #: assets/js/app.js:9107
 #: assets/js/app.js:14906
-#: assets/js/app.js:16029
-#: assets/js/app.js:16053
-#: assets/js/app.js:30337
-#: assets/js/app.js:30574
+#: assets/js/app.js:16044
+#: assets/js/app.js:16068
+#: assets/js/app.js:30352
+#: assets/js/app.js:30589
 msgid "Type"
 msgstr "タイプ"
 
@@ -3007,7 +3008,7 @@ msgstr "フォーム設定"
 
 #: includes/adapters/gravity-forms.php:294
 #: assets/js/app.js:2554
-#: assets/js/app.js:29783
+#: assets/js/app.js:29798
 msgid "Notifications"
 msgstr "通知"
 
@@ -3045,7 +3046,7 @@ msgstr "このフィードを完全に削除しますか ? そのフォームで
 
 #: includes/adapters/gravity-forms.php:471
 #: assets/js/app.js:5692
-#: assets/js/app.js:30455
+#: assets/js/app.js:30470
 msgid "Payment"
 msgstr "支払い"
 
@@ -3192,7 +3193,7 @@ msgid "No conditions"
 msgstr "条件なし"
 
 #: includes/adapters/gravity-smtp.php:319
-#: assets/js/app.js:15493
+#: assets/js/app.js:15508
 msgid "Log"
 msgstr "ログ"
 
@@ -3353,7 +3354,7 @@ msgstr[0] "ルール %1$d 件 · 有効 %2$d 件"
 
 #: includes/adapters/gravity-smtp.php:1024
 #: assets/js/app.js:7935
-#: assets/js/app.js:30586
+#: assets/js/app.js:30601
 msgid "None"
 msgstr "なし"
 
@@ -3851,7 +3852,7 @@ msgid "The key validation service did not answer."
 msgstr "キーの検証サービスから応答がありませんでした。"
 
 #: includes/adapters/licenses.php:2405
-#: assets/js/app.js:16890
+#: assets/js/app.js:16905
 msgid "The key was not accepted."
 msgstr "キーが受け付けられませんでした。"
 
@@ -3973,7 +3974,7 @@ msgid "No key stored"
 msgstr "キーは未保存"
 
 #: includes/adapters/licenses.php:2713
-#: assets/js/app.js:15141
+#: assets/js/app.js:15151
 msgid "active"
 msgstr "有効"
 
@@ -4510,7 +4511,7 @@ msgstr "サイト"
 
 #: includes/adapters/network.php:199
 #: includes/adapters/network.php:211
-#: assets/js/app.js:30660
+#: assets/js/app.js:30675
 msgid "Address"
 msgstr "アドレス"
 
@@ -4527,7 +4528,7 @@ msgid "Subdomain"
 msgstr "サブドメイン"
 
 #: includes/adapters/network.php:216
-#: assets/js/app.js:16509
+#: assets/js/app.js:16524
 msgid "Site title"
 msgstr "サイトのタイトル"
 
@@ -4894,7 +4895,7 @@ msgstr "エンドポイント"
 #: includes/adapters/ottokit.php:152
 #: includes/adapters/ottokit.php:160
 #: assets/js/app.js:745
-#: assets/js/app.js:16718
+#: assets/js/app.js:16733
 msgid "Retry"
 msgstr "再試行"
 
@@ -4943,8 +4944,8 @@ msgstr "OttoKit はそのリクエストを再送信できませんでした。"
 
 #: includes/adapters/ottokit.php:319
 #: assets/js/app.js:978
-#: assets/js/app.js:34326
-#: assets/js/app.js:34702
+#: assets/js/app.js:34341
+#: assets/js/app.js:34717
 msgid "Account"
 msgstr "アカウント"
 
@@ -4955,7 +4956,7 @@ msgstr "接続済み"
 
 #: includes/adapters/ottokit.php:320
 #: assets/js/app.js:13333
-#: assets/js/app.js:16724
+#: assets/js/app.js:16739
 msgid "Not connected"
 msgstr "未接続"
 
@@ -4997,7 +4998,7 @@ msgstr "遅延読み込み"
 
 #: includes/adapters/perfmatters.php:37
 #: assets/js/app.js:6527
-#: assets/js/app.js:32882
+#: assets/js/app.js:32897
 msgid "Analytics"
 msgstr "アナリティクス"
 
@@ -5010,7 +5011,7 @@ msgid "Standalone plugins managed by Performance Lab"
 msgstr "Performance Lab が管理する独立プラグイン"
 
 #: includes/adapters/performance-lab.php:160
-#: assets/js/app.js:32908
+#: assets/js/app.js:32923
 msgid "Performance Lab"
 msgstr "Performance Lab"
 
@@ -5040,8 +5041,8 @@ msgstr "機能"
 #: assets/js/app.js:9573
 #: assets/js/app.js:9705
 #: assets/js/app.js:14950
-#: assets/js/app.js:31259
-#: assets/js/app.js:31331
+#: assets/js/app.js:31274
+#: assets/js/app.js:31346
 msgid "Slug"
 msgstr "スラッグ"
 
@@ -5284,7 +5285,7 @@ msgstr "保存済みルールにありません (生成済みですが未保存)
 #: includes/adapters/rewrite-rules-inspector.php:175
 #: assets/js/app.js:9290
 #: assets/js/app.js:9879
-#: assets/js/app.js:30649
+#: assets/js/app.js:30664
 msgid "Registered"
 msgstr "登録日"
 
@@ -5307,7 +5308,7 @@ msgid "Saved set matches generation"
 msgstr "保存セットは生成結果と一致しています"
 
 #: includes/adapters/rewrite-rules-inspector.php:219
-#: assets/js/app.js:16617
+#: assets/js/app.js:16632
 msgid "Permalink structure"
 msgstr "パーマリンク構造"
 
@@ -5324,7 +5325,7 @@ msgid "Flush only helps after a structure is set"
 msgstr "フラッシュは構造を設定したあとでのみ有効です"
 
 #: includes/adapters/rewrite-rules-inspector.php:224
-#: assets/js/app.js:32947
+#: assets/js/app.js:32962
 msgid "Rewrite Rules Inspector"
 msgstr "Rewrite Rules Inspector"
 
@@ -5595,10 +5596,10 @@ msgstr "すべてのプロファイル"
 #: includes/adapters/scrutoscope.php:759
 #: assets/js/app.js:9290
 #: assets/js/app.js:10058
-#: assets/js/app.js:30648
-#: assets/js/app.js:30964
-#: assets/js/app.js:34337
-#: assets/js/app.js:34713
+#: assets/js/app.js:30663
+#: assets/js/app.js:30979
+#: assets/js/app.js:34352
+#: assets/js/app.js:34728
 msgid "Role"
 msgstr "権限グループ"
 
@@ -5618,7 +5619,7 @@ msgstr "すべてのイベント"
 #: includes/adapters/scrutoscope.php:797
 #: includes/adapters/wp-crontrol.php:245
 #: includes/adapters/wp-crontrol.php:398
-#: assets/js/app.js:15441
+#: assets/js/app.js:15456
 msgid "Hook"
 msgstr "フック"
 
@@ -5626,13 +5627,13 @@ msgstr "フック"
 #: includes/adapters/wp-crontrol.php:248
 #: includes/adapters/wp-crontrol.php:399
 #: includes/adapters/wpvivid.php:272
-#: assets/js/app.js:30448
+#: assets/js/app.js:30463
 msgid "Schedule"
 msgstr "スケジュール"
 
 #: includes/adapters/scrutoscope.php:801
 #: includes/adapters/wp-crontrol.php:402
-#: assets/js/app.js:15441
+#: assets/js/app.js:15456
 msgid "Next run"
 msgstr "次回実行"
 
@@ -5857,7 +5858,7 @@ msgstr "Solid Security を開く ↗"
 
 #: includes/adapters/solid-security.php:296
 #: includes/adapters/solid-security.php:303
-#: assets/js/app.js:32863
+#: assets/js/app.js:32878
 msgid "Solid Security"
 msgstr "Solid Security"
 
@@ -6000,7 +6001,7 @@ msgid "YYYY-MM-DD HH:MM"
 msgstr "YYYY-MM-DD HH:MM"
 
 #: includes/adapters/the-events-calendar.php:105
-#: assets/js/app.js:30454
+#: assets/js/app.js:30469
 msgid "Ends"
 msgstr "終了"
 
@@ -6062,8 +6063,8 @@ msgstr "(シリアライズ済みの %1$s、%2$s バイト — 確認するに�
 #: includes/adapters/transients-manager.php:270
 #: includes/adapters/transients-manager.php:386
 #: assets/js/app.js:9107
-#: assets/js/app.js:30587
-#: assets/js/app.js:30601
+#: assets/js/app.js:30602
+#: assets/js/app.js:30616
 msgid "Expires"
 msgstr "有効期限"
 
@@ -6128,7 +6129,7 @@ msgid "Transients Manager is blocking sets"
 msgstr "Transients Manager がセットをブロックしています"
 
 #: includes/adapters/transients-manager.php:332
-#: assets/js/app.js:32946
+#: assets/js/app.js:32961
 msgid "Transients Manager"
 msgstr "Transients Manager"
 
@@ -6227,7 +6228,7 @@ msgstr "UpdraftPlus を開く ↗"
 
 #: includes/adapters/updraftplus.php:172
 #: includes/adapters/wpvivid.php:321
-#: assets/js/app.js:32870
+#: assets/js/app.js:32885
 msgid "Backup"
 msgstr "バックアップ"
 
@@ -6416,7 +6417,7 @@ msgstr "優先順位 "
 
 #: includes/adapters/wp-crontrol.php:294
 #: includes/adapters/wp-crontrol.php:350
-#: assets/js/app.js:32945
+#: assets/js/app.js:32960
 msgid "WP Crontrol"
 msgstr "WP Crontrol"
 
@@ -6426,6 +6427,7 @@ msgid "%s one-off"
 msgstr "単発 %s 件"
 
 #: includes/adapters/wp-crontrol.php:335
+#: assets/js/app.js:15460
 msgid "Overdue"
 msgstr "期限超過"
 
@@ -6733,7 +6735,7 @@ msgstr "新規%sを追加"
 #: includes/class-minn-admin-cpt.php:65
 #: includes/class-minn-admin-cpt.php:108
 #: assets/js/app.js:9631
-#: assets/js/app.js:30945
+#: assets/js/app.js:30960
 msgid "Edit %s"
 msgstr "%sを編集"
 
@@ -7100,7 +7102,7 @@ msgstr "このログは書き込みできません。"
 
 #: includes/class-minn-admin-notices.php:400
 #: assets/js/app.js:4035
-#: assets/js/app.js:30392
+#: assets/js/app.js:30407
 msgid "Open"
 msgstr "開く"
 
@@ -7245,8 +7247,8 @@ msgstr "公開済み"
 #: includes/class-minn-admin-surfaces.php:248
 #: assets/js/app.js:967
 #: assets/js/app.js:1899
-#: assets/js/app.js:30693
-#: assets/js/app.js:34317
+#: assets/js/app.js:30708
+#: assets/js/app.js:34332
 msgid "Users"
 msgstr "ユーザー"
 
@@ -7259,7 +7261,7 @@ msgstr "登録済み"
 #: assets/js/app.js:611
 #: assets/js/app.js:959
 #: assets/js/app.js:1854
-#: assets/js/app.js:29745
+#: assets/js/app.js:29760
 msgid "Comments"
 msgstr "コメント"
 
@@ -7296,8 +7298,8 @@ msgstr "%1$s %2$s%% (直近 %3$s 日間との比較) · %4$s"
 
 #: includes/class-minn-admin-rest.php:2687
 #: assets/js/app.js:3445
-#: assets/js/app.js:30247
-#: assets/js/app.js:30260
+#: assets/js/app.js:30262
+#: assets/js/app.js:30275
 msgid "Visitors"
 msgstr "訪問者"
 
@@ -7357,8 +7359,8 @@ msgid "Could not restore the item."
 msgstr "項目を復元できませんでした。"
 
 #: includes/class-minn-admin-rest.php:3083
-#: assets/js/app.js:22863
-#: assets/js/app.js:22944
+#: assets/js/app.js:22878
+#: assets/js/app.js:22959
 msgid "Someone else"
 msgstr "ほかのユーザー"
 
@@ -7705,7 +7707,7 @@ msgid_plural "Yes (%s sites)"
 msgstr[0] "はい (%s サイト)"
 
 #: includes/class-minn-admin-rest.php:5992
-#: assets/js/app.js:16521
+#: assets/js/app.js:16536
 msgid "Timezone"
 msgstr "タイムゾーン"
 
@@ -7714,7 +7716,7 @@ msgid "Permalinks"
 msgstr "パーマリンク"
 
 #: includes/class-minn-admin-rest.php:5993
-#: assets/js/app.js:16159
+#: assets/js/app.js:16174
 msgid "Plain"
 msgstr "基本"
 
@@ -7793,9 +7795,9 @@ msgstr "未インストール"
 #: includes/class-minn-admin-surfaces.php:253
 #: assets/js/app.js:972
 #: assets/js/app.js:1896
-#: assets/js/app.js:15151
-#: assets/js/app.js:15224
-#: assets/js/app.js:16679
+#: assets/js/app.js:15161
+#: assets/js/app.js:15234
+#: assets/js/app.js:16694
 msgid "Extensions"
 msgstr "拡張機能"
 
@@ -7815,11 +7817,12 @@ msgid "next in %s"
 msgstr "次回まで %s"
 
 #: includes/class-minn-admin-rest.php:6134
+#: assets/js/app.js:15455
 msgid "WP-Cron disabled (system cron expected)"
 msgstr "WP-Cron は無効です (システムの cron を想定)"
 
 #: includes/class-minn-admin-rest.php:6137
-#: assets/js/app.js:15768
+#: assets/js/app.js:15783
 msgid "Engine"
 msgstr "エンジン"
 
@@ -7836,9 +7839,9 @@ msgid "Prefix"
 msgstr "プレフィックス"
 
 #: includes/class-minn-admin-rest.php:6144
-#: assets/js/app.js:15621
-#: assets/js/app.js:15897
-#: assets/js/app.js:15992
+#: assets/js/app.js:15636
+#: assets/js/app.js:15912
+#: assets/js/app.js:16007
 msgid "Tables"
 msgstr "テーブル"
 
@@ -7979,7 +7982,10 @@ msgid "%1$s across %2$s options — healthy"
 msgstr "%2$s 件のオプションで %1$s — 健全です"
 
 #. translators: 1: total autoloaded size (e.g. "3.1 MB"), 2: how many autoloaded options.
+#. translators: 1: total autoloaded size, 2: number of autoloaded options.
 #: includes/class-minn-admin-rest.php:6254
+#: assets/js/app.js:15092
+#: assets/js/app.js:15440
 msgid "%1$s across %2$s options loads on every request — see the top offenders in the Database card"
 msgstr "%2$s 件のオプションで %1$s が毎回のリクエストで読み込まれます — データベースカードで上位の原因を確認してください"
 
@@ -8174,7 +8180,7 @@ msgstr "メディア"
 #: assets/js/app.js:6396
 #: assets/js/app.js:6526
 #: assets/js/app.js:6554
-#: assets/js/app.js:30650
+#: assets/js/app.js:30665
 msgid "Orders"
 msgstr "注文"
 
@@ -8182,7 +8188,7 @@ msgstr "注文"
 #: assets/js/app.js:962
 #: assets/js/app.js:1860
 #: assets/js/app.js:5751
-#: assets/js/app.js:30680
+#: assets/js/app.js:30695
 msgid "Subscriptions"
 msgstr "サブスクリプション"
 
@@ -8228,7 +8234,7 @@ msgstr "ウィジェット"
 #: includes/class-minn-admin-surfaces.php:252
 #: assets/js/app.js:973
 #: assets/js/app.js:1915
-#: assets/js/app.js:15707
+#: assets/js/app.js:15722
 msgid "Structure"
 msgstr "構造"
 
@@ -8236,8 +8242,8 @@ msgstr "構造"
 #: assets/js/app.js:975
 #: assets/js/app.js:1920
 #: assets/js/app.js:2750
-#: assets/js/app.js:15223
-#: assets/js/app.js:29745
+#: assets/js/app.js:15233
+#: assets/js/app.js:29760
 msgid "System"
 msgstr "システム"
 
@@ -8328,7 +8334,7 @@ msgid "Border strong"
 msgstr "枠線（強）"
 
 #: includes/class-minn-admin.php:1076
-#: assets/js/app.js:25697
+#: assets/js/app.js:25712
 msgid "Text"
 msgstr "テキスト"
 
@@ -8511,8 +8517,8 @@ msgstr[0] "項目: %s"
 #: assets/js/app.js:9886
 #: assets/js/app.js:14177
 #: assets/js/app.js:14582
-#: assets/js/app.js:21230
-#: assets/js/app.js:29745
+#: assets/js/app.js:21245
+#: assets/js/app.js:29760
 msgid "All"
 msgstr "すべて"
 
@@ -8522,8 +8528,9 @@ msgstr "すべて"
 #: assets/js/app.js:14248
 #: assets/js/app.js:14582
 #: assets/js/app.js:14617
-#: assets/js/app.js:31444
-#: assets/js/app.js:31511
+#: assets/js/app.js:15162
+#: assets/js/app.js:31459
+#: assets/js/app.js:31526
 msgid "Active"
 msgstr "有効"
 
@@ -8540,9 +8547,9 @@ msgstr "停止中"
 #: assets/js/app.js:7092
 #: assets/js/app.js:7927
 #: assets/js/app.js:8949
-#: assets/js/app.js:21452
-#: assets/js/app.js:30564
-#: assets/js/app.js:30717
+#: assets/js/app.js:21467
+#: assets/js/app.js:30579
+#: assets/js/app.js:30732
 msgid "Published"
 msgstr "公開済み"
 
@@ -8552,8 +8559,8 @@ msgstr "公開済み"
 #: assets/js/app.js:7093
 #: assets/js/app.js:7927
 #: assets/js/app.js:8950
-#: assets/js/app.js:30565
-#: assets/js/app.js:30718
+#: assets/js/app.js:30580
+#: assets/js/app.js:30733
 msgid "Draft"
 msgstr "下書き"
 
@@ -8576,7 +8583,7 @@ msgstr "保留中"
 #: assets/js/app.js:600
 #: assets/js/app.js:5384
 #: assets/js/app.js:6659
-#: assets/js/app.js:30758
+#: assets/js/app.js:30773
 msgid "Processing"
 msgstr "処理中"
 
@@ -8599,7 +8606,7 @@ msgstr "返金済み"
 #: assets/js/app.js:602
 #: assets/js/app.js:5386
 #: assets/js/app.js:6830
-#: assets/js/app.js:30759
+#: assets/js/app.js:30774
 msgid "On hold"
 msgstr "承認待ち"
 
@@ -8660,9 +8667,9 @@ msgid "Core"
 msgstr "コア"
 
 #: assets/js/app.js:610
-#: assets/js/app.js:22496
-#: assets/js/app.js:22498
-#: assets/js/app.js:31265
+#: assets/js/app.js:22511
+#: assets/js/app.js:22513
+#: assets/js/app.js:31280
 msgid "Visibility"
 msgstr "公開範囲"
 
@@ -8706,8 +8713,8 @@ msgstr "購読者"
 #: assets/js/app.js:6683
 #: assets/js/app.js:7012
 #: assets/js/app.js:9290
-#: assets/js/app.js:30441
-#: assets/js/app.js:30748
+#: assets/js/app.js:30456
+#: assets/js/app.js:30763
 msgid "Customer"
 msgstr "顧客"
 
@@ -8757,13 +8764,15 @@ msgstr "コメントの承認"
 
 #: assets/js/app.js:961
 #: assets/js/app.js:6683
-#: assets/js/app.js:21879
+#: assets/js/app.js:21894
 msgid "Order"
 msgstr "注文"
 
 #: assets/js/app.js:964
+#: assets/js/app.js:8619
 #: assets/js/app.js:8717
-#: assets/js/app.js:30767
+#: assets/js/app.js:30529
+#: assets/js/app.js:30782
 msgid "Product"
 msgstr "商品"
 
@@ -8773,7 +8782,7 @@ msgid "People"
 msgstr "メンバー"
 
 #: assets/js/app.js:968
-#: assets/js/app.js:30938
+#: assets/js/app.js:30953
 msgid "Edit user"
 msgstr "ユーザーを編集"
 
@@ -8848,15 +8857,15 @@ msgstr "確認のため %s と入力してください"
 #: assets/js/app.js:10660
 #: assets/js/app.js:12379
 #: assets/js/app.js:13707
-#: assets/js/app.js:24835
-#: assets/js/app.js:25141
-#: assets/js/app.js:30320
-#: assets/js/app.js:30725
-#: assets/js/app.js:30780
-#: assets/js/app.js:30812
-#: assets/js/app.js:31028
-#: assets/js/app.js:31100
-#: assets/js/app.js:31134
+#: assets/js/app.js:24850
+#: assets/js/app.js:25156
+#: assets/js/app.js:30335
+#: assets/js/app.js:30740
+#: assets/js/app.js:30795
+#: assets/js/app.js:30827
+#: assets/js/app.js:31043
+#: assets/js/app.js:31115
+#: assets/js/app.js:31149
 msgid "Cancel"
 msgstr "キャンセル"
 
@@ -8899,7 +8908,7 @@ msgid "The database, when this release ships a migration"
 msgstr "このリリースにマイグレーションが含まれる場合はデータベース"
 
 #: assets/js/app.js:1160
-#: assets/js/app.js:29518
+#: assets/js/app.js:29533
 msgid "Your content, media and users"
 msgstr "コンテンツ・メディア・ユーザー"
 
@@ -8914,7 +8923,7 @@ msgstr "ファイルの置き換え中、訪問者には数秒間メンテナン
 #: assets/js/app.js:1162
 #: assets/js/app.js:14031
 #: assets/js/app.js:14118
-#: assets/js/app.js:29642
+#: assets/js/app.js:29657
 msgid "Update WordPress"
 msgstr "WordPress を更新"
 
@@ -8923,13 +8932,13 @@ msgid "Type to search…"
 msgstr "入力して検索…"
 
 #: assets/js/app.js:1259
-#: assets/js/app.js:18007
-#: assets/js/app.js:22051
+#: assets/js/app.js:18022
+#: assets/js/app.js:22066
 msgid "Replace image"
 msgstr "画像の置き換え"
 
 #: assets/js/app.js:1261
-#: assets/js/app.js:22053
+#: assets/js/app.js:22068
 msgid "Set image"
 msgstr "画像を設定"
 
@@ -8939,15 +8948,15 @@ msgstr "画像を設定"
 #: assets/js/app.js:8011
 #: assets/js/app.js:8108
 #: assets/js/app.js:8248
-#: assets/js/app.js:16480
-#: assets/js/app.js:16499
-#: assets/js/app.js:16752
-#: assets/js/app.js:22054
-#: assets/js/app.js:22520
-#: assets/js/app.js:24850
-#: assets/js/app.js:25183
-#: assets/js/app.js:25734
-#: assets/js/app.js:26848
+#: assets/js/app.js:16495
+#: assets/js/app.js:16514
+#: assets/js/app.js:16767
+#: assets/js/app.js:22069
+#: assets/js/app.js:22535
+#: assets/js/app.js:24865
+#: assets/js/app.js:25198
+#: assets/js/app.js:25749
+#: assets/js/app.js:26863
 msgid "Remove"
 msgstr "削除"
 
@@ -9019,7 +9028,7 @@ msgstr "連携を復元しました"
 #: assets/js/app.js:2357
 #: assets/js/app.js:2358
 #: assets/js/app.js:2510
-#: assets/js/app.js:31047
+#: assets/js/app.js:31062
 msgid "Switch site"
 msgstr "サイトを切り替え"
 
@@ -9028,9 +9037,9 @@ msgid "Search sites…"
 msgstr "サイトを検索…"
 
 #: assets/js/app.js:2189
-#: assets/js/app.js:31437
-#: assets/js/app.js:31474
-#: assets/js/app.js:31501
+#: assets/js/app.js:31452
+#: assets/js/app.js:31489
+#: assets/js/app.js:31516
 msgid "Searching…"
 msgstr "検索中…"
 
@@ -9089,7 +9098,7 @@ msgstr "ワークスペース"
 
 #: assets/js/app.js:2452
 #: assets/js/app.js:2519
-#: assets/js/app.js:15270
+#: assets/js/app.js:15280
 msgid "Tools"
 msgstr "ツール"
 
@@ -9116,7 +9125,7 @@ msgid "WordPress admin (opens in a new tab)"
 msgstr "WordPress 管理画面 (新しいタブで開く)"
 
 #: assets/js/app.js:2537
-#: assets/js/app.js:30007
+#: assets/js/app.js:30022
 msgid "Log out"
 msgstr "ログアウト"
 
@@ -9153,7 +9162,7 @@ msgid "View site (opens in a new tab)"
 msgstr "サイトを表示 (新しいタブで開く)"
 
 #: assets/js/app.js:2552
-#: assets/js/app.js:31357
+#: assets/js/app.js:31372
 msgid "About Minn"
 msgstr "Minn について"
 
@@ -9220,8 +9229,8 @@ msgid "dark"
 msgstr "ダーク"
 
 #: assets/js/app.js:3021
-#: assets/js/app.js:34393
-#: assets/js/app.js:34803
+#: assets/js/app.js:34408
+#: assets/js/app.js:34818
 msgid "Color scheme"
 msgstr "配色"
 
@@ -9330,8 +9339,8 @@ msgid "No activity yet."
 msgstr "アクティビティがありません。"
 
 #: assets/js/app.js:3446
-#: assets/js/app.js:30248
-#: assets/js/app.js:30261
+#: assets/js/app.js:30263
+#: assets/js/app.js:30276
 msgid "Pageviews"
 msgstr "ページビュー"
 
@@ -9344,7 +9353,7 @@ msgid "Patterns"
 msgstr "パターン"
 
 #: assets/js/app.js:3676
-#: assets/js/app.js:21452
+#: assets/js/app.js:21467
 msgid "Scheduled"
 msgstr "予約済み"
 
@@ -9353,17 +9362,17 @@ msgid "Trashed"
 msgstr "ゴミ箱"
 
 #: assets/js/app.js:3681
-#: assets/js/app.js:23100
-#: assets/js/app.js:30379
-#: assets/js/app.js:33975
-#: assets/js/app.js:33976
+#: assets/js/app.js:23115
+#: assets/js/app.js:30394
+#: assets/js/app.js:33990
+#: assets/js/app.js:33991
 msgid "Title"
 msgstr "タイトル"
 
 #: assets/js/app.js:3701
 #: assets/js/app.js:5039
 #: assets/js/app.js:9966
-#: assets/js/app.js:29444
+#: assets/js/app.js:29459
 msgid "Working…"
 msgstr "処理中…"
 
@@ -9463,7 +9472,7 @@ msgid "Copy public preview link"
 msgstr "公開プレビューリンクをコピー"
 
 #: assets/js/app.js:4011
-#: assets/js/app.js:24851
+#: assets/js/app.js:24866
 msgid "Duplicate"
 msgstr "複製"
 
@@ -9478,7 +9487,7 @@ msgid "Move to draft"
 msgstr "下書きに戻す"
 
 #: assets/js/app.js:4015
-#: assets/js/app.js:22532
+#: assets/js/app.js:22547
 msgid "Move to trash"
 msgstr "ゴミ箱へ移動"
 
@@ -9499,7 +9508,7 @@ msgstr "下書きに戻しました"
 #: assets/js/app.js:4041
 #: assets/js/app.js:4217
 #: assets/js/app.js:5224
-#: assets/js/app.js:22596
+#: assets/js/app.js:22611
 msgid "Moved to trash"
 msgstr "ゴミ箱に移動しました"
 
@@ -9529,8 +9538,8 @@ msgstr "完全に削除しました"
 #: assets/js/app.js:8827
 #: assets/js/app.js:10329
 #: assets/js/app.js:11815
-#: assets/js/app.js:15500
-#: assets/js/app.js:21537
+#: assets/js/app.js:15515
+#: assets/js/app.js:21552
 msgid "Clear"
 msgstr "クリア"
 
@@ -9549,11 +9558,11 @@ msgstr "ステータスを設定"
 #: assets/js/app.js:4181
 #: assets/js/app.js:8826
 #: assets/js/app.js:10328
-#: assets/js/app.js:24836
-#: assets/js/app.js:25142
-#: assets/js/app.js:25780
-#: assets/js/app.js:26989
-#: assets/js/app.js:27167
+#: assets/js/app.js:24851
+#: assets/js/app.js:25157
+#: assets/js/app.js:25795
+#: assets/js/app.js:27004
+#: assets/js/app.js:27182
 msgid "Apply"
 msgstr "適用"
 
@@ -9572,7 +9581,7 @@ msgstr "ステータスを更新しました"
 
 #: assets/js/app.js:4271
 #: assets/js/app.js:7776
-#: assets/js/app.js:25679
+#: assets/js/app.js:25694
 msgid "Images"
 msgstr "画像"
 
@@ -9595,14 +9604,14 @@ msgstr "保存する変更がありません。先に回転または切り抜き
 #: assets/js/app.js:4446
 #: assets/js/app.js:6029
 #: assets/js/app.js:8545
-#: assets/js/app.js:25822
-#: assets/js/app.js:31884
-#: assets/js/app.js:32029
-#: assets/js/app.js:32123
-#: assets/js/app.js:32195
-#: assets/js/app.js:32241
-#: assets/js/app.js:32271
-#: assets/js/app.js:32419
+#: assets/js/app.js:25837
+#: assets/js/app.js:31899
+#: assets/js/app.js:32044
+#: assets/js/app.js:32138
+#: assets/js/app.js:32210
+#: assets/js/app.js:32256
+#: assets/js/app.js:32286
+#: assets/js/app.js:32434
 msgid "Saving…"
 msgstr "保存中…"
 
@@ -9615,7 +9624,7 @@ msgid "Edited copy saved"
 msgstr "編集したコピーを保存しました"
 
 #: assets/js/app.js:4473
-#: assets/js/app.js:30319
+#: assets/js/app.js:30334
 msgid "Save as copy"
 msgstr "コピーとして保存"
 
@@ -9656,7 +9665,7 @@ msgid "Files not attached to any post or page"
 msgstr "投稿や固定ページに添付されていないファイル"
 
 #: assets/js/app.js:4587
-#: assets/js/app.js:30351
+#: assets/js/app.js:30366
 msgid "Unattached"
 msgstr "未添付"
 
@@ -9733,12 +9742,12 @@ msgid "Select"
 msgstr "選択"
 
 #: assets/js/app.js:4809
-#: assets/js/app.js:30391
+#: assets/js/app.js:30406
 msgid "Copy URL"
 msgstr "URL をコピー"
 
 #: assets/js/app.js:4810
-#: assets/js/app.js:31853
+#: assets/js/app.js:31868
 msgid "URL copied"
 msgstr "URL をコピーしました"
 
@@ -9747,19 +9756,19 @@ msgstr "URL をコピーしました"
 #: assets/js/app.js:10205
 #: assets/js/app.js:14437
 #: assets/js/app.js:14784
-#: assets/js/app.js:31855
-#: assets/js/app.js:34897
+#: assets/js/app.js:31870
+#: assets/js/app.js:34912
 msgid "Could not copy"
 msgstr "コピーできませんでした"
 
 #: assets/js/app.js:4813
-#: assets/js/app.js:16559
-#: assets/js/app.js:26991
+#: assets/js/app.js:16574
+#: assets/js/app.js:27006
 msgid "Open ↗"
 msgstr "開く ↗"
 
 #: assets/js/app.js:4814
-#: assets/js/app.js:30393
+#: assets/js/app.js:30408
 msgid "Edit image"
 msgstr "画像を編集"
 
@@ -9823,7 +9832,7 @@ msgid "Select page"
 msgstr "ページを選択"
 
 #: assets/js/app.js:5136
-#: assets/js/app.js:30349
+#: assets/js/app.js:30364
 msgid "Open in the editor"
 msgstr "エディターで開く"
 
@@ -9832,7 +9841,7 @@ msgid "View on the site (lands on this comment)"
 msgstr "サイトで表示 (このコメントの位置を開きます)"
 
 #: assets/js/app.js:5141
-#: assets/js/app.js:30494
+#: assets/js/app.js:30509
 msgid "Close"
 msgstr "閉じる"
 
@@ -9865,8 +9874,8 @@ msgstr "投稿者のメールアドレス"
 #: assets/js/app.js:5162
 #: assets/js/app.js:9710
 #: assets/js/app.js:12378
-#: assets/js/app.js:30390
-#: assets/js/app.js:30916
+#: assets/js/app.js:30405
+#: assets/js/app.js:30931
 msgid "Save"
 msgstr "保存"
 
@@ -9954,21 +9963,21 @@ msgid "Could not load analytics"
 msgstr "アナリティクスを読み込めませんでした"
 
 #: assets/js/app.js:5601
-#: assets/js/app.js:30751
-#: assets/js/app.js:34367
-#: assets/js/app.js:34744
+#: assets/js/app.js:30766
+#: assets/js/app.js:34382
+#: assets/js/app.js:34759
 msgid "First name"
 msgstr "名"
 
 #: assets/js/app.js:5602
-#: assets/js/app.js:30752
-#: assets/js/app.js:34371
-#: assets/js/app.js:34748
+#: assets/js/app.js:30767
+#: assets/js/app.js:34386
+#: assets/js/app.js:34763
 msgid "Last name"
 msgstr "姓"
 
 #: assets/js/app.js:5605
-#: assets/js/app.js:30659
+#: assets/js/app.js:30674
 msgid "Phone"
 msgstr "電話番号"
 
@@ -10002,8 +10011,8 @@ msgid "Postcode"
 msgstr "郵便番号"
 
 #: assets/js/app.js:5620
-#: assets/js/app.js:30450
-#: assets/js/app.js:30655
+#: assets/js/app.js:30465
+#: assets/js/app.js:30670
 msgid "Billing"
 msgstr "請求先"
 
@@ -10056,14 +10065,14 @@ msgstr "合計"
 #: assets/js/app.js:7901
 #: assets/js/app.js:8591
 #: assets/js/app.js:12023
-#: assets/js/app.js:16805
-#: assets/js/app.js:30607
-#: assets/js/app.js:30996
-#: assets/js/app.js:32153
-#: assets/js/app.js:34359
-#: assets/js/app.js:34383
-#: assets/js/app.js:34736
-#: assets/js/app.js:34764
+#: assets/js/app.js:16820
+#: assets/js/app.js:30622
+#: assets/js/app.js:31011
+#: assets/js/app.js:32168
+#: assets/js/app.js:34374
+#: assets/js/app.js:34398
+#: assets/js/app.js:34751
+#: assets/js/app.js:34779
 msgid "Save changes"
 msgstr "変更を保存"
 
@@ -10149,7 +10158,7 @@ msgstr "顧客に表示する"
 #: assets/js/app.js:5763
 #: assets/js/app.js:13543
 #: assets/js/app.js:13576
-#: assets/js/app.js:16975
+#: assets/js/app.js:16990
 msgid "Checking…"
 msgstr "確認中…"
 
@@ -10171,8 +10180,8 @@ msgstr "PDF Invoices & Packing slips で生成"
 
 #: assets/js/app.js:5781
 #: assets/js/app.js:7908
-#: assets/js/app.js:30493
-#: assets/js/app.js:30614
+#: assets/js/app.js:30508
+#: assets/js/app.js:30629
 msgid "Edit in WooCommerce"
 msgstr "WooCommerce で編集"
 
@@ -10256,8 +10265,8 @@ msgid "Refund deleted"
 msgstr "返金を削除しました"
 
 #: assets/js/app.js:6201
-#: assets/js/app.js:30794
-#: assets/js/app.js:31010
+#: assets/js/app.js:30809
+#: assets/js/app.js:31025
 msgid "Send email"
 msgstr "メールを送信"
 
@@ -10288,17 +10297,17 @@ msgstr "このサイトの注文にアクセスする権限がありません。
 #: assets/js/app.js:11607
 #: assets/js/app.js:11983
 #: assets/js/app.js:14885
-#: assets/js/app.js:15424
-#: assets/js/app.js:16965
-#: assets/js/app.js:21827
-#: assets/js/app.js:21869
-#: assets/js/app.js:22521
-#: assets/js/app.js:29799
-#: assets/js/app.js:30478
-#: assets/js/app.js:30899
-#: assets/js/app.js:30938
-#: assets/js/app.js:33044
-#: assets/js/app.js:33297
+#: assets/js/app.js:15434
+#: assets/js/app.js:16980
+#: assets/js/app.js:21842
+#: assets/js/app.js:21884
+#: assets/js/app.js:22536
+#: assets/js/app.js:29814
+#: assets/js/app.js:30493
+#: assets/js/app.js:30914
+#: assets/js/app.js:30953
+#: assets/js/app.js:33059
+#: assets/js/app.js:33312
 msgid "Loading…"
 msgstr "読み込み中…"
 
@@ -10369,7 +10378,7 @@ msgid "Order #%s — your order"
 msgstr "注文 #%s — ご注文"
 
 #: assets/js/app.js:6529
-#: assets/js/app.js:30740
+#: assets/js/app.js:30755
 msgid "New order"
 msgstr "新規注文"
 
@@ -10438,7 +10447,7 @@ msgid "No product sales in this range."
 msgstr "この期間の商品売上はありません。"
 
 #: assets/js/app.js:6639
-#: assets/js/app.js:30666
+#: assets/js/app.js:30681
 msgid "Loading orders…"
 msgstr "注文を読み込み中…"
 
@@ -10465,7 +10474,7 @@ msgstr "注文を検索 (ID・名前・メール…)"
 
 #: assets/js/app.js:6683
 #: assets/js/app.js:14950
-#: assets/js/app.js:30461
+#: assets/js/app.js:30476
 msgid "Items"
 msgstr "項目"
 
@@ -10560,7 +10569,7 @@ msgid "Could not load subscription"
 msgstr "サブスクリプションを読み込めませんでした"
 
 #: assets/js/app.js:6970
-#: assets/js/app.js:30681
+#: assets/js/app.js:30696
 msgid "Loading subscriptions…"
 msgstr "サブスクリプションを読み込み中…"
 
@@ -10579,7 +10588,7 @@ msgid "Subscription"
 msgstr "サブスクリプション"
 
 #: assets/js/app.js:7012
-#: assets/js/app.js:30451
+#: assets/js/app.js:30466
 msgid "Next payment"
 msgstr "次回支払い"
 
@@ -10649,7 +10658,7 @@ msgstr "%s すべて"
 #: assets/js/app.js:7742
 #: assets/js/app.js:7788
 #: assets/js/app.js:8717
-#: assets/js/app.js:30713
+#: assets/js/app.js:30728
 msgid "SKU"
 msgstr "SKU"
 
@@ -10665,7 +10674,7 @@ msgstr "価格"
 
 #: assets/js/app.js:7173
 #: assets/js/app.js:7751
-#: assets/js/app.js:30712
+#: assets/js/app.js:30727
 msgid "Regular price"
 msgstr "通常価格"
 
@@ -10717,7 +10726,7 @@ msgstr "お買い物カゴでこの商品と一緒に提案されます。"
 #: assets/js/app.js:7352
 #: assets/js/app.js:7743
 #: assets/js/app.js:14917
-#: assets/js/app.js:21826
+#: assets/js/app.js:21841
 msgid "Categories"
 msgstr "カテゴリー"
 
@@ -10726,7 +10735,7 @@ msgid "Search categories…"
 msgstr "カテゴリーを検索…"
 
 #: assets/js/app.js:7353
-#: assets/js/app.js:21833
+#: assets/js/app.js:21848
 msgid "Add a tag, press Enter"
 msgstr "タグを入力して Enter"
 
@@ -10822,7 +10831,7 @@ msgstr "価格設定"
 #: assets/js/app.js:7752
 #: assets/js/app.js:7788
 #: assets/js/app.js:7789
-#: assets/js/app.js:30713
+#: assets/js/app.js:30728
 msgid "Optional"
 msgstr "オプション"
 
@@ -10877,7 +10886,7 @@ msgid "Price and stock for this type of product are managed in WooCommerce (vari
 msgstr "このタイプの商品の価格と在庫は WooCommerce で管理されます (バリエーションまたはグループの子商品)。"
 
 #: assets/js/app.js:7779
-#: assets/js/app.js:24833
+#: assets/js/app.js:24848
 msgid "Add images…"
 msgstr "画像を追加…"
 
@@ -10898,7 +10907,7 @@ msgid "Track stock quantity"
 msgstr "在庫数を管理"
 
 #: assets/js/app.js:7795
-#: assets/js/app.js:30774
+#: assets/js/app.js:30789
 msgid "Quantity"
 msgstr "数量"
 
@@ -10919,7 +10928,7 @@ msgid "Weight"
 msgstr "重さ"
 
 #: assets/js/app.js:7810
-#: assets/js/app.js:30338
+#: assets/js/app.js:30353
 msgid "Dimensions"
 msgstr "寸法"
 
@@ -10948,7 +10957,7 @@ msgid "set-on-save"
 msgstr "set-on-save"
 
 #: assets/js/app.js:7831
-#: assets/js/app.js:21819
+#: assets/js/app.js:21834
 msgid "Changing this breaks the current URL."
 msgstr "これを変更すると現在の URL が使えなくなります。"
 
@@ -10973,8 +10982,8 @@ msgid "Download limit"
 msgstr "ダウンロード回数の上限"
 
 #: assets/js/app.js:7845
-#: assets/js/app.js:30582
-#: assets/js/app.js:30583
+#: assets/js/app.js:30597
+#: assets/js/app.js:30598
 msgid "Unlimited"
 msgstr "無制限"
 
@@ -11128,7 +11137,7 @@ msgid "No images yet. The first one you add becomes the product image."
 msgstr "まだ画像がありません。最初に追加した画像が商品画像になります。"
 
 #: assets/js/app.js:8008
-#: assets/js/app.js:24847
+#: assets/js/app.js:24862
 msgid "Click to replace this image"
 msgstr "クリックしてこの画像を置き換え"
 
@@ -11137,34 +11146,34 @@ msgid "Product image"
 msgstr "商品画像"
 
 #: assets/js/app.js:8011
-#: assets/js/app.js:24850
-#: assets/js/app.js:27170
+#: assets/js/app.js:24865
+#: assets/js/app.js:27185
 msgid "Remove image"
 msgstr "画像を削除"
 
 #: assets/js/app.js:8013
-#: assets/js/app.js:24853
+#: assets/js/app.js:24868
 msgid "Move earlier"
 msgstr "前へ移動"
 
 #: assets/js/app.js:8013
-#: assets/js/app.js:24853
+#: assets/js/app.js:24868
 msgid "Move image earlier"
 msgstr "画像を前へ移動"
 
 #: assets/js/app.js:8014
-#: assets/js/app.js:24854
+#: assets/js/app.js:24869
 msgid "Move later"
 msgstr "後ろへ移動"
 
 #: assets/js/app.js:8014
-#: assets/js/app.js:24854
+#: assets/js/app.js:24869
 msgid "Move image later"
 msgstr "画像を後ろへ移動"
 
 #: assets/js/app.js:8055
-#: assets/js/app.js:21229
-#: assets/js/app.js:22519
+#: assets/js/app.js:21244
+#: assets/js/app.js:22534
 msgid "Replace"
 msgstr "置換"
 
@@ -11172,7 +11181,7 @@ msgstr "置換"
 #: assets/js/app.js:11660
 #: assets/js/app.js:12406
 #: assets/js/app.js:12723
-#: assets/js/app.js:25200
+#: assets/js/app.js:25215
 msgid "Add"
 msgstr "追加"
 
@@ -11213,14 +11222,14 @@ msgid "Remove attribute"
 msgstr "属性を削除"
 
 #: assets/js/app.js:8179
-#: assets/js/app.js:30768
+#: assets/js/app.js:30783
 msgid "Search products…"
 msgstr "商品を検索…"
 
 #: assets/js/app.js:8223
 #: assets/js/app.js:8311
 #: assets/js/app.js:9828
-#: assets/js/app.js:16284
+#: assets/js/app.js:16299
 msgid "No matches"
 msgstr "一致するものがありません"
 
@@ -11229,7 +11238,7 @@ msgid "No matches. Press Enter to create it."
 msgstr "一致するものがありません。Enter で新規作成できます。"
 
 #: assets/js/app.js:8540
-#: assets/js/app.js:31644
+#: assets/js/app.js:31659
 msgid "Name is required"
 msgstr "名前は必須です"
 
@@ -11242,7 +11251,7 @@ msgid "You don't have access to products on this site."
 msgstr "このサイトの商品にアクセスする権限がありません。"
 
 #: assets/js/app.js:8625
-#: assets/js/app.js:30520
+#: assets/js/app.js:30535
 msgid "Loading product…"
 msgstr "商品を読み込み中…"
 
@@ -11298,7 +11307,7 @@ msgid "Open product"
 msgstr "商品を開く"
 
 #: assets/js/app.js:8929
-#: assets/js/app.js:22510
+#: assets/js/app.js:22525
 msgid "View on site ↗"
 msgstr "サイトで表示 ↗"
 
@@ -11359,13 +11368,13 @@ msgid "Search coupons (code, ID…)"
 msgstr "クーポンを検索 (コード・ID…)"
 
 #: assets/js/app.js:9107
-#: assets/js/app.js:30561
-#: assets/js/app.js:30573
+#: assets/js/app.js:30576
+#: assets/js/app.js:30588
 msgid "Amount"
 msgstr "金額"
 
 #: assets/js/app.js:9107
-#: assets/js/app.js:30600
+#: assets/js/app.js:30615
 msgid "Usage"
 msgstr "利用状況"
 
@@ -11419,7 +11428,7 @@ msgid "Post Types"
 msgstr "投稿タイプ"
 
 #: assets/js/app.js:9467
-#: assets/js/app.js:31273
+#: assets/js/app.js:31288
 msgid "Taxonomies"
 msgstr "タクソノミー"
 
@@ -11471,7 +11480,7 @@ msgid "Delete %s…"
 msgstr "%s を削除…"
 
 #: assets/js/app.js:9694
-#: assets/js/app.js:21867
+#: assets/js/app.js:21882
 msgid "Parent"
 msgstr "親"
 
@@ -11491,8 +11500,8 @@ msgstr "%sを追加"
 
 #. translators: %s: the new term's name.
 #: assets/js/app.js:9746
-#: assets/js/app.js:22495
-#: assets/js/app.js:33977
+#: assets/js/app.js:22510
+#: assets/js/app.js:33992
 msgid "Saved"
 msgstr "保存しました"
 
@@ -11617,7 +11626,7 @@ msgstr[0] "%1$s 人のユーザーを %2$s に設定"
 
 #: assets/js/app.js:9996
 #: assets/js/app.js:10039
-#: assets/js/app.js:31127
+#: assets/js/app.js:31142
 msgid "Search users…"
 msgstr "ユーザーを検索…"
 
@@ -11627,7 +11636,7 @@ msgid "Session filter"
 msgstr "セッションの絞り込み"
 
 #: assets/js/app.js:10004
-#: assets/js/app.js:31125
+#: assets/js/app.js:31140
 msgid "Loading users…"
 msgstr "ユーザーを読み込み中…"
 
@@ -11637,7 +11646,7 @@ msgid "All roles"
 msgstr "すべての権限グループ"
 
 #: assets/js/app.js:10041
-#: assets/js/app.js:30945
+#: assets/js/app.js:30960
 msgid "Add user"
 msgstr "ユーザーを追加"
 
@@ -11646,7 +11655,7 @@ msgid "Attach an account that already exists on this network"
 msgstr "このサイトネットワークに既存のアカウントを追加します"
 
 #: assets/js/app.js:10042
-#: assets/js/app.js:31079
+#: assets/js/app.js:31094
 msgid "Add existing user"
 msgstr "既存のユーザーを追加"
 
@@ -11863,12 +11872,12 @@ msgid "Copy command"
 msgstr "コマンドをコピー"
 
 #: assets/js/app.js:10826
-#: assets/js/app.js:32239
+#: assets/js/app.js:32254
 msgid "Fill in all fields first"
 msgstr "先にすべての項目を入力してください"
 
 #: assets/js/app.js:10850
-#: assets/js/app.js:15888
+#: assets/js/app.js:15903
 msgid "Command copied"
 msgstr "コマンドをコピーしました"
 
@@ -11948,7 +11957,7 @@ msgid_plural "%s advanced settings"
 msgstr[0] "高度な設定 %s 件"
 
 #: assets/js/app.js:12017
-#: assets/js/app.js:21735
+#: assets/js/app.js:21750
 msgid "edit in wp-admin ↗"
 msgstr "wp-admin で編集 ↗"
 
@@ -11965,7 +11974,7 @@ msgid "Nothing changed yet"
 msgstr "まだ変更はありません"
 
 #: assets/js/app.js:12077
-#: assets/js/app.js:17300
+#: assets/js/app.js:17315
 msgid "Settings saved"
 msgstr "設定を保存しました。"
 
@@ -12003,7 +12012,7 @@ msgid "— none —"
 msgstr "— なし —"
 
 #: assets/js/app.js:12376
-#: assets/js/app.js:18439
+#: assets/js/app.js:18454
 msgid "Label"
 msgstr "ラベル"
 
@@ -12014,17 +12023,17 @@ msgstr "ドラッグで並べ替え"
 
 #: assets/js/app.js:12390
 #: assets/js/app.js:12734
-#: assets/js/app.js:25181
-#: assets/js/app.js:25732
-#: assets/js/app.js:25783
+#: assets/js/app.js:25196
+#: assets/js/app.js:25747
+#: assets/js/app.js:25798
 msgid "Move up"
 msgstr "上に移動"
 
 #: assets/js/app.js:12391
 #: assets/js/app.js:12735
-#: assets/js/app.js:25182
-#: assets/js/app.js:25733
-#: assets/js/app.js:25784
+#: assets/js/app.js:25197
+#: assets/js/app.js:25748
+#: assets/js/app.js:25799
 msgid "Move down"
 msgstr "下に移動"
 
@@ -12198,7 +12207,7 @@ msgid "Could not load connectors"
 msgstr "コネクタを読み込めませんでした"
 
 #: assets/js/app.js:13013
-#: assets/js/app.js:29677
+#: assets/js/app.js:29692
 msgid "Updating…"
 msgstr "更新中…"
 
@@ -12212,7 +12221,7 @@ msgstr "待機中…"
 #: assets/js/app.js:14618
 #: assets/js/app.js:14635
 #: assets/js/app.js:14750
-#: assets/js/app.js:29638
+#: assets/js/app.js:29653
 msgid "Update → %s"
 msgstr "更新 → %s"
 
@@ -12220,9 +12229,9 @@ msgstr "更新 → %s"
 #: assets/js/app.js:13038
 #: assets/js/app.js:14229
 #: assets/js/app.js:14238
-#: assets/js/app.js:29631
-#: assets/js/app.js:29638
-#: assets/js/app.js:29644
+#: assets/js/app.js:29646
+#: assets/js/app.js:29653
+#: assets/js/app.js:29659
 msgid "Update"
 msgstr "更新"
 
@@ -12239,14 +12248,14 @@ msgstr "待機中 — 更新は1件ずつ実行されます"
 #. translators: %s: the version on offer.
 #: assets/js/app.js:13038
 #: assets/js/app.js:14229
-#: assets/js/app.js:29642
+#: assets/js/app.js:29657
 msgid "Update to %s"
 msgstr "%s に更新"
 
 #. translators: %s: number of plugins.
 #: assets/js/app.js:13052
 #: assets/js/app.js:14200
-#: assets/js/app.js:29538
+#: assets/js/app.js:29553
 msgid "Updating %s plugin…"
 msgid_plural "Updating %s plugins…"
 msgstr[0] "プラグイン %s 件を更新中…"
@@ -12256,14 +12265,14 @@ msgstr[0] "プラグイン %s 件を更新中…"
 #: assets/js/app.js:13174
 #: assets/js/app.js:13188
 #: assets/js/app.js:14707
-#: assets/js/app.js:29688
+#: assets/js/app.js:29703
 msgid "%1$s updated to v%2$s"
 msgstr "%1$s を v%2$s に更新しました"
 
 #: assets/js/app.js:13174
 #: assets/js/app.js:13188
 #: assets/js/app.js:14707
-#: assets/js/app.js:29688
+#: assets/js/app.js:29703
 msgid "%s updated"
 msgstr "%s を更新しました"
 
@@ -12286,11 +12295,15 @@ msgid "Updated, but the plugin list could not refresh yet. Reload if badges look
 msgstr "更新しましたが、プラグイン一覧をまだ再取得できていません。表示が古い場合は再読み込みしてください。"
 
 #: assets/js/app.js:13235
-#: assets/js/app.js:31181
+#: assets/js/app.js:15162
+#: assets/js/app.js:15164
+#: assets/js/app.js:31196
 msgid "Plugins"
 msgstr "プラグイン"
 
 #: assets/js/app.js:13236
+#: assets/js/app.js:15162
+#: assets/js/app.js:15166
 msgid "Themes"
 msgstr "テーマ"
 
@@ -12392,6 +12405,7 @@ msgid "More actions"
 msgstr "その他の操作"
 
 #: assets/js/app.js:13416
+#: assets/js/app.js:15207
 msgid "Needs attention"
 msgstr "要対応"
 
@@ -12438,9 +12452,9 @@ msgid "Could not check for updates"
 msgstr "更新を確認できませんでした"
 
 #: assets/js/app.js:13576
-#: assets/js/app.js:32758
-#: assets/js/app.js:33180
-#: assets/js/app.js:33317
+#: assets/js/app.js:32773
+#: assets/js/app.js:33195
+#: assets/js/app.js:33332
 msgid "Activating…"
 msgstr "有効化中…"
 
@@ -12520,12 +12534,12 @@ msgid "Not indexed"
 msgstr "インデックスなし"
 
 #: assets/js/app.js:13871
-#: assets/js/app.js:16566
+#: assets/js/app.js:16581
 msgid "Maintenance mode"
 msgstr "メンテナンスモード"
 
 #: assets/js/app.js:13879
-#: assets/js/app.js:16565
+#: assets/js/app.js:16580
 msgid "Search engine visibility"
 msgstr "検索エンジンでの表示"
 
@@ -12569,7 +12583,7 @@ msgid "Site hidden from the public"
 msgstr "サイトは一般公開されていません"
 
 #: assets/js/app.js:13956
-#: assets/js/app.js:16556
+#: assets/js/app.js:16571
 msgid "Visitors see a maintenance or coming-soon page."
 msgstr "訪問者にはメンテナンスまたは近日公開のページが表示されます。"
 
@@ -12615,20 +12629,20 @@ msgid "Still updating after 5 minutes. Give it a moment, then check Extensions."
 msgstr "5分経ってもまだ更新中です。しばらく待ってから拡張機能を確認してください。"
 
 #: assets/js/app.js:14106
-#: assets/js/app.js:29589
-#: assets/js/app.js:29697
+#: assets/js/app.js:29604
+#: assets/js/app.js:29712
 msgid "Updating WordPress…"
 msgstr "WordPress を更新中…"
 
 #. translators: %s: the new WordPress version.
 #: assets/js/app.js:14110
-#: assets/js/app.js:29703
+#: assets/js/app.js:29718
 msgid "WordPress updated to %s"
 msgstr "WordPress を %s に更新しました"
 
 #: assets/js/app.js:14178
 #: assets/js/app.js:14583
-#: assets/js/app.js:29745
+#: assets/js/app.js:29760
 msgid "Updates"
 msgstr "更新"
 
@@ -12659,7 +12673,7 @@ msgstr "WordPress.org とライセンス提供元に最新の状態を再確認�
 
 #: assets/js/app.js:14196
 #: assets/js/app.js:14590
-#: assets/js/app.js:29996
+#: assets/js/app.js:30011
 msgid "Check for updates"
 msgstr "更新を確認"
 
@@ -12672,8 +12686,8 @@ msgid "Update every plugin with a pending offer"
 msgstr "更新が提供されているすべてのプラグインを更新"
 
 #: assets/js/app.js:14201
-#: assets/js/app.js:29522
-#: assets/js/app.js:29795
+#: assets/js/app.js:29537
+#: assets/js/app.js:29810
 msgid "Update everything"
 msgstr "すべて更新"
 
@@ -12682,7 +12696,7 @@ msgid "Search plugins…"
 msgstr "プラグインの検索…"
 
 #: assets/js/app.js:14208
-#: assets/js/app.js:31461
+#: assets/js/app.js:31476
 msgid "Add plugin"
 msgstr "プラグインを追加"
 
@@ -12718,8 +12732,8 @@ msgstr "%s を無効化中…"
 
 #. translators: %s: the plugin's name.
 #: assets/js/app.js:14289
-#: assets/js/app.js:33189
-#: assets/js/app.js:33324
+#: assets/js/app.js:33204
+#: assets/js/app.js:33339
 msgid "%s activated"
 msgstr "%s を有効化しました"
 
@@ -12818,7 +12832,7 @@ msgid "Search themes…"
 msgstr "テーマを検索…"
 
 #: assets/js/app.js:14594
-#: assets/js/app.js:31490
+#: assets/js/app.js:31505
 msgid "Add theme"
 msgstr "テーマを追加"
 
@@ -12831,7 +12845,9 @@ msgid "%s theme page"
 msgstr "%s テーマのページ"
 
 #. translators: %s: the parent theme's name.
+#. translators: %s: parent theme name.
 #: assets/js/app.js:14631
+#: assets/js/app.js:15146
 msgid "child of %s"
 msgstr "%s の子テーマ"
 
@@ -12875,14 +12891,14 @@ msgstr "テーマを削除"
 
 #. translators: %s: the theme's name.
 #: assets/js/app.js:14699
-#: assets/js/app.js:29676
+#: assets/js/app.js:29691
 msgid "Updating %s…"
 msgstr "%s を更新中…"
 
 #. translators: 1: the theme's name. 2: the new version.
 #. translators: %s: the theme's name.
 #: assets/js/app.js:14707
-#: assets/js/app.js:32763
+#: assets/js/app.js:32778
 msgid "%s is now the active theme"
 msgstr "%s が有効なテーマになりました"
 
@@ -12915,18 +12931,18 @@ msgid "CPT UI"
 msgstr "CPT UI"
 
 #: assets/js/app.js:14867
-#: assets/js/app.js:22515
+#: assets/js/app.js:22530
 msgid "Featured image"
 msgstr "アイキャッチ画像"
 
 #: assets/js/app.js:14869
-#: assets/js/app.js:21988
-#: assets/js/app.js:22526
+#: assets/js/app.js:22003
+#: assets/js/app.js:22541
 msgid "Page attributes"
 msgstr "ページ属性"
 
 #: assets/js/app.js:14906
-#: assets/js/app.js:30346
+#: assets/js/app.js:30361
 msgid "Attached to"
 msgstr "添付先"
 
@@ -12946,7 +12962,7 @@ msgid_plural "%s post types"
 msgstr[0] "投稿タイプ %s 件"
 
 #: assets/js/app.js:14946
-#: assets/js/app.js:31249
+#: assets/js/app.js:31264
 msgid "Add post type"
 msgstr "投稿タイプを追加"
 
@@ -12990,4346 +13006,4358 @@ msgstr "このテーブルを閲覧専用のデータベースビューアーで
 msgid "View every autoloaded option"
 msgstr "autoload されるすべてのオプションを表示"
 
-#: assets/js/app.js:15090
+#: assets/js/app.js:15095
 msgid "view all ›"
 msgstr "すべて表示 ›"
 
-#: assets/js/app.js:15106
+#: assets/js/app.js:15111
 msgid "Debug tools"
 msgstr "デバッグツール"
 
-#: assets/js/app.js:15107
+#: assets/js/app.js:15112
 msgid "writes wp-config.php"
 msgstr "wp-config.php に書き込みます"
 
-#: assets/js/app.js:15118
+#: assets/js/app.js:15123
 msgid "defined elsewhere"
 msgstr "別の場所で定義済み"
 
 #. translators: %s: setting label.
-#: assets/js/app.js:15119
+#: assets/js/app.js:15124
 msgid "Toggle %s"
 msgstr "%sを切り替え"
 
-#: assets/js/app.js:15127
+#: assets/js/app.js:15132
 msgid "View log →"
 msgstr "ログを表示 →"
 
-#: assets/js/app.js:15133
+#: assets/js/app.js:15137
+#: assets/js/app.js:15508
+msgid "Log source"
+msgstr "ログのソース"
+
+#: assets/js/app.js:15138
 msgid "Browse →"
 msgstr "表示 →"
 
-#: assets/js/app.js:15196
-#: assets/js/app.js:15225
+#: assets/js/app.js:15206
+#: assets/js/app.js:15235
 msgid "Integrations"
 msgstr "連携"
 
-#: assets/js/app.js:15200
+#: assets/js/app.js:15207
+#: assets/js/app.js:15209
+msgid "Surfaces"
+msgstr "画面"
+
+#: assets/js/app.js:15207
+#: assets/js/app.js:15210
 msgid "Editor panels"
 msgstr "エディターパネル"
 
-#: assets/js/app.js:15201
+#: assets/js/app.js:15207
+#: assets/js/app.js:15211
 msgid "Design sources"
 msgstr "デザインのソース"
 
-#: assets/js/app.js:15202
+#: assets/js/app.js:15212
 msgid "Cache purgers"
 msgstr "キャッシュ削除"
 
-#: assets/js/app.js:15203
+#: assets/js/app.js:15213
 msgid "Spam filters"
 msgstr "スパムフィルター"
 
-#: assets/js/app.js:15204
+#: assets/js/app.js:15214
 msgid "License readers"
 msgstr "ライセンス読み取り"
 
-#: assets/js/app.js:15205
+#: assets/js/app.js:15215
 msgid "Page builders"
 msgstr "ページビルダー"
 
-#: assets/js/app.js:15206
+#: assets/js/app.js:15216
 msgid "Block inspector forms"
 msgstr "ブロック設定フォーム"
 
-#: assets/js/app.js:15207
+#: assets/js/app.js:15216
+#: assets/js/app.js:32976
+msgid "Blocks"
+msgstr "ブロック"
+
+#: assets/js/app.js:15217
 msgid "Hook listeners"
 msgstr "フックのリスナー"
 
 #. translators: %s: number of failing checks.
-#: assets/js/app.js:15213
+#: assets/js/app.js:15223
 msgid "%s failing"
 msgstr "失敗: %s"
 
 #. translators: %s: number of checks to review.
-#: assets/js/app.js:15214
+#: assets/js/app.js:15224
 msgid "%s to review"
 msgstr "要確認: %s"
 
 #. translators: %s: number of healthy checks.
-#: assets/js/app.js:15215
+#: assets/js/app.js:15225
 msgid "%s healthy"
 msgstr "正常: %s"
 
-#: assets/js/app.js:15217
+#: assets/js/app.js:15227
 msgid "Copy report"
 msgstr "レポートをコピー"
 
-#: assets/js/app.js:15221
-#: assets/js/app.js:15622
+#: assets/js/app.js:15231
+#: assets/js/app.js:15637
 msgid "Health"
 msgstr "正常性"
 
-#: assets/js/app.js:15222
+#: assets/js/app.js:15232
 msgid "Debug"
 msgstr "デバッグ"
 
-#: assets/js/app.js:15255
+#: assets/js/app.js:15265
 msgid "View the full list"
 msgstr "一覧をすべて表示"
 
-#: assets/js/app.js:15255
+#: assets/js/app.js:15265
 msgid "Open in wp-admin"
 msgstr "wp-admin で開く"
 
-#: assets/js/app.js:15271
+#: assets/js/app.js:15281
 msgid "one-shot jobs, in wp-admin"
 msgstr "wp-admin での単発ジョブ"
 
-#: assets/js/app.js:15275
+#: assets/js/app.js:15285
 msgid "Site Health"
 msgstr "サイトヘルス"
 
-#: assets/js/app.js:15275
+#: assets/js/app.js:15285
 msgid "Core's full test suite and status"
 msgstr "コアのテスト一式と状態"
 
-#: assets/js/app.js:15276
+#: assets/js/app.js:15286
 msgid "Export content"
 msgstr "コンテンツをエクスポート"
 
-#: assets/js/app.js:15276
+#: assets/js/app.js:15286
 msgid "Download a WXR of posts, pages and media"
 msgstr "投稿・固定ページ・メディアの WXR をダウンロード"
 
-#: assets/js/app.js:15277
+#: assets/js/app.js:15287
 msgid "Import content"
 msgstr "コンテンツをインポート"
 
-#: assets/js/app.js:15277
+#: assets/js/app.js:15287
 msgid "Bring content in from another site"
 msgstr "他のサイトからコンテンツを取り込む"
 
-#: assets/js/app.js:15278
+#: assets/js/app.js:15288
 msgid "Export personal data"
 msgstr "個人データのエクスポート"
 
-#: assets/js/app.js:15278
+#: assets/js/app.js:15288
 msgid "Answer a GDPR data request"
 msgstr "GDPR のデータ開示請求に対応"
 
-#: assets/js/app.js:15279
+#: assets/js/app.js:15289
 msgid "Erase personal data"
 msgstr "個人データを消去"
 
-#: assets/js/app.js:15279
+#: assets/js/app.js:15289
 msgid "Handle a GDPR erasure request"
 msgstr "GDPR の消去請求に対応"
 
 #. translators: %s: how long ago the report was generated, e.g. "2 minutes ago".
-#: assets/js/app.js:15290
+#: assets/js/app.js:15300
+#, minn-reviewed
 msgid "Generated %s"
-msgstr "%sに生成"
+msgstr "生成: %s"
 
 #. translators: %s: the configuration constant's name.
-#: assets/js/app.js:15336
+#: assets/js/app.js:15346
 msgid "%s enabled — applies on the next page load"
 msgstr "%s を有効にしました — 次回のページ読み込みで適用されます"
 
-#: assets/js/app.js:15336
+#: assets/js/app.js:15346
 msgid "%s disabled — applies on the next page load"
 msgstr "%s を無効にしました — 次回のページ読み込みで適用されます"
 
-#: assets/js/app.js:15392
-#: assets/js/app.js:15399
+#: assets/js/app.js:15402
+#: assets/js/app.js:15409
 msgid "System report copied"
 msgstr "システムレポートをコピーしました"
 
-#: assets/js/app.js:15399
-#: assets/js/app.js:15573
-#: assets/js/app.js:15890
-#: assets/js/app.js:31608
+#: assets/js/app.js:15409
+#: assets/js/app.js:15588
+#: assets/js/app.js:15905
+#: assets/js/app.js:31623
 msgid "Copy failed"
 msgstr "コピーに失敗しました"
 
-#: assets/js/app.js:15429
+#: assets/js/app.js:15444
 msgid "Option"
 msgstr "オプション"
 
-#: assets/js/app.js:15429
+#: assets/js/app.js:15444
+#, minn-reviewed
 msgid "Autoload"
-msgstr "autoload"
+msgstr "自動読み込み"
 
-#: assets/js/app.js:15441
-msgid "Recurrence"
-msgstr "繰り返し"
-
-#: assets/js/app.js:15454
-msgid "Autoloaded options"
-msgstr "自動読み込みオプション"
-
-#: assets/js/app.js:15454
+#: assets/js/app.js:15455
+#: assets/js/app.js:15469
 msgid "Scheduled cron events"
 msgstr "予約済みの cron イベント"
 
-#: assets/js/app.js:15493
-msgid "Log source"
-msgstr "ログのソース"
+#: assets/js/app.js:15456
+msgid "Recurrence"
+msgstr "繰り返し"
 
-#: assets/js/app.js:15497
-#: assets/js/app.js:15836
+#: assets/js/app.js:15469
+msgid "Autoloaded options"
+msgstr "自動読み込みオプション"
+
+#: assets/js/app.js:15512
+#: assets/js/app.js:15851
 msgid "Refresh"
 msgstr "再読み込み"
 
-#: assets/js/app.js:15498
+#: assets/js/app.js:15513
 msgid "Copy all"
 msgstr "すべてコピー"
 
-#: assets/js/app.js:15499
+#: assets/js/app.js:15514
 msgid "Collapse repeated lines (digits ignored)"
 msgstr "繰り返し行をまとめる (数字は無視)"
 
-#: assets/js/app.js:15504
-#: assets/js/app.js:15532
+#: assets/js/app.js:15519
+#: assets/js/app.js:15547
 msgid "Reading log…"
 msgstr "ログを読み込み中…"
 
-#: assets/js/app.js:15522
+#: assets/js/app.js:15537
 msgid "The log is empty."
 msgstr "ログは空です。"
 
-#: assets/js/app.js:15538
+#: assets/js/app.js:15553
 msgid "empty"
 msgstr "空"
 
-#: assets/js/app.js:15539
+#: assets/js/app.js:15554
 msgid "showing last 256 KB"
 msgstr "末尾 256 KB を表示"
 
 #. translators: %s: the error message returned while reading the log.
-#: assets/js/app.js:15546
+#: assets/js/app.js:15561
 msgid "Couldn’t read the log: %s"
 msgstr "ログを読み込めませんでした: %s"
 
-#: assets/js/app.js:15573
+#: assets/js/app.js:15588
 msgid "Log copied"
 msgstr "ログをコピーしました"
 
-#: assets/js/app.js:15583
+#: assets/js/app.js:15598
 msgid "Empty this log?"
 msgstr "このログを空にしますか ?"
 
-#: assets/js/app.js:15583
+#: assets/js/app.js:15598
 msgid "Its entries are deleted from the server. There is no undo for this."
 msgstr "ログの内容がサーバーから削除されます。この操作は元に戻せません。"
 
-#: assets/js/app.js:15583
+#: assets/js/app.js:15598
 msgid "Empty log"
 msgstr "ログを空にする"
 
-#: assets/js/app.js:15587
+#: assets/js/app.js:15602
 msgid "Log cleared"
 msgstr "ログをクリアしました"
 
 #. translators: %s: human-readable byte size of a binary database value.
-#: assets/js/app.js:15667
+#: assets/js/app.js:15682
 msgid "(%s binary)"
 msgstr "(バイナリ %s)"
 
-#: assets/js/app.js:15706
+#: assets/js/app.js:15721
 msgid "Rows"
 msgstr "行"
 
-#: assets/js/app.js:15724
+#: assets/js/app.js:15739
 msgid "You need administrator permissions to view the database."
 msgstr "データベースを表示するには管理者権限が必要です。"
 
-#: assets/js/app.js:15734
+#: assets/js/app.js:15749
 msgid "Loading tables…"
 msgstr "テーブルを読み込み中…"
 
-#: assets/js/app.js:15741
+#: assets/js/app.js:15756
 msgid "Search tables…"
 msgstr "テーブルを検索…"
 
 #. translators: 1: number of database tables, 2: total size (e.g. "97.8 MB").
-#: assets/js/app.js:15744
+#: assets/js/app.js:15759
 msgid "%1$s tables · %2$s"
 msgstr "%1$s テーブル · %2$s"
 
 #. translators: %d: how many tables use a different table prefix.
-#: assets/js/app.js:15747
+#: assets/js/app.js:15762
 msgid "Hide %d other-prefix tables"
 msgstr "他のプレフィックスのテーブル %d 件を非表示"
 
 #. translators: %d: how many tables use a different table prefix.
-#: assets/js/app.js:15748
+#: assets/js/app.js:15763
 msgid "Show %d other-prefix tables"
 msgstr "他のプレフィックスのテーブル %d 件を表示"
 
-#: assets/js/app.js:15749
-#: assets/js/app.js:15837
-#: assets/js/app.js:15921
-#: assets/js/app.js:16023
+#: assets/js/app.js:15764
+#: assets/js/app.js:15852
+#: assets/js/app.js:15936
+#: assets/js/app.js:16038
 msgid "Read-only by design"
 msgstr "仕様により閲覧専用"
 
-#: assets/js/app.js:15765
-#: assets/js/app.js:26596
+#: assets/js/app.js:15780
+#: assets/js/app.js:26611
 msgid "Table"
 msgstr "テーブル"
 
-#: assets/js/app.js:15766
+#: assets/js/app.js:15781
 msgid "Rows (est.)"
 msgstr "行数 (概算)"
 
-#: assets/js/app.js:15777
+#: assets/js/app.js:15792
 msgid "No tables match."
 msgstr "一致するテーブルがありません。"
 
 #. translators: %s: how many health checks need attention.
-#: assets/js/app.js:15829
+#: assets/js/app.js:15844
 msgid "%s check needs attention"
 msgid_plural "%s checks need attention"
 msgstr[0] "%s 件のチェックに対応が必要"
 
-#: assets/js/app.js:15830
+#: assets/js/app.js:15845
 msgid "Everything looks healthy"
 msgstr "すべて正常です"
 
-#: assets/js/app.js:15840
+#: assets/js/app.js:15855
 msgid "Running checks…"
 msgstr "チェックを実行中…"
 
-#: assets/js/app.js:15904
+#: assets/js/app.js:15919
 msgid "Loading rows…"
 msgstr "行を読み込み中…"
 
 #. translators: 1: row count, 2: table size, 3: storage engine.
-#: assets/js/app.js:15920
+#: assets/js/app.js:15935
 msgid "%1$s rows · %2$s · %3$s"
 msgstr "%1$s 行 · %2$s · %3$s"
 
-#: assets/js/app.js:15924
+#: assets/js/app.js:15939
 msgid "Filter column"
 msgstr "絞り込むカラム"
 
-#: assets/js/app.js:15927
+#: assets/js/app.js:15942
 msgid "Contains…"
 msgstr "次を含む…"
 
-#: assets/js/app.js:15928
+#: assets/js/app.js:15943
 msgid "Clear filter"
 msgstr "絞り込みをクリア"
 
 #. translators: %s: number of rows browsable per ordering (e.g. "10,000").
-#: assets/js/app.js:15931
+#: assets/js/app.js:15946
 msgid "Browsing the first %s rows of this order; filter to reach the rest."
 msgstr "この並び順の先頭 %s 行を表示しています。残りは絞り込みで確認してください。"
 
-#: assets/js/app.js:15937
-#: assets/js/app.js:16037
+#: assets/js/app.js:15952
+#: assets/js/app.js:16052
 msgid "PK"
 msgstr "PK"
 
-#: assets/js/app.js:15945
+#: assets/js/app.js:15960
 msgid "No rows match this filter."
 msgstr "この条件に一致する行はありません。"
 
-#: assets/js/app.js:15945
+#: assets/js/app.js:15960
 msgid "This table is empty."
 msgstr "このテーブルは空です。"
 
-#: assets/js/app.js:16000
+#: assets/js/app.js:16015
 msgid "Loading structure…"
 msgstr "構造を読み込み中…"
 
 #. translators: %s: estimated row count.
-#: assets/js/app.js:16007
+#: assets/js/app.js:16022
 msgid "~%s rows"
 msgstr "約 %s 行"
 
 #. translators: %s: reclaimable space inside the table file (e.g. "2.4 MB").
-#: assets/js/app.js:16012
+#: assets/js/app.js:16027
 msgid "%s free"
 msgstr "空き %s"
 
 #. translators: %s: the next AUTO_INCREMENT value for this table.
-#: assets/js/app.js:16016
+#: assets/js/app.js:16031
 msgid "next id %s"
 msgstr "次の ID %s"
 
-#: assets/js/app.js:16025
-#: assets/js/app.js:16051
+#: assets/js/app.js:16040
+#: assets/js/app.js:16066
 msgid "Columns"
 msgstr "カラム"
 
-#: assets/js/app.js:16028
-#: assets/js/app.js:26570
-#: assets/js/app.js:29170
+#: assets/js/app.js:16043
+#: assets/js/app.js:26585
+#: assets/js/app.js:29185
 msgid "Column"
 msgstr "カラム"
 
-#: assets/js/app.js:16030
+#: assets/js/app.js:16045
 msgid "Null"
 msgstr "Null"
 
-#: assets/js/app.js:16031
+#: assets/js/app.js:16046
 msgid "Default"
 msgstr "デフォルト"
 
-#: assets/js/app.js:16032
+#: assets/js/app.js:16047
 msgid "Extra"
 msgstr "その他"
 
-#: assets/js/app.js:16046
+#: assets/js/app.js:16061
 msgid "Indexes"
 msgstr "インデックス"
 
-#: assets/js/app.js:16050
+#: assets/js/app.js:16065
 msgid "Index"
 msgstr "インデックス"
 
-#: assets/js/app.js:16052
+#: assets/js/app.js:16067
 msgid "Unique"
 msgstr "一意"
 
-#: assets/js/app.js:16054
+#: assets/js/app.js:16069
 msgid "Cardinality"
 msgstr "カーディナリティ"
 
-#: assets/js/app.js:16064
+#: assets/js/app.js:16079
 msgid "This table has no indexes."
 msgstr "このテーブルにインデックスはありません。"
 
-#: assets/js/app.js:16125
-#: assets/js/app.js:22381
+#: assets/js/app.js:16140
+#: assets/js/app.js:22396
 msgid "Copy"
 msgstr "コピー"
 
 #. translators: 1: shown byte size, 2: total byte size of the value.
-#: assets/js/app.js:16130
+#: assets/js/app.js:16145
 msgid "Showing the first %1$s of %2$s."
 msgstr "全 %2$s のうち先頭 %1$s を表示しています。"
 
-#: assets/js/app.js:16160
+#: assets/js/app.js:16175
 msgid "Day and name"
 msgstr "日付と投稿名"
 
-#: assets/js/app.js:16161
+#: assets/js/app.js:16176
 msgid "Month and name"
 msgstr "月と投稿名"
 
-#: assets/js/app.js:16162
+#: assets/js/app.js:16177
 msgid "Numeric"
 msgstr "数字ベース"
 
-#: assets/js/app.js:16163
+#: assets/js/app.js:16178
 msgid "Post name"
 msgstr "投稿名"
 
-#: assets/js/app.js:16456
+#: assets/js/app.js:16471
 msgid "— Select —"
 msgstr "— 選択 —"
 
-#: assets/js/app.js:16458
+#: assets/js/app.js:16473
 msgid "Sunday"
 msgstr "日曜日"
 
-#: assets/js/app.js:16458
+#: assets/js/app.js:16473
 msgid "Monday"
 msgstr "月曜日"
 
-#: assets/js/app.js:16458
+#: assets/js/app.js:16473
 msgid "Tuesday"
 msgstr "火曜日"
 
-#: assets/js/app.js:16458
+#: assets/js/app.js:16473
 msgid "Wednesday"
 msgstr "水曜日"
 
-#: assets/js/app.js:16458
+#: assets/js/app.js:16473
 msgid "Thursday"
 msgstr "木曜日"
 
-#: assets/js/app.js:16458
+#: assets/js/app.js:16473
 msgid "Friday"
 msgstr "金曜日"
 
-#: assets/js/app.js:16458
+#: assets/js/app.js:16473
 msgid "Saturday"
 msgstr "土曜日"
 
-#: assets/js/app.js:16472
-#: assets/js/app.js:16474
+#: assets/js/app.js:16487
+#: assets/js/app.js:16489
 msgid "Site icon"
 msgstr "サイトアイコン"
 
-#: assets/js/app.js:16477
+#: assets/js/app.js:16492
 msgid "Shown in browser tabs, bookmarks and app icons. Square image, 512×512 or larger. Drag & drop an image here, or"
 msgstr "ブラウザーのタブ・ブックマーク・アプリのアイコンに表示されます。正方形で 512×512 以上の画像。ここに画像をドラッグ & ドロップするか、"
 
-#: assets/js/app.js:16479
-#: assets/js/app.js:16498
+#: assets/js/app.js:16494
+#: assets/js/app.js:16513
 msgid "Choose image"
 msgstr "画像を選択"
 
-#: assets/js/app.js:16491
-#: assets/js/app.js:16493
+#: assets/js/app.js:16506
+#: assets/js/app.js:16508
 msgid "Site logo"
 msgstr "サイトロゴ。"
 
-#: assets/js/app.js:16496
+#: assets/js/app.js:16511
 msgid "Shown by the theme where its design places a logo. Drag & drop an image here, or"
 msgstr "テーマのデザインでロゴが配置される位置に表示されます。ここに画像をドラッグ & ドロップするか、"
 
-#: assets/js/app.js:16508
+#: assets/js/app.js:16523
 msgid "Your site’s identity, locale and admin."
 msgstr "サイトの基本情報・地域設定・管理者。"
 
-#: assets/js/app.js:16510
+#: assets/js/app.js:16525
 msgid "Tagline"
 msgstr "キャッチフレーズ"
 
-#: assets/js/app.js:16513
+#: assets/js/app.js:16528
 msgid "Site address"
 msgstr "サイトアドレス"
 
-#: assets/js/app.js:16514
+#: assets/js/app.js:16529
 msgid "Administration email"
 msgstr "管理者メールアドレス"
 
-#: assets/js/app.js:16523
+#: assets/js/app.js:16538
 msgid "Start typing — e.g. Chicago, Berlin, UTC"
 msgstr "入力して検索 — 例: Tokyo、Chicago、UTC"
 
-#: assets/js/app.js:16527
+#: assets/js/app.js:16542
 msgid "Date format"
 msgstr "日付形式"
 
-#: assets/js/app.js:16528
+#: assets/js/app.js:16543
 msgid "Time format"
 msgstr "時刻形式"
 
-#: assets/js/app.js:16529
+#: assets/js/app.js:16544
 msgid "Week starts on"
 msgstr "週の始まり"
 
-#: assets/js/app.js:16537
+#: assets/js/app.js:16552
 msgid "Site language"
 msgstr "サイトの言語"
 
-#: assets/js/app.js:16538
+#: assets/js/app.js:16553
 msgid "English (United States)"
 msgstr "英語 (アメリカ合衆国)"
 
-#: assets/js/app.js:16552
+#: assets/js/app.js:16567
 msgid "Also limiting visibility"
 msgstr "公開範囲を制限しているもの"
 
-#: assets/js/app.js:16556
+#: assets/js/app.js:16571
 msgid "The site is behind a password."
 msgstr "サイトはパスワードで保護されています。"
 
-#: assets/js/app.js:16558
+#: assets/js/app.js:16573
 msgid "Turn off"
 msgstr "オフにする"
 
-#: assets/js/app.js:16562
+#: assets/js/app.js:16577
 msgid "Who can see, index and join your site."
 msgstr "サイトを閲覧・インデックス・参加できる対象。"
 
-#: assets/js/app.js:16563
+#: assets/js/app.js:16578
 msgid "New user default role"
 msgstr "新規ユーザーのデフォルト権限グループ"
 
-#: assets/js/app.js:16565
+#: assets/js/app.js:16580
 msgid "Allow search engines to index this site."
 msgstr "検索エンジンによるサイトのインデックスを許可する。"
 
-#: assets/js/app.js:16566
+#: assets/js/app.js:16581
 msgid "Show a coming-soon page to visitors instead of the site."
 msgstr "サイトの代わりに近日公開ページを訪問者に表示します。"
 
-#: assets/js/app.js:16567
+#: assets/js/app.js:16582
 msgid "Membership"
 msgstr "メンバーシップ"
 
-#: assets/js/app.js:16567
+#: assets/js/app.js:16582
 msgid "Anyone can register an account (with the default role above)."
 msgstr "だれでもアカウントを登録できます (上のデフォルト権限グループが適用されます)。"
 
-#: assets/js/app.js:16573
+#: assets/js/app.js:16588
 msgid "Your homepage displays"
 msgstr "ホームページの表示"
 
-#: assets/js/app.js:16573
+#: assets/js/app.js:16588
 msgid "Latest posts"
 msgstr "最新の投稿"
 
-#: assets/js/app.js:16573
+#: assets/js/app.js:16588
 msgid "A static page"
 msgstr "固定ページ"
 
-#: assets/js/app.js:16582
+#: assets/js/app.js:16597
 msgid "What visitors land on, and how much shows."
 msgstr "訪問者が最初に見るページと、その表示量。"
 
-#: assets/js/app.js:16584
+#: assets/js/app.js:16599
 msgid "Posts page"
 msgstr "投稿ページ"
 
-#: assets/js/app.js:16585
+#: assets/js/app.js:16600
 msgid "Blog pages show at most"
 msgstr "1ページに表示する最大投稿数"
 
-#: assets/js/app.js:16594
+#: assets/js/app.js:16609
 msgid "Site-wide CSS on top of the active theme."
 msgstr "有効なテーマに追加するサイト全体の CSS。"
 
-#: assets/js/app.js:16597
+#: assets/js/app.js:16612
 msgid "Additional CSS"
 msgstr "追加 CSS"
 
-#: assets/js/app.js:16598
+#: assets/js/app.js:16613
 msgid "/* CSS added here loads on every page, after the theme's own stylesheets. */"
 msgstr "/* ここに追加した CSS は、テーマ自身のスタイルシートの後にすべてのページで読み込まれます。 */"
 
 #. translators: %s: name of the active theme.
-#: assets/js/app.js:16599
+#: assets/js/app.js:16614
 msgid "The same stylesheet the Customizer's \"Additional CSS\" edits, loaded after the theme's own styles on every page. It belongs to the active theme (%s); switching themes keeps a separate one per theme."
 msgstr "カスタマイザーの「追加 CSS」が編集するものと同じスタイルシートで、すべてのページでテーマ自身のスタイルの後に読み込まれます。有効なテーマ (%s) に属しており、テーマを切り替えるとテーマごとに別のものが使われます。"
 
-#: assets/js/app.js:16601
+#: assets/js/app.js:16616
 msgid "Custom CSS couldn't be loaded."
 msgstr "カスタム CSS を読み込めませんでした。"
 
-#: assets/js/app.js:16601
+#: assets/js/app.js:16616
 msgid "Open the Customizer ↗"
 msgstr "カスタマイザーを開く ↗"
 
-#: assets/js/app.js:16612
+#: assets/js/app.js:16627
 msgid "Permalink settings couldn’t be loaded."
 msgstr "パーマリンク設定を読み込めませんでした。"
 
-#: assets/js/app.js:16612
+#: assets/js/app.js:16627
 msgid "Open in the classic admin ↗"
 msgstr "クラシック管理画面で開く ↗"
 
-#: assets/js/app.js:16618
-#: assets/js/app.js:17163
+#: assets/js/app.js:16633
+#: assets/js/app.js:17178
 msgid "Custom structure"
 msgstr "カスタム構造"
 
 #. translators: %s: the list of WordPress permalink structure tags, which are not translatable.
-#: assets/js/app.js:16621
+#: assets/js/app.js:16636
 msgid "Tags: %s. With Plain permalinks, Minn itself moves from /minn-admin/ to ?minn_admin=1 and reloads after saving."
 msgstr "タグ: %s。基本のパーマリンクでは、Minn 自体が /minn-admin/ から ?minn_admin=1 に移り、保存後に再読み込みされます。"
 
-#: assets/js/app.js:16624
+#: assets/js/app.js:16639
 msgid "Category base (optional)"
 msgstr "カテゴリーベース (任意)"
 
-#: assets/js/app.js:16625
+#: assets/js/app.js:16640
 msgid "Tag base (optional)"
 msgstr "タグベース (任意)"
 
-#: assets/js/app.js:16629
+#: assets/js/app.js:16644
 msgid "Defaults for new content, and the URL structure."
 msgstr "新規コンテンツのデフォルトと URL 構造。"
 
-#: assets/js/app.js:16630
+#: assets/js/app.js:16645
 msgid "Default post category"
 msgstr "デフォルトの投稿カテゴリー。"
 
-#: assets/js/app.js:16631
+#: assets/js/app.js:16646
 msgid "Default post format"
 msgstr "デフォルトの投稿フォーマット。"
 
-#: assets/js/app.js:16632
+#: assets/js/app.js:16647
 msgid "Convert emoticons"
 msgstr "顔文字を変換"
 
-#: assets/js/app.js:16632
+#: assets/js/app.js:16647
 msgid "Turn :-) and :-P into graphics when displayed."
 msgstr "表示時に :-) や :-P を画像に変換します。"
 
-#: assets/js/app.js:16642
-#: assets/js/app.js:21843
-#: assets/js/app.js:21844
+#: assets/js/app.js:16657
+#: assets/js/app.js:21858
+#: assets/js/app.js:21859
 msgid "Allow comments"
 msgstr "コメントの投稿を許可"
 
-#: assets/js/app.js:16642
+#: assets/js/app.js:16657
 msgid "Let readers respond to new posts."
 msgstr "新しい投稿に読者が返信できるようにします。"
 
-#: assets/js/app.js:16643
-#: assets/js/app.js:21848
+#: assets/js/app.js:16658
+#: assets/js/app.js:21863
 msgid "Allow pingbacks & trackbacks"
 msgstr "ピンバックとトラックバックを許可"
 
-#: assets/js/app.js:16643
+#: assets/js/app.js:16658
 msgid "Accept link notifications from other blogs on new posts."
 msgstr "新しい投稿への他ブログからのリンク通知を受け付けます。"
 
-#: assets/js/app.js:16644
+#: assets/js/app.js:16659
 msgid "Moderate all comments"
 msgstr "すべてのコメントを承認制にする"
 
-#: assets/js/app.js:16644
+#: assets/js/app.js:16659
 msgid "Every comment must be manually approved before it appears."
 msgstr "すべてのコメントは、表示前に手動での承認が必要になります。"
 
-#: assets/js/app.js:16645
+#: assets/js/app.js:16660
 msgid "Registered users only"
 msgstr "登録ユーザーのみ"
 
-#: assets/js/app.js:16645
+#: assets/js/app.js:16660
 msgid "Users must be registered and logged in to comment."
 msgstr "ユーザー登録してログインしたユーザーのみコメントをつけられるようにする."
 
-#: assets/js/app.js:16646
+#: assets/js/app.js:16661
 msgid "Show avatars"
 msgstr "アバターを表示する"
 
-#: assets/js/app.js:16646
+#: assets/js/app.js:16661
 msgid "Display profile pictures next to comments."
 msgstr "コメントの横にプロフィール画像を表示します。"
 
-#: assets/js/app.js:16651
+#: assets/js/app.js:16666
 msgid "Spam protection couldn’t be loaded."
 msgstr "スパム対策を読み込めませんでした。"
 
-#: assets/js/app.js:16651
+#: assets/js/app.js:16666
 msgid "Open plugins ↗"
 msgstr "プラグインを開く ↗"
 
-#: assets/js/app.js:16657
+#: assets/js/app.js:16672
 msgid "Needs setup"
 msgstr "セットアップが必要"
 
-#: assets/js/app.js:16659
+#: assets/js/app.js:16674
 msgid "Change key…"
 msgstr "キーを変更…"
 
-#: assets/js/app.js:16660
+#: assets/js/app.js:16675
 msgid "Full settings ↗"
 msgstr "すべての設定 ↗"
 
-#: assets/js/app.js:16665
+#: assets/js/app.js:16680
 msgid "Paste the replacement key"
 msgstr "新しいキーを貼り付け"
 
-#: assets/js/app.js:16665
+#: assets/js/app.js:16680
 msgid "Paste your API key"
 msgstr "API キーを貼り付け"
 
-#: assets/js/app.js:16666
-#: assets/js/app.js:16751
-#: assets/js/app.js:16981
-#: assets/js/app.js:16991
+#: assets/js/app.js:16681
+#: assets/js/app.js:16766
+#: assets/js/app.js:16996
+#: assets/js/app.js:17006
 msgid "Save key"
 msgstr "キーを保存"
 
 #. translators: %s: a link to the Extensions screen.
-#: assets/js/app.js:16679
+#: assets/js/app.js:16694
 msgid "No spam filter plugin is active. Install Akismet, Antispam Bee or CleanTalk from %s and it appears here. Core’s blocklist below still works on its own."
 msgstr "有効なスパムフィルタープラグインがありません。%s から Akismet、Antispam Bee、CleanTalk のいずれかをインストールすると、ここに表示されます。下にあるコアのブロックリストは単体でも動作します。"
 
-#: assets/js/app.js:16686
+#: assets/js/app.js:16701
 msgid "Review spam →"
 msgstr "スパムを確認 →"
 
-#: assets/js/app.js:16689
+#: assets/js/app.js:16704
 msgid "Commenting is disabled on this site, so there is no comment spam queue to review."
 msgstr "このサイトではコメントが無効なため、確認すべきスパムコメントはありません。"
 
-#: assets/js/app.js:16693
+#: assets/js/app.js:16708
 msgid "Disallowed comment keys"
 msgstr "コメント内で許可されないキーワード"
 
-#: assets/js/app.js:16694
+#: assets/js/app.js:16709
 msgid "one word, IP, email or URL fragment per line"
 msgstr "1行につき単語・IP・メールアドレス・URL の一部を1つ"
 
-#: assets/js/app.js:16695
+#: assets/js/app.js:16710
 msgid "Core’s built-in filter: comments containing any of these go straight to the spam folder. One entry per line."
 msgstr "コア内蔵のフィルターです。これらのいずれかを含むコメントは、そのままスパムフォルダーに入ります。1行につき1件。"
 
-#: assets/js/app.js:16699
+#: assets/js/app.js:16714
 msgid "How comments behave, and how spam is handled."
 msgstr "コメントの動作と、スパムの扱い。"
 
-#: assets/js/app.js:16717
+#: assets/js/app.js:16732
 msgid "Connectors couldn’t be loaded."
 msgstr "コネクタを読み込めませんでした。"
 
-#: assets/js/app.js:16721
+#: assets/js/app.js:16736
 msgid "AI provider"
 msgstr "AI プロバイダー"
 
-#: assets/js/app.js:16721
+#: assets/js/app.js:16736
 msgid "Spam filtering"
 msgstr "スパムフィルタリング"
 
-#: assets/js/app.js:16725
+#: assets/js/app.js:16740
 msgid "Key in wp-config"
 msgstr "wp-config 内のキー"
 
-#: assets/js/app.js:16725
+#: assets/js/app.js:16740
 msgid "Key in environment"
 msgstr "環境変数内のキー"
 
 #. translators: %s: name of the PHP constant holding the key.
-#: assets/js/app.js:16732
+#: assets/js/app.js:16747
 msgid "The key is supplied by the <code>%s</code> constant in wp-config.php, so it can only be changed there."
 msgstr "このキーは wp-config.php の <code>%s</code> 定数で指定されているため、そこでのみ変更できます。"
 
 #. translators: %s: name of the environment variable holding the key.
-#: assets/js/app.js:16732
+#: assets/js/app.js:16747
 msgid "The key is supplied by the <code>%s</code> environment variable, so it can only be changed there."
 msgstr "このキーは <code>%s</code> 環境変数で指定されているため、そこでのみ変更できます。"
 
 #. translators: %s: name of the provider plugin.
-#: assets/js/app.js:16735
+#: assets/js/app.js:16750
 msgid "Needs the %s provider plugin before a key can be saved."
 msgstr "キーを保存するには %s プロバイダープラグインが必要です。"
 
-#: assets/js/app.js:16736
-#: assets/js/app.js:17023
+#: assets/js/app.js:16751
+#: assets/js/app.js:17038
 msgid "Install & activate"
 msgstr "インストールして有効化"
 
-#: assets/js/app.js:16740
+#: assets/js/app.js:16755
 msgid "The provider plugin is installed but not active."
 msgstr "プロバイダーのプラグインはインストール済みですが、有効化されていません。"
 
-#: assets/js/app.js:16744
+#: assets/js/app.js:16759
 msgid "This connector’s key isn’t writable right now: its plugin registers the setting while active."
 msgstr "このコネクターのキーは現在書き込みできません。この設定はプラグインが有効な間だけ登録されます。"
 
-#: assets/js/app.js:16750
+#: assets/js/app.js:16765
 msgid "Paste an API key"
 msgstr "API キーを貼り付け"
 
-#: assets/js/app.js:16761
+#: assets/js/app.js:16776
 msgid "Get an API key ↗"
 msgstr "API キーを取得 ↗"
 
-#: assets/js/app.js:16769
+#: assets/js/app.js:16784
 msgid "External services WordPress can use: AI providers and other connected APIs. Keys are stored by core, validated on save, and never shown again once saved."
 msgstr "WordPress が利用できる外部サービスです (AI プロバイダーやその他の連携 API)。キーはコアが保存し、保存時に検証されます。保存後に再表示されることはありません。"
 
-#: assets/js/app.js:16783
+#: assets/js/app.js:16798
 msgid "Loading settings…"
 msgstr "設定を読み込み中…"
 
-#: assets/js/app.js:16883
+#: assets/js/app.js:16898
 msgid "Key saved and verified"
 msgstr "キーを保存して検証しました"
 
-#: assets/js/app.js:16898
+#: assets/js/app.js:16913
 msgid "Could not reach the server. Please try again."
 msgstr "サーバーに接続できませんでした。もう一度お試しください。"
 
-#: assets/js/app.js:16939
+#: assets/js/app.js:16954
 msgid "Could not refresh connectors — try again in a moment."
 msgstr "コネクタを再読み込みできませんでした。しばらくしてからもう一度お試しください。"
 
-#: assets/js/app.js:16973
+#: assets/js/app.js:16988
 msgid "Paste a key first"
 msgstr "先にキーを貼り付けてください"
 
-#: assets/js/app.js:16979
+#: assets/js/app.js:16994
 msgid "The provider rejected that key."
 msgstr "プロバイダーがそのキーを拒否しました。"
 
-#: assets/js/app.js:16986
+#: assets/js/app.js:17001
 msgid "Key saved"
 msgstr "キーを保存しました"
 
-#: assets/js/app.js:16997
+#: assets/js/app.js:17012
 msgid "Remove the saved key?"
 msgstr "保存されたキーを削除しますか ?"
 
-#: assets/js/app.js:17002
+#: assets/js/app.js:17017
 msgid "Key removed"
 msgstr "キーを削除しました"
 
-#: assets/js/app.js:17010
-#: assets/js/app.js:32758
-#: assets/js/app.js:33180
-#: assets/js/app.js:33317
+#: assets/js/app.js:17025
+#: assets/js/app.js:32773
+#: assets/js/app.js:33195
+#: assets/js/app.js:33332
 msgid "Installing…"
 msgstr "インストール中…"
 
-#: assets/js/app.js:17018
+#: assets/js/app.js:17033
 msgid "Provider plugin installed"
 msgstr "プロバイダーのプラグインをインストールしました"
 
-#: assets/js/app.js:17036
+#: assets/js/app.js:17051
 msgid "Provider plugin activated"
 msgstr "プロバイダーのプラグインを有効化しました"
 
-#: assets/js/app.js:17070
-#: assets/js/app.js:17114
-#: assets/js/app.js:32343
+#: assets/js/app.js:17085
+#: assets/js/app.js:17129
+#: assets/js/app.js:32358
 msgid "Drop an image file"
 msgstr "画像ファイルをドロップ"
 
-#: assets/js/app.js:17078
+#: assets/js/app.js:17093
 msgid "Icon uploaded — save to apply"
 msgstr "アイコンをアップロードしました。保存すると適用されます"
 
-#: assets/js/app.js:17122
+#: assets/js/app.js:17137
 msgid "Logo uploaded — save to apply"
 msgstr "ロゴをアップロードしました。保存すると適用されます"
 
-#: assets/js/app.js:17217
+#: assets/js/app.js:17232
 msgid "Language pack installed"
 msgstr "言語パックをインストールしました"
 
 #. translators: %s: what the user typed.
-#: assets/js/app.js:17232
+#: assets/js/app.js:17247
 msgid "“%s” isn’t a timezone — pick one from the suggestions."
 msgstr "「%s」はタイムゾーンではありません。候補から選んでください。"
 
-#: assets/js/app.js:17293
+#: assets/js/app.js:17308
 msgid "Settings saved — reloading…"
 msgstr "設定を保存しました。再読み込みしています…"
 
-#: assets/js/app.js:17677
-#: assets/js/app.js:17949
-#: assets/js/app.js:17963
-#: assets/js/app.js:17980
+#: assets/js/app.js:17692
+#: assets/js/app.js:17964
+#: assets/js/app.js:17978
+#: assets/js/app.js:17995
 msgid "Configure block"
 msgstr "ブロックを設定"
 
-#: assets/js/app.js:17862
+#: assets/js/app.js:17877
 msgid "A columns block keeps at least one column."
 msgstr "カラムブロックには少なくとも1つのカラムが必要です。"
 
-#: assets/js/app.js:17877
+#: assets/js/app.js:17892
 msgid "Column removed"
 msgstr "カラムを削除しました"
 
-#: assets/js/app.js:17949
+#: assets/js/app.js:17964
 msgid "Configure shortcode block"
 msgstr "ショートコードブロックを設定"
 
-#: assets/js/app.js:17949
+#: assets/js/app.js:17964
 msgid "shortcode"
 msgstr "ショートコード"
 
-#: assets/js/app.js:17951
+#: assets/js/app.js:17966
 msgid "[shortcode attr=\"value\"]"
 msgstr "[shortcode attr=\"value\"]"
 
-#: assets/js/app.js:17963
+#: assets/js/app.js:17978
 msgid "Configure details block"
 msgstr "詳細ブロックを設定"
 
-#: assets/js/app.js:17963
+#: assets/js/app.js:17978
 msgid "details"
 msgstr "詳細"
 
-#: assets/js/app.js:17966
+#: assets/js/app.js:17981
 msgid "Details"
 msgstr "詳細"
 
-#: assets/js/app.js:17968
+#: assets/js/app.js:17983
 msgid "Write the hidden content…"
 msgstr "隠す内容を入力…"
 
-#: assets/js/app.js:17980
+#: assets/js/app.js:17995
 msgid "Configure buttons block"
 msgstr "ボタンブロックを設定"
 
-#: assets/js/app.js:17980
+#: assets/js/app.js:17995
 msgid "buttons"
 msgstr "ボタン"
 
-#: assets/js/app.js:17982
+#: assets/js/app.js:17997
 msgid "Add button"
 msgstr "ボタンを追加"
 
-#: assets/js/app.js:17996
+#: assets/js/app.js:18011
 msgid "Styled block: edit text via ⚙"
 msgstr "スタイル付きブロック: テキストは ⚙ から編集"
 
 #. translators: %d: number of images in the block
-#: assets/js/app.js:18005
+#: assets/js/app.js:18020
 msgid "Edit image · %d"
 msgid_plural "Edit images · %d"
 msgstr[0] "画像を編集 · %d"
 
 #. translators: %d: number of nested blocks
-#: assets/js/app.js:18023
+#: assets/js/app.js:18038
 msgid "Edit content · %d"
 msgstr "コンテンツを編集 · %d"
 
-#: assets/js/app.js:18025
+#: assets/js/app.js:18040
 msgid "Configure block · ⌥-click duplicates · ⇧⌥-click removes"
 msgstr "ブロックを設定 · ⌥ + クリックで複製 · ⇧⌥ + クリックで削除"
 
-#: assets/js/app.js:18029
+#: assets/js/app.js:18044
 msgid "Edit this pattern"
 msgstr "このパターンを編集"
 
-#: assets/js/app.js:18029
+#: assets/js/app.js:18044
 msgid "Edit pattern"
 msgstr "パターンを編集"
 
-#: assets/js/app.js:18030
+#: assets/js/app.js:18045
 msgid "Dynamic block — rendered on the site"
 msgstr "ダイナミックブロック — サイト側でレンダリングされます"
 
-#: assets/js/app.js:18441
+#: assets/js/app.js:18456
 msgid "Open in a new tab"
 msgstr "新しいタブで開く"
 
-#: assets/js/app.js:18441
+#: assets/js/app.js:18456
 msgid "New tab"
 msgstr "新しいタブ"
 
-#: assets/js/app.js:18442
+#: assets/js/app.js:18457
 msgid "Outline style"
 msgstr "輪郭スタイル"
 
-#: assets/js/app.js:18442
-#: assets/js/app.js:22534
+#: assets/js/app.js:18457
+#: assets/js/app.js:22549
 msgid "Outline"
 msgstr "アウトライン"
 
-#: assets/js/app.js:18443
+#: assets/js/app.js:18458
 msgid "Remove button"
 msgstr "ボタンを削除"
 
-#: assets/js/app.js:18732
+#: assets/js/app.js:18747
 msgid "Text is editable in place · structure via ⚙"
 msgstr "テキストはその場で編集 · 構造は ⚙ から"
 
-#: assets/js/app.js:18927
-#: assets/js/app.js:19020
+#: assets/js/app.js:18942
+#: assets/js/app.js:19035
 msgid "Block removed · ⌘Z"
 msgstr "ブロックを削除しました · ⌘Z"
 
 #. translators: toast after duplicating a block
-#: assets/js/app.js:18957
-#: assets/js/app.js:26439
+#: assets/js/app.js:18972
+#: assets/js/app.js:26454
 msgid "Block duplicated"
 msgstr "ブロックを複製しました"
 
-#: assets/js/app.js:20452
+#: assets/js/app.js:20467
 msgid "Could not load revisions"
 msgstr "リビジョンを読み込めませんでした"
 
-#: assets/js/app.js:20562
+#: assets/js/app.js:20577
 msgid "Unsaved · backed up"
 msgstr "未保存 · バックアップ済み"
 
-#: assets/js/app.js:20563
+#: assets/js/app.js:20578
 msgid "Unsaved changes"
 msgstr "未保存の変更"
 
-#: assets/js/app.js:20566
+#: assets/js/app.js:20581
 msgid "Not yet"
 msgstr "まだありません"
 
-#: assets/js/app.js:20668
+#: assets/js/app.js:20683
 msgid "Word goal"
 msgstr "文字数の目標"
 
-#: assets/js/app.js:20670
+#: assets/js/app.js:20685
 msgid "e.g. 500"
 msgstr "例: 500"
 
-#: assets/js/app.js:20671
+#: assets/js/app.js:20686
 msgid "Set"
 msgstr "設定"
 
-#: assets/js/app.js:20673
+#: assets/js/app.js:20688
 msgid "Clear goal"
 msgstr "目標をクリア"
 
-#: assets/js/app.js:20674
+#: assets/js/app.js:20689
 msgid "Shown on every post. Session words start when you first edit."
 msgstr "すべての投稿に表示されます。セッションの文字数は最初の編集時から数え始めます。"
 
-#: assets/js/app.js:20691
-#: assets/js/app.js:20703
+#: assets/js/app.js:20706
+#: assets/js/app.js:20718
 msgid "Word goal cleared"
 msgstr "文字数の目標をクリアしました"
 
 #. translators: %s: words written this session, signed and in bold.
-#: assets/js/app.js:20736
+#: assets/js/app.js:20751
 msgid "%s session"
 msgstr "セッション %s"
 
 #. translators: %1$s: word count in bold, optionally followed by a goal. %2$s: reading time in minutes, in bold.
-#: assets/js/app.js:20739
+#: assets/js/app.js:20754
 msgid "%1$s words&nbsp;·&nbsp;%2$s min"
 msgstr "%1$s 語&nbsp;·&nbsp;%2$s 分"
 
 #. translators: %s: word count, in bold.
-#: assets/js/app.js:20740
+#: assets/js/app.js:20755
 msgid "%s words"
 msgstr "%s 語"
 
 #. translators: %s: the word-count goal.
-#: assets/js/app.js:20742
+#: assets/js/app.js:20757
 msgid "Goal %s words · click to change"
 msgstr "目標 %s 語 · クリックして変更"
 
-#: assets/js/app.js:20743
+#: assets/js/app.js:20758
 msgid "Click to set a word goal"
 msgstr "クリックして文字数の目標を設定"
 
-#: assets/js/app.js:20932
+#: assets/js/app.js:20947
 msgid "Focus mode on — ⌘⇧D to leave"
 msgstr "フォーカスモードをオン — 終了は ⌘⇧D"
 
-#: assets/js/app.js:20932
+#: assets/js/app.js:20947
 msgid "Focus mode off"
 msgstr "フォーカスモードをオフにしました"
 
-#: assets/js/app.js:21012
+#: assets/js/app.js:21027
 msgid "Outline mode on — ⌘⇧O to leave"
 msgstr "アウトラインモードをオン — 終了は ⌘⇧O"
 
-#: assets/js/app.js:21012
+#: assets/js/app.js:21027
 msgid "Outline mode off"
 msgstr "アウトラインモードをオフにしました"
 
-#: assets/js/app.js:21220
+#: assets/js/app.js:21235
 msgid "Find in post"
 msgstr "投稿内を検索"
 
-#: assets/js/app.js:21222
+#: assets/js/app.js:21237
 msgid "Previous match (⇧Enter)"
 msgstr "前の一致 (⇧Enter)"
 
-#: assets/js/app.js:21223
+#: assets/js/app.js:21238
 msgid "Next match (Enter)"
 msgstr "次の一致 (Enter)"
 
-#: assets/js/app.js:21224
+#: assets/js/app.js:21239
 msgid "Match case"
 msgstr "大文字小文字を区別する"
 
-#: assets/js/app.js:21225
+#: assets/js/app.js:21240
 msgid "Close (Esc)"
 msgstr "閉じる (Esc)"
 
-#: assets/js/app.js:21228
+#: assets/js/app.js:21243
 msgid "Replace with"
 msgstr "これと置換"
 
-#: assets/js/app.js:21230
+#: assets/js/app.js:21245
 msgid "Replace all matches"
 msgstr "一致するものをすべて置換"
 
 #. translators: %s: how many matches were replaced.
-#: assets/js/app.js:21345
+#: assets/js/app.js:21360
 msgid "Replaced %s match"
 msgid_plural "Replaced %s matches"
 msgstr[0] "%s 件を置換しました"
 
 #. translators: %s: how many more posts the tip omits.
-#: assets/js/app.js:21454
+#: assets/js/app.js:21469
 msgid "…and %s more"
 msgstr "…ほか %s 件"
 
-#: assets/js/app.js:21523
+#: assets/js/app.js:21538
 msgid "Previous month"
 msgstr "前月"
 
-#: assets/js/app.js:21524
+#: assets/js/app.js:21539
 msgid "Next month"
 msgstr "翌月"
 
-#: assets/js/app.js:21530
+#: assets/js/app.js:21545
 msgid "Highlighted days already have other pages."
 msgstr "ハイライトされた日には既に他の固定ページがあります。"
 
-#: assets/js/app.js:21530
+#: assets/js/app.js:21545
 msgid "Highlighted days already have other posts."
 msgstr "ハイライトされた日には既に他の投稿があります。"
 
-#: assets/js/app.js:21532
+#: assets/js/app.js:21547
 msgid "Time"
 msgstr "時刻"
 
-#: assets/js/app.js:21536
+#: assets/js/app.js:21551
 msgid "Now"
 msgstr "現在"
 
-#: assets/js/app.js:21538
+#: assets/js/app.js:21553
 msgid "Done"
 msgstr "完了"
 
-#: assets/js/app.js:21814
+#: assets/js/app.js:21829
 msgid "Permalink"
 msgstr "パーマリンク"
 
-#: assets/js/app.js:21817
+#: assets/js/app.js:21832
 msgid "set on first save"
 msgstr "初回保存時に設定"
 
-#: assets/js/app.js:21821
+#: assets/js/app.js:21836
 msgid "Format"
 msgstr "フォーマット"
 
-#: assets/js/app.js:21837
+#: assets/js/app.js:21852
 msgid "Excerpt"
 msgstr "抜粋"
 
-#: assets/js/app.js:21838
+#: assets/js/app.js:21853
 msgid "Optional summary for archives, feeds and shares…"
 msgstr "アーカイブ・フィード・共有用の要約 (任意)…"
 
-#: assets/js/app.js:21840
+#: assets/js/app.js:21855
 msgid "Discussion"
 msgstr "ディスカッション"
 
-#: assets/js/app.js:21847
+#: assets/js/app.js:21862
 msgid "Allow pingbacks and trackbacks"
 msgstr "ピンバックとトラックバックを許可"
 
-#: assets/js/app.js:21852
+#: assets/js/app.js:21867
 msgid "Stickiness"
 msgstr "先頭固定"
 
-#: assets/js/app.js:21855
-#: assets/js/app.js:21856
+#: assets/js/app.js:21870
+#: assets/js/app.js:21871
 msgid "Stick to the top of the blog"
 msgstr "ブログの先頭に固定表示"
 
-#: assets/js/app.js:21873
+#: assets/js/app.js:21888
 msgid "Template"
 msgstr "テンプレート"
 
-#: assets/js/app.js:21875
-#: assets/js/app.js:22190
+#: assets/js/app.js:21890
+#: assets/js/app.js:22205
 msgid "Default template"
 msgstr "デフォルトテンプレート"
 
-#: assets/js/app.js:21912
+#: assets/js/app.js:21927
 msgid "Permalink, taxonomies, discussion…"
 msgstr "パーマリンク・タクソノミー・ディスカッション…"
 
 #. translators: %s: the page's menu-order number.
-#: assets/js/app.js:21926
+#: assets/js/app.js:21941
 msgid "Order %s"
 msgstr "順序 %s"
 
-#: assets/js/app.js:21927
+#: assets/js/app.js:21942
 msgid "Parent, template, order"
 msgstr "親・テンプレート・順序"
 
-#: assets/js/app.js:21932
+#: assets/js/app.js:21947
 msgid "No revisions yet"
 msgstr "まだリビジョンはありません"
 
-#: assets/js/app.js:21955
+#: assets/js/app.js:21970
 msgid "Title, description, keyword…"
 msgstr "タイトル・説明・キーワード…"
 
-#: assets/js/app.js:21961
+#: assets/js/app.js:21976
 msgid "Edit fields"
 msgstr "項目を編集"
 
-#: assets/js/app.js:22211
+#: assets/js/app.js:22226
 msgid "Remove tag"
 msgstr "タグを削除"
 
-#: assets/js/app.js:22212
+#: assets/js/app.js:22227
 msgid "No tags yet"
 msgstr "タグはまだありません"
 
-#: assets/js/app.js:22364
+#: assets/js/app.js:22379
 msgid "Loading public preview…"
 msgstr "公開プレビューを読み込み中…"
 
-#: assets/js/app.js:22374
-#: assets/js/app.js:22375
+#: assets/js/app.js:22389
+#: assets/js/app.js:22390
 msgid "Public preview link"
 msgstr "公開プレビューのリンク"
 
-#: assets/js/app.js:22384
+#: assets/js/app.js:22399
 msgid "Share a link so people without accounts can preview this draft."
 msgstr "アカウントがない人にもこの下書きをプレビューしてもらえるリンクを共有します。"
 
-#: assets/js/app.js:22408
+#: assets/js/app.js:22423
 msgid "Public preview on · link copied"
 msgstr "公開プレビューをオン · リンクをコピーしました"
 
-#: assets/js/app.js:22410
+#: assets/js/app.js:22425
 msgid "Public preview enabled"
 msgstr "公開プレビューを有効にしました"
 
-#: assets/js/app.js:22413
+#: assets/js/app.js:22428
 msgid "Public preview off"
 msgstr "公開プレビューをオフにしました"
 
-#: assets/js/app.js:22417
+#: assets/js/app.js:22432
 msgid "Could not update public preview"
 msgstr "公開プレビューを更新できませんでした"
 
-#: assets/js/app.js:22431
-#: assets/js/app.js:22454
+#: assets/js/app.js:22446
+#: assets/js/app.js:22469
 msgid "Public preview link copied"
 msgstr "公開プレビューのリンクをコピーしました"
 
-#: assets/js/app.js:22435
+#: assets/js/app.js:22450
 msgid "Select the link and copy it"
 msgstr "リンクを選択してコピーしてください"
 
-#: assets/js/app.js:22444
+#: assets/js/app.js:22459
 msgid "Public preview is not available for this post."
 msgstr "この投稿では公開プレビューを利用できません。"
 
-#: assets/js/app.js:22451
+#: assets/js/app.js:22466
 msgid "No preview link returned."
 msgstr "プレビューリンクが返されませんでした。"
 
-#: assets/js/app.js:22454
+#: assets/js/app.js:22469
 msgid "Public preview enabled · link copied"
 msgstr "公開プレビューを有効にしました · リンクをコピーしました"
 
-#: assets/js/app.js:22456
+#: assets/js/app.js:22471
 msgid "Public preview link (copy it now):"
 msgstr "公開プレビューのリンク (今すぐコピーしてください):"
 
-#: assets/js/app.js:22492
+#: assets/js/app.js:22507
 msgid "Publish"
 msgstr "公開"
 
-#: assets/js/app.js:22503
+#: assets/js/app.js:22518
 msgid "Enter a password"
 msgstr "パスワードを入力"
 
-#: assets/js/app.js:22505
+#: assets/js/app.js:22520
 msgid "Scheduled for"
 msgstr "公開予定日時"
 
-#: assets/js/app.js:22505
+#: assets/js/app.js:22520
 msgid "Publish time"
 msgstr "公開日時"
 
-#: assets/js/app.js:22506
+#: assets/js/app.js:22521
 msgid "Immediately"
 msgstr "すぐに"
 
-#: assets/js/app.js:22509
+#: assets/js/app.js:22524
 msgid "Save draft"
 msgstr "下書き保存"
 
-#: assets/js/app.js:22510
+#: assets/js/app.js:22525
 msgid "Preview draft ↗"
 msgstr "下書きをプレビュー ↗"
 
-#: assets/js/app.js:22517
+#: assets/js/app.js:22532
 msgid "Preview featured image"
 msgstr "アイキャッチ画像をプレビュー"
 
-#: assets/js/app.js:22591
+#: assets/js/app.js:22606
 msgid "Move this page to trash?"
 msgstr "この固定ページをゴミ箱に移動しますか ?"
 
-#: assets/js/app.js:22591
+#: assets/js/app.js:22606
 msgid "Move this post to trash?"
 msgstr "この投稿をゴミ箱に移動しますか ?"
 
-#: assets/js/app.js:22641
+#: assets/js/app.js:22656
 msgid "Could not load image"
 msgstr "画像を読み込めませんでした"
 
-#: assets/js/app.js:22662
-#: assets/js/app.js:35638
+#: assets/js/app.js:22677
+#: assets/js/app.js:35653
 msgid "Draft saved"
 msgstr "下書きを保存しました"
 
-#: assets/js/app.js:22684
+#: assets/js/app.js:22699
 msgid "Page scheduled"
 msgstr "固定ページを予約しました。"
 
-#: assets/js/app.js:22684
+#: assets/js/app.js:22699
 msgid "Post scheduled"
 msgstr "投稿を予約しました。"
 
-#: assets/js/app.js:22686
+#: assets/js/app.js:22701
 msgid "Page published"
 msgstr "固定ページを公開しました。"
 
-#: assets/js/app.js:22686
+#: assets/js/app.js:22701
 msgid "Post published"
 msgstr "投稿を公開しました。"
 
 #. translators: %1$s: the content type, lowercased, e.g. "post". %2$s: how long ago the backup was written.
-#: assets/js/app.js:22704
+#: assets/js/app.js:22719
 msgid "A newer backup of this %1$s exists (%2$s) — likely unsaved changes from an earlier session."
 msgstr "この%1$sには、より新しいバックアップがあります (%2$s)。以前のセッションの未保存の変更と思われます。"
 
-#: assets/js/app.js:22705
+#: assets/js/app.js:22720
 msgid "Restore backup"
 msgstr "バックアップを復元"
 
-#: assets/js/app.js:22706
-#: assets/js/app.js:23037
+#: assets/js/app.js:22721
+#: assets/js/app.js:23052
 msgid "Dismiss"
 msgstr "非表示"
 
-#: assets/js/app.js:22735
+#: assets/js/app.js:22750
 msgid "Backup restored — review, then Save or Update to apply"
 msgstr "バックアップを復元しました。内容を確認し、保存または更新で反映してください"
 
 #. translators: %s: the content type, lowercased, e.g. "post".
-#: assets/js/app.js:22839
+#: assets/js/app.js:22854
 msgid "This %s is open in another editor session. Taking over will lock them out of saving until they take it back."
 msgstr "この%sは別の編集セッションで開かれています。編集を引き継ぐと、相手が取り戻すまで保存できなくなります。"
 
-#: assets/js/app.js:22841
+#: assets/js/app.js:22856
 msgid "‹ Back to content"
 msgstr "‹ コンテンツに戻る"
 
-#: assets/js/app.js:22842
+#: assets/js/app.js:22857
 msgid "Take over"
 msgstr "引き継ぐ"
 
 #. translators: %s: the name of the user who took over, in bold.
-#: assets/js/app.js:22866
+#: assets/js/app.js:22881
 msgid "%s took over editing. This copy is read-only and won’t save."
 msgstr "%s が編集を引き継ぎました。この画面は閲覧専用で、保存されません。"
 
-#: assets/js/app.js:22867
+#: assets/js/app.js:22882
 msgid "Take back"
 msgstr "編集を取り戻す"
 
-#: assets/js/app.js:22933
+#: assets/js/app.js:22948
 msgid "Loaded the latest saved version"
 msgstr "最後に保存されたバージョンを読み込みました"
 
 #. translators: %1$s: display name of the other editor. %2$s: how long ago they saved.
-#: assets/js/app.js:22947
+#: assets/js/app.js:22962
 msgid "<b>%1$s</b> saved a newer version while you were locked out (%2$s). Saving your copy would overwrite it."
 msgstr "ロックされている間に <b>%1$s</b> がより新しいバージョンを保存しました (%2$s)。このまま保存すると上書きされます。"
 
-#: assets/js/app.js:22948
+#: assets/js/app.js:22963
 msgid "Load theirs"
 msgstr "相手の内容を読み込む"
 
-#: assets/js/app.js:22949
+#: assets/js/app.js:22964
 msgid "Keep my copy"
 msgstr "自分の内容を保持"
 
 #. translators: %1$s: the content type, lowercased, e.g. "post". %2$s: how long ago the work was left.
-#: assets/js/app.js:23035
+#: assets/js/app.js:23050
 msgid "This browser has unsaved work on this %1$s from %2$s — a session ended before it reached the server."
 msgstr "このブラウザーには、この%1$sの未保存の作業が残っています (%2$s)。サーバーに届く前にセッションが終了しました。"
 
-#: assets/js/app.js:23072
+#: assets/js/app.js:23087
 msgid "Recovered work restored — review, then save"
 msgstr "復元した内容を読み込みました。確認して保存してください"
 
-#: assets/js/app.js:23079
+#: assets/js/app.js:23094
 msgid "Loading editor…"
 msgstr "エディターを読み込み中…"
 
-#: assets/js/app.js:23103
+#: assets/js/app.js:23118
 msgid "This is a synced pattern — saving changes here updates every post and page that uses it."
 msgstr "これは同期パターンです。ここでの変更を保存すると、使用しているすべての投稿と固定ページに反映されます。"
 
-#: assets/js/app.js:23118
+#: assets/js/app.js:23133
 msgid "Open in block editor ↗"
 msgstr "ブロックエディターで開く ↗"
 
-#: assets/js/app.js:23121
+#: assets/js/app.js:23136
 msgid "Formatting"
 msgstr "フォーマット"
 
-#: assets/js/app.js:23122
+#: assets/js/app.js:23137
 msgid "Bold"
 msgstr "太字"
 
-#: assets/js/app.js:23123
+#: assets/js/app.js:23138
 msgid "Italic"
 msgstr "イタリック"
 
-#: assets/js/app.js:23124
+#: assets/js/app.js:23139
 msgid "Strikethrough — or wrap it in ~~tildes~~"
 msgstr "打ち消し線 — または ~~チルダ~~ で囲む"
 
-#: assets/js/app.js:23124
+#: assets/js/app.js:23139
 msgid "Strikethrough"
 msgstr "打ち消し線"
 
-#: assets/js/app.js:23125
+#: assets/js/app.js:23140
 msgid "Inline code — or wrap it in backticks"
 msgstr "インラインコード — またはバッククォートで囲む"
 
-#: assets/js/app.js:23125
+#: assets/js/app.js:23140
 msgid "Inline code"
 msgstr "インラインコード"
 
-#: assets/js/app.js:23126
-#: assets/js/app.js:28555
+#: assets/js/app.js:23141
+#: assets/js/app.js:28570
 msgid "Heading 2"
 msgstr "見出し2"
 
-#: assets/js/app.js:23127
-#: assets/js/app.js:28556
+#: assets/js/app.js:23142
+#: assets/js/app.js:28571
 msgid "Heading 3"
 msgstr "見出し3"
 
-#: assets/js/app.js:23128
+#: assets/js/app.js:23143
 msgid "Quote"
 msgstr "引用"
 
-#: assets/js/app.js:23129
-#: assets/js/app.js:26838
+#: assets/js/app.js:23144
+#: assets/js/app.js:26853
 msgid "Code block"
 msgstr "コードブロック"
 
-#: assets/js/app.js:23130
-#: assets/js/app.js:28563
+#: assets/js/app.js:23145
+#: assets/js/app.js:28578
 msgid "Bulleted list"
 msgstr "番号なしリスト"
 
-#: assets/js/app.js:23131
-#: assets/js/app.js:28564
+#: assets/js/app.js:23146
+#: assets/js/app.js:28579
 msgid "Numbered list"
 msgstr "番号付きリスト"
 
-#: assets/js/app.js:23132
+#: assets/js/app.js:23147
 msgid "Center — press again to clear"
 msgstr "中央揃え — もう一度押すと解除"
 
-#: assets/js/app.js:23132
+#: assets/js/app.js:23147
 msgid "Align center"
 msgstr "中央揃え"
 
-#: assets/js/app.js:23133
+#: assets/js/app.js:23148
 msgid "Align right — press again to clear"
 msgstr "右揃え — もう一度押すと解除"
 
-#: assets/js/app.js:23133
+#: assets/js/app.js:23148
 msgid "Align right"
 msgstr "右寄せ"
 
-#: assets/js/app.js:23134
+#: assets/js/app.js:23149
 msgid "Link — or ⌘K"
 msgstr "リンク — または ⌘K"
 
-#: assets/js/app.js:23134
-#: assets/js/app.js:26974
+#: assets/js/app.js:23149
+#: assets/js/app.js:26989
 msgid "Link"
 msgstr "リンク"
 
-#: assets/js/app.js:23135
-#: assets/js/app.js:31528
+#: assets/js/app.js:23150
+#: assets/js/app.js:31543
 msgid "Insert image"
 msgstr "画像を挿入"
 
-#: assets/js/app.js:23136
+#: assets/js/app.js:23151
 msgid "Paragraph"
 msgstr "段落"
 
-#: assets/js/app.js:23137
+#: assets/js/app.js:23152
 msgid "Clear formatting"
 msgstr "書式設定をクリア"
 
-#: assets/js/app.js:23138
+#: assets/js/app.js:23153
 msgid "type / for blocks"
 msgstr "/ を入力するとブロックを挿入"
 
-#: assets/js/app.js:23140
+#: assets/js/app.js:23155
 msgid "Post content"
 msgstr "投稿の本文"
 
-#: assets/js/app.js:23141
+#: assets/js/app.js:23156
 msgid "Writing stats"
 msgstr "執筆の統計"
 
-#: assets/js/app.js:23314
-#: assets/js/app.js:26068
-#: assets/js/app.js:27286
+#: assets/js/app.js:23329
+#: assets/js/app.js:26083
+#: assets/js/app.js:27301
 msgid "Image replaced"
 msgstr "画像を置き換えました"
 
-#: assets/js/app.js:23637
+#: assets/js/app.js:23652
 msgid "Add column before"
 msgstr "前にカラムを追加"
 
-#: assets/js/app.js:23638
+#: assets/js/app.js:23653
 msgid "Add column after"
 msgstr "後にカラムを追加"
 
-#: assets/js/app.js:23639
+#: assets/js/app.js:23654
 msgid "Remove column"
 msgstr "カラムを削除"
 
-#: assets/js/app.js:23752
+#: assets/js/app.js:23767
 msgid "Island text is plain-text only — use ⚙ or the block editor for formatting"
 msgstr "この領域のテキストはプレーンテキストのみです。書式は ⚙ かブロックエディターで設定してください"
 
-#: assets/js/app.js:23762
+#: assets/js/app.js:23777
 msgid "This block keeps custom styling — change its type in the block editor"
 msgstr "このブロックにはカスタムスタイルが設定されています。種類の変更はブロックエディターで行ってください"
 
-#: assets/js/app.js:23877
+#: assets/js/app.js:23892
 msgid "You aren’t allowed to upload files"
 msgstr "ファイルをアップロードする権限がありません"
 
-#: assets/js/app.js:23882
+#: assets/js/app.js:23897
 msgid "Only images can be dropped into the editor"
 msgstr "エディターにドロップできるのは画像のみです"
 
-#: assets/js/app.js:24820
-#: assets/js/app.js:24822
+#: assets/js/app.js:24835
+#: assets/js/app.js:24837
 msgid "Edit images"
 msgstr "画像を編集"
 
-#: assets/js/app.js:24824
+#: assets/js/app.js:24839
 msgid "Drag to reorder · click a tile to replace · this block's layout has a fixed number of images"
 msgstr "ドラッグで並べ替え · タイルをクリックで置き換え · このブロックのレイアウトは画像の枚数が固定です"
 
-#: assets/js/app.js:24826
+#: assets/js/app.js:24841
 msgid "Drag to reorder · click a tile to replace · × removes · drop images to add"
 msgstr "ドラッグで並べ替え · タイルをクリックで置き換え · × で削除 · 画像をドロップで追加"
 
-#: assets/js/app.js:24827
+#: assets/js/app.js:24842
 msgid "Drag to reorder · click a tile to replace · × removes"
 msgstr "ドラッグで並べ替え · タイルをクリックで置き換え · × で削除"
 
-#: assets/js/app.js:24831
+#: assets/js/app.js:24846
 msgid "Drop images to add them here"
 msgstr "ここに画像をドロップすると追加されます"
 
-#: assets/js/app.js:24849
+#: assets/js/app.js:24864
 msgid "new"
 msgstr "新規"
 
-#: assets/js/app.js:24851
-#: assets/js/app.js:27169
+#: assets/js/app.js:24866
+#: assets/js/app.js:27184
 msgid "Duplicate image"
 msgstr "画像を複製"
 
-#: assets/js/app.js:24856
-#: assets/js/app.js:27158
-#: assets/js/app.js:30383
+#: assets/js/app.js:24871
+#: assets/js/app.js:27173
+#: assets/js/app.js:30398
 msgid "Caption"
 msgstr "キャプション"
 
-#: assets/js/app.js:24857
+#: assets/js/app.js:24872
 msgid "No images left. Add some, or Cancel and remove the whole block from its ⚙ popover instead."
 msgstr "画像が残っていません。追加するか、キャンセルして ⚙ ポップオーバーからブロック全体を削除してください。"
 
-#: assets/js/app.js:24873
+#: assets/js/app.js:24888
 msgid "Only image files can be dropped here."
 msgstr "ここにドロップできるのは画像ファイルのみです。"
 
-#: assets/js/app.js:24876
+#: assets/js/app.js:24891
 msgid "Uploading image…"
 msgstr "画像をアップロード中…"
 
 #. translators: %s: the uploaded file's name.
-#: assets/js/app.js:24895
+#: assets/js/app.js:24910
 msgid "%s uploaded to the media library."
 msgstr "%s をメディアライブラリにアップロードしました。"
 
-#: assets/js/app.js:24905
+#: assets/js/app.js:24920
 msgid "Image added — Apply to save it into the block."
 msgstr "画像を追加しました。「適用」でブロックに保存します。"
 
-#: assets/js/app.js:24980
+#: assets/js/app.js:24995
 msgid "Add to block"
 msgstr "ブロックに追加"
 
-#: assets/js/app.js:25018
+#: assets/js/app.js:25033
 msgid "Every image needs to be in the media library."
 msgstr "すべての画像がメディアライブラリにある必要があります。"
 
-#: assets/js/app.js:25020
-#: assets/js/app.js:26216
+#: assets/js/app.js:25035
+#: assets/js/app.js:26231
 msgid "Applying…"
 msgstr "適用中…"
 
-#: assets/js/app.js:25120
+#: assets/js/app.js:25135
 msgid "This block’s content can’t be edited here."
 msgstr "このブロックの内容はここでは編集できません。"
 
-#: assets/js/app.js:25127
-#: assets/js/app.js:25129
+#: assets/js/app.js:25142
+#: assets/js/app.js:25144
 msgid "Edit content"
 msgstr "コンテンツを編集"
 
-#: assets/js/app.js:25131
+#: assets/js/app.js:25146
 msgid "Text first; each block’s other settings are tucked below it."
 msgstr "まずテキスト。各ブロックのその他の設定はその下にまとめられています。"
 
-#: assets/js/app.js:25132
+#: assets/js/app.js:25147
 msgid "Text first; each block’s other settings are tucked below it. This block’s structure is locked."
 msgstr "まずテキスト。各ブロックのその他の設定はその下にまとめられています。このブロックの構造はロックされています。"
 
-#: assets/js/app.js:25136
-#: assets/js/app.js:25934
+#: assets/js/app.js:25151
+#: assets/js/app.js:25949
 msgid "Loading block schema…"
 msgstr "ブロックのスキーマを読み込み中…"
 
 #. translators: %d: number of settings fields
-#: assets/js/app.js:25171
+#: assets/js/app.js:25186
 msgid "Settings (%d)"
 msgstr "設定 (%d)"
 
-#: assets/js/app.js:25187
-#: assets/js/app.js:25737
+#: assets/js/app.js:25202
+#: assets/js/app.js:25752
 msgid "No editable settings."
 msgstr "編集できる設定はありません。"
 
-#: assets/js/app.js:25193
+#: assets/js/app.js:25208
 msgid "No blocks left. Add one, or Cancel and remove the whole block from its ⚙ popover instead."
 msgstr "ブロックが残っていません。追加するか、キャンセルして ⚙ のポップオーバーからブロック全体を削除してください。"
 
-#: assets/js/app.js:25200
-#: assets/js/app.js:25745
+#: assets/js/app.js:25215
+#: assets/js/app.js:25760
 msgid "block"
 msgstr "ブロック"
 
 #. translators: %d: number of additional settings hidden behind the button.
-#: assets/js/app.js:25248
-#: assets/js/app.js:25375
+#: assets/js/app.js:25263
+#: assets/js/app.js:25390
 msgid "More settings (%d)"
 msgstr "さらに設定 (%d)"
 
-#: assets/js/app.js:25248
-#: assets/js/app.js:25979
+#: assets/js/app.js:25263
+#: assets/js/app.js:25994
 msgid "Fewer settings"
 msgstr "設定を折りたたむ"
 
-#: assets/js/app.js:25260
-#: assets/js/app.js:25880
-#: assets/js/app.js:26211
-#: assets/js/app.js:26249
+#: assets/js/app.js:25275
+#: assets/js/app.js:25895
+#: assets/js/app.js:26226
+#: assets/js/app.js:26264
 msgid "Block updated"
 msgstr "ブロックを更新しました"
 
-#: assets/js/app.js:25260
-#: assets/js/app.js:26211
+#: assets/js/app.js:25275
+#: assets/js/app.js:26226
 msgid "This block could not be updated."
 msgstr "このブロックを更新できませんでした。"
 
-#: assets/js/app.js:25377
+#: assets/js/app.js:25392
 msgid "Filter settings…"
 msgstr "設定を絞り込み…"
 
-#: assets/js/app.js:25668
-#: assets/js/app.js:25756
+#: assets/js/app.js:25683
+#: assets/js/app.js:25771
 msgid "Edit images…"
 msgstr "画像を編集…"
 
 #. translators: %d: number of images in the gallery being inspected.
-#: assets/js/app.js:25678
+#: assets/js/app.js:25693
 msgid "Images · %d"
 msgstr "画像 · %d"
 
-#: assets/js/app.js:25682
+#: assets/js/app.js:25697
 msgid "Replace…"
 msgstr "置換…"
 
-#: assets/js/app.js:25692
+#: assets/js/app.js:25707
 msgid "Link, size and lightbox options live in the block editor."
 msgstr "リンク・サイズ・ライトボックスの設定はブロックエディターにあります。"
 
 #. translators: %d: number of nested blocks
-#: assets/js/app.js:25709
+#: assets/js/app.js:25724
 msgid "Content · %d block"
 msgid_plural "Content · %d blocks"
 msgstr[0] "コンテンツ · %d ブロック"
 
-#: assets/js/app.js:25711
+#: assets/js/app.js:25726
 msgid "Edit content…"
 msgstr "コンテンツを編集…"
 
-#: assets/js/app.js:25721
-#: assets/js/app.js:25726
+#: assets/js/app.js:25736
+#: assets/js/app.js:25741
 msgid "text"
 msgstr "テキスト"
 
 #. translators: %s: name of the block type to add, or the word "block" when there is a choice.
-#: assets/js/app.js:25745
+#: assets/js/app.js:25760
 msgid "+ Add %s"
 msgstr "+ %sを追加"
 
-#: assets/js/app.js:25753
+#: assets/js/app.js:25768
 msgid "Change URL…"
 msgstr "URL を変更…"
 
-#: assets/js/app.js:25754
+#: assets/js/app.js:25769
 msgid "Rebuilds the embed for the new URL."
 msgstr "新しい URL で埋め込みを作り直します。"
 
-#: assets/js/app.js:25757
+#: assets/js/app.js:25772
 msgid "Reorder, remove or add images; captions and layout stay."
 msgstr "画像の並べ替え・削除・追加ができます。キャプションとレイアウトは保持されます。"
 
-#: assets/js/app.js:25758
+#: assets/js/app.js:25773
 msgid "Replace images…"
 msgstr "画像を置き換え…"
 
-#: assets/js/app.js:25759
+#: assets/js/app.js:25774
 msgid "Re-picks the gallery images; per-image captions and layout tweaks reset."
 msgstr "ギャラリーの画像を選び直します。画像ごとのキャプションやレイアウトの調整はリセットされます。"
 
-#: assets/js/app.js:25776
+#: assets/js/app.js:25791
 msgid "This block has no attributes a form can edit — its content lives in saved HTML. It stays preserved exactly as-is."
 msgstr "このブロックにはフォームで編集できる属性がなく、内容は保存済みの HTML にあります。そのままの形で保持されます。"
 
-#: assets/js/app.js:25777
+#: assets/js/app.js:25792
 msgid "This block type isn’t registered on this site, so its settings can’t be read. It stays preserved exactly as-is."
 msgstr "このブロックタイプはこのサイトに登録されていないため、設定を読み取れません。そのままの形で保持されます。"
 
-#: assets/js/app.js:25781
+#: assets/js/app.js:25796
 msgid "Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there."
 msgstr "レイアウト・余白・色などのデザイン設定はブロックエディターにあります。未保存のブロックも表示されるよう、先にこの投稿を保存します。"
 
-#: assets/js/app.js:25781
+#: assets/js/app.js:25796
 msgid "Block editor ↗"
 msgstr "ブロックエディター ↗"
 
-#: assets/js/app.js:25782
+#: assets/js/app.js:25797
 msgid "Move block"
 msgstr "ブロックを移動"
 
-#: assets/js/app.js:25783
+#: assets/js/app.js:25798
 msgid "Move block up"
 msgstr "ブロックを上へ移動"
 
-#: assets/js/app.js:25784
+#: assets/js/app.js:25799
 msgid "Move block down"
 msgstr "ブロックを下へ移動"
 
-#: assets/js/app.js:25786
+#: assets/js/app.js:25801
 msgid "Move to the previous column"
 msgstr "前のカラムへ移動"
 
-#: assets/js/app.js:25786
+#: assets/js/app.js:25801
 msgid "Move block to the previous column"
 msgstr "ブロックを前のカラムへ移動"
 
-#: assets/js/app.js:25787
+#: assets/js/app.js:25802
 msgid "Move to the next column"
 msgstr "次のカラムへ移動"
 
-#: assets/js/app.js:25787
+#: assets/js/app.js:25802
 msgid "Move block to the next column"
 msgstr "ブロックを次のカラムへ移動"
 
-#: assets/js/app.js:25789
+#: assets/js/app.js:25804
 msgid "Duplicate this block"
 msgstr "このブロックを複製"
 
-#: assets/js/app.js:25790
+#: assets/js/app.js:25805
 msgid "Remove this block"
 msgstr "このブロックを削除"
 
-#: assets/js/app.js:25790
+#: assets/js/app.js:25805
 msgid "Remove block"
 msgstr "ブロックを削除"
 
-#: assets/js/app.js:25802
+#: assets/js/app.js:25817
 msgid "Another session holds this post — take over before opening the block editor"
 msgstr "別のセッションがこの投稿を編集中です。ブロックエディターを開く前に編集を引き継いでください"
 
-#: assets/js/app.js:25928
+#: assets/js/app.js:25943
 msgid "This block’s markup can’t be parsed safely."
 msgstr "このブロックのマークアップを安全に解析できません。"
 
-#: assets/js/app.js:25938
 #: assets/js/app.js:25953
+#: assets/js/app.js:25968
 msgid "Block settings"
 msgstr "ブロックの設定"
 
-#: assets/js/app.js:26011
+#: assets/js/app.js:26026
 msgid "Embed URL (YouTube, tweet, audio…):"
 msgstr "埋め込む URL (YouTube、ツイート、音声…):"
 
-#: assets/js/app.js:26013
-#: assets/js/app.js:29120
+#: assets/js/app.js:26028
+#: assets/js/app.js:29135
 msgid "That doesn’t look like a URL"
 msgstr "URL の形式ではありません"
 
-#: assets/js/app.js:26049
+#: assets/js/app.js:26064
 msgid "These images can’t be edited safely here."
 msgstr "これらの画像はここでは安全に編集できません。"
 
-#: assets/js/app.js:26437
+#: assets/js/app.js:26452
 msgid "Block removed — ⌘Z restores it"
 msgstr "ブロックを削除しました。⌘Z で元に戻せます"
 
-#: assets/js/app.js:26458
+#: assets/js/app.js:26473
 msgid "Table — rows, columns, header"
 msgstr "表 — 行・カラム・ヘッダー"
 
-#: assets/js/app.js:26459
+#: assets/js/app.js:26474
 msgid "Code block — syntax highlighting"
 msgstr "コードブロック — シンタックスハイライト"
 
-#: assets/js/app.js:26460
+#: assets/js/app.js:26475
 msgid "Image — alt, caption, replace"
 msgstr "画像 — 代替テキスト・キャプション・置き換え"
 
-#: assets/js/app.js:26462
-#: assets/js/app.js:26625
+#: assets/js/app.js:26477
+#: assets/js/app.js:26640
 msgid "Table settings"
 msgstr "表の設定"
 
-#: assets/js/app.js:26464
-#: assets/js/app.js:27177
+#: assets/js/app.js:26479
+#: assets/js/app.js:27192
 msgid "Image settings"
 msgstr "画像の設定"
 
-#: assets/js/app.js:26567
+#: assets/js/app.js:26582
 msgid "Add row above"
 msgstr "上に行を追加"
 
-#: assets/js/app.js:26568
+#: assets/js/app.js:26583
 msgid "Add row below"
 msgstr "下に行を追加"
 
-#: assets/js/app.js:26569
+#: assets/js/app.js:26584
 msgid "Delete row"
 msgstr "行を削除"
 
-#: assets/js/app.js:26571
+#: assets/js/app.js:26586
 msgid "Add column left"
 msgstr "左にカラムを追加"
 
-#: assets/js/app.js:26572
+#: assets/js/app.js:26587
 msgid "Add column right"
 msgstr "右にカラムを追加"
 
-#: assets/js/app.js:26573
+#: assets/js/app.js:26588
 msgid "Delete column"
 msgstr "列を削除"
 
-#: assets/js/app.js:26600
+#: assets/js/app.js:26615
 msgid "Row — at the caret"
 msgstr "行 — カーソル位置に"
 
-#: assets/js/app.js:26602
+#: assets/js/app.js:26617
 msgid "Above"
 msgstr "上"
 
-#: assets/js/app.js:26603
+#: assets/js/app.js:26618
 msgid "Below"
 msgstr "下"
 
-#: assets/js/app.js:26606
+#: assets/js/app.js:26621
 msgid "Column — at the caret"
 msgstr "カラム — カーソル位置に"
 
-#: assets/js/app.js:26608
+#: assets/js/app.js:26623
 msgid "Left"
 msgstr "左"
 
-#: assets/js/app.js:26609
+#: assets/js/app.js:26624
 msgid "Right"
 msgstr "右"
 
-#: assets/js/app.js:26613
+#: assets/js/app.js:26628
 msgid "Remove header row"
 msgstr "ヘッダー行を削除"
 
-#: assets/js/app.js:26613
+#: assets/js/app.js:26628
 msgid "Make first row a header"
 msgstr "最初の行をヘッダーにする"
 
-#: assets/js/app.js:26614
+#: assets/js/app.js:26629
 msgid "Delete table"
 msgstr "表を削除"
 
-#: assets/js/app.js:26765
+#: assets/js/app.js:26780
 msgid "Table deleted. ⌘Z restores it"
 msgstr "表を削除しました。⌘Z で元に戻せます"
 
-#: assets/js/app.js:26796
+#: assets/js/app.js:26811
 msgid "Row deleted. ⌘Z restores it"
 msgstr "行を削除しました。⌘Z で元に戻せます"
 
-#: assets/js/app.js:26797
+#: assets/js/app.js:26812
 msgid "Column deleted. ⌘Z restores it"
 msgstr "カラムを削除しました。⌘Z で元に戻せます"
 
-#: assets/js/app.js:26842
+#: assets/js/app.js:26857
 msgid "Syntax highlighting"
 msgstr "シンタックスハイライト"
 
-#: assets/js/app.js:26844
+#: assets/js/app.js:26859
 msgid "Auto detect"
 msgstr "自動検出"
 
-#: assets/js/app.js:26848
+#: assets/js/app.js:26863
 msgid "Remove this code block"
 msgstr "このコードブロックを削除"
 
-#: assets/js/app.js:26853
+#: assets/js/app.js:26868
 msgid "Code block settings"
 msgstr "コードブロックの設定"
 
-#: assets/js/app.js:26978
+#: assets/js/app.js:26993
 msgid "URL or search"
 msgstr "URL または検索"
 
-#: assets/js/app.js:26979
+#: assets/js/app.js:26994
 msgid "https://… or search your content"
 msgstr "https://… またはコンテンツを検索"
 
-#: assets/js/app.js:26983
-#: assets/js/app.js:26984
-#: assets/js/app.js:27162
+#: assets/js/app.js:26998
+#: assets/js/app.js:26999
+#: assets/js/app.js:27177
 msgid "Open in new tab"
 msgstr "新しいタブで開く"
 
-#: assets/js/app.js:26990
+#: assets/js/app.js:27005
 msgid "Unlink"
 msgstr "リンクを解除"
 
-#: assets/js/app.js:27152
+#: assets/js/app.js:27167
 msgid "Image"
 msgstr "画像"
 
-#: assets/js/app.js:27156
-#: assets/js/app.js:30381
+#: assets/js/app.js:27171
+#: assets/js/app.js:30396
 msgid "Alt text"
 msgstr "代替テキスト"
 
-#: assets/js/app.js:27157
-#: assets/js/app.js:30382
+#: assets/js/app.js:27172
+#: assets/js/app.js:30397
 msgid "Describe this image…"
 msgstr "この画像を説明…"
 
-#: assets/js/app.js:27159
+#: assets/js/app.js:27174
 msgid "Optional caption"
 msgstr "キャプション (任意)"
 
-#: assets/js/app.js:27160
+#: assets/js/app.js:27175
 msgid "Link URL"
 msgstr "リンク URL"
 
-#: assets/js/app.js:27161
+#: assets/js/app.js:27176
 msgid "https://… (empty for no link)"
 msgstr "https://… (空欄でリンクなし)"
 
-#: assets/js/app.js:27163
+#: assets/js/app.js:27178
 msgid "Expand on click (lightbox)"
 msgstr "クリックで拡大 (ライトボックス)"
 
-#: assets/js/app.js:27164
+#: assets/js/app.js:27179
 msgid "A linked image can’t also open a lightbox — clear the link to use it."
 msgstr "リンク付きの画像はライトボックスを使えません。使うにはリンクを削除してください。"
 
-#: assets/js/app.js:27263
+#: assets/js/app.js:27278
 msgid "Image updated"
 msgstr "画像を更新しました"
 
-#: assets/js/app.js:27296
+#: assets/js/app.js:27311
 msgid "Image duplicated"
 msgstr "画像を複製しました"
 
-#: assets/js/app.js:27320
+#: assets/js/app.js:27335
 msgid "Image removed — ⌘Z restores it"
 msgstr "画像を削除しました。⌘Z で元に戻せます"
 
 #. translators: %s: the error message.
-#: assets/js/app.js:28407
+#: assets/js/app.js:28422
 msgid "Upload failed: %s"
 msgstr "アップロードに失敗しました: %s"
 
-#: assets/js/app.js:28479
+#: assets/js/app.js:28494
 msgid "(untitled pattern)"
 msgstr "(無題のパターン)"
 
-#: assets/js/app.js:28523
+#: assets/js/app.js:28538
 msgid "This pattern’s markup can’t be parsed safely"
 msgstr "このパターンのマークアップを安全に解析できません"
 
-#: assets/js/app.js:28532
+#: assets/js/app.js:28547
 msgid "Nothing insertable in this pattern"
 msgstr "このパターンに挿入できるものはありません"
 
-#: assets/js/app.js:28568
+#: assets/js/app.js:28583
 msgid "Embed — YouTube, tweet, audio…"
 msgstr "埋め込み — YouTube、ツイート、音声…"
 
-#: assets/js/app.js:28631
+#: assets/js/app.js:28646
 msgid "This layout is locked — open it in the block editor to add blocks"
 msgstr "このレイアウトはロックされています。ブロックを追加するにはブロックエディターで開いてください"
 
-#: assets/js/app.js:28653
-#: assets/js/app.js:32968
+#: assets/js/app.js:28668
+#: assets/js/app.js:32983
 msgid "Essential Blocks"
 msgstr "Essential Blocks"
 
-#: assets/js/app.js:28655
+#: assets/js/app.js:28670
 msgid "Anchor Blocks"
 msgstr "Anchor Blocks"
 
-#: assets/js/app.js:28681
+#: assets/js/app.js:28696
 msgid "Insert from the block library"
 msgstr "ブロックライブラリから挿入"
 
-#: assets/js/app.js:28683
+#: assets/js/app.js:28698
 msgid "Search blocks, designs and patterns…"
 msgstr "ブロック・デザイン・パターンを検索…"
 
-#: assets/js/app.js:28686
+#: assets/js/app.js:28701
 msgid "Loading the library…"
 msgstr "ライブラリを読み込み中…"
 
-#: assets/js/app.js:28774
+#: assets/js/app.js:28789
 msgid "Your patterns"
 msgstr "あなたのパターン"
 
-#: assets/js/app.js:28775
+#: assets/js/app.js:28790
 msgid "Synced"
 msgstr "同期済み"
 
-#: assets/js/app.js:28804
+#: assets/js/app.js:28819
 msgid "Nothing matches."
 msgstr "一致するものがありません。"
 
-#: assets/js/app.js:28890
+#: assets/js/app.js:28905
 msgid "Building the gallery…"
 msgstr "ギャラリーを作成中…"
 
-#: assets/js/app.js:28898
+#: assets/js/app.js:28913
 msgid "Build gallery"
 msgstr "ギャラリーを作成"
 
-#: assets/js/app.js:28910
+#: assets/js/app.js:28925
 msgid "This block’s columns can’t be edited here."
 msgstr "このブロックのカラムはここでは編集できません。"
 
-#: assets/js/app.js:28927
+#: assets/js/app.js:28942
 msgid "Inserting…"
 msgstr "挿入中…"
 
-#: assets/js/app.js:28946
+#: assets/js/app.js:28961
 msgid "Command returned no content"
 msgstr "コマンドは内容を返しませんでした"
 
-#: assets/js/app.js:28950
+#: assets/js/app.js:28965
 msgid "Insert failed: %s"
 msgstr "挿入に失敗しました: %s"
 
-#: assets/js/app.js:28967
+#: assets/js/app.js:28982
 msgid "Inserting design…"
 msgstr "デザインを挿入中…"
 
-#: assets/js/app.js:28971
+#: assets/js/app.js:28986
 msgid "Design source unavailable"
 msgstr "デザインのソースが利用できません"
 
-#: assets/js/app.js:28974
+#: assets/js/app.js:28989
 msgid "Design unavailable"
 msgstr "デザインが利用できません"
 
-#: assets/js/app.js:28983
+#: assets/js/app.js:28998
 msgid "Design insert failed: %s"
 msgstr "デザインの挿入に失敗しました: %s"
 
-#: assets/js/app.js:29010
-#: assets/js/app.js:29030
+#: assets/js/app.js:29025
+#: assets/js/app.js:29045
 msgid "Pattern unavailable"
 msgstr "パターンが利用できません"
 
-#: assets/js/app.js:29013
+#: assets/js/app.js:29028
 msgid "Pattern insert failed: "
 msgstr "パターンの挿入に失敗しました: "
 
-#: assets/js/app.js:29034
+#: assets/js/app.js:29049
 msgid "Pattern insert failed: %s"
 msgstr "パターンの挿入に失敗しました: %s"
 
-#: assets/js/app.js:29118
+#: assets/js/app.js:29133
 msgid "Paste the URL to embed (YouTube, tweet, audio…):"
 msgstr "埋め込む URL を貼り付け (YouTube、ツイート、音声…):"
 
 #. translators: %d: number of block types not shown in the shortlist.
-#: assets/js/app.js:29282
+#: assets/js/app.js:29297
 msgid "Browse all — %d more blocks…"
 msgstr "すべて表示 — 他 %d 件のブロック…"
 
-#: assets/js/app.js:29282
+#: assets/js/app.js:29297
 msgid "Browse all…"
 msgstr "すべて表示…"
 
-#: assets/js/app.js:29335
+#: assets/js/app.js:29350
 msgid "Insert block"
 msgstr "ブロックを挿入"
 
-#: assets/js/app.js:29478
+#: assets/js/app.js:29493
 msgid "No action available"
 msgstr "利用できる操作はありません"
 
 #. translators: %s: the completed action's label.
-#: assets/js/app.js:29484
+#: assets/js/app.js:29499
 msgid "Done: %s"
 msgstr "完了: %s"
 
 #. translators: %d is a number of translations.
-#: assets/js/app.js:29503
-#: assets/js/app.js:29582
+#: assets/js/app.js:29518
+#: assets/js/app.js:29597
 msgid "%d translation"
 msgid_plural "%d translations"
 msgstr[0] "翻訳 %d 件"
 
-#: assets/js/app.js:29516
+#: assets/js/app.js:29531
 msgid "Update everything?"
 msgstr "すべて更新しますか ?"
 
-#: assets/js/app.js:29518
+#: assets/js/app.js:29533
 msgid "Plugin and theme settings"
 msgstr "プラグインとテーマの設定"
 
-#: assets/js/app.js:29518
+#: assets/js/app.js:29533
 msgid "Anything without a pending update"
 msgstr "更新の提供がないものすべて"
 
-#: assets/js/app.js:29520
+#: assets/js/app.js:29535
 msgid "Each update runs its author's own upgrade routine. Plugins first, then themes, then WordPress core last (visitors see a maintenance notice for a few seconds)."
 msgstr "各更新は作者自身のアップグレード処理を実行します。先にプラグイン、次にテーマ、最後に WordPress コアです (訪問者には数秒間メンテナンスの案内が表示されます)。"
 
-#: assets/js/app.js:29521
+#: assets/js/app.js:29536
 msgid "Each update runs its author's own upgrade routine. Plugins first, then themes."
 msgstr "各更新は作者自身のアップグレード処理を実行します。先にプラグイン、次にテーマです。"
 
 #. translators: %d is a number of translations.
-#: assets/js/app.js:29575
+#: assets/js/app.js:29590
 msgid "Updating %d translation…"
 msgid_plural "Updating %d translations…"
 msgstr[0] "翻訳 %d 件を更新中…"
 
 #. translators: %s: the error message.
-#: assets/js/app.js:29595
+#: assets/js/app.js:29610
 msgid "WordPress: %s"
 msgstr "WordPress: %s"
 
 #. translators: %s: the list of failures.
-#: assets/js/app.js:29622
+#: assets/js/app.js:29637
 msgid "Some updates failed — %s"
 msgstr "一部の更新に失敗しました — %s"
 
-#: assets/js/app.js:29624
+#: assets/js/app.js:29639
 msgid "Updated %s. Everything is current."
 msgstr "%s を更新しました。すべて最新です。"
 
-#: assets/js/app.js:29666
+#: assets/js/app.js:29681
 msgid "You cannot update plugins."
 msgstr "プラグインを更新する権限がありません。"
 
-#: assets/js/app.js:29668
+#: assets/js/app.js:29683
 msgid "Missing plugin file."
 msgstr "プラグインファイルがありません。"
 
-#: assets/js/app.js:29671
+#: assets/js/app.js:29686
 msgid "You cannot update themes."
 msgstr "テーマを更新する権限がありません。"
 
-#: assets/js/app.js:29673
+#: assets/js/app.js:29688
 msgid "Missing theme."
 msgstr "テーマがありません。"
 
-#: assets/js/app.js:29692
+#: assets/js/app.js:29707
 msgid "You cannot update WordPress."
 msgstr "WordPress を更新する権限がありません。"
 
-#: assets/js/app.js:29715
+#: assets/js/app.js:29730
 msgid "Unknown update type."
 msgstr "不明な更新タイプです。"
 
-#: assets/js/app.js:29730
+#: assets/js/app.js:29745
 msgid "Update failed"
 msgstr "更新に失敗しました"
 
-#: assets/js/app.js:29745
+#: assets/js/app.js:29760
 msgid "Notices"
 msgstr "通知"
 
-#: assets/js/app.js:29774
+#: assets/js/app.js:29789
 msgid "Hide this notice from Minn"
 msgstr "この通知を Minn で非表示にする"
 
-#: assets/js/app.js:29774
+#: assets/js/app.js:29789
 msgid "Hide"
 msgstr "非表示"
 
-#: assets/js/app.js:29784
+#: assets/js/app.js:29799
 msgid "Mark all read"
 msgstr "すべて既読にする"
 
-#: assets/js/app.js:29799
+#: assets/js/app.js:29814
 msgid "You’re all caught up."
 msgstr "すべて確認済みです。"
 
-#: assets/js/app.js:29826
+#: assets/js/app.js:29841
 msgid "Clearing cache…"
 msgstr "キャッシュを削除中…"
 
 #. translators: 1: the providers that cleared. 2: the providers that failed.
-#: assets/js/app.js:29848
+#: assets/js/app.js:29863
 msgid "Cache cleared (%1$s); failed: %2$s"
 msgstr "キャッシュをクリアしました (%1$s)。失敗: %2$s"
 
-#: assets/js/app.js:29850
+#: assets/js/app.js:29865
 msgid "Cache cleared (%s)"
 msgstr "キャッシュをクリアしました (%s)"
 
 #. translators: %s: the backup provider's name.
-#: assets/js/app.js:29859
+#: assets/js/app.js:29874
 msgid "Backup started. %s is working in the background."
 msgstr "バックアップを開始しました。%s がバックグラウンドで動作しています。"
 
-#: assets/js/app.js:29872
+#: assets/js/app.js:29887
 msgid "Disembark backup command copied"
 msgstr "Disembark のバックアップコマンドをコピーしました"
 
-#: assets/js/app.js:29874
+#: assets/js/app.js:29889
 msgid "Copy failed — the command is on the Backups page"
 msgstr "コピーできませんでした。コマンドはバックアップのページにあります"
 
-#: assets/js/app.js:29885
+#: assets/js/app.js:29900
 msgid "Find & replace (⌘⇧F)"
 msgstr "検索と置換 (⌘⇧F)"
 
-#: assets/js/app.js:29886
+#: assets/js/app.js:29901
 msgid "Toggle focus mode (⌘⇧D)"
 msgstr "フォーカスモードを切り替え (⌘⇧D)"
 
-#: assets/js/app.js:29887
+#: assets/js/app.js:29902
 msgid "Toggle outline mode (⌘⇧O)"
 msgstr "アウトラインモードを切り替え (⌘⇧O)"
 
-#: assets/js/app.js:29892
+#: assets/js/app.js:29907
 msgid "Edit in the block editor ↗"
 msgstr "ブロックエディターで編集 ↗"
 
-#: assets/js/app.js:29895
+#: assets/js/app.js:29910
 msgid "Go to Overview"
 msgstr "概要へ移動"
 
-#: assets/js/app.js:29896
+#: assets/js/app.js:29911
 msgid "Manage Content"
 msgstr "コンテンツを管理"
 
-#: assets/js/app.js:29897
+#: assets/js/app.js:29912
 msgid "Open Media Library"
 msgstr "メディアライブラリを開く"
 
-#: assets/js/app.js:29899
+#: assets/js/app.js:29914
 msgid "Review Comments"
 msgstr "コメントを確認"
 
-#: assets/js/app.js:29900
+#: assets/js/app.js:29915
 msgid "View Orders"
 msgstr "注文を表示"
 
-#: assets/js/app.js:29901
+#: assets/js/app.js:29916
 msgid "View Subscriptions"
 msgstr "サブスクリプションを表示"
 
-#: assets/js/app.js:29902
+#: assets/js/app.js:29917
 msgid "View Products"
 msgstr "商品を表示"
 
-#: assets/js/app.js:29903
+#: assets/js/app.js:29918
 msgid "View Coupons"
 msgstr "クーポンを表示"
 
-#: assets/js/app.js:29904
+#: assets/js/app.js:29919
 msgid "View Customers"
 msgstr "顧客を表示"
 
-#: assets/js/app.js:29905
+#: assets/js/app.js:29920
 msgid "Browse Users"
 msgstr "ユーザーを表示"
 
 #. translators: %s: how many providers share this surface.
-#: assets/js/app.js:29912
+#: assets/js/app.js:29927
 msgid "%s provider"
 msgid_plural "%s providers"
 msgstr[0] "プロバイダー %s 件"
 
 #. translators: %s: the surface's name.
-#: assets/js/app.js:29918
+#: assets/js/app.js:29933
 msgid "Open %s"
 msgstr "%s を開く"
 
-#: assets/js/app.js:29925
+#: assets/js/app.js:29940
 msgid "Edit Menus"
 msgstr "メニューを編集"
 
-#: assets/js/app.js:29926
+#: assets/js/app.js:29941
 msgid "Manage Widgets"
 msgstr "ウィジェットを管理"
 
-#: assets/js/app.js:29928
+#: assets/js/app.js:29943
 msgid "Manage Extensions"
 msgstr "拡張機能を管理"
 
-#: assets/js/app.js:29929
+#: assets/js/app.js:29944
 msgid "Manage Post Types"
 msgstr "投稿タイプを管理"
 
-#: assets/js/app.js:29930
+#: assets/js/app.js:29945
 msgid "Manage categories & tags"
 msgstr "カテゴリーとタグを管理"
 
-#: assets/js/app.js:29931
+#: assets/js/app.js:29946
 msgid "View System diagnostics"
 msgstr "システム診断を表示"
 
-#: assets/js/app.js:29932
+#: assets/js/app.js:29947
 msgid "Browse database (read-only)"
 msgstr "データベースを表示 (閲覧専用)"
 
-#: assets/js/app.js:29933
+#: assets/js/app.js:29948
 msgid "View site logs"
 msgstr "サイトのログを表示"
 
-#: assets/js/app.js:29934
+#: assets/js/app.js:29949
 msgid "Open Settings"
 msgstr "設定を開く"
 
-#: assets/js/app.js:29946
+#: assets/js/app.js:29961
 msgid "Switch site…"
 msgstr "サイトを切り替え…"
 
 #. translators: %s: site name.
-#: assets/js/app.js:29956
+#: assets/js/app.js:29971
 msgid "Switch to %s"
 msgstr "%s に切り替え"
 
-#: assets/js/app.js:29965
+#: assets/js/app.js:29980
 msgid "Open Network Admin ↗"
 msgstr "ネットワーク管理画面を開く ↗"
 
-#: assets/js/app.js:29972
+#: assets/js/app.js:29987
 msgid "Write new post"
 msgstr "新規投稿を書く"
 
-#: assets/js/app.js:29973
+#: assets/js/app.js:29988
 msgid "Create new page"
 msgstr "新規固定ページを作成"
 
-#: assets/js/app.js:29974
+#: assets/js/app.js:29989
 msgid "Toggle light / dark"
 msgstr "ライト / ダークを切り替え"
 
-#: assets/js/app.js:29975
+#: assets/js/app.js:29990
 msgid "View notifications"
 msgstr "通知を表示"
 
-#: assets/js/app.js:29989
+#: assets/js/app.js:30004
 msgid "Copy Disembark backup command"
 msgstr "Disembark のバックアップコマンドをコピー"
 
-#: assets/js/app.js:29999
+#: assets/js/app.js:30014
 msgid "Update all plugins"
 msgstr "すべてのプラグインを更新"
 
-#: assets/js/app.js:30002
+#: assets/js/app.js:30017
 msgid "Your profile — name, email, password"
 msgstr "あなたのプロフィール — 名前・メール・パスワード"
 
-#: assets/js/app.js:30003
+#: assets/js/app.js:30018
 msgid "Open the user guide"
 msgstr "ユーザーガイドを開く"
 
-#: assets/js/app.js:30004
+#: assets/js/app.js:30019
 msgid "About Minn — help & shortcuts"
 msgstr "Minn について — ヘルプとショートカット"
 
-#: assets/js/app.js:30005
+#: assets/js/app.js:30020
 msgid "Visit site"
 msgstr "サイトを表示"
 
-#: assets/js/app.js:30006
+#: assets/js/app.js:30021
 msgid "Classic wp-admin"
 msgstr "クラシックの wp-admin"
 
-#: assets/js/app.js:30105
+#: assets/js/app.js:30120
 msgid "Search or run a command…"
 msgstr "検索、またはコマンドを実行…"
 
-#: assets/js/app.js:30129
+#: assets/js/app.js:30144
 msgid "Your content"
 msgstr "自分のコンテンツ"
 
-#: assets/js/app.js:30133
+#: assets/js/app.js:30148
 msgid "Searching your content…"
 msgstr "コンテンツを検索中…"
 
 #. translators: %s: the search query.
-#: assets/js/app.js:30134
+#: assets/js/app.js:30149
 msgid "No results for “%s”"
 msgstr "「%s」に一致する結果はありません"
 
-#: assets/js/app.js:30189
+#: assets/js/app.js:30204
 msgid "Loading events…"
 msgstr "イベントを読み込み中…"
 
-#: assets/js/app.js:30190
+#: assets/js/app.js:30205
 msgid "Nothing recorded in this period."
 msgstr "この期間に記録はありません。"
 
-#: assets/js/app.js:30228
-#: assets/js/app.js:30369
-#: assets/js/app.js:30895
+#: assets/js/app.js:30243
+#: assets/js/app.js:30384
+#: assets/js/app.js:30910
 msgid "Previous (←)"
 msgstr "前へ (←)"
 
-#: assets/js/app.js:30229
-#: assets/js/app.js:30370
-#: assets/js/app.js:30896
+#: assets/js/app.js:30244
+#: assets/js/app.js:30385
+#: assets/js/app.js:30911
 msgid "Next (→)"
 msgstr "次へ (→)"
 
-#: assets/js/app.js:30232
+#: assets/js/app.js:30247
 msgid "Loading top pages…"
 msgstr "人気のページを読み込み中…"
 
-#: assets/js/app.js:30237
+#: assets/js/app.js:30252
 msgid "Top pages"
 msgstr "上位のページ"
 
-#: assets/js/app.js:30247
-#: assets/js/app.js:30260
+#: assets/js/app.js:30262
+#: assets/js/app.js:30275
 msgid "vis"
 msgstr "訪問"
 
-#: assets/js/app.js:30248
-#: assets/js/app.js:30261
+#: assets/js/app.js:30263
+#: assets/js/app.js:30276
 msgid "views"
 msgstr "表示"
 
-#: assets/js/app.js:30253
+#: assets/js/app.js:30268
 msgid "Top referrers"
 msgstr "上位の参照元"
 
-#: assets/js/app.js:30291
+#: assets/js/app.js:30306
 msgid "Save widget"
 msgstr "ウィジェットを保存"
 
 #. translators: %s: file name of the image being edited.
-#: assets/js/app.js:30303
+#: assets/js/app.js:30318
 msgid "Edit image · %s"
 msgstr "画像を編集 · %s"
 
-#: assets/js/app.js:30307
+#: assets/js/app.js:30322
 msgid "Rotate left"
 msgstr "左に回転"
 
-#: assets/js/app.js:30307
-#: assets/js/app.js:30308
+#: assets/js/app.js:30322
+#: assets/js/app.js:30323
 msgid "Rotate"
 msgstr "回転"
 
-#: assets/js/app.js:30308
+#: assets/js/app.js:30323
 msgid "Rotate right"
 msgstr "右に回転"
 
-#: assets/js/app.js:30309
+#: assets/js/app.js:30324
 msgid "Reset"
 msgstr "リセット"
 
-#: assets/js/app.js:30310
+#: assets/js/app.js:30325
 msgid "Drag on the image to crop"
 msgstr "画像上をドラッグして切り抜き"
 
-#: assets/js/app.js:30340
+#: assets/js/app.js:30355
 msgid "Uploaded"
 msgstr "アップロード済み"
 
-#: assets/js/app.js:30357
+#: assets/js/app.js:30372
 msgid "Sanitized by Safe SVG"
 msgstr "Safe SVG でサニタイズ済み"
 
 #. translators: %s: the plugin's name.
-#: assets/js/app.js:30357
+#: assets/js/app.js:30372
 msgid "SVG uploads enabled by %s"
 msgstr "SVG のアップロードは %s により有効です"
 
-#: assets/js/app.js:30357
+#: assets/js/app.js:30372
 msgid "SVG uploads enabled by a plugin"
 msgstr "SVG のアップロードはプラグインにより有効です"
 
-#: assets/js/app.js:30384
+#: assets/js/app.js:30399
 msgid "Shown beneath the image…"
 msgstr "画像の下に表示されます…"
 
-#: assets/js/app.js:30386
+#: assets/js/app.js:30401
 msgid "Longer detail, shown on the attachment page…"
 msgstr "添付ファイルページに表示される詳しい説明…"
 
-#: assets/js/app.js:30393
+#: assets/js/app.js:30408
 msgid "Rotate and crop — saved as a new copy"
 msgstr "回転と切り抜き — 新しいコピーとして保存されます"
 
-#: assets/js/app.js:30394
-#: assets/js/app.js:32985
+#: assets/js/app.js:30409
+#: assets/js/app.js:33000
 msgid "Regenerate Thumbnails"
 msgstr "Regenerate Thumbnails"
 
-#: assets/js/app.js:30394
+#: assets/js/app.js:30409
 msgid "Force Regenerate Thumbnails"
 msgstr "Force Regenerate Thumbnails"
 
-#: assets/js/app.js:30394
+#: assets/js/app.js:30409
 msgid "Thumbnails"
 msgstr "サムネイル"
 
-#: assets/js/app.js:30395
+#: assets/js/app.js:30410
 msgid "Upload a new file over this one — same name, same URL, every reference keeps working (Enable Media Replace)"
 msgstr "同じ名前・同じ URL のまま新しいファイルで上書きします。既存の参照はすべてそのまま使えます (Enable Media Replace)"
 
-#: assets/js/app.js:30395
+#: assets/js/app.js:30410
 msgid "Replace file"
 msgstr "ファイルを置き換え"
 
-#: assets/js/app.js:30397
+#: assets/js/app.js:30412
 msgid "Replace featured"
 msgstr "アイキャッチを置き換え"
 
-#: assets/js/app.js:30398
+#: assets/js/app.js:30413
 msgid "Remove featured"
 msgstr "アイキャッチを削除"
 
 #. translators: %s: the subscription number.
-#: assets/js/app.js:30429
+#: assets/js/app.js:30444
 msgid "Subscription #%s"
 msgstr "定期購入 #%s"
 
-#: assets/js/app.js:30435
+#: assets/js/app.js:30450
 msgid "Loading subscription…"
 msgstr "定期購入を読み込み中…"
 
-#: assets/js/app.js:30445
+#: assets/js/app.js:30460
 msgid "Customer ID"
 msgstr "顧客 ID"
 
-#: assets/js/app.js:30447
-#: assets/js/app.js:30492
+#: assets/js/app.js:30462
+#: assets/js/app.js:30507
 msgid "View customer"
 msgstr "顧客を表示"
 
-#: assets/js/app.js:30452
+#: assets/js/app.js:30467
 msgid "Last payment"
 msgstr "最終支払い"
 
-#: assets/js/app.js:30453
+#: assets/js/app.js:30468
 msgid "Trial ends"
 msgstr "試用期間の終了"
 
-#: assets/js/app.js:30456
+#: assets/js/app.js:30471
 msgid "Renewal"
 msgstr "更新"
 
-#: assets/js/app.js:30456
+#: assets/js/app.js:30471
 msgid "Manual"
 msgstr "手動"
 
-#: assets/js/app.js:30457
+#: assets/js/app.js:30472
 msgid "Suspensions"
 msgstr "停止回数"
 
-#: assets/js/app.js:30463
+#: assets/js/app.js:30478
 msgid "No line items."
 msgstr "明細はありません。"
 
-#: assets/js/app.js:30464
+#: assets/js/app.js:30479
 msgid "Recurring total"
 msgstr "継続課金の合計"
 
-#: assets/js/app.js:30469
+#: assets/js/app.js:30484
 msgid "Active, On hold and Cancelled cover daily work. Switched / Expired are usually set by WooCommerce Subscriptions itself."
 msgstr "日々の運用では「有効」「保留」「キャンセル」を使います。「切り替え済み」「期限切れ」は通常 WooCommerce Subscriptions 自身が設定します。"
 
-#: assets/js/app.js:30471
+#: assets/js/app.js:30486
 msgid "Parent order"
 msgstr "親注文"
 
-#: assets/js/app.js:30472
+#: assets/js/app.js:30487
 msgid "Order that started this subscription"
 msgstr "このサブスクリプションを開始した注文"
 
-#: assets/js/app.js:30474
+#: assets/js/app.js:30489
 msgid "Initial"
 msgstr "初回"
 
-#: assets/js/app.js:30477
+#: assets/js/app.js:30492
 msgid "Related orders"
 msgstr "関連する注文"
 
-#: assets/js/app.js:30479
+#: assets/js/app.js:30494
 msgid "No renewal orders yet."
 msgstr "更新の注文はまだありません。"
 
-#: assets/js/app.js:30490
-#: assets/js/app.js:32053
+#: assets/js/app.js:30505
+#: assets/js/app.js:32068
 msgid "Save status"
 msgstr "ステータスを保存"
 
-#: assets/js/app.js:30491
+#: assets/js/app.js:30506
 msgid "Open parent order"
 msgstr "親注文を開く"
 
-#: assets/js/app.js:30539
+#: assets/js/app.js:30554
 msgid "New coupon"
 msgstr "新規クーポン"
 
-#: assets/js/app.js:30540
+#: assets/js/app.js:30555
 msgid "Create a promo code"
 msgstr "プロモーションコードを作成"
 
-#: assets/js/app.js:30545
+#: assets/js/app.js:30560
 msgid "Loading coupon…"
 msgstr "クーポンを読み込み中…"
 
-#: assets/js/app.js:30551
+#: assets/js/app.js:30566
 msgid "Code & discount"
 msgstr "コードと割引"
 
-#: assets/js/app.js:30554
+#: assets/js/app.js:30569
 msgid "e.g. SAVE10"
 msgstr "例: SAVE10"
 
-#: assets/js/app.js:30555
+#: assets/js/app.js:30570
 msgid "Discount type"
 msgstr "割引タイプ"
 
-#: assets/js/app.js:30569
+#: assets/js/app.js:30584
 msgid "Internal note"
 msgstr "内部メモ"
 
-#: assets/js/app.js:30578
+#: assets/js/app.js:30593
 msgid "Limits & options"
 msgstr "制限とオプション"
 
-#: assets/js/app.js:30582
+#: assets/js/app.js:30597
 msgid "Usage limit"
 msgstr "利用回数の上限"
 
-#: assets/js/app.js:30583
+#: assets/js/app.js:30598
 msgid "Per user"
 msgstr "ユーザーごと"
 
-#: assets/js/app.js:30586
+#: assets/js/app.js:30601
 msgid "Minimum spend"
 msgstr "最低購入金額"
 
-#: assets/js/app.js:30591
+#: assets/js/app.js:30606
 msgid "Individual use only"
 msgstr "単独利用のみ"
 
-#: assets/js/app.js:30595
+#: assets/js/app.js:30610
 msgid "Allow free shipping"
 msgstr "送料無料を許可"
 
-#: assets/js/app.js:30607
-#: assets/js/app.js:32153
+#: assets/js/app.js:30622
+#: assets/js/app.js:32168
 msgid "Create coupon"
 msgstr "クーポンを作成"
 
-#: assets/js/app.js:30609
+#: assets/js/app.js:30624
 msgid "Saves code, amount, limits and options through WooCommerce."
 msgstr "コード・金額・制限・オプションを WooCommerce 経由で保存します。"
 
-#: assets/js/app.js:30639
+#: assets/js/app.js:30654
 msgid "Loading customer…"
 msgstr "顧客を読み込み中…"
 
-#: assets/js/app.js:30645
+#: assets/js/app.js:30660
 msgid "Profile"
 msgstr "プロフィール"
 
-#: assets/js/app.js:30647
-#: assets/js/app.js:30952
+#: assets/js/app.js:30662
+#: assets/js/app.js:30967
 msgid "Username"
 msgstr "ユーザー名"
 
-#: assets/js/app.js:30651
+#: assets/js/app.js:30666
 msgid "Recent total"
 msgstr "直近の合計"
 
-#: assets/js/app.js:30665
+#: assets/js/app.js:30680
 msgid "Recent orders"
 msgstr "最近の注文"
 
-#: assets/js/app.js:30675
+#: assets/js/app.js:30690
 msgid "No orders for this customer."
 msgstr "この顧客の注文はありません。"
 
-#: assets/js/app.js:30687
+#: assets/js/app.js:30702
 msgid "No subscriptions for this customer."
 msgstr "この顧客の定期購入はありません。"
 
-#: assets/js/app.js:30692
+#: assets/js/app.js:30707
 msgid "All subscriptions"
 msgstr "すべてのサブスクリプション"
 
-#: assets/js/app.js:30694
+#: assets/js/app.js:30709
 msgid "Edit in WordPress"
 msgstr "WordPress で編集"
 
-#: assets/js/app.js:30705
+#: assets/js/app.js:30720
 msgid "New product"
 msgstr "新規商品"
 
-#: assets/js/app.js:30710
+#: assets/js/app.js:30725
 msgid "Product name"
 msgstr "商品名"
 
-#: assets/js/app.js:30721
+#: assets/js/app.js:30736
 msgid "Creates a simple product. Variations, gallery and long description stay in WooCommerce."
 msgstr "シンプル商品を作成します。バリエーション・ギャラリー・長い説明は WooCommerce 側で編集します。"
 
-#: assets/js/app.js:30726
-#: assets/js/app.js:31668
+#: assets/js/app.js:30741
+#: assets/js/app.js:31683
 msgid "Create product"
 msgstr "商品を作成"
 
-#: assets/js/app.js:30741
+#: assets/js/app.js:30756
 msgid "Simple draft or processing order with one line item"
 msgstr "明細1行だけの、下書きまたは処理中の簡易な注文"
 
-#: assets/js/app.js:30757
+#: assets/js/app.js:30772
 msgid "Pending payment"
 msgstr "支払い待ち"
 
-#: assets/js/app.js:30765
+#: assets/js/app.js:30780
 msgid "Line item"
 msgstr "明細行"
 
-#: assets/js/app.js:30773
+#: assets/js/app.js:30788
 msgid "Selected:"
 msgstr "選択中:"
 
-#: assets/js/app.js:30773
+#: assets/js/app.js:30788
 msgid "Pick a published product to add."
 msgstr "追加する公開済みの商品を選択してください。"
 
-#: assets/js/app.js:30781
-#: assets/js/app.js:31783
+#: assets/js/app.js:30796
+#: assets/js/app.js:31798
 msgid "Create order"
 msgstr "注文を作成"
 
 #. translators: 1: the order number. 2: the recipient's email address.
-#: assets/js/app.js:30795
+#: assets/js/app.js:30810
 msgid "Order #%1$s → %2$s"
 msgstr "注文 #%1$s → %2$s"
 
 #. translators: %s: the order number.
-#: assets/js/app.js:30795
+#: assets/js/app.js:30810
 msgid "Order #%s → billing email"
 msgstr "注文 #%s → 請求先メール"
 
-#: assets/js/app.js:30806
-#: assets/js/app.js:31022
+#: assets/js/app.js:30821
+#: assets/js/app.js:31037
 msgid "Write your message…"
 msgstr "メッセージを入力…"
 
-#: assets/js/app.js:30807
+#: assets/js/app.js:30822
 msgid "Styled Minn Admin HTML email to the order billing address. Blank lines become paragraphs. A button links to pay or view the order."
 msgstr "注文の請求先アドレスへ、Minn Admin の書式付き HTML メールを送信します。空行は段落になります。支払いまたは注文表示へのボタンが付きます。"
 
-#: assets/js/app.js:30912
+#: assets/js/app.js:30927
 msgid "Email preview"
 msgstr "メールのプレビュー"
 
-#: assets/js/app.js:30917
+#: assets/js/app.js:30932
 msgid "Open raw"
 msgstr "元データを開く"
 
-#: assets/js/app.js:30956
-#: assets/js/app.js:34329
-#: assets/js/app.js:34705
+#: assets/js/app.js:30971
+#: assets/js/app.js:34344
+#: assets/js/app.js:34720
 msgid "Display name"
 msgstr "表示名"
 
-#: assets/js/app.js:30973
-#: assets/js/app.js:34353
-#: assets/js/app.js:34730
+#: assets/js/app.js:30988
+#: assets/js/app.js:34368
+#: assets/js/app.js:34745
 msgid "New password (leave blank to keep)"
 msgstr "新しいパスワード (空欄で変更なし)"
 
-#: assets/js/app.js:30976
-#: assets/js/app.js:34356
-#: assets/js/app.js:34733
+#: assets/js/app.js:30991
+#: assets/js/app.js:34371
+#: assets/js/app.js:34748
 msgid "Generate"
 msgstr "生成"
 
-#: assets/js/app.js:30982
-#: assets/js/app.js:34430
-#: assets/js/app.js:34834
+#: assets/js/app.js:30997
+#: assets/js/app.js:34445
+#: assets/js/app.js:34849
 msgid "Sessions"
 msgstr "セッション"
 
-#: assets/js/app.js:30983
+#: assets/js/app.js:30998
 msgid "Loading sessions…"
 msgstr "セッションを読み込み中…"
 
-#: assets/js/app.js:30984
-#: assets/js/app.js:34431
-#: assets/js/app.js:34835
+#: assets/js/app.js:30999
+#: assets/js/app.js:34446
+#: assets/js/app.js:34850
 msgid "No active sessions."
 msgstr "有効なセッションはありません。"
 
-#: assets/js/app.js:30988
-#: assets/js/app.js:34839
+#: assets/js/app.js:31003
+#: assets/js/app.js:34854
 msgid "this session"
 msgstr "現在のセッション"
 
-#: assets/js/app.js:30991
-#: assets/js/app.js:34438
-#: assets/js/app.js:34842
+#: assets/js/app.js:31006
+#: assets/js/app.js:34453
+#: assets/js/app.js:34857
 msgid "Sign out"
 msgstr "ログアウト"
 
-#: assets/js/app.js:30993
-#: assets/js/app.js:34440
-#: assets/js/app.js:34844
+#: assets/js/app.js:31008
+#: assets/js/app.js:34455
+#: assets/js/app.js:34859
 msgid "Sign out everywhere"
 msgstr "すべてのセッションからログアウト"
 
-#: assets/js/app.js:30996
+#: assets/js/app.js:31011
 msgid "Create user"
 msgstr "ユーザーを作成"
 
-#: assets/js/app.js:30997
-#: assets/js/app.js:31114
-#: assets/js/app.js:31133
-#: assets/js/app.js:32583
-#: assets/js/app.js:34446
+#: assets/js/app.js:31012
+#: assets/js/app.js:31129
+#: assets/js/app.js:31148
+#: assets/js/app.js:32598
+#: assets/js/app.js:34461
 msgid "Delete user"
 msgstr "ユーザーを削除"
 
 #. translators: %s: name or email address the message was sent to.
-#: assets/js/app.js:31011
+#: assets/js/app.js:31026
 msgid "To %s"
 msgstr "宛先: %s"
 
-#: assets/js/app.js:31011
+#: assets/js/app.js:31026
 msgid "user"
 msgstr "ユーザー"
 
 #. translators: %s: the site's name.
-#: assets/js/app.js:31018
+#: assets/js/app.js:31033
 msgid "A note from %s"
 msgstr "%s からのメモ"
 
-#: assets/js/app.js:31018
+#: assets/js/app.js:31033
 msgid "A note from the site"
 msgstr "サイトからのメモ"
 
-#: assets/js/app.js:31023
+#: assets/js/app.js:31038
 msgid "Sent as a styled Minn Admin HTML email from the site. Blank lines become paragraphs."
 msgstr "サイトから Minn Admin の書式付き HTML メールとして送信されます。空行は段落になります。"
 
 #. translators: %d: number of sites.
-#: assets/js/app.js:31050
+#: assets/js/app.js:31065
 msgid "You belong to %d sites"
 msgstr "%d 件のサイトに所属しています"
 
-#: assets/js/app.js:31055
+#: assets/js/app.js:31070
 msgid "Search by name or address…"
 msgstr "名前またはアドレスで検索…"
 
-#: assets/js/app.js:31058
+#: assets/js/app.js:31073
 msgid "Loading sites…"
 msgstr "サイトを読み込み中…"
 
-#: assets/js/app.js:31059
-#: assets/js/app.js:31066
+#: assets/js/app.js:31074
+#: assets/js/app.js:31081
 msgid "No sites match that search."
 msgstr "検索に一致するサイトがありません。"
 
-#: assets/js/app.js:31064
+#: assets/js/app.js:31079
 msgid "You are here"
 msgstr "現在の場所"
 
-#: assets/js/app.js:31080
+#: assets/js/app.js:31095
 msgid "Attach a network account to this site"
 msgstr "サイトネットワークのアカウントをこのサイトに追加"
 
-#: assets/js/app.js:31086
+#: assets/js/app.js:31101
 msgid "Email or username"
 msgstr "メールアドレスまたはユーザー名"
 
-#: assets/js/app.js:31087
+#: assets/js/app.js:31102
 msgid "person@example.com"
 msgstr "person@example.com"
 
-#: assets/js/app.js:31088
+#: assets/js/app.js:31103
 msgid "The account must already exist on this network. Creating new accounts is a network administrator job."
 msgstr "アカウントはこのサイトネットワークにすでに存在している必要があります。新規アカウントの作成はネットワーク管理者の役割です。"
 
-#: assets/js/app.js:31091
+#: assets/js/app.js:31106
 msgid "Role on this site"
 msgstr "このサイトでの権限グループ"
 
-#: assets/js/app.js:31093
+#: assets/js/app.js:31108
 msgid "Pick a role…"
 msgstr "権限グループを選択…"
 
-#: assets/js/app.js:31120
+#: assets/js/app.js:31135
 msgid "This permanently removes the account. Content they authored must be reassigned to another user."
 msgstr "アカウントを完全に削除します。そのユーザーが作成したコンテンツは、別のユーザーに引き継ぐ必要があります。"
 
-#: assets/js/app.js:31124
+#: assets/js/app.js:31139
 msgid "Reassign content to"
 msgstr "コンテンツの引き継ぎ先"
 
-#: assets/js/app.js:31176
+#: assets/js/app.js:31191
 msgid "Minn Admin is off"
 msgstr "Minn Admin は無効です"
 
-#: assets/js/app.js:31176
+#: assets/js/app.js:31191
 msgid "Deactivate Minn Admin?"
 msgstr "Minn Admin を無効化しますか ?"
 
 #. translators: 1: the word "Done." in bold. 2: the word "Plugins" in bold.
-#: assets/js/app.js:31181
+#: assets/js/app.js:31196
 msgid "%1$s Heading to the classic dashboard… Reactivate Minn any time from %2$s, and everything here (content, settings, markup) is exactly as you left it."
 msgstr "%1$s クラシックのダッシュボードへ移動します… Minn は %2$s からいつでも再有効化でき、ここにあるもの (コンテンツ・設定・マークアップ) はそのまま残ります。"
 
-#: assets/js/app.js:31181
+#: assets/js/app.js:31196
 msgid "Done."
 msgstr "完了しました。"
 
 #. translators: %s: the /minn-admin/ path, in bold.
-#: assets/js/app.js:31182
+#: assets/js/app.js:31197
 msgid "This turns off the %s dashboard and returns you to the classic wp-admin."
 msgstr "%s のダッシュボードを無効にし、クラシックの wp-admin に戻ります。"
 
-#: assets/js/app.js:31182
+#: assets/js/app.js:31197
 msgid "/minn-admin/"
 msgstr "/minn-admin/"
 
-#: assets/js/app.js:31183
+#: assets/js/app.js:31198
 msgid "Nothing is lost: Minn writes native WordPress content and options, and reactivating from the Plugins screen brings this dashboard straight back."
 msgstr "失われるものはありません。Minn は WordPress 本来のコンテンツとオプションを書き込むため、プラグイン画面から再有効化すればこのダッシュボードがそのまま戻ります。"
 
-#: assets/js/app.js:31187
+#: assets/js/app.js:31202
 msgid "Deactivate and go to wp-admin"
 msgstr "無効化して wp-admin へ移動"
 
-#: assets/js/app.js:31188
+#: assets/js/app.js:31203
 msgid "Keep Minn"
 msgstr "Minn を使い続ける"
 
 #. translators: %s: the Minn Admin version.
-#: assets/js/app.js:31203
+#: assets/js/app.js:31218
 msgid "What's new · v%s"
 msgstr "新着情報 · v%s"
 
-#: assets/js/app.js:31206
+#: assets/js/app.js:31221
 msgid "Loading changelog…"
 msgstr "更新履歴を読み込み中…"
 
-#: assets/js/app.js:31208
+#: assets/js/app.js:31223
 msgid "Versions"
 msgstr "バージョン"
 
-#: assets/js/app.js:31217
+#: assets/js/app.js:31232
 msgid "View the full changelog with screenshots on minnadmin.com"
 msgstr "スクリーンショット付きの更新履歴を minnadmin.com で表示"
 
-#: assets/js/app.js:31227
-#: assets/js/app.js:31398
+#: assets/js/app.js:31242
+#: assets/js/app.js:31413
 msgid "User guide"
 msgstr "ユーザーガイド"
 
-#: assets/js/app.js:31230
+#: assets/js/app.js:31245
 msgid "Loading the guide…"
 msgstr "ガイドを読み込み中…"
 
-#: assets/js/app.js:31254
-#: assets/js/app.js:31326
+#: assets/js/app.js:31269
+#: assets/js/app.js:31341
 msgid "Built into WordPress — shown for reference."
 msgstr "WordPress 本体の機能です。参考として表示しています。"
 
-#: assets/js/app.js:31254
-#: assets/js/app.js:31326
+#: assets/js/app.js:31269
+#: assets/js/app.js:31341
 msgid "Registered in code by a theme or plugin — shown for reference, editable only where it’s defined."
 msgstr "テーマやプラグインがコードで登録しています。参考として表示しており、編集は定義元でのみ可能です。"
 
-#: assets/js/app.js:31255
-#: assets/js/app.js:31327
+#: assets/js/app.js:31270
+#: assets/js/app.js:31342
 msgid "Plural label"
 msgstr "複数形のラベル"
 
-#: assets/js/app.js:31256
+#: assets/js/app.js:31271
 msgid "Books"
 msgstr "書籍"
 
-#: assets/js/app.js:31257
-#: assets/js/app.js:31329
+#: assets/js/app.js:31272
+#: assets/js/app.js:31344
 msgid "Singular label"
 msgstr "単数形のラベル"
 
-#: assets/js/app.js:31258
+#: assets/js/app.js:31273
 msgid "Book"
 msgstr "書籍"
 
-#: assets/js/app.js:31260
+#: assets/js/app.js:31275
 msgid "book"
 msgstr "book"
 
-#: assets/js/app.js:31261
+#: assets/js/app.js:31276
 msgid "Description (optional)"
 msgstr "説明 (任意)"
 
-#: assets/js/app.js:31263
-#: assets/js/app.js:31333
+#: assets/js/app.js:31278
+#: assets/js/app.js:31348
 msgid "Store definition in"
 msgstr "定義の保存先"
 
-#: assets/js/app.js:31267
+#: assets/js/app.js:31282
 msgid "Visible on the front end with its own URLs"
 msgstr "フロントエンドに独自の URL で表示されます"
 
-#: assets/js/app.js:31268
+#: assets/js/app.js:31283
 msgid "Archive page"
 msgstr "アーカイブページ"
 
-#: assets/js/app.js:31268
+#: assets/js/app.js:31283
 msgid "A listing page at /slug/"
 msgstr "/slug/ の一覧ページ"
 
-#: assets/js/app.js:31269
+#: assets/js/app.js:31284
 msgid "Like pages — items can have parents"
 msgstr "固定ページのように、項目に親を設定できます"
 
-#: assets/js/app.js:31270
-#: assets/js/app.js:31338
+#: assets/js/app.js:31285
+#: assets/js/app.js:31353
 msgid "Show in REST API"
 msgstr "REST API に表示"
 
-#: assets/js/app.js:31270
+#: assets/js/app.js:31285
 msgid "Required for Minn (and the block editor) to list and edit content"
 msgstr "Minn (およびブロックエディター) がコンテンツを一覧表示・編集するために必要です"
 
-#: assets/js/app.js:31271
+#: assets/js/app.js:31286
 msgid "Supports"
 msgstr "サポートする機能"
 
-#: assets/js/app.js:31279
-#: assets/js/app.js:32205
+#: assets/js/app.js:31294
+#: assets/js/app.js:32220
 msgid "Create post type"
 msgstr "投稿タイプを作成"
 
-#: assets/js/app.js:31321
+#: assets/js/app.js:31336
 msgid "Add taxonomy"
 msgstr "タクソノミーを追加"
 
-#: assets/js/app.js:31328
+#: assets/js/app.js:31343
 msgid "Genres"
 msgstr "ジャンル"
 
-#: assets/js/app.js:31330
+#: assets/js/app.js:31345
 msgid "Genre"
 msgstr "ジャンル"
 
-#: assets/js/app.js:31332
+#: assets/js/app.js:31347
 msgid "genre"
 msgstr "ジャンル"
 
-#: assets/js/app.js:31335
+#: assets/js/app.js:31350
 msgid "Behavior"
 msgstr "動作"
 
-#: assets/js/app.js:31336
+#: assets/js/app.js:31351
 msgid "Hierarchical (like categories)"
 msgstr "階層構造 (カテゴリーと同様)"
 
-#: assets/js/app.js:31336
+#: assets/js/app.js:31351
 msgid "Terms can nest under parents; off behaves like tags"
 msgstr "タームを親の下に入れ子にできます。オフの場合はタグと同様の動作です"
 
-#: assets/js/app.js:31337
+#: assets/js/app.js:31352
 msgid "Visible on the front end with term archive URLs"
 msgstr "フロントエンドにタームアーカイブの URL で表示されます"
 
-#: assets/js/app.js:31338
+#: assets/js/app.js:31353
 msgid "Required for Minn and the block editor to assign terms"
 msgstr "Minn とブロックエディターがタームを設定するために必要です"
 
-#: assets/js/app.js:31339
+#: assets/js/app.js:31354
 msgid "Attach to"
 msgstr "関連付ける投稿タイプ"
 
-#: assets/js/app.js:31345
-#: assets/js/app.js:32281
+#: assets/js/app.js:31360
+#: assets/js/app.js:32296
 msgid "Create taxonomy"
 msgstr "タクソノミーを作成"
 
-#: assets/js/app.js:31362
+#: assets/js/app.js:31377
 msgid "Minn is a reimagined WordPress admin."
 msgstr "Minn は WordPress の管理画面を作り直したものです。"
 
-#: assets/js/app.js:31362
+#: assets/js/app.js:31377
 msgid "A calm, fast surface for the work you do every day: writing, moderating, uploading, and keeping an eye on the site. Classic wp-admin stays fully available, one click away."
 msgstr "執筆・コメントの承認・アップロード・サイトの見守りといった日々の作業のための、静かで高速な画面です。クラシックの wp-admin もワンクリックでそのまま利用できます。"
 
-#: assets/js/app.js:31364
+#: assets/js/app.js:31379
 msgid "Getting around"
 msgstr "画面の移動"
 
-#: assets/js/app.js:31365
+#: assets/js/app.js:31380
 msgid "The sidebar has three groups: Workspace (the daily material), Tools (what your plugins add) and Manage (the site itself). The fastest way anywhere is the command palette:"
 msgstr "サイドバーは3つのグループに分かれています。ワークスペース (日々の素材)、ツール (プラグインが追加するもの)、管理 (サイト自体)。どこへ行くにも最速なのはコマンドパレットです:"
 
-#: assets/js/app.js:31365
+#: assets/js/app.js:31380
 msgid ", then start typing a view, a post or a command."
 msgstr "を押して、画面名や投稿名、コマンドを入力し始めてください。"
 
-#: assets/js/app.js:31367
+#: assets/js/app.js:31382
 msgid "Right-click almost anything"
 msgstr "ほとんどのものを右クリックできます"
 
-#: assets/js/app.js:31368
+#: assets/js/app.js:31383
 msgid "The least discoverable thing in Minn, so here it is in writing: rows in Content and Media, comments, the theme button, plugin entries in the sidebar and group headings in the block library all have right-click menus. When in doubt, try a right-click."
 msgstr "Minn で最も気づかれにくい機能なので明記します。コンテンツやメディアの行、コメント、テーマのボタン、サイドバーのプラグイン項目、ブロックライブラリの見出しには、いずれも右クリックメニューがあります。迷ったら右クリックしてみてください。"
 
-#: assets/js/app.js:31370
+#: assets/js/app.js:31385
 msgid "Make it yours"
 msgstr "自分好みに"
 
-#: assets/js/app.js:31371
+#: assets/js/app.js:31386
 msgid "Anything a plugin adds here can be hidden for you alone: right-click its sidebar entry or block-library heading and choose Hide. Everything hidden is listed on Your profile, where one click restores it."
 msgstr "プラグインが追加した項目は、自分の画面からだけ非表示にできます。サイドバーの項目やブロックライブラリの見出しを右クリックして「非表示」を選んでください。非表示にした項目は「あなたのプロフィール」に一覧表示され、ワンクリックで元に戻せます。"
 
-#: assets/js/app.js:31373
+#: assets/js/app.js:31388
 msgid "Keyboard shortcuts"
 msgstr "キーボードショートカット"
 
-#: assets/js/app.js:31375
+#: assets/js/app.js:31390
 msgid "Command palette · with text selected in the editor: link"
 msgstr "コマンドパレット · エディターでテキストを選択中はリンク"
 
-#: assets/js/app.js:31376
+#: assets/js/app.js:31391
 msgid "Save, keeping the current status"
 msgstr "現在のステータスのまま保存"
 
-#: assets/js/app.js:31377
+#: assets/js/app.js:31392
 msgid "Publish, Update or Schedule"
 msgstr "公開・更新・予約投稿"
 
-#: assets/js/app.js:31378
+#: assets/js/app.js:31393
 msgid "Block library: browse every block, design and pattern"
 msgstr "ブロックライブラリ: すべてのブロック・デザイン・パターンを表示"
 
-#: assets/js/app.js:31379
+#: assets/js/app.js:31394
 msgid "Find & replace in the post"
 msgstr "投稿内を検索して置換"
 
-#: assets/js/app.js:31380
+#: assets/js/app.js:31395
 msgid "Focus mode: fade all but the current paragraph"
 msgstr "フォーカスモード: 現在の段落以外を薄く表示"
 
-#: assets/js/app.js:31381
+#: assets/js/app.js:31396
 msgid "Outline mode: just the writing and the outline"
 msgstr "アウトラインモード: 本文とアウトラインのみ表示"
 
-#: assets/js/app.js:31382
+#: assets/js/app.js:31397
 msgid "Show or hide the navigation"
 msgstr "ナビゲーションの表示・非表示"
 
-#: assets/js/app.js:31383
+#: assets/js/app.js:31398
 msgid "A block's ⚙ handle: duplicate that block in place"
 msgstr "ブロックの ⚙ ハンドル: そのブロックをその場で複製"
 
-#: assets/js/app.js:31384
+#: assets/js/app.js:31399
 msgid "A block's ⚙ handle: remove that block (⌘Z restores it)"
 msgstr "ブロックの ⚙ ハンドル: そのブロックを削除 (⌘Z で復元)"
 
-#: assets/js/app.js:31385
+#: assets/js/app.js:31400
 msgid "The WordPress button (bottom left) while editing: open this post in the block editor"
 msgstr "編集中に左下の WordPress ボタン: この投稿をブロックエディターで開く"
 
-#: assets/js/app.js:31386
+#: assets/js/app.js:31401
 msgid "click"
 msgstr "クリック"
 
-#: assets/js/app.js:31386
+#: assets/js/app.js:31401
 msgid "An image in a protected block: edit, reorder or replace its images"
 msgstr "保護されたブロック内の画像: 画像の編集・並べ替え・置き換え"
 
-#: assets/js/app.js:31387
+#: assets/js/app.js:31402
 msgid "Previous / next item in a media or entry detail"
 msgstr "メディアやエントリーの詳細で前後の項目へ移動"
 
-#: assets/js/app.js:31388
+#: assets/js/app.js:31403
 msgid "Esc"
 msgstr "Esc"
 
-#: assets/js/app.js:31388
+#: assets/js/app.js:31403
 msgid "Close menus and dialogs"
 msgstr "メニューやダイアログを閉じる"
 
-#: assets/js/app.js:31390
+#: assets/js/app.js:31405
 msgid "The word-count pill (bottom-right in the editor) shows total words, reading time, and words written this session. Click it to set or clear a word goal."
 msgstr "エディター右下の文字数バッジには、総文字数・読了時間・今回のセッションで書いた文字数が表示されます。クリックすると文字数の目標を設定または解除できます。"
 
 #. translators: 1: the Ctrl key, styled as a key. 2: the Command key, styled as a key.
-#: assets/js/app.js:31391
+#: assets/js/app.js:31406
 msgid "On Windows and Linux, use %1$s in place of %2$s."
 msgstr "Windows と Linux では %2$s の代わりに %1$s を使います。"
 
-#: assets/js/app.js:31391
+#: assets/js/app.js:31406
 msgid "Ctrl"
 msgstr "Ctrl"
 
-#: assets/js/app.js:31393
+#: assets/js/app.js:31408
 msgid "Deliberately minimal"
 msgstr "あえて最小限に"
 
-#: assets/js/app.js:31394
+#: assets/js/app.js:31409
 msgid "Minn surfaces the settings people change day to day; the long tail stays in wp-admin on purpose. For plugin configuration Minn doesn't rebuild, open"
 msgstr "Minn は日常的に変更する設定だけを表示し、それ以外はあえて wp-admin に残しています。Minn が作り直していないプラグイン設定については、"
 
-#: assets/js/app.js:31394
+#: assets/js/app.js:31409
 msgid "Your profile → AI Access"
 msgstr "あなたのプロフィール → AI アクセス"
 
-#: assets/js/app.js:31394
+#: assets/js/app.js:31409
 msgid " and hand your AI agent a revocable credential to do the fiddly work over the REST API."
 msgstr " を開き、AI エージェントに取り消し可能な認証情報を渡して、細かい作業を REST API 経由で任せてください。"
 
-#: assets/js/app.js:31395
+#: assets/js/app.js:31410
 msgid "Everything Minn writes is native WordPress: real block markup, core options, core users. Deactivate the plugin and nothing is lost. Plugins extend Minn with one PHP filter, as plain data, which is why nothing here can nag you."
 msgstr "Minn が書き込むものはすべて WordPress 本来のデータです。実際のブロックマークアップ、コアのオプション、コアのユーザー。プラグインを無効化しても何も失われません。プラグインは PHP フィルター1つで、単なるデータとして Minn を拡張します。だからこの画面で煩わされることがありません。"
 
-#: assets/js/app.js:31399
+#: assets/js/app.js:31414
 msgid "minnadmin.com"
 msgstr "minnadmin.com"
 
-#: assets/js/app.js:31400
+#: assets/js/app.js:31415
 msgid "GitHub"
 msgstr "GitHub"
 
-#: assets/js/app.js:31401
+#: assets/js/app.js:31416
 msgid "For plugin authors"
 msgstr "プラグイン作者の方へ"
 
-#: assets/js/app.js:31422
+#: assets/js/app.js:31437
 msgid "Already active"
 msgstr "すでに有効"
 
-#: assets/js/app.js:31423
+#: assets/js/app.js:31438
 msgid "Installed — click to activate"
 msgstr "インストール済み — クリックで有効化"
 
-#: assets/js/app.js:31424
+#: assets/js/app.js:31439
 msgid "Install from GitHub release"
 msgstr "GitHub のリリースからインストール"
 
-#: assets/js/app.js:31424
+#: assets/js/app.js:31439
 msgid "Install from WordPress.org"
 msgstr "WordPress.org からインストール"
 
-#: assets/js/app.js:31434
+#: assets/js/app.js:31449
 msgid "Browse more on WordPress.org →"
 msgstr "WordPress.org でさらに探す →"
 
 #. translators: %s: the search query.
-#: assets/js/app.js:31439
-#: assets/js/app.js:31503
+#: assets/js/app.js:31454
+#: assets/js/app.js:31518
 msgid "No results for “%s”."
 msgstr "「%s」に一致する結果はありません。"
 
-#: assets/js/app.js:31445
-#: assets/js/app.js:31511
+#: assets/js/app.js:31460
+#: assets/js/app.js:31526
 msgid "Install"
 msgstr "インストール"
 
 #. translators: 1: the text ".zip" in bold. 2: a "browse" link.
-#: assets/js/app.js:31467
+#: assets/js/app.js:31482
 msgid "Drop a plugin %1$s here or %2$s"
 msgstr "プラグインの %1$s をここにドロップ、または %2$s"
 
-#: assets/js/app.js:31467
-#: assets/js/app.js:31496
+#: assets/js/app.js:31482
+#: assets/js/app.js:31511
 msgid ".zip"
 msgstr ".zip"
 
-#: assets/js/app.js:31467
-#: assets/js/app.js:31496
-#: assets/js/app.js:31535
+#: assets/js/app.js:31482
+#: assets/js/app.js:31511
+#: assets/js/app.js:31550
 msgid "browse"
 msgstr "表示"
 
-#: assets/js/app.js:31470
+#: assets/js/app.js:31485
 msgid "Search the WordPress.org directory…"
 msgstr "WordPress.org のディレクトリを検索…"
 
-#: assets/js/app.js:31473
+#: assets/js/app.js:31488
 msgid "Catalog"
 msgstr "カタログ"
 
 #. translators: 1: the text ".zip" in bold. 2: a "browse" link.
-#: assets/js/app.js:31496
+#: assets/js/app.js:31511
 msgid "Drop a theme %1$s here or %2$s"
 msgstr "テーマの %1$s をここにドロップ、または %2$s"
 
-#: assets/js/app.js:31499
+#: assets/js/app.js:31514
 msgid "Search the WordPress.org theme directory…"
 msgstr "WordPress.org のテーマディレクトリを検索…"
 
-#: assets/js/app.js:31502
+#: assets/js/app.js:31517
 msgid "Search for a theme, or drop a zip above."
 msgstr "テーマを検索するか、上に zip ファイルをドロップしてください。"
 
-#: assets/js/app.js:31528
+#: assets/js/app.js:31543
 msgid "Build a gallery"
 msgstr "ギャラリーを作成"
 
-#: assets/js/app.js:31528
+#: assets/js/app.js:31543
 msgid "Insert file"
 msgstr "ファイルを挿入"
 
-#: assets/js/app.js:31529
-#: assets/js/app.js:32307
+#: assets/js/app.js:31544
+#: assets/js/app.js:32322
 msgid "Pick images in order"
 msgstr "画像を順番に選択してください"
 
 #. translators: %s: a "browse" link.
-#: assets/js/app.js:31535
+#: assets/js/app.js:31550
 msgid "Drag & drop an image here, or %s"
 msgstr "ここに画像をドラッグ & ドロップ、または %s"
 
-#: assets/js/app.js:31535
+#: assets/js/app.js:31550
 msgid "(it’s used right away)"
 msgstr "(すぐに使用されます)"
 
-#: assets/js/app.js:31547
-#: assets/js/app.js:32305
+#: assets/js/app.js:31562
+#: assets/js/app.js:32320
 msgid "Insert gallery"
 msgstr "ギャラリーを挿入"
 
-#: assets/js/app.js:31606
+#: assets/js/app.js:31621
 msgid "Copied (truncated value)"
 msgstr "コピーしました (値は一部省略)"
 
-#: assets/js/app.js:31606
+#: assets/js/app.js:31621
 msgid "Value copied"
 msgstr "値をコピーしました"
 
-#: assets/js/app.js:31654
-#: assets/js/app.js:31768
-#: assets/js/app.js:32123
+#: assets/js/app.js:31669
+#: assets/js/app.js:31783
+#: assets/js/app.js:32138
 msgid "Creating…"
 msgstr "作成中…"
 
-#: assets/js/app.js:31660
+#: assets/js/app.js:31675
 msgid "Product created"
 msgstr "商品を作成しました"
 
-#: assets/js/app.js:31755
+#: assets/js/app.js:31770
 msgid "Pick a product"
 msgstr "商品を選択してください"
 
-#: assets/js/app.js:31774
+#: assets/js/app.js:31789
 msgid "Order #"
 msgstr "注文番号"
 
-#: assets/js/app.js:31796
+#: assets/js/app.js:31811
 msgid "Widget saved"
 msgstr "ウィジェットを保存しました"
 
-#: assets/js/app.js:31916
+#: assets/js/app.js:31931
 msgid "Featured image updated"
 msgstr "アイキャッチ画像を更新しました"
 
-#: assets/js/app.js:31929
+#: assets/js/app.js:31944
 msgid "Featured image removed"
 msgstr "アイキャッチ画像を削除しました"
 
-#: assets/js/app.js:31939
+#: assets/js/app.js:31954
 msgid "Regenerating…"
 msgstr "再生成中…"
 
 #. translators: %s: how many thumbnail sizes were rebuilt.
-#: assets/js/app.js:31944
+#: assets/js/app.js:31959
 msgid "Regenerated %s thumbnail size"
 msgid_plural "Regenerated %s thumbnail sizes"
 msgstr[0] "%s 件のサムネイルサイズを再生成しました"
 
-#: assets/js/app.js:31949
+#: assets/js/app.js:31964
 msgid "Regenerate failed"
 msgstr "再生成に失敗しました"
 
-#: assets/js/app.js:31950
+#: assets/js/app.js:31965
 msgid "Thumbnails rebuilt (Force Regenerate Thumbnails)"
 msgstr "サムネイルを再生成しました (Force Regenerate Thumbnails)"
 
-#: assets/js/app.js:31956
+#: assets/js/app.js:31971
 msgid "↻ Thumbnails"
 msgstr "↻ サムネイル"
 
-#: assets/js/app.js:31980
+#: assets/js/app.js:31995
 msgid "Replacing…"
 msgstr "置き換え中…"
 
-#: assets/js/app.js:31990
+#: assets/js/app.js:32005
 msgid "File replaced — same URL, new content"
 msgstr "ファイルを置き換えました。URL はそのままで内容が新しくなります"
 
-#: assets/js/app.js:31996
+#: assets/js/app.js:32011
 msgid "⇅ Replace file"
 msgstr "⇅ ファイルを置き換え"
 
-#: assets/js/app.js:32035
+#: assets/js/app.js:32050
 msgid "Subscription #"
 msgstr "サブスクリプション番号"
 
-#: assets/js/app.js:32079
-#: assets/js/app.js:32479
+#: assets/js/app.js:32094
+#: assets/js/app.js:32494
 msgid "Subject and message are required"
 msgstr "件名とメッセージは必須です"
 
-#: assets/js/app.js:32088
-#: assets/js/app.js:32488
+#: assets/js/app.js:32103
+#: assets/js/app.js:32503
 msgid "Email sent"
 msgstr "メールを送信しました。"
 
-#: assets/js/app.js:32103
+#: assets/js/app.js:32118
 msgid "Code is required"
 msgstr "コードは必須です"
 
-#: assets/js/app.js:32105
+#: assets/js/app.js:32120
 msgid "Amount is required"
 msgstr "金額は必須です"
 
-#: assets/js/app.js:32131
+#: assets/js/app.js:32146
 msgid "Coupon created"
 msgstr "クーポンを作成しました"
 
-#: assets/js/app.js:32138
+#: assets/js/app.js:32153
 msgid "Coupon updated"
 msgstr "クーポンを更新しました"
 
-#: assets/js/app.js:32159
+#: assets/js/app.js:32174
 msgid "It is removed for good; orders that already used it keep their totals."
 msgstr "完全に削除されます。すでに利用された注文の合計額はそのまま残ります。"
 
-#: assets/js/app.js:32159
+#: assets/js/app.js:32174
 msgid "Delete coupon"
 msgstr "クーポンを削除"
 
-#: assets/js/app.js:32163
+#: assets/js/app.js:32178
 msgid "Coupon deleted"
 msgstr "クーポンを削除しました"
 
-#: assets/js/app.js:32198
+#: assets/js/app.js:32213
 msgid "Post type updated"
 msgstr "投稿タイプを更新しました"
 
-#: assets/js/app.js:32198
+#: assets/js/app.js:32213
 msgid "Post type created"
 msgstr "投稿タイプを作成しました"
 
-#: assets/js/app.js:32213
+#: assets/js/app.js:32228
 msgid "Post type removed — content preserved"
 msgstr "投稿タイプを削除しました。コンテンツは残っています"
 
-#: assets/js/app.js:32274
+#: assets/js/app.js:32289
 msgid "Taxonomy updated"
 msgstr "タクソノミーを更新しました"
 
-#: assets/js/app.js:32274
+#: assets/js/app.js:32289
 msgid "Taxonomy created"
 msgstr "タクソノミーを作成しました"
 
-#: assets/js/app.js:32289
+#: assets/js/app.js:32304
 msgid "Taxonomy removed — terms preserved"
 msgstr "タクソノミーを削除しました。タームは残っています"
 
-#: assets/js/app.js:32345
+#: assets/js/app.js:32360
 msgid "Uploading…"
 msgstr "アップロード中…"
 
-#: assets/js/app.js:32365
+#: assets/js/app.js:32380
 msgid "Image uploaded and selected"
 msgstr "画像をアップロードして選択しました"
 
-#: assets/js/app.js:32371
+#: assets/js/app.js:32386
 msgid "Image uploaded"
 msgstr "画像をアップロードしました"
 
-#: assets/js/app.js:32537
+#: assets/js/app.js:32552
 msgid "Enter an email or username"
 msgstr "メールアドレスまたはユーザー名を入力してください"
 
-#: assets/js/app.js:32541
+#: assets/js/app.js:32556
 msgid "Pick a role"
 msgstr "権限グループを選択してください"
 
 #. translators: %s: the user's name.
-#: assets/js/app.js:32551
+#: assets/js/app.js:32566
 msgid "%s added to this site"
 msgstr "%s をこのサイトに追加しました"
 
-#: assets/js/app.js:32551
+#: assets/js/app.js:32566
 msgid "User added to this site"
 msgstr "ユーザーをこのサイトに追加しました"
 
-#: assets/js/app.js:32579
+#: assets/js/app.js:32594
 msgid "Pick a user to reassign content to"
 msgstr "コンテンツの引き継ぎ先ユーザーを選択してください"
 
 #. translators: %s: the user's name.
-#: assets/js/app.js:32583
+#: assets/js/app.js:32598
 msgid "Permanently delete %s?"
 msgstr "%s を完全に削除しますか ?"
 
-#: assets/js/app.js:32583
+#: assets/js/app.js:32598
 msgid "Permanently delete this user?"
 msgstr "このユーザーを完全に削除しますか ?"
 
-#: assets/js/app.js:32583
+#: assets/js/app.js:32598
 msgid "The account is removed for good, and their content moves to the user you picked. There is no undo for this."
 msgstr "アカウントは完全に削除され、コンテンツは選択したユーザーに移ります。この操作は元に戻せません。"
 
-#: assets/js/app.js:32587
+#: assets/js/app.js:32602
 msgid "User deleted"
 msgstr "ユーザーを削除しました。"
 
-#: assets/js/app.js:32747
+#: assets/js/app.js:32762
 msgid "The server kept dropping the request. Give it a few seconds and try again."
 msgstr "サーバーがリクエストを受け付けませんでした。数秒待ってからもう一度お試しください。"
 
 #. translators: %s: the theme's name.
 #. translators: %s: the plugin's name.
-#: assets/js/app.js:32768
-#: assets/js/app.js:33197
-#: assets/js/app.js:33201
-#: assets/js/app.js:33329
+#: assets/js/app.js:32783
+#: assets/js/app.js:33212
+#: assets/js/app.js:33216
+#: assets/js/app.js:33344
 msgid "%s installed"
 msgstr "%s をインストールしました"
 
-#: assets/js/app.js:32786
+#: assets/js/app.js:32801
 msgid "Theme uploads must be .zip files"
 msgstr "テーマのアップロードは .zip ファイルである必要があります"
 
 #. translators: %s: the uploaded file's name.
-#: assets/js/app.js:32791
-#: assets/js/app.js:33354
+#: assets/js/app.js:32806
+#: assets/js/app.js:33369
 msgid "Installing %s…"
 msgstr "%s をインストール中…"
 
-#: assets/js/app.js:32796
+#: assets/js/app.js:32811
 msgid "Theme installed — activate it from the Themes tab"
 msgstr "テーマをインストールしました。テーマタブから有効化してください"
 
-#: assets/js/app.js:32828
+#: assets/js/app.js:32843
 msgid "SEO"
 msgstr "SEO"
 
-#: assets/js/app.js:32828
+#: assets/js/app.js:32843
 msgid "Titles, meta, sitemaps"
 msgstr "タイトル・メタ情報・サイトマップ"
 
-#: assets/js/app.js:32830
+#: assets/js/app.js:32845
 msgid "Yoast SEO"
 msgstr "Yoast SEO"
 
-#: assets/js/app.js:32831
+#: assets/js/app.js:32846
 msgid "Rank Math"
 msgstr "Rank Math"
 
-#: assets/js/app.js:32832
+#: assets/js/app.js:32847
 msgid "All in One SEO"
 msgstr "All in One SEO"
 
-#: assets/js/app.js:32838
+#: assets/js/app.js:32853
 msgid "Contact forms & entries"
 msgstr "お問い合わせフォームとエントリー"
 
-#: assets/js/app.js:32840
+#: assets/js/app.js:32855
 msgid "Contact Form 7"
 msgstr "Contact Form 7"
 
-#: assets/js/app.js:32842
+#: assets/js/app.js:32857
 msgid "Ninja Forms"
 msgstr "Ninja Forms"
 
-#: assets/js/app.js:32843
+#: assets/js/app.js:32858
 msgid "Fluent Forms"
 msgstr "Fluent Forms"
 
-#: assets/js/app.js:32846
+#: assets/js/app.js:32861
 msgid "Everest Forms"
 msgstr "Everest Forms"
 
-#: assets/js/app.js:32851
+#: assets/js/app.js:32866
 msgid "Ecommerce"
 msgstr "イーコマース"
 
-#: assets/js/app.js:32851
+#: assets/js/app.js:32866
 msgid "Store & payments"
 msgstr "ストアと支払い"
 
-#: assets/js/app.js:32854
+#: assets/js/app.js:32869
 msgid "WooCommerce Subscriptions"
 msgstr "WooCommerce Subscriptions"
 
-#: assets/js/app.js:32854
+#: assets/js/app.js:32869
 msgid "Recurring billing for WooCommerce. In Minn: Workspace → Subscriptions (status, next payment, related orders)."
 msgstr "WooCommerce の継続課金。Minn ではワークスペース → サブスクリプション (ステータス・次回支払い・関連する注文)。"
 
-#: assets/js/app.js:32856
+#: assets/js/app.js:32871
 msgid "Easy Digital Downloads"
 msgstr "Easy Digital Downloads"
 
-#: assets/js/app.js:32860
+#: assets/js/app.js:32875
 msgid "Security"
 msgstr "セキュリティ"
 
-#: assets/js/app.js:32860
+#: assets/js/app.js:32875
 msgid "Firewall, login, SSL"
 msgstr "ファイアウォール・ログイン・SSL"
 
-#: assets/js/app.js:32864
+#: assets/js/app.js:32879
 msgid "Limit Login Attempts"
 msgstr "Limit Login Attempts"
 
-#: assets/js/app.js:32865
+#: assets/js/app.js:32880
 msgid "Really Simple SSL"
 msgstr "Really Simple SSL"
 
-#: assets/js/app.js:32866
+#: assets/js/app.js:32881
 msgid "Sucuri Scanner"
 msgstr "Sucuri Scanner"
 
-#: assets/js/app.js:32870
+#: assets/js/app.js:32885
 msgid "Sets, migrate, restore"
 msgstr "バックアップセット・移行・復元"
 
-#: assets/js/app.js:32876
+#: assets/js/app.js:32891
 msgid "All-in-One WP Migration"
 msgstr "All-in-One WP Migration"
 
-#: assets/js/app.js:32882
+#: assets/js/app.js:32897
 msgid "Privacy-friendly traffic"
 msgstr "プライバシーに配慮したアクセス解析"
 
-#: assets/js/app.js:32884
+#: assets/js/app.js:32899
 msgid "Koko Analytics"
 msgstr "Koko Analytics"
 
-#: assets/js/app.js:32885
+#: assets/js/app.js:32900
 msgid "WP Statistics"
 msgstr "WP Statistics"
 
-#: assets/js/app.js:32887
+#: assets/js/app.js:32902
 msgid "Independent Analytics"
 msgstr "Independent Analytics"
 
-#: assets/js/app.js:32888
+#: assets/js/app.js:32903
 msgid "Site Kit"
 msgstr "Site Kit"
 
-#: assets/js/app.js:32892
+#: assets/js/app.js:32907
 msgid "Cache"
 msgstr "キャッシュ"
 
-#: assets/js/app.js:32892
+#: assets/js/app.js:32907
 msgid "Page & object cache"
 msgstr "ページキャッシュとオブジェクトキャッシュ"
 
-#: assets/js/app.js:32894
+#: assets/js/app.js:32909
 msgid "LiteSpeed Cache"
 msgstr "LiteSpeed Cache"
 
-#: assets/js/app.js:32895
+#: assets/js/app.js:32910
 msgid "WP Super Cache"
 msgstr "WP Super Cache"
 
-#: assets/js/app.js:32896
+#: assets/js/app.js:32911
 msgid "W3 Total Cache"
 msgstr "W3 Total Cache"
 
-#: assets/js/app.js:32897
+#: assets/js/app.js:32912
 msgid "WP Fastest Cache"
 msgstr "WP Fastest Cache"
 
-#: assets/js/app.js:32898
+#: assets/js/app.js:32913
 msgid "Cache Enabler"
 msgstr "Cache Enabler"
 
-#: assets/js/app.js:32904
+#: assets/js/app.js:32919
 msgid "Minify, defer, unload"
 msgstr "圧縮・遅延読み込み・読み込み解除"
 
-#: assets/js/app.js:32907
+#: assets/js/app.js:32922
 msgid "Asset CleanUp"
 msgstr "Asset CleanUp"
 
-#: assets/js/app.js:32914
+#: assets/js/app.js:32929
 msgid "Email / SMTP"
 msgstr "メール / SMTP"
 
-#: assets/js/app.js:32914
+#: assets/js/app.js:32929
 msgid "Delivery & logs"
 msgstr "配信とログ"
 
-#: assets/js/app.js:32917
+#: assets/js/app.js:32932
 msgid "WP Mail SMTP"
 msgstr "WP Mail SMTP"
 
-#: assets/js/app.js:32918
+#: assets/js/app.js:32933
 msgid "Post SMTP"
 msgstr "Post SMTP"
 
-#: assets/js/app.js:32919
+#: assets/js/app.js:32934
 msgid "WP Mail Logging"
 msgstr "WP Mail Logging"
 
-#: assets/js/app.js:32923
+#: assets/js/app.js:32938
 msgid "301s & aliases"
 msgstr "301 とエイリアス"
 
-#: assets/js/app.js:32926
+#: assets/js/app.js:32941
 msgid "Safe Redirect Manager"
 msgstr "Safe Redirect Manager"
 
-#: assets/js/app.js:32927
+#: assets/js/app.js:32942
 msgid "Simple 301 Redirects"
 msgstr "Simple 301 Redirects"
 
-#: assets/js/app.js:32932
+#: assets/js/app.js:32947
 msgid "Custom code, safely"
 msgstr "カスタムコードを安全に"
 
-#: assets/js/app.js:32934
+#: assets/js/app.js:32949
 msgid "Code Snippets"
 msgstr "Code Snippets"
 
-#: assets/js/app.js:32937
+#: assets/js/app.js:32952
 msgid "Simple Custom CSS and JS"
 msgstr "Simple Custom CSS and JS"
 
-#: assets/js/app.js:32938
+#: assets/js/app.js:32953
 msgid "Header Footer Code Manager"
 msgstr "Header Footer Code Manager"
 
-#: assets/js/app.js:32942
+#: assets/js/app.js:32957
 msgid "Dev tools"
 msgstr "開発ツール"
 
-#: assets/js/app.js:32942
+#: assets/js/app.js:32957
 msgid "Debug & inspect"
 msgstr "デバッグと調査"
 
-#: assets/js/app.js:32944
+#: assets/js/app.js:32959
 msgid "Query Monitor"
 msgstr "Query Monitor"
 
-#: assets/js/app.js:32948
+#: assets/js/app.js:32963
 msgid "Debug Bar"
 msgstr "Debug Bar"
 
-#: assets/js/app.js:32952
+#: assets/js/app.js:32967
 msgid "Comment & form spam"
 msgstr "コメントとフォームのスパム"
 
-#: assets/js/app.js:32955
+#: assets/js/app.js:32970
 msgid "Antispam Bee"
 msgstr "Antispam Bee"
 
-#: assets/js/app.js:32957
+#: assets/js/app.js:32972
 msgid "WP Armour"
 msgstr "WP Armour"
 
-#: assets/js/app.js:32961
-msgid "Blocks"
-msgstr "ブロック"
-
-#: assets/js/app.js:32961
+#: assets/js/app.js:32976
 msgid "Block libraries & patterns"
 msgstr "ブロックライブラリとパターン"
 
-#: assets/js/app.js:32964
+#: assets/js/app.js:32979
 msgid "Kadence Blocks"
 msgstr "Kadence Blocks"
 
-#: assets/js/app.js:32972
+#: assets/js/app.js:32987
 msgid "Meta & field groups"
 msgstr "メタ情報とフィールドグループ"
 
-#: assets/js/app.js:32974
+#: assets/js/app.js:32989
 msgid "Advanced Custom Fields"
 msgstr "Advanced Custom Fields"
 
-#: assets/js/app.js:32975
+#: assets/js/app.js:32990
 msgid "Meta Box"
 msgstr "Meta Box"
 
-#: assets/js/app.js:32977
+#: assets/js/app.js:32992
 msgid "Custom Post Type UI"
 msgstr "Custom Post Type UI"
 
-#: assets/js/app.js:32981
+#: assets/js/app.js:32996
 msgid "Little extras"
 msgstr "ちょっとした追加機能"
 
-#: assets/js/app.js:32981
+#: assets/js/app.js:32996
 msgid "Handy day-to-day tools"
 msgstr "日々の作業に便利なツール"
 
-#: assets/js/app.js:32983
+#: assets/js/app.js:32998
 msgid "User Switching"
 msgstr "User Switching"
 
-#: assets/js/app.js:32984
+#: assets/js/app.js:32999
 msgid "Public Post Preview"
 msgstr "Public Post Preview"
 
-#: assets/js/app.js:32986
+#: assets/js/app.js:33001
 msgid "Duplicate Post"
 msgstr "Duplicate Post"
 
-#: assets/js/app.js:32987
+#: assets/js/app.js:33002
 msgid "Safe SVG"
 msgstr "Safe SVG"
 
-#: assets/js/app.js:33046
+#: assets/js/app.js:33061
 msgid "No details available."
 msgstr "詳細はありません。"
 
-#: assets/js/app.js:33054
+#: assets/js/app.js:33069
 msgid "GitHub release"
 msgstr "GitHub のリリース"
 
-#: assets/js/app.js:33186
+#: assets/js/app.js:33201
 msgid "Could not find the installed plugin file."
 msgstr "インストール済みのプラグインファイルが見つかりませんでした。"
 
-#: assets/js/app.js:33203
+#: assets/js/app.js:33218
 msgid "No install source for that plugin."
 msgstr "そのプラグインのインストール元がありません。"
 
-#: assets/js/app.js:33349
+#: assets/js/app.js:33364
 msgid "Plugin uploads must be .zip files"
 msgstr "プラグインのアップロードは .zip ファイルである必要があります"
 
-#: assets/js/app.js:33359
+#: assets/js/app.js:33374
 msgid "Plugin installed — activate it from the list"
 msgstr "プラグインをインストールしました。一覧から有効化してください"
 
-#: assets/js/app.js:33589
+#: assets/js/app.js:33604
 msgid "No changelog found."
 msgstr "更新履歴が見つかりません。"
 
-#: assets/js/app.js:33698
+#: assets/js/app.js:33713
 msgid "No guide found."
 msgstr "ガイドが見つかりません。"
 
 #. translators: 1: the day. 2: how many revisions that day.
-#: assets/js/app.js:33811
+#: assets/js/app.js:33826
 msgid "%1$s: %2$s revision"
 msgid_plural "%1$s: %2$s revisions"
 msgstr[0] "%1$s: リビジョン %2$s 件"
 
-#: assets/js/app.js:33813
+#: assets/js/app.js:33828
 msgid "%s: no revisions"
 msgstr "%s: リビジョンなし"
 
-#: assets/js/app.js:33828
+#: assets/js/app.js:33843
 msgid "Less"
 msgstr "折りたたむ"
 
-#: assets/js/app.js:33834
+#: assets/js/app.js:33849
 msgid "More"
 msgstr "続き"
 
-#: assets/js/app.js:33934
+#: assets/js/app.js:33949
 msgid "All revisions"
 msgstr "すべてのリビジョン"
 
-#: assets/js/app.js:33937
+#: assets/js/app.js:33952
 msgid "Revision history"
 msgstr "リビジョン履歴"
 
-#: assets/js/app.js:33941
+#: assets/js/app.js:33956
 msgid "Loading revisions…"
 msgstr "リビジョンを読み込み中…"
 
-#: assets/js/app.js:33953
+#: assets/js/app.js:33968
 msgid "No revisions on that day."
 msgstr "その日のリビジョンはありません。"
 
-#: assets/js/app.js:33953
+#: assets/js/app.js:33968
 msgid "No revisions yet."
 msgstr "まだリビジョンはありません。"
 
-#: assets/js/app.js:33971
+#: assets/js/app.js:33986
 msgid "Identical to the current content"
 msgstr "現在の内容と同一です"
 
-#: assets/js/app.js:33972
+#: assets/js/app.js:33987
 msgid "Post too large to diff — showing the revision as saved"
 msgstr "投稿が大きすぎて差分を表示できません。保存されたリビジョンをそのまま表示しています"
 
-#: assets/js/app.js:33978
+#: assets/js/app.js:33993
 msgid "Changes"
 msgstr "変更点"
 
-#: assets/js/app.js:33982
+#: assets/js/app.js:33997
 msgid "This revision"
 msgstr "このリビジョン"
 
-#: assets/js/app.js:33982
+#: assets/js/app.js:33997
 msgid "Current"
 msgstr "現在"
 
-#: assets/js/app.js:33990
-#: assets/js/app.js:34051
+#: assets/js/app.js:34005
+#: assets/js/app.js:34066
 msgid "Restore this revision"
 msgstr "このリビジョンを復元"
 
-#: assets/js/app.js:34004
+#: assets/js/app.js:34019
 msgid "Newer (←)"
 msgstr "新しい (←)"
 
-#: assets/js/app.js:34005
+#: assets/js/app.js:34020
 msgid "Older (→)"
 msgstr "古い (→)"
 
-#: assets/js/app.js:34008
+#: assets/js/app.js:34023
 msgid "Loading revision…"
 msgstr "リビジョンを読み込み中…"
 
-#: assets/js/app.js:34026
+#: assets/js/app.js:34041
 msgid "(empty)"
 msgstr "(空)"
 
-#: assets/js/app.js:34032
+#: assets/js/app.js:34047
 msgid "Replace the current content with this revision? The current state is saved as its own revision first."
 msgstr "現在の内容をこのリビジョンで置き換えますか ? 現在の状態は、先に別のリビジョンとして保存されます。"
 
-#: assets/js/app.js:34034
+#: assets/js/app.js:34049
 msgid "Restoring…"
 msgstr "復元中…"
 
-#: assets/js/app.js:34043
+#: assets/js/app.js:34058
 msgid "Revision restored"
 msgstr "リビジョンを復元しました"
 
-#: assets/js/app.js:34060
+#: assets/js/app.js:34075
 msgid "Unknown device"
 msgstr "不明なデバイス"
 
-#: assets/js/app.js:34062
+#: assets/js/app.js:34077
 msgid "Browser"
 msgstr "ブラウザー"
 
-#: assets/js/app.js:34207
+#: assets/js/app.js:34222
 msgid "Username, email and password are required."
 msgstr "ユーザー名・メールアドレス・パスワードは必須です。"
 
-#: assets/js/app.js:34210
+#: assets/js/app.js:34225
 msgid "User created"
 msgstr "ユーザーを作成しました。"
 
-#: assets/js/app.js:34213
-#: assets/js/app.js:34503
+#: assets/js/app.js:34228
+#: assets/js/app.js:34518
 msgid "User updated"
 msgstr "ユーザーを更新しました。"
 
-#: assets/js/app.js:34239
-#: assets/js/app.js:34541
-#: assets/js/app.js:35030
+#: assets/js/app.js:34254
+#: assets/js/app.js:34556
+#: assets/js/app.js:35045
 msgid "Session signed out"
 msgstr "セッションからログアウトしました"
 
-#: assets/js/app.js:34252
-#: assets/js/app.js:34552
+#: assets/js/app.js:34267
+#: assets/js/app.js:34567
 msgid "Sign this user out of all sessions?"
 msgstr "このユーザーをすべてのセッションからログアウトさせますか ?"
 
-#: assets/js/app.js:34256
-#: assets/js/app.js:34556
-#: assets/js/app.js:35045
+#: assets/js/app.js:34271
+#: assets/js/app.js:34571
+#: assets/js/app.js:35060
 msgid "Signed out everywhere"
 msgstr "すべてのセッションからログアウトしました"
 
-#: assets/js/app.js:34282
+#: assets/js/app.js:34297
 msgid "Could not load this user."
 msgstr "このユーザーを読み込めませんでした。"
 
-#: assets/js/app.js:34309
+#: assets/js/app.js:34324
 msgid "Loading user…"
 msgstr "ユーザーを読み込み中…"
 
-#: assets/js/app.js:34363
-#: assets/js/app.js:34740
+#: assets/js/app.js:34378
+#: assets/js/app.js:34755
 msgid "Public profile"
 msgstr "公開プロフィール"
 
-#: assets/js/app.js:34363
-#: assets/js/app.js:34740
+#: assets/js/app.js:34378
+#: assets/js/app.js:34755
 msgid "author boxes & archives"
 msgstr "投稿者情報とアーカイブ"
 
-#: assets/js/app.js:34376
-#: assets/js/app.js:34753
+#: assets/js/app.js:34391
+#: assets/js/app.js:34768
 msgid "Website"
 msgstr "サイト"
 
-#: assets/js/app.js:34380
-#: assets/js/app.js:34757
+#: assets/js/app.js:34395
+#: assets/js/app.js:34772
 msgid "Bio"
 msgstr "プロフィール情報"
 
-#: assets/js/app.js:34389
-#: assets/js/app.js:34800
+#: assets/js/app.js:34404
+#: assets/js/app.js:34815
 msgid "Appearance"
 msgstr "外観"
 
-#: assets/js/app.js:34389
+#: assets/js/app.js:34404
 msgid "what this user sees"
 msgstr "このユーザーに表示される内容"
 
-#: assets/js/app.js:34390
+#: assets/js/app.js:34405
 msgid "Set their Minn palette now so it looks right before their first sign-in. Light or dark mode stays a device preference each person controls themselves."
 msgstr "初回ログイン前に Minn の配色を設定しておけます。ライトとダークの切り替えは、各自がデバイスごとに管理する設定のままです。"
 
-#: assets/js/app.js:34399
-#: assets/js/app.js:34401
+#: assets/js/app.js:34414
+#: assets/js/app.js:34416
 msgid "Minn is their default admin"
 msgstr "このユーザーのデフォルト管理画面を Minn にする"
 
-#: assets/js/app.js:34402
+#: assets/js/app.js:34417
 msgid "After sign-in they land in Minn. Full wp-admin stays available."
 msgstr "ログイン後は Minn が開きます。通常の wp-admin もそのまま利用できます。"
 
-#: assets/js/app.js:34406
-#: assets/js/app.js:34408
-#: assets/js/app.js:34811
-#: assets/js/app.js:34813
+#: assets/js/app.js:34421
+#: assets/js/app.js:34423
+#: assets/js/app.js:34826
+#: assets/js/app.js:34828
 msgid "Show toolbar when viewing the site"
 msgstr "サイト表示時にツールバーを表示"
 
-#: assets/js/app.js:34409
+#: assets/js/app.js:34424
 msgid "The WordPress admin bar on the front end while they are signed in."
 msgstr "ログイン中、フロントエンドに WordPress の管理バーを表示します。"
 
-#: assets/js/app.js:34418
+#: assets/js/app.js:34433
 msgid "Hidden for them"
 msgstr "このユーザーが非表示にした項目"
 
-#: assets/js/app.js:34419
+#: assets/js/app.js:34434
 msgid "Items this user chose to hide from their own Minn. Restoring brings one back for them."
 msgstr "このユーザーが自分の Minn で非表示にした項目です。復元すると、そのユーザーの画面に戻ります。"
 
-#: assets/js/app.js:34424
-#: assets/js/app.js:34828
+#: assets/js/app.js:34439
+#: assets/js/app.js:34843
 msgid "Editor panel"
 msgstr "エディターパネル"
 
-#: assets/js/app.js:34424
-#: assets/js/app.js:34828
+#: assets/js/app.js:34439
+#: assets/js/app.js:34843
 msgid "Design library"
 msgstr "デザインライブラリ"
 
-#: assets/js/app.js:34424
-#: assets/js/app.js:34828
+#: assets/js/app.js:34439
+#: assets/js/app.js:34843
 msgid "Editor blocks and commands"
 msgstr "エディターのブロックとコマンド"
 
-#: assets/js/app.js:34424
-#: assets/js/app.js:34828
+#: assets/js/app.js:34439
+#: assets/js/app.js:34843
 msgid "Menu item"
 msgstr "メニュー項目"
 
-#: assets/js/app.js:34424
-#: assets/js/app.js:34828
+#: assets/js/app.js:34439
+#: assets/js/app.js:34843
 msgid "Sidebar surface"
 msgstr "サイドバーの画面"
 
-#: assets/js/app.js:34436
+#: assets/js/app.js:34451
 msgid "signed in"
 msgstr "ログイン中"
 
-#: assets/js/app.js:34444
+#: assets/js/app.js:34459
 msgid "Danger zone"
 msgstr "危険な操作"
 
-#: assets/js/app.js:34445
+#: assets/js/app.js:34460
 msgid "Deleting a user asks what happens to their content first."
 msgstr "ユーザーを削除する際は、先にコンテンツの扱いを確認します。"
 
-#: assets/js/app.js:34501
+#: assets/js/app.js:34516
 msgid "language pack installed"
 msgstr "言語パックをインストールしました"
 
 #. translators: %s: name of the restored item.
-#: assets/js/app.js:34576
+#: assets/js/app.js:34591
 msgid "%s restored for them"
 msgstr "%s をこのユーザーに復元しました"
 
-#: assets/js/app.js:34576
+#: assets/js/app.js:34591
 msgid "Item"
 msgstr "項目"
 
-#: assets/js/app.js:34664
+#: assets/js/app.js:34679
 msgid "Could not load your profile."
 msgstr "プロフィールを読み込めませんでした。"
 
-#: assets/js/app.js:34692
+#: assets/js/app.js:34707
 msgid "Loading your profile…"
 msgstr "プロフィールを読み込み中…"
 
-#: assets/js/app.js:34727
+#: assets/js/app.js:34742
 msgid "Any language — ones not yet installed download automatically when you save."
 msgstr "すべての言語から選べます。未インストールの言語は保存時に自動でダウンロードされます。"
 
-#: assets/js/app.js:34758
+#: assets/js/app.js:34773
 msgid "A couple of sentences about you — themes show this in author boxes."
 msgstr "自己紹介を数文で。テーマの投稿者情報に表示されます。"
 
 #. translators: %s: a link to Gravatar.
-#: assets/js/app.js:34762
+#: assets/js/app.js:34777
 msgid "Your profile picture comes from %s, matched to your email."
 msgstr "プロフィール画像は、メールアドレスに紐付いた %s から取得されます。"
 
-#: assets/js/app.js:34762
+#: assets/js/app.js:34777
 msgid "Gravatar ↗"
 msgstr "Gravatar ↗"
 
-#: assets/js/app.js:34768
+#: assets/js/app.js:34783
 msgid "AI Access"
 msgstr "AI アクセス"
 
-#: assets/js/app.js:34768
+#: assets/js/app.js:34783
 msgid "application passwords"
 msgstr "アプリケーションパスワード"
 
-#: assets/js/app.js:34769
+#: assets/js/app.js:34784
 msgid "Give an AI agent its own revocable credential instead of your login. It authenticates against the REST API with HTTP Basic auth."
 msgstr "自分のログイン情報ではなく、AI エージェント専用の取り消し可能な認証情報を発行します。REST API へは HTTP Basic 認証で接続します。"
 
-#: assets/js/app.js:34779
+#: assets/js/app.js:34794
 msgid "No application passwords yet."
 msgstr "アプリケーションパスワードはまだありません。"
 
 #. translators: %s: when the password was created.
-#: assets/js/app.js:34784
+#: assets/js/app.js:34799
 msgid "created %s"
 msgstr "作成日 %s"
 
 #. translators: %s: when the password was last used.
-#: assets/js/app.js:34784
+#: assets/js/app.js:34799
 msgid "last used %s"
 msgstr "最終使用 %s"
 
-#: assets/js/app.js:34784
+#: assets/js/app.js:34799
 msgid "never used"
 msgstr "未使用"
 
-#: assets/js/app.js:34786
+#: assets/js/app.js:34801
 msgid "Revoke"
 msgstr "取消"
 
-#: assets/js/app.js:34789
-#: assets/js/app.js:34968
+#: assets/js/app.js:34804
+#: assets/js/app.js:34983
 msgid "AI Agent"
 msgstr "AI エージェント"
 
-#: assets/js/app.js:34794
+#: assets/js/app.js:34809
 msgid "Download agent-guide.md"
 msgstr "agent-guide.md をダウンロード"
 
-#: assets/js/app.js:34807
+#: assets/js/app.js:34822
 msgid "Theme"
 msgstr "テーマ"
 
-#: assets/js/app.js:34814
+#: assets/js/app.js:34829
 msgid "The WordPress admin bar on the front end while you're signed in. Applies only to you."
 msgstr "ログイン中、フロントエンドに WordPress の管理バーを表示します。設定はあなたにのみ適用されます。"
 
-#: assets/js/app.js:34823
+#: assets/js/app.js:34838
 msgid "Hidden for you"
 msgstr "あなたが非表示にした項目"
 
-#: assets/js/app.js:34941
+#: assets/js/app.js:34956
 msgid "Password changed — refreshing…"
 msgstr "パスワードを変更しました。再読み込みしています…"
 
-#: assets/js/app.js:34945
+#: assets/js/app.js:34960
 msgid "Profile updated — language pack installed"
 msgstr "プロフィールを更新しました — 言語パックをインストールしました"
 
-#: assets/js/app.js:34945
+#: assets/js/app.js:34960
 msgid "Profile updated"
 msgstr "プロフィールを更新しました。"
 
-#: assets/js/app.js:34985
+#: assets/js/app.js:35000
 msgid "Password copied"
 msgstr "パスワードをコピーしました"
 
-#: assets/js/app.js:34988
+#: assets/js/app.js:35003
 msgid "curl example copied"
 msgstr "curl の例をコピーしました"
 
-#: assets/js/app.js:34991
+#: assets/js/app.js:35006
 msgid "Revoke this application password? Anything using it loses access immediately."
 msgstr "このアプリケーションパスワードを無効化しますか ? 使用中のものはただちにアクセスできなくなります。"
 
-#: assets/js/app.js:34995
+#: assets/js/app.js:35010
 msgid "Application password revoked"
 msgstr "アプリケーションパスワードを無効化しました"
 
-#: assets/js/app.js:35005
+#: assets/js/app.js:35020
 msgid "Agent guide copied"
 msgstr "エージェントガイドをコピーしました"
 
-#: assets/js/app.js:35041
+#: assets/js/app.js:35056
 msgid "Sign out of all other sessions?"
 msgstr "他のすべてのセッションからログアウトしますか ?"
 
-#: assets/js/app.js:35129
+#: assets/js/app.js:35144
 msgid "All notifications marked read"
 msgstr "すべての通知を既読にしました"
 
-#: assets/js/app.js:35188
+#: assets/js/app.js:35203
 msgid "Notice hidden"
 msgstr "通知を非表示にしました"
 
 #. translators: %s: the error message.
-#: assets/js/app.js:35255
+#: assets/js/app.js:35270
 msgid "Something went wrong: %s"
 msgstr "問題が発生しました: %s"
 
-#: assets/js/app.js:35268
+#: assets/js/app.js:35283
 msgid "Scroll tabs left"
 msgstr "タブを左へスクロール"
 
-#: assets/js/app.js:35270
+#: assets/js/app.js:35285
 msgid "Scroll tabs right"
 msgstr "タブを右へスクロール"
