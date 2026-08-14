@@ -208,6 +208,23 @@ const TEXT_ALLOW = new Set( [
 }
 
 /* ---------------------------------------------------------------------------
+ * 6b. System-page helper arguments are visible labels too.
+ *     Passing raw English into extSection()/intSection() evades the generic
+ *     template-node scanner because the helper renders it later.
+ * ------------------------------------------------------------------------ */
+{
+	const bad = [];
+	const re = /\b(?:extSection|intSection)\(\s*(['"])([A-Za-z][^'"]*)\1/g;
+	let m;
+	while ( ( m = re.exec( src ) ) ) {
+		// "Must-use" is WordPress's technical extension class, not prose.
+		if ( m[ 2 ] === 'Must-use' ) continue;
+		bad.push( `app.js:${ lineOf( m.index ) }  raw System section label: ${ m[ 2 ] }` );
+	}
+	check( 'System helper labels are translated', bad.length === 0, bad.slice( 0, 8 ).join( '\n      ' ) );
+}
+
+/* ---------------------------------------------------------------------------
  * 7. PHP: no unwrapped prose literals in the REST/adapter layer.
  *    make-pot only sees wrapped strings, so an unwrapped PHP sentence is
  *    invisible to every other layer of the pipeline: the greeting shipped
