@@ -1158,7 +1158,7 @@
 			return `<div class="minn-field-image" ${ attr }="${ esc( id ) }" data-ftype="image" data-img-id="${ has ? esc( String( img.id ) ) : '' }" data-img-url="${ esc( url ) }">
 				${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
 				<div class="minn-field-image-actions">
-					<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : __( 'Set image' ) }</button>
+					<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : esc( __( 'Set image' ) ) }</button>
 					${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
 				</div>
 			</div>`;
@@ -1509,7 +1509,7 @@
 		menu.innerHTML = `
 			<button data-newtype="posts"><span class="minn-row-icon">${ icon( 'pilcrow' ) }</span> ${ esc( __( 'Post' ) ) }</button>
 			<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( __( 'Page' ) ) }</button>
-			<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ __( 'Pattern' ) }</button>
+			<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ esc( __( 'Pattern' ) ) }</button>
 			${ builderRows }`;
 		const r = btn.getBoundingClientRect();
 		menu.style.top = ( r.bottom + 6 ) + 'px';
@@ -1534,7 +1534,15 @@
 						body: JSON.stringify( { builder: b.dataset.newbuilder, type: 'pages' } ),
 					} );
 					// Hand the tab to the builder — its surface is another app.
-					location.href = r.edit_url;
+					// edit_url comes from the minn_admin_page_builders filter, so a
+					// third party supplies it; a navigation sink needs the same
+					// scheme check the builder note's anchor already applies.
+					const dest = safeHref( r.edit_url );
+					if ( ! dest ) {
+						toast( __( 'That builder returned an address Minn will not open.' ), true );
+						return;
+					}
+					location.href = dest;
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -3664,7 +3672,7 @@
 		const trashHtml = `
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
 				${ ! state.contentTrash ? `<button class="minn-tab${ state.contentModified ? ' active' : '' }" id="minn-content-modified" title="${ esc( __( 'Only live content carrying unsaved edits' ) ) }">${ esc( __( 'Modified' ) ) }</button>` : '' }
-				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ state.contentTrash ? __( 'Back to content' ) : __( 'View trash' ) }">${ icon( 'trash' ) } Trash</button>
+				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ esc( state.contentTrash ? __( 'Back to content' ) : __( 'View trash' ) ) }">${ icon( 'trash' ) } Trash</button>
 			</div>`;
 		const filtersHtml = `
 			${ showTax ? taxCombo( 'cat', __( 'All categories' ) ) : '' }
@@ -8424,7 +8432,7 @@
 				<button type="button" class="minn-btn-soft" id="minn-pp-back">← ${ esc( __( 'Products' ) ) }</button>
 				<div class="minn-modal-title-block">
 					<div class="minn-modal-title">${ esc( p.name || 'Product' ) }</div>
-					<div class="minn-modal-sub">${ loading ? __( 'Loading…' ) : esc( sub ) }</div>
+					<div class="minn-modal-sub">${ loading ? esc( __( 'Loading…' ) ) : esc( sub ) }</div>
 				</div>
 				${ p.status ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ p.status ] || 'draft' }">${ esc( ( p.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
 			</div>
@@ -11393,8 +11401,14 @@
 		// role — flexible for the title/text columns, fixed and narrow for the
 		// short ones (codes, counts, dates, pills) so long values get the room.
 		const FIXED = { ago: '128px', pill: '110px', mono: '84px', num: '84px' };
+		// A descriptor's width lands in a style attribute, which is a CSS
+		// context: escaping would not help, so accept only real track values and
+		// fall through to the default for anything else. Every sibling column
+		// property on this template is escaped; this one could not be.
+		const TRACK = /^(?:\d+(?:\.\d+)?(?:px|em|rem|%|fr|ch|vw)|minmax\(\s*[\w.%()]+\s*,\s*[\w.%()]+\s*\)|auto|max-content|min-content)$/;
+		const track = ( w ) => ( TRACK.test( String( w == null ? '' : w ).trim() ) ? String( w ).trim() : '' );
 		const gridCols = ( hasBulk ? '30px ' : '' ) + cols.map( ( col, i ) =>
-			col.width || FIXED[ col.format ] || ( i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)' )
+			track( col.width ) || FIXED[ col.format ] || ( i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)' )
 		).join( ' ' ) + ' 30px';
 
 		// A long tab list (a site with a dozen forms) turns the pill strip
@@ -12165,7 +12179,7 @@
 			<div class="minn-panel-title" style="margin-bottom:10px;">${ esc( __( 'Add to menu' ) ) }</div>
 			<div class="minn-menu-add-row">
 				<div class="minn-ac" id="minn-menu-pick">
-					<input class="minn-input minn-ac-input" placeholder="${ ms.pick ? __( 'Find a page or post…' ) : __( 'Loading pages…' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<input class="minn-input minn-ac-input" placeholder="${ esc( ms.pick ? __( 'Find a page or post…' ) : __( 'Loading pages…' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 					<div class="minn-ac-panel" hidden></div>
 				</div>
 				<button class="minn-btn-soft" id="minn-menu-add-content">${ icon( 'plus' ) } Add</button>
@@ -12949,7 +12963,7 @@
 							toast( `Could not update ${ name } — connection dropped mid-upgrade. Try again.`, true );
 						}
 					} catch ( e2 ) {
-						toast( `Could not update ${ name }: ${ e.message || __( 'Failed to fetch' ) }. Try again in a moment.`, true );
+						toast( `Could not update ${ name }: ${ e.message || esc( __( 'Failed to fetch' ) ) }. Try again in a moment.`, true );
 					}
 				} else {
 					toast( e.message || `Could not update ${ name }`, true );
@@ -13106,13 +13120,13 @@
 		const can = it.can || [];
 		const controls = [
 			it.off && it.turnOn
-				? `<button class="lic-menu" data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ it.turnOn.startsWith( 'theme:' ) ? __( 'Switch the site to this theme' ) : __( 'Activate this plugin' ) }">${ esc( it.turnOn.startsWith( 'theme:' ) ? __( 'Turn theme on' ) : __( 'Turn plugin on' ) ) }</button>` : '',
+				? `<button class="lic-menu" data-lic="turnon" data-component="${ esc( it.turnOn ) }" data-name="${ esc( it.name ) }" title="${ esc( it.turnOn.startsWith( 'theme:' ) ? __( 'Switch the site to this theme' ) : __( 'Activate this plugin' ) ) }">${ esc( it.turnOn.startsWith( 'theme:' ) ? __( 'Turn theme on' ) : __( 'Turn plugin on' ) ) }</button>` : '',
 			can.includes( 'activate' ) && it.state !== 'valid'
 				? `<button data-lic="activate" data-provider="${ esc( it.source ) }" data-secret="${ esc( it.secret || __( 'License key' ) ) }"${ it.secretFields ? ` data-fields="${ esc( JSON.stringify( it.secretFields ) ) }"` : '' }>${ esc( __( 'Activate…' ) ) }</button>` : '',
 			// No link-out on off rows: the vendor's screen does not exist
 			// while its plugin is inactive (Turn on is the affordance).
 			! can.includes( 'activate' ) && it.activateUrl && it.state !== 'valid' && ! it.off
-				? `<button data-lic="href" data-href="${ esc( it.activateUrl ) }">${ it.category === 'connection' ? __( 'Connect ↗' ) : __( 'Activate ↗' ) }</button>` : '',
+				? `<button data-lic="href" data-href="${ esc( it.activateUrl ) }">${ it.category === 'connection' ? esc( __( 'Connect ↗' ) ) : esc( __( 'Activate ↗' ) ) }</button>` : '',
 			can.includes( 'deactivate' ) && it.state === 'valid'
 				? `<button class="lic-menu lic-danger" data-lic="deactivate" data-provider="${ esc( it.source ) }" data-name="${ esc( it.name ) }">${ esc( __( 'Deactivate' ) ) }</button>` : '',
 			can.includes( 'verify' ) && it.key
@@ -13181,7 +13195,7 @@
 		/* translators: %s: how many rows need attention. */
 		if ( bad ) licMeta += ' · ' + sprintf( _n( '%s needs attention', '%s need attention', bad ), bad );
 		/* translators: %s: a button reading "Settings → Connectors". */
-		const connFoot = hasCoreConnectors ? ' ' + sprintf( __( 'Core connector keys (AI providers) are managed in %s.' ), `<button class="minn-lic-connlink" id="minn-lic-connectors">${ __( 'Settings → Connectors' ) }</button>` ) : '';
+		const connFoot = hasCoreConnectors ? ' ' + sprintf( esc( __( 'Core connector keys (AI providers) are managed in %s.' ) ), `<button class="minn-lic-connlink" id="minn-lic-connectors">${ esc( __( 'Settings → Connectors' ) ) }</button>` ) : '';
 		view.innerHTML = `
 		<div class="minn-toolbar">
 			${ extTabsHtml() }
@@ -13369,7 +13383,7 @@
 					} else if ( applied && applied.update ) {
 						const u = applied.update;
 						toastAction(
-							`${ action === 'activate' ? __( 'License activated' ) : __( 'License re-verified' ) } · ${ u.name } ${ u.version } is available`,
+							`${ action === 'activate' ? esc( __( 'License activated' ) ) : esc( __( 'License re-verified' ) ) } · ${ u.name } ${ u.version } is available`,
 							__( 'View updates' ),
 							() => { state.extTab = 'plugins'; state.extFilter = 'updates'; go( 'extensions' ); }
 						);
@@ -13428,7 +13442,12 @@
 				return;
 			}
 			if ( 'href' === action ) {
-				window.open( btn.dataset.href, '_blank', 'noopener' );
+				// window.open( 'javascript:…' ) executes too, so scheme-check here
+				// as well rather than relying on the new tab.
+				const href = safeHref( btn.dataset.href );
+				if ( href ) {
+					window.open( href, '_blank', 'noopener' );
+				}
 				return;
 			}
 			if ( 'deactivate' === action ) {
@@ -13944,7 +13963,7 @@
 				<span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
 					<button class="minn-btn-soft" id="minn-check-updates" title="${ esc( __( 'Force a fresh check against WordPress.org and licensed vendors' ) ) }"${ bulkBusy ? ' disabled' : '' }>${ icon( 'refresh' ) } Check for updates</button>
 					${ updateCount || bulkBusy ? `
-					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ bulkBusy ? __( 'Updates run one at a time' ) : __( 'Update every plugin with a pending offer' ) }">
+					<button class="minn-btn-soft" id="minn-update-all"${ bulkBusy ? ' disabled' : '' } title="${ esc( bulkBusy ? __( 'Updates run one at a time' ) : __( 'Update every plugin with a pending offer' ) ) }">
 						${ icon( 'refresh' ) } ${ bulkBusy ? `Updating… (${ queueCount })` : `Update all (${ updateCount })` }
 					</button>` : '' }
 				</span>` : '' }
@@ -14256,7 +14275,7 @@
 		const onTitle = sprintf( __( 'Automatic updates are on for %s. Click to turn them off.' ), name );
 		/* translators: %s: plugin or theme name. */
 		const offTitle = sprintf( __( 'Turn on automatic updates for %s.' ), name );
-		return `<button class="minn-auto-toggle${ on ? ' on' : '' }" data-autotype="${ type }" data-autoasset="${ esc( asset ) }" role="switch" aria-checked="${ on ? 'true' : 'false' }" title="${ esc( on ? onTitle : offTitle ) }">${ icon( 'refresh' ) }<span>${ __( 'Auto' ) }</span></button>`;
+		return `<button class="minn-auto-toggle${ on ? ' on' : '' }" data-autotype="${ type }" data-autoasset="${ esc( asset ) }" role="switch" aria-checked="${ on ? 'true' : 'false' }" title="${ esc( on ? onTitle : offTitle ) }">${ icon( 'refresh' ) }<span>${ esc( __( 'Auto' ) ) }</span></button>`;
 	}
 
 	function bindAutoToggles( view ) {
@@ -14691,7 +14710,7 @@
 					<div class="minn-row-meta"><span class="minn-permalink">${ esc( t.slug ) }</span></div>
 					<div><span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span></div>
 					<div class="minn-row-meta">${ t.count }</div>
-					<div class="minn-row-meta" title="${ t.show_in_rest ? __( 'Available over the REST API (editable in Minn)' ) : __( 'Not exposed over REST — Minn can’t list or edit its content' ) }">${ t.show_in_rest ? '✓' : '—' }</div>
+					<div class="minn-row-meta" title="${ esc( t.show_in_rest ? __( 'Available over the REST API (editable in Minn)' ) : __( 'Not exposed over REST — Minn can’t list or edit its content' ) ) }">${ t.show_in_rest ? '✓' : '—' }</div>
 					<div class="minn-row-arrow">›</div>
 				</div>` ).join( '' ) }
 			</div>`;
@@ -15110,7 +15129,12 @@
 			} ) );
 		// Adapter checks with an href open the plugin's own screen.
 		$$( '[data-syshref]', view ).forEach( ( el ) =>
-			el.addEventListener( 'click', () => window.open( el.dataset.syshref, '_blank', 'noopener' ) ) );
+			el.addEventListener( 'click', () => {
+				const href = safeHref( el.dataset.syshref );
+				if ( href ) {
+					window.open( href, '_blank', 'noopener' );
+				}
+			} ) );
 
 		$( '#minn-sys-copy', view ).addEventListener( 'click', async () => {
 			const text = systemReportText( s );
@@ -15178,7 +15202,7 @@
 		<div class="minn-modal-overlay" id="minn-modal-overlay">
 			<div class="minn-modal wide">
 				<div class="minn-modal-head">
-					<div class="minn-modal-title">${ isAuto ? __( 'Autoloaded options' ) : __( 'Scheduled cron events' ) }</div>
+					<div class="minn-modal-title">${ isAuto ? esc( __( 'Autoloaded options' ) ) : esc( __( 'Scheduled cron events' ) ) }</div>
 					<button class="minn-x-btn" id="minn-modal-close">×</button>
 				</div>
 				${ body }
@@ -16381,7 +16405,7 @@
 						<div class="minn-spam-provider">
 							<div class="minn-spam-head">
 								<span class="minn-spam-name">${ esc( p.name ) }</span>
-								<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : __( 'Needs setup' ) }</span>
+								<span class="minn-spam-pill${ p.configured ? ' ok' : ' warn' }">${ p.configured ? 'Active' : esc( __( 'Needs setup' ) ) }</span>
 								${ p.blocked ? `<span class="minn-spam-blocked">${ esc( String( p.blocked ) ) } blocked all-time</span>` : '' }
 								${ p.keyProvider && p.configured ? `<button class="minn-spam-link" type="button" data-spamkeychange="${ esc( p.id ) }">${ esc( __( 'Change key…' ) ) }</button>` : '' }
 								${ p.adminUrl ? `<a class="minn-spam-link" href="${ esc( p.adminUrl ) }" target="_blank" rel="noopener"${ p.keyProvider && p.configured ? ' style="margin-left:0"' : '' }>${ esc( __( 'Full settings ↗' ) ) }</a>` : '' }
@@ -16389,7 +16413,7 @@
 							<div class="minn-toggle-desc">${ esc( p.note ) }</div>
 							${ p.keyProvider ? `
 							<div class="minn-conn-row" data-spamkeyrow="${ esc( p.id ) }"${ p.configured ? ' hidden' : '' }>
-								<input class="minn-input mono" data-1p-ignore data-lpignore="true" data-bwignore placeholder="${ p.configured ? __( 'Paste the replacement key' ) : __( 'Paste your API key' ) }">
+								<input class="minn-input mono" data-1p-ignore data-lpignore="true" data-bwignore placeholder="${ esc( p.configured ? __( 'Paste the replacement key' ) : __( 'Paste your API key' ) ) }">
 								<button class="minn-btn-soft" data-spamkeysave="${ esc( p.keyProvider ) }" data-spamkeycard="${ esc( p.id ) }">${ esc( __( 'Save key' ) ) }</button>
 							</div>
 							<div class="minn-toggle-desc minn-spam-keyerr" data-spamkeyerr="${ esc( p.id ) }" hidden></div>` : '' }
@@ -16449,14 +16473,14 @@
 					cards = cn.connectors.map( ( c ) => {
 						const pill = c.source === 'none'
 							? `<span class="minn-spam-pill warn">${ esc( __( 'Not connected' ) ) }</span>`
-							: `<span class="minn-spam-pill ok">${ c.source === 'database' ? 'Connected' : ( c.source === 'constant' ? __( 'Key in wp-config' ) : __( 'Key in environment' ) ) }</span>`;
+							: `<span class="minn-spam-pill ok">${ c.source === 'database' ? 'Connected' : ( c.source === 'constant' ? esc( __( 'Key in wp-config' ) ) : esc( __( 'Key in environment' ) ) ) }</span>`;
 						let controls = '';
 						if ( c.method !== 'api_key' ) {
 							controls = '';
 						} else if ( c.source === 'constant' || c.source === 'env' ) {
 							// Env/constant keys win over the database by core's
 							// precedence — honest lock, no controls.
-							controls = `<div class="minn-toggle-desc">${ c.source === 'constant' ? sprintf( /* translators: %s: name of the PHP constant holding the key. */ __( 'The key is supplied by the <code>%s</code> constant in wp-config.php, so it can only be changed there.' ), esc( c.constantName ) ) : sprintf( /* translators: %s: name of the environment variable holding the key. */ __( 'The key is supplied by the <code>%s</code> environment variable, so it can only be changed there.' ), esc( c.envVarName ) ) }</div>`;
+							controls = `<div class="minn-toggle-desc">${ c.source === 'constant' ? sprintf( /* translators: %s: name of the PHP constant holding the key. */ esc( __( 'The key is supplied by the <code>%s</code> constant in wp-config.php, so it can only be changed there.' ) ), esc( c.constantName ) ) : sprintf( /* translators: %s: name of the environment variable holding the key. */ esc( __( 'The key is supplied by the <code>%s</code> environment variable, so it can only be changed there.' ) ), esc( c.envVarName ) ) }</div>`;
 						} else if ( c.plugin && ! c.plugin.installed ) {
 							controls = `<div class="minn-conn-row">
 								<span class="minn-toggle-desc">${ sprintf( esc( /* translators: %s: name of the provider plugin. */ __( 'Needs the %s provider plugin before a key can be saved.' ) ), esc( c.name ) ) }</span>
@@ -16474,7 +16498,7 @@
 							// API keys aren't login credentials and the value
 							// rides exactly one request (the licenses rule).
 							controls = `<div class="minn-conn-row">
-								<input class="minn-input mono" data-conn-key="${ esc( c.settingName ) }" placeholder="${ c.keyTail ? `Replace the saved key (ends in ${ esc( c.keyTail ) })` : __( 'Paste an API key' ) }" data-1p-ignore data-lpignore="true" data-bwignore>
+								<input class="minn-input mono" data-conn-key="${ esc( c.settingName ) }" placeholder="${ c.keyTail ? `Replace the saved key (ends in ${ esc( c.keyTail ) })` : esc( __( 'Paste an API key' ) ) }" data-1p-ignore data-lpignore="true" data-bwignore>
 								<button class="minn-btn-soft" data-conn-save="${ esc( c.id ) }">${ esc( __( 'Save key' ) ) }</button>
 								${ c.source === 'database' ? `<button class="minn-btn-soft danger" data-conn-clear="${ esc( c.id ) }">${ esc( __( 'Remove' ) ) }</button>` : '' }
 							</div>`;
@@ -21590,7 +21614,7 @@
 			<div class="minn-editor-door-fields" style="display:flex; flex-direction:column; gap:14px; font-size:13.5px; color:var(--text2);">
 				${ ed.supportsParent ? `<div>${ esc( __( 'Parent' ) ) }
 					<div class="minn-ac" id="minn-parent-ac" style="margin-top:5px;">
-						<input class="minn-input minn-ac-input" placeholder="${ ed.parentPick ? '— none —' : __( 'Loading…' ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+						<input class="minn-input minn-ac-input" placeholder="${ esc( ed.parentPick ? '— none —' : __( 'Loading…' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
 						<div class="minn-ac-panel" hidden></div>
 					</div>
 				</div>` : '' }
@@ -21773,7 +21797,7 @@
 					wrap.innerHTML = `
 						${ has && url ? `<button type="button" class="minn-field-image-thumb" data-img-pick style="background-image:url('${ escCssUrl( url ) }')" title="${ esc( __( 'Replace image' ) ) }"></button>` : '' }
 						<div class="minn-field-image-actions">
-							<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : __( 'Set image' ) }</button>
+							<button type="button" class="minn-btn-soft" data-img-pick>${ has ? 'Replace' : esc( __( 'Set image' ) ) }</button>
 							${ has ? `<button type="button" class="minn-btn-soft danger" data-img-clear>${ esc( __( 'Remove' ) ) }</button>` : '' }
 						</div>`;
 					wire();
@@ -22225,7 +22249,7 @@
 			</div>
 			${ ed.visibility === 'password' ? `<input type="text" class="minn-input minn-vis-extra" id="minn-password-input" placeholder="${ esc( __( 'Enter a password' ) ) }" value="${ esc( ed.password ) }" autocomplete="off">` : '' }
 			<div class="minn-schedule">
-				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? __( 'Scheduled for' ) : __( 'Publish time' ) }</div>
+				<div class="minn-side-key" style="margin-bottom:5px;">${ ed.status === 'future' ? esc( __( 'Scheduled for' ) ) : esc( __( 'Publish time' ) ) }</div>
 				<input type="text" readonly class="minn-input minn-dp-input" id="minn-schedule-input" data-dp="${ esc( dateValue ) }" value="${ esc( dpPretty( dateValue ) ) }" placeholder="${ esc( __( 'Immediately' ) ) }">
 			</div>
 			<button class="minn-btn-primary" id="minn-publish-btn">${ publishLabel( ed ) }</button>
@@ -24545,10 +24569,10 @@
 				<div class="minn-imgedit-head">
 					<strong>${ esc( __( 'Edit images' ) ) }</strong>
 					<span class="minn-imgedit-hint">${ fixed
-						? __( "Drag to reorder · click a tile to replace · this block\'s layout has a fixed number of images" )
+						? esc( __( "Drag to reorder · click a tile to replace · this block\'s layout has a fixed number of images" ) )
 						: ( canUpload
-							? __( 'Drag to reorder · click a tile to replace · × removes · drop images to add' )
-							: __( 'Drag to reorder · click a tile to replace · × removes' ) ) }</span>
+							? esc( __( 'Drag to reorder · click a tile to replace · × removes · drop images to add' ) )
+							: esc( __( 'Drag to reorder · click a tile to replace · × removes' ) ) ) }</span>
 					<button type="button" class="minn-x-btn" id="minn-imgedit-close">×</button>
 				</div>
 				<div class="minn-imgedit-grid" id="minn-imgedit-grid"></div>
@@ -26333,7 +26357,7 @@
 					<button class="minn-btn-soft danger" data-op="col-del" type="button">${ esc( __( 'Delete' ) ) }</button>
 				</div>
 				<div class="minn-table-ops">
-					<button class="minn-btn-soft" data-op="header" type="button">${ table.tHead ? __( 'Remove header row' ) : __( 'Make first row a header' ) }</button>
+					<button class="minn-btn-soft" data-op="header" type="button">${ table.tHead ? esc( __( 'Remove header row' ) ) : esc( __( 'Make first row a header' ) ) }</button>
 					<button class="minn-btn-soft danger" data-op="table-del" type="button">${ esc( __( 'Delete table' ) ) }</button>
 				</div>
 			</div>`;
@@ -30238,8 +30262,8 @@
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
 						<div class="minn-modal-title-block">
-							<div class="minn-modal-title">${ isNew ? __( 'New coupon' ) : esc( c.code || listC.code || 'Coupon' ) }</div>
-							<div class="minn-modal-sub">${ isNew ? __( 'Create a promo code' ) : ( couponTypeLabel( c.discount_type ) + ( c.id ? ' · #' + c.id : '' ) ) }</div>
+							<div class="minn-modal-title">${ isNew ? esc( __( 'New coupon' ) ) : esc( c.code || listC.code || 'Coupon' ) }</div>
+							<div class="minn-modal-sub">${ isNew ? esc( __( 'Create a promo code' ) ) : ( couponTypeLabel( c.discount_type ) + ( c.id ? ' · #' + c.id : '' ) ) }</div>
 						</div>
 						${ ! isNew ? `<span class="minn-status ${ PRODUCT_STATUS_STYLE[ c.status ] || 'draft' }">${ esc( ( c.status || '' ).replace( /-/g, ' ' ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
@@ -30644,7 +30668,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? __( 'Add user' ) : 'Edit ' + esc( u.name ) }</div>
+						<div class="minn-modal-title">${ isNew ? esc( __( 'Add user' ) ) : 'Edit ' + esc( u.name ) }</div>
 						${ ! isNew ? `<span class="minn-modal-id-tag">#${ esc( String( m.userId ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -30672,7 +30696,7 @@
 							<input class="minn-input" value="${ esc( role ) }" disabled>` }
 						</div>
 						<div>
-							<div class="minn-field-label">${ isNew ? 'Password' : __( 'New password (leave blank to keep)' ) }</div>
+							<div class="minn-field-label">${ isNew ? 'Password' : esc( __( 'New password (leave blank to keep)' ) ) }</div>
 							<div style="display:flex; gap:8px;">
 								<input class="minn-input mono" id="minn-uf-password" autocomplete="new-password">
 								<button class="minn-btn-soft" id="minn-uf-genpass" style="flex-shrink:0;">${ esc( __( 'Generate' ) ) }</button>
@@ -30695,7 +30719,7 @@
 						${ m.sessions && m.sessions.length ? `<button class="minn-comment-action danger" id="minn-uf-killall" style="margin:10px 0 0;">${ esc( __( 'Sign out everywhere' ) ) }</button>` : '' }
 					</div>` : '' }
 					<div class="minn-modal-actions">
-						<button class="minn-btn-primary" id="minn-uf-save">${ isNew ? __( 'Create user' ) : __( 'Save changes' ) }</button>
+						<button class="minn-btn-primary" id="minn-uf-save">${ isNew ? esc( __( 'Create user' ) ) : esc( __( 'Save changes' ) ) }</button>
 						${ ! isNew && B.caps.deleteUsers && u && u.id !== B.user.id ? `<button class="minn-btn-soft danger" id="minn-uf-delete">${ esc( __( 'Delete user' ) ) }</button>` : '' }
 					</div>
 				</div>
@@ -30875,7 +30899,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ m.done ? __( 'Minn Admin is off' ) : __( 'Deactivate Minn Admin?' ) }</div>
+						<div class="minn-modal-title">${ m.done ? esc( __( 'Minn Admin is off' ) ) : esc( __( 'Deactivate Minn Admin?' ) ) }</div>
 						${ m.done ? '' : '<button class="minn-x-btn" id="minn-modal-close">×</button>' }
 					</div>
 					<div class="minn-help-body" style="border-bottom:0;">
@@ -30948,7 +30972,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? __( 'Add post type' ) : esc( t.plural ) }</div>
+						<div class="minn-modal-title">${ isNew ? esc( __( 'Add post type' ) ) : esc( t.plural ) }</div>
 						${ isNew ? '' : `<span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span>` }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -31020,7 +31044,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ isNew ? __( 'Add taxonomy' ) : esc( t.plural ) }</div>
+						<div class="minn-modal-title">${ isNew ? esc( __( 'Add taxonomy' ) ) : esc( t.plural ) }</div>
 						${ isNew ? '' : `<span class="minn-status ${ t.editable ? 'publish' : 'draft' }">${ esc( CPT_SOURCE_LABEL[ t.source ] || t.source ) }</span>` }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
@@ -31225,7 +31249,7 @@
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ m.multi ? __( 'Build a gallery' ) : ( any ? __( 'Insert file' ) : __( 'Insert image' ) ) }</div>
+						<div class="minn-modal-title">${ m.multi ? esc( __( 'Build a gallery' ) ) : ( any ? esc( __( 'Insert file' ) ) : esc( __( 'Insert image' ) ) ) }</div>
 						${ m.multi ? `<span class="minn-modal-count" id="minn-picker-count">${ esc( __( 'Pick images in order' ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
