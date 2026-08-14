@@ -287,6 +287,34 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'the renewal order is badged as a renewal', marks.renewal === 'renewal', JSON.stringify( marks ) );
 		t.check( 'an unrelated order carries no badge', marks.plain === null, JSON.stringify( marks ) );
 
+		// It has to be SEEN, not merely present: the first version was 93px of
+		// badge inside a 120px cell that clips, so only a sliver showed — wide
+		// enough to hover, which is what made it look like it worked.
+		const fits = await page.evaluate( ( ids ) => {
+			const one = ( id ) => {
+				const badge = document.querySelector( `.minn-table-row[data-order="${ id }"] [data-subrel]` );
+				if ( ! badge ) return null;
+				const cell = badge.closest( '.minn-cell-clip' ) || badge.parentElement;
+				const b = badge.getBoundingClientRect(), c = cell.getBoundingClientRect();
+				return {
+					w: Math.round( b.width ),
+					h: Math.round( b.height ),
+					clipped: Math.round( b.x + b.width ) > Math.round( c.x + c.width ) + 1,
+				};
+			};
+			return { parent: one( ids.parent ), renewal: one( ids.renewal ) };
+		}, { parent: relParent, renewal: relRenewal } );
+		t.check( 'both badges are drawn whole inside their cell',
+			!! fits.parent && !! fits.renewal
+				&& fits.parent.w >= 14 && fits.parent.h >= 14 && ! fits.parent.clipped
+				&& fits.renewal.w >= 14 && fits.renewal.h >= 14 && ! fits.renewal.clipped,
+			JSON.stringify( fits ) );
+		t.check( 'a badge still names itself for a screen reader',
+			await page.evaluate( ( id ) => {
+				const b = document.querySelector( `.minn-table-row[data-order="${ id }"] [data-subrel]` );
+				return !! b && /renewal/i.test( b.getAttribute( 'aria-label' ) || '' );
+			}, relRenewal ), '' );
+
 		await page.hover( `.minn-table-row[data-order="${ relRenewal }"] [data-subrel]` );
 		await page.waitForSelector( '.minn-subrel-pop', { timeout: 10000 } );
 		const pop = await page.evaluate( () => ( document.querySelector( '.minn-subrel-pop' ) || {} ).textContent || '' );
