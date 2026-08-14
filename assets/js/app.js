@@ -6301,16 +6301,16 @@
 		const paidChip = o.date_paid
 			? `<span class="minn-status publish">${ __( 'Paid' ) }</span>`
 			: `<span class="minn-status private">${ __( 'Pending' ) }</span>`;
-		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
 		// A tag, not a second pencil: two identical pencils in one card head
 		// say "edit something" twice and leave the user to guess which.
-		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
+		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
 		return `
 					<div class="minn-order-body">
 						<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec minn-order-itemscard">
-								<div class="minn-order-card-head">${ statusChip }<span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ canEdit && o.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div>
+								<div class="minn-order-card-head">${ statusChip }<div class="minn-order-card-actions"><span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ canEdit && o.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div></div>
 								<div class="minn-order-items">
 									${ ( o.line_items || [] ).map( ( li ) => `
 										<div class="minn-order-item">
@@ -7708,8 +7708,8 @@
 		// Its own attribute, not the order surface's data-oedit: bindOrderDetail
 		// queries [data-oedit] across the whole document, so sharing the name
 		// would let an order host bind pencils that are not its own.
-		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
-		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" title="${ esc( label ) }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
+		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
 		// An order reference stays navigation, as it is everywhere else; the eye
 		// beside it opens the quick view, so glancing at a renewal does not cost
 		// the subscription you are reading. Siblings, never nested: a button
@@ -7724,7 +7724,7 @@
 						<div class="minn-order-layout">
 						<div class="minn-order-main">
 							<div class="minn-order-sec minn-order-itemscard">
-								<div class="minn-order-card-head"><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span><span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ s.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div>
+								<div class="minn-order-card-head"><span class="minn-status ${ SUB_STATUS_STYLE[ s.status ] || 'draft' }">${ esc( subStatusLabel( s.status ) ) }</span><div class="minn-order-card-actions"><span class="minn-order-card-meta">${ esc( countLabel ) }</span>${ s.is_editable ? pencil( 'items', __( 'Edit items' ) ) + tagBtn( 'coupons', __( 'Edit coupons' ) ) : '' }</div></div>
 								<div class="minn-order-items">
 									${ ( s.line_items || [] ).map( ( li ) => `
 										<div class="minn-order-item">

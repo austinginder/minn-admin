@@ -2737,6 +2737,25 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-editpen { margin-left: auto; display: inline-flex; align-items: center; background: none; border: none; color: var(--text3); cursor: pointer; padding: 4px; border-radius: 7px; }
 .minn-order-editpen:hover { color: var(--text); background: var(--hover); }
 .minn-order-editpen svg { width: 15px; height: 15px; }
+/* Meta and actions travel together on the right. One wrapper claims the space
+   once: with margin-left:auto on each child, the first pushed the meta away
+   and every button after it opened another void of its own. */
+.minn-order-card-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.minn-order-card-actions > * { margin-left: 0; }
+/* Icon-only actions say what they do. The native title waits about a second
+   and never shows on keyboard focus, which is where a user who cannot see the
+   icon most needs it. aria-label is the source, so the visible text and the
+   accessible name cannot drift apart. */
+.minn-order-editpen { position: relative; }
+.minn-order-editpen::after {
+	content: attr(aria-label);
+	position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+	padding: 4px 8px; border-radius: 6px; white-space: nowrap;
+	background: var(--panel); border: 1px solid var(--border2); box-shadow: var(--shadow);
+	color: var(--text2); font-size: 12px; font-weight: 500;
+	opacity: 0; pointer-events: none; transition: opacity 0.12s ease;
+}
+.minn-order-editpen:hover::after, .minn-order-editpen:focus-visible::after { opacity: 1; }
 .minn-order-read { font-size: 13.5px; color: var(--text2); display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .minn-order-read-name { font-weight: 600; color: var(--text); }
 .minn-order-read-sub { font-weight: 600; font-size: 12px; color: var(--text); margin-top: 8px; }
