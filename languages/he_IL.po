@@ -4150,7 +4150,7 @@ msgstr "רשת"
 msgid "All sites"
 msgstr "כל האתרים"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "ציבורי"
 
@@ -16441,3 +16441,77 @@ msgstr "גיבוי האתר עכשיו (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "סיסמה"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "הצגת עמוד"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s גרסה"
+msgstr[1] "%s גרסאות"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "בחירת תמונה ראשית"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "היסטוריה"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "ציטוט"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "מפריד"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "גלרייה"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "מרווח"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "קובץ"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "כפתורים"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "טוען קבצים…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "טוען תמונות…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "אין עדיין קבצים בספרייה."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "אין עדיין תמונות בספרייה."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s גרסה"
+msgstr[1] "%s גרסאות"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "העתק את מדריך הסוכן"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "סיסמה חדשה"

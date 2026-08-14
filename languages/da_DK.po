@@ -4150,7 +4150,7 @@ msgstr "Netværk"
 msgid "All sites"
 msgstr "Alle websteder"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Offentlig"
 
@@ -16441,3 +16441,77 @@ msgstr "Sikkerhedskopiér webstedet nu (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Adgangskode"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Se side"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s revision"
+msgstr[1] "%s revisioner"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Vælg udvalgt billede"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Historik"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Fremhævet citat"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "opdeler"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Galleri"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Afstandsstykke"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Fil"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Knapper"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Indlæser filer…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Indlæser billeder…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "Der er endnu ingen filer i biblioteket."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "Der er endnu ingen billeder i biblioteket."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s version"
+msgstr[1] "%s versioner"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Kopiér agentvejledningen"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Ny adgangskode"

@@ -4161,7 +4161,7 @@ msgstr "Сеть"
 msgid "All sites"
 msgstr "Все сайты"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Общедоступный"
 
@@ -16501,3 +16501,79 @@ msgstr "Создать резервную копию сайта сейчас (%s
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Пароль"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Просмотреть страницу"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s редакция"
+msgstr[1] "%s редакции"
+msgstr[2] "%s редакций"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Установить изображение страницы"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "История"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Выдержка"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "разделитель"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Галерея"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Интервал"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Файл"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Кнопки"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Загрузка файлов…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Загрузка изображений…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "В библиотеке пока нет файлов."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "В библиотеке пока нет изображений."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s версия"
+msgstr[1] "%s версии"
+msgstr[2] "%s версий"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Копировать руководство для агента"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Новый пароль"

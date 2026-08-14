@@ -4150,7 +4150,7 @@ msgstr "Hálózat"
 msgid "All sites"
 msgstr "Minden honlap"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Nyilvános"
 
@@ -16441,3 +16441,77 @@ msgstr "Webhely biztonsági mentése most (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Jelszó"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Oldal megtekintése"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s változat"
+msgstr[1] "%s változat"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Kiemelt kép beállítása"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Előzmények"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Kiemelt idézet"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "elválasztó"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Galéria"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Helykitöltő"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Fájl"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Gombok"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Fájlok betöltése…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Képek betöltése…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "Még nincsenek fájlok a médiatárban."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "Még nincsenek képek a médiatárban."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s verzió"
+msgstr[1] "%s verzió"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Ügynökútmutató másolása"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Új jelszó"

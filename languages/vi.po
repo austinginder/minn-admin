@@ -4139,7 +4139,7 @@ msgstr "Mạng Lưới"
 msgid "All sites"
 msgstr "Tất Cả Trang Mạng"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Công khai"
 
@@ -16381,3 +16381,75 @@ msgstr "Sao lưu trang web ngay (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Mật khẩu"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Xem trang web"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s bản sửa đổi"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Đặt ảnh đại diện"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Lịch sử"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Trích dẫn nổi bật"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "đường phân cách"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Thư viện ảnh"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Khoảng cách"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Tập tin"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Nút bấm"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Đang tải tệp…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Đang tải hình ảnh…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "Chưa có tệp nào trong thư viện."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "Chưa có hình ảnh nào trong thư viện."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s phiên bản"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Sao chép hướng dẫn tác nhân"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Mật khẩu mới"

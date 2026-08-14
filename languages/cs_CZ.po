@@ -4161,7 +4161,7 @@ msgstr "Síť webů"
 msgid "All sites"
 msgstr "Přehled webů"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Veřejná"
 
@@ -16501,3 +16501,79 @@ msgstr "Zálohovat web nyní (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Heslo"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Zobrazit stránku"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s revize"
+msgstr[1] "%s revize"
+msgstr[2] "%s revizí"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Zvolit náhledový obrázek"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Historie"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Úryvek"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "oddělovač"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Galerie"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Mezera"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Mediální soubor"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Tlačítka"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Načítání souborů…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Načítání obrázků…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "V knihovně zatím nejsou žádné soubory."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "V knihovně zatím nejsou žádné obrázky."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s verze"
+msgstr[1] "%s verze"
+msgstr[2] "%s verzí"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Zkopírovat průvodce agenta"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Nové heslo"

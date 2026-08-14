@@ -4150,7 +4150,7 @@ msgstr "Réseau"
 msgid "All sites"
 msgstr "Tous les sites"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Public"
 
@@ -16441,3 +16441,77 @@ msgstr "Sauvegarder le site maintenant (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Mot de passe"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Voir la page"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s révision"
+msgstr[1] "%s révisions"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Définir l’image mise en avant"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Historique"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Citation en exergue"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "Séparateur"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Galerie"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Espacement"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Fichier"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Boutons"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Chargement des fichiers…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Chargement des images…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "Aucun fichier dans la médiathèque pour le moment."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "Aucune image dans la médiathèque pour le moment."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s version"
+msgstr[1] "%s versions"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Copier le guide de l’agent"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Nouveau mot de passe"

@@ -4150,7 +4150,7 @@ msgstr "Nätverk"
 msgid "All sites"
 msgstr "Alla webbplatser"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "Offentlig"
 
@@ -16441,3 +16441,77 @@ msgstr "Säkerhetskopiera webbplatsen nu (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "Lösenord"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "Visa sida"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s version"
+msgstr[1] "%s versioner"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "Ange utvald bild"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "Historik"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "Framhävt citat"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "avdelare"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "Galleri"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "Distanselement"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "Fil"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "Knappar"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "Laddar filer…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "Laddar bilder…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "Det finns inga filer i biblioteket ännu."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "Det finns inga bilder i biblioteket ännu."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s version"
+msgstr[1] "%s versioner"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "Kopiera agentguiden"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "Nytt lösenord"

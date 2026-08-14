@@ -4150,7 +4150,7 @@ msgstr "شبکه"
 msgid "All sites"
 msgstr "همهٔ سایت‌ها"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "عمومی"
 
@@ -16441,3 +16441,77 @@ msgstr "اکنون از سایت پشتیبان بگیرید (%s)"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "رمز عبور"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "دیدن برگه"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s بازبینی"
+msgstr[1] "%s بازبینی"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "تنظیم تصویر شاخص"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "تاریخچه"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "کشیدن نقل قول"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "تقسیم‌کننده"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "گالری"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "فاصله‌گذار"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "پرونده"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "دکمه‌ها"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "در حال بارگذاری پرونده‌ها…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "در حال بارگذاری تصاویر…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "هنوز پرونده‌ای در کتابخانه نیست."
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "هنوز تصویری در کتابخانه نیست."
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s نسخه"
+msgstr[1] "%s نسخه"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "کپی راهنمای عامل"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "رمز جدید"

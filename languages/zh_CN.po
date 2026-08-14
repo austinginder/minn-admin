@@ -4139,7 +4139,7 @@ msgstr "站点网络"
 msgid "All sites"
 msgstr "所有站点"
 
-#: includes/adapters/network.php:191
+#: includes/adapters/network.php:191 assets/js/app.js:22576
 msgid "Public"
 msgstr "公开"
 
@@ -16381,3 +16381,75 @@ msgstr "立即备份站点（%s）"
 #: assets/js/app.js:31004
 msgid "Password"
 msgstr "密码"
+
+#: assets/js/app.js:21891
+msgid "View page"
+msgstr "查看页面"
+
+#. translators: %s: localized number of revisions.
+#: assets/js/app.js:21967
+msgid "%s revision"
+msgid_plural "%s revisions"
+msgstr[0] "%s 个修订版本"
+
+#: assets/js/app.js:22555
+msgid "Set featured image"
+msgstr "设置特色图片"
+
+#: assets/js/app.js:22561
+msgid "History"
+msgstr "历史"
+
+#: assets/js/app.js:28593
+msgid "Pullquote"
+msgstr "引文"
+
+#: assets/js/app.js:28600
+msgid "Divider"
+msgstr "分隔符"
+
+#: assets/js/app.js:28602
+msgid "Gallery"
+msgstr "图库"
+
+#: assets/js/app.js:28603
+msgid "Spacer"
+msgstr "间隔"
+
+#: assets/js/app.js:28604
+msgid "File"
+msgstr "文件"
+
+#: assets/js/app.js:28608
+msgid "Buttons"
+msgstr "按钮"
+
+#: assets/js/app.js:31572
+msgid "Loading files…"
+msgstr "正在加载文件…"
+
+#: assets/js/app.js:31572
+msgid "Loading images…"
+msgstr "正在加载图像…"
+
+#: assets/js/app.js:31572
+msgid "No files in the library yet."
+msgstr "媒体库中还没有文件。"
+
+#: assets/js/app.js:31572
+msgid "No images in the library yet."
+msgstr "媒体库中还没有图像。"
+
+#. translators: %s: localized number of saved versions.
+#: assets/js/app.js:33964
+msgid "%s version"
+msgid_plural "%s versions"
+msgstr[0] "%s 个版本"
+
+#: assets/js/app.js:34829
+msgid "Copy agent guide"
+msgstr "复制代理指南"
+
+#: assets/js/app.js:34826
+msgid "New password"
+msgstr "新密码"
