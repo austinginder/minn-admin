@@ -308,6 +308,32 @@ class Minn_Admin_Notices {
 	}
 
 	/**
+	 * Visible control text without screen-reader-only accessibility suffixes.
+	 *
+	 * WordPress and plugins commonly append text such as "(opens in a new
+	 * tab)" inside .screen-reader-text. Minn supplies its own accessible
+	 * control and external-link marker, so copying that hidden suffix into
+	 * the visible button duplicates the affordance and can leave English in
+	 * an otherwise translated panel.
+	 */
+	private static function control_text_of( $node ) {
+		$parts = array();
+		$xpath = new DOMXPath( $node->ownerDocument );
+		$query = './/text()['
+			. 'not(ancestor::*[contains(concat(" ", normalize-space(@class), " "), " screen-reader-text ")])'
+			. ' and not(ancestor::*[@aria-hidden="true"])'
+			. ']';
+		foreach ( $xpath->query( $query, $node ) as $text ) {
+			$chunk = preg_replace( '/\s+/u', ' ', trim( (string) $text->nodeValue ) );
+			if ( '' !== $chunk ) {
+				$parts[] = $chunk;
+			}
+		}
+		$label = implode( ' ', $parts );
+		return function_exists( 'mb_substr' ) ? mb_substr( $label, 0, 80 ) : substr( $label, 0, 80 );
+	}
+
+	/**
 	 * Up to 3 action links, absolutized; text and URL only.
 	 *
 	 * Links carrying our capture params are notices that built their href
@@ -337,12 +363,7 @@ class Minn_Admin_Notices {
 			}
 			$class = (string) $a->getAttribute( 'class' );
 			$id    = (string) $a->getAttribute( 'id' );
-			$label = preg_replace( '/\s+/u', ' ', trim( (string) $a->textContent ) );
-			if ( function_exists( 'mb_substr' ) ) {
-				$label = mb_substr( $label, 0, 80 );
-			} else {
-				$label = substr( $label, 0, 80 );
-			}
+			$label = self::control_text_of( $a );
 
 			// A button element IS a control (anchors can be decoration), but
 			// only ones Minn can honestly answer are surfaced: a whitelisted
@@ -376,7 +397,7 @@ class Minn_Admin_Notices {
 			}
 
 			$href = trim( (string) $a->getAttribute( 'href' ) );
-			$label = $label ?: 'Open';
+			$label = $label ?: __( 'Open', 'minn-admin' );
 
 			// JS-only button CTAs (href="#" / empty / javascript:).
 			$is_hash = ( '' === $href || '#' === $href || 0 === strpos( $href, '#' ) || 0 === stripos( $href, 'javascript:' ) );
