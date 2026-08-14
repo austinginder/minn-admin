@@ -73,6 +73,15 @@ try {
 	check( 'Reordered contextual entries keep the old German pack', de.version === '0.30.0' && de.package === oldDe.package && de.sha256 === oldDe.sha256 );
 	check( 'A real French translation change moves its pack forward', fr.version === '0.31.0' && fr.package.includes( '/v0.31.0/' ) && fr.sha256 !== oldFr.sha256 );
 	check( 'Attach list contains only the changed pack', /carried: de_DE/.test( secondOut ) && ! /ATTACH[\s\S]*minn-admin-de_DE\.zip/.test( secondOut ) && /ATTACH[\s\S]*minn-admin-fr_FR\.zip/.test( secondOut ) );
+
+	fs.rmSync( path.join( tmp, 'dist/languages/minn-admin-fr_FR.zip' ) );
+	let partialRefused = false;
+	try {
+		run( 'v0.31.0' );
+	} catch ( e ) {
+		partialRefused = /missing: minn-admin-fr_FR\.zip/.test( String( e.stderr || '' ) );
+	}
+	check( 'An incomplete pack build is refused', partialRefused );
 } finally {
 	fs.rmSync( tmp, { recursive: true, force: true } );
 }

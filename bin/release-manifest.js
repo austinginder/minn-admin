@@ -35,7 +35,7 @@ const path = require( 'path' );
 const crypto = require( 'crypto' );
 
 const { parsePo } = require( './i18n/po.js' );
-const { byCode, ALIASES } = require( './i18n/locales.js' );
+const { byCode, ALIASES, packedAs } = require( './i18n/locales.js' );
 
 const ROOT = path.resolve( __dirname, '..' );
 const DIST = path.join( ROOT, 'dist/languages' );
@@ -51,6 +51,27 @@ if ( ! tag || ! /^v\d+\.\d+\.\d+$/.test( tag ) ) {
 
 if ( ! fs.existsSync( DIST ) ) {
 	console.error( `no packs in ${ path.relative( ROOT, DIST ) } — run bin/i18n/build-packs.sh first` );
+	process.exit( 1 );
+}
+
+// Refuse a partial build. Enumerating whatever happens to be in dist makes a
+// deleted or failed pack look like an intentional removal from the manifest,
+// and sites on that locale simply stop receiving translation updates. The .po
+// files are the source set; packedAs() adds byte-for-byte aliases such as
+// en_AU, en_CA, en_NZ and en_ZA.
+const expectedFiles = fs.readdirSync( path.join( ROOT, 'languages' ) )
+	.filter( ( file ) => file.endsWith( '.po' ) )
+	.flatMap( ( file ) => packedAs( file.slice( 0, -3 ) ).map( ( locale ) => `minn-admin-${ locale }.zip` ) )
+	.sort();
+const actualFiles = fs.readdirSync( DIST )
+	.filter( ( file ) => /^minn-admin-.+\.zip$/.test( file ) )
+	.sort();
+const missingFiles = expectedFiles.filter( ( file ) => ! actualFiles.includes( file ) );
+const extraFiles = actualFiles.filter( ( file ) => ! expectedFiles.includes( file ) );
+if ( missingFiles.length || extraFiles.length ) {
+	console.error( 'language-pack build is incomplete or contains unexpected archives' );
+	if ( missingFiles.length ) console.error( `  missing: ${ missingFiles.join( ', ' ) }` );
+	if ( extraFiles.length ) console.error( `  unexpected: ${ extraFiles.join( ', ' ) }` );
 	process.exit( 1 );
 }
 
