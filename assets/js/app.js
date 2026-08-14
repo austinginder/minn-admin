@@ -9846,7 +9846,7 @@
 		const mark = active ? ( order === 'asc' ? ' ↑' : ' ↓' ) : '';
 		// aria-sort only belongs on real columnheaders; these grid headers
 		// carry the sort state in the button's accessible name instead.
-		const colLabel = typeof col.label === 'function' ? col.label() : col.label;
+		const colLabel = col.label();
 		const label = sortButtonLabel( colLabel, active, order );
 		return `<button type="button" class="minn-th-sort${ active ? ' is-active' : '' }" data-usort="${ esc( key ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ esc( colLabel ) }${ mark }</button>`;
 	}
