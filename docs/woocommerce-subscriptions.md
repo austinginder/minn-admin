@@ -100,7 +100,7 @@ records the same note shape (`{ note, customer_note }`) under their own route, s
 composer, the private/customer split and the list are one helper used twice. What is not
 shared is the ids: an order quick view can stack over a subscription page, putting two
 timelines in one document, and a shared id would let one host's binder drive the other's
-composer — the page's, since it comes first in the DOM. Orders keep `minn-o-*`,
+composer (the page's, since it comes first in the DOM). Orders keep `minn-o-*`,
 subscriptions take `minn-s-*`, and the subscription's binder is scoped to its own view.
 
 Notes arrive on their own request, like renewal orders: a failure leaves the card empty

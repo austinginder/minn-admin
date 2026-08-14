@@ -5831,7 +5831,7 @@
 		document.body.appendChild( pop );
 		const r = anchor.getBoundingClientRect();
 		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - pop.offsetWidth - 10 ) ) + 'px';
-		pop.style.top = Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) + 'px';
+		pop.style.top = Math.max( 10, Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
 		document.addEventListener( 'mousedown', orderFilterPopAway, true );
 		document.addEventListener( 'keydown', orderFilterPopKey, true );
 
@@ -6180,7 +6180,7 @@
 		document.body.appendChild( pop );
 		const r = anchor.getBoundingClientRect();
 		pop.style.left = Math.max( 10, Math.min( r.left, window.innerWidth - pop.offsetWidth - 10 ) ) + 'px';
-		pop.style.top = Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) + 'px';
+		pop.style.top = Math.max( 10, Math.min( r.bottom + 6, window.innerHeight - pop.offsetHeight - 10 ) ) + 'px';
 		document.addEventListener( 'mousedown', itemsPopAway, true );
 		document.addEventListener( 'keydown', itemsPopKey, true );
 	}
