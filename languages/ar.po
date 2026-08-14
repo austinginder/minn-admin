@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-08-14 02:49+0000\n"
+"PO-Revision-Date: 2026-08-14 02:53+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Arabic\n"
 "MIME-Version: 1.0\n"
@@ -15,8 +15,8 @@ msgstr ""
 #: includes/adapters/acf.php:24
 #: includes/adapters/meta-box.php:257
 #: includes/adapters/pods.php:388
-#: assets/js/app.js:14413
-#: assets/js/app.js:32438
+#: assets/js/app.js:14515
+#: assets/js/app.js:32568
 msgid "Custom fields"
 msgstr "خصائص إضافية"
 
@@ -45,7 +45,7 @@ msgstr "مزعج"
 #: includes/adapters/gravity-forms.php:206
 #: includes/adapters/network.php:253
 #: includes/adapters/wpforms.php:344
-#: assets/js/app.js:4759
+#: assets/js/app.js:4861
 msgid "Not spam"
 msgstr "غير مزعج"
 
@@ -71,10 +71,10 @@ msgstr "غير مزعج"
 #: includes/adapters/ninja-forms.php:256
 #: includes/adapters/sureforms.php:159
 #: includes/adapters/wpforms.php:365
-#: assets/js/app.js:3794
-#: assets/js/app.js:3844
-#: assets/js/app.js:4135
-#: assets/js/app.js:4682
+#: assets/js/app.js:3896
+#: assets/js/app.js:3946
+#: assets/js/app.js:4237
+#: assets/js/app.js:4784
 msgid "Delete permanently"
 msgstr "حذف بشكل دائم"
 
@@ -91,8 +91,8 @@ msgstr "المواقع"
 
 #: includes/adapters/network.php:177
 #: includes/adapters/network.php:1364
-#: assets/js/app.js:1933
-#: assets/js/app.js:2174
+#: assets/js/app.js:2035
+#: assets/js/app.js:2276
 msgid "Network"
 msgstr "الشبكة"
 
@@ -117,13 +117,13 @@ msgid "Deleted"
 msgstr "تم حذف"
 
 #: includes/adapters/network.php:198
-#: assets/js/app.js:757
+#: assets/js/app.js:859
 msgid "Site"
 msgstr "الموقع"
 
 #: includes/adapters/network.php:199
 #: includes/adapters/network.php:211
-#: assets/js/app.js:30134
+#: assets/js/app.js:30264
 msgid "Address"
 msgstr "العنوان"
 
@@ -133,19 +133,19 @@ msgstr "تمّ الإنشاء في"
 
 #: includes/adapters/network.php:202
 #: includes/adapters/network.php:584
-#: assets/js/app.js:3498
-#: assets/js/app.js:3665
-#: assets/js/app.js:5328
-#: assets/js/app.js:6320
-#: assets/js/app.js:6642
-#: assets/js/app.js:8336
-#: assets/js/app.js:8725
-#: assets/js/app.js:21454
-#: assets/js/app.js:22006
-#: assets/js/app.js:29941
-#: assets/js/app.js:30036
-#: assets/js/app.js:30189
-#: assets/js/app.js:30229
+#: assets/js/app.js:3600
+#: assets/js/app.js:3767
+#: assets/js/app.js:5430
+#: assets/js/app.js:6422
+#: assets/js/app.js:6744
+#: assets/js/app.js:8438
+#: assets/js/app.js:8827
+#: assets/js/app.js:21566
+#: assets/js/app.js:22118
+#: assets/js/app.js:30071
+#: assets/js/app.js:30166
+#: assets/js/app.js:30319
+#: assets/js/app.js:30359
 msgid "Status"
 msgstr "الحالة"
 
@@ -154,7 +154,7 @@ msgid "Add site"
 msgstr "أضف موقع"
 
 #: includes/adapters/network.php:216
-#: assets/js/app.js:16042
+#: assets/js/app.js:16150
 msgid "Site title"
 msgstr "اسم الموقع"
 
@@ -180,31 +180,31 @@ msgid "Network settings"
 msgstr "إعدادات الشبكة"
 
 #: includes/adapters/network.php:580
-#: assets/js/app.js:5262
-#: assets/js/app.js:7002
-#: assets/js/app.js:7352
-#: assets/js/app.js:7360
-#: assets/js/app.js:7716
-#: assets/js/app.js:9190
-#: assets/js/app.js:9319
-#: assets/js/app.js:14451
-#: assets/js/app.js:14495
-#: assets/js/app.js:29917
-#: assets/js/app.js:30131
-#: assets/js/app.js:30184
+#: assets/js/app.js:5364
+#: assets/js/app.js:7104
+#: assets/js/app.js:7454
+#: assets/js/app.js:7462
+#: assets/js/app.js:7818
+#: assets/js/app.js:9292
+#: assets/js/app.js:9421
+#: assets/js/app.js:14553
+#: assets/js/app.js:14597
+#: assets/js/app.js:30047
+#: assets/js/app.js:30261
+#: assets/js/app.js:30314
 msgid "Name"
 msgstr "اسم القالب"
 
 #: includes/adapters/network.php:581
-#: assets/js/app.js:5248
-#: assets/js/app.js:5263
-#: assets/js/app.js:8908
-#: assets/js/app.js:29918
-#: assets/js/app.js:30132
-#: assets/js/app.js:30228
-#: assets/js/app.js:30434
-#: assets/js/app.js:33790
-#: assets/js/app.js:34163
+#: assets/js/app.js:5350
+#: assets/js/app.js:5365
+#: assets/js/app.js:9010
+#: assets/js/app.js:30048
+#: assets/js/app.js:30262
+#: assets/js/app.js:30358
+#: assets/js/app.js:30564
+#: assets/js/app.js:33920
+#: assets/js/app.js:34293
 msgid "Email"
 msgstr "البريد الإلكتروني"
 
@@ -217,7 +217,7 @@ msgid "Untitled"
 msgstr "بدون عنوان"
 
 #: includes/adapters/rewrite-rules-inspector.php:219
-#: assets/js/app.js:16150
+#: assets/js/app.js:16258
 msgid "Permalink structure"
 msgstr "تركيبة الرابط الدائم"
 
@@ -233,7 +233,7 @@ msgid "Priority "
 msgstr "الأولوية "
 
 #: includes/class-minn-admin-rest.php:2519
-#: assets/js/app.js:772
+#: assets/js/app.js:874
 msgid "Pages"
 msgstr "صفحات"
 
@@ -243,10 +243,10 @@ msgstr "منشور"
 
 #: includes/class-minn-admin-rest.php:2533
 #: includes/class-minn-admin-surfaces.php:248
-#: assets/js/app.js:750
-#: assets/js/app.js:1663
-#: assets/js/app.js:30167
-#: assets/js/app.js:33774
+#: assets/js/app.js:852
+#: assets/js/app.js:1765
+#: assets/js/app.js:30297
+#: assets/js/app.js:33904
 msgid "Users"
 msgstr "أعضاء"
 
@@ -256,8 +256,8 @@ msgstr "تاريخ التسجيل"
 
 #: includes/class-minn-admin-rest.php:2539
 #: includes/class-minn-admin-surfaces.php:242
-#: assets/js/app.js:742
-#: assets/js/app.js:1618
+#: assets/js/app.js:844
+#: assets/js/app.js:1720
 msgid "Comments"
 msgstr "تعليقات"
 
@@ -283,1368 +283,1368 @@ msgid "Persistent object cache"
 msgstr "التخزين المؤقت للكائن المستمر"
 
 #: includes/class-minn-admin-surfaces.php:240
-#: assets/js/app.js:740
-#: assets/js/app.js:1614
+#: assets/js/app.js:842
+#: assets/js/app.js:1716
 msgid "Content"
 msgstr "المحتوى"
 
 #: includes/class-minn-admin-surfaces.php:241
-#: assets/js/app.js:741
-#: assets/js/app.js:1615
+#: assets/js/app.js:843
+#: assets/js/app.js:1717
 msgid "Media"
 msgstr "الوسائط"
 
 #: includes/class-minn-admin-surfaces.php:249
-#: assets/js/app.js:752
-#: assets/js/app.js:1681
-#: assets/js/app.js:14451
+#: assets/js/app.js:854
+#: assets/js/app.js:1783
+#: assets/js/app.js:14553
 msgid "Terms"
 msgstr "عناصر"
 
 #: includes/class-minn-admin-surfaces.php:250
-#: assets/js/app.js:753
-#: assets/js/app.js:1668
+#: assets/js/app.js:855
+#: assets/js/app.js:1770
 msgid "Menus"
 msgstr "قوائم"
 
 #: includes/class-minn-admin-surfaces.php:251
-#: assets/js/app.js:754
-#: assets/js/app.js:1670
+#: assets/js/app.js:856
+#: assets/js/app.js:1772
 msgid "Widgets"
 msgstr "ودجات"
 
 #: includes/class-minn-admin-surfaces.php:254
-#: assets/js/app.js:759
+#: assets/js/app.js:861
 msgid "Database"
 msgstr "قاعدة البيانات"
 
 #: includes/class-minn-admin-surfaces.php:256
-#: assets/js/app.js:757
-#: assets/js/app.js:1685
+#: assets/js/app.js:859
+#: assets/js/app.js:1787
 msgid "Settings"
 msgstr "الإعدادات"
 
-#: includes/class-minn-admin.php:44
+#: includes/class-minn-admin.php:45
 msgid "Sorry, you are not allowed to manage plugins for this site."
 msgstr "عفوًا، غير مسموح لك بإدارة الإضافات لهذا الموقع."
 
-#: includes/class-minn-admin.php:57
+#: includes/class-minn-admin.php:58
 msgid "Plugin not found."
 msgstr "لم يتم العثور على الإضافة."
 
-#: includes/class-minn-admin.php:96
+#: includes/class-minn-admin.php:97
 msgid "Sorry, you are not allowed to manage this plugin."
 msgstr "عذرًا، غير مسموح لك بإدارة هذه الإضافة."
 
-#: includes/class-minn-admin.php:169
+#: includes/class-minn-admin.php:170
 msgid "Site default"
 msgstr "لغة الموقع الافتراضية"
 
-#: assets/js/app.js:421
+#: assets/js/app.js:523
 msgid "Pagination"
 msgstr "تعدد الصفحات"
 
-#: assets/js/app.js:423
+#: assets/js/app.js:525
 msgid "Previous page"
 msgstr "الصفحة السابقة"
 
-#: assets/js/app.js:425
+#: assets/js/app.js:527
 msgid "Next page"
 msgstr "الصفحة التالية"
 
-#: assets/js/app.js:531
-#: assets/js/app.js:16247
+#: assets/js/app.js:633
+#: assets/js/app.js:16359
 msgid "Retry"
 msgstr "إعادة المحاولة"
 
-#: assets/js/app.js:738
-#: assets/js/app.js:1613
-#: assets/js/app.js:2156
+#: assets/js/app.js:840
+#: assets/js/app.js:1715
+#: assets/js/app.js:2258
 msgid "Overview"
 msgstr "نظرة عامة"
 
-#: assets/js/app.js:738
+#: assets/js/app.js:840
 msgid "Dashboard"
 msgstr "الرئيسية"
 
-#: assets/js/app.js:741
+#: assets/js/app.js:843
 msgid "Library"
 msgstr "المكتبة"
 
-#: assets/js/app.js:744
-#: assets/js/app.js:6320
-#: assets/js/app.js:21392
+#: assets/js/app.js:846
+#: assets/js/app.js:6422
+#: assets/js/app.js:21504
 msgid "Order"
 msgstr "ترتيب"
 
-#: assets/js/app.js:750
-#: assets/js/app.js:751
+#: assets/js/app.js:852
+#: assets/js/app.js:853
 msgid "People"
 msgstr "أشخاص"
 
-#: assets/js/app.js:751
-#: assets/js/app.js:30412
+#: assets/js/app.js:853
+#: assets/js/app.js:30542
 msgid "Edit user"
 msgstr "تحرير إعدادات العضو"
 
-#: assets/js/app.js:753
+#: assets/js/app.js:855
 msgid "Navigation"
 msgstr "التنقّل"
 
-#: assets/js/app.js:755
+#: assets/js/app.js:857
 msgid "Installed"
 msgstr "منصّبة"
 
-#: assets/js/app.js:760
+#: assets/js/app.js:862
 msgid "Editor"
 msgstr "المُحرر"
 
-#: assets/js/app.js:760
-#: assets/js/app.js:30039
-#: assets/js/app.js:30192
+#: assets/js/app.js:862
+#: assets/js/app.js:30169
+#: assets/js/app.js:30322
 msgid "Draft"
 msgstr "مسودة"
 
-#: assets/js/app.js:769
+#: assets/js/app.js:871
 msgid "Trash"
 msgstr "سلّة المهملات"
 
-#: assets/js/app.js:771
-#: assets/js/app.js:778
-#: assets/js/app.js:9190
+#: assets/js/app.js:873
+#: assets/js/app.js:880
+#: assets/js/app.js:9292
 msgid "Posts"
 msgstr "مقالات"
 
-#: assets/js/app.js:779
+#: assets/js/app.js:881
 msgid "pages"
 msgstr "صفحات"
 
-#: assets/js/app.js:887
-#: assets/js/app.js:4795
-#: assets/js/app.js:4808
-#: assets/js/app.js:9326
-#: assets/js/app.js:9417
-#: assets/js/app.js:10247
-#: assets/js/app.js:11956
-#: assets/js/app.js:13269
-#: assets/js/app.js:24348
-#: assets/js/app.js:24653
-#: assets/js/app.js:29794
-#: assets/js/app.js:30199
-#: assets/js/app.js:30254
-#: assets/js/app.js:30286
-#: assets/js/app.js:30502
-#: assets/js/app.js:30574
-#: assets/js/app.js:30608
+#: assets/js/app.js:989
+#: assets/js/app.js:4897
+#: assets/js/app.js:4910
+#: assets/js/app.js:9428
+#: assets/js/app.js:9519
+#: assets/js/app.js:10349
+#: assets/js/app.js:12058
+#: assets/js/app.js:13371
+#: assets/js/app.js:24460
+#: assets/js/app.js:24765
+#: assets/js/app.js:29924
+#: assets/js/app.js:30329
+#: assets/js/app.js:30384
+#: assets/js/app.js:30416
+#: assets/js/app.js:30632
+#: assets/js/app.js:30704
+#: assets/js/app.js:30738
 msgid "Cancel"
 msgstr "إلغاء "
 
-#: assets/js/app.js:943
-#: assets/js/app.js:13679
-#: assets/js/app.js:29125
+#: assets/js/app.js:1045
+#: assets/js/app.js:13781
+#: assets/js/app.js:29255
 msgid "Update WordPress"
 msgstr "تحديث ووردبريس"
 
-#: assets/js/app.js:1040
-#: assets/js/app.js:17522
-#: assets/js/app.js:21563
+#: assets/js/app.js:1142
+#: assets/js/app.js:17634
+#: assets/js/app.js:21675
 msgid "Replace image"
 msgstr "استبدال الصورة"
 
-#: assets/js/app.js:1042
-#: assets/js/app.js:21565
+#: assets/js/app.js:1144
+#: assets/js/app.js:21677
 msgid "Set image"
 msgstr "تعيين صورة"
 
-#: assets/js/app.js:1391
+#: assets/js/app.js:1493
 msgid "Post"
 msgstr "مقالة"
 
-#: assets/js/app.js:1392
+#: assets/js/app.js:1494
 msgid "Page"
 msgstr "صفحة"
 
-#: assets/js/app.js:1393
+#: assets/js/app.js:1495
 msgid "Pattern"
 msgstr "نمط"
 
-#: assets/js/app.js:1928
+#: assets/js/app.js:2030
 msgid "Search sites…"
 msgstr "بحث في المواقع…"
 
-#: assets/js/app.js:2168
+#: assets/js/app.js:2270
 msgid "Search…"
 msgstr "بحث…"
 
-#: assets/js/app.js:2172
-#: assets/js/app.js:14815
+#: assets/js/app.js:2274
+#: assets/js/app.js:14917
 msgid "Tools"
 msgstr "الأدوات"
 
-#: assets/js/app.js:2190
-#: assets/js/app.js:29481
+#: assets/js/app.js:2292
+#: assets/js/app.js:29611
 msgid "Log out"
 msgstr "تسجيل الخروج"
 
-#: assets/js/app.js:2204
+#: assets/js/app.js:2306
 msgid "View site"
 msgstr "مشاهدة الموقع"
 
-#: assets/js/app.js:2207
-#: assets/js/app.js:29263
+#: assets/js/app.js:2309
+#: assets/js/app.js:29393
 msgid "Notifications"
 msgstr "الإشعارات"
 
-#: assets/js/app.js:2210
+#: assets/js/app.js:2312
 msgid "New post"
 msgstr "مقالة جديدة"
 
-#: assets/js/app.js:2210
+#: assets/js/app.js:2312
 msgid "New"
 msgstr "جديد"
 
-#: assets/js/app.js:2403
+#: assets/js/app.js:2505
 msgid "Light"
 msgstr "فاتح"
 
-#: assets/js/app.js:2403
+#: assets/js/app.js:2505
 msgid "Dark"
 msgstr "داكن"
 
-#: assets/js/app.js:2670
+#: assets/js/app.js:2772
 msgid "light"
 msgstr "فاتح"
 
-#: assets/js/app.js:2670
+#: assets/js/app.js:2772
 msgid "dark"
 msgstr "داكن"
 
-#: assets/js/app.js:2676
+#: assets/js/app.js:2778
 msgid "Custom"
 msgstr "تخصيص"
 
-#: assets/js/app.js:2844
+#: assets/js/app.js:2946
 msgid "Store"
 msgstr "متجر"
 
-#: assets/js/app.js:3201
+#: assets/js/app.js:3303
 msgid "Patterns"
 msgstr "الأنماط"
 
-#: assets/js/app.js:3479
+#: assets/js/app.js:3581
 msgid "View trash"
 msgstr "مشاهدة  سلة المهملات"
 
-#: assets/js/app.js:3482
-#: assets/js/app.js:3592
+#: assets/js/app.js:3584
+#: assets/js/app.js:3694
 msgid "All categories"
 msgstr "كل التصنيفات"
 
-#: assets/js/app.js:3483
-#: assets/js/app.js:3597
+#: assets/js/app.js:3585
+#: assets/js/app.js:3699
 msgid "All tags"
 msgstr "كل الوسوم"
 
-#: assets/js/app.js:3498
+#: assets/js/app.js:3600
 msgid "Author"
 msgstr "كاتب"
 
 #. translators: %s: the title or name of the row being selected.
-#: assets/js/app.js:3502
-#: assets/js/app.js:8340
-#: assets/js/app.js:9667
+#: assets/js/app.js:3604
+#: assets/js/app.js:8442
+#: assets/js/app.js:9769
 msgid "Select %s"
 msgstr "تحديد %s"
 
-#: assets/js/app.js:3517
-#: assets/js/app.js:3822
-#: assets/js/app.js:22549
-#: assets/js/app.js:33883
-#: assets/js/app.js:34284
+#: assets/js/app.js:3619
+#: assets/js/app.js:3924
+#: assets/js/app.js:22661
+#: assets/js/app.js:34013
+#: assets/js/app.js:34414
 msgid "Restore"
 msgstr "استعادة"
 
-#: assets/js/app.js:3518
-#: assets/js/app.js:26099
-#: assets/js/app.js:26105
-#: assets/js/app.js:30082
+#: assets/js/app.js:3620
+#: assets/js/app.js:26229
+#: assets/js/app.js:26235
+#: assets/js/app.js:30212
 msgid "Delete"
 msgstr "حذف"
 
-#: assets/js/app.js:3519
-#: assets/js/app.js:9199
-#: assets/js/app.js:9675
-#: assets/js/app.js:11276
+#: assets/js/app.js:3621
+#: assets/js/app.js:9301
+#: assets/js/app.js:9777
+#: assets/js/app.js:11378
 msgid "Actions"
 msgstr "إجراءات"
 
-#: assets/js/app.js:3668
+#: assets/js/app.js:3770
 msgid "Move to trash"
 msgstr "نقل إلى سلة المُهملات"
 
-#: assets/js/app.js:3824
-#: assets/js/app.js:3834
-#: assets/js/app.js:4490
-#: assets/js/app.js:4939
-#: assets/js/app.js:8446
-#: assets/js/app.js:9929
-#: assets/js/app.js:11393
-#: assets/js/app.js:15039
-#: assets/js/app.js:21050
+#: assets/js/app.js:3926
+#: assets/js/app.js:3936
+#: assets/js/app.js:4592
+#: assets/js/app.js:5041
+#: assets/js/app.js:8548
+#: assets/js/app.js:10031
+#: assets/js/app.js:11495
+#: assets/js/app.js:15141
+#: assets/js/app.js:21162
 msgid "Clear"
 msgstr "إزالة"
 
-#: assets/js/app.js:3829
-#: assets/js/app.js:3851
-#: assets/js/app.js:8438
-#: assets/js/app.js:8451
+#: assets/js/app.js:3931
+#: assets/js/app.js:3953
+#: assets/js/app.js:8540
+#: assets/js/app.js:8553
 msgid "Set status…"
 msgstr "تعيين حالة…"
 
-#: assets/js/app.js:3829
-#: assets/js/app.js:8438
+#: assets/js/app.js:3931
+#: assets/js/app.js:8540
 msgid "Set status"
 msgstr "تعيين حالة"
 
-#: assets/js/app.js:3832
-#: assets/js/app.js:8445
-#: assets/js/app.js:9928
-#: assets/js/app.js:24349
-#: assets/js/app.js:24654
-#: assets/js/app.js:26484
-#: assets/js/app.js:26662
+#: assets/js/app.js:3934
+#: assets/js/app.js:8547
+#: assets/js/app.js:10030
+#: assets/js/app.js:24461
+#: assets/js/app.js:24766
+#: assets/js/app.js:26614
+#: assets/js/app.js:26792
 msgid "Apply"
 msgstr "تطبيق"
 
-#: assets/js/app.js:4236
+#: assets/js/app.js:4338
 msgid "Unattached"
 msgstr "غير مرفق"
 
-#: assets/js/app.js:4240
-#: assets/js/app.js:4419
+#: assets/js/app.js:4342
+#: assets/js/app.js:4521
 msgid "All dates"
 msgstr "كل التواريخ"
 
-#: assets/js/app.js:4254
+#: assets/js/app.js:4356
 msgid "Grid"
 msgstr "شبكة"
 
-#: assets/js/app.js:4255
+#: assets/js/app.js:4357
 msgid "List"
 msgstr "قائمة"
 
-#: assets/js/app.js:4326
-#: assets/js/app.js:4337
-#: assets/js/app.js:4776
+#: assets/js/app.js:4428
+#: assets/js/app.js:4439
+#: assets/js/app.js:4878
 msgid "Select"
 msgstr "تحديد"
 
-#: assets/js/app.js:4458
+#: assets/js/app.js:4560
 msgid "Copy URL"
 msgstr "نسخ الرابط URL"
 
-#: assets/js/app.js:4463
-#: assets/js/app.js:29867
+#: assets/js/app.js:4565
+#: assets/js/app.js:29997
 msgid "Edit image"
 msgstr "تحرير الصورة"
 
-#: assets/js/app.js:4488
+#: assets/js/app.js:4590
 msgid "Move"
 msgstr "نقل"
 
-#: assets/js/app.js:4802
+#: assets/js/app.js:4904
 msgid "Author name"
 msgstr "اسم الكاتب"
 
-#: assets/js/app.js:4807
-#: assets/js/app.js:11955
-#: assets/js/app.js:29864
-#: assets/js/app.js:30390
+#: assets/js/app.js:4909
+#: assets/js/app.js:12057
+#: assets/js/app.js:29994
+#: assets/js/app.js:30520
 msgid "Save"
 msgstr "حفظ"
 
-#: assets/js/app.js:4853
+#: assets/js/app.js:4955
 msgid "View post"
 msgstr "مشاهدة المقالة"
 
-#: assets/js/app.js:4868
+#: assets/js/app.js:4970
 msgid "Delete this comment permanently?"
 msgstr "حذف هذا التعليق بشكل دائم?"
 
-#: assets/js/app.js:5245
-#: assets/js/app.js:30225
-#: assets/js/app.js:33824
-#: assets/js/app.js:34198
+#: assets/js/app.js:5347
+#: assets/js/app.js:30355
+#: assets/js/app.js:33954
+#: assets/js/app.js:34328
 msgid "First name"
 msgstr "الاسم الأول"
 
-#: assets/js/app.js:5246
-#: assets/js/app.js:30226
-#: assets/js/app.js:33828
-#: assets/js/app.js:34202
+#: assets/js/app.js:5348
+#: assets/js/app.js:30356
+#: assets/js/app.js:33958
+#: assets/js/app.js:34332
 msgid "Last name"
 msgstr "الاسم الأخير"
 
-#: assets/js/app.js:5255
-#: assets/js/app.js:5276
+#: assets/js/app.js:5357
+#: assets/js/app.js:5378
 msgid "City"
 msgstr "المدينة"
 
-#: assets/js/app.js:5259
-#: assets/js/app.js:5280
+#: assets/js/app.js:5361
+#: assets/js/app.js:5382
 msgid "Country"
 msgstr "الدولة"
 
-#: assets/js/app.js:5331
-#: assets/js/app.js:5696
-#: assets/js/app.js:7520
-#: assets/js/app.js:8210
-#: assets/js/app.js:30081
-#: assets/js/app.js:30470
-#: assets/js/app.js:31624
-#: assets/js/app.js:33816
-#: assets/js/app.js:33840
-#: assets/js/app.js:34190
-#: assets/js/app.js:34218
+#: assets/js/app.js:5433
+#: assets/js/app.js:5798
+#: assets/js/app.js:7622
+#: assets/js/app.js:8312
+#: assets/js/app.js:30211
+#: assets/js/app.js:30600
+#: assets/js/app.js:31754
+#: assets/js/app.js:33946
+#: assets/js/app.js:33970
+#: assets/js/app.js:34320
+#: assets/js/app.js:34348
 msgid "Save changes"
 msgstr "حفظ التغييرات"
 
-#: assets/js/app.js:5336
-#: assets/js/app.js:29929
+#: assets/js/app.js:5438
+#: assets/js/app.js:30059
 msgid "Payment"
 msgstr "دفع"
 
-#: assets/js/app.js:5599
+#: assets/js/app.js:5701
 msgid "Recording…"
 msgstr "جاري التسجيل…"
 
-#: assets/js/app.js:6164
+#: assets/js/app.js:6266
 msgid "Analytics"
 msgstr "التحليلات"
 
-#: assets/js/app.js:6320
-#: assets/js/app.js:14495
-#: assets/js/app.js:29935
+#: assets/js/app.js:6422
+#: assets/js/app.js:14597
+#: assets/js/app.js:30065
 msgid "Items"
 msgstr "عناصر"
 
-#: assets/js/app.js:6809
-#: assets/js/app.js:7004
-#: assets/js/app.js:7630
-#: assets/js/app.js:7727
-#: assets/js/app.js:7867
-#: assets/js/app.js:16013
-#: assets/js/app.js:16032
-#: assets/js/app.js:16281
-#: assets/js/app.js:22032
-#: assets/js/app.js:24363
-#: assets/js/app.js:24695
-#: assets/js/app.js:25234
-#: assets/js/app.js:26343
+#: assets/js/app.js:6911
+#: assets/js/app.js:7106
+#: assets/js/app.js:7732
+#: assets/js/app.js:7829
+#: assets/js/app.js:7969
+#: assets/js/app.js:16121
+#: assets/js/app.js:16140
+#: assets/js/app.js:16393
+#: assets/js/app.js:22144
+#: assets/js/app.js:24475
+#: assets/js/app.js:24807
+#: assets/js/app.js:25359
+#: assets/js/app.js:26473
 msgid "Remove"
 msgstr "إزالة"
 
-#: assets/js/app.js:6982
+#: assets/js/app.js:7084
 msgid "Search categories…"
 msgstr "بحث في التصنيفات…"
 
-#: assets/js/app.js:7002
+#: assets/js/app.js:7104
 msgid "File name"
 msgstr "اسم الملف"
 
-#: assets/js/app.js:7003
+#: assets/js/app.js:7105
 msgid "File URL"
 msgstr "رابط الملف"
 
-#: assets/js/app.js:7333
-#: assets/js/app.js:7546
+#: assets/js/app.js:7435
+#: assets/js/app.js:7648
 msgid "Pending review"
 msgstr "بإنتظار المراجعة"
 
-#: assets/js/app.js:7362
-#: assets/js/app.js:21339
+#: assets/js/app.js:7464
+#: assets/js/app.js:21451
 msgid "Categories"
 msgstr "تصنيفات"
 
-#: assets/js/app.js:7371
-#: assets/js/app.js:7407
-#: assets/js/app.js:7408
-#: assets/js/app.js:30187
+#: assets/js/app.js:7473
+#: assets/js/app.js:7509
+#: assets/js/app.js:7510
+#: assets/js/app.js:30317
 msgid "Optional"
 msgstr "اختياري"
 
-#: assets/js/app.js:7395
-#: assets/js/app.js:25179
+#: assets/js/app.js:7497
+#: assets/js/app.js:25304
 msgid "Images"
 msgstr "الصور"
 
-#: assets/js/app.js:7398
+#: assets/js/app.js:7500
 msgid "Add images…"
 msgstr "إضافة صور…"
 
-#: assets/js/app.js:7429
+#: assets/js/app.js:7531
 msgid "Dimensions"
 msgstr "أبعاد"
 
-#: assets/js/app.js:7431
+#: assets/js/app.js:7533
 msgid "Length"
 msgstr "مدّة"
 
-#: assets/js/app.js:7432
+#: assets/js/app.js:7534
 msgid "Width"
 msgstr "عرض"
 
-#: assets/js/app.js:7433
+#: assets/js/app.js:7535
 msgid "Height"
 msgstr "ارتفاع"
 
-#: assets/js/app.js:7445
-#: assets/js/app.js:9190
-#: assets/js/app.js:9320
-#: assets/js/app.js:14495
-#: assets/js/app.js:30733
-#: assets/js/app.js:30805
+#: assets/js/app.js:7547
+#: assets/js/app.js:9292
+#: assets/js/app.js:9422
+#: assets/js/app.js:14597
+#: assets/js/app.js:30863
+#: assets/js/app.js:30935
 msgid "Slug"
 msgstr "الاسم اللطيف"
 
-#: assets/js/app.js:7465
+#: assets/js/app.js:7567
 msgid "Never"
 msgstr "أبداً"
 
-#: assets/js/app.js:7470
+#: assets/js/app.js:7572
 msgid "Advanced"
 msgstr "متقدم"
 
-#: assets/js/app.js:7476
+#: assets/js/app.js:7578
 msgid "Menu order"
 msgstr "ترتيب القائمة"
 
-#: assets/js/app.js:7482
+#: assets/js/app.js:7584
 msgid "Attributes"
 msgstr "السمات"
 
-#: assets/js/app.js:7552
+#: assets/js/app.js:7654
 msgid "Do not allow"
 msgstr "عدم السماح"
 
-#: assets/js/app.js:7630
-#: assets/js/app.js:24363
-#: assets/js/app.js:26665
+#: assets/js/app.js:7732
+#: assets/js/app.js:24475
+#: assets/js/app.js:26795
 msgid "Remove image"
 msgstr "إزالة الصورة"
 
-#: assets/js/app.js:7674
-#: assets/js/app.js:20744
-#: assets/js/app.js:22031
+#: assets/js/app.js:7776
+#: assets/js/app.js:20856
+#: assets/js/app.js:22143
 msgid "Replace"
 msgstr "استبدل"
 
-#: assets/js/app.js:7703
-#: assets/js/app.js:24712
+#: assets/js/app.js:7805
+#: assets/js/app.js:24824
 msgid "Add"
 msgstr "أضف"
 
-#: assets/js/app.js:7721
+#: assets/js/app.js:7823
 msgid "Visible"
 msgstr "مرئي"
 
-#: assets/js/app.js:8725
-#: assets/js/app.js:30028
-#: assets/js/app.js:30046
+#: assets/js/app.js:8827
+#: assets/js/app.js:30158
+#: assets/js/app.js:30176
 msgid "Code"
 msgstr "شفرة خاصة"
 
-#: assets/js/app.js:8725
-#: assets/js/app.js:14451
-#: assets/js/app.js:15568
-#: assets/js/app.js:15592
-#: assets/js/app.js:30048
+#: assets/js/app.js:8827
+#: assets/js/app.js:14553
+#: assets/js/app.js:15670
+#: assets/js/app.js:15694
+#: assets/js/app.js:30178
 msgid "Type"
 msgstr "نوع"
 
-#: assets/js/app.js:8908
-#: assets/js/app.js:9661
-#: assets/js/app.js:30122
-#: assets/js/app.js:30438
-#: assets/js/app.js:33794
-#: assets/js/app.js:34167
+#: assets/js/app.js:9010
+#: assets/js/app.js:9763
+#: assets/js/app.js:30252
+#: assets/js/app.js:30568
+#: assets/js/app.js:33924
+#: assets/js/app.js:34297
 msgid "Role"
 msgstr "الدور"
 
-#: assets/js/app.js:8908
-#: assets/js/app.js:30123
+#: assets/js/app.js:9010
+#: assets/js/app.js:30253
 msgid "Registered"
 msgstr "تاريخ التسجيل"
 
-#: assets/js/app.js:9248
+#: assets/js/app.js:9350
 msgid "View posts"
 msgstr "مشاهدة المقالات"
 
-#: assets/js/app.js:9309
-#: assets/js/app.js:21380
+#: assets/js/app.js:9411
+#: assets/js/app.js:21492
 msgid "Parent"
 msgstr "أب"
 
-#: assets/js/app.js:9323
-#: assets/js/app.js:29859
-#: assets/js/app.js:30043
+#: assets/js/app.js:9425
+#: assets/js/app.js:29989
+#: assets/js/app.js:30173
 msgid "Description"
 msgstr "وصف"
 
-#: assets/js/app.js:9599
-#: assets/js/app.js:9642
-#: assets/js/app.js:30601
+#: assets/js/app.js:9701
+#: assets/js/app.js:9744
+#: assets/js/app.js:30731
 msgid "Search users…"
 msgstr "بحث عن الأعضاء…"
 
-#: assets/js/app.js:9680
+#: assets/js/app.js:9782
 msgid "No users found."
 msgstr "لم يتم إيجاد أعضاء."
 
-#: assets/js/app.js:9783
+#: assets/js/app.js:9885
 msgid "View user"
 msgstr "عرض المستخدم"
 
-#: assets/js/app.js:9813
+#: assets/js/app.js:9915
 msgid "Send password reset"
 msgstr "إرسال إعادة تعيين كلمة المرور"
 
-#: assets/js/app.js:10867
+#: assets/js/app.js:10969
 msgid "Post ID"
 msgstr "معرّف المقالة"
 
-#: assets/js/app.js:11654
-#: assets/js/app.js:16823
+#: assets/js/app.js:11756
+#: assets/js/app.js:16935
 msgid "Settings saved"
 msgstr "تمّ حفظ الإعدادات"
 
-#: assets/js/app.js:11819
+#: assets/js/app.js:11921
 msgid "Menu created"
 msgstr "تمّ إنشاء القائمة"
 
-#: assets/js/app.js:11967
-#: assets/js/app.js:12310
-#: assets/js/app.js:24693
-#: assets/js/app.js:25232
-#: assets/js/app.js:25283
+#: assets/js/app.js:12069
+#: assets/js/app.js:12412
+#: assets/js/app.js:24805
+#: assets/js/app.js:25357
+#: assets/js/app.js:25408
 msgid "Move up"
 msgstr "تحريك للأعلى"
 
-#: assets/js/app.js:11968
-#: assets/js/app.js:12311
-#: assets/js/app.js:24694
-#: assets/js/app.js:25233
-#: assets/js/app.js:25284
+#: assets/js/app.js:12070
+#: assets/js/app.js:12413
+#: assets/js/app.js:24806
+#: assets/js/app.js:25358
+#: assets/js/app.js:25409
 msgid "Move down"
 msgstr "تحريك للأسفل"
 
-#: assets/js/app.js:11977
+#: assets/js/app.js:12079
 msgid "Add to menu"
 msgstr "أضف للقائمة"
 
-#: assets/js/app.js:12166
+#: assets/js/app.js:12268
 msgid "Item updated"
 msgstr "تم تحديث العنصر"
 
-#: assets/js/app.js:12222
+#: assets/js/app.js:12324
 msgid "Delete menu"
 msgstr "حذف القائمة"
 
-#: assets/js/app.js:12225
+#: assets/js/app.js:12327
 msgid "Menu deleted"
 msgstr "تمّ حذف القائمة"
 
-#: assets/js/app.js:12316
+#: assets/js/app.js:12418
 msgid "Edit"
 msgstr "تحرير"
 
-#: assets/js/app.js:12589
-#: assets/js/app.js:29159
+#: assets/js/app.js:12691
+#: assets/js/app.js:29289
 msgid "Updating…"
 msgstr "جاري التحديث…"
 
-#: assets/js/app.js:12804
-#: assets/js/app.js:30655
+#: assets/js/app.js:12906
+#: assets/js/app.js:30785
 msgid "Plugins"
 msgstr "إضافات"
 
-#: assets/js/app.js:12805
+#: assets/js/app.js:12907
 msgid "Themes"
 msgstr "قوالب"
 
-#: assets/js/app.js:12901
+#: assets/js/app.js:13003
 msgid "Invalid"
 msgstr "غير صالح"
 
-#: assets/js/app.js:12903
+#: assets/js/app.js:13005
 msgid "Unknown"
 msgstr "غير معروف"
 
-#: assets/js/app.js:12923
+#: assets/js/app.js:13025
 msgid "Activate…"
 msgstr "تفعيل…"
 
-#: assets/js/app.js:12929
+#: assets/js/app.js:13031
 msgid "Deactivate"
 msgstr "تعطيل"
 
-#: assets/js/app.js:13268
-#: assets/js/app.js:14182
-#: assets/js/app.js:16270
+#: assets/js/app.js:13370
+#: assets/js/app.js:14284
+#: assets/js/app.js:16382
 msgid "Activate"
 msgstr "تفعيل"
 
-#: assets/js/app.js:13441
-#: assets/js/app.js:16098
+#: assets/js/app.js:13543
+#: assets/js/app.js:16206
 msgid "Search engine visibility"
 msgstr "الظهور لمحركات البحث"
 
-#: assets/js/app.js:13467
+#: assets/js/app.js:13569
 msgid "Undo"
 msgstr "تراجع"
 
-#: assets/js/app.js:13492
-#: assets/js/app.js:13515
+#: assets/js/app.js:13594
+#: assets/js/app.js:13617
 msgid "Search engines discouraged"
 msgstr "تمّ منع محركات البحث من أرشفة موقعك"
 
-#: assets/js/app.js:13765
+#: assets/js/app.js:13867
 msgid "Search plugins…"
 msgstr "بحث في الإضافات…"
 
-#: assets/js/app.js:13796
+#: assets/js/app.js:13898
 msgid "Update"
 msgstr "تحديث"
 
-#: assets/js/app.js:13806
+#: assets/js/app.js:13908
 msgid "Network active"
 msgstr "على الشبكة النشطة"
 
-#: assets/js/app.js:13806
+#: assets/js/app.js:13908
 msgid "Active"
 msgstr "تفعيل"
 
-#: assets/js/app.js:13806
+#: assets/js/app.js:13908
 msgid "Inactive"
 msgstr "غير فعّال"
 
-#: assets/js/app.js:13903
-#: assets/js/app.js:13966
+#: assets/js/app.js:14005
+#: assets/js/app.js:14068
 msgid "Delete plugin"
 msgstr "حذف الإضافة"
 
-#: assets/js/app.js:14071
+#: assets/js/app.js:14173
 msgid "Auto"
 msgstr "تلقائي"
 
-#: assets/js/app.js:14145
+#: assets/js/app.js:14247
 msgid "Search themes…"
 msgstr "البحث عن القوالب…"
 
-#: assets/js/app.js:14183
+#: assets/js/app.js:14285
 msgid "Live preview"
 msgstr "معاينة حيّة"
 
-#: assets/js/app.js:14238
-#: assets/js/app.js:14306
+#: assets/js/app.js:14340
+#: assets/js/app.js:14408
 msgid "Delete theme"
 msgstr "حذف قالب"
 
-#: assets/js/app.js:14412
-#: assets/js/app.js:22027
+#: assets/js/app.js:14514
+#: assets/js/app.js:22139
 msgid "Featured image"
 msgstr "الصورة البارزة للمقالة"
 
-#: assets/js/app.js:14414
-#: assets/js/app.js:21500
-#: assets/js/app.js:22038
+#: assets/js/app.js:14516
+#: assets/js/app.js:21612
+#: assets/js/app.js:22150
 msgid "Page attributes"
 msgstr "خصائص الصفحة"
 
-#: assets/js/app.js:14820
+#: assets/js/app.js:14922
 msgid "Site Health"
 msgstr "صحّة الموقع"
 
-#: assets/js/app.js:14823
+#: assets/js/app.js:14925
 msgid "Export personal data"
 msgstr "تصدير البيانات الشخصية"
 
-#: assets/js/app.js:14824
+#: assets/js/app.js:14926
 msgid "Erase personal data"
 msgstr "مسح البيانات الشخصية"
 
-#: assets/js/app.js:14968
-#: assets/js/app.js:15306
+#: assets/js/app.js:15070
+#: assets/js/app.js:15408
 msgid "Size"
 msgstr "حجم"
 
-#: assets/js/app.js:14993
+#: assets/js/app.js:15095
 msgid "Autoloaded options"
 msgstr "خيارات التحميل التلقائي"
 
-#: assets/js/app.js:15245
+#: assets/js/app.js:15347
 msgid "Rows"
 msgstr "صفوف"
 
-#: assets/js/app.js:15304
-#: assets/js/app.js:26091
+#: assets/js/app.js:15406
+#: assets/js/app.js:26221
 msgid "Table"
 msgstr "جدول"
 
-#: assets/js/app.js:15564
-#: assets/js/app.js:15590
+#: assets/js/app.js:15666
+#: assets/js/app.js:15692
 msgid "Columns"
 msgstr "أعمدة"
 
-#: assets/js/app.js:15567
-#: assets/js/app.js:26065
+#: assets/js/app.js:15669
+#: assets/js/app.js:26195
 msgid "Column"
 msgstr "عمود"
 
-#: assets/js/app.js:15570
+#: assets/js/app.js:15672
 msgid "Default"
 msgstr "الإفتراضي"
 
-#: assets/js/app.js:15580
-#: assets/js/app.js:15599
+#: assets/js/app.js:15682
+#: assets/js/app.js:15701
 msgid "Yes"
 msgstr "نعم"
 
-#: assets/js/app.js:15580
-#: assets/js/app.js:15599
+#: assets/js/app.js:15682
+#: assets/js/app.js:15701
 msgid "No"
 msgstr "لا"
 
-#: assets/js/app.js:15589
+#: assets/js/app.js:15691
 msgid "Index"
 msgstr "Index"
 
-#: assets/js/app.js:15664
-#: assets/js/app.js:21893
+#: assets/js/app.js:15766
+#: assets/js/app.js:22005
 msgid "Copy"
 msgstr "نسخ"
 
-#: assets/js/app.js:15693
+#: assets/js/app.js:15801
 msgid "Day and name"
 msgstr "اليوم + عنوان المقالة"
 
-#: assets/js/app.js:15694
+#: assets/js/app.js:15802
 msgid "Month and name"
 msgstr "الشهر + عنوان المقالة"
 
-#: assets/js/app.js:15696
+#: assets/js/app.js:15804
 msgid "Post name"
 msgstr "عنوان المقالة"
 
-#: assets/js/app.js:16005
-#: assets/js/app.js:16007
+#: assets/js/app.js:16113
+#: assets/js/app.js:16115
 msgid "Site icon"
 msgstr "أيقونة الموقع"
 
-#: assets/js/app.js:16012
-#: assets/js/app.js:16031
+#: assets/js/app.js:16120
+#: assets/js/app.js:16139
 msgid "Choose image"
 msgstr "اختيار صورة"
 
-#: assets/js/app.js:16024
-#: assets/js/app.js:16026
+#: assets/js/app.js:16132
+#: assets/js/app.js:16134
 msgid "Site logo"
 msgstr "شعار الموقع"
 
-#: assets/js/app.js:16054
+#: assets/js/app.js:16162
 msgid "Timezone"
 msgstr "المنطقة الزمنيّة"
 
-#: assets/js/app.js:16060
+#: assets/js/app.js:16168
 msgid "Date format"
 msgstr "صيغة التاريخ"
 
-#: assets/js/app.js:16061
+#: assets/js/app.js:16169
 msgid "Time format"
 msgstr "صيغة الوقت"
 
-#: assets/js/app.js:16062
+#: assets/js/app.js:16170
 msgid "Week starts on"
 msgstr "الأسبوع يبدأ يوم"
 
-#: assets/js/app.js:16070
+#: assets/js/app.js:16178
 msgid "Site language"
 msgstr "لغة الموقع"
 
-#: assets/js/app.js:16096
+#: assets/js/app.js:16204
 msgid "New user default role"
 msgstr "الدور الافتراضي للأعضاء الجدد"
 
-#: assets/js/app.js:16098
+#: assets/js/app.js:16206
 msgid "Allow search engines to index this site."
 msgstr "السماح لمحركات البحث بفهرسة هذا الموقع."
 
-#: assets/js/app.js:16106
+#: assets/js/app.js:16214
 msgid "Your homepage displays"
 msgstr "تعرض صفحتك الرئيسية"
 
-#: assets/js/app.js:16106
+#: assets/js/app.js:16214
 msgid "Latest posts"
 msgstr "أحدث المقالات"
 
-#: assets/js/app.js:16106
+#: assets/js/app.js:16214
 msgid "A static page"
 msgstr "صفحة ثابتة"
 
-#: assets/js/app.js:16117
+#: assets/js/app.js:16225
 msgid "Posts page"
 msgstr "صفحة المقالات"
 
-#: assets/js/app.js:16118
+#: assets/js/app.js:16226
 msgid "Blog pages show at most"
 msgstr "عدد الموضوعات المعروضة في الصفحة"
 
-#: assets/js/app.js:16130
+#: assets/js/app.js:16238
 msgid "Additional CSS"
 msgstr "تنسيقات (CSS) إضافية"
 
-#: assets/js/app.js:16151
-#: assets/js/app.js:16692
+#: assets/js/app.js:16259
+#: assets/js/app.js:16804
 msgid "Custom structure"
 msgstr "تركيبة مخصّصة"
 
-#: assets/js/app.js:16159
+#: assets/js/app.js:16271
 msgid "Default post category"
 msgstr "تصنيف المقالة الافتراضي"
 
-#: assets/js/app.js:16160
+#: assets/js/app.js:16272
 msgid "Default post format"
 msgstr "صيغة المقالة الافتراضية"
 
-#: assets/js/app.js:16171
-#: assets/js/app.js:21356
-#: assets/js/app.js:21357
+#: assets/js/app.js:16283
+#: assets/js/app.js:21468
+#: assets/js/app.js:21469
 msgid "Allow comments"
 msgstr "السماح بالتعليقات"
 
-#: assets/js/app.js:16174
+#: assets/js/app.js:16286
 msgid "Users must be registered and logged in to comment."
 msgstr "يجب على الزوار التسجيل ليتمكنوا من التعليق."
 
-#: assets/js/app.js:16175
+#: assets/js/app.js:16287
 msgid "Show avatars"
 msgstr "السماح بعرض الصور الرمزية"
 
-#: assets/js/app.js:16222
+#: assets/js/app.js:16334
 msgid "Disallowed comment keys"
 msgstr "مفاتيح التعليقات غير المسموح بها"
 
-#: assets/js/app.js:17464
+#: assets/js/app.js:17576
 msgid "shortcode"
 msgstr "كود قصير"
 
-#: assets/js/app.js:17465
+#: assets/js/app.js:17577
 msgid "Shortcode"
 msgstr "كود قصير"
 
-#: assets/js/app.js:17478
+#: assets/js/app.js:17590
 msgid "details"
 msgstr "التفاصيل"
 
-#: assets/js/app.js:17481
+#: assets/js/app.js:17593
 msgid "Details"
 msgstr "التفاصيل"
 
-#: assets/js/app.js:17495
+#: assets/js/app.js:17607
 msgid "buttons"
 msgstr "أزرار"
 
-#: assets/js/app.js:17957
-#: assets/js/app.js:22046
+#: assets/js/app.js:18069
+#: assets/js/app.js:22158
 msgid "Outline"
 msgstr "مُحدد"
 
-#: assets/js/app.js:20739
+#: assets/js/app.js:20851
 msgid "Match case"
 msgstr "طابق حالة الأحرف"
 
-#: assets/js/app.js:20743
+#: assets/js/app.js:20855
 msgid "Replace with"
 msgstr "استبدل بـ"
 
-#: assets/js/app.js:20745
+#: assets/js/app.js:20857
 msgid "All"
 msgstr "الكل"
 
-#: assets/js/app.js:21045
+#: assets/js/app.js:21157
 msgid "Time"
 msgstr "الوقت"
 
-#: assets/js/app.js:21051
+#: assets/js/app.js:21163
 msgid "Done"
 msgstr "تمّ"
 
-#: assets/js/app.js:21327
+#: assets/js/app.js:21439
 msgid "Permalink"
 msgstr "الرابط الدائم"
 
-#: assets/js/app.js:21334
+#: assets/js/app.js:21446
 msgid "Format"
 msgstr "بنية المقالة"
 
-#: assets/js/app.js:21343
+#: assets/js/app.js:21455
 msgid "Tags"
 msgstr "وسوم"
 
-#: assets/js/app.js:21350
+#: assets/js/app.js:21462
 msgid "Excerpt"
 msgstr "المقتطف"
 
-#: assets/js/app.js:21353
+#: assets/js/app.js:21465
 msgid "Discussion"
 msgstr "مناقشة"
 
-#: assets/js/app.js:21386
+#: assets/js/app.js:21498
 msgid "Template"
 msgstr "قالب"
 
-#: assets/js/app.js:21388
-#: assets/js/app.js:21702
+#: assets/js/app.js:21500
+#: assets/js/app.js:21814
 msgid "Default template"
 msgstr "القالب الافتراضي"
 
-#: assets/js/app.js:22004
+#: assets/js/app.js:22116
 msgid "Publish"
 msgstr "نشر"
 
-#: assets/js/app.js:22007
-#: assets/js/app.js:33434
+#: assets/js/app.js:22119
+#: assets/js/app.js:33564
 msgid "Saved"
 msgstr "تم الحفظ"
 
-#: assets/js/app.js:22008
-#: assets/js/app.js:22010
-#: assets/js/app.js:30739
+#: assets/js/app.js:22120
+#: assets/js/app.js:22122
+#: assets/js/app.js:30869
 msgid "Visibility"
 msgstr "الظهور"
 
-#: assets/js/app.js:22175
-#: assets/js/app.js:35088
+#: assets/js/app.js:22287
+#: assets/js/app.js:35218
 msgid "Draft saved"
 msgstr "تم حفظ المسودة"
 
-#: assets/js/app.js:22219
-#: assets/js/app.js:22550
+#: assets/js/app.js:22331
+#: assets/js/app.js:22662
 msgid "Dismiss"
 msgstr "تجاهل"
 
-#: assets/js/app.js:22355
+#: assets/js/app.js:22467
 msgid "Take over"
 msgstr "تولى المهمة"
 
-#: assets/js/app.js:22613
-#: assets/js/app.js:29853
-#: assets/js/app.js:33432
-#: assets/js/app.js:33433
+#: assets/js/app.js:22725
+#: assets/js/app.js:29983
+#: assets/js/app.js:33562
+#: assets/js/app.js:33563
 msgid "Title"
 msgstr "العنوان"
 
-#: assets/js/app.js:22634
+#: assets/js/app.js:22746
 msgid "Formatting"
 msgstr "تنسيق"
 
-#: assets/js/app.js:22635
+#: assets/js/app.js:22747
 msgid "Bold"
 msgstr "عريض"
 
-#: assets/js/app.js:22636
+#: assets/js/app.js:22748
 msgid "Italic"
 msgstr "مائل"
 
-#: assets/js/app.js:22637
+#: assets/js/app.js:22749
 msgid "Strikethrough"
 msgstr "يتوسطه خط"
 
-#: assets/js/app.js:22639
-#: assets/js/app.js:28049
+#: assets/js/app.js:22751
+#: assets/js/app.js:28179
 msgid "Heading 2"
 msgstr "ترويسة 2"
 
-#: assets/js/app.js:22640
-#: assets/js/app.js:28050
+#: assets/js/app.js:22752
+#: assets/js/app.js:28180
 msgid "Heading 3"
 msgstr "ترويسة 3"
 
-#: assets/js/app.js:22641
+#: assets/js/app.js:22753
 msgid "Quote"
 msgstr "اقتباس"
 
-#: assets/js/app.js:22643
-#: assets/js/app.js:28057
+#: assets/js/app.js:22755
+#: assets/js/app.js:28187
 msgid "Bulleted list"
 msgstr "قائمة نقطية"
 
-#: assets/js/app.js:22644
-#: assets/js/app.js:28058
+#: assets/js/app.js:22756
+#: assets/js/app.js:28188
 msgid "Numbered list"
 msgstr "قائمة مرقّمة"
 
-#: assets/js/app.js:22645
+#: assets/js/app.js:22757
 msgid "Align center"
 msgstr "محاذاة للوسط"
 
-#: assets/js/app.js:22646
+#: assets/js/app.js:22758
 msgid "Align right"
 msgstr "محاذاة لليمين"
 
-#: assets/js/app.js:22647
-#: assets/js/app.js:26469
+#: assets/js/app.js:22759
+#: assets/js/app.js:26599
 msgid "Link"
 msgstr "رابط"
 
-#: assets/js/app.js:22648
-#: assets/js/app.js:31000
+#: assets/js/app.js:22760
+#: assets/js/app.js:31130
 msgid "Insert image"
 msgstr "إدراج صورة"
 
-#: assets/js/app.js:22649
+#: assets/js/app.js:22761
 msgid "Paragraph"
 msgstr "فقرة"
 
-#: assets/js/app.js:22650
+#: assets/js/app.js:22762
 msgid "Clear formatting"
 msgstr "إزالة التنسيق"
 
-#: assets/js/app.js:24369
-#: assets/js/app.js:26653
-#: assets/js/app.js:29857
+#: assets/js/app.js:24481
+#: assets/js/app.js:26783
+#: assets/js/app.js:29987
 msgid "Caption"
 msgstr "كلمات توضيحية"
 
-#: assets/js/app.js:24712
+#: assets/js/app.js:24824
 msgid "block"
 msgstr "المكوّن"
 
-#: assets/js/app.js:25182
+#: assets/js/app.js:25307
 msgid "Replace…"
 msgstr "استبدل…"
 
-#: assets/js/app.js:25197
+#: assets/js/app.js:25322
 msgid "Text"
 msgstr "نصّ"
 
-#: assets/js/app.js:25221
-#: assets/js/app.js:25226
+#: assets/js/app.js:25346
+#: assets/js/app.js:25351
 msgid "text"
 msgstr "نص"
 
-#: assets/js/app.js:26064
+#: assets/js/app.js:26194
 msgid "Delete row"
 msgstr "احذف صف"
 
-#: assets/js/app.js:26068
+#: assets/js/app.js:26198
 msgid "Delete column"
 msgstr "حذف عمود"
 
-#: assets/js/app.js:26103
+#: assets/js/app.js:26233
 msgid "Left"
 msgstr "يسار"
 
-#: assets/js/app.js:26104
+#: assets/js/app.js:26234
 msgid "Right"
 msgstr "يمين"
 
-#: assets/js/app.js:26109
+#: assets/js/app.js:26239
 msgid "Delete table"
 msgstr "احذف الجدول"
 
-#: assets/js/app.js:26337
+#: assets/js/app.js:26467
 msgid "Syntax highlighting"
 msgstr "إبراز صيغة الشفرات البرمجية (Syntax Highlighting)"
 
-#: assets/js/app.js:26647
+#: assets/js/app.js:26777
 msgid "Image"
 msgstr "صورة"
 
-#: assets/js/app.js:26651
-#: assets/js/app.js:29855
+#: assets/js/app.js:26781
+#: assets/js/app.js:29985
 msgid "Alt text"
 msgstr "النص البديل"
 
-#: assets/js/app.js:26655
+#: assets/js/app.js:26785
 msgid "Link URL"
 msgstr "مسار الرابط (URL)"
 
-#: assets/js/app.js:29254
+#: assets/js/app.js:29384
 msgid "Hide"
 msgstr "إخفاء "
 
-#: assets/js/app.js:29399
+#: assets/js/app.js:29529
 msgid "Edit Menus"
 msgstr "تحرير القوائم"
 
-#: assets/js/app.js:29479
+#: assets/js/app.js:29609
 msgid "Visit site"
 msgstr "زيارة الموقع"
 
-#: assets/js/app.js:29765
+#: assets/js/app.js:29895
 msgid "Save widget"
 msgstr "حفظ الودجت"
 
-#: assets/js/app.js:29866
+#: assets/js/app.js:29996
 msgid "Open"
 msgstr "مفتوح"
 
-#: assets/js/app.js:29922
+#: assets/js/app.js:30052
 msgid "Schedule"
 msgstr "جدولة"
 
-#: assets/js/app.js:29968
+#: assets/js/app.js:30098
 msgid "Close"
 msgstr "إغلاق"
 
-#: assets/js/app.js:30038
-#: assets/js/app.js:30191
+#: assets/js/app.js:30168
+#: assets/js/app.js:30321
 msgid "Published"
 msgstr "منشور"
 
-#: assets/js/app.js:30060
+#: assets/js/app.js:30190
 msgid "None"
 msgstr "لا شيء"
 
-#: assets/js/app.js:30119
+#: assets/js/app.js:30249
 msgid "Profile"
 msgstr "حسابك"
 
-#: assets/js/app.js:30121
-#: assets/js/app.js:30426
+#: assets/js/app.js:30251
+#: assets/js/app.js:30556
 msgid "Username"
 msgstr "اسم المستخدم"
 
-#: assets/js/app.js:30275
-#: assets/js/app.js:30491
+#: assets/js/app.js:30405
+#: assets/js/app.js:30621
 msgid "Subject"
 msgstr "العنوان"
 
-#: assets/js/app.js:30419
+#: assets/js/app.js:30549
 msgid "Add user"
 msgstr "إضافة مستخدم"
 
-#: assets/js/app.js:30456
-#: assets/js/app.js:33887
-#: assets/js/app.js:34288
+#: assets/js/app.js:30586
+#: assets/js/app.js:34017
+#: assets/js/app.js:34418
 msgid "Sessions"
 msgstr "الجلسات"
 
-#: assets/js/app.js:30553
+#: assets/js/app.js:30683
 msgid "Add existing user"
 msgstr "إضافة عضو موجود"
 
-#: assets/js/app.js:30560
+#: assets/js/app.js:30690
 msgid "Email or username"
 msgstr "البريد الإلكتروني أو اسم المستخدم"
 
-#: assets/js/app.js:30655
+#: assets/js/app.js:30785
 msgid "Done."
 msgstr "تمّ."
 
-#: assets/js/app.js:30804
+#: assets/js/app.js:30934
 msgid "Genre"
 msgstr "نوع"
 
-#: assets/js/app.js:30806
+#: assets/js/app.js:30936
 msgid "genre"
 msgstr "نوع"
 
-#: assets/js/app.js:30847
+#: assets/js/app.js:30977
 msgid "Keyboard shortcuts"
 msgstr "اختصارات لوحة المفاتيح"
 
-#: assets/js/app.js:30874
+#: assets/js/app.js:31004
 msgid "GitHub"
 msgstr "جيت هاب"
 
-#: assets/js/app.js:30933
+#: assets/js/app.js:31063
 msgid "Add plugin"
 msgstr "إضافة إضافة"
 
-#: assets/js/app.js:30939
-#: assets/js/app.js:30968
-#: assets/js/app.js:31007
+#: assets/js/app.js:31069
+#: assets/js/app.js:31098
+#: assets/js/app.js:31137
 msgid "browse"
 msgstr "تصفّح"
 
-#: assets/js/app.js:30962
+#: assets/js/app.js:31092
 msgid "Add theme"
 msgstr "إضافة قالب"
 
-#: assets/js/app.js:31019
-#: assets/js/app.js:31776
+#: assets/js/app.js:31149
+#: assets/js/app.js:31906
 msgid "Insert gallery"
 msgstr "إدراج المعرض"
 
-#: assets/js/app.js:31559
-#: assets/js/app.js:31959
+#: assets/js/app.js:31689
+#: assets/js/app.js:32089
 msgid "Email sent"
 msgstr "تم إرسال البريد الإلكتروني"
 
-#: assets/js/app.js:31816
+#: assets/js/app.js:31946
 msgid "Uploading…"
 msgstr "جاري الرفع…"
 
-#: assets/js/app.js:32056
+#: assets/js/app.js:32186
 msgid "User deleted"
 msgstr "تمّ حذف العضو"
 
-#: assets/js/app.js:33291
+#: assets/js/app.js:33421
 msgid "More"
 msgstr "المزيد"
 
-#: assets/js/app.js:33439
+#: assets/js/app.js:33569
 msgid "Current"
 msgstr "الحالية"
 
-#: assets/js/app.js:33447
-#: assets/js/app.js:33508
+#: assets/js/app.js:33577
+#: assets/js/app.js:33638
 msgid "Restore this revision"
 msgstr "استعادة هذه المراجعة"
 
-#: assets/js/app.js:33667
+#: assets/js/app.js:33797
 msgid "User created"
 msgstr "تمّ إنشاء العضو"
 
-#: assets/js/app.js:33670
-#: assets/js/app.js:33960
+#: assets/js/app.js:33800
+#: assets/js/app.js:34090
 msgid "User updated"
 msgstr "تم تحديث العضو"
 
-#: assets/js/app.js:33803
-#: assets/js/app.js:34176
+#: assets/js/app.js:33933
+#: assets/js/app.js:34306
 msgid "Language"
 msgstr "لغة"
 
-#: assets/js/app.js:33833
-#: assets/js/app.js:34207
+#: assets/js/app.js:33963
+#: assets/js/app.js:34337
 msgid "Website"
 msgstr "الموقع الإلكتروني"
 
-#: assets/js/app.js:33846
-#: assets/js/app.js:34254
+#: assets/js/app.js:33976
+#: assets/js/app.js:34384
 msgid "Appearance"
 msgstr "المظهر"
 
-#: assets/js/app.js:33881
-#: assets/js/app.js:34282
+#: assets/js/app.js:34011
+#: assets/js/app.js:34412
 msgid "Menu item"
 msgstr "عنصر القائمة"
 
-#: assets/js/app.js:34222
+#: assets/js/app.js:34352
 msgid "application passwords"
 msgstr "كلمات مرور التطبيقات"
 
-#: assets/js/app.js:34240
+#: assets/js/app.js:34370
 msgid "Revoke"
 msgstr "إلغاء"
 
-#: assets/js/app.js:34261
+#: assets/js/app.js:34391
 msgid "Theme"
 msgstr "قالب"
 
-#: assets/js/app.js:34399
+#: assets/js/app.js:34529
 msgid "Profile updated"
 msgstr "تمّ تحديث الحساب"

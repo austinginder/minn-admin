@@ -7,41 +7,44 @@ The convention for writing translatable strings already lives in `CLAUDE.md`
 ("Internationalization"). This file is the plan for the other half: coverage,
 catalogs, right to left layout, delivery, and upkeep.
 
-## Where this stands today
+## Status
 
-Measured at v0.29.0.
+Phases 0 through 5 are built and verified in development. What remains is
+generation coverage, which needs an API key. See "What is left" at the end.
 
-| | Count |
-|---|---|
-| `.pot` entries shipped | 341, stamped `Minn Admin 0.25.0` |
-| PHP calls (`__` / `_n` / `esc_html__`) | 235 / 11 / 1, across 97 files |
-| App calls (`__` / `_n` / `sprintf`) in `app.js` | 420 / 13 / 44 |
-| Attribute literals still unwrapped in `app.js` | 265 unique `placeholder=` / `title=` / `aria-label=` values |
-| Attribute literals already wrapped | 88 |
-| Logical CSS properties in `app.css` | 0 |
-| Physical direction declarations in `app.css` | roughly 272 |
+| | Before | Now |
+|---|---|---|
+| `.pot` entries | 341, stamped 0.25.0 | **2,712**, current, 0 extractor warnings |
+| Plural entries | 0 usable | 20, with a real Plural-Forms evaluator |
+| Translator notes | 0 | 84 |
+| Unwrapped attribute literals in `app.js` | 265 | **0** |
+| Unwrapped visible text nodes in `app.js` | ~600 | **0** |
+| Untranslated display strings in PHP | ~1,200 | **0** |
+| Logical CSS properties | 0 | 183 declarations, plus 24 offsets |
+| Locales with a catalog | 0 | 13 |
+| Decay guards | none | 4 static checks + 3 suites |
 
-The plumbing is finished and the coverage is not. `Minn_Admin::load_textdomain()`
-runs on `init`, PHP uses the core functions, and the app carries its own `__()`,
-`_n()` and `sprintf()` fed from the boot payload by
-`Minn_Admin::js_translations()`. What is missing is that a large share of the
-visible interface is still literal English in `app.js`, and the shipped catalog
-is four releases stale.
+### Measured before the sweep, for the record
 
-The consequence matters more than the numbers. Hand today's `.pot` to a
-translator and the result is an admin that reverts to English the moment anyone
-does real work, because Cancel, Save changes, Status and most placeholders are
-not in the catalog at all. A half translated interface reads worse than an
-English one, so **the sweep is a hard prerequisite for shipping any locale**.
+341 `.pot` entries stamped `0.25.0`; 235 PHP `__()` calls across 97 files;
+420 `__()` in `app.js` against 265 unwrapped attribute literals; zero logical
+CSS properties against roughly 272 physical direction declarations.
 
-Three code level gaps also block the delivery model below, and each is small:
+The reason the sweep came first: hand a translator the old `.pot` and the
+result is an admin that reverts to English the moment anyone does real work,
+because Cancel, Save changes, Status and most placeholders were not in the
+catalog at all. **A half translated interface reads worse than an English
+one**, which is why coverage was a hard prerequisite for shipping any locale,
+and why the generated catalogs are still not wired into the manifest.
 
-1. `js_translations()` globs only `MINN_ADMIN_DIR . 'languages/'`. Language packs
-   install to `WP_LANG_DIR . '/plugins/'`, so PHP would translate and the app
-   would stay English.
-2. `Minn_Admin_Updater::update()` fills only `$transient->response`. WordPress
+Three small code gaps blocked the delivery model, all now closed:
+
+1. `js_translations()` globbed only `MINN_ADMIN_DIR . 'languages/'`. Language
+   packs install to `WP_LANG_DIR . '/plugins/'`, so PHP would have translated
+   while the whole app stayed English.
+2. `Minn_Admin_Updater::update()` filled only `$transient->response`. WordPress
    reads translation updates from `$transient->translations`.
-3. `includes/template.php` line 13 sets `lang` on `<html>` and never sets `dir`.
+3. `includes/template.php` set `lang` on `<html>` and never `dir`.
 
 ## The delivery mechanism: WordPress language packs
 
@@ -95,18 +98,19 @@ The `.po` stays in git as the source and is not shipped. Nothing else goes in.
 
 ### Security: hash the packs like the plugin
 
-The updater currently verifies its own download against a manifest `sha256` in
-`verify_package()`, and refuses to install when the manifest publishes no hash.
-That posture should extend to translation packages rather than lapse for them.
-`is_our_package_url()` anchors on the path `/austinginder/minn-admin/`, so a pack
-served from anywhere else silently skips verification today.
+The updater verifies its own download against a manifest `sha256` and refuses
+to install when the manifest publishes no hash. That posture extends to
+translation packages rather than lapsing for them.
 
-Two changes, whichever repo the packs end up in:
-
-- Publish a per pack `sha256` in the manifest alongside `package`.
-- Widen `is_our_package_url()` to the translations path as well, keeping the
-  anchored (never substring) match, and have `verify_package()` look the hash up
-  by package URL instead of only comparing against the single `download_url`.
+- The manifest publishes a per pack `sha256` alongside `package`.
+- `hash_for_package()` looks a hash up BY PACKAGE URL, three-state on purpose:
+  a hash to verify against, `''` when the manifest claims the package but
+  publishes no hash (a refusal, not a pass), and `null` when the URL is not
+  ours at all, so every other plugin's downloads pass through untouched.
+- A pack that would be refused is never OFFERED either.
+- `is_our_package_url()` reads an allowlist of repository paths rather than one
+  hardcoded prefix, keeping the anchored (never substring) match. Moving packs
+  to their own repository later is one more entry plus a manifest URL.
 
 A `.mo` is data rather than executable code, so the blast radius is smaller than
 a plugin zip. It is still a file that decides what text the admin renders, and
@@ -378,22 +382,79 @@ that true, and both should land in phase 3:
 
 ## Phasing
 
-**Phase 0, sweep and foundation.** Regenerate the `.pot`. Sweep the remaining
-literals in `app.js`, view by view. Add the two guards. Fix `js_translations()`
-to read `WP_LANG_DIR/plugins/`. This is the bulk of the effort and it gates
-everything after it.
+**Phase 0, sweep and foundation. Done.** `.pot` regenerated (341 to 2,712
+entries, zero extractor warnings). Every attribute literal, text node and PHP
+display string wrapped. Four decay guards added. `js_translations()` reads the
+language-pack directory.
 
-**Phase 1, right to left.** Issue #19's first three PRs, rebased onto current
-`main`. Ships value with zero locales installed.
+**Phase 1, right to left. Done.** `dir` from `is_rtl()`, logical properties,
+LTR isolation for technical values, direction-aware positioning at nine JS
+sites. Physical positioning preserved where mirroring would be wrong.
+`tests/rtl.test.js` drives a real fa_IR session.
 
-**Phase 2, the pipeline.** Core catalog matcher, generator, validator, packer.
-Prove it end to end on `de_DE`, which the suite already exercises as a fixture
-and which has a language pack installed on the dev site.
+**Phase 2, the pipeline. Done.** `bin/i18n/`: core-glossary matcher, generator,
+validator, packer. Proven end to end on `de_DE`, whose built pack translates
+both the PHP side and the SPA when installed the way WordPress installs one.
 
-**Phase 3, delivery.** `translations` in the update transient, per pack `sha256`
-in the manifest, `is_our_package_url()` widened, release workflow.
+**Phase 3, delivery. Done.** `translations` in the update transient, per pack
+`sha256`, the package-URL check rewritten as an allowlist. Core's own
+`wp_get_translation_updates()` returns the packs and the Updates screen reads
+"Translation Updates".
 
-**Phase 4, wave 1.** Thirteen locales. Persian ships with its contributor named
-as maintainer.
+**Phase 4, wave 1. Foundation done, coverage pending.** Thirteen catalogs
+exist, validate and compile, at 12% coverage from WordPress core alone. The
+model pass needs an API key. Persian ships with its contributor named as
+maintainer.
 
 **Phase 5, wave 2.** To twenty, after wave 1 has been through a release cycle.
+
+## What was found along the way
+
+Four defects the work surfaced that were not on the plan, each of which would
+have shipped a translated build that looked fine and behaved wrong:
+
+**Cards stopped being doors.** The overview stats and the System health checks
+decided where a card navigated by comparing its DISPLAY LABEL against an
+English string. That works exactly until a locale ships: a translated
+"Backups" matches nothing, so every actionable card silently loses its
+destination. Both now carry a stable key and route on that. The System code
+already had a comment admitting the label matching would break under
+translation.
+
+**`_n()` plurals were wrong in every locale but English.** The app's `_n()`
+hardcoded `n != 1`. Ten of the thirteen wave-1 locales need something else:
+Japanese has one form, Russian and Polish three, Arabic six. The catalog
+already carried each locale's rule on JED's reserved entry, which the loader
+skipped. It is now read, shipped in the boot payload, and evaluated by a
+parser rather than `eval`, because a translation pack is a downloaded file.
+
+**Language packs would have translated PHP and left the app English.**
+`js_translations()` read only the plugin's own `languages/` directory. Packs
+install to `WP_LANG_DIR/plugins/`, which core checks first.
+
+**A user's language choice only half applied.** Core consults the user's
+locale only when `is_admin()`, and Minn renders at `/minn-admin/` on the front
+end. Picking German in Your profile gave a German app with English PHP, and
+`is_rtl()` never became true for that user, so no amount of choosing Persian
+produced a right-to-left layout.
+
+## What is left
+
+**Generation coverage.** Each locale currently carries the WordPress-core pass
+only: 327 entries, 12% coverage, every one a community-reviewed core
+translation. The remaining ~2,385 strings per locale need
+`ANTHROPIC_API_KEY=… node bin/i18n/translate.js <locale>`, which is a single
+command per locale and the reason the pipeline exists.
+
+Until then the catalogs are deliberately **not** wired into `manifest.json`.
+Shipping them now would be worse than shipping nothing: a half-translated
+admin reads worse than an English one, which is the whole reason the sweep
+came before the locales.
+
+**A first human review per locale.** Generated entries are replaceable;
+marking one `minn-reviewed` in the `.po` makes it permanent. That is the path
+from generated to maintained, and it is what a native speaker's pull request
+should touch.
+
+**Wave 2** takes the list to twenty and waits until wave 1 has been through a
+release cycle.
