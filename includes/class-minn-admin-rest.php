@@ -1592,7 +1592,7 @@ class Minn_Admin_REST {
 					// per item, and it tells the public which posts carry
 					// unsaved edits.
 					'context'     => array( 'edit' ),
-					'description' => 'Whether an autosave newer than the saved post exists (live post carrying unsaved edits).',
+					'description' => __( 'Whether an autosave newer than the saved post exists (live post carrying unsaved edits).', 'minn-admin' ),
 				),
 			)
 		);
@@ -1636,7 +1636,7 @@ class Minn_Admin_REST {
 				'get_callback' => array( __CLASS__, 'post_lock_holder' ),
 				'schema'       => array(
 					'type'        => array( 'object', 'null' ),
-					'description' => 'The other user currently editing this post (core edit lock), or null.',
+					'description' => __( 'The other user currently editing this post (core edit lock), or null.', 'minn-admin' ),
 					// Edit-context only — the lock holder's id + display name is
 					// list-view data for editors, not for public wp/v2 reads.
 					'context'     => array( 'edit' ),
@@ -1735,7 +1735,7 @@ class Minn_Admin_REST {
 					$type = get_post_type_object( $post->post_type );
 					return array(
 						'id'        => $post->ID,
-						'title'     => get_the_title( $post ) !== '' ? get_the_title( $post ) : '(no title)',
+						'title'     => get_the_title( $post ) !== '' ? get_the_title( $post ) : __( '(no title)', 'minn-admin' ),
 						'type'      => $post->post_type,
 						'rest_base' => ( $type && $type->show_in_rest ) ? ( $type->rest_base ?: $post->post_type ) : null,
 						'editable'  => current_user_can( 'edit_post', $post->ID ),
@@ -1844,7 +1844,7 @@ class Minn_Admin_REST {
 	 */
 	private static function plain_title( $post ) {
 		$t = html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' );
-		return '' === trim( $t ) ? '(no title)' : $t;
+		return '' === trim( $t ) ? __( '(no title)', 'minn-admin' ) : $t;
 	}
 
 	/**
@@ -2333,7 +2333,7 @@ class Minn_Admin_REST {
 			$result = call_user_func( $setup['run'], $choices );
 		} catch ( \Throwable $e ) {
 			$msg = trim( wp_strip_all_tags( (string) $e->getMessage() ) );
-			return new WP_Error( 'setup_failed', '' !== $msg ? $msg : 'The plugin reported an error during setup.', array( 'status' => 500 ) );
+			return new WP_Error( 'setup_failed', '' !== $msg ? $msg : __( 'The plugin reported an error during setup.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		if ( is_wp_error( $result ) ) {
 			$result->add_data( array( 'status' => 500 ) );
@@ -2472,13 +2472,14 @@ class Minn_Admin_REST {
 		// front end with it; mirror its cheap structural checks (balance only —
 		// full parsing stays out of scope, exactly like core).
 		$balance = array(
-			array( '{', '}', 'curly brackets' ),
-			array( '(', ')', 'parentheses' ),
-			array( '[', ']', 'square brackets' ),
+			array( '{', '}', __( 'curly brackets', 'minn-admin' ) ),
+			array( '(', ')', __( 'parentheses', 'minn-admin' ) ),
+			array( '[', ']', __( 'square brackets', 'minn-admin' ) ),
 		);
 		foreach ( $balance as $pair ) {
 			if ( substr_count( $css, $pair[0] ) !== substr_count( $css, $pair[1] ) ) {
-				return new WP_Error( 'invalid_css', __( 'That CSS has unbalanced ', 'minn-admin' ) . $pair[2] . '. Fix it and save again; nothing was changed.', array( 'status' => 400 ) );
+				/* translators: %s: the bracket type that is unbalanced (e.g. "curly brackets"). */
+				return new WP_Error( 'invalid_css', sprintf( __( 'That CSS has unbalanced %s. Fix it and save again; nothing was changed.', 'minn-admin' ), $pair[2] ), array( 'status' => 400 ) );
 			}
 		}
 		if ( substr_count( $css, '/*' ) !== substr_count( $css, '*/' ) ) {
@@ -2603,7 +2604,8 @@ class Minn_Admin_REST {
 			$offset  = ( $buckets - 1 - $i ) * $bucket_days;
 			$label   = 1 === $bucket_days
 				? date_i18n( 'M j', time() - $offset * DAY_IN_SECONDS )
-				: 'Week of ' . date_i18n( 'M j', time() - ( $offset + $bucket_days - 1 ) * DAY_IN_SECONDS );
+				/* translators: %s: the date the week starts on (e.g. "Jun 3"). */
+				: sprintf( __( 'Week of %s', 'minn-admin' ), date_i18n( 'M j', time() - ( $offset + $bucket_days - 1 ) * DAY_IN_SECONDS ) );
 			$chart[] = array(
 				'label' => $label,
 				'value' => $count,
@@ -2654,7 +2656,8 @@ class Minn_Admin_REST {
 				$to_ts    = time() - $offset * DAY_IN_SECONDS;
 				$label    = 1 === $bucket_days
 					? date_i18n( 'M j, Y', $to_ts )
-					: 'Week of ' . date_i18n( 'M j, Y', $from_ts );
+					/* translators: %s: the date the week starts on (e.g. "Jun 3, 2026"). */
+					: sprintf( __( 'Week of %s', 'minn-admin' ), date_i18n( 'M j, Y', $from_ts ) );
 				$tchart[] = array(
 					'label' => $label,
 					'value' => $bucket['v'],
@@ -2960,9 +2963,13 @@ class Minn_Admin_REST {
 				'kind'  => 'comment',
 				'id'    => (int) $c->comment_ID,
 				'text'  => sprintf(
-					$pending ? 'Comment from %s awaiting moderation on “%s”' : '%s commented on “%s”',
-					$c->comment_author ? $c->comment_author : 'Anonymous',
-					html_entity_decode( get_the_title( (int) $c->comment_post_ID ) ?: '(no title)', ENT_QUOTES )
+					$pending
+						/* translators: 1: comment author name, 2: post title. */
+						? __( 'Comment from %1$s awaiting moderation on “%2$s”', 'minn-admin' )
+						/* translators: 1: comment author name, 2: post title. */
+						: __( '%1$s commented on “%2$s”', 'minn-admin' ),
+					$c->comment_author ? $c->comment_author : __( 'Anonymous', 'minn-admin' ),
+					html_entity_decode( get_the_title( (int) $c->comment_post_ID ) ?: __( '(no title)', 'minn-admin' ), ENT_QUOTES )
 				),
 				'time'  => strtotime( $c->comment_date_gmt . ' UTC' ),
 				'color' => $pending ? 'amber' : 'blue',
@@ -3073,10 +3080,11 @@ class Minn_Admin_REST {
 			return $response;
 		}
 		$user = get_userdata( $other );
-		$name = $user ? $user->display_name : 'Someone else';
+		$name = $user ? $user->display_name : __( 'Someone else', 'minn-admin' );
 		return new WP_Error(
 			'minn_locked',
-			$name . ' took over editing. Your copy was not saved.',
+			/* translators: %s: display name of the user who now holds the edit lock. */
+			sprintf( __( '%s took over editing. Your copy was not saved.', 'minn-admin' ), $name ),
 			array(
 				'status' => 409,
 				'holder' => array(
@@ -3335,7 +3343,8 @@ class Minn_Admin_REST {
 						'id'     => 'plugin-' . $file . '-' . $data->new_version,
 						'kind'   => 'updates',
 						'icon'   => '⬆',
-						'title'  => sprintf( '%s %s is available to install', $name, $data->new_version ),
+						/* translators: 1: plugin name, 2: version number. */
+						'title'  => sprintf( __( '%1$s %2$s is available to install', 'minn-admin' ), $name, $data->new_version ),
 						'time'   => $checked,
 						// Client renders an in-row Update button from this.
 						'update' => array(
@@ -3389,7 +3398,8 @@ class Minn_Admin_REST {
 						'id'     => 'theme-' . $stylesheet . '-' . $ver,
 						'kind'   => 'updates',
 						'icon'   => '⬆',
-						'title'  => sprintf( '%s theme %s is available to install', $tname, $ver ),
+						/* translators: 1: theme name, 2: version number. */
+						'title'  => sprintf( __( '%1$s theme %2$s is available to install', 'minn-admin' ), $tname, $ver ),
 						'time'   => $tchecked,
 						'update' => array(
 							'type'       => 'theme',
@@ -3409,7 +3419,8 @@ class Minn_Admin_REST {
 					'id'     => 'core-' . $core->updates[0]->version,
 					'kind'   => 'system',
 					'icon'   => '🛡',
-					'title'  => sprintf( 'WordPress %s is available', $core->updates[0]->version ),
+					/* translators: %s: WordPress version number. */
+					'title'  => sprintf( __( 'WordPress %s is available', 'minn-admin' ), $core->updates[0]->version ),
 					'time'   => (int) $core->last_checked,
 					'update' => array(
 						'type'    => 'core',
@@ -3428,7 +3439,8 @@ class Minn_Admin_REST {
 					'id'    => 'core-auto-' . $auto['version'],
 					'kind'  => 'system',
 					'icon'  => '🛡',
-					'title' => sprintf( 'WordPress updated itself to %s', $auto['version'] ),
+					/* translators: %s: WordPress version number. */
+					'title' => sprintf( __( 'WordPress updated itself to %s', 'minn-admin' ), $auto['version'] ),
 					'time'  => (int) $auto['timestamp'],
 				);
 			}
@@ -3455,7 +3467,8 @@ class Minn_Admin_REST {
 					'id'    => 'user-' . $u->ID,
 					'kind'  => 'system',
 					'icon'  => '👤',
-					'title' => sprintf( 'New user registered: %s', $u->display_name ),
+					/* translators: %s: the new user's display name. */
+					'title' => sprintf( __( 'New user registered: %s', 'minn-admin' ), $u->display_name ),
 					'time'  => strtotime( $u->user_registered . ' UTC' ),
 				);
 			}
@@ -4325,7 +4338,7 @@ class Minn_Admin_REST {
 		}
 		$result = retrieve_password( $user->user_login );
 		if ( true !== $result ) {
-			$msg = is_wp_error( $result ) ? $result->get_error_message() : 'Could not send the reset email.';
+			$msg = is_wp_error( $result ) ? $result->get_error_message() : __( 'Could not send the reset email.', 'minn-admin' );
 			return new WP_Error( 'reset_failed', $msg, array( 'status' => 500 ) );
 		}
 		return rest_ensure_response( array(
@@ -4661,7 +4674,7 @@ class Minn_Admin_REST {
 		}
 		$sent = wp_mail( $to, $subject, $html, $headers );
 		if ( ! $sent ) {
-			return new WP_Error( 'send_failed', 'wp_mail() could not send the message. Check your mail configuration.', array( 'status' => 500 ) );
+			return new WP_Error( 'send_failed', __( 'wp_mail() could not send the message. Check your mail configuration.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		return true;
 	}
@@ -4883,7 +4896,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $result || is_wp_error( $result ) ) {
 			self::restore_theme_update_offers( $pending_before, array() );
 			$errors = $skin->get_error_messages();
-			return new WP_Error( 'update_failed', $errors ? implode( ' ', (array) $errors ) : 'Update failed.', array( 'status' => 500 ) );
+			return new WP_Error( 'update_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Update failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		// Put every other pending offer back.
@@ -5060,7 +5073,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		if ( ! $result || is_wp_error( $result ) ) {
 			$errors = $skin->get_error_messages();
-			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : 'Install failed.', array( 'status' => 500 ) );
+			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Install failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		return rest_ensure_response( array( 'installed' => true, 'stylesheet' => $slug ) );
 	}
@@ -5094,7 +5107,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		if ( ! $result || is_wp_error( $result ) ) {
 			$errors = $skin->get_error_messages();
-			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : 'Install failed.', array( 'status' => 500 ) );
+			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Install failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 		return rest_ensure_response( array( 'installed' => true, 'stylesheet' => $upgrader->theme_info() ? $upgrader->theme_info()->get_stylesheet() : null ) );
 	}
@@ -5242,7 +5255,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'slug'        => 'disembark',
 				'name'        => 'Disembark',
 				'author'      => 'Disembark Host',
-				'description' => 'Generate a full WordPress backup (files + database) and pull it off-site with the Disembark CLI or disembark.host.',
+				'description' => __( 'Generate a full WordPress backup (files + database) and pull it off-site with the Disembark CLI or disembark.host.', 'minn-admin' ),
 				'installs'    => 0,
 				'version'     => '',
 				'rating'      => 0,
@@ -5283,7 +5296,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		if ( ! $result || is_wp_error( $result ) ) {
 			$errors = $skin->get_error_messages();
-			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : 'Install failed.', array( 'status' => 500 ) );
+			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Install failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		return rest_ensure_response(
@@ -5338,7 +5351,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		if ( ! $result || is_wp_error( $result ) ) {
 			$errors = $skin->get_error_messages();
-			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : 'Install failed.', array( 'status' => 500 ) );
+			return new WP_Error( 'install_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Install failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		return rest_ensure_response(
@@ -5529,7 +5542,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			// Even on failure the upgrader may have cleaned the cache — put offers back.
 			self::restore_plugin_update_offers( $pending_before, array() );
 			$errors = $skin->get_error_messages();
-			return new WP_Error( 'update_failed', $errors ? implode( ' ', (array) $errors ) : 'Update failed.', array( 'status' => 500 ) );
+			return new WP_Error( 'update_failed', $errors ? implode( ' ', (array) $errors ) : __( 'Update failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		// Safety net: whatever the upgrade path did, an active plugin stays active.
@@ -5609,7 +5622,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$result   = $upgrader->upgrade( $offer );
 
 		if ( is_wp_error( $result ) ) {
-			return new WP_Error( 'update_failed', $result->get_error_message() ?: 'Core update failed.', array( 'status' => 500 ) );
+			return new WP_Error( 'update_failed', $result->get_error_message() ?: __( 'Core update failed.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
 		// Run any database migration with the NEW code — the standard
@@ -5963,25 +5976,36 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$cron   = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
 
 		$wordpress = array(
-			'Version'          => get_bloginfo( 'version' ),
-			'Environment'      => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
-			'Site URL'         => site_url(),
-			'Home URL'         => home_url(),
+			__( 'Version', 'minn-admin' )     => get_bloginfo( 'version' ),
+			__( 'Environment', 'minn-admin' ) => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
+			__( 'Site URL', 'minn-admin' )    => site_url(),
+			__( 'Home URL', 'minn-admin' )    => home_url(),
 			// The REAL login URL — wp_login_url() honors login-hiders (WPS Hide
 			// Login and friends filter it), so this shows the custom slug when
 			// one is active rather than a wp-login.php that would 404.
-			'Login URL'        => wp_login_url(),
-			'Multisite'        => is_multisite() ? 'Yes (' . get_blog_count() . ' sites)' : 'No',
-			'Language'         => get_locale(),
-			'Timezone'         => wp_timezone_string() ? wp_timezone_string() : (string) get_option( 'gmt_offset' ),
-			'Permalinks'       => get_option( 'permalink_structure' ) ? get_option( 'permalink_structure' ) : 'Plain',
-			'Debug mode'       => ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? 'On' . ( ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) ? ' + log' : '' ) : 'Off',
-			'Object cache'     => wp_using_ext_object_cache() ? 'External (persistent)' : 'None (transient)',
-			'WP-Cron'          => $cron ? 'Disabled (external)' : 'Enabled',
-			'Memory limit'     => defined( 'WP_MEMORY_LIMIT' ) ? WP_MEMORY_LIMIT : '(default)',
-			'Max memory limit' => defined( 'WP_MAX_MEMORY_LIMIT' ) ? WP_MAX_MEMORY_LIMIT : '(default)',
-			'Active theme'     => $theme->get( 'Name' ) . ' ' . $theme->get( 'Version' ) . ( $parent ? ' (child of ' . $parent->get( 'Name' ) . ')' : '' ),
-			'Active plugins'   => (string) count( (array) get_option( 'active_plugins', array() ) ) . ( count( (array) ( function_exists( 'wp_get_mu_plugins' ) ? wp_get_mu_plugins() : array() ) ) ? ' + ' . count( wp_get_mu_plugins() ) . ' mu' : '' ),
+			__( 'Login URL', 'minn-admin' )   => wp_login_url(),
+			__( 'Multisite', 'minn-admin' )   => is_multisite()
+				/* translators: %s: how many sites the multisite network contains. */
+				? sprintf( _n( 'Yes (%s site)', 'Yes (%s sites)', get_blog_count(), 'minn-admin' ), get_blog_count() )
+				: __( 'No', 'minn-admin' ),
+			__( 'Language', 'minn-admin' )    => get_locale(),
+			__( 'Timezone', 'minn-admin' )    => wp_timezone_string() ? wp_timezone_string() : (string) get_option( 'gmt_offset' ),
+			__( 'Permalinks', 'minn-admin' )  => get_option( 'permalink_structure' ) ? get_option( 'permalink_structure' ) : __( 'Plain', 'minn-admin' ),
+			__( 'Debug mode', 'minn-admin' )  => ( defined( 'WP_DEBUG' ) && WP_DEBUG )
+				? ( ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) ? __( 'On + log', 'minn-admin' ) : __( 'On', 'minn-admin' ) )
+				: __( 'Off', 'minn-admin' ),
+			__( 'Object cache', 'minn-admin' ) => wp_using_ext_object_cache() ? __( 'External (persistent)', 'minn-admin' ) : __( 'None (transient)', 'minn-admin' ),
+			'WP-Cron'                          => $cron ? __( 'Disabled (external)', 'minn-admin' ) : __( 'Enabled', 'minn-admin' ),
+			__( 'Memory limit', 'minn-admin' ) => defined( 'WP_MEMORY_LIMIT' ) ? WP_MEMORY_LIMIT : __( '(default)', 'minn-admin' ),
+			__( 'Max memory limit', 'minn-admin' ) => defined( 'WP_MAX_MEMORY_LIMIT' ) ? WP_MAX_MEMORY_LIMIT : __( '(default)', 'minn-admin' ),
+			__( 'Active theme', 'minn-admin' ) => $parent
+				/* translators: 1: theme name, 2: theme version, 3: parent theme name. */
+				? sprintf( __( '%1$s %2$s (child of %3$s)', 'minn-admin' ), $theme->get( 'Name' ), $theme->get( 'Version' ), $parent->get( 'Name' ) )
+				: $theme->get( 'Name' ) . ' ' . $theme->get( 'Version' ),
+			__( 'Active plugins', 'minn-admin' ) => count( (array) ( function_exists( 'wp_get_mu_plugins' ) ? wp_get_mu_plugins() : array() ) )
+				/* translators: 1: how many plugins are active, 2: how many must-use plugins are installed. */
+				? sprintf( __( '%1$s + %2$s mu', 'minn-admin' ), count( (array) get_option( 'active_plugins', array() ) ), count( wp_get_mu_plugins() ) )
+				: (string) count( (array) get_option( 'active_plugins', array() ) ),
 		);
 
 		// --- PHP -----------------------------------------------------------
@@ -5994,16 +6018,16 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 		$opcache = function_exists( 'opcache_get_status' ) ? @opcache_get_status( false ) : false;
 		$php     = array(
-			'Version'             => PHP_VERSION,
-			'Interface (SAPI)'    => PHP_SAPI,
+			__( 'Version', 'minn-admin' )          => PHP_VERSION,
+			__( 'Interface (SAPI)', 'minn-admin' ) => PHP_SAPI,
 			'memory_limit'        => ini_get( 'memory_limit' ),
 			'max_execution_time'  => ini_get( 'max_execution_time' ) . 's',
 			'upload_max_filesize' => ini_get( 'upload_max_filesize' ),
 			'post_max_size'       => ini_get( 'post_max_size' ),
 			'max_input_vars'      => ini_get( 'max_input_vars' ),
 			'max_input_time'      => ini_get( 'max_input_time' ) . 's',
-			'OPcache'             => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'Enabled' : ( function_exists( 'opcache_get_status' ) ? 'Disabled' : 'Not installed' ),
-			'Extensions'          => implode( ', ', $loaded ),
+			'OPcache'             => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? __( 'Enabled', 'minn-admin' ) : ( function_exists( 'opcache_get_status' ) ? __( 'Disabled', 'minn-admin' ) : __( 'Not installed', 'minn-admin' ) ),
+			__( 'Extensions', 'minn-admin' ) => implode( ', ', $loaded ),
 			'cURL'                => function_exists( 'curl_version' ) ? ( curl_version()['version'] ?? 'yes' ) : 'no',
 		);
 
@@ -6097,22 +6121,29 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$cron_next = (int) $ts; // the array is time-ordered
 			}
 		}
-		$cron_disabled     = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
-		$wordpress['Cron'] = $cron_events . ' event' . ( 1 === $cron_events ? '' : 's' )
-			. ( $cron_next ? ( $cron_next <= time() ? ', next due now' : ', next in ' . human_time_diff( time(), $cron_next ) ) : '' )
-			. ( $cron_disabled ? ' · WP-Cron disabled (system cron expected)' : '' );
+		$cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
+		/* translators: %s: how many cron events are scheduled. */
+		$cron_bits = array( sprintf( _n( '%s event', '%s events', $cron_events, 'minn-admin' ), $cron_events ) );
+		if ( $cron_next ) {
+			$cron_bits[] = $cron_next <= time()
+				? __( 'next due now', 'minn-admin' )
+				/* translators: %s: human-readable time until the next cron event (e.g. "4 mins"). */
+				: sprintf( __( 'next in %s', 'minn-admin' ), human_time_diff( time(), $cron_next ) );
+		}
+		$wordpress[ __( 'Cron', 'minn-admin' ) ] = implode( ', ', $cron_bits )
+			. ( $cron_disabled ? ' · ' . __( 'WP-Cron disabled (system cron expected)', 'minn-admin' ) : '' );
 
 		$database = array(
-			'Engine'             => $is_maria ? 'MariaDB' : 'MySQL',
-			'Version'            => $server_info ? $server_info : $db_version,
-			'Host'               => DB_HOST,
-			'Name'               => DB_NAME,
-			'Charset'            => defined( 'DB_CHARSET' ) ? DB_CHARSET : $wpdb->charset,
-			'Collation'          => $wpdb->collate ? $wpdb->collate : '(default)',
-			'Prefix'             => $wpdb->prefix,
-			'Tables'             => (string) count( (array) $tables ),
-			'Size'               => size_format( $db_size, 1 ),
-			'Expired transients' => number_format_i18n( (int) $expired_transients->c )
+			__( 'Engine', 'minn-admin' )    => $is_maria ? 'MariaDB' : 'MySQL',
+			__( 'Version', 'minn-admin' )   => $server_info ? $server_info : $db_version,
+			__( 'Host', 'minn-admin' )      => DB_HOST,
+			__( 'Name', 'minn-admin' )      => DB_NAME,
+			__( 'Charset', 'minn-admin' )   => defined( 'DB_CHARSET' ) ? DB_CHARSET : $wpdb->charset,
+			__( 'Collation', 'minn-admin' ) => $wpdb->collate ? $wpdb->collate : __( '(default)', 'minn-admin' ),
+			__( 'Prefix', 'minn-admin' )    => $wpdb->prefix,
+			__( 'Tables', 'minn-admin' )    => (string) count( (array) $tables ),
+			__( 'Size', 'minn-admin' )      => size_format( $db_size, 1 ),
+			__( 'Expired transients', 'minn-admin' ) => number_format_i18n( (int) $expired_transients->c )
 				. ( (int) $expired_transients->s > 0 ? ' (' . size_format( (int) $expired_transients->s, 1 ) . ')' : '' ),
 		);
 
@@ -6125,21 +6156,26 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$disk_total       = function_exists( 'disk_total_space' ) ? @disk_total_space( ABSPATH ) : false;
 		$has_uname        = function_exists( 'php_uname' );
 		$server           = array(
-			'Web server'      => isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : 'Unknown',
-			'Protocol'        => isset( $_SERVER['SERVER_PROTOCOL'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_PROTOCOL'] ) ) : '',
-			'HTTPS'           => is_ssl() ? 'Yes' : 'No',
-			'Operating system'=> $has_uname ? php_uname( 's' ) . ' ' . php_uname( 'r' ) : PHP_OS,
-			'Architecture'    => $has_uname ? php_uname( 'm' ) : ( PHP_INT_SIZE === 8 ? '64-bit' : '32-bit' ),
-			'Server IP'       => isset( $_SERVER['SERVER_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_ADDR'] ) ) : '',
-			'Uploads writable'=> $uploads_writable ? 'Yes' : 'No',
-			'Disk free'       => ( $disk_free && $disk_total ) ? size_format( $disk_free ) . ' free of ' . size_format( $disk_total ) : 'Unknown',
+			__( 'Web server', 'minn-admin' )       => isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : __( 'Unknown', 'minn-admin' ),
+			__( 'Protocol', 'minn-admin' )         => isset( $_SERVER['SERVER_PROTOCOL'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_PROTOCOL'] ) ) : '',
+			'HTTPS'                                => is_ssl() ? __( 'Yes', 'minn-admin' ) : __( 'No', 'minn-admin' ),
+			__( 'Operating system', 'minn-admin' ) => $has_uname ? php_uname( 's' ) . ' ' . php_uname( 'r' ) : PHP_OS,
+			__( 'Architecture', 'minn-admin' )     => $has_uname ? php_uname( 'm' ) : ( PHP_INT_SIZE === 8 ? '64-bit' : '32-bit' ),
+			__( 'Server IP', 'minn-admin' )        => isset( $_SERVER['SERVER_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_ADDR'] ) ) : '',
+			__( 'Uploads writable', 'minn-admin' ) => $uploads_writable ? __( 'Yes', 'minn-admin' ) : __( 'No', 'minn-admin' ),
+			__( 'Disk free', 'minn-admin' )        => ( $disk_free && $disk_total )
+				/* translators: 1: free disk space, 2: total disk space. */
+				? sprintf( __( '%1$s free of %2$s', 'minn-admin' ), size_format( $disk_free ), size_format( $disk_total ) )
+				: __( 'Unknown', 'minn-admin' ),
 		);
 
 		// --- Health checks (pass / warn / fail) ----------------------------
 		$php_ok    = version_compare( PHP_VERSION, '8.1', '>=' );
 		$php_warn  = ! $php_ok && version_compare( PHP_VERSION, '7.4', '>=' );
 		$mem_bytes = $bytes( ini_get( 'memory_limit' ) );
-		$env       = $wordpress['Environment'];
+		// Read the raw value, not the info-card row: that array's display keys
+		// are translated now, so a literal key lookup would miss.
+		$env       = function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production';
 		$debug_on  = defined( 'WP_DEBUG' ) && WP_DEBUG;
 		$core_t     = get_site_transient( 'update_core' );
 		$core_offer = ( $core_t && ! empty( $core_t->updates ) && 'upgrade' === $core_t->updates[0]->response )
@@ -6150,50 +6186,60 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'label'  => __( 'WordPress version', 'minn-admin' ),
 				'status' => $core_offer ? 'warn' : 'pass',
 				'detail' => $core_offer
-					? get_bloginfo( 'version' ) . ' installed — WordPress ' . $core_offer . ' is available'
-					: get_bloginfo( 'version' ) . ' is current',
+					/* translators: 1: installed WordPress version, 2: available WordPress version. */
+					? sprintf( __( '%1$s installed — WordPress %2$s is available', 'minn-admin' ), get_bloginfo( 'version' ), $core_offer )
+					/* translators: %s: installed WordPress version. */
+					: sprintf( __( '%s is current', 'minn-admin' ), get_bloginfo( 'version' ) ),
 			),
 			array(
 				'key'    => 'php',
 				'label'  => __( 'PHP version', 'minn-admin' ),
 				'status' => $php_ok ? 'pass' : ( $php_warn ? 'warn' : 'fail' ),
-				'detail' => $php_ok ? PHP_VERSION . ' is current' : PHP_VERSION . ' is past its supported life — upgrade to 8.2+',
+				'detail' => $php_ok
+					/* translators: %s: the PHP version in use. */
+					? sprintf( __( '%s is current', 'minn-admin' ), PHP_VERSION )
+					/* translators: %s: the PHP version in use. */
+					: sprintf( __( '%s is past its supported life — upgrade to 8.2+', 'minn-admin' ), PHP_VERSION ),
 			),
 			array(
 				'key'    => 'https',
 				'label'  => __( 'HTTPS', 'minn-admin' ),
 				'status' => is_ssl() ? 'pass' : 'warn',
-				'detail' => is_ssl() ? 'Served over TLS' : 'This request is not over HTTPS',
+				'detail' => is_ssl() ? __( 'Served over TLS', 'minn-admin' ) : __( 'This request is not over HTTPS', 'minn-admin' ),
 			),
 			array(
 				'key'    => 'object-cache',
 				'label'  => __( 'Persistent object cache', 'minn-admin' ),
 				'status' => wp_using_ext_object_cache() ? 'pass' : 'warn',
-				'detail' => wp_using_ext_object_cache() ? 'A drop-in is active' : 'Redis/Memcached would speed up repeat queries',
+				'detail' => wp_using_ext_object_cache() ? __( 'A drop-in is active', 'minn-admin' ) : __( 'Redis/Memcached would speed up repeat queries', 'minn-admin' ),
 			),
 			array(
 				'key'    => 'memory',
 				'label'  => __( 'Memory limit', 'minn-admin' ),
 				'status' => ( $mem_bytes < 0 || $mem_bytes >= 256 * 1024 * 1024 ) ? 'pass' : ( $mem_bytes >= 128 * 1024 * 1024 ? 'warn' : 'fail' ),
-				'detail' => ini_get( 'memory_limit' ) . ' available to PHP',
+				/* translators: %s: the configured PHP memory limit (e.g. "256M"). */
+				'detail' => sprintf( __( '%s available to PHP', 'minn-admin' ), ini_get( 'memory_limit' ) ),
 			),
 			array(
 				'key'    => 'opcache',
 				'label'  => __( 'OPcache', 'minn-admin' ),
 				'status' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'pass' : 'warn',
-				'detail' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'Bytecode caching is on' : 'Not enabled — pages recompile each request',
+				'detail' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? __( 'Bytecode caching is on', 'minn-admin' ) : __( 'Not enabled — pages recompile each request', 'minn-admin' ),
 			),
 			array(
 				'key'    => 'debug',
 				'label'  => __( 'Debug mode', 'minn-admin' ),
 				'status' => ( $debug_on && 'production' === $env ) ? 'warn' : 'pass',
-				'detail' => ( $debug_on && 'production' === $env ) ? 'WP_DEBUG is on in a production environment' : ( $debug_on ? 'On (fine for ' . $env . ')' : 'Off' ),
+				'detail' => ( $debug_on && 'production' === $env )
+					? __( 'WP_DEBUG is on in a production environment', 'minn-admin' )
+					/* translators: %s: the environment type (e.g. "staging"). */
+					: ( $debug_on ? sprintf( __( 'On (fine for %s)', 'minn-admin' ), $env ) : __( 'Off', 'minn-admin' ) ),
 			),
 			array(
 				'key'    => 'uploads',
 				'label'  => __( 'Uploads writable', 'minn-admin' ),
 				'status' => $uploads_writable ? 'pass' : 'fail',
-				'detail' => $uploads_writable ? 'The uploads directory accepts writes' : 'Uploads directory is not writable',
+				'detail' => $uploads_writable ? __( 'The uploads directory accepts writes', 'minn-admin' ) : __( 'Uploads directory is not writable', 'minn-admin' ),
 			),
 			array(
 				'key'    => 'autoload',
@@ -6201,16 +6247,22 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				// The usual guidance: under ~800 KB is healthy, past a few MB
 				// every request pays a real tax.
 				'status' => $autoload_size < 800 * 1024 ? 'pass' : ( $autoload_size < 3 * 1024 * 1024 ? 'warn' : 'fail' ),
-				'detail' => $autoload['size_human'] . ' across ' . number_format_i18n( $autoload['count'] ) . ' options'
-					. ( $autoload_size < 800 * 1024 ? ' — healthy' : ' loads on every request — see the top offenders in the Database card' ),
+				'detail' => $autoload_size < 800 * 1024
+					/* translators: 1: total autoloaded size (e.g. "412 KB"), 2: how many autoloaded options. */
+					? sprintf( __( '%1$s across %2$s options — healthy', 'minn-admin' ), $autoload['size_human'], number_format_i18n( $autoload['count'] ) )
+					/* translators: 1: total autoloaded size (e.g. "3.1 MB"), 2: how many autoloaded options. */
+					: sprintf( __( '%1$s across %2$s options loads on every request — see the top offenders in the Database card', 'minn-admin' ), $autoload['size_human'], number_format_i18n( $autoload['count'] ) ),
 			),
 			array(
 				'key'    => 'cron',
 				'label'  => __( 'Cron', 'minn-admin' ),
 				'status' => $cron_overdue > 0 ? 'warn' : 'pass',
 				'detail' => $cron_overdue > 0
-					? $cron_overdue . ' overdue event' . ( 1 === $cron_overdue ? '' : 's' ) . ' — cron may be stalled' . ( $cron_disabled ? ' (WP-Cron is disabled; is the system cron running?)' : '' )
-					: $cron_events . ' scheduled event' . ( 1 === $cron_events ? '' : 's' ) . ', none overdue',
+					/* translators: %s: how many cron events are past their scheduled run time. */
+					? sprintf( _n( '%s overdue event — cron may be stalled', '%s overdue events — cron may be stalled', $cron_overdue, 'minn-admin' ), $cron_overdue )
+						. ( $cron_disabled ? ' ' . __( '(WP-Cron is disabled; is the system cron running?)', 'minn-admin' ) : '' )
+					/* translators: %s: how many cron events are scheduled. */
+					: sprintf( _n( '%s scheduled event, none overdue', '%s scheduled events, none overdue', $cron_events, 'minn-admin' ), $cron_events ),
 			),
 		);
 
@@ -6254,9 +6306,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'key'    => 'loopback',
 				'label'  => __( 'Loopback requests', 'minn-admin' ),
 				'status' => $grade( $self['loopback']['status'] ),
-				'detail' => __( 'good', 'minn-admin' ) === $self['loopback']['status']
-					? 'The site can reach itself (cron and scheduled posts depend on this)'
-					: ( $self['loopback']['message'] ? $self['loopback']['message'] : 'Loopback requests are failing' ),
+				'detail' => 'good' === $self['loopback']['status']
+					? __( 'The site can reach itself (cron and scheduled posts depend on this)', 'minn-admin' )
+					: ( $self['loopback']['message'] ? $self['loopback']['message'] : __( 'Loopback requests are failing', 'minn-admin' ) ),
 			);
 		}
 		if ( isset( $self['rest'] ) ) {
@@ -6264,9 +6316,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'key'    => 'rest',
 				'label'  => __( 'REST API self-check', 'minn-admin' ),
 				'status' => $grade( $self['rest']['status'] ),
-				'detail' => __( 'good', 'minn-admin' ) === $self['rest']['status']
-					? 'The REST API answers external requests (Minn itself rides it)'
-					: ( $self['rest']['message'] ? $self['rest']['message'] : 'The REST API did not answer' ),
+				'detail' => 'good' === $self['rest']['status']
+					? __( 'The REST API answers external requests (Minn itself rides it)', 'minn-admin' )
+					: ( $self['rest']['message'] ? $self['rest']['message'] : __( 'The REST API did not answer', 'minn-admin' ) ),
 			);
 		}
 
@@ -6286,19 +6338,24 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$age = $bk ? time() - $bk['time'] : null;
 			if ( ! $bk ) {
 				$bk_status = 'warn';
-				$bk_detail = $bk_provider . ' is active but no backup has completed yet';
+				/* translators: %s: the backup plugin's name. */
+				$bk_detail = sprintf( __( '%s is active but no backup has completed yet', 'minn-admin' ), $bk_provider );
 			} elseif ( ! $bk['success'] ) {
 				$bk_status = 'fail';
-				$bk_detail = 'The last backup reported errors (' . human_time_diff( $bk['time'] ) . ' ago)';
+				/* translators: %s: human-readable time since the failed backup (e.g. "3 hours"). */
+				$bk_detail = sprintf( __( 'The last backup reported errors (%s ago)', 'minn-admin' ), human_time_diff( $bk['time'] ) );
 			} elseif ( $age <= 36 * HOUR_IN_SECONDS ) {
 				$bk_status = 'pass';
-				$bk_detail = 'Last backup completed ' . human_time_diff( $bk['time'] ) . ' ago';
+				/* translators: %s: human-readable time since the last backup (e.g. "3 hours"). */
+				$bk_detail = sprintf( __( 'Last backup completed %s ago', 'minn-admin' ), human_time_diff( $bk['time'] ) );
 			} elseif ( $age <= 8 * DAY_IN_SECONDS ) {
 				$bk_status = 'warn';
-				$bk_detail = 'Last backup was ' . human_time_diff( $bk['time'] ) . ' ago — consider a fresher schedule';
+				/* translators: %s: human-readable time since the last backup (e.g. "4 days"). */
+				$bk_detail = sprintf( __( 'Last backup was %s ago — consider a fresher schedule', 'minn-admin' ), human_time_diff( $bk['time'] ) );
 			} else {
 				$bk_status = 'fail';
-				$bk_detail = 'Last backup was ' . human_time_diff( $bk['time'] ) . ' ago';
+				/* translators: %s: human-readable time since the last backup (e.g. "2 weeks"). */
+				$bk_detail = sprintf( __( 'Last backup was %s ago', 'minn-admin' ), human_time_diff( $bk['time'] ) );
 			}
 			array_splice( $checks, 1, 0, array( array(
 				'key'    => 'backups',
@@ -6389,10 +6446,20 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$sum  = $licenses['summary'];
 			$bad  = $sum['expired'] + $sum['invalid'];
 			$soft = $sum['missing'] + $sum['unknown'];
-			$bits = array();
+			$bits       = array();
+			$bit_labels = array(
+				/* translators: %s: how many licenses are expired. */
+				'expired' => __( '%s expired', 'minn-admin' ),
+				/* translators: %s: how many licenses are invalid. */
+				'invalid' => __( '%s invalid', 'minn-admin' ),
+				/* translators: %s: how many licenses are missing. */
+				'missing' => __( '%s missing', 'minn-admin' ),
+				/* translators: %s: how many licenses are in an unknown state. */
+				'unknown' => __( '%s unknown', 'minn-admin' ),
+			);
 			foreach ( array( 'expired', 'invalid', 'missing', 'unknown' ) as $k ) {
 				if ( $sum[ $k ] ) {
-					$bits[] = $sum[ $k ] . ' ' . $k;
+					$bits[] = sprintf( $bit_labels[ $k ], $sum[ $k ] );
 				}
 			}
 			// Denominator = summary total, NOT count(items): read-only core
@@ -6405,8 +6472,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'goto'   => 'licenses',
 				'status' => $bad ? 'fail' : ( $soft ? 'warn' : 'pass' ),
 				'detail' => $bits
-					? implode( ', ', $bits ) . ' of ' . $lic_total . ' components; see the Licenses tab'
-					: 'All ' . $lic_total . ' components are licensed or connected',
+					/* translators: 1: comma-separated problem counts (e.g. "2 expired, 1 missing"), 2: how many licensed components exist. */
+					? sprintf( __( '%1$s of %2$s components; see the Licenses tab', 'minn-admin' ), implode( ', ', $bits ), $lic_total )
+					/* translators: %s: how many licensed components exist. */
+					: sprintf( __( 'All %s components are licensed or connected', 'minn-admin' ), $lic_total ),
 			);
 		}
 
@@ -6687,7 +6756,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 		$path = self::wpconfig_path();
 		if ( ! $path || ! wp_is_writable( $path ) ) {
-			return new WP_Error( 'not_writable', 'wp-config.php is not writable.', array( 'status' => 400 ) );
+			return new WP_Error( 'not_writable', __( 'wp-config.php is not writable.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$contents = file_get_contents( $path );
 		if ( false === $contents ) {

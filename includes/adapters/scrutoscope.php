@@ -404,7 +404,7 @@ function minn_admin_scrutoscope_status_model() {
 		array(
 			'label' => __( 'Background capture', 'minn-admin' ),
 			'value' => $bg ? ( 'On · ' . rtrim( rtrim( sprintf( '%.1f', $rate ), '0' ), '.' ) . '% sample' ) : 'Off',
-			'hint'  => $bg ? 'Sampled front-end and admin requests' : 'Start a session or enable sampling in Scrutoscope',
+			'hint'  => $bg ? __( 'Sampled front-end and admin requests', 'minn-admin' ) : __( 'Start a session or enable sampling in Scrutoscope', 'minn-admin' ),
 		),
 		array(
 			'label' => __( 'Profiles stored', 'minn-admin' ),
@@ -418,19 +418,19 @@ function minn_admin_scrutoscope_status_model() {
 						? ' · ' . sprintf( __( '%s pinned', 'minn-admin' ), number_format_i18n( $stats['pinned'] ) )
 						: '' )
 				)
-				: 'None yet',
+				: __( 'None yet', 'minn-admin' ),
 		),
 		array(
 			'label' => __( 'Query profiling', 'minn-admin' ),
 			'value' => ! empty( $qprof['active'] ) ? 'On' : 'Off',
 			'hint'  => ! empty( $qprof['managed'] )
-				? 'SAVEQUERIES via Scrutoscope settings'
-				: 'SAVEQUERIES set outside Scrutoscope',
+				? __( 'SAVEQUERIES via Scrutoscope settings', 'minn-admin' )
+				: __( 'SAVEQUERIES set outside Scrutoscope', 'minn-admin' ),
 		),
 		array(
 			'label' => __( 'Capture mode', 'minn-admin' ),
 			'value' => $light ? 'Lightweight' : 'Full',
-			'hint'  => $light ? 'Sources only (smaller profiles)' : 'Timeline + per-callback trace',
+			'hint'  => $light ? __( 'Sources only (smaller profiles)', 'minn-admin' ) : __( 'Timeline + per-callback trace', 'minn-admin' ),
 		),
 		array(
 			'label' => __( 'Version', 'minn-admin' ),
@@ -747,9 +747,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'background', 'Background' ),
 					// Profile this hook (below) writes profile_type=on_demand —
 					// without this tab Minn's own captures land under All only.
-					array( 'on_demand', 'On demand' ),
+					array( 'on_demand', __( 'On demand', 'minn-admin' ) ),
 				),
-				'allLabel' => 'All profiles',
+				'allLabel' => __( 'All profiles', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'route', 'label' => __( 'Route', 'minn-admin' ), 'format' => 'title' ),
@@ -791,7 +791,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'static'   => array(
 						array( 'overdue', 'Overdue' ),
 					),
-					'allLabel' => 'All events',
+					'allLabel' => __( 'All events', 'minn-admin' ),
 				),
 				'columns'   => array(
 					array( 'key' => 'hook', 'label' => __( 'Hook', 'minn-admin' ), 'format' => 'title' ),

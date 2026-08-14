@@ -172,7 +172,7 @@ function minn_admin_wpml_status_model() {
 			array(
 				'label' => __( 'Logged emails', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
-				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
+				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : __( 'All logged sends', 'minn-admin' ),
 			),
 		),
 		'chart'   => array(
@@ -230,7 +230,7 @@ add_action( 'rest_api_init', function () {
 			$items = array_map( function ( $row ) {
 				return array(
 					'id'        => (int) $row->mail_id,
-					'subject'   => $row->subject ? $row->subject : '(no subject)',
+					'subject'   => $row->subject ? $row->subject : __( '(no subject)', 'minn-admin' ),
 					'to'        => minn_admin_wpml_receivers( $row->receiver ),
 					'status'    => ( null === $row->error || '' === $row->error ) ? 'sent' : 'failed',
 					'timestamp' => $row->timestamp,

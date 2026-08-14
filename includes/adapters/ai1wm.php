@@ -106,10 +106,15 @@ function minn_admin_ai1wm_status_model() {
 		'rows'    => array(
 			array(
 				'label' => __( 'Newest export', 'minn-admin' ),
-				'value' => $newest ? $newest['title'] : 'None yet',
+				'value' => $newest ? $newest['title'] : __( 'None yet', 'minn-admin' ),
 				'hint'  => $newest && $newest['ts']
-					? human_time_diff( $newest['ts'] ) . ' ago · ' . $newest['size']
-					: 'Exports are built manually from All-in-One WP Migration\'s screen.',
+					? sprintf(
+						/* translators: 1: human-readable time since the newest export was created. 2: export file size. */
+						__( '%1$s ago · %2$s', 'minn-admin' ),
+						human_time_diff( $newest['ts'] ),
+						$newest['size']
+					)
+					: __( 'Exports are built manually from All-in-One WP Migration\'s screen.', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Exports', 'minn-admin' ),

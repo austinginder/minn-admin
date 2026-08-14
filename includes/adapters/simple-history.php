@@ -138,7 +138,8 @@ function minn_admin_simple_history_status_model() {
 			array(
 				'label' => __( 'Events (24h)', 'minn-admin' ),
 				'value' => number_format_i18n( $day ),
-				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
+				/* translators: %s: number of events logged in the last 7 days. */
+				'hint'  => sprintf( __( '%s in the last 7 days', 'minn-admin' ), number_format_i18n( $week ) ),
 			),
 			array(
 				'label' => __( 'Events all-time', 'minn-admin' ),
@@ -150,7 +151,7 @@ function minn_admin_simple_history_status_model() {
 			),
 			array(
 				'label' => __( 'Severity (7d)', 'minn-admin' ),
-				'value' => $mix ? implode( ' · ', $mix ) : 'No errors or warnings',
+				'value' => $mix ? implode( ' · ', $mix ) : __( 'No errors or warnings', 'minn-admin' ),
 			),
 		),
 		'actions' => array(

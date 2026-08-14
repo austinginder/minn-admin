@@ -171,8 +171,8 @@ function minn_admin_rri_detail( $id ) {
 		array(
 			'label' => __( 'Status', 'minn-admin' ),
 			'value' => 'missing' === $source
-				? 'Missing from saved rules (generated but not stored)'
-				: 'Registered',
+				? __( 'Missing from saved rules (generated but not stored)', 'minn-admin' )
+				: __( 'Registered', 'minn-admin' ),
 		),
 	);
 
@@ -213,12 +213,12 @@ function minn_admin_rri_status_model() {
 			array(
 				'label' => __( 'Missing', 'minn-admin' ),
 				'value' => number_format_i18n( $missing ),
-				'hint'  => $missing ? 'Generated but not in the saved option' : 'Saved set matches generation',
+				'hint'  => $missing ? __( 'Generated but not in the saved option', 'minn-admin' ) : __( 'Saved set matches generation', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Permalink structure', 'minn-admin' ),
-				'value' => $struct ? $struct : 'Plain (no pretty permalinks)',
-				'hint'  => $struct ? 'Pretty permalinks on' : 'Flush only helps after a structure is set',
+				'value' => $struct ? $struct : __( 'Plain (no pretty permalinks)', 'minn-admin' ),
+				'hint'  => $struct ? __( 'Pretty permalinks on', 'minn-admin' ) : __( 'Flush only helps after a structure is set', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Rewrite Rules Inspector', 'minn-admin' ),
@@ -294,7 +294,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'page', 'Pages' ),
 					array( 'other', 'Other / plugins' ),
 				),
-				'allLabel' => 'All rules',
+				'allLabel' => __( 'All rules', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'rule', 'label' => __( 'Match', 'minn-admin' ), 'format' => 'title' ),
@@ -362,7 +362,8 @@ add_action( 'rest_api_init', function () {
 			$count = count( minn_admin_rri_all_rules() );
 			return rest_ensure_response( array(
 				'ok'      => true,
-				'message' => sprintf( 'Rewrite rules flushed. %s rules registered.', number_format_i18n( $count ) ),
+				/* translators: %s: number of rewrite rules registered after the flush. */
+				'message' => sprintf( __( 'Rewrite rules flushed. %s rules registered.', 'minn-admin' ), number_format_i18n( $count ) ),
 			) );
 		},
 	) );

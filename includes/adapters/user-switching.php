@@ -35,7 +35,7 @@ add_action( 'rest_api_init', function () {
 				return $url ? str_replace( '&amp;', '&', $url ) : '';
 			},
 			'schema'       => array(
-				'description' => 'User Switching nonce URL for the current viewer, when allowed.',
+				'description' => __( 'User Switching nonce URL for the current viewer, when allowed.', 'minn-admin' ),
 				'type'        => 'string',
 				'context'     => array( 'edit' ),
 			),

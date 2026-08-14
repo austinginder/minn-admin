@@ -83,7 +83,11 @@ function minn_admin_aryo_status_model() {
 	$last_label = '—';
 	if ( $last ) {
 		// Display relative to "now" in the same clock the row used (site local).
-		$last_label = human_time_diff( (int) $last, $now ) . ' ago';
+		$last_label = sprintf(
+			/* translators: %s: human-readable time since the last event. */
+			__( '%s ago', 'minn-admin' ),
+			human_time_diff( (int) $last, $now )
+		);
 	}
 	$top_label = '—';
 	if ( $top && ! empty( $top->action ) ) {
@@ -96,7 +100,11 @@ function minn_admin_aryo_status_model() {
 			array(
 				'label' => __( 'Events (24h)', 'minn-admin' ),
 				'value' => number_format_i18n( $day ),
-				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
+				'hint'  => sprintf(
+					/* translators: %s: number of events recorded in the last 7 days. */
+					__( '%s in the last 7 days', 'minn-admin' ),
+					number_format_i18n( $week )
+				),
 			),
 			array(
 				'label' => __( 'Events all-time', 'minn-admin' ),
@@ -146,7 +154,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'action',
-				'allLabel' => 'All actions',
+				'allLabel' => __( 'All actions', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),

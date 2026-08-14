@@ -96,14 +96,14 @@ function minn_admin_updraft_status_model() {
 	$count   = count( $history );
 
 	if ( $running ) {
-		$last_value = 'Running now…';
-		$last_hint  = 'UpdraftPlus is building or resuming a set';
+		$last_value = __( 'Running now…', 'minn-admin' );
+		$last_hint  = __( 'UpdraftPlus is building or resuming a set', 'minn-admin' );
 	} elseif ( $last ) {
 		$last_value = human_time_diff( $last['time'] ) . ' ago';
-		$last_hint  = $last['success'] ? 'Completed successfully' : 'Finished with errors — check UpdraftPlus';
+		$last_hint  = $last['success'] ? __( 'Completed successfully', 'minn-admin' ) : __( 'Finished with errors — check UpdraftPlus', 'minn-admin' );
 	} else {
 		$last_value = 'Never';
-		$last_hint  = 'No finished backup recorded yet';
+		$last_hint  = __( 'No finished backup recorded yet', 'minn-admin' );
 	}
 
 	return array(
@@ -117,8 +117,8 @@ function minn_admin_updraft_status_model() {
 				'label' => __( 'Sets kept', 'minn-admin' ),
 				'value' => (string) $count,
 				'hint'  => $count
-					? 'Newest first in the list below (retention may prune older sets)'
-					: 'Nothing on disk yet',
+					? __( 'Newest first in the list below (retention may prune older sets)', 'minn-admin' )
+					: __( 'Nothing on disk yet', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Status', 'minn-admin' ),
@@ -237,11 +237,13 @@ add_action( 'rest_api_init', function () {
 			// Kick cron immediately so the job starts without waiting for
 			// the next visitor; UpdraftPlus resumes itself from there.
 			spawn_cron();
-			$label = 'db' === $what ? 'Database backup' : 'Full backup';
+			$message = 'db' === $what
+				? __( 'Database backup started — UpdraftPlus is running it in the background.', 'minn-admin' )
+				: __( 'Full backup started — UpdraftPlus is running it in the background.', 'minn-admin' );
 			return rest_ensure_response( array(
 				'started' => true,
 				'what'    => 'db' === $what ? 'db' : 'all',
-				'message' => $label . ' started — UpdraftPlus is running it in the background.',
+				'message' => $message,
 			) );
 		},
 	) );

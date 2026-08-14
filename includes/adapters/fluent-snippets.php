@@ -76,24 +76,24 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$type_options = array(
-		array( 'PHP', 'Functions (PHP)' ),
+		array( 'PHP', __( 'Functions (PHP)', 'minn-admin' ) ),
 		array( 'php_content', 'Content (PHP + HTML)' ),
-		array( 'css', 'Styles (CSS)' ),
-		array( 'js', 'Scripts (JS)' ),
+		array( 'css', __( 'Styles (CSS)', 'minn-admin' ) ),
+		array( 'js', __( 'Scripts (JS)', 'minn-admin' ) ),
 	);
 	// Common run_at values across types; Fluent validates against type.
 	$run_options = array(
 		array( 'all', 'Everywhere' ),
-		array( 'backend', 'Admin only' ),
-		array( 'frontend', 'Front-end only' ),
-		array( 'wp_head', 'Site header' ),
-		array( 'wp_footer', 'Site footer' ),
-		array( 'wp_body_open', 'Body open' ),
-		array( 'before_content', 'Before content' ),
-		array( 'after_content', 'After content' ),
+		array( 'backend', __( 'Admin only', 'minn-admin' ) ),
+		array( 'frontend', __( 'Front-end only', 'minn-admin' ) ),
+		array( 'wp_head', __( 'Site header', 'minn-admin' ) ),
+		array( 'wp_footer', __( 'Site footer', 'minn-admin' ) ),
+		array( 'wp_body_open', __( 'Body open', 'minn-admin' ) ),
+		array( 'before_content', __( 'Before content', 'minn-admin' ) ),
+		array( 'after_content', __( 'After content', 'minn-admin' ) ),
 		array( 'shortcode', 'Shortcode' ),
-		array( 'admin_head', 'Admin header' ),
-		array( 'admin_footer', 'Admin footer' ),
+		array( 'admin_head', __( 'Admin header', 'minn-admin' ) ),
+		array( 'admin_footer', __( 'Admin footer', 'minn-admin' ) ),
 		array( 'everywhere', 'Backend + frontend (CSS)' ),
 	);
 
@@ -260,11 +260,11 @@ add_action( 'rest_api_init', function () {
 				array(
 					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
-					'hint'  => $inactive ? $inactive . ' inactive' : 'nothing inactive',
+					'hint'  => $inactive ? $inactive . ' inactive' : __( 'nothing inactive', 'minn-admin' ),
 				),
 				array(
 					'label' => __( 'Storage', 'minn-admin' ),
-					'value' => 'Standalone files',
+					'value' => __( 'Standalone files', 'minn-admin' ),
 					'hint'  => __( 'FluentSnippets runs snippets from files, not the database', 'minn-admin' ),
 				),
 			);

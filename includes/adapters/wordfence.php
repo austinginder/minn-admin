@@ -38,16 +38,16 @@ function minn_admin_wordfence_active() {
 /** Human label for a wfLogins action code. */
 function minn_admin_wordfence_action_label( $action, $fail ) {
 	$map = array(
-		'loginOK'                 => 'Signed in',
-		'loginFailValidUsername'  => 'Failed login (valid user)',
-		'loginFailInvalidUsername'=> 'Failed login (unknown user)',
-		'lockedOut'               => 'Locked out',
+		'loginOK'                 => __( 'Signed in', 'minn-admin' ),
+		'loginFailValidUsername'  => __( 'Failed login (valid user)', 'minn-admin' ),
+		'loginFailInvalidUsername'=> __( 'Failed login (unknown user)', 'minn-admin' ),
+		'lockedOut'               => __( 'Locked out', 'minn-admin' ),
 		'blocked'                 => 'Blocked',
 	);
 	if ( isset( $map[ $action ] ) ) {
 		return $map[ $action ];
 	}
-	return $fail ? 'Failed login' : 'Signed in';
+	return $fail ? __( 'Failed login', 'minn-admin' ) : __( 'Signed in', 'minn-admin' );
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
@@ -75,7 +75,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'failed', 'Failed' ),
 					array( 'success', 'Successful' ),
 				),
-				'allLabel' => 'All logins',
+				'allLabel' => __( 'All logins', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
@@ -111,14 +111,15 @@ function minn_admin_wordfence_status_model() {
 		array(
 			'label' => __( 'Failed logins (24h)', 'minn-admin' ),
 			'value' => number_format_i18n( $failed_24h ),
-			'hint'  => $ok_24h ? number_format_i18n( $ok_24h ) . ' successful' : 'No successful logins in the window',
+			/* translators: %s: number of successful logins. */
+			'hint'  => $ok_24h ? sprintf( __( '%s successful', 'minn-admin' ), number_format_i18n( $ok_24h ) ) : __( 'No successful logins in the window', 'minn-admin' ),
 		),
 	);
 	// Reuse the System posture helpers so the card and health strip never drift.
 	foreach ( minn_admin_wordfence_checks() as $check ) {
 		$rows[] = array(
 			'label' => $check['label'],
-			'value' => 'pass' === $check['status'] ? 'OK' : ( 'fail' === $check['status'] ? 'Attention' : 'Watch' ),
+			'value' => 'pass' === $check['status'] ? __( 'OK', 'minn-admin' ) : ( 'fail' === $check['status'] ? __( 'Attention', 'minn-admin' ) : __( 'Watch', 'minn-admin' ) ),
 			'hint'  => $check['detail'],
 		);
 	}
@@ -127,7 +128,8 @@ function minn_admin_wordfence_status_model() {
 		array( 'label' => __( 'Open Wordfence ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=Wordfence' ) ),
 	);
 	foreach ( minn_admin_wordfence_checks() as $check ) {
-		if ( ! empty( $check['href'] ) && false !== strpos( $check['label'], 'scan' ) ) {
+		// Route on the destination, never the label: the label is translated.
+		if ( ! empty( $check['href'] ) && false !== strpos( $check['href'], 'WordfenceScan' ) ) {
 			$actions[] = array( 'label' => __( 'Scan ↗', 'minn-admin' ), 'href' => $check['href'] );
 			break;
 		}
@@ -239,11 +241,12 @@ function minn_admin_wordfence_checks() {
 		if ( class_exists( 'wfFirewall' ) ) {
 			$mode = ( new wfFirewall() )->firewallMode();
 			$map  = array(
-				'enabled'       => array( 'pass', 'Enabled and blocking' ),
-				'learning-mode' => array( 'warn', 'In learning mode — it is watching traffic but not blocking yet' ),
-				'disabled'      => array( 'warn', 'The firewall is turned off' ),
+				'enabled'       => array( 'pass', __( 'Enabled and blocking', 'minn-admin' ) ),
+				'learning-mode' => array( 'warn', __( 'In learning mode — it is watching traffic but not blocking yet', 'minn-admin' ) ),
+				'disabled'      => array( 'warn', __( 'The firewall is turned off', 'minn-admin' ) ),
 			);
-			$m = isset( $map[ $mode ] ) ? $map[ $mode ] : array( 'warn', 'Mode: ' . (string) $mode );
+			/* translators: %s: the firewall mode Wordfence reports. */
+			$m = isset( $map[ $mode ] ) ? $map[ $mode ] : array( 'warn', sprintf( __( 'Mode: %s', 'minn-admin' ), (string) $mode ) );
 			$rows[] = array( 'label' => __( 'Wordfence firewall', 'minn-admin' ), 'status' => $m[0], 'detail' => $m[1], 'href' => admin_url( 'admin.php?page=WordfenceWAF' ) );
 		}
 	} catch ( \Throwable $e ) {
@@ -258,13 +261,18 @@ function minn_admin_wordfence_checks() {
 			if ( ! $last ) {
 				$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'warn', 'detail' => __( 'No malware scan has run yet', 'minn-admin' ) , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 			} else {
-				$when = human_time_diff( (int) $last ) . ' ago';
+				/* translators: %s: human-readable time difference (e.g. "5 mins"). */
+				$when = sprintf( __( '%s ago', 'minn-admin' ), human_time_diff( (int) $last ) );
 				if ( $issues > 0 ) {
-					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'fail', 'detail' => $issues . ' unresolved issue' . ( 1 === $issues ? '' : 's' ) . ' from the last scan (' . $when . ')' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
+					/* translators: 1: number of unresolved issues, 2: how long ago the scan ran. */
+					$detail = sprintf( _n( '%1$s unresolved issue from the last scan (%2$s)', '%1$s unresolved issues from the last scan (%2$s)', $issues, 'minn-admin' ), number_format_i18n( $issues ), $when );
+					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'fail', 'detail' => $detail, 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				} elseif ( time() - (int) $last > 14 * DAY_IN_SECONDS ) {
-					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'warn', 'detail' => __( 'Last scan was ', 'minn-admin' ) . $when . ' — run a fresh one' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
+					/* translators: %s: how long ago the last scan ran. */
+					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'warn', 'detail' => sprintf( __( 'Last scan was %s. Run a fresh one.', 'minn-admin' ), $when ), 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				} else {
-					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'pass', 'detail' => __( 'Last scan ', 'minn-admin' ) . $when . ', no issues found' , 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
+					/* translators: %s: how long ago the last scan ran. */
+					$rows[] = array( 'label' => __( 'Wordfence scan', 'minn-admin' ), 'status' => 'pass', 'detail' => sprintf( __( 'Last scan %s, no issues found', 'minn-admin' ), $when ), 'href' => admin_url( 'admin.php?page=WordfenceScan' ) );
 				}
 			}
 		}

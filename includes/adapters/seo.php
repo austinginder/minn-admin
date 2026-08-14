@@ -405,7 +405,7 @@ add_action( 'rest_api_init', function () {
 		'callback'            => function () use ( $plugin ) {
 			$groups = array(
 				array(
-					'group'  => 'Search appearance',
+					'group'  => __( 'Search appearance', 'minn-admin' ),
 					'fields' => array(
 						array( 'name' => 'title', 'label' => __( 'SEO title', 'minn-admin' ), 'type' => 'text' ),
 						array( 'name' => 'description', 'label' => __( 'Meta description', 'minn-admin' ), 'type' => 'textarea' ),
@@ -488,7 +488,7 @@ add_action( 'rest_api_init', function () {
 		},
 		'schema'          => array(
 			'type'        => 'object',
-			'description' => 'SEO title, meta description, focus keyword, and social image (Minn Admin editor panel).',
+			'description' => __( 'SEO title, meta description, focus keyword, and social image (Minn Admin editor panel).', 'minn-admin' ),
 			'context'     => array( 'edit' ),
 			'properties'  => array(
 				'title'         => array( 'type' => 'string' ),

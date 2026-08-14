@@ -70,7 +70,8 @@ function minn_admin_emr_replace( $req ) {
 	if ( $current_mime && $check['type'] !== $current_mime ) {
 		return new WP_Error(
 			'minn_emr_type_mismatch',
-			sprintf( 'Replacing in place keeps the same URL, so the new file must stay %s. To swap the type, upload it as a new file.', $current_mime ),
+			/* translators: %s: MIME type of the current attachment (e.g. image/jpeg). */
+			sprintf( __( 'Replacing in place keeps the same URL, so the new file must stay %s. To swap the type, upload it as a new file.', 'minn-admin' ), $current_mime ),
 			array( 'status' => 400 )
 		);
 	}

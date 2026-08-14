@@ -139,7 +139,8 @@ function minn_admin_stream_status_model() {
 			array(
 				'label' => __( 'Events (24h)', 'minn-admin' ),
 				'value' => number_format_i18n( $day ),
-				'hint'  => number_format_i18n( $week ) . ' in the last 7 days',
+				/* translators: %s: number of events logged in the last 7 days. */
+				'hint'  => sprintf( __( '%s in the last 7 days', 'minn-admin' ), number_format_i18n( $week ) ),
 			),
 			array(
 				'label' => __( 'Events all-time', 'minn-admin' ),
@@ -187,7 +188,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'connector',
-				'allLabel' => 'All sources',
+				'allLabel' => __( 'All sources', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),

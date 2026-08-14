@@ -190,33 +190,33 @@ function minn_admin_gsmtp_condition_summary( $conditions ) {
 		'subject'          => 'Subject',
 		'message'          => __( 'Message', 'minn-admin' ),
 		'from_email'       => 'From',
-		'from_name'        => 'From name',
+		'from_name'        => __( 'From name', 'minn-admin' ),
 		'to'               => 'To',
 		'cc'               => 'CC',
 		'bcc'              => 'BCC',
 		'reply_to'         => 'Reply-To',
 		'source'           => 'Source',
-		'source_subtype'   => 'Source type',
-		'to_count'         => 'To count',
-		'cc_count'         => 'CC count',
-		'bcc_count'        => 'BCC count',
-		'has_attachments'  => 'Has attachments',
+		'source_subtype'   => __( 'Source type', 'minn-admin' ),
+		'to_count'         => __( 'To count', 'minn-admin' ),
+		'cc_count'         => __( 'CC count', 'minn-admin' ),
+		'bcc_count'        => __( 'BCC count', 'minn-admin' ),
+		'has_attachments'  => __( 'Has attachments', 'minn-admin' ),
 		'attachments_count'=> 'Attachments',
-		'content_type'     => 'Content type',
-		'message_size'     => 'Message size',
-		'attachment_size'  => 'Attachment size',
+		'content_type'     => __( 'Content type', 'minn-admin' ),
+		'message_size'     => __( 'Message size', 'minn-admin' ),
+		'attachment_size'  => __( 'Attachment size', 'minn-admin' ),
 	);
 	$comps = array(
 		'='                 => 'is',
-		'!='                => 'is not',
+		'!='                => __( 'is not', 'minn-admin' ),
 		'>'                 => '>',
 		'>='                => '≥',
 		'<'                 => '<',
 		'<='                => '≤',
 		'contains'          => 'contains',
-		'does_not_contain'  => 'does not contain',
-		'starts_with'       => 'starts with',
-		'ends_with'         => 'ends with',
+		'does_not_contain'  => __( 'does not contain', 'minn-admin' ),
+		'starts_with'       => __( 'starts with', 'minn-admin' ),
+		'ends_with'         => __( 'ends with', 'minn-admin' ),
 	);
 	$parts = array();
 	$walk  = function ( $node ) use ( &$walk, &$parts, $labels, $comps ) {
@@ -243,7 +243,7 @@ function minn_admin_gsmtp_condition_summary( $conditions ) {
 	};
 	$walk( $conditions );
 	if ( ! $parts ) {
-		return 'No conditions';
+		return __( 'No conditions', 'minn-admin' );
 	}
 	// Cap for list display.
 	$shown = array_slice( $parts, 0, 3 );
@@ -997,8 +997,8 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'Sending through', 'minn-admin' ), 'value' => $title ),
 				array(
 					'label' => __( 'Test mode', 'minn-admin' ),
-					'value' => $test_mode ? 'On' : 'Off',
-					'hint'  => $test_mode ? 'Emails are logged, not sent.' : '',
+					'value' => $test_mode ? __( 'On', 'minn-admin' ) : __( 'Off', 'minn-admin' ),
+					'hint'  => $test_mode ? __( 'Emails are logged, not sent.', 'minn-admin' ) : '',
 				),
 			);
 			// Email Routing (2.3.0+): count of recipes + whether evaluation
@@ -1010,8 +1010,8 @@ add_action( 'rest_api_init', function () {
 				} ) );
 				$active  = minn_admin_gsmtp_active_connector_count();
 				$hint    = $active < 2
-					? 'Needs at least 2 active integrations to evaluate (same as Gravity SMTP).'
-					: ( $all ? 'First matching rule wins, top to bottom.' : 'No rules yet — add them in Gravity SMTP.' );
+					? __( 'Needs at least 2 active integrations to evaluate (same as Gravity SMTP).', 'minn-admin' )
+					: ( $all ? __( 'First matching rule wins, top to bottom.', 'minn-admin' ) : __( 'No rules yet — add them in Gravity SMTP.', 'minn-admin' ) );
 				$rows[]  = array(
 					'label' => __( 'Routing', 'minn-admin' ),
 					'value' => $all
@@ -1088,7 +1088,7 @@ add_action( 'rest_api_init', function () {
 					return rest_ensure_response( array(
 						'updated' => true,
 						'enabled' => $on,
-						'message' => $on ? 'Rule enabled.' : 'Rule disabled.',
+						'message' => $on ? __( 'Rule enabled.', 'minn-admin' ) : __( 'Rule disabled.', 'minn-admin' ),
 					) );
 				},
 			) );
@@ -1149,7 +1149,7 @@ add_action( 'rest_api_init', function () {
 			add_action( 'gravitysmtp_after_mail_created', $listener );
 			$sent = wp_mail(
 				$email,
-				'Test email from Minn Admin (Gravity SMTP)',
+				__( 'Test email from Minn Admin (Gravity SMTP)', 'minn-admin' ),
 				"This is a test email sent through the {$connector} connector, triggered from Minn Admin's Email Log.",
 				array()
 			);
@@ -1161,8 +1161,8 @@ add_action( 'rest_api_init', function () {
 				'sent'    => true,
 				'logged'  => (bool) $logged,
 				'message' => $logged
-					? 'Test email sent and logged.'
-					: 'Test email sent, but another active mail plugin carried it, so it appears in that plugin’s log, not Gravity SMTP’s.',
+					? __( 'Test email sent and logged.', 'minn-admin' )
+					: __( 'Test email sent, but another active mail plugin carried it, so it appears in that plugin’s log, not Gravity SMTP’s.', 'minn-admin' ),
 			) );
 		},
 	) );
@@ -1222,7 +1222,7 @@ function minn_admin_gsmtp_connector_options() {
 			}
 		}
 	} catch ( \Throwable $e ) {
-		return array( array( 'generic', 'Custom SMTP' ) );
+		return array( array( 'generic', __( 'Custom SMTP', 'minn-admin' ) ) );
 	}
 	usort( $out, function ( $a, $b ) {
 		return strcasecmp( $a[1], $b[1] );
@@ -1250,7 +1250,7 @@ function minn_admin_gsmtp_settings_shape( $tab ) {
 						'label'   => __( 'Primary service', 'minn-admin' ),
 						'type'    => 'combobox',
 						'options' => minn_admin_gsmtp_connector_options(),
-						'help'    => 'Saving a different service reloads this tab with its settings.',
+						'help'    => __( 'Saving a different service reloads this tab with its settings.', 'minn-admin' ),
 					),
 				),
 			),
@@ -1463,8 +1463,8 @@ function minn_admin_gravity_smtp_resend( WP_REST_Request $request ) {
 		'resent'  => true,
 		'logged'  => (bool) $logged,
 		'message' => $logged
-			? 'Resent to the original recipients.'
-			: 'Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s.',
+			? __( 'Resent to the original recipients.', 'minn-admin' )
+			: __( 'Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s.', 'minn-admin' ),
 	) );
 }
 

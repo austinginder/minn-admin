@@ -120,7 +120,7 @@ add_action( 'rest_api_init', function () {
 			$locked += 1;
 			return rest_ensure_response( array(
 				'groups' => array(
-					array( 'group' => 'Event details', 'fields' => $fields, 'locked' => $locked ),
+					array( 'group' => __( 'Event details', 'minn-admin' ), 'fields' => $fields, 'locked' => $locked ),
 				),
 			) );
 		},
@@ -233,7 +233,8 @@ add_action( 'rest_api_init', function () {
 					}
 					$ts = strtotime( $raw );
 					if ( ! $ts ) {
-						return new WP_Error( 'minn_tec_bad_date', sprintf( 'Could not read the %s date — use YYYY-MM-DD HH:MM.', strtolower( $side ) ), array( 'status' => 400 ) );
+						/* translators: %s: which date could not be parsed, "start" or "end". */
+						return new WP_Error( 'minn_tec_bad_date', sprintf( __( 'Could not read the %s date — use YYYY-MM-DD HH:MM.', 'minn-admin' ), strtolower( $side ) ), array( 'status' => 400 ) );
 					}
 					// The exact shape TEC's own REST endpoint sends.
 					$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
@@ -270,7 +271,7 @@ add_action( 'rest_api_init', function () {
 				return null;
 			},
 			'schema'          => array(
-				'description' => 'The Events Calendar event details for Minn Admin.',
+				'description' => __( 'The Events Calendar event details for Minn Admin.', 'minn-admin' ),
 				'type'        => 'object',
 				'context'     => array( 'edit' ),
 			),

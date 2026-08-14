@@ -115,7 +115,7 @@ function minn_admin_fluent_smtp_health() {
 			}
 			return array(
 				'label' => __( 'Connection health', 'minn-admin' ),
-				'value' => 'Not checked yet',
+				'value' => __( 'Not checked yet', 'minn-admin' ),
 				'hint'  => __( 'FluentSMTP runs its first daily check within 24 hours', 'minn-admin' ),
 			);
 		}
@@ -144,7 +144,7 @@ function minn_admin_fluent_smtp_health() {
 		}
 		return array(
 			'label' => __( 'Connection health', 'minn-admin' ),
-			'value' => 'All passing',
+			'value' => __( 'All passing', 'minn-admin' ),
 			'hint'  => __( 'Daily check by FluentSMTP', 'minn-admin' ) . $ago,
 		);
 	} catch ( \Throwable $e ) {
@@ -259,12 +259,12 @@ function minn_admin_fluent_smtp_status_model() {
 		array(
 			'label' => __( 'Logged emails', 'minn-admin' ),
 			'value' => number_format_i18n( $total ),
-			'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : 'All logged sends',
+			'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : __( 'All logged sends', 'minn-admin' ),
 		),
 		array(
 			'label' => __( 'Connections', 'minn-admin' ),
 			'value' => (string) $connections,
-			'hint'  => $connections ? 'Configured in FluentSMTP' : 'No mailer connected yet',
+			'hint'  => $connections ? __( 'Configured in FluentSMTP', 'minn-admin' ) : __( 'No mailer connected yet', 'minn-admin' ),
 		),
 	);
 
@@ -480,14 +480,14 @@ function minn_admin_fluent_smtp_settings_shape() {
 					'label'   => __( 'Default connection', 'minn-admin' ),
 					'type'    => 'combobox',
 					'options' => minn_admin_fluent_smtp_connection_options(),
-					'help'    => 'Used when no sender mapping claims the From address. Connection credentials stay in FluentSMTP.',
+					'help'    => __( 'Used when no sender mapping claims the From address. Connection credentials stay in FluentSMTP.', 'minn-admin' ),
 				),
 				array(
 					'key'     => 'fallback_connection',
 					'label'   => __( 'Fallback connection', 'minn-admin' ),
 					'type'    => 'combobox',
 					'options' => minn_admin_fluent_smtp_connection_options( true ),
-					'help'    => 'Tried when the chosen connection fails to send.',
+					'help'    => __( 'Tried when the chosen connection fails to send.', 'minn-admin' ),
 				),
 			),
 		),
@@ -498,7 +498,7 @@ function minn_admin_fluent_smtp_settings_shape() {
 					'key'   => 'log_emails',
 					'label' => __( 'Log all emails', 'minn-admin' ),
 					'type'  => 'toggle',
-					'help'  => 'Keep a copy of every outgoing email in the log.',
+					'help'  => __( 'Keep a copy of every outgoing email in the log.', 'minn-admin' ),
 				),
 				array(
 					'key'     => 'log_saved_interval_days',
@@ -507,7 +507,7 @@ function minn_admin_fluent_smtp_settings_shape() {
 					'options' => array_map( function ( $d ) {
 						return array( $d, $d . ' days' );
 					}, $day_opts ),
-					'help'    => 'FluentSMTP prunes older log entries on its daily schedule.',
+					'help'    => __( 'FluentSMTP prunes older log entries on its daily schedule.', 'minn-admin' ),
 				),
 			),
 		),
@@ -518,7 +518,7 @@ function minn_admin_fluent_smtp_settings_shape() {
 					'key'   => 'simulate_emails',
 					'label' => __( 'Simulate outgoing emails', 'minn-admin' ),
 					'type'  => 'toggle',
-					'help'  => 'Emails are logged but never actually sent. For staging and test sites.',
+					'help'  => __( 'Emails are logged but never actually sent. For staging and test sites.', 'minn-admin' ),
 				),
 			),
 			'locked' => $sim_locked ? 1 : 0,
@@ -853,7 +853,8 @@ add_action( 'rest_api_init', function () {
 						continue;
 					}
 					if ( ! is_email( $addr ) ) {
-						return new WP_Error( 'bad_email', '"' . $addr . '" is not a valid email address.', array( 'status' => 400 ) );
+						/* translators: %s: the rejected recipient address as typed. */
+						return new WP_Error( 'bad_email', sprintf( __( '"%s" is not a valid email address.', 'minn-admin' ), $addr ), array( 'status' => 400 ) );
 					}
 					$override[] = $addr;
 				}
@@ -942,7 +943,8 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 			// Fallback: plain wp_mail (still rides FluentSMTP when it owns the pipeline).
-			$sent = wp_mail( $email, 'Fluent SMTP: Test Email - ' . get_bloginfo( 'name' ), "This is a test email from Minn Admin.\n" );
+			/* translators: %s: the site title. */
+			$sent = wp_mail( $email, sprintf( __( 'Fluent SMTP: Test Email - %s', 'minn-admin' ), get_bloginfo( 'name' ) ), "This is a test email from Minn Admin.\n" );
 			if ( ! $sent ) {
 				return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
 			}

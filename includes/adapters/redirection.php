@@ -228,7 +228,10 @@ add_action( 'rest_api_init', function () {
 				$rows[] = array(
 					'label' => __( 'Redirect rules', 'minn-admin' ),
 					'value' => (string) $enabled,
-					'hint'  => $disabled ? $disabled . ' disabled' : 'all enabled',
+					'hint'  => $disabled
+						/* translators: %d: number of disabled redirect rules. */
+						? sprintf( _n( '%d disabled', '%d disabled', $disabled, 'minn-admin' ), $disabled )
+						: __( 'all enabled', 'minn-admin' ),
 				);
 				$rows[] = array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( $hits ) );
 				$top = $wpdb->get_row( "SELECT url, last_count FROM {$wpdb->prefix}redirection_items WHERE last_count > 0 ORDER BY last_count DESC LIMIT 1" ); // phpcs:ignore
@@ -319,7 +322,7 @@ add_action( 'rest_api_init', function () {
 									'key'   => 'monitor',
 									'label' => __( 'Monitor permalink changes', 'minn-admin' ),
 									'type'  => 'toggle',
-									'help'  => 'Add a redirect when a post or page slug changes.',
+									'help'  => __( 'Add a redirect when a post or page slug changes.', 'minn-admin' ),
 								),
 							),
 						),
@@ -330,7 +333,7 @@ add_action( 'rest_api_init', function () {
 									'key'   => 'log',
 									'label' => __( 'Keep a log of redirects and 404s', 'minn-admin' ),
 									'type'  => 'toggle',
-									'help'  => 'When on, logs are kept for the number of days below.',
+									'help'  => __( 'When on, logs are kept for the number of days below.', 'minn-admin' ),
 								),
 								array(
 									'key'      => 'expire_days',
@@ -344,7 +347,7 @@ add_action( 'rest_api_init', function () {
 									'key'      => 'ip_logging',
 									'label'    => __( 'Store IP addresses with logs', 'minn-admin' ),
 									'type'     => 'toggle',
-									'help'     => 'A privacy choice — off by default on fresh installs.',
+									'help'     => __( 'A privacy choice — off by default on fresh installs.', 'minn-admin' ),
 									'showWhen' => array( 'key' => 'log', 'equals' => true ),
 								),
 							),

@@ -180,7 +180,7 @@ function minn_admin_fluent_forms_summary( $map ) {
 			break;
 		}
 	}
-	return $parts ? implode( ' · ', $parts ) : '(empty entry)';
+	return $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' );
 }
 
 /** Server-built model for the surface status card (SureForms parity). */
@@ -262,7 +262,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'form_id',
-				'allLabel' => 'All entries',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
 			// Their status column: unread/read/spam/trashed (favorites is a separate flag).
 			'filter'    => array(
@@ -762,16 +762,16 @@ add_action( 'rest_api_init', function () {
 				array( '%d' )
 			);
 			$msgs = array(
-				'unread'  => 'Entry restored.',
-				'read'    => 'Marked as read.',
-				'spam'    => 'Marked as spam.',
-				'trashed' => 'Moved to trash.',
+				'unread'  => __( 'Entry restored.', 'minn-admin' ),
+				'read'    => __( 'Marked as read.', 'minn-admin' ),
+				'spam'    => __( 'Marked as spam.', 'minn-admin' ),
+				'trashed' => __( 'Moved to trash.', 'minn-admin' ),
 			);
 			return rest_ensure_response( array(
 				'id'      => $id,
 				'status'  => $status,
 				'ok'      => true,
-				'message' => $msgs[ $status ] ?? 'Status updated.',
+				'message' => $msgs[ $status ] ?? __( 'Status updated.', 'minn-admin' ),
 			) );
 		},
 	) );

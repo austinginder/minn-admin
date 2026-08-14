@@ -158,7 +158,7 @@ function minn_admin_forminator_status_model() {
 			array(
 				'label' => __( 'Entries', 'minn-admin' ),
 				'value' => number_format_i18n( $received ),
-				'hint'  => $spam ? number_format_i18n( $spam ) . ' spam' : 'All received entries',
+				'hint'  => $spam ? number_format_i18n( $spam ) . ' spam' : __( 'All received entries', 'minn-admin' ),
 			),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
@@ -193,7 +193,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'form_id',
-				'allLabel' => 'All entries',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
 			// is_spam column + status field — Received vs Spam (no trash in free).
 			'filter'    => array(
@@ -373,7 +373,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$items[] = array(
 					'id'         => (int) $row->entry_id,
-					'summary'    => $parts ? implode( ' · ', $parts ) : '(empty entry)',
+					'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
 					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 					'status'     => ! empty( $row->is_spam ) ? 'spam' : 'received',
 					// date_i18n stamp — site-local, emitted naked.
@@ -462,8 +462,8 @@ add_action( 'rest_api_init', function () {
 	) );
 
 	foreach ( array(
-		'spam'   => array( 1, 'spam', 'Marked as spam.' ),
-		'unspam' => array( 0, 'active', 'Marked not spam.' ),
+		'spam'   => array( 1, 'spam', __( 'Marked as spam.', 'minn-admin' ) ),
+		'unspam' => array( 0, 'active', __( 'Marked not spam.', 'minn-admin' ) ),
 	) as $slug => $cfg ) {
 		list( $is_spam, $status, $msg ) = $cfg;
 		register_rest_route( 'minn-admin/v1', '/forminator/entries/(?P<id>\d+)/' . $slug, array(

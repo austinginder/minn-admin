@@ -228,7 +228,7 @@ function minn_admin_wpvivid_schedule_hint() {
 	}
 	$rec = isset( $s['recurrence'] ) ? (string) $s['recurrence'] : '';
 	$next = ! empty( $s['next_start'] ) ? (int) $s['next_start'] : 0;
-	$label = $rec ? $rec : 'On a schedule';
+	$label = $rec ? $rec : __( 'On a schedule', 'minn-admin' );
 	if ( $next > 0 ) {
 		$label .= ' · next ' . human_time_diff( $next );
 	}
@@ -244,14 +244,14 @@ function minn_admin_wpvivid_status_model() {
 	$sched   = minn_admin_wpvivid_schedule_hint();
 
 	if ( $running ) {
-		$last_value = 'Running now…';
-		$last_hint  = 'WPvivid is building a backup';
+		$last_value = __( 'Running now…', 'minn-admin' );
+		$last_hint  = __( 'WPvivid is building a backup', 'minn-admin' );
 	} elseif ( $last ) {
 		$last_value = human_time_diff( $last['time'] ) . ' ago';
-		$last_hint  = $last['success'] ? 'Completed successfully' : 'Finished with errors — check WPvivid';
+		$last_hint  = $last['success'] ? __( 'Completed successfully', 'minn-admin' ) : __( 'Finished with errors — check WPvivid', 'minn-admin' );
 	} else {
 		$last_value = 'Never';
-		$last_hint  = 'No finished backup recorded yet';
+		$last_hint  = __( 'No finished backup recorded yet', 'minn-admin' );
 	}
 
 	return array(
@@ -265,8 +265,8 @@ function minn_admin_wpvivid_status_model() {
 				'label' => __( 'Sets kept', 'minn-admin' ),
 				'value' => (string) $count,
 				'hint'  => $count
-					? 'Newest first in the list below (retention may prune older sets)'
-					: 'Nothing on disk yet',
+					? __( 'Newest first in the list below (retention may prune older sets)', 'minn-admin' )
+					: __( 'Nothing on disk yet', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Schedule', 'minn-admin' ),
@@ -413,7 +413,7 @@ add_action( 'rest_api_init', function () {
 			if ( empty( $ret['result'] ) || 'success' !== $ret['result'] ) {
 				return new WP_Error(
 					'delete_failed',
-					! empty( $ret['error'] ) ? (string) $ret['error'] : 'WPvivid refused the delete.',
+					! empty( $ret['error'] ) ? (string) $ret['error'] : __( 'WPvivid refused the delete.', 'minn-admin' ),
 					array( 'status' => 400 )
 				);
 			}
@@ -455,7 +455,7 @@ add_action( 'rest_api_init', function () {
 			if ( empty( $ret['result'] ) || 'success' !== $ret['result'] || empty( $ret['task_id'] ) ) {
 				return new WP_Error(
 					'prepare_failed',
-					! empty( $ret['error'] ) ? (string) $ret['error'] : 'WPvivid refused to prepare the backup.',
+					! empty( $ret['error'] ) ? (string) $ret['error'] : __( 'WPvivid refused to prepare the backup.', 'minn-admin' ),
 					array( 'status' => 400 )
 				);
 			}
@@ -464,12 +464,14 @@ add_action( 'rest_api_init', function () {
 			// backup() holds the request for the whole run (and dies).
 			wp_schedule_single_event( time() - 1, 'minn_admin_wpvivid_run', array( $task_id ) );
 			spawn_cron();
-			$label = 'db' === $what ? 'Database backup' : 'Full backup';
+			$message = 'db' === $what
+				? __( 'Database backup started — WPvivid is running it in the background.', 'minn-admin' )
+				: __( 'Full backup started — WPvivid is running it in the background.', 'minn-admin' );
 			return rest_ensure_response( array(
 				'started' => true,
 				'what'    => 'db' === $what ? 'db' : 'all',
 				'task_id' => $task_id,
-				'message' => $label . ' started — WPvivid is running it in the background.',
+				'message' => $message,
 			) );
 		},
 	) );

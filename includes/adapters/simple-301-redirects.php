@@ -112,7 +112,7 @@ add_action( 'rest_api_init', function () {
 					array( 'label' => __( 'Redirect rules', 'minn-admin' ), 'value' => (string) count( $rules ) ),
 					array(
 						'label' => __( 'Wildcards', 'minn-admin' ),
-						'value' => $wildcards ? 'On' : 'Off',
+						'value' => $wildcards ? __( 'On', 'minn-admin' ) : __( 'Off', 'minn-admin' ),
 						'hint'  => $wildcards ? '* patterns match in sources' : '',
 					),
 				),

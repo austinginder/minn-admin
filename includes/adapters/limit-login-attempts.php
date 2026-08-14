@@ -50,11 +50,11 @@ function minn_admin_llar_can() {
 /** Human label for a detect_gateway() value; unknown values pass through. */
 function minn_admin_llar_gateway_label( $gateway ) {
 	$map = array(
-		'wp_login'        => 'Login form',
-		'wp_lostpassword' => 'Password reset',
+		'wp_login'        => __( 'Login form', 'minn-admin' ),
+		'wp_lostpassword' => __( 'Password reset', 'minn-admin' ),
 		'wp_register'     => 'Registration',
 		'xmlrpc'          => 'XML-RPC',
-		'wp_woo_login'    => 'WooCommerce login',
+		'wp_woo_login'    => __( 'WooCommerce login', 'minn-admin' ),
 	);
 	$g = (string) $gateway;
 	return isset( $map[ $g ] ) ? $map[ $g ] : ( $g ? $g : '—' );
@@ -149,9 +149,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'tabs'      => array(
 				'param'    => 'kind',
 				'static'   => array(
-					array( 'locked', 'Locked out now' ),
+					array( 'locked', __( 'Locked out now', 'minn-admin' ) ),
 				),
-				'allLabel' => 'All lockouts',
+				'allLabel' => __( 'All lockouts', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
@@ -238,7 +238,8 @@ add_action( 'rest_api_init', function () {
 					),
 					array(
 						'label' => __( 'Policy', 'minn-admin' ),
-						'value' => $retries ? sprintf( '%d retries, then a %s lockout', $retries, human_time_diff( 0, max( 60, $duration ) ) ) : '—',
+						/* translators: 1: allowed retries before lockout, 2: human-readable lockout duration. */
+						'value' => $retries ? sprintf( __( '%1$d retries, then a %2$s lockout', 'minn-admin' ), $retries, human_time_diff( 0, max( 60, $duration ) ) ) : '—',
 					),
 				),
 				'actions' => array(

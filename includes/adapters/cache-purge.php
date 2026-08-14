@@ -299,16 +299,20 @@ function minn_admin_redis_object_cache_checks() {
 
 	if ( true === $redis ) {
 		$status = 'pass';
-		$detail = 'Drop-in active · ' . $human;
+		$detail = sprintf(
+			/* translators: %s: connection status reported by Redis Object Cache. */
+			__( 'Drop-in active · %s', 'minn-admin' ),
+			$human
+		);
 	} elseif ( ! $plugin->object_cache_dropin_exists() ) {
 		$status = 'warn';
-		$detail = 'Plugin installed; drop-in not enabled';
+		$detail = __( 'Plugin installed; drop-in not enabled', 'minn-admin' );
 	} elseif ( $plugin->object_cache_dropin_outdated() ) {
 		$status = 'warn';
-		$detail = 'Drop-in is outdated — update it from Redis Object Cache';
+		$detail = __( 'Drop-in is outdated — update it from Redis Object Cache', 'minn-admin' );
 	} elseif ( false === $redis ) {
 		$status = 'fail';
-		$detail = 'Drop-in present but Redis is not connected';
+		$detail = __( 'Drop-in present but Redis is not connected', 'minn-admin' );
 	} else {
 		$status = 'warn';
 		$detail = $human;

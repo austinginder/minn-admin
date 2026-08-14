@@ -328,12 +328,13 @@ function minn_admin_crontrol_status_model() {
 			array(
 				'label' => __( 'Events', 'minn-admin' ),
 				'value' => number_format_i18n( $total ),
-				'hint'  => $once ? ( number_format_i18n( $once ) . ' one-off' ) : '',
+				/* translators: %s: formatted number of one-off events. */
+				'hint'  => $once ? sprintf( __( '%s one-off', 'minn-admin' ), number_format_i18n( $once ) ) : '',
 			),
 			array(
 				'label' => __( 'Overdue', 'minn-admin' ),
 				'value' => number_format_i18n( $overdue ),
-				'hint'  => $overdue ? 'Past next-run time' : 'None past due',
+				'hint'  => $overdue ? __( 'Past next-run time', 'minn-admin' ) : __( 'None past due', 'minn-admin' ),
 			),
 			array(
 				'label' => __( 'Paused', 'minn-admin' ),
@@ -391,7 +392,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'recurring', 'Recurring' ),
 					array( 'once', 'One-off' ),
 				),
-				'allLabel' => 'All events',
+				'allLabel' => __( 'All events', 'minn-admin' ),
 			),
 			'columns'   => array(
 				array( 'key' => 'hook', 'label' => __( 'Hook', 'minn-admin' ), 'format' => 'title' ),

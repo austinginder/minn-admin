@@ -180,7 +180,7 @@ function minn_admin_cfdb7_summary( $values ) {
 			break;
 		}
 	}
-	return $parts ? implode( ' · ', $parts ) : '(empty entry)';
+	return $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' );
 }
 
 /**
@@ -242,7 +242,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'form_post_id',
-				'allLabel' => 'All messages',
+				'allLabel' => __( 'All messages', 'minn-admin' ),
 			),
 			// Read/unread lives in the serialized blob as cfdb7_status.
 			'filter'    => array(

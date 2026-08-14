@@ -205,7 +205,7 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array(
 				'groups' => array(
 					array(
-						'group'  => 'Episode details',
+						'group'  => __( 'Episode details', 'minn-admin' ),
 						'fields' => $mapped['fields'],
 						'locked' => $mapped['locked'],
 					),
@@ -241,7 +241,7 @@ add_action( 'rest_api_init', function () {
 					minn_admin_ssp_write_values( $post->ID, $value );
 				},
 				'schema'          => array(
-					'description' => 'Seriously Simple Podcasting episode fields for Minn Admin.',
+					'description' => __( 'Seriously Simple Podcasting episode fields for Minn Admin.', 'minn-admin' ),
 					'type'        => 'object',
 					'context'     => array( 'edit' ),
 				),

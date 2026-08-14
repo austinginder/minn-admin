@@ -84,7 +84,7 @@ function minn_admin_sureforms_summary( array $data ) {
 	if ( strlen( $summary ) > 80 ) {
 		$summary = substr( $summary, 0, 80 ) . '…';
 	}
-	return $summary ?: '(empty entry)';
+	return $summary ?: __( '(empty entry)', 'minn-admin' );
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
@@ -113,7 +113,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'form_id',
-				'allLabel' => 'All entries',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
