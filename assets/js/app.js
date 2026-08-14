@@ -24,12 +24,96 @@
 		return typeof t === 'string' ? t : ( Array.isArray( t ) ? t[ 0 ] : text );
 	};
 
-	// JED plural entries are [singular, plural, …]. Until a locale that needs
-	// a real Plural-Forms evaluator ships a catalog, the n !== 1 rule covers
-	// the Germanic/Romance languages likely to translate first.
+	/* Plural-Forms.
+	 *
+	 * The catalog ships the locale's own rule (boot payload i18nPlural), e.g.
+	 *   "nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 …);"
+	 * English's "n != 1" is the exception, not the pattern: Japanese, Chinese,
+	 * Vietnamese and Indonesian have ONE form, Russian and Polish three,
+	 * Arabic six. Hardcoding n !== 1 prints the wrong plural across most of
+	 * the locales Minn ships.
+	 *
+	 * The rule is parsed and evaluated, never eval()'d. A translation pack is
+	 * a downloaded file like any other, and eval on its contents would hand
+	 * whoever served it a script-execution primitive inside the admin.
+	 * Supported grammar is the gettext subset: ?: || && | & == != < > <= >=
+	 * + - * / % ! parentheses, the variable n, and integer literals. */
+	const pluralRule = ( () => {
+		const expr = String( B.i18nPlural || '' );
+		const m = /plural\s*=\s*([^;]+)/.exec( expr );
+		if ( ! m ) return null;
+		const srcExpr = m[ 1 ];
+		// Tokenize.
+		const toks = srcExpr.match( /\d+|n|\?|:|\|\||&&|[<>!=]=|[-+*/%<>()!|&]/g );
+		if ( ! toks ) return null;
+		let pos = 0;
+		const peek = () => toks[ pos ];
+		const eat = ( t ) => { if ( toks[ pos ] === t ) { pos++; return true; } return false; };
+		// Precedence climbing, lowest first.
+		const parseTernary = ( n ) => {
+			const cond = parseOr( n );
+			if ( eat( '?' ) ) {
+				const a = parseTernary( n );
+				if ( ! eat( ':' ) ) throw 0;
+				const b = parseTernary( n );
+				return cond ? a : b;
+			}
+			return cond;
+		};
+		const bin = ( next, ops ) => ( n ) => {
+			let left = next( n );
+			for ( ;; ) {
+				const op = peek();
+				if ( ! ops.includes( op ) ) return left;
+				pos++;
+				const right = next( n );
+				left = OPS[ op ]( left, right );
+			}
+		};
+		const OPS = {
+			'||': ( a, b ) => ( a || b ) ? 1 : 0, '&&': ( a, b ) => ( a && b ) ? 1 : 0,
+			'|': ( a, b ) => a | b, '&': ( a, b ) => a & b,
+			'==': ( a, b ) => ( a === b ? 1 : 0 ), '!=': ( a, b ) => ( a !== b ? 1 : 0 ),
+			'<': ( a, b ) => ( a < b ? 1 : 0 ), '>': ( a, b ) => ( a > b ? 1 : 0 ),
+			'<=': ( a, b ) => ( a <= b ? 1 : 0 ), '>=': ( a, b ) => ( a >= b ? 1 : 0 ),
+			'+': ( a, b ) => a + b, '-': ( a, b ) => a - b,
+			'*': ( a, b ) => a * b, '/': ( a, b ) => Math.trunc( a / b ), '%': ( a, b ) => a % b,
+		};
+		const parseUnary = ( n ) => {
+			if ( eat( '!' ) ) return parseUnary( n ) ? 0 : 1;
+			if ( eat( '(' ) ) { const v = parseTernary( n ); if ( ! eat( ')' ) ) throw 0; return v; }
+			const t = toks[ pos++ ];
+			if ( 'n' === t ) return n;
+			if ( /^\d+$/.test( t ) ) return parseInt( t, 10 );
+			throw 0;
+		};
+		const parseMul = bin( parseUnary, [ '*', '/', '%' ] );
+		const parseAdd = bin( parseMul, [ '+', '-' ] );
+		const parseRel = bin( parseAdd, [ '<', '>', '<=', '>=' ] );
+		const parseEq = bin( parseRel, [ '==', '!=' ] );
+		const parseBitAnd = bin( parseEq, [ '&' ] );
+		const parseBitOr = bin( parseBitAnd, [ '|' ] );
+		const parseAnd = bin( parseBitOr, [ '&&' ] );
+		const parseOr = bin( parseAnd, [ '||' ] );
+		return ( n ) => {
+			pos = 0;
+			try {
+				const v = parseTernary( n );
+				return typeof v === 'boolean' ? ( v ? 1 : 0 ) : ( v | 0 );
+			} catch ( e ) {
+				return 1 === n ? 0 : 1;
+			}
+		};
+	} )();
+
+	// JED plural entries are [form0, form1, …] in the locale's own order.
 	const _n = ( single, plural, n ) => {
 		const t = I18N[ single ];
-		if ( Array.isArray( t ) && t.length > 1 ) return 1 === n ? t[ 0 ] : t[ 1 ];
+		if ( Array.isArray( t ) && t.length ) {
+			const i = pluralRule ? pluralRule( n ) : ( 1 === n ? 0 : 1 );
+			return t[ i ] != null && '' !== t[ i ] ? t[ i ] : ( t[ 0 ] || ( 1 === n ? single : plural ) );
+		}
+		// No catalog: English source vocabulary, English rule.
 		return 1 === n ? __( single ) : plural;
 	};
 
