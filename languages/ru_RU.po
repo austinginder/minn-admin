@@ -4,12 +4,12 @@ msgstr ""
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
 "PO-Revision-Date: 2026-08-14 02:49+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
-"Language-Team: German\n"
+"Language-Team: Russian\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Language: de_DE\n"
-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"Language: ru_RU\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
 "X-Generator: minn-admin/bin/i18n\n"
 
 #: includes/adapters/acf.php:24
@@ -18,11 +18,11 @@ msgstr ""
 #: assets/js/app.js:14413
 #: assets/js/app.js:32438
 msgid "Custom fields"
-msgstr "Individuelle Felder"
+msgstr "Произвольные поля"
 
 #: includes/adapters/asset-cleanup.php:129
 msgid "Google Fonts"
-msgstr "Google Fonts"
+msgstr "Шрифты Google"
 
 #: includes/adapters/cf7-flamingo.php:151
 #: includes/adapters/cf7-flamingo.php:199
@@ -35,7 +35,7 @@ msgstr "Google Fonts"
 #: includes/adapters/gravity-forms.php:134
 #: includes/adapters/network.php:246
 msgid "Mark as spam"
-msgstr "Als Spam markieren"
+msgstr "Отметить как спамера"
 
 #: includes/adapters/cf7-flamingo.php:157
 #: includes/adapters/everest-forms.php:468
@@ -47,7 +47,7 @@ msgstr "Als Spam markieren"
 #: includes/adapters/wpforms.php:344
 #: assets/js/app.js:4759
 msgid "Not spam"
-msgstr "Kein Spam"
+msgstr "Не спамер"
 
 #: includes/adapters/cf7-flamingo.php:177
 #: includes/adapters/cf7-flamingo.php:185
@@ -76,60 +76,60 @@ msgstr "Kein Spam"
 #: assets/js/app.js:4135
 #: assets/js/app.js:4682
 msgid "Delete permanently"
-msgstr "Endgültig löschen"
+msgstr "Удалить навсегда"
 
 #: includes/adapters/licenses.php:4307
 msgid "Unknown action."
-msgstr "Diese Aktion ist unbekannt."
+msgstr "Неизвестное действие."
 
 #: includes/adapters/network.php:174
 #: includes/adapters/network.php:413
 #: includes/adapters/network.php:582
 #: includes/adapters/network.php:1352
 msgid "Sites"
-msgstr "Websites"
+msgstr "Сайты"
 
 #: includes/adapters/network.php:177
 #: includes/adapters/network.php:1364
 #: assets/js/app.js:1933
 #: assets/js/app.js:2174
 msgid "Network"
-msgstr "Netzwerk"
+msgstr "Сеть"
 
 #: includes/adapters/network.php:189
 msgid "All sites"
-msgstr "Alle Websites"
+msgstr "Все сайты"
 
 #: includes/adapters/network.php:191
 msgid "Public"
-msgstr "Öffentlich"
+msgstr "Общедоступный"
 
 #: includes/adapters/network.php:192
 msgid "Archived"
-msgstr "Archiviert"
+msgstr "Архивирован"
 
 #: includes/adapters/network.php:193
 msgid "Spam"
-msgstr "Spam"
+msgstr "Спам"
 
 #: includes/adapters/network.php:194
 msgid "Deleted"
-msgstr "Gelöscht"
+msgstr "Удалено"
 
 #: includes/adapters/network.php:198
 #: assets/js/app.js:757
 msgid "Site"
-msgstr "Website"
+msgstr "Сайт"
 
 #: includes/adapters/network.php:199
 #: includes/adapters/network.php:211
 #: assets/js/app.js:30134
 msgid "Address"
-msgstr "Adresse"
+msgstr "Адрес"
 
 #: includes/adapters/network.php:201
 msgid "Created"
-msgstr "Erstellt"
+msgstr "Создан"
 
 #: includes/adapters/network.php:202
 #: includes/adapters/network.php:584
@@ -147,37 +147,37 @@ msgstr "Erstellt"
 #: assets/js/app.js:30189
 #: assets/js/app.js:30229
 msgid "Status"
-msgstr "Zustand"
+msgstr "Состояние"
 
 #: includes/adapters/network.php:205
 msgid "Add site"
-msgstr "Website hinzufügen"
+msgstr "Добавить сайт"
 
 #: includes/adapters/network.php:216
 #: assets/js/app.js:16042
 msgid "Site title"
-msgstr "Website-Titel"
+msgstr "Название сайта"
 
 #: includes/adapters/network.php:259
 msgid "Delete site"
-msgstr "Website löschen"
+msgstr "Удалить сайт"
 
 #: includes/adapters/network.php:362
 msgid "Anyone can register"
-msgstr "Jeder kann sich registrieren"
+msgstr "Любой может зарегистрироваться"
 
 #: includes/adapters/network.php:387
 msgid "Uploads"
-msgstr "Uploads"
+msgstr "Загрузки"
 
 #: includes/adapters/network.php:423
 msgid "Network admin email"
-msgstr "E-Mail-Adresse des Netzwerkadministrators"
+msgstr "E-mail администратора сети"
 
 #: includes/adapters/network.php:542
 #: includes/adapters/network.php:547
 msgid "Network settings"
-msgstr "Netzwerk-Einstellungen"
+msgstr "Параметры сети"
 
 #: includes/adapters/network.php:580
 #: assets/js/app.js:5262
@@ -193,7 +193,7 @@ msgstr "Netzwerk-Einstellungen"
 #: assets/js/app.js:30131
 #: assets/js/app.js:30184
 msgid "Name"
-msgstr "Name"
+msgstr "Название"
 
 #: includes/adapters/network.php:581
 #: assets/js/app.js:5248
@@ -206,40 +206,40 @@ msgstr "Name"
 #: assets/js/app.js:33790
 #: assets/js/app.js:34163
 msgid "Email"
-msgstr "E-Mail"
+msgstr "Email"
 
 #: includes/adapters/network.php:1384
 msgid "closed"
-msgstr "Geschlossen"
+msgstr "закрыты"
 
 #: includes/adapters/page-builders.php:285
 msgid "Untitled"
-msgstr "Ohne Titel"
+msgstr "Без названия"
 
 #: includes/adapters/rewrite-rules-inspector.php:219
 #: assets/js/app.js:16150
 msgid "Permalink structure"
-msgstr "Permalink-Struktur"
+msgstr "Структура постоянных ссылок"
 
 #: includes/adapters/site-status.php:395
 #: includes/adapters/site-status.php:403
 #: includes/adapters/site-status.php:411
 #: includes/adapters/site-status.php:419
 msgid "Site visibility"
-msgstr "Sichtbarkeit der Website"
+msgstr "Видимость сайта"
 
 #: includes/adapters/wp-crontrol.php:268
 msgid "Priority "
-msgstr "Priorität "
+msgstr "Приоритет "
 
 #: includes/class-minn-admin-rest.php:2519
 #: assets/js/app.js:772
 msgid "Pages"
-msgstr "Seiten"
+msgstr "Страницы"
 
 #: includes/class-minn-admin-rest.php:2521
 msgid "published"
-msgstr "Veröffentlicht"
+msgstr "Опубликовано"
 
 #: includes/class-minn-admin-rest.php:2533
 #: includes/class-minn-admin-surfaces.php:248
@@ -248,176 +248,176 @@ msgstr "Veröffentlicht"
 #: assets/js/app.js:30167
 #: assets/js/app.js:33774
 msgid "Users"
-msgstr "Benutzer"
+msgstr "Пользователи"
 
 #: includes/class-minn-admin-rest.php:2535
 msgid "registered"
-msgstr "Registriert"
+msgstr "Зарегистрирован"
 
 #: includes/class-minn-admin-rest.php:2539
 #: includes/class-minn-admin-surfaces.php:242
 #: assets/js/app.js:742
 #: assets/js/app.js:1618
 msgid "Comments"
-msgstr "Kommentare"
+msgstr "Комментарии"
 
 #: includes/class-minn-admin-rest.php:3578
 msgid "Translation update failed."
-msgstr "Die Aktualisierung der Übersetzung ist fehlgeschlagen."
+msgstr "Обновление перевода не удалось."
 
 #: includes/class-minn-admin-rest.php:4750
 #: includes/class-minn-admin-rest.php:4772
 msgid "Theme not found."
-msgstr "Das Theme wurde nicht gefunden."
+msgstr "Тема не найдена."
 
 #: includes/class-minn-admin-rest.php:6120
 msgid "WordPress version"
-msgstr "WordPress-Version"
+msgstr "Версия WordPress"
 
 #: includes/class-minn-admin-rest.php:6128
 msgid "PHP version"
-msgstr "PHP-Version"
+msgstr "Версия PHP"
 
 #: includes/class-minn-admin-rest.php:6140
 msgid "Persistent object cache"
-msgstr "Persistenter Objekt-Cache"
+msgstr "Постоянный кеш объектов"
 
 #: includes/class-minn-admin-surfaces.php:240
 #: assets/js/app.js:740
 #: assets/js/app.js:1614
 msgid "Content"
-msgstr "Inhalt"
+msgstr "Содержимое"
 
 #: includes/class-minn-admin-surfaces.php:241
 #: assets/js/app.js:741
 #: assets/js/app.js:1615
 msgid "Media"
-msgstr "Medien"
+msgstr "Медиафайлы"
 
 #: includes/class-minn-admin-surfaces.php:249
 #: assets/js/app.js:752
 #: assets/js/app.js:1681
 #: assets/js/app.js:14451
 msgid "Terms"
-msgstr "Begriffe"
+msgstr "термины"
 
 #: includes/class-minn-admin-surfaces.php:250
 #: assets/js/app.js:753
 #: assets/js/app.js:1668
 msgid "Menus"
-msgstr "Menüs"
+msgstr "Меню"
 
 #: includes/class-minn-admin-surfaces.php:251
 #: assets/js/app.js:754
 #: assets/js/app.js:1670
 msgid "Widgets"
-msgstr "Widgets"
+msgstr "Виджеты"
 
 #: includes/class-minn-admin-surfaces.php:254
 #: assets/js/app.js:759
 msgid "Database"
-msgstr "Datenbank"
+msgstr "База данных"
 
 #: includes/class-minn-admin-surfaces.php:256
 #: assets/js/app.js:757
 #: assets/js/app.js:1685
 msgid "Settings"
-msgstr "Einstellungen"
+msgstr "Настройки"
 
 #: includes/class-minn-admin.php:44
 msgid "Sorry, you are not allowed to manage plugins for this site."
-msgstr "Du bist leider nicht berechtigt, Plugins dieser Website zu verwalten."
+msgstr "К сожалению, вы не имеете права управлять плагинами для этого сайта."
 
 #: includes/class-minn-admin.php:57
 msgid "Plugin not found."
-msgstr "Das Plugin wurde nicht gefunden."
+msgstr "Плагин не найден."
 
 #: includes/class-minn-admin.php:96
 msgid "Sorry, you are not allowed to manage this plugin."
-msgstr "Du bist leider nicht berechtigt, dieses Plugin zu verwalten."
+msgstr "К сожалению, вам не разрешено обновлять этот плагин"
 
 #: includes/class-minn-admin.php:169
 msgid "Site default"
-msgstr "Website-Einstellung"
+msgstr "Основной язык сайта"
 
 #: assets/js/app.js:421
 msgid "Pagination"
-msgstr "Seitennummerierung"
+msgstr "Пагинация"
 
 #: assets/js/app.js:423
 msgid "Previous page"
-msgstr "Vorherige Seite"
+msgstr "Предыдущая страница"
 
 #: assets/js/app.js:425
 msgid "Next page"
-msgstr "Nächste Seite"
+msgstr "Следующая страница"
 
 #: assets/js/app.js:531
 #: assets/js/app.js:16247
 msgid "Retry"
-msgstr "Erneut versuchen"
+msgstr "Повторить"
 
 #: assets/js/app.js:738
 #: assets/js/app.js:1613
 #: assets/js/app.js:2156
 msgid "Overview"
-msgstr "Übersicht"
+msgstr "Общая информация"
 
 #: assets/js/app.js:738
 msgid "Dashboard"
-msgstr "Dashboard"
+msgstr "Консоль"
 
 #: assets/js/app.js:741
 msgid "Library"
-msgstr "Mediathek"
+msgstr "Медиатека"
 
 #: assets/js/app.js:744
 #: assets/js/app.js:6320
 #: assets/js/app.js:21392
 msgid "Order"
-msgstr "Reihenfolge"
+msgstr "Порядок"
 
 #: assets/js/app.js:750
 #: assets/js/app.js:751
 msgid "People"
-msgstr "Leute"
+msgstr "Люди"
 
 #: assets/js/app.js:751
 #: assets/js/app.js:30412
 msgid "Edit user"
-msgstr "Benutzer bearbeiten"
+msgstr "Редактирование пользователя"
 
 #: assets/js/app.js:753
 msgid "Navigation"
-msgstr "Navigation"
+msgstr "Навигация"
 
 #: assets/js/app.js:755
 msgid "Installed"
-msgstr "Installiert"
+msgstr "Установлен"
 
 #: assets/js/app.js:760
 msgid "Editor"
-msgstr "Editor"
+msgstr "Редактор"
 
 #: assets/js/app.js:760
 #: assets/js/app.js:30039
 #: assets/js/app.js:30192
 msgid "Draft"
-msgstr "Entwurf"
+msgstr "Черновик"
 
 #: assets/js/app.js:769
 msgid "Trash"
-msgstr "Papierkorb"
+msgstr "Корзина"
 
 #: assets/js/app.js:771
 #: assets/js/app.js:778
 #: assets/js/app.js:9190
 msgid "Posts"
-msgstr "Beiträge"
+msgstr "Записи"
 
 #: assets/js/app.js:779
 msgid "pages"
-msgstr "Seiten"
+msgstr "Страницы"
 
 #: assets/js/app.js:887
 #: assets/js/app.js:4795
@@ -437,124 +437,124 @@ msgstr "Seiten"
 #: assets/js/app.js:30574
 #: assets/js/app.js:30608
 msgid "Cancel"
-msgstr "Abbrechen"
+msgstr "Отмена"
 
 #: assets/js/app.js:943
 #: assets/js/app.js:13679
 #: assets/js/app.js:29125
 msgid "Update WordPress"
-msgstr "WordPress aktualisieren"
+msgstr "Обновить WordPress"
 
 #: assets/js/app.js:1040
 #: assets/js/app.js:17522
 #: assets/js/app.js:21563
 msgid "Replace image"
-msgstr "Bild ersetzen"
+msgstr "Заменить изображение"
 
 #: assets/js/app.js:1042
 #: assets/js/app.js:21565
 msgid "Set image"
-msgstr "Bild auswählen"
+msgstr "Задать изображение"
 
 #: assets/js/app.js:1391
 msgid "Post"
-msgstr "Beitrag"
+msgstr "Запись"
 
 #: assets/js/app.js:1392
 msgid "Page"
-msgstr "Seite"
+msgstr "Страница"
 
 #: assets/js/app.js:1393
 msgid "Pattern"
-msgstr "Vorlage"
+msgstr "Паттерн"
 
 #: assets/js/app.js:1928
 msgid "Search sites…"
-msgstr "Websites durchsuchen…"
+msgstr "Поиск сайтов…"
 
 #: assets/js/app.js:2168
 msgid "Search…"
-msgstr "Suchen…"
+msgstr "Поиск…"
 
 #: assets/js/app.js:2172
 #: assets/js/app.js:14815
 msgid "Tools"
-msgstr "Werkzeuge"
+msgstr "Инструменты"
 
 #: assets/js/app.js:2190
 #: assets/js/app.js:29481
 msgid "Log out"
-msgstr "Abmelden"
+msgstr "Выйти"
 
 #: assets/js/app.js:2204
 msgid "View site"
-msgstr "Website anzeigen"
+msgstr "Посмотреть сайт"
 
 #: assets/js/app.js:2207
 #: assets/js/app.js:29263
 msgid "Notifications"
-msgstr "Benachrichtigungen"
+msgstr "Уведомления"
 
 #: assets/js/app.js:2210
 msgid "New post"
-msgstr "Neuer Beitrag"
+msgstr "Новая запись"
 
 #: assets/js/app.js:2210
 msgid "New"
-msgstr "Neu"
+msgstr "Добавить"
 
 #: assets/js/app.js:2403
 msgid "Light"
-msgstr "Hell"
+msgstr "Светлая"
 
 #: assets/js/app.js:2403
 msgid "Dark"
-msgstr "Dunkel"
+msgstr "Тёмная"
 
 #: assets/js/app.js:2670
 msgid "light"
-msgstr "Hell"
+msgstr "Светлая"
 
 #: assets/js/app.js:2670
 msgid "dark"
-msgstr "Dunkel"
+msgstr "Тёмная"
 
 #: assets/js/app.js:2676
 msgid "Custom"
-msgstr "Individuell"
+msgstr "Пользовательский"
 
 #: assets/js/app.js:2844
 msgid "Store"
-msgstr "Shop"
+msgstr "Магазин"
 
 #: assets/js/app.js:3201
 msgid "Patterns"
-msgstr "Vorlagen"
+msgstr "Паттерны"
 
 #: assets/js/app.js:3479
 msgid "View trash"
-msgstr "Papierkorb anzeigen"
+msgstr "Посмотреть корзину"
 
 #: assets/js/app.js:3482
 #: assets/js/app.js:3592
 msgid "All categories"
-msgstr "Alle Kategorien"
+msgstr "Все рубрики"
 
 #: assets/js/app.js:3483
 #: assets/js/app.js:3597
 msgid "All tags"
-msgstr "Alle Schlagwörter"
+msgstr "Все метки"
 
 #: assets/js/app.js:3498
 msgid "Author"
-msgstr "Autor"
+msgstr "Автор"
 
 #. translators: %s: the title or name of the row being selected.
 #: assets/js/app.js:3502
 #: assets/js/app.js:8340
 #: assets/js/app.js:9667
 msgid "Select %s"
-msgstr "%s auswählen"
+msgstr "Выбрать %s"
 
 #: assets/js/app.js:3517
 #: assets/js/app.js:3822
@@ -562,25 +562,25 @@ msgstr "%s auswählen"
 #: assets/js/app.js:33883
 #: assets/js/app.js:34284
 msgid "Restore"
-msgstr "Wiederherstellen"
+msgstr "Восстановить"
 
 #: assets/js/app.js:3518
 #: assets/js/app.js:26099
 #: assets/js/app.js:26105
 #: assets/js/app.js:30082
 msgid "Delete"
-msgstr "Löschen"
+msgstr "Удалить"
 
 #: assets/js/app.js:3519
 #: assets/js/app.js:9199
 #: assets/js/app.js:9675
 #: assets/js/app.js:11276
 msgid "Actions"
-msgstr "Aktionen"
+msgstr "Действия"
 
 #: assets/js/app.js:3668
 msgid "Move to trash"
-msgstr "In den Papierkorb verschieben"
+msgstr "Удалить"
 
 #: assets/js/app.js:3824
 #: assets/js/app.js:3834
@@ -592,19 +592,19 @@ msgstr "In den Papierkorb verschieben"
 #: assets/js/app.js:15039
 #: assets/js/app.js:21050
 msgid "Clear"
-msgstr "Zurücksetzen"
+msgstr "Очистить"
 
 #: assets/js/app.js:3829
 #: assets/js/app.js:3851
 #: assets/js/app.js:8438
 #: assets/js/app.js:8451
 msgid "Set status…"
-msgstr "Status festlegen…"
+msgstr "Установить статус…"
 
 #: assets/js/app.js:3829
 #: assets/js/app.js:8438
 msgid "Set status"
-msgstr "Status festlegen"
+msgstr "Установить статус"
 
 #: assets/js/app.js:3832
 #: assets/js/app.js:8445
@@ -614,86 +614,86 @@ msgstr "Status festlegen"
 #: assets/js/app.js:26484
 #: assets/js/app.js:26662
 msgid "Apply"
-msgstr "Anwenden"
+msgstr "Применить"
 
 #: assets/js/app.js:4236
 msgid "Unattached"
-msgstr "Nicht verknüpft"
+msgstr "Неприкреплённые"
 
 #: assets/js/app.js:4240
 #: assets/js/app.js:4419
 msgid "All dates"
-msgstr "Alle Daten"
+msgstr "Все даты"
 
 #: assets/js/app.js:4254
 msgid "Grid"
-msgstr "Raster"
+msgstr "Сетка"
 
 #: assets/js/app.js:4255
 msgid "List"
-msgstr "Liste"
+msgstr "Список"
 
 #: assets/js/app.js:4326
 #: assets/js/app.js:4337
 #: assets/js/app.js:4776
 msgid "Select"
-msgstr "Auswählen"
+msgstr "Выбрать"
 
 #: assets/js/app.js:4458
 msgid "Copy URL"
-msgstr "URL kopieren"
+msgstr "Копировать URL"
 
 #: assets/js/app.js:4463
 #: assets/js/app.js:29867
 msgid "Edit image"
-msgstr "Bild bearbeiten"
+msgstr "Редактировать изображение"
 
 #: assets/js/app.js:4488
 msgid "Move"
-msgstr "Verschieben"
+msgstr "Переместить"
 
 #: assets/js/app.js:4802
 msgid "Author name"
-msgstr "Name des Autors"
+msgstr "Имя автора записи"
 
 #: assets/js/app.js:4807
 #: assets/js/app.js:11955
 #: assets/js/app.js:29864
 #: assets/js/app.js:30390
 msgid "Save"
-msgstr "Speichern"
+msgstr "Сохранить"
 
 #: assets/js/app.js:4853
 msgid "View post"
-msgstr "Beitrag anzeigen"
+msgstr "Просмотреть запись"
 
 #: assets/js/app.js:4868
 msgid "Delete this comment permanently?"
-msgstr "Diesen Kommentar endgültig löschen?"
+msgstr "Удалить этот комментарий навсегда?"
 
 #: assets/js/app.js:5245
 #: assets/js/app.js:30225
 #: assets/js/app.js:33824
 #: assets/js/app.js:34198
 msgid "First name"
-msgstr "Vorname"
+msgstr "Имя"
 
 #: assets/js/app.js:5246
 #: assets/js/app.js:30226
 #: assets/js/app.js:33828
 #: assets/js/app.js:34202
 msgid "Last name"
-msgstr "Nachname"
+msgstr "Фамилия"
 
 #: assets/js/app.js:5255
 #: assets/js/app.js:5276
 msgid "City"
-msgstr "Stadt"
+msgstr "Город"
 
 #: assets/js/app.js:5259
 #: assets/js/app.js:5280
 msgid "Country"
-msgstr "Land"
+msgstr "Страна"
 
 #: assets/js/app.js:5331
 #: assets/js/app.js:5696
@@ -707,26 +707,26 @@ msgstr "Land"
 #: assets/js/app.js:34190
 #: assets/js/app.js:34218
 msgid "Save changes"
-msgstr "Änderungen speichern"
+msgstr "Сохранить изменения"
 
 #: assets/js/app.js:5336
 #: assets/js/app.js:29929
 msgid "Payment"
-msgstr "Zahlung"
+msgstr "Оплата"
 
 #: assets/js/app.js:5599
 msgid "Recording…"
-msgstr "Aufnahme…"
+msgstr "запись…"
 
 #: assets/js/app.js:6164
 msgid "Analytics"
-msgstr "Analysedienste"
+msgstr "Аналитика"
 
 #: assets/js/app.js:6320
 #: assets/js/app.js:14495
 #: assets/js/app.js:29935
 msgid "Items"
-msgstr "Einträge"
+msgstr "элементов"
 
 #: assets/js/app.js:6809
 #: assets/js/app.js:7004
@@ -742,61 +742,61 @@ msgstr "Einträge"
 #: assets/js/app.js:25234
 #: assets/js/app.js:26343
 msgid "Remove"
-msgstr "Entfernen"
+msgstr "Удалить"
 
 #: assets/js/app.js:6982
 msgid "Search categories…"
-msgstr "Kategorien suchen…"
+msgstr "Поиск рубрик…"
 
 #: assets/js/app.js:7002
 msgid "File name"
-msgstr "Dateiname"
+msgstr "Имя файла"
 
 #: assets/js/app.js:7003
 msgid "File URL"
-msgstr "Datei-URL"
+msgstr "Ссылка на файл"
 
 #: assets/js/app.js:7333
 #: assets/js/app.js:7546
 msgid "Pending review"
-msgstr "Ausstehende Überprüfung"
+msgstr "На утверждении"
 
 #: assets/js/app.js:7362
 #: assets/js/app.js:21339
 msgid "Categories"
-msgstr "Kategorien"
+msgstr "Рубрики"
 
 #: assets/js/app.js:7371
 #: assets/js/app.js:7407
 #: assets/js/app.js:7408
 #: assets/js/app.js:30187
 msgid "Optional"
-msgstr "Optional"
+msgstr "Опционально"
 
 #: assets/js/app.js:7395
 #: assets/js/app.js:25179
 msgid "Images"
-msgstr "Bilder"
+msgstr "Изображения"
 
 #: assets/js/app.js:7398
 msgid "Add images…"
-msgstr "Bilder hinzufügen…"
+msgstr "Добавить…"
 
 #: assets/js/app.js:7429
 msgid "Dimensions"
-msgstr "Maße"
+msgstr "Размеры"
 
 #: assets/js/app.js:7431
 msgid "Length"
-msgstr "Länge"
+msgstr "Продолжительность"
 
 #: assets/js/app.js:7432
 msgid "Width"
-msgstr "Breite"
+msgstr "Ширина"
 
 #: assets/js/app.js:7433
 msgid "Height"
-msgstr "Höhe"
+msgstr "Высота"
 
 #: assets/js/app.js:7445
 #: assets/js/app.js:9190
@@ -805,54 +805,54 @@ msgstr "Höhe"
 #: assets/js/app.js:30733
 #: assets/js/app.js:30805
 msgid "Slug"
-msgstr "Titelform"
+msgstr "Ярлык"
 
 #: assets/js/app.js:7465
 msgid "Never"
-msgstr "Noch nie"
+msgstr "Никогда"
 
 #: assets/js/app.js:7470
 msgid "Advanced"
-msgstr "Erweitert"
+msgstr "Дополнительно"
 
 #: assets/js/app.js:7476
 msgid "Menu order"
-msgstr "Menüreihenfolge"
+msgstr "Порядок меню"
 
 #: assets/js/app.js:7482
 msgid "Attributes"
-msgstr "Attribute"
+msgstr "Атрибуты"
 
 #: assets/js/app.js:7552
 msgid "Do not allow"
-msgstr "Nicht erlauben"
+msgstr "Запретить"
 
 #: assets/js/app.js:7630
 #: assets/js/app.js:24363
 #: assets/js/app.js:26665
 msgid "Remove image"
-msgstr "Bild entfernen"
+msgstr "Удалить изображение"
 
 #: assets/js/app.js:7674
 #: assets/js/app.js:20744
 #: assets/js/app.js:22031
 msgid "Replace"
-msgstr "Ersetzen"
+msgstr "Заменить"
 
 #: assets/js/app.js:7703
 #: assets/js/app.js:24712
 msgid "Add"
-msgstr "Hinzufügen"
+msgstr "Добавить"
 
 #: assets/js/app.js:7721
 msgid "Visible"
-msgstr "Sichtbar"
+msgstr "Видимый"
 
 #: assets/js/app.js:8725
 #: assets/js/app.js:30028
 #: assets/js/app.js:30046
 msgid "Code"
-msgstr "Code"
+msgstr "Код"
 
 #: assets/js/app.js:8725
 #: assets/js/app.js:14451
@@ -860,7 +860,7 @@ msgstr "Code"
 #: assets/js/app.js:15592
 #: assets/js/app.js:30048
 msgid "Type"
-msgstr "Typ"
+msgstr "Тип"
 
 #: assets/js/app.js:8908
 #: assets/js/app.js:9661
@@ -869,58 +869,58 @@ msgstr "Typ"
 #: assets/js/app.js:33794
 #: assets/js/app.js:34167
 msgid "Role"
-msgstr "Rolle"
+msgstr "Роль"
 
 #: assets/js/app.js:8908
 #: assets/js/app.js:30123
 msgid "Registered"
-msgstr "Registriert"
+msgstr "Зарегистрирован"
 
 #: assets/js/app.js:9248
 msgid "View posts"
-msgstr "Beiträge anzeigen"
+msgstr "Просмотр записей"
 
 #: assets/js/app.js:9309
 #: assets/js/app.js:21380
 msgid "Parent"
-msgstr "Übergeordnet"
+msgstr "Родитель"
 
 #: assets/js/app.js:9323
 #: assets/js/app.js:29859
 #: assets/js/app.js:30043
 msgid "Description"
-msgstr "Beschreibung"
+msgstr "Описание"
 
 #: assets/js/app.js:9599
 #: assets/js/app.js:9642
 #: assets/js/app.js:30601
 msgid "Search users…"
-msgstr "Benutzer suchen…"
+msgstr "Поиск пользователей…"
 
 #: assets/js/app.js:9680
 msgid "No users found."
-msgstr "Es wurden keine Benutzer gefunden."
+msgstr "Пользователей не найдено."
 
 #: assets/js/app.js:9783
 msgid "View user"
-msgstr "Benutzer anzeigen"
+msgstr "Просмотр пользователя"
 
 #: assets/js/app.js:9813
 msgid "Send password reset"
-msgstr "Passwort zurücksetzen senden"
+msgstr "Послать информацию сброса пароля"
 
 #: assets/js/app.js:10867
 msgid "Post ID"
-msgstr "Beitrags-ID"
+msgstr "ID записи"
 
 #: assets/js/app.js:11654
 #: assets/js/app.js:16823
 msgid "Settings saved"
-msgstr "Die Einstellungen wurden gespeichert"
+msgstr "Настройки сохранены"
 
 #: assets/js/app.js:11819
 msgid "Menu created"
-msgstr "Menü erstellt"
+msgstr "Меню создано"
 
 #: assets/js/app.js:11967
 #: assets/js/app.js:12310
@@ -928,7 +928,7 @@ msgstr "Menü erstellt"
 #: assets/js/app.js:25232
 #: assets/js/app.js:25283
 msgid "Move up"
-msgstr "Nach oben verschieben"
+msgstr "Переместить вверх"
 
 #: assets/js/app.js:11968
 #: assets/js/app.js:12311
@@ -936,624 +936,624 @@ msgstr "Nach oben verschieben"
 #: assets/js/app.js:25233
 #: assets/js/app.js:25284
 msgid "Move down"
-msgstr "Nach unten verschieben"
+msgstr "Переместить вниз"
 
 #: assets/js/app.js:11977
 msgid "Add to menu"
-msgstr "Zum Menü hinzufügen"
+msgstr "Добавить в меню"
 
 #: assets/js/app.js:12166
 msgid "Item updated"
-msgstr "Das Element wurde aktualisiert"
+msgstr "Элемент обновлён"
 
 #: assets/js/app.js:12222
 msgid "Delete menu"
-msgstr "Menü löschen"
+msgstr "Удалить меню"
 
 #: assets/js/app.js:12225
 msgid "Menu deleted"
-msgstr "Menü gelöscht"
+msgstr "Меню удалено"
 
 #: assets/js/app.js:12316
 msgid "Edit"
-msgstr "Bearbeiten"
+msgstr "Изменить"
 
 #: assets/js/app.js:12589
 #: assets/js/app.js:29159
 msgid "Updating…"
-msgstr "Aktualisierung…"
+msgstr "Обновляем…"
 
 #: assets/js/app.js:12804
 #: assets/js/app.js:30655
 msgid "Plugins"
-msgstr "Plugins"
+msgstr "Плагины"
 
 #: assets/js/app.js:12805
 msgid "Themes"
-msgstr "Themes"
+msgstr "Темы"
 
 #: assets/js/app.js:12901
 msgid "Invalid"
-msgstr "Ungültig"
+msgstr "Ключ неверен"
 
 #: assets/js/app.js:12903
 msgid "Unknown"
-msgstr "Unbekannt"
+msgstr "Неизвестно"
 
 #: assets/js/app.js:12923
 msgid "Activate…"
-msgstr "Aktivieren…"
+msgstr "Активировать…"
 
 #: assets/js/app.js:12929
 msgid "Deactivate"
-msgstr "Deaktivieren"
+msgstr "Деактивировать"
 
 #: assets/js/app.js:13268
 #: assets/js/app.js:14182
 #: assets/js/app.js:16270
 msgid "Activate"
-msgstr "Aktivieren"
+msgstr "Активировать"
 
 #: assets/js/app.js:13441
 #: assets/js/app.js:16098
 msgid "Search engine visibility"
-msgstr "Sichtbarkeit für Suchmaschinen"
+msgstr "Видимость для поисковых систем"
 
 #: assets/js/app.js:13467
 msgid "Undo"
-msgstr "Rückgängig machen"
+msgstr "Отменить"
 
 #: assets/js/app.js:13492
 #: assets/js/app.js:13515
 msgid "Search engines discouraged"
-msgstr "Suchmaschinen ausgeschlossen"
+msgstr "Поисковые системы заблокированы"
 
 #: assets/js/app.js:13765
 msgid "Search plugins…"
-msgstr "Plugins suchen…"
+msgstr "Поиск плагинов…"
 
 #: assets/js/app.js:13796
 msgid "Update"
-msgstr "Aktualisieren"
+msgstr "Обновить"
 
 #: assets/js/app.js:13806
 msgid "Network active"
-msgstr "Netzwerkweit aktiviert"
+msgstr "Активирован для сети"
 
 #: assets/js/app.js:13806
 msgid "Active"
-msgstr "Aktiv"
+msgstr "Активен"
 
 #: assets/js/app.js:13806
 msgid "Inactive"
-msgstr "Inaktiv"
+msgstr "Неактивен"
 
 #: assets/js/app.js:13903
 #: assets/js/app.js:13966
 msgid "Delete plugin"
-msgstr "Plugin löschen"
+msgstr "Удалить плагин"
 
 #: assets/js/app.js:14071
 msgid "Auto"
-msgstr "Automatisch"
+msgstr "Авто"
 
 #: assets/js/app.js:14145
 msgid "Search themes…"
-msgstr "Themes suchen…"
+msgstr "Поиск тем…"
 
 #: assets/js/app.js:14183
 msgid "Live preview"
-msgstr "Live-Vorschau"
+msgstr "Просмотреть"
 
 #: assets/js/app.js:14238
 #: assets/js/app.js:14306
 msgid "Delete theme"
-msgstr "Theme löschen"
+msgstr "Удалить тему"
 
 #: assets/js/app.js:14412
 #: assets/js/app.js:22027
 msgid "Featured image"
-msgstr "Beitragsbild"
+msgstr "Изображение записи"
 
 #: assets/js/app.js:14414
 #: assets/js/app.js:21500
 #: assets/js/app.js:22038
 msgid "Page attributes"
-msgstr "Seiten-Attribute"
+msgstr "Атрибуты страницы"
 
 #: assets/js/app.js:14820
 msgid "Site Health"
-msgstr "Website-Zustand"
+msgstr "Здоровье сайта"
 
 #: assets/js/app.js:14823
 msgid "Export personal data"
-msgstr "Personenbezogene Daten exportieren"
+msgstr "Экспорт персональных данных"
 
 #: assets/js/app.js:14824
 msgid "Erase personal data"
-msgstr "Personenbezogene Daten löschen"
+msgstr "Удаление персональных данных"
 
 #: assets/js/app.js:14968
 #: assets/js/app.js:15306
 msgid "Size"
-msgstr "Größe"
+msgstr "Размер"
 
 #: assets/js/app.js:14993
 msgid "Autoloaded options"
-msgstr "Automatisch geladene Optionen"
+msgstr "Автозагружаемые параметры"
 
 #: assets/js/app.js:15245
 msgid "Rows"
-msgstr "Zeilen"
+msgstr "Строки"
 
 #: assets/js/app.js:15304
 #: assets/js/app.js:26091
 msgid "Table"
-msgstr "Tabelle"
+msgstr "Таблица"
 
 #: assets/js/app.js:15564
 #: assets/js/app.js:15590
 msgid "Columns"
-msgstr "Spalten"
+msgstr "Столбцы"
 
 #: assets/js/app.js:15567
 #: assets/js/app.js:26065
 msgid "Column"
-msgstr "Spalte"
+msgstr "Колонка"
 
 #: assets/js/app.js:15570
 msgid "Default"
-msgstr "Standard"
+msgstr "По умолчанию"
 
 #: assets/js/app.js:15580
 #: assets/js/app.js:15599
 msgid "Yes"
-msgstr "Ja"
+msgstr "Да"
 
 #: assets/js/app.js:15580
 #: assets/js/app.js:15599
 msgid "No"
-msgstr "Nein"
+msgstr "Нет"
 
 #: assets/js/app.js:15589
 msgid "Index"
-msgstr "Index"
+msgstr "Индексная"
 
 #: assets/js/app.js:15664
 #: assets/js/app.js:21893
 msgid "Copy"
-msgstr "Kopieren"
+msgstr "Копировать"
 
 #: assets/js/app.js:15693
 msgid "Day and name"
-msgstr "Tag und Name"
+msgstr "День и название"
 
 #: assets/js/app.js:15694
 msgid "Month and name"
-msgstr "Monat und Name"
+msgstr "Месяц и название"
 
 #: assets/js/app.js:15696
 msgid "Post name"
-msgstr "Beitragsname"
+msgstr "Название записи"
 
 #: assets/js/app.js:16005
 #: assets/js/app.js:16007
 msgid "Site icon"
-msgstr "Website-Icon"
+msgstr "Иконка сайта"
 
 #: assets/js/app.js:16012
 #: assets/js/app.js:16031
 msgid "Choose image"
-msgstr "Bild auswählen"
+msgstr "Выбор изображения"
 
 #: assets/js/app.js:16024
 #: assets/js/app.js:16026
 msgid "Site logo"
-msgstr "Website-Logo"
+msgstr "Логотип сайта"
 
 #: assets/js/app.js:16054
 msgid "Timezone"
-msgstr "Zeitzone"
+msgstr "Часовой пояс"
 
 #: assets/js/app.js:16060
 msgid "Date format"
-msgstr "Datumsformat"
+msgstr "Формат даты"
 
 #: assets/js/app.js:16061
 msgid "Time format"
-msgstr "Zeitformat"
+msgstr "Формат времени"
 
 #: assets/js/app.js:16062
 msgid "Week starts on"
-msgstr "Erster Wochentag"
+msgstr "Первый день недели"
 
 #: assets/js/app.js:16070
 msgid "Site language"
-msgstr "Sprache der Website"
+msgstr "Язык сайта"
 
 #: assets/js/app.js:16096
 msgid "New user default role"
-msgstr "Standardrolle eines neuen Benutzers"
+msgstr "Роль нового пользователя"
 
 #: assets/js/app.js:16098
 msgid "Allow search engines to index this site."
-msgstr "Suchmaschinen dürfen diese Website indexieren."
+msgstr "Разрешить поисковым системам индексировать сайт."
 
 #: assets/js/app.js:16106
 msgid "Your homepage displays"
-msgstr "Deine Homepage zeigt"
+msgstr "На главной странице отображать"
 
 #: assets/js/app.js:16106
 msgid "Latest posts"
-msgstr "Neueste Beiträge"
+msgstr "Последние записи"
 
 #: assets/js/app.js:16106
 msgid "A static page"
-msgstr "Eine statische Seite"
+msgstr "Статическую страницу"
 
 #: assets/js/app.js:16117
 msgid "Posts page"
-msgstr "Beitragsseite"
+msgstr "Страница записей"
 
 #: assets/js/app.js:16118
 msgid "Blog pages show at most"
-msgstr "Blogseiten zeigen maximal"
+msgstr "На страницах блога отображать не более"
 
 #: assets/js/app.js:16130
 msgid "Additional CSS"
-msgstr "Zusätzliches CSS"
+msgstr "Дополнительные стили"
 
 #: assets/js/app.js:16151
 #: assets/js/app.js:16692
 msgid "Custom structure"
-msgstr "Individuelle Struktur"
+msgstr "Произвольно"
 
 #: assets/js/app.js:16159
 msgid "Default post category"
-msgstr "Standard-Beitragskategorie"
+msgstr "Рубрика для записей по умолчанию"
 
 #: assets/js/app.js:16160
 msgid "Default post format"
-msgstr "Standard-Beitragsformat"
+msgstr "Формат записей по умолчанию"
 
 #: assets/js/app.js:16171
 #: assets/js/app.js:21356
 #: assets/js/app.js:21357
 msgid "Allow comments"
-msgstr "Kommentare erlauben"
+msgstr "Разрешить комментарии"
 
 #: assets/js/app.js:16174
 msgid "Users must be registered and logged in to comment."
-msgstr "Benutzer müssen zum Kommentieren registriert und angemeldet sein."
+msgstr "Пользователи должны быть зарегистрированы и авторизованы для комментирования."
 
 #: assets/js/app.js:16175
 msgid "Show avatars"
-msgstr "Avatare anzeigen"
+msgstr "Показывать аватары"
 
 #: assets/js/app.js:16222
 msgid "Disallowed comment keys"
-msgstr "Kommentar-Sperrliste"
+msgstr "Запрещённые ключевые слова комментариев"
 
 #: assets/js/app.js:17464
 msgid "shortcode"
-msgstr "Shortcode"
+msgstr "Шорткод"
 
 #: assets/js/app.js:17465
 msgid "Shortcode"
-msgstr "Shortcode"
+msgstr "Шорткод"
 
 #: assets/js/app.js:17478
 msgid "details"
-msgstr "Details"
+msgstr "Детали"
 
 #: assets/js/app.js:17481
 msgid "Details"
-msgstr "Details"
+msgstr "Детали"
 
 #: assets/js/app.js:17495
 msgid "buttons"
-msgstr "Buttons"
+msgstr "Кнопки"
 
 #: assets/js/app.js:17957
 #: assets/js/app.js:22046
 msgid "Outline"
-msgstr "Kontur"
+msgstr "Контур"
 
 #: assets/js/app.js:20739
 msgid "Match case"
-msgstr "Groß- und Kleinschreibung beachten"
+msgstr "С учётом регистра"
 
 #: assets/js/app.js:20743
 msgid "Replace with"
-msgstr "Ersetzen durch"
+msgstr "Замена"
 
 #: assets/js/app.js:20745
 msgid "All"
-msgstr "Alle"
+msgstr "Все"
 
 #: assets/js/app.js:21045
 msgid "Time"
-msgstr "Zeit"
+msgstr "Время"
 
 #: assets/js/app.js:21051
 msgid "Done"
-msgstr "Fertig"
+msgstr "Готово"
 
 #: assets/js/app.js:21327
 msgid "Permalink"
-msgstr "Permalink"
+msgstr "Постоянная ссылка"
 
 #: assets/js/app.js:21334
 msgid "Format"
-msgstr "Beitragsformat"
+msgstr "Формат"
 
 #: assets/js/app.js:21343
 msgid "Tags"
-msgstr "Schlagwörter"
+msgstr "Метки"
 
 #: assets/js/app.js:21350
 msgid "Excerpt"
-msgstr "Textauszug"
+msgstr "Отрывок"
 
 #: assets/js/app.js:21353
 msgid "Discussion"
-msgstr "Diskussion"
+msgstr "Обсуждение"
 
 #: assets/js/app.js:21386
 msgid "Template"
-msgstr "Template"
+msgstr "Шаблон"
 
 #: assets/js/app.js:21388
 #: assets/js/app.js:21702
 msgid "Default template"
-msgstr "Standard-Template"
+msgstr "Шаблон по умолчанию"
 
 #: assets/js/app.js:22004
 msgid "Publish"
-msgstr "Veröffentlichen"
+msgstr "Опубликовать"
 
 #: assets/js/app.js:22007
 #: assets/js/app.js:33434
 msgid "Saved"
-msgstr "Gespeichert"
+msgstr "Сохранено"
 
 #: assets/js/app.js:22008
 #: assets/js/app.js:22010
 #: assets/js/app.js:30739
 msgid "Visibility"
-msgstr "Sichtbarkeit"
+msgstr "Видимость"
 
 #: assets/js/app.js:22175
 #: assets/js/app.js:35088
 msgid "Draft saved"
-msgstr "Entwurf gespeichert"
+msgstr "Черновик сохранен"
 
 #: assets/js/app.js:22219
 #: assets/js/app.js:22550
 msgid "Dismiss"
-msgstr "Verwerfen"
+msgstr "Закрыть"
 
 #: assets/js/app.js:22355
 msgid "Take over"
-msgstr "Übernehmen"
+msgstr "Перехватить"
 
 #: assets/js/app.js:22613
 #: assets/js/app.js:29853
 #: assets/js/app.js:33432
 #: assets/js/app.js:33433
 msgid "Title"
-msgstr "Titel"
+msgstr "Заголовок"
 
 #: assets/js/app.js:22634
 msgid "Formatting"
-msgstr "Formatierung"
+msgstr "Форматирование"
 
 #: assets/js/app.js:22635
 msgid "Bold"
-msgstr "Fett"
+msgstr "Жирный"
 
 #: assets/js/app.js:22636
 msgid "Italic"
-msgstr "Kursiv"
+msgstr "Курсив"
 
 #: assets/js/app.js:22637
 msgid "Strikethrough"
-msgstr "Durchstreichen"
+msgstr "Перечёркнутый"
 
 #: assets/js/app.js:22639
 #: assets/js/app.js:28049
 msgid "Heading 2"
-msgstr "Überschrift 2"
+msgstr "Заголовок 2"
 
 #: assets/js/app.js:22640
 #: assets/js/app.js:28050
 msgid "Heading 3"
-msgstr "Überschrift 3"
+msgstr "Заголовок 3"
 
 #: assets/js/app.js:22641
 msgid "Quote"
-msgstr "Zitat"
+msgstr "Цитата"
 
 #: assets/js/app.js:22643
 #: assets/js/app.js:28057
 msgid "Bulleted list"
-msgstr "Aufzählungsliste"
+msgstr "Маркированный список"
 
 #: assets/js/app.js:22644
 #: assets/js/app.js:28058
 msgid "Numbered list"
-msgstr "Nummerierte Liste"
+msgstr "Нумерованный список"
 
 #: assets/js/app.js:22645
 msgid "Align center"
-msgstr "Zentrieren"
+msgstr "По центру"
 
 #: assets/js/app.js:22646
 msgid "Align right"
-msgstr "Rechtsbündig"
+msgstr "По правому краю"
 
 #: assets/js/app.js:22647
 #: assets/js/app.js:26469
 msgid "Link"
-msgstr "Link"
+msgstr "Ссылка"
 
 #: assets/js/app.js:22648
 #: assets/js/app.js:31000
 msgid "Insert image"
-msgstr "Bild einfügen"
+msgstr "Вставить изображение"
 
 #: assets/js/app.js:22649
 msgid "Paragraph"
-msgstr "Absatz"
+msgstr "Параграф"
 
 #: assets/js/app.js:22650
 msgid "Clear formatting"
-msgstr "Formatierung entfernen"
+msgstr "Очистить форматирование"
 
 #: assets/js/app.js:24369
 #: assets/js/app.js:26653
 #: assets/js/app.js:29857
 msgid "Caption"
-msgstr "Beschriftung"
+msgstr "Подпись"
 
 #: assets/js/app.js:24712
 msgid "block"
-msgstr "Block"
+msgstr "Блок"
 
 #: assets/js/app.js:25182
 msgid "Replace…"
-msgstr "Ersetzen…"
+msgstr "Заменить…"
 
 #: assets/js/app.js:25197
 msgid "Text"
-msgstr "Text"
+msgstr "Текст"
 
 #: assets/js/app.js:25221
 #: assets/js/app.js:25226
 msgid "text"
-msgstr "Text"
+msgstr "текст"
 
 #: assets/js/app.js:26064
 msgid "Delete row"
-msgstr "Zeile löschen"
+msgstr "Удалить строку"
 
 #: assets/js/app.js:26068
 msgid "Delete column"
-msgstr "Spalte löschen"
+msgstr "Удалить столбец"
 
 #: assets/js/app.js:26103
 msgid "Left"
-msgstr "Links"
+msgstr "Слева"
 
 #: assets/js/app.js:26104
 msgid "Right"
-msgstr "Rechts"
+msgstr "Справа"
 
 #: assets/js/app.js:26109
 msgid "Delete table"
-msgstr "Tabelle löschen"
+msgstr "Удалить таблицу"
 
 #: assets/js/app.js:26337
 msgid "Syntax highlighting"
-msgstr "Syntaxhervorhebung"
+msgstr "Подсветка синтаксиса"
 
 #: assets/js/app.js:26647
 msgid "Image"
-msgstr "Bild"
+msgstr "Изображение"
 
 #: assets/js/app.js:26651
 #: assets/js/app.js:29855
 msgid "Alt text"
-msgstr "Alternativtext"
+msgstr "Атрибут alt"
 
 #: assets/js/app.js:26655
 msgid "Link URL"
-msgstr "Link-URL"
+msgstr "URL ссылки"
 
 #: assets/js/app.js:29254
 msgid "Hide"
-msgstr "Ausblenden"
+msgstr "Скрыть"
 
 #: assets/js/app.js:29399
 msgid "Edit Menus"
-msgstr "Menüs bearbeiten"
+msgstr "Редактировать меню"
 
 #: assets/js/app.js:29479
 msgid "Visit site"
-msgstr "Website aufrufen"
+msgstr "Перейти на сайт"
 
 #: assets/js/app.js:29765
 msgid "Save widget"
-msgstr "Widget speichern"
+msgstr "Сохранить виджет"
 
 #: assets/js/app.js:29866
 msgid "Open"
-msgstr "Offen"
+msgstr "открыты"
 
 #: assets/js/app.js:29922
 msgid "Schedule"
-msgstr "Planen"
+msgstr "Запланировать"
 
 #: assets/js/app.js:29968
 msgid "Close"
-msgstr "Schließen"
+msgstr "Закрыть"
 
 #: assets/js/app.js:30038
 #: assets/js/app.js:30191
 msgid "Published"
-msgstr "Veröffentlicht"
+msgstr "Опубликовано"
 
 #: assets/js/app.js:30060
 msgid "None"
-msgstr "Keine"
+msgstr "Нет"
 
 #: assets/js/app.js:30119
 msgid "Profile"
-msgstr "Profil"
+msgstr "Профиль"
 
 #: assets/js/app.js:30121
 #: assets/js/app.js:30426
 msgid "Username"
-msgstr "Benutzername"
+msgstr "Имя пользователя"
 
 #: assets/js/app.js:30275
 #: assets/js/app.js:30491
 msgid "Subject"
-msgstr "Thema"
+msgstr "Тема"
 
 #: assets/js/app.js:30419
 msgid "Add user"
-msgstr "Benutzer hinzufügen"
+msgstr "Добавить пользователя"
 
 #: assets/js/app.js:30456
 #: assets/js/app.js:33887
 #: assets/js/app.js:34288
 msgid "Sessions"
-msgstr "Sitzungen"
+msgstr "Сессии"
 
 #: assets/js/app.js:30553
 msgid "Add existing user"
-msgstr "Bestehenden Benutzer hinzufügen"
+msgstr "Добавить существующего пользователя"
 
 #: assets/js/app.js:30560
 msgid "Email or username"
-msgstr "E-Mail-Adresse oder Benutzername"
+msgstr "E-mail или имя пользователя"
 
 #: assets/js/app.js:30655
 msgid "Done."
-msgstr "Fertig."
+msgstr "Готово."
 
 #: assets/js/app.js:30804
 msgid "Genre"
-msgstr "Genre"
+msgstr "Жанр"
 
 #: assets/js/app.js:30806
 msgid "genre"
-msgstr "Genre"
+msgstr "Жанр"
 
 #: assets/js/app.js:30847
 msgid "Keyboard shortcuts"
-msgstr "Tastaturbefehle"
+msgstr "Горячие клавиши"
 
 #: assets/js/app.js:30874
 msgid "GitHub"
@@ -1561,90 +1561,90 @@ msgstr "GitHub"
 
 #: assets/js/app.js:30933
 msgid "Add plugin"
-msgstr "Plugin hinzufügen"
+msgstr "Добавить плагин"
 
 #: assets/js/app.js:30939
 #: assets/js/app.js:30968
 #: assets/js/app.js:31007
 msgid "browse"
-msgstr "Durchsuchen"
+msgstr "Просмотреть"
 
 #: assets/js/app.js:30962
 msgid "Add theme"
-msgstr "Theme hinzufügen"
+msgstr "Добавить тему"
 
 #: assets/js/app.js:31019
 #: assets/js/app.js:31776
 msgid "Insert gallery"
-msgstr "Galerie einfügen"
+msgstr "Вставить галерею"
 
 #: assets/js/app.js:31559
 #: assets/js/app.js:31959
 msgid "Email sent"
-msgstr "Die E-Mail wurde gesendet"
+msgstr "Email сообщение отправлено"
 
 #: assets/js/app.js:31816
 msgid "Uploading…"
-msgstr "Wird hochgeladen…"
+msgstr "Загрузка…"
 
 #: assets/js/app.js:32056
 msgid "User deleted"
-msgstr "Der Benutzer wurde gelöscht"
+msgstr "Пользователь удалён"
 
 #: assets/js/app.js:33291
 msgid "More"
-msgstr "Mehr"
+msgstr "Тег «Далее»"
 
 #: assets/js/app.js:33439
 msgid "Current"
-msgstr "Aktuell"
+msgstr "Текущий"
 
 #: assets/js/app.js:33447
 #: assets/js/app.js:33508
 msgid "Restore this revision"
-msgstr "Diese Revision wiederherstellen"
+msgstr "Восстановить эту редакцию"
 
 #: assets/js/app.js:33667
 msgid "User created"
-msgstr "Der Benutzer wurde erstellt"
+msgstr "Пользователь создан"
 
 #: assets/js/app.js:33670
 #: assets/js/app.js:33960
 msgid "User updated"
-msgstr "Der Benutzer wurde aktualisiert"
+msgstr "Информация о пользователе обновлена"
 
 #: assets/js/app.js:33803
 #: assets/js/app.js:34176
 msgid "Language"
-msgstr "Sprache"
+msgstr "Язык"
 
 #: assets/js/app.js:33833
 #: assets/js/app.js:34207
 msgid "Website"
-msgstr "Website"
+msgstr "Сайт"
 
 #: assets/js/app.js:33846
 #: assets/js/app.js:34254
 msgid "Appearance"
-msgstr "Design"
+msgstr "Внешний вид"
 
 #: assets/js/app.js:33881
 #: assets/js/app.js:34282
 msgid "Menu item"
-msgstr "Menüeintrag"
+msgstr "Элемент меню"
 
 #: assets/js/app.js:34222
 msgid "application passwords"
-msgstr "Anwendungspasswörter"
+msgstr "Пароли приложений"
 
 #: assets/js/app.js:34240
 msgid "Revoke"
-msgstr "Widerrufen"
+msgstr "Отозвать"
 
 #: assets/js/app.js:34261
 msgid "Theme"
-msgstr "Theme"
+msgstr "Тема"
 
 #: assets/js/app.js:34399
 msgid "Profile updated"
-msgstr "Das Profil wurde aktualisiert"
+msgstr "Профиль обновлён"
