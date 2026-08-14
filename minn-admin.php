@@ -132,6 +132,19 @@ register_activation_hook( __FILE__, function ( $network_wide ) {
 	if ( $network_wide ) {
 		Minn_Admin::invalidate_network_rewrites();
 	}
+	// Prime language packs. A fresh install ships no catalogs (packs are
+	// separate downloads), so a non-English site would read English until
+	// the next scheduled update check noticed the manifest's translations
+	// and cron installed them, up to half a day later. Clearing the
+	// updater's manifest cache and re-running the plugin update check here
+	// puts the packs into the transient immediately; core's translation
+	// auto-updater installs them on its next pass, and the Updates screen
+	// offers them right away either way. English sites fetch a manifest and
+	// download nothing.
+	delete_transient( 'minn_admin_updater' );
+	if ( function_exists( 'wp_update_plugins' ) ) {
+		wp_update_plugins();
+	}
 } );
 
 register_deactivation_hook( __FILE__, function ( $network_wide ) {
