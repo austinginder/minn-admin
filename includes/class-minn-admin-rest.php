@@ -942,6 +942,25 @@ class Minn_Admin_REST {
 					'permission_callback' => $order_cap,
 				)
 			);
+			// Which orders on a list page belong to a subscription. One request
+			// for the whole page: the alternative is asking WooCommerce for
+			// every order's meta_data, which drags the entire meta bag of every
+			// row across the wire to read one key.
+			register_rest_route(
+				self::NS,
+				'/wc/orders/subscription-relations',
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'wc_order_subscription_relations' ),
+					'permission_callback' => $order_cap,
+					'args'                => array(
+						'ids' => array(
+							'type'     => 'string',
+							'required' => true,
+						),
+					),
+				)
+			);
 		}
 
 		register_rest_route(
@@ -4463,6 +4482,62 @@ class Minn_Admin_REST {
 	 * so a client can't reliably match them back to lines), and whether this
 	 * order's gateway can push money back itself.
 	 */
+	/**
+	 * Map order ids to the subscription they belong to, if any.
+	 *
+	 * WooCommerce Subscriptions owns this relation and answers it through its
+	 * own helper, which knows both storage layouts (post meta and HPOS). We
+	 * never read `_subscription_renewal` ourselves for that reason.
+	 *
+	 * Returns { orderId: { kind, subscription } } and omits unrelated orders
+	 * entirely, so a store without subscriptions answers with an empty object
+	 * rather than a page of nulls.
+	 */
+	public static function wc_order_subscription_relations( WP_REST_Request $request ) {
+		if ( ! function_exists( 'wcs_get_subscriptions_for_order' ) ) {
+			return new \stdClass(); // WCS inactive: nothing relates to anything.
+		}
+		$ids = array_filter( array_map( 'absint', explode( ',', (string) $request['ids'] ) ) );
+		// A list page is 20 rows; the cap is for a caller that asks for more.
+		$ids = array_slice( array_values( array_unique( $ids ) ), 0, 60 );
+		$out = array();
+		foreach ( $ids as $id ) {
+			$found = null;
+			foreach ( array( 'parent', 'renewal', 'resubscribe', 'switch' ) as $kind ) {
+				$subs = wcs_get_subscriptions_for_order( $id, array( 'order_type' => $kind ) );
+				if ( empty( $subs ) ) {
+					continue;
+				}
+				$found = array( $kind, reset( $subs ) );
+				break;
+			}
+			if ( ! $found ) {
+				continue;
+			}
+			list( $kind, $sub ) = $found;
+			$status = $sub->get_status();
+			$out[ (string) $id ] = array(
+				'kind'         => $kind,
+				'subscription' => array(
+					'id'                     => $sub->get_id(),
+					'number'                 => (string) $sub->get_order_number(),
+					'status'                 => $status,
+					'status_label'           => function_exists( 'wcs_get_subscription_status_name' )
+						? wcs_get_subscription_status_name( $status )
+						: $status,
+					'total'                  => wc_format_decimal( $sub->get_total(), wc_get_price_decimals() ),
+					'currency'               => $sub->get_currency(),
+					'billing_period'         => $sub->get_billing_period(),
+					'billing_interval'       => $sub->get_billing_interval(),
+					// WCS returns GMT unless asked otherwise, which is the
+					// shape the rest of the subscription surface reads.
+					'next_payment_date_gmt'  => $sub->get_date( 'next_payment' ) ? $sub->get_date( 'next_payment' ) : null,
+				),
+			);
+		}
+		return empty( $out ) ? new \stdClass() : $out;
+	}
+
 	public static function wc_order_refund_state( WP_REST_Request $request ) {
 		if ( ! function_exists( 'wc_get_order' ) ) {
 			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
