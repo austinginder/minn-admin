@@ -185,6 +185,12 @@
 	const esc = ( s ) => String( s == null ? '' : s ).replace( /[&<>"']/g, ( c ) => ( {
 		'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 	}[ c ] ) );
+	// A handful of translated status sentences intentionally emphasize one
+	// placeholder. Escape the catalog text first, then restore only literal,
+	// attribute-free <b> tags; a modified catalog cannot introduce new markup.
+	const escStrongTranslation = ( s ) => esc( s )
+		.replace( /&lt;b&gt;/gi, '<b>' )
+		.replace( /&lt;\/b&gt;/gi, '</b>' );
 
 	// Escape for a CSS url() STRING, which is one nesting level below HTML.
 	// esc() is the HTML escaper: it turns ' into &#39;, but the HTML parser
@@ -3171,9 +3177,9 @@
 		<div class="minn-dash-grid">
 			<div class="minn-card minn-panel-pad">
 				<div class="minn-chart-head">
-					<div class="minn-panel-title">${ isTraffic ? __( 'Traffic' ) : __( 'Activity' ) }${ isTraffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }</div>
+					<div class="minn-panel-title">${ esc( isTraffic ? __( 'Traffic' ) : __( 'Activity' ) ) }${ isTraffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }</div>
 					<div class="minn-chart-head-actions">
-						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="${ isTraffic ? __( 'Show Activity' ) : __( 'Show Traffic' ) }">⇄</button>` : '' }
+						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="${ esc( isTraffic ? __( 'Show Activity' ) : __( 'Show Traffic' ) ) }">⇄</button>` : '' }
 						<div class="minn-range-tabs">
 							${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ sprintf( /* translators: %s: number of days; "d" abbreviates days. */ esc( __( '%sd' ) ), d ) }</button>` ).join( '' ) }
 						</div>
@@ -14837,7 +14843,7 @@
 			view.innerHTML = `
 			<div class="minn-toolbar">
 				${ tabs }
-				<div class="minn-toolbar-meta">${ sprintf( /* translators: %s: how many post types exist. */ _n( '%s post type', '%s post types', c.types.length ), c.types.length ) }</div>
+				<div class="minn-toolbar-meta">${ sprintf( /* translators: %s: how many post types exist. */ esc( _n( '%s post type', '%s post types', c.types.length ) ), c.types.length ) }</div>
 				<button class="minn-btn-soft" id="minn-add-cpt">${ icon( 'plus' ) } ${ esc( __( 'Add post type' ) ) }</button>
 			</div>
 			<div class="minn-card minn-table">
@@ -22839,7 +22845,7 @@
 		const who = ed.drift.who || __( 'Someone else' );
 		title.insertAdjacentHTML( 'afterend', `
 			<div class="minn-backup-note minn-drift-note" id="minn-drift-note" role="alert">
-				<span>${ sprintf( /* translators: %1$s: display name of the other editor. %2$s: how long ago they saved. */ __( '<b>%1$s</b> saved a newer version while you were locked out (%2$s). Saving your copy would overwrite it.' ), esc( who ), esc( timeAgo( ed.drift.modified ) ) ) }</span>
+				<span>${ sprintf( /* translators: %1$s: display name of the other editor. %2$s: how long ago they saved. */ escStrongTranslation( __( '<b>%1$s</b> saved a newer version while you were locked out (%2$s). Saving your copy would overwrite it.' ) ), esc( who ), esc( timeAgo( ed.drift.modified ) ) ) }</span>
 				<button class="minn-btn-soft" id="minn-drift-load" type="button">${ esc( __( 'Load theirs' ) ) }</button>
 				<button class="minn-x-btn" id="minn-drift-keep" type="button" title="${ esc( __( 'Keep my copy' ) ) }">×</button>
 			</div>` );
@@ -29803,9 +29809,10 @@
 		surfaceNavItems().forEach( ( s ) => {
 			const full = surfaceById( s.id ) || s;
 			const n = surfacesInFamily( s.family || '' ).length;
+			/* This stays plain text until renderPaletteList escapes the complete label. */
+			const providerCount = sprintf( /* translators: %s: how many providers share this surface. */ _n( '%s provider', '%s providers', n ), n );
 			const badge = n > 1
-				/* translators: %s: how many providers share this surface. */
-				? ` (${ full.sub || full.id } · ${ sprintf( _n( '%s provider', '%s providers', n ), n ) })`
+				? ` (${ full.sub || full.id } · ${ providerCount })`
 				: ( full.sub ? ' (' + full.sub + ')' : '' );
 			cmds.push( {
 				/* translators: %s: the surface's name. */
@@ -30248,7 +30255,7 @@
 			// Safe SVG always sanitizes; SVG Support's sanitize-on-upload is a
 			// setting, so its note claims only what's certain.
 			const svgNote = it.kind === 'SVG' && B.safeSvg
-				? `<div class="minn-media-svg-note">${ B.svgProvider === 'Safe SVG' ? __( 'Sanitized by Safe SVG' ) : ( B.svgProvider ? sprintf( /* translators: %s: the plugin's name. */ esc( __( 'SVG uploads enabled by %s' ) ), esc( B.svgProvider ) ) : esc( __( 'SVG uploads enabled by a plugin' ) ) ) }</div>`
+				? `<div class="minn-media-svg-note">${ B.svgProvider === 'Safe SVG' ? esc( __( 'Sanitized by Safe SVG' ) ) : ( B.svgProvider ? sprintf( /* translators: %s: the plugin's name. */ esc( __( 'SVG uploads enabled by %s' ) ), esc( B.svgProvider ) ) : esc( __( 'SVG uploads enabled by a plugin' ) ) ) }</div>`
 				: '';
 			return `
 			<div class="minn-modal-overlay" id="minn-modal-overlay">
