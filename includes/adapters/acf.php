@@ -31,7 +31,11 @@ defined( 'ABSPATH' ) || exit;
 // 'H:i:s' and rides the lenient time text control ('HH:mm').
 // File stores an attachment id like image, but rides the file control (any
 // attachment type, filename shown instead of a thumb).
-const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'file', 'wysiwyg', 'date_picker', 'date_time_picker', 'time_picker' );
+// Relational fields (post_object / relationship / page_link / taxonomy /
+// user) map onto ONE picker pair: `suggest` (single, async search) and
+// `relation` (ordered multi with chips), both searching through the
+// /acf/relation route which honors each field's own constraints.
+const MINN_ADMIN_ACF_SIMPLE_TYPES = array( 'text', 'textarea', 'number', 'range', 'email', 'url', 'select', 'radio', 'button_group', 'checkbox', 'true_false', 'color_picker', 'image', 'gallery', 'file', 'wysiwyg', 'date_picker', 'date_time_picker', 'time_picker', 'post_object', 'relationship', 'page_link', 'taxonomy', 'user' );
 
 /** Layout-only ACF field types: chrome, not data — never mapped, never counted as locked. */
 const MINN_ADMIN_ACF_CHROME_TYPES = array( 'tab', 'message', 'accordion' );
@@ -320,11 +324,18 @@ function minn_admin_acf_map_field( $f ) {
 		$type = 'datetime';
 	} elseif ( 'time_picker' === $type ) {
 		$type = 'time';
+	} elseif ( in_array( $type, array( 'post_object', 'page_link', 'user' ), true ) ) {
+		$type = ! empty( $f['multiple'] ) ? 'relation' : 'suggest';
+	} elseif ( 'relationship' === $type ) {
+		$type = 'relation'; // always an ordered multi
+	} elseif ( 'taxonomy' === $type ) {
+		// The field_type setting decides single vs multi, not `multiple`.
+		$type = in_array( $f['field_type'] ?? '', array( 'checkbox', 'multi_select' ), true ) ? 'relation' : 'suggest';
 	}
-	if ( ! empty( $f['multiple'] ) && 'multicheck' !== $type ) {
+	if ( ! empty( $f['multiple'] ) && ! in_array( $type, array( 'multicheck', 'relation' ), true ) ) {
 		return null;
 	}
-	return array(
+	$out = array(
 		'name'      => $f['name'],
 		'label'     => $f['label'],
 		'type'      => $type,
@@ -334,6 +345,214 @@ function minn_admin_acf_map_field( $f ) {
 		'anyChoice' => ! empty( $f['allow_custom'] ) ? true : null,
 		'key'       => $f['key'],
 	);
+	if ( in_array( $type, array( 'suggest', 'relation' ), true ) ) {
+		$out['route'] = 'minn-admin/v1/acf/relation?field=' . rawurlencode( $f['key'] );
+	}
+	return $out;
+}
+
+/**
+ * The object kind behind a relational ACF field: post, term or user.
+ *
+ * @param array $acf_field Raw ACF field array.
+ * @return string 'post' | 'term' | 'user' | ''
+ */
+function minn_admin_acf_relation_kind( $acf_field ) {
+	$t = is_array( $acf_field ) ? ( $acf_field['type'] ?? '' ) : '';
+	if ( in_array( $t, array( 'post_object', 'relationship', 'page_link' ), true ) ) {
+		return 'post';
+	}
+	if ( 'taxonomy' === $t ) {
+		return 'term';
+	}
+	if ( 'user' === $t ) {
+		return 'user';
+	}
+	return '';
+}
+
+/**
+ * One stored relational id → the picker's { value, label } row, or null when
+ * the object is gone. Non-published posts carry their status in the label.
+ *
+ * @param string $kind post | term | user.
+ * @param mixed  $id   Stored id.
+ * @return array|null
+ */
+function minn_admin_acf_relation_entry( $kind, $id ) {
+	if ( 'post' === $kind ) {
+		$p = get_post( (int) $id );
+		if ( ! $p || in_array( $p->post_status, array( 'trash', 'auto-draft' ), true ) ) {
+			return null;
+		}
+		$label = '' !== $p->post_title ? $p->post_title : '#' . $p->ID;
+		if ( 'publish' !== $p->post_status ) {
+			$status = get_post_status_object( $p->post_status );
+			$label .= ' (' . ( $status ? $status->label : $p->post_status ) . ')';
+		}
+		return array( 'value' => (string) $p->ID, 'label' => $label );
+	}
+	if ( 'term' === $kind ) {
+		$t = get_term( (int) $id );
+		return ( $t && ! is_wp_error( $t ) ) ? array( 'value' => (string) $t->term_id, 'label' => $t->name ) : null;
+	}
+	if ( 'user' === $kind ) {
+		$u = get_userdata( (int) $id );
+		return $u ? array( 'value' => (string) $u->ID, 'label' => $u->display_name ? $u->display_name : $u->user_login ) : null;
+	}
+	return null;
+}
+
+/**
+ * Stored single relational value → { value, label } or ''. page_link archive
+ * URLs (non-numeric strings) pass through with the URL as their own label.
+ *
+ * @param string $key Field key.
+ * @param mixed  $val Raw stored value.
+ * @return array|string
+ */
+function minn_admin_acf_suggest_out( $key, $val ) {
+	if ( is_array( $val ) ) {
+		$val = reset( $val ); // defensive: a single field holding an array
+	}
+	if ( null === $val || false === $val || '' === $val ) {
+		return '';
+	}
+	$acf  = acf_get_field( $key );
+	$kind = minn_admin_acf_relation_kind( $acf );
+	if ( 'post' === $kind && ! is_numeric( $val ) ) {
+		return array( 'value' => (string) $val, 'label' => (string) $val );
+	}
+	$entry = minn_admin_acf_relation_entry( $kind, $val );
+	return $entry ? $entry : '';
+}
+
+/**
+ * Stored relational list → ordered [{ value, label }] rows.
+ *
+ * @param string $key Field key.
+ * @param mixed  $val Raw stored value.
+ * @return array[]
+ */
+function minn_admin_acf_relation_list_out( $key, $val ) {
+	$acf  = acf_get_field( $key );
+	$kind = minn_admin_acf_relation_kind( $acf );
+	$out  = array();
+	foreach ( (array) $val as $id ) {
+		if ( ! is_scalar( $id ) || '' === $id ) {
+			continue;
+		}
+		if ( 'post' === $kind && ! is_numeric( $id ) ) {
+			$out[] = array( 'value' => (string) $id, 'label' => (string) $id );
+			continue;
+		}
+		$entry = minn_admin_acf_relation_entry( $kind, $id );
+		if ( $entry ) {
+			$out[] = $entry;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Validate one incoming relational value against the field's own
+ * constraints. Returns the storable id, '' to clear, or null when invalid
+ * (the caller skips the write, never clobbering the stored value).
+ *
+ * @param array $acf   Raw ACF field array.
+ * @param mixed $value { value, label }, a bare id, or empty.
+ * @return string|int|null
+ */
+function minn_admin_acf_relation_id_in( $acf, $value ) {
+	if ( is_array( $value ) || is_object( $value ) ) {
+		$value = (array) $value;
+		$value = isset( $value['value'] ) ? $value['value'] : null;
+	}
+	if ( null === $value || false === $value || '' === $value ) {
+		return '';
+	}
+	if ( ! is_scalar( $value ) ) {
+		return null;
+	}
+	$kind = minn_admin_acf_relation_kind( $acf );
+	if ( 'post' === $kind ) {
+		// page_link archives are stored as URL strings by ACF itself; pass
+		// an untouched one back through so a whole-panel save can't drop it.
+		if ( ! is_numeric( $value ) ) {
+			$value = (string) $value;
+			return ( 'page_link' === $acf['type'] && $value === esc_url_raw( $value ) && 0 === strpos( $value, 'http' ) ) ? $value : null;
+		}
+		$p = get_post( (int) $value );
+		if ( ! $p || in_array( $p->post_status, array( 'trash', 'auto-draft' ), true ) ) {
+			return null;
+		}
+		if ( ! empty( $acf['post_type'] ) && ! in_array( $p->post_type, (array) $acf['post_type'], true ) ) {
+			return null;
+		}
+		return (string) $p->ID;
+	}
+	if ( 'term' === $kind ) {
+		if ( ! is_numeric( $value ) ) {
+			return null;
+		}
+		$t = get_term( (int) $value );
+		if ( ! $t || is_wp_error( $t ) ) {
+			return null;
+		}
+		if ( ! empty( $acf['taxonomy'] ) && $t->taxonomy !== $acf['taxonomy'] ) {
+			return null;
+		}
+		return (int) $t->term_id; // ACF's own taxonomy save stores ints
+	}
+	if ( 'user' === $kind ) {
+		if ( ! is_numeric( $value ) ) {
+			return null;
+		}
+		$u = get_userdata( (int) $value );
+		if ( ! $u ) {
+			return null;
+		}
+		if ( ! empty( $acf['role'] ) && ! array_intersect( (array) $acf['role'], (array) $u->roles ) ) {
+			return null;
+		}
+		return (string) $u->ID;
+	}
+	return null;
+}
+
+/**
+ * Incoming single relational value → stored id ('' clears, null = invalid).
+ *
+ * @param string $key   Field key.
+ * @param mixed  $value Incoming value.
+ * @return string|int|null
+ */
+function minn_admin_acf_suggest_in( $key, $value ) {
+	$acf = acf_get_field( $key );
+	return $acf ? minn_admin_acf_relation_id_in( $acf, $value ) : null;
+}
+
+/**
+ * Incoming relational list → ordered stored-id list; invalid entries drop,
+ * an empty list clears.
+ *
+ * @param string $key   Field key.
+ * @param mixed  $value Incoming value.
+ * @return array
+ */
+function minn_admin_acf_relation_in( $key, $value ) {
+	$acf = acf_get_field( $key );
+	$out = array();
+	if ( ! $acf ) {
+		return $out;
+	}
+	foreach ( (array) $value as $entry ) {
+		$id = minn_admin_acf_relation_id_in( $acf, $entry );
+		if ( null !== $id && '' !== $id && ! in_array( $id, $out, true ) ) {
+			$out[] = $id;
+		}
+	}
+	return $out;
 }
 
 /**
@@ -359,9 +578,10 @@ function minn_admin_acf_map_repeater( $f ) {
 			continue;
 		}
 		// Subs share the field map — everything simple except wysiwyg (the
-		// row cards have no rich-text seat).
+		// row cards have no rich-text seat) and the relational pickers (no
+		// arming in the rows dialect yet).
 		$m = minn_admin_acf_map_field( $sub );
-		if ( ! $m || 'wysiwyg' === $m['type'] ) {
+		if ( ! $m || in_array( $m['type'], array( 'wysiwyg', 'suggest', 'relation' ), true ) ) {
 			$locked++;
 			continue;
 		}
@@ -494,6 +714,10 @@ function minn_admin_acf_read_values( $post_id ) {
 			$out[ $name ] = minn_admin_acf_gallery_out( $val );
 		} elseif ( 'file' === $field['type'] ) {
 			$out[ $name ] = minn_admin_acf_file_out( $val );
+		} elseif ( 'suggest' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_suggest_out( $field['key'], $val );
+		} elseif ( 'relation' === $field['type'] ) {
+			$out[ $name ] = minn_admin_acf_relation_list_out( $field['key'], $val );
 		} elseif ( 'multicheck' === $field['type'] ) {
 			$out[ $name ] = minn_admin_acf_choices_out( $val );
 		} elseif ( 'date' === $field['type'] ) {
@@ -573,6 +797,13 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 		} elseif ( 'gallery' === $field['type'] ) {
 			// [{ id, url }] entries or bare ids; an empty list clears.
 			$value = minn_admin_acf_gallery_in( $value );
+		} elseif ( 'suggest' === $field['type'] ) {
+			$value = minn_admin_acf_suggest_in( $field['key'], $value );
+			if ( null === $value ) {
+				continue; // invalid pick never clobbers the stored value
+			}
+		} elseif ( 'relation' === $field['type'] ) {
+			$value = minn_admin_acf_relation_in( $field['key'], $value );
 		} elseif ( 'multicheck' === $field['type'] ) {
 			$value = minn_admin_acf_choices_in( $value, $field );
 		} elseif ( in_array( $field['type'], array( 'date', 'datetime', 'time' ), true ) ) {
@@ -675,11 +906,11 @@ function minn_admin_acf_block_forms() {
 				$locked++;
 				continue;
 			}
-			// Date and file types stay locked in block forms: their values
-			// live in the block's data attribute in ACF's raw storage
-			// formats, and the inspector has no adapter layer (or per-type
-			// picker arming) to translate.
-			if ( in_array( $simple['type'], array( 'date', 'datetime', 'time', 'file' ), true ) ) {
+			// Date, file and relational types stay locked in block forms:
+			// their values live in the block's data attribute in ACF's raw
+			// storage formats, and the inspector has no adapter layer (or
+			// per-type picker arming) to translate.
+			if ( in_array( $simple['type'], array( 'date', 'datetime', 'time', 'file', 'suggest', 'relation' ), true ) ) {
 				$locked++;
 				continue;
 			}
@@ -834,6 +1065,112 @@ add_action( 'rest_api_init', function () {
 			}
 
 			return rest_ensure_response( minn_admin_acf_fields_payload( $post_id, $post_type ) );
+		},
+	) );
+
+	// Relational-field search: rows for the suggest / relation pickers. The
+	// field key names the constraints — post types, taxonomy terms filter,
+	// user roles — so the picker can only ever offer what the field itself
+	// allows (mirroring ACF's own ajax queries). Listing follows the TEC
+	// suggest precedent: published (and scheduled) posts are shared choices;
+	// drafts/pending/private are ownership-scoped for users who cannot edit
+	// other people's posts.
+	register_rest_route( 'minn-admin/v1', '/acf/relation', array(
+		'methods'             => 'GET',
+		'permission_callback' => function () {
+			return current_user_can( 'edit_posts' );
+		},
+		'args'                => array(
+			'field' => array( 'type' => 'string', 'required' => true ),
+			'q'     => array( 'type' => 'string', 'default' => '' ),
+		),
+		'callback'            => function ( WP_REST_Request $request ) {
+			$acf  = acf_get_field( (string) $request['field'] );
+			$kind = $acf ? minn_admin_acf_relation_kind( $acf ) : '';
+			if ( ! $kind ) {
+				return new WP_Error( 'minn_no_field', __( 'Unknown relational field.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$q    = trim( (string) $request['q'] );
+			$rows = array();
+
+			if ( 'post' === $kind ) {
+				$base = array(
+					'post_type'        => ! empty( $acf['post_type'] ) ? (array) $acf['post_type'] : 'any',
+					'posts_per_page'   => 20,
+					'orderby'          => 'title',
+					'order'            => 'ASC',
+					'suppress_filters' => false,
+				);
+				if ( '' !== $q ) {
+					$base['s'] = $q;
+				}
+				// ACF's taxonomy filter entries are "taxonomy:term-slug".
+				if ( ! empty( $acf['taxonomy'] ) && is_array( $acf['taxonomy'] ) ) {
+					$tax_query = array( 'relation' => 'OR' );
+					foreach ( $acf['taxonomy'] as $pair ) {
+						$bits = explode( ':', (string) $pair, 2 );
+						if ( 2 === count( $bits ) ) {
+							$tax_query[] = array( 'taxonomy' => $bits[0], 'field' => 'slug', 'terms' => $bits[1] );
+						}
+					}
+					if ( count( $tax_query ) > 1 ) {
+						$base['tax_query'] = $tax_query;
+					}
+				}
+				$posts = get_posts( array_merge( $base, array( 'post_status' => array( 'publish', 'future' ) ) ) );
+				$rest  = array_merge( $base, array( 'post_status' => array( 'draft', 'pending', 'private' ) ) );
+				if ( ! current_user_can( 'edit_others_posts' ) ) {
+					$rest['author'] = get_current_user_id();
+				}
+				$posts = array_merge( $posts, get_posts( $rest ) );
+				usort( $posts, function ( $a, $b ) {
+					return strcasecmp( (string) $a->post_title, (string) $b->post_title );
+				} );
+				$multi_type = ! is_array( $base['post_type'] ) || count( $base['post_type'] ) > 1;
+				foreach ( array_slice( $posts, 0, 20 ) as $p ) {
+					$entry = minn_admin_acf_relation_entry( 'post', $p->ID );
+					if ( ! $entry ) {
+						continue;
+					}
+					if ( $multi_type ) {
+						$type_obj        = get_post_type_object( $p->post_type );
+						$entry['label'] .= ' · ' . ( $type_obj ? $type_obj->labels->singular_name : $p->post_type );
+					}
+					$rows[] = $entry;
+				}
+			} elseif ( 'term' === $kind ) {
+				$args = array(
+					'taxonomy'   => ! empty( $acf['taxonomy'] ) ? $acf['taxonomy'] : 'category',
+					'hide_empty' => false,
+					'number'     => 20,
+				);
+				if ( '' !== $q ) {
+					$args['search'] = $q;
+				}
+				foreach ( (array) get_terms( $args ) as $t ) {
+					if ( $t instanceof WP_Term ) {
+						$rows[] = array( 'value' => (string) $t->term_id, 'label' => $t->name );
+					}
+				}
+			} else {
+				// The site builder put a user picker on this form on purpose
+				// (same trust call ACF's own ajax makes); the role filter is
+				// the field's, never ours.
+				$args = array(
+					'number'  => 20,
+					'orderby' => 'display_name',
+				);
+				if ( '' !== $q ) {
+					$args['search'] = '*' . $q . '*';
+				}
+				if ( ! empty( $acf['role'] ) ) {
+					$args['role__in'] = (array) $acf['role'];
+				}
+				foreach ( get_users( $args ) as $u ) {
+					$rows[] = array( 'value' => (string) $u->ID, 'label' => $u->display_name ? $u->display_name : $u->user_login );
+				}
+			}
+			return rest_ensure_response( $rows );
 		},
 	) );
 
@@ -1005,8 +1342,11 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			'type'  => 'true_false' === $f['type'] ? 'toggle'
 				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
 				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'multicheck', 'date', 'datetime', 'time' ), true ) ? $f['type'] : 'text' ) ) ),
+				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation' ), true ) ? $f['type'] : 'text' ) ) ),
 		);
+		if ( ! empty( $f['route'] ) ) {
+			$sf['route'] = $f['route'];
+		}
 		if ( in_array( $sf['type'], array( 'select', 'multicheck' ), true ) ) {
 			$sf['options'] = array();
 			foreach ( (array) ( $f['choices'] ?? array() ) as $value => $label ) {
@@ -1024,6 +1364,10 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
 			$values[ $f['key'] ] = minn_admin_acf_image_out( $v );
 		} elseif ( 'file' === $sf['type'] ) {
 			$values[ $f['key'] ] = minn_admin_acf_file_out( $v );
+		} elseif ( 'suggest' === $sf['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_suggest_out( $f['key'], $v );
+		} elseif ( 'relation' === $sf['type'] ) {
+			$values[ $f['key'] ] = minn_admin_acf_relation_list_out( $f['key'], $v );
 		} elseif ( 'multicheck' === $sf['type'] ) {
 			$values[ $f['key'] ] = minn_admin_acf_choices_out( $v );
 		} elseif ( 'date' === $sf['type'] ) {
@@ -1077,6 +1421,13 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$v = minn_admin_acf_gallery_in( $v );
 		} elseif ( 'image' === $byKey[ $key ]['type'] || 'file' === $byKey[ $key ]['type'] ) {
 			$v = minn_admin_acf_image_in( $v );
+		} elseif ( 'suggest' === $byKey[ $key ]['type'] ) {
+			$v = minn_admin_acf_suggest_in( $key, $v );
+			if ( null === $v ) {
+				continue; // invalid pick never clobbers the stored value
+			}
+		} elseif ( 'relation' === $byKey[ $key ]['type'] ) {
+			$v = minn_admin_acf_relation_in( $key, $v );
 		} elseif ( 'multicheck' === $byKey[ $key ]['type'] ) {
 			$v = minn_admin_acf_choices_in( $v, $byKey[ $key ] );
 		} elseif ( in_array( $byKey[ $key ]['type'], array( 'date', 'datetime', 'time' ), true ) ) {

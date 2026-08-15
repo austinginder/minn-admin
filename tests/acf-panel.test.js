@@ -178,6 +178,69 @@ const { launch, login, loginAs, createPost, deletePost, openEditor, reporter } =
 		mv = await readMinnAcf();
 		t.check( 'time persisted normalized', mv.slideshow_daily_at === '19:30', JSON.stringify( mv && mv.slideshow_daily_at ) );
 
+		// post_object single: the async suggest picker over /acf/relation.
+		const sgSel = '[data-pf$=":slideshow_cta_page"][data-ftype="suggest"]';
+		t.check( 'post_object renders the suggest picker', !! ( await page.$( sgSel ) ) );
+		await page.click( `${ sgSel } .minn-ac-input` );
+		await page.fill( `${ sgSel } .minn-ac-input`, 'sample' );
+		await page.waitForSelector( `${ sgSel } .minn-ac-item[data-acv]`, { timeout: 10000 } );
+		await page.evaluate( ( sel ) => {
+			const items = Array.from( document.querySelectorAll( `${ sel } .minn-ac-item` ) );
+			( items.find( ( x ) => /sample page/i.test( x.textContent ) ) || items[ 0 ] )
+				.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+		}, sgSel );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'picked page persisted as { value, label }',
+			mv.slideshow_cta_page && /^\d+$/.test( String( mv.slideshow_cta_page.value ) ) && /sample page/i.test( mv.slideshow_cta_page.label ),
+			JSON.stringify( mv && mv.slideshow_cta_page ) );
+
+		// relationship: ordered chips + an append-only picker.
+		const rlSel = '[data-pf$=":slideshow_related"][data-ftype="relation"]';
+		t.check( 'relationship renders the relation control', !! ( await page.$( rlSel ) ) );
+		const relPick = async ( q ) => {
+			await page.click( `${ rlSel } .minn-ac-input` );
+			await page.fill( `${ rlSel } .minn-ac-input`, q );
+			await page.waitForSelector( `${ rlSel } .minn-ac-item[data-acv]`, { timeout: 10000 } );
+			await page.evaluate( ( sel ) => {
+				document.querySelector( `${ sel } .minn-ac-item` )
+					.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+			}, rlSel );
+		};
+		await relPick( 'summer reading' );
+		await relPick( 'field notes' );
+		await page.waitForFunction( ( sel ) =>
+			document.querySelectorAll( `${ sel } .minn-relation-chip` ).length === 2, rlSel, { timeout: 5000 } );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'two relationship picks persisted in pick order',
+			Array.isArray( mv.slideshow_related ) && mv.slideshow_related.length === 2
+			&& /summer/i.test( mv.slideshow_related[ 0 ].label ) && /field notes/i.test( mv.slideshow_related[ 1 ].label ),
+			JSON.stringify( mv && mv.slideshow_related ) );
+		await page.click( `${ rlSel } [data-reldel="0"]` );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'chip removal persisted, order kept',
+			Array.isArray( mv.slideshow_related ) && mv.slideshow_related.length === 1 && /field notes/i.test( mv.slideshow_related[ 0 ].label ),
+			JSON.stringify( mv && mv.slideshow_related ) );
+
+		// taxonomy single: the same picker over terms.
+		const txSel = '[data-pf$=":slideshow_topic"][data-ftype="suggest"]';
+		await page.click( `${ txSel } .minn-ac-input` );
+		await page.fill( `${ txSel } .minn-ac-input`, 'sailing' );
+		await page.waitForSelector( `${ txSel } .minn-ac-item[data-acv]`, { timeout: 10000 } );
+		await page.evaluate( ( sel ) => {
+			const items = Array.from( document.querySelectorAll( `${ sel } .minn-ac-item` ) );
+			( items.find( ( x ) => /^sailing$/i.test( x.textContent.trim() ) ) || items[ 0 ] )
+				.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+		}, txSel );
+		await save();
+		mv = await readMinnAcf();
+		t.check( 'taxonomy pick persisted as a term',
+			mv.slideshow_topic && /sailing/i.test( mv.slideshow_topic.label ),
+			JSON.stringify( mv && mv.slideshow_topic ) );
+
+
 		// image field: the form engine's { id, url } control with the media picker.
 		const imgSel = '[data-pf$=":slideshow_cover"][data-ftype="image"]';
 		t.check( 'image field renders the image control', !! ( await page.$( imgSel ) ) );

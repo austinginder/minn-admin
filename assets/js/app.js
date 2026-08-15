@@ -1335,6 +1335,22 @@
 				<button type="button" class="minn-btn-soft" data-rt-edit>${ s ? esc( __( 'Edit content…' ) ) : esc( __( 'Add content…' ) ) }</button>
 			</div>`;
 		}
+		// Relation: an ORDERED multi-pick over an async route (ACF
+		// relationship / multi post-object / taxonomy / user fields). Value
+		// = [{ value, label }] in stored order; chips remove on × and drag
+		// to reorder, the suggest input appends. The CALLER arms
+		// bindRelationField, which owns the chips and keeps the live value
+		// on el._relValue (data-relval is the render-time seed).
+		if ( t === 'relation' ) {
+			const items = ( Array.isArray( v ) ? v : [] ).filter( ( x ) => x && typeof x === 'object' && x.value != null );
+			return `<div class="minn-field-relation" ${ attr }="${ esc( id ) }" data-ftype="relation" data-relval="${ esc( JSON.stringify( items ) ) }" data-sgroute="${ esc( f.route || '' ) }">
+				<div class="minn-relation-chips"></div>
+				<div class="minn-ac minn-relation-add">
+					<input class="minn-input minn-ac-input" placeholder="${ esc( f.placeholder || __( 'Type to search…' ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false">
+					<div class="minn-ac-panel" hidden></div>
+				</div>
+			</div>`;
+		}
 		// File: any attachment ({ id, url, name }) — Set/Replace opens the
 		// media picker in any-type mode. The CALLER arms bindFileField (no
 		// input events, like image).
@@ -1400,6 +1416,10 @@
 			const id = parseInt( el.dataset.fileId || '0', 10 );
 			if ( ! id ) return null;
 			return { id, url: el.dataset.fileUrl || '', name: el.dataset.fileName || '' };
+		}
+		if ( kind === 'relation' ) {
+			if ( el._relValue !== undefined ) return el._relValue;
+			try { return JSON.parse( el.dataset.relval || '[]' ); } catch ( e ) { return []; }
 		}
 		if ( kind === 'date' || kind === 'datetime' ) return el.dataset.dp || '';
 		if ( kind === 'time' ) {
@@ -1526,6 +1546,100 @@
 			}, 120 );
 		} );
 		input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Escape' ) { close(); input.blur(); }
+		} );
+	}
+
+	// Arm one relation control (data-ftype="relation"): an ordered chip list
+	// with an append-only suggest input. Search mirrors bindSuggestField
+	// (route + &q=, seq-guarded, mousedown picks); already-picked rows are
+	// filtered out; chips remove on × and drag to reorder (midpoint drop).
+	function bindRelationField( wrap, onChange ) {
+		if ( wrap._minnRelBound ) return;
+		wrap._minnRelBound = true;
+		let items = [];
+		try { items = JSON.parse( wrap.dataset.relval || '[]' ); } catch ( e ) {}
+		const chips = $( '.minn-relation-chips', wrap );
+		const input = $( '.minn-ac-input', wrap );
+		const panel = $( '.minn-ac-panel', wrap );
+		if ( ! chips || ! input || ! panel ) return;
+		const commit = () => {
+			wrap._relValue = items.slice();
+			onChange( wrap._relValue );
+		};
+		let dragIdx = null;
+		const paint = () => {
+			chips.innerHTML = items.map( ( it, i ) =>
+				`<span class="minn-relation-chip" draggable="true" data-relidx="${ i }"><span class="minn-relation-chip-label">${ esc( String( it.label || it.value ) ) }</span><button type="button" data-reldel="${ i }" aria-label="${ esc( __( 'Remove' ) ) }">×</button></span>` ).join( '' );
+			$$( '[data-reldel]', chips ).forEach( ( b ) => b.addEventListener( 'click', ( e ) => {
+				e.preventDefault();
+				items.splice( parseInt( b.dataset.reldel, 10 ), 1 );
+				paint();
+				commit();
+			} ) );
+			$$( '.minn-relation-chip', chips ).forEach( ( ch ) => {
+				ch.addEventListener( 'dragstart', ( e ) => {
+					dragIdx = parseInt( ch.dataset.relidx, 10 );
+					e.dataTransfer.effectAllowed = 'move';
+					try { e.dataTransfer.setData( 'text/plain', '' ); } catch ( err ) {}
+				} );
+				ch.addEventListener( 'dragover', ( e ) => e.preventDefault() );
+				ch.addEventListener( 'drop', ( e ) => {
+					e.preventDefault();
+					e.stopPropagation(); // the app-wide drop handler must not see this
+					if ( dragIdx === null ) return;
+					const to = parseInt( ch.dataset.relidx, 10 );
+					const r = ch.getBoundingClientRect();
+					let dest = e.clientX > r.left + r.width / 2 ? to + 1 : to;
+					const [ moved ] = items.splice( dragIdx, 1 );
+					if ( dest > dragIdx ) dest--;
+					items.splice( dest, 0, moved );
+					dragIdx = null;
+					paint();
+					commit();
+				} );
+			} );
+		};
+		paint();
+		let timer = null;
+		let seq = 0;
+		const close = () => { panel.hidden = true; input.setAttribute( 'aria-expanded', 'false' ); };
+		const search = () => {
+			const route = wrap.dataset.sgroute || '';
+			if ( ! route ) return;
+			const my = ++seq;
+			api( route + ( route.indexOf( '?' ) === -1 ? '?' : '&' ) + 'q=' + encodeURIComponent( input.value.trim() ) )
+				.then( ( rows ) => {
+					if ( my !== seq || ! Array.isArray( rows ) ) return;
+					const have = new Set( items.map( ( x ) => String( x.value ) ) );
+					const fresh = rows.filter( ( r ) => ! have.has( String( r.value ) ) );
+					if ( ! fresh.length ) { close(); return; }
+					panel.innerHTML = fresh.map( ( r ) =>
+						`<button type="button" class="minn-ac-item" data-acv="${ esc( String( r.value ) ) }">${ esc( String( r.label ) ) }</button>` ).join( '' );
+					$$( '.minn-ac-item', panel ).forEach( ( item ) => {
+						// mousedown + preventDefault: the pick must land before blur.
+						item.addEventListener( 'mousedown', ( e ) => {
+							e.preventDefault();
+							items.push( { value: item.dataset.acv, label: item.textContent } );
+							input.value = '';
+							close();
+							paint();
+							commit();
+						} );
+					} );
+					panel.hidden = false;
+					input.setAttribute( 'aria-expanded', 'true' );
+				} )
+				.catch( () => {} );
+		};
+		input.addEventListener( 'focus', search );
+		input.addEventListener( 'input', () => {
+			clearTimeout( timer );
+			timer = setTimeout( search, 250 );
+		} );
+		input.addEventListener( 'blur', () => setTimeout( close, 120 ) );
+		input.addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' ) e.preventDefault(); // pick-only, never submit
 			if ( e.key === 'Escape' ) { close(); input.blur(); }
 		} );
 	}
@@ -14822,6 +14936,11 @@
 				bindImageField( input, mark );
 			} else if ( input.dataset.ftype === 'file' ) {
 				bindFileField( input, mark );
+			} else if ( input.dataset.ftype === 'suggest' ) {
+				// Picks fire no input events; the pick is the dirty signal.
+				bindSuggestField( input, () => mark() );
+			} else if ( input.dataset.ftype === 'relation' ) {
+				bindRelationField( input, () => mark() );
 			} else if ( input.dataset.ftype === 'date' || input.dataset.ftype === 'datetime' ) {
 				// Readonly input: the picker's commit is the only edit signal.
 				bindDatePicker( input, mark, { dateOnly: input.dataset.ftype === 'date', marks: false } );
@@ -25035,6 +25154,8 @@
 				bindImageField( input, ( v ) => write( v ) );
 			} else if ( input.dataset.ftype === 'file' ) {
 				bindFileField( input, ( v ) => write( v ) );
+			} else if ( input.dataset.ftype === 'relation' ) {
+				bindRelationField( input, ( v ) => write( v ) );
 			} else if ( input.dataset.ftype === 'date' || input.dataset.ftype === 'datetime' ) {
 				// Readonly input — commits fire no input events, so the
 				// picker's onChange is the write path.

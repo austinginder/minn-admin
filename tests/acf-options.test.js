@@ -156,5 +156,42 @@ const { launch, login, reporter } = require( './helpers' );
 		await page.keyboard.press( 'Escape' );
 	}
 
+	// relation field: chips + append picker on a settings page.
+	const rlWrap = await page.$( '.minn-surface-settings [data-ftype="relation"]' );
+	if ( ! rlWrap ) {
+		console.log( 'SKIP relation check: no relation field on this options page' );
+	} else {
+		const rlKey = await rlWrap.evaluate( ( e ) => e.dataset.sset );
+		const rlSel = `.minn-surface-settings [data-sset="${ rlKey }"]`;
+		const rlRoute = surface.settings.route.replace( '{tab}', lastTab2.id );
+		await page.click( `${ rlSel } .minn-ac-input` );
+		await page.waitForSelector( `${ rlSel } .minn-ac-item[data-acv]`, { timeout: 10000 } );
+		await page.evaluate( ( sel ) => {
+			document.querySelector( `${ sel } .minn-ac-item` )
+				.dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true, cancelable: true } ) );
+		}, rlSel );
+		await page.waitForSelector( `${ rlSel } .minn-relation-chip`, { timeout: 5000 } );
+		const saveRel = async () => {
+			const wait = page.waitForResponse( ( res ) => res.request().method() === 'POST'
+				&& res.url().includes( rlRoute ), { timeout: 20000 } );
+			await page.click( '#minn-sset-save' );
+			await wait;
+			await page.waitForTimeout( 600 );
+		};
+		await saveRel();
+		const readRel = () => page.evaluate( async ( args ) => {
+			const r = await fetch( window.MINN.restUrl + args.route, { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+			return ( ( await r.json() ).values || {} )[ args.key ];
+		}, { route: rlRoute, key: rlKey } );
+		let rl = await readRel();
+		t.check( 'relation pick persisted from the settings page',
+			Array.isArray( rl ) && rl.length === 1 && /^\d+$/.test( String( rl[ 0 ].value ) ), JSON.stringify( rl ) );
+		// Remove the chip (the save re-rendered the view — re-query).
+		await page.click( `${ rlSel } [data-reldel="0"]` );
+		await saveRel();
+		rl = await readRel();
+		t.check( 'relation clear persisted', Array.isArray( rl ) && rl.length === 0, JSON.stringify( rl ) );
+	}
+
 	await t.done( browser, errors );
 } )();

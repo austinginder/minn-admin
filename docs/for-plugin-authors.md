@@ -1180,9 +1180,14 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 ```
 
 Supported field types: `text`, `textarea`, `number`, `range`, `email`, `url`, `select`, `radio`,
-`true_false`, `color_picker` (swatch + hex text), `image` (`{ id, url }`, media picker), `gallery`
+`true_false`, `color_picker` (swatch + hex text), `multicheck` (multi-value choices as tick
+rows; value = the checked choice keys in order; declare `choices`), `date` / `datetime`
+(Minn's calendar popover; values `YYYY-MM-DD` / `YYYY-MM-DDTHH:mm`), `time` (lenient typed
+input normalized to `HH:mm`), `image` (`{ id, url }`, media picker), `file` (`{ id, url,
+name }`, the media picker over every attachment type), `gallery`
 (ordered `[{ id, url }]`, Minn's images editor), `wysiwyg` (an HTML fragment string, edited
-in Minn's rich-text modal with pastes cleaned through the shared sanitizer), `suggest`, and
+in Minn's rich-text modal with pastes cleaned through the shared sanitizer), `suggest`,
+`relation`, and
 `rows` (below). Report anything
 else in the `locked` count; Minn shows "N advanced fields — edit in wp-admin ↗" rather than
 rendering something unsafe.
@@ -1207,6 +1212,13 @@ declares a `route`; Minn fetches it with `&q=` as the user types and expects a p
 value in your `valuesKey` payload is `{ value, label }` (or `''` for none), and the same
 shape comes back on save, so read the id from `value`. The bundled Events Calendar adapter's
 venue picker is the reference.
+
+**`relation` (since 0.31.0)** is `suggest`'s ordered-multi sibling: the same `route` + `&q=`
+search, but picks append as chips the user can drag to reorder and remove with ×. The value
+is an ordered `[{ value, label }]` list, and the same shape comes back on save — read the
+ids from `value` in order. Already-picked rows are filtered out of the results client-side.
+The bundled ACF adapter's relationship fields (and its `/acf/relation` search route, which
+honors each field's own post-type/taxonomy/role constraints) are the reference.
 
 The bundled ACF adapter (`includes/adapters/acf.php`) is the reference implementation.
 

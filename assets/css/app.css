@@ -1094,6 +1094,21 @@ button.minn-nav-label:hover { color: var(--text2); }
 .minn-field-multicheck { display: flex; flex-direction: column; gap: 6px; }
 .minn-field-file { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .minn-field-file-name { font-size: 13px; word-break: break-all; }
+/* Relation control: ordered chips (drag to reorder, × removes) over an
+   append-only suggest input. Chips share the .minn-chip visual language. */
+.minn-field-relation { display: flex; flex-direction: column; gap: 7px; }
+.minn-relation-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.minn-relation-chips:empty { display: none; }
+.minn-relation-chip {
+  display: inline-flex; align-items: center; gap: 6px; cursor: grab;
+  background: var(--panel2); border: 1px solid var(--border); padding: 2px 6px 2px 8px;
+  border-radius: 6px; font-size: 12.5px; color: var(--text2);
+}
+.minn-relation-chip button {
+  background: none; border: 0; padding: 0 2px; cursor: pointer;
+  color: var(--text3); font-size: 14px; line-height: 1;
+}
+.minn-relation-chip button:hover { color: var(--red); }
 .minn-field-image-thumb {
   display: block; width: 100%; max-width: 280px; aspect-ratio: 1.91 / 1;
   border-radius: 9px; background-size: cover; background-position: center;
